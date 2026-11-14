@@ -2,6 +2,7 @@ import { closeBracketLine, type Container, containersEqual, type Frame, framesEq
 import { type ChainState, chainStatesEqual, closeChainLine, INITIAL_CHAIN_STATE, startChainLine, stepChain } from "./pretty-chain.ts";
 import { SQL_GROUPS, stepClause } from "./pretty-clause.ts";
 import { isClosingFence, parseOpeningFence, unlabelledFenceSpan } from "./pretty-fenced.ts";
+import { INITIAL_JSX_STATE, type JsxState, jsxStatesEqual, JSX_SCRIPT_RULE, stepJsx } from "./pretty-jsx.ts";
 import type { PrettyLexer } from "./pretty-lexers.ts";
 import { INITIAL_MARKUP, type MarkupState, markupEqual, startMarkupLine, stepMarkup } from "./pretty-markup.ts";
 import { closeSexpLine, type SexpFrame, sexpFramesEqual, stepSexp } from "./pretty-sexp.ts";
@@ -27,6 +28,7 @@ export interface PrettySnapshot {
   readonly containers: Container | null;
   readonly sexpFrames: SexpFrame | null;
   readonly chainState: ChainState;
+  readonly jsxState: JsxState;
   readonly markup: MarkupState;
   readonly listDepth: number;
   readonly fence: Fence | null;
@@ -49,6 +51,7 @@ export function snapshotsEqual(a: PrettySnapshot, b: PrettySnapshot): boolean {
   if ((a.lexer === null) !== (b.lexer === null) || (a.lexer && !a.lexer.equals(b.lexer!))) return false;
   if (!framesEqual(a.frames, b.frames) || !containersEqual(a.containers, b.containers)) return false;
   if (!sexpFramesEqual(a.sexpFrames, b.sexpFrames) || !chainStatesEqual(a.chainState, b.chainState)) return false;
+  if (!jsxStatesEqual(a.jsxState, b.jsxState)) return false;
   if (!markupEqual(a.markup, b.markup) || a.listDepth !== b.listDepth) return false;
   const fa = a.fence;
   const fb = b.fence;
@@ -103,6 +106,7 @@ export class PrettyScanner implements ScanCursor {
       containers: s.containers,
       sexpFrames: s.sexpFrames,
       chainState: s.chainState,
+      jsxState: s.jsxState,
       markup: s.markup,
       listDepth: s.listDepth,
       fence: s.fence,
@@ -126,6 +130,7 @@ export class PrettyScanner implements ScanCursor {
     s.containers = snapshot.containers;
     s.sexpFrames = snapshot.sexpFrames;
     s.chainState = snapshot.chainState;
+    s.jsxState = snapshot.jsxState;
     s.markup = snapshot.markup;
     s.listDepth = snapshot.listDepth;
     s.fence = snapshot.fence;
@@ -210,21 +215,30 @@ export class PrettyScanner implements ScanCursor {
     const rule = s.rule!;
     switch (rule.kind) {
       case "bracket": return stepBracket(this, rule, pos, end);
-      case "markup": return stepMarkup(this, pos);
+      case "markup": return stepMarkup(this, pos, end);
       case "clause": return stepClause(this, pos, end);
       case "sexp": return stepSexp(this, rule.data, pos, end);
       case "chain": return stepChain(this, pos, end);
+      case "jsx": return stepJsx(this, pos, end);
     }
   }
 
   private enterRule(rule: PrettyRule | null): void {
     const s = this.state;
     s.rule = rule;
-    s.lexer = rule?.kind === "bracket" ? rule.lexer() : rule?.kind === "clause" ? SQL_GROUPS.lexer() : null;
+    s.lexer =
+      rule?.kind === "bracket"
+        ? rule.lexer()
+        : rule?.kind === "clause"
+          ? SQL_GROUPS.lexer()
+          : rule?.kind === "jsx"
+            ? JSX_SCRIPT_RULE.lexer()
+            : null;
     s.frames = null;
     s.containers = null;
     s.sexpFrames = null;
     s.chainState = INITIAL_CHAIN_STATE;
+    s.jsxState = INITIAL_JSX_STATE;
     s.markup = INITIAL_MARKUP;
     s.listDepth = -1;
   }
@@ -316,7 +330,7 @@ export class PrettyScanner implements ScanCursor {
     s.visualFrom = -1;
     s.pending = -1;
     s.inLine = false;
-    if (s.rule?.kind === "bracket" || s.rule?.kind === "clause") closeBracketLine(s);
+    if (s.rule?.kind === "bracket" || s.rule?.kind === "clause" || s.rule?.kind === "jsx" || (s.rule?.kind === "markup" && s.markup.embedded)) closeBracketLine(s);
     if (s.rule?.kind === "sexp") closeSexpLine(s);
     if (s.rule?.kind === "chain") closeChainLine(s);
     if (this.spanEnd >= 0 && s.lineEnd >= this.spanEnd) {

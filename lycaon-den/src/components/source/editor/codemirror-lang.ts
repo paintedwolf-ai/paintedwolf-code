@@ -65,6 +65,7 @@ import {
   NO_LAYOUT,
   type PrettyLayout,
   SCRIPT,
+  SCRIPT_JSX,
   SEXP,
   SEXP_DATA,
   STYLE,
@@ -322,9 +323,9 @@ interface CatalogEntry {
 
 const CATALOG = {
   ts: { grammar: () => javascript({ typescript: true }), label: "TypeScript", pretty: SCRIPT, formatters: WEB_FORMATTERS },
-  tsx: { grammar: () => javascript({ typescript: true, jsx: true }), label: "TSX", pretty: SCRIPT, formatters: WEB_FORMATTERS },
+  tsx: { grammar: () => javascript({ typescript: true, jsx: true }), label: "TSX", pretty: SCRIPT_JSX, formatters: WEB_FORMATTERS },
   js: { grammar: () => javascript(), label: "JavaScript", pretty: SCRIPT, formatters: WEB_FORMATTERS },
-  jsx: { grammar: () => javascript({ jsx: true }), label: "JSX", pretty: SCRIPT, formatters: WEB_FORMATTERS },
+  jsx: { grammar: () => javascript({ jsx: true }), label: "JSX", pretty: SCRIPT_JSX, formatters: WEB_FORMATTERS },
   mjs: { grammar: () => javascript(), label: "JavaScript", pretty: SCRIPT, formatters: WEB_FORMATTERS },
   cjs: { grammar: () => javascript(), label: "JavaScript", pretty: SCRIPT, formatters: WEB_FORMATTERS },
   mts: { grammar: () => javascript({ typescript: true }), label: "TypeScript", pretty: SCRIPT, formatters: WEB_FORMATTERS },

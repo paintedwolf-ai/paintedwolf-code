@@ -18,7 +18,7 @@ import {
 } from "../editor/codemirror-lang.ts";
 import { DataLexer, ScriptLexer, StyleLexer } from "./pretty-lexers.ts";
 import { NO_LAYOUT, type PrettyLayout } from "./pretty-outcome.ts";
-import type { BracketRule, ChainRule, ClauseRule, MarkupRule, PrettyPlan, PrettyRule, PrettySpan, SexpRule } from "./pretty-scan-state.ts";
+import type { BracketRule, ChainRule, ClauseRule, JsxRule, MarkupRule, PrettyPlan, PrettyRule, PrettySpan, SexpRule } from "./pretty-scan-state.ts";
 import { TreeLexer } from "./pretty-tokens.ts";
 
 export const DATA_RULE: BracketRule = {
@@ -33,11 +33,12 @@ export const SCRIPT_RULE: BracketRule = {
   kind: "bracket", data: false, statements: true, afterBlock: "script", records: false, parsed: false,
   lexer: () => new ScriptLexer(),
 };
+export const SCRIPT_JSX_RULE: JsxRule = { kind: "jsx" };
 export const STYLE_RULE: BracketRule = {
   kind: "bracket", data: false, statements: true, afterBlock: "style", records: false, parsed: false,
   lexer: () => new StyleLexer(false),
 };
-const LINE_COMMENT_STYLE_RULE: BracketRule = { ...STYLE_RULE, lexer: () => new StyleLexer(true) };
+export const LINE_COMMENT_STYLE_RULE: BracketRule = { ...STYLE_RULE, lexer: () => new StyleLexer(true) };
 export const MARKUP_RULE: MarkupRule = { kind: "markup" };
 /** Any brace language: groups over the editor's tokens, with `;` separating statements where the language has them. */
 const BRACKET_RULE: BracketRule = {
@@ -56,7 +57,14 @@ function ruleFor(layout: PrettyLayout): PrettyRule | null {
   switch (layout.kind) {
     case "data": return layout.records ? RECORDS_RULE : layout.comments ? COMMENTED_DATA_RULE : DATA_RULE;
     case "markup": return MARKUP_RULE;
-    case "code": return layout.dialect === "script" ? SCRIPT_RULE : layout.dialect === "style" ? STYLE_RULE : LINE_COMMENT_STYLE_RULE;
+    case "code":
+      return layout.dialect === "script"
+        ? SCRIPT_RULE
+        : layout.dialect === "script-jsx"
+          ? SCRIPT_JSX_RULE
+          : layout.dialect === "style"
+            ? STYLE_RULE
+            : LINE_COMMENT_STYLE_RULE;
     case "bracket": return layout.statements ? BRACKET_STATEMENTS_RULE : layout.blocks ? BRACKET_BLOCKS_RULE : BRACKET_RULE;
     case "clause": return CLAUSE_RULE;
     case "sexp": return layout.data ? SEXP_DATA_RULE : SEXP_RULE;

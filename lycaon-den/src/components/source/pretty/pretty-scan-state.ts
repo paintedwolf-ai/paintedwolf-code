@@ -1,6 +1,7 @@
 import type { Text } from "@codemirror/state";
 import type { Container, Frame } from "./pretty-bracket.ts";
 import { type ChainState, INITIAL_CHAIN_STATE } from "./pretty-chain.ts";
+import { INITIAL_JSX_STATE, type JsxState } from "./pretty-jsx.ts";
 import type { PrettyLexer } from "./pretty-lexers.ts";
 import type { MarkupState } from "./pretty-markup.ts";
 import type { SexpFrame } from "./pretty-sexp.ts";
@@ -62,7 +63,11 @@ export interface ChainRule {
   readonly kind: "chain";
 }
 
-export type PrettyRule = BracketRule | MarkupRule | ClauseRule | SexpRule | ChainRule;
+export interface JsxRule {
+  readonly kind: "jsx";
+}
+
+export type PrettyRule = BracketRule | MarkupRule | ClauseRule | SexpRule | ChainRule | JsxRule;
 
 /** Whether a rule reads the editor's syntax tree and so lays out only what it has parsed. */
 export function readsSyntaxTree(rule: PrettyRule): boolean {
@@ -121,6 +126,7 @@ export class ScanState {
   containers: Container | null = null;
   sexpFrames: SexpFrame | null = null;
   chainState: ChainState = INITIAL_CHAIN_STATE;
+  jsxState: JsxState = INITIAL_JSX_STATE;
   markup: MarkupState;
   /** Group depth whose commas break as a SQL clause list, or -1. */
   listDepth = -1;
