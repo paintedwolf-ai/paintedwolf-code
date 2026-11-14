@@ -12,8 +12,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"net/netip"
 	"net/url"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -142,11 +144,29 @@ func (o *Owners) Prepare(program mutation.Program, request commandprogram.Operat
 	if err != nil {
 		return Prepared{}, err
 	}
+	opts.unixSocket = socketOperand(program.Paths.Cwd().Abs, opts.unixSocket)
 	mode := transferMode(opts)
 	review := bound.Review(o.operation)
 	review.PathTargets = curlPathTargets(opts)
 	review.Record, review.Represented = requestRecord(opts)
-	return Prepared{Mode: mode, Operation: o.operation, Argv: bound, Review: review, LoopbackPorts: loopbackPorts(opts.url, opts.dial), owners: o, program: program, request: request, options: opts, transfer: &Transfer{}}, nil
+	var ports []uint16
+	if opts.unixSocket == "" {
+		ports = loopbackPorts(opts.url, opts.dial)
+	}
+	return Prepared{Mode: mode, Operation: o.operation, Argv: bound, Review: review, LoopbackPorts: ports, owners: o, program: program, request: request, options: opts, transfer: &Transfer{}}, nil
+}
+
+// socketOperand places a relative --unix-socket under the program's working
+// directory. The socket is reviewed as a local service, never as a file read;
+// session addresses resolve with the socket review itself.
+func socketOperand(cwd, operand string) string {
+	if operand == "" || filepath.IsAbs(operand) || cwd == "" {
+		return operand
+	}
+	if _, _, session := projectroot.SessionAddress(operand); session {
+		return operand
+	}
+	return filepath.Join(cwd, operand)
 }
 
 func curlPathTargets(opts options) []commandprogram.PathTarget {

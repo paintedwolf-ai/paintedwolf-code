@@ -131,11 +131,7 @@ func (inv *invocation) buildRequestArgs(cookieHeader string) (map[string]any, er
 		args["timeout_ms"] = float64(o.maxTime.Milliseconds())
 	}
 	if o.unixSocket != "" {
-		bound, err := inv.program.Paths.Bind(inv.ctx, o.unixSocket, false)
-		if err != nil {
-			return nil, err
-		}
-		args["unix_socket"] = bound.Resolved.Abs
+		args["unix_socket"] = o.unixSocket
 	}
 	return args, nil
 }
