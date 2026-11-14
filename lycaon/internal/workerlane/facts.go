@@ -67,6 +67,7 @@ func (s *Service) FactsFor(ctx context.Context, state LaneState, checkpoints Che
 		return f, nil
 	}
 	lastRound := rounds[last]
+	f.LastResultID = lastRound.ResultID
 	f.LastChange = ChangeState(changes[lastRound.ResultID])
 	if f.PromotionUnsettled, err = state.PromotionUnsettled(ctx, lastRound.JobID); err != nil {
 		return Facts{}, err
