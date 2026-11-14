@@ -10,7 +10,7 @@ export const SETTLED_SCROLL_REPEATS = 40;
 const SETTLED_SCROLL_CHECKS = 96;
 /**
  * Frames checked while the editor is still measuring: in a long line each
- * drawn window changes the height estimates, moving the target as it settles.
+ * drawn window changes the size estimates, moving the target as it settles.
  */
 const SETTLED_SCROLL_MEASURING_CHECKS = 900;
 /** Consecutive frames the target must stay visible. */
@@ -79,7 +79,7 @@ function settleScroll(
   let stable = 0;
   let scale = 1;
   let lastSign = 0;
-  let lastHeight = view.scrollDOM.scrollHeight;
+  let lastSize = `${view.scrollDOM.scrollWidth}x${view.scrollDOM.scrollHeight}`;
   const check = (): void => {
     if (activeSettles.get(view) !== token) return;
     if (!view.dom.isConnected) return release();
@@ -88,9 +88,10 @@ function settleScroll(
       write: (offset, v) => {
         if (activeSettles.get(v) !== token) return;
         checks += 1;
-        const height = v.scrollDOM.scrollHeight;
-        const measuring = height !== lastHeight;
-        lastHeight = height;
+        // Wrapped lines revise their height as they are drawn; unwrapped ones, their width.
+        const size = `${v.scrollDOM.scrollWidth}x${v.scrollDOM.scrollHeight}`;
+        const measuring = size !== lastSize;
+        lastSize = size;
         if (offset !== null && offset.exact && offset.top === 0 && offset.left === 0) {
           stable += 1;
           if (stable >= SETTLED_SCROLL_STABLE) return release();
