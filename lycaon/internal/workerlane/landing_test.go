@@ -64,9 +64,12 @@ func newLandingFixture(t *testing.T) *landingFixture {
 	testutil.FailErr(t, "create worker", err)
 	ws := &fakeWorkspaces{base: t.TempDir()}
 	f := &landingFixture{db: sqlDB, records: records, ws: ws, lanes: workerlane.New(ws, records), promoter: &fakePromoter{db: sqlDB, status: api.WorkerMergeStatusMerged}, actor: actor, workerID: w.WorkerID}
+	// As in production: the round is admitted when its job is enqueued and
+	// its lane prepared when the job is claimed, before it settles.
+	f.round(t, "job-1", "result-1", false)
 	_, err = f.lanes.Admit(t.Context(), workerlane.Request{Actor: actor, Op: workerrecords.Op{ID: "admit-1"}, WorkerID: w.WorkerID, Facts: workerlane.Facts{Write: true}})
 	testutil.FailErr(t, "prepare lane", err)
-	f.round(t, "job-1", "result-1", true)
+	f.settleRound(t, "job-1", "result-1")
 	return f
 }
 
@@ -78,10 +81,15 @@ func (f *landingFixture) round(t *testing.T, jobID, resultID string, settle bool
 	testutil.FailErr(t, "insert job", err)
 	_, err = f.records.AdmitRound(t.Context(), f.actor, workerrecords.Op{ID: "round-" + jobID}, f.workerID, workerrecords.RoundSpec{JobID: jobID, ExecutionTarget: "local"})
 	testutil.FailErr(t, "admit round", err)
-	if !settle {
-		return
+	if settle {
+		f.settleRound(t, jobID, resultID)
 	}
-	_, err = f.db.ExecContext(t.Context(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES (?, ?, 'complete', ?)`, resultID, jobID, now)
+}
+
+func (f *landingFixture) settleRound(t *testing.T, jobID, resultID string) {
+	t.Helper()
+	now := db.FormatTime(time.Now().UTC())
+	_, err := f.db.ExecContext(t.Context(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES (?, ?, 'complete', ?)`, resultID, jobID, now)
 	testutil.FailErr(t, "insert result", err)
 	_, err = f.records.SettleRound(t.Context(), f.actor, workerrecords.Op{ID: "settle-" + jobID}, f.workerID, jobID, "cp-"+jobID)
 	testutil.FailErr(t, "settle round", err)
