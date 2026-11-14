@@ -333,3 +333,32 @@ func openTurnSQLStore(t *testing.T) turnTestStore {
 	testdbseed.InsertProjectRoot(t, handle, testdbseed.DefaultProjectID, t.TempDir())
 	return NewSQL(handle)
 }
+
+// A running turn's progress advances when a model response or tool result
+// is accounted; a finished turn's does not move.
+func TestTouchTurnProgressAdvancesOnlyARunningTurn(t *testing.T) {
+	ctx := t.Context()
+	handle := testdbfixture.Open(t, "turns.db")
+	testdbseed.InsertProjectRoot(t, handle, testdbseed.DefaultProjectID, t.TempDir())
+	st := NewSQL(handle)
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	turn, err := st.BeginTurn(ctx, TurnStart{ID: uuid.NewString(), SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: `{}`})
+	testutil.FailErr(t, "begin turn", err)
+	const old = "2026-01-01T00:00:00Z"
+	_, err = handle.ExecContext(ctx, `UPDATE turns SET progressed_at = ? WHERE id = ?`, old, turn.Turn.ID)
+	testutil.FailErr(t, "age progress", err)
+	testutil.FailErr(t, "touch", st.TouchTurnProgress(ctx, turn.Turn.ID))
+	var progressed string
+	testutil.FailErr(t, "read progress", handle.QueryRowContext(ctx, `SELECT progressed_at FROM turns WHERE id = ?`, turn.Turn.ID).Scan(&progressed))
+	if progressed <= old {
+		t.Fatalf("progress did not advance: %s", progressed)
+	}
+	_, err = handle.ExecContext(ctx, `UPDATE turns SET status = 'complete', completed_at = ?, progressed_at = ? WHERE id = ?`, old, old, turn.Turn.ID)
+	testutil.FailErr(t, "finish turn", err)
+	testutil.FailErr(t, "touch finished", st.TouchTurnProgress(ctx, turn.Turn.ID))
+	testutil.FailErr(t, "read finished progress", handle.QueryRowContext(ctx, `SELECT progressed_at FROM turns WHERE id = ?`, turn.Turn.ID).Scan(&progressed))
+	if progressed != old {
+		t.Fatalf("a finished turn's progress moved: %s", progressed)
+	}
+}

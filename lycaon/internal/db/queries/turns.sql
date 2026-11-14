@@ -58,6 +58,9 @@ WHERE id = ? AND turn_id = ? AND status = 'running';
 UPDATE turns SET revision = revision + 1, updated_at = ?, progressed_at = ?
 WHERE id = ? AND active_attempt_id = ? AND status = 'running';
 
+-- name: TouchTurnProgress :execrows
+UPDATE turns SET progressed_at = ? WHERE id = ? AND status = 'running';
+
 -- name: UpsertLiveModelOutput :exec
 INSERT INTO live_model_outputs (
     id, turn_attempt_id, session_id, iteration, message_id, content,

@@ -706,6 +706,23 @@ func (q *Queries) TouchCheckpointedTurn(ctx context.Context, arg TouchCheckpoint
 	return result.RowsAffected()
 }
 
+const touchTurnProgress = `-- name: TouchTurnProgress :execrows
+UPDATE turns SET progressed_at = ? WHERE id = ? AND status = 'running'
+`
+
+type TouchTurnProgressParams struct {
+	ProgressedAt string `json:"progressed_at"`
+	ID           string `json:"id"`
+}
+
+func (q *Queries) TouchTurnProgress(ctx context.Context, arg TouchTurnProgressParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, touchTurnProgress, arg.ProgressedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const upsertLiveModelOutput = `-- name: UpsertLiveModelOutput :exec
 INSERT INTO live_model_outputs (
     id, turn_attempt_id, session_id, iteration, message_id, content,
