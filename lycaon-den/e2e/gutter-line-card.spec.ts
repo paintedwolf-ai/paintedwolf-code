@@ -50,6 +50,7 @@ test("line facts show a hint on rest and open the card only on activation", asyn
 
   await handle.click();
   await expect(card).toBeVisible();
+  await expect(tooltip).toHaveCount(0);
   await expect(card).toHaveAttribute("data-side", "right");
   await expect(handle).toHaveCSS("box-shadow", "none");
   await expect(card.getByRole("button")).toHaveCount(4);
