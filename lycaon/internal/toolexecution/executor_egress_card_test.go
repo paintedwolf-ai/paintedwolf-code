@@ -2,7 +2,6 @@ package toolexecution_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolexecution"
 	"slices"
 	"strings"
 	"sync"
@@ -17,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/ingestion"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -54,42 +54,53 @@ func gatherExecutor(t *testing.T) (*toolexecution.Executor, *gatherHITL) {
 	return exec, mgr
 }
 
-// Two hosts one command reaches inside the settle window are one card over the
-// observed set, and both dials are released by the one answer.
-func TestConcurrentHostsFromOneCommandAreOneSetCard(t *testing.T) {
+// Each recipient is its own decision: two hosts one command reaches at once
+// raise one card each, and each card names its host alone.
+func TestConcurrentHostsFromOneCommandAskSeparately(t *testing.T) {
 	exec, mgr := gatherExecutor(t)
 	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	cmd := confine.EgressCommand{SessionID: "chat-1", RootSessionID: "chat-1", ToolCallID: "tc-pytest", CommandLine: "pytest -n auto", ProjectID: "proj", ProjectDir: "/tmp/proj"}
 
-	results := make(chan bool, 2)
-	for _, host := range []string{"api.osv.dev", "attack.mitre.org"} {
+	hosts := []string{"api.osv.dev", "attack.mitre.org"}
+	results := make(chan bool, len(hosts))
+	for _, host := range hosts {
 		go func(host string) { results <- exec.ResolveEgressForTest(ctx, cmd, host) }(host)
 	}
-	for i := 0; i < 2; i++ {
+	for i := range hosts {
 		select {
 		case ok := <-results:
 			if !ok {
 				t.Fatalf("dial %d denied", i)
 			}
 		case <-ctx.Done():
-			t.Fatal("timed out waiting for the set card")
+			t.Fatal("timed out waiting for the cards")
 		}
 	}
 	reqs := mgr.requests()
-	if len(reqs) != 1 {
-		t.Fatalf("checkpoint requests = %d, want one set card: %+v", len(reqs), reqs)
+	if len(reqs) != len(hosts) {
+		t.Fatalf("checkpoint requests = %d, want one per host: %+v", len(reqs), reqs)
 	}
-	req := reqs[0]
-	if req.DeclaredEndpoints == nil || req.DeclaredEndpoints.HostCount != 2 || req.DeclaredEndpoints.Source != toolexecution.DeclaredEndpointObserved {
-		t.Fatalf("set card endpoints = %+v, want two observed hosts", req.DeclaredEndpoints)
+	named := map[string]bool{}
+	for _, req := range reqs {
+		if req.DeclaredEndpoints != nil {
+			t.Fatalf("an observed host was folded into a set: %+v", req.DeclaredEndpoints)
+		}
+		plan, err := hitl.CompileCheckpointApprovalPlan(req)
+		testutil.FailErr(t, "compile plan", err)
+		if plan.Subject.Kind == hitl.ApprovalSubjectDestinationSet {
+			t.Fatalf("subject = %+v, want one destination", plan.Subject)
+		}
+		var host string
+		if req.ProposedAction != nil {
+			host, _ = req.ProposedAction.Invocation.Args["host"].(string)
+		}
+		named[host] = true
 	}
-	plan, err := hitl.CompileCheckpointApprovalPlan(req)
-	if err != nil {
-		t.Fatalf("compile set plan: %v", err)
-	}
-	if plan.Subject.Kind != hitl.ApprovalSubjectDestinationSet || len(plan.Subject.Targets) != 2 {
-		t.Fatalf("set subject = %+v", plan.Subject)
+	for _, host := range hosts {
+		if !named[host] {
+			t.Fatalf("no card named %s: %v", host, named)
+		}
 	}
 }
 
@@ -103,8 +114,6 @@ func TestRepeatedHostsKeepBalancedTaskScope(t *testing.T) {
 	if !exec.ResolveEgressForTest(ctx, cmd, "api.github.com") {
 		t.Fatal("first host denied")
 	}
-	// Past the window: the next host is a second card for the same command.
-	time.Sleep(700 * time.Millisecond)
 	if !exec.ResolveEgressForTest(ctx, cmd, "cve.circl.lu") {
 		t.Fatal("second host denied")
 	}
@@ -138,7 +147,10 @@ func TestRepeatedHostsKeepBalancedTaskScope(t *testing.T) {
 
 func TestCheckpointOwnerReleaseKeepsCurrentBrokerApproval(t *testing.T) {
 	confine.SetEgressPosture(confine.PostureAsk)
-	t.Cleanup(func() { confine.SetEgressPosture(confine.PostureObserve) })
+	t.Cleanup(func() {
+		confine.SetEgressPosture(confine.PostureObserve)
+		confine.ForgetEgressSession("current-owner")
+	})
 	old, oldManager := gatherExecutor(t)
 	current, currentManager := gatherExecutor(t)
 	// Parsed HTTP is ingestion at Balanced; Strict reviews the first host.

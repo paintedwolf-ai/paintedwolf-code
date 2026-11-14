@@ -2,11 +2,12 @@ package httpaction
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -155,6 +156,8 @@ func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[st
 		toolrejection.AttachUserGuidance(reject, resolution.Guidance)
 		return outboundRequest{}, reject
 	}
+	// The card named the recipient; sending to it, whole or redacted, was the person's choice.
+	egressgate.ApproveRecipient(ctx, destinationID)
 	if resolution.Decision != secretmatch.SendRedacted {
 		return sending, nil
 	}

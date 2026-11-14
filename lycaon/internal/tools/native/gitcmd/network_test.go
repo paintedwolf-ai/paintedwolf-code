@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -230,8 +231,12 @@ func TestNetworkCommandsAdmitEveryResolvedRemoteBeforeContact(t *testing.T) {
 		confine.SetEgressResolver(nil)
 	})
 	var asked []string
+	var admittedServer []egressproxy.Endpoint
 	confine.SetEgressResolver(func(_ context.Context, _ confine.EgressCommand, ep egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
 		asked = append(asked, ep.Host)
+		if ep.Host == "127.0.0.1" {
+			admittedServer = append(admittedServer, ep)
+		}
 		return ep.Host == "127.0.0.1"
 	})
 
@@ -252,6 +257,13 @@ func TestNetworkCommandsAdmitEveryResolvedRemoteBeforeContact(t *testing.T) {
 	// The fetch URL alone is authorized, so fetch works while push stays refused.
 	if fetch := h.exec("git", "fetch", "origin"); fetch.err != nil || fetch.result.Status != 0 {
 		t.Fatalf("fetch from the authorized remote: %+v %v %s", fetch.result, fetch.err, fetch.stderr)
+	}
+	serverURL, err := url.Parse(server.URL)
+	testutil.FailErr(t, "parse server URL", err)
+	// Push and fetch each admit the server once, as the request Git sends.
+	want := "http_request://" + serverURL.Host
+	if len(admittedServer) != 2 || admittedServer[0].String() != want || admittedServer[1].String() != want {
+		t.Fatalf("server admissions %v, want two for %s", admittedServer, want)
 	}
 	h.exec("git", "fetch", "--", "-c").refused(t, "option-shaped remote", "COMMAND_OPERAND_INVALID")
 }

@@ -250,8 +250,10 @@ func testJarModifiedDuringEgressWaitCannotSendUnreviewedCookie(t *testing.T) {
 		"capability_request": loopbackCapability(t, server.URL),
 	}, sessionContext(t.TempDir(), "egress-wait-call"))
 	testutil.FailErr(t, "request after egress wait", err)
-	if secretAsks.Load() != 1 {
-		t.Fatalf("secretAsks = %d, want 1 (injected foreign cookie must be reviewed after egress wait)", secretAsks.Load())
+	// The hop's cookies were reviewed and frozen before the connection wait,
+	// so a cookie injected during it is never sent and needs no review.
+	if secretAsks.Load() != 0 {
+		t.Fatalf("secretAsks = %d, want 0 (a cookie injected after the hop's review is not part of it)", secretAsks.Load())
 	}
 	if strings.Contains(receivedCookie, "foreign-secret-cookie-9999") {
 		t.Fatalf("server received withheld foreign cookie injected during wait: %q", receivedCookie)

@@ -299,6 +299,7 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)
 		defer tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleCompleted)
 	}
+	ctx = egressgate.WithReviewedRecipients(ctx)
 	ctx = secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
 		SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
 		ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID,
@@ -482,12 +483,17 @@ func send(
 			if reject := checkHopLoopbackAuthority(hop.URL, spec.resolve, allowAddress); reject != nil {
 				return reject
 			}
-			if err := admitHopRoute(hopCtx, hop.URL, hop.Method, spec.resolve); err != nil {
+		}
+		// Cookie review comes first: approving the disclosure is consent to
+		// the connection that carries it.
+		if outbound.beforeCookieHop != nil {
+			if err := outbound.beforeCookieHop(hopCtx, hop); err != nil {
 				return err
 			}
 		}
-		if outbound.beforeCookieHop != nil {
-			if err := outbound.beforeCookieHop(hopCtx, hop); err != nil {
+		if spec.socket == "" {
+			recipientID, _ := requestDestination(spec.forHop(hop))
+			if err := admitHopRoute(hopCtx, hop.URL, hop.Method, spec.resolve, recipientID); err != nil {
 				return err
 			}
 		}

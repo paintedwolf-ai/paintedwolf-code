@@ -12,12 +12,13 @@ import (
 )
 
 // admitHopRoute gates the nominal hop URL and any explicitly mapped route
-// destination selected for that hop before DNS resolution or dialing.
-func admitHopRoute(ctx context.Context, hopURL *url.URL, method string, resolve []outboundhttp.ResolveMapping) error {
+// destination selected for that hop before DNS resolution or dialing. Each is
+// one connection of the reviewed recipient.
+func admitHopRoute(ctx context.Context, hopURL *url.URL, method string, resolve []outboundhttp.ResolveMapping, recipientID string) error {
 	if hopURL == nil {
 		return nil
 	}
-	if err := egressgate.AwaitHTTPRequest(ctx, hopURL, method); err != nil {
+	if err := egressgate.AwaitHTTPHop(ctx, hopURL, method, recipientID); err != nil {
 		return err
 	}
 	routes, err := selectedHopRouteURLs(hopURL, resolve)
@@ -25,7 +26,7 @@ func admitHopRoute(ctx context.Context, hopURL *url.URL, method string, resolve 
 		return err
 	}
 	for _, routeURL := range routes {
-		if err := egressgate.AwaitHTTPRequest(ctx, routeURL, method); err != nil {
+		if err := egressgate.AwaitHTTPHop(ctx, routeURL, method, recipientID); err != nil {
 			return err
 		}
 	}
