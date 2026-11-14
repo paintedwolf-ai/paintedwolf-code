@@ -42,7 +42,11 @@ type ToolResponse struct {
 // deferred names the tools the frozen request can load but does not offer.
 func ClassifyToolResponse(profile providerprofile.Profile, req modelcall.CompletionRequest, deferred []string, c *modelcall.Completion, providerID, model string) (*ToolResponse, error) {
 	out := &ToolResponse{Completion: c}
-	if c == nil || len(c.ToolCalls) > 0 || !req.ToolsCallable() {
+	if c == nil || len(c.ToolCalls) > 0 || len(req.Tools) == 0 {
+		return out, nil
+	}
+	if !req.ToolsCallable() {
+		out.TextAction = detectTextAction(out.Completion.Content, req.Tools, deferred)
 		return out, nil
 	}
 	switch req.ToolProtocol {

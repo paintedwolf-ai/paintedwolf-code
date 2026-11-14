@@ -87,6 +87,15 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 				assertUnitRendersIff(t, engine, "http-operating-procedure", vars, vars["profile_command_network_egress"] == true)
 				restores, _ := vars["profile_has_restore_version"].(bool)
 				assertUnitRendersIff(t, engine, "native-edit-tool", vars, vars["profile_command_mutation"] == true || restores)
+				mints, _ := vars["mints"].(map[string]bool)
+				if got := mints["tui"]; got != (vars["profile_has_terminal_capture"] == true) {
+					t.Errorf("mints[tui] = %v, want %v", got, vars["profile_has_terminal_capture"] == true)
+				}
+				if vars["profile_command_mutation"] == false && !slices.Contains(offered, "apply_patch") {
+					if mints["edit"] || mints["replace"] || mints["rewrite"] || mints["delete"] {
+						t.Errorf("read-only command surface claims mutating mints: %v", mints)
+					}
+				}
 			})
 		}
 	}

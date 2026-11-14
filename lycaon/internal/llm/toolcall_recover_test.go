@@ -236,6 +236,9 @@ func TestClassifyToolResponseKeepsProseWhenToolUseForbidden(t *testing.T) {
 	if len(out.Completion.ToolCalls) != 0 || out.Completion.Content != content {
 		t.Fatalf("a forbidden turn recovered %d tool calls from prose", len(out.Completion.ToolCalls))
 	}
+	if !slices.Equal(out.TextAction.Tools, []string{"read"}) {
+		t.Fatalf("forbidden turn did not observe written call: %+v", out.TextAction)
+	}
 }
 
 func harmonyToolReq() modelcall.CompletionRequest {

@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -294,12 +295,22 @@ func TestBlockedTextActionIsNotTheFinalAnswer(t *testing.T) {
 	limits := settings.DefaultSessionLimits()
 	limits.MaxIterations = 1
 	retracted := false
+	closed := false
 	deps := PromptLoopDeps{
 		Context: ContextDeps{Tools: reg, Limits: func(context.Context, *api.Session) settings.SessionLimits { return limits }, BuildMessages: func(_ context.Context, _ *api.Session, h []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
 			return h, nil
 		}},
-		Model:    ModelDeps{LLM: client},
-		Closeout: CloseoutDeps{EvaluateContentAnchor: outputPolicyEvaluator(t, outputPolicyPipeline(t)())},
+		Model: ModelDeps{LLM: client},
+		Closeout: CloseoutDeps{
+			EvaluateContentAnchor: outputPolicyEvaluator(t, outputPolicyPipeline(t)()),
+			AssembleLedgerCloseout: func(_ context.Context, _, _ string, _ []string, drafted guidance.CloseoutDraft, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+				if strings.Contains(drafted.Synthesis, fenced) {
+					t.Fatalf("blocked text reached closeout assembly: %+v", drafted)
+				}
+				closed = true
+				return guidance.CoordinatorCompletionReport{Synthesis: drafted.Synthesis}, &api.CitationGrounding{HostAssembled: true}
+			},
+		},
 		Projection: ProjectionDeps{
 			AppendDraftVersion: func(_ context.Context, _, _, body, code string) (int, error) {
 				if code == "TOOL_ACTION_IN_TEXT" && body == fenced {
@@ -326,8 +337,8 @@ func TestBlockedTextActionIsNotTheFinalAnswer(t *testing.T) {
 	sess := &api.Session{ID: t.Name(), Posture: api.SessionPostureBuild}
 	_, err := NewPromptLoopForTest(deps).Run(t.Context(), PromptRunInput{SessionID: sess.ID, Session: sess, History: []api.Message{{Role: api.MessageRoleUser, Content: "Read x"}}, ProfileID: "explore_readonly", ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}})
 	testutil.FailErr(t, "run last turn", err)
-	if !retracted || client.calls != 1 {
-		t.Fatalf("retracted=%v model calls=%d", retracted, client.calls)
+	if !retracted || !closed || client.calls != 1 {
+		t.Fatalf("retracted=%v closed=%v model calls=%d", retracted, closed, client.calls)
 	}
 }
 

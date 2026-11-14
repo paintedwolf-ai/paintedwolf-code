@@ -405,6 +405,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 			return nil, nil, reject
 		}
 		st.output.rejection = reject
+		st.output.recoveryAdmitted = true
 	}
 	if input := completion.ContextInputTokens(); l.Deps.RecordCompactionTokenObservation != nil && input > 0 {
 		l.Deps.RecordCompactionTokenObservation(sessionID, callProvider, callModel, input, transcriptEstimate)
