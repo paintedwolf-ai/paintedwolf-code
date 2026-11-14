@@ -325,7 +325,6 @@ func TestBuildOrientationLinesOmitsEmptyRepo(t *testing.T) {
 	}
 }
 
-
 // The coordinator addresses workers by name and results by handle, so no
 // board line, in any scope, carries a job id or a prefix of one.
 func TestBoardOrientationNamesNoJob(t *testing.T) {

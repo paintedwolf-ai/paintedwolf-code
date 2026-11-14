@@ -38,10 +38,10 @@ func (s *SQLStore) CancelJob(ctx context.Context, id string, result *api.WorkerR
 
 	completedAt := db.FormatTime(time.Now().UTC())
 	n, err := q.CancelWorkerJob(ctx, db.CancelWorkerJobParams{
-		ResultJson:  resultJSON,
-		CompletedAt: sql.NullString{String: completedAt, Valid: true},
+		ResultJson:     resultJSON,
+		CompletedAt:    sql.NullString{String: completedAt, Valid: true},
 		KeptCheckpoint: keptCheckpoint,
-		ID:          id,
+		ID:             id,
 	})
 	if err != nil || n != 1 {
 		return n == 1, err

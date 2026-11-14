@@ -158,12 +158,12 @@ func (s *SQLStore) FailJob(ctx context.Context, claimed *api.WorkerTask, errMsg 
 	q := s.queries.WithTx(tx)
 	completedAt := db.FormatTime(time.Now().UTC())
 	n, err := q.FailWorkerJob(ctx, db.FailWorkerJobParams{
-		Error:       db.NullString(errMsg),
-		FailureJson: failureJSON,
-		CompletedAt: sql.NullString{String: completedAt, Valid: true},
+		Error:          db.NullString(errMsg),
+		FailureJson:    failureJSON,
+		CompletedAt:    sql.NullString{String: completedAt, Valid: true},
 		KeptCheckpoint: keptCheckpoint,
-		ID:          claimed.ID,
-		ClaimToken:  db.NullString(claimed.ClaimToken),
+		ID:             claimed.ID,
+		ClaimToken:     db.NullString(claimed.ClaimToken),
 	})
 	if err != nil || n != 1 {
 		return n == 1, err
