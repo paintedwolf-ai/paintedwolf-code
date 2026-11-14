@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.env_var, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SNAPSHOT_FILE_NOT_PRODUCED"
 effect: block
-category: recoverable
-emit: guard:command
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command
 message: snapshot_capture target file was not produced
 what: The expected snapshot{% if paintedwolf.path %} at {{ paintedwolf.path }}{% endif %} was unavailable after the command completed.
 cause: The command exited with status 0, but the host could not read a complete nonempty snapshot.
 why: '{% if paintedwolf.env_var %}This capture supplied its output path in `{{ paintedwolf.env_var }}`.{% endif %}'
 fix: ''
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       path: build/screen.png

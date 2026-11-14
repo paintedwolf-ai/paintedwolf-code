@@ -6,14 +6,14 @@ selector: {}
 requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMPLETE_LEG_REVIEW_ASSIGNMENT_MISSING"
 effect: block
-category: recoverable
-emit: guard:tool
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
 message: A recorded review assignment is required.
 what: This review has no recorded assignment subject.
 cause: The host cannot establish which inputs this worker was assigned.
 why: A completion payload cannot reconstruct missing dispatch context.
 fix: '{{ paintedwolf.next_steps }}'
 instead: Preserve the evidence already gathered and report this dependency; do not invent a revision.
-scenarios:
+x-paintedwolf-scenarios:
   - id: missing
     vars: {}

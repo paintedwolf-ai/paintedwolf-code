@@ -11,15 +11,15 @@ selector:
 requires_facts: [paintedwolf.id_required, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "TERMINAL_ID_REQUIRED"
 effect: block
-category: recoverable
-emit: guard:terminal_session
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:terminal_session
 message: terminal id is required
 what: id was missing or empty.
 cause: Handle tools operate on an existing terminal_open id only.
 why: Without an id the host cannot address a pty process.
 fix: Pass id from a prior terminal_open result.
 instead: Branch on Code TERMINAL_ID_REQUIRED; pass id from terminal_open
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       profile: implement

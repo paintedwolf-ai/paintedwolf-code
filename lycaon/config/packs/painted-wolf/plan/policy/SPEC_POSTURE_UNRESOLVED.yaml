@@ -8,15 +8,15 @@ when: paintedwolf.rejection_code == "SPEC_POSTURE_UNRESOLVED"
 effect: block
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: rule:spec
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
 message: Establish spec posture via /plan or write a blueprint file first
 what: Establish spec posture via /plan or write a blueprint file first
 cause: Establish spec posture via /plan or write a blueprint file first
 why: Use a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` or run /plan
 fix: Use a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` or run /plan
 instead: Establish spec posture before high-risk tools
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

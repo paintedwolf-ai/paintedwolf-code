@@ -7,14 +7,14 @@ selector:
 requires_facts: [paintedwolf.ask_artifact_count, paintedwolf.ask_purpose, paintedwolf.ask_purposes, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "ASK_USER_PURPOSE_INVALID"
 effect: block
-category: recoverable
-emit: guard:ask_user
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
 message: "The ask purpose {{ paintedwolf.ask_purpose }} does not fit its artifacts."
 what: "The ask purpose {{ paintedwolf.ask_purpose }} does not fit an ask with {{ paintedwolf.ask_artifact_count }} artifacts."
 cause: "Purpose must be one of {{ paintedwolf.ask_purposes }}: clarify carries no artifacts, review carries one to four, and compare carries two to four."
 why: The purpose selects the card the user answers, so it has to match what the ask attaches.
 fix: "Omit purpose to let artifacts select review, or pass the purpose that matches the attached artifacts."
 instead: Branch on Code ASK_USER_PURPOSE_INVALID; correct purpose or artifacts
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars: {"ask_purpose": "clarify", "ask_purposes": ["clarify", "review", "compare"], "ask_artifact_count": 2, "session_role": "coordinator", "tool": "ask_user"}

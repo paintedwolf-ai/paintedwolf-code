@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKFLOW_TRANSITION_UNKNOWN"
 effect: block
-category: recoverable
-emit: guard:workflow
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:workflow
 message: unknown choice transition_id for the current phase
 what: The transition_id is not declared on the current phase
 cause: transition_id must match a transitions[].id on the active phase
 why: Call workflow_transition only with an id from the Phase exit choice arms
 fix: Use a transition_id listed in the active-workflow Phase exit section
 instead: Use a transition_id listed in the active-workflow Phase exit section
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       phase: decide

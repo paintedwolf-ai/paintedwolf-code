@@ -2,8 +2,8 @@
   "id": "doc-namespace-identity",
   "title": "Two publishers may ship the same id under different namespaces; the decision still carries the bare id",
   "covers": [
+    "OAR-DOC-20",
     "OAR-DOC-21",
-    "OAR-DOC-22",
     "OAR-EVAL-7"
   ],
   "rule": [
@@ -14,7 +14,6 @@
       "on": "tool.pre_invoke",
       "selector": {},
       "effect": "warn",
-      "emit": "rule:conformance",
       "when": "tool == \"read\"",
       "namespace": "acme.security"
     },
@@ -25,7 +24,6 @@
       "on": "tool.pre_invoke",
       "selector": {},
       "effect": "block",
-      "emit": "rule:conformance",
       "when": "tool == \"read\"",
       "namespace": "globex.policy"
     }

@@ -6,13 +6,13 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKFLOW_REVIEW_VIEW_INVALID"
 effect: block
-category: recoverable
-emit: guard:workflow
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:workflow
 message: The requested review view is unavailable or invalid.
 what: The requested review view is unavailable or invalid.
 cause: The review view must match the active run, permitted assignment, and returned cursor.
 fix: Use summary or assignments as coordinator; workers use subject with their exact assignment_id. Use only returned cursors and do not combine review and finding selectors.
 instead: Correct the named selector; ask the coordinator if no assignment is available.
-scenarios:
+x-paintedwolf-scenarios:
   - id: rejected
     vars: {}

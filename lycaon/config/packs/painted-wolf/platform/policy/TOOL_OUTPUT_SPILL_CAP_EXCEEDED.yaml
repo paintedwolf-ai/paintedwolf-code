@@ -6,8 +6,8 @@ selector: {}
 requires_facts: [paintedwolf.bare_repo_scope, paintedwolf.bytes, paintedwolf.cap, paintedwolf.execution_outcome, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "TOOL_OUTPUT_SPILL_CAP_EXCEEDED"
 effect: block
-category: recoverable
-emit: guard:tool
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
 message: structured tool output is {{ paintedwolf.bytes }} bytes; spill cap is {{ paintedwolf.cap }}
 what: 'Structured {{ tool }} output is {{ paintedwolf.bytes }} bytes, above the {{ paintedwolf.cap }}-byte spill cap; the oversized spill was not written.'
 cause: 'Execution returned {{ paintedwolf.execution_outcome }} before spill admission. Refusing this output does not undo completed changes.'
@@ -15,7 +15,7 @@ why: Structured output must remain valid JSON; cutting it to fit would corrupt t
 fix: >-
   Inspect existing results and current state before another operation. Do not repeat a mutation just to reshape its output. {% if paintedwolf.bare_repo_scope %}For a fresh read-only summary, use a subpath instead of path={{ paintedwolf.path }}, or add a focused pattern. {% else %}Use an independent bounded observation or pagination supported by its actual schema.{% endif %} No new spill is available from this failed write. Retain any earlier results and report the unavailable payload as a limitation.
 instead: Preserve completed work; recover only the observations still needed
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       execution_outcome: completed

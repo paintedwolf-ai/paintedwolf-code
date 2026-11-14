@@ -1,0 +1,29 @@
+{
+  "id": "expr-string-builtins-use-code-points",
+  "title": "String built-ins count and compare code points without folding case",
+  "covers": [
+    "OAR-EXPR-18"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "size(\"é😀\") == 2 && !starts_with(tool, \"R\") && starts_with(tool, \"\") && contains(tool, \"\")"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:fired"
+    ]
+  }
+}

@@ -29,7 +29,6 @@ profile_map:
   unsupported: [model.output, model.tool_result]
 activity_window: 16
 detectors: []
-supports_transform: true
 expression_nodes_max: 256
 host_facts:
   - name: paintedwolf.audited_present

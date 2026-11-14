@@ -1,0 +1,55 @@
+{
+  "id": "fire-same-code-reject-run-resets",
+  "title": "A decision other than a block ends the run of blocks",
+  "covers": [
+    "OAR-FIRE-8"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "A_RUN_GUARD",
+      "kind": "schema",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "warn",
+      "when": "same_code_reject_run >= 1"
+    },
+    {
+      "spec_version": "1.0",
+      "id": "NO_RM",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "when": "tool == \"rm\""
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "ls"
+    },
+    "session_id": "fixture-session",
+    "occurrences": [
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool": "rm"
+        }
+      },
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool": "ls"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "decision": "none",
+    "applied": [
+      "A_RUN_GUARD:passed",
+      "NO_RM:passed"
+    ]
+  }
+}

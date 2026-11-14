@@ -13,7 +13,7 @@ func CheckCondition(source string, env *Environment) error {
 	}
 	if env != nil && env.ExpressionNodesMax > 0 {
 		if n := countNodes(ast); n > env.ExpressionNodesMax {
-			return loadErr("condition has %d parse-tree nodes, above the declared expression_nodes_max of %d", n, env.ExpressionNodesMax)
+			return loadErr("[OAR-EXPR-19] condition has %d parse-tree nodes, above this engine's limit of %d", n, env.ExpressionNodesMax)
 		}
 	}
 	typ, _, err := checkCondition(ast, env)
@@ -47,16 +47,4 @@ func EvaluateCondition(source string, env *Environment, facts map[string]any, fu
 	}
 	rule := &Rule{When: root, Refs: refs, environment: env}
 	return rule.EvaluateCondition(facts, functions)
-}
-
-// ValidateTransformTarget checks that a transform target is either the whole
-// content or a list<map> fact whose members are well-formed spans.
-// A malformed span is a rule that cannot be
-// evaluated.
-func ValidateTransformTarget(target string, facts map[string]any, contentLen int) error {
-	if target == "content" {
-		return nil
-	}
-	_, err := readSpans(facts[target], contentLen)
-	return err
 }

@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: CHOWN_BULK_DENIED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - chown
+selector: {}
 requires_facts: [paintedwolf.bulk_denied, paintedwolf.max_paths, paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.requested]
-when: paintedwolf.rejection_code == "CHOWN_BULK_DENIED"
+when: paintedwolf.operation == "chown" && paintedwolf.rejection_code == "CHOWN_BULK_DENIED"
 effect: block
-category: recoverable
-emit: guard:chown
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chown
 message: chown:chown batch exceeds max paths
 what: chown received {{ paintedwolf.requested }} paths; the current limit is {{ paintedwolf.max_paths }}.
 cause: The explicit path batch exceeds the per-call bound.
 why: Ownership changes need bounded, reviewable targets.
 fix: Split only the requested paths into batches of at most {{ paintedwolf.max_paths }}. Preserve intended ownership and do not expand the assignment.
 instead: Branch on Code CHOWN_BULK_DENIED; reduce the explicit batch
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

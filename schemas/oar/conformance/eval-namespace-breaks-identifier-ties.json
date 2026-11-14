@@ -1,0 +1,49 @@
+{
+  "id": "eval-namespace-breaks-identifier-ties",
+  "title": "Rules of one kind and id order by namespace",
+  "covers": [
+    "OAR-EVAL-1",
+    "OAR-DOC-21"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "SHARED",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "warn",
+      "when": "true",
+      "namespace": "example.b",
+      "what": "from b"
+    },
+    {
+      "spec_version": "1.0",
+      "id": "SHARED",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "warn",
+      "when": "true",
+      "namespace": "example.a",
+      "what": "from a"
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "SHARED",
+    "copy": {
+      "what": "from a"
+    },
+    "applied": [
+      "example.a/SHARED:fired",
+      "example.b/SHARED:fired"
+    ]
+  }
+}

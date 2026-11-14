@@ -10,15 +10,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code, paintedwolf.supplied]
 when: paintedwolf.rejection_code == "SCAN_PROJECT_DIR_HOST"
 effect: block
-category: recoverable
-emit: guard:scan_drilldown
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:scan_drilldown
 message: scan project_dir is host-bound — omit it
 what: Scan tool received project_dir {{ paintedwolf.supplied }} but scans are keyed to the active session project root.
 cause: project_dir is host-injected from the session — do not pass ".", relative paths, or another checkout path.
 why: Stored scans are keyed by the session absolute project_dir; guessed paths resolve no scan.
 fix: Omit project_dir and retain the intended scan identifiers in the fields accepted by this tool. scan_summary accepts scan_ids or pass_id; scan_query accepts scan_ids. The host chooses the active project.
 instead: Omit project_dir — host binds scan tools to the session root
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       profile: explore_readonly

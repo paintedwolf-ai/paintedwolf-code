@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.bare_repo_scope, paintedwolf.bytes, paintedwolf.cap, paintedwolf.execution_outcome, paintedwolf.missing_args, paintedwolf.opaque_overflow, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.unpaginated_survey]
 when: paintedwolf.rejection_code == "TOOL_RESULT_TOO_LARGE"
 effect: block
-category: recoverable
-emit: guard:tool
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
 message: tool result is {{ paintedwolf.bytes }} bytes; spill cap is {{ paintedwolf.cap }}{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason }}){% endif %}
 what: '{{ tool }} returned {{ paintedwolf.bytes }} bytes, above the {{ paintedwolf.cap }}-byte output cap without a continuation receipt; delivery of that payload was refused.'
 cause: Execution returned {{ paintedwolf.execution_outcome }} before the output check. This refusal does not undo completed changes or establish that nothing ran.
 why: Output admission bounds retained data and requires a bounded, truthful result.
 fix: Inspect existing results and the current state before choosing another operation. Do not repeat a mutation merely to obtain smaller output. {% if paintedwolf.bare_repo_scope %}For a fresh read-only summary, use a subpath instead of path={{ paintedwolf.path }}, or add a focused pattern. {% else %}{% if paintedwolf.unpaginated_survey %}Use an independent bounded survey with pagination{% if paintedwolf.missing_args %} ({{ paintedwolf.missing_args }}){% endif %} or a tighter scope. {% else %}{% if paintedwolf.opaque_overflow %}Use an existing process handle or retained log only if one was actually returned. A new command must be independently needed and bound its output; piping a mutating command through a text limiter does not make replay safe. {% else %}Use an independently safe observation with a smaller result budget.{% endif %}{% endif %}{% endif %} Report any unavailable result as a limitation; do not invent a spill path or continuation cursor.
 instead: Preserve completed work; recover observations without replaying side effects
-scenarios:
+x-paintedwolf-scenarios:
   - id: bare_repo_scope
     vars:
       execution_outcome: completed

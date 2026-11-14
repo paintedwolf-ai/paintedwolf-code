@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: MOVE_BULK_DENIED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - move
+selector: {}
 requires_facts: [paintedwolf.bulk_denied, paintedwolf.max_pairs, paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.requested]
-when: paintedwolf.rejection_code == "MOVE_BULK_DENIED"
+when: paintedwolf.operation == "move" && paintedwolf.rejection_code == "MOVE_BULK_DENIED"
 effect: block
-category: recoverable
-emit: guard:move
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:move
 message: move:move batch exceeds max pairs
 what: move received {{ paintedwolf.requested }} pairs; the current bound is {{ paintedwolf.max_pairs }}.
 cause: The explicit move set exceeds the per-call pair bound.
 why: Each source/destination pairing and its order must retain the intended mutation.
 fix: Split the intended pairs into batches of at most {{ paintedwolf.max_pairs }}. Preserve completed move receipts and do not replay already-moved sources.
 instead: Keep each batch bounded and account for prior moves
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

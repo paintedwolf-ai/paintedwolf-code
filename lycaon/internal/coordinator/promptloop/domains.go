@@ -99,7 +99,7 @@ type CloseoutDeps struct {
 	RejectFmt              *guidance.StaticRejectFormatter
 	HintConfig             *guidance.HintConfig
 	HintNextSteps          guidance.NextStepsResolver
-	EvaluateContentAnchor  func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (reject *guidance.Refusal, blocked bool, content string, transformed bool)
+	EvaluateContentAnchor  func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (reject *guidance.Refusal, blocked bool)
 	EvaluateCloseoutBlock  func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error)
 	EvaluateMidTurnNote    func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) error
 	AssembleLedgerCloseout func(ctx context.Context, sessionID, surfaceID string, forcedBy []string, draft guidance.CloseoutDraft, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding)

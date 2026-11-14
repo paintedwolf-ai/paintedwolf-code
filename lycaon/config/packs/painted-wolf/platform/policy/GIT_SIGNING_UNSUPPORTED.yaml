@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: GIT_SIGNING_UNSUPPORTED
 kind: policy
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - git_commit
+selector: {}
 requires_facts: [paintedwolf.operation, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "GIT_SIGNING_UNSUPPORTED"
+when: paintedwolf.operation == "git_commit" && paintedwolf.rejection_code == "GIT_SIGNING_UNSUPPORTED"
 effect: block
-category: recoverable
-emit: guard:git_signing
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:git_signing
 message: git signing unsupported
 what: This action asked for a signed commit or tag; signing is not supported yet.
 cause: No signing program resolves here, and this host brokers no key material.
 why: A clear failure beats a silent unsigned commit.
 fix: Create the signed commit or tag from your terminal, then continue.
 instead: Commit or tag from your terminal; do not retry unsigned here
-scenarios:
+x-paintedwolf-scenarios:
   - id: commit
     vars:
       profile: implement

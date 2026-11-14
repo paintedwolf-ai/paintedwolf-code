@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: MKDIR_PATH_DENIED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - mkdir
+selector: {}
 requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "MKDIR_PATH_DENIED"
+when: paintedwolf.operation == "mkdir" && paintedwolf.rejection_code == "MKDIR_PATH_DENIED"
 effect: block
-category: recoverable
-emit: guard:mkdir
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:mkdir
 message: mkdir:mkdir path matches deny glob
 what: Directory creation is denied at {{ paintedwolf.path }}.
 cause: The resolved path is protected by the host write policy.
 why: Changing the creation tool cannot override this boundary.
 fix: Preserve any earlier creation receipts. Use a different path only if it is both intended and permitted; do not rename or route through another tool to evade protection.
 instead: Preserve the path boundary and report the unmet creation
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

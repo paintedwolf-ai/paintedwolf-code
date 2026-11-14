@@ -182,7 +182,7 @@ func TestValidateNextStepsChecksArgsAgainstToolSchemas(t *testing.T) {
 		{"reissue path no tool accepts", &Rule{ID: "R", NextSteps: &NextSteps{Steps: []NextStep{
 			{Args: map[string]any{"bogus": "x"}, Say: "Use {{ call }}."},
 		}}}, "no declared tool accepts bogus"},
-		{"reissue selector must accept", &Rule{ID: "R", Selector: Selector{"tool": {"recall"}}, NextSteps: &NextSteps{Steps: []NextStep{
+		{"reissue selector must accept", &Rule{ID: "R", Selector: Selector{"tools": {"recall"}}, NextSteps: &NextSteps{Steps: []NextStep{
 			{Args: map[string]any{"overlay_id": "x"}, Say: "Use {{ call }}."},
 		}}}, "recall does not accept overlay_id"},
 		{"pick path checked", &Rule{ID: "R", RequiresFacts: []string{"paintedwolf.x"}, NextSteps: &NextSteps{Steps: []NextStep{

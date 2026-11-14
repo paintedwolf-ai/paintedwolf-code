@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "TOOL_INVOKE_PROSE_TURN"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: Tools cannot run on a prose-only turn
 what: This tool cannot run during closeout
 cause: This turn has entered closeout; ordinary tool execution is closed.
 why: Closeout must settle the work using the currently offered completion surface.
 fix: '{{ paintedwolf.next_steps }}'
 instead: Complete the current closeout without starting another execution arc
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

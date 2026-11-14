@@ -150,3 +150,13 @@ func TestCommandRecoveryUsesInvocationIdentity(t *testing.T) {
 		}
 	}
 }
+
+func TestFactsFromDataPublishesTheToolProfile(t *testing.T) {
+	got := FactsFromData(map[string]any{"profile": "plan_write_only"})
+	if got["paintedwolf.tool_profile"] != "plan_write_only" {
+		t.Fatalf("tool profile fact = %#v", got["paintedwolf.tool_profile"])
+	}
+	if _, retired := got["paintedwolf.profile"]; retired {
+		t.Fatal("published the retired paintedwolf.profile")
+	}
+}

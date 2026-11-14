@@ -6,14 +6,14 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SUBMIT_VERDICT_SCANS_PENDING"
 effect: block
-category: recoverable
-emit: guard:workflow
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:workflow
 message: The review is waiting for bound scans.
 what: The run's scanner inventory is still being collected.
 cause: One or more bound scans have not settled.
 why: A terminal review needs the complete inventory to account for its findings.
 fix: Wait for the bound scans to settle, then inspect their groups and submit the complete verdict.
 instead: Do not submit a partial inventory or start another scan to replace one that is still running.
-scenarios:
+x-paintedwolf-scenarios:
   - id: pending
     vars: {}

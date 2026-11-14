@@ -74,7 +74,6 @@ type EngineDeclaration struct {
 	Detectors   []string         `yaml:"detectors" json:"detectors"`
 
 	ExpressionNodesMax int  `yaml:"expression_nodes_max" json:"expression_nodes_max"`
-	SupportsTransform  bool `yaml:"supports_transform" json:"supports_transform"`
 	SupportsChunk      bool `yaml:"supports_chunk" json:"supports_chunk"`
 }
 
@@ -169,7 +168,7 @@ func (d *EngineDeclaration) Environment() (*oarcore.Environment, error) {
 	return oarcore.NewEnvironment(oarcore.EnvironmentSpec{
 		Host: d.Host, ProfileMap: profileMap, HostAnchors: d.HostAnchors, Profiles: d.Profiles,
 		HostFacts: facts, ActivityWindow: d.Window, Detectors: d.Detectors,
-		ExpressionNodesMax: d.ExpressionNodesMax, SupportsTransform: d.SupportsTransform, SupportsChunk: d.SupportsChunk,
+		ExpressionNodesMax: d.ExpressionNodesMax, SupportsChunk: d.SupportsChunk,
 	})
 }
 

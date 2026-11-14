@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.ref, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "ASK_USER_ARTIFACT_FOREIGN"
 effect: block
-category: recoverable
-emit: guard:ask_user
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
 message: artifacts entry is outside this session tree
 what: The artifact {{ paintedwolf.ref }} is outside this conversation’s session tree.
 cause: Tree-scoped lookup denied this reference; no foreign artifact details are exposed.
 why: Asks may only attach artifacts from the current coordinator session tree.
 fix: Use an artifact produced under this session tree (worker or coordinator).
 instead: Branch on Code ASK_USER_ARTIFACT_FOREIGN; attach an in-tree artifact_id
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: stub

@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.need, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SKILL_UNKNOWN"
 effect: block
-category: recoverable
-emit: guard:skills_read
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:skills_read
 message: 'No confident skill match was selected for {{ paintedwolf.need }}.'
 what: No confident skill match was selected for {{ paintedwolf.need }}.
 cause: The lookup did not establish a confident match, and the need did not name one exact identifier.
 why: Skill lookup is optional; an empty result does not block the task or prove no relevant skill exists.
 fix: Continue the task with available tools and context, without a skill. Retry only if you have a more specific need or a known exact skill identifier.
 instead: Branch on Code SKILL_UNKNOWN; do not infer that the catalog has no relevant skill
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       need: missing-skill

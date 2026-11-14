@@ -2,20 +2,12 @@ spec_version: "1.0"
 id: EDIT_FILE_TOO_LARGE
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - edit
-      - replace_lines
-      - code_rewrite
-      - jq_edit
-      - write
-      - restore_version
+selector: {}
 requires_facts: [paintedwolf.can_command, paintedwolf.max_file_bytes, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.resource_limit, paintedwolf.size]
-when: paintedwolf.rejection_code == "EDIT_FILE_TOO_LARGE"
+when: paintedwolf.operation in ["edit", "replace_lines", "code_rewrite", "jq_edit", "write", "restore_version"] && paintedwolf.rejection_code == "EDIT_FILE_TOO_LARGE"
 effect: block
-category: recoverable
-emit: guard:write
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:write
 message: mutation target exceeds max_file_bytes
 what: '{{ tool }} did not change {{ paintedwolf.path }}: the file or its new content exceeds the {{ paintedwolf.max_file_bytes }}-byte whole-file mutation limit.{% if paintedwolf.size %} Measured size is at least {{ paintedwolf.size }} bytes.{% endif %}'
 cause: Whole-file mutations replace complete file states, and every replaced state must fit this limit.
@@ -24,7 +16,7 @@ fix: >-
   {% if paintedwolf.can_command %}Use command with a streaming tool such as sed, awk, python, or jq to inspect or change bounded parts of the file.{% else %}Split the file into smaller files, or reduce its size, before retrying the whole-file mutation.{% endif %} Preserve the original file and any completed work; repeating the mutation does not change the limit.
 instead: >-
   {% if paintedwolf.can_command %}Change the file with command, or split it into smaller files{% else %}Report the size dependency, or split the file into smaller files{% endif %}
-scenarios:
+x-paintedwolf-scenarios:
   - id: with_command
     vars:
       can_command: true

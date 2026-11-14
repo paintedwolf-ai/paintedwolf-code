@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "MESSAGE_COORDINATOR_REPLY_UNKNOWN"
 effect: block
-category: recoverable
-emit: guard:message_coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:message_coordinator
 message: reply_to names no message in your history with the coordinator.
 what: reply_to names no message in your history with the coordinator.
 cause: The number does not match a message you received.
 why: A reply links to an earlier message so the coordinator can follow the thread.
 fix: Use the number shown beside the coordinator message, or omit reply_to.
 instead: Branch on Code MESSAGE_COORDINATOR_REPLY_UNKNOWN; use the number shown beside the coordinator message, or omit reply_to
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       profile: explore

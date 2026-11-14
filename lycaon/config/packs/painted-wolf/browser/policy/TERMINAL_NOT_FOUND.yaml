@@ -11,8 +11,8 @@ selector:
 requires_facts: [paintedwolf.id, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.terminal_not_pty]
 when: paintedwolf.rejection_code == "TERMINAL_NOT_FOUND"
 effect: block
-category: recoverable
-emit: guard:terminal_session
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:terminal_session
 message: terminal id is not a live pty handle in this session
 what: >-
   {% if paintedwolf.terminal_not_pty %}Handle {{ paintedwolf.id }} belongs to a command, not a terminal.{% else %}No terminal in this session matches id {{ paintedwolf.id }}.{% endif %}
@@ -20,7 +20,7 @@ cause: Terminal operations require a terminal id from the same session; closed o
 why: Driving a missing handle cannot restore the process.
 fix: '{% if paintedwolf.terminal_not_pty %}{% else %}Use a terminal id returned in this session. {% endif %}{{ paintedwolf.next_steps }} Inspect any known prior outcome before repeating work.'
 instead: Keep command handles and terminal ids on their corresponding tools
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       id: missing-id

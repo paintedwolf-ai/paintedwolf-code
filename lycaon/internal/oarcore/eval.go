@@ -6,10 +6,10 @@ package oarcore
 // mutates state and nothing performs input or output. Every state change an
 // engine makes is one the rule declared through `on_fire`.
 //
-// The only failures reachable at run time are the three the specification names:
-// an absent map key or an out-of-range index, division or modulo
-// by zero, and 64-bit integer overflow. Each
-// raises, and the rule is then handled per its `on_error` ([OAR-OPS-2]).
+// Run-time failures are a non-string selected member ([OAR-EXPR-13]), division
+// or modulo by zero, 64-bit overflow, and a non-finite double result
+// ([OAR-EXPR-14]). Each raises, and the rule is then handled per its
+// `on_error` ([OAR-OPS-2]).
 
 import (
 	"fmt"
@@ -29,7 +29,7 @@ func raise(format string, args ...any) error {
 
 // value is a run-time value of the condition language. The Go representations
 // are fixed: bool, int64, float64, string, []string, []map[string]any (a
-// list<map>), and map[string]any (a map or a map<string,string>). There is no
+// list<map<string, dyn>>), and map[string]any (a map<string, dyn>). There is no
 // null: every declared fact has a value at every occurrence
 // ([OAR-FACT-25]).
 type value any
@@ -52,10 +52,6 @@ func zeroValue(t FactType) value {
 		return []map[string]any{}
 	case TypeMap:
 		return map[string]any{}
-	case typeDyn:
-		// dyn is the type of a selected map member and never declarable
-		// ([OAR-FACT-25]); no declared fact carries it.
-		return nil
 	}
 	return nil
 }
@@ -87,8 +83,6 @@ func evalNode(n *node, ctx *evalContext) (value, error) {
 		return v, nil
 	case nodeCall:
 		return evalCall(n, ctx)
-	case nodeIndex:
-		return evalIndex(n, ctx)
 	case nodeUnary:
 		return evalUnary(n, ctx)
 	case nodeTernary:
@@ -111,48 +105,19 @@ func evalNode(n *node, ctx *evalContext) (value, error) {
 	return nil, raise("unreachable node kind")
 }
 
-// evalList builds a list literal. The checker already proved every member has
-// the same type, and that the type is string or map.
+// evalList builds a list literal; the checker proved every member is a string.
 func evalList(n *node, ctx *evalContext) (value, error) {
-	if len(n.items) == 0 {
-		return nil, raise("the empty list literal has no inferable type")
-	}
-	first, err := evalNode(n.items[0], ctx)
-	if err != nil {
-		return nil, err
-	}
-	if _, isString := first.(string); isString {
-		out := make([]string, 0, len(n.items))
-		out = append(out, first.(string))
-		for _, item := range n.items[1:] {
-			v, err := evalNode(item, ctx)
-			if err != nil {
-				return nil, err
-			}
-			s, ok := v.(string)
-			if !ok {
-				return nil, raise("a list literal member is not a string")
-			}
-			out = append(out, s)
-		}
-		return out, nil
-	}
-	out := make([]map[string]any, 0, len(n.items))
-	m, ok := first.(map[string]any)
-	if !ok {
-		return nil, raise("a list literal member is neither a string nor a map")
-	}
-	out = append(out, m)
-	for _, item := range n.items[1:] {
+	out := make([]string, 0, len(n.items))
+	for _, item := range n.items {
 		v, err := evalNode(item, ctx)
 		if err != nil {
 			return nil, err
 		}
-		m, ok := v.(map[string]any)
+		s, ok := v.(string)
 		if !ok {
-			return nil, raise("a list literal member is neither a string nor a map")
+			return nil, raise("a list literal member is not a string")
 		}
-		out = append(out, m)
+		out = append(out, s)
 	}
 	return out, nil
 }
@@ -195,51 +160,6 @@ func evalCall(n *node, ctx *evalContext) (value, error) {
 		return nil, err
 	}
 	return fn(arg)
-}
-
-func evalIndex(n *node, ctx *evalContext) (value, error) {
-	target, err := evalNode(n.left, ctx)
-	if err != nil {
-		return nil, err
-	}
-	idx, err := evalNode(n.right, ctx)
-	if err != nil {
-		return nil, err
-	}
-	switch t := target.(type) {
-	case []string:
-		i, ok := idx.(int64)
-		// Out of range raises, and a negative index
-		// is out of range like any other.
-		if !ok || i < 0 || i >= int64(len(t)) {
-			return nil, raise("list index %v is out of range", idx)
-		}
-		return t[i], nil
-	case []map[string]any:
-		i, ok := idx.(int64)
-		if !ok || i < 0 || i >= int64(len(t)) {
-			return nil, raise("list index %v is out of range", idx)
-		}
-		return t[i], nil
-	case []any:
-		i, ok := idx.(int64)
-		if !ok || i < 0 || i >= int64(len(t)) {
-			return nil, raise("list index %v is out of range", idx)
-		}
-		return t[i], nil
-	case map[string]any:
-		key, ok := idx.(string)
-		if !ok {
-			return nil, raise("a map is indexed by a string")
-		}
-		// An absent key raises.
-		v, present := t[key]
-		if !present {
-			return nil, raise("map key %q is absent", key)
-		}
-		return normalizeMember(v), nil
-	}
-	return nil, raise("the index operator was applied to a scalar")
 }
 
 func evalUnary(n *node, ctx *evalContext) (value, error) {
@@ -453,20 +373,8 @@ func evalMod(l, r value) (value, error) {
 	return a % b, nil
 }
 
-// valuesEqual compares two values. an int is promoted to double
-// for a mixed comparison only. two aggregates never reach here:
-// the type checker rejects that comparison at load.
+// valuesEqual compares two scalars of one type ([OAR-EXPR-11]).
 func valuesEqual(l, r value) bool {
-	li, lIsInt := l.(int64)
-	rd, rIsDouble := r.(float64)
-	if lIsInt && rIsDouble {
-		return float64(li) == rd
-	}
-	ld, lIsDouble := l.(float64)
-	ri, rIsInt := r.(int64)
-	if lIsDouble && rIsInt {
-		return ld == float64(ri)
-	}
 	switch a := l.(type) {
 	case bool:
 		b, ok := r.(bool)
@@ -493,44 +401,27 @@ func compareValues(l, r value) (int, error) {
 		}
 		return compareCodePoints(ls, rs), nil
 	}
-	li, lIsInt := l.(int64)
-	ri, rIsInt := r.(int64)
-	if lIsInt && rIsInt {
-		switch {
-		case li < ri:
-			return -1, nil
-		case li > ri:
-			return 1, nil
-		default:
-			return 0, nil
+	switch a := l.(type) {
+	case int64:
+		if b, ok := r.(int64); ok {
+			return order(a < b, a > b), nil
+		}
+	case float64:
+		if b, ok := r.(float64); ok {
+			return order(a < b, a > b), nil
 		}
 	}
-	a, err := asFloat(l)
-	if err != nil {
-		return 0, err
-	}
-	b, err := asFloat(r)
-	if err != nil {
-		return 0, err
-	}
-	switch {
-	case a < b:
-		return -1, nil
-	case a > b:
-		return 1, nil
-	default:
-		return 0, nil
-	}
+	return 0, raise("an ordering comparison was applied to %T and %T", l, r)
 }
 
-func asFloat(v value) (float64, error) {
-	switch x := v.(type) {
-	case int64:
-		return float64(x), nil
-	case float64:
-		return x, nil
+func order(less, greater bool) int {
+	switch {
+	case less:
+		return -1
+	case greater:
+		return 1
 	}
-	return 0, raise("an ordering comparison was applied to a non-number")
+	return 0
 }
 
 // compareCodePoints compares two strings by Unicode code point, as the standard
@@ -570,8 +461,6 @@ func sizeOf(v value) (value, error) {
 	case []map[string]any:
 		return int64(len(t)), nil
 	case map[string]any:
-		// A map<string,string> is a map for the purposes of in and
-		// size().
 		return int64(len(t)), nil
 	case []any:
 		return int64(len(t)), nil
@@ -632,9 +521,7 @@ func finiteDouble(v float64) (value, error) {
 	return v, nil
 }
 
-// asBool reads a value a boolean context requires. Only a selected map member
-// can arrive with another type, and that is a fact-provider failure
-// ([OAR-FACT-22], [OAR-FACT-23]).
+// asBool reads a value a boolean context requires; the checker proved its type.
 func asBool(v value) (bool, error) {
 	b, ok := v.(bool)
 	if !ok {
@@ -643,16 +530,16 @@ func asBool(v value) (bool, error) {
 	return b, nil
 }
 
-// comparableValues reports whether == may compare two runtime values: the same
-// scalar kind, or two numbers.
+// comparableValues reports whether == may compare two runtime values of one
+// scalar kind.
 func comparableValues(l, r value) bool {
 	switch l.(type) {
-	case int64, float64:
-		switch r.(type) {
-		case int64, float64:
-			return true
-		}
-		return false
+	case int64:
+		_, ok := r.(int64)
+		return ok
+	case float64:
+		_, ok := r.(float64)
+		return ok
 	case bool:
 		_, ok := r.(bool)
 		return ok
@@ -663,35 +550,9 @@ func comparableValues(l, r value) bool {
 	return false
 }
 
-// normalizeMember gives a selected map member the engine's runtime kinds:
-// integers as int64, lists of strings as []string.
-func normalizeMember(v any) value {
-	switch x := v.(type) {
-	case int:
-		return int64(x)
-	case int32:
-		return int64(x)
-	case uint32:
-		return int64(x)
-	case float32:
-		return float64(x)
-	case []any:
-		strs := make([]string, 0, len(x))
-		for _, item := range x {
-			s, ok := item.(string)
-			if !ok {
-				return x
-			}
-			strs = append(strs, s)
-		}
-		return strs
-	}
-	return v
-}
-
 // selectMember reads the member a dotted name selects from a map<string, dyn>
-// fact ([OAR-FACT-22]). An absent member reads as the empty string; a member
-// holding anything but a string fails like a provider ([OAR-FACT-23]).
+// fact ([OAR-EXPR-13]). An absent member reads as the empty string; a member
+// holding anything but a string raises.
 func selectMember(name string, ctx *evalContext) (value, error) {
 	at := strings.LastIndex(name, ".")
 	if at > 0 {
@@ -703,7 +564,7 @@ func selectMember(name string, ctx *evalContext) (value, error) {
 			if s, isString := member.(string); isString {
 				return s, nil
 			}
-			return nil, raise("[OAR-FACT-23] %s holds %T where a string was assumed", name, member)
+			return nil, raise("[OAR-EXPR-13] %s holds %T, not a string", name, member)
 		}
 	}
 	return nil, raise("fact %s was not produced", name)

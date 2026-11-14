@@ -32,7 +32,7 @@ func TestSandboxCapabilityRulesBindActualRefusals(t *testing.T) {
 		if !strings.HasPrefix(rule.ID, "SANDBOX_") || rule.Anchor != oar.AnchorToolRejected {
 			continue
 		}
-		selected := append(append([]string(nil), rule.Selector["tool"]...), rule.Selector["paintedwolf.operation"]...)
+		selected := append(append([]string(nil), rule.Tools()...), rule.Operations()...)
 		// An intrinsic code-only rule ignores tool identity, so one actual tool exercises it.
 		if len(rule.Selector) == 0 {
 			selected = toolNames[:1]

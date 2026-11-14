@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: COPY_NOT_FOUND
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - copy
+selector: {}
 requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "COPY_NOT_FOUND"
+when: paintedwolf.operation == "copy" && paintedwolf.rejection_code == "COPY_NOT_FOUND"
 effect: block
-category: recoverable
-emit: guard:copy
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:copy
 message: copy:copy source does not exist
 what: The copy source {{ paintedwolf.path }} does not exist.
 cause: The source path could not be found.
 why: Copying requires existing input; changing the destination does not supply it.
 fix: Confirm the intended source with an offered discovery tool, or remove an unintended pair. Do not create placeholder input just to make the copy succeed.
 instead: Resolve the intended existing source
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

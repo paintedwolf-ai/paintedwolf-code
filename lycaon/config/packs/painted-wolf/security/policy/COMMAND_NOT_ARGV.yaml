@@ -9,14 +9,14 @@ selector:
 requires_facts: [paintedwolf.command, paintedwolf.directory_change, paintedwolf.env_assignment, paintedwolf.next_steps, paintedwolf.reissue_via_command, paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.shell_metacharacters]
 when: paintedwolf.rejection_code == "COMMAND_NOT_ARGV"
 effect: block
-category: recoverable
-emit: guard:command_surface
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_surface
 message: command rejected
 what: 'This invocation could not be admitted as literal executable arguments{% if paintedwolf.command %}: `{{ paintedwolf.command }}`{% endif %}.'
 cause: '{{ paintedwolf.rejection_reason }}'
 why: Each admitted stage uses literal arguments; shell expansions are not evaluated on this surface.
 fix: '{% if paintedwolf.next_steps %}{{ paintedwolf.next_steps }}{% else %}Repair the command syntax: close quoted strings, name every redirection target, and remove empty stages.{% endif %}'
-scenarios:
+x-paintedwolf-scenarios:
   - id: directory_change
     tool: command
     vars:

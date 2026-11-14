@@ -319,6 +319,21 @@ func (r *ProviderCatalog) ProviderEnabled(id string) bool {
 	return r.deviceEnabled(id)
 }
 
+// ConfiguredProviderIDs lists every device-catalog provider id, sorted.
+func (r *ProviderCatalog) ConfiguredProviderIDs() []string {
+	if r == nil {
+		return nil
+	}
+	r.mu.RLock()
+	out := make([]string, 0, len(r.deviceCatalog))
+	for _, s := range r.deviceCatalog {
+		out = append(out, s.ID)
+	}
+	r.mu.RUnlock()
+	sort.Strings(out)
+	return out
+}
+
 // EnabledProviderIDs lists the enabled device-catalog provider ids, sorted.
 //
 // Device level is the whole answer for callers describing what a session may reach: a

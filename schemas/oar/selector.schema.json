@@ -6,65 +6,15 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "surface": {
-      "description": "Session surface the occurrence happens on.",
-      "type": ["string", "null"],
-      "enum": ["coordinator", "worker", "phase", null]
-    },
-    "phase": {
-      "type": ["string", "null"],
-      "description": "Active workflow phase id, or null when unbound."
-    },
-    "workflow": {
-      "type": ["string", "null"],
-      "description": "Workflow catalog id, or null when unbound."
-    },
-    "tool": {
-      "type": ["string", "null"],
-      "description": "Singular tool at tool-lifecycle anchors. Prefer tools when matching a set."
-    },
     "tools": {
       "type": "array",
-      "description": "Multi-tool match (AND with other clauses). All listed tools are eligible; the engine supplies the concrete tool.",
-      "items": { "type": "string", "minLength": 1 },
+      "description": "Tool names the occurrence's core fact `tool` must be one of. Does not match at an anchor where no tool is invoked ([OAR-SEL-6]).",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
       "uniqueItems": true
-    },
-    "profiles": {
-      "type": "array",
-      "description": "Tool profiles that must match.",
-      "items": { "type": "string", "minLength": 1 },
-      "uniqueItems": true
-    },
-    "surfaces": {
-      "type": "array",
-      "description": "Session surfaces (e.g. implement_investigate). Plural extension of the singular surface clause.",
-      "items": { "type": "string", "minLength": 1 },
-      "uniqueItems": true
-    },
-    "session_posture": {
-      "type": "array",
-      "description": "Optional session posture filter (e.g. spec).",
-      "items": { "type": "string", "minLength": 1 },
-      "uniqueItems": true
-    },
-    "principal": {
-      "description": "Caller-identity scoping for multi-tenant adopters: a shared-vocabulary role or a list of caller ids.",
-      "oneOf": [
-        {
-          "type": "string",
-          "enum": ["human", "coordinator", "worker"]
-        },
-        {
-          "type": "array",
-          "items": { "type": "string", "minLength": 1 },
-          "uniqueItems": true
-        }
-      ]
-    },
-    "ledger": {
-      "type": "object",
-      "description": "Typed ledger facts only — never natural language.",
-      "additionalProperties": true
     }
   }
 }

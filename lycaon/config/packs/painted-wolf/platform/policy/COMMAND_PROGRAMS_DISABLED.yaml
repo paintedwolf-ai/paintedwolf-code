@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.can_command_output, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_PROGRAMS_DISABLED"
 effect: block
-category: blocked
-emit: guard:tool
+x-paintedwolf-category: blocked
+x-paintedwolf-emit: guard:tool
 message: command programs are turned off on this host
 what: Command programs are turned off on this host, so this program did not start.
 cause: This host currently admits no new command programs.
 why: ''
 fix: ''
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       tool: command

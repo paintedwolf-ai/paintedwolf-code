@@ -1,0 +1,29 @@
+{
+  "id": "expr-strings-order-by-code-point",
+  "title": "Strings order by Unicode code point, not UTF-16 code unit",
+  "covers": [
+    "OAR-EXPR-10"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool < \"😀\" && \"a\" < \"b\" && \"ab\" > \"a\""
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": ""
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:fired"
+    ]
+  }
+}

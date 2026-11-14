@@ -223,10 +223,10 @@ func outputPolicyPipeline(t *testing.T) func() *oar.GuardPipeline {
 	}
 }
 
-func outputPolicyEvaluator(t *testing.T, pipeline *oar.GuardPipeline) func(context.Context, *api.Session, string, oar.ContentObservation, string, map[string]any) (*guidance.Refusal, bool, string, bool) {
-	return func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, _ string, _ map[string]any) (*guidance.Refusal, bool, string, bool) {
+func outputPolicyEvaluator(t *testing.T, pipeline *oar.GuardPipeline) func(context.Context, *api.Session, string, oar.ContentObservation, string, map[string]any) (*guidance.Refusal, bool) {
+	return func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, _ string, _ map[string]any) (*guidance.Refusal, bool) {
 		if anchor != oar.AnchorContentOutput {
-			return nil, false, "", false
+			return nil, false
 		}
 		gc := oar.NewGuardContext()
 		gc.Session.SessionID = sess.ID
@@ -234,12 +234,12 @@ func outputPolicyEvaluator(t *testing.T, pipeline *oar.GuardPipeline) func(conte
 		result, err := pipeline.EvaluateBlock(ctx, anchor, gc)
 		testutil.FailErr(t, "output policy", err)
 		if result.Decision == nil {
-			return nil, false, "", false
+			return nil, false
 		}
 		decision := result.Decision
 		body, err := guidance.RenderPolicyCopy(ctx, decision.Code, string(decision.Effect), decision.Copy, decision.Data)
 		testutil.FailErr(t, "render output policy", err)
-		return guidance.NewRefusal(decision.Code, body).WithPolicyCopy(decision.Copy).WithDetails(decision.Data, nil), true, "", false
+		return guidance.NewRefusal(decision.Code, body).WithPolicyCopy(decision.Copy).WithDetails(decision.Data, nil), true
 	}
 }
 
@@ -260,8 +260,8 @@ func TestDroppedToolCallNeedsItsPolicyDecision(t *testing.T) {
 		decision *guidance.Refusal
 		want     error
 	}{{nil, cause}, {other, other}} {
-		turn := &modelTurn{Closeout: &turnCloseout{Deps: CloseoutDeps{EvaluateContentAnchor: func(context.Context, *api.Session, string, oar.ContentObservation, string, map[string]any) (*guidance.Refusal, bool, string, bool) {
-			return tc.decision, tc.decision != nil, "", false
+		turn := &modelTurn{Closeout: &turnCloseout{Deps: CloseoutDeps{EvaluateContentAnchor: func(context.Context, *api.Session, string, oar.ContentObservation, string, map[string]any) (*guidance.Refusal, bool) {
+			return tc.decision, tc.decision != nil
 		}}}}
 		st := &promptLoopTurnState{}
 		got, err := turn.recoverRejectedResponse(t.Context(), &api.Session{ID: "s"}, st, req, nil, &modelcall.Completion{Content: "partial"}, cause, 1)

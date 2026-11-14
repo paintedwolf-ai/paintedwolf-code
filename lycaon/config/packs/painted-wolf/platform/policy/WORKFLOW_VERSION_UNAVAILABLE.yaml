@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason]
 when: paintedwolf.rejection_code == "WORKFLOW_VERSION_UNAVAILABLE"
 effect: block
-category: recoverable
-emit: rule:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:coordinator
 message: Workflow version is unavailable
 what: The workflow version is unavailable.
 cause: '{{ paintedwolf.rejection_reason }}'
 why: The requested workflow version is not available and cannot be resumed.
 fix: Start a new run with the current workflow version or exit the workflow with /exit.
 instead: Follow the current workflow version and task intent
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       profile: coordinator

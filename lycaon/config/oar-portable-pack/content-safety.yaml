@@ -1,10 +1,10 @@
-# The content-safety surface ([OAR-OPS-9], [OAR-OPS-10]): a registered detector
+# The content-safety surface ([OAR-OPS-10], [OAR-OPS-11]): a registered detector
 # publishes observations — scores, spans — and the rule owns every threshold.
 # Two rules over the same detector, separated by a YAML `---`: that is a *rule
 # set*, and a member's position in one has no effect on its identity, ordering,
 # or precedence.
 #
-# Both rules name the facts they need in `requires_facts` ([OAR-DOC-23]), so a
+# Both rules name the facts they need in `requires_facts` ([OAR-DOC-22]), so a
 # host that does not run a content detector is refused this rule at load with
 # both names in the error, rather than meeting a default value at run time.
 spec_version: "1.0"

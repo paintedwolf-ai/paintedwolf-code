@@ -9,17 +9,17 @@ effect: block
 # agent_is_scout narrows this to the explore_readonly archetype.
 x-paintedwolf-audience:
   - explore_readonly
-category: recoverable
-emit: guard:worker_summary
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_summary
 message: Read scout marked leg complete without survey tool evidence
 what: Read scout marked leg complete without a successful source-survey observation.
 cause: explore_readonly-archetype legs must run at least one successful read-only survey tool before leg_status complete
 why: No survey tool results in this child transcript
 fix: 'Use an offered survey tool on the assigned scope. {{ paintedwolf.next_steps }}'
 instead: 'Do not mark the leg complete without its required survey evidence; preserve any existing work and report the unresolved scope.'
-evidence:
+x-paintedwolf-evidence:
   in_session_retry: true
-scenarios:
+x-paintedwolf-scenarios:
   - id: no_tools
     vars:
       offender_count: 0
