@@ -410,12 +410,15 @@ modelIndependentWebE2e("keeps the text at the top of the view across toggles whe
   await scroller.evaluate((element) => { element.scrollTop = (element.scrollHeight - element.clientHeight) / 2; });
   await settle(page);
   await settle(page);
-  // The document position drawn at the top left of the view, and where it sits.
+  // The document position drawn at the top left of the view, and where it sits:
+  // the first drawn line, which at the top of the document starts below the padding.
   const topText = () => page.evaluate(() => {
     const view = window.__pretty.view();
     const port = view.scrollDOM.getBoundingClientRect();
     const content = view.contentDOM.getBoundingClientRect();
-    const pos = view.posAtCoords({ x: Math.max(content.left, port.left) + 4, y: port.top + 4 }, false);
+    const block = view.lineBlockAtHeight(port.top - view.documentTop);
+    const y = Math.max(port.top, view.documentTop + block.top) + 4;
+    const pos = view.posAtCoords({ x: Math.max(content.left, port.left) + 4, y }, false);
     return { pos, line: view.defaultLineHeight };
   });
   const placeOf = (pos: number) => page.evaluate((pos) => {

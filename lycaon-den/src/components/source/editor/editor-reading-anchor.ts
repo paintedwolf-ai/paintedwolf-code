@@ -1,6 +1,6 @@
 import { ViewPlugin, type EditorView, type ViewUpdate } from "@codemirror/view";
 import { setEditorScrollTop } from "./editor-scroll-position.ts";
-import { isSettlingScroll, positionRect } from "./editor-settled-scroll.ts";
+import { isSettlingScroll, positionRect, topEdgePoint } from "./editor-settled-scroll.ts";
 
 type Anchor = { pos: number; offset: number };
 
@@ -15,8 +15,7 @@ export function readReadingAnchor(view: EditorView): Anchor | null {
   const block = view.lineBlockAtHeight(scroller.scrollTop);
   if (block.height <= scroller.clientHeight) return null;
   const port = scroller.getBoundingClientRect();
-  const content = view.contentDOM.getBoundingClientRect();
-  const pos = view.posAtCoords({ x: Math.max(content.left, port.left) + 1, y: port.top + 1 }, false);
+  const pos = view.posAtCoords(topEdgePoint(view), false);
   const at = view.coordsAtPos(pos);
   return at ? { pos, offset: at.top - port.top } : null;
 }

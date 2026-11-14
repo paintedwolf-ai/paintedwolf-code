@@ -9,7 +9,8 @@ function view(blockHeight: number, scrollTop: number, contentLeft = 40): EditorV
   return {
     scrollDOM: { clientHeight: 600, scrollTop, getBoundingClientRect: () => PORT },
     contentDOM: { getBoundingClientRect: () => ({ left: contentLeft }) },
-    lineBlockAtHeight: () => ({ height: blockHeight }),
+    lineBlockAtHeight: () => ({ top: 0, height: blockHeight }),
+    documentTop: PORT.top - scrollTop,
     viewport: { from: 0, to: 1_000_000 },
     posAtCoords: ({ x, y }: { x: number; y: number }) => (x < PORT.left ? -1 : Math.floor((y - PORT.top + scrollTop) / 10)),
     coordsAtPos: (pos: number) => ({ top: PORT.top + 10 * pos - scrollTop, bottom: PORT.top + 10 * pos - scrollTop + 10 }),
@@ -17,6 +18,14 @@ function view(blockHeight: number, scrollTop: number, contentLeft = 40): EditorV
 }
 
 describe("reading anchor", () => {
+  it("takes the first line, not the padding above it, at the top of the document", () => {
+    // Scrolled to the top, the line starts 12px below the viewport's top edge.
+    const at = view(50_000, 0);
+    (at as unknown as { documentTop: number }).documentTop = PORT.top + 12;
+    (at as unknown as { posAtCoords: (p: { x: number; y: number }) => number }).posAtCoords = ({ y }) => (y < PORT.top + 12 ? 0 : 7);
+    expect(readReadingAnchor(at)?.pos).toBe(7);
+  });
+
   it("has none while the line at the top fits in the viewport", () => {
     expect(readReadingAnchor(view(600, 5_000))).toBeNull();
   });
