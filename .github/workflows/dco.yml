@@ -47,7 +47,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: paintedwolf-ai/dco-checker
-          ref: 82d6997588764ead443a819de36ec373b8cbca4f
+          ref: 0946029d0650c8e23d928db8277bf9765a01bf17
           path: .queue-dco-checker
           persist-credentials: false
       - name: Certify the exact recovered queue group
@@ -62,8 +62,8 @@ jobs:
           DCO_RUN_ID: ${{ github.run_id }}
           DCO_RUN_ATTEMPT: ${{ github.run_attempt }}
           DCO_CALLER_REVISION: ${{ github.workflow_sha }}
-          DCO_CHECKER_REVISION: 82d6997588764ead443a819de36ec373b8cbca4f
+          DCO_CHECKER_REVISION: 0946029d0650c8e23d928db8277bf9765a01bf17
         run: python3 -m ci_policy.queue_certification .queue-dco-checker/scripts/dco_check.py
       - name: Certify original PR commits
         if: github.event_name != 'workflow_dispatch' || (inputs.queue_ref == '' && inputs.queue_sha == '')
-        uses: paintedwolf-ai/dco-checker@82d6997588764ead443a819de36ec373b8cbca4f
+        uses: paintedwolf-ai/dco-checker@0946029d0650c8e23d928db8277bf9765a01bf17

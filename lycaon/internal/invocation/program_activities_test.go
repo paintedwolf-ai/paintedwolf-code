@@ -459,3 +459,17 @@ func TestActivityFoldSubPhasesAcrossProgram(t *testing.T) {
 		t.Fatalf("read row: %+v", values[2])
 	}
 }
+
+func redirectFixture(id, operator, path string, start int) activityInput {
+	write := activityFixture(id, "root", "write", "", start)
+	write.receipt.EffectMode, write.receipt.NativeCommand, write.receipt.Command = "publication", operator, operator+" "+path
+	write.receipt.EffectClasses = []string{"mutation"}
+	write.arguments["path_targets"] = map[string]any{"read": []any{}, "write": []any{path}}
+	return write
+}
+
+func producerFixture(id string, start int) activityInput {
+	producer := activityFixture(id, "root", "printf", "printf", start)
+	producer.receipt.EffectClasses = []string{"mutation"}
+	return producer
+}

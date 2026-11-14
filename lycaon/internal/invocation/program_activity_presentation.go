@@ -90,6 +90,9 @@ func activityPresentation(input activityInput) activityRule {
 			return activityRule{"primary", "Managing files", "Remove files", "mutate"}
 		case input.operation == "chmod" || input.operation == "chown" || cmd == "chmod" || cmd == "chown":
 			return activityRule{"primary", "Managing files", "Change permissions", "mutate"}
+		case len(activityPaths(input.arguments, "write")) == 0:
+			// A producer whose only mutation is its redirect supports the write that names the file.
+			return activityRule{"support", "Editing files", "Write file", "mutate"}
 		default:
 			return activityRule{"primary", "Editing files", "Write file", "mutate"}
 		}

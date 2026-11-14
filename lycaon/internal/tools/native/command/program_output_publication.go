@@ -16,7 +16,9 @@ import (
 
 // beginOutput records the actual redirect, not a fabricated utility invocation.
 // Its owner admission waits for the staged bytes; its original pin never refreshes.
-func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination commandprogram.OutputDestination, path string) (tools.CommandOutputWrite, error) {
+// The reviewed inputs carry the resolved path; the receipt's command is the
+// operator and the display path, which activity subjects read back.
+func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination commandprogram.OutputDestination, path, displayPath string) (tools.CommandOutputWrite, error) {
 	definition, ok := d.run.registry.Operation("write")
 	if !ok {
 		return tools.CommandOutputWrite{}, fmt.Errorf("output publication requires write owner")
@@ -27,7 +29,7 @@ func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination command
 		return tools.CommandOutputWrite{}, err
 	}
 	review := commandprogram.ArgvReview{OperationID: operation.Facts().Identity, Command: destination.Redirect.Operator, Operands: []string{path}, Options: []commandprogram.ReviewedOption{}}
-	child, err := d.prepareInvocation(ctx, operation, destination.Invocation, destination.Redirect.Operator+" "+path, review.Arguments(), nil)
+	child, err := d.prepareInvocation(ctx, operation, destination.Invocation, destination.Redirect.Operator+" "+displayPath, review.Arguments(), nil)
 	if err != nil {
 		return tools.CommandOutputWrite{}, err
 	}
