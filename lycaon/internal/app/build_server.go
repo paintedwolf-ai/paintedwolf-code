@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workerops"
 	"os"
 	"time"
 
@@ -408,7 +409,26 @@ func (b *serveBuilder) wireOrchestrator() error {
 	b.delegations.Queue.SetRunningCancel(b.worker.poller.Abort)
 	b.worker.poller.ParentWaiter = b.boards.ParentWaiter
 	b.worker.poller.Quiet = b.quietRounds()
+	b.worker.poller.Blocked = b.blockedPrerequisites()
 	return nil
+}
+
+// blockedPrerequisites lists waiting jobs whose prerequisite can no longer be
+// met, for their coordinators' attention.
+func (b *serveBuilder) blockedPrerequisites() *worker.BlockedPrerequisites {
+	queries := db.New(b.storage.Database)
+	return &worker.BlockedPrerequisites{
+		List: func(ctx context.Context) ([]worker.BlockedPrerequisite, error) {
+			rows, err := queries.ListBlockedWorkerPrerequisites(ctx)
+			out := make([]worker.BlockedPrerequisite, 0, len(rows))
+			for _, r := range rows {
+				out = append(out, worker.BlockedPrerequisite{ConsumerJobID: r.ConsumerID, ProducerJobID: r.ProducerJobID, Reason: r.Reason})
+			}
+			return out, err
+		},
+		Jobs:   b.delegations.Queue,
+		Notify: b.sessions.Manager.Coordinator.Workers.PrerequisiteBlocked,
+	}
 }
 
 // quietRounds measures working rounds against their turns' durable progress.
@@ -427,6 +447,10 @@ func (b *serveBuilder) quietRounds() *worker.QuietRounds {
 		},
 		Notify: b.sessions.Manager.Coordinator.Workers.RoundNotice,
 		After:  b.worker.cfg.RoundPolicy().QuietNoticeAfter,
+		Waiting: func(ctx context.Context, task *wire.WorkerTask) bool {
+			pending, err := workerops.PrerequisitePending(ctx, queries.LatestRoundJobForJob, b.delegations.Queue, *task)
+			return err == nil && pending
+		},
 	}
 	if checkpoints, ok := b.sessions.Checkpoints.(*hitl.Checkpoints); ok {
 		quiet.AwaitingApproval = func(ctx context.Context, childSessionID string) bool {

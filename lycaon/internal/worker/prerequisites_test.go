@@ -83,13 +83,19 @@ func TestPrerequisitesWaitForPromotedSuccessfulOutput(t *testing.T) {
 				} else {
 					transition(pid, outcome.status, outcome.merge)
 				}
+				// An unusable producer leaves its consumers waiting for the
+				// coordinator to replace or withdraw them; nothing cancels them.
 				_, err = q.RecoverExpiredClaims(t.Context())
-				testutil.FailErr(t, "settle dependency chain", err)
+				testutil.FailErr(t, "recover", err)
+				if claim, err := q.ClaimNext(t.Context(), ClaimRequest{}); err != nil || claim != nil {
+					t.Fatalf("claimed a blocked consumer: %+v, %v", claim, err)
+				}
 				for _, blocked := range []string{first, second} {
 					task, ok := q.Get(blocked)
-					if !ok || task.Status != api.WorkerStatusCanceled || task.Result == nil || task.Result.Status != "canceled" {
-						t.Fatalf("unsettled consumer %s: %+v", blocked, task)
+					if !ok || task.Status != api.WorkerStatusPending {
+						t.Fatalf("blocked consumer %s: %+v", blocked, task)
 					}
+					testutil.FailErr(t, "withdraw blocked consumer", q.Cancel(t.Context(), blocked, &api.WorkerResult{Status: "canceled"}))
 				}
 			}
 		})

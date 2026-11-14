@@ -124,9 +124,6 @@ func (q *sqlQueueClaims) PublishEnqueued(ctx context.Context, jobID string) {
 
 // ClaimNext claims the next pending job when under the running cap.
 func (q *sqlQueueClaims) ClaimNext(ctx context.Context, req ClaimRequest) (*api.WorkerTask, error) {
-	if _, err := q.recoverPrerequisites(ctx); err != nil {
-		return nil, err
-	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

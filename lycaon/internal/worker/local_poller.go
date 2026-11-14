@@ -45,7 +45,9 @@ type LocalWorkerPoller struct {
 	InstanceID          string
 	MaintenanceInterval time.Duration
 	// Quiet raises notices for working rounds without recent progress.
-	Quiet        *QuietRounds
+	Quiet *QuietRounds
+	// Blocked raises notices for waiting jobs whose prerequisite cannot be met.
+	Blocked      *BlockedPrerequisites
 	sem          chan struct{}
 	capacityWake chan struct{}
 	inflight     sync.WaitGroup
@@ -204,6 +206,7 @@ func (p *LocalWorkerPoller) maintain(ctx context.Context) error {
 	recovered, err := p.Queue.RecoverExpiredClaims(ctx)
 	p.fanOutRecovered(ctx, recovered)
 	p.Quiet.Check(ctx)
+	p.Blocked.Check(ctx)
 	return err
 }
 

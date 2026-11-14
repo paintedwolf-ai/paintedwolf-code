@@ -167,10 +167,7 @@ func (q *sqlQueueClaims) RenewClaim(ctx context.Context, jobID, claimToken strin
 
 // RecoverExpiredClaims tears down workspaces for terminal recoveries.
 func (q *sqlQueueClaims) RecoverExpiredClaims(ctx context.Context) ([]api.WorkerTask, error) {
-	prerequisites, prerequisiteErr := q.recoverPrerequisites(ctx)
 	canceled, cancelErr := q.recoverCancellations(ctx)
-	canceled = append(prerequisites, canceled...)
-	cancelErr = errors.Join(prerequisiteErr, cancelErr)
 	ids, err := q.store.queries.ListExpiredWorkerJobIDs(ctx, db.NullString(db.FormatTime(time.Now().UTC())))
 	if err != nil {
 		return canceled, errors.Join(cancelErr, err)

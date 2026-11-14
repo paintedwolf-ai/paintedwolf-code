@@ -110,21 +110,23 @@ func RegisterWorkerCancelTool(reg *tools.DefaultRegistry, deps CancelToolDeps) e
 		if err != nil {
 			return "", err
 		}
-		stop, err := deps.Workers.Stop(ctx, coordinatorActor(tctx), op, name, reason)
+		result := map[string]any{}
+		cancel := func(ctx context.Context, jobID string) error {
+			captureWorkerSubject(tctx, deps.Cancel.Queue, jobID)
+			out, err := deps.Cancel.CancelForSession(ctx, tctx.Identity.SessionID, jobID, reason)
+			if err != nil {
+				return err
+			}
+			result["status"], result["change_report"], result["result"] = out.Status, out.Report, out.Result
+			return nil
+		}
+		stop, err := deps.Workers.Stop(ctx, coordinatorActor(tctx), op, name, reason, cancel)
 		if err != nil {
 			return "", workerToolReject("worker_cancel", name, "", err)
 		}
-		result := map[string]any{"worker": stop.Worker}
+		result["worker"] = stop.Worker
 		if stop.Withdrawn {
 			result["withdrawn"] = true
-		}
-		if stop.JobID != "" {
-			captureWorkerSubject(tctx, deps.Cancel.Queue, stop.JobID)
-			out, err := deps.Cancel.CancelForSession(ctx, tctx.Identity.SessionID, stop.JobID, reason)
-			if err != nil {
-				return "", err
-			}
-			result["status"], result["change_report"], result["result"] = out.Status, out.Report, out.Result
 		}
 		raw, err := json.Marshal(result)
 		if err != nil {

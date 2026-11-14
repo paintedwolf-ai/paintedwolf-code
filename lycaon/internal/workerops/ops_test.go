@@ -395,3 +395,37 @@ func TestLostChildSessionMakesTheWorkerUnusable(t *testing.T) {
 		t.Fatalf("after losing the child session: %+v", v)
 	}
 }
+
+// A pending round whose producer has not delivered waits on its
+// prerequisite and queues once the producer's output is ready; withdrawing
+// the waiting worker cancels that round first, so the worker can close.
+func TestWaitingOnAPrerequisiteAndWithdrawal(t *testing.T) {
+	f := newFixture(t)
+	f.job(t, "producer-job", api.WorkerStatusRunning, "")
+	f.job(t, "job-1", api.WorkerStatusPending, "")
+	f.jobs["job-1"].AfterWorkers = []string{"producer-job"}
+	_, err := f.records.AdmitRound(t.Context(), f.coord, op("admit"), f.workerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	if v := f.state(t); v.State != workerstate.Waiting {
+		t.Fatalf("before the producer delivers: %+v", v)
+	}
+	f.jobs["producer-job"].Status = api.WorkerStatusComplete
+	f.jobs["producer-job"].Result = &api.WorkerResult{Status: "complete"}
+	if v := f.state(t); v.State != workerstate.Working || v.Reason != workerstate.ReasonQueued {
+		t.Fatalf("once the producer delivered: %+v", v)
+	}
+	f.jobs["producer-job"].Status = api.WorkerStatusRunning
+	var cancelled []string
+	stop, err := f.svc.Stop(t.Context(), f.coord, op("withdraw"), "surveyor", "", func(_ context.Context, jobID string) error {
+		cancelled = append(cancelled, jobID)
+		_, err := db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(now()), JobID: jobID})
+		return err
+	})
+	testutil.FailErr(t, "withdraw", err)
+	if !stop.Withdrawn || len(cancelled) != 1 || cancelled[0] != "job-1" {
+		t.Fatalf("stop = %+v cancelled = %v", stop, cancelled)
+	}
+	if v := f.state(t); v.State != workerstate.Closed {
+		t.Fatalf("after withdrawal: %+v", v)
+	}
+}

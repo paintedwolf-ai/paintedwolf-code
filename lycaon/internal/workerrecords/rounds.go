@@ -258,6 +258,13 @@ func (s *Store) RoundByJob(ctx context.Context, jobID string) (Round, bool, erro
 	return roundFromRow(r), true, nil
 }
 
+// LatestRoundJob is the job of the latest round of the worker that ran jobID,
+// or jobID itself when it ran no worker round: a long-lived producer is ready
+// on its latest round.
+func (s *Store) LatestRoundJob(ctx context.Context, jobID string) (string, error) {
+	return s.q.LatestRoundJobForJob(ctx, strings.TrimSpace(jobID))
+}
+
 // JobNames are what a coordinator calls a job: its worker and, once its round
 // settles, the result handle that addresses its changes. Change is what became
 // of those changes: landed, rejected, shelved, or empty while open.

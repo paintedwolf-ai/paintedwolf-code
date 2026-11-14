@@ -372,11 +372,11 @@ type Stop struct {
 	Withdrawn bool `json:"withdrawn,omitempty"`
 }
 
-// Stop resolves what worker_cancel stops. A working or asking worker's
-// round is stopped and keeps its work; a waiting worker's held job is
-// withdrawn with the worker, and a planned worker is withdrawn. The caller
-// cancels JobID through the job queue; withdrawal closes the worker here.
-func (s *Service) Stop(ctx context.Context, actor workerrecords.Actor, op workerrecords.Op, name, reason string) (Stop, error) {
+// Stop stops a worker for worker_cancel. A working or asking worker's round
+// is stopped through cancel and keeps its work. A waiting worker's round is
+// cancelled, which settles it, and the worker is closed; a planned worker is
+// closed.
+func (s *Service) Stop(ctx context.Context, actor workerrecords.Actor, op workerrecords.Op, name, reason string, cancel func(ctx context.Context, jobID string) error) (Stop, error) {
 	snap, err := s.resolve(ctx, actor, name)
 	if err != nil {
 		return Stop{}, err
@@ -386,10 +386,13 @@ func (s *Service) Stop(ctx context.Context, actor workerrecords.Actor, op worker
 	switch {
 	case snap.View.Admits(workerstate.OpCancel):
 		out.JobID = latest.JobID
-		return out, nil
+		return out, cancel(ctx, latest.JobID)
 	case snap.View.Admits(workerstate.OpWithdraw):
 		if hasRound && latest.SettledAt == "" {
 			out.JobID = latest.JobID
+			if err := cancel(ctx, latest.JobID); err != nil {
+				return Stop{}, err
+			}
 		}
 		if strings.TrimSpace(reason) == "" {
 			reason = "withdrawn"

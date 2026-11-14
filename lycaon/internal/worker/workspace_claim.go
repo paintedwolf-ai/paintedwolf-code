@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workerops"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -83,17 +84,10 @@ func (q *sqlQueuePromotion) ClaimWorkerBranch(ctx context.Context, jobID string)
 	if !ok || task == nil {
 		return nil, ErrWorkerBranchClaimFailed
 	}
-	for _, id := range task.AfterWorkers {
-		// A long-lived producer is ready on its latest round, as the claim
-		// query decides.
-		latest, err := q.store.queries.LatestRoundJobForJob(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		upstream, ok := q.Get(latest) //nolint:contextcheck // bounded Get
-		if !ok || !api.WorkerOutputReady(upstream) {
-			return nil, ErrWorkerPrerequisitesPending
-		}
+	if pending, err := workerops.PrerequisitePending(ctx, q.store.queries.LatestRoundJobForJob, q, *task); err != nil { //nolint:contextcheck // bounded Get
+		return nil, err
+	} else if pending {
+		return nil, ErrWorkerPrerequisitesPending
 	}
 	if !task.EffectiveScope().IsWrite() {
 		return task, nil
