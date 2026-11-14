@@ -3,6 +3,7 @@ package formatconfig
 import (
 	"bytes"
 	"encoding/xml"
+	"errors"
 	"io"
 	"strconv"
 	"strings"
@@ -17,7 +18,7 @@ func decodeXMLProperty(body []byte, elemName, attrName, attrValue, propName stri
 	doc := document{}
 	for {
 		tok, err := dec.Token()
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return doc, true
 		}
 		if err != nil {
@@ -178,9 +179,10 @@ func decodeEDNCljfmt(body []byte) (document, bool) {
 					}
 					prevKey = ""
 				case ":wrap-lines?":
-					if tok == "true" {
+					switch tok {
+					case "true":
 						doc["wrap-lines?"] = true
-					} else if tok == "false" {
+					case "false":
 						doc["wrap-lines?"] = false
 					}
 					prevKey = ""
