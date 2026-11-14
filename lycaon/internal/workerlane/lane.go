@@ -83,7 +83,7 @@ func (s *Service) Admit(ctx context.Context, req Request) (Binding, error) {
 	switch sel.Action {
 	case ActionHold:
 		return Binding{}, &HoldError{Reason: sel.Hold}
-	case ActionSource, ActionSubject:
+	case ActionSource:
 		return Binding{Action: sel.Action}, nil
 	case ActionKeep:
 		current, ok, err := s.current(ctx, req.Actor, req.WorkerID)

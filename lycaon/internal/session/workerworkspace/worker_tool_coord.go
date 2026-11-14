@@ -44,7 +44,9 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 	if !ok || task == nil {
 		return tctx, nil
 	}
-	if task.EffectiveScope().IsWrite() && strings.TrimSpace(task.WorkspaceRoot) == "" {
+	// A write worker claims its branch; a reviewer its view of the subject.
+	// The claim returns any other read worker as it is.
+	if strings.TrimSpace(task.WorkspaceRoot) == "" {
 		claimed, err := m.tasks.ClaimWorkerBranch(ctx, task.ID)
 		if err != nil {
 			return tctx, fmt.Errorf("claim worker branch: %w", err)
@@ -68,7 +70,8 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 	tctx.Identity.HandoffSessionID = parentID
 	tctx.Identity.HandoffAgentID = task.ID
 	tctx.Source.WorkerCoord = m
-	if root := strings.TrimSpace(task.WorkspaceRoot); root != "" && task.EffectiveScope().IsWrite() {
+	root := strings.TrimSpace(task.WorkspaceRoot)
+	if root != "" && task.EffectiveScope().IsWrite() {
 		layout, err := workspace.LoadBranchLayout(root)
 		if err != nil {
 			tctx.Source.BranchWorkspace = nil
@@ -87,9 +90,34 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 		}
 		tctx.Source.BranchWorkspace = branchState
 		_, _ = m.BindPreparedBranch(root, task.ID, sess.ID)
+	} else if root != "" {
+		if err := m.bindReviewView(&tctx, root); err != nil {
+			return tctx, err
+		}
 	}
 	m.EnsureTracker(task.ID, sess.ID, firstNonEmpty(task.WorkspacePath, sess.WorkspacePath), strings.TrimSpace(task.WorkspaceRoot), tctx.Source.Roots)
 	return tctx, nil
+}
+
+// bindReviewView points a reviewer's tools at its view of the sealed subject.
+// It has no branch root, so file tools refuse every write.
+func (m *Service) bindReviewView(tctx *tools.ToolContext, root string) error {
+	layout, err := workspace.LoadBranchLayout(root)
+	if err != nil {
+		return err
+	}
+	branchState, err := m.branchState(root)
+	if err != nil {
+		return err
+	}
+	tctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
+	tctx.Source.WorkerSourceRoots = workerSourceRootPaths(layout.Roots)
+	tctx.Source.Roots = layout.Roots
+	tctx.Source.ReviewViewRoot = root
+	tctx.Source.RecordViewProcess = workspace.BranchProcessRecorder(root)
+	tctx.Source.WorkerViewBoundary = workspace.BranchViewBoundary(root)
+	tctx.Source.BranchWorkspace = branchState
+	return nil
 }
 
 func (m *Service) BoardRoots(ctx context.Context, sess *api.Session) ([]projectroot.RootRef, error) {
@@ -154,7 +182,8 @@ func (m *Service) AfterWorkerWrite(ctx context.Context, tctx tools.ToolContext, 
 
 // EnsureBranch ensures a write worker has an isolated branch.
 func (m *Service) EnsureBranch(ctx context.Context, tctx tools.ToolContext) (tools.ToolContext, error) {
-	if m == nil {
+	// A reviewer's view was bound with its tool context.
+	if m == nil || strings.TrimSpace(tctx.Source.ReviewViewRoot) != "" {
 		return tctx, nil
 	}
 	if strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {

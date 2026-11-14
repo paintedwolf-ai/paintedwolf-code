@@ -205,6 +205,17 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 	if reject := controlPlaneReject(tctx, modelPath, op); reject != nil {
 		return Resolved{}, reject
 	}
+	// A reviewer reads its view of the subject; writing it was refused above.
+	if view := strings.TrimSpace(tctx.Source.ReviewViewRoot); view != "" {
+		resolved, err := resolveUnderBranch(ctx, b, tctx, view, modelPath, op)
+		if err == nil {
+			return resolved, nil
+		}
+		if granted, ok := resolveGranted(tctx, modelPath, op); ok {
+			return granted, nil
+		}
+		return Resolved{}, err
+	}
 	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
 		resolved, err := resolveUnderBranch(ctx, b, tctx, branch, modelPath, op)
 		if err == nil {

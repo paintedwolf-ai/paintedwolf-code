@@ -185,6 +185,7 @@ func (s *Service) Instruct(ctx context.Context, actor workerrecords.Actor, op wo
 	}
 	start, err := s.Reader.Records.StartRound(ctx, actor, op, w.ID, workerrecords.RoundStart{
 		JobID: jobID, ExecutionTarget: target, Instruction: in.Instructions, Brief: in.Brief, AgentType: in.AgentType, ScopeMode: scope,
+		ReviewSubject: reviewSubject(snap),
 	})
 	if err != nil {
 		return Receipt{}, err
@@ -390,4 +391,59 @@ func (s *Service) Asking(ctx context.Context, actor workerrecords.Actor, name st
 	}
 	latest, _ := snap.Latest()
 	return latest.JobID, nil
+}
+
+// ErrReviewNoChanges refuses a review of a result whose round changed nothing:
+// there is no sealed checkpoint to read.
+var ErrReviewNoChanges = errors.New("review subject has no changes")
+
+// Review names the subject a review of resultID binds: a delivered worker's
+// result with changes. It records nothing; ReviewStarted accounts for the
+// result once the reviewer's round is admitted.
+func (s *Service) Review(ctx context.Context, actor workerrecords.Actor, resultID string) (workerrecords.ReviewSubject, error) {
+	ref, err := s.Reader.Records.Result(ctx, actor, resultID)
+	if err != nil {
+		return workerrecords.ReviewSubject{}, err
+	}
+	w, err := s.Reader.Records.Worker(ctx, actor, ref.WorkerID)
+	if err != nil {
+		return workerrecords.ReviewSubject{}, err
+	}
+	snap, err := s.Reader.Read(ctx, actor, w)
+	if err != nil {
+		return workerrecords.ReviewSubject{}, err
+	}
+	if !snap.View.Admits(workerstate.OpReview) {
+		return workerrecords.ReviewSubject{}, refusal(snap, workerstate.OpReview)
+	}
+	subject := workerrecords.ReviewSubject{ResultID: ref.ResultID, WorkerID: ref.WorkerID, JobID: ref.JobID}
+	for _, r := range snap.Rounds {
+		if r.ResultID == ref.ResultID {
+			subject.CheckpointID = r.CheckpointID
+		}
+	}
+	if subject.CheckpointID == "" {
+		return workerrecords.ReviewSubject{}, ErrReviewNoChanges
+	}
+	return subject, nil
+}
+
+// ReviewStarted accounts for the reviewed result: starting its review is how
+// the coordinator dealt with it. A replay finds it accounted already.
+func (s *Service) ReviewStarted(ctx context.Context, actor workerrecords.Actor, op workerrecords.Op, subject workerrecords.ReviewSubject) error {
+	if _, err := s.Reader.Records.AccountResult(ctx, actor, op, subject.ResultID); err != nil && !errors.Is(err, workerrecords.ErrAlreadyAccounted) {
+		return err
+	}
+	s.accounted(actor.SessionID, subject.JobID)
+	return nil
+}
+
+// reviewSubject is the sealed subject a reviewer's every round reads.
+func reviewSubject(snap Snapshot) json.RawMessage {
+	for _, r := range snap.Rounds {
+		if r.ReviewSubject != "" {
+			return json.RawMessage(r.ReviewSubject)
+		}
+	}
+	return nil
 }

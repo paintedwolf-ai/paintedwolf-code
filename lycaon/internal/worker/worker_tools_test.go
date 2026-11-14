@@ -506,19 +506,19 @@ func TestStackedLaneStartsOnTheBaseResult(t *testing.T) {
 	stacked := func(base string) *api.WorkerTask {
 		return &api.WorkerTask{ID: "job-2", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, BaseOverlayID: base}}
 	}
-	if a, err := lanes.assignment(t.Context(), stacked("")); err != nil || a.BaseResultID != "" || !a.Write {
+	if a, err := lanes.assignment(t.Context(), stacked(""), workerrecords.Round{}); err != nil || a.BaseResultID != "" || !a.Write {
 		t.Fatalf("unstacked = %+v, %v", a, err)
 	}
-	if _, err := lanes.assignment(t.Context(), stacked("job-1")); !errors.Is(err, ErrStackedBaseUnavailable) {
+	if _, err := lanes.assignment(t.Context(), stacked("job-1"), workerrecords.Round{}); !errors.Is(err, ErrStackedBaseUnavailable) {
 		t.Fatalf("without a checkpoint store: %v", err)
 	}
 	lanes.Checkpoints = reconstructible{}
-	a, err := lanes.assignment(t.Context(), stacked("job-1"))
+	a, err := lanes.assignment(t.Context(), stacked("job-1"), workerrecords.Round{})
 	testutil.FailErr(t, "stacked", err)
 	if a.BaseResultID != "result-job-1" {
 		t.Fatalf("stacked = %+v", a)
 	}
-	if _, err := lanes.assignment(t.Context(), stacked("job-unknown")); !errors.Is(err, ErrStackedBaseUnavailable) {
+	if _, err := lanes.assignment(t.Context(), stacked("job-unknown"), workerrecords.Round{}); !errors.Is(err, ErrStackedBaseUnavailable) {
 		t.Fatalf("unknown base: %v", err)
 	}
 }

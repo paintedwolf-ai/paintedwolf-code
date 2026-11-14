@@ -7,7 +7,11 @@
 {% endif %}{% if requires_isolation %}- requires_isolation: true
 {% endif %}{% if failed_leaves %}- failed_leaves: {% for leaf in failed_leaves %}`{{ leaf }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
 {% endif %}
-{% if not requires_isolation %}- read scope: full project (touch paths are hints, not limits)
+{% if review_handle %}- reviewing: result `{{ review_handle }}`{% if review_worker %} from worker `{{ review_worker }}`{% endif %}
+{% elif not requires_isolation %}- read scope: full project (touch paths are hints, not limits)
+{% endif %}{% if review_handle %}
+## Review subject
+Your workspace is a read-only view of that result: its changes over the source they started from. It stays this result whatever the worker who made it does next. Your file tools read it and refuse writes; a command cannot change the result. Report what you find with cited paths and lines; the coordinator decides what happens to the result.
 {% endif %}{% if layout_top_level %}
 ## Repo layout (host)
 Top-level paths materialized for this workspace — search and file-read paths must exist here.

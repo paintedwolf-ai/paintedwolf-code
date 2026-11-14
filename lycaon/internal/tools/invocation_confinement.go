@@ -28,11 +28,13 @@ func UniqueRoots(in []string) []string {
 
 func ActionConfineInputsForContext(tctx ToolContext, overlayWriteRoots []string) hitl.ActionConfineInputs {
 	var readDenyPaths []string
-	writeLeg := strings.TrimSpace(tctx.Source.WorkerBranchRoot) != ""
-	if writeLeg || strings.TrimSpace(tctx.Identity.WorkerJobID) != "" {
-		readDenyPaths = append(readDenyPaths, confine.WorkerReadDenyRoots(writeLeg)...)
+	// A worker with a private view reads that view, not the sources it was
+	// prepared from.
+	viewLeg := WorkerViewRoot(tctx) != ""
+	if viewLeg || strings.TrimSpace(tctx.Identity.WorkerJobID) != "" {
+		readDenyPaths = append(readDenyPaths, confine.WorkerReadDenyRoots(viewLeg)...)
 	}
-	if writeLeg {
+	if viewLeg {
 		readDenyPaths = append(readDenyPaths, tctx.Source.WorkerSourceRoots...)
 	}
 	overlayReadPaths := tctx.Files.SessionReadPaths

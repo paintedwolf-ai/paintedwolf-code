@@ -95,7 +95,7 @@ func (q *sqlQueuePromotion) ClaimWorkerBranch(ctx context.Context, jobID string)
 			return nil, ErrWorkerPrerequisitesPending
 		}
 	}
-	if !task.EffectiveScope().IsWrite() {
+	if !task.EffectiveScope().IsWrite() && !q.reviews(ctx, task) {
 		return task, nil
 	}
 	if strings.TrimSpace(task.WorkspaceRoot) != "" {
@@ -111,8 +111,21 @@ func (q *sqlQueuePromotion) ClaimWorkerBranch(ctx context.Context, jobID string)
 	return task, nil
 }
 
+// reviews reports a read job that reviews a sealed result: it runs in a
+// view of that result, prepared like a lane.
+func (q *sqlQueuePromotion) reviews(ctx context.Context, task *api.WorkerTask) bool {
+	q.mu.Lock()
+	lanes := q.lanes
+	q.mu.Unlock()
+	return lanes != nil && lanes.Reviews(ctx, task)
+}
+
 func (q *sqlQueuePromotion) provisionWorkerBranch(ctx context.Context, task *api.WorkerTask) error {
-	if task == nil || !task.EffectiveScope().IsWrite() || strings.TrimSpace(task.WorkspaceRoot) != "" {
+	if task == nil || strings.TrimSpace(task.WorkspaceRoot) != "" {
+		return nil
+	}
+	reviewer := q.reviews(ctx, task)
+	if !task.EffectiveScope().IsWrite() && !reviewer {
 		return nil
 	}
 	q.mu.Lock()
@@ -140,6 +153,10 @@ func (q *sqlQueuePromotion) provisionWorkerBranch(ctx context.Context, task *api
 		if err != nil {
 			return fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
 		}
+	}
+	if reviewer {
+		// A reviewer has no view but its subject's.
+		return fmt.Errorf("%w: review view unavailable", ErrWorkerBranchClaimFailed)
 	}
 	parentCheckpoint, err := stackedParentCheckpoint(ctx, task, roots, q.self, ws)
 	if err != nil {
