@@ -122,7 +122,7 @@ export function prettyPlanFor(doc: Text, target: PrettyTarget): PrettyPlan {
 
 const EVIDENCE_TAG = new RegExp(`^\\[(?:${EVIDENCE_HANDLE_PATTERN})(?: ${EVIDENCE_COVERAGE_PATTERN})?\\]`);
 const LOG_TIMESTAMP_PREFIX =
-  /^(?:\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?|\d{2}:\d{2}:\d{2}(?:\.\d+)?)\b(?:[^{[\n`<>]|\[\w[A-Za-z0-9_.:/# -]*\])+(?=\{|\[)/;
+  /^(?:\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)?|\d{2}:\d{2}:\d{2}(?:\.\d+)?)\b(?:[^{[\n`<>]|\[\w[A-Za-z0-9_.:/# -]*\])+(?=\{|\[)/;
 const LOG_LEVEL_OR_LABEL_PREFIX =
   /^(?:(?:INFO|WARN|WARNING|ERROR|DEBUG|TRACE|FATAL)\b(?:[^{[\n`<>]|\[\w[A-Za-z0-9_.:/# -]*\])+|[A-Za-z][A-Za-z0-9 _.-]{0,32}:\s+)(?=\{|\[)/;
 const BRACKET_TAG_CHAIN = /^(?:\[[A-Za-z0-9_.:/# -]+\]\s+)+(?=\{|\[)/;

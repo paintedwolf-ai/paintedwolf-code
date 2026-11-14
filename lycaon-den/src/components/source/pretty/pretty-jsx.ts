@@ -101,8 +101,8 @@ export function stepJsx(cursor: ScanCursor, pos: number, end: number): number {
   const j = state.jsxState;
   const curFrameDepth = frameDepth(cursor);
 
-  // Inside a `{...}` JS expression embedded in JSX, delegate to Script bracket layout.
-  if (j.depth > 0 && j.braceDepthWhenEntered[j.braceDepthWhenEntered.length - 1]! < curFrameDepth) {
+  // Inside a `{...}` JS expression embedded in JSX (prop or child), delegate to Script bracket layout.
+  if (j.braceDepthWhenEntered.length > 0 && j.braceDepthWhenEntered[j.braceDepthWhenEntered.length - 1]! < curFrameDepth) {
     return stepBracket(cursor, JSX_SCRIPT_RULE, pos, end);
   }
 

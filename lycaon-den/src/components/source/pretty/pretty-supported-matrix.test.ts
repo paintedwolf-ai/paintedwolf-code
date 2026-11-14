@@ -1,7 +1,9 @@
+// @vitest-environment jsdom
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { indentUnit } from "@codemirror/language";
+import { forceParsing, indentUnit } from "@codemirror/language";
 import { EditorState, type Extension } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
 import {
   formattersForBuffer,
@@ -178,7 +180,7 @@ function fixtureForPath(filePath: string): FixturePair {
     const dense = `{:items [${items.map((item) => `{:name ${strLit} :id ${item}}`).join(" ")}]} ${commentLit}`;
     return {
       dense,
-      formatted: "{:items\n  [{:name \"a\" :id item0}]}\n",
+      formatted: "{:items\n  [\n    \"a\"\n    \"b\"\n  ]}\n",
       protectedRanges: [[dense.indexOf(strLit), dense.indexOf(strLit) + strLit.length], [dense.lastIndexOf(commentLit), dense.length]],
     };
   }
@@ -351,21 +353,27 @@ describe("bidirectional supportedLanguages matrix", () => {
       const commentEnd = doc.length;
       expect(strStart, filePath).toBeGreaterThan(11_000);
 
-      const state = open(doc, filePath);
-      const posList = breaks(state);
-      expect(posList.length, `${filePath}: total breaks`).toBeGreaterThan(10);
-      expect(posList.some((p) => p > 11_000), `${filePath}: breaks past 11k`).toBe(true);
-      for (const p of posList) {
-        expect(p > strStart && p < strEnd, `${filePath}: break inside string at ${p}`).toBe(false);
-        expect(p > commentStart && p < commentEnd, `${filePath}: break inside comment at ${p}`).toBe(false);
-      }
+      const view = new EditorView({ state: open(doc, filePath) });
+      try {
+        forceParsing(view, doc.length, 5_000);
+        const state = view.state;
+        const posList = breaks(state);
+        expect(posList.length, `${filePath}: total breaks`).toBeGreaterThan(10);
+        expect(posList.some((p) => p > 11_000), `${filePath}: breaks past 11k`).toBe(true);
+        for (const p of posList) {
+          expect(p > strStart && p < strEnd, `${filePath}: break inside string at ${p}`).toBe(false);
+          expect(p > commentStart && p < commentEnd, `${filePath}: break inside comment at ${p}`).toBe(false);
+        }
 
-      const edited = state.update({ changes: { from: strEnd + 2, insert: " " } }).state;
-      const editedBreaks = breaks(edited);
-      expect(editedBreaks.some((p) => p > 11_000), `${filePath}: edited breaks past 11k`).toBe(true);
-      for (const p of editedBreaks) {
-        expect(p > strStart + 1 && p < strEnd, `${filePath}: edited break inside string at ${p}`).toBe(false);
-        expect(p > commentStart + 1 && p < commentEnd + 1, `${filePath}: edited break inside comment at ${p}`).toBe(false);
+        view.dispatch({ changes: { from: strEnd + 2, insert: " " } });
+        const editedBreaks = breaks(view.state);
+        expect(editedBreaks.some((p) => p > 11_000), `${filePath}: edited breaks past 11k`).toBe(true);
+        for (const p of editedBreaks) {
+          expect(p > strStart + 1 && p < strEnd, `${filePath}: edited break inside string at ${p}`).toBe(false);
+          expect(p > commentStart + 1 && p < commentEnd + 1, `${filePath}: edited break inside comment at ${p}`).toBe(false);
+        }
+      } finally {
+        view.destroy();
       }
     }
   });

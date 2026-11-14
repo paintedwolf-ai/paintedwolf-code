@@ -219,14 +219,14 @@ describe("after-block breaks, PowerShell, and SQL predicates/CASE", () => {
   it("breaks SQL JOIN ON, AND/OR predicates (preserving BETWEEN), and CASE expressions", () => {
     const pad = "col_".repeat(45);
     const sql =
-      `SELECT ${pad}u.id, CASE WHEN u.active = 1 THEN 'yes' WHEN u.active = 0 THEN 'no' ELSE 'unknown' END FROM users u LEFT JOIN orders o ON o.user_id = u.id AND o.total_amount_cents > 10000 AND o.currency_code = 'USD' WHERE u.age BETWEEN 18 AND 65 AND u.country_iso_code = 'US' AND u.account_tier = 'enterprise' OR u.vip_override_flag = 1`;
+      `SELECT ${pad}u.id, CASE WHEN u.active = 1 THEN 'yes' WHEN u.active = 0 THEN 'no' ELSE 'unknown' END FROM users u LEFT JOIN orders o ON o.user_id = u.id AND o.total_amount_in_minor_currency_units > 100000000000000000000000000000 WHERE u.age BETWEEN 18 AND 65 AND u.primary_billing_country_iso_code = 'US' OR u.vip_enterprise_account_override_flag = 1`;
     const state = open(sql, "query.sql");
     const positions = breaks(state);
     expect(positions).toContain(sql.indexOf("ON o.user_id"));
-    expect(positions).toContain(sql.indexOf("AND o.total_amount_cents"));
+    expect(positions).toContain(sql.indexOf("AND o.total_amount_in_minor_currency_units"));
     expect(positions).not.toContain(sql.indexOf("AND 65"));
-    expect(positions).toContain(sql.indexOf("AND u.country_iso_code"));
-    expect(positions).toContain(sql.indexOf("OR u.vip_override_flag"));
+    expect(positions).toContain(sql.indexOf("AND u.primary_billing_country_iso_code"));
+    expect(positions).toContain(sql.indexOf("OR u.vip_enterprise_account_override_flag"));
     expect(positions).toContain(sql.indexOf("WHEN u.active = 1"));
     expect(positions).toContain(sql.indexOf("ELSE 'unknown'"));
     expect(positions).toContain(sql.indexOf("END FROM"));

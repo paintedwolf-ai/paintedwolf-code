@@ -335,8 +335,7 @@ describe("chat content Files pane", () => {
 
   it("mounts language grammars, renders language labels, and applies project lineWidth in ChatContentPage", async () => {
     saveEditorLineLayout("pretty");
-    const pad = "x".repeat(95);
-    const py = `def f(a, b): return {"k": "${pad}, inside", "n": 1}\n`;
+    const py = `def f(a, b): return {${Array.from({ length: 16 }, (_, i) => `"key_${i}": ${i}`).join(", ")}}\n`;
     const client = {
       getProjectSourceFormatSettings: async () => ({
         config_names: ["pyproject.toml"],

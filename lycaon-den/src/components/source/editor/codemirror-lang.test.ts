@@ -214,8 +214,8 @@ describe("codemirror-lang", () => {
 
   it("declares the Pretty layout of every catalog language", () => {
     const declared: Record<string, string> = {
-      "data": "json jsonc json5 jsonl ndjson webmanifest har avsc jsonnet libsonnet",
-      "markup": "xml svg html htm vue svelte astro",
+      "data": "json jsonc json5 jsonl ndjson webmanifest har avsc jsonnet libsonnet geojson sarif tfstate topojson",
+      "markup": "xml svg html htm vue svelte astro csproj fsproj nuspec plist props targets vbproj vcxproj wsdl xaml xsd",
       "code": "ts mts cts tsx js mjs cjs jsx css scss less",
       "bracket statements": "c h cc cpp cxx hpp hh hxx java cs csx cake scala kt kts dart rs swift groovy gradle gvy d php hack sol move cairo circom cls trigger ql qll proto hcl tf tfvars tofu nomad ps1 psm1 psd1",
       "bracket": "go py pyi yaml yml toml rb cr ex exs lua r jl hs elm ml mli erl hrl al perl ph pl plx pm psgi t promql sass bzl",
@@ -260,7 +260,7 @@ describe("codemirror-lang", () => {
     }
 
     for (const cfg of ["tsconfig.json", "tsconfig.node.json", "jsconfig.json", "devcontainer.json", ".devcontainer.json"]) {
-      expect(prettyLayoutForPath(cfg)).toEqual({ kind: "data", comments: true });
+      expect(prettyLayoutForPath(cfg)).toEqual({ kind: "data", comments: true, records: false });
     }
     expect(languageExtensionForPath("src/index.mts")).not.toBeNull();
     expect(languageExtensionForPath("src/index.cts")).not.toBeNull();
