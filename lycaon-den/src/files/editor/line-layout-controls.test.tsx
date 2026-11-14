@@ -4,6 +4,9 @@ import { join } from "node:path";
 import { cleanup, fireEvent, render } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { NATIVE_UI_HANDLER_IDS } from "../../contributions/native-ui-handlers.generated.ts";
+import { resetContributionStoreForTest } from "../../contributions/contribution-store.ts";
+import { seedStockFrame, stockId } from "../../contributions/stock-frame-test.ts";
+import { buildAppMenuSpec } from "../../shortcuts/app-menu-model.ts";
 import { STOCK_FRAME } from "../../contributions/stock-frame.generated.ts";
 import {
   editorLineLayoutPref,
@@ -23,6 +26,7 @@ import { FilesEditorStatus } from "./FilesEditorChrome.tsx";
 afterEach(() => {
   cleanup();
   resetEditorPrefsForTests();
+  resetContributionStoreForTest();
 });
 
 function makeBuffer(overrides: Partial<FileBuffer> = {}): FileBuffer {
@@ -75,44 +79,22 @@ const pressed = (view: ReturnType<typeof renderStatus>, id: string) =>
   view.getByTestId(`files-editor-layout-${id}`).getAttribute("aria-pressed");
 
 describe("line layout controls", () => {
-  it("registers editor-toggle-pretty command, Alt+P keybinding, and View menu entry without an Apply command", () => {
-    expect(NATIVE_UI_HANDLER_IDS).toContain("editor.togglePretty");
-    const command = STOCK_FRAME.commands.find((entry) => entry.id === "painted-wolf/platform:editor-toggle-pretty");
-    expect(command).toMatchObject({
-      id: "painted-wolf/platform:editor-toggle-pretty",
-      title: "Toggle pretty display",
-      scope: "files",
-      category: "navigation",
-      action_kind: "native_ui",
-      handler_id: "editor.togglePretty",
-      when: { fact: "files_stage_active" },
-    });
-
-    const keybinding = STOCK_FRAME.keybindings.find((entry) => entry.id === "painted-wolf/platform:key-editor-toggle-pretty");
-    expect(keybinding).toMatchObject({
-      id: "painted-wolf/platform:key-editor-toggle-pretty",
-      command: "painted-wolf/platform:editor-toggle-pretty",
-      scope: "files",
-      allow_in_input: true,
-      bindings: {
-        macos: ["Alt+P"],
-        windows: ["Alt+P"],
-        linux: ["Alt+P"],
-      },
-    });
-
-    const menu = STOCK_FRAME.menus.find((entry) => entry.id === "painted-wolf/platform:app-menu-view-editor-toggle-pretty");
-    expect(menu).toMatchObject({
-      id: "painted-wolf/platform:app-menu-view-editor-toggle-pretty",
-      slot: "app_menu.view",
-      command: "painted-wolf/platform:editor-toggle-pretty",
-      group: "2",
-      order: 7,
-      label: "Toggle pretty display",
-    });
-
-    const applyCommands = STOCK_FRAME.commands.filter((entry) => entry.id.includes("pretty") && entry.id.includes("apply"));
-    expect(applyCommands).toEqual([]);
+  it("pulls Off, Wrap and Pretty out of the View menu with the saved mode checked", () => {
+    for (const handler of ["editor.lineLayoutOff", "editor.toggleWrap", "editor.togglePretty"]) {
+      expect(NATIVE_UI_HANDLER_IDS).toContain(handler);
+    }
+    for (const mode of ["off", "wrap", "pretty"] as const) {
+      seedStockFrame({ lineLayout: mode });
+      const view = buildAppMenuSpec({ platform: "linux" }).find((section) => section.menu === "view");
+      const pullOuts = (view?.groups ?? []).flat().filter((item) => item.submenu);
+      expect(pullOuts).toHaveLength(1);
+      const items = pullOuts[0]!.submenu!;
+      expect(items.map((item) => item.id)).toEqual([
+        stockId("editor-line-layout-off"), stockId("editor-toggle-wrap"), stockId("editor-toggle-pretty"),
+      ]);
+      expect(items.map((item) => item.checked)).toEqual(["off", "wrap", "pretty"].map((m) => m === mode));
+    }
+    expect(STOCK_FRAME.commands.filter((entry) => entry.id.includes("pretty") && entry.id.includes("apply"))).toEqual([]);
   });
 
   it("offers Off, Wrap and Pretty in order and shows the editor-wide choice", () => {

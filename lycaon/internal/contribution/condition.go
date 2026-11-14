@@ -131,6 +131,10 @@ func validateFactNode(c Condition, scope conditionScope) error {
 		if !contextFeatures[operand] {
 			return fmt.Errorf("fact %s: unknown context feature %q", c.Fact, operand)
 		}
+	case OperandLineLayout:
+		if !lineLayouts[operand] {
+			return fmt.Errorf("fact %s: unknown line layout %q", c.Fact, operand)
+		}
 	case OperandNone:
 	}
 	return nil

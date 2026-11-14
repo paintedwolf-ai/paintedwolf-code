@@ -110,7 +110,8 @@ export function bindFilesCommands(options: CommandBindings): void {
       const off = editorWordWrapPref() ? "wrap" : "off";
       void saveEditorLineLayout(editorLineLayoutPref() === "pretty" ? off : "pretty");
     });
-    on("editor.toggleWrap", () => { void saveEditorLineLayout(editorLineLayoutPref() === "off" ? "wrap" : "off"); });
+    on("editor.toggleWrap", () => { void saveEditorLineLayout(editorLineLayoutPref() === "wrap" ? "off" : "wrap"); });
+    on("editor.lineLayoutOff", () => { void saveEditorLineLayout("off"); });
     on("editor.toggleLineNumbers", () => { void saveEditorLineNumbers(!editorLineNumbersPref()); });
     on("editor.toggleTabFocus", () => { void saveEditorTabMovesFocus(!editorTabMovesFocusPref()); });
     on("files.moveTabLeft", () => tabCommands.moveTab(-1));

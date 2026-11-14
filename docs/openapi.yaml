@@ -39002,6 +39002,9 @@ components:
           $ref: '#/components/schemas/ContributionCondition'
         state_label:
           type: string
+        submenu:
+          type: string
+          description: Title of a pull-out the item nests under. Items in one slot and group that share a title share the pull-out, ordered by order.
     ContributionKeybinding:
       x-go-generate: true
       type: object

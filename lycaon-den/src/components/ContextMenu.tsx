@@ -59,7 +59,7 @@ export type ContextMenuEntry =
   | ContextMenuHeader;
 
 type ContextMenuSubmenu = ContextMenuFields & {
-  submenu: readonly ContextMenuEntry[];
+  submenu: readonly ContextMenuItem[];
   onSelect?: never;
   separator?: never;
   header?: never;
@@ -168,9 +168,6 @@ function ContextMenuSurface(props: SurfaceProps) {
   const openSubmenu = (index: number, focusChild: boolean) => {
     const item = items()[index];
     if (!item?.submenu?.length || item.disabled) return;
-    if (props.depth > 0) {
-      throw new Error("ContextMenu supports one submenu level");
-    }
     submenuEl = undefined;
     setOpenSubmenuIdx(index);
     if (focusChild) {
@@ -486,7 +483,7 @@ function ContextMenuSurface(props: SurfaceProps) {
                               keyboard={props.keyboard}
                               depth={props.depth + 1}
                               dismissTree={props.dismissTree}
-                              testId="context-menu-submenu"
+                              testId={props.depth === 0 ? "context-menu-submenu" : `context-menu-submenu-${props.depth + 1}`}
                               onDismiss={() => setOpenSubmenuIdx(null)}
                               onEscape={() => {
                                 setOpenSubmenuIdx(null);

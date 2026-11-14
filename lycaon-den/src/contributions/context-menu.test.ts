@@ -65,4 +65,17 @@ describe("contributed context menus", () => {
     seed([{ ...placement, command: "orchard/validation:removed" }]);
     expect(contributionContextMenuItems([placement.slot])).toEqual([]);
   });
+
+  it("gathers placements that share a pull-out title into one submenu", () => {
+    const other = { ...command, id: "orchard/validation:explain", title: "Explain selection" };
+    seedContributionFrameForTest({ ...STOCK_FRAME, commands: [command, other], menus: [
+      { ...placement, id: "orchard/validation:a", submenu: "Ask", order: 2 },
+      { ...placement, id: "orchard/validation:b", command: other.id, submenu: "Ask", order: 1 },
+      { ...placement, id: "orchard/validation:c", order: 3 },
+    ] });
+    setShellFactState(ALL_SHELL_FACTS);
+    const items = contributionContextMenuItems([placement.slot]);
+    expect(items.map((item) => item.label)).toEqual(["Ask", command.title]);
+    expect(items[0]?.submenu?.map((item) => item.label)).toEqual([other.title, command.title]);
+  });
 });
