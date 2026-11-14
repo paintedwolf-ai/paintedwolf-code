@@ -4,12 +4,13 @@ import { expect } from "@playwright/test";
 import { apiJson, apiPostPrompt, modelIndependentWebE2e as test, openProjectFilesFixture, waitForSessionReady, webE2e } from "./helpers.ts";
 import { manualHarnessTools } from "./manual-harness-tools.ts";
 
-test("line facts unite reads and approvals with stable pointer and keyboard entry", async ({ page, request }, testInfo) => {
+test("line facts show a hint on rest and open the card only on activation", async ({ page, request }, testInfo) => {
   const { project } = await openProjectFilesFixture(page, request, { prefix: "line-facts", name: "Line facts",
     seed: root => writeFileSync(path.join(root, "load.go"), ["package config", "", "func load() {", "  read()", "  parse()", "}", ...Array.from({ length: 80 }, (_, i) => `// line ${i + 7}`)].join("\n")) });
   await page.getByTestId("files-tree-file").filter({ hasText: "load.go" }).click();
   const editor = page.getByTestId("files-editor-host").filter({ visible: true });
-  await expect(editor.locator(".cm-content")).toBeEditable({ timeout: 15000 });
+  const content = editor.locator(".cm-content");
+  await expect(content).toBeEditable({ timeout: 15000 });
   await page.evaluate(async ({ projectId, rootId }) => {
     const modulePath = "/src/files/components/agent-presence-store.ts";
     const { applyAgentPresenceSnapshot } = await import(/* @vite-ignore */ modulePath);
@@ -22,41 +23,85 @@ test("line facts unite reads and approvals with stable pointer and keyboard entr
         intents: [{ ...target, id: "pending", tool_call_id: "pending", tool: "replace_lines", operation: "edit", state: "awaiting_approval", extent: "range", ranges: [{ start_line: 4, end_line: 5 }] }] },
     ] });
   }, { projectId: project.id, rootId: project.roots[0]!.id });
+
   const handle = editor.locator('.files-line-gutter__facts[data-line="4"]');
-  await expect(handle).toHaveAttribute("aria-label", "Line 4: 4 facts");
-  const caret = await editor.locator(".cm-content").evaluate(node => ({ text: node.textContent, scroll: node.closest(".cm-scroller")?.scrollTop }));
-  await handle.hover();
+  const next = editor.locator('.files-line-gutter__facts[data-line="5"]');
+  const foldableHandle = editor.locator('.files-line-gutter__facts[data-line="3"]');
+  const foldNumber = editor.locator('[data-testid="files-line-gutter-fold"][data-line="3"]');
   const card = page.getByTestId("files-line-facts");
+  const tooltip = page.getByTestId("den-tooltip");
+
+  await expect(handle).toHaveAttribute("aria-label", "Line 4: 4 facts");
+
+  await content.click({ position: { x: 24, y: 8 } });
+  await page.keyboard.press("Shift+ArrowRight");
+  const readFocusState = () => content.evaluate(node => ({
+    focused: document.activeElement === node,
+    selectedText: document.getSelection()?.toString() ?? "",
+    scroll: node.closest(".cm-scroller")?.scrollTop ?? 0,
+  }));
+  const before = await readFocusState();
+  expect(before.focused).toBe(true);
+  expect(before.selectedText.length).toBeGreaterThan(0);
+
+  await handle.hover();
+  await expect(tooltip).toBeVisible();
+  await expect(card).toHaveCount(0);
+
+  await handle.click();
   await expect(card).toBeVisible();
   await expect(card).toHaveAttribute("data-side", "right");
   await expect(handle).toHaveCSS("box-shadow", "none");
   await expect(card.getByRole("button")).toHaveCount(4);
-  await expect(card.getByRole("button").first()).toContainText("Waiting for your approval");
-  await card.hover();
-  await page.waitForTimeout(240);
+  expect(await readFocusState()).toEqual(before);
+
+  await next.hover();
+  await expect(tooltip).toBeVisible();
   await expect(card).toBeVisible();
-  await card.getByRole("button").first().focus();
+  await expect(card).toHaveAccessibleName("Line 4 · load.go");
+
+  await page.keyboard.press("Escape");
+  await expect(card).toHaveCount(0);
+  expect(await readFocusState()).toEqual(before);
+
+  await handle.click();
+  await expect(card).toBeVisible();
+  await handle.click();
+  await expect(card).toHaveCount(0);
+
+  await foldableHandle.click({ position: { x: 6, y: 8 } });
+  await expect(card).toBeVisible();
+  await expect(card).toHaveAccessibleName("Line 3 · load.go");
+  await foldNumber.click();
+  await expect(card).toHaveCount(0);
+  await expect(editor.locator(".cm-foldPlaceholder")).toHaveCount(1);
+  await foldNumber.click();
+  await expect(editor.locator(".cm-foldPlaceholder")).toHaveCount(0);
+
+  await content.hover({ position: { x: 80, y: 40 } });
+  await handle.focus();
+  await expect(handle).toBeFocused();
+  await expect(tooltip).toBeVisible();
+  await expect(card).toHaveCount(0);
+
+  await page.keyboard.press("ArrowRight");
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("button").first()).toBeFocused();
   await page.keyboard.press("ArrowDown");
   await expect(card.getByRole("button").nth(1)).toBeFocused();
-  await page.keyboard.press("Escape");
-  await expect(card).toBeHidden();
-  await expect(handle).toBeFocused();
-  await page.keyboard.press("ArrowDown");
-  const next = editor.locator('.files-line-gutter__facts[data-line="5"]');
-  await expect(next).toBeFocused();
-  await expect(card).toHaveAccessibleName("Line 5 · load.go");
-  await page.keyboard.press("ArrowRight");
-  await expect(card.getByRole("button").first()).toBeFocused();
   await page.screenshot({ path: testInfo.outputPath("line-facts.png") });
   await page.keyboard.press("Escape");
-  await editor.locator(".cm-content").hover();
-  await page.waitForTimeout(320);
-  await expect(card).toBeHidden();
-  expect(await editor.locator(".cm-content").evaluate(node => ({ text: node.textContent, scroll: node.closest(".cm-scroller")?.scrollTop }))).toEqual(caret);
-  await handle.hover();
+  await expect(card).toHaveCount(0);
+  await expect(handle).toBeFocused();
+
+  await page.keyboard.press("ArrowDown");
+  await expect(next).toBeFocused();
+  await expect(card).toHaveCount(0);
+
+  await handle.click();
   await expect(card).toBeVisible();
   await editor.locator(".cm-scroller").evaluate(node => { node.scrollTop = 200; });
-  await expect(card).toBeHidden();
+  await expect(card).toHaveCount(0);
 });
 
 webE2e("a live read opens its exact tool and returns to the originating file line", async ({ page, request }) => {
@@ -78,7 +123,7 @@ webE2e("a live read opens its exact tool and returns to the originating file lin
     await driver.completed(readId);
     const handle = editor.locator('.files-line-gutter__facts[data-line="3"]');
     await expect(handle).toBeVisible();
-    await handle.hover();
+    await handle.click();
     const card = page.getByTestId("files-line-facts");
     await card.getByRole("button", { name: /Read lines 2–3/ }).click();
     await expect(page.locator(`[data-tool-call-id="${readId}"].den-reveal-flash`)).toBeVisible();
@@ -128,7 +173,7 @@ webE2e("Review expands and focuses the exact pending approval", async ({ page, r
     const hideConversation = page.getByRole("button", { name: "Hide conversation", exact: true });
     await expect(hideConversation).toBeVisible();
     await hideConversation.click();
-    await editor.locator('.files-line-gutter__facts[data-line="2"]').hover();
+    await editor.locator('.files-line-gutter__facts[data-line="2"]').click();
     await page.getByTestId("files-line-facts").getByRole("button", { name: /Waiting for your approval/ }).click();
     await expect(approval).toHaveAttribute("data-checkpoint-id", checkpointId!);
     await expect(approval).not.toHaveAttribute("data-minimized");

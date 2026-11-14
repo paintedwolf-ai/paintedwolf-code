@@ -2,118 +2,258 @@
 import { EditorState, StateEffect, StateField } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { AgentSessionPresence, SecurityFinding } from "../../../api/types.ts";
 import { agentDocumentMarks } from "../../../files/components/agent-presence.ts";
 import type { PaintedAgentMark } from "../../../files/documents/agent-paint-lifetime.ts";
-import { lineFactsGutter, lineFactsMarker, lineFactsTint } from "./line-facts-gutter.ts";
+import { lineFacts, lineFactsHint, lineFactsHintLabel, type LineFactsInput } from "./line-facts.ts";
+import { lineFactsGutter, lineFactsMarker, lineFactsTint, setLineFactsHandlers } from "./line-facts-gutter.ts";
 
-let view: EditorView;
-afterEach(() => { view?.destroy(); document.body.replaceChildren(); vi.restoreAllMocks(); });
+let view: EditorView | undefined;
+afterEach(() => { view?.destroy(); view = undefined; document.body.replaceChildren(); vi.restoreAllMocks(); });
 
-function mount(withRead: boolean) {
-  const parent = document.body.appendChild(document.createElement("div"));
-  const doc = EditorState.create({ doc: "one\ntwo\nthree\nfour" }).doc;
-  const marks: PaintedAgentMark[] = withRead ? agentDocumentMarks(new Map([["reader", {
-    session_id: "reader", title: "Read", turn: 1, activities: [], intents: [], worker_drafts: [],
-    reads: [{ id: "read", sequence: 1, tool_call_id: "call", tool: "read", root_id: "root", path: "a.ts",
-      extent: "range", ranges: [{ start_line: 2, end_line: 3 }], stale: false }],
-  }]]), { reads: true, changes: true, fileNames: true }, "reader", "root", "a.ts").map(mark => ({
-    mark, from: doc.line(2).from, to: doc.line(4).from, bornAt: 0, leftAt: null, supersededAt: null, color: undefined,
-  })) : [];
-  const setMarks = StateEffect.define<PaintedAgentMark[]>();
-  const markField = StateField.define<PaintedAgentMark[]>({ create: () => marks,
-    update: (value, transaction) => {
-      for (const effect of transaction.effects) if (effect.is(setMarks)) return effect.value;
-      return value;
-    } });
-  const attribution: [] = [], findings: [] = [];
-  view = new EditorView({ parent, state: EditorState.create({ doc, extensions: [markField, lineFactsGutter(state => ({
-    doc: state.doc, marks: state.field(markField), attribution, findings,
-  }))] }) });
-  const buttons = [1, 2, 3, 4].map(line => {
-    const button = view.dom.appendChild(document.createElement("button"));
-    button.className = "files-line-gutter__facts";
-    button.dataset.line = String(line);
-    return button;
-  });
-  return { marks, setMarks, buttons, lines: [...view.contentDOM.querySelectorAll(".cm-line")] };
+const baseDoc = EditorState.create({ doc: "one\ntwo\nthree\nfour" }).doc;
+
+function paintedFrom(fields: Partial<AgentSessionPresence>, id = "chat"): PaintedAgentMark[] {
+  const presence: AgentSessionPresence = {
+    session_id: id, title: `Chat ${id}`, turn: 1, activities: [], reads: [], intents: [], worker_drafts: [], ...fields,
+  };
+  return agentDocumentMarks(new Map([[id, presence]]), { reads: true, changes: true, fileNames: true }, id, "root", "a.ts")
+    .map(mark => ({
+      mark,
+      from: mark.range ? baseDoc.line(mark.range.start_line).from : 0,
+      to: mark.range ? baseDoc.line(mark.range.end_line).to : baseDoc.length,
+      bornAt: 0,
+      leftAt: null,
+      supersededAt: null,
+      color: undefined,
+    }));
 }
-function move(line: Element) { line.dispatchEvent(new MouseEvent("mousemove", { bubbles: true })); }
 
-describe("read gutter facts", () => {
-  it("does no coordinate or DOM-position work on pointer movement", () => {
-    const { lines } = mount(true);
-    const coords = vi.spyOn(view, "posAtCoords");
-    const position = vi.spyOn(view, "posAtDOM");
-    for (const line of lines) move(line);
-    expect(coords).not.toHaveBeenCalled();
-    expect(position).not.toHaveBeenCalled();
+function mountPlugin() {
+  const parent = document.body.appendChild(document.createElement("div"));
+  const setMarks = StateEffect.define<PaintedAgentMark[]>();
+  const markField = StateField.define<PaintedAgentMark[]>({
+    create: () => [],
+    update: (value, tr) => {
+      for (const effect of tr.effects) if (effect.is(setMarks)) return effect.value;
+      return value;
+    },
+  });
+  const attribution: [] = [], findings: [] = [];
+  view = new EditorView({
+    parent,
+    state: EditorState.create({
+      doc: baseDoc,
+      extensions: [markField, lineFactsGutter(state => ({ doc: state.doc, marks: state.field(markField), attribution, findings }))],
+    }),
+  });
+  const handlers = { open: vi.fn(), dismiss: vi.fn(), refresh: vi.fn() };
+  setLineFactsHandlers(view, handlers);
+
+  const gutter = view.dom.appendChild(document.createElement("div"));
+  gutter.className = "files-line-gutter";
+  const cell = gutter.appendChild(document.createElement("div"));
+  cell.className = "cm-gutterElement";
+
+  const addGutterControl = (cls: string) => {
+    const btn = cell.appendChild(document.createElement("button"));
+    btn.className = cls;
+    btn.dataset.line = "2";
+    return btn;
+  };
+  const handle = addGutterControl("files-line-gutter__facts");
+  const foldNumber = addGutterControl("files-line-gutter__number files-line-gutter__number--foldable");
+  const findingGlyph = addGutterControl("files-line-gutter__finding");
+  const provenanceBar = addGutterControl("files-line-gutter__provenance");
+  const code = view.contentDOM.querySelector<HTMLElement>(".cm-line")!;
+
+  const card = document.body.appendChild(document.createElement("div"));
+  card.className = "files-line-facts";
+  const cardRow = card.appendChild(document.createElement("button"));
+  cardRow.className = "files-line-facts__row";
+
+  const outside = document.body.appendChild(document.createElement("button"));
+
+  return { setMarks, handlers, targets: { handle, cardRow, foldNumber, findingGlyph, provenanceBar, code, outside } };
+}
+
+describe("line facts gutter", () => {
+  it.each([
+    ["handle", "handle", 0],
+    ["card row", "cardRow", 0],
+    ["fold number", "foldNumber", 1],
+    ["finding glyph", "findingGlyph", 1],
+    ["provenance bar", "provenanceBar", 1],
+    ["code", "code", 1],
+    ["outside the editor", "outside", 1],
+  ] as const)("press on %s calls dismiss %i times", (_label, key, expected) => {
+    const { handlers, targets } = mountPlugin();
+    targets[key].dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    expect(handlers.dismiss).toHaveBeenCalledTimes(expected);
   });
 
-  it("does not apply mouseover or is-hot classes to read gutter handles on pointer movement", () => {
-    const { lines, buttons } = mount(true);
-    for (const line of lines) move(line);
-    expect(buttons.every(button => !button.classList.contains("is-hot"))).toBe(true);
+  it("dismisses once on scroll, Escape outside the card, and focus leaving editor and card, and refreshes on input change", () => {
+    const { setMarks, handlers, targets } = mountPlugin();
+    view!.scrollDOM.dispatchEvent(new Event("scroll"));
+    expect(handlers.dismiss).toHaveBeenCalledTimes(1);
+
+    handlers.dismiss.mockClear();
+    targets.code.focus();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(handlers.dismiss).toHaveBeenCalledTimes(1);
+
+    handlers.dismiss.mockClear();
+    targets.cardRow.focus();
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(handlers.dismiss).toHaveBeenCalledTimes(0);
+
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+    expect(handlers.dismiss).toHaveBeenCalledTimes(0);
+
+    targets.handle.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: targets.code }));
+    targets.handle.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: targets.cardRow }));
+    expect(handlers.dismiss).toHaveBeenCalledTimes(0);
+
+    targets.handle.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: targets.outside }));
+    expect(handlers.dismiss).toHaveBeenCalledTimes(1);
+
+    view!.dispatch({ effects: setMarks.of(paintedFrom({ reads: [{ id: "r", sequence: 1, tool_call_id: "c", tool: "read", root_id: "root", path: "a.ts", extent: "range", ranges: [{ start_line: 2, end_line: 2 }], stale: false }] })) });
+    expect(handlers.refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("attaches the line hint to every handle and replaces markers when lead or count changes", () => {
+    const finding = (id: string, level: SecurityFinding["level"]): SecurityFinding => ({
+      rule_id: id, level, message: `msg-${id}`, locations: [], fingerprints: { primary: id }, tool: { name: "opengrep", driver_id: "opengrep" },
+    });
+    const cases: Array<{ name: string; input: LineFactsInput; emptyLine?: number }> = [
+      {
+        name: "approval-held change",
+        emptyLine: 4,
+        input: { doc: baseDoc, attribution: [], findings: [], marks: paintedFrom({ intents: [{ id: "i", tool_call_id: "t", checkpoint_id: "cp", tool: "replace_lines", operation: "edit", state: "awaiting_approval", root_id: "root", path: "a.ts", extent: "range", ranges: [{ start_line: 2, end_line: 3 }] }] }) },
+      },
+      {
+        name: "pending change",
+        emptyLine: 4,
+        input: { doc: baseDoc, attribution: [], findings: [], marks: paintedFrom({ intents: [{ id: "i", tool_call_id: "t", tool: "replace_lines", operation: "edit", state: "pending", root_id: "root", path: "a.ts", extent: "range", ranges: [{ start_line: 2, end_line: 3 }] }] }) },
+      },
+      {
+        name: "pending insertion",
+        emptyLine: 4,
+        input: { doc: baseDoc, attribution: [], findings: [], marks: paintedFrom({ intents: [{ id: "i", tool_call_id: "t", tool: "insert", operation: "edit", state: "pending", root_id: "root", path: "a.ts", extent: "range", ranges: [{ start_line: 2, end_line: 2, start_character: 0, end_character: 0 }] }] }) },
+      },
+      {
+        name: "pending change with destination",
+        emptyLine: 4,
+        input: { doc: baseDoc, attribution: [], findings: [], marks: paintedFrom({ intents: [{ id: "i", tool_call_id: "t", tool: "move", operation: "move", to_path: "b.ts", state: "pending", root_id: "root", path: "a.ts", extent: "range", ranges: [{ start_line: 2, end_line: 3 }] }] }) },
+      },
+      {
+        name: "worker draft ready",
+        emptyLine: 4,
+        input: { doc: baseDoc, attribution: [], findings: [], marks: paintedFrom({ worker_drafts: [{ worker_id: "w", state: "ready", root_id: "root", path: "a.ts", extent: "range", ranges: [{ start_line: 2, end_line: 3 }], insertions: 3, deletions: 1 }] }) },
+      },
+      {
+        name: "worker draft landing",
+        emptyLine: 4,
+        input: { doc: baseDoc, attribution: [], findings: [], marks: paintedFrom({ worker_drafts: [{ worker_id: "w", state: "landing", root_id: "root", path: "a.ts", extent: "range", ranges: [{ start_line: 2, end_line: 3 }], insertions: 3, deletions: 1 }] }) },
+      },
+      {
+        name: "read range",
+        emptyLine: 4,
+        input: { doc: baseDoc, attribution: [], findings: [], marks: paintedFrom({ reads: [{ id: "r", sequence: 1, tool_call_id: "c", tool: "read", root_id: "root", path: "a.ts", extent: "range", ranges: [{ start_line: 2, end_line: 3 }], stale: false }] }) },
+      },
+      {
+        name: "read whole file",
+        input: { doc: baseDoc, attribution: [], findings: [], marks: paintedFrom({ reads: [{ id: "r", sequence: 1, tool_call_id: "c", tool: "read", root_id: "root", path: "a.ts", extent: "whole_file", ranges: [], stale: false }] }) },
+      },
+      {
+        name: "read stale",
+        emptyLine: 4,
+        input: { doc: baseDoc, attribution: [], findings: [], marks: paintedFrom({ reads: [{ id: "r", sequence: 1, tool_call_id: "c", tool: "read", root_id: "root", path: "a.ts", extent: "range", ranges: [{ start_line: 2, end_line: 3 }], stale: true }] }) },
+      },
+      {
+        name: "search match",
+        emptyLine: 4,
+        input: { doc: baseDoc, attribution: [], findings: [], marks: paintedFrom({ reads: [{ id: "r", sequence: 1, tool_call_id: "c", tool: "search", root_id: "root", path: "a.ts", extent: "matches", ranges: [{ start_line: 2, end_line: 3 }], stale: false }] }) },
+      },
+      {
+        name: "edited by chat",
+        emptyLine: 4,
+        input: { doc: baseDoc, marks: [], findings: [], attribution: [{ startLine: 2, endLine: 3, contributors: [{ sessionId: "s", turn: 4, ts: new Date(Date.now() - 600_000).toISOString(), toolCallId: "tc" }] }] },
+      },
+      {
+        name: "finding",
+        emptyLine: 4,
+        input: { doc: baseDoc, marks: [], attribution: [], findings: [{ line: 2, level: "high", findings: [finding("f1", "high")] }] },
+      },
+      {
+        name: "two rows",
+        emptyLine: 4,
+        input: { doc: baseDoc, marks: [], attribution: [], findings: [{ line: 2, level: "high", findings: [finding("f1", "high"), finding("f2", "low")] }] },
+      },
+      {
+        name: "three rows",
+        emptyLine: 4,
+        input: { doc: baseDoc, marks: [], attribution: [{ startLine: 2, endLine: 2, contributors: [{ sessionId: "s", turn: 1, ts: "", toolCallId: "tc" }] }], findings: [{ line: 2, level: "high", findings: [finding("f1", "high"), finding("f2", "low")] }] },
+      },
+    ];
+
+    for (const { input, emptyLine } of cases) {
+      const marker = lineFactsMarker(input, 2);
+      expect(marker).not.toBeNull();
+      const dom = marker!.toDOM();
+      expect(dom.dataset.tip).toBe(lineFactsHintLabel(lineFactsHint(lineFacts(2, input))!));
+      expect(dom.dataset.tipPos).toBe("end");
+      if (emptyLine) expect(lineFactsMarker(input, emptyLine)).toBeNull();
+    }
+
+    const oneFinding = cases.find(c => c.name === "finding")!.input;
+    const differentLead: LineFactsInput = {
+      doc: baseDoc, marks: [], attribution: [],
+      findings: [{ line: 2, level: "critical", findings: [finding("f-other", "critical")] }],
+    };
+    const twoFindings = cases.find(c => c.name === "two rows")!.input;
+    const baseMarker = lineFactsMarker(oneFinding, 2)!;
+    expect(baseMarker.eq(lineFactsMarker(oneFinding, 2)!)).toBe(true);
+    expect(baseMarker.eq(lineFactsMarker(differentLead, 2)!)).toBe(false);
+    expect(baseMarker.eq(lineFactsMarker(twoFindings, 2)!)).toBe(false);
   });
 
   it("marks read gutter handles with read classification", () => {
-    const { marks } = mount(true);
-    const doc = EditorState.create({ doc: "one\ntwo\nthree\nfour" }).doc;
-    const input = { doc, marks, attribution: [], findings: [] };
+    const marks = paintedFrom({
+      reads: [{ id: "read", sequence: 1, tool_call_id: "call", tool: "read", root_id: "root", path: "a.ts", extent: "range", ranges: [{ start_line: 2, end_line: 3 }], stale: false }],
+    }, "reader");
+    const input: LineFactsInput = { doc: baseDoc, marks, attribution: [], findings: [] };
     const markerLine2 = lineFactsMarker(input, 2);
     expect(markerLine2?.hasRead).toBe(true);
     expect(markerLine2?.elementClass).toContain("files-line-gutter__cell--read");
     const dom = markerLine2?.toDOM();
     expect(dom?.classList.contains("files-line-gutter__facts--read")).toBe(true);
     expect(dom?.dataset.read).toBe("true");
-
-    const markerLine1 = lineFactsMarker(input, 1);
-    expect(markerLine1).toBeNull();
+    expect(lineFactsMarker(input, 1)).toBeNull();
   });
 
   it("provides a single uniform tint across overlapping reads without stacking gradients", () => {
-    const doc = EditorState.create({ doc: "one\ntwo\nthree\nfour" }).doc;
     const marks: PaintedAgentMark[] = [
-      ...agentDocumentMarks(new Map([["reader1", {
-        session_id: "reader1", title: "Read 1", turn: 1, activities: [], intents: [], worker_drafts: [],
-        reads: [{ id: "read1", sequence: 1, tool_call_id: "call1", tool: "read", root_id: "root", path: "a.ts",
-          extent: "range", ranges: [{ start_line: 2, end_line: 3 }], stale: false }],
-      }]]), { reads: true, changes: true, fileNames: true }, "reader1", "root", "a.ts").map(mark => ({
-        mark, from: doc.line(2).from, to: doc.line(4).from, bornAt: 0, leftAt: null, supersededAt: null, color: undefined,
-      })),
-      ...agentDocumentMarks(new Map([["reader2", {
-        session_id: "reader2", title: "Read 2", turn: 1, activities: [], intents: [], worker_drafts: [],
-        reads: [{ id: "read2", sequence: 2, tool_call_id: "call2", tool: "read", root_id: "root", path: "a.ts",
-          extent: "range", ranges: [{ start_line: 2, end_line: 4 }], stale: false }],
-      }]]), { reads: true, changes: true, fileNames: true }, "reader2", "root", "a.ts").map(mark => ({
-        mark, from: doc.line(2).from, to: doc.line(4).to, bornAt: 0, leftAt: null, supersededAt: null, color: undefined,
-      })),
+      ...paintedFrom({ reads: [{ id: "read1", sequence: 1, tool_call_id: "call1", tool: "read", root_id: "root", path: "a.ts", extent: "range", ranges: [{ start_line: 2, end_line: 3 }], stale: false }] }, "reader1"),
+      ...paintedFrom({ reads: [{ id: "read2", sequence: 2, tool_call_id: "call2", tool: "read", root_id: "root", path: "a.ts", extent: "range", ranges: [{ start_line: 2, end_line: 4 }], stale: false }] }, "reader2"),
     ];
-    const input = { doc, marks, attribution: [], findings: [] };
+    const input: LineFactsInput = { doc: baseDoc, marks, attribution: [], findings: [] };
     const tintLine2 = lineFactsTint(input, 2);
     // Overlapping reads paint one gradient, not stacked ones.
     expect(tintLine2.startsWith("linear-gradient")).toBe(true);
     expect(tintLine2.includes("), linear-gradient")).toBe(false);
-
-    const tintLine3 = lineFactsTint(input, 3);
-    expect(tintLine3).toBe(tintLine2);
+    expect(lineFactsTint(input, 3)).toBe(tintLine2);
   });
 
   it("suppresses range read gradients when a whole-file read is already active", () => {
-    const doc = EditorState.create({ doc: "one\ntwo\nthree\nfour" }).doc;
-    const marks: PaintedAgentMark[] = agentDocumentMarks(new Map([["reader", {
-      session_id: "reader", title: "Read", turn: 1, activities: [], intents: [], worker_drafts: [],
+    const marks = paintedFrom({
       reads: [
-        { id: "whole", sequence: 1, tool_call_id: "whole", tool: "read", root_id: "root", path: "a.ts",
-          extent: "whole_file", ranges: [], stale: false },
-        { id: "range", sequence: 2, tool_call_id: "range", tool: "read", root_id: "root", path: "a.ts",
-          extent: "range", ranges: [{ start_line: 2, end_line: 3 }], stale: false },
+        { id: "whole", sequence: 1, tool_call_id: "whole", tool: "read", root_id: "root", path: "a.ts", extent: "whole_file", ranges: [], stale: false },
+        { id: "range", sequence: 2, tool_call_id: "range", tool: "read", root_id: "root", path: "a.ts", extent: "range", ranges: [{ start_line: 2, end_line: 3 }], stale: false },
       ],
-    }]]), { reads: true, changes: true, fileNames: true }, "reader", "root", "a.ts").map(mark => ({
-      mark, from: 0, to: doc.length, bornAt: 0, leftAt: null, supersededAt: null, color: undefined,
-    }));
-    const input = { doc, marks, attribution: [], findings: [] };
+    }, "reader");
+    const input: LineFactsInput = { doc: baseDoc, marks, attribution: [], findings: [] };
     expect(lineFactsTint(input, 2)).toBe("none");
-
     const marker = lineFactsMarker(input, 2);
     expect(marker?.hasRead).toBe(true);
     expect(marker?.tint).toBe("none");
