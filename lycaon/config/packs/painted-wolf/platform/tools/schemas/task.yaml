@@ -13,8 +13,9 @@ schema:
       uniqueItems: true
       items:
         type: string
-        format: uuid
-      description: Existing sibling job IDs whose outputs this fresh worker needs. The host starts this worker once each producer has delivered a complete result and its writes have landed; a producer sent back for corrections holds it until it delivers again. Cannot combine with base_overlay_id.
+        minLength: 1
+        maxLength: 64
+      description: Names of workers in this session whose outputs this fresh worker needs. The host starts this worker once each producer has delivered a complete result and its writes have landed; a producer sent back for corrections holds it until it delivers again. Cannot combine with base_overlay_id.
     shared_context:
       type: string
       description: Shared interface agreements and assumptions for this worker, up to 8192 UTF-8 bytes. Copy the same relevant contracts to collaborating assignments; workers do not inherit the parent conversation or sibling files.
@@ -106,7 +107,7 @@ schema:
             verification, or promotion.
         base_overlay_id:
           type: string
-          description: Optional. Stacked-overlay base — names another pending write overlay to dispatch on top of (instead of primary). Empty means based on primary.
+          description: Optional result handle of another worker's unlanded write result; this worker starts on top of those changes instead of current source.
   anyOf:
     - required: [brief]
     - required: [workflow_work_id]
