@@ -131,6 +131,12 @@ func TestPrerequisitesResolveAndRefuse(t *testing.T) {
 	if len(r.ProducerIDs) != 1 || r.ProducerIDs[0] != producer.WorkerID || r.BaseResultID != "result-p" {
 		t.Fatalf("receipt = %+v", r)
 	}
+	_, err = f.store.AddPrerequisites(t.Context(), f.coord, op("pre-base-again"), consumer.WorkerID, workerrecords.Prerequisites{BaseResultID: "result-p"})
+	testutil.FailErr(t, "same base again", err)
+	f.workerWithRound(t, "other-producer", "child-o", "job-o")
+	f.insertResult(t, "result-o", "job-o")
+	_, err = f.store.AddPrerequisites(t.Context(), f.coord, op("pre-base-other"), consumer.WorkerID, workerrecords.Prerequisites{BaseResultID: "result-o"})
+	wantErr(t, "another base", err, workerrecords.ErrBaseResultSet)
 	_, err = f.store.AddPrerequisites(t.Context(), f.coord, op("pre-self"), consumer.WorkerID, workerrecords.Prerequisites{AfterWorkers: []string{"consumer"}})
 	wantErr(t, "self", err, workerrecords.ErrPrerequisiteSelf)
 	_, err = f.store.AddPrerequisites(t.Context(), f.coord, op("pre-missing"), consumer.WorkerID, workerrecords.Prerequisites{AfterWorkers: []string{"nobody"}})
@@ -152,7 +158,7 @@ func TestPreparationsAppendInOrder(t *testing.T) {
 	f := newFixture(t)
 	w, _ := f.workerWithRound(t, "fixer", "child-1", "job-1")
 	f.insertResult(t, "result-1", "job-1")
-	p1, err := f.store.RecordPreparation(t.Context(), f.coord, op("prep-1"), w.WorkerID, workerrecords.Preparation{SourceResultID: "result-1", PromotionRef: "promotion-1", PreparationRef: "prep-1", BindingGeneration: 2})
+	p1, err := f.store.RecordPreparation(t.Context(), f.coord, op("prep-1"), w.WorkerID, workerrecords.Preparation{SourceResultID: "result-1", PreparationRef: "prep-1", BindingGeneration: 2})
 	testutil.FailErr(t, "record", err)
 	p2, err := f.store.RecordPreparation(t.Context(), f.coord, op("prep-2"), w.WorkerID, workerrecords.Preparation{PreparationRef: "prep-2", BindingGeneration: 3})
 	testutil.FailErr(t, "record second", err)
@@ -173,9 +179,8 @@ func TestPreparationsAppendInOrder(t *testing.T) {
 func TestClosedWorkerKeepsHistoryAndRefusesWork(t *testing.T) {
 	f := newFixture(t)
 	w, _ := f.workerWithRound(t, "fixer", "child-1", "job-1")
-	_, err := f.store.SettleRound(t.Context(), f.coord, op("settle"), w.WorkerID, "job-1", "")
-	testutil.FailErr(t, "settle", err)
-	_, err = f.store.Close(t.Context(), f.coord, op("close"), w.WorkerID, "withdrawn")
+	f.settle(t, "job-1", "")
+	_, err := f.store.Close(t.Context(), f.coord, op("close"), w.WorkerID, "withdrawn")
 	testutil.FailErr(t, "close", err)
 	got, err := f.store.Worker(t.Context(), f.coord, w.WorkerID)
 	testutil.FailErr(t, "read closed", err)

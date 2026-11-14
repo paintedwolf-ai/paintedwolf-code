@@ -104,12 +104,18 @@ func TestRunRetentionAgesOutOnlyTerminalOperationReceipts(t *testing.T) {
 	seedPromptSubmissionRow(t, database, "fresh", 2, "complete", fresh)
 	seedPromptSubmissionRow(t, database, "running", 3, "running", old)
 	seedCommandInvocationRow(t, database, "command-old", old)
+	for id, at := range map[string]string{"worker-op-old": old, "worker-op-fresh": fresh} {
+		_, err := database.ExecContext(t.Context(), `INSERT INTO worker_operations (operation_id, session_id, kind, request_digest, receipt_json, created_at)
+			VALUES (?, 'sess-1', 'instruct', 'digest', '{}', ?)`, id, at)
+		testutil.FailErr(t, "insert worker operation", err)
+	}
 
 	cfg := DefaultRetention()
 	cfg.IncrementalVacuumMinFreelistPages = 9999
 	report, err := RunRetention(t.Context(), database, cfg)
 	testutil.FailErr(t, "RunRetention", err)
-	if report.JournalDeleted("prompt_submissions") != 1 || report.JournalDeleted("command_invocations") != 1 {
+	if report.JournalDeleted("prompt_submissions") != 1 || report.JournalDeleted("command_invocations") != 1 ||
+		report.JournalDeleted("worker_operations") != 1 || !rowExists(t, database, `SELECT 1 FROM worker_operations WHERE operation_id = 'worker-op-fresh'`) {
 		t.Fatalf("journal cleanup report = %+v", report.OperationJournals)
 	}
 	if rowExists(t, database, `SELECT 1 FROM prompt_submissions WHERE id = 'old'`) {

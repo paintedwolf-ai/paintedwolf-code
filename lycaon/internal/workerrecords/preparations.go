@@ -11,7 +11,6 @@ import (
 // Preparation references one workspace preparation for a worker.
 type Preparation struct {
 	SourceResultID    string `json:"source_result_id,omitempty"`
-	PromotionRef      string `json:"promotion_ref,omitempty"`
 	PreparationRef    string `json:"preparation_ref,omitempty"`
 	BindingGeneration int64  `json:"binding_generation"`
 }
@@ -26,7 +25,6 @@ type PreparationReceipt struct {
 // generations never go backwards.
 func (s *Store) RecordPreparation(ctx context.Context, actor Actor, op Op, workerID string, prep Preparation) (PreparationReceipt, error) {
 	prep.SourceResultID = strings.TrimSpace(prep.SourceResultID)
-	prep.PromotionRef = strings.TrimSpace(prep.PromotionRef)
 	prep.PreparationRef = strings.TrimSpace(prep.PreparationRef)
 	if prep.BindingGeneration < 0 {
 		return PreparationReceipt{}, ErrInvalidPreparation
@@ -58,7 +56,7 @@ func (s *Store) RecordPreparation(ctx context.Context, actor Actor, op Op, worke
 		}
 		if err := q.InsertWorkerWorkspacePreparation(ctx, db.InsertWorkerWorkspacePreparationParams{
 			WorkerID: w.ID, Generation: generation, SourceResultID: nullString(prep.SourceResultID),
-			PromotionRef: prep.PromotionRef, PreparationRef: prep.PreparationRef,
+			PreparationRef:    prep.PreparationRef,
 			BindingGeneration: prep.BindingGeneration, OperationID: op.ID, CreatedAt: s.stamp(),
 		}); err != nil {
 			return PreparationReceipt{}, err
@@ -71,7 +69,6 @@ func (s *Store) RecordPreparation(ctx context.Context, actor Actor, op Op, worke
 type PreparationRecord struct {
 	Generation        int64  `json:"generation"`
 	SourceResultID    string `json:"source_result_id,omitempty"`
-	PromotionRef      string `json:"promotion_ref,omitempty"`
 	PreparationRef    string `json:"preparation_ref,omitempty"`
 	BindingGeneration int64  `json:"binding_generation"`
 	CreatedAt         string `json:"created_at"`
@@ -94,7 +91,7 @@ func (s *Store) LatestPreparation(ctx context.Context, actor Actor, workerID str
 		return PreparationRecord{}, false, err
 	}
 	return PreparationRecord{
-		Generation: p.Generation, SourceResultID: p.SourceResultID.String, PromotionRef: p.PromotionRef,
+		Generation: p.Generation, SourceResultID: p.SourceResultID.String,
 		PreparationRef: p.PreparationRef, BindingGeneration: p.BindingGeneration, CreatedAt: p.CreatedAt,
 	}, true, nil
 }
