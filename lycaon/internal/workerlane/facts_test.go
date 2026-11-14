@@ -106,3 +106,19 @@ func TestM14StateReadsMergeAndClaimState(t *testing.T) {
 type jobLookup map[string]*api.WorkerTask
 
 func (j jobLookup) Get(id string) (*api.WorkerTask, bool) { t, ok := j[id]; return t, ok }
+
+// A round without changes leaves the lane as it was: a rejection of the
+// earlier result still decides the next round's lane.
+func TestRoundsWithoutChangesDoNotHideARejection(t *testing.T) {
+	f := newLandingFixture(t)
+	f.round(t, "job-2", "result-2", false)
+	_, err := f.records.SetChange(t.Context(), f.actor, workerrecords.Op{ID: "reject-1"}, "result-1", workerrecords.Change{State: workerrecords.ChangeRejected})
+	testutil.FailErr(t, "reject", err)
+	got := f.facts(t, fakeState{}, workerlane.Assignment{Write: true})
+	if got.LastChange != workerlane.ChangeRejected {
+		t.Fatalf("after rejecting under a round without changes = %+v", got)
+	}
+	if sel := workerlane.Select(got); sel.Action == workerlane.ActionKeep {
+		t.Fatalf("a rejected lane was kept: %+v", sel)
+	}
+}

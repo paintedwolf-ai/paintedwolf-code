@@ -57,7 +57,7 @@ type Facts struct {
 	HasLane bool
 	// BaseCheckpoint is the sealed checkpoint a stacked worker starts on.
 	BaseCheckpoint string
-	// LastChange is the fate of the last settled result's changes.
+	// LastChange is the fate of the latest settled result that has changes.
 	LastChange ChangeState
 	// PriorCheckpoint is the checkpoint of the result before the rejected
 	// one, when that earlier result is still unlanded in the lane.
