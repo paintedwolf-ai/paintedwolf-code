@@ -47,14 +47,24 @@ func (l *turnProjection) beginActivity(
 	}}
 }
 
+// report publishes progress for an open lease. After the call returns, only
+// command program edges publish: a detached program keeps changing until it
+// settles, and the finished lease carries those changes as done events.
 func (a *activityLease) report(progress api.ToolProgress) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.finished || a.publish == nil {
+	if a.publish == nil {
+		return
+	}
+	commandChanged := commandActivityEdge(a.event.Progress, &progress)
+	if a.finished {
+		if commandChanged {
+			a.event.Progress = &progress
+			a.publish(a.event)
+		}
 		return
 	}
 	phaseChanged := a.event.Progress == nil || a.event.Progress.Phase != progress.Phase
-	commandChanged := commandActivityEdge(a.event.Progress, &progress)
 	a.event.Progress = &progress
 	if phaseChanged || commandChanged || time.Since(a.lastProgress) >= time.Second {
 		a.lastProgress = time.Now()

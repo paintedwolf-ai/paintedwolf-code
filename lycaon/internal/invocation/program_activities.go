@@ -78,13 +78,26 @@ func (r *SQLRecorder) ActivitySummary(ctx context.Context, session, program stri
 
 type activityObserverKey struct{}
 
+// ActivityObserver receives committed changes to a program's activities.
+type ActivityObserver struct {
+	Execution func(ctx context.Context, program, execution string)
+	Settled   func(ctx context.Context, program string)
+}
+
 // WithActivityObserver binds live presentation to this invocation's lifetime.
-func WithActivityObserver(ctx context.Context, observe func(context.Context, string, string)) context.Context {
-	return context.WithValue(ctx, activityObserverKey{}, observe)
+// A program that outlives its call still reports through it until it settles.
+func WithActivityObserver(ctx context.Context, observer ActivityObserver) context.Context {
+	return context.WithValue(ctx, activityObserverKey{}, observer)
 }
 
 func notifyActivity(ctx context.Context, program, execution string) {
-	if observe, ok := ctx.Value(activityObserverKey{}).(func(context.Context, string, string)); ok {
-		observe(ctx, program, execution)
+	if observer, ok := ctx.Value(activityObserverKey{}).(ActivityObserver); ok && observer.Execution != nil {
+		observer.Execution(ctx, program, execution)
+	}
+}
+
+func notifySettled(ctx context.Context, program string) {
+	if observer, ok := ctx.Value(activityObserverKey{}).(ActivityObserver); ok && observer.Settled != nil {
+		observer.Settled(ctx, program)
 	}
 }
