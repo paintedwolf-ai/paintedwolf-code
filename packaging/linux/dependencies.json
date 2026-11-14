@@ -18,7 +18,8 @@
       "libgbm1",
       "libxkbcommon0",
       "libasound2t64 | libasound2",
-      "python3-apt"
+      "python3-apt",
+      "fuse3"
     ],
     "recommends": [
       "libvulkan1",
@@ -40,7 +41,8 @@
       "at-spi2-atk",
       "mesa-libgbm",
       "libxkbcommon",
-      "alsa-lib"
+      "alsa-lib",
+      "fuse3"
     ],
     "recommends": [
       "vulkan-loader",
@@ -69,7 +71,8 @@
       "libxfixes",
       "libcups",
       "mesa",
-      "libdrm"
+      "libdrm",
+      "fuse3"
     ],
     "recommends": [
       "vulkan-icd-loader: Bialy Vulkan acceleration",

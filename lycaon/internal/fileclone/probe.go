@@ -41,6 +41,14 @@ func SupportedFrom(ctx context.Context, source, root string) (bool, error) {
 	return probeSourceClone(ctx, source, root, Clone, os.RemoveAll)
 }
 
+// SupportedFromUsing is SupportedFrom through the given clone, or Clone when it is nil.
+func SupportedFromUsing(ctx context.Context, source, root string, clone func(src, dst string) (bool, error)) (bool, error) {
+	if clone == nil {
+		clone = Clone
+	}
+	return probeSourceClone(ctx, source, root, clone, os.RemoveAll)
+}
+
 // The lifetime belongs here even when the platform leaves a partial result.
 // Dependencies bind the filesystem boundary; cleanup never inherits cancellation.
 func probeSourceClone(ctx context.Context, source, root string, clone func(string, string) (bool, error), remove func(string) error) (supported bool, err error) {

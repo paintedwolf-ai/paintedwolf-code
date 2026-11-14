@@ -75,7 +75,7 @@ const (
 
 // refuses reports whether the floors hold path against the creation.
 func (f creationFloors) refuses(kind creation, path string) bool {
-	path = filepath.Clean(path)
+	path = filepath.Clean(strings.TrimSuffix(path, " (deleted)"))
 	for _, p := range f.protected {
 		if !atOrUnderFold(path, p) {
 			continue
@@ -97,6 +97,27 @@ func (f creationFloors) refuses(kind creation, path string) bool {
 	// whatever it holds there, unreviewed.
 	for _, p := range f.protected {
 		if atOrUnderFold(p, path) {
+			return true
+		}
+	}
+	return false
+}
+
+// crossesNamedFloor reports whether moving oldPath to newPath crosses the
+// boundary of any NamedFloor.
+func (f creationFloors) crossesNamedFloor(oldPath, newPath string) bool {
+	for _, n := range f.names {
+		if atOrUnderFold(oldPath, n.Below) != atOrUnderFold(newPath, n.Below) {
+			return true
+		}
+	}
+	return false
+}
+
+// isNamedFloorBase reports whether name matches any NamedFloor basename.
+func (f creationFloors) isNamedFloorBase(name string) bool {
+	for _, n := range f.names {
+		if strings.EqualFold(name, n.Name) {
 			return true
 		}
 	}

@@ -173,7 +173,7 @@ func relocateSameMountSubvolume(from, to fseffect.Location, identity string) err
 	if err != nil {
 		return err
 	}
-	if current != identity {
+	if !fspath.SameEntryAcrossRestart(identity, current) {
 		return fseffect.ErrPostcondition
 	}
 	srcRoot, err := os.OpenRoot(from.Root)
@@ -200,7 +200,7 @@ func relocateSameMountSubvolume(from, to fseffect.Location, identity string) err
 		return err
 	}
 	after, err := fspath.EntryIdentity(fromPath)
-	if err != nil || after != identity {
+	if err != nil || !fspath.SameEntryAcrossRestart(identity, after) {
 		_ = dstRoot.RemoveAll(to.Rel)
 		if err != nil {
 			return err

@@ -8,13 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/workerplacement"
 )
 
@@ -33,14 +32,60 @@ func branchVolumeAvailable(branchRoot string) error {
 }
 
 // With no regular file to try, the volume itself answers.
-func probeSourcesClone(ctx context.Context, sample, dir string) (bool, error) {
+// existingBranchAncestor is the nearest existing directory above a branch, up to its branch base. A
+// missing base means the volume holding it is gone, and nothing is created in its place.
+func existingBranchAncestor(branchRoot string) (string, error) {
+	base := enginepaths.WorkerBranchesRootOf(branchRoot)
+	for dir := filepath.Dir(branchRoot); ; dir = filepath.Dir(dir) {
+		_, err := os.Stat(dir)
+		if err == nil {
+			return dir, nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", err
+		}
+		if dir == base || dir == filepath.Dir(dir) {
+			return "", fmt.Errorf("%w: %s", ErrBranchVolumeUnavailable, branchRoot)
+		}
+	}
+}
+
+func (m *Manager) probeSourcesClone(ctx context.Context, sample, dir string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
 	if sample == "" {
 		return fileclone.SupportedAt(dir)
 	}
-	return probeClone(sample, dir)
+	return fileclone.SupportedFromUsing(ctx, sample, dir, m.fileCloner())
+}
+
+// placedBranchClonability re-derives a placed branch's clone answer when its view is rebuilt: the
+// branch stays where it is, so only the sources' clone path to it is asked again. An evicted branch
+// has no tree, so the probe asks the nearest directory above it, which is on the same volume.
+func (m *Manager) placedBranchClonability(ctx context.Context, branchRoot string, sources []projectroot.RootRef) (workerplacement.Decision, error) {
+	parent, err := existingBranchAncestor(branchRoot)
+	if err != nil {
+		return workerplacement.Decision{}, err
+	}
+	if m.cloneProbe != nil {
+		clonable, err := m.cloneProbe(ctx, parent)
+		return workerplacement.Decision{Clonable: clonable}, err
+	}
+	for _, source := range sources {
+		sample, err := firstRegularFile(ctx, source.Path, m.sourceAdmit(source.Path))
+		if err != nil {
+			return workerplacement.Decision{}, err
+		}
+		clonable, err := m.probeSourcesClone(ctx, sample, parent)
+		if err != nil {
+			return workerplacement.Decision{}, err
+		}
+		if !clonable {
+			return workerplacement.Decision{}, nil
+		}
+	}
+	return workerplacement.Decision{Clonable: true}, nil
 }
 
 func (m *Manager) decidePlacement(ctx context.Context, roots, sources []projectroot.RootRef) (workerplacement.Decision, error) {
@@ -57,6 +102,9 @@ func (m *Manager) decidePlacement(ctx context.Context, roots, sources []projectr
 		AttachedRoots: placementRoots(roots, sources),
 		SourceRoots:   sourcePaths,
 		Probe: func(ctx context.Context, dir string) (bool, error) {
+			if m.cloneProbe != nil {
+				return m.cloneProbe(ctx, dir)
+			}
 			var sample string
 			for _, source := range sources {
 				found, err := firstRegularFile(ctx, source.Path, m.sourceAdmit(source.Path))
@@ -68,7 +116,7 @@ func (m *Manager) decidePlacement(ctx context.Context, roots, sources []projectr
 					break
 				}
 			}
-			return probeSourcesClone(ctx, sample, dir)
+			return m.probeSourcesClone(ctx, sample, dir)
 		},
 	})
 }
@@ -211,7 +259,7 @@ type sourceAdmit = func(rel, abs string, isDir bool) bool
 func (m *Manager) sourceAdmit(sourceRoot string) sourceAdmit {
 	excluded := map[string]struct{}{}
 	source := fspath.CanonicalPath(sourceRoot)
-	for _, path := range []string{m.stateRoot, m.seedRoot} {
+	for _, path := range []string{m.stateRoot} {
 		if strings.TrimSpace(path) == "" {
 			continue
 		}
@@ -229,20 +277,7 @@ func (m *Manager) sourceAdmit(sourceRoot string) sourceAdmit {
 	}
 }
 
-// skipUnreadable counts a directory this user cannot list instead of failing the
-// walk. Home directories and volume roots hold such entries.
-func skipUnreadable(count *atomic.Int64) func(rel string, err error) error {
-	return func(rel string, err error) error {
-		if rel == "." || !errors.Is(err, fs.ErrPermission) {
-			return err
-		}
-		if count != nil {
-			count.Add(1)
-		}
-		return nil
-	}
-}
-
+// sourceUnreadable reports a file this user cannot open.
 func sourceUnreadable(path string) bool {
 	file, err := os.Open(path)
 	if err != nil {
@@ -252,47 +287,42 @@ func sourceUnreadable(path string) bool {
 	return false
 }
 
-// sourceCost is what a copy of one source costs in entries and bytes.
-type sourceCost struct {
-	entries    int64
-	bytes      int64
-	unreadable int64
+// firstRegularFile finds a readable file to probe a clone with, reading directories in bounded
+// batches. An unreadable file says nothing about what the volume can clone.
+func firstRegularFile(ctx context.Context, root string, admit sourceAdmit) (string, error) {
+	cleanRoot := filepath.Clean(root)
+	sample, _, err := adapter.FirstRegularFile(ctx, cleanRoot, func(path string, d fs.DirEntry) bool {
+		rel, relErr := filepath.Rel(cleanRoot, path)
+		if relErr != nil || (admit != nil && !admit(filepath.ToSlash(rel), path, d.IsDir())) {
+			return false
+		}
+		return d.IsDir() || !sourceUnreadable(path)
+	})
+	return sample, err
 }
 
-// declareCopyCost surveys by stat, reports the cost before the first byte moves,
-// and refuses only when the destination cannot hold it.
-func declareCopyCost(ctx context.Context, sourceRoot, branchRoot string, admit sourceAdmit, progress PreparationProgress) (sourceCost, error) {
-	progress.Stage = "surveying_source"
-	reportPreparation(ctx, progress)
-	var cost sourceCost
-	err := sandbox.SurveyWalk(ctx, sourceRoot, sandbox.SurveyOptions{IncludeHidden: true, Admit: admit, OnReadError: skipUnreadable(nil)},
-		func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
-			info, err := entry.DirEntry.Info()
-			if err != nil {
-				if sourceChangeSkippable(err) {
-					return sandbox.SurveyContinue, nil
-				}
-				return sandbox.SurveyContinue, err
-			}
-			cost.entries++
-			if info.Mode().IsRegular() {
-				cost.bytes += max(info.Size(), 0)
-			}
-			return sandbox.SurveyContinue, nil
-		})
+// hiddenEnginePaths is engine storage a broad root can contain: the state folder and every
+// reachable placement folder. A view never shows it and a materialization never copies it.
+// hiddenEngineNames names engine storage a view hides wherever it appears: this engine's placement
+// folder, which can be made on a volume after a view of it started.
+func (m *Manager) hiddenEngineNames() []string {
+	if strings.TrimSpace(m.stateRoot) == "" {
+		return nil
+	}
+	return []string{enginepaths.WorkerPlacementDirName(os.Getuid(), m.stateRoot)}
+}
+
+func (m *Manager) hiddenEnginePaths() []string {
+	if strings.TrimSpace(m.stateRoot) == "" {
+		return nil
+	}
+	paths := []string{m.stateRoot}
+	folders, err := workerplacement.AvailableFolders(m.stateRoot)
 	if err != nil {
-		return sourceCost{}, err
+		return paths
 	}
-	progress.Stage = StageCostDeclared
-	progress.TotalEntries, progress.TotalBytes = cost.entries, cost.bytes
-	reportPreparation(ctx, progress)
-	available, known, err := queryAvailableStorageBytes(branchRoot)
-	if err != nil {
-		return sourceCost{}, err
+	for _, folder := range folders {
+		paths = append(paths, folder.Path)
 	}
-	required := uint64(cost.bytes) // #nosec G115 -- bytes sums file sizes, never negative; wrapping keeps the refusal
-	if known && available < required {
-		return sourceCost{}, &CapacityError{Path: branchRoot, Required: required, Available: available}
-	}
-	return cost, nil
+	return paths
 }

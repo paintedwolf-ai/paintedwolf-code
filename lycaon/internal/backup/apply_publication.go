@@ -38,6 +38,11 @@ func ensureDirectoryPath(root, leaf string) error {
 		case statErr != nil:
 			return statErr
 		case info.IsDir() && info.Mode()&os.ModeSymlink == 0:
+			if info.Mode().Perm()&0o200 == 0 {
+				if err := os.Chmod(current, info.Mode().Perm()|0o700); err != nil {
+					return err
+				}
+			}
 			continue
 		default:
 			if err := os.RemoveAll(current); err != nil {

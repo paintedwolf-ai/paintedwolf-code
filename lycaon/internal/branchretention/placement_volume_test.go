@@ -26,7 +26,7 @@ func TestRetentionAndInventoryFindABranchOnAnotherVolume(t *testing.T) {
 	state, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve state", err)
 	branchRoot := enginepaths.WorkerBranchesRootUnder(state)
-	mgr := workspace.NewManager(branchRoot, enginepaths.WorkerSeedsRootUnder(state))
+	mgr := workspace.NewManager(branchRoot)
 	binding, err := mgr.CreateWorkerWorkspace(t.Context(), project, "job")
 	testutil.FailErr(t, "create", err)
 

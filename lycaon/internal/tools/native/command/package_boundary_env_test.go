@@ -97,3 +97,18 @@ func TestCommandPackageNeverImportsNative(t *testing.T) {
 		}
 	}
 }
+
+func TestAgentCommandLaunchRecordsItsProcessInTheWorkersView(t *testing.T) {
+	var recorded []int
+	tctx := tools.ToolContext{Source: tools.InvocationSource{RecordViewProcess: func(pid int) error {
+		recorded = append(recorded, pid)
+		return nil
+	}}}
+	launch := agentCommandLaunch(tctx, "test-command", nil, nil, "synthetic command")
+	if launch.RecordStart == nil {
+		t.Fatal("agent launch does not record its process")
+	}
+	if err := launch.RecordStart(7); err != nil || len(recorded) != 1 || recorded[0] != 7 {
+		t.Fatalf("recorded=%v err=%v", recorded, err)
+	}
+}

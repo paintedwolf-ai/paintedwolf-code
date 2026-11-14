@@ -96,11 +96,11 @@ func TestPromoteOverlayEmitsRootScopeSourceChanges(t *testing.T) {
 	testutil.FailErr(t, "MkdirAll primary", os.MkdirAll(filepath.Join(primary, "src"), 0o755))
 	testutil.FailErr(t, "WriteFile base", os.WriteFile(filepath.Join(primary, "src", "edited.go"), []byte("base\n"), 0o644))
 	const rootID = "root-id"
-	manager := workspace.NewManager(t.TempDir(), t.TempDir())
+	manager := workspace.NewManager(t.TempDir())
 	roots := []projectroot.RootRef{{
 		ID: rootID, Label: "project", Path: primary, IsPrimary: true,
 	}}
-	binding, _, err := manager.CreateWorkerWorkspaceFromSources(ctx, roots, roots, rootID, "job-feed")
+	binding, _, err := manager.CreateWorkerBranch(ctx, roots, rootID, "job-feed")
 	testutil.FailErr(t, "create worker workspace", err)
 	overlay := binding.Root
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"src/**"}}
@@ -320,11 +320,11 @@ func newEditorSyncPromotion(t *testing.T, store *mergeStoreStub) editorSyncPromo
 	primary := t.TempDir()
 	testutil.FailErr(t, "WriteFile base", os.WriteFile(filepath.Join(primary, "edited.go"), []byte("base\n"), 0o644))
 	const rootID = "root-id"
-	manager := workspace.NewManager(t.TempDir(), t.TempDir())
+	manager := workspace.NewManager(t.TempDir())
 	roots := []projectroot.RootRef{{
 		ID: rootID, Label: "project", Path: primary, IsPrimary: true,
 	}}
-	binding, _, err := manager.CreateWorkerWorkspaceFromSources(ctx, roots, roots, rootID, "job-sync")
+	binding, _, err := manager.CreateWorkerBranch(ctx, roots, rootID, "job-sync")
 	testutil.FailErr(t, "create worker workspace", err)
 	overlay := binding.Root
 	baseline := workspaceBaselinePath(t, overlay)

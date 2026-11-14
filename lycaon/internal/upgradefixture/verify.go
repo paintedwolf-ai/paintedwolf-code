@@ -10,7 +10,10 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -67,12 +70,53 @@ func VerifyWorkerHistory(ctx context.Context, database db.Handle, projectID stri
 		if task.ID != evidence.JobID {
 			continue
 		}
-		if task.Status != api.WorkerStatusComplete || task.ParentSessionID != evidence.ParentSessionID || task.ChildSessionID != evidence.ChildSessionID || task.WorkspaceBaselinePath == "" || task.WorkspaceOverlayPath == "" {
+		if task.Status != api.WorkerStatusComplete || task.ParentSessionID != evidence.ParentSessionID || task.ChildSessionID != evidence.ChildSessionID {
+			return fmt.Errorf("retained worker lost completed history")
+		}
+		if storeDir, checkpointID, ok := workspace.BranchCheckpoint(task.WorkspaceRoot); ok {
+			return verifyCheckpointBodies(storeDir, checkpointID, evidence)
+		}
+		if task.WorkspaceBaselinePath == "" || task.WorkspaceOverlayPath == "" {
 			return fmt.Errorf("retained worker lost completed history")
 		}
 		return verifyWorkerBodies(ctx, &task, evidence)
 	}
 	return fmt.Errorf("retained worker %s is missing", evidence.JobID)
+}
+
+// verifyCheckpointBodies reads a checkpointed worker's base and final bodies from the checkpoint it
+// published, which outlives both the project and the branch tree.
+func verifyCheckpointBodies(storeDir, checkpointID string, evidence WorkerEvidence) error {
+	store, err := checkpoint.NewStore(storeDir)
+	if err != nil {
+		return err
+	}
+	manifest, err := store.LoadManifest(checkpointID)
+	if err != nil {
+		return err
+	}
+	if len(manifest.SelectedRoots) != 1 {
+		return fmt.Errorf("retained worker topology is missing")
+	}
+	rootID := manifest.SelectedRoots[0].ID
+	for _, side := range []struct {
+		expected map[string]string
+		read     func(string, layeredfs.QualifiedPath) ([]byte, error)
+	}{{evidence.Baseline, store.ReadBaseContent}, {evidence.Overlay, store.ReadEntryContent}} {
+		for path, expected := range side.expected {
+			if !filepath.IsLocal(path) {
+				return fmt.Errorf("invalid worker fixture path")
+			}
+			body, err := side.read(checkpointID, layeredfs.QualifiedPath{RootID: rootID, Rel: filepath.ToSlash(path)})
+			if err != nil {
+				return fmt.Errorf("retained worker body %s: %w", path, err)
+			}
+			if digest(body) != expected {
+				return fmt.Errorf("retained worker body changed: %s", path)
+			}
+		}
+	}
+	return nil
 }
 
 func verifyWorkerBodies(ctx context.Context, task *api.WorkerTask, evidence WorkerEvidence) error {

@@ -31,7 +31,7 @@ func New(t *testing.T, kind Kind) (*Volume, bool) {
 		runInNamespace(t)
 		return nil, true
 	}
-	return tmpfsVolume(t), false
+	return tmpfsVolume(t, kind), false
 }
 
 // sharedVolume returns a fresh volume: on Linux every test already gets its own
@@ -96,7 +96,10 @@ func runInNamespace(t *testing.T) {
 	}
 }
 
-func tmpfsVolume(t *testing.T) *Volume {
+// fsCasefoldFlag is FS_CASEFOLD_FL, which only an empty directory can take.
+const fsCasefoldFlag = 0x40000000
+
+func tmpfsVolume(t *testing.T, kind Kind) *Volume {
 	t.Helper()
 	// Every mount here disappears with the process, so a killed test leaves nothing.
 	if err := unix.Mount("", "/", "", unix.MS_REC|unix.MS_PRIVATE, ""); err != nil {
@@ -113,8 +116,15 @@ func tmpfsVolume(t *testing.T) *Volume {
 			t.Fatalf("create %s: %v", dir, err)
 		}
 	}
-	if err := unix.Mount("tmpfs", store, "tmpfs", 0, "size=32m"); err != nil {
-		t.Skipf("cannot mount tmpfs: %v", err)
+	options := "size=32m"
+	if kind == Folding {
+		options += ",casefold"
+	}
+	if err := unix.Mount("tmpfs", store, "tmpfs", 0, options); err != nil {
+		t.Skipf("cannot mount tmpfs with %s: %v", options, err)
+	}
+	if kind == Folding {
+		casefoldRoot(t, store)
 	}
 	// A bind of the store can go away while its contents stay, like an ejected disk.
 	bind := func(t *testing.T) {
@@ -125,7 +135,7 @@ func tmpfsVolume(t *testing.T) *Volume {
 	v := &Volume{Root: mount}
 	v.eject = func(t *testing.T) {
 		if err := unix.Unmount(mount, 0); err != nil {
-			t.Fatalf("eject test volume: %v", err)
+			t.Fatalf("eject test volume: %v; this process holds %v", err, descriptorsUnder(mount))
 		}
 	}
 	v.remount = bind
@@ -145,5 +155,37 @@ func (v *Volume) MakeReadOnly(t *testing.T) {
 	}
 	if err := unix.Mount("", v.Root, "", unix.MS_REMOUNT|unix.MS_BIND|unix.MS_RDONLY, ""); err != nil {
 		t.Fatalf("remount test volume read-only: %v", err)
+	}
+}
+
+// descriptorsUnder lists this process's open descriptors and working directory inside root, which
+// is what keeps a volume busy.
+func descriptorsUnder(root string) []string {
+	var held []string
+	entries, _ := os.ReadDir("/proc/self/fd")
+	for _, entry := range entries {
+		if target, err := os.Readlink(filepath.Join("/proc/self/fd", entry.Name())); err == nil && (target == root || strings.HasPrefix(target, root+"/")) {
+			held = append(held, entry.Name()+"="+target)
+		}
+	}
+	if cwd, err := os.Getwd(); err == nil && (cwd == root || strings.HasPrefix(cwd, root+"/")) {
+		held = append(held, "cwd="+cwd)
+	}
+	return held
+}
+
+func casefoldRoot(t *testing.T, dir string) {
+	t.Helper()
+	fd, err := unix.Open(dir, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	if err != nil {
+		t.Fatalf("open %s: %v", dir, err)
+	}
+	defer func() { _ = unix.Close(fd) }()
+	flags, err := unix.IoctlGetUint32(fd, unix.FS_IOC_GETFLAGS)
+	if err != nil {
+		t.Skipf("this kernel reports no directory flags on tmpfs: %v", err)
+	}
+	if err := unix.IoctlSetPointerInt(fd, unix.FS_IOC_SETFLAGS, int(flags|fsCasefoldFlag)); err != nil {
+		t.Skipf("this kernel cannot casefold a tmpfs directory: %v", err)
 	}
 }

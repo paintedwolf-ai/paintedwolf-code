@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -16,9 +17,10 @@ import (
 
 // GitOperationTool binds repository effects to source scope and prepared review.
 type GitOperationTool struct {
-	Git      git.GitManager
-	Boundary *sandbox.Boundary
-	Kind     string
+	Git        git.GitManager
+	PrivateGit *privategit.Manager
+	Boundary   *sandbox.Boundary
+	Kind       string
 }
 
 func (t *GitOperationTool) Run(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
@@ -29,7 +31,7 @@ func (t *GitOperationTool) Run(ctx context.Context, args map[string]any, tc tool
 	}
 	req.IncludeUntracked, _ = args["include_untracked"].(bool)
 	req.ReinstateIndex, _ = args["reinstate_index"].(bool)
-	result, err := GitMutations{Git: t.Git, Boundary: t.Boundary}.Operate(ctx, tc, req)
+	result, err := GitMutations{Git: t.Git, Boundary: t.Boundary, PrivateGit: t.PrivateGit}.Operate(ctx, tc, req)
 	if err != nil && !result.Attempted {
 		return "", err
 	}
@@ -56,16 +58,22 @@ func (t *GitOperationTool) Run(ctx context.Context, args map[string]any, tc tool
 // command forms share: path admission, host review of every file effect,
 // source history, and the Git owner's rehearsed, revalidated operation.
 type GitMutations struct {
-	Git      git.GitManager
-	Boundary *sandbox.Boundary
+	Git        git.GitManager
+	Boundary   *sandbox.Boundary
+	PrivateGit *privategit.Manager
 }
 
 // Operate runs one reviewed repository operation in the active root. A
 // precondition refusal returns before any effect; an attempted operation
 // returns its observed result, with an error only when Git could not finish.
 func (m GitMutations) Operate(ctx context.Context, tc tools.ToolContext, req git.OperationRequest) (git.OperationResult, error) {
-	if tc.Identity.WorkerJobID != "" {
-		return git.OperationResult{}, &toolrejection.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "addressed_session_required", "git_addressed_session_required": true}}
+	cwd, finish, managed, prepErr := privategit.PrepareManagerViewOperation(ctx, m.PrivateGit, tools.HostWriteRoot(tc), tc.Identity.WorkerJobID)
+	if prepErr != nil {
+		return git.OperationResult{}, prepErr
+	}
+	defer func() { _ = finish() }()
+	if err := workerGitPrecondition(tc, managed); err != nil {
+		return git.OperationResult{}, err
 	}
 	root, err := projectpaths.ResolveGitStage(ctx, m.Boundary, tc, ".")
 	if err != nil {
@@ -90,7 +98,11 @@ func (m GitMutations) Operate(ctx context.Context, tc tools.ToolContext, req git
 	if historyErr != nil {
 		return git.OperationResult{}, historyErr
 	}
-	result, err := m.Git.Operate(ctx, root.Abs, req)
+	target := root.Abs
+	if managed {
+		target = cwd
+	}
+	result, err := m.Git.Operate(ctx, target, req)
 	if err != nil && !result.Attempted {
 		var precondition *git.OperationError
 		if errors.As(err, &precondition) {
@@ -102,7 +114,21 @@ func (m GitMutations) Operate(ctx context.Context, tc tools.ToolContext, req git
 	for _, path := range result.Paths {
 		tc.RecordSourcePath(path, api.NavigationEntryKindFile)
 	}
+	if err == nil && result.Status != "failed" && result.Status != "conflicts" {
+		if finErr := finish(); finErr != nil {
+			return result, finErr
+		}
+	}
 	return result, err
+}
+
+// workerGitPrecondition admits a worker's Git only through its managed prepared view. A session has
+// no such constraint: its repository effects run in its own addressed root.
+func workerGitPrecondition(tc tools.ToolContext, managed bool) error {
+	if tc.Identity.WorkerJobID == "" || managed {
+		return nil
+	}
+	return &toolrejection.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "addressed_session_required", "git_addressed_session_required": true}}
 }
 
 func gitString(args map[string]any, key string) string { value, _ := args[key].(string); return value }

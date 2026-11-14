@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"os/exec"
 	"os/signal"
 	"strconv"
@@ -92,6 +93,12 @@ func applyProcessAttributes(a ProcessAttributes) error {
 	if a.IgnoreHangup {
 		// An ignored disposition survives exec.
 		signal.Ignore(syscall.SIGHUP)
+	} else {
+		// Installing a Go handler before exec forces setsig(SIGHUP, sighandler)
+		// even when the helper inherited SIG_IGN at startup, and POSIX execve
+		// resets caught signals to SIG_DFL in the target.
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, syscall.SIGHUP)
 	}
 	return nil
 }

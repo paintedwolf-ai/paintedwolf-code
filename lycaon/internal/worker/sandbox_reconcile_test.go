@@ -31,7 +31,7 @@ func TestReconcileProjectSandboxesRetainsActiveWriteSandboxes(t *testing.T) {
 		{ID: "merged", Status: api.WorkerStatusComplete, WorkspaceRoot: merged, Scope: writeScope(), MergeStatus: api.WorkerMergeStatusMerged},
 	}
 
-	removed, err := worker.ReconcileProjectSandboxes(context.Background(), sandboxRoot, primary, loadTasks(tasks))
+	removed, err := worker.ReconcileProjectSandboxes(context.Background(), sandboxRoot, primary, nil, loadTasks(tasks))
 	testutil.FailErr(t, "ReconcileProjectSandboxes", err)
 	if removed != 1 {
 		t.Fatalf("removed = %d want 1 terminal sandbox", removed)
@@ -61,7 +61,7 @@ func TestReconcileProjectSandboxesRetainsWorkersFromOtherProjectID(t *testing.T)
 		Scope:         writeScope(),
 	}}
 
-	removed, err := worker.ReconcileProjectSandboxes(context.Background(), sandboxRoot, primary, loadTasks(tasks))
+	removed, err := worker.ReconcileProjectSandboxes(context.Background(), sandboxRoot, primary, nil, loadTasks(tasks))
 	testutil.FailErr(t, "ReconcileProjectSandboxes", err)
 	if removed != 0 {
 		t.Fatalf("removed = %d want 0 when active write worker retains sandbox", removed)
