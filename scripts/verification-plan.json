@@ -487,6 +487,9 @@
     ],
     "arch-lint:changes": [
       "arch-lint:changes"
+    ],
+    "arch-lint:report": [
+      "arch-lint:report"
     ]
   },
   "private": [
@@ -1015,6 +1018,15 @@
       "workers": 1
     },
     "arch-lint:changes": {
+      "locks": [
+        "go"
+      ],
+      "shared_locks": [
+        "go"
+      ],
+      "workers": "shared"
+    },
+    "arch-lint:report": {
       "locks": [
         "go"
       ],
