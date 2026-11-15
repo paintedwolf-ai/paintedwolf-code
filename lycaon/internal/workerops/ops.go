@@ -282,15 +282,21 @@ func (s *Service) Shelve(ctx context.Context, actor workerrecords.Actor, op work
 	if err != nil {
 		return workerrecords.Disposition{}, err
 	}
-	if !snap.View.Admits(workerstate.OpShelve) {
-		return workerrecords.Disposition{}, refusal(snap, workerstate.OpShelve)
+	_, _, replayed, err := s.Reader.Records.Operation(ctx, actor, op.ID)
+	if err != nil {
+		return workerrecords.Disposition{}, err
 	}
-	changed := false
-	for _, r := range snap.Rounds {
-		changed = changed || (r.ResultID == ref.ResultID && r.CheckpointID != "")
-	}
-	if !changed {
-		return workerrecords.Disposition{}, ErrNoChanges
+	if !replayed {
+		if !snap.View.Admits(workerstate.OpShelve) {
+			return workerrecords.Disposition{}, refusal(snap, workerstate.OpShelve)
+		}
+		changed := false
+		for _, r := range snap.Rounds {
+			changed = changed || (r.ResultID == ref.ResultID && r.CheckpointID != "")
+		}
+		if !changed {
+			return workerrecords.Disposition{}, ErrNoChanges
+		}
 	}
 	d, err := s.Reader.Records.SetChange(ctx, actor, op, ref.ResultID, workerrecords.Change{State: workerrecords.ChangeShelved, ShelveReason: reason})
 	if err != nil {
