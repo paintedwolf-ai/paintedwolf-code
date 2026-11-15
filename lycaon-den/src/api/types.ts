@@ -15157,7 +15157,10 @@ export interface components {
             disposition_label?: string;
             /** @description Derived display label for workspace_state. */
             workspace_label?: string;
-            /** @description Most recent activity timestamp for recency ordering. */
+            /**
+             * Format: date-time
+             * @description Most recent activity timestamp for recency ordering.
+             */
             updated_at?: string;
             read_paths?: string[];
             read_omitted?: number;

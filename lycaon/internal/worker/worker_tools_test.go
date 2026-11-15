@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -637,5 +638,77 @@ func TestTaskStartsAReviewerOnASealedResult(t *testing.T) {
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Data["merge_status"] != "rejected" || reject.Data["worker"] != "surveyor" {
 		t.Fatalf("refusal data = %+v", reject)
+	}
+}
+
+func TestWorkerHistoryToolPagesBeforeRoundAndBeforePreservingUnread(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	childActor := workerrecords.Actor{SessionID: "child", Role: workerrecords.RoleWorker, PrincipalID: "child"}
+	f.deliver(t, "job-01")
+	for i := 2; i <= 25; i++ {
+		jobID := fmt.Sprintf("job-%02d", i)
+		_, err := f.run(t, InstructWorkerTool, fmt.Sprintf("inst-%02d", i), map[string]any{
+			"worker": "surveyor", "instructions": fmt.Sprintf("round %02d", i),
+		})
+		testutil.FailErr(t, "instruct", err)
+		created := latestJob(t, f.db)
+		_ = jobID
+		report, _ := json.Marshal(api.WorkerResult{Status: "complete", CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}})
+		now := db.FormatTime(time.Now().UTC())
+		_, err = f.db.ExecContext(t.Context(), `UPDATE worker_jobs SET status = 'complete', result_json = ?, completed_at = ? WHERE id = ?`, string(report), now, created)
+		testutil.FailErr(t, "complete job", err)
+		_, err = f.db.ExecContext(t.Context(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES (?, ?, 'complete', ?)`, "result-"+created, created, now)
+		testutil.FailErr(t, "insert result", err)
+		_, err = db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{
+			SettledAt: db.NullString(now), JobID: created,
+		})
+		testutil.FailErr(t, "settle round", err)
+	}
+	_, err := f.run(t, InstructWorkerTool, "inst-26", map[string]any{
+		"worker": "surveyor", "instructions": "round 26",
+	})
+	testutil.FailErr(t, "instruct 26", err)
+	for i := range 30 {
+		_, err := f.records.AppendMessage(t.Context(), childActor, workerrecords.Op{ID: fmt.Sprintf("wmsg-%02d", i)}, f.workerID, workerrecords.MessageSpec{
+			Body: fmt.Sprintf("msg-%02d %s", i, strings.Repeat("z", 700)),
+		})
+		testutil.FailErr(t, "worker msg", err)
+	}
+
+	out1, err := f.run(t, WorkerHistoryTool, "hist-1", map[string]any{"worker": "surveyor"})
+	testutil.FailErr(t, "worker_history p1", err)
+	var p1 struct {
+		Rounds      []map[string]any `json:"rounds"`
+		Messages    []map[string]any `json:"messages"`
+		Before      int64            `json:"before"`
+		BeforeRound int64            `json:"before_round"`
+	}
+	testutil.FailErr(t, "decode p1", json.Unmarshal([]byte(out1), &p1))
+	if len(p1.Rounds) != workerops.MaxHistoryRounds || p1.BeforeRound != 7 || p1.Before == 0 {
+		t.Fatalf("p1 = rounds:%d before_round:%d before:%d", len(p1.Rounds), p1.BeforeRound, p1.Before)
+	}
+
+	out2, err := f.run(t, WorkerHistoryTool, "hist-2", map[string]any{
+		"worker": "surveyor", "before_round": float64(p1.BeforeRound), "before": float64(p1.Before),
+	})
+	testutil.FailErr(t, "worker_history p2", err)
+	var p2 struct {
+		Rounds      []map[string]any `json:"rounds"`
+		Messages    []map[string]any `json:"messages"`
+		BeforeRound int64            `json:"before_round"`
+	}
+	testutil.FailErr(t, "decode p2", json.Unmarshal([]byte(out2), &p2))
+	if len(p2.Rounds) != 6 || p2.BeforeRound != 0 || len(p2.Messages) == 0 {
+		t.Fatalf("p2 = rounds:%d before_round:%d msgs:%d", len(p2.Rounds), p2.BeforeRound, len(p2.Messages))
+	}
+
+	if _, err := f.run(t, WorkerHistoryTool, "hist-bad", map[string]any{"worker": "surveyor", "before_round": float64(0)}); err == nil {
+		t.Fatal("expected rejection on non-positive before_round")
+	}
+
+	unread, err := f.records.OpenPageBounded(t.Context(), f.coord, f.workerID, 0, 5, workerrecords.MaxHistoryPageBytes)
+	testutil.FailErr(t, "unread page", err)
+	if len(unread.Messages) != 5 {
+		t.Fatalf("worker_history cleared unread messages: got %d", len(unread.Messages))
 	}
 }

@@ -296,6 +296,8 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"spend_under_cent":    true,
 	"estimated_spend_usd": true,
 	"latest_message_seq":  true,
+	"round_ordinal":       true,
+	"workflow_work_id":    true,
 	"tools":               true,
 	"tools_minutes":       true,
 	// Prerequisite-blocked notice names the blocking producer worker when resolved.

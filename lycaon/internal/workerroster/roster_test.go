@@ -259,3 +259,121 @@ func TestShownQuestionsFollowTheRenderedFrame(t *testing.T) {
 		t.Fatal("the question was taken twice")
 	}
 }
+
+func TestRosterScaleRecencyWorkspaceStatesLabelsAndRoundPathScanBound(t *testing.T) {
+	f := newFixture(t)
+	// Seed read-scope, preparing, refreshed, reset, and long-history workers.
+	_, err := f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
+		VALUES ('child-reader', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now(), now(), now())
+	testutil.FailErr(t, "insert reader child", err)
+	readerW, err := f.records.CreateWorker(t.Context(), f.coord, workerrecords.Op{ID: "create-reader"}, workerrecords.WorkerSpec{
+		Name: "reader", AgentType: "repo-researcher", ScopeMode: "read", Brief: "read repo", ChildSessionID: "child-reader",
+	})
+	testutil.FailErr(t, "create reader", err)
+	f.admit(t, readerW.WorkerID, "job-reader-1", api.WorkerStatusRunning)
+
+	prepW := f.worker(t, "prep-writer", "implementer")
+	_ = prepW
+
+	refreshedW := f.worker(t, "refreshed-writer", "implementer")
+	f.admit(t, refreshedW, "job-ref-1", api.WorkerStatusRunning)
+	f.settle(t, refreshedW, "job-ref-1", "cp-ref-1", []string{"pkg/ref.go"})
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO landed_changes (id, worker_job_id, canonical_path, created_at) VALUES ('landed-ref-1', 'job-ref-1', '/repo', ?)`, now())
+	testutil.FailErr(t, "insert landed ref", err)
+	_, err = f.records.SetChange(t.Context(), f.coord, workerrecords.Op{ID: "land-ref"}, "result-job-ref-1", workerrecords.Change{State: workerrecords.ChangeLanded, LandedChangeID: "landed-ref-1"})
+	testutil.FailErr(t, "land ref", err)
+	_, err = f.records.RecordPreparation(t.Context(), f.coord, workerrecords.Op{ID: "prep-ref"}, refreshedW, workerrecords.Preparation{
+		PreparationRef: "/lanes/ref", SourceResultID: "result-job-ref-1", BindingGeneration: 2,
+	})
+	testutil.FailErr(t, "record prep ref", err)
+
+	resetW := f.worker(t, "reset-writer", "implementer")
+	f.admit(t, resetW, "job-rst-1", api.WorkerStatusRunning)
+	f.settle(t, resetW, "job-rst-1", "cp-rst-1", []string{"pkg/rst.go"})
+	_, err = f.records.SetChange(t.Context(), f.coord, workerrecords.Op{ID: "rej-rst"}, "result-job-rst-1", workerrecords.Change{State: workerrecords.ChangeRejected})
+	testutil.FailErr(t, "reject rst", err)
+
+	// Long-history worker with 45 rounds; round 1 path is outside MaxRoundPathScan (32).
+	longW := f.worker(t, "long-history", "implementer")
+	for i := 1; i <= 45; i++ {
+		jobID := fmt.Sprintf("job-lh-%02d", i)
+		if i == 1 {
+			f.admit(t, longW, jobID, api.WorkerStatusRunning)
+			f.touches[jobID] = []string{"ancient/round1.go"}
+		} else {
+			_, jErr := f.db.ExecContext(t.Context(), `INSERT INTO worker_jobs (id, project_id, parent_session_id, child_session_id, agent_type, status, prompt, brief, created_at)
+				VALUES (?, ?, 'coord', 'child-long-history', 'implementer', 'running', 'p', 'b', ?)`, jobID, testdbseed.DefaultProjectID, now())
+			testutil.FailErr(t, "insert lh job", jErr)
+			f.jobs[jobID] = &api.WorkerTask{ID: jobID, ParentSessionID: "coord", Status: api.WorkerStatusRunning}
+			_, sErr := f.records.StartRound(t.Context(), f.coord, workerrecords.Op{ID: fmt.Sprintf("start-lh-%02d", i)}, longW, workerrecords.RoundStart{
+				JobID: jobID, ExecutionTarget: "local", Instruction: fmt.Sprintf("lh %d", i),
+			})
+			testutil.FailErr(t, "start lh round", sErr)
+			if i == 45 {
+				f.touches[jobID] = []string{"recent/round45.go"}
+			}
+		}
+		f.settle(t, longW, jobID, "", nil)
+		if i < 45 {
+			_, _ = f.records.AccountResult(t.Context(), f.coord, workerrecords.Op{ID: fmt.Sprintf("acct-lh-%02d", i)}, "result-"+jobID)
+		}
+	}
+
+	// Add 45 idle workers with distinct updated_at timestamps to verify recency ordering within equal priority.
+	for i := range 45 {
+		name := fmt.Sprintf("idle-%02d", i)
+		id := f.worker(t, name, "implementer")
+		_, err := f.records.RecordPreparation(t.Context(), f.coord, workerrecords.Op{ID: "prep-" + name}, id, workerrecords.Preparation{
+			PreparationRef: "/lanes/" + name, BindingGeneration: 1,
+		})
+		testutil.FailErr(t, "prep idle", err)
+		ts := fmt.Sprintf("2026-11-15T12:%02d:00Z", i)
+		_, err = f.db.ExecContext(t.Context(), `UPDATE workers SET updated_at = ? WHERE id = ?`, ts, id)
+		testutil.FailErr(t, "stamp updated_at", err)
+	}
+
+	boardRows, err := f.source.Board(t.Context(), "coord")
+	testutil.FailErr(t, "board 50 workers", err)
+	if len(boardRows) != 50 {
+		t.Fatalf("board rows = %d, want 50", len(boardRows))
+	}
+
+	byName := map[string]api.BoardWorker{}
+	var idleOrder []string
+	for _, r := range boardRows {
+		byName[r.Name] = r
+		if len(r.Name) > 5 && r.Name[:5] == "idle-" {
+			idleOrder = append(idleOrder, r.Name)
+		}
+	}
+	if idleOrder[0] != "idle-44" || idleOrder[len(idleOrder)-1] != "idle-00" {
+		t.Fatalf("idle recency order = first:%s last:%s", idleOrder[0], idleOrder[len(idleOrder)-1])
+	}
+	if byName["reader"].WorkspaceState != "shared" || byName["reader"].WorkspaceLabel != "shared read view" {
+		t.Fatalf("reader workspace = %+v", byName["reader"])
+	}
+	if byName["prep-writer"].WorkspaceState != "preparing" || byName["prep-writer"].WorkspaceLabel != "preparing workspace" {
+		t.Fatalf("prep-writer workspace = %+v", byName["prep-writer"])
+	}
+	if byName["refreshed-writer"].WorkspaceState != "refreshed" || byName["refreshed-writer"].DispositionLabel != "changes landed" {
+		t.Fatalf("refreshed-writer = %+v", byName["refreshed-writer"])
+	}
+	if byName["reset-writer"].WorkspaceState != "reset" || byName["reset-writer"].DispositionLabel != "changes rejected" {
+		t.Fatalf("reset-writer = %+v", byName["reset-writer"])
+	}
+	lh := byName["long-history"]
+	if slices.Contains(lh.ReadPaths, "ancient/round1.go") || !slices.Contains(lh.ReadPaths, "recent/round45.go") {
+		t.Fatalf("long-history read paths = %v, want recent window only", lh.ReadPaths)
+	}
+
+	tmplRows, omitted, err := f.source.Template(t.Context(), "coord")
+	testutil.FailErr(t, "template", err)
+	if len(tmplRows) != workerroster.MaxRows || omitted != 50-workerroster.MaxRows {
+		t.Fatalf("template rows=%d omitted=%d", len(tmplRows), omitted)
+	}
+	latestMap, err := f.source.LatestResults(t.Context(), "coord")
+	testutil.FailErr(t, "latest results", err)
+	if latestMap["job-lh-45"].Worker != "long-history" {
+		t.Fatalf("latest results missing long-history: %+v", latestMap)
+	}
+}

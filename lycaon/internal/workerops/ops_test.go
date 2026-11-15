@@ -3,8 +3,10 @@ package workerops_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -490,5 +492,92 @@ func TestShelveReplaysItsFirstDisposition(t *testing.T) {
 	_, err = f.svc.Shelve(t.Context(), f.coord, op("shelve-op"), "result-job-1", "different reason")
 	if !errors.Is(err, workerrecords.ErrOperationConflict) {
 		t.Fatalf("conflicting shelve replay = %v, want ErrOperationConflict", err)
+	}
+}
+
+func TestReadBoundedParityAndHistoryPagedBounds(t *testing.T) {
+	f := newFixture(t)
+	childActor := workerrecords.Actor{SessionID: "child", Role: workerrecords.RoleWorker, PrincipalID: "child"}
+	for i := 1; i <= 44; i++ {
+		jobID := fmt.Sprintf("job-%02d", i)
+		if i == 1 {
+			f.round(t, jobID, "complete", "")
+		} else {
+			_, err := f.svc.Instruct(t.Context(), f.coord, op(fmt.Sprintf("start-%02d", i)), workerops.Instruction{
+				Worker: "surveyor", Instructions: fmt.Sprintf("round %d", i),
+			}, f.enqueue(jobID))
+			testutil.FailErr(t, "instruct round", err)
+			f.settle(t, jobID, "complete", "")
+		}
+		if i < 44 {
+			_, _ = f.records.AccountResult(t.Context(), f.coord, op(fmt.Sprintf("acct-%02d", i)), "result-"+jobID)
+		}
+	}
+
+	w, err := f.records.Worker(t.Context(), f.coord, f.workerID)
+	testutil.FailErr(t, "worker", err)
+	fullSnap, err := f.svc.Reader.Read(t.Context(), f.coord, w)
+	testutil.FailErr(t, "full read", err)
+	boundedSnap, err := f.svc.Reader.ReadBounded(t.Context(), f.coord, w, 4)
+	testutil.FailErr(t, "bounded read", err)
+	if !reflect.DeepEqual(boundedSnap.View, fullSnap.View) || len(boundedSnap.Rounds) != 4 {
+		t.Fatalf("bounded view=%+v (rounds=%d), full=%+v", boundedSnap.View, len(boundedSnap.Rounds), fullSnap.View)
+	}
+	fullRes, _ := fullSnap.LatestResult()
+	boundedRes, _ := boundedSnap.LatestResult()
+	if boundedRes.ResultID != fullRes.ResultID {
+		t.Fatalf("latest result bounded=%q full=%q", boundedRes.ResultID, fullRes.ResultID)
+	}
+	if gotJob, ok, err := f.svc.Reader.LatestResultJob(t.Context(), f.coord, "surveyor"); err != nil || !ok || gotJob != "job-44" {
+		t.Fatalf("LatestResultJob = %q ok=%v err=%v", gotJob, ok, err)
+	}
+	if n, err := f.svc.Reader.CountState(t.Context(), f.coord, workerstate.Delivered); err != nil || n != 1 {
+		t.Fatalf("CountState delivered = %d err=%v", n, err)
+	}
+
+	// Start round 45 and send 60 messages including unread worker messages.
+	_, err = f.svc.Instruct(t.Context(), f.coord, op("start-45"), workerops.Instruction{
+		Worker: "surveyor", Instructions: "round 45",
+	}, f.enqueue("job-45"))
+	testutil.FailErr(t, "start 45", err)
+	for i := range 30 {
+		_, err := f.records.AppendMessage(t.Context(), childActor, op(fmt.Sprintf("wmsg-%02d", i)), f.workerID, workerrecords.MessageSpec{
+			Body: fmt.Sprintf("finding-%02d %s", i, strings.Repeat("m", 600)),
+		})
+		testutil.FailErr(t, "worker msg", err)
+	}
+
+	// Page all 45 rounds via BeforeRound.
+	beforeRound := int64(0)
+	totalRounds := 0
+	for {
+		page, err := f.svc.HistoryPaged(t.Context(), f.coord, "surveyor", workerops.HistoryQuery{BeforeRound: beforeRound})
+		testutil.FailErr(t, "history paged rounds", err)
+		if len(page.Rounds) > workerops.MaxHistoryRounds {
+			t.Fatalf("round page len=%d > %d", len(page.Rounds), workerops.MaxHistoryRounds)
+		}
+		if len(page.Rounds) > 1 && page.Rounds[0].Ordinal >= page.Rounds[len(page.Rounds)-1].Ordinal {
+			t.Fatalf("rounds within page not chronological: %d..%d", page.Rounds[0].Ordinal, page.Rounds[len(page.Rounds)-1].Ordinal)
+		}
+		totalRounds += len(page.Rounds)
+		if page.BeforeRound == 0 {
+			break
+		}
+		beforeRound = page.BeforeRound
+	}
+	if totalRounds != 45 {
+		t.Fatalf("paged %d rounds, want 45", totalRounds)
+	}
+
+	// Page messages via Before and ensure unread coordinator page is still intact.
+	p1, err := f.svc.HistoryPaged(t.Context(), f.coord, "surveyor", workerops.HistoryQuery{})
+	testutil.FailErr(t, "history messages p1", err)
+	if p1.Before == 0 || len(p1.Messages) == 0 {
+		t.Fatalf("expected more message pages: len=%d before=%d", len(p1.Messages), p1.Before)
+	}
+	unread, err := f.records.OpenPageBounded(t.Context(), f.coord, f.workerID, 0, 5, workerrecords.MaxHistoryPageBytes)
+	testutil.FailErr(t, "unread after history", err)
+	if len(unread.Messages) != 5 {
+		t.Fatalf("unread messages cleared by HistoryPaged: got %d", len(unread.Messages))
 	}
 }

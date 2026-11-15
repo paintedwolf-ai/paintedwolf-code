@@ -230,11 +230,18 @@ func workerHistoryHandler(deps WorkerToolDeps) tools.ToolHandler {
 			return "", fmt.Errorf("worker is required")
 		}
 		before, _ := args["before"].(float64)
-		beforeRound, _ := args["before_round"].(float64)
+		var beforeRound int64
+		if raw, has := args["before_round"]; has && raw != nil {
+			f, ok := raw.(float64)
+			if !ok || f < 1 || f != float64(int64(f)) {
+				return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": WorkerHistoryTool, "field": "before_round"}}
+			}
+			beforeRound = int64(f)
+		}
 		limit, _ := args["limit"].(float64)
 		page, err := deps.Ops.HistoryPaged(ctx, coordinatorActor(tctx), name, workerops.HistoryQuery{
 			BeforeSeq:   int64(before),
-			BeforeRound: int64(beforeRound),
+			BeforeRound: beforeRound,
 			Limit:       int(limit),
 		})
 		if err != nil {

@@ -118,7 +118,9 @@ components:
           type: string
           description: Derived display label for workspace_state.
         updated_at:
+          x-go-type: "string"
           type: string
+          format: date-time
           description: Most recent activity timestamp for recency ordering.
         read_paths:
           type: array

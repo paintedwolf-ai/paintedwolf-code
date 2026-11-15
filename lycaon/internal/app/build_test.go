@@ -21,12 +21,16 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/mcp"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -365,5 +369,40 @@ func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
 	}
 	if quiet.AwaitingApproval(t.Context(), child.ID) {
 		t.Fatal("expected no pending approval on fresh session")
+	}
+
+	parentSess, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{
+		ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild,
+	}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create parent session", err)
+	workerChild, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{
+		ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild,
+	}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create worker child", err)
+	_, err = store.ExecContext(t.Context(), "UPDATE sessions SET parent_session_id = ? WHERE id = ?", parentSess.ID, workerChild.ID)
+	testutil.FailErr(t, "bind worker child parent", err)
+	coordActor := workerrecords.Actor{SessionID: parentSess.ID, Role: workerrecords.RoleCoordinator, PrincipalID: parentSess.ID}
+	_, err = app.Boards.WorkerRecords.CreateWorker(t.Context(), coordActor, workerrecords.Op{ID: "cw-1"}, workerrecords.WorkerSpec{
+		Name: "auth-fixer", AgentType: "implementer", ScopeMode: "write", Brief: "Fix auth", ChildSessionID: workerChild.ID,
+	})
+	testutil.FailErr(t, "create worker record", err)
+	rendered, err := composeWorkerTaskAssignment(
+		t.Context(),
+		persistence.Runtime{Database: store, Sessions: sessionstore.NewSQL(store)},
+		app.Workflows,
+		nil,
+		app.Boards,
+		app.Delegations,
+		tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: parentSess.ID, ProjectID: testdbseed.DefaultProjectID},
+			Source:   tools.InvocationSource{ActiveRootID: "r1", Roots: []projectroot.RootRef{{ID: "r1", Path: projectDir, IsPrimary: true}}},
+		},
+		"implementer",
+		wire.WorkerTaskCharter{Goal: "Fix auth"},
+		&wire.WorkerTask{ID: jobID, ChildSessionID: workerChild.ID, Prompt: "check middleware", Scope: &wire.TaskScope{Mode: wire.TaskScopeModeWrite}},
+	)
+	testutil.FailErr(t, "compose worker assignment", err)
+	if !strings.Contains(rendered, "auth-fixer") || !strings.Contains(rendered, "check middleware") {
+		t.Fatalf("rendered assignment missing worker or prompt: %s", rendered)
 	}
 }

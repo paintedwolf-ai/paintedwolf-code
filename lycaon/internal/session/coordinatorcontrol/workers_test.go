@@ -27,4 +27,14 @@ func TestRoundNoticeIsAddressedByNameAndLatestMessage(t *testing.T) {
 			}
 		})
 	}
+
+	w := &Workers{
+		RoundProvenance: func(_ context.Context, jobID string) (string, int64, string, int64, bool, error) {
+			return "builder", 4, "work-auth", 9, jobID == "job-4", nil
+		},
+	}
+	got := w.addressed(t.Context(), kick.WorkerRoundNoticeFacts{JobID: "job-4"})
+	if got.Worker != "builder" || got.RoundOrdinal != 4 || got.WorkflowWorkID != "work-auth" || got.LatestMessageSeq != 9 {
+		t.Fatalf("provenance facts = %+v", got)
+	}
 }

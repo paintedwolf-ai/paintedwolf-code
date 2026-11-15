@@ -232,4 +232,15 @@ func TestJobMetaFormatV1BackwardCompatibilityAndV2Persistence(t *testing.T) {
 		len(gotV2.FocusPathHints) != 1 {
 		t.Fatalf("unexpected v2 round-trip metadata: %+v", gotV2)
 	}
+
+	branchRoot := filepath.Join(t.TempDir(), "worker-lane")
+	if got := workspace.BranchViewKind(branchRoot); got != "" {
+		t.Fatalf("unprepared BranchViewKind = %q, want empty", got)
+	}
+	testutil.FailErr(t, "mkdir lane", os.MkdirAll(branchRoot, 0o750))
+	v2Meta.AdapterFacts = &adapter.AdapterFacts{AdapterID: adapter.AdapterNFSDarwin, PreparationKind: adapter.PreparationMounted}
+	testutil.FailErr(t, "write lane meta", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branchRoot), v2Meta))
+	if got := workspace.BranchViewKind(branchRoot); got != string(adapter.PreparationMounted) {
+		t.Fatalf("prepared BranchViewKind = %q, want %q", got, adapter.PreparationMounted)
+	}
 }

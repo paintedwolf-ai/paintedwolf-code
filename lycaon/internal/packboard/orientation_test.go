@@ -361,3 +361,47 @@ func TestBoardOrientationNamesNoJob(t *testing.T) {
 		}
 	}
 }
+
+func TestNamedWorkerOrientationAndPulseFingerprint(t *testing.T) {
+	now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
+	workers := []api.BoardWorker{
+		{
+			Name: "asker", AgentType: "implementer", ScopeMode: "write",
+			WorkspaceState: "retained", State: api.WorkerStateAsking,
+			Reason: "pending_decision", Question: "Which schema?",
+		},
+		{
+			Name: "fixer", AgentType: "implementer", ScopeMode: "write",
+			WorkspaceState: "refreshed", State: api.WorkerStateDelivered,
+			ResultHandle: "res-1", ResultDisposition: api.WorkerResultOpen,
+			ChangedPaths: []string{"pkg/a.go"}, ChangedOmitted: 1, About: "fix parser",
+		},
+	}
+	for i := range 12 {
+		workers = append(workers, api.BoardWorker{
+			Name: fmt.Sprintf("scout-%02d", i), State: api.WorkerStateWorking, WorkspaceState: "shared",
+		})
+	}
+	snap := api.BoardSnapshot{
+		Workers: &api.BoardWorkersSlice{"workers": workers},
+	}
+	lines := packboard.BuildOrientationLines(snap, packboard.OrientOpts{Now: now, IncludeDetail: true})
+	joined := strings.Join(lines, "\n")
+	for _, want := range []string{"Worker: asker · implementer · asking:pending_decision · retained · ask: Which schema?", "Worker: fixer · implementer · delivered · refreshed · res-1:open · changed: pkg/a.go (+1) · fix parser"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("orientation missing %q in:\n%s", want, joined)
+		}
+	}
+	injectLines := packboard.BuildInjectLines(snap, packboard.InjectScopeFull, packboard.OrientOpts{Now: now, IncludeDetail: true})
+	if len(injectLines) == 0 {
+		t.Fatal("inject lines empty")
+	}
+	fp1 := packboard.PulseFingerprint(snap, now)
+	workers[1].WorkspaceState = "reset"
+	fp2 := packboard.PulseFingerprint(api.BoardSnapshot{
+		Workers: &api.BoardWorkersSlice{"workers": workers},
+	}, now)
+	if fp1 == fp2 || !strings.Contains(packboard.NamedWorkerPulseSig(workers), "omitted:2") {
+		t.Fatalf("pulse fingerprint did not track workspace_state or omitted count: %s vs %s", fp1, fp2)
+	}
+}

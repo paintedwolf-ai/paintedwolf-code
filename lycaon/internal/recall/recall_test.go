@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -297,4 +298,39 @@ func seedSourceChange(t *testing.T, sqlDB db.Handle, path, op string, at time.Ti
 		ProjectID:      projectID, Op: api.SourceChangeOp(op),
 		Origin: api.SourceChangeOriginAgent, OperationID: "sc-" + path + op,
 		Before: []byte("before"), After: []byte("after"), TS: at}))
+}
+
+func TestWorkerFilterAttributesAcrossRoundsAndRoleChanges(t *testing.T) {
+	f := newFixture(t)
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := f.db.ExecContext(t.Context(), `INSERT INTO workers (
+		id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id, operation_id, created_at, updated_at
+	) VALUES ('w-survey', ?, ?, 'surveyor', 'repo-researcher', 'read', 'survey', ?, 'op-ws', ?, ?)`,
+		projectID, coordinatorSession, workerSession, now, now)
+	testutil.FailErr(t, "insert worker", err)
+
+	f.seed(t,
+		evidenceRow("e-r1", workerSession, "read#1", "pkg/a.go", "round one finding"),
+		evidenceRow("e-sib", siblingSession, "read#2", "pkg/b.go", "round one sibling finding"),
+	)
+	// Role changes from scout to implementer on round 2; worker:surveyor still finds both rounds.
+	_, err = f.db.ExecContext(t.Context(), `UPDATE sessions SET agent_type = 'implementer' WHERE id = ?`, workerSession)
+	testutil.FailErr(t, "update role", err)
+	f.seed(t, evidenceRow("e-r2", workerSession, "read#3", "pkg/a.go", "round two finding"))
+
+	res := f.answer(t, coordinator(), "worker:surveyor finding", recall.WidenDefault)
+	if len(res.Hits) != 2 || res.Hits[0].Worker != "surveyor" || res.Facets.ByWorker["surveyor"] != 2 {
+		t.Fatalf("worker:surveyor res = hits:%+v facets:%+v", res.Hits, res.Facets)
+	}
+
+	// Truncated NextAction names worker: narrowing.
+	var bulk []search.IndexRow
+	for i := range 35 {
+		bulk = append(bulk, evidenceRow("bulk-"+string(rune('a'+i%26))+string(rune('0'+i/26)), workerSession, "read#x", "pkg/x.go", "overflow match token"))
+	}
+	f.seed(t, bulk...)
+	trunc := f.answer(t, coordinator(), "overflow match token", recall.WidenDefault)
+	if !strings.Contains(trunc.NextAction, "worker:") {
+		t.Fatalf("NextAction = %q, want worker: narrowing hint", trunc.NextAction)
+	}
 }
