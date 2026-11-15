@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -77,24 +76,6 @@ func loadBundledSessionLimits() (SessionLimits, error) {
 		cfg.WorkerToolBudgetMax = budget.Max
 	}
 	return normalizeWorkerToolBudget(cfg, cfg), nil
-}
-
-// LoadSessionLimits reads session settings from path and merges onto bundled defaults.
-func LoadSessionLimits(path string) (SessionLimits, error) {
-	cfg := DefaultSessionLimits()
-	// Missing user settings retain bundled defaults.
-	data, err := os.ReadFile(path) // #nosec G304 -- caller-provided settings path
-	if err != nil {
-		if os.IsNotExist(err) {
-			return cfg, nil
-		}
-		return cfg, err
-	}
-	var file SessionLimits
-	if err := config.DecodeYAML(data, &file); err != nil {
-		return cfg, err
-	}
-	return MergeSessionLimits(cfg, file), nil
 }
 
 // MergeSessionLimits overlays non-zero/non-nil fields from overlay onto base.

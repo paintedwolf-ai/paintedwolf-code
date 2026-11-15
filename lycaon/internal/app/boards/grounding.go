@@ -251,7 +251,6 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 
 	r.deps.Sessions.Manager.SetWorkerQueue(r.deps.Delegations.Queue)
 	r.deps.Sessions.Manager.SetSessionWorkerAbort(r.deps.Delegations.Cancel)
-	r.ParentWaiter = worker.NewParentWorkerWaiter()
 
 	if err := call.RegisterHandoffTools(r.deps.Execution.Host.Registry, call.HandoffToolDeps{Calls: r.Calls, Sessions: callLookup}); err != nil {
 		return fmt.Errorf("handoff tools: %w", err)

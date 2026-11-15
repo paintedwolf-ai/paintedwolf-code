@@ -1,11 +1,14 @@
 package settings_test
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -21,10 +24,28 @@ func bundledSessionYAML(t *testing.T) string {
 	return filepath.Join(filepath.Dir(file), "..", "..", "config", "packs", "painted-wolf", "platform", "host", "session.yaml")
 }
 
+// loadSessionLimits merges a session.yaml over the defaults as the overlay
+// loader does; a missing file keeps the defaults.
+func loadSessionLimits(path string) (settings.SessionLimits, error) {
+	cfg := settings.DefaultSessionLimits()
+	data, err := os.ReadFile(path) // #nosec G304 -- test fixture path
+	if errors.Is(err, fs.ErrNotExist) {
+		return cfg, nil
+	}
+	if err != nil {
+		return cfg, err
+	}
+	var file settings.SessionLimits
+	if err := config.DecodeYAML(data, &file); err != nil {
+		return cfg, err
+	}
+	return settings.MergeSessionLimits(cfg, file), nil
+}
+
 func TestDefaultSessionLimitsMatchesBundledYAML(t *testing.T) {
 	def := settings.DefaultSessionLimits()
-	cfg, err := settings.LoadSessionLimits(bundledSessionYAML(t))
-	testutil.FailErr(t, "settings.LoadSessionLimits failed", err)
+	cfg, err := loadSessionLimits(bundledSessionYAML(t))
+	testutil.FailErr(t, "load session limits", err)
 	if def.MaxIterations != cfg.MaxIterations {
 		t.Fatalf("max_iterations default = %d bundled = %d", def.MaxIterations, cfg.MaxIterations)
 	}
@@ -37,8 +58,8 @@ func TestDefaultSessionLimitsMatchesBundledYAML(t *testing.T) {
 }
 
 func TestLoadSessionLimitsFromBundledYAML(t *testing.T) {
-	cfg, err := settings.LoadSessionLimits(bundledSessionYAML(t))
-	testutil.FailErr(t, "settings.LoadSessionLimits failed", err)
+	cfg, err := loadSessionLimits(bundledSessionYAML(t))
+	testutil.FailErr(t, "load session limits", err)
 	if cfg.MaxIterations != 500 {
 		t.Fatalf("max_iterations = %d", cfg.MaxIterations)
 	}
@@ -184,8 +205,8 @@ func TestSessionLimitsAccessorsDefaultTrue(t *testing.T) {
 }
 
 func TestLoadSessionLimitsMissingFileUsesDefaults(t *testing.T) {
-	cfg, err := settings.LoadSessionLimits(filepath.Join(t.TempDir(), "missing.yaml"))
-	testutil.FailErr(t, "settings.LoadSessionLimits failed", err)
+	cfg, err := loadSessionLimits(filepath.Join(t.TempDir(), "missing.yaml"))
+	testutil.FailErr(t, "load session limits", err)
 	if cfg.MaxIterations != settings.DefaultSessionLimits().MaxIterations {
 		t.Fatal("missing file should return defaults")
 	}
@@ -196,7 +217,7 @@ func TestLoadSessionLimitsRejectsInvalidYAML(t *testing.T) {
 	if err := os.WriteFile(path, []byte("max_iterations: not-a-number\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	if _, err := settings.LoadSessionLimits(path); err == nil {
+	if _, err := loadSessionLimits(path); err == nil {
 		t.Fatal("expected parse error")
 	}
 }

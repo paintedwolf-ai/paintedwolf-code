@@ -3,13 +3,14 @@ package coordinator_test
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator"
@@ -300,17 +301,6 @@ type stubWorkerCtx struct {
 
 func (s stubWorkerCtx) BuildWorkerPromptContext(_ context.Context, _ string, _ *api.Session) (inject.WorkerLegContext, error) {
 	return s.leg, nil
-}
-
-func TestScaffoldAnyDecisionPending(t *testing.T) {
-	vars := map[string]any{
-		"user_decision": map[string]any{
-			"risk": map[string]any{"pending": true},
-		},
-	}
-	if !scaffoldvars.AnyDecisionPending(vars) {
-		t.Fatal("expected decision pending")
-	}
 }
 
 func TestRenderCoordinatorTripartiteComposeDraft(t *testing.T) {

@@ -28,7 +28,6 @@ type Runtime struct {
 	Visual         visual.Store
 	Calls          *call.SQLManager
 	Grounding      *toolhost.GroundingService
-	ParentWaiter   *worker.ParentWorkerWaiter
 	RepoProvider   repoinfo.Provider
 	BudgetLedger   *worker.SQLBudgetLedger
 	AnswerDecision *worker.AnswerDecisionService

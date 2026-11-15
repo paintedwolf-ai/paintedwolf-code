@@ -163,8 +163,8 @@ func TestClaimWorkerBranchMountedViewSkipsBaselineTreeWalkAndExposesWorkspaceSta
 		t.Fatalf("expected Format-v2 mounted live JobMeta, got %+v", meta)
 	}
 
-	snap, receipt, ok := WorkerClaimWorkspaceState(id)
+	snap, receipt, ok := workspace.BranchWorkspaceState(claimed.WorkspaceRoot)
 	if !ok || snap.Readiness != claim.StateReady || snap.GitInit != claim.GitInitLazyPending || receipt.AdapterID != adapter.AdapterNFSDarwin {
-		t.Fatalf("unexpected WorkerClaimWorkspaceState: ok=%v snap=%+v receipt=%+v", ok, snap, receipt)
+		t.Fatalf("unexpected branch workspace state: ok=%v snap=%+v receipt=%+v", ok, snap, receipt)
 	}
 }

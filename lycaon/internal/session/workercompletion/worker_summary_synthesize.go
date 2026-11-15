@@ -1,11 +1,9 @@
 package workercompletion
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -15,25 +13,6 @@ const maxToolExcerptChars = 900
 // synthesizedSurveyHeading opens the section. The body under it comes from the
 // worker-survey-preamble partial.
 const synthesizedSurveyHeading = "## Synthesized survey"
-
-// SynthesizeSummaryFromChildMessages builds a bounded survey from child tool results.
-func SynthesizeSummaryFromChildMessages(msgs []api.Message, agentType string) string {
-	excerpts := collectToolExcerpts(msgs, maxSynthesizedSurveyChars)
-	if excerpts == "" {
-		return ""
-	}
-	preamble, err := guidance.RenderSynthesizedSurveyPreamble(context.Background(), agentType)
-	if err != nil || strings.TrimSpace(preamble) == "" {
-		// The heading alone on a render fault: restating the partial's body here
-		// would be a second copy of it, drifting the moment either changes.
-		preamble = synthesizedSurveyHeading
-	}
-	out := strings.TrimSpace(preamble + "\n\n## Tool excerpts\n" + excerpts)
-	if len(out) > maxSynthesizedSurveyChars {
-		out = out[:maxSynthesizedSurveyChars] + "\n…"
-	}
-	return out
-}
 
 func collectToolExcerpts(msgs []api.Message, maxTotal int) string {
 	if len(msgs) == 0 || maxTotal <= 0 {

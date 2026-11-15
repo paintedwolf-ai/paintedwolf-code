@@ -1,12 +1,5 @@
 package syntaxhealth
 
-import (
-	"strings"
-	"unicode/utf8"
-
-	"github.com/lycaon/lycaon/internal/runeclamp"
-)
-
 const (
 	indentPreviewMaxBytes = 80
 	linePreviewMaxBytes   = 160
@@ -75,59 +68,4 @@ func lineDistance(row, startLine, endLine int) int {
 		return row - endLine
 	}
 	return 0
-}
-
-// PythonIndentContext reports indentation near an edit without changing its verdict.
-func PythonIndentContext(report Report, src []byte, startLine, endLine int) []LineContext {
-	if report.Language != "python" || startLine <= 0 {
-		return nil
-	}
-	lines := strings.Split(string(src), "\n")
-	if len(lines) == 0 {
-		return nil
-	}
-	if endLine < startLine {
-		endLine = startLine
-	}
-	from := max(1, startLine-2)
-	to := min(len(lines), endLine+2)
-	out := make([]LineContext, 0, to-from+1)
-	for row := from; row <= to; row++ {
-		line := lines[row-1]
-		indent, text := splitIndent(line)
-		out = append(out, LineContext{
-			Row: row, IndentColumns: indentColumns(indent),
-			Indent: runeclamp.ClampBytes(visibleIndent(indent), indentPreviewMaxBytes),
-			Text:   runeclamp.ClampBytes(text, linePreviewMaxBytes),
-		})
-	}
-	return out
-}
-
-func splitIndent(line string) (string, string) {
-	idx := 0
-	for idx < len(line) {
-		r, size := utf8.DecodeRuneInString(line[idx:])
-		if r != ' ' && r != '\t' {
-			break
-		}
-		idx += size
-	}
-	return line[:idx], line[idx:]
-}
-
-func indentColumns(indent string) int {
-	columns := 0
-	for _, r := range indent {
-		if r == '\t' {
-			columns += 8 - columns%8
-		} else {
-			columns++
-		}
-	}
-	return columns
-}
-
-func visibleIndent(indent string) string {
-	return strings.NewReplacer(" ", "·", "\t", "→").Replace(indent)
 }

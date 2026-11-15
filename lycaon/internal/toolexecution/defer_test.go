@@ -47,23 +47,6 @@ func TestHideSkillsReadWhenEmpty(t *testing.T) {
 	}
 }
 
-func TestFilterDeferredMetas(t *testing.T) {
-	metas := []tools.ToolMeta{
-		{Name: "read"},
-		{Name: "wc", Deferred: true},
-		{Name: "chmod", Deferred: true},
-	}
-	got := tools.FilterDeferredMetas(metas, map[string]bool{"chmod": true})
-	var names []string
-	for _, m := range got {
-		names = append(names, m.Name)
-	}
-	want := []string{"read", "chmod"}
-	if !reflect.DeepEqual(names, want) {
-		t.Fatalf("filtered = %v want %v", names, want)
-	}
-}
-
 type fakeRequestBoundary struct {
 	deferred map[string]bool
 	allowed  map[string]bool

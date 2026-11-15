@@ -41,7 +41,6 @@ type LocalWorkerPoller struct {
 	Queue               WorkerQueue
 	Executor            WorkerExecutor
 	Outcomes            OutcomeRecorder
-	ParentWaiter        *ParentWorkerWaiter
 	InstanceID          string
 	MaintenanceInterval time.Duration
 	sem                 chan struct{}

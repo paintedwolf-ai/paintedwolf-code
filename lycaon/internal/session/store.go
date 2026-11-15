@@ -94,7 +94,6 @@ type CommandStore interface {
 	PatchMessageViewContext(ctx context.Context, sessionID, messageID string, view api.ViewContext) (api.Message, error)
 	StampMessageScreenGeneration(ctx context.Context, sessionID, messageID string, generation uint64) error
 	PatchLiveProjection(ctx context.Context, sessionID, messageID, content string, toolCalls []api.ToolCall) error
-	TruncateMessagesFrom(ctx context.Context, sessionID, anchorMessageID string) (int, error)
 	PutCompactionView(ctx context.Context, sessionID string, view store.CompactionView) error
 	AppendDraftVersion(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error)
 	UpdateSession(ctx context.Context, id string, fn func(*api.Session)) error

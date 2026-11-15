@@ -387,7 +387,6 @@ func (b *serveBuilder) wireOrchestrator() error {
 	}
 	b.worker.poller = worker.NewLocalWorkerPoller(b.delegations.Queue, executor, b.worker.cfg, workerOutcomes)
 	b.delegations.Queue.SetRunningCancel(b.worker.poller.Abort)
-	b.worker.poller.ParentWaiter = b.boards.ParentWaiter
 	return nil
 }
 

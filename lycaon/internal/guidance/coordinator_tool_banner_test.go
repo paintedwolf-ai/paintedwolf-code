@@ -44,18 +44,6 @@ func TestRenderWorkerInFlightRoster(t *testing.T) {
 	}
 }
 
-func TestRenderSynthesizedSurveyPreambleRepoResearcher(t *testing.T) {
-	setTestRenderer(t)
-	out, err := RenderSynthesizedSurveyPreamble(context.Background(), "repo-researcher")
-	testutil.FailErr(t, "RenderSynthesizedSurveyPreamble failed", err)
-	if strings.Contains(out, "GameFiles") {
-		t.Fatalf("repo-researcher preamble must not mention GameFiles: %q", out)
-	}
-	if !strings.Contains(out, "Lockfile") {
-		t.Fatalf("preamble = %q", out)
-	}
-}
-
 func TestRosterJobIDPrefix(t *testing.T) {
 	if got := RosterJobIDPrefix("8a3f12ab-cdef"); got != "8a3f…" {
 		t.Fatalf("got %q", got)

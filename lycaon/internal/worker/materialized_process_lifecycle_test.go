@@ -252,7 +252,7 @@ func runPrepareLifecyclePhase(t *testing.T, fixture *layeredWorkerFixture, root 
 	trace("claim-start")
 	task := fixture.claim(t)
 	trace("claim-complete")
-	snap, _, ok := WorkerClaimWorkspaceState(task.ID)
+	snap, _, ok := workspace.BranchWorkspaceState(task.WorkspaceRoot)
 	expected := adapter.PreparationMaterialized
 	if mounted {
 		expected = adapter.PreparationMounted

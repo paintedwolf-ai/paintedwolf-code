@@ -165,7 +165,7 @@ func TestUnderBudgetMaterializedWorkerRetainsGitAndCheckpointBases(t *testing.T)
 	fixture := newLayeredWorkerFixture(t, selector)
 	task := fixture.claim(t)
 
-	snap, receipt, ok := WorkerClaimWorkspaceState(task.ID)
+	snap, receipt, ok := workspace.BranchWorkspaceState(task.WorkspaceRoot)
 	if !ok || snap.Readiness != claim.StateReady {
 		t.Fatalf("claim state ok=%v snap=%+v", ok, snap)
 	}
@@ -250,7 +250,7 @@ func TestMaterializedWorkerReachesOnlyItsOwnBranch(t *testing.T) {
 	root := task.WorkspaceRoot
 	binding := &workspace.Binding{ID: task.ID, Root: root}
 	t.Cleanup(func() { _ = fixture.manager.DestroyWorkerWorkspace(t.Context(), binding) })
-	snap, _, ok := WorkerClaimWorkspaceState(task.ID)
+	snap, _, ok := workspace.BranchWorkspaceState(task.WorkspaceRoot)
 	if !ok || snap.Adapter.PreparationKind != adapter.PreparationMaterialized {
 		t.Fatalf("the default selector chose: ok=%v %+v", ok, snap.Adapter)
 	}
@@ -308,7 +308,7 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 	// Worker storage sits under the engine's state root, as it does in production.
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(fixture.branches))
 	task := fixture.claim(t)
-	snap, _, ok := WorkerClaimWorkspaceState(task.ID)
+	snap, _, ok := workspace.BranchWorkspaceState(task.WorkspaceRoot)
 	if !ok {
 		t.Fatal("claim recorded no workspace state")
 	}

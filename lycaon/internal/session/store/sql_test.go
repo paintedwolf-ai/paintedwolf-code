@@ -421,8 +421,7 @@ func TestSQLCompactionViewCannotRepublishDeletedBoundary(t *testing.T) {
 		SourceSeq:         boundary.Seq,
 	}
 	testutil.FailErr(t, "put compaction view", s.PutCompactionView(t.Context(), sess.ID, view))
-	_, err = s.TruncateMessagesFrom(t.Context(), sess.ID, boundary.ID)
-	testutil.FailErr(t, "truncate boundary", err)
+	rewindFrom(t, s, sess.ID, boundary.ID)
 	if err := s.PutCompactionView(t.Context(), sess.ID, view); err == nil {
 		t.Fatal("stale compaction view republished after its boundary was deleted")
 	}

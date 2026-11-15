@@ -99,9 +99,12 @@ func commitRewindMemory(ctx context.Context, s *memoryCore, id, sessionID, ancho
 			continue
 		}
 		removed := len(msgs) - i
+		removedIDs := make(map[string]struct{}, removed)
 		for _, removedMessage := range msgs[i:] {
+			removedIDs[removedMessage.ID] = struct{}{}
 			delete(s.chunkProjections[sessionID], removedMessage.ID)
 		}
+		dropRewoundTurnsLocked(s, sessionID, removedIDs)
 		s.messages[sessionID] = append([]api.Message(nil), msgs[:i]...)
 		now := time.Now().UTC()
 		for submissionID, row := range s.promptSubmissions {
@@ -208,4 +211,33 @@ func (r *memoryRewind) DeleteRewindOperation(ctx context.Context, id string, old
 	delete(s.rewindOperations, id)
 	delete(s.rewindCreatedAt, id)
 	return nil
+}
+
+// dropRewoundTurnsLocked removes the turns, clocks and model outputs that the
+// rewound messages opened or produced, as the SQL store's cascades do.
+func dropRewoundTurnsLocked(s *memoryCore, sessionID string, removedIDs map[string]struct{}) {
+	for openingID := range s.turnClocks[sessionID] {
+		if _, ok := removedIDs[openingID]; ok {
+			delete(s.turnClocks[sessionID], openingID)
+		}
+	}
+	for submissionID, turnID := range s.turnSubmissions {
+		if _, ok := removedIDs[submissionID]; ok {
+			deleteTurnLocked(s, turnID)
+		}
+	}
+	for outputID, output := range s.modelOutputs {
+		if _, ok := removedIDs[output.MessageID]; !ok {
+			continue
+		}
+		delete(s.modelOutputs, outputID)
+		delete(s.projectedModelOutputs, outputID)
+		for turnID, attempts := range s.turnAttempts {
+			for _, attempt := range attempts {
+				if attempt.ID == output.TurnAttemptID {
+					deleteTurnLocked(s, turnID)
+				}
+			}
+		}
+	}
 }

@@ -1,14 +1,18 @@
 package hostcontracts
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
+
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -40,8 +44,7 @@ func TestStreamReplayRequiresTranscriptMembership(t *testing.T) {
 			if w := request(a.ID); w.Code != http.StatusOK || !strings.Contains(w.Body.String(), msg.Content) {
 				t.Fatalf("owner replay status=%d body=%s", w.Code, w.Body.String())
 			}
-			_, err := srv.Sources.Workspace.SessionStore.TruncateMessagesFrom(t.Context(), a.ID, msg.ID)
-			testutil.FailErr(t, "truncate transcript", err)
+			rewindFrom(t, srv.Sources.Workspace.SessionStore, a.ID, msg.ID)
 			contractfixture.AssertErrorResponse(t, request(a.ID), http.StatusNotFound, "message_not_found")
 			testutil.FailErr(t, "delete session", srv.Sources.Workspace.SessionStore.Delete(t.Context(), a.ID))
 			if w := request(a.ID); w.Code != http.StatusNotFound {
@@ -49,4 +52,18 @@ func TestStreamReplayRequiresTranscriptMembership(t *testing.T) {
 			}
 		})
 	}
+}
+
+// rewindFrom truncates a session from anchor through the committed rewind path.
+func rewindFrom(t *testing.T, st interface {
+	PrepareRewind(context.Context, store.RewindOperation) error
+	SetRewindPhase(context.Context, string, string, string) error
+	CommitRewind(context.Context, string, string, string, api.RewindSessionResponse) (int, error)
+}, sessionID, anchor string) {
+	t.Helper()
+	id := uuid.NewString()
+	testutil.FailErr(t, "prepare rewind", st.PrepareRewind(t.Context(), store.RewindOperation{ID: id, SessionID: sessionID, AnchorMessageID: anchor, InputDigest: "test"}))
+	testutil.FailErr(t, "apply rewind files", st.SetRewindPhase(t.Context(), id, "files_applied", ""))
+	_, err := st.CommitRewind(t.Context(), id, sessionID, anchor, api.RewindSessionResponse{})
+	testutil.FailErr(t, "commit rewind", err)
 }

@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/hostmarker"
 	"strconv"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/hostmarker"
 
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -620,15 +621,4 @@ func RosterJobIDPrefix(id string) string {
 		return "????"
 	}
 	return runeclamp.ClampBytes(id, shortIDBytes)
-}
-
-// RenderSynthesizedSurveyPreamble renders enrich/worker-survey-preamble.md for host-compiled surveys.
-func RenderSynthesizedSurveyPreamble(ctx context.Context, agentType string) (string, error) {
-	block, err := RenderGuidance(ctx, "enrich/worker-survey-preamble", map[string]any{
-		"agent_type": strings.TrimSpace(agentType),
-	})
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(block), nil
 }

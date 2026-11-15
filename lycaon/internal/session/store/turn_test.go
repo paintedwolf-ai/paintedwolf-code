@@ -28,7 +28,6 @@ type turnTestStore interface {
 	ListPendingModelOutputProjections(context.Context) ([]PendingModelOutputProjection, error)
 	AppendMessages(context.Context, string, ...api.Message) error
 	MarkModelOutputProjected(context.Context, string) error
-	TruncateMessagesFrom(context.Context, string, string) (int, error)
 }
 
 func TestTurnAttemptRecoveryParity(t *testing.T) {
@@ -173,8 +172,7 @@ func TestSettledModelOutputRepairsProjectionParity(t *testing.T) {
 			if len(pending) != 0 {
 				t.Fatalf("pending after ack = %+v", pending)
 			}
-			removed, err := st.TruncateMessagesFrom(ctx, sess.ID, outputID)
-			testutil.FailErr(t, "truncate output turn", err)
+			removed := rewindFrom(t, st.(rewindStore), sess.ID, outputID)
 			if removed != 1 {
 				t.Fatalf("removed = %d want 1", removed)
 			}

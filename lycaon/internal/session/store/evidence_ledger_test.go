@@ -105,7 +105,7 @@ func TestEvidenceLedgerStore_markSuperseded(t *testing.T) {
 	newRec := evidence.Record{Handle: "read#2", Kind: "read", Path: "src/a.go", Body: []string{"new"}}
 	testutil.FailErr(t, "UpsertEvidenceRecord old", store.UpsertEvidenceRecord(ctx, sess.ID, old))
 	testutil.FailErr(t, "UpsertEvidenceRecord new", store.UpsertEvidenceRecord(ctx, sess.ID, newRec))
-	testutil.FailErr(t, "MarkSuperseded", store.MarkSuperseded(ctx, sess.ID, "read#1", "read#2"))
+	testutil.FailErr(t, "MarkSuperseded", markSuperseded(ctx, store.sqlCore.queries, sess.ID, "read#1", "read#2"))
 
 	ev, err := store.LoadLedger(ctx, sess.ID)
 	testutil.FailErr(t, "LoadLedger", err)
@@ -1151,7 +1151,7 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		Custody:    evidence.FileCustody{Seq: 20},
 	}
 	testutil.FailErr(t, "upsert write#10", store.UpsertEvidenceRecord(ctx, sess.ID, highWrite))
-	testutil.FailErr(t, "mark write#10 superseded", store.MarkSuperseded(ctx, sess.ID, "write#10", "write#11"))
+	testutil.FailErr(t, "mark write#10 superseded", markSuperseded(ctx, store.sqlCore.queries, sess.ID, "write#10", "write#11"))
 	delHandle, _, err := store.CommitEvidenceToolResult(
 		ctx, sess.ID, dir, "delete",
 		map[string]any{"path": "legacy.txt"},

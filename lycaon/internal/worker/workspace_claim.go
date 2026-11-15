@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
-	"github.com/lycaon/lycaon/internal/layeredfs/claim"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/project"
@@ -21,28 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-var (
-	workerClaimStateMu sync.RWMutex
-	workerClaimStates  = make(map[string]claim.WorkspaceStateSnapshot)
-)
-
-func recordWorkerClaimState(jobID string, snap claim.WorkspaceStateSnapshot) {
-	workerClaimStateMu.Lock()
-	workerClaimStates[strings.TrimSpace(jobID)] = snap
-	workerClaimStateMu.Unlock()
-}
-
-// WorkerClaimWorkspaceState returns the typed WorkspaceStateSnapshot and DispatchWorkspaceReceipt for jobID.
-func WorkerClaimWorkspaceState(jobID string) (claim.WorkspaceStateSnapshot, claim.DispatchWorkspaceReceipt, bool) {
-	workerClaimStateMu.RLock()
-	snap, ok := workerClaimStates[strings.TrimSpace(jobID)]
-	workerClaimStateMu.RUnlock()
-	if !ok {
-		return claim.WorkspaceStateSnapshot{}, claim.DispatchWorkspaceReceipt{}, false
-	}
-	return snap, claim.BuildReceipt(snap), true
-}
 
 const workspacePreparationEmitInterval = 500 * time.Millisecond
 
@@ -130,15 +106,6 @@ func (q *sqlQueuePromotion) provisionWorkerBranch(ctx context.Context, task *api
 	ctx = workspace.WithWorkspaceProject(ctx, task.ProjectID)
 	binding, layout, err := createTaskBranch(ctx, ws, roots, activeID, task.ID, parentCheckpoint)
 	if err != nil {
-		readiness := claim.StateFailedPreparation
-		if errors.Is(err, claim.ErrSettlementUnresolved) {
-			readiness = claim.StateRecoveryRequired
-		}
-		recordWorkerClaimState(task.ID, claim.WorkspaceStateSnapshot{
-			Identity:  claim.ClaimIdentity{WorkerID: task.ID, ProjectID: task.ProjectID, ViewID: task.ID},
-			Readiness: readiness,
-			Notice:    claim.WorkspaceNotice{Severity: claim.SeverityError, ReasonCode: claim.ClassifyFailureReason(err), Diagnostic: err.Error()},
-		})
 		return fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
 	}
 	if binding == nil || strings.TrimSpace(binding.Root) == "" {
@@ -168,9 +135,6 @@ func (q *sqlQueuePromotion) provisionWorkerBranch(ctx context.Context, task *api
 		}
 	} else {
 		task.WorkspaceRoot, task.WorkspaceBaselinePath = binding.Root, baselinePath
-	}
-	if snap, _, ok := workspace.BranchWorkspaceState(task.WorkspaceRoot); ok {
-		recordWorkerClaimState(task.ID, snap)
 	}
 	return nil
 }
