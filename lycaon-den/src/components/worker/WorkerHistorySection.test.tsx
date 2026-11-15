@@ -249,6 +249,7 @@ describe("WorkerHistorySection", () => {
       expect(requestBriefing).toHaveBeenCalledWith("proj-1", {
         profile_id: "worker_result",
         target_ref: { result_handle: "00000000-0000-4000-8000-0000000000b1" },
+        trigger: "automatic",
       }),
     );
     expect(await screen.findByText(/Checked round 1 auth invariants\./)).toBeTruthy();

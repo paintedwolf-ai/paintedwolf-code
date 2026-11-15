@@ -87,6 +87,7 @@ describe("WorkerSummarySection render", () => {
     expect(requestBriefing).toHaveBeenCalledWith("proj-1", {
       profile_id: "worker_result",
       target_ref: { result_handle: RESULT_HANDLE },
+      trigger: "automatic",
     });
     expect(onPresence).toHaveBeenCalledWith(true);
     pendingView.unmount();
@@ -172,6 +173,7 @@ describe("WorkerSummarySection render", () => {
     expect(requestBriefing).toHaveBeenCalledWith("proj-1", {
       profile_id: "worker_result",
       target_ref: { result_handle: earlierHandle },
+      trigger: "automatic",
     });
     expect(screen.getByText(/Earlier round summary\./)).toBeTruthy();
   });
