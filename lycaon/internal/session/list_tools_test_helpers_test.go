@@ -213,7 +213,7 @@ func registerContextualToolsCoordinatorExtras(
 		WorkerRecords: workerrecords.New(sqlDB),
 		Reviews:       &workerops.Service{Reader: workerops.Reader{Records: workerrecords.New(sqlDB), Jobs: queue}},
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
