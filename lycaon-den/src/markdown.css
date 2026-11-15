@@ -105,9 +105,11 @@
 .markdown-body pre {
   margin: 0;
   padding: var(--transcript-code-padding-y) var(--transcript-code-padding-x);
+  line-height: var(--transcript-code-line-height);
   user-select: text;
 }
 .markdown-body pre code {
+  display: block;
   padding: 0;
   background: transparent;
   font-size: var(--text-den-label);
@@ -125,24 +127,24 @@
 
 .markdown-body .markdown-code-scroll[data-code-fold="folded"] > .den-scrollport__viewport {
   max-height: calc(
-    12 *
-      max(
-        var(--text-den-body) * var(--transcript-prose-line-height),
-        var(--text-den-label) * var(--transcript-code-line-height)
-      ) + var(--transcript-code-padding-y)
+    12 * var(--text-den-label) * var(--transcript-code-line-height) + var(--transcript-code-padding-y)
   );
   overflow-y: hidden;
 }
 
+.markdown-body .markdown-code-scroll[data-code-fold="open"]:not([data-closing]) > .den-scrollport__viewport,
+.markdown-body pre[data-code-fold="open"]:not([data-closing]) > code {
+  flex-shrink: 0;
+}
+
+.markdown-body pre[data-code-fold][data-closing] > code {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .markdown-body pre[data-code-fold="folded"] > code {
-  display: block;
-  max-height: calc(
-    12 *
-      max(
-        var(--text-den-body) * var(--transcript-prose-line-height),
-        var(--text-den-label) * var(--transcript-code-line-height)
-      )
-  );
+  max-height: calc(12 * var(--text-den-label) * var(--transcript-code-line-height));
   overflow: hidden;
 }
 
@@ -169,6 +171,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   width: 100%;
   min-height: var(--den-icon-target);
   padding: 0.25em var(--transcript-code-padding-x);

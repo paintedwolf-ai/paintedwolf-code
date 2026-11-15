@@ -135,6 +135,7 @@ export function AssistantChatTurn(props: Props) {
         <AssistantProseBody
           client={props.client}
           messageId={wireRow()?.id}
+          disclosureScope={rowKey()}
           messageContent={wireRow()?.content}
           source={content()}
           redactionSpans={proseRedactionSpans()}

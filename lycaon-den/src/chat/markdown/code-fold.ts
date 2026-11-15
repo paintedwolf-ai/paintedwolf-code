@@ -1,8 +1,17 @@
 import type { TranscriptViewportController } from "../stream/transcript-viewport-types.ts";
+import type { TranscriptDisclosureStore } from "../transcript/presentation/disclosure-state.tsx";
+import {
+  transcriptDisclosureKey,
+  type TranscriptDisclosureKey,
+} from "../transcript/presentation/transcript-disclosure-key.ts";
 import { TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT } from "../transcript/presentation/transcript-disclosure.tsx";
 import { findController, refreshFindResults } from "../../find/find-controller.ts";
 import { registerFindRevealHost } from "../../find/find-reveal.ts";
-import { scrollportMotionForViewport } from "../../platform/scrolling/scrollport-motion.ts";
+import {
+  animateHeightToggle,
+  heightToggleDirectionFor,
+} from "../../ui/height-toggle-motion.ts";
+import { copyTextToClipboard } from "../../utils/clipboard.ts";
 
 export const CODE_FOLD_LINE_THRESHOLD = 24;
 export const CODE_FOLD_VISIBLE_LINES = 12;
@@ -30,37 +39,105 @@ type ActiveFenceEntry = {
   unregisterHost: () => void;
 };
 
+export type MarkdownCodeFoldOptions = {
+  viewport?: TranscriptViewportController | null;
+  disclosures?: TranscriptDisclosureStore | null;
+  scope?: () => string | undefined;
+};
+
 export type MarkdownCodeFoldController = {
   sync: (root: HTMLElement) => void;
+  syncState: () => void;
   clear: () => void;
   dispose: () => void;
 };
 
-function resolveScrollContainer(
-  frame: HTMLElement,
-  viewport?: TranscriptViewportController | null,
-): HTMLElement | null {
-  const stream = viewport?.stream();
-  if (stream?.isConnected && stream.contains(frame)) return stream;
-  for (let el = frame.parentElement; el; el = el.parentElement) {
-    if (el.classList.contains("den-chat-stream")) return el;
-    if (el.scrollTop > 0 || el.scrollHeight > el.clientHeight) {
-      const overflowY = getComputedStyle(el).overflowY;
-      if (overflowY === "auto" || overflowY === "scroll" || el.scrollTop > 0) return el;
-    }
+function isViewportController(
+  value: TranscriptViewportController | MarkdownCodeFoldOptions,
+): value is TranscriptViewportController {
+  return "beginDisclosureMotion" in value;
+}
+
+function normalizeOptions(
+  input?: TranscriptViewportController | MarkdownCodeFoldOptions | null,
+): MarkdownCodeFoldOptions {
+  if (!input) return {};
+  if (isViewportController(input)) {
+    return { viewport: input, disclosures: input.disclosures };
   }
-  return null;
+  return {
+    viewport: input.viewport,
+    disclosures: input.disclosures ?? input.viewport?.disclosures,
+    scope: input.scope,
+  };
+}
+
+function notifyFenceLayout(frame: HTMLElement): void {
+  frame.dispatchEvent(new Event(TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT, { bubbles: true }));
 }
 
 function stripFoldChrome(frame: HTMLElement): void {
   delete frame.dataset.codeFold;
+  delete frame.dataset.disclosureKey;
   frame.querySelector(`:scope > .${FADE_CLASS}`)?.remove();
   frame.querySelector(`:scope > .${TOGGLE_CLASS}`)?.remove();
 }
 
+function measureCollapsedFenceHeight(entry: ActiveFenceEntry): number {
+  const startHeight = entry.frame.getBoundingClientRect().height;
+  const view = entry.frame.ownerDocument.defaultView;
+  const pre = entry.frame.querySelector("pre") ?? entry.frame;
+  const code = pre.querySelector("code") ?? pre;
+  const lineHeight = Number.parseFloat(view?.getComputedStyle(code).lineHeight ?? "");
+  if (Number.isFinite(lineHeight) && lineHeight > 0) {
+    const preStyle = view?.getComputedStyle(pre);
+    const paddingTop = Number.parseFloat(preStyle?.paddingTop ?? "") || 0;
+    const paddingBottom =
+      pre === entry.frame ? Number.parseFloat(preStyle?.paddingBottom ?? "") || 0 : 0;
+    const toggleHeight = entry.toggleEl.getBoundingClientRect().height;
+    return Math.min(
+      startHeight,
+      CODE_FOLD_VISIBLE_LINES * lineHeight + paddingTop + paddingBottom + toggleHeight,
+    );
+  }
+  const prev = entry.frame.dataset.codeFold;
+  entry.frame.dataset.codeFold = "folded";
+  const measured = entry.frame.getBoundingClientRect().height;
+  if (prev) entry.frame.dataset.codeFold = prev;
+  else delete entry.frame.dataset.codeFold;
+  return measured;
+}
+
+/** Attaches copy controls and syncs tall-fence folding on sanitized Markdown DOM. */
+export function syncMarkdownFenceChrome(
+  root: HTMLElement,
+  codeFold: MarkdownCodeFoldController,
+): void {
+  for (const pre of Array.from(root.querySelectorAll("pre"))) {
+    // The frame holds the button at the fence's visible corner while the code scrolls.
+    const fence = pre.closest(".markdown-code-scroll") ?? pre;
+    if (fence.querySelector(":scope > .den-code-copy")) continue;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "den-code-copy";
+    button.dataset.testid = "code-block-copy";
+    button.setAttribute("data-den-find-remote", "");
+    button.textContent = "Copy";
+    button.setAttribute("aria-label", "Copy code");
+    button.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const code = pre.querySelector("code");
+      void copyTextToClipboard((code ?? pre).textContent ?? "");
+    });
+    fence.appendChild(button);
+  }
+  codeFold.sync(root);
+}
+
 export function createMarkdownCodeFoldController(
-  viewport?: TranscriptViewportController | null,
+  options?: TranscriptViewportController | MarkdownCodeFoldOptions | null,
 ): MarkdownCodeFoldController {
+  const resolved = normalizeOptions(options);
   const instanceId = `markdown-code-fold:${++nextControllerSeq}`;
   const userExpandedByIndex = new Map<number, boolean>();
   const leasesByIndex = new Map<number, Set<symbol>>();
@@ -68,12 +145,36 @@ export function createMarkdownCodeFoldController(
   const boundIndexByButton = new WeakMap<HTMLButtonElement, number>();
   let disposed = false;
 
-  const isExpanded = (index: number): boolean =>
-    userExpandedByIndex.get(index) === true || (leasesByIndex.get(index)?.size ?? 0) > 0;
+  const disclosureKeyFor = (index: number): TranscriptDisclosureKey | undefined => {
+    const scope = resolved.scope?.()?.trim();
+    if (!scope) return undefined;
+    return transcriptDisclosureKey.codeFence(`${scope}:${index}`);
+  };
+
+  const isExpanded = (index: number): boolean => {
+    const key = disclosureKeyFor(index);
+    if (key && resolved.disclosures) {
+      return resolved.disclosures.isOpen(key);
+    }
+    return userExpandedByIndex.get(index) === true || (leasesByIndex.get(index)?.size ?? 0) > 0;
+  };
+
+  const setUserExpanded = (index: number, next: boolean): void => {
+    const key = disclosureKeyFor(index);
+    if (key && resolved.disclosures) {
+      resolved.disclosures.setUserOpen(key, next);
+      return;
+    }
+    if (!next) leasesByIndex.get(index)?.clear();
+    userExpandedByIndex.set(index, next);
+  };
 
   const applyEntryDom = (index: number, entry: ActiveFenceEntry): void => {
     const expanded = isExpanded(index);
+    const key = disclosureKeyFor(index);
     entry.frame.dataset.codeFold = expanded ? "open" : "folded";
+    if (key) entry.frame.dataset.disclosureKey = key;
+    else delete entry.frame.dataset.disclosureKey;
     const label = expanded ? "Show less" : `Show all ${entry.lineCount} lines`;
     const ariaLabel = expanded ? `Show less (${entry.lineCount} lines)` : label;
     if (entry.toggleEl.textContent !== label) entry.toggleEl.textContent = label;
@@ -87,56 +188,31 @@ export function createMarkdownCodeFoldController(
     const entry = entries.get(index);
     if (!entry) return;
 
-    const nextUserExpanded = !isExpanded(index);
-    if (!nextUserExpanded) leasesByIndex.get(index)?.clear();
+    const direction = heightToggleDirectionFor(entry.frame, isExpanded(index));
+    const key = disclosureKeyFor(index);
+    const finishMotion = resolved.viewport?.beginDisclosureMotion(key, direction);
 
-    const scroller = resolveScrollContainer(entry.frame, viewport);
-    const finishMotion = viewport?.beginDisclosureMotion(
-      undefined,
-      nextUserExpanded ? "open" : "close",
-    );
-    const scrollTopBefore =
-      (scroller && scrollportMotionForViewport(scroller)?.offsetY()) ?? scroller?.scrollTop ?? 0;
-    const scrollerRect = scroller?.getBoundingClientRect();
-    const frameRectBefore = entry.frame.getBoundingClientRect();
-    const buttonTopBefore = entry.toggleEl.getBoundingClientRect().top;
-    const row = entry.frame.closest<HTMLElement>(".transcript-viewport-row");
-    const measuredBefore = row?.offsetHeight || entry.frame.offsetHeight;
-    const hasRectLayout = frameRectBefore.height > 0 && scrollerRect !== undefined;
-    const rowVirtualStart =
-      row?.dataset.virtualStart !== undefined ? Number(row.dataset.virtualStart) : NaN;
-    const frameAboveViewport =
-      scroller !== null &&
-      (hasRectLayout
-        ? frameRectBefore.top < scrollerRect.top
-        : Number.isFinite(rowVirtualStart)
-          ? rowVirtualStart < scrollTopBefore
-          : scrollTopBefore > 0 && entry.frame.offsetTop < scrollTopBefore);
-
-    const anchorSubject = !nextUserExpanded && frameAboveViewport ? entry.toggleEl : entry.frame;
-    const holdChange = scroller
-      ? scrollportMotionForViewport(scroller)?.declareHeightChange(anchorSubject)
-      : undefined;
-
-    userExpandedByIndex.set(index, nextUserExpanded);
-    applyEntryDom(index, entry);
-
-    if (!nextUserExpanded && scroller && frameAboveViewport) {
-      const drift = hasRectLayout
-        ? entry.toggleEl.getBoundingClientRect().top - buttonTopBefore
-        : (row?.offsetHeight || entry.frame.offsetHeight) - measuredBefore;
-      if (drift < 0) {
-        if (viewport && viewport.stream() === scroller) {
-          viewport.shiftVirtualContent(drift, scrollTopBefore);
-        } else {
-          scroller.scrollTop = Math.max(0, scrollTopBefore + drift);
-        }
-      }
-    }
-
-    entry.frame.dispatchEvent(new Event(TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT, { bubbles: true }));
-    holdChange?.end();
-    finishMotion?.();
+    animateHeightToggle(entry.frame, {
+      direction,
+      showBody: () => {
+        setUserExpanded(index, true);
+        applyEntryDom(index, entry);
+      },
+      hideBody: () => {},
+      closeBody: () => {
+        setUserExpanded(index, false);
+        applyEntryDom(index, entry);
+      },
+      resetBodyVisibility: () => {},
+      collapsedHeight: () => measureCollapsedFenceHeight(entry),
+      bodyStillOpen: () => isExpanded(index),
+      onSettled: () => {
+        notifyFenceLayout(entry.frame);
+        finishMotion?.();
+        if (findController.isOpen() && findController.query()) refreshFindResults();
+      },
+    });
+    notifyFenceLayout(entry.frame);
     if (findController.isOpen() && findController.query()) refreshFindResults();
   };
 
@@ -181,7 +257,7 @@ export function createMarkdownCodeFoldController(
   };
 
   const sync = (root: HTMLElement): void => {
-    if (disposed || !root.isConnected) return;
+    if (disposed) return;
     const pres = Array.from(root.querySelectorAll("pre"));
     let findChanged = false;
 
@@ -209,6 +285,23 @@ export function createMarkdownCodeFoldController(
           hostEl: () => entries.get(index)?.frame ?? null,
           isCollapsed: () => !isExpanded(index),
           revealForFind: () => {
+            const key = disclosureKeyFor(index);
+            if (key && resolved.disclosures) {
+              const releaseStore = resolved.disclosures.acquire(key);
+              const active = entries.get(index);
+              if (active) {
+                applyEntryDom(index, active);
+                notifyFenceLayout(active.frame);
+              }
+              return () => {
+                releaseStore();
+                const current = entries.get(index);
+                if (current) {
+                  applyEntryDom(index, current);
+                  notifyFenceLayout(current.frame);
+                }
+              };
+            }
             let leases = leasesByIndex.get(index);
             if (!leases) {
               leases = new Set();
@@ -219,9 +312,7 @@ export function createMarkdownCodeFoldController(
             const active = entries.get(index);
             if (active) {
               applyEntryDom(index, active);
-              active.frame.dispatchEvent(
-                new Event(TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT, { bubbles: true }),
-              );
+              notifyFenceLayout(active.frame);
             }
             return () => {
               const currentLeases = leasesByIndex.get(index);
@@ -229,9 +320,7 @@ export function createMarkdownCodeFoldController(
               const current = entries.get(index);
               if (current) {
                 applyEntryDom(index, current);
-                current.frame.dispatchEvent(
-                  new Event(TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT, { bubbles: true }),
-                );
+                notifyFenceLayout(current.frame);
               }
             };
           },
@@ -254,6 +343,13 @@ export function createMarkdownCodeFoldController(
     }
   };
 
+  const syncState = (): void => {
+    if (disposed) return;
+    for (const [index, entry] of entries) {
+      applyEntryDom(index, entry);
+    }
+  };
+
   const clear = (): void => {
     let removed = false;
     for (const index of Array.from(entries.keys())) {
@@ -271,5 +367,5 @@ export function createMarkdownCodeFoldController(
     }
   };
 
-  return { sync, clear, dispose };
+  return { sync, syncState, clear, dispose };
 }

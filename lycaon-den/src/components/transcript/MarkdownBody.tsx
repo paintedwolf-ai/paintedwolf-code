@@ -1,8 +1,11 @@
-import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
+import { Show, createMemo, createRenderEffect, createSignal, onCleanup } from "solid-js";
 import type { Token } from "marked";
 import type { ResolveProjectRoot } from "../../api/project-path.ts";
 import { useChatDestinationScope } from "../../chat/composer/chat-destination-scope.tsx";
-import { createMarkdownCodeFoldController } from "../../chat/markdown/code-fold.ts";
+import {
+  createMarkdownCodeFoldController,
+  syncMarkdownFenceChrome,
+} from "../../chat/markdown/code-fold.ts";
 import { prepareMarkdownSource } from "../../chat/markdown/markdown-output.ts";
 import { renderMarkdownHtml } from "../../chat/markdown/markdown-render.ts";
 import { remoteImagePlaceholderURL } from "../../chat/markdown/untrusted-markdown.ts";
@@ -15,7 +18,7 @@ import type {
   ProseNavigationIndex,
 } from "../../chat/markdown/prose-path-opens.ts";
 import { useTranscriptViewport } from "../../chat/stream/transcript-viewport.tsx";
-import { copyTextToClipboard } from "../../utils/clipboard.ts";
+import { useTranscriptDisclosureStore } from "../../chat/transcript/presentation/disclosure-state.tsx";
 import { confirmAndOpenExternalLink } from "../../platform/desktop/external-link.ts";
 import { clickSelectedText } from "../../platform/interaction/selection-gesture.ts";
 import {
@@ -47,6 +50,8 @@ type Props = {
   rootRefs?: readonly ResolveProjectRoot[];
   /** Session's active root; bare prose paths resolve against it. */
   activeRootId?: string;
+  /** Transcript row scope for persisting code-fence fold state across remounts. */
+  disclosureScope?: string;
 };
 
 /** Render sanitized finalized markdown. */
@@ -119,54 +124,46 @@ export function MarkdownBody(props: Props) {
   };
 
   let rootRef: HTMLDivElement | undefined;
-  const codeFold = createMarkdownCodeFoldController(useTranscriptViewport());
+  const viewport = useTranscriptViewport();
+  const disclosures = useTranscriptDisclosureStore() ?? viewport?.disclosures;
+  const codeFold = createMarkdownCodeFoldController({
+    viewport,
+    disclosures,
+    scope: () => props.disclosureScope,
+  });
   onCleanup(() => codeFold.dispose());
 
-  // Attach fence chrome after sanitization.
-  createEffect(() => {
+  /* eslint-disable solid/no-innerhtml -- sanitized markdown HTML only */
+  const bodyEl = (
+    <div
+      ref={rootRef}
+      class={className()}
+      classList={{ "markdown-body--untrusted": props.untrusted === true }}
+      innerHTML={html()}
+      onClick={onClick}
+      onKeyDown={onClick}
+      onAuxClick={onClick}
+      onContextMenu={onContextMenu}
+    />
+  );
+  /* eslint-enable solid/no-innerhtml */
+
+  // Attach fence chrome synchronously so initial measurements read folded height.
+  createRenderEffect(() => {
     if (props.inline) {
       codeFold.clear();
       return;
     }
     html();
-    const root = rootRef;
-    if (!root) return;
-    queueMicrotask(() => {
-      if (!root.isConnected) return;
-      for (const pre of Array.from(root.querySelectorAll("pre"))) {
-        // The frame holds the button at the fence's visible corner while the code scrolls.
-        const fence = pre.closest(".markdown-code-scroll") ?? pre;
-        if (fence.querySelector(":scope > .den-code-copy")) continue;
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "den-code-copy";
-        button.dataset.testid = "code-block-copy";
-        button.textContent = "Copy";
-        button.setAttribute("aria-label", "Copy code");
-        button.addEventListener("click", (e) => {
-          e.stopPropagation();
-          const code = pre.querySelector("code");
-          void copyTextToClipboard((code ?? pre).textContent ?? "");
-        });
-        fence.appendChild(button);
-      }
-      codeFold.sync(root);
-    });
+    if (rootRef) syncMarkdownFenceChrome(rootRef, codeFold);
+  });
+  createRenderEffect(() => {
+    if (!props.inline) codeFold.syncState();
   });
 
-  /* eslint-disable solid/no-innerhtml -- sanitized markdown HTML only */
   return (
     <>
-      <div
-        ref={rootRef}
-        class={className()}
-        classList={{ "markdown-body--untrusted": props.untrusted === true }}
-        innerHTML={html()}
-        onClick={onClick}
-        onKeyDown={onClick}
-        onAuxClick={onClick}
-        onContextMenu={onContextMenu}
-      />
+      {bodyEl}
       <Show when={menu()} keyed>
         {(state) => (
           <ContextMenu
@@ -178,5 +175,4 @@ export function MarkdownBody(props: Props) {
       </Show>
     </>
   );
-  /* eslint-enable solid/no-innerhtml */
 }
