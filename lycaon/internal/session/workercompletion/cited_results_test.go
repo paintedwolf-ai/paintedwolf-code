@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
@@ -44,9 +45,7 @@ func TestCitedResultsSurviveTheWire(t *testing.T) {
 		t.Fatalf("cited results after wire = %v", got)
 	}
 	decoded, err := DecodeCompleteLegArgs(map[string]any{"leg_status": "complete", "brief": "done", "cited_results": []any{" res-1 ", "res-1"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "decode complete_leg args", err)
 	if !slices.Equal(decoded.CitedResults, []string{"res-1"}) {
 		t.Fatalf("decoded cited results = %v", decoded.CitedResults)
 	}
