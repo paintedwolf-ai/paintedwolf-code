@@ -2,7 +2,10 @@ package app
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/app/boards"
 	"github.com/lycaon/lycaon/internal/app/delegations"
+	"github.com/lycaon/lycaon/internal/app/persistence"
+	"github.com/lycaon/lycaon/internal/app/scanning"
 	"github.com/lycaon/lycaon/internal/app/sessions"
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/configlayout"
@@ -10,7 +13,9 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -19,10 +24,12 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 	"slices"
 	"strings"
@@ -310,5 +317,77 @@ func TestFeedbackAndReviewCallbacksRetainGuidanceUntilCoordinatorWake(t *testing
 	}
 	if id, ok := host.Coordinator.Runtime.CoordinatorLoop().Nudges.Pending(sess.ID); !ok || id != anchor.PhaseAdvanced {
 		t.Fatalf("feedback/review callbacks did not wake coordinator:%q,%v", id, ok)
+	}
+}
+
+func TestComposeWorkerAssignmentRendersNamedFollowUpAndWorkflowContext(t *testing.T) {
+	ctx := t.Context()
+	database := testdbfixture.Open(t, "compose-assignment.db")
+	projectDir := t.TempDir()
+	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", projectDir)
+	sessionStore := store.NewSQL(database)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create coordinator session", err)
+	childSess, err := sessionStore.CreateChild(ctx, sess, api.SpawnChildRequest{AgentType: "skeptic"})
+	testutil.FailErr(t, "create child session", err)
+
+	records := workerrecords.New(database)
+	actor := workerrecords.Actor{SessionID: sess.ID, Role: workerrecords.RoleCoordinator, PrincipalID: sess.ID}
+	_, err = records.CreateWorker(ctx, actor, workerrecords.Op{ID: "op-create"}, workerrecords.WorkerSpec{
+		Name: "challenger", AgentType: "skeptic", ScopeMode: "read", ChildSessionID: childSess.ID,
+	})
+	testutil.FailErr(t, "create worker record", err)
+
+	manifests, err := workflowdef.RegistryFromDirs("")
+	testutil.FailErr(t, "load workflow manifests", err)
+	wfStore := workflowpersistence.New(database)
+	wfMgr := workflow.NewManager(wfStore, sessionStore, manifests, nil)
+	now := time.Now().UTC()
+	run := &api.WorkflowRun{
+		ID: "survey-run", SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
+		WorkflowID: "security-survey", WorkflowVersion: "2.0.0",
+		Status: api.WorkflowRunStatusRunning, CurrentPhase: "challenge",
+		CreatedAt: now, UpdatedAt: now,
+	}
+	testutil.FailErr(t, "create workflow run", wfStore.State.CreateState(ctx, run, projectDir, nil))
+
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
+	registry, err := anchor.LoadRegistryFromConfigRoot()
+	testutil.FailErr(t, "load anchor registry", err)
+	previousRegistry := anchor.DefaultRegistry()
+	anchor.SetDefaultRegistry(registry)
+	t.Cleanup(func() { anchor.SetDefaultRegistry(previousRegistry) })
+	builder := &serveBuilder{
+		storage: persistence.Runtime{Sessions: sessionStore},
+		workflows: &workflows.Runtime{
+			Store:   wfStore,
+			Manager: wfMgr,
+		},
+		scanning: &scanning.Runtime{Store: scan.NewSQLStore(database)},
+		boards:   &boards.Runtime{WorkerRecords: records},
+		delegations: &delegations.Runtime{
+			Workspace:      workspace.NewManager(t.TempDir()),
+			InjectRenderer: prompts.NewInjectRenderer(engine),
+		},
+	}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID},
+		Source:   tools.InvocationSource{ActiveRootID: "root-id", Roots: []projectroot.RootRef{{ID: "root-id", Path: projectDir, IsPrimary: true}}},
+	}
+	brief := api.WorkerTaskCharter{
+		Goal:     "Challenge the authentication boundary claims",
+		DoneWhen: []string{"Every open claim has grounding evidence or a refutation"},
+	}
+	task := &api.WorkerTask{
+		ID:              "job-round-2",
+		ParentSessionID: sess.ID,
+		ChildSessionID:  childSess.ID,
+		Prompt:          "Re-verify token expiry handling in middleware",
+		Scope:           &api.TaskScope{Mode: api.TaskScopeModeRead},
+	}
+	rendered, err := builder.composeWorkerAssignment(ctx, tctx, "skeptic", brief, task)
+	testutil.FailErr(t, "compose worker assignment", err)
+	if !strings.Contains(rendered, "challenger") || !strings.Contains(rendered, "Re-verify token expiry handling in middleware") {
+		t.Fatalf("rendered assignment missing worker name or round instructions: %q", rendered)
 	}
 }

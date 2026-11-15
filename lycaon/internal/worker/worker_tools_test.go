@@ -712,3 +712,43 @@ func TestWorkerHistoryToolPagesBeforeRoundAndBeforePreservingUnread(t *testing.T
 		t.Fatalf("worker_history cleared unread messages: got %d", len(unread.Messages))
 	}
 }
+
+func TestInstructWorkerComposesAssignmentPrompt(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	f.deliver(t, "job-1")
+
+	reg := tools.NewDefaultRegistry()
+	failNext := true
+	testutil.FailErr(t, "register", RegisterWorkerTools(reg, WorkerToolDeps{
+		Ops:   f.ops,
+		Queue: f.queue,
+		ComposePrompt: func(_ context.Context, _ tools.ToolContext, agent string, charter api.WorkerTaskCharter, task *api.WorkerTask) (string, error) {
+			if failNext {
+				return "", errors.New("prompt renderer unavailable")
+			}
+			return fmt.Sprintf("[%s] %s :: %s", agent, charter.Goal, task.Prompt), nil
+		},
+	}))
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "coord", ProjectID: testdbseed.DefaultProjectID, ToolCallID: "call-fail"},
+		Source:   tools.InvocationSource{ActiveRootID: "root-id", Roots: []projectroot.RootRef{{ID: "root-id", Path: f.root, IsPrimary: true}}},
+		Effects:  tools.InvocationEffects{Out: &tools.ToolInvocationOut{}},
+	}
+	if _, err := reg.Run(t.Context(), InstructWorkerTool, map[string]any{"worker": "surveyor", "instructions": "check retries"}, tctx); err == nil {
+		t.Fatal("expected compose failure to abort instruct_worker")
+	}
+	if n := countJobs(t, f.db); n != 1 {
+		t.Fatalf("failed compose enqueued a job: count=%d", n)
+	}
+
+	failNext = false
+	effects := &tools.ToolInvocationOut{}
+	tctx.Identity.ToolCallID = "call-ok"
+	tctx.Effects.Out = effects
+	_, err := reg.Run(t.Context(), InstructWorkerTool, map[string]any{"worker": "surveyor", "instructions": "check retries"}, tctx)
+	testutil.FailErr(t, "instruct with composed prompt", err)
+	job, ok := f.queue.Get(effects.Dispatch.WorkerID)
+	if !ok || !strings.Contains(job.Prompt, "[repo-researcher]") || !strings.Contains(job.Prompt, "check retries") {
+		t.Fatalf("composed job prompt = %+v", job)
+	}
+}
