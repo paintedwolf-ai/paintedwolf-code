@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
-import { createSignal } from "solid-js";
+import { createSignal, For } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BoardView, Message, WorkerTask } from "../../api/types.ts";
 import { sessionWorkers } from "../../chat/actions/chat-actions.ts";
@@ -210,22 +210,24 @@ describe("persistent worker collaboration UI", () => {
 
     render(() => (
       <div>
-        {items.map((entry) => (
-          <TranscriptItemRow
-            item={() => entry}
-            taskMatches={() => matches}
-            workers={collapsed}
-            messages={messages}
-            messageById={() => msgMap}
-            reviewTurns={() => emptyReviews}
-            layout="chat"
-            visibleTurnActive={false}
-            sessionId="sess-1"
-            checkpointAppStore={appStore}
-            projectId="proj-1"
-            onOpenWorker={vi.fn()}
-          />
-        ))}
+        <For each={items}>
+          {(entry) => (
+            <TranscriptItemRow
+              item={() => entry}
+              taskMatches={() => matches}
+              workers={collapsed}
+              messages={messages}
+              messageById={() => msgMap}
+              reviewTurns={() => emptyReviews}
+              layout="chat"
+              visibleTurnActive={false}
+              sessionId="sess-1"
+              checkpointAppStore={appStore}
+              projectId="proj-1"
+              onOpenWorker={vi.fn()}
+            />
+          )}
+        </For>
         <WorkersTab
           workers={collapsed}
           board={board}
