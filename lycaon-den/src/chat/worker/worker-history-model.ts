@@ -79,3 +79,21 @@ export function workerRoundDisposition(
     result: round.result,
   });
 }
+
+export function resolveHistoryFocusElement(
+  root: HTMLElement | undefined,
+  target: WorkerHistoryFocusTarget,
+): { element: HTMLElement | null; key: string | null } {
+  if (target.messageSeq != null) {
+    const el = root?.querySelector<HTMLElement>(`[data-message-seq="${target.messageSeq}"]`) ?? null;
+    if (el) return { element: el, key: `msg:${target.messageSeq}` };
+  }
+  if (target.roundOrdinal != null) {
+    const el =
+      root?.querySelector<HTMLElement>(`[data-round-ordinal="${target.roundOrdinal}"]`) ?? null;
+    if (el) return { element: el, key: `round:${target.roundOrdinal}` };
+  }
+  const replyEl = root?.querySelector<HTMLElement>('[data-needs-reply="true"]') ?? null;
+  const seq = replyEl?.getAttribute("data-message-seq");
+  return { element: replyEl, key: seq ? `msg:${seq}` : null };
+}

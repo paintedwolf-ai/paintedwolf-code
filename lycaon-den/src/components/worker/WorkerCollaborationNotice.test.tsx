@@ -34,7 +34,17 @@ const sampleWorker: WorkerTask = {
 
 const sampleBoard: BoardView = {
   session_id: "sess-1",
+  summary: "ok",
+  repo: { languages: [], file_count: 0, generated_at: "2026-11-15T01:00:00Z" },
   roster: [],
+  cost: null,
+  pack_content_hash: "hash",
+  detail_level: "compact",
+  board: "",
+  board_chars: 0,
+  truncated: false,
+  generated_at: "2026-11-15T01:00:00Z",
+  now_line: "now",
   workers: [
     {
       worker_id: "rec-1",
@@ -107,8 +117,9 @@ describe("WorkerCollaborationNotice", () => {
           worker_record_id: "rec-1",
           worker_name: "auth-impl",
           round: 2,
+          child_session_id: "child-1",
           agent_type: "implementer",
-          status: "needs_decision",
+          status: "held",
           envelope: "<task />",
         },
       }),
@@ -155,6 +166,7 @@ describe("WorkerCollaborationNotice", () => {
           worker_record_id: "rec-1",
           worker_name: "auth-impl",
           round: 2,
+          child_session_id: "child-1",
           agent_type: "implementer",
           status: "complete",
           envelope: "<task />",

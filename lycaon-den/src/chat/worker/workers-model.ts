@@ -345,7 +345,6 @@ const DISPATCH_PARAM_SKIP = new Set([
   "brief",
   "job_id",
   "child_session_id",
-  "max_tool_loops",
 ]);
 
 const DISPATCH_PARAM_ORDER = [
@@ -645,10 +644,10 @@ export type MatchWorkerForTaskOptions = {
 
 export function matchWorkerForTask(
   part: ToolPartView,
-  workers: WorkerTask[],
+  workers: readonly WorkerTask[],
   options?: MatchWorkerForTaskOptions,
 ): WorkerTask | undefined {
-  let pool = workers;
+  let pool: readonly WorkerTask[] = workers;
   const sessionId = options?.sessionId?.trim();
   if (sessionId) {
     pool = workersForSession(pool, sessionId);
@@ -699,7 +698,7 @@ export function matchWorkerForTask(
 /** Bind task tool cards to distinct workers (newest-first when job_id is absent). */
 export function taskWorkerMatchesForTranscript(
   items: readonly TranscriptItem[],
-  workers: WorkerTask[],
+  workers: readonly WorkerTask[],
   sessionId: string,
 ): ReadonlyMap<string, WorkerTask> {
 	const matches = new Map<string, WorkerTask>();

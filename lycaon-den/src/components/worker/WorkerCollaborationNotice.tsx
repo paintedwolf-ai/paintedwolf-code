@@ -123,9 +123,12 @@ export function collaborationNoticeForToolPart(
           : receipt?.outcome === "started" || part.workerSummary != null
             ? "applied"
             : undefined;
+    const decisionQuestion =
+      part.workerSummary?.decision_request?.question?.trim() || bw?.question?.trim();
     const settledAsking =
-      part.workerSummary?.status === "needs_decision" ||
-      part.workerSummary?.status === "needs_input";
+      part.workerSummary?.decision_request != null ||
+      part.workerSummary?.status === "held" ||
+      (part.workerSummary != null && bw?.state === "asking");
     const instructions = stringArg(part.args?.instructions);
     const headline = settledAsking
       ? `${workerLabel} needs an answer`
@@ -139,8 +142,8 @@ export function collaborationNoticeForToolPart(
               ? `Sent instruction to ${workerLabel} · Round ${round}`
               : `Sent instruction to ${workerLabel}`;
     const rawDetail =
-      settledAsking && bw?.question?.trim()
-        ? bw.question.trim()
+      settledAsking && decisionQuestion
+        ? decisionQuestion
         : part.error?.trim() || instructions;
     return {
       kind: settledAsking ? "question" : "instruction",
@@ -182,11 +185,14 @@ export function collaborationNoticeForToolPart(
     const workerLabel =
       bw?.name?.trim() || existing.worker_name?.trim() || existing.agent_type || "worker";
     const round = part.workerSummary?.round ?? existing.round;
+    const decisionQuestion =
+      part.workerSummary?.decision_request?.question?.trim() || bw?.question?.trim();
     const asking =
-      part.workerSummary?.status === "needs_decision" ||
-      part.workerSummary?.status === "needs_input";
+      part.workerSummary?.decision_request != null ||
+      part.workerSummary?.status === "held" ||
+      bw?.state === "asking";
     const detail = asking
-      ? bw?.question?.trim()
+      ? decisionQuestion
       : existing.result?.summary?.trim();
     return {
       kind: asking ? "question" : "round",
