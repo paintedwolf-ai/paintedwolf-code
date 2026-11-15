@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/tools"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
 
 // commandEffectVariables maps each prompt variable to the effect it states.
@@ -63,9 +64,13 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 	contractcheck.FailErr(t, "load tool profiles", err)
 	postures, err := sessionprofiles.LoadPostureRegistry()
 	contractcheck.FailErr(t, "load postures", err)
+	sandboxCfg, err := sandbox.LoadConfig()
+	contractcheck.FailErr(t, "load sandbox config", err)
+	bootReg := toolfixture.ContractServeBootRegistry(t)
 	engine := bundledPromptEngine()
 	for _, posture := range postures.List() {
 		profiles := postureProfiles(shipped, posture.CommandEffects)
+		exec := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(sandbox.NewBoundary(sandboxCfg, profiles)), bootReg, toolprofiles.DefaultToolProfileID)
 		coordinator := profileByID(t, profiles, prompts.CoordinatorProfileID)
 		executor := toolexecution.NewExecutor(
 			toolprofiles.NewProfilePolicyEngine(sandbox.NewBoundary(sandbox.Config{}, profiles)),
@@ -98,6 +103,10 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 				if reader.Effects() != execEffects || reader.Effects() != admitted {
 					t.Fatalf("reader.Effects() = %v, executor = %v, admitted = %v", reader.Effects().Classes(), execEffects.Classes(), admitted.Classes())
 				}
+				assertCommandMetaMatchesReader(t, exec, platform.ToolFilter{
+					ProfileID: prompts.CoordinatorProfileID,
+					SurfaceID: surfaceID,
+				}, reader)
 
 				vars := map[string]any{"root_count": 1}
 				mergePromptBudgetSkillRoster(t, vars)
@@ -135,8 +144,12 @@ func TestWorkerPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 	contractcheck.FailErr(t, "load tool profiles", err)
 	postures, err := sessionprofiles.LoadPostureRegistry()
 	contractcheck.FailErr(t, "load postures", err)
+	sandboxCfg, err := sandbox.LoadConfig()
+	contractcheck.FailErr(t, "load sandbox config", err)
+	bootReg := toolfixture.ContractServeBootRegistry(t)
 	for _, posture := range postures.List() {
 		profiles := postureProfiles(shipped, posture.CommandEffects)
+		exec := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(sandbox.NewBoundary(sandboxCfg, profiles)), bootReg, toolprofiles.DefaultToolProfileID)
 		for _, profile := range profiles {
 			if profile.ID == prompts.CoordinatorProfileID {
 				continue
@@ -161,6 +174,7 @@ func TestWorkerPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 				if reader.Effects() != programSurface.Effects() || reader.Effects() != profile.CommandEffects {
 					t.Fatalf("worker reader.Effects() = %v, executor = %v, want %v", reader.Effects().Classes(), programSurface.Effects().Classes(), profile.CommandEffects.Classes())
 				}
+				assertCommandMetaMatchesReader(t, exec, platform.ToolFilter{ProfileID: profile.ID}, reader)
 				vars := map[string]any{}
 				contractcheck.FailErr(t, "merge profile vars", prompts.MergeAgentToolSurfaceVars(profile.ID, nil, nil, prompts.ReaderInput{}, vars, profiles))
 				commandOffered, _ := vars["profile_has_command"].(bool)
@@ -194,5 +208,43 @@ func assertUnitRendersIff(t *testing.T, engine *prompts.FileTemplateEngine, stem
 	contractcheck.FailErr(t, "render "+stem, err)
 	if got := strings.TrimSpace(body) != ""; got != want {
 		t.Errorf("unit %s rendered = %v, want %v", stem, got, want)
+	}
+}
+
+func assertCommandMetaMatchesReader(t *testing.T, exec *toolexecution.Executor, filter platform.ToolFilter, reader prompts.Reader) {
+	t.Helper()
+	metas, err := exec.Metadata.List(t.Context(), filter)
+	contractcheck.FailErr(t, "Metadata.List", err)
+	var cmd *tools.ToolMeta
+	for i := range metas {
+		if metas[i].Name == "command" {
+			cmd = &metas[i]
+			break
+		}
+	}
+	if cmd == nil {
+		return
+	}
+	wantParts := []string{"base"}
+	effects := reader.Effects()
+	if allowsEffect(t, effects, toolcontract.CommandMutation) {
+		wantParts = append(wantParts, "mutation")
+	}
+	wantArgs := allowsEffect(t, effects, toolcontract.CommandExternalExec)
+	if wantArgs {
+		wantParts = append(wantParts, "external_exec", "external_exec_selector")
+	}
+	if allowsEffect(t, effects, toolcontract.CommandNetworkEgress) {
+		wantParts = append(wantParts, "network_egress")
+	}
+	if !slices.Equal(cmd.DescriptionParts, wantParts) {
+		t.Errorf("command DescriptionParts = %v, want %v", cmd.DescriptionParts, wantParts)
+	}
+	props, _ := cmd.ArgsSchema["properties"].(map[string]any)
+	for _, arg := range []string{"capability_request", "secret_use", "snapshot_capture", "socks_proxy", "terminal_capture", "verification"} {
+		_, present := props[arg]
+		if present != wantArgs {
+			t.Errorf("command arg %q present = %v, want %v", arg, present, wantArgs)
+		}
 	}
 }

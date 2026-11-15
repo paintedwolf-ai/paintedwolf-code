@@ -143,6 +143,11 @@ facts. Existing egress endpoint records may carry the additive
 `authority_refused` outcome after a later payload refusal; prior connected facts
 remain distinct. These changes add no OpenAPI fields or generated DTOs.
 
+A tool schema may declare `description_effects` (`mutation`, `external_exec`,
+`external_exec_selector`, `network_egress`) to append effect-specific description
+fragments for the reader's admitted command effects. When `description_effects`
+is absent, the tool description is static.
+
 The durable checkpoint authority descriptor includes `execution_id` for
 socket/direct-IP once permits. Its canonical reader keeps session and real
 model-call identity distinct from the native child. Absence or an empty value

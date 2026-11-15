@@ -3,6 +3,7 @@ package toolschema
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -15,6 +16,13 @@ import (
 // toolNameStem validates tool names used as schema filenames.
 var toolNameStem = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 
+var validDescriptionEffectKeys = map[string]bool{
+	"mutation":               true,
+	"external_exec":          true,
+	"external_exec_selector": true,
+	"network_egress":         true,
+}
+
 // Config is the merged in-memory tool schema catalog (name → Entry).
 type Config struct {
 	Tools map[string]Entry `yaml:"tools"`
@@ -23,17 +31,19 @@ type Config struct {
 // Entry describes model-facing metadata for one tool.
 // On disk, unit files place these fields at the document root (no tools: wrapper).
 type Entry struct {
-	Description string         `yaml:"description"`
-	Tags        []string       `yaml:"tags,omitempty"`
-	Schema      map[string]any `yaml:"schema"`
+	Description        string            `yaml:"description"`
+	DescriptionEffects map[string]string `yaml:"description_effects,omitempty"`
+	Tags               []string          `yaml:"tags,omitempty"`
+	Schema             map[string]any    `yaml:"schema"`
 }
 
 // Meta is registry-facing tool metadata derived from config.
 type Meta struct {
-	Name        string
-	Description string
-	Tags        []string
-	ArgsSchema  map[string]any
+	Name               string
+	Description        string
+	DescriptionEffects map[string]string
+	Tags               []string
+	ArgsSchema         map[string]any
 }
 
 // ValidToolName reports whether name is a legal tools/schemas/<name> stem.
@@ -51,6 +61,11 @@ func ParseEntry(data []byte) (Entry, error) {
 	}
 	if strings.TrimSpace(entry.Description) == "" && entry.Schema == nil {
 		return Entry{}, fmt.Errorf("empty tool schema entry")
+	}
+	for k := range entry.DescriptionEffects {
+		if !validDescriptionEffectKeys[k] {
+			return Entry{}, fmt.Errorf("unknown description_effects key %q", k)
+		}
 	}
 	return entry, nil
 }
@@ -149,10 +164,11 @@ func (c *Config) ToolMeta(name string) (Meta, bool) {
 		schema = map[string]any{"type": "object"}
 	}
 	return Meta{
-		Name:        name,
-		Description: desc,
-		Tags:        append([]string(nil), entry.Tags...),
-		ArgsSchema:  schema,
+		Name:               name,
+		Description:        desc,
+		DescriptionEffects: maps.Clone(entry.DescriptionEffects),
+		Tags:               append([]string(nil), entry.Tags...),
+		ArgsSchema:         schema,
 	}, true
 }
 
