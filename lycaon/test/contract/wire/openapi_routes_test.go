@@ -33,6 +33,9 @@ func TestOpenAPIRoutesCoveredByStub(t *testing.T) {
 			if route.OperationID == "exportProjectFindings" {
 				bodyJSON = `{"format":"sarif"}`
 			}
+			if route.OperationID == "requestBriefing" {
+				bodyJSON = `{"profile_id":"worker_result","target_ref":{"worker_id":"` + fixtureWorkerID + `","result_revision":"2026-01-01T00:00:00Z"}}`
+			}
 			req, err := http.NewRequestWithContext(t.Context(), route.Method, url, strings.NewReader(bodyJSON))
 			contractcheck.FailErr(t, "http.NewRequest failed", err)
 			if route.Method == http.MethodPost || route.Method == http.MethodPut || route.Method == http.MethodPatch {
@@ -90,6 +93,7 @@ func stubPathParams(path string) map[string]string {
 		"protection_id":   fixtureCheckpointID,
 		"resource_id":     "res_01",
 		"process_id":      "proc-1",
+		"record_id":       strings.Repeat("a", 64),
 	}
 	if strings.Contains(path, "/projects/") {
 		params["id"] = fixtureProjectID

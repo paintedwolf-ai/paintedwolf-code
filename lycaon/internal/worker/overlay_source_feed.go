@@ -5,11 +5,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 
 	"github.com/google/uuid"
 
@@ -64,7 +66,7 @@ func (s *MergeService) snapshotPromoteTargets(
 			}
 			t.before = before
 			t.beforeSHA = beforeSHA
-		case statErr != nil && !os.IsNotExist(statErr):
+		case statErr != nil && !os.IsNotExist(statErr) && !errors.Is(statErr, syscall.ENOTDIR):
 			return nil, fmt.Errorf("stat promotion target %s: %w", t.relPath, statErr)
 		}
 		out[p] = t
@@ -312,7 +314,13 @@ func orderAppliedByFirstWrite(
 func readForLedger(abs string) (content []byte, sha string, err error) {
 	info, err := os.Stat(abs)
 	if err != nil {
+		if errors.Is(err, syscall.ENOTDIR) {
+			return nil, "", os.ErrNotExist
+		}
 		return nil, "", err
+	}
+	if info.IsDir() {
+		return nil, "", os.ErrNotExist
 	}
 	if info.Size() <= sourceledger.MaxRevisionContentBytes {
 		b, readErr := os.ReadFile(abs)

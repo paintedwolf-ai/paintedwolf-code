@@ -1,6 +1,7 @@
 package sourceledger
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 	"time"
@@ -57,5 +58,114 @@ func TestWalkChapterMetadataCannotCrossProjectBoundary(t *testing.T) {
 	testutil.FailErr(t, "load walk turn metadata", err)
 	if len(turns) != 0 {
 		t.Fatalf("cross-project metadata = %+v", turns)
+	}
+}
+
+func TestWalkEffectsByIDAndGroup(t *testing.T) {
+	store, ctx := openLedger(t)
+	testdbseed.InsertProject(t, store.sqlDB, "p2")
+	_, err := store.sqlDB.ExecContext(ctx, `
+		INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
+		VALUES ('r2', 'p2', '/tmp/source-ledger-other', 'other', 1, ?, 'attached')
+	`, db.FormatTime(time.Now().UTC()))
+	testutil.FailErr(t, "insert second root", err)
+
+	if _, err := store.Walk.EffectsByID(ctx, "p1", make([]string, maxEffectsByID+1)); err == nil {
+		t.Fatal("EffectsByID accepted an unbounded id list")
+	}
+	if _, err := store.Walk.EffectsInGroup(ctx, "p1", "", ""); err == nil {
+		t.Fatal("EffectsInGroup accepted an empty group")
+	}
+	if _, err := store.Walk.EffectsInGroup(ctx, "p1", "cw-1", "gt-1"); err == nil {
+		t.Fatal("EffectsInGroup accepted both group ids")
+	}
+
+	seedWalkGit(t, store, "gt-1", "s1", 1, "", time.Now().UTC())
+	testutil.FailErr(t, "record grouped effects", store.RecordBatch(ctx, []RecordInput{
+		{
+			RecordLocation:  RecordLocation{RootID: "r1", Path: "first.txt"},
+			ProjectID:       "p1",
+			OperationID:     "op-gt-1",
+			GitTransitionID: "gt-1",
+			Cause:           CauseGitOperation,
+			CaptureQuality:  CaptureReconciled,
+			Op:              api.SourceChangeOpCreate,
+			Origin:          api.SourceChangeOriginExternal,
+			After:           []byte("one"),
+		},
+		{
+			RecordLocation:  RecordLocation{RootID: "r1", Path: "second.txt"},
+			ProjectID:       "p1",
+			OperationID:     "op-gt-1",
+			GitTransitionID: "gt-1",
+			Cause:           CauseGitOperation,
+			CaptureQuality:  CaptureReconciled,
+			Op:              api.SourceChangeOpCreate,
+			Origin:          api.SourceChangeOriginExternal,
+			After:           []byte("two"),
+		},
+	}))
+	mustRecord(t, store, ctx, RecordInput{
+		RecordLocation: RecordLocation{RootID: "r2", Path: "other.txt"},
+		ProjectID:      "p2",
+		OperationID:    "op-p2",
+		Op:             api.SourceChangeOpCreate,
+		Origin:         api.SourceChangeOriginExternal,
+		After:          []byte("other"),
+	})
+
+	rows, err := store.sqlDB.QueryContext(ctx, `SELECT project_id, id FROM source_effects ORDER BY project_id, ordinal`)
+	testutil.FailErr(t, "list seeded effect ids", err)
+	defer func() { _ = rows.Close() }()
+	var p1IDs, p2IDs []string
+	for rows.Next() {
+		var projectID, id string
+		testutil.FailErr(t, "scan effect id", rows.Scan(&projectID, &id))
+		if projectID == "p1" {
+			p1IDs = append(p1IDs, id)
+		} else {
+			p2IDs = append(p2IDs, id)
+		}
+	}
+	testutil.FailErr(t, "iterate effect rows", rows.Err())
+	if len(p1IDs) != 2 || len(p2IDs) != 1 {
+		t.Fatalf("seeded effect counts = (%d, %d), want (2, 1)", len(p1IDs), len(p2IDs))
+	}
+
+	byID, err := store.Walk.EffectsByID(ctx, "p1", []string{p1IDs[1], p2IDs[0], p1IDs[0]})
+	testutil.FailErr(t, "read effects by id", err)
+	if len(byID) != 2 || byID[0].ID != p1IDs[0] || byID[1].ID != p1IDs[1] || byID[0].Path != "first.txt" || byID[1].Path != "second.txt" {
+		t.Fatalf("EffectsByID = %+v", byID)
+	}
+
+	grouped, err := store.Walk.EffectsInGroup(ctx, "p1", "", "gt-1")
+	testutil.FailErr(t, "read grouped effects", err)
+	if len(grouped) != 2 || grouped[0].ID != p1IDs[0] || grouped[1].ID != p1IDs[1] || grouped[0].GitTransitionID != "gt-1" {
+		t.Fatalf("EffectsInGroup = %+v", grouped)
+	}
+	crossProject, err := store.Walk.EffectsInGroup(ctx, "p2", "", "gt-1")
+	testutil.FailErr(t, "read cross-project group", err)
+	if len(crossProject) != 0 {
+		t.Fatalf("cross-project EffectsInGroup = %+v", crossProject)
+	}
+
+	seedWalkGit(t, store, "gt-oversized", "s1", 1, "", time.Now().UTC())
+	oversized := make([]RecordInput, maxEffectsByID+1)
+	for i := range oversized {
+		oversized[i] = RecordInput{
+			RecordLocation:  RecordLocation{RootID: "r1", Path: fmt.Sprintf("bulk-%03d.txt", i)},
+			ProjectID:       "p1",
+			OperationID:     "op-gt-oversized",
+			GitTransitionID: "gt-oversized",
+			Cause:           CauseGitOperation,
+			CaptureQuality:  CaptureReconciled,
+			Op:              api.SourceChangeOpCreate,
+			Origin:          api.SourceChangeOriginExternal,
+			After:           []byte("x"),
+		}
+	}
+	testutil.FailErr(t, "record oversized group", store.RecordBatch(ctx, oversized))
+	if _, err := store.Walk.EffectsInGroup(ctx, "p1", "", "gt-oversized"); !errors.Is(err, ErrGroupTooLarge) {
+		t.Fatalf("oversized EffectsInGroup error = %v, want ErrGroupTooLarge", err)
 	}
 }

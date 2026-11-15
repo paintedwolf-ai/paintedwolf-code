@@ -82,10 +82,12 @@ type result struct {
 }
 
 type requestSpec struct {
-	outgoing func(string) bool
-	method   string
-	target   *url.URL
-	headers  []outboundhttp.Header
+	outgoing        func(string) bool
+	outgoingHeaders func(string) bool
+	outgoingBody    func(string) bool
+	method          string
+	target          *url.URL
+	headers         []outboundhttp.Header
 	// headerSources parallels headers.
 	headerSources []headerSource
 	body          requestBody
@@ -299,6 +301,8 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleStarted)
 		defer tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleCompleted)
 	}
+	ctx = egressgate.WithReviewedRecipients(ctx)
+	deps.SecretAsk = recordReviewedRecipient(deps.SecretAsk)
 	ctx = secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
 		SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
 		ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID,
@@ -336,12 +340,19 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 	if reject != nil {
 		return exchanged{}, reject
 	}
-	ctx = egressgate.WithAttribution(ctx, confine.EgressCommand{
-		SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
-		ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID, Image: "http_request", ToolName: "http_request",
-		ActionID: tctx.EffectActionID(),
-	})
-	defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.EffectActionID())
+	if reject := reviewClientIdentity(ctx, deps, spec, tctx, opts.TLS); reject != nil {
+		return exchanged{}, reject
+	}
+	// A caller that already attributes the action (native curl names its
+	// command line) keeps that attribution and its lifetime.
+	if egressgate.From(ctx) == nil {
+		ctx = egressgate.WithAttribution(ctx, confine.EgressCommand{
+			SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
+			ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID, Image: "http_request", ToolName: "http_request",
+			ActionID: tctx.EffectActionID(),
+		})
+		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.EffectActionID())
+	}
 	resp, landed, bufferedBody, listenerFact, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]), opts)
 	if err != nil {
 		if spec.socket != "" && (errors.Is(err, socketref.ErrUnbound) || errors.Is(err, syscall.ECONNREFUSED)) {
@@ -349,7 +360,7 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		}
 		var exErr *outboundhttp.ExchangeError
 		if reject := toolrejection.AsToolReject(err); reject != nil && (!errors.As(err, &exErr) || (exErr.RequestsStarted == 0 && exErr.ResponsesReceived == 0)) &&
-			(reject.Code == CookieJarFailedCode || reject.Code == toolrejection.OutboundSecretDeniedCode || reject.Code == toolrejection.OutboundSecretScreenFailedCode) {
+			(reject.Code == CookieJarFailedCode || reject.Code == TokenJarFailedCode || reject.Code == toolrejection.OutboundSecretDeniedCode || reject.Code == toolrejection.OutboundSecretScreenFailedCode || toolrejection.IsSecretCapabilityCode(reject.Code)) {
 			return exchanged{}, reject
 		}
 		return exchanged{}, &TransportFailure{Reject: sendReject(ctx, deps, jarReq, jar, tokenJarReq, tokenJar, err), Cause: err}
@@ -388,6 +399,9 @@ func parseRequestSpec(ctx context.Context, boundary *sandbox.Boundary, tctx tool
 		method = "GET"
 	}
 	rawURL, _ := args["url"].(string)
+	if err := referencesOutsideTheirFields(rawURL, args["host_header"]); err != nil {
+		return requestSpec{}, invalid(err)
+	}
 	target, err := outboundhttp.NormalizeURL(rawURL)
 	if err != nil {
 		return requestSpec{}, err
@@ -449,8 +463,10 @@ func parseRequestSpec(ctx context.Context, boundary *sandbox.Boundary, tctx tool
 	}
 	return requestSpec{
 		method: method, target: target, headers: headers, headerSources: sources, body: body,
-		outgoing:  func(path string) bool { return secretmatch.HTTPArgumentConsumed(args, path) },
-		redirects: redirects, disposition: disposition, contest: contest,
+		outgoing:        func(path string) bool { return secretmatch.HTTPArgumentConsumed(args, path) },
+		outgoingHeaders: func(path string) bool { return secretmatch.HTTPHeaderArgumentConsumed(args, path) },
+		outgoingBody:    func(path string) bool { return secretmatch.HTTPBodyArgumentConsumed(args, path) },
+		redirects:       redirects, disposition: disposition, contest: contest,
 		unixSocket: unixSocket, hostHeader: hostHeader, resolve: resolve,
 		tokenJar: tokenJar, captureTokens: captureTokens,
 	}, nil
@@ -464,16 +480,19 @@ func send(
 	allowAddress func(netip.Addr, uint16) bool, timeout time.Duration, opts ExchangeOptions,
 ) (outboundhttp.Response, *inboundwrite.Receipt, []byte, *api.LoopbackListenerFact, error) {
 	var loopbackObs loopbackHopObservation
+	var headerDelivery, bodyDelivery *secretcap.PreparedDelivery
 	firstHopSeen := false
 	req := outboundhttp.Request{
 		Class:  egressclass.AgentHTTPRequest,
 		Method: spec.method, URL: outbound.url, OriginHeaders: outbound.headers, Body: outbound.body, Timeout: timeout,
 		Redirects: outboundhttp.RedirectMode(spec.redirects), DiscardBody: spec.disposition.discard, AllowAddress: allowAddress,
-		UnixSocket:     spec.socket,
-		SocketBinding:  spec.socketBinding,
-		HostHeader:     outbound.hostHeader,
-		Resolve:        spec.resolve,
-		OnFirstHopConn: func(local, remote netip.AddrPort) { loopbackObs.onFirstHopConn(ctx, tctx, local, remote) },
+		UnixSocket:                  spec.socket,
+		SocketBinding:               spec.socketBinding,
+		HostHeader:                  outbound.hostHeader,
+		Resolve:                     spec.resolve,
+		OnFirstHopConn:              func(local, remote netip.AddrPort) { loopbackObs.onFirstHopConn(ctx, tctx, local, remote) },
+		OnFirstHopHeadersDispatched: func() { headerDelivery.Commit(ctx) },
+		OnFirstHopBodyDispatched:    func() { bodyDelivery.Commit(ctx) },
 	}
 	// A socket request reaches only the reviewed socket; its URL host names
 	// no network destination for the egress gate to judge.
@@ -482,18 +501,73 @@ func send(
 			if reject := checkHopLoopbackAuthority(hop.URL, spec.resolve, allowAddress); reject != nil {
 				return reject
 			}
-			if err := admitHopRoute(hopCtx, hop.URL, hop.Method, spec.resolve); err != nil {
-				return err
-			}
 		}
+		// Cookie review comes first: approving the disclosure is consent to
+		// the connection that carries it.
 		if outbound.beforeCookieHop != nil {
 			if err := outbound.beforeCookieHop(hopCtx, hop); err != nil {
 				return err
 			}
 		}
+		if spec.socket == "" {
+			recipientID, _ := requestDestination(spec.forHop(hop))
+			if err := admitHopRoute(hopCtx, hop.URL, hop.Method, spec.resolve, recipientID); err != nil {
+				return err
+			}
+		}
 		if !firstHopSeen {
 			firstHopSeen = true
+			if err := hopCtx.Err(); err != nil {
+				return err
+			}
+			if deps.SecretMatcher != nil {
+				if err := deps.SecretMatcher.CheckClassification(hopCtx, outbound.classification); err != nil {
+					return screenFaultReject(secretmatch.FaultStageRaise)
+				}
+			}
+			if err := checkTokenJarState(hopCtx, deps, tokenJarReq, tokenJar); err != nil {
+				return err
+			}
+			var err error
+			headerDelivery, err = tctx.Effects.Secrets.PrepareDelivery(hopCtx, spec.outgoingHeaders)
+			if err != nil {
+				return toolrejection.HeldHandOffReject("http_request", err)
+			}
+			bodyDelivery, err = tctx.Effects.Secrets.PrepareDelivery(hopCtx, spec.outgoingBody)
+			if err != nil {
+				return toolrejection.HeldHandOffReject("http_request", err)
+			}
 			loopbackObs.beforeFirstHop(hopCtx, tctx, spec)
+			return nil
+		}
+		// A redirect carries the request's material again: a same-origin hop
+		// keeps its headers and a 307 or 308 keeps its body. A release revoked
+		// while an earlier hop ran is not replayed.
+		sameOrigin := secretmatch.HTTPOrigin(hop.URL) == secretmatch.HTTPOrigin(spec.target)
+		resendsBody := strings.EqualFold(hop.Method, spec.method)
+		if !sameOrigin && !resendsBody {
+			return nil
+		}
+		// What the first hop checked before sending applies again before the
+		// material is resent: a classification withdrawn or a jar revoked
+		// while an earlier hop ran stops the replay.
+		if deps.SecretMatcher != nil {
+			if err := deps.SecretMatcher.CheckClassification(hopCtx, outbound.classification); err != nil {
+				return screenFaultReject(secretmatch.FaultStageRaise)
+			}
+		}
+		if sameOrigin {
+			if err := checkTokenJarState(hopCtx, deps, tokenJarReq, tokenJar); err != nil {
+				return err
+			}
+			if err := tctx.Effects.Secrets.Precheck(hopCtx, spec.outgoingHeaders); err != nil {
+				return toolrejection.HeldHandOffReject("http_request", err)
+			}
+		}
+		if resendsBody {
+			if err := tctx.Effects.Secrets.Precheck(hopCtx, spec.outgoingBody); err != nil {
+				return toolrejection.HeldHandOffReject("http_request", err)
+			}
 		}
 		return nil
 	}
@@ -535,9 +609,6 @@ func send(
 			landed = &receipt
 			return nil
 		}
-	}
-	if err := tctx.Effects.Secrets.HandOff(ctx, spec.outgoing); err != nil {
-		return outboundhttp.Response{}, nil, nil, nil, toolrejection.HeldHandOffReject("http_request", err)
 	}
 	resp, err := outboundhttp.Do(ctx, req)
 	if err != nil {

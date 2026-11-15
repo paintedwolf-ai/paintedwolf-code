@@ -22,7 +22,8 @@ func seedLegacyManifestStore(t *testing.T, dir string, rootEntries map[string]in
 	testutil.FailErr(t, "read released corpus", err)
 	path := filepath.Join(dir, "store.db")
 	testutil.FailErr(t, "copy released corpus", os.WriteFile(path, raw, 0o600))
-	source, err := sql.Open("sqlite", path)
+	// A fixture proves no durability. Flushing each statement dominated this package on drives with real flush latency.
+	source, err := sql.Open("sqlite", fileDSN(path, "_pragma=synchronous(off)"))
 	testutil.FailErr(t, "open released store", err)
 	defer func() { _ = source.Close() }()
 	released, err := inspectSchema(t.Context(), source)

@@ -1,6 +1,7 @@
 package workspacebaseline
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -54,7 +55,7 @@ func (r *Reader) Changes(ctx context.Context, roots []projectroot.RootRef, branc
 // ChangeSet is Changes with each path's kind, sorted by display path.
 func (r *Reader) ChangeSet(ctx context.Context, roots []projectroot.RootRef, branch string) ([]Change, error) {
 	var changes []Change
-	add := func(change Change) error {
+	err := r.eachChange(ctx, roots, branch, func(change Change) error {
 		changes = append(changes, change)
 		if len(changes) > DefaultMaxOverlayFiles {
 			return &OverlayBudgetExceededError{
@@ -62,36 +63,6 @@ func (r *Reader) ChangeSet(ctx context.Context, roots []projectroot.RootRef, bra
 				MaxFiles: DefaultMaxOverlayFiles,
 				Reason:   fmt.Sprintf("%d changed files exceeds limit of %d", len(changes), DefaultMaxOverlayFiles),
 			}
-		}
-		return nil
-	}
-	err := r.EachIdentity(ctx, roots, func(entry Entry) error {
-		abs, err := branchPathAt(roots, branch, entry.RootID, entry.ScopeRel)
-		if err != nil {
-			return err
-		}
-		kind, err := statChange(abs, entry.File)
-		if err != nil {
-			return err
-		}
-		if kind != "" {
-			if err := add(Change{RootID: entry.RootID, ScopeRel: entry.ScopeRel, Path: entry.Path, Kind: kind}); err != nil {
-				return err
-			}
-		}
-		return ctx.Err()
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	err = Branch(roots, branch)(ctx, func(file CaptureFile) error {
-		_, exists, err := r.LookupIdentity(ctx, roots, file.RootID, file.ScopeRel)
-		if err != nil {
-			return err
-		}
-		if !exists {
-			return add(Change{RootID: file.RootID, ScopeRel: file.ScopeRel, Path: file.Path, Kind: ChangeCreated})
 		}
 		return nil
 	})
@@ -108,6 +79,43 @@ func (r *Reader) ChangeSet(ctx context.Context, roots []projectroot.RootRef, bra
 		return changes[i].ScopeRel < changes[j].ScopeRel
 	})
 	return changes, nil
+}
+
+// EachChange visits every path that differs from the manifest, whatever their number.
+func (r *Reader) EachChange(ctx context.Context, roots []projectroot.RootRef, branch string, visit func(path string) error) error {
+	return r.eachChange(ctx, roots, branch, func(change Change) error { return visit(change.Path) })
+}
+
+func (r *Reader) eachChange(ctx context.Context, roots []projectroot.RootRef, branch string, visit func(Change) error) error {
+	err := r.EachIdentity(ctx, roots, func(entry Entry) error {
+		abs, err := branchPathAt(roots, branch, entry.RootID, entry.ScopeRel)
+		if err != nil {
+			return err
+		}
+		kind, err := statChange(abs, entry.File)
+		if err != nil {
+			return err
+		}
+		if kind != "" {
+			if err := visit(Change{RootID: entry.RootID, ScopeRel: entry.ScopeRel, Path: entry.Path, Kind: kind}); err != nil {
+				return err
+			}
+		}
+		return ctx.Err()
+	})
+	if err != nil {
+		return err
+	}
+	return Branch(roots, branch)(ctx, func(file CaptureFile) error {
+		_, exists, err := r.LookupIdentity(ctx, roots, file.RootID, file.ScopeRel)
+		if err != nil {
+			return err
+		}
+		if !exists {
+			return visit(Change{RootID: file.RootID, ScopeRel: file.ScopeRel, Path: file.Path, Kind: ChangeCreated})
+		}
+		return nil
+	})
 }
 
 // statChange compares one baseline entry with the tree by metadata alone.
@@ -264,6 +272,54 @@ func branchPathAt(roots []projectroot.RootRef, branch, rootID, scopeRel string) 
 	return filepath.Join(base, rel), nil
 }
 
+// BranchLocation is where one manifest path lives: its project root and the branch tree file.
+type BranchLocation struct {
+	RootID string
+	Rel    string
+	Abs    string
+}
+
+// LocateInBranch maps a manifest path onto its root and branch tree file.
+func LocateInBranch(roots []projectroot.RootRef, branch, path string) (BranchLocation, error) {
+	if len(roots) == 0 {
+		return BranchLocation{}, fmt.Errorf("project roots required")
+	}
+	chosen, rel, err := manifestRoot(roots, path)
+	if err != nil {
+		return BranchLocation{}, err
+	}
+	base, treeRel, err := branchLocation(roots, branch, path)
+	if err != nil {
+		return BranchLocation{}, err
+	}
+	return BranchLocation{RootID: chosen.ID, Rel: rel, Abs: filepath.Join(base, treeRel)}, nil
+}
+
+// manifestRoot resolves a manifest path to its root and root-relative path. A multi-root manifest
+// qualifies paths outside the primary root as @label/rel.
+func manifestRoot(roots []projectroot.RootRef, path string) (projectroot.RootRef, string, error) {
+	if len(roots) == 1 {
+		return roots[0], path, nil
+	}
+	primary, err := projectroot.PrimaryRoot(roots)
+	if err != nil {
+		return projectroot.RootRef{}, "", err
+	}
+	if !strings.HasPrefix(path, "@") {
+		return primary, path, nil
+	}
+	label, rel, ok := strings.Cut(path[1:], "/")
+	if !ok {
+		return projectroot.RootRef{}, "", fmt.Errorf("invalid qualified baseline path")
+	}
+	for _, root := range roots {
+		if strings.EqualFold(root.Label, label) {
+			return root, rel, nil
+		}
+	}
+	return projectroot.RootRef{}, "", fmt.Errorf("unknown baseline root")
+}
+
 // branchLocationAt splits a structured identity into the tree holding it and
 // its place there. Multi-root trees keep one directory per root under the
 // branch; single-root trees keep the root's files at the branch top.
@@ -286,29 +342,11 @@ func branchLocationAt(roots []projectroot.RootRef, branch, rootID, scopeRel stri
 func branchLocation(roots []projectroot.RootRef, branch, path string) (base, rel string, err error) {
 	base = branch
 	if len(roots) > 1 {
-		primary, err := projectroot.PrimaryRoot(roots)
+		chosen, rootRel, err := manifestRoot(roots, path)
 		if err != nil {
 			return "", "", err
 		}
-		chosen := primary
-		if strings.HasPrefix(path, "@") {
-			label, rel, ok := strings.Cut(path[1:], "/")
-			if !ok {
-				return "", "", fmt.Errorf("invalid qualified baseline path")
-			}
-			found := false
-			for _, root := range roots {
-				if strings.EqualFold(root.Label, label) {
-					chosen = root
-					found = true
-					break
-				}
-			}
-			if !found {
-				return "", "", fmt.Errorf("unknown baseline root")
-			}
-			path = rel
-		}
+		path = rootRel
 		dir, err := projectroot.BranchDirForID(chosen.ID)
 		if err != nil {
 			return "", "", err
@@ -327,34 +365,58 @@ func CanonicalPath(roots []projectroot.RootRef, path string) (string, error) {
 	if len(roots) == 0 {
 		return "", fmt.Errorf("project roots required")
 	}
-	chosen := roots[0]
-	if len(roots) > 1 {
-		primary, err := projectroot.PrimaryRoot(roots)
-		if err != nil {
-			return "", err
-		}
-		chosen = primary
-		if strings.HasPrefix(path, "@") {
-			label, rel, ok := strings.Cut(path[1:], "/")
-			if !ok {
-				return "", fmt.Errorf("invalid qualified baseline path")
-			}
-			found := false
-			for _, root := range roots {
-				if strings.EqualFold(root.Label, label) {
-					chosen = root
-					found = true
-					break
-				}
-			}
-			if !found {
-				return "", fmt.Errorf("unknown baseline root")
-			}
-			path = rel
-		}
+	chosen, rel, err := manifestRoot(roots, path)
+	if err != nil {
+		return "", err
 	}
-	if path == "" || filepath.IsAbs(path) || sandbox.HasParentTraversal(path) {
+	if rel == "" || filepath.IsAbs(rel) || sandbox.HasParentTraversal(rel) {
 		return "", fmt.Errorf("invalid baseline path")
 	}
-	return filepath.Join(chosen.Path, filepath.FromSlash(path)), nil
+	return filepath.Join(chosen.Path, filepath.FromSlash(rel)), nil
+}
+
+// OverlayChange is one path a sealed overlay records, against its baseline.
+type OverlayChange struct {
+	RootID     string
+	Rel        string
+	Final      File
+	Base       File
+	BaseExists bool
+	// Body reads pinned content by digest.
+	Body func(sha string) ([]byte, error)
+}
+
+// EachOverlayChange visits a sealed overlay's paths with their baseline state. It reads only the
+// immutable manifests and their pinned content, never a working tree.
+func EachOverlayChange(ctx context.Context, baselinePath, overlayPath string, roots []projectroot.RootRef, visit func(OverlayChange) error) error {
+	blobs := ContentStore(baselinePath)
+	baseline, err := Open(ctx, baselinePath, blobs)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = baseline.Close() }()
+	overlay, err := Open(ctx, overlayPath, blobs)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = overlay.Close() }()
+	body := func(sha string) ([]byte, error) {
+		var content bytes.Buffer
+		err := blobs.CopySHA(ctx, sha, &content)
+		return content.Bytes(), err
+	}
+	return overlay.Each(ctx, func(path string, final File) error {
+		root, rel, err := manifestRoot(roots, path)
+		if err != nil {
+			return err
+		}
+		base, exists, err := baseline.Lookup(ctx, path)
+		if err != nil {
+			return err
+		}
+		if final.Opaque && final.LinkTarget == "" {
+			return fmt.Errorf("overlay body for %s was not captured", path)
+		}
+		return visit(OverlayChange{RootID: root.ID, Rel: rel, Final: final, Base: base, BaseExists: exists, Body: body})
+	})
 }

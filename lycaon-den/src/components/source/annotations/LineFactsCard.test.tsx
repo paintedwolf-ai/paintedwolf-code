@@ -105,4 +105,9 @@ describe("line facts card", () => {
     setState(state => ({ ...state, enter: true }));
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: /first/ })));
   });
+  it("mounts the change briefing slot when projectId and effectId are present", () => {
+    const { setState } = fixture();
+    setState(old => ({ ...old, projectId: "proj-1", facts: { ...old.facts, changed: [row("first", { effectId: "eff-1" })] } }));
+    expect(screen.getByRole("region", { name: "Changed" })).toBeTruthy();
+  });
 });

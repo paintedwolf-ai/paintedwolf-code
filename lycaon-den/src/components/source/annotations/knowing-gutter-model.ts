@@ -10,6 +10,8 @@ export type AttributionContributor = {
   turn: number;
   toolCallId: string;
   ts: string;
+  /** The change that wrote the text, when the host knows it. */
+  effectId?: string;
 };
 
 export type AttributionMark = { startLine: number; endLine: number; contributors: AttributionContributor[] };
@@ -43,7 +45,7 @@ export function mergeAttributionIntervals(intervals: readonly SourceAttributionI
   for (const iv of intervals) {
     if (iv.start_line < 1 || iv.end_line < iv.start_line) continue;
     const author = { sessionId: (iv.session_id ?? "").trim(), turn: iv.turn,
-      toolCallId: (iv.tool_call_id ?? "").trim(), ts: iv.recorded_at };
+      toolCallId: (iv.tool_call_id ?? "").trim(), ts: iv.recorded_at, ...(iv.effect_id ? { effectId: iv.effect_id } : {}) };
     for (const [line, delta] of [[iv.start_line, 1], [iv.end_line + 1, -1]] as const) {
       events.set(line, [...(events.get(line) ?? []), { author, delta }]);
     }

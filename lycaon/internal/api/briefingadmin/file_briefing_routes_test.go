@@ -58,7 +58,7 @@ func newBriefingRoutes(t *testing.T, setting *switchable) briefingRoutes {
 	t.Cleanup(func() { briefings.Stop(); briefings.Wait(context.Background()) })
 
 	h := briefingadmin.New(&httpio.Responder{Logger: slog.Default()}, briefingadmin.Dependencies{
-		EditorDocuments: deps.Source.EditorDocuments, FileBriefings: briefings,
+		EditorDocuments: deps.Source.EditorDocuments, Briefings: briefingadmin.Services{Files: briefings},
 		ProjectRegistry: deps.Core.Projects, SessionStore: deps.Core.Store, SourceLedger: deps.Source.SourceLedger,
 		WorkerBranchRoot: func(context.Context, string, string) (string, func()) { return "", func() {} },
 	})

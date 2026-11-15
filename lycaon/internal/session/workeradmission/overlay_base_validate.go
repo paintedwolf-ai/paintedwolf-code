@@ -23,7 +23,7 @@ type OverlayBaseRejection struct {
 	Data map[string]any
 }
 
-// ValidateStackedBase requires an active write overlay on the same parent session.
+// ValidateStackedBase requires a finished, unlanded write overlay on the same parent session.
 // An omitted base selects primary.
 func ValidateStackedBase(
 	ctx context.Context,
@@ -65,9 +65,14 @@ func ValidateStackedBase(
 	switch task.MergeStatus {
 	case api.WorkerMergeStatusPending,
 		api.WorkerMergeStatusApplying,
-		api.WorkerMergeStatusRebasing,
-		"":
+		api.WorkerMergeStatusRebasing:
 		return OverlayBaseRejection{}, nil
+	case "":
+		// A running worker has only a changing tree; a child stacks on its finished result.
+		return OverlayBaseRejection{
+			Code: OverlayBaseNotPendingCode,
+			Data: map[string]any{"base_overlay_id": base, "merge_status": "running", "reason": "base_still_running"},
+		}, nil
 	case api.WorkerMergeStatusMerged:
 		return OverlayBaseRejection{
 			Code: OverlayBaseNotPendingCode,

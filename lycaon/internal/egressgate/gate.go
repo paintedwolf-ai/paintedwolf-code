@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -55,6 +56,13 @@ func AwaitHost(ctx context.Context, host string) error {
 
 // AwaitHTTPRequest attributes one normalized HTTP hop, excluding its query.
 func AwaitHTTPRequest(ctx context.Context, target *url.URL, method string) error {
+	return AwaitHTTPHop(ctx, target, method, "")
+}
+
+// AwaitHTTPHop gates one hop whose payload the screens reviewed for
+// recipientID; empty names the hop's own origin. A hop to a recipient the
+// person already approved needs no separate connection card.
+func AwaitHTTPHop(ctx context.Context, target *url.URL, method, recipientID string) error {
 	if target == nil {
 		return nil
 	}
@@ -62,9 +70,12 @@ func AwaitHTTPRequest(ctx context.Context, target *url.URL, method string) error
 	if path == "" {
 		path = "/"
 	}
-	id, label := secretmatch.HTTPDestination(target)
-	recipient := secretmatch.Recipient{ID: id, Label: label, Surface: secretmatch.SurfaceHTTPRequest, Kind: secretmatch.DestinationService}
-	if secretcap.ResolutionFrom(ctx).RecipientApproved(recipient) {
+	recipient := secretmatch.Recipient{Surface: secretmatch.SurfaceHTTPRequest, Kind: secretmatch.DestinationService}
+	recipient.ID, recipient.Label = secretmatch.HTTPDestination(target)
+	if recipientID != "" {
+		recipient.ID = recipientID
+	}
+	if recipientReviewed(ctx, recipient.ID) || secretcap.ResolutionFrom(ctx).RecipientApproved(recipient) {
 		ctx = context.WithValue(ctx, consentContextKey{}, hopEndpoint(target))
 	}
 	return awaitEndpoint(ctx, target.Hostname(), hopEndpoint(target), method, path)
@@ -102,6 +113,24 @@ func awaitEndpoint(ctx context.Context, host, endpoint, method, path string) err
 	if confine.DecideAttributedHTTPRequest(reviewCtx, state.Command, endpoint, method, path) {
 		return nil
 	}
+	return refused(ctx, reviewCtx, state, host)
+}
+
+// AwaitTransport gates the connection a confined launch of this action will
+// open, so the launch's own dial finds the decision already taken.
+func AwaitTransport(ctx context.Context, ep egressproxy.Endpoint) error {
+	state := From(ctx)
+	if state == nil || strings.TrimSpace(ep.Host) == "" {
+		return nil
+	}
+	reviewCtx := hitl.WaitContext(ctx)
+	if confine.DecideAttributedEndpoint(reviewCtx, state.Command, ep) {
+		return nil
+	}
+	return refused(ctx, reviewCtx, state, ep.Host)
+}
+
+func refused(ctx, reviewCtx context.Context, state *State, host string) error {
 	if err := reviewCtx.Err(); err != nil {
 		return err
 	}

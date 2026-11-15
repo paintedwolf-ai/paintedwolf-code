@@ -1,11 +1,14 @@
 import { createSignal } from "solid-js";
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import type { CommandActivity, CommandProgramReceipt } from "../../api/types.ts";
 import type { ActivitySpanEntry } from "../../chat/transcript/projection/transcript-item-model.ts";
 import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
 import { ToolPartShell } from "./ToolPartShell.tsx";
 import { CommandActivitySpan } from "./CommandActivitySpan.tsx";
+import { stubClient } from "../../test/client-fixture.ts";
+import { getLycaonClient } from "../../platform/connection/app-connection.ts";
+vi.mock("../../platform/connection/app-connection.ts", () => ({ getLycaonClient: vi.fn() }));
 
 function entry(id: string, group: string, state: "running" | "completed" = "running", phase?: CommandActivity["phase"]): ActivitySpanEntry {
   const fact: CommandActivity = { id, group, label: "Read source", subject: "source.rs", state, outcome: state === "running" ? "Running" : "Completed", phase, execution_ids: [id], spans: [] };
@@ -38,4 +41,14 @@ it("advances the span label only on a strict rank increase (AT-ACT-HEAD-01)", ()
   expect(label()).toBe("Reading files");
   setEntries([entry("read", "Reading files", "completed", "inspect"), entry("search", "Searching codebase", "completed", "inspect"), entry("map", "Mapping codebase", "completed", "inspect")]);
   expect(label()).toBe("Mapping codebase");
+});
+
+it("takes its status from the settled receipt, not the program recorded while running", async () => {
+  const recorded = entry("server", "Running programs");
+  const settled = { ...(recorded.kind === "tool" ? recorded.part.commandProgram! : ({} as CommandProgramReceipt)), state: "completed" } as CommandProgramReceipt;
+  const fact = { ...settled.activities![0]!, state: "completed", outcome: "Completed", steps: [] } as CommandActivity;
+  vi.mocked(getLycaonClient).mockReturnValue(stubClient({ getCommandProgramReceipt: vi.fn().mockResolvedValue({ program: settled, activities: [fact], executions: [], nodes: [] }) }));
+  const view = render(() => <CommandActivitySpan label="Running commands" entries={[recorded]} sessionId="session" layout="chat" entryKey="command-groups-settled" renderToolEntry={part => <ToolPartShell part={part()} layout="chat"><span>Recorded detail</span></ToolPartShell>} />);
+  const group = () => view.container.querySelector('[data-testid="activity-span-card"]');
+  await waitFor(() => expect(group()?.getAttribute("data-status")).toBe("done"));
 });

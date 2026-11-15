@@ -90,9 +90,7 @@ func BindPublication(definition OperationDefinition, invocation OperationInvocat
 	command := definition.Facts().Identity
 	switch kind {
 	case RedirectPublication:
-		switch operator {
-		case ">", ">>", "&>", "&>>":
-		default:
+		if !OutputRedirectOperator(operator) {
 			return BoundOperation{}, fmt.Errorf("output redirect operator required")
 		}
 		command = operator
@@ -107,3 +105,13 @@ func BindPublication(definition OperationDefinition, invocation OperationInvocat
 	return BoundOperation{definition: definition, invocation: invocation, command: command, mode: "publication", effects: effects, publication: kind}, nil
 }
 func (b BoundOperation) Publication() PublicationKind { return b.publication }
+
+// OutputRedirectOperator reports whether operator publishes to a file. A
+// redirect binding records the operator as its command.
+func OutputRedirectOperator(operator string) bool {
+	switch operator {
+	case ">", ">>", "&>", "&>>":
+		return true
+	}
+	return false
+}

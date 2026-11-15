@@ -31,18 +31,37 @@ func TestProgramActivityObserverSeesCommittedSettlement(t *testing.T) {
 	child := f.child(t)
 	f.start(t, child)
 	observed := 0
-	ctx := invocation.WithActivityObserver(t.Context(), func(ctx context.Context, program, _ string) {
+	ctx := invocation.WithActivityObserver(t.Context(), invocation.ActivityObserver{Execution: func(ctx context.Context, program, _ string) {
 		page, err := f.recorder.ReadProgramPage(ctx, f.session, program, "", 10)
 		testutil.FailErr(t, "read committed activity update", err)
 		if page.Activities[0].Outcome != "Finished" {
 			t.Fatalf("observed uncommitted outcome: %+v", page.Activities)
 		}
 		observed++
-	})
+	}})
 	result := toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}
 	testutil.FailErr(t, "settle observed child", f.recorder.SettleChild(ctx, child.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: true, DetailReference: "output:done"}))
 	if observed != 1 {
 		t.Fatalf("updates = %d", observed)
+	}
+}
+
+func TestProgramActivityObserverSeesCommittedProgramSettlement(t *testing.T) {
+	f := newProgramReceiptFixture(t)
+	child := f.child(t)
+	f.start(t, child)
+	result := toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}
+	testutil.FailErr(t, "settle child", f.recorder.SettleChild(t.Context(), child.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: result, OwnerInvoked: true, DetailReference: "output:done"}))
+	var settled []string
+	ctx := invocation.WithActivityObserver(t.Context(), invocation.ActivityObserver{Settled: func(ctx context.Context, program string) {
+		summary, err := f.recorder.ActivitySummary(ctx, f.session, program)
+		testutil.FailErr(t, "read settled program", err)
+		settled = append(settled, summary.State)
+	}})
+	status := 0
+	testutil.FailErr(t, "settle program", f.recorder.SettleProgram(ctx, f.program, toolcontract.ProgramSettlement{State: "completed", Status: &status, DetailReference: "output:program"}))
+	if len(settled) != 1 || settled[0] != "completed" {
+		t.Fatalf("settlement observations = %v", settled)
 	}
 }
 

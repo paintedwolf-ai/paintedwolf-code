@@ -26,6 +26,10 @@ describe("formatQuery", () => {
     ).toBe("");
   });
 
+  it("repeats a key once per array item", () => {
+    expect(formatQuery({ scopes: ["a", "b:c"], limit: 2 })).toBe("?scopes=a&scopes=b%3Ac&limit=2");
+  });
+
   it("sends false, which a tri-state filter reads as a value", () => {
     expect(formatQuery({ pinned: false })).toBe("?pinned=false");
   });

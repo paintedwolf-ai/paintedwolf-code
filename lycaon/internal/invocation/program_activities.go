@@ -40,8 +40,8 @@ func activityOutcome(receipt api.CommandExecutionReceipt) (string, string) {
 	}
 }
 
-func readProgramActivities(ctx context.Context, tx *sql.Tx, program api.CommandProgramReceipt) ([]api.CommandActivity, error) {
-	groups, err := readActivityGroups(ctx, tx, program.ID)
+func readProgramActivities(ctx context.Context, tx *sql.Tx, program api.CommandProgramReceipt, display func(string) string) ([]api.CommandActivity, error) {
+	groups, err := readActivityGroups(ctx, tx, program.ID, display)
 	if err != nil {
 		return nil, err
 	}
@@ -60,6 +60,7 @@ func readProgramActivities(ctx context.Context, tx *sql.Tx, program api.CommandP
 
 // ActivitySummary reads complete counts without paging execution bodies.
 func (r *SQLRecorder) ActivitySummary(ctx context.Context, session, program string) (api.CommandProgramReceipt, error) {
+	display := r.pathDisplay(ctx, session)
 	tx, err := r.beginProgramRead(ctx)
 	if err != nil {
 		return api.CommandProgramReceipt{}, err
@@ -69,7 +70,7 @@ func (r *SQLRecorder) ActivitySummary(ctx context.Context, session, program stri
 	if err != nil {
 		return result, err
 	}
-	result.Activities, err = readProgramActivities(ctx, tx, result)
+	result.Activities, err = readProgramActivities(ctx, tx, result, display)
 	if err != nil {
 		return result, err
 	}
@@ -78,13 +79,26 @@ func (r *SQLRecorder) ActivitySummary(ctx context.Context, session, program stri
 
 type activityObserverKey struct{}
 
+// ActivityObserver receives committed changes to a program's activities.
+type ActivityObserver struct {
+	Execution func(ctx context.Context, program, execution string)
+	Settled   func(ctx context.Context, program string)
+}
+
 // WithActivityObserver binds live presentation to this invocation's lifetime.
-func WithActivityObserver(ctx context.Context, observe func(context.Context, string, string)) context.Context {
-	return context.WithValue(ctx, activityObserverKey{}, observe)
+// A program that outlives its call still reports through it until it settles.
+func WithActivityObserver(ctx context.Context, observer ActivityObserver) context.Context {
+	return context.WithValue(ctx, activityObserverKey{}, observer)
 }
 
 func notifyActivity(ctx context.Context, program, execution string) {
-	if observe, ok := ctx.Value(activityObserverKey{}).(func(context.Context, string, string)); ok {
-		observe(ctx, program, execution)
+	if observer, ok := ctx.Value(activityObserverKey{}).(ActivityObserver); ok && observer.Execution != nil {
+		observer.Execution(ctx, program, execution)
+	}
+}
+
+func notifySettled(ctx context.Context, program string) {
+	if observer, ok := ctx.Value(activityObserverKey{}).(ActivityObserver); ok && observer.Settled != nil {
+		observer.Settled(ctx, program)
 	}
 }

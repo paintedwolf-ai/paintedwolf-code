@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // agentStreamStage owns one reviewed stream through publication and settlement.
@@ -93,10 +94,11 @@ func (c *revisionCapture) Close() {
 
 // publish commits credential delivery only after the filesystem effect committed,
 // including a committed effect whose later synchronization reports an error.
-func (s *agentStreamStage) publish(ctx context.Context) (fseffect.Result, error) {
+func (s *agentStreamStage) publish(ctx context.Context, tc tools.ToolContext) (fseffect.Result, error) {
 	result, err := s.replacement.Commit()
 	if result.Publication.Committed() {
 		s.delivery.Commit(ctx)
+		observeCommittedWorkerWrite(ctx, tc, s.request.Target.Abs, result.SHA256, result.Bytes)
 	}
 	return result, err
 }
