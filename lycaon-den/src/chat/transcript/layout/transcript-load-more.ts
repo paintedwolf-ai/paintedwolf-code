@@ -1,6 +1,10 @@
 import { createMemo, type Accessor } from "solid-js";
 import { scrollportMotionForViewport } from "../../../platform/scrolling/scrollport-motion.ts";
 import { TranscriptPageIntent } from "./transcript-page-intent.ts";
+import {
+  traceTranscriptPageApply,
+  traceTranscriptPageRequest,
+} from "./transcript-paging-trace.ts";
 import type { LycaonClient } from "../../../api/client.ts";
 import type { Message } from "../../../api/types.ts";
 import type { AppStore } from "../../../store/app-state-model.ts";
@@ -133,18 +137,31 @@ async function fetchTranscriptRequest(
     ...transcriptPageQuery(request),
   });
   if (appStore.state.transcriptSessionId !== sessionId || appStore.state.sessionViewEpoch !== epoch) return false;
-  if (!appStore.actions.loadTranscriptPage(request, page) || page.messages.length === 0) return false;
-  if (request.edge === "seek") {
-    const nextSpan = presentedOrdSpan(appStore.state.transcript);
-    return Boolean(
-      nextSpan &&
-        (!prevSpan ||
-          nextSpan.firstOrd !== prevSpan.firstOrd ||
-          nextSpan.lastOrd !== prevSpan.lastOrd),
-    );
+  const applied = appStore.actions.loadTranscriptPage(request, page);
+  const loaded = applied && page.messages.length > 0;
+  let advanced = false;
+  if (loaded) {
+    if (request.edge === "seek") {
+      const nextSpan = presentedOrdSpan(appStore.state.transcript);
+      advanced = Boolean(
+        nextSpan &&
+          (!prevSpan ||
+            nextSpan.firstOrd !== prevSpan.firstOrd ||
+            nextSpan.lastOrd !== prevSpan.lastOrd),
+      );
+    } else {
+      const next = transcriptPageRequest(appStore.state.transcript, request.edge);
+      advanced = !next || transcriptPageRequestKey(next) !== transcriptPageRequestKey(request);
+    }
   }
-  const next = transcriptPageRequest(appStore.state.transcript, request.edge);
-  return !next || transcriptPageRequestKey(next) !== transcriptPageRequestKey(request);
+  traceTranscriptPageApply({
+    request,
+    messages: page.messages,
+    applied,
+    advanced,
+    tw: appStore.state.transcript,
+  });
+  return advanced;
 }
 
 /** Fetches one page at a resident edge; returns true when the resident edge advanced. */
@@ -348,6 +365,14 @@ export function createTranscriptPaging(
     if (request.edge === "seek") {
       opts.geometry?.()?.prepareLanding(streamTarget.scrollTop);
     }
+    traceTranscriptPageRequest({
+      tw: opts.appStore.state.transcript,
+      request,
+      intent: intent.currentDirection(),
+      scrollTop: streamTarget.scrollTop,
+      scrollHeight: streamTarget.scrollHeight,
+      layout: opts.geometry?.() ?? null,
+    });
     inFlight = true;
     intent.started();
     let advanced = false;

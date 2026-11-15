@@ -22,6 +22,7 @@ import {
   denScrollDebugLog,
   isStreamScrollDebugEnabled,
 } from "../../stream/den-scroll-debug.ts";
+import { traceTranscriptRunwayDensity } from "./transcript-paging-trace.ts";
 import type { TranscriptItem } from "../projection/transcript-item-model.ts";
 
 const ROW_ESTIMATE_MISS_REPORT_PX = 24;
@@ -499,7 +500,7 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
       estimatedSize: (_, index) => estimatedSize(index),
     });
   const residentHeight = (): number => residentMetrics().residentHeightPx;
-  const runwayBudget = createTranscriptRunwayBudget();
+  const runwayBudget = createTranscriptRunwayBudget(traceTranscriptRunwayDensity);
   const runway = createMemo<TranscriptRunwayState>(() => {
     measurementEpoch();
     const unloaded = opts.unloadedOrds?.() ?? { before: 0, after: 0 };

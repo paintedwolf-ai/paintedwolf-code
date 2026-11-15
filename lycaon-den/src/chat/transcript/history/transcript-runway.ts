@@ -242,6 +242,20 @@ export function transcriptRunwayOrd(opts: {
   return undefined;
 }
 
+export type TranscriptRunwayDensityCause =
+  | "start_loaded"
+  | "page_landed"
+  | "first_measure";
+
+export type TranscriptRunwayDensityChange = {
+  fromPx: number;
+  toPx: number;
+  measuredOrds: number;
+  beforePx: number;
+  afterPx: number;
+  cause: TranscriptRunwayDensityCause;
+};
+
 export type TranscriptRunwayBudget = {
   /** Updates runway heights from the latest resident observation. */
   observe: (obs: TranscriptRunwayObservation) => TranscriptRunwayState;
@@ -259,7 +273,9 @@ export type TranscriptRunwayBudget = {
  * `unloaded.before` changes (a page lands or is evicted above), or when `unloaded.before === 0`,
  * so pure resident re-measurements never resize `beforePx` and push the reading anchor.
  */
-export function createTranscriptRunwayBudget(): TranscriptRunwayBudget {
+export function createTranscriptRunwayBudget(
+  onDensityChange?: (change: TranscriptRunwayDensityChange) => void,
+): TranscriptRunwayBudget {
   let state: TranscriptRunwayState = {
     beforePx: 0,
     afterPx: 0,
@@ -320,6 +336,21 @@ export function createTranscriptRunwayBudget(): TranscriptRunwayBudget {
       state.densityPxPerOrd === densityPxPerOrd
     ) {
       return state;
+    }
+    if (densityPxPerOrd !== state.densityPxPerOrd) {
+      const cause: TranscriptRunwayDensityCause = firstMeasure
+        ? "first_measure"
+        : unloaded.before === 0
+          ? "start_loaded"
+          : "page_landed";
+      onDensityChange?.({
+        fromPx: state.densityPxPerOrd,
+        toPx: densityPxPerOrd,
+        measuredOrds,
+        beforePx,
+        afterPx,
+        cause,
+      });
     }
     state = { beforePx, afterPx, densityPxPerOrd };
     return state;
