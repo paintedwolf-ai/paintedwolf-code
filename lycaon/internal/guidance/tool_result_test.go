@@ -3,8 +3,9 @@ package guidance
 import (
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
+
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,7 +29,7 @@ func TestComposeToolResultCompleted(t *testing.T) {
 // Quiet chrome follows the registry row for the raised code; the body never
 // enters the decision.
 func TestComposeToolResultUiVisibilityFollowsRegistry(t *testing.T) {
-	bundled, err := LoadHintConfig(extpacks.Bundled(hintregistry.DefaultDir))
+	bundled, err := LoadHintConfig(extpacks.Bundled(config.PlatformPolicy))
 	testutil.FailErr(t, "LoadHintConfig failed", err)
 	stock, err := LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfigStock failed", err)

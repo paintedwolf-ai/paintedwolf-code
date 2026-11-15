@@ -10,10 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
+
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/oar"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -58,7 +59,7 @@ func TestOARNoMaybeRejectFuncs(t *testing.T) {
 func TestOARHintCoverageUsesCatalogAnchors(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	contractcheck.FailErr(t, "install catalog", anchorcatalog.InstallFile(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "host", "anchors", "catalog.yaml")))
-	hintsAt := extpacks.Bundled(hintregistry.DefaultDir)
+	hintsAt := extpacks.Bundled(config.PlatformPolicy)
 	schemaDir := filepath.Join(root, "schemas")
 	loader, err := oar.NewLoader(schemaDir)
 	contractcheck.FailErr(t, "oar loader", err)

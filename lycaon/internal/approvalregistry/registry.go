@@ -9,14 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"gopkg.in/yaml.v3"
-)
 
-// DefaultDir is the platform pack approval registry, for callers that load that
-// one directory rather than the ListEffective union of pack approvals/ dirs.
-const DefaultDir = config.PlatformApprovals
+	"github.com/lycaon/lycaon/internal/extpacks"
+)
 
 // ExplainManifestName is the filename inside each approvals/<KEY>/ feature dir.
 const ExplainManifestName = "explain.yaml"

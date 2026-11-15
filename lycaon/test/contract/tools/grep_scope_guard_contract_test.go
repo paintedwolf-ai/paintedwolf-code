@@ -12,14 +12,13 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/toolscope"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestGrepScopeRequiredHintRegistered(t *testing.T) {
 	t.Parallel()
-	cfg, err := guidance.LoadValidatedHintConfig(extpacks.Bundled(hintregistry.DefaultDir))
+	cfg, err := guidance.LoadValidatedHintConfig(extpacks.Bundled(config.PlatformPolicy))
 	contractcheck.FailErr(t, "hint config", err)
 	entry, ok := cfg.HintCodes["GREP_SCOPE_REQUIRED"]
 	if !ok {

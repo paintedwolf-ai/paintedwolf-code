@@ -24,8 +24,6 @@ import (
 
 // toolBatch runs one assistant message's tool calls: ordering, concurrency, holds, and settlement.
 
-const concurrentToolCallLimit = spawn.MaxConcurrentToolCalls
-
 func registryContract(reg tools.ToolRegistry, name string) (toolcontract.Contract, bool) {
 	if reg == nil {
 		return toolcontract.Contract{}, false
@@ -57,7 +55,7 @@ func reorderToolBatchExecution(reg tools.ToolRegistry, calls []api.ToolCall) []a
 }
 
 func concurrentRunLimit(reg tools.ToolRegistry, run []api.ToolCall) int {
-	limit := concurrentToolCallLimit
+	limit := spawn.MaxConcurrentToolCalls
 	for i := range run {
 		contract, ok := registryContract(reg, run[i].Name)
 		if ok && contract.BatchConcurrencyLimit > 0 && contract.BatchConcurrencyLimit < limit {

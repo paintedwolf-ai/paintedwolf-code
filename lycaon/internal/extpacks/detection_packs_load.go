@@ -19,8 +19,6 @@ const (
 	detectionManifestLeaf = "pack"
 	// detectionFixturesLeaf is the authoring corpus unit's last segment.
 	detectionFixturesLeaf = "fixtures"
-	// detectionRulesSegment is the directory segment holding rule documents.
-	detectionRulesSegment = detectionpack.PackRulesDir
 )
 
 // detectionPackUnitID assigns provider-scoped ids to manifests, fixtures, and rules.
@@ -40,12 +38,12 @@ func detectionPackUnitID(provider string, parts []string) string {
 		return base + detectionManifestLeaf
 	case len(parts) == 4 && parts[3] == detectionpack.PackFixturesFile:
 		return base + detectionFixturesLeaf
-	case len(parts) == 5 && parts[3] == detectionRulesSegment:
+	case len(parts) == 5 && parts[3] == detectionpack.PackRulesDir:
 		slug, ok := detectionpack.RuleFileSlug(parts[4])
 		if !ok {
 			return ""
 		}
-		return base + detectionRulesSegment + "/" + slug
+		return base + detectionpack.PackRulesDir + "/" + slug
 	default:
 		return ""
 	}
@@ -196,8 +194,8 @@ func groupDetectionUnits(eff *EffectiveCatalog) []*detectionGroup {
 		switch {
 		case leaf == detectionManifestLeaf:
 			g.manifest = id
-		case strings.HasPrefix(leaf, detectionRulesSegment+"/"):
-			g.rules[strings.TrimPrefix(leaf, detectionRulesSegment+"/")] = id
+		case strings.HasPrefix(leaf, detectionpack.PackRulesDir+"/"):
+			g.rules[strings.TrimPrefix(leaf, detectionpack.PackRulesDir+"/")] = id
 		}
 	}
 	groups := make([]*detectionGroup, 0, len(byKey))

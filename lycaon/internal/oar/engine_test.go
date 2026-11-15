@@ -7,9 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
+
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -22,7 +23,7 @@ func schemaDir(t *testing.T) string {
 // a host path — the tests below load the same tree the binary ships.
 func hintsDir(t *testing.T) extpacks.Source {
 	t.Helper()
-	return extpacks.Bundled(hintregistry.DefaultDir)
+	return extpacks.Bundled(config.PlatformPolicy)
 }
 
 func loadStockRules(t *testing.T) *RuleSet {
