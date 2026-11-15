@@ -27,6 +27,7 @@ type fakeWorkspaces struct {
 	created  []createCall
 	evicted  []string
 	failNext error
+	onCreate func()
 	inFlight atomic.Int32
 	maxSeen  atomic.Int32
 }
@@ -41,13 +42,20 @@ func (f *fakeWorkspaces) create(viewID, parent string) (*workspace.Binding, work
 		}
 	}
 	f.mu.Lock()
-	defer f.mu.Unlock()
+	hook := f.onCreate
+	f.onCreate = nil
 	if err := f.failNext; err != nil {
 		f.failNext = nil
+		f.mu.Unlock()
 		return nil, workspace.SandboxLayout{}, err
 	}
 	f.created = append(f.created, createCall{viewID: viewID, parent: parent})
-	return &workspace.Binding{Root: filepath.Join(f.base, viewID)}, workspace.SandboxLayout{}, nil
+	root := filepath.Join(f.base, viewID)
+	f.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	return &workspace.Binding{Root: root}, workspace.SandboxLayout{}, nil
 }
 
 func (f *fakeWorkspaces) CreateWorkerBranch(_ context.Context, _ []projectroot.RootRef, _, viewID string) (*workspace.Binding, workspace.SandboxLayout, error) {
@@ -67,6 +75,7 @@ func (f *fakeWorkspaces) EvictWorkerBranch(_ context.Context, root string) error
 
 type laneFixture struct {
 	ws       *fakeWorkspaces
+	records  *workerrecords.Store
 	lanes    *workerlane.Service
 	actor    workerrecords.Actor
 	workerID string
@@ -82,7 +91,7 @@ func newLaneFixture(t *testing.T) *laneFixture {
 	w, err := records.CreateWorker(t.Context(), actor, workerrecords.Op{ID: "create"}, workerrecords.WorkerSpec{AgentType: "implementer", ScopeMode: workerrecords.ScopeWrite})
 	testutil.FailErr(t, "create worker", err)
 	ws := &fakeWorkspaces{base: t.TempDir()}
-	return &laneFixture{ws: ws, lanes: workerlane.New(ws, records), actor: actor, workerID: w.WorkerID}
+	return &laneFixture{ws: ws, records: records, lanes: workerlane.New(ws, records), actor: actor, workerID: w.WorkerID}
 }
 
 func (f *laneFixture) admit(t *testing.T, facts workerlane.Facts) (workerlane.Binding, error) {
@@ -190,5 +199,41 @@ func TestLaneOperationsSerializePerWorker(t *testing.T) {
 	}
 	if n := len(f.ws.created); n != 9 {
 		t.Fatalf("preparations = %d, want one per admission", n)
+	}
+}
+
+func TestRefreshIdlePreparesWhileIdleAndIgnoresClosedWorker(t *testing.T) {
+	f := newLaneFixture(t)
+	first, err := f.admit(t, workerlane.Facts{Write: true})
+	testutil.FailErr(t, "first round", err)
+
+	refreshed, did, err := f.lanes.RefreshIdle(t.Context(), workerlane.Request{
+		Actor: f.actor, Op: workerrecords.Op{ID: "idle-refresh-1"}, WorkerID: f.workerID,
+		Facts: workerlane.Facts{Write: true, HasLane: true, LastChange: workerlane.ChangeLanded},
+	})
+	testutil.FailErr(t, "idle refresh", err)
+	if !did || refreshed.Generation != 2 || refreshed.Root == first.Root {
+		t.Fatalf("idle refresh = (%+v, %v)", refreshed, did)
+	}
+
+	f.ws.onCreate = func() {
+		_, closeErr := f.records.Close(t.Context(), f.actor, workerrecords.Op{ID: "close-mid-prep"}, f.workerID, "withdrawn")
+		testutil.FailErr(t, "close mid prep", closeErr)
+	}
+	late, did, err := f.lanes.RefreshIdle(t.Context(), workerlane.Request{
+		Actor: f.actor, Op: workerrecords.Op{ID: "idle-refresh-late"}, WorkerID: f.workerID,
+		Facts: workerlane.Facts{Write: true, HasLane: true, LastChange: workerlane.ChangeLanded},
+	})
+	testutil.FailErr(t, "late refresh on closed worker", err)
+	if did || late.Generation != 0 {
+		t.Fatalf("closed worker accepted late preparation: (%+v, %v)", late, did)
+	}
+	latest, ok, err := f.records.LatestPreparation(t.Context(), f.actor, f.workerID)
+	testutil.FailErr(t, "latest preparation", err)
+	if !ok || latest.BindingGeneration != 2 || latest.PreparationRef != refreshed.Root {
+		t.Fatalf("recorded preparation after late callback = %+v (ok=%v)", latest, ok)
+	}
+	if _, err := f.admit(t, workerlane.Facts{Write: true, HasLane: true}); !errors.Is(err, workerlane.ErrClosed) {
+		t.Fatalf("admit on closed worker = %v, want ErrClosed", err)
 	}
 }

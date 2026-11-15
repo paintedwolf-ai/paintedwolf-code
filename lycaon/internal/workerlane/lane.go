@@ -25,6 +25,8 @@ var (
 	ErrHeld = errors.New("lane is held")
 	// ErrNotPrepared reports a write round on a worker with no lane.
 	ErrNotPrepared = errors.New("worker has no prepared lane")
+	// ErrClosed reports a worker that was closed before its lane switched.
+	ErrClosed = errors.New("worker is closed")
 )
 
 // HoldError names the hold that refused admission.
@@ -74,6 +76,11 @@ type Request struct {
 func (s *Service) Admit(ctx context.Context, req Request) (Binding, error) {
 	unlock := s.lock(req.WorkerID)
 	defer unlock()
+	if closed, err := s.isClosed(ctx, req.Actor, req.WorkerID); err != nil {
+		return Binding{}, err
+	} else if closed {
+		return Binding{}, ErrClosed
+	}
 	sel := Select(req.Facts)
 	switch sel.Action {
 	case ActionHold:
@@ -92,6 +99,43 @@ func (s *Service) Admit(ctx context.Context, req Request) (Binding, error) {
 		return current, nil
 	}
 	return s.switchLane(ctx, req, sel)
+}
+
+// RefreshIdle prepares a fresh lane view after a landing while the worker has
+// no unsettled round. Closing the worker before or during preparation leaves
+// its recorded binding untouched.
+func (s *Service) RefreshIdle(ctx context.Context, req Request) (Binding, bool, error) {
+	unlock := s.lock(req.WorkerID)
+	defer unlock()
+	if closed, err := s.isClosed(ctx, req.Actor, req.WorkerID); err != nil || closed {
+		return Binding{}, false, err
+	}
+	rounds, err := s.records.Rounds(ctx, req.Actor, req.WorkerID)
+	if err != nil {
+		return Binding{}, false, err
+	}
+	for _, r := range rounds {
+		if r.SettledAt == "" {
+			return Binding{}, false, nil
+		}
+	}
+	sel := Select(req.Facts)
+	if sel.Action != ActionRefresh {
+		return Binding{}, false, nil
+	}
+	b, err := s.switchLane(ctx, req, sel)
+	if errors.Is(err, ErrClosed) {
+		return Binding{}, false, nil
+	}
+	return b, err == nil, err
+}
+
+func (s *Service) isClosed(ctx context.Context, actor workerrecords.Actor, workerID string) (bool, error) {
+	w, err := s.records.Worker(ctx, actor, workerID)
+	if err != nil {
+		return false, err
+	}
+	return w.ClosedAt != "", nil
 }
 
 // switchLane prepares the next generation and records it only when
@@ -123,6 +167,13 @@ func (s *Service) switchLane(ctx context.Context, req Request, sel Selection) (B
 	}
 	if binding == nil || strings.TrimSpace(binding.Root) == "" {
 		return Binding{}, fmt.Errorf("prepare lane generation %d: no branch root", generation)
+	}
+	if closed, err := s.isClosed(ctx, req.Actor, req.WorkerID); err != nil {
+		_ = s.workspaces.EvictWorkerBranch(context.WithoutCancel(ctx), binding.Root)
+		return Binding{}, err
+	} else if closed {
+		_ = s.workspaces.EvictWorkerBranch(context.WithoutCancel(ctx), binding.Root)
+		return Binding{}, ErrClosed
 	}
 	if _, err := s.records.RecordPreparation(ctx, req.Actor, req.Op, req.WorkerID, workerrecords.Preparation{
 		SourceResultID: source, PreparationRef: binding.Root, BindingGeneration: generation,
