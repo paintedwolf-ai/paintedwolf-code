@@ -3,6 +3,7 @@ package workerrecords
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -46,7 +47,7 @@ func resultWorker(ctx context.Context, q *db.Queries, actor Actor, resultID stri
 		return db.Workers{}, owner, err
 	}
 	w, err := coordinatorWorker(ctx, q, actor, owner.WorkerID)
-	if err == ErrWorkerNotFound {
+	if errors.Is(err, ErrWorkerNotFound) {
 		return db.Workers{}, owner, ErrResultNotFound
 	}
 	return w, owner, err

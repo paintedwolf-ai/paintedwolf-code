@@ -70,25 +70,28 @@ func TestReleasedJobsBecomeWorkers(t *testing.T) {
 
 	workers := map[string]string{}
 	agents := map[string]string{}
-	rows, err := reader.QueryContext(t.Context(), `SELECT name, id, agent_type, COALESCE(child_session_id, ''), scope_mode, brief FROM workers WHERE session_id = 'parent' ORDER BY name`)
-	testutil.FailErr(t, "read workers", err)
-	for rows.Next() {
-		var name, id, agent, child, scope, brief string
-		testutil.FailErr(t, "scan worker", rows.Scan(&name, &id, &agent, &child, &scope, &brief))
-		workers[name] = id
-		agents[name] = agent
-		switch name {
-		case "implementer-1":
-			if child != "child-1" || scope != "write" || brief != "brief of j3" {
-				t.Fatalf("implementer-1 = child %q scope %q brief %q", child, scope, brief)
-			}
-		case "repo-researcher-1":
-			if child != "" {
-				t.Fatalf("a child of another session was bound: %q", child)
+	func() {
+		rows, err := reader.QueryContext(t.Context(), `SELECT name, id, agent_type, COALESCE(child_session_id, ''), scope_mode, brief FROM workers WHERE session_id = 'parent' ORDER BY name`)
+		testutil.FailErr(t, "read workers", err)
+		defer func() { testutil.FailErr(t, "close workers", rows.Close()) }()
+		for rows.Next() {
+			var name, id, agent, child, scope, brief string
+			testutil.FailErr(t, "scan worker", rows.Scan(&name, &id, &agent, &child, &scope, &brief))
+			workers[name] = id
+			agents[name] = agent
+			switch name {
+			case "implementer-1":
+				if child != "child-1" || scope != "write" || brief != "brief of j3" {
+					t.Fatalf("implementer-1 = child %q scope %q brief %q", child, scope, brief)
+				}
+			case "repo-researcher-1":
+				if child != "" {
+					t.Fatalf("a child of another session was bound: %q", child)
+				}
 			}
 		}
-	}
-	testutil.FailErr(t, "close workers", rows.Close())
+		testutil.FailErr(t, "iterate workers", rows.Err())
+	}()
 	long := strings.Repeat("é", 62) + "-1"
 	if len(workers) != 6 || workers["implementer-1"] == "" || workers["implementer-2"] == "" || workers["repo-researcher-1"] == "" ||
 		agents["worker-1"] != "worker" || workers[long] == "" {
@@ -101,14 +104,17 @@ func TestReleasedJobsBecomeWorkers(t *testing.T) {
 		settled sql.NullString
 	}
 	var rounds []round
-	rows, err = reader.QueryContext(t.Context(), `SELECT ordinal, job_id, settled_at FROM worker_rounds WHERE worker_id = ? ORDER BY ordinal`, workers["implementer-1"])
-	testutil.FailErr(t, "read rounds", err)
-	for rows.Next() {
-		var r round
-		testutil.FailErr(t, "scan round", rows.Scan(&r.ordinal, &r.job, &r.settled))
-		rounds = append(rounds, r)
-	}
-	testutil.FailErr(t, "close rounds", rows.Close())
+	func() {
+		rows, err := reader.QueryContext(t.Context(), `SELECT ordinal, job_id, settled_at FROM worker_rounds WHERE worker_id = ? ORDER BY ordinal`, workers["implementer-1"])
+		testutil.FailErr(t, "read rounds", err)
+		defer func() { testutil.FailErr(t, "close rounds", rows.Close()) }()
+		for rows.Next() {
+			var r round
+			testutil.FailErr(t, "scan round", rows.Scan(&r.ordinal, &r.job, &r.settled))
+			rounds = append(rounds, r)
+		}
+		testutil.FailErr(t, "iterate rounds", rows.Err())
+	}()
 	if len(rounds) != 3 || rounds[0].job != "j1" || rounds[0].settled.String != t1 ||
 		rounds[1].job != "j2" || rounds[1].settled.String != t3 || rounds[2].job != "j3" || rounds[2].settled.Valid {
 		t.Fatalf("rounds = %+v", rounds)

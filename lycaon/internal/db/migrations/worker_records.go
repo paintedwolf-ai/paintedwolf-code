@@ -292,6 +292,9 @@ func workerRecordsWrites(ctx context.Context, store DBTX, _ uint64) (uint64, err
 	if err := store.QueryRowContext(ctx, `SELECT COUNT(*), COALESCE(SUM(length(brief)), 0) FROM worker_jobs`).Scan(&jobs, &briefBytes); err != nil {
 		return 0, err
 	}
+	if jobs < 0 || briefBytes < 0 {
+		return 0, fmt.Errorf("negative worker job write count")
+	}
 	const perJob = 2048
 	return uint64(jobs)*perJob + uint64(briefBytes), nil
 }
