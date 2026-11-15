@@ -65,7 +65,7 @@ test("line facts show a hint on rest and open the card only on activation", asyn
   await expect(card).toHaveCount(0);
   expect(await readFocusState()).toEqual(before);
 
-  const mod = await page.evaluate(() => /Mac|iPhone|iPad/.test(navigator.platform) ? "Meta" : "Control");
+  const mod = await page.evaluate(() => /mac/i.test(navigator.platform) || /mac os/i.test(navigator.userAgent) ? "Meta" : "Control");
   const treeFile = page.getByTestId("files-tree-file").filter({ hasText: "load.go" });
   await treeFile.focus();
   await expect(treeFile).toBeFocused();
