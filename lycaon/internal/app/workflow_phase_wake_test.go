@@ -379,11 +379,11 @@ func TestComposeWorkerAssignmentRendersNamedFollowUpAndWorkflowContext(t *testin
 		DoneWhen: []string{"Every open claim has grounding evidence or a refutation"},
 	}
 	task := &api.WorkerTask{
-		ID:             "job-round-2",
+		ID:              "job-round-2",
 		ParentSessionID: sess.ID,
-		ChildSessionID: childSess.ID,
-		Prompt:         "Re-verify token expiry handling in middleware",
-		Scope:          &api.TaskScope{Mode: api.TaskScopeModeRead},
+		ChildSessionID:  childSess.ID,
+		Prompt:          "Re-verify token expiry handling in middleware",
+		Scope:           &api.TaskScope{Mode: api.TaskScopeModeRead},
 	}
 	rendered, err := builder.composeWorkerAssignment(ctx, tctx, "skeptic", brief, task)
 	testutil.FailErr(t, "compose worker assignment", err)
