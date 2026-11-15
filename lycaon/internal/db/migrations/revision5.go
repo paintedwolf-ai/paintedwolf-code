@@ -3,6 +3,7 @@ package migrations
 import (
 	"context"
 	"database/sql"
+	_ "embed"
 	"fmt"
 )
 
@@ -24,9 +25,9 @@ type Part struct {
 func Revision5(target Baseline) Step {
 	return composeStep(Step{
 		ID:       "source-manifests-and-command-records",
-		Checksum: "4f6ca42e5b2dd41ed2ad764a6e5af2302201115fcc9a37a393ec8eddea18384a",
+		Checksum: "06665671cc951c7dac37e1e766361205999b0f3f83aea03cad3eb8bec38e04db",
 		From:     manifestLayoutSource, To: target,
-	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), WorkerRecords())
+	}, SourceManifestLayout(), VaultUnlockAway(), EffectPermitIdentity(), ProgramReceipts(), SourceLinkKind(), SessionProgressIdentity(), TurnLoadVisibility(), EvidenceRootID(), ToolResultFileEdits(), Briefings(), WorkerRecords())
 }
 
 func composeStep(step Step, parts ...Part) Step {
@@ -68,4 +69,15 @@ func composeStep(step Step, parts ...Part) Step {
 		return total, nil
 	}
 	return step
+}
+
+//go:embed briefings.sql
+var briefingsSQL []byte
+
+// Briefings adds content-addressed briefing results, records and targets.
+func Briefings() Part {
+	return Part{Source: briefingsSQL, Apply: func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, string(briefingsSQL))
+		return err
+	}}
 }

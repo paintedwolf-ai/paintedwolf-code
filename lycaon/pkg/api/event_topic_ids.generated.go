@@ -56,6 +56,9 @@ const (
 	EventTopicSourceOperation EventTopic = "source_operation"
 	// EventTopicFileBriefing Project file briefing progress.
 	EventTopicFileBriefing EventTopic = "file_briefing"
+	// EventTopicBriefing Step, activity and worker briefing snapshots, and resets
+	// that clear earlier epochs after summaries are turned off.
+	EventTopicBriefing EventTopic = "briefing"
 	// EventTopicArtifact Project-scoped. A durable visual artifact was written or
 	// deleted. Carries no bytes: the gallery re-reads the list, so one artifact's
 	// metadata, reference counts, and tile all render from one place.
@@ -126,6 +129,7 @@ var allEventTopicValues = []EventTopic{
 	EventTopicSourceChanged,
 	EventTopicSourceOperation,
 	EventTopicFileBriefing,
+	EventTopicBriefing,
 	EventTopicArtifact,
 	EventTopicAgentPresence,
 	EventTopicEditorDocument,

@@ -43,7 +43,7 @@ describe("chat content navigation", () => {
   it("does not reveal a search result that was canceled while loading", async () => {
     const f = fixture();
     const reveal = vi.spyOn(f.editor.reader,"reveal");
-    const pending = f.editor.reveal(800,7);
+    const pending = f.editor.revealMatch({offset:800,length:7});
     f.editor.clearMatch();
     f.finish();
     await pending;

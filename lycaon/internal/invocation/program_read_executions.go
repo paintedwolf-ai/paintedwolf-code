@@ -8,9 +8,11 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func readExecutions(ctx context.Context, tx *sql.Tx, program string, after int64, limit int, selection executionSelection) ([]api.CommandExecutionReceipt, int64, error) {
-	const query = `SELECT e.id,e.program_id,e.node_id,e.parent_execution_id,d.owner,d.lifecycle,e.definition_digest,e.arguments_representation,e.arguments_digest,e.reviewed_arguments_representation,e.reviewed_arguments_digest,e.reviewed_arguments_ref,e.native_command,e.effect_mode,e.effect_classes_json,e.arguments_ref,e.canonical,e.state,e.owner_started,e.owner_invoked,e.status_code,e.stop_code,e.host_stop_code,e.complete,e.publication_eligible,e.output_publishable,e.effect_certainty,e.evidence_kind,e.evidence_ref,e.owner_ref,e.recovery_ref,e.held_version_id,e.accepted_revision,e.published_revision,e.detail_ref,e.approval_ref,e.job_handle,e.conflict_path,e.conflict_expected_revision,e.conflict_observed_revision,e.ordinal FROM invocation_program_executions e JOIN invocation_program_definitions d ON d.program_id=e.program_id AND d.definition_digest=e.definition_digest WHERE e.program_id=? AND e.ordinal>? ` + activityExecutionFilter + ` ORDER BY e.ordinal LIMIT ?`
-	rows, err := tx.QueryContext(ctx, query, program, after, selection.ids, selection.ids, limit)
+// readExecutions reads executions in ordinal order after the given ordinal,
+// skipping the first skip matches.
+func readExecutions(ctx context.Context, tx *sql.Tx, program string, after int64, skip, limit int, selection executionSelection) ([]api.CommandExecutionReceipt, int64, error) {
+	const query = `SELECT e.id,e.program_id,e.node_id,e.parent_execution_id,d.owner,d.lifecycle,e.definition_digest,e.arguments_representation,e.arguments_digest,e.reviewed_arguments_representation,e.reviewed_arguments_digest,e.reviewed_arguments_ref,e.native_command,e.effect_mode,e.effect_classes_json,e.arguments_ref,e.canonical,e.state,e.owner_started,e.owner_invoked,e.status_code,e.stop_code,e.host_stop_code,e.complete,e.publication_eligible,e.output_publishable,e.effect_certainty,e.evidence_kind,e.evidence_ref,e.owner_ref,e.recovery_ref,e.held_version_id,e.accepted_revision,e.published_revision,e.detail_ref,e.approval_ref,e.job_handle,e.conflict_path,e.conflict_expected_revision,e.conflict_observed_revision,e.ordinal FROM invocation_program_executions e JOIN invocation_program_definitions d ON d.program_id=e.program_id AND d.definition_digest=e.definition_digest WHERE e.program_id=? AND e.ordinal>? ` + activityExecutionFilter + ` ORDER BY e.ordinal LIMIT ? OFFSET ?`
+	rows, err := tx.QueryContext(ctx, query, program, after, selection.ids, selection.ids, limit, skip)
 	if err != nil {
 		return nil, after, err
 	}
@@ -46,38 +48,41 @@ func readExecutions(ctx context.Context, tx *sql.Tx, program string, after int64
 // readExecutionOutputs attaches each child's latest retained stdout and stderr
 // handle with its stored screened preview. The body stays behind its handle.
 func readExecutionOutputs(ctx context.Context, tx *sql.Tx, program string, executions []api.CommandExecutionReceipt) error {
-	for i := range executions {
-		outputs, err := readExecutionOutput(ctx, tx, program, executions[i].ID)
-		if err != nil {
-			return err
-		}
-		executions[i].Outputs = outputs
+	if len(executions) == 0 {
+		return nil
 	}
-	return nil
-}
-
-func readExecutionOutput(ctx context.Context, tx *sql.Tx, program, execution string) ([]api.CommandExecutionOutput, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT o.stream,o.reference,json_extract(o.blob_json,'$.Size'),o.complete,o.redacted,o.preview,o.preview_truncated,o.tail_preview,o.line_count FROM invocation_program_outputs o WHERE o.program_id=? AND o.execution_id=? AND `+latestExecutionOutput+` ORDER BY o.stream`, program, execution)
+	index := make(map[string]int, len(executions))
+	ids := make([]string, len(executions))
+	for i := range executions {
+		index[executions[i].ID] = i
+		ids[i] = executions[i].ID
+	}
+	encoded, err := json.Marshal(ids)
 	if err != nil {
-		return nil, err
+		return err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT o.execution_id,o.stream,o.reference,json_extract(o.blob_json,'$.Size'),o.complete,o.redacted,o.preview,o.preview_truncated,o.tail_preview,o.line_count FROM invocation_program_outputs o WHERE o.program_id=? AND o.execution_id IN (SELECT value FROM json_each(?)) AND `+latestExecutionOutput+` ORDER BY o.execution_id,o.stream`, program, string(encoded))
+	if err != nil {
+		return err
 	}
 	defer func() { _ = rows.Close() }()
-	var outputs []api.CommandExecutionOutput
 	for rows.Next() {
+		var execution string
 		var output api.CommandExecutionOutput
 		var lines sql.NullInt64
-		if err := rows.Scan(&output.Stream, &output.Ref, &output.SizeBytes, &output.Complete, &output.Redacted, &output.Preview, &output.PreviewTruncated, &output.TailPreview, &lines); err != nil {
-			return nil, err
+		if err := rows.Scan(&execution, &output.Stream, &output.Ref, &output.SizeBytes, &output.Complete, &output.Redacted, &output.Preview, &output.PreviewTruncated, &output.TailPreview, &lines); err != nil {
+			return err
 		}
 		if lines.Valid {
 			output.LineCount = &lines.Int64
 		}
-		outputs = append(outputs, output)
+		at := index[execution]
+		executions[at].Outputs = append(executions[at].Outputs, output)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return err
 	}
-	return outputs, rows.Close()
+	return rows.Close()
 }
 
 const latestExecutionOutput = `o.stream IN ('stdout','stderr') AND NOT EXISTS (SELECT 1 FROM invocation_program_outputs later WHERE later.program_id=o.program_id AND later.execution_id=o.execution_id AND later.stream=o.stream AND (later.created_at>o.created_at OR (later.created_at=o.created_at AND later.id>o.id)))`

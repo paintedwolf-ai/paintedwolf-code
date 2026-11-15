@@ -1,0 +1,460 @@
+package layeredfs
+
+import (
+	"errors"
+	"io/fs"
+	"path"
+	"path/filepath"
+	"strings"
+	"syscall"
+)
+
+const maxSymlinkHops = 16
+
+type resolvedLayerEntry struct {
+	qpath       QualifiedPath
+	layer       LayerSource
+	attr        EntryAttr
+	privNode    *privateNode
+	parentEntry *ParentEntry
+	lowerEntry  *LowerEntry
+}
+
+// Stat resolves a path following symlinks within the root boundary and returns its attributes.
+func (c *Core) Stat(qpath QualifiedPath) (EntryAttr, error) {
+	if err := c.barrier.enterOp(); err != nil {
+		return EntryAttr{}, err
+	}
+	defer c.barrier.leaveOp()
+	res, err := resolvePath(c, qpath, true, false)
+	if err != nil {
+		return EntryAttr{}, err
+	}
+	emitObservation(c, ObservationEvent{
+		Path:       res.qpath,
+		Layer:      res.layer,
+		NodeID:     res.attr.NodeID,
+		Generation: res.attr.Generation,
+		Kind:       ObserveStat,
+		Size:       res.attr.Size,
+		ModTimeNS:  res.attr.ModTime.UnixNano(),
+	})
+	return res.attr, nil
+}
+
+// Lstat resolves a path without following the final component if it is a symlink.
+func (c *Core) Lstat(qpath QualifiedPath) (EntryAttr, error) {
+	if err := c.barrier.enterOp(); err != nil {
+		return EntryAttr{}, err
+	}
+	defer c.barrier.leaveOp()
+	res, err := resolvePath(c, qpath, false, false)
+	if err != nil {
+		return EntryAttr{}, err
+	}
+	emitObservation(c, ObservationEvent{
+		Path:       res.qpath,
+		Layer:      res.layer,
+		NodeID:     res.attr.NodeID,
+		Generation: res.attr.Generation,
+		Kind:       ObserveLookup,
+		Size:       res.attr.Size,
+		ModTimeNS:  res.attr.ModTime.UnixNano(),
+	})
+	return res.attr, nil
+}
+
+// LstatAttrs is Lstat without the extended attributes, for callers that present metadata only.
+// The kernel asks for this on every path component it walks, so it must not open the file.
+func (c *Core) LstatAttrs(qpath QualifiedPath) (EntryAttr, error) {
+	if err := c.barrier.enterOp(); err != nil {
+		return EntryAttr{}, err
+	}
+	defer c.barrier.leaveOp()
+	res, err := resolveWith(c, qpath, false, false, false)
+	if err != nil {
+		return EntryAttr{}, err
+	}
+	emitObservation(c, ObservationEvent{
+		Path:       res.qpath,
+		Layer:      res.layer,
+		NodeID:     res.attr.NodeID,
+		Generation: res.attr.Generation,
+		Kind:       ObserveLookup,
+		Size:       res.attr.Size,
+		ModTimeNS:  res.attr.ModTime.UnixNano(),
+	})
+	return res.attr, nil
+}
+
+// Readlink reads the target of a symbolic link without following the final component.
+func (c *Core) Readlink(qpath QualifiedPath) (string, error) {
+	if err := c.barrier.enterOp(); err != nil {
+		return "", err
+	}
+	defer c.barrier.leaveOp()
+	res, err := resolvePath(c, qpath, false, false)
+	if err != nil {
+		return "", err
+	}
+	if res.attr.Kind != EntrySymlink {
+		return "", syscall.EINVAL
+	}
+	emitObservation(c, ObservationEvent{
+		Path:       res.qpath,
+		Layer:      res.layer,
+		NodeID:     res.attr.NodeID,
+		Generation: res.attr.Generation,
+		Kind:       ObserveReadlink,
+	})
+	return res.attr.LinkTarget, nil
+}
+
+func resolvePath(c *Core, qpath QualifiedPath, followFinal bool, writeIntent bool) (resolvedLayerEntry, error) {
+	return resolveWith(c, qpath, followFinal, writeIntent, true)
+}
+
+// resolveWith loads extended attributes for the final component only when wantXattrs is set, and
+// never for the directories on the way to it.
+func resolveWith(c *Core, qpath QualifiedPath, followFinal, writeIntent, wantXattrs bool) (resolvedLayerEntry, error) {
+	c.mu.RLock()
+	if c.state.released {
+		c.mu.RUnlock()
+		return resolvedLayerEntry{}, ErrViewReleased
+	}
+	_, rootOK := c.roots.byID[qpath.RootID]
+	c.mu.RUnlock()
+	if !rootOK {
+		return resolvedLayerEntry{}, ErrInvalidRoot
+	}
+	rel, err := sanitizeRelPath(qpath.Rel)
+	if err != nil {
+		return resolvedLayerEntry{}, err
+	}
+	qpath.Rel = rel
+	qpath, err = checkGitAccess(c, qpath, writeIntent)
+	if err != nil {
+		return resolvedLayerEntry{}, err
+	}
+	walk := newLowerWalk(c, qpath.RootID)
+	defer walk.close()
+	if qpath.Rel == "." {
+		return lookupComponent(c, qpath, walk, wantXattrs)
+	}
+
+	parts := strings.Split(qpath.Rel, "/")
+	var resolvedParts []string
+	hops := 0
+
+	for len(parts) > 0 {
+		comp := parts[0]
+		parts = parts[1:]
+		switch comp {
+		case "", ".":
+			continue
+		case "..":
+			if len(resolvedParts) == 0 {
+				return resolvedLayerEntry{}, ErrSymlinkEscape
+			}
+			resolvedParts = resolvedParts[:len(resolvedParts)-1]
+			continue
+		}
+		candidateRel := comp
+		if len(resolvedParts) > 0 {
+			candidateRel = strings.Join(resolvedParts, "/") + "/" + comp
+		}
+		c.mu.RLock()
+		spelled := c.state.storedSpelling(QualifiedPath{RootID: qpath.RootID, Rel: candidateRel})
+		c.mu.RUnlock()
+		if c.roots.hidden(spelled) {
+			return resolvedLayerEntry{}, fs.ErrNotExist
+		}
+		candPath, err := checkGitAccess(c, spelled, writeIntent && len(parts) == 0)
+		if err != nil {
+			return resolvedLayerEntry{}, err
+		}
+		isFinal := len(parts) == 0
+		entry, lErr := lookupComponent(c, candPath, walk, isFinal && wantXattrs)
+		if errors.Is(lErr, fs.ErrNotExist) && spelled.Rel == candidateRel {
+			// A folding root folds even in a lower directory that does not: the lower entry under
+			// its own spelling is this name.
+			if lower, ok := c.lowerSpellingOf(spelled); ok {
+				if candPath, err = checkGitAccess(c, lower, writeIntent && isFinal); err != nil {
+					return resolvedLayerEntry{}, err
+				}
+				spelled = lower
+				entry, lErr = lookupComponent(c, candPath, walk, isFinal && wantXattrs)
+			}
+		}
+		if lErr != nil {
+			return resolvedLayerEntry{}, lErr
+		}
+		if entry.attr.Kind == EntrySymlink && (!isFinal || followFinal) {
+			hops++
+			if hops > maxSymlinkHops {
+				return resolvedLayerEntry{}, syscall.ELOOP
+			}
+			newParts, reset, sErr := expandSymlinkTarget(c, qpath.RootID, entry.attr.LinkTarget, parts)
+			if sErr != nil {
+				return resolvedLayerEntry{}, sErr
+			}
+			if reset {
+				resolvedParts = nil
+			}
+			parts = newParts
+			continue
+		}
+		if !isFinal && entry.attr.Kind != EntryDirectory {
+			return resolvedLayerEntry{}, syscall.ENOTDIR
+		}
+		if isFinal {
+			if writeIntent && entry.privNode == nil {
+				// A copy-up records the source's own spelling.
+				entry.qpath = c.canonicalSpelling(entry.qpath)
+			}
+			return entry, nil
+		}
+		resolvedParts = strings.Split(spelled.Rel, "/")
+	}
+
+	finalRel := "."
+	if len(resolvedParts) > 0 {
+		finalRel = strings.Join(resolvedParts, "/")
+	}
+	return lookupComponent(c, QualifiedPath{RootID: qpath.RootID, Rel: finalRel}, walk, wantXattrs)
+}
+
+func expandSymlinkTarget(c *Core, rootID, rawTarget string, remaining []string) ([]string, bool, error) {
+	target := filepath.ToSlash(rawTarget)
+	if !strings.HasPrefix(target, "/") {
+		return append(strings.Split(target, "/"), remaining...), false, nil
+	}
+	rootSpec := c.roots.byID[rootID]
+	if rootSpec.TrunkPath == "" {
+		return nil, false, ErrSymlinkEscape
+	}
+	rootClean := filepath.ToSlash(filepath.Clean(rootSpec.TrunkPath))
+	targetClean := filepath.ToSlash(filepath.Clean(target))
+	if targetClean != rootClean && !strings.HasPrefix(targetClean, rootClean+"/") {
+		return nil, false, ErrSymlinkEscape
+	}
+	relTarget := strings.TrimPrefix(strings.TrimPrefix(targetClean, rootClean), "/")
+	if relTarget == "" {
+		return remaining, true, nil
+	}
+	return append(strings.Split(relTarget, "/"), remaining...), true, nil
+}
+
+func resolveParentDir(c *Core, qpath QualifiedPath, writeIntent bool) (QualifiedPath, string, error) {
+	rel, err := sanitizeRelPath(qpath.Rel)
+	if err != nil {
+		return QualifiedPath{}, "", err
+	}
+	if rel == "." {
+		return QualifiedPath{}, "", syscall.EINVAL
+	}
+	qpath.Rel = rel
+	qpath, err = checkGitAccess(c, qpath, writeIntent)
+	if err != nil {
+		return QualifiedPath{}, "", err
+	}
+	slash := strings.LastIndexByte(qpath.Rel, '/')
+	parentRel, name := ".", qpath.Rel
+	if slash >= 0 {
+		parentRel, name = qpath.Rel[:slash], qpath.Rel[slash+1:]
+	}
+	if name == "" || name == "." || name == ".." {
+		return QualifiedPath{}, "", ErrPathEscape
+	}
+	if writeIntent {
+		if err := c.roots.refuseHidden(qpath); err != nil {
+			return QualifiedPath{}, "", err
+		}
+	}
+	parentRes, err := resolvePath(c, QualifiedPath{RootID: qpath.RootID, Rel: parentRel}, true, writeIntent)
+	if err != nil {
+		return QualifiedPath{}, "", err
+	}
+	if parentRes.attr.Kind != EntryDirectory {
+		return QualifiedPath{}, "", syscall.ENOTDIR
+	}
+	if !writeIntent {
+		return parentRes.qpath, name, nil
+	}
+	// A mutation records the one spelling the view and its source already use for this name.
+	spelled := c.canonicalSpelling(QualifiedPath{RootID: parentRes.qpath.RootID, Rel: joinRel(parentRes.qpath.Rel, name)})
+	return QualifiedPath{RootID: spelled.RootID, Rel: path.Dir(spelled.Rel)}, path.Base(spelled.Rel), nil
+}
+
+func newLowerWalk(c *Core, rootID string) *osLowerWalk {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if p, ok := c.roots.providers[rootID].(*osLowerProvider); ok {
+		return p.walk()
+	}
+	return nil
+}
+
+func lookupExactComponent(c *Core, qpath QualifiedPath) (resolvedLayerEntry, error) {
+	return lookupComponent(c, qpath, nil, true)
+}
+
+func lookupComponent(c *Core, qpath QualifiedPath, walk *osLowerWalk, wantXattrs bool) (resolvedLayerEntry, error) {
+	qpath.Rel = cleanRelPath(qpath.Rel)
+
+	c.mu.RLock()
+	if c.state.released {
+		c.mu.RUnlock()
+		return resolvedLayerEntry{}, ErrViewReleased
+	}
+	if nodeID, ok := c.state.pathIndex[qpath]; ok {
+		node := c.state.nodesByID[nodeID]
+		if node != nil && !node.flags.unlinked {
+			if node.flags.gitHostPath != "" {
+				c.mu.RUnlock()
+				c.mu.Lock()
+				if c.state.released {
+					c.mu.Unlock()
+					return resolvedLayerEntry{}, ErrViewReleased
+				}
+				if curID, stillOK := c.state.pathIndex[qpath]; stillOK {
+					if curNode := c.state.nodesByID[curID]; curNode != nil && !curNode.flags.unlinked {
+						if refreshMutableGitNodeLocked(c, qpath, curNode) {
+							attr := nodeToAttrLocked(curNode)
+							c.mu.Unlock()
+							return resolvedLayerEntry{
+								qpath:    qpath,
+								layer:    LayerPrivate,
+								attr:     attr,
+								privNode: curNode,
+							}, nil
+						}
+					}
+				}
+				c.mu.Unlock()
+				c.mu.RLock()
+			} else {
+				attr := nodeToAttrLocked(node)
+				c.mu.RUnlock()
+				return resolvedLayerEntry{
+					qpath:    qpath,
+					layer:    LayerPrivate,
+					attr:     attr,
+					privNode: node,
+				}, nil
+			}
+		}
+	}
+	if isMaskedByPrivateDeletionOrReplacementLocked(c, qpath) {
+		c.mu.RUnlock()
+		return resolvedLayerEntry{}, fs.ErrNotExist
+	}
+	parentLayers := c.cfg.ParentLayers
+	provider := c.roots.providers[qpath.RootID]
+	c.mu.RUnlock()
+
+	var syntheticParent *ParentEntry
+	for _, pl := range parentLayers {
+		pe, ok, err := pl.Lookup(qpath)
+		if err != nil {
+			return resolvedLayerEntry{}, err
+		}
+		if !ok {
+			continue
+		}
+		if pe.Kind == EntryAbsent {
+			return resolvedLayerEntry{}, fs.ErrNotExist
+		}
+		if pe.Synthetic {
+			if syntheticParent == nil {
+				cp := pe
+				syntheticParent = &cp
+			}
+			continue
+		}
+		cp := pe
+		return resolvedLayerEntry{
+			qpath:       qpath,
+			layer:       LayerParent,
+			attr:        parentEntryToAttr(qpath, pe),
+			parentEntry: &cp,
+		}, nil
+	}
+
+	if provider == nil {
+		if syntheticParent != nil {
+			return resolvedLayerEntry{
+				qpath:       qpath,
+				layer:       LayerParent,
+				attr:        parentEntryToAttr(qpath, *syntheticParent),
+				parentEntry: syntheticParent,
+			}, nil
+		}
+		if qpath.Rel == "." {
+			return resolvedLayerEntry{
+				qpath: qpath,
+				layer: LayerTrunk,
+				attr: EntryAttr{
+					NodeID:     syntheticNodeID(qpath, 1),
+					Generation: 1,
+					Layer:      LayerTrunk,
+					Kind:       EntryDirectory,
+					Mode:       fs.ModeDir | 0o755,
+					Nlink:      2,
+				},
+			}, nil
+		}
+		return resolvedLayerEntry{}, fs.ErrNotExist
+	}
+
+	c.counters.lowerLookups.Add(1)
+	var le LowerEntry
+	var err error
+	if walk != nil {
+		le, err = walk.lstat(qpath.Rel)
+	} else {
+		le, err = provider.Lstat(qpath.Rel)
+	}
+	if err != nil {
+		if syntheticParent != nil && errors.Is(err, fs.ErrNotExist) {
+			return resolvedLayerEntry{
+				qpath:       qpath,
+				layer:       LayerParent,
+				attr:        parentEntryToAttr(qpath, *syntheticParent),
+				parentEntry: syntheticParent,
+			}, nil
+		}
+		return resolvedLayerEntry{}, err
+	}
+	if le.Kind == EntryAbsent {
+		if syntheticParent != nil {
+			return resolvedLayerEntry{
+				qpath:       qpath,
+				layer:       LayerParent,
+				attr:        parentEntryToAttr(qpath, *syntheticParent),
+				parentEntry: syntheticParent,
+			}, nil
+		}
+		return resolvedLayerEntry{}, fs.ErrNotExist
+	}
+	var xattrs map[string][]byte
+	if wantXattrs {
+		if xattrs, err = provider.ListXattr(qpath.Rel); err != nil {
+			return resolvedLayerEntry{}, err
+		}
+	}
+	attr := lowerEntryToAttr(qpath, le, xattrs)
+	if attr.Kind == EntryDirectory {
+		c.mu.RLock()
+		if modified, ok := c.state.lowerDirMod[qpath]; ok && modified.After(attr.ModTime) {
+			attr.ModTime, attr.CTime = modified, modified
+		}
+		c.mu.RUnlock()
+	}
+	return resolvedLayerEntry{
+		qpath:      qpath,
+		layer:      LayerTrunk,
+		attr:       attr,
+		lowerEntry: &le,
+	}, nil
+}

@@ -3,7 +3,7 @@ import type { IconSlot } from "../../contributions/theme-vocabulary.generated.ts
 import { Show, type JSX } from "solid-js";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 
-export type WorkerSectionKey = "task" | "activity" | "coordination" | "evidence";
+export type WorkerSectionKey = "summary" | "task" | "activity" | "coordination" | "evidence";
 
 export type WorkerSectionStatus =
   | "working"

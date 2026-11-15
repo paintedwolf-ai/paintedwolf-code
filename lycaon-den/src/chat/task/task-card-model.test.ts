@@ -182,8 +182,8 @@ describe("task-card-model", () => {
       agent_type: "implementer",
       status: "running",
       workspace_preparation: {
-        strategy: "bridge_cow",
-        stage: "materializing_seed",
+        strategy: "direct_copy",
+        stage: "snapshotting_branch",
         files: 125_000,
         bytes: 12 * 1024 ** 3,
         total_bytes: 30 * 1024 ** 3,
@@ -191,7 +191,7 @@ describe("task-card-model", () => {
       created_at: "2026-08-01T00:00:00Z",
     };
     expect(taskActivityDisplay(taskPart(), { worker })).toBe(
-      "Building reusable workspace cache · 12.0 GB of 30.0 GB",
+      "Copying isolated workspace · 12.0 GB of 30.0 GB",
     );
   });
 });

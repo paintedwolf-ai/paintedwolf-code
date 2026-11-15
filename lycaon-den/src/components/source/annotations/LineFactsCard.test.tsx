@@ -4,7 +4,7 @@ import { createSignal } from "solid-js";
 import { LineFactsCard, type LineFactsCardState } from "./LineFactsCard.tsx";
 import type { LineFactRow } from "./line-facts.ts";
 
-const row = (id: string): LineFactRow => ({ key: id, title: id, fact: "Edited lines 4–6 · turn 12",
+const row = (id: string, effectId?: string): LineFactRow => ({ key: id, title: id, fact: "Edited lines 4–6 · turn 12", effectId,
   target: { kind: "chat", sessionId: id, toolCallId: `tool-${id}` } });
 function fixture() {
   const anchor = document.createElement("button");
@@ -62,5 +62,10 @@ describe("line facts card", () => {
     anchor.focus();
     setState(state => ({ ...state, enter: true }));
     await waitFor(() => expect(document.activeElement).toBe(screen.getByRole("button", { name: /first/ })));
+  });
+  it("mounts the change briefing slot when projectId and effectId are present", () => {
+    const { setState } = fixture();
+    setState(old => ({ ...old, projectId: "proj-1", facts: { ...old.facts, changed: [row("first", "eff-1")] } }));
+    expect(screen.getByRole("region", { name: "Changed" })).toBeTruthy();
   });
 });

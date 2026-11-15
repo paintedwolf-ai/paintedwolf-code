@@ -4,9 +4,7 @@ import type {
   SourceChange,
 } from "../../api/types.ts";
 
-export type LiveFileBriefing = Omit<FileBriefingResponse, "status"> & {
-  status: FileBriefingResponse["status"] | "streaming";
-  streamText?: string;
+export type LiveFileBriefing = FileBriefingResponse & {
   stale: boolean;
 };
 
@@ -25,7 +23,6 @@ const listeners = new Set<Listener>();
 const resyncListeners = new Set<() => void>();
 const statusOrder: Record<LiveFileBriefing["status"], number> = {
   pending: 0,
-  streaming: 1,
   preview: 2,
   complete: 2,
   failed: 2,
@@ -70,32 +67,13 @@ function storeBriefing(entryKey: string, briefing: LiveFileBriefing): void {
   while (briefings.size > MAX_LIVE_BRIEFINGS) {
     const entries = [...briefings];
     const evicted =
-      entries.find(([, candidate]) =>
-        candidate.status !== "pending" && candidate.status !== "streaming"
-      ) ?? entries[0];
+      entries.find(([, candidate]) => candidate.status !== "pending") ?? entries[0];
     if (!evicted) break;
     briefings.delete(evicted[0]);
     for (const [request, mapped] of targetByRequest) {
       if (mapped === evicted[0]) targetByRequest.delete(request);
     }
   }
-}
-
-// Terminal payloads reuse streamed text when no explanation is present.
-function retainedStreamText(
-  prior: LiveFileBriefing | undefined,
-  attemptId: string,
-  sourceSHA256: string,
-  sections: LiveFileBriefing["sections"] | undefined,
-  fallbackText: string,
-): string | undefined {
-  if (
-    !prior ||
-    prior.attempt_id !== attemptId ||
-    prior.source_sha256 !== sourceSHA256
-  ) return undefined;
-  if ((sections?.length ?? 0) > 0 || fallbackText.trim() !== "") return undefined;
-  return prior.streamText;
 }
 
 function acceptsUpdate(
@@ -154,17 +132,7 @@ export function receiveFileBriefingSnapshot(
   ) {
     return prior;
   }
-  const next: LiveFileBriefing = {
-    ...response,
-    streamText: retainedStreamText(
-      prior,
-      response.attempt_id,
-      response.source_sha256,
-      response.sections,
-      response.fallback_text,
-    ),
-    stale: false,
-  };
+  const next: LiveFileBriefing = { ...response, stale: false };
   storeBriefing(entryKey, next);
   notify(id, response.root_id, response.path, next);
   return next;
@@ -189,19 +157,8 @@ export function applyFileBriefingEvent(event: FileBriefingEvent): void {
   if (!preview) return;
   const sameAttempt = prior?.attempt_id === event.attempt_id;
   const sameRevision = sameAttempt && prior?.source_sha256 === event.source_sha256;
-  const streamed = sameRevision ? (prior.streamText ?? "") : "";
   const sections = event.sections ?? (sameRevision ? prior?.sections : undefined) ?? [];
   const fallbackText = event.fallback_text;
-  const streamText =
-    event.status === "streaming"
-      ? streamed + (event.delta ?? "")
-      : retainedStreamText(
-          prior,
-          event.attempt_id,
-          event.source_sha256,
-          event.sections ?? sections,
-          fallbackText,
-        );
   const next: LiveFileBriefing = {
     target_key: event.target_key,
     attempt_id: event.attempt_id,
@@ -215,11 +172,11 @@ export function applyFileBriefingEvent(event: FileBriefingEvent): void {
       event.locations ?? (sameRevision ? prior?.locations : undefined) ?? [],
     sections,
     fallback_text: fallbackText,
-    streamText,
     truncated: event.truncated,
     error: event.error,
     stale: sameRevision ? (prior?.stale ?? false) : false,
     updated_at: event.updated_at,
+    ...(event.evidence_ref ? { evidence_ref: event.evidence_ref } : {}),
   };
   storeBriefing(entryKey, next);
   notify(projectId, rootId, path, next);

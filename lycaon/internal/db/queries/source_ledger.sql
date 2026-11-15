@@ -984,6 +984,14 @@ SELECT version_id,document_id,epoch,spans_json,revision FROM source_version_text
 INSERT INTO source_effect_contributions (effect_id,contribution_id) VALUES (?,?)
 ON CONFLICT DO NOTHING;
 
+-- ListEffectsForContributions lists the effects that published each
+-- contribution, earliest first; callers bound the id list.
+-- name: ListEffectsForContributions :many
+SELECT ec.effect_id, ec.contribution_id
+FROM source_effect_contributions ec JOIN source_effects e ON e.id = ec.effect_id
+WHERE ec.contribution_id IN (sqlc.slice(contribution_ids))
+ORDER BY e.ordinal, ec.effect_id;
+
 -- name: ListSelectedTextContributions :many
 WITH selection_input AS (SELECT CAST(sqlc.arg(ranges_json) AS TEXT) AS ranges),
 selected AS (
@@ -1006,3 +1014,37 @@ SELECT a.effect_id,a.contribution_id,a.origin,a.session_id,a.turn,a.person_id,a.
 FROM source_effect_authors a
 WHERE a.project_id=sqlc.arg(project_id) AND a.effect_id IN (SELECT id FROM requested)
 ORDER BY a.effect_id,a.created_ts,a.contribution_id;
+
+-- ListSourceEffectsByIDs reads named effects of one project; callers bound
+-- the id list.
+-- name: ListSourceEffectsByIDs :many
+SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
+       COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.root_id, e.path, e.from_root_id, e.from_path,
+       e.op, e.entry_kind, e.ordinal, e.created_ts,
+       o.branch_id, o.origin, o.cause, o.actor_label,
+       o.session_id, o.job_id, o.turn, o.tool_call_id, o.tool_name, o.batch_id, o.capture_quality,
+       COALESCE(o.git_transition_id, '') AS git_transition_id,
+       COALESCE(o.command_window_id, '') AS command_window_id
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = sqlc.arg(project_id) AND e.id IN (sqlc.slice(effect_ids))
+ORDER BY e.ordinal, e.id;
+
+-- name: ListSourceEffectsByGroup :many
+SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
+       COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.root_id, e.path, e.from_root_id, e.from_path,
+       e.op, e.entry_kind, e.ordinal, e.created_ts,
+       o.branch_id, o.origin, o.cause, o.actor_label,
+       o.session_id, o.job_id, o.turn, o.tool_call_id, o.tool_name, o.batch_id, o.capture_quality,
+       COALESCE(o.git_transition_id, '') AS git_transition_id,
+       COALESCE(o.command_window_id, '') AS command_window_id
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = sqlc.arg(project_id)
+  AND e.operation_id IN (
+      SELECT g.id FROM source_operations g WHERE g.command_window_id = CAST(sqlc.arg(command_window_id) AS TEXT)
+      UNION
+      SELECT g.id FROM source_operations g WHERE g.git_transition_id = CAST(sqlc.arg(git_transition_id) AS TEXT)
+  )
+ORDER BY e.ordinal, e.id
+LIMIT sqlc.arg(row_limit);

@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -144,9 +145,18 @@ func TestNetworkCommandsOverSmartHTTPAndEgressGate(t *testing.T) {
 		confine.SetEgressPosture(confine.PostureObserve)
 		confine.SetEgressResolver(nil)
 	})
-	confine.SetEgressResolver(func(_ context.Context, _ confine.EgressCommand, _ egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
+	var asked []confine.EgressCommand
+	confine.SetEgressResolver(func(_ context.Context, cmd confine.EgressCommand, _ egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
+		asked = append(asked, cmd)
 		return false
 	})
+
+	// The preflight carries the identity the confined launch's dials do, so
+	// its card names the command and offers that command's network.
+	h.exec("git", "fetch", "origin").refused(t, "denied preflight", "GIT_REMOTE_HOST_DENIED")
+	if len(asked) == 0 || asked[0].ToolName != "git" || asked[0].CommandLine != "git fetch origin" {
+		t.Fatalf("preflight attribution = %+v", asked)
+	}
 
 	for _, argv := range [][]string{
 		{"git", "fetch", "origin"},
@@ -230,8 +240,12 @@ func TestNetworkCommandsAdmitEveryResolvedRemoteBeforeContact(t *testing.T) {
 		confine.SetEgressResolver(nil)
 	})
 	var asked []string
+	var admittedServer []egressproxy.Endpoint
 	confine.SetEgressResolver(func(_ context.Context, _ confine.EgressCommand, ep egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
 		asked = append(asked, ep.Host)
+		if ep.Host == "127.0.0.1" {
+			admittedServer = append(admittedServer, ep)
+		}
 		return ep.Host == "127.0.0.1"
 	})
 
@@ -252,6 +266,13 @@ func TestNetworkCommandsAdmitEveryResolvedRemoteBeforeContact(t *testing.T) {
 	// The fetch URL alone is authorized, so fetch works while push stays refused.
 	if fetch := h.exec("git", "fetch", "origin"); fetch.err != nil || fetch.result.Status != 0 {
 		t.Fatalf("fetch from the authorized remote: %+v %v %s", fetch.result, fetch.err, fetch.stderr)
+	}
+	serverURL, err := url.Parse(server.URL)
+	testutil.FailErr(t, "parse server URL", err)
+	// Push and fetch each admit the server once, as the request Git sends.
+	want := "http_request://" + serverURL.Host
+	if len(admittedServer) != 2 || admittedServer[0].String() != want || admittedServer[1].String() != want {
+		t.Fatalf("server admissions %v, want two for %s", admittedServer, want)
 	}
 	h.exec("git", "fetch", "--", "-c").refused(t, "option-shaped remote", "COMMAND_OPERAND_INVALID")
 }

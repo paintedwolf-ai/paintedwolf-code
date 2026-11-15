@@ -317,10 +317,6 @@ color: var(--den-text-muted);
 }
 
 
-.assistant-turn__note-badge {
-  letter-spacing: 0.02em;
-}
-
 .assistant-turn:has(> .den-citation-evidence-chicklet) {
   align-self: stretch;
   width: 100%;
@@ -353,6 +349,12 @@ color: var(--den-text-muted);
 .den-citation-evidence-chicklet-body .den-worker-transcript-evidence {
   margin-top: 6px;
   padding: 0;
+}
+
+/* Paths, URLs and codes are unbroken strings; wrap them inside the panel. */
+.den-citation-grounding {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .den-citation-grounding--partial .den-citation-grounding-headline {
@@ -414,10 +416,15 @@ margin: 4px 0 0;
 
 .den-citation-grounding-code,
 .den-citation-grounding-context,
-.den-citation-grounding-scope {
+.den-citation-grounding-scope,
+.den-citation-grounding-source {
   margin: 6px 0 0;
   font-size: var(--text-den-hint);
   color: var(--den-text-muted);
+}
+
+.den-citation-grounding-host-box .den-citation-grounding-source {
+  margin-top: 0;
 }
 
 /* Grounded path / URL open affordances */

@@ -1,7 +1,10 @@
 import type { ChatContentReference, HostSecretRedactionMeta } from "../../../api/types.ts";
 
 type InlineContent = { kind: "inline"; text: string; redaction?: HostSecretRedactionMeta };
-export type CommandReceiptContent = { kind: "command_receipts"; programs: { id: string; activityId?: string }[]; context: string };
+/** A whole recorded program, or the executions one host activity selects. */
+export type CommandReceiptScope = { readonly programId: string; readonly activityId?: string };
+/** The host-written receipt of the scopes, in order. */
+export type CommandReceiptContent = { kind: "command_receipts"; scopes: CommandReceiptScope[] };
 type Content = CommandReceiptContent | InlineContent | { kind: "retained"; reference: ChatContentReference } | { kind: "process"; handle: string };
 
 export type ChatContentDocument = {
@@ -14,6 +17,8 @@ export type ChatContentDocument = {
   path?: string;
   /** The content's language where no path names it. */
   language?: string;
+  /** Advances each time a link opens the document, so a failed tab can retry. */
+  openSeq?: number;
 } & (
   | { kind: "tool"; messageId: string; toolCallId: string; content: Content }
   | { kind: "approval"; checkpointId: string; content: InlineContent }

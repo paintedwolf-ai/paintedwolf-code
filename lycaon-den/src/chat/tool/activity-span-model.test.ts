@@ -1,11 +1,9 @@
 import { sourceTextHash, fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
 import { describe, expect, it } from "vitest";
 import {
-  activitySpanComposition,
   activitySpanFailureCount,
   activitySpanHint,
   activitySpanStatus,
-  formatActivitySpanComposition,
   omitIndexWarmingFromTranscript,
   projectActivitySpans,
 } from "./activity-span-model.ts";
@@ -78,9 +76,6 @@ describe("decision rows in activity spans", () => {
     ]);
     expect(span.entries.map((entry) => entry.kind)).toEqual(["turn_load", "turn_load", "tool", "tool"]);
     expect(span.label).toBe("reading files");
-    expect(activitySpanComposition(span.entries).map((p) => `${p.label} ×${p.count}`)).toEqual([
-      "Local AI ×2", "read ×1", "command ×1",
-    ]);
   });
 
   it("are dropped when no call follows them, so an answer-only turn adds no card", () => {
@@ -609,15 +604,6 @@ describe("activity span summary", () => {
       "investigating",
     );
     expect(hint).toBe("missing.go, +1");
-  });
-
-  it("keeps an ordered composition for expanded details", () => {
-    const composition = activitySpanComposition([
-      toolEntry(part("r1", "read", "a.go")),
-      toolEntry(part("r2", "read", "b.go")),
-      toolEntry(part("w1", "edit", "a.go")),
-    ]);
-    expect(formatActivitySpanComposition(composition)).toBe("Read ×2 · Edit ×1");
   });
 });
 

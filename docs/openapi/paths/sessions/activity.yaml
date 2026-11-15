@@ -145,6 +145,84 @@ paths:
           $ref: ../../components/responses.yaml#/components/responses/NotFound
         '409':
           $ref: ../../components/responses.yaml#/components/responses/Conflict
+  /v1/sessions/{id}/program-receipt-document:
+    get:
+      tags: [sessions]
+      operationId: getCommandReceiptDocument
+      x-positional-window: true
+      summary: Read a row window of a command receipt document
+      description: >-
+        The document is JSON Lines written by the host from durable program records. For each
+        scope in order it holds one program row, then the scope's execution rows by ordinal, then
+        the program's node rows by node id. Reads that name a revision answer
+        chat_content_changed once the records behind it change.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      - $ref: ../../components/parameters.yaml#/components/parameters/CommandReceiptScopes
+      - name: revision
+        in: query
+        description: Snapshot to read. Omit it to read the current snapshot.
+        schema: {type: string, pattern: '^[0-9a-f]{64}$'}
+      - name: offset
+        in: query
+        description: Zero-based row to start at.
+        schema: {type: integer, minimum: 0, default: 0}
+      - name: limit
+        in: query
+        schema: {type: integer, minimum: 1, maximum: 500, default: 64}
+      responses:
+        '200':
+          description: Rows from one snapshot of the receipt document
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/command-programs.yaml#/components/schemas/CommandReceiptDocumentPage
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+  /v1/sessions/{id}/program-receipt-document/search:
+    get:
+      tags: [sessions]
+      operationId: searchCommandReceiptDocument
+      summary: Search a command receipt document without reading its rows
+      description: >-
+        Each request scans a bounded number of rows, so a page may hold no matches and still
+        carry next_cursor.
+      parameters:
+      - $ref: ../../components/parameters.yaml#/components/parameters/SessionId
+      - $ref: ../../components/parameters.yaml#/components/parameters/CommandReceiptScopes
+      - name: revision
+        in: query
+        required: true
+        schema: {type: string, pattern: '^[0-9a-f]{64}$'}
+      - {name: q, in: query, required: true, schema: {type: string, minLength: 1, maxLength: 1024}}
+      - {name: case_sensitive, in: query, schema: {type: boolean, default: false}}
+      - {name: cursor, in: query, schema: {type: string}}
+      - {name: limit, in: query, schema: {type: integer, minimum: 1, maximum: 500, default: 50}}
+      responses:
+        '200':
+          description: Matches by row and rune column in the named snapshot
+          content:
+            application/json:
+              schema:
+                $ref: ../../components/schemas/session/command-programs.yaml#/components/schemas/CommandReceiptSearchPage
+        default:
+          $ref: ../../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
   /v1/sessions/{id}/queue:
     get:
       tags:

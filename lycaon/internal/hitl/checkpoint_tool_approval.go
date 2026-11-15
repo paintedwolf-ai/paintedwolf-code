@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // applyToolApprovalRequest persists the persisted shape of a tool-approval card.
@@ -98,4 +99,12 @@ func seedPayloadConsequence(row *StoredCheckpoint, plan *ApprovalPlan) {
 	if code := strings.TrimSpace(plan.Presentation.ConsequenceCode); code != "" {
 		row.Payload["consequence_code"] = code
 	}
+}
+
+// rationaleEvidence references the record behind a card's purpose sentence.
+func rationaleEvidence(projectID, recordID string) *api.BriefingEvidenceRef {
+	if recordID == "" {
+		return nil
+	}
+	return &api.BriefingEvidenceRef{ProjectID: projectID, RecordID: recordID}
 }

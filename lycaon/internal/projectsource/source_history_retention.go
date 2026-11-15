@@ -158,7 +158,7 @@ func removeRecoverySlot(slotPath, expectedIdentity string) error {
 	if err != nil {
 		return err
 	}
-	if expectedIdentity != "" && identity != expectedIdentity {
+	if expectedIdentity != "" && !fspath.SameEntryAcrossRestart(expectedIdentity, identity) {
 		return nil
 	}
 	err = fseffect.RemoveTreeGuarded(fseffect.Location{Root: parent, Rel: base}, identity)

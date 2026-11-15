@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -22,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitexec"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -53,8 +55,9 @@ var readForms = map[string]operandRule{
 
 // Owners holds the Git read, mutation and network frontends.
 type Owners struct {
-	Git      Backend
-	Boundary *sandbox.Boundary
+	Git        Backend
+	Boundary   *sandbox.Boundary
+	PrivateGit *privategit.Manager
 	// Launch admits the confined launch every Git process of one command runs
 	// under. Without it no Git command runs.
 	Launch AgentLaunch
@@ -272,6 +275,11 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if streams.Input != nil {
 		defer func() { _ = streams.Input.Close() }()
 	}
+	finish, err := p.enterWorkerView(ctx, tc)
+	if err != nil {
+		return settle(0, err, p.command.spec.Name)
+	}
+	defer func() { _ = finish() }()
 	if p.owners.Launch == nil {
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, gitexec.ErrLaunchAuthorityRequired
 	}
@@ -301,6 +309,32 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		runErr = ctx.Err()
 	}
 	return settle(status, runErr, p.command.spec.Name)
+}
+
+// enterWorkerView prepares a write-leg worker's private view before any form runs, so a read sees the
+// view's own repository, initialized on first use. A branch with no managed view has no repository a
+// worker may touch, and the form is refused rather than run against whatever Git would discover.
+func (p Prepared) enterWorkerView(ctx context.Context, tc tools.ToolContext) (func() error, error) {
+	noop := func() error { return nil }
+	if tc.Identity.WorkerJobID == "" || strings.TrimSpace(tc.Source.WorkerBranchRoot) == "" {
+		return noop, nil
+	}
+	_, finish, managed, err := privategit.PrepareManagerViewOperation(ctx, p.owners.PrivateGit, tools.HostWriteRoot(tc), tc.Identity.WorkerJobID)
+	if errors.Is(err, fs.ErrNotExist) || errors.Is(err, privategit.ErrNoSourceRepository) {
+		// The view's sources hold no repository, which Git itself reports to the form.
+		return noop, nil
+	}
+	if err != nil {
+		return noop, err
+	}
+	if !managed {
+		if _, statErr := os.Lstat(filepath.Join(tools.HostWriteRoot(tc), ".git")); errors.Is(statErr, fs.ErrNotExist) {
+			// The branch holds no repository; Git reports that to the form itself.
+			return noop, nil
+		}
+		return noop, &toolrejection.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "addressed_session_required", "git_addressed_session_required": true}}
+	}
+	return finish, nil
 }
 
 // settle projects Git's exit onto the producer contract. Read commands have

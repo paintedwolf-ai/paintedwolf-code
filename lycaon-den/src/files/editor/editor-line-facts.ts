@@ -92,7 +92,7 @@ export function createEditorLineFacts(options: EditorLineFactsOptions) {
     }
     anchor.classList.add("is-open");
     anchor.querySelector(".files-line-gutter__facts")?.setAttribute("aria-expanded", "true");
-    setLineFactsCard({ anchor, line, path: buffer().path, facts, enter });
+    setLineFactsCard({ anchor, line, path: buffer().path, facts, enter, projectId: projectId() });
     for (const row of facts.changed) {
       if (row.target.kind !== "chat") continue;
       const sessionId = row.target.sessionId;

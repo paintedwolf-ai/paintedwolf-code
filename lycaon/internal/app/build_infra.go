@@ -8,10 +8,12 @@ import (
 	"github.com/lycaon/lycaon/internal/app/eventing"
 	"github.com/lycaon/lycaon/internal/app/execution"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/tsparse"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"os"
 )
 
@@ -20,11 +22,15 @@ func (b *serveBuilder) wireToolRuntime() error {
 		return err
 	}
 	b.startup.resources.Track("decision-engine", 47, b.decisions.Close)
-	var err error
-	b.execution, err = execution.Build(b.settings.Service, b.catalog.ModuleRoot, b.catalog.Effective, b.decisions.Rerank)
+	privateGit, err := workspace.OpenPrivateGit(enginepaths.WorkerBranchesRootUnder(b.storage.Directory))
 	if err != nil {
 		return err
 	}
+	b.execution, err = execution.Build(b.settings.Service, b.catalog.ModuleRoot, b.catalog.Effective, b.decisions.Rerank, privateGit)
+	if err != nil {
+		return err
+	}
+
 	b.startup.resources.Track("egress-approvals", 56, b.execution.Host.Authority.ReleaseEgressApprovals)
 	b.startup.resources.Track("egress-policy", 160, func(context.Context) error { b.execution.Host.Authority.ReleaseEgressPolicy(); return nil })
 	b.providers.BindCurator()

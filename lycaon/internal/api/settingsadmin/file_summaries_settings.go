@@ -32,6 +32,12 @@ func (s *Handler) HandleUpdateFileSummariesSettings(w http.ResponseWriter, r *ht
 			s.responses.InternalError(w, r, err)
 			return
 		}
+		if host := s.Sources.Briefings.Engine.Host(); !enabled && host != nil {
+			if err := host.Purge(r.Context(), s.Events); err != nil {
+				s.responses.InternalError(w, r, err)
+				return
+			}
+		}
 		projectview.PublishSettings(s.Events, s.Projects, r.Context(), wire.SettingsAreaFileSummaries, "global", "", "updated")
 	}
 	httpio.WriteJSON(w, http.StatusOK, wire.FileSummariesSettingsResponse{Enabled: enabled})

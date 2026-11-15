@@ -5,6 +5,7 @@ import type { WorkflowsClient } from "./http-capabilities/workflows.ts";
 import type { ProjectsClient } from "./http-capabilities/projects.ts";
 import type { SourceClient } from "./http-capabilities/source.ts";
 import type { SourceHistoryClient } from "./http-capabilities/source-history.ts";
+import type { BriefingsClient } from "./http-capabilities/briefings.ts";
 import type { DocumentsClient } from "./http-capabilities/documents.ts";
 import type { SearchClient } from "./http-capabilities/search.ts";
 import type { GitClient } from "./http-capabilities/git.ts";
@@ -22,6 +23,7 @@ export interface LycaonClient extends
   ProjectsClient,
   SourceClient,
   SourceHistoryClient,
+  BriefingsClient,
   DocumentsClient,
   SearchClient,
   GitClient,

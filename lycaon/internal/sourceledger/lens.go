@@ -201,7 +201,7 @@ func (s *Walk) walkCommandWindows(ctx context.Context, effects []Effect) ([]Comm
 			ids = append(ids, effect.CommandWindowID)
 		}
 	}
-	byID, err := s.commands.commandWindowsFor(ctx, ids)
+	byID, err := s.commands.CommandWindows(ctx, ids)
 	if err != nil {
 		return nil, err
 	}
@@ -459,7 +459,7 @@ type Walk struct {
 }
 
 type walkCommandsPort interface {
-	commandWindowsFor(ctx context.Context, ids []string) (map[string]CommandWindow, error)
+	CommandWindows(ctx context.Context, ids []string) (map[string]CommandWindow, error)
 }
 
 type walkGitPort interface {

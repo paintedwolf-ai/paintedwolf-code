@@ -175,10 +175,17 @@ func (n Network) decideBind(r SocketRequest) Decision {
 	if r.HostSocket {
 		return refuse("network-bind", local)
 	}
-	if (!ip.IsLoopback() && !ip.IsUnspecified()) || !n.listenAllowed(r.IP.Port()) {
-		// The listener stays inside the sandbox, where only the command's own
-		// processes reach it.
+	if !ip.IsLoopback() && !ip.IsUnspecified() {
 		return Decision{Action: Perform}
+	}
+	if !n.listenAllowed(r.IP.Port()) {
+		// The listener stays inside the sandbox, where only the command's own
+		// processes reach it. A fixed port is one local_listen could open.
+		d := Decision{Action: Perform}
+		if r.IP.Port() != 0 {
+			d.Refusal = &Refusal{Operation: "network-bind", Target: local}
+		}
+		return d
 	}
 	// A granted listener is reachable from this machine only.
 	bind := netip.AddrPortFrom(ip, r.IP.Port())
