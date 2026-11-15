@@ -125,7 +125,7 @@ func TestBlueprintFlow11CriteriaReconcileAndBoardPlanFilter(t *testing.T) {
 	scannersOff := false
 	testutil.FailErr(t, "disable auto-scanners", h.Boards.Snapshot.SecurityScanners.PutGlobal(settings.SecurityScannersUserOverlay{Enabled: &scannersOff}))
 	ctx := h.OwnerCtx(t, t.Context())
-	dir := h.ProjectDir(t, "wc07-flow11")
+	dir := h.ProjectDir(t, "blueprint-flow11")
 	writeTestProjectApprovalsAllowWrite(t, dir)
 	testutil.FailErr(t, "seed app.go", os.WriteFile(filepath.Join(dir, "app.go"), []byte("package app\n"), 0o600))
 	testutil.FailErr(t, "seed ext.go", os.WriteFile(filepath.Join(dir, "ext.go"), []byte("package app\n"), 0o600))
@@ -135,9 +135,9 @@ func TestBlueprintFlow11CriteriaReconcileAndBoardPlanFilter(t *testing.T) {
 	call := coordToolCtx(t, h, ctx, sess, dir)
 	actor := workerrecords.Actor{SessionID: sess.ID, Role: workerrecords.RoleCoordinator, PrincipalID: sess.ID}
 
-	bpPath := blueprint.ConventionPath("wc07-flow11.md")
+	bpPath := blueprint.ConventionPath("blueprint-flow11.md")
 	bpV1 := "# Plan\n\n<!-- lycaon:tasks [\n" +
-		`  {"id":"leg-core","title":"Core edit","files":["app.go"],"verify":["echo wc07-ok"]},` + "\n" +
+		`  {"id":"leg-core","title":"Core edit","files":["app.go"],"verify":["echo blueprint-ok"]},` + "\n" +
 		`  {"id":"leg-ext","title":"Ext edit","files":["ext.go"],"depends_on":["leg-core"]}` + "\n" +
 		"] -->\n"
 	absBP := filepath.Join(dir, filepath.FromSlash(bpPath))
@@ -166,7 +166,7 @@ func TestBlueprintFlow11CriteriaReconcileAndBoardPlanFilter(t *testing.T) {
 		t.Fatalf("expected prerequisite_worker_not_started, got %v", err)
 	}
 
-	// Round 1 completes without modifying app.go or running echo wc07-ok.
+	// Round 1 completes without modifying app.go or running echo blueprint-ok.
 	scripts.push("implementer",
 		api.ToolCall{ID: "r1-read", Name: "command", Args: map[string]any{"command": "cat app.go"}},
 		api.ToolCall{ID: "r1-done", Name: "complete_leg", Args: map[string]any{
@@ -196,10 +196,10 @@ func TestBlueprintFlow11CriteriaReconcileAndBoardPlanFilter(t *testing.T) {
 	}
 	r1Child := coreWorker.ChildSessionID
 
-	// Round 2 edits app.go and runs echo wc07-ok in the same child conversation.
+	// Round 2 edits app.go and runs echo blueprint-ok in the same child conversation.
 	scripts.push("implementer",
 		api.ToolCall{ID: "r2-write", Name: "command", Args: map[string]any{"command": "printf 'package app\\nvar Ready = true\\n' > app.go"}},
-		api.ToolCall{ID: "r2-test", Name: "command", Args: map[string]any{"command": "echo wc07-ok", "verification": true}},
+		api.ToolCall{ID: "r2-test", Name: "command", Args: map[string]any{"command": "echo blueprint-ok", "verification": true}},
 		api.ToolCall{ID: "r2-done", Name: "complete_leg", Args: map[string]any{
 			"leg_status":     "complete",
 			"brief":          "Updated app.go and verified.",
@@ -250,7 +250,7 @@ func TestBlueprintFlow11CriteriaReconcileAndBoardPlanFilter(t *testing.T) {
 	testutil.FailErr(t, "create unrelated worker", err)
 
 	call.Identity.ToolCallID = uuid.NewString()
-	boardRaw, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"plan": "wc07-flow11.md"}, call)
+	boardRaw, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"plan": "blueprint-flow11.md"}, call)
 	testutil.FailErr(t, "pack_board plan filter", err)
 	var view api.BoardView
 	testutil.FailErr(t, "decode board view", json.Unmarshal([]byte(boardRaw), &view))
@@ -264,11 +264,11 @@ func TestBlueprintFlow11CriteriaReconcileAndBoardPlanFilter(t *testing.T) {
 	}
 }
 
-func installWC07GatedWorkflowFixture(t *testing.T, projectDir string) {
+func installGatedWorkflowFixture(t *testing.T, projectDir string) {
 	t.Helper()
-	const manifestYAML = `id: wc07-gated
+	const manifestYAML = `id: review-gated
 version: 1.0.0
-trigger: /wc07-gated
+trigger: /review-gated
 request:
   question: What change should be implemented and verified?
 initial_posture: build
@@ -300,9 +300,9 @@ phases:
 controls:
   phase_advance: host
 `
-	dstDir := filepath.Join(projectDir, settingsoverlay.DirName(), "workflows", "wc07-gated")
-	testutil.FailErr(t, "mkdir wc07-gated overlay", os.MkdirAll(dstDir, 0o755))
-	testutil.FailErr(t, "write wc07-gated workflow.yaml", os.WriteFile(filepath.Join(dstDir, "workflow.yaml"), []byte(manifestYAML), 0o600))
+	dstDir := filepath.Join(projectDir, settingsoverlay.DirName(), "workflows", "review-gated")
+	testutil.FailErr(t, "mkdir review-gated overlay", os.MkdirAll(dstDir, 0o755))
+	testutil.FailErr(t, "write review-gated workflow.yaml", os.WriteFile(filepath.Join(dstDir, "workflow.yaml"), []byte(manifestYAML), 0o600))
 }
 
 func TestSameRuntimeAmbientAndGatedWorkflowReviewVerifyDecision(t *testing.T) {
@@ -311,7 +311,7 @@ func TestSameRuntimeAmbientAndGatedWorkflowReviewVerifyDecision(t *testing.T) {
 		scripts := newQueuedWorkerScripts()
 		h = BuildForTest(t, WithLLMClient(scripts.mock(&h)), WithoutCoordinatorLoop())
 		ctx := h.OwnerCtx(t, t.Context())
-		dir := h.ProjectDir(t, "wc07-ambient")
+		dir := h.ProjectDir(t, "ambient-review")
 		writeTestProjectApprovalsAllowWrite(t, dir)
 		testutil.FailErr(t, "seed svc.go", os.WriteFile(filepath.Join(dir, "svc.go"), []byte("package svc\n"), 0o600))
 
@@ -376,29 +376,29 @@ func TestSameRuntimeAmbientAndGatedWorkflowReviewVerifyDecision(t *testing.T) {
 	})
 
 	t.Run("gated_workflow_obligations", func(t *testing.T) {
-		runWC07GatedWorkflowSubtest(t)
+		runGatedWorkflowSubtest(t)
 	})
 }
 
-func runWC07GatedWorkflowSubtest(t *testing.T) {
+func runGatedWorkflowSubtest(t *testing.T) {
 	var h *Harness
 	scripts := newQueuedWorkerScripts()
 	h = BuildForTest(t, WithLLMClient(scripts.mock(&h)), WithoutCoordinatorLoop())
 	scannersOff := false
 	testutil.FailErr(t, "disable auto-scanners", h.Boards.Snapshot.SecurityScanners.PutGlobal(settings.SecurityScannersUserOverlay{Enabled: &scannersOff}))
 	ctx := h.OwnerCtx(t, t.Context())
-	dir := h.ProjectDir(t, "wc07-gated")
+	dir := h.ProjectDir(t, "review-gated")
 	writeTestProjectApprovalsAllowWrite(t, dir)
-	installWC07GatedWorkflowFixture(t, dir)
+	installGatedWorkflowFixture(t, dir)
 	testutil.FailErr(t, "seed svc.go", os.WriteFile(filepath.Join(dir, "svc.go"), []byte("package svc\n"), 0o600))
 
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, dir)
 	testutil.FailErr(t, "create gated session", err)
 	h.Sessions.Manager.Catalog.InvalidateEffectiveCatalog(sess.ProjectID)
 	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
-		WorkflowID: "wc07-gated", WorkflowVersion: "1.0.0", Request: "Implement V() with review and signoff",
+		WorkflowID: "review-gated", WorkflowVersion: "1.0.0", Request: "Implement V() with review and signoff",
 	})
-	testutil.FailErr(t, "start wc07-gated", err)
+	testutil.FailErr(t, "start review-gated", err)
 	h.SeedProgress(t, ctx, sess.ID)
 
 	call := coordToolCtx(t, h, ctx, sess, dir)

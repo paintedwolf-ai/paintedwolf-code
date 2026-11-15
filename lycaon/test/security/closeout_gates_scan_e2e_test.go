@@ -38,8 +38,9 @@ func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
 	evidenceStore := inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
 
 	sqlDB := testdbfixture.Open(t, "store.db")
-	rootID := testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
+	_ = testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
 	testdbseed.InsertWorkflowRun(t, sqlDB, "run-closeout", "sess-closeout", testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, sqlDB, "child-closeout", testdbseed.DefaultProjectID)
 
 	store := scan.NewSQLStore(sqlDB)
 	coord := scantest.Coordinator(t, store, staticHeadSHA{sha: "closeout-head"})
@@ -47,40 +48,39 @@ func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
 
 	records := workerrecords.New(sqlDB)
 	actor := workerrecords.Actor{SessionID: "sess-closeout", Role: workerrecords.RoleCoordinator, PrincipalID: "sess-closeout"}
-	planned, err := records.CreatePlannedWorker(context.Background(), actor, workerrecords.CreatePlannedWorkerInput{
-		ProjectID:      testdbseed.DefaultProjectID,
-		RootID:         rootID,
+	planned, err := records.CreateWorker(context.Background(), actor, workerrecords.Op{ID: "create-leg-1"}, workerrecords.WorkerSpec{
 		Name:           "leg-1",
 		AgentType:      "implementer",
 		ScopeMode:      workerrecords.ScopeWrite,
 		Brief:          "Verify landed source",
+		ChildSessionID: "child-closeout",
 		BlueprintPath:  "plans/test.md",
 		WorkflowRunID:  "run-closeout",
 		WorkflowWorkID: "leg-1",
 	})
-	testutil.FailErr(t, "CreatePlannedWorker", err)
-	testdbseed.InsertSession(t, sqlDB, "child-closeout", testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "CreateWorker", err)
+	now := db.FormatTime(time.Now().UTC())
 	_, err = sqlDB.ExecContext(
 		context.Background(),
 		`INSERT INTO worker_jobs (id, project_id, workspace_path, parent_session_id, child_session_id, agent_type, prompt, brief, execution_target, status, created_at)
-		 VALUES ('job-leg-1', ?, ?, 'sess-closeout', 'child-closeout', 'implementer', 'fixture', 'fixture', 'local', 'complete', datetime('now'))`,
-		testdbseed.DefaultProjectID, projectDir,
+		 VALUES ('job-leg-1', ?, ?, 'sess-closeout', 'child-closeout', 'implementer', 'fixture', 'fixture', 'local', 'complete', ?)`,
+		testdbseed.DefaultProjectID, projectDir, now,
 	)
 	testutil.FailErr(t, "insert settled plan job", err)
-	_, err = records.StartPlannedRound(context.Background(), actor, workerrecords.StartPlannedRoundInput{
-		WorkerID:       planned.ID,
-		ChildSessionID: "child-closeout",
-		JobID:          "job-leg-1",
+	_, err = records.AdmitRound(context.Background(), actor, workerrecords.Op{ID: "round-leg-1"}, planned.WorkerID, workerrecords.RoundSpec{
+		JobID: "job-leg-1", ExecutionTarget: "local",
 	})
-	testutil.FailErr(t, "StartPlannedRound", err)
-	_, err = records.RecordDelivery(context.Background(), actor, workerrecords.RecordDeliveryInput{
-		WorkerID:    planned.ID,
-		JobID:       "job-leg-1",
-		ResultID:    "res-leg-1",
-		Delivered:   true,
-		ChangeState: workerrecords.ChangeLanded,
+	testutil.FailErr(t, "AdmitRound", err)
+	_, err = sqlDB.ExecContext(context.Background(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES ('res-leg-1', 'job-leg-1', 'complete', ?)`, now)
+	testutil.FailErr(t, "insert worker_results", err)
+	_, err = db.New(sqlDB).SettleWorkerRoundByJob(context.Background(), db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(now), JobID: "job-leg-1"})
+	testutil.FailErr(t, "SettleWorkerRoundByJob", err)
+	_, err = sqlDB.ExecContext(context.Background(), `INSERT INTO landed_changes (id, worker_job_id, canonical_path, created_at) VALUES ('land-leg-1', 'job-leg-1', ?, ?)`, projectDir, now)
+	testutil.FailErr(t, "insert landed_changes", err)
+	_, err = records.SetChange(context.Background(), actor, workerrecords.Op{ID: "land-leg-1-op"}, "res-leg-1", workerrecords.Change{
+		State: workerrecords.ChangeLanded, LandedChangeID: "land-leg-1",
 	})
-	testutil.FailErr(t, "RecordDelivery", err)
+	testutil.FailErr(t, "SetChange landed", err)
 	planSvc := &workerplan.Service{Records: records}
 
 	verifyRec := evidence.Record{

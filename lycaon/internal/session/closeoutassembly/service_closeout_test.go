@@ -48,7 +48,7 @@ func TestAssemblyRecoversCompletedLegsWithoutInventingCitations(t *testing.T) {
 	s := New(closeoutSession{msgs: []api.Message{
 		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job", LegID: "leg", AgentType: "Review", Status: api.WorkerSummaryStatusComplete, Envelope: completeEnv}},
 		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job", LegID: "duplicate", AgentType: "Review", Status: api.WorkerSummaryStatusComplete, Envelope: dupEnv}},
-		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job-pending", LegID: "pending", AgentType: "Review", Status: api.WorkerSummaryStatusRunning, Envelope: unfinishedEnv}},
+		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job-pending", LegID: "pending", AgentType: "Review", Status: api.WorkerSummaryStatusPartial, Envelope: unfinishedEnv}},
 		{Role: api.MessageRoleTool, WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "job-empty", LegID: "empty", AgentType: "Review", Status: api.WorkerSummaryStatusComplete}},
 	}}, closeoutRoots{t.TempDir()}, nil, nil)
 	report, grounding := s.Assemble(t.Context(), "parent", "implement_synthesis", nil, guidance.CloseoutDraft{}, 0)

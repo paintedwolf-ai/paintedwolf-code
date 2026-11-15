@@ -174,7 +174,7 @@ func TestCheckSessionCloseoutAndCloseoutComplete(t *testing.T) {
 	})
 	testutil.FailErr(t, "create closeout worker", err)
 
-	cond := env.svc.CloseoutComplete(func(context.Context, string) (bool, error) { return true, nil })
+	cond := env.svc.CloseoutComplete()
 
 	v, err := env.svc.CheckSessionCloseout(ctx, env.coord.SessionID, testdbseed.DefaultProjectID, "/repo")
 	testutil.FailErr(t, "unstarted closeout", err)

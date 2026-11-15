@@ -103,7 +103,11 @@ func TestCostSummaryWorkerSplitAfterDelegation(t *testing.T) {
 
 	testutil.WaitFor(t, func() bool {
 		jobs, err := h.Delegations.Queue.ListBySession(ctx, parent.ProjectID, parent.ID, wire.WorkerStatusComplete)
-		return err == nil && len(jobs) == 1 && jobs[0].OutcomeDeliveredAt != nil
+		if err != nil || len(jobs) != 1 {
+			return false
+		}
+		pending, err := h.Delegations.Queue.ListPendingOutcomes(ctx)
+		return err == nil && len(pending) == 0
 	})
 
 	req := authedRequest(t, http.MethodGet, "/v1/cost/summary?session_id="+parent.ID, nil)
