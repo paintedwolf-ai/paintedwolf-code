@@ -468,7 +468,7 @@ func (p *preparedRecording) CommitTxWithCache(ctx context.Context, tx *sql.Tx, c
 	if len(p.inputs) == 0 {
 		return TrackedFile{}, nil
 	}
-	return p.store.recordBatchIdentityTxWithCache(ctx, p.store.queries.WithTx(tx), p.inputs, cache)
+	return p.store.recordBatchIdentityTx(ctx, p.store.queries.WithTx(tx), p.inputs, cache)
 }
 
 func (p *preparedRecording) Close() {
@@ -502,7 +502,7 @@ func (p *preparedRecording) commitObserved(ctx context.Context, tx *sql.Tx, scop
 	if len(admitted) == 0 {
 		return 0, nil
 	}
-	_, err := p.store.recordBatchIdentityTx(ctx, p.store.queries.WithTx(tx), admitted)
+	_, err := p.store.recordBatchIdentityTx(ctx, p.store.queries.WithTx(tx), admitted, nil)
 	return len(admitted), err
 }
 

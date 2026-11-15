@@ -321,7 +321,7 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in preparedTrack
 			RootID:          in.RootID, Path: in.Path, EntryKind: in.EntryKind,
 			SHA256: in.SHA256, Object: in.object, Size: in.Size,
 			CaptureQuality: "exact", TS: in.TS,
-		})
+		}, nil)
 		if err != nil {
 			return TrackedFile{}, err
 		}
@@ -330,7 +330,7 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in preparedTrack
 			FileID: head.FileID, VersionID: versionID, RootID: in.RootID, Path: in.Path,
 			State: entryState(in.EntryKind, in.SHA256), ContentSha256: in.SHA256, Ordinal: head.Ordinal,
 			ObservedTs: in.TS.Format(time.RFC3339Nano),
-		}); err != nil {
+		}, nil); err != nil {
 			return TrackedFile{}, err
 		}
 		return TrackedFile{FileID: head.FileID, VersionID: versionID}, nil
@@ -373,7 +373,7 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in preparedTrack
 		RootID:               in.RootID, Path: in.Path,
 		EntryKind: in.EntryKind, State: state, SHA256: in.SHA256, Object: in.object,
 		Size: in.Size, CaptureQuality: "exact", TS: in.TS,
-	})
+	}, nil)
 	if err != nil {
 		return TrackedFile{}, err
 	}
@@ -386,7 +386,7 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in preparedTrack
 		FileID: fileID, VersionID: versionID, RootID: in.RootID, Path: in.Path,
 		State: state, ContentSha256: in.SHA256, Ordinal: ordinal,
 		ObservedTs: in.TS.Format(time.RFC3339Nano),
-	}); err != nil {
+	}, nil); err != nil {
 		return TrackedFile{}, err
 	}
 	return TrackedFile{FileID: fileID, VersionID: versionID}, nil
