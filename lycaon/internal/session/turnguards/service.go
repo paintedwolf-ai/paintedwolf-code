@@ -102,6 +102,7 @@ type Service struct {
 	workerQueue         workeroutcomes.CycleLedger
 	taskIdentities      workeradmission.TaskIdentityResolver
 	latestResultJob     LatestResultJobs
+	resultJob           ResultJobs
 	jobNames            JobNames
 }
 

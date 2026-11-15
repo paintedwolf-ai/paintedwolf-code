@@ -20,6 +20,9 @@ type CompositeWorkerContext struct {
 	Tools      LegToolLister
 	AgentsFor  func(*api.Session) profiles.AgentProfileResolver
 	MatcherFor func(*api.Session) PlaybookMatcherInterface
+	// ReviewSubject names the result a reviewer's job reads and the worker
+	// that delivered it; ok is false for any other job.
+	ReviewSubject func(ctx context.Context, jobID string) (worker, handle string, ok bool, err error)
 }
 
 func (c *CompositeWorkerContext) BuildWorkerPromptContext(ctx context.Context, childID string, sess *api.Session) (inject.WorkerLegContext, error) {
@@ -73,6 +76,15 @@ func buildTaskSpawnWorkerContext(ctx context.Context, c *CompositeWorkerContext,
 			// The task tool stamps the run on the job; the session carries none.
 			if task, ok := c.Delegation.Tasks.GetLatestByChildSessionID(ctx, sess.ID); ok && task != nil {
 				runID = task.WorkflowRunID
+				if c.ReviewSubject != nil {
+					worker, handle, reviewer, err := c.ReviewSubject(ctx, task.ID)
+					if err != nil {
+						return out, err
+					}
+					if reviewer {
+						out.ReviewHandle, out.ReviewWorker = handle, worker
+					}
+				}
 			}
 		}
 	}

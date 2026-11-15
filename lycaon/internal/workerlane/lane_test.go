@@ -192,3 +192,25 @@ func TestLaneOperationsSerializePerWorker(t *testing.T) {
 		t.Fatalf("preparations = %d, want one per admission", n)
 	}
 }
+
+// A reviewer's lane is a view of its sealed subject, prepared once and kept
+// across its rounds.
+func TestReviewerLaneIsAViewOfItsSubject(t *testing.T) {
+	f := newLaneFixture(t)
+	admit := func(op string) (workerlane.Binding, error) {
+		return f.lanes.Admit(t.Context(), workerlane.Request{
+			Actor: f.actor, Op: workerrecords.Op{ID: op}, WorkerID: f.workerID,
+			Facts: workerlane.Facts{Reviewer: true, SubjectCheckpoint: "cp-subject"},
+		})
+	}
+	first, err := admit("review-1")
+	testutil.FailErr(t, "first review round", err)
+	if first.Action != workerlane.ActionSubject || first.Root == "" || len(f.ws.created) != 1 || f.ws.created[0].parent != "cp-subject" {
+		t.Fatalf("review view = %+v, created %+v", first, f.ws.created)
+	}
+	again, err := admit("review-2")
+	testutil.FailErr(t, "second review round", err)
+	if again.Root != first.Root || len(f.ws.created) != 1 || len(f.ws.evicted) != 0 {
+		t.Fatalf("second round moved the view: %+v, created %+v", again, f.ws.created)
+	}
+}

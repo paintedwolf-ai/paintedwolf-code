@@ -270,6 +270,20 @@ func (q *memoryQueueClaims) FinishCanceled(ctx context.Context, jobID string, re
 }
 
 // Hold moves a pending job to held without terminating it.
+// ReleaseAdmitted makes a job enqueued held claimable once its round is recorded.
+func (q *memoryQueueClaims) ReleaseAdmitted(ctx context.Context, jobID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	q.mu.Lock()
+	job, ok := q.jobs[jobID]
+	if ok && job.task.Status == api.WorkerStatusHeld && !job.cancelRequested {
+		job.task.Status = api.WorkerStatusPending
+	}
+	q.mu.Unlock()
+	return nil
+}
+
 func (q *memoryQueueClaims) Hold(ctx context.Context, jobID string) error {
 	if err := ctx.Err(); err != nil {
 		return err

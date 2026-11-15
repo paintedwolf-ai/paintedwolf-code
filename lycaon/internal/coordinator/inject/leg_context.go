@@ -22,6 +22,10 @@ type WorkerLegContext struct {
 	ReservedPaths      []ReservedPath
 	AgentsMDMessage    api.Message
 	LayoutTopLevel     []string
+	// ReviewHandle names the sealed result a reviewer reads; ReviewWorker
+	// the worker that delivered it.
+	ReviewHandle string
+	ReviewWorker string
 }
 
 // SiblingNote is one cross-cutting finding from another worker, pushed into a

@@ -179,6 +179,8 @@ func (p preparedCapture) Close() {}
 
 type noopWorkerBranchClaim struct{}
 
+func (noopWorkerBranchClaim) ReviewsWorker(context.Context, *api.WorkerTask) bool { return false }
+
 func (noopWorkerBranchClaim) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error) {
 	return nil, fmt.Errorf("worker branch claim not available")
 }

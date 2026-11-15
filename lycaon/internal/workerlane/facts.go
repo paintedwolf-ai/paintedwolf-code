@@ -2,6 +2,7 @@ package workerlane
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/workerrecords"
@@ -19,16 +20,27 @@ type LaneState interface {
 
 // Assignment is what the next round is asked to be.
 type Assignment struct {
-	Write             bool
-	Reviewer          bool
-	SubjectCheckpoint string
+	Write bool
+	// Reviewer binds the round to the sealed result SubjectResultID names.
+	Reviewer        bool
+	SubjectResultID string
 	// BaseResultID names the earlier result a stacked worker starts on.
 	BaseResultID string
 }
 
 // FactsFor gathers the admission facts for a worker's next round.
 func (s *Service) FactsFor(ctx context.Context, state LaneState, checkpoints Checkpoints, actor workerrecords.Actor, workerID string, a Assignment) (Facts, error) {
-	f := Facts{Write: a.Write, Reviewer: a.Reviewer, SubjectCheckpoint: a.SubjectCheckpoint}
+	f := Facts{Write: a.Write, Reviewer: a.Reviewer}
+	if a.Reviewer {
+		h, err := s.Handle(ctx, checkpoints, actor, a.SubjectResultID)
+		if err != nil {
+			return Facts{}, err
+		}
+		if !h.Changed() {
+			return Facts{}, fmt.Errorf("%w: review subject %s has no checkpoint", ErrHandleStale, a.SubjectResultID)
+		}
+		f.SubjectCheckpoint = h.CheckpointID
+	}
 	if a.BaseResultID != "" {
 		h, err := s.Handle(ctx, checkpoints, actor, a.BaseResultID)
 		if err != nil {

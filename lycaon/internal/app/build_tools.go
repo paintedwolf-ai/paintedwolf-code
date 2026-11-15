@@ -101,16 +101,12 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	if err := blueprint.RegisterPlanTools(b.execution.Host.Registry, b.workflows.Blueprints); err != nil {
 		return fmt.Errorf("plan tools: %w", err)
 	}
-	taskDeps := taskToolDeps(b)
-	b.sessions.Manager.Coordinator.Guards.SetTaskIdentityResolver(taskDeps.IdentityResolver())
-	if err := worker.RegisterTaskTool(b.execution.Host.Registry, taskDeps); err != nil {
-		return fmt.Errorf("task tool: %w", err)
-	}
 	waits := &awaitstore.Store{DB: b.storage.Database}
 	workerOps := &workerops.Service{
 		Reader:    b.boards.WorkerReader(),
 		Agents:    prompts.AgentMutationCapable,
 		Accounted: b.boards.ReleaseAccounted,
+		Release:   b.delegations.Queue.ReleaseAdmitted,
 		WakeParked: func(ctx context.Context, jobID string) error {
 			settled, err := waits.SettleWorkerWait(ctx, jobID, awaitstore.Condition{Kind: "instruction", Outcome: "received"})
 			if err != nil || !settled {
@@ -119,6 +115,12 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 			_, err = b.delegations.Queue.ResumeReadyWaits(ctx)
 			return err
 		},
+	}
+	taskDeps := taskToolDeps(b)
+	taskDeps.Reviews = workerOps
+	b.sessions.Manager.Coordinator.Guards.SetTaskIdentityResolver(taskDeps.IdentityResolver())
+	if err := worker.RegisterTaskTool(b.execution.Host.Registry, taskDeps); err != nil {
+		return fmt.Errorf("task tool: %w", err)
 	}
 	if err := worker.RegisterAnswerDecisionTool(b.execution.Host.Registry, worker.AnswerDecisionToolDeps{
 		Answer:  b.boards.AnswerDecision,

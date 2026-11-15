@@ -62,6 +62,8 @@ type WorkerLegInjectData struct {
 	SiblingNotes       []SiblingNoteView
 	ReservedPaths      []ReservedPathView
 	LayoutTopLevel     []string
+	ReviewHandle       string
+	ReviewWorker       string
 }
 
 // BoardOrientationRootView is one root section for board-orientation inject.
@@ -251,6 +253,8 @@ func BuildWorkerLegInjectData(ctx WorkerLegContext) WorkerLegInjectData {
 		SiblingNotesAfter:  ctx.SiblingNotesAfter,
 		ReservedPaths:      reservedPaths,
 		LayoutTopLevel:     append([]string(nil), ctx.LayoutTopLevel...),
+		ReviewHandle:       strings.TrimSpace(ctx.ReviewHandle),
+		ReviewWorker:       strings.TrimSpace(ctx.ReviewWorker),
 	}
 }
 
@@ -314,6 +318,8 @@ func WorkerLegInjectToMap(data WorkerLegInjectData) map[string]any {
 		partial = append(partial, workerOmission("layout entries", omitted))
 	}
 	return map[string]any{
+		"review_handle":       data.ReviewHandle,
+		"review_worker":       data.ReviewWorker,
 		"leg_id":              data.LegID,
 		"agent_type":          data.AgentType,
 		"workflow_id":         data.WorkflowID,

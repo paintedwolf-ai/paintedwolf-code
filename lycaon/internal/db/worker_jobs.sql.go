@@ -1802,6 +1802,20 @@ func (q *Queries) ReclaimExpiredWorkerJobMergeApply(ctx context.Context, arg Rec
 	return result.RowsAffected()
 }
 
+const releaseAdmittedWorkerJob = `-- name: ReleaseAdmittedWorkerJob :execrows
+UPDATE worker_jobs SET status = 'pending' WHERE id = ? AND status = 'held' AND cancel_requested_at IS NULL
+`
+
+// ReleaseAdmittedWorkerJob makes a job claimable once its worker round is
+// recorded; until then it is held so no executor runs it without one.
+func (q *Queries) ReleaseAdmittedWorkerJob(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, releaseAdmittedWorkerJob, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const releaseWorkerJobMergeApply = `-- name: ReleaseWorkerJobMergeApply :execrows
 UPDATE worker_jobs SET merge_status = 'pending',
     merge_claim_token = NULL, merge_heartbeat_at = NULL, merge_lease_expires_at = NULL

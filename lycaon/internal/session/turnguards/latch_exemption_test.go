@@ -10,11 +10,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// Only an instruction to the worker whose latest result the latch holds is
-// exempt; another worker, an unlatched result, a lookup failure or another
-// tool stays under the latch.
-func TestLatchExemptsOnlyTheLatchedWorker(t *testing.T) {
+// Only a call that accounts for the result the latch holds is exempt: an
+// instruction to the worker that delivered it, or a review of it. Another
+// worker or result, a lookup failure or another tool stays under the latch.
+func TestLatchExemptsOnlyCallsThatAccountForTheLatchedResult(t *testing.T) {
 	latest := map[string]string{"fixer": "job-held", "scout": "job-other"}
+	handles := map[string]string{"result-held": "job-held", "result-other": "job-other"}
 	m := &Service{}
 	m.SetWorkerResults(func(_ context.Context, sessionID, name string) (string, bool, error) {
 		if sessionID != "coord" {
@@ -26,21 +27,28 @@ func TestLatchExemptsOnlyTheLatchedWorker(t *testing.T) {
 		job, ok := latest[name]
 		return job, ok, nil
 	})
+	m.SetResultJobs(func(_ context.Context, _, handle string) (string, bool, error) {
+		job, ok := handles[handle]
+		return job, ok, nil
+	})
 	sess := &api.Session{ID: "coord"}
 	baseline := guard.ProgressClosureBaseline{JobIDs: []string{"job-held"}}
 	for _, tc := range []struct {
-		tool, worker string
-		exempt       bool
+		tool   string
+		args   map[string]any
+		exempt bool
 	}{
-		{"instruct_worker", "fixer", true},
-		{"instruct_worker", "scout", false},
-		{"instruct_worker", "nobody", false},
-		{"instruct_worker", "broken", false},
-		{"task", "fixer", false},
+		{"instruct_worker", map[string]any{"worker": "fixer"}, true},
+		{"instruct_worker", map[string]any{"worker": "scout"}, false},
+		{"instruct_worker", map[string]any{"worker": "nobody"}, false},
+		{"instruct_worker", map[string]any{"worker": "broken"}, false},
+		{"task", map[string]any{"review_of": "result-held"}, true},
+		{"task", map[string]any{"review_of": "result-other"}, false},
+		{"task", map[string]any{"worker": "fixer"}, false},
+		{"shelve_overlay", map[string]any{"review_of": "result-held"}, false},
 	} {
-		got := m.instructsLatchedWorker(t.Context(), sess, tc.tool, map[string]any{"worker": tc.worker}, baseline)
-		if got != tc.exempt {
-			t.Fatalf("%s to %s: exempt=%v, want %v", tc.tool, tc.worker, got, tc.exempt)
+		if got := m.accountsLatchedResult(t.Context(), sess, tc.tool, tc.args, baseline); got != tc.exempt {
+			t.Fatalf("%s %v: exempt=%v, want %v", tc.tool, tc.args, got, tc.exempt)
 		}
 	}
 }

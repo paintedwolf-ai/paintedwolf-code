@@ -18,6 +18,8 @@ type WorkerCycleLister interface {
 	ListPendingOutcomes(ctx context.Context) ([]api.WorkerTask, error)
 	Get(jobID string) (*api.WorkerTask, bool)
 	ClaimWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, error)
+	// ReviewsWorker reports a read job that reviews a sealed result.
+	ReviewsWorker(ctx context.Context, task *api.WorkerTask) bool
 }
 
 // SetWorkerRounds sets the policy that bounds worker rounds and their notices.
@@ -113,6 +115,13 @@ func (m *Host) SetJobNames(names turnguards.JobNames) {
 func (m *Host) SetWorkerResults(results turnguards.LatestResultJobs) {
 	if m != nil && m.Coordinator.Guards != nil {
 		m.Coordinator.Guards.SetWorkerResults(results)
+	}
+}
+
+// SetResultJobs sets how a result handle resolves to its job.
+func (m *Host) SetResultJobs(results turnguards.ResultJobs) {
+	if m != nil && m.Coordinator.Guards != nil {
+		m.Coordinator.Guards.SetResultJobs(results)
 	}
 }
 

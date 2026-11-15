@@ -137,7 +137,7 @@ func roundEnqueuer(deps WorkerToolDeps, tctx tools.ToolContext, args map[string]
 			WorkspaceRootID:  scope.WorkspaceRootID,
 			WorkspacePath:    scope.WorkspacePath,
 			SpawnReason:      api.SpawnReasonHumanRequest,
-			Status:           api.WorkerStatusPending,
+			Status:           api.WorkerStatusHeld,
 			ExecutionTarget:  DefaultExecutionTarget(deps.Workers),
 			SourceToolCallID: strings.TrimSpace(tctx.Identity.ToolCallID),
 			SourceArgsDigest: digest,

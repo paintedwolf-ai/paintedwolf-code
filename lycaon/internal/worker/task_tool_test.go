@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"os"
 	"path/filepath"
@@ -101,6 +102,7 @@ func taskTool(t *testing.T, sqlDB *db.Store, wrap func(worker.WorkerQueue) worke
 		queue = wrap(queue)
 	}
 	deps.Queue, deps.WorkerRecords = queue, workerrecords.New(sqlDB)
+	deps.Reviews = &workerops.Service{Reader: workerops.Reader{Records: deps.WorkerRecords, Jobs: queue}}
 	if deps.Agents == nil {
 		deps.Agents = orchestration.NewMemoryAgentRegistryForTest()
 	}

@@ -55,6 +55,9 @@ type WorkerQueue interface {
 	Cancel(ctx context.Context, id string, result *api.WorkerResult) error
 	FinishCanceled(ctx context.Context, id string, result *api.WorkerResult) error
 	Hold(ctx context.Context, id string) error
+	// ReleaseAdmitted makes a job enqueued held claimable once its worker
+	// round is recorded.
+	ReleaseAdmitted(ctx context.Context, id string) error
 	List(ctx context.Context, projectID string, status ...api.WorkerStatus) ([]api.WorkerTask, error)
 	ListSessionPage(ctx context.Context, query SessionPageQuery) (SessionPage, error)
 	ListBySession(ctx context.Context, projectID, sessionID string, status ...api.WorkerStatus) ([]api.WorkerTask, error)
