@@ -49,11 +49,9 @@ func TestSkillRuntimePlanBoundsCatalogCapabilities(t *testing.T) {
 						t.Fatalf("absent %s advertised as requestable", name)
 					}
 				}
-				if offered, ok := vars["surface_offered"].([]string); ok {
-					for _, name := range offered {
-						if !state.plan.Addressable(name) {
-							t.Fatalf("catalog reintroduced %s", name)
-						}
+				for _, name := range reader.Offered() {
+					if !state.plan.Addressable(name) {
+						t.Fatalf("catalog reintroduced %s", name)
 					}
 				}
 			})
@@ -78,15 +76,26 @@ func TestCoordinatorSkillCanTeachDeferredToolWithinRuntimePlan(t *testing.T) {
 	if vars["profile_has_fetch_url"] != true || vars["profile_has_web_search"] != true {
 		t.Fatal("reachable research workflow was blanked")
 	}
-	if offered := vars["surface_offered"].([]string); slices.Contains(offered, "command") {
+	if slices.Contains(reader.Offered(), "command") {
 		t.Fatal("runtime-excluded command was taught")
 	}
 }
 
 func TestPromptSurfaceRespectsClosedRuntimePlan(t *testing.T) {
-	vars := map[string]any{}
-	testutil.FailErr(t, "closed runtime surface", MergeCoordinatorSurfacePathVars("implement_investigate", nil, vars, ReaderInput{Plan: toolsurface.Compile(nil, nil), Loaded: map[string]bool{"web_search": true, "fetch_url": true, "command": true}}))
-	if len(vars["surface_offered"].([]string)) != 0 || vars["more_tools_loadable"] != false {
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load tool profiles", err)
+	reader, err := NewReader(ReaderInput{
+		ProfileID: CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Profiles:  profiles,
+		Plan:      toolsurface.Compile(nil, nil),
+		Loaded:    map[string]bool{"web_search": true, "fetch_url": true, "command": true},
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "closed runtime surface", err)
+	vars := reader.Facts()
+	if len(reader.Offered()) != 0 || vars["more_tools_loadable"] != false {
 		t.Fatalf("closed plan widened: %v", vars)
 	}
 }

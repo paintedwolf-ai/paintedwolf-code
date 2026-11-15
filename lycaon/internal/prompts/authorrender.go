@@ -514,16 +514,21 @@ func mergeAuthorUnits(ctx context.Context, engine *FileTemplateEngine, vars map[
 			}
 		}
 	}
+	var classes []toolcontract.CommandEffectClass
 	if vars["profile_command_mutation"] == true {
-		held[toolcontract.ReachCommandMutation] = true
+		classes = append(classes, toolcontract.CommandMutation)
+		held["command"] = true
 	}
 	if vars["profile_command_external_exec"] == true {
-		held[toolcontract.ReachCommandExternalExec] = true
-		held[toolcontract.ReachCommandExternalExecSelector] = true
+		classes = append(classes, toolcontract.CommandExternalExec)
+		held["command"] = true
 	}
 	if vars["profile_command_network_egress"] == true {
-		held[toolcontract.ReachCommandNetworkEgress] = true
+		classes = append(classes, toolcontract.CommandNetworkEgress)
+		held["command"] = true
 	}
+	effects, _ := toolcontract.NewCommandEffects(classes...)
+	held = readerHeldSet(held, effects)
 	mode, _ := vars["execution_mode"].(string)
 	sel := promptunit.Selection{Host: promptunit.HostCoordinator, Mode: strings.TrimSpace(mode), Held: held}
 	blocks, err := RenderUnitSlots(ctx, UnitRendererFor(engine), catalog, sel, vars)

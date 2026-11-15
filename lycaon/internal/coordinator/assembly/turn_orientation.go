@@ -134,10 +134,9 @@ func (e *turnContextAssembler) prependTransitionInject(
 	if err != nil {
 		return "", false
 	}
-	surfaceVars := reader.Facts()
-	surfaceVars["project_dir"] = sess.WorkspacePath
-	if roots, count, activePath, omitted, ok := e.surface.workspaceRootsForTurn(ctx, sess, turn); ok {
-		mergeWorkspaceRootTurnVars(surfaceVars, roots, count, activePath, omitted)
+	occ := map[string]any{"project_dir": sess.WorkspacePath}
+	if roots, _, activePath, omitted, ok := e.surface.workspaceRootsForTurn(ctx, sess, turn); ok {
+		mergeWorkspaceRootTurnVars(occ, roots, activePath, omitted)
 	}
 	if err := prompts.MergeCoordinatorPromptVars(
 		profile.SurfaceID,
@@ -148,8 +147,12 @@ func (e *turnContextAssembler) prependTransitionInject(
 			ExecutionModeLeft:     transition.ExecutionModeLeft,
 		},
 		implState.VerifyCommand,
-		surfaceVars,
+		occ,
 	); err != nil {
+		return "", false
+	}
+	surfaceVars, err := prompts.Vars(reader, occ)
+	if err != nil {
 		return "", false
 	}
 	block, err := anchor.RenderInform(ctx, anchor.InjectTransition, anchor.MatchContext{Surface: "coordinator", SessionID: sess.ID}, inj, surfaceVars)

@@ -115,3 +115,47 @@ func TestReaderHeldComposesToolsAndReachMarks(t *testing.T) {
 		})
 	}
 }
+
+func TestVarsRefusesDeclaredAndReservedReaderFactsInOccurrence(t *testing.T) {
+	reader, err := prompts.DeclaredReader(nil, "implement_investigate")
+	testutil.FailErr(t, "DeclaredReader", err)
+
+	if _, err := prompts.Vars(prompts.Reader{}, nil); err == nil {
+		t.Fatal("Vars with zero Reader succeeded, want error")
+	}
+
+	for _, key := range []string{
+		"surface_id",
+		"root_count",
+		"web_search_enabled",
+		"caps.vision",
+		"caps",
+		"profile_has_read",
+		"profile_custom_undeclared",
+		"mints",
+		"mints.read",
+		"receipt_kind",
+		"tool_check_custom",
+		"runner_custom",
+		"agent_has_skill_custom",
+		"visual_show_custom",
+	} {
+		t.Run(key, func(t *testing.T) {
+			if _, err := prompts.Vars(reader, map[string]any{key: true}); err == nil {
+				t.Fatalf("Vars accepted reader fact key %q in occurrence", key)
+			}
+		})
+	}
+
+	merged, err := prompts.Vars(reader, map[string]any{
+		"project_dir":       "/tmp/repo",
+		"progress_snapshot": "done",
+	})
+	testutil.FailErr(t, "Vars with occurrence keys", err)
+	if merged["project_dir"] != "/tmp/repo" || merged["progress_snapshot"] != "done" {
+		t.Fatalf("occurrence keys missing after Vars: %v", merged)
+	}
+	if merged["surface_id"] != "implement_investigate" {
+		t.Fatalf("reader fact surface_id = %v, want implement_investigate", merged["surface_id"])
+	}
+}

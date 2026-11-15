@@ -7,11 +7,12 @@ import (
 	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools/readcaps"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 )
@@ -50,6 +51,7 @@ func DeclaredReader(catalog *extpacks.EffectiveCatalog, scopeID string) (Reader,
 	case IsCoordinatorSurfaceID(scopeID):
 		profileID = CoordinatorProfileID
 		surfaceID = scopeID
+		mode = defaultExecutionModeForSurface(surfaceID)
 		plan, err = CompileSurfacePlan(surfaceID, 1)
 		if err != nil {
 			return Reader{}, err
@@ -115,83 +117,30 @@ func buildReaderFacts(
 	commandOnFloor bool,
 	effects toolcontract.CommandEffects,
 ) (map[string]any, error) {
-	out := make(map[string]any, 64)
+	loadNativeToolFamilies()
+	isCoordinator := surfaceID != "" || profileID == CoordinatorProfileID
+	offeredSet := toolNameSet(offered)
+	command := commandEffectFlags(offeredSet["command"], effects)
+	reachHeld := readerHeldSet(offeredSet, effects)
 
-	if surfaceID != "" || profileID == CoordinatorProfileID {
-		var (
-			scopeData CoordinatorPathScopeData
-			err       error
-		)
-		if surfaceID == "implement_investigate" {
-			scopeData, err = LoadInvestigatePathScopes()
-		} else {
-			scopeData, err = CoordinatorPathScopesFromProfiles(in.Profiles)
-		}
-		if err != nil {
-			return nil, err
-		}
-		for k, v := range CoordinatorPathScopeTemplateVars(scopeData) {
-			out[k] = v
-		}
-		for k, v := range CoordinatorPolicyTemplateVars(offered, requestable) {
-			out[k] = v
-		}
-		spawn.RefreshSizingHintVars(out)
-		out["is_coordinator"] = true
-		out["on_worker_branch"] = in.OnWorkerBranch
-		out["has_git"] = in.HasGit
-		out["root_count"] = in.RootCount
-		out["command_on_floor"] = commandOnFloor
-		if surfaceID != "" {
-			out["surface_id"] = surfaceID
-		}
-		if mode != "" {
-			out["execution_mode"] = mode
-		}
-		restrictCommandEffects(effects, offered, requestable, out)
-		syncCommandExternalFacts(out)
-		canRequest := len(requestable) > 0 && slices.Contains(offered, "request_tools")
-		if canRequest {
-			roster, err := RequestableTools(requestable, in.Schemas)
-			if err != nil {
-				return nil, err
-			}
-			out["requestable_tools"] = requestableToolVars(roster)
-			out["requestable_capabilities"] = RequestableCapabilities(roster)
-		} else {
-			out["requestable_tools"] = []map[string]any(nil)
-			out["requestable_capabilities"] = []string(nil)
-		}
-		out["surface_offered"] = slices.Clone(offered)
-		commandMutates := currentCommandEffectFlags(out, slices.Contains(offered, "command")).mutation
-		if surfaceID != "" {
-			card, err := LoadCoordinatorSurfaceCard(surfaceID)
-			if err != nil {
-				return nil, err
-			}
-			for k, v := range CoordinatorSurfaceCardVars(card, offered, requestable, commandMutates).TemplateVars() {
-				out[k] = v
-			}
-		}
-		runOffered := offered
-		if !commandMutates {
-			runOffered = filterToolName(offered, "command")
-		}
-		MergeVisualShowVars(runOffered, requestable, out)
-		out["more_tools_loadable"] = canRequest
-		out["web_search_enabled"] = in.WebSearch
-		if !in.WebSearch {
-			MergeWebResearchUnavailable(out)
-		}
-		clearSkillRosterWithoutSkillsRead(out)
-		return out, nil
+	writeTools := orderedEnabledTools(nativeWriteTools, offeredSet)
+	if command.mutation {
+		writeTools = append([]string{"command"}, writeTools...)
 	}
+	surveyTools := orderedEnabledTools(surveyToolDisplayOrder, offeredSet)
+
+	allReachable := toolNameSet(append(slices.Clone(offered), requestable...))
+	if !command.mutation {
+		delete(allReachable, "command")
+	}
+	mutationCapable := toolSetMutationCapable(allReachable)
 
 	catalog, _ := extpacks.CatalogForConsumers()
 	schemas := in.Schemas
 	if schemas == nil && catalog != nil {
 		schemas, _ = loadToolSchemaCached(catalog)
 	}
+
 	toolViews := make([]AgentToolArgView, 0, len(offered))
 	for _, name := range offered {
 		view := AgentToolArgView{Name: name}
@@ -202,37 +151,204 @@ func buildReaderFacts(
 		}
 		toolViews = append(toolViews, view)
 	}
-	roster, err := RequestableTools(requestable, schemas)
+
+	connects := command.mutation && (command.externalExec || command.networkEgress)
+
+	f := ReaderFacts{
+		CapsVision:                  false,
+		CommandOnFloor:              commandOnFloor,
+		CommandOutputFiles:          offeredSet["command"],
+		ExecutionMode:               mode,
+		HasGit:                      in.HasGit,
+		IsCoordinator:               isCoordinator,
+		NativeEditLimitMiB:          readcaps.MaxMutationBytes >> 20,
+		OnWorkerBranch:              in.OnWorkerBranch,
+		ProfileCommandMutation:      command.mutation,
+		ProfileCommandExternalExec:  command.externalExec,
+		ProfileCommandNetworkEgress: command.networkEgress,
+		ProfileHasCodeRewrite:       command.mutation && (offeredSet["code_rewrite"] || toolcontract.CommandLanguageReachable("code-rewrite", reachHeld)),
+		ProfileHasManagedSecrets:    len(nativeSecretTools) > 0 && allPresent(nativeSecretTools, offeredSet),
+		ProfileHasPageControls:      hasToolFamily(offeredSet, "page"),
+		ProfileHasRetrieval:         profileHasRetrievalTool(offeredSet),
+		ProfileHasScanDrilldown:     profileHasScanDrilldownTools(offeredSet),
+		ProfileHasSummarize:         offeredSet["summarize"] || toolcontract.CommandLanguageReachable("summarize", reachHeld),
+		ProfileHasSurveyRepo:        offeredSet["survey_repo"] || toolcontract.CommandLanguageReachable("repo-map", reachHeld),
+		ProfileHasTerminalCapture:   command.externalExec,
+		ProfileHasWriteTools:        len(writeTools) > 0 || command.mutation,
+		ProfileMutationCapable:      mutationCapable,
+		ProgressGatedTools:          progressGatedOfferedTools(offeredSet, command.mutation),
+		RecallMayWiden:              isCoordinator,
+		RootCount:                   in.RootCount,
+		RunnerDirectIPTools:         runnerCapabilityTools(offered, toolcontract.CapabilityDirectIP, connects),
+		RunnerLocalListenTools:      runnerCapabilityTools(offered, toolcontract.CapabilityLocalListen, connects),
+		RunnerLoopbackConnectTools:  runnerCapabilityTools(offered, toolcontract.CapabilityLoopbackConnect, connects),
+		RunnerSocketTools:           runnerCapabilityTools(offered, toolcontract.CapabilitySocket, connects),
+		RunnerWriteRootTools:        runnerCapabilityTools(offered, toolcontract.CapabilityWriteRoot, command.mutation),
+		SurfaceID:                   surfaceID,
+		ToolCheckScanDrilldownTools: scanDrilldownToolsForCheck(offeredSet),
+		ToolCheckSurveyTools:        surveyTools,
+		ToolCheckVerifyTools:        verifyToolsForCheck(offeredSet, command.externalExec),
+		ToolCheckWriteTools:         writeTools,
+		ToolProfile:                 profileID,
+		WebSearchEnabled:            in.WebSearch,
+	}
+
+	if isCoordinator {
+		if err := fillCoordinatorReaderFacts(in, surfaceID, offered, requestable, offeredSet, command.mutation, schemas, &f); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := fillWorkerReaderFacts(profile, offered, requestable, toolViews, schemas, catalog, &f); err != nil {
+			return nil, err
+		}
+	}
+
+	vocab, err := BuildReaderFactVocabulary(catalog)
 	if err != nil {
 		return nil, err
 	}
-	var rejectCodes []AgentRejectCodeView
-	if catalog != nil {
-		if policy, err := hintregistry.ListEffectiveWithCatalog(catalog); err == nil {
-			if hints, err := loadHintCodeRowsCached(catalog.Revision, policy); err == nil {
-				rejectCodes = recoverableRejectCodes(hints, append(slices.Clone(offered), requestable...))
+	f.ProfileHas = make(map[string]bool, len(vocab.Tools))
+	for name := range vocab.Tools {
+		if _, isScalar := declaredReaderFactScalars["profile_has_"+name]; isScalar {
+			continue
+		}
+		f.ProfileHas[name] = offeredSet[name]
+	}
+	for name, ok := range offeredSet {
+		if ok && toolschema.ValidToolName(name) {
+			if _, isScalar := declaredReaderFactScalars["profile_has_"+name]; !isScalar {
+				f.ProfileHas[name] = true
 			}
 		}
 	}
-	data := AgentToolSurfaceData{
-		ToolProfile:     profileID,
-		Tools:           toolViews,
-		Requestable:     roster,
-		RejectCodes:     rejectCodes,
-		WriteGlobs:      slices.Clone(profile.WriteGlobs),
-		CommandEffects:  effects,
-		CommandDeferred: profile.ToolDeferred("command"),
+	if !in.WebSearch {
+		f.ProfileHas["fetch_url"] = false
+		f.ProfileHas["web_search"] = false
 	}
-	for k, v := range AgentToolSurfaceTemplateVars(data) {
-		out[k] = v
+
+	rawCanRequest := requestableToolSet(offered, requestable)
+	f.ProfileCanRequest = make(map[string]bool, len(vocab.Tools))
+	for name := range vocab.Tools {
+		f.ProfileCanRequest[name] = rawCanRequest[name]
 	}
-	restrictCommandEffects(effects, offered, requestable, out)
-	syncCommandExternalFacts(out)
-	mergeVisualShowVarsFromSurface(data, out)
-	out["is_coordinator"] = false
-	out["on_worker_branch"] = in.OnWorkerBranch
-	out["has_git"] = in.HasGit
-	out["root_count"] = in.RootCount
-	out["web_search_enabled"] = in.WebSearch
-	return out, nil
+	for name, ok := range rawCanRequest {
+		if ok {
+			f.ProfileCanRequest[name] = true
+		}
+	}
+
+	f.Mints = evidenceMintsForCommand(offeredSet, command.mutation, command.externalExec)
+	f.ReceiptKind = evidence.ActiveBinding().ReceiptKinds()
+	for name := range vocab.ReceiptTools {
+		if _, ok := f.ReceiptKind[name]; !ok {
+			f.ReceiptKind[name] = ""
+		}
+	}
+
+	f.AgentHasSkill = make(map[string]bool, len(vocab.SkillKeys))
+	for _, key := range vocab.SkillKeys {
+		f.AgentHasSkill[key] = false
+	}
+
+	return f.Map(), nil
+}
+
+func fillCoordinatorReaderFacts(
+	in ReaderInput,
+	surfaceID string,
+	offered, requestable []string,
+	offeredSet map[string]bool,
+	commandMutates bool,
+	schemas *toolschema.Config,
+	f *ReaderFacts,
+) error {
+	var (
+		scopeData CoordinatorPathScopeData
+		err       error
+	)
+	if surfaceID == "implement_investigate" {
+		scopeData, err = LoadInvestigatePathScopes()
+	} else {
+		scopeData, err = CoordinatorPathScopesFromProfiles(in.Profiles)
+	}
+	if err != nil {
+		return err
+	}
+	f.ReadGlobs = scopeData.ReadGlobs
+	f.WriteGlobs = scopeData.WriteGlobs
+	f.LaneSSyncTools = LaneSyncTools(offered)
+	f.VisualReviewCadence = "on_request"
+	f.MoreToolsLoadable = len(requestable) > 0
+	if len(requestable) > 0 && offeredSet["request_tools"] {
+		roster, err := RequestableTools(requestable, schemas)
+		if err != nil {
+			return err
+		}
+		f.RequestableCapabilities = RequestableCapabilities(roster)
+	}
+	if surfaceID != "" {
+		card, err := LoadCoordinatorSurfaceCard(surfaceID)
+		if err != nil {
+			return err
+		}
+		cv := CoordinatorSurfaceCardVars(card, offered, requestable, commandMutates)
+		f.SurfaceCardLabel = cv.Label
+		f.SurfaceCardRule = cv.Rule
+		f.SurfacePublishesText = cv.PublishesText
+		f.CardMayEdit = cv.MayEdit
+		f.CardMayRun = cv.MayRun
+		f.CardMayDispatch = cv.MayDispatch
+		f.CardEditDeferred = cv.EditDeferred
+		f.CardOnlyTools = cv.OnlyTools
+	}
+	runOffered := offered
+	if !commandMutates {
+		runOffered = filterToolName(offered, "command")
+	}
+	fillVisualShowFacts(runOffered, requestable, f)
+	return nil
+}
+
+func fillWorkerReaderFacts(
+	profile sandbox.ToolProfile,
+	offered, requestable []string,
+	toolViews []AgentToolArgView,
+	schemas *toolschema.Config,
+	catalog *extpacks.EffectiveCatalog,
+	f *ReaderFacts,
+) error {
+	toolsCtx := make([]map[string]any, len(toolViews))
+	for i, t := range toolViews {
+		toolsCtx[i] = map[string]any{
+			"name":          t.Name,
+			"required_args": t.RequiredArgs,
+		}
+	}
+	f.AgentTools = toolsCtx
+	f.WriteGlobs = slices.Clone(profile.WriteGlobs)
+	f.MoreToolsLoadable = len(requestable) > 0
+	if len(requestable) > 0 {
+		roster, err := RequestableTools(requestable, schemas)
+		if err != nil {
+			return err
+		}
+		f.RequestableCapabilities = RequestableCapabilities(roster)
+	}
+	if catalog != nil {
+		if policy, err := hintregistry.ListEffectiveWithCatalog(catalog); err == nil {
+			if hints, err := loadHintCodeRowsCached(catalog.Revision, policy); err == nil {
+				rejectCodes := recoverableRejectCodes(hints, append(slices.Clone(offered), requestable...))
+				codesCtx := make([]map[string]any, len(rejectCodes))
+				for i, c := range rejectCodes {
+					codesCtx[i] = map[string]any{
+						"code":               c.Code,
+						"branch_instruction": c.BranchInstruction,
+					}
+				}
+				f.RejectCodes = codesCtx
+			}
+		}
+	}
+	fillVisualShowFacts(offered, requestable, f)
+	return nil
 }

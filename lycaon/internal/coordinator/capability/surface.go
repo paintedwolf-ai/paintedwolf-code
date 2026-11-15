@@ -116,8 +116,6 @@ func Resolve(input ResolveInput) (CapabilitySurface, error) {
 // MergeSpawnInjectVars returns pongo vars for inject/implement-spawn.md from the surface.
 func (s CapabilitySurface) MergeSpawnInjectVars() map[string]any {
 	vars := prompts.SpawnRosterTemplateVars(s.Roster, s.ExcludedDisclosures)
-	vars["surface_id"] = s.SurfaceID
-	vars["execution_mode"] = surface.ExecutionModeFamily(s.SurfaceID)
 	vars["repo_known_empty"] = s.RepoKnownEmpty
 	MergeVars(vars, s.Flags)
 	allowed := append([]string(nil), s.SpawnAllowlist...)

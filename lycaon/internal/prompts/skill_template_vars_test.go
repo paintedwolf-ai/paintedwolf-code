@@ -49,9 +49,9 @@ func TestSkillVarsCoordinatorSurface(t *testing.T) {
 	if vars["root_count"] != 2 {
 		t.Fatalf("root_count = %v", vars["root_count"])
 	}
-	offered, _ := vars["surface_offered"].([]string)
+	offered := reader.Offered()
 	if !sort.StringsAreSorted(offered) || len(offered) == 0 {
-		t.Fatalf("surface_offered = %v", offered)
+		t.Fatalf("reader.Offered() = %v", offered)
 	}
 	if vars["profile_has_command"] != true {
 		t.Fatalf("profile_has_command = %v", vars["profile_has_command"])
@@ -96,8 +96,8 @@ func TestSkillVarsWorkerProfile(t *testing.T) {
 	if vars["profile_has_task"] != false {
 		t.Fatalf("worker must not hold task: %v", vars["profile_has_task"])
 	}
-	if _, ok := vars["surface_offered"]; ok {
-		t.Fatal("worker vars must not carry coordinator surface rosters")
+	if vars["surface_id"] != "" {
+		t.Fatalf("worker vars must not carry coordinator surface_id: %v", vars["surface_id"])
 	}
 }
 

@@ -150,7 +150,10 @@ func (e *promptSurface) workerReader(ctx context.Context, sess *api.Session, fe 
 	}
 	var visible []string
 	var loaded map[string]bool
-	rootCount := 1
+	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, nil)
+	if !ok {
+		rootCount = 1
+	}
 	if vars != nil {
 		if raw, ok := vars["visible_tools"].([]string); ok {
 			visible = raw
@@ -158,19 +161,13 @@ func (e *promptSurface) workerReader(ctx context.Context, sess *api.Session, fe 
 		if raw, ok := vars["loaded_tools"].(map[string]bool); ok {
 			loaded = raw
 		}
-		if rc, ok := vars["root_count"].(int); ok {
-			rootCount = rc
-		}
 	}
 	webSearchEnabled := true
 	if fn := e.deps.WebSearchEnabled; fn != nil {
 		webSearchEnabled = fn()
-	} else if vars != nil {
-		if ws, ok := vars["web_search_enabled"].(bool); ok {
-			webSearchEnabled = ws
-		}
 	}
-	return prompts.NewReader(prompts.ReaderInput{
+	visionEnabled := e.deps.ModelVision != nil && e.deps.ModelVision(ctx, sess)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
 		ProfileID: profileID,
 		Profiles:  profiles,
 		Loaded:    loaded,
@@ -179,4 +176,8 @@ func (e *promptSurface) workerReader(ctx context.Context, sess *api.Session, fe 
 		RootCount: rootCount,
 		WebSearch: webSearchEnabled,
 	})
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	return reader.WithVision(visionEnabled), nil
 }

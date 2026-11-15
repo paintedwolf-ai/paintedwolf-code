@@ -33,12 +33,9 @@ func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 	engine := contractPersonaEngine(t)
 	units, err := prompts.UnitCatalogForEngine(engine)
 	contractcheck.FailErr(t, "unit catalog", err)
-	base := mergeCoordinatorTemplateVars(t)
+	base := mergeCoordinatorSurfaceVars(t, "implement_synthesis")
+	mergeFixtureWorkspaceRoot(t, base, "")
 	for _, state := range toolFactStates(t, binding, units) {
-		vars := maps.Clone(base)
-		maps.Copy(vars, prompts.VisibleToolsNativePartialVars(state.offered))
-		prompts.MergeVisualShowVars(state.offered, state.requestable, vars)
-		vars["is_coordinator"] = state.host == promptunit.HostCoordinator
 		allTools := map[string]bool{}
 		for _, tool := range slices.Concat(state.offered, state.requestable) {
 			allTools[tool] = true
@@ -72,6 +69,8 @@ func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 			WebSearch: true,
 		})
 		contractcheck.FailErr(t, "build state reader", err)
+		vars, err := prompts.Vars(reader, maps.Clone(base))
+		contractcheck.FailErr(t, "merge state vars", err)
 		held := reader.Held()
 		selection := reader.Selection()
 		for _, slot := range units.Rendered(selection) {

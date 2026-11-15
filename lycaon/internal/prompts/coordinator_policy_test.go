@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/limits"
-	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
 func TestCoordinatorReadLineLimitInPolicyVars(t *testing.T) {
@@ -33,7 +34,16 @@ func TestCoordinatorPolicyGuidanceTracksOfferedTools(t *testing.T) {
 	sticky := make([]string, 1, 4)
 	sticky[0] = "recall"
 	deferred := []string{"command", "capture_page", "summarize"}
-	vars := prompts.CoordinatorPolicyTemplateVars(sticky, deferred)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Profiles:  toolProfiles(t),
+		Plan:      toolsurface.Compile(sticky, deferred),
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader", err)
+	vars := reader.Facts()
 	if vars["profile_has_recall"] != true || vars["more_tools_loadable"] != true {
 		t.Fatalf("offered tool guidance: %#v", vars)
 	}
@@ -63,12 +73,23 @@ func TestLaneSyncToolsIncludesListDir(t *testing.T) {
 	}
 }
 
-func TestCoordinatorPolicyTemplateVarsKeys(t *testing.T) {
-	vars := prompts.CoordinatorPolicyTemplateVars([]string{"read", "grep", "find", "task"}, nil)
+func TestCoordinatorPolicyFactKeys(t *testing.T) {
+	reader, err := prompts.DeclaredReader(nil, "implement_investigate")
+	testutil.FailErr(t, "DeclaredReader", err)
+	vars := reader.Facts()
 	for _, key := range []string{
-		"coordinator_read_line_limit",
 		"is_coordinator",
 		"lane_s_sync_tools",
+		"more_tools_loadable",
+		"recall_may_widen",
+		"visual_review_cadence",
+	} {
+		if _, ok := vars[key]; !ok {
+			t.Fatalf("missing reader fact %q", key)
+		}
+	}
+	policy := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+	for _, key := range []string{
 		"max_in_flight",
 		"max_read_workers",
 		"max_write_workers",
@@ -79,29 +100,18 @@ func TestCoordinatorPolicyTemplateVarsKeys(t *testing.T) {
 		"throwaway_tool_loops_min",
 		"throwaway_tool_loops_max",
 		"deep_tool_loops_hint",
-		"max_author_progress_lines",
-		"max_progress_label_chars",
 	} {
-		if _, ok := vars[key]; !ok {
+		if _, ok := policy[key]; !ok {
 			t.Fatalf("missing policy var %q", key)
 		}
 	}
-	if vars["coordinator_read_line_limit"] != readcaps.LineLimit {
-		t.Fatalf("read line limit mismatch")
-	}
-	if vars["max_concurrent_tool_calls"] != spawn.MaxConcurrentToolCalls {
+	if policy["max_concurrent_tool_calls"] != spawn.MaxConcurrentToolCalls {
 		t.Fatalf("max_concurrent_tool_calls mismatch")
 	}
-	if vars["worker_summary_max_chars"] != limits.DefaultWorkerSummaryMaxChars {
-		t.Fatalf("worker_summary_max_chars = %v want %d", vars["worker_summary_max_chars"], limits.DefaultWorkerSummaryMaxChars)
+	if policy["worker_summary_max_chars"] != limits.DefaultWorkerSummaryMaxChars {
+		t.Fatalf("worker_summary_max_chars = %v want %d", policy["worker_summary_max_chars"], limits.DefaultWorkerSummaryMaxChars)
 	}
-	if vars["worker_tool_budget_default"] != spawn.DefaultWorkerMaxToolLoops {
-		t.Fatalf("worker default = %v want %d", vars["worker_tool_budget_default"], spawn.DefaultWorkerMaxToolLoops)
-	}
-	if vars["max_author_progress_lines"] != progress.MaxAuthorProgressLines {
-		t.Fatalf("max_author_progress_lines = %v want %d", vars["max_author_progress_lines"], progress.MaxAuthorProgressLines)
-	}
-	if vars["max_progress_label_chars"] != progress.MaxLabelRunes {
-		t.Fatalf("max_progress_label_chars = %v want %d", vars["max_progress_label_chars"], progress.MaxLabelRunes)
+	if policy["worker_tool_budget_default"] != spawn.DefaultWorkerMaxToolLoops {
+		t.Fatalf("worker default = %v want %d", policy["worker_tool_budget_default"], spawn.DefaultWorkerMaxToolLoops)
 	}
 }

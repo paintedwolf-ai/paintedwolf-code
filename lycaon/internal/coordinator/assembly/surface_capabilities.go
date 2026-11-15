@@ -94,14 +94,11 @@ func (e *promptSurface) mergeEffectivePromptSurface(ctx context.Context, sess *a
 		}
 	}
 }
-func (e *promptSurface) mergeVisibleToolCapabilityVars(vars map[string]any) {
+func (e *promptSurface) mergeVisibleToolCapabilityVars(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch, vars map[string]any) {
 	if vars == nil {
 		return
 	}
-	rootCount := 0
-	if v, ok := vars["root_count"].(int); ok {
-		rootCount = v
-	}
+	_, rootCount, _, _, _ := e.workspaceRootsForTurn(ctx, sess, turn)
 	var visible []string
 	switch v := vars["visible_tools"].(type) {
 	case []string:
@@ -156,8 +153,7 @@ func (e *promptSurface) workspaceRootsForTurn(ctx context.Context, sess *api.Ses
 
 // mergeWorkspaceRootTurnVars applies the turn's workspace root snapshot to
 // prompt vars for workspace-roots.md and the root-aware surfaces.
-func mergeWorkspaceRootTurnVars(vars map[string]any, roots []map[string]any, rootCount int, activePath string, omittedCount int) {
-	vars["root_count"] = rootCount
+func mergeWorkspaceRootTurnVars(vars map[string]any, roots []map[string]any, activePath string, omittedCount int) {
 	vars["workspace_roots"] = roots
 	vars["workspace_roots_omitted_count"] = omittedCount
 	if activePath != "" {
@@ -264,6 +260,7 @@ func (e *promptSurface) turnReader(
 		}
 		profiles = loaded
 	}
+	visionEnabled := e.deps.ModelVision != nil && e.deps.ModelVision(ctx, sess)
 	reader, err := prompts.NewReader(prompts.ReaderInput{
 		ProfileID: prompts.CoordinatorProfileID,
 		SurfaceID: profile.SurfaceID,
@@ -278,6 +275,7 @@ func (e *promptSurface) turnReader(
 	if err != nil {
 		return prompts.Reader{}, err
 	}
+	reader = reader.WithVision(visionEnabled)
 	if turn != nil {
 		turn.Reader = reader
 	}

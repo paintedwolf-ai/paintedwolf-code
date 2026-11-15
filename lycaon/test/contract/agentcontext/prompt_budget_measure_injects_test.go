@@ -57,11 +57,11 @@ func measureCoordinatorInjectBlock(
 	switch spec.ID {
 	case "turn_state":
 		block, err := inject.RenderTurnStateBlock(ctx, renderer, "sess-inject-test", inject.TurnStateInjectInput{
-			ProgressMissing:          true,
-			ProfileHasUpdateProgress: true,
-			VerifyRequired:           true,
-			PendingOverlayJobs:       []string{"job-overlay-1", "job-overlay-2"},
-			PartialWorkerJobs:        []string{"job-partial-1"},
+			ProgressMissing:    true,
+			Reader:             coordinatorTestReader(t, "implement_investigate", 1),
+			VerifyRequired:     true,
+			PendingOverlayJobs: []string{"job-overlay-1", "job-overlay-2"},
+			PartialWorkerJobs:  []string{"job-partial-1"},
 		})
 		contractcheck.FailErr(t, "RenderTurnStateBlock", err)
 		return block

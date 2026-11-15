@@ -103,11 +103,12 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 					t.Fatalf("reader.Effects() = %v, executor = %v, admitted = %v", reader.Effects().Classes(), execEffects.Classes(), admitted.Classes())
 				}
 
-				vars := map[string]any{"root_count": 1}
+				vars := map[string]any{}
 				mergePromptBudgetSkillRoster(t, vars)
-				contractcheck.FailErr(t, "merge surface vars", prompts.MergeCoordinatorSurfacePathVars(surfaceID, profiles, vars, prompts.ReaderInput{}))
 				contractcheck.FailErr(t, "merge prompt vars", prompts.MergeCoordinatorPromptVars(surfaceID, prompts.ExecutionModePromptTransition{}, "", vars))
-				offered, _ := vars["surface_offered"].([]string)
+				vars, err = prompts.Vars(reader, vars)
+				contractcheck.FailErr(t, "prompts.Vars", err)
+				offered := reader.Offered()
 				commandOffered := slices.Contains(offered, "command")
 				for name, class := range commandEffectVariables {
 					want := commandOffered && allowsEffect(t, admitted, class)
@@ -166,8 +167,7 @@ func TestWorkerPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 					t.Fatalf("worker reader.Effects() = %v, executor = %v, want %v", reader.Effects().Classes(), programSurface.Effects().Classes(), profile.CommandEffects.Classes())
 				}
 				assertCatalogUnitSelection(t, catalog, reader)
-				vars := map[string]any{}
-				contractcheck.FailErr(t, "merge profile vars", prompts.MergeAgentToolSurfaceVars(profile.ID, nil, nil, prompts.ReaderInput{}, vars, profiles))
+				vars := reader.Facts()
 				commandOffered, _ := vars["profile_has_command"].(bool)
 				for name, class := range commandEffectVariables {
 					want := commandOffered && allowsEffect(t, profile.CommandEffects, class)

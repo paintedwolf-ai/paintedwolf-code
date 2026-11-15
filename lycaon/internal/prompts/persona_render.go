@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"strings"
 	"sync"
 
@@ -55,25 +54,17 @@ func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string
 	if err != nil {
 		return nil, "", "", nil, err
 	}
-	data := PersonaDataMap(def)
+	occ := PersonaDataMap(def)
 	for k, v := range occurrence {
-		data[k] = v
+		occ[k] = v
 	}
-	if err := MergeWorkerPolicyTemplateVars(id, data); err != nil {
+	if err := MergeWorkerPolicyTemplateVars(id, occ); err != nil {
 		return nil, "", "", nil, fmt.Errorf("agent spawn vars for %q: %w", id, err)
 	}
-	for k, v := range reader.Facts() {
-		if k == "agent_skills" {
-			if existing := agentSkillViewsFromVars(data); len(existing) > 0 && slices.Contains(reader.Offered(), "skills_read") {
-				continue
-			}
-		}
-		if isPreservedEnvironmentFact(k, data) {
-			continue
-		}
-		data[k] = v
+	data, err := Vars(reader, occ)
+	if err != nil {
+		return nil, "", "", nil, fmt.Errorf("persona vars for %q: %w", id, err)
 	}
-	syncCommandExternalFacts(data)
 	unitCatalog, err := UnitCatalogFor(eff)
 	if err != nil {
 		return nil, "", "", nil, fmt.Errorf("unit catalog for %q: %w", id, err)

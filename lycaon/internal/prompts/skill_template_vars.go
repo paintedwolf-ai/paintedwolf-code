@@ -8,14 +8,15 @@ import (
 // reader's facts plus spawn policy and sizing.
 func SkillVars(reader Reader, budget spawn.WorkerToolBudget) map[string]any {
 	resolved := defaultDelegationBudget(budget)
-	vars := spawn.PolicyTemplateVars(resolved)
-	for k, v := range reader.Facts() {
-		vars[k] = v
+	occ := spawn.PolicyTemplateVars(resolved)
+	occ["worker_tool_budget_default"] = resolved.Default
+	occ["worker_tool_budget_min"] = resolved.Min
+	occ["worker_tool_budget_max"] = resolved.Max
+	spawn.RefreshSizingHintVars(occ)
+	vars, err := Vars(reader, occ)
+	if err != nil {
+		return reader.Facts()
 	}
-	vars["worker_tool_budget_default"] = resolved.Default
-	vars["worker_tool_budget_min"] = resolved.Min
-	vars["worker_tool_budget_max"] = resolved.Max
-	spawn.RefreshSizingHintVars(vars)
 	return vars
 }
 

@@ -58,10 +58,7 @@ func TestWebResearchPromptVarsSuppliedAndGated(t *testing.T) {
 
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	for _, enabled := range []bool{false, true} {
-		vars := map[string]any{
-			"execution_mode": "orchestrate",
-			"root_count":     0,
-		}
+		vars := map[string]any{}
 		reader, err := prompts.NewReader(prompts.ReaderInput{
 			ProfileID: prompts.CoordinatorProfileID,
 			SurfaceID: spawn.SurfaceImplementRouting,
@@ -75,6 +72,8 @@ func TestWebResearchPromptVarsSuppliedAndGated(t *testing.T) {
 			reader,
 			inject.ResolveAgentRoster(spawn.SurfaceImplementRouting, spawn.AmbientAllowedAgents(), 0, false, enabled).Effective,
 		))
+		vars, err = prompts.Vars(reader, vars)
+		contractcheck.FailErr(t, "prompts.Vars", err)
 		if vars["web_search_enabled"] != enabled {
 			t.Fatalf("web_search_enabled = %v want %v", vars["web_search_enabled"], enabled)
 		}

@@ -53,8 +53,9 @@ func TestRequestableCapabilitiesFollowLaunchersNotControls(t *testing.T) {
 }
 
 func TestInvestigateMoreToolsListsNothingAlreadyReachable(t *testing.T) {
-	vars := map[string]any{}
-	testutil.FailErr(t, "MergeCoordinatorSurfacePathVars", MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, ReaderInput{}))
+	reader, err := DeclaredReader(nil, toolcontract.SurfaceImplementInvestigate)
+	testutil.FailErr(t, "DeclaredReader", err)
+	vars := reader.Facts()
 	labels, _ := vars["requestable_capabilities"].([]string)
 	label := map[string]string{}
 	for _, c := range capabilityLabels {

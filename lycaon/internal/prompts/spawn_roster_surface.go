@@ -227,7 +227,6 @@ func spawnAgentTemplateVars(a SpawnAgentView) map[string]any {
 		"id":               a.ID,
 		"name":             a.Name,
 		"description":      a.Description,
-		"tool_profile":     a.ToolProfile,
 		"enabled_tools":    a.EnabledTools,
 		"denied_tools":     a.DeniedTools,
 		"can_edit":         a.CanEdit,

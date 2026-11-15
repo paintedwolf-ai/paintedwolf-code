@@ -39,9 +39,9 @@ func RenderImplementSpawnInject(
 	if err != nil {
 		return "", fmt.Errorf("resolve capability surface: %w", err)
 	}
-	vars := reader.Facts()
-	for k, v := range surf.MergeSpawnInjectVars() {
-		vars[k] = v
+	vars, err := prompts.Vars(reader, surf.MergeSpawnInjectVars())
+	if err != nil {
+		return "", err
 	}
 	block, err := anchor.RenderInform(ctx, anchor.InjectImplementSpawn, anchor.MatchContext{Surface: "coordinator", SessionID: sessionID}, renderer, vars)
 	if err != nil {

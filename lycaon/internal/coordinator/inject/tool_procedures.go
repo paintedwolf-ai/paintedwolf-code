@@ -14,8 +14,10 @@ func RenderToolProceduresBlock(
 	ctx context.Context, renderer *prompts.InjectRenderer,
 	sessionID string, reader prompts.Reader,
 ) (string, error) {
-	vars := reader.Facts()
-	vars["offered_tools"] = reader.Offered()
+	vars, err := prompts.Vars(reader, map[string]any{"offered_tools": reader.Offered()})
+	if err != nil {
+		return "", err
+	}
 	surface, profile := procedureTarget(reader)
 	catalog, err := renderer.UnitCatalog()
 	if err != nil {
@@ -34,7 +36,7 @@ func RenderToolProceduresBlock(
 }
 
 func procedureTarget(reader prompts.Reader) (string, string) {
-	if reader.Host() == promptunit.HostCoordinator {
+	if reader.Selection().Host == promptunit.HostCoordinator {
 		if reader.SurfaceID() != "" {
 			return "coordinator", reader.SurfaceID()
 		}

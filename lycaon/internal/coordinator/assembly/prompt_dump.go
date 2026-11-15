@@ -72,13 +72,14 @@ func RenderPromptDump(
 	current := surface.ExecutionModeFamily(profile.SurfaceID)
 	transition := surface.ComputeModeTransition(previous, current, opts.Causes)
 
-	base := map[string]any{"project_dir": sess.WorkspacePath}
+	occ := map[string]any{"project_dir": sess.WorkspacePath}
 	var roots []projectroot.RootRef
 	if sess.WorkspacePath != "" {
 		roots = []projectroot.RootRef{{ID: promptDumpFixtureRootID, Path: sess.WorkspacePath, Label: "Fixture", IsPrimary: true}}
 	}
-	prompts.MergeWorkspaceRootsVars(base, roots, promptDumpFixtureRootID)
-	rootCount, _ := base["root_count"].(int)
+	prompts.MergeWorkspaceRootsVars(occ, roots, promptDumpFixtureRootID)
+	delete(occ, "root_count")
+	rootCount := len(roots)
 	roster := inject.ResolveAgentRoster(profile.SurfaceID, spawn.AmbientAllowedAgents(), rootCount, false, true)
 	profiles, err := sandbox.LoadToolProfiles()
 	if err != nil {
@@ -100,14 +101,11 @@ func RenderPromptDump(
 	if err != nil {
 		return "", err
 	}
-	for k, v := range reader.Facts() {
-		base[k] = v
-	}
-	if err := capability.MergeForTurn(base, reader, roster.Effective); err != nil {
+	if err := capability.MergeForTurn(occ, reader, roster.Effective); err != nil {
 		return "", fmt.Errorf("merge fixture capabilities: %w", err)
 	}
 	for key, value := range spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget()) {
-		base[key] = value
+		occ[key] = value
 	}
 	if err := prompts.MergeCoordinatorPromptVars(
 		profile.SurfaceID,
@@ -118,9 +116,13 @@ func RenderPromptDump(
 			ExecutionModeLeft:     transition.ExecutionModeLeft,
 		},
 		implState.VerifyCommand,
-		base,
+		occ,
 	); err != nil {
 		return "", fmt.Errorf("merge coordinator prompt vars: %w", err)
+	}
+	base, err := prompts.Vars(reader, occ)
+	if err != nil {
+		return "", fmt.Errorf("prompt dump vars: %w", err)
 	}
 
 	unitCatalog, err := prompts.UnitCatalogForEngine(engine)

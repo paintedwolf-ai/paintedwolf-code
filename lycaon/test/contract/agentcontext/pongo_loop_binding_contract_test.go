@@ -6,15 +6,12 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/pongoplain"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
-
-var templateRegion = regexp.MustCompile(`(?s)\{#.*?#\}|\{%\s*(?:comment|verbatim)\s*%\}.*?\{%\s*end(?:comment|verbatim)\s*%\}|\{\{.*?\}\}|\{%.*?%\}`)
-var expressionToken = regexp.MustCompile(`"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[A-Za-z_][A-Za-z_0-9]*(?:\s*\.\s*[A-Za-z_][A-Za-z_0-9]*)*`)
 
 // Pongo silently resolves unknown struct fields to nil. Discover its actual
 // loop ABI from the pinned dependency instead of copying the member list.
@@ -60,7 +57,7 @@ func TestCatalogLoopBindingsExistInPongo(t *testing.T) {
 		if readErr != nil {
 			return readErr
 		}
-		for _, binding := range loopBindings(string(body)) {
+		for _, binding := range pongoplain.LoopBindings(string(body)) {
 			checked++
 			if !validLoopBinding(binding, fields) {
 				t.Errorf("%s: unknown Pongo loop member in %s", path, binding)
@@ -85,27 +82,11 @@ func validLoopBinding(binding string, fields map[string]bool) bool {
 	return len(members) > 0
 }
 
-func loopBindings(source string) []string {
-	var out []string
-	for _, region := range templateRegion.FindAllString(source, -1) {
-		if strings.HasPrefix(region, "{#") || strings.Contains(region, "{% endcomment") || strings.Contains(region, "{% endverbatim") {
-			continue
-		}
-		for _, tok := range expressionToken.FindAllString(region, -1) {
-			selector := strings.Join(strings.Fields(tok), "")
-			if strings.HasPrefix(selector, "forloop.") {
-				out = append(out, selector)
-			}
-		}
-	}
-	return out
-}
-
 func TestLoopBindingDiscoveryIgnoresLiteralCopy(t *testing.T) {
 	source := `forloop.prose {# {{ forloop.comment }} #} {% comment %}{{ forloop.hidden }}{% endcomment %}
 {% verbatim %}{{ forloop.literal }}{% endverbatim %}
 {{ "forloop.string" }} {% if not forloop.last %}x{% endif %} {{ forloop.Parentloop.Counter }}`
-	got := loopBindings(source)
+	got := pongoplain.LoopBindings(source)
 	if len(got) != 2 || got[0] != "forloop.last" || got[1] != "forloop.Parentloop.Counter" {
 		t.Fatalf("bindings = %v", got)
 	}

@@ -12,22 +12,39 @@ import (
 	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
+func factsFromOffered(t *testing.T, offered []string, webSearch bool) map[string]any {
+	t.Helper()
+	tools := make(map[string]bool, len(offered))
+	for _, name := range offered {
+		tools[name] = true
+	}
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "worker",
+		Plan:      toolsurface.Compile(offered, nil),
+		Visible:   offered,
+		Profiles: []sandbox.ToolProfile{{
+			ID:             "worker",
+			Tools:          tools,
+			CommandEffects: toolcontract.AllCommandEffects(),
+		}},
+		RootCount: 1,
+		WebSearch: webSearch,
+	})
+	testutil.FailErr(t, "NewReader", err)
+	return reader.Facts()
+}
+
 func TestHTTPActionVarsFollowOfferedTools(t *testing.T) {
 	t.Parallel()
-	vars := map[string]any{}
-	prompts.MergeHTTPActionVars([]string{"read", "wait"}, vars)
-	want := map[string]any{"profile_has_fetch_url": false, "profile_has_wait": true}
-	if !reflect.DeepEqual(vars, want) {
-		t.Fatalf("vars = %#v want %#v", vars, want)
+	vars := factsFromOffered(t, []string{"read", "wait"}, true)
+	if vars["profile_has_fetch_url"] != false || vars["profile_has_wait"] != true {
+		t.Fatalf("vars = %#v", vars)
 	}
-	prompts.MergeHTTPActionVars([]string{"fetch_url"}, vars)
-	vars["profile_has_web_search"] = true
-	prompts.MergeWebResearchUnavailable(vars)
-	if vars["profile_has_fetch_url"] != false || vars["profile_has_web_search"] != false {
-		t.Fatalf("disabled web research still teaches fetch_url: %#v", vars)
+	disabled := factsFromOffered(t, []string{"fetch_url", "web_search"}, false)
+	if disabled["profile_has_fetch_url"] != false || disabled["profile_has_web_search"] != false {
+		t.Fatalf("disabled web research still teaches fetch_url: %#v", disabled)
 	}
-	absent := map[string]any{}
-	prompts.MergeHTTPActionVars([]string{"read"}, absent)
+	absent := factsFromOffered(t, []string{"read"}, true)
 	if absent["profile_has_fetch_url"] != false {
 		t.Fatalf("absent tool advertised: %#v", absent)
 	}
@@ -74,9 +91,6 @@ func TestToolProfileCapabilityVarsImplement(t *testing.T) {
 	if vars["profile_has_managed_secrets"] != false {
 		t.Fatalf("implement must not teach the managed-secret lifecycle before it loads: %#v", vars)
 	}
-	if vars["profile_has_read_tools"] != true {
-		t.Fatalf("implement must advertise read tools")
-	}
 	if vars["profile_has_source_history"] != true {
 		t.Fatalf("implement holds source_history sticky: %#v", vars["profile_has_source_history"])
 	}
@@ -105,10 +119,6 @@ func TestToolProfileCapabilityVarsImplement(t *testing.T) {
 			t.Errorf("command operation %s is requestable", retired)
 		}
 	}
-	serial, _ := vars["profile_serial_tools"].([]string)
-	if !slices.Contains(serial, "command") {
-		t.Fatalf("serial tools missing command: %v", serial)
-	}
 	if vars["visual_show_available"] != true || vars["visual_show_terminal"] != true || vars["visual_show_page"] != false {
 		t.Fatalf("implement must expose terminals and leave page capture untaught until loaded: %#v", vars)
 	}
@@ -125,9 +135,6 @@ func TestToolProfileCapabilityVarsImplement(t *testing.T) {
 	if vars["profile_has_terminal_capture"] != true {
 		t.Fatal("implement command surface must advertise sealed terminal capture")
 	}
-	if hostExec, _ := vars["runner_host_execution_tools"].([]string); !reflect.DeepEqual(hostExec, []string{"command", "verify"}) {
-		t.Fatalf("implement runner_host_execution_tools = %v, want [command verify]", hostExec)
-	}
 }
 
 func TestToolProfileCapabilityVarsExploreReadonly(t *testing.T) {
@@ -140,9 +147,6 @@ func TestToolProfileCapabilityVarsExploreReadonly(t *testing.T) {
 	}
 	if vars["profile_has_write_tools"] != false {
 		t.Fatalf("explore_readonly must not advertise write tools")
-	}
-	if vars["profile_has_read_tools"] != true {
-		t.Fatalf("explore_readonly must advertise read tools")
 	}
 	if vars["profile_has_source_history"] != false {
 		t.Fatalf("a deferred source_history stays untaught until it loads: %#v", vars["profile_has_source_history"])
@@ -161,9 +165,6 @@ func TestToolProfileCapabilityVarsExploreReadonly(t *testing.T) {
 	}
 	if vars["profile_has_terminal_capture"] != false {
 		t.Fatalf("explore_readonly must not advertise sealed terminal capture")
-	}
-	if hostExec, _ := vars["runner_host_execution_tools"].([]string); len(hostExec) != 0 {
-		t.Fatalf("explore_readonly runner_host_execution_tools = %v, want empty", hostExec)
 	}
 	surveyTools, _ := vars["tool_check_survey_tools"].([]string)
 	if slices.Contains(surveyTools, "write") || slices.Contains(surveyTools, "edit") {
@@ -279,55 +280,38 @@ func TestToolProfileCapabilityVarsWebResearch(t *testing.T) {
 	if vars["profile_has_command"] != false {
 		t.Fatalf("web_research must not have command")
 	}
-	if vars["profile_has_read_tools"] != false {
-		t.Fatalf("web_research must not advertise read tools")
-	}
 	mcp, _ := vars["tool_check_scan_drilldown_tools"].([]string)
 	if !reflect.DeepEqual(mcp, []string{"scan_query"}) {
 		t.Fatalf("web_research must expose only the advisory inventory query: %v", mcp)
 	}
 }
 
-func TestVisibleToolsNativePartialVarsFromSurfaceTools(t *testing.T) {
-	vars := prompts.VisibleToolsNativePartialVars([]string{"command", "survey_repo", "summarize"})
-	for _, key := range []string{"profile_has_command", "profile_has_survey_repo", "profile_has_summarize", "profile_has_write_tools", "profile_has_read_tools", "profile_has_jq_edit"} {
+func TestReaderFactsFromSurfaceTools(t *testing.T) {
+	vars := factsFromOffered(t, []string{"command", "survey_repo", "summarize", "code_rewrite"}, true)
+	for _, key := range []string{"profile_has_command", "profile_has_survey_repo", "profile_has_summarize", "profile_has_write_tools", "profile_has_code_rewrite"} {
 		if vars[key] != true {
 			t.Errorf("%s = %v, want true", key, vars[key])
 		}
 	}
 	// Having command is not having a tool that shares its form.
-	commandOnly := prompts.VisibleToolsNativePartialVars([]string{"command"})
-	if commandOnly["profile_has_summarize"] != false || commandOnly["profile_has_survey_repo"] != false {
+	commandOnly := factsFromOffered(t, []string{"command"}, true)
+	if commandOnly["profile_has_summarize"] != false || commandOnly["profile_has_survey_repo"] != false || commandOnly["profile_has_code_rewrite"] != false {
 		t.Fatalf("command implied a form tool: %v", commandOnly)
 	}
-	vars = prompts.VisibleToolsNativePartialVars([]string{"restore_version"})
-	if vars["profile_has_write_tools"] != true || vars["profile_has_read_tools"] != false {
+	vars = factsFromOffered(t, []string{"restore_version"}, true)
+	if vars["profile_has_write_tools"] != true {
 		t.Fatalf("restoration capabilities = %+v", vars)
 	}
-	pageOnly := prompts.VisibleToolsNativePartialVars([]string{"capture_page", "page_open"})
-	if _, ok := pageOnly["visual_show_available"]; ok {
-		t.Fatal("on-wire capability vars must not write visual_show_*")
+	pageOnly := factsFromOffered(t, []string{"capture_page", "page_open"}, true)
+	if pageOnly["visual_show_available"] != true || pageOnly["visual_show_page"] != true {
+		t.Fatalf("page capture must advertise visual_show_page: %+v", pageOnly)
 	}
 }
 
 func TestPreferNativeAndHostRunnerDerivedFromSurface(t *testing.T) {
-	vars := prompts.VisibleToolsNativePartialVars([]string{"write", "command", "terminal_open"})
+	vars := factsFromOffered(t, []string{"write", "command", "terminal_open"}, true)
 	if vars["command_output_files"] != true {
 		t.Fatalf("command_output_files = %v, want true", vars["command_output_files"])
-	}
-	prefer, _ := vars["prefer_native_file_tools"].([]string)
-	host, _ := vars["host_runner_tools"].([]string)
-	if !slices.Contains(prefer, "write") {
-		t.Fatalf("prefer_native_file_tools missing write: %v", prefer)
-	}
-	if slices.Contains(prefer, "command") {
-		t.Fatalf("prefer_native_file_tools must not include command: %v", prefer)
-	}
-	if !slices.Contains(host, "command") || !slices.Contains(host, "terminal_open") {
-		t.Fatalf("host_runner_tools missing command/terminal_open: %v", host)
-	}
-	if slices.Contains(host, "write") {
-		t.Fatalf("host_runner_tools must not include write: %v", host)
 	}
 }
 
@@ -359,7 +343,7 @@ func TestHostRunnerToolOrderIncludesNativeTerminalThenArgv(t *testing.T) {
 
 func TestCommandProgressGuidanceFollowsOfferedEffects(t *testing.T) {
 	offered := []string{"command", "restore_version", "task", "edit", "jq_edit"}
-	vars := prompts.VisibleToolsNativePartialVars(offered)
+	vars := factsFromOffered(t, offered, true)
 	if got := vars["progress_gated_tools"]; !reflect.DeepEqual(got, []string{"command", "restore_version", "task"}) {
 		t.Fatalf("offered progress guidance = %v", got)
 	}
