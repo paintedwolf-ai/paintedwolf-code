@@ -8,8 +8,9 @@ import (
 	"os"
 	"unsafe"
 
-	"github.com/lycaon/lycaon/internal/fspath"
 	"golang.org/x/sys/windows"
+
+	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 func RemoveTreeGuarded(loc Location, expected string) error {

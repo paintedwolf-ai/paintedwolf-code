@@ -4,8 +4,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lycaon/lycaon/internal/fssync"
 	"golang.org/x/sys/windows"
+
+	"github.com/lycaon/lycaon/internal/fssync"
 )
 
 // flushHandle flushes a held handle under the process durability policy.

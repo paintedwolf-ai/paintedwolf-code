@@ -1,6 +1,7 @@
 package sourceapi
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 	"unicode/utf8"
@@ -76,7 +77,7 @@ func (s *Presentation) HandleSearchSourceView(w http.ResponseWriter, r *http.Req
 		s.responses.InvalidQuery(w, err)
 		return
 	}
-	identity, _ := sourceViewCanonical(struct {
+	identity, _ := json.Marshal(struct {
 		View, Person, Query string
 		Sensitive           bool
 	}{view.id, view.scope.Person, query.query, query.sensitive})

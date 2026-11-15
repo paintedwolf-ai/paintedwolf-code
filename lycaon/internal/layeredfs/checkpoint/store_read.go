@@ -160,10 +160,6 @@ func (s *Store) LoadPromotionRecord(txID string) (PromotionJournalRecord, bool, 
 	return rec, true, nil
 }
 
-func (pr *Promoter) loadPromotionRecord(txID string) (PromotionJournalRecord, bool, error) {
-	return pr.cfg.Store.LoadPromotionRecord(txID)
-}
-
 func (pr *Promoter) savePromotionRecord(rec PromotionJournalRecord) error {
 	if !isSafeStoreID(rec.TransactionID) {
 		return fmt.Errorf("%w: invalid transaction id %q", ErrInvalidManifest, rec.TransactionID)

@@ -37,7 +37,7 @@ type provenanceDoc struct {
 }
 
 var loadProvenance = sync.OnceValues(func() (map[string]FontProvenance, error) {
-	data, err := readEmbedded("provenance.yaml")
+	data, err := embedded.ReadFile("provenance.yaml")
 	if err != nil {
 		return nil, fmt.Errorf("read provenance.yaml: %w", err)
 	}
@@ -54,7 +54,7 @@ var loadProvenance = sync.OnceValues(func() (map[string]FontProvenance, error) {
 	if strings.TrimSpace(doc.Icons.License) == "" || strings.TrimSpace(doc.Icons.LicenseFile) == "" {
 		return nil, fmt.Errorf("icon provenance is incomplete")
 	}
-	if _, err := readEmbedded(doc.Icons.LicenseFile); err != nil {
+	if _, err := embedded.ReadFile(doc.Icons.LicenseFile); err != nil {
 		return nil, fmt.Errorf("read icon license: %w", err)
 	}
 	out := make(map[string]FontProvenance, len(doc.Fonts))

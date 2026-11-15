@@ -7,8 +7,10 @@ import (
 	"io"
 	"os"
 
-	"github.com/lycaon/lycaon/internal/fspath"
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/fssync"
 )
 
 // RemoveTreeGuarded removes a quarantined entry through held directory descriptors.
@@ -28,7 +30,7 @@ func RemoveTreeGuarded(loc Location, expected string) error {
 	if err := removeTreeAt(parent.fd, parent.name); err != nil {
 		return err
 	}
-	return fsyncFD(parent.fd)
+	return fssync.FD(parent.fd)
 }
 
 func removeTreeAt(parent int, name string) error {
@@ -72,7 +74,7 @@ func removeTreeAt(parent int, name string) error {
 			return err
 		}
 	}
-	if err := fsyncFD(fd); err != nil {
+	if err := fssync.FD(fd); err != nil {
 		return err
 	}
 	return unix.Unlinkat(parent, name, unix.AT_REMOVEDIR)

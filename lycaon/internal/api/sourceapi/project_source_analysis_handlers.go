@@ -5,8 +5,10 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
+	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -106,7 +108,7 @@ func (s *Analysis) HandleSearchProjectSource(w http.ResponseWriter, r *http.Requ
 	limit := pq.Limit
 	query := r.URL.Query().Get("q")
 	rootID := strings.TrimSpace(r.URL.Query().Get("root_id"))
-	scope := sourceSearchScope(chi.URLParam(r, "id"), rootID, strings.TrimSpace(query))
+	scope := pagecursor.Scope(chi.URLParam(r, "id"), rootID, strings.TrimSpace(query))
 	position, err := decodeSourceSearchCursor(pq.Cursor, scope, snapshot.Revision)
 	if err != nil {
 		s.responses.PageCursorError(w, r, "cursor", err)
@@ -154,7 +156,7 @@ func (s *Analysis) HandleSearchProjectSource(w http.ResponseWriter, r *http.Requ
 		}
 	}
 	if hasMore {
-		nextCursor, err := encodeSourceSearchCursor(scope, snapshot.Revision, entries[len(entries)-1].SourceIndexEntry)
+		nextCursor, err := sourceSearchPages.EncodeAt(scope, snapshot.Revision, entries[len(entries)-1].SourceIndexEntry)
 		if err != nil {
 			s.responses.InternalError(w, r, err)
 			return

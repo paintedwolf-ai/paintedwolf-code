@@ -9,8 +9,10 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/fssync"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // A retained name is recovery authority, so its inode must be durable before the
@@ -41,7 +43,7 @@ func TestHardLinkSyncsInodeBeforeNameAndParentAfter(t *testing.T) {
 			}
 			order = append(order, "parent")
 		}
-		return fsyncFD(fd)
+		return fssync.FD(fd)
 	})
 	testutil.FailErr(t, "hard link", err)
 	if !slices.Equal(order, []string{"inode", "parent"}) {

@@ -43,7 +43,7 @@ type Store interface {
 }
 
 func normalizeFindingFields(agent, summary, ref string) (string, string, string) {
-	return strings.TrimSpace(agent), trimSummary(summary), strings.TrimSpace(ref)
+	return strings.TrimSpace(agent), strings.TrimSpace(summary), strings.TrimSpace(ref)
 }
 
 func findingMatches(f Finding, agent, summary, ref string) bool {
@@ -62,10 +62,6 @@ func filterSince(all []Finding, since time.Time) []Finding {
 		}
 	}
 	return out
-}
-
-func trimSummary(summary string) string {
-	return strings.TrimSpace(summary)
 }
 
 // Delivery retains the bounded peer context used by a successful model request.

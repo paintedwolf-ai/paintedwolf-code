@@ -11,8 +11,9 @@ import (
 	"path/filepath"
 	"unsafe"
 
-	"github.com/lycaon/lycaon/internal/fspath"
 	"golang.org/x/sys/windows"
+
+	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 func openGuardedDirectory(loc Location, expected string) (*os.File, error) {

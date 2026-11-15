@@ -23,7 +23,7 @@ func TestProvenanceCoversCatalogExactly(t *testing.T) {
 		if entry.License == "" || entry.LicenseFile == "" || entry.Copyright == "" {
 			t.Fatalf("font %q: incomplete provenance %#v", f.Family, entry)
 		}
-		if _, err := readEmbedded(entry.LicenseFile); err != nil {
+		if _, err := embedded.ReadFile(entry.LicenseFile); err != nil {
 			t.Fatalf("font %q: licence %q not embedded: %v", f.Family, entry.LicenseFile, err)
 		}
 	}

@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"github.com/lycaon/lycaon/internal/fspath"
 	"golang.org/x/sys/unix"
+
+	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/fssync"
 )
 
 // RestoreNativeTrash consumes an exact OS-returned Trash location. macOS permits
@@ -32,5 +34,5 @@ func RestoreNativeTrash(source string, destination Location, expected string) er
 	if err := renameNoReplace(unix.AT_FDCWD, source, parent.fd, parent.name); err != nil {
 		return err
 	}
-	return fsyncFD(parent.fd)
+	return fssync.FD(parent.fd)
 }
