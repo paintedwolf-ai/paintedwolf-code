@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/reproducedsource"
 )
 
-// I3: Trailing report json fence, diff/patch fences, and caller-excluded spans never contribute.
+// Trailing report json fences, diff/patch fences, and caller-excluded spans never contribute.
 func TestMeasureExcludedFences(t *testing.T) {
 	candidates := []reproducedsource.Candidate{
 		{
@@ -121,7 +121,7 @@ func TestMeasureExcludedFences(t *testing.T) {
 	}
 }
 
-// I7: StartLine..EndLine covers matched short and blank lines; Lines counts non-blank lines; ties break in order.
+// StartLine..EndLine covers matched short and blank lines; Lines counts non-blank lines; ties break in order.
 func TestMeasureLineSpansNormalizationAndTieBreaking(t *testing.T) {
 	bracedCandidate := reproducedsource.Candidate{
 		DisplayPath: "internal/worker/loop.go",

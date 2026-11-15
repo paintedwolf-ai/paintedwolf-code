@@ -182,7 +182,7 @@ func extractPolicyFeedbackByCode(t *testing.T, msgs []api.Message, code string) 
 	return matched
 }
 
-// I6: Delivered coordinator paste queues one nudge for the next turn; workers, new code, and mid-turn text do not.
+// Coordinator pastes queue one nudge for the next turn; workers, new code, and mid-turn text do not.
 func TestReproducedSourcePostTurnEndToEnd(t *testing.T) {
 	source40 := buildSourceFileLines("Handler", 40)
 

@@ -61,7 +61,7 @@ func HasMeasurableFence(doc citationmd.Document, excluded []citationmd.Span) boo
 	return len(extractFences(doc, excluded)) > 0
 }
 
-// Measure finds the longest consecutive run of normalised non-blank lines shared
+// Measure finds the longest consecutive run of normalized non-blank lines shared
 // between any non-excluded code block in doc and any candidate file.
 func Measure(doc citationmd.Document, excluded []citationmd.Span, files []Candidate) Result {
 	if len(files) == 0 {

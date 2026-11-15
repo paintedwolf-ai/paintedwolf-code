@@ -60,7 +60,7 @@ func (f *fakeReproducedDeps) Read(_ context.Context, root projectroot.RootRef, r
 	return raw, true, nil
 }
 
-// I4: Candidates are the session's deduplicated touched (rootID, relPath) pairs; untouched files are never opened.
+// Candidates are deduplicated session-touched (rootID, relPath) pairs; untouched files stay unopened.
 func TestReproducedSourceOpensOnlyDeduplicatedTouchedCandidates(t *testing.T) {
 	untouchedBody := strings.Join([]string{
 		"package untouched",
@@ -149,7 +149,7 @@ func TestReproducedSourceOpensOnlyDeduplicatedTouchedCandidates(t *testing.T) {
 	}
 }
 
-// I5: Measurement reads nothing without admitted rule reference or measurable fences, and caps at 64 files / 256 KiB.
+// Measurement reads nothing without a rule reference or measurable fence, and caps at 64 files / 256 KiB.
 func TestReproducedSourceShortCircuitsAndEnforcesCaps(t *testing.T) {
 	t.Run("unreferenced_facts_never_run_provider", func(t *testing.T) {
 		deps := &fakeReproducedDeps{

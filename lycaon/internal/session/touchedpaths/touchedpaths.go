@@ -26,15 +26,16 @@ type AuthoredSource interface {
 	SessionAuthoredPaths(ctx context.Context, projectID, sessionID, rootID string) ([]string, error)
 }
 
-// List returns up to MaxCandidates deduplicated paths the session authored or observed.
-// Authored paths come first (roots in attachment order, paths sorted), followed by
-// observed ledger paths (newest handle first).
+// List returns deduplicated paths the session authored or observed, capped at max
+// when max > 0. Authored paths come first (roots in attachment order, paths sorted),
+// followed by observed ledger paths (newest handle first).
 func List(
 	ctx context.Context,
 	projectID, sessionID, activeRootID string,
 	roots []projectroot.RootRef,
 	ledger LedgerSource,
 	authored AuthoredSource,
+	max int,
 ) []Path {
 	activeID := resolveActiveRootID(roots, activeRootID)
 	rootsByID := make(map[string]projectroot.RootRef, len(roots))
@@ -77,15 +78,18 @@ func List(
 
 	seen := make(map[Path]struct{})
 	var out []Path
+	full := func() bool {
+		return max > 0 && len(out) >= max
+	}
 	add := func(p Path) bool {
-		if len(out) >= MaxCandidates {
+		if full() {
 			return false
 		}
 		if _, ok := seen[p]; !ok {
 			seen[p] = struct{}{}
 			out = append(out, p)
 		}
-		return len(out) < MaxCandidates
+		return !full()
 	}
 
 	if authored != nil && sessionID != "" && projectID != "" {
@@ -112,7 +116,7 @@ func List(
 		}
 	}
 
-	if len(out) >= MaxCandidates || ledger == nil || sessionID == "" {
+	if full() || ledger == nil || sessionID == "" {
 		return out
 	}
 	ev, err := ledger.LoadLedger(ctx, sessionID)
@@ -137,7 +141,7 @@ func List(
 		}
 	}
 
-	if len(ev.ByPath) > 0 && len(out) < MaxCandidates {
+	if len(ev.ByPath) > 0 && !full() {
 		type fallbackEntry struct {
 			key     string
 			ordinal int

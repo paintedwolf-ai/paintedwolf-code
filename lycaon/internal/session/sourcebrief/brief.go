@@ -267,7 +267,7 @@ func (m *Service) sessionTouchedPaths(
 	reader tools.SourceHistory,
 	roots []projectroot.RootRef,
 ) map[string]bool {
-	paths := touchedpaths.List(ctx, sess.ProjectID, sess.ID, sess.WorkspaceRootID, roots, m.store, reader.Authorship)
+	paths := touchedpaths.List(ctx, sess.ProjectID, sess.ID, sess.WorkspaceRootID, roots, m.store, reader.Authorship, 0)
 	touched := make(map[string]bool, len(paths))
 	for _, p := range paths {
 		touched[projectroot.DisplayPath(roots, sess.WorkspaceRootID, p.RootID, p.RelPath)] = true

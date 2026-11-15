@@ -62,6 +62,7 @@ func TestListDeduplicatesAcrossRootsAndOrdersAuthoredBeforeNewestObserved(t *tes
 		roots,
 		stubLedger{ev: ev},
 		authored,
+		touchedpaths.MaxCandidates,
 	)
 
 	want := []touchedpaths.Path{
@@ -107,14 +108,18 @@ func TestListAppliesCapAfterDeduplication(t *testing.T) {
 		ordinal++
 	}
 
+	ledger := stubLedger{ev: evidence.AssembleLedger(records)}
+	authored := stubAuthored{byRoot: map[string][]string{"r1": authoredPaths}}
+
 	got := touchedpaths.List(
 		context.Background(),
 		"proj-1",
 		"sess-1",
 		"r1",
 		roots,
-		stubLedger{ev: evidence.AssembleLedger(records)},
-		stubAuthored{byRoot: map[string][]string{"r1": authoredPaths}},
+		ledger,
+		authored,
+		touchedpaths.MaxCandidates,
 	)
 
 	if len(got) != touchedpaths.MaxCandidates {
@@ -131,5 +136,19 @@ func TestListAppliesCapAfterDeduplication(t *testing.T) {
 		if got[40+i] != want {
 			t.Fatalf("got[%d] = %+v, want %+v", 40+i, got[40+i], want)
 		}
+	}
+
+	uncapped := touchedpaths.List(
+		context.Background(),
+		"proj-1",
+		"sess-1",
+		"r1",
+		roots,
+		ledger,
+		authored,
+		0,
+	)
+	if len(uncapped) != 80 {
+		t.Fatalf("len(uncapped) = %d, want 80", len(uncapped))
 	}
 }

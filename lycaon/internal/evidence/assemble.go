@@ -41,17 +41,16 @@ func AssembleLedger(records []Record) Ledger {
 	if len(records) == 0 {
 		return ev
 	}
-	for _, rec := range records {
-		if rec.Handle != "" {
-			ev.observationOrder = append(ev.observationOrder, rec.Handle)
-		}
-	}
 	chronological := append([]Record(nil), records...)
 	sort.SliceStable(chronological, func(i, j int) bool {
 		return chronological[i].CustodySeq() < chronological[j].CustodySeq()
 	})
 	for _, rec := range chronological {
-		if rec.Handle == "" || rec.SupersededBy != "" {
+		if rec.Handle == "" {
+			continue
+		}
+		ev.observationOrder = append(ev.observationOrder, rec.Handle)
+		if rec.SupersededBy != "" {
 			continue
 		}
 		for _, path := range IndexedPathsForRecord(rec) {

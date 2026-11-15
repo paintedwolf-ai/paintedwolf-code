@@ -60,7 +60,7 @@ func randomProseChunk(rng *rand.Rand) string {
 	return b.String()
 }
 
-// I1: Reproduced-source facts depend only on fence contents and candidate file text.
+// Reproduced-source facts depend only on fence contents and candidate file text.
 func TestMeasureProseInvarianceProperty(t *testing.T) {
 	candidates := []reproducedsource.Candidate{
 		{
@@ -110,7 +110,7 @@ func TestMeasureProseInvarianceProperty(t *testing.T) {
 	}
 }
 
-// I2: Generated code absent from candidates yields all zero values even when sharing short delimiter lines.
+// Generated code absent from candidates yields zero values even when sharing short delimiter lines.
 func TestMeasureAbsentCodeYieldsZeroProperty(t *testing.T) {
 	candidates := []reproducedsource.Candidate{
 		{

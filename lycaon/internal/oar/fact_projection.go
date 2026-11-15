@@ -31,7 +31,7 @@ func activation(gc *GuardContext) map[string]any {
 			if !strings.HasPrefix(name, "paintedwolf.") || occurrenceIdentityFacts[name] {
 				continue
 			}
-			// Host presentation fields are declared strings; serialize their structured source at the producer boundary.
+			// Host presentation fields are declared strings; serialize structured values at the boundary.
 			if declaredFactTypes[name] == "string" && strings.HasPrefix(name, "paintedwolf.") {
 				if value == nil {
 					value = ""
