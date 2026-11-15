@@ -27,7 +27,6 @@ func TestSessionRoundTripProperty(t *testing.T) {
 			ProviderID:           rapid.StringMatching(`[a-z0-9-]{0,30}`).Draw(t, "provider_id"),
 			Model:                rapid.StringMatching(`[a-z0-9._-]{0,40}`).Draw(t, "model"),
 			ParentSessionID:      rapid.StringMatching(`[a-f0-9-]{0,36}`).Draw(t, "parent_session_id"),
-			MaxToolLoops:         rapid.IntRange(0, 1000).Draw(t, "max_tool_loops"),
 			CompactionGeneration: rapid.IntRange(0, 1000).Draw(t, "compaction_generation"),
 			CreatedAt:            drawTime(t, "created_at"),
 			UpdatedAt:            drawTime(t, "updated_at"),

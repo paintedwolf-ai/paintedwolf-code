@@ -24,4 +24,4 @@ Implement one delegated leg within its brief and focus paths.{% if profile_has_c
 
 - Extract short numbered facts and cite URLs — do not dump full pages into chat or the finish summary.
 
-{% set finish_note = "The final iteration offers only `complete_leg` — finish edits and checks before then." %}{% include "archetypes/implement_shell.md" %}
+{% set finish_note = "`complete_leg` delivers and ends your round — finish edits and checks first." %}{% include "archetypes/implement_shell.md" %}

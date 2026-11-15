@@ -46,7 +46,7 @@ func TestRecallMayWidenFollowsRenderRole(t *testing.T) {
 	if v, _ := coordinator["recall_may_widen"].(bool); !v {
 		t.Fatalf("coordinator vars must allow widening: %#v", coordinator["recall_may_widen"])
 	}
-	worker := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+	worker := spawn.PolicyTemplateVars()
 	if v, ok := worker["recall_may_widen"].(bool); !ok || v {
 		t.Fatalf("worker vars must deny widening: %#v", worker["recall_may_widen"])
 	}

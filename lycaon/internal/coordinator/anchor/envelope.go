@@ -26,10 +26,10 @@ type Envelope struct {
 	ScanStatus                string
 	ScanCategories            string
 	ScanFindingsCount         int
-	// WorkerBudget carries a worker's ceiling, open request, and exhaustion.
-	WorkerBudget *kick.WorkerBudgetFacts
-	BatchSeq     int
-	BatchSeqSet  bool
+	// WorkerRoundNotice carries a round notice's measurements.
+	WorkerRoundNotice *kick.WorkerRoundNoticeFacts
+	BatchSeq          int
+	BatchSeqSet       bool
 	// Vars carries anchor-specific catalog data.
 	// (roots-changed data, progress facts, phase-exit facts, …).
 	Vars                  map[string]any
@@ -84,8 +84,8 @@ func (e Envelope) KickOptions() []kick.KickOption {
 	if strings.TrimSpace(e.ScanID) != "" {
 		opts = append(opts, kick.WithScanFinished(e.ScanID, e.ScanStatus, e.ScanCategories, e.ScanFindingsCount))
 	}
-	if e.WorkerBudget != nil && strings.TrimSpace(e.WorkerBudget.JobID) != "" {
-		opts = append(opts, kick.WithWorkerBudget(*e.WorkerBudget))
+	if e.WorkerRoundNotice != nil && strings.TrimSpace(e.WorkerRoundNotice.JobID) != "" {
+		opts = append(opts, kick.WithWorkerRoundNotice(*e.WorkerRoundNotice))
 	}
 	if e.BatchSeqSet {
 		opts = append(opts, kick.WithBatchSeq(e.BatchSeq))

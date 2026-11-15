@@ -10,7 +10,7 @@ import {
   workerRowTitleDisambiguated,
 } from "../../chat/worker/workers-model.ts";
 import { pendingWorkerApprovalByJob } from "../../chat/worker/worker-approval-model.ts";
-import { WorkerBudgetChip } from "./WorkerBudgetChip.tsx";
+import { WorkerTurnsChip } from "./WorkerTurnsChip.tsx";
 import { WorkerToolCallsChip } from "./WorkerToolCallsChip.tsx";
 import { Scrollport } from "../primitives/Scrollport.tsx";
 
@@ -97,7 +97,7 @@ export function WorkersTab(props: Props) {
                   <Show when={workerDependencyLabel(liveRow(worker))}>
                     {(label) => <span class="den-workers-tab-approval">{label()}</span>}
                   </Show>
-                  <WorkerBudgetChip worker={() => liveRow(worker)} />
+                  <WorkerTurnsChip worker={() => liveRow(worker)} />
                   <WorkerToolCallsChip worker={() => liveRow(worker)} />
                 </button>
                 <Show when={canCancelWorker(worker)}>

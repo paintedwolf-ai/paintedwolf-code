@@ -361,7 +361,7 @@ func (w *Workers) executeStage(ctx context.Context, child *api.Session, task api
 		if err := w.decisions.Put(ctx, api.WorkerDecisionRequest{WorkerID: task.ID, ChildSessionID: child.ID, Question: stage.Question, Options: stage.Options, BlockerClass: api.WorkerBlockerDecision}); err != nil {
 			return api.WorkerResult{}, err
 		}
-		return api.WorkerResult{Status: string(api.WorkerSummaryStatusNeedsDecision), HostAssembled: true, Summary: stage.Question,
+		return api.WorkerResult{Status: string(api.WorkerSummaryStatusNeedsDecision), Summary: stage.Question,
 			CompletionReport: &api.WorkerCompletionReport{LegStatus: "blocked", RemainingRisk: []string{"A decision is required before the change can be finished."}}}, nil
 	case StageFailed:
 		return api.WorkerResult{}, &worker.PermanentExecutionError{Err: ScriptedFailure{Code: stage.Code}}
@@ -403,7 +403,7 @@ func (w *Workers) deliverWrite(ctx context.Context, child *api.Session, task api
 	if proof == nil || proof.Verdict != api.SourceVerdictPassed {
 		return api.WorkerResult{}, fmt.Errorf("scripted delivery verification did not pass")
 	}
-	return api.WorkerResult{Status: "complete", HostAssembled: true, Summary: "The requested change is complete and the supplied tests pass.",
+	return api.WorkerResult{Status: "complete", Summary: "The requested change is complete and the supplied tests pass.",
 		CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete", FilesModified: sortedPaths(delivery.Files), RemainingRisk: []string{"Changes have not been integrated."}}}, nil
 }
 
@@ -420,7 +420,7 @@ func (w *Workers) deliverRead(ctx context.Context, child *api.Session, task api.
 		}
 		report.Findings = append(report.Findings, api.WorkerCompletionFinding{Path: finding.Path, Line: finding.Line, Excerpt: excerpt, Note: finding.Note})
 	}
-	return api.WorkerResult{Status: "complete", HostAssembled: true, Summary: "The survey is complete; findings cite the observed lines.", CompletionReport: report}, nil
+	return api.WorkerResult{Status: "complete", Summary: "The survey is complete; findings cite the observed lines.", CompletionReport: report}, nil
 }
 
 // excerptLine reads the cited line from file bytes, not the JSON tool envelope.

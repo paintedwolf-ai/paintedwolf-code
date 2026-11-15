@@ -154,7 +154,7 @@ func ExecuteFailureCode(err error) string {
 		return "worker_execute_failed"
 	}
 	if errors.Is(err, promptloop.ErrLLMTurnTimeout) {
-		return "worker_closeout_exhausted"
+		return "worker_model_timeout"
 	}
 	if errors.Is(err, workspace.ErrWorkspaceStorageExhausted) {
 		return "worker_workspace_disk_full"
@@ -267,6 +267,20 @@ type WorkersConfig struct {
 		InstanceID             string `yaml:"instance_id"`
 		DefaultExecutionTarget string `yaml:"default_execution_target"`
 	} `yaml:"executor"`
+	Rounds struct {
+		ToollessResponseBound       int `yaml:"toolless_response_bound"`
+		ConsumptionNoticeModelCalls int `yaml:"consumption_notice_model_calls"`
+		QuietNoticeAfterMs          int `yaml:"quiet_notice_after_ms"`
+	} `yaml:"rounds"`
+}
+
+// RoundPolicy returns the configured worker round policy.
+func (c WorkersConfig) RoundPolicy() spawn.RoundPolicy {
+	return spawn.RoundPolicy{
+		ToollessResponseBound:       c.Rounds.ToollessResponseBound,
+		ConsumptionNoticeModelCalls: c.Rounds.ConsumptionNoticeModelCalls,
+		QuietNoticeAfter:            time.Duration(c.Rounds.QuietNoticeAfterMs) * time.Millisecond,
+	}
 }
 
 var (
@@ -310,6 +324,16 @@ func LoadWorkersConfig() (WorkersConfig, error) {
 	}
 	if strings.TrimSpace(cfg.Executor.DefaultExecutionTarget) == "" {
 		cfg.Executor.DefaultExecutionTarget = string(api.ExecutionTargetLocal)
+	}
+	def := spawn.DefaultRoundPolicy()
+	if cfg.Rounds.ToollessResponseBound <= 0 {
+		cfg.Rounds.ToollessResponseBound = def.ToollessResponseBound
+	}
+	if cfg.Rounds.ConsumptionNoticeModelCalls <= 0 {
+		cfg.Rounds.ConsumptionNoticeModelCalls = def.ConsumptionNoticeModelCalls
+	}
+	if cfg.Rounds.QuietNoticeAfterMs <= 0 {
+		cfg.Rounds.QuietNoticeAfterMs = int(def.QuietNoticeAfter / time.Millisecond)
 	}
 	return cfg, nil
 }

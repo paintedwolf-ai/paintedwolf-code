@@ -137,7 +137,7 @@ func TestWorkerPromptIncludesManifestTouchPaths(t *testing.T) {
 
 func resolveObservedTask(t *testing.T, args map[string]any) workeradmission.TaskIdentity {
 	t.Helper()
-	identity, err := (workeradmission.TaskIdentityResolver{}).Resolve(t.Context(), "parent-1", "", args)
+	identity, err := (workeradmission.TaskIdentityResolver{}).Resolve(t.Context(), "parent-1", args)
 	testutil.FailErr(t, "resolve observed task", err)
 	return identity
 }

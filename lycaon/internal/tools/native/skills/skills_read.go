@@ -162,7 +162,7 @@ func (t *SkillsReadTool) policyVars(ctx context.Context, tctx tools.ToolContext)
 			return vars
 		}
 	}
-	return spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+	return spawn.PolicyTemplateVars()
 }
 
 // stampSkillActivation copies catalog fields onto the tool result for the skill card.

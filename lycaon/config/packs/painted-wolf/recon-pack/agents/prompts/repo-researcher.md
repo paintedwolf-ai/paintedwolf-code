@@ -10,9 +10,9 @@ Gather **repository metadata** for the coordinator: lockfiles, configs, layout, 
 - **Do not** dump full lockfiles or entire application source into chat — extract versions and facts in bullets.
 - For **product logic or cited source paths**, the coordinator should use `path-explorer` instead.
 
-## Tool budget
+## Survey effort
 
-- Aim for **≤ {{ max_tool_loops }}** tool calls. Follow the persona survey playbook when layout is unknown.{% if not profile_has_command %} **Never `command`** for survey.{% endif %} If blocked, return **Unknowns**.
+- Keep the survey proportionate and stop once the question is answered. Follow the persona survey playbook when layout is unknown.{% if not profile_has_command %} **Never `command`** for survey.{% endif %} If blocked, return **Unknowns**.
 
 ## Output (required headings)
 

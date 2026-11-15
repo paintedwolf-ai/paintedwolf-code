@@ -5,7 +5,6 @@ import (
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/promptstate"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
@@ -18,17 +17,16 @@ type FanoutRoster interface {
 	RosterFor(*api.WorkflowRun, workflowdef.Manifest) []string
 }
 type Fanout struct {
-	settlement       promptstate.MutexRegistry
-	Runs             runstate.RunsRepository
-	Vars             *runstate.Variables
-	Resolver         *catalog.Resolver
-	Journal          *runstate.Journal
-	Sessions         session.Store
-	Phases           *workflowphases.Service
-	Questions        *workflowreview.Questions
-	Assignments      *workflowreview.Assignments
-	Policy           FanoutRoster
-	Progress         progress.RunScopedStore
-	WorkerTasks      func(context.Context, string) ([]api.WorkerTask, error)
-	WorkerToolBudget func(string) spawn.WorkerToolBudget
+	settlement  promptstate.MutexRegistry
+	Runs        runstate.RunsRepository
+	Vars        *runstate.Variables
+	Resolver    *catalog.Resolver
+	Journal     *runstate.Journal
+	Sessions    session.Store
+	Phases      *workflowphases.Service
+	Questions   *workflowreview.Questions
+	Assignments *workflowreview.Assignments
+	Policy      FanoutRoster
+	Progress    progress.RunScopedStore
+	WorkerTasks func(context.Context, string) ([]api.WorkerTask, error)
 }

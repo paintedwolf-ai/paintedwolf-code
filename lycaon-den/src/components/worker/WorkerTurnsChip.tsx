@@ -1,9 +1,8 @@
 import { Show, type Accessor } from "solid-js";
 import type { WorkerTask } from "../../api/types.ts";
 import {
-  formatWorkerBudget,
-  isWorkerBudgetLow,
-  workerBudgetAriaLabel,
+  formatWorkerTurns,
+  workerTurnsAriaLabel,
 } from "../../chat/worker/worker-progress.ts";
 
 type Props = {
@@ -11,16 +10,15 @@ type Props = {
   testId?: string;
 };
 
-export function WorkerBudgetChip(props: Props) {
-  const label = () => formatWorkerBudget(props.worker());
+export function WorkerTurnsChip(props: Props) {
+  const label = () => formatWorkerTurns(props.worker());
   return (
     <Show when={label()}>
       {(text) => (
         <span
-          class="den-worker-budget"
-          classList={{ "den-worker-budget--low": isWorkerBudgetLow(props.worker()) }}
+          class="den-worker-turns"
           data-testid={props.testId}
-          aria-label={workerBudgetAriaLabel(props.worker())}
+          aria-label={workerTurnsAriaLabel(props.worker())}
         >
           {text()}
         </span>

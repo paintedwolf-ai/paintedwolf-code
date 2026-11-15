@@ -1,4 +1,4 @@
-@utility den-worker-budget {
+@utility den-worker-turns {
 flex-shrink: 0;
   font-size: var(--text-den-overline);
   font-weight: 600;
@@ -8,12 +8,7 @@ flex-shrink: 0;
 }
 
 
-@utility den-worker-budget--low {
-color: var(--den-status-running);
-}
-
-
-/* Lighter text separates tool usage from the turn budget. */
+/* Lighter text separates tool usage from the turn count. */
 @utility den-worker-tool-calls {
 flex-shrink: 0;
   font-size: var(--text-den-overline);
@@ -276,11 +271,6 @@ margin-left: 8px;
 }
 
 
-@media (prefers-reduced-motion: no-preference) {
-  .den-worker-budget--low {
-    transition: color var(--den-duration) var(--den-ease);
-  }
-}
 
 .den-worker-msg--user .den-worker-msg-role { color: var(--den-text); }
 

@@ -84,7 +84,6 @@ func TestCatalogIntrinsicRejectionsKeepTheirIdentity(t *testing.T) {
 		{"http_request", "HTTP_REQUEST_COOKIE_NOT_HELD"},
 		{"http_request", "HTTP_REQUEST_COOKIE_JAR_FAILED"},
 		{"wait", "WAIT_PROBE_SECRET_UNSUPPORTED"},
-		{"extend_worker_budget", "WORKER_BUDGET_EXTEND_NOT_RUNNING"},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			gc := oar.NewGuardContext()

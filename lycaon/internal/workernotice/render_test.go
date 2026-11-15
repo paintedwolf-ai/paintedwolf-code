@@ -28,18 +28,15 @@ func loadWorkerFailureNoticeCatalog(t *testing.T) *usernotice.Catalog {
 	return usernotice.NewCatalog(cfg)
 }
 
-func TestRenderExecuteFailureCloseoutExhausted(t *testing.T) {
+func TestRenderExecuteFailureModelTimeout(t *testing.T) {
 	renderer := workernotice.NewRenderer(loadWorkerFailureNoticeCatalog(t))
 	err := errors.Join(promptloop.ErrLLMTurnTimeout, context.DeadlineExceeded)
 	out := renderer.RenderExecuteFailure(err)
-	if out.Code != "worker_closeout_exhausted" {
-		t.Fatalf("Code = %q want worker_closeout_exhausted", out.Code)
+	if out.Code != "worker_model_timeout" {
+		t.Fatalf("Code = %q want worker_model_timeout", out.Code)
 	}
 	if strings.TrimSpace(out.Title) == "" || strings.TrimSpace(out.Message) == "" {
 		t.Fatalf("RenderExecuteFailure = %+v want title and message", out)
-	}
-	if !strings.Contains(out.Message, "closing attempts") {
-		t.Fatalf("Message = %q want closing attempts copy", out.Message)
 	}
 }
 

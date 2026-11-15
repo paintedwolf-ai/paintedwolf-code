@@ -249,14 +249,6 @@
     "title": "Delegated task"
   },
   {
-    "tool": "extend_worker_budget",
-    "args": {
-      "job_id": "opaque",
-      "max_tool_loops": 80
-    },
-    "title": "Worker task"
-  },
-  {
     "tool": "delete",
     "args": {
       "paths": [

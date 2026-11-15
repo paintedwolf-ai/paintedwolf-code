@@ -6,11 +6,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/session/batchcontrol"
 	"github.com/lycaon/lycaon/internal/session/turnadmission"
 	"github.com/lycaon/lycaon/internal/session/turnsettlement"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type Workers struct {
@@ -33,13 +33,14 @@ func (m *Workers) Terminal(ctx context.Context, parentID, completingJobID string
 	m.Admission.MaybePromote(ctx, parentID)
 	m.Digests.Forget(completingJobID)
 }
-func (m *Workers) BudgetRequested(ctx context.Context, task api.WorkerTask) {
-	parentID := strings.TrimSpace(task.ParentSessionID)
-	if m == nil || parentID == "" || task.BudgetRequest == nil {
+
+// RoundNotice tells a worker's coordinator about its running round.
+func (m *Workers) RoundNotice(ctx context.Context, parentID string, facts kick.WorkerRoundNoticeFacts) {
+	parentID = strings.TrimSpace(parentID)
+	if m == nil || parentID == "" || strings.TrimSpace(facts.JobID) == "" {
 		return
 	}
-	facts := workeroutcomes.BudgetFacts(&task, m.Results.BudgetForTask(ctx, &task))
-	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerBudgetRequested(ctx, parentID, task.ID, anchor.Envelope{WorkerBudget: &facts})
+	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerRoundNotice(ctx, parentID, facts.JobID, anchor.Envelope{WorkerRoundNotice: &facts})
 }
 
 func (m *Workers) AfterTerminal(

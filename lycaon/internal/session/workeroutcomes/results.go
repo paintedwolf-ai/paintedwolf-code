@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -133,14 +132,6 @@ func (m *Results) EnvelopeForTerminal(ctx context.Context, sessionID, completing
 			env.WithWorkerDecision(req)
 		}
 	}
-	if m.tasks != nil {
-		if task, ok := m.tasks.Get(jobID); ok && task != nil {
-			facts := BudgetFacts(task, m.BudgetForTask(ctx, task))
-			if facts.Exhausted || facts.Request != nil {
-				env.WorkerBudget = &facts
-			}
-		}
-	}
 	return env
 }
 
@@ -229,27 +220,15 @@ func (m *Results) ProjectFailure(ctx context.Context, task SummaryInput, failure
 	return err
 }
 
-// BudgetForTask resolves ceiling bounds from the worker's parent session.
-func (m *Results) BudgetForTask(ctx context.Context, task *api.WorkerTask) spawn.WorkerToolBudget {
-	budget := spawn.DefaultWorkerToolBudget()
-	if m == nil || task == nil || m.sessions == nil || m.limits == nil {
-		return budget
-	}
-	if parent, err := m.sessions.Get(ctx, strings.TrimSpace(task.ParentSessionID)); err == nil && parent != nil {
-		budget = m.limits.Effective(ctx, parent).WorkerToolBudget()
-	}
-	return budget
-}
-
-// BudgetRequestOpen reports a live job still carrying an unanswered
-// request; a job's finish wake reports any request it ended with.
-func (m *Results) BudgetRequestOpen(jobID string) bool {
+// RoundRunning reports whether a job's round is still running, which keeps
+// its round notices actionable.
+func (m *Results) RoundRunning(jobID string) bool {
 	jobID = strings.TrimSpace(jobID)
 	if m == nil || m.tasks == nil || jobID == "" {
 		return true
 	}
 	task, ok := m.tasks.Get(jobID)
-	if !ok || task == nil || task.BudgetRequest == nil {
+	if !ok || task == nil {
 		return false
 	}
 	return task.Status == api.WorkerStatusPending || task.Status == api.WorkerStatusRunning

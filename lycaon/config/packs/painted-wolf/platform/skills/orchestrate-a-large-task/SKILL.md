@@ -27,9 +27,9 @@ Stop when every checklist row is closed by an integrated overlay, an explicit re
 
 ## Procedures
 
-{% if profile_has_task %}Read the full orchestration procedure before the first dispatch; it holds the sizing table, the `task()` fields, budget requests, and the dispatch shape.
+{% if profile_has_task %}Read the full orchestration procedure before the first dispatch; it holds the sizing table, the `task()` fields, and the dispatch shape.
 
-- [Orchestrate a large task](references/orchestrate_a_large_task.md): briefing, width, budgets, and integration mechanics. Topology choices: [briefs and topologies](references/orchestrate_a_large_task-briefs-and-topologies.md).
+- [Orchestrate a large task](references/orchestrate_a_large_task.md): briefing, width, and integration mechanics. Topology choices: [briefs and topologies](references/orchestrate_a_large_task-briefs-and-topologies.md).
 - [Research then implement](references/research_then_implement.md): versions, APIs, standards, or unfamiliar architecture could change the build.
 - [Compare implementation approaches](references/compare_implementation_approaches.md): architecture, library, algorithm, or migration shape is undecided; judge isolated alternatives against a frozen rubric.
 - [Parallelize a configuration matrix](references/parallelize_a_configuration_matrix.md): one acceptance contract across platforms, versions, providers, or flags.

@@ -205,13 +205,6 @@ components:
           description: Worker assignment goal used for card titles.
         merge_status:
           $ref: worker.yaml#/components/schemas/WorkerMergeStatus
-        max_tool_loops:
-          type: integer
-          minimum: 0
-        budget_request:
-          x-go-pointer: true
-          $ref: worker.yaml#/components/schemas/WorkerBudgetRequest
-          description: The worker's unanswered request for more tool rounds; absent once granted
         tool_loops_used:
           type: integer
           minimum: 0

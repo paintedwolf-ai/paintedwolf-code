@@ -187,11 +187,10 @@ func skillPreviewProfile(agentID, surfaceID string) (string, string, error) {
 // preview vars on top.
 func skillPreviewVars(explicit map[string]any, profileID, surfaceID string, sk skills.Skill) (map[string]any, error) {
 	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{
-		ProfileID:        profileID,
-		SurfaceID:        surfaceID,
-		HasGit:           true,
-		RootCount:        1,
-		DelegationBudget: spawn.DefaultWorkerToolBudget(),
+		ProfileID: profileID,
+		SurfaceID: surfaceID,
+		HasGit:    true,
+		RootCount: 1,
 	})
 	if err != nil {
 		return nil, err
