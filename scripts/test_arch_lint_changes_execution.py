@@ -45,7 +45,8 @@ class ArchLintChangesTest(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp())
         self.repo = self.tmp / "repo"
-        (self.repo / "lycaon").mkdir(parents=True)
+        (self.repo / "lycaon" / "internal" / "store").mkdir(parents=True)
+        (self.repo / "lycaon" / "internal" / "store" / "store.go").write_text("package store\n")
         self.git("init", "-q", "-b", "main")
         self.write_findings({"reach": [finding("dead-func", "x/store.Old")]})
         self.git("add", "-A")
@@ -73,7 +74,7 @@ class ArchLintChangesTest(unittest.TestCase):
             "reach": [finding("dead-func", "x/store.Old"), finding("dead-func", "x/store.New")],
             "tauri": [finding("uninvoked-tauri-command", "vault_lock_status", "lycaon-den/src-tauri/src/lib.rs")],
         })
-        scope = change_report.Scope(self.base, "test base", ["findings.json"])
+        scope = change_report.Scope(self.base, "test base", ["findings.json", "lycaon/internal/store/store.go"])
         header, findings, failed = arch_lint_changes.changes(
             self.repo, scope, POLICY, self.cache, self.binary, self.linter)
         self.assertTrue(failed)
@@ -87,6 +88,23 @@ class ArchLintChangesTest(unittest.TestCase):
         self.assertEqual(len(list(self.cache.glob("base-*.json"))), 1)
         again = arch_lint_changes.base_checks(self.repo, self.base, self.binary, POLICY, self.cache)
         self.assertEqual(list(again), [("dead-func", "x/store.Old")])
+
+    def test_a_change_without_go_runs_only_cross_language_checks(self):
+        self.write_findings({
+            "reach": [finding("dead-func", "x/store.New")],
+            "refs": [finding("unreferenced-script", "scripts/old.sh", "scripts/old.sh")],
+        })
+        scope = change_report.Scope(self.base, "test base", ["findings.json", "scripts/old.sh"])
+        _, findings, failed = arch_lint_changes.changes(self.repo, scope, POLICY, self.cache, self.binary, self.linter)
+        self.assertTrue(failed)
+        self.assertEqual([f.area for f in findings], ["unreferenced-script"])
+        self.assertTrue(list(self.cache.glob("base-*-xrefs.json")))
+
+    def test_changed_go_packages_skip_tests_testdata_and_removed_packages(self):
+        self.assertEqual(arch_lint_changes.changed_go_packages(self.repo, [
+            "lycaon/internal/store/store.go", "lycaon/internal/store/store_test.go",
+            "lycaon/internal/store/testdata/x.go", "lycaon/internal/gone/gone.go", "docs/x.go",
+        ]), ["./internal/store"])
 
     def test_reuses_the_base_tree_for_a_new_base(self):
         arch_lint_changes.base_checks(self.repo, self.base, self.binary, POLICY, self.cache)
@@ -107,10 +125,12 @@ class ArchLintChangesTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "boom"):
             arch_lint_changes.checks(broken, self.repo, POLICY)
         with self.assertRaisesRegex(RuntimeError, "golangci-lint"):
-            arch_lint_changes.unparam(self.repo, self.base, broken)
+            arch_lint_changes.unparam(self.repo, self.base, broken, ["./internal/store"])
+        self.assertEqual(arch_lint_changes.unparam(self.repo, self.base, broken, []), [])
 
     def test_main_measures_against_the_change_base(self):
         self.write_findings({"reach": [finding("dead-func", "x/store.Old"), finding("dead-func", "x/store.New")]})
+        (self.repo / "lycaon" / "internal" / "store" / "store.go").write_text("package store\n\nfunc New() {}\n")
         with mock.patch.object(arch_lint_changes, "ROOT", self.repo), \
                 mock.patch.object(arch_lint_changes, "build", return_value=self.binary), \
                 mock.patch.object(arch_lint_changes, "golangci_lint", return_value=self.linter), \

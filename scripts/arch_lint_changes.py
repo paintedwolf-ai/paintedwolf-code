@@ -43,18 +43,18 @@ def build(root, out_dir):
     return binary
 
 
-def checks(binary, tree, policy):
-    """Every arch-lint check over one tree, as (kind, key) → finding."""
+def checks(binary, tree, policy, go=True):
+    """Every arch-lint check over one tree, as (kind, key) → finding. Without go,
+    only the cross-language checks run."""
     go_dir = tree / "lycaon"
     support = ",".join(policy["test_support"])
     reach = policy["reach"]
-    commands = [
+    go_commands = [
         [binary, "reach", "-dir", go_dir, "-goos", ",".join(reach["goos"]), "-report", reach["report"],
          "-skip", support, "-schema", go_dir / reach["schema"], *reach["roots"]],
         [binary, "vet", "-dir", go_dir, "-test-support", support, *policy["vet"]["packages"]],
-        [binary, "refs", "-root", tree],
-        [binary, "tauri", "-root", tree],
     ]
+    commands = (go_commands if go else []) + [[binary, "refs", "-root", tree], [binary, "tauri", "-root", tree]]
     found = {}
     for command in commands:
         for finding in json.loads(run([str(part) for part in command]) or "null") or []:
@@ -62,10 +62,10 @@ def checks(binary, tree, policy):
     return found
 
 
-def base_checks(root, base, binary, policy, cache):
-    """Findings at the base, cached by base commit and the binary that judged it."""
+def base_checks(root, base, binary, policy, cache, go=True):
+    """Findings at the base, cached by base commit, scope and the binary that judged it."""
     digest = hashlib.sha256(binary.read_bytes()).hexdigest()[:16]
-    cached = cache / f"base-{base}-{digest}.json"
+    cached = cache / f"base-{base}-{digest}{'' if go else '-xrefs'}.json"
     if cached.exists():
         return {(f["kind"], f["key"]): f for f in json.loads(cached.read_text())}
     tree = cache / "base-tree"
@@ -73,7 +73,7 @@ def base_checks(root, base, binary, policy, cache):
         run(["git", "-C", str(tree), "checkout", "-q", "--force", "--detach", base])
     else:
         run(["git", "-C", str(root), "worktree", "add", "-q", "--force", "--detach", str(tree), base])
-    found = checks(binary, tree, policy)
+    found = checks(binary, tree, policy, go)
     cached.write_text(json.dumps(list(found.values())))
     return found
 
@@ -83,11 +83,23 @@ def golangci_lint(root):
     return bin_dir(root) / "golangci-lint"
 
 
-def unparam(root, base, linter):
+def changed_go_packages(root, paths):
+    """Package directories under lycaon/ holding a changed non-test Go file."""
+    dirs = set()
+    for path in paths:
+        if path.startswith("lycaon/") and path.endswith(".go") and not path.endswith("_test.go") \
+                and "/testdata/" not in path:
+            dirs.add("./" + str(Path(path).parent.relative_to("lycaon")))
+    return sorted(d for d in dirs if (root / "lycaon" / d).is_dir())
+
+
+def unparam(root, base, linter, packages):
     """Unused parameters golangci-lint's unparam finds on lines the change touched."""
+    if not packages:
+        return []
     result = subprocess.run(
         [str(linter), "run", "--no-config", "--default=none", "--enable=unparam", "--tests=false",
-         f"--new-from-rev={base}", "--output.json.path=stdout", "--output.text.path=stderr", "./..."],
+         f"--new-from-rev={base}", "--output.json.path=stdout", "--output.text.path=stderr", *packages],
         cwd=root / "lycaon", capture_output=True, text=True)
     if result.returncode not in (0, 1):
         raise RuntimeError(f"golangci-lint: {result.stderr.strip()}")
@@ -105,10 +117,11 @@ def to_finding(level, f):
 
 
 def changes(root, scope, policy, cache, binary, linter):
-    head = checks(binary, root, policy)
-    base = base_checks(root, scope.base, binary, policy, cache)
+    go = scope.touches(["lycaon/"])
+    head = checks(binary, root, policy, go)
+    base = base_checks(root, scope.base, binary, policy, cache, go)
     new = [f for key, f in sorted(head.items()) if key not in base]
-    new += unparam(root, scope.base, linter)
+    new += unparam(root, scope.base, linter, changed_go_packages(root, scope.paths))
     findings = [to_finding("error", f) for f in new]
     header = f"{scope.describe()}; {len(head)} finding(s) at the working tree, {len(base)} at the base"
     return header, findings, bool(findings)
