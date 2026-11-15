@@ -62,7 +62,7 @@ func (r *WorkspaceTrackerRegistry) EnsureTracker(
 		viewID := firstNonEmpty(caps.ViewID, jobID, childSessionID, branchRoot, workspacePath, "workspace-view")
 		facts := observation.UnknownVisibilityFacts("unbound")
 		if hasCaps {
-			facts = observation.VisibilityFactsFromDescriptor(caps)
+			facts = caps.Facts
 		}
 		rootSpecs := buildRootSpecs(workspacePath, roots)
 		tr, err := observation.NewTracker(observation.TrackerConfig{
@@ -85,7 +85,7 @@ func (r *WorkspaceTrackerRegistry) EnsureTracker(
 			st.Tracker.BindCore(nil, rootSpecs...)
 		}
 		if hasCaps {
-			_ = st.Tracker.SetVisibilityFacts(observation.VisibilityFactsFromDescriptor(caps))
+			_ = st.Tracker.SetVisibilityFacts(caps.Facts)
 			st.CapabilitiesBound = true
 			st.ViewCapabilities = caps
 		}

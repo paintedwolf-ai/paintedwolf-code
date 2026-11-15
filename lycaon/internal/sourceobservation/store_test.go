@@ -162,7 +162,7 @@ func TestSyncFromTrackerBridgesTrunkChangedNotice(t *testing.T) {
 	store := New(filepath.Join(t.TempDir(), "source-observations.db"))
 	t.Cleanup(func() { _ = store.Close() })
 
-	facts := observation.LiveMountVisibilityFacts("fuse-linux", true, true, true, observation.CompletenessComplete)
+	facts := observation.VisibilityFacts{AdapterName: "fuse-linux", UntouchedVisibility: observation.VisibilityLive, SupportsInvalidation: true, SupportsNegativeLookupInvalidation: true, SupportsDirCookieInvalidation: true, AttributionCompleteness: observation.CompletenessComplete}
 	tracker, err := observation.NewTracker(observation.TrackerConfig{ViewID: "view-sync", Facts: facts})
 	testutil.FailErr(t, "NewTracker", err)
 

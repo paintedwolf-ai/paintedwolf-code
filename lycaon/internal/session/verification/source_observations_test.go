@@ -166,7 +166,7 @@ func TestObservedDependencyAndIncompleteAttributionInvalidateVerificationChecks(
 		return "rev-1", "root-1"
 	})
 
-	facts := observation.LiveMountVisibilityFacts("fuse-linux", true, true, true, observation.CompletenessComplete)
+	facts := observation.VisibilityFacts{AdapterName: "fuse-linux", UntouchedVisibility: observation.VisibilityLive, SupportsInvalidation: true, SupportsNegativeLookupInvalidation: true, SupportsDirCookieInvalidation: true, AttributionCompleteness: observation.CompletenessComplete}
 	tracker, err := observation.NewTracker(observation.TrackerConfig{ViewID: "view-verify", Facts: facts})
 	testutil.FailErr(t, "NewTracker", err)
 	m.SetObservationTracker(sess.ID, tracker)

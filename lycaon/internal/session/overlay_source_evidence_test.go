@@ -457,11 +457,11 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 		t.Fatal("expected Enrich to provision a scoped observation.Tracker on mgr.Workers.Workspaces")
 	}
 	unboundFacts := tracker.Facts()
-	if unboundFacts.Mode != observation.VisibilityModeUnknown || unboundFacts.LiveVisible || unboundFacts.SupportsInvalidation || unboundFacts.Completeness != observation.CompletenessUnknown {
+	if unboundFacts.UntouchedVisibility != observation.VisibilityUnknown || unboundFacts.SupportsInvalidation || unboundFacts.AttributionCompleteness != observation.CompletenessUnknown {
 		t.Fatalf("expected unbound tracker to default to conservative unknown visibility/completeness, got %+v", unboundFacts)
 	}
 	_, err = mgr.Workers.Workspaces.BindViewCapabilities(
-		observation.MountedAdapterViewCapabilities(jobID, "fuselinux", true, true, true, observation.CompletenessComplete),
+		observation.ViewCapabilityDescriptor{ViewID: jobID, Facts: observation.VisibilityFacts{AdapterName: "fuselinux", UntouchedVisibility: observation.VisibilityLive, SupportsInvalidation: true, SupportsNegativeLookupInvalidation: true, SupportsDirCookieInvalidation: true, AttributionCompleteness: observation.CompletenessComplete}},
 		jobID,
 	)
 	testutil.FailErr(t, "BindViewCapabilities job", err)
@@ -634,7 +634,7 @@ func provisionUnrelatedWorker(
 	otherTask, _ := q.Get(otherJobID)
 	otherCtx := workercontext.WithJob(ctx, otherJobID)
 	_, err = mgr.Workers.Workspaces.BindViewCapabilities(
-		observation.MountedAdapterViewCapabilities(otherJobID, "fuselinux", true, true, true, observation.CompletenessComplete),
+		observation.ViewCapabilityDescriptor{ViewID: otherJobID, Facts: observation.VisibilityFacts{AdapterName: "fuselinux", UntouchedVisibility: observation.VisibilityLive, SupportsInvalidation: true, SupportsNegativeLookupInvalidation: true, SupportsDirCookieInvalidation: true, AttributionCompleteness: observation.CompletenessComplete}},
 		otherJobID,
 	)
 	testutil.FailErr(t, "BindViewCapabilities other", err)
@@ -706,7 +706,7 @@ func TestWorkerReadAndWriteStructuredFactsWithoutSecondReadAndUnknownEvidence(t 
 	// to prove neither method re-reads the file with os.ReadFile.
 	testutil.FailErr(t, "WriteFile mutated", os.WriteFile(diskFile, []byte("disk-bytes-never-read-by-worker\n"), 0o644))
 
-	// Before view capabilities are bound, a native read digest alone must not claim CompletenessComplete or LiveVisible.
+	// Before view capabilities are bound, a native read digest alone must not claim CompletenessComplete or a live view.
 	unboundObs, ok := svc.ObserveReadWithFacts("job-unbound", "sess-unbound", dir, "", nil, tools.WorkerFileObservationFacts{
 		RootID:   "primary",
 		RelPath:  "mutated.py",
@@ -720,7 +720,7 @@ func TestWorkerReadAndWriteStructuredFactsWithoutSecondReadAndUnknownEvidence(t 
 	}
 
 	_, err := svc.BindViewCapabilities(
-		observation.MountedAdapterViewCapabilities("job-facts", "fuselinux", true, true, true, observation.CompletenessComplete),
+		observation.ViewCapabilityDescriptor{ViewID: "job-facts", Facts: observation.VisibilityFacts{AdapterName: "fuselinux", UntouchedVisibility: observation.VisibilityLive, SupportsInvalidation: true, SupportsNegativeLookupInvalidation: true, SupportsDirCookieInvalidation: true, AttributionCompleteness: observation.CompletenessComplete}},
 		"job-facts",
 	)
 	testutil.FailErr(t, "BindViewCapabilities job-facts", err)
@@ -764,14 +764,14 @@ func TestWorkerReadAndWriteStructuredFactsWithoutSecondReadAndUnknownEvidence(t 
 	if !ok {
 		t.Fatal("expected ObserveReadPath to succeed")
 	}
-	if unknownObs.SHA256 != "" || unknownObs.Completeness != observation.CompletenessPartial || !unknownObs.Uncertain {
+	if unknownObs.SHA256 != "" || unknownObs.Completeness != observation.CompletenessPartialKernelCached || !unknownObs.Uncertain {
 		t.Fatalf("expected unavailable digest facts to preserve explicit unknown/partial evidence, got %+v", unknownObs)
 	}
 	binding, ok := svc.BindVerificationReceipt("job-facts", "sess-facts", dir, "", "check-unknown", "ckpt-1", []string{"primary"})
 	if !ok {
 		t.Fatal("expected BindVerificationReceipt to succeed")
 	}
-	if binding.ReadAttributionCompleteness != observation.CompletenessPartial {
+	if binding.ReadAttributionCompleteness != observation.CompletenessPartialKernelCached {
 		t.Fatalf("expected binding completeness to downgrade to partial when observation lacks digest facts, got %s", binding.ReadAttributionCompleteness)
 	}
 	freshness := tr.EvaluateReceiptFreshness(binding, "ckpt-1")
