@@ -273,8 +273,10 @@ func TestSerializedPromotionRejectionAndAdmissionRaces(t *testing.T) {
 	testutil.FailErr(t, "edit v1", os.WriteFile(filepath.Join(lane1Dir, "main.go"), []byte("package main\n// v1\n"), 0o644))
 
 	won, err := e.queue.Complete(t.Context(), job1, api.WorkerResult{
-		Status: "complete", Summary: "wrote v1", ChangedPaths: []string{"main.go"},
-		CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete", Summary: "wrote v1"},
+		Status:           "complete",
+		Summary:          "wrote v1",
+		ChangeReport:     &api.WorkerChangeReport{ChangedPaths: []string{"main.go"}},
+		CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"},
 	})
 	testutil.FailErr(t, "complete job 1", err)
 	if !won {
@@ -345,8 +347,10 @@ func TestSerializedPromotionRejectionAndAdmissionRaces(t *testing.T) {
 	// Deliver R2, then admit R3 FIRST: promoting or rejecting R2 is refused with active-execution conflict.
 	testutil.FailErr(t, "edit v2", os.WriteFile(filepath.Join(lane2Dir, "main.go"), []byte("package main\n// v2\n"), 0o644))
 	won, err = e.queue.Complete(t.Context(), job2, api.WorkerResult{
-		Status: "complete", Summary: "wrote v2", ChangedPaths: []string{"main.go"},
-		CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete", Summary: "wrote v2"},
+		Status:           "complete",
+		Summary:          "wrote v2",
+		ChangeReport:     &api.WorkerChangeReport{ChangedPaths: []string{"main.go"}},
+		CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"},
 	})
 	testutil.FailErr(t, "complete job 2", err)
 	if !won {
@@ -375,8 +379,10 @@ func TestSerializedPromotionRejectionAndAdmissionRaces(t *testing.T) {
 	lane3Dir := lanePrimaryDir(t, job3.WorkspaceRoot)
 	testutil.FailErr(t, "write extra.go", os.WriteFile(filepath.Join(lane3Dir, "extra.go"), []byte("package main\n"), 0o644))
 	won, err = e.queue.Complete(t.Context(), job3, api.WorkerResult{
-		Status: "complete", Summary: "added extra.go", ChangedPaths: []string{"main.go", "extra.go"},
-		CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete", Summary: "added extra.go"},
+		Status:           "complete",
+		Summary:          "added extra.go",
+		ChangeReport:     &api.WorkerChangeReport{ChangedPaths: []string{"main.go", "extra.go"}},
+		CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"},
 	})
 	testutil.FailErr(t, "complete job 3", err)
 	if !won {
@@ -390,7 +396,7 @@ func TestSerializedPromotionRejectionAndAdmissionRaces(t *testing.T) {
 
 	var wg sync.WaitGroup
 	outcomes := make([]string, 2)
-	var r4Dispatch *api.WorkerTaskDispatch
+	var r4Dispatch *api.WorkerDispatch
 	var mu sync.Mutex
 	for i, text := range []string{"fresh approach part A", "fresh approach part B"} {
 		wg.Add(1)
@@ -441,8 +447,10 @@ func TestPromotionRefreshFailureHoldAndClosedWorkerCallback(t *testing.T) {
 	lane1Dir := lanePrimaryDir(t, job1.WorkspaceRoot)
 	testutil.FailErr(t, "write feature.go", os.WriteFile(filepath.Join(lane1Dir, "feature.go"), []byte("package main\n"), 0o644))
 	won, err := e.queue.Complete(t.Context(), job1, api.WorkerResult{
-		Status: "complete", Summary: "added feature.go", ChangedPaths: []string{"feature.go"},
-		CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete", Summary: "added feature.go"},
+		Status:           "complete",
+		Summary:          "added feature.go",
+		ChangeReport:     &api.WorkerChangeReport{ChangedPaths: []string{"feature.go"}},
+		CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"},
 	})
 	testutil.FailErr(t, "complete job 1", err)
 	if !won {
@@ -509,7 +517,7 @@ func TestPromotionRefreshFailureHoldAndClosedWorkerCallback(t *testing.T) {
 	if err != nil || !won {
 		t.Fatalf("fail r2: won=%v err=%v", won, err)
 	}
-	_, err = e.records.Close(t.Context(), e.coord, workerrecords.Op{ID: "close-builder"}, w.ID, workerrecords.CloseSessionUnusable)
+	_, err = e.records.Close(t.Context(), e.coord, workerrecords.Op{ID: "close-builder"}, w.ID, "session_unusable")
 	testutil.FailErr(t, "close builder", err)
 
 	prepsBefore, err := e.records.Preparations(t.Context(), e.coord, w.ID)
@@ -552,7 +560,7 @@ func TestBlockingQuestionStopLineageAndOrdinaryPathContracts(t *testing.T) {
 	testutil.FailErr(t, "put decision", e.decisions.Put(t.Context(), api.WorkerDecisionRequest{
 		ChildSessionID: "child-asker", WorkerID: askJob.ID, Question: "UTF-8 or Latin-1?",
 	}))
-	won, err := e.queue.Complete(t.Context(), askJob, api.WorkerResult{Status: "held", Suspended: true})
+	won, err := e.queue.Complete(t.Context(), askJob, api.WorkerResult{Status: "needs_decision", Summary: "Waiting for decision"})
 	testutil.FailErr(t, "suspend askJob", err)
 	if !won {
 		t.Fatal("suspend lost claim")

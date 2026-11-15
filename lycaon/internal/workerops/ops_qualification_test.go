@@ -413,9 +413,12 @@ func TestAgentTransitionRefusalAndResolutionMatrix(t *testing.T) {
 	_, err = f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
 		VALUES ('child-bound', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now(), now(), now())
 	testutil.FailErr(t, "insert child-bound", err)
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO workflow_runs (id, session_id, project_id, workflow_id, workflow_version, status, revision, current_phase, created_at, updated_at)
+		VALUES ('run-1', 'coord', ?, 'wf', '1.0.0', 'running', 1, 'implement', ?, ?)`, testdbseed.DefaultProjectID, now(), now())
+	testutil.FailErr(t, "insert workflow run", err)
 	pw, err := f.records.CreateWorker(t.Context(), f.coord, op("create-bound"), workerrecords.WorkerSpec{
 		Name: "bound-leg", AgentType: "repo-researcher", ScopeMode: "read", ChildSessionID: "child-bound",
-		DelegationID: "del-a", LegID: "leg-a", WorkflowWorkID: "work-leg-a",
+		DelegationID: "del-a", LegID: "leg-a", WorkflowRunID: "run-1", WorkflowPhase: "implement", WorkflowWorkID: "work-leg-a",
 	})
 	testutil.FailErr(t, "create bound", err)
 	_, err = f.db.ExecContext(t.Context(), `INSERT INTO worker_jobs (id, project_id, parent_session_id, child_session_id, agent_type, status, prompt, brief, created_at)

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/db"
@@ -231,6 +232,11 @@ func (c staticWorkerLegCtx) BuildWorkerPromptContext(context.Context, string, *a
 }
 
 func TestFindingsAndMessagesStreamsNeverStarveOrCrossAcknowledge(t *testing.T) {
+	anchorReg, err := anchor.LoadRegistryFromConfigRoot()
+	testutil.FailErr(t, "load anchor registry", err)
+	anchor.SetDefaultRegistry(anchorReg)
+	t.Cleanup(func() { anchor.SetDefaultRegistry(nil) })
+
 	f := newMultiWorkerMessagingFixture(t)
 	delivery := &workermessaging.Delivery{Records: f.records}
 
