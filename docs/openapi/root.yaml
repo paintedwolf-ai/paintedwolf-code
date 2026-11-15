@@ -1207,6 +1207,24 @@ components:
       $ref: components/schemas/checkpoint.yaml#/components/schemas/ToolApprovalRejectBody
     ToolResult:
       $ref: components/schemas/session/tool-results.yaml#/components/schemas/ToolResult
+    ActionDescriptor:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionDescriptor
+    ActionRan:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionRan
+    ActionFactKind:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionFactKind
+    ActionFact:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionFact
+    ActionPreview:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionPreview
+    ActionPreviewLine:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionPreviewLine
+    ActionLink:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionLink
+    ActionReceiptScope:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionReceiptScope
+    ActionOpener:
+      $ref: components/schemas/session/actions.yaml#/components/schemas/ActionOpener
     ExternalAccess:
       $ref: components/schemas/external-access.yaml#/components/schemas/ExternalAccess
     ExternalAccessVisibility:

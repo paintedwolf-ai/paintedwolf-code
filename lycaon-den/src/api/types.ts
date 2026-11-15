@@ -8317,6 +8317,8 @@ export interface components {
             extra_content?: {
                 [key: string]: unknown;
             };
+            /** @description Card for the call before its result arrives; projected on read, never stored. */
+            action?: components["schemas"]["ActionDescriptor"];
         };
         ToolApprovalPayload: {
             tool_call_id?: string;
@@ -8388,6 +8390,8 @@ export interface components {
             codes?: string[];
             /** @description Structured facts for every raised guidance code, in the same order as codes. Agents branch on code and details, never on rendered content. */
             feedback?: components["schemas"]["ToolFeedback"][];
+            /** @description Card for a settled call that is not a command program; projected on read, never stored. */
+            action?: components["schemas"]["ActionDescriptor"];
             /** @description Quiet-chrome for Den verbose prefs. Host stamps from the policy registry (`guard:` emit, advisory/informational/expected_behavior categories, info|warning severity) or a structured reject `code` with no registry row. `benign` hides unless verbose; `normal` stays visible (worker_dispatch, SPEC_POSTURE, …). */
             ui_visibility?: components["schemas"]["ToolResultUiVisibility"];
             /** @description Producer-stated worker dispatch identity. */
@@ -8416,6 +8420,192 @@ export interface components {
             verdict?: components["schemas"]["VerdictOutcome"];
             /** @description Host-observed loopback listener attribution for an http_request whose first hop connected to a loopback address. */
             listener?: components["schemas"]["LoopbackListenerFact"];
+        };
+        /** @description The host's account of one visible action, composed from typed facts on the call, its result or its command activity. Den draws every action card from this and owns only copy and formatting. */
+        ActionDescriptor: {
+            /** @description Verb-first action name from the tool presentation catalog. */
+            label: string;
+            /** @enum {string} */
+            status: "running" | "done" | "error";
+            ran: components["schemas"]["ActionRan"];
+            /** @description At most four facts, in vocabulary order, at most one of each kind. */
+            facts: components["schemas"]["ActionFact"][];
+            /** @description Fact kinds whose compact form makes the row's outcome text, in order. */
+            row: components["schemas"]["ActionFactKind"][];
+            preview?: components["schemas"]["ActionPreview"];
+            /** @description Records the action has, in the order Input, Output, Receipt; absent kinds are omitted. */
+            links: components["schemas"]["ActionLink"][];
+            opener?: components["schemas"]["ActionOpener"];
+            /** @description Actions sharing a key render as one card: one terminal session, one page session, repeated reads of one path, or a burst of one coordination family. Empty for an action that stands alone. */
+            fold_key?: string;
+        };
+        ActionRan: {
+            /** @description What the action ran or addressed, already screened for secrets. */
+            text: string;
+            /**
+             * @description What the text is, for the copy control's name.
+             * @enum {string}
+             */
+            noun: "command" | "path" | "pattern" | "query" | "url" | "request" | "message" | "transition" | "skill" | "phase" | "scan" | "brief" | "need" | "target";
+            redaction?: components["schemas"]["HostSecretRedactionMeta"];
+        };
+        /** @enum {string} */
+        ActionFactKind: "result" | "changed" | "found" | "took" | "steps" | "stopped_by" | "network" | "worker" | "budget" | "process" | "captured" | "containment" | "loaded_by";
+        /** @description One typed fact. The fields a kind uses are listed on each field; Den formats the values and owns the label for each kind. */
+        ActionFact: {
+            kind: components["schemas"]["ActionFactKind"];
+            /**
+             * @description result: how the action ended.
+             * @enum {string}
+             */
+            outcome?: "passed" | "failed" | "refused" | "interrupted" | "completed" | "created" | "updated" | "deleted" | "moved" | "copied" | "committed" | "merged" | "checked_out" | "answered" | "approved" | "declined" | "pass" | "fail" | "captured" | "loaded" | "cancelled";
+            /** @description result: process exit status. */
+            exit_code?: number;
+            /** @description result: HTTP response status. */
+            http_status?: number;
+            /** @description result: a short identifier the outcome produced, such as a commit. */
+            ref?: string;
+            /** @description changed: files touched. found: files the matches are in. */
+            files?: number;
+            /** @description changed: lines added. */
+            added?: number;
+            /** @description changed: lines removed. */
+            removed?: number;
+            /** @description changed: hunks. */
+            hunks?: number;
+            /** @description changed: new files. */
+            created?: number;
+            /** @description found: how many. steps: how many members. */
+            count?: number;
+            /**
+             * @description found: what was counted.
+             * @enum {string}
+             */
+            noun?: "matches" | "files" | "entries" | "lines" | "results" | "tools" | "findings" | "citations" | "items" | "bytes" | "processes" | "secrets" | "refs" | "commits";
+            /** @description found: up to three named items, such as loaded tools. */
+            items?: string[];
+            /** @description found: high-severity findings. */
+            high?: number;
+            /** @description found: medium-severity findings. */
+            medium?: number;
+            /** @description found: low-severity findings. */
+            low?: number;
+            /**
+             * Format: int64
+             * @description took: elapsed time; for a running action, time so far.
+             */
+            duration_ms?: number;
+            /** @description took: the action has not settled. */
+            running?: boolean;
+            /** @description steps: members that failed, were refused or were interrupted. */
+            failed?: number;
+            /**
+             * @description steps: what a member is.
+             * @enum {string}
+             */
+            unit?: "executions" | "calls" | "actions";
+            /** @description steps: the members' actions in order, for a session such as a terminal. */
+            sequence?: string[];
+            /**
+             * @description stopped_by: what stopped or approved the action. loaded_by: how a tool or skill was resolved.
+             * @enum {string}
+             */
+            by?: "host_stop" | "approval" | "policy" | "budget" | "engine" | "name" | "none";
+            /** @description stopped_by: the host stop or rejection code. */
+            code?: string;
+            /**
+             * @description stopped_by: who decided an approval.
+             * @enum {string}
+             */
+            decided_by?: "person" | "policy";
+            /**
+             * Format: date-time
+             * @description stopped_by: when an approval was decided.
+             */
+            at?: string;
+            /** @description network: hosts reached. */
+            hosts?: string[];
+            /**
+             * @description network: how traffic left the host.
+             * @enum {string}
+             */
+            egress?: "proxy_only" | "direct" | "local_only";
+            /** @description worker: the worker's role. */
+            role?: string;
+            /** @description worker: the worker's state. process: the process state. */
+            state?: string;
+            /**
+             * Format: int64
+             * @description budget: amount used.
+             */
+            used?: number;
+            /**
+             * Format: int64
+             * @description budget: amount allowed.
+             */
+            limit?: number;
+            /** @description process: listening port. */
+            port?: number;
+            /** @description captured: the artifact's caption. */
+            caption?: string;
+            /** @description captured: the artifact. */
+            artifact_id?: string;
+            /** @description containment: the confinement mode. */
+            mode?: string;
+        };
+        ActionPreview: {
+            /** @enum {string} */
+            kind: "output" | "diff" | "hits" | "steps" | "image";
+            lines?: components["schemas"]["ActionPreviewLine"][];
+            /** @description Further lines not shown. */
+            more?: number;
+            /** @description output: the lines are the end of the stream. */
+            tail?: boolean;
+            /** @description image: the artifact to show. */
+            artifact_id?: string;
+            /** @description image: the artifact's caption. */
+            caption?: string;
+        };
+        ActionPreviewLine: {
+            text: string;
+            /** @enum {string} */
+            stream?: "stdout" | "stderr";
+            /**
+             * @description diff: added or removed.
+             * @enum {string}
+             */
+            sign?: "added" | "removed";
+            /** @description hits: where the line is. */
+            location?: string;
+            /** @description steps: how the step ended. */
+            state?: string;
+        };
+        ActionLink: {
+            /** @enum {string} */
+            kind: "input" | "output" | "receipt";
+            content_ref?: components["schemas"]["ChatContentReference"];
+            /** @description output: a background process whose output is the record. */
+            process_handle?: string;
+            /** @description receipt: the program activities the receipt document covers. */
+            receipts?: components["schemas"]["ActionReceiptScope"][];
+        };
+        ActionReceiptScope: {
+            program_id: string;
+            activity_id: string;
+        };
+        ActionOpener: {
+            /** @enum {string} */
+            kind: "file" | "diff" | "terminal" | "image" | "worker" | "commit" | "search" | "git" | "security" | "running" | "workflow" | "skill";
+            path?: string;
+            line?: number;
+            /** @description commit: the commit. git: the ref to show. */
+            ref?: string;
+            /** @description search: what to search for. */
+            query?: string;
+            artifact_id?: string;
+            process_handle?: string;
+            worker_id?: string;
+            workflow_run_id?: string;
         };
         ExternalAccess: {
             modes: components["schemas"]["ExternalAccessMode"][];
@@ -10679,6 +10869,53 @@ export interface components {
             start_byte: number;
             end_byte: number;
         };
+        /**
+         * @description What a replacement claims. A secret was detected and removed; a managed_reference is a protected value written as its capability reference, so the source still holds the value the reference names; an observer_mask is a standing policy that never showed the value to observers and asserts nothing about its content.
+         * @enum {string}
+         */
+        RedactionKind: "secret" | "managed_reference" | "observer_mask";
+        /**
+         * @description The evidence lens that justified one replacement. policy accompanies observer_mask, where no detection took place.
+         * @enum {string}
+         */
+        RedactionSource: "shape_rule" | "container_harvest" | "remembered_match" | "policy";
+        /** @description One replacement in this message copy. Offsets index the redacted string, and length is the marker's own width — the placeholder or the capability reference — never the width of the value it replaced, so a span can be marked without disclosing how long the original was. */
+        RedactedSpan: {
+            /** @description Dotted path of the redacted field within this message, such as content, tool_result.content, or tool_calls.0.args.command. */
+            field: string;
+            /** @description Rune offset of the marker within the redacted field value. */
+            start: number;
+            /** @description Rune length of the marker. */
+            length: number;
+            kind: components["schemas"]["RedactionKind"];
+            source?: components["schemas"]["RedactionSource"];
+            /** @description Catalog rule identity, when a shape rule named the value. */
+            rule_id?: string;
+            /** @description Human-readable rule name for presentation. */
+            rule_title?: string;
+        };
+        /** @description Host-recorded provenance for spans replaced in this message copy. Presence is authoritative; literal marker text in content is not a redaction signal. Every replacement in this copy is listed, so a client renders from the list rather than by searching content, and the list describes this copy alone rather than accumulating across projections of one message. */
+        HostSecretRedactionMeta: {
+            spans: components["schemas"]["RedactedSpan"][];
+        };
+        ChatContentRow: {
+            index: number;
+            offset: number;
+            text: string;
+            spans: components["schemas"]["RedactedSpan"][];
+        };
+        /** @description Retained screened content; the inline field is a bounded preview, never a replacement for this revision. */
+        ChatContentReference: {
+            /** @enum {string} */
+            field: "content" | "tool_output" | "tool_args";
+            tool_call_id?: string;
+            sha256: string;
+            total_runes: number;
+            size_bytes: number;
+            /** @description Number of display rows in this revision. */
+            rows: number;
+            preview_rows?: components["schemas"]["ChatContentRow"][];
+        };
         CommandActivity: {
             /** Format: uuid */
             id: string;
@@ -10710,6 +10947,8 @@ export interface components {
             /** @description First execution of each structural step; use activity_id to page all member receipts. */
             execution_ids: string[];
             spans: components["schemas"]["CommandActivitySpan"][];
+            /** @description Card for this activity; projected on read and in live snapshots, never stored. */
+            action?: components["schemas"]["ActionDescriptor"];
         };
         /** @description Capture or delivery limit. Execution status and completed effects retain their original outcomes; saved bytes form an incomplete prefix. */
         CommandProgramOutputLimit: {
@@ -10848,35 +11087,6 @@ export interface components {
             start_line?: number;
             /** @description Inclusive 1-based last line of a path_file reference's scope. */
             end_line?: number;
-        };
-        /**
-         * @description What a replacement claims. A secret was detected and removed; a managed_reference is a protected value written as its capability reference, so the source still holds the value the reference names; an observer_mask is a standing policy that never showed the value to observers and asserts nothing about its content.
-         * @enum {string}
-         */
-        RedactionKind: "secret" | "managed_reference" | "observer_mask";
-        /**
-         * @description The evidence lens that justified one replacement. policy accompanies observer_mask, where no detection took place.
-         * @enum {string}
-         */
-        RedactionSource: "shape_rule" | "container_harvest" | "remembered_match" | "policy";
-        /** @description One replacement in this message copy. Offsets index the redacted string, and length is the marker's own width — the placeholder or the capability reference — never the width of the value it replaced, so a span can be marked without disclosing how long the original was. */
-        RedactedSpan: {
-            /** @description Dotted path of the redacted field within this message, such as content, tool_result.content, or tool_calls.0.args.command. */
-            field: string;
-            /** @description Rune offset of the marker within the redacted field value. */
-            start: number;
-            /** @description Rune length of the marker. */
-            length: number;
-            kind: components["schemas"]["RedactionKind"];
-            source?: components["schemas"]["RedactionSource"];
-            /** @description Catalog rule identity, when a shape rule named the value. */
-            rule_id?: string;
-            /** @description Human-readable rule name for presentation. */
-            rule_title?: string;
-        };
-        /** @description Host-recorded provenance for spans replaced in this message copy. Presence is authoritative; literal marker text in content is not a redaction signal. Every replacement in this copy is listed, so a client renders from the list rather than by searching content, and the list describes this copy alone rather than accumulating across projections of one message. */
-        HostSecretRedactionMeta: {
-            spans: components["schemas"]["RedactedSpan"][];
         };
         /**
          * @description State of one checklist row. Derived by the host from the coordinator's markdown markers; the coordinator never writes these strings directly.
@@ -11105,24 +11315,6 @@ export interface components {
             /** Format: int64 */
             duration_ms?: number;
             skip_reason?: string;
-        };
-        ChatContentRow: {
-            index: number;
-            offset: number;
-            text: string;
-            spans: components["schemas"]["RedactedSpan"][];
-        };
-        /** @description Retained screened content; the inline field is a bounded preview, never a replacement for this revision. */
-        ChatContentReference: {
-            /** @enum {string} */
-            field: "content" | "tool_output" | "tool_args";
-            tool_call_id?: string;
-            sha256: string;
-            total_runes: number;
-            size_bytes: number;
-            /** @description Number of display rows in this revision. */
-            rows: number;
-            preview_rows?: components["schemas"]["ChatContentRow"][];
         };
         /** @enum {string} */
         InvocationStatus: "running" | "completed" | "rejected" | "error" | "interrupted";
@@ -30871,6 +31063,15 @@ export type ToolApprovalResolveBody = components["schemas"]["ToolApprovalResolve
 export type ToolApprovalApproveBody = components["schemas"]["ToolApprovalApproveBody"];
 export type ToolApprovalRejectBody = components["schemas"]["ToolApprovalRejectBody"];
 export type ToolResult = components["schemas"]["ToolResult"];
+export type ActionDescriptor = components["schemas"]["ActionDescriptor"];
+export type ActionRan = components["schemas"]["ActionRan"];
+export type ActionFactKind = components["schemas"]["ActionFactKind"];
+export type ActionFact = components["schemas"]["ActionFact"];
+export type ActionPreview = components["schemas"]["ActionPreview"];
+export type ActionPreviewLine = components["schemas"]["ActionPreviewLine"];
+export type ActionLink = components["schemas"]["ActionLink"];
+export type ActionReceiptScope = components["schemas"]["ActionReceiptScope"];
+export type ActionOpener = components["schemas"]["ActionOpener"];
 export type ExternalAccess = components["schemas"]["ExternalAccess"];
 export type ExternalAccessVisibility = components["schemas"]["ExternalAccessVisibility"];
 export type ExternalAccessVisibilitySummary = components["schemas"]["ExternalAccessVisibilitySummary"];
@@ -31092,6 +31293,12 @@ export type ActivityKind = components["schemas"]["ActivityKind"];
 export type ActivityStatus = components["schemas"]["ActivityStatus"];
 export type CommandActivityStep = components["schemas"]["CommandActivityStep"];
 export type CommandActivitySpan = components["schemas"]["CommandActivitySpan"];
+export type RedactionKind = components["schemas"]["RedactionKind"];
+export type RedactionSource = components["schemas"]["RedactionSource"];
+export type RedactedSpan = components["schemas"]["RedactedSpan"];
+export type HostSecretRedactionMeta = components["schemas"]["HostSecretRedactionMeta"];
+export type ChatContentRow = components["schemas"]["ChatContentRow"];
+export type ChatContentReference = components["schemas"]["ChatContentReference"];
 export type CommandActivity = components["schemas"]["CommandActivity"];
 export type CommandProgramOutputLimit = components["schemas"]["CommandProgramOutputLimit"];
 export type CommandProgramOutputWindow = components["schemas"]["CommandProgramOutputWindow"];
@@ -31102,10 +31309,6 @@ export type ContentAuthority = components["schemas"]["ContentAuthority"];
 export type ContentTrustTier = components["schemas"]["ContentTrustTier"];
 export type MessageReferenceKind = components["schemas"]["MessageReferenceKind"];
 export type MessageContentPart = components["schemas"]["MessageContentPart"];
-export type RedactionKind = components["schemas"]["RedactionKind"];
-export type RedactionSource = components["schemas"]["RedactionSource"];
-export type RedactedSpan = components["schemas"]["RedactedSpan"];
-export type HostSecretRedactionMeta = components["schemas"]["HostSecretRedactionMeta"];
 export type ProgressState = components["schemas"]["ProgressState"];
 export type ProgressCompleteMeta = components["schemas"]["ProgressCompleteMeta"];
 export type ProgressChangeKind = components["schemas"]["ProgressChangeKind"];
@@ -31133,8 +31336,6 @@ export type CompletionReportDefectCode = components["schemas"]["CompletionReport
 export type CompletionReportDefect = components["schemas"]["CompletionReportDefect"];
 export type CompletionReportMeta = components["schemas"]["CompletionReportMeta"];
 export type IndexWarmingMeta = components["schemas"]["IndexWarmingMeta"];
-export type ChatContentRow = components["schemas"]["ChatContentRow"];
-export type ChatContentReference = components["schemas"]["ChatContentReference"];
 export type InvocationStatus = components["schemas"]["InvocationStatus"];
 export type InvocationEvidence = components["schemas"]["InvocationEvidence"];
 export type InvocationFailure = components["schemas"]["InvocationFailure"];

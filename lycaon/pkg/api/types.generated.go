@@ -15,6 +15,163 @@ type AbortSessionRequest struct {
 	Reason string `json:"reason,omitempty"`
 }
 
+// ActionDescriptor The host's account of one visible action, composed from typed facts on the call, its result or its command activity. Den draws every action card from this and owns only copy and formatting.
+type ActionDescriptor struct {
+	// Verb-first action name from the tool presentation catalog.
+	Label  string    `json:"label"`
+	Status string    `json:"status"`
+	Ran    ActionRan `json:"ran"`
+	// At most four facts, in vocabulary order, at most one of each kind.
+	Facts []ActionFact `json:"facts"`
+	// Fact kinds whose compact form makes the row's outcome text, in order.
+	Row     []ActionFactKind `json:"row"`
+	Preview *ActionPreview   `json:"preview,omitempty"`
+	// Records the action has, in the order Input, Output, Receipt; absent kinds are omitted.
+	Links  []ActionLink  `json:"links"`
+	Opener *ActionOpener `json:"opener,omitempty"`
+	// Actions sharing a key render as one card: one terminal session, one page session, repeated reads of one path, or a burst of one coordination family. Empty for an action that stands alone.
+	FoldKey string `json:"fold_key,omitempty"`
+}
+
+// ActionFact One typed fact. The fields a kind uses are listed on each field; Den formats the values and owns the label for each kind.
+type ActionFact struct {
+	Kind ActionFactKind `json:"kind"`
+	// result: how the action ended.
+	Outcome string `json:"outcome,omitempty"`
+	// result: process exit status.
+	ExitCode *int `json:"exit_code,omitempty"`
+	// result: HTTP response status.
+	HTTPStatus *int `json:"http_status,omitempty"`
+	// result: a short identifier the outcome produced, such as a commit.
+	Ref string `json:"ref,omitempty"`
+	// changed: files touched. found: files the matches are in.
+	Files int `json:"files,omitempty"`
+	// changed: lines added.
+	Added int `json:"added,omitempty"`
+	// changed: lines removed.
+	Removed int `json:"removed,omitempty"`
+	// changed: hunks.
+	Hunks int `json:"hunks,omitempty"`
+	// changed: new files.
+	Created int `json:"created,omitempty"`
+	// found: how many. steps: how many members.
+	Count int `json:"count,omitempty"`
+	// found: what was counted.
+	Noun string `json:"noun,omitempty"`
+	// found: up to three named items, such as loaded tools.
+	Items []string `json:"items,omitempty"`
+	// found: high-severity findings.
+	High int `json:"high,omitempty"`
+	// found: medium-severity findings.
+	Medium int `json:"medium,omitempty"`
+	// found: low-severity findings.
+	Low int `json:"low,omitempty"`
+	// took: elapsed time; for a running action, time so far.
+	DurationMs int64 `json:"duration_ms,omitempty"`
+	// took: the action has not settled.
+	Running bool `json:"running,omitempty"`
+	// steps: members that failed, were refused or were interrupted.
+	Failed int `json:"failed,omitempty"`
+	// steps: what a member is.
+	Unit string `json:"unit,omitempty"`
+	// steps: the members' actions in order, for a session such as a terminal.
+	Sequence []string `json:"sequence,omitempty"`
+	// stopped_by: what stopped or approved the action. loaded_by: how a tool or skill was resolved.
+	By string `json:"by,omitempty"`
+	// stopped_by: the host stop or rejection code.
+	Code string `json:"code,omitempty"`
+	// stopped_by: who decided an approval.
+	DecidedBy string `json:"decided_by,omitempty"`
+	// stopped_by: when an approval was decided.
+	At *time.Time `json:"at,omitempty"`
+	// network: hosts reached.
+	Hosts []string `json:"hosts,omitempty"`
+	// network: how traffic left the host.
+	Egress string `json:"egress,omitempty"`
+	// worker: the worker's role.
+	Role string `json:"role,omitempty"`
+	// worker: the worker's state. process: the process state.
+	State string `json:"state,omitempty"`
+	// budget: amount used.
+	Used int64 `json:"used,omitempty"`
+	// budget: amount allowed.
+	Limit int64 `json:"limit,omitempty"`
+	// process: listening port.
+	Port *int `json:"port,omitempty"`
+	// captured: the artifact's caption.
+	Caption string `json:"caption,omitempty"`
+	// captured: the artifact.
+	ArtifactID string `json:"artifact_id,omitempty"`
+	// containment: the confinement mode.
+	Mode string `json:"mode,omitempty"`
+}
+
+// ActionLink
+type ActionLink struct {
+	Kind       string                `json:"kind"`
+	ContentRef *ChatContentReference `json:"content_ref,omitempty"`
+	// output: a background process whose output is the record.
+	ProcessHandle string `json:"process_handle,omitempty"`
+	// receipt: the program activities the receipt document covers.
+	Receipts []ActionReceiptScope `json:"receipts,omitempty"`
+}
+
+// ActionOpener
+type ActionOpener struct {
+	Kind string `json:"kind"`
+	Path string `json:"path,omitempty"`
+	Line *int   `json:"line,omitempty"`
+	// commit: the commit. git: the ref to show.
+	Ref string `json:"ref,omitempty"`
+	// search: what to search for.
+	Query         string `json:"query,omitempty"`
+	ArtifactID    string `json:"artifact_id,omitempty"`
+	ProcessHandle string `json:"process_handle,omitempty"`
+	WorkerID      string `json:"worker_id,omitempty"`
+	WorkflowRunID string `json:"workflow_run_id,omitempty"`
+}
+
+// ActionPreview
+type ActionPreview struct {
+	Kind  string              `json:"kind"`
+	Lines []ActionPreviewLine `json:"lines,omitempty"`
+	// Further lines not shown.
+	More int `json:"more,omitempty"`
+	// output: the lines are the end of the stream.
+	Tail bool `json:"tail,omitempty"`
+	// image: the artifact to show.
+	ArtifactID string `json:"artifact_id,omitempty"`
+	// image: the artifact's caption.
+	Caption string `json:"caption,omitempty"`
+}
+
+// ActionPreviewLine
+type ActionPreviewLine struct {
+	Text   string `json:"text"`
+	Stream string `json:"stream,omitempty"`
+	// diff: added or removed.
+	Sign string `json:"sign,omitempty"`
+	// hits: where the line is.
+	Location string `json:"location,omitempty"`
+	// steps: how the step ended.
+	State string `json:"state,omitempty"`
+}
+
+// ActionRan
+type ActionRan struct {
+	// What the action ran or addressed, already screened for secrets.
+	Text string `json:"text"`
+	// What the text is, for the copy control's name.
+	Noun      string                   `json:"noun"`
+	Redaction *HostSecretRedactionMeta `json:"redaction,omitempty"`
+}
+
+// ActionReceiptScope
+type ActionReceiptScope struct {
+	ProgramID  string `json:"program_id"`
+	ActivityID string `json:"activity_id"`
+}
+
 // ActiveWorkflowRunResponse
 type ActiveWorkflowRunResponse struct {
 	Run *WorkflowRun `json:"run"`
@@ -1432,6 +1589,8 @@ type CommandActivity struct {
 	// First execution of each structural step; use activity_id to page all member receipts.
 	ExecutionIDs []string              `json:"execution_ids"`
 	Spans        []CommandActivitySpan `json:"spans"`
+	// Card for this activity; projected on read and in live snapshots, never stored.
+	Action *ActionDescriptor `json:"action,omitempty"`
 }
 
 // CommandActivitySpan
@@ -8515,6 +8674,8 @@ type ToolCall struct {
 	ArgsMalformed bool `json:"args_malformed,omitempty"`
 	// Provider-specific tool-call metadata required on replay.
 	ExtraContent map[string]any `json:"extra_content,omitempty"`
+	// Card for the call before its result arrives; projected on read, never stored.
+	Action *ActionDescriptor `json:"action,omitempty"`
 }
 
 // ToolCompletion A call's lifecycle outcome as its producer states it. State `parked` with resource_kind `wait` means the call ended its turn on the session's wait lease (resource_id): a `wait` call, or a `command` call whose program keeps running while it waits. The lease's awaiting_wake activity carries the call's tool_call_id; when that activity closes, the wait has ended and the call's outcome arrives in a later message.
@@ -8584,6 +8745,8 @@ type ToolResult struct {
 	Codes []string `json:"codes,omitempty"`
 	// Structured facts for every raised guidance code, in the same order as codes. Agents branch on code and details, never on rendered content.
 	Feedback []ToolFeedback `json:"feedback,omitempty"`
+	// Card for a settled call that is not a command program; projected on read, never stored.
+	Action *ActionDescriptor `json:"action,omitempty"`
 	// Quiet-chrome for Den verbose prefs. Host stamps from the policy registry (`guard:` emit, advisory/informational/expected_behavior categories, info|warning severity) or a structured reject `code` with no registry row. `benign` hides unless verbose; `normal` stays visible (worker_dispatch, SPEC_POSTURE, …).
 	UiVisibility ToolResultUiVisibility `json:"ui_visibility,omitempty"`
 	// Producer-stated worker dispatch identity.

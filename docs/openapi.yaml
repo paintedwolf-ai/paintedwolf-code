@@ -21756,6 +21756,10 @@ components:
           type: object
           additionalProperties: true
           description: Provider-specific tool-call metadata required on replay.
+        action:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ActionDescriptor'
+          description: Card for the call before its result arrives; projected on read, never stored.
     ToolApprovalPayload:
       x-go-generate: true
       type: object
@@ -21912,6 +21916,10 @@ components:
           description: Structured facts for every raised guidance code, in the same order as codes. Agents branch on code and details, never on rendered content.
           items:
             $ref: '#/components/schemas/ToolFeedback'
+        action:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ActionDescriptor'
+          description: Card for a settled call that is not a command program; projected on read, never stored.
         ui_visibility:
           x-go-name: UiVisibility
           $ref: '#/components/schemas/ToolResultUiVisibility'
@@ -21982,6 +21990,425 @@ components:
           $ref: '#/components/schemas/LoopbackListenerFact'
           description: |
             Host-observed loopback listener attribution for an http_request whose first hop connected to a loopback address.
+    ActionDescriptor:
+      x-go-generate: true
+      type: object
+      description: The host's account of one visible action, composed from typed facts on the call, its result or its command activity. Den draws every action card from this and owns only copy and formatting.
+      additionalProperties: false
+      required:
+        - label
+        - status
+        - ran
+        - facts
+        - row
+        - links
+      properties:
+        label:
+          type: string
+          description: Verb-first action name from the tool presentation catalog.
+        status:
+          type: string
+          enum:
+            - running
+            - done
+            - error
+        ran:
+          $ref: '#/components/schemas/ActionRan'
+        facts:
+          type: array
+          maxItems: 4
+          description: At most four facts, in vocabulary order, at most one of each kind.
+          items:
+            $ref: '#/components/schemas/ActionFact'
+        row:
+          type: array
+          maxItems: 2
+          description: Fact kinds whose compact form makes the row's outcome text, in order.
+          items:
+            $ref: '#/components/schemas/ActionFactKind'
+        preview:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ActionPreview'
+        links:
+          type: array
+          maxItems: 3
+          description: Records the action has, in the order Input, Output, Receipt; absent kinds are omitted.
+          items:
+            $ref: '#/components/schemas/ActionLink'
+        opener:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ActionOpener'
+        fold_key:
+          type: string
+          description: 'Actions sharing a key render as one card: one terminal session, one page session, repeated reads of one path, or a burst of one coordination family. Empty for an action that stands alone.'
+    ActionRan:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - text
+        - noun
+      properties:
+        text:
+          type: string
+          description: What the action ran or addressed, already screened for secrets.
+        noun:
+          type: string
+          description: What the text is, for the copy control's name.
+          enum:
+            - command
+            - path
+            - pattern
+            - query
+            - url
+            - request
+            - message
+            - transition
+            - skill
+            - phase
+            - scan
+            - brief
+            - need
+            - target
+        redaction:
+          x-go-pointer: true
+          $ref: '#/components/schemas/HostSecretRedactionMeta'
+    ActionFactKind:
+      type: string
+      enum:
+        - result
+        - changed
+        - found
+        - took
+        - steps
+        - stopped_by
+        - network
+        - worker
+        - budget
+        - process
+        - captured
+        - containment
+        - loaded_by
+    ActionFact:
+      x-go-generate: true
+      type: object
+      description: One typed fact. The fields a kind uses are listed on each field; Den formats the values and owns the label for each kind.
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          $ref: '#/components/schemas/ActionFactKind'
+        outcome:
+          type: string
+          description: 'result: how the action ended.'
+          enum:
+            - passed
+            - failed
+            - refused
+            - interrupted
+            - completed
+            - created
+            - updated
+            - deleted
+            - moved
+            - copied
+            - committed
+            - merged
+            - checked_out
+            - answered
+            - approved
+            - declined
+            - pass
+            - fail
+            - captured
+            - loaded
+            - cancelled
+        exit_code:
+          type: integer
+          x-go-pointer: true
+          description: 'result: process exit status.'
+        http_status:
+          type: integer
+          x-go-pointer: true
+          description: 'result: HTTP response status.'
+        ref:
+          type: string
+          description: 'result: a short identifier the outcome produced, such as a commit.'
+        files:
+          type: integer
+          description: 'changed: files touched. found: files the matches are in.'
+        added:
+          type: integer
+          description: 'changed: lines added.'
+        removed:
+          type: integer
+          description: 'changed: lines removed.'
+        hunks:
+          type: integer
+          description: 'changed: hunks.'
+        created:
+          type: integer
+          description: 'changed: new files.'
+        count:
+          type: integer
+          description: 'found: how many. steps: how many members.'
+        noun:
+          type: string
+          description: 'found: what was counted.'
+          enum:
+            - matches
+            - files
+            - entries
+            - lines
+            - results
+            - tools
+            - findings
+            - citations
+            - items
+            - bytes
+            - processes
+            - secrets
+            - refs
+            - commits
+        items:
+          type: array
+          maxItems: 3
+          description: 'found: up to three named items, such as loaded tools.'
+          items:
+            type: string
+        high:
+          type: integer
+          description: 'found: high-severity findings.'
+        medium:
+          type: integer
+          description: 'found: medium-severity findings.'
+        low:
+          type: integer
+          description: 'found: low-severity findings.'
+        duration_ms:
+          type: integer
+          format: int64
+          description: 'took: elapsed time; for a running action, time so far.'
+        running:
+          type: boolean
+          description: 'took: the action has not settled.'
+        failed:
+          type: integer
+          description: 'steps: members that failed, were refused or were interrupted.'
+        unit:
+          type: string
+          description: 'steps: what a member is.'
+          enum:
+            - executions
+            - calls
+            - actions
+        sequence:
+          type: array
+          maxItems: 8
+          description: 'steps: the members'' actions in order, for a session such as a terminal.'
+          items:
+            type: string
+        by:
+          type: string
+          description: 'stopped_by: what stopped or approved the action. loaded_by: how a tool or skill was resolved.'
+          enum:
+            - host_stop
+            - approval
+            - policy
+            - budget
+            - engine
+            - name
+            - none
+        code:
+          type: string
+          description: 'stopped_by: the host stop or rejection code.'
+        decided_by:
+          type: string
+          description: 'stopped_by: who decided an approval.'
+          enum:
+            - person
+            - policy
+        at:
+          type: string
+          format: date-time
+          x-go-pointer: true
+          description: 'stopped_by: when an approval was decided.'
+        hosts:
+          type: array
+          maxItems: 3
+          description: 'network: hosts reached.'
+          items:
+            type: string
+        egress:
+          type: string
+          description: 'network: how traffic left the host.'
+          enum:
+            - proxy_only
+            - direct
+            - local_only
+        role:
+          type: string
+          description: 'worker: the worker''s role.'
+        state:
+          type: string
+          description: 'worker: the worker''s state. process: the process state.'
+        used:
+          type: integer
+          format: int64
+          description: 'budget: amount used.'
+        limit:
+          type: integer
+          format: int64
+          description: 'budget: amount allowed.'
+        port:
+          type: integer
+          x-go-pointer: true
+          description: 'process: listening port.'
+        caption:
+          type: string
+          description: 'captured: the artifact''s caption.'
+        artifact_id:
+          type: string
+          description: 'captured: the artifact.'
+        mode:
+          type: string
+          description: 'containment: the confinement mode.'
+    ActionPreview:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - output
+            - diff
+            - hits
+            - steps
+            - image
+        lines:
+          type: array
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/ActionPreviewLine'
+        more:
+          type: integer
+          description: Further lines not shown.
+        tail:
+          type: boolean
+          description: 'output: the lines are the end of the stream.'
+        artifact_id:
+          type: string
+          description: 'image: the artifact to show.'
+        caption:
+          type: string
+          description: 'image: the artifact''s caption.'
+    ActionPreviewLine:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - text
+      properties:
+        text:
+          type: string
+        stream:
+          type: string
+          enum:
+            - stdout
+            - stderr
+        sign:
+          type: string
+          description: 'diff: added or removed.'
+          enum:
+            - added
+            - removed
+        location:
+          type: string
+          description: 'hits: where the line is.'
+        state:
+          type: string
+          description: 'steps: how the step ended.'
+    ActionLink:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - input
+            - output
+            - receipt
+        content_ref:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ChatContentReference'
+        process_handle:
+          type: string
+          description: 'output: a background process whose output is the record.'
+        receipts:
+          type: array
+          description: 'receipt: the program activities the receipt document covers.'
+          items:
+            $ref: '#/components/schemas/ActionReceiptScope'
+    ActionReceiptScope:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - program_id
+        - activity_id
+      properties:
+        program_id:
+          type: string
+        activity_id:
+          type: string
+    ActionOpener:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - kind
+      properties:
+        kind:
+          type: string
+          enum:
+            - file
+            - diff
+            - terminal
+            - image
+            - worker
+            - commit
+            - search
+            - git
+            - security
+            - running
+            - workflow
+            - skill
+        path:
+          type: string
+        line:
+          type: integer
+          x-go-pointer: true
+        ref:
+          type: string
+          description: 'commit: the commit. git: the ref to show.'
+        query:
+          type: string
+          description: 'search: what to search for.'
+        artifact_id:
+          type: string
+        process_handle:
+          type: string
+        worker_id:
+          type: string
+        workflow_run_id:
+          type: string
     ExternalAccess:
       x-go-generate: true
       type: object
@@ -27755,6 +28182,127 @@ components:
           type: integer
         end_byte:
           type: integer
+    RedactionKind:
+      type: string
+      description: |
+        What a replacement claims. A secret was detected and removed; a managed_reference is a protected value written as its capability reference, so the source still holds the value the reference names; an observer_mask is a standing policy that never showed the value to observers and asserts nothing about its content.
+      enum:
+        - secret
+        - managed_reference
+        - observer_mask
+    RedactionSource:
+      type: string
+      description: |
+        The evidence lens that justified one replacement. policy accompanies observer_mask, where no detection took place.
+      enum:
+        - shape_rule
+        - container_harvest
+        - remembered_match
+        - policy
+    RedactedSpan:
+      x-go-generate: true
+      type: object
+      required:
+        - field
+        - start
+        - length
+        - kind
+      additionalProperties: false
+      description: |
+        One replacement in this message copy. Offsets index the redacted string, and length is the marker's own width — the placeholder or the capability reference — never the width of the value it replaced, so a span can be marked without disclosing how long the original was.
+      properties:
+        field:
+          type: string
+          description: |
+            Dotted path of the redacted field within this message, such as content, tool_result.content, or tool_calls.0.args.command.
+        start:
+          type: integer
+          minimum: 0
+          description: Rune offset of the marker within the redacted field value.
+        length:
+          type: integer
+          minimum: 1
+          description: Rune length of the marker.
+        kind:
+          $ref: '#/components/schemas/RedactionKind'
+        source:
+          $ref: '#/components/schemas/RedactionSource'
+        rule_id:
+          type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+          description: Catalog rule identity, when a shape rule named the value.
+        rule_title:
+          type: string
+          description: Human-readable rule name for presentation.
+    HostSecretRedactionMeta:
+      x-go-generate: true
+      type: object
+      required:
+        - spans
+      additionalProperties: false
+      description: |
+        Host-recorded provenance for spans replaced in this message copy. Presence is authoritative; literal marker text in content is not a redaction signal. Every replacement in this copy is listed, so a client renders from the list rather than by searching content, and the list describes this copy alone rather than accumulating across projections of one message.
+      properties:
+        spans:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RedactedSpan'
+    ChatContentRow:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - index
+        - offset
+        - text
+        - spans
+      properties:
+        index:
+          type: integer
+        offset:
+          type: integer
+        text:
+          type: string
+        spans:
+          type: array
+          items:
+            $ref: '#/components/schemas/RedactedSpan'
+    ChatContentReference:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - field
+        - sha256
+        - total_runes
+        - size_bytes
+        - rows
+      description: Retained screened content; the inline field is a bounded preview, never a replacement for this revision.
+      properties:
+        field:
+          type: string
+          enum:
+            - content
+            - tool_output
+            - tool_args
+        tool_call_id:
+          type: string
+          pattern: ^[A-Za-z0-9_.:-]+$
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        total_runes:
+          type: integer
+        size_bytes:
+          type: integer
+        rows:
+          type: integer
+          description: Number of display rows in this revision.
+        preview_rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatContentRow'
     CommandActivity:
       x-go-generate: true
       type: object
@@ -27834,6 +28382,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CommandActivitySpan'
+        action:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ActionDescriptor'
+          description: Card for this activity; projected on read and in live snapshots, never stored.
     CommandProgramOutputLimit:
       x-go-generate: true
       type: object
@@ -28149,72 +28701,6 @@ components:
           type: integer
           minimum: 1
           description: Inclusive 1-based last line of a path_file reference's scope.
-    RedactionKind:
-      type: string
-      description: |
-        What a replacement claims. A secret was detected and removed; a managed_reference is a protected value written as its capability reference, so the source still holds the value the reference names; an observer_mask is a standing policy that never showed the value to observers and asserts nothing about its content.
-      enum:
-        - secret
-        - managed_reference
-        - observer_mask
-    RedactionSource:
-      type: string
-      description: |
-        The evidence lens that justified one replacement. policy accompanies observer_mask, where no detection took place.
-      enum:
-        - shape_rule
-        - container_harvest
-        - remembered_match
-        - policy
-    RedactedSpan:
-      x-go-generate: true
-      type: object
-      required:
-        - field
-        - start
-        - length
-        - kind
-      additionalProperties: false
-      description: |
-        One replacement in this message copy. Offsets index the redacted string, and length is the marker's own width — the placeholder or the capability reference — never the width of the value it replaced, so a span can be marked without disclosing how long the original was.
-      properties:
-        field:
-          type: string
-          description: |
-            Dotted path of the redacted field within this message, such as content, tool_result.content, or tool_calls.0.args.command.
-        start:
-          type: integer
-          minimum: 0
-          description: Rune offset of the marker within the redacted field value.
-        length:
-          type: integer
-          minimum: 1
-          description: Rune length of the marker.
-        kind:
-          $ref: '#/components/schemas/RedactionKind'
-        source:
-          $ref: '#/components/schemas/RedactionSource'
-        rule_id:
-          type: string
-          pattern: ^[A-Za-z0-9_.:-]+$
-          description: Catalog rule identity, when a shape rule named the value.
-        rule_title:
-          type: string
-          description: Human-readable rule name for presentation.
-    HostSecretRedactionMeta:
-      x-go-generate: true
-      type: object
-      required:
-        - spans
-      additionalProperties: false
-      description: |
-        Host-recorded provenance for spans replaced in this message copy. Presence is authoritative; literal marker text in content is not a redaction signal. Every replacement in this copy is listed, so a client renders from the list rather than by searching content, and the list describes this copy alone rather than accumulating across projections of one message.
-      properties:
-        spans:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/RedactedSpan'
     ProgressState:
       type: string
       description: State of one checklist row. Derived by the host from the coordinator's markdown markers; the coordinator never writes these strings directly.
@@ -28748,61 +29234,6 @@ components:
           format: int64
         skip_reason:
           type: string
-    ChatContentRow:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - index
-        - offset
-        - text
-        - spans
-      properties:
-        index:
-          type: integer
-        offset:
-          type: integer
-        text:
-          type: string
-        spans:
-          type: array
-          items:
-            $ref: '#/components/schemas/RedactedSpan'
-    ChatContentReference:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - field
-        - sha256
-        - total_runes
-        - size_bytes
-        - rows
-      description: Retained screened content; the inline field is a bounded preview, never a replacement for this revision.
-      properties:
-        field:
-          type: string
-          enum:
-            - content
-            - tool_output
-            - tool_args
-        tool_call_id:
-          type: string
-          pattern: ^[A-Za-z0-9_.:-]+$
-        sha256:
-          type: string
-          pattern: ^[0-9a-f]{64}$
-        total_runes:
-          type: integer
-        size_bytes:
-          type: integer
-        rows:
-          type: integer
-          description: Number of display rows in this revision.
-        preview_rows:
-          type: array
-          items:
-            $ref: '#/components/schemas/ChatContentRow'
     InvocationStatus:
       type: string
       enum:
