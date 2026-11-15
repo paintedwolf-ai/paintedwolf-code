@@ -1076,7 +1076,6 @@
       "setup": "analysis"
     },
     "ready": {
-      "compile_targets": {},
       "targets": [
         "build",
         "budgets",

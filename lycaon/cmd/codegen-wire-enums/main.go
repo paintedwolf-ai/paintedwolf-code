@@ -31,10 +31,7 @@ func main() {
 	var outputs []outputFile
 	for _, e := range enums {
 		openapiPath := filepath.Join(absRoot, "docs", "openapi", "components", "schemas", e.openAPIFileName())
-		openapiBody, err := renderOpenAPI(e)
-		if err != nil {
-			fatal(err)
-		}
+		openapiBody := renderOpenAPI(e)
 		outputs = append(outputs, outputFile{path: openapiPath, body: openapiBody, hint: "OpenAPI " + e.Name})
 
 		goPath := filepath.Join(absRoot, "lycaon", "pkg", "api", e.goFileName())
@@ -70,10 +67,7 @@ func main() {
 
 		if e.TSLabels != nil {
 			labelPath := filepath.Join(absRoot, filepath.FromSlash(e.TSLabels.Path))
-			labelBody, err := renderLabelsTS(e)
-			if err != nil {
-				fatal(err)
-			}
+			labelBody := renderLabelsTS(e)
 			outputs = append(outputs, outputFile{path: labelPath, body: labelBody, hint: "Den " + e.Name + " labels"})
 		}
 	}
@@ -94,10 +88,7 @@ func main() {
 		outputs = append(outputs, outputFile{path: payloadsPath, body: payloadsBody, hint: "Den event payload map"})
 
 		envelopePath := filepath.Join(absRoot, "docs", "openapi", "components", "schemas", "event-envelope.generated.yaml")
-		envelopeBody, err := renderEventEnvelopeOpenAPI(et)
-		if err != nil {
-			fatal(err)
-		}
+		envelopeBody := renderEventEnvelopeOpenAPI(et)
 		outputs = append(outputs, outputFile{path: envelopePath, body: envelopeBody, hint: "OpenAPI event envelope"})
 
 		for _, topic := range et.Values {

@@ -13,12 +13,6 @@ class HostedPlanTests(unittest.TestCase):
             mutate(data)
         return patch.object(ci, 'catalog', return_value=data)
 
-    def test_native_admission_cannot_omit_targets_or_accept_unsafe_roots(self):
-        for declaration in (None, [], {'unknown:test': ['lycaon-den/src-tauri/']},
-                {'den:test:rust': [], 'decide:test': ['lycaon/internal/decide/native/']},
-                {'den:test:rust': ['../outside/'], 'decide:test': ['lycaon/internal/decide/native/']}):
-            with self.catalog_patch(lambda d: d['ci']['ready'].update(compile_targets=declaration)), self.assertRaises(ValueError):
-                ci.matrix('fast')
 
     def test_tier_partitions_cover_every_local_gate_stage_once(self):
         lanes = ci.lanes()

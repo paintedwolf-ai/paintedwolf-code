@@ -5,7 +5,7 @@ import re
 
 from ci_policy.hosted_schedule import order, PRIORITIES
 from ci_policy.timings import row_key
-from ci_policy.native_admission import runs_script_coverage, targets as native_targets
+from ci_policy.native_admission import runs_script_coverage
 from verification_plan import catalog, expand
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -49,7 +49,7 @@ def lanes():
         if not re.fullmatch(r"[a-z][a-z0-9-]*", name):
             raise ValueError(f"invalid CI lane: {name}")
         if set(lane) - {"targets", "minutes", "profiles", "suite", "setup", "runner", "workers", "shards", "priority",
-                        "platform", "arguments", "early_targets", "contract_first", "compile_targets", "admission_checks", "runtime_engines"}:
+                        "platform", "arguments", "early_targets", "contract_first", "admission_checks", "runtime_engines"}:
             raise ValueError(f"unknown CI lane fields: {name}")
         if "arguments" in lane and (len(lane["targets"]) != 1 or not lane["arguments"]
                                     or not all(isinstance(value, str) and value for value in lane["arguments"])):
@@ -61,13 +61,6 @@ def lanes():
             if (lane["targets"] != ["test:stress"] or not lane.get("arguments")
                     or not {"integration", "nightly", "release"}.issubset(lane["profiles"])):
                 raise ValueError(f"CI lane {name} requires explicit scale scope and complete qualification profiles")
-        compilation = lane.get('compile_targets', {})
-        if (name == 'ready' or 'compile_targets' in lane) and (name != 'ready' or not isinstance(compilation, dict)
-                or not set(compilation).issubset({'den:test:rust', 'decide:test'})
-                or any(not isinstance(roots, list) or not roots
-                       or any(not isinstance(root, str) or not root.endswith('/') or '..' in root for root in roots)
-                       for roots in compilation.values())):
-            raise ValueError(f"CI lane {name} has invalid native compilation targets")
         admission = lane.get('admission_checks', [])
         if ('admission_checks' in lane and name != 'ready'
                 or not isinstance(admission, list)
@@ -198,7 +191,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "timing_row": row_key(name, f"{index}/{count}" if count > 1 else ""),
                            "shard": f"{index}/{count}" if count > 1 else "",
                            "minutes": lane["minutes"], "job_minutes": lane["minutes"] + 30,
-                           "setup": "shell" if name == "ready" and "den:test:rust" in native_targets(scope) else lane["setup"],
+                           "setup": lane["setup"],
                            "runtime_engines": lane.get("runtime_engines", True),
                            "notices": "licenses:notices" in lane["targets"],
                            "containers": CONTAINER_TARGET in lane["targets"],

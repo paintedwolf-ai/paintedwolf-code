@@ -935,7 +935,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs {{.CLI_ARGS}}
 
   logs:tui:
     desc: 'Force the interactive log browser (LLM/HTTP/SSE/sessions, expand & follow)'
@@ -943,7 +943,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs tui {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs tui {{.CLI_ARGS}}
 
   logs:prompt:
     desc: 'Pretty-print one LLM call transcript — `./task logs:prompt -- [N] [--no-system] [--tools]` (default: last call)'
@@ -951,7 +951,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs prompt {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs prompt {{.CLI_ARGS}}
 
   logs:llm:
     desc: 'Compact list of captured LLM calls — `./task logs:llm -- [--agent NAME] [--surface NAME] [-n N]`'
@@ -959,7 +959,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs llm {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs llm {{.CLI_ARGS}}
 
   logs:http:
     desc: 'Status-colored HTTP request log — `./task logs:http -- [--errors] [-n N]`'
@@ -967,7 +967,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs http {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs http {{.CLI_ARGS}}
 
   logs:den-perf:
     desc: 'Den main-thread stall/perf log — `./task logs:den-perf -- [-f] [--json]`'
@@ -975,7 +975,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs den-perf {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs den-perf {{.CLI_ARGS}}
 
   logs:sse:
     desc: 'SSE event stream by topic — `./task logs:sse -- [--topic NAME] [-n N]`'
@@ -983,7 +983,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs sse {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs sse {{.CLI_ARGS}}
 
   logs:sessions:
     desc: 'Coordinator/worker session topology tree'
@@ -991,7 +991,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs sessions {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs sessions {{.CLI_ARGS}}
 
   logs:dump:
     desc: 'Annotated synthetic coordinator prompt — `./task logs:dump -- --fixture implement_investigate_idle [--previous-family orchestrate]`'
@@ -999,7 +999,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs dump {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs dump {{.CLI_ARGS}}
 
   logs:config:
     desc: 'View or change logs viewer settings — `./task logs:config -- [get KEY | set KEY VALUE | path]`'
@@ -1007,7 +1007,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs config {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs config {{.CLI_ARGS}}
 
   eval:tool-usage:
     desc: 'Agent outcomes: tool-usage driver or BENCHMARK=prepare|test|run|service|report|analyze|smoke|providers'
@@ -1711,12 +1711,6 @@ tasks:
       - lycaon/pkg/api/types.generated.go
     cmds:
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bash {{.SCRIPTS_DIR}}/codegen-den-wire.sh check
-
-  oar:import-invariant:
-    desc: Convert an Invariant-subset rule file into OAR hint YAML
-    dir: '{{.GO_DIR}}'
-    cmds:
-      - go run ./cmd/oar-import-invariant {{.CLI_ARGS}}
 
   oar:verify:
     desc: Verify OAR semantics, shipped catalog startup, recovery vocabulary, and rejection delivery
