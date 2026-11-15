@@ -689,7 +689,7 @@ func TestBlockingQuestionStopLineageAndOrdinaryPathContracts(t *testing.T) {
 	_, _, err = e.invoke(t, "promote_overlay", "stale-handle", map[string]any{"overlay_id": "result-nonexistent"})
 	wantReject(t, err, "RESULT_HANDLE_UNKNOWN")
 	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Data["result_handle"] != "result-nonexistent" {
+	if !errors.As(err, &reject) || reject.Data["overlay_id"] != "result-nonexistent" {
 		t.Fatalf("unknown handle reject data = %+v", reject)
 	}
 
