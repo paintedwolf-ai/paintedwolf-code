@@ -224,7 +224,9 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	}); err != nil {
 		contractcheck.FailErr(t, "worker.RegisterWorkerTools failed", err)
 	}
-	if err := loopwake.RegisterWaitTool(rt.Registry, loopwake.NewLoopEngine().Subscriptions, loopwake.WaitToolDeps{}); err != nil {
+	if err := loopwake.RegisterWaitTool(rt.Registry, loopwake.NewLoopEngine().Subscriptions, loopwake.WaitToolDeps{
+		WorkerKnown: func(context.Context, string, string) bool { return true },
+	}); err != nil {
 		contractcheck.FailErr(t, "loopwake.RegisterWaitTool failed", err)
 	}
 	renderBudgets, err := browser.LoadRenderBudgets()
