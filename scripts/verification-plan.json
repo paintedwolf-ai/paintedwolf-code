@@ -8,6 +8,7 @@
       "lint:full",
       "budgets",
       "coverage:changes",
+      "arch-lint:changes",
       "den:typecheck",
       "den:lint",
       "den:test:fast",
@@ -35,6 +36,7 @@
       "lint:full",
       "budgets",
       "coverage:changes",
+      "arch-lint:changes",
       "den:coverage:changes",
       "scripts:coverage:changes",
       "lint:vuln",
@@ -482,6 +484,9 @@
     ],
     "decide:prepare": [
       "decide:prepare"
+    ],
+    "arch-lint:changes": [
+      "arch-lint:changes"
     ]
   },
   "private": [
@@ -1008,6 +1013,15 @@
         "rust"
       ],
       "workers": 1
+    },
+    "arch-lint:changes": {
+      "locks": [
+        "go"
+      ],
+      "shared_locks": [
+        "go"
+      ],
+      "workers": "shared"
     }
   },
   "environment": {
@@ -1081,6 +1095,7 @@
         "build",
         "budgets",
         "coverage:changes",
+        "arch-lint:changes",
         "den:typecheck",
         "den:lint",
         "den:test:fast"
@@ -1100,7 +1115,8 @@
       ],
       "early_targets": [
         "budgets",
-        "coverage:changes"
+        "coverage:changes",
+        "arch-lint:changes"
       ]
     },
     "ready-tests": {
@@ -1119,7 +1135,8 @@
     "limits": {
       "targets": [
         "budgets",
-        "coverage:changes"
+        "coverage:changes",
+        "arch-lint:changes"
       ],
       "minutes": 120,
       "profiles": [

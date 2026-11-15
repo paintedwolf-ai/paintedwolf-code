@@ -266,6 +266,16 @@ tasks:
     cmds:
       - python3 {{.SCRIPTS_DIR}}/coverage_changes.py go
 
+  arch-lint:changes:
+    desc: Structural defects the change adds or makes — unreachable code, unset context keys, unread tables, forwarders, dropped fields, test-support imports, unreferenced commands and scripts, unwired Tauri commands, unused parameters (scripts/arch-lint-policy.json)
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/arch_lint_changes.py
+
+  arch-lint:report:
+    desc: List every arch-lint finding at the working tree
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/arch_lint_changes.py --all
+
   scripts:coverage:changes:
     desc: Scripts Python statements the change adds or modifies must be tested, subprocesses included (floors and suites in scripts/coverage-policy.json)
     cmds:

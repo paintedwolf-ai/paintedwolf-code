@@ -1,0 +1,134 @@
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+from unittest import mock
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import arch_lint_changes  # noqa: E402
+import change_report  # noqa: E402
+
+# The fake reads findings for its subcommand from <tree>/findings.json.
+FAKE_ARCH_LINT = """#!/usr/bin/env python3
+import json, sys
+args = sys.argv[1:]
+tree = None
+for flag in ("-dir", "-root"):
+    if flag in args:
+        tree = args[args.index(flag) + 1]
+if tree.endswith("/lycaon"):
+    tree = tree[: -len("/lycaon")]
+data = json.load(open(tree + "/findings.json"))
+print(json.dumps(data.get(args[0], [])))
+"""
+
+FAKE_LINTER = """#!/usr/bin/env python3
+import json, sys
+print(json.dumps({"Issues": [{"Text": "save - mode is unused", "Pos": {"Filename": "internal/store/save.go", "Line": 7}}]}))
+sys.exit(1)
+"""
+
+POLICY = {"reach": {"roots": ["./cmd/..."], "goos": ["linux"], "report": "^x/", "schema": "schema.sql"},
+          "vet": {"packages": ["./..."]}, "test_support": ["test$"]}
+
+
+def finding(kind, key, pos="lycaon/internal/store/store.go:3:6"):
+    return {"kind": kind, "key": key, "pos": pos, "message": f"{kind} {key}"}
+
+
+class ArchLintChangesTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp())
+        self.repo = self.tmp / "repo"
+        (self.repo / "lycaon").mkdir(parents=True)
+        self.git("init", "-q", "-b", "main")
+        self.write_findings({"reach": [finding("dead-func", "x/store.Old")]})
+        self.git("add", "-A")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "base")
+        self.base = self.git("rev-parse", "HEAD").strip()
+        self.binary = self.executable("arch-lint", FAKE_ARCH_LINT)
+        self.linter = self.executable("golangci-lint", FAKE_LINTER)
+        self.cache = self.tmp / "cache"
+        self.cache.mkdir()
+
+    def git(self, *args):
+        return subprocess.run(["git", "-C", str(self.repo), *args], check=True, capture_output=True, text=True).stdout
+
+    def executable(self, name, body):
+        path = self.tmp / name
+        path.write_text(body)
+        path.chmod(0o755)
+        return path
+
+    def write_findings(self, data):
+        (self.repo / "findings.json").write_text(json.dumps(data))
+
+    def test_fails_only_on_findings_the_base_lacks(self):
+        self.write_findings({
+            "reach": [finding("dead-func", "x/store.Old"), finding("dead-func", "x/store.New")],
+            "tauri": [finding("uninvoked-tauri-command", "vault_lock_status", "lycaon-den/src-tauri/src/lib.rs")],
+        })
+        scope = change_report.Scope(self.base, "test base", ["findings.json"])
+        header, findings, failed = arch_lint_changes.changes(
+            self.repo, scope, POLICY, self.cache, self.binary, self.linter)
+        self.assertTrue(failed)
+        self.assertIn("3 finding(s) at the working tree, 1 at the base", header)
+        self.assertEqual([(f.area, f.path, f.line) for f in findings], [
+            ("dead-func", "lycaon/internal/store/store.go", 3),
+            ("uninvoked-tauri-command", "lycaon-den/src-tauri/src/lib.rs", None),
+            ("unparam", "lycaon/internal/store/save.go", 7),
+        ])
+        # The base result is cached by commit and binary.
+        self.assertEqual(len(list(self.cache.glob("base-*.json"))), 1)
+        again = arch_lint_changes.base_checks(self.repo, self.base, self.binary, POLICY, self.cache)
+        self.assertEqual(list(again), [("dead-func", "x/store.Old")])
+
+    def test_reuses_the_base_tree_for_a_new_base(self):
+        arch_lint_changes.base_checks(self.repo, self.base, self.binary, POLICY, self.cache)
+        self.write_findings({})
+        self.git("add", "-A")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "next")
+        later = self.git("rev-parse", "HEAD").strip()
+        self.assertEqual(arch_lint_changes.base_checks(self.repo, later, self.binary, POLICY, self.cache), {})
+
+    def test_all_lists_every_finding_without_failing(self):
+        header, findings, failed = arch_lint_changes.everything(self.repo, POLICY, self.binary)
+        self.assertFalse(failed)
+        self.assertEqual(header, "every finding at the working tree: dead-func 1")
+        self.assertEqual([f.level for f in findings], ["notice"])
+
+    def test_a_failing_tool_stops_the_check(self):
+        broken = self.executable("broken", "#!/bin/sh\necho boom >&2\nexit 2\n")
+        with self.assertRaisesRegex(RuntimeError, "boom"):
+            arch_lint_changes.checks(broken, self.repo, POLICY)
+        with self.assertRaisesRegex(RuntimeError, "golangci-lint"):
+            arch_lint_changes.unparam(self.repo, self.base, broken)
+
+    def test_main_measures_against_the_change_base(self):
+        self.write_findings({"reach": [finding("dead-func", "x/store.Old"), finding("dead-func", "x/store.New")]})
+        with mock.patch.object(arch_lint_changes, "ROOT", self.repo), \
+                mock.patch.object(arch_lint_changes, "build", return_value=self.binary), \
+                mock.patch.object(arch_lint_changes, "golangci_lint", return_value=self.linter), \
+                mock.patch.object(arch_lint_changes, "artifact_root", return_value=self.tmp / "artifacts"), \
+                mock.patch.dict(os.environ, {"PW_CHANGE_BASE": self.base}), \
+                mock.patch("sys.stdout"):
+            policy = self.tmp / "policy.json"
+            policy.write_text(json.dumps(POLICY))
+            with mock.patch.object(arch_lint_changes, "POLICY", policy):
+                self.assertEqual(arch_lint_changes.main([]), 1)
+                self.assertEqual(arch_lint_changes.main(["--all"]), 0)
+
+    def test_main_needs_a_base(self):
+        with mock.patch.object(arch_lint_changes, "build", return_value=self.binary), \
+                mock.patch.object(arch_lint_changes, "artifact_root", return_value=self.tmp / "artifacts"), \
+                mock.patch.object(change_report, "resolve", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "PW_CHANGE_BASE"):
+                arch_lint_changes.main([])
+
+
+if __name__ == "__main__":
+    unittest.main()

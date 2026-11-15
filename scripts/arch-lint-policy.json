@@ -1,0 +1,25 @@
+{
+  "reach": {
+    "roots": [
+      "./cmd/..."
+    ],
+    "goos": [
+      "darwin",
+      "linux"
+    ],
+    "report": "^github.com/lycaon/lycaon/",
+    "schema": "internal/db/schema.sql"
+  },
+  "vet": {
+    "packages": [
+      "./cmd/...",
+      "./internal/...",
+      "./pkg/..."
+    ]
+  },
+  "test_support": [
+    "(^|/)test[a-z0-9]*(/|$)",
+    "[a-z0-9]test(/|$)",
+    "/contractfixture$"
+  ]
+}
