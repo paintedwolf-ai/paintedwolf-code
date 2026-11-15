@@ -241,8 +241,7 @@ export function ToolPartShell(props: Props) {
         }}>
           <Show when={open()}>
             {props.target}
-            <Show when={props.slots?.purpose}>{(purpose) => <div class="den-activity-purpose" data-testid="activity-purpose">{purpose()}</div>}</Show>
-            <Show when={props.slots?.result}>{(result) => <div class="den-activity-result" data-testid="activity-result">{result()}</div>}</Show>
+            {props.slots?.summary}
             {props.children}
             <Show when={props.slots?.evidence}>{(evidence) => <nav class="den-activity-footer" aria-label="Activity records">{evidence()}</nav>}</Show>
           </Show>

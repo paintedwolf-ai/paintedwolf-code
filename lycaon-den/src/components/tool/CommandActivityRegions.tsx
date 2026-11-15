@@ -21,10 +21,9 @@ export function ActivityCommand(props: ActivityProps) {
   </ShowLatest>;
 }
 
-/** Briefing text replaces the deterministic line; neither renders when empty. */
-export function ActivityResult(props: { line?: string; children?: JSX.Element }) {
-  return <Show when={props.children ?? props.line}>
-    <div class="den-activity-result" data-testid="activity-result">{props.children ?? props.line}</div>
+export function ActivityResult(props: { line?: string }) {
+  return <Show when={props.line}>
+    <div class="den-activity-result" data-testid="activity-result">{props.line}</div>
   </Show>;
 }
 

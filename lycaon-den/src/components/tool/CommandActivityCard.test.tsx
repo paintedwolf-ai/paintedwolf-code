@@ -57,7 +57,7 @@ describe("activity detail layout", () => {
     const { view } = await opened(part({ phase: "mutate", execution_count: 1 }));
     await waitFor(() => expect(region(view.container, "activity-output")).toBeTruthy());
     expect(region(view.container, "activity-target")?.textContent).toContain(source);
-    for (const absent of ["activity-result", "activity-steps", "activity-calls", "activity-exceptions", "activity-purpose"]) expect(region(view.container, absent)).toBeNull();
+    for (const absent of ["activity-result", "activity-steps", "activity-calls", "activity-exceptions", "activity-summary"]) expect(region(view.container, absent)).toBeNull();
     expect(region(view.container, "activity-footer")).toBeTruthy();
   });
 
@@ -72,17 +72,16 @@ describe("activity detail layout", () => {
     expect(region(view.container, "activity-steps")?.querySelectorAll(".den-activity-row")).toHaveLength(2);
   });
 
-  it("fills the briefing slots in place of the deterministic result", async () => {
+  it("places the summary beside the deterministic result, never in its place", async () => {
     const value = part({ state: "failed", status_code: 9 });
     const stub = stubClient({ getCommandProgramReceipt: vi.fn().mockResolvedValue(page()) });
     const view = render(() => <CommandActivityCard part={value} layout="chat" sessionId="activity-card-test" projectId="project"
       client={stub}
-      slots={{ purpose: <span>supplied purpose</span>, result: <span>supplied change</span>, evidence: <button type="button">supplied evidence</button> }} />);
+      slots={{ summary: <div data-testid="supplied-summary">supplied summary</div>, evidence: <button type="button">supplied evidence</button> }} />);
     fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
-    await waitFor(() => expect(region(view.container, "activity-purpose")?.textContent).toBe("supplied purpose"));
-    expect(region(view.container, "activity-result")?.textContent).toBe("supplied change");
+    await waitFor(() => expect(view.container.querySelector('[data-testid="supplied-summary"]')?.textContent).toBe("supplied summary"));
+    expect(region(view.container, "activity-result")?.textContent).toContain("9");
     expect(region(view.container, "activity-footer")?.textContent).toContain("supplied evidence");
-    expect(view.container.querySelectorAll('[data-testid="activity-purpose"]')).toHaveLength(1);
   });
 
   it("shows and copies only the activity's own statements from a compound command", async () => {
