@@ -108,15 +108,24 @@ func runCopyDrop(pass *analysis.Pass) (any, error) {
 				if !ok {
 					continue
 				}
+				var shared, omitted []string
 				for i := 0; i < targetStruct.NumFields(); i++ {
 					field := targetStruct.Field(i)
-					if keys[field.Name()] || field.Embedded() || !field.Exported() {
+					if field.Embedded() || !field.Exported() {
 						continue
 					}
-					if shared := fieldNamed(sourceStruct, field.Name()); shared != nil && types.Identical(shared.Type(), field.Type()) {
-						pass.Reportf(lit.Pos(), "%s built from %s (%s) omits shared field %s",
-							target.Obj().Name(), v.Name(), source.Obj().Name(), field.Name())
+					if other := fieldNamed(sourceStruct, field.Name()); other != nil && types.Identical(other.Type(), field.Type()) {
+						shared = append(shared, field.Name())
+						if !keys[field.Name()] {
+							omitted = append(omitted, field.Name())
+						}
 					}
+				}
+				// A literal that sets most shared fields and drops a few loses
+				// values; one that sets a few seeds a new value on purpose.
+				if len(omitted) > 0 && 2*(len(shared)-len(omitted)) > len(shared) {
+					pass.Reportf(lit.Pos(), "%s built from %s (%s) omits shared %s",
+						target.Obj().Name(), v.Name(), source.Obj().Name(), fieldList(omitted))
 				}
 			}
 			return true
@@ -155,6 +164,13 @@ func runTestImport(pass *analysis.Pass) (any, error) {
 		}
 	}
 	return nil, nil
+}
+
+func fieldList(names []string) string {
+	if len(names) == 1 {
+		return "field " + names[0]
+	}
+	return "fields " + strings.Join(names, ", ")
 }
 
 // hasOwnMethods reports methods declared on the named type itself.
