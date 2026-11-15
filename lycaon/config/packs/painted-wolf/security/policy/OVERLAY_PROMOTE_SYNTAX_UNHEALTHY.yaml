@@ -8,14 +8,14 @@ when: paintedwolf.rejection_code == "OVERLAY_PROMOTE_SYNTAX_UNHEALTHY"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:overlay_promote_syntax
-message: overlay source syntax is unhealthy
+message: Overlay source syntax is unhealthy
 what: 'The worker overlay was not promoted because validation of {{ paintedwolf.path }} did not succeed.'
 cause: >-
   {% if paintedwolf.parse_syntax_error %}The parser reports a syntax error in the merged source: {{ paintedwolf.parse_error }}. {% if paintedwolf.parse_errors %}Syntax diagnostics: {{ paintedwolf.parse_errors }}.{% endif %} {% else %}Host parser failure for the {{ paintedwolf.parse_phase }} snapshot: {{ paintedwolf.parse_failure }}.{% endif %}
 why: >-
   Promotion validates the bytes that would be integrated. The existing project and worker overlay are preserved. A host parser failure does not establish that the source needs repair.
 fix: >-
-  {% if paintedwolf.parse_syntax_error %}Resume the same worker and repair the reported syntax errors in its preserved overlay, then retry promotion. {% else %}{% if paintedwolf.parse_timed_out %}Report the host timeout with the path and diagnostics. The host owner can raise validation_timeout_ms in {{ paintedwolf.parse_config }} or repair the parser. Retry promotion of the preserved overlay after that correction. {% else %}{% if paintedwolf.parse_canceled %}Resume promotion under an active request after cancellation or the enclosing deadline is resolved. {% else %}Report the parser failure and preserve the overlay. Retry promotion after the host parser or its configuration is corrected.{% endif %}{% endif %}{% endif %}
+  {% if paintedwolf.parse_syntax_error %}Instruct the same worker via instruct_worker to repair the reported syntax errors in its preserved workspace, then retry promotion of the new result handle. {% else %}{% if paintedwolf.parse_timed_out %}Report the host timeout with the path and diagnostics. The host owner can raise validation_timeout_ms in {{ paintedwolf.parse_config }} or repair the parser. Retry promotion of the preserved overlay after that correction. {% else %}{% if paintedwolf.parse_canceled %}Resume promotion under an active request after cancellation or the enclosing deadline is resolved. {% else %}Report the parser failure and preserve the overlay. Retry promotion after the host parser or its configuration is corrected.{% endif %}{% endif %}{% endif %}
 instead: Preserve accepted work and resolve the reported validation failure before promotion
 x-paintedwolf-scenarios:
   - id: default
