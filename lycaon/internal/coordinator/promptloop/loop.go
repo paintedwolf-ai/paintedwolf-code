@@ -115,10 +115,7 @@ func (l *PromptLoop) runPreparedPromptLoop(ctx context.Context, in PromptRunInpu
 
 	firstModelTurn := st.turnsRanThisRun == 0
 loop:
-	for {
-		if completed >= maxIter {
-			break
-		}
+	for completed < maxIter {
 		step := completed
 		sentBeforeCall, err := l.Inbox.takeUserSend(ctx, id, st, &userPrompt)
 		if err != nil {

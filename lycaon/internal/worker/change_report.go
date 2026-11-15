@@ -152,10 +152,11 @@ func RegisterAnswerDecisionTool(reg *tools.DefaultRegistry, deps AnswerDecisionT
 		if deps.Workers == nil {
 			return "", fmt.Errorf("worker operations not configured")
 		}
-		jobID, err := deps.Workers.Asking(ctx, coordinatorActor(tctx), name)
+		jobID, unlock, err := deps.Workers.Asking(ctx, coordinatorActor(tctx), name)
 		if err != nil {
 			return "", workerToolReject("answer_decision", name, "", err)
 		}
+		defer unlock()
 		captureWorkerSubject(tctx, svc.Queue, jobID)
 		out, err := svc.AnswerJob(ctx, strings.TrimSpace(tctx.Identity.SessionID), name, jobID, answer, resolvedBy)
 		if err != nil {

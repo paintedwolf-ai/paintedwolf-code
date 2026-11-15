@@ -249,6 +249,15 @@ func (s mergeEngine) resolvePromoteWork(ctx context.Context, sessionID, overlayI
 			"overlay_id": overlayID, "merge_status": string(task.MergeStatus),
 		})
 	}
+	if s.Store != nil {
+		if _, working, err := s.Store.LaterRounds(ctx, overlayID); err != nil {
+			return promoteWork{}, err
+		} else if working {
+			return promoteWork{}, s.reject(ctx, OverlayPromoteNotPendingCode, map[string]any{
+				"overlay_id": overlayID, "merge_status": "worker_working",
+			})
+		}
+	}
 	lease, err := s.holdBranch(ctx, overlayID)
 	if err != nil {
 		return promoteWork{}, err
