@@ -20,7 +20,6 @@ type JobCompletion struct {
 	Suspended bool
 }
 
-// CompleteJob commits the result, overlay manifest, and merge status together.
 // CompleteJob commits a job's result. A job that runs a worker round settles
 // that round in the same transaction, linking the checkpoint its changes
 // published; a job suspended on a decision leaves its round open.

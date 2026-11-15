@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workerstate"
@@ -115,6 +116,17 @@ type Service struct {
 	// Accounted hears of results an operation accounted for, by job, so the
 	// checklist latch can release them.
 	Accounted func(sessionID string, jobIDs []string)
+
+	// locks serializes operations on one worker so admission and result
+	// disposition observe one consistent state.
+	locks sync.Map
+}
+
+func (s *Service) lockWorker(workerID string) func() {
+	mu, _ := s.locks.LoadOrStore(workerID, &sync.Mutex{})
+	m := mu.(*sync.Mutex)
+	m.Lock()
+	return m.Unlock
 }
 
 func (s *Service) accounted(sessionID, jobID string) {
@@ -143,6 +155,10 @@ func (s *Service) Instruct(ctx context.Context, actor workerrecords.Actor, op wo
 	}
 	snap, err := s.resolve(ctx, actor, in.Worker)
 	if err != nil {
+		return Receipt{}, err
+	}
+	defer s.lockWorker(snap.Worker.ID)()
+	if snap, err = s.resolve(ctx, actor, in.Worker); err != nil {
 		return Receipt{}, err
 	}
 	if prior, ok, err := s.replay(ctx, actor, op, snap); err != nil || ok {
@@ -257,6 +273,7 @@ func (s *Service) Shelve(ctx context.Context, actor workerrecords.Actor, op work
 	if err != nil {
 		return workerrecords.Disposition{}, err
 	}
+	defer s.lockWorker(ref.WorkerID)()
 	w, err := s.Reader.Records.Worker(ctx, actor, ref.WorkerID)
 	if err != nil {
 		return workerrecords.Disposition{}, err

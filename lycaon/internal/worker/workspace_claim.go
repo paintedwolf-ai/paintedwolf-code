@@ -101,12 +101,12 @@ func (q *sqlQueuePromotion) ClaimWorkerBranch(ctx context.Context, jobID string)
 	if strings.TrimSpace(task.WorkspaceRoot) != "" {
 		return task, nil
 	}
-	claimCtx := q.withWorkspacePreparation(ctx, task)
+	claimCtx, stopPreparation := q.withWorkspacePreparation(ctx, task)
+	defer stopPreparation()
 	if err := q.provisionWorkerBranch(claimCtx, task); err != nil {
-		q.clearWorkspacePreparation(task)
 		return nil, err
 	}
-	q.clearWorkspacePreparation(task)
+	stopPreparation()
 	q.refreshBoard(ctx, *task, task.ProjectID)
 	return task, nil
 }
@@ -228,16 +228,32 @@ func (q *sqlQueuePromotion) adoptExistingWorkerWorkspace(ctx context.Context, ta
 	return nil
 }
 
-func (q *sqlQueueCore) withWorkspacePreparation(ctx context.Context, task *api.WorkerTask) context.Context {
+func (q *sqlQueueCore) withWorkspacePreparation(ctx context.Context, task *api.WorkerTask) (context.Context, func()) {
 	if task == nil || !task.EffectiveScope().IsWrite() {
-		return ctx
+		return ctx, func() {}
 	}
 	var reportMu sync.Mutex
 	var lastEmit time.Time
 	lastStage := ""
+	stopped := false
+	stop := func() {
+		reportMu.Lock()
+		defer reportMu.Unlock()
+		if stopped {
+			return
+		}
+		stopped = true
+		q.mu.Lock()
+		delete(q.preparations, task.ID)
+		task.WorkspacePreparation = nil
+		q.mu.Unlock()
+	}
 	return workspace.WithPreparationReporter(ctx, func(progress workspace.PreparationProgress) {
 		reportMu.Lock()
 		defer reportMu.Unlock()
+		if stopped {
+			return
+		}
 		preparation := &api.WorkspacePreparation{
 			Strategy:          api.WorkspaceProvisionStrategy(progress.Strategy),
 			Stage:             progress.Stage,
@@ -258,17 +274,7 @@ func (q *sqlQueueCore) withWorkspacePreparation(ctx context.Context, task *api.W
 			lastEmit, lastStage = now, progress.Stage
 			q.refreshBoard(context.WithoutCancel(ctx), snapshot, task.ProjectID)
 		}
-	})
-}
-
-func (q *sqlQueueCore) clearWorkspacePreparation(task *api.WorkerTask) {
-	if task == nil {
-		return
-	}
-	q.mu.Lock()
-	delete(q.preparations, task.ID)
-	task.WorkspacePreparation = nil
-	q.mu.Unlock()
+	}), stop
 }
 
 func (q *sqlQueueCore) decorateWorkspacePreparations(tasks []api.WorkerTask) {
