@@ -290,6 +290,10 @@
   height: calc(1.5rem + 4px);
 }
 
+.den-user-msg-footer > .den-msg-actions {
+  align-self: center;
+}
+
 .den-user-msg-footer > .den-msg-time-below {
   align-self: center;
   min-width: 0;
@@ -333,7 +337,7 @@
 .bubble--user:hover ~ .den-user-msg-footer > .den-msg-actions,
 .den-view-context:hover ~ .den-user-msg-footer > .den-msg-actions,
 .den-user-msg-footer:hover > .den-msg-actions,
-.user-turn:focus-within .den-msg-actions,
+.den-user-msg-footer:focus-within > .den-msg-actions,
 .assistant-turn:hover > .den-msg-actions,
 .assistant-turn:focus-within > .den-msg-actions,
 .den-msg-actions:hover,

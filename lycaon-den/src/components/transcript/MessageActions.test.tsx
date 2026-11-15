@@ -157,17 +157,34 @@ describe("MessageActions", () => {
     expect(document.activeElement).toBe(rewind);
   });
 
-  it("flashes Copied on the copy button, then reverts", () => {
+  it("flashes Copied on the copy button, resets on re-click or identity change, and reverts", () => {
     vi.useFakeTimers();
     try {
-      render(() => (
-        <MessageActions actions={buildAssistantMessageActions({ onCopy: () => {} })} />
+      const [id, setId] = createSignal("copy");
+      const { unmount } = render(() => (
+        <MessageActions
+          actions={[
+            {
+              ...buildAssistantMessageActions({ onCopy: () => {} })[0]!,
+              id: id(),
+            },
+          ]}
+        />
       ));
       const btn = screen.getByTestId("bubble-copy");
       fireEvent.click(btn);
       expect(btn.getAttribute("aria-label")).toBe("Copied");
+      fireEvent.click(btn);
       vi.advanceTimersByTime(1500);
       expect(btn.getAttribute("aria-label")).toBe("Copy");
+
+      fireEvent.click(btn);
+      expect(btn.getAttribute("aria-label")).toBe("Copied");
+      setId("copy-next");
+      expect(btn.getAttribute("aria-label")).toBe("Copy");
+
+      fireEvent.click(btn);
+      unmount();
     } finally {
       vi.useRealTimers();
     }

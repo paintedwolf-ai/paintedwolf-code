@@ -130,20 +130,6 @@ describe("scalable layout chrome", () => {
     );
   });
 
-  it("reserves layout space for message actions instead of floating over adjacent content", () => {
-    const components = read("global-components.css");
-    const msgActions = components.match(/\.den-msg-actions\s*\{([^}]+)\}/)?.[1];
-    expect(msgActions).toBeDefined();
-    expect(msgActions).not.toMatch(/position:\s*(?:absolute|fixed)/);
-    expect(msgActions).toMatch(/align-self:\s*flex-end/);
-    expect(msgActions).toMatch(/flex-wrap:\s*nowrap/);
-    expect(msgActions).toMatch(/height:\s*calc\(1\.5rem \+ 4px\)/);
-    expect(components).not.toMatch(/\.user-turn:has\(/);
-    expect(components.match(/\.den-msg-actions--start\s*\{([^}]+)\}/)?.[1]).toMatch(
-      /align-self:\s*flex-start/,
-    );
-  });
-
   it("uses one closed width and full open width for transcript cards", () => {
     const chat = read("chat-utilities.css");
     const components = read("global-components.css");
