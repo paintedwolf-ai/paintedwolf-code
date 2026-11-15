@@ -221,9 +221,6 @@ func (l *WaitSubscriptions) workerName(ctx context.Context, completingJobID, sub
 }
 
 func (l *WaitSubscriptions) overlayPromoteDue(ctx context.Context, sessionID string, env anchor.Envelope) bool {
-	if env.HasPendingOverlayPromote() {
-		return true
-	}
 	deps := l.loopDeps()
 	if deps.HostWakeOverlayPromoteDue == nil {
 		return false

@@ -33,8 +33,10 @@ func TestWorkerRoundNoticeAndMessageNeedsReplyWakeWaitingCoordinator(t *testing.
 		},
 	})
 	workers := &Workers{
-		Runtime:    rt,
-		LatestSent: func(context.Context, string) (int64, error) { return 3, nil },
+		Runtime: rt,
+		RoundProvenance: func(context.Context, string) (string, int64, string, int64, bool, error) {
+			return "fixer", 1, "", 3, true, nil
+		},
 	}
 	loop := rt.CoordinatorLoop()
 	deadline := time.Now().UTC().Add(10 * time.Minute)

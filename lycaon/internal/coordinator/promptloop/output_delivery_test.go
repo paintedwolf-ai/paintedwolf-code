@@ -77,7 +77,7 @@ func TestOutputSpillRefusalReturnsObservationWithoutClaimingASpill(t *testing.T)
 		},
 	})
 	content := `{"truncated":true,"value":"` + strings.Repeat("x", 2048) + `"}`
-	got := loop.Tools.truncateToolResultForSession(t.Context(), "command", toolResultStorageProjection{content: content}, content, 128, 1024, &api.Session{ID: "session", ProjectID: "project"})
+	got := loop.Tools.truncateToolResultForSession(t.Context(), "command", "", toolResultStorageProjection{content: content}, content, 128, 1024, &api.Session{ID: "session", ProjectID: "project"})
 	if got.reject == nil || got.reject.Code != tooloutput.ToolOutputSpillCapExceededCode {
 		t.Fatalf("spill observation = %+v", got)
 	}

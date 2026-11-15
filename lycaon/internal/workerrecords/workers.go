@@ -285,38 +285,6 @@ func (s *Store) Workers(ctx context.Context, actor Actor) ([]Worker, error) {
 	return out, nil
 }
 
-// BindReceipt confirms a child session binding.
-type BindReceipt struct {
-	WorkerID       string `json:"worker_id"`
-	ChildSessionID string `json:"child_session_id"`
-}
-
-// BindChildSession records the worker's child session once.
-func (s *Store) BindChildSession(ctx context.Context, actor Actor, op Op, workerID, childSessionID string) (BindReceipt, error) {
-	childSessionID = strings.TrimSpace(childSessionID)
-	return run(ctx, s, actor, op, "bind_child_session", []string{workerID, childSessionID}, func(q *db.Queries, _ *sql.Tx) (BindReceipt, error) {
-		w, err := coordinatorWorker(ctx, q, actor, workerID)
-		if err != nil {
-			return BindReceipt{}, err
-		}
-		if w.ChildSessionID.Valid {
-			if w.ChildSessionID.String == childSessionID {
-				return BindReceipt{WorkerID: w.ID, ChildSessionID: childSessionID}, nil
-			}
-			return BindReceipt{}, ErrBindingInvalid
-		}
-		if err := checkChildSession(ctx, q, w.SessionID, childSessionID); err != nil {
-			return BindReceipt{}, err
-		}
-		if _, err := q.BindWorkerChildSession(ctx, db.BindWorkerChildSessionParams{
-			ChildSessionID: nullString(childSessionID), UpdatedAt: s.stamp(), ID: w.ID,
-		}); err != nil {
-			return BindReceipt{}, err
-		}
-		return BindReceipt{WorkerID: w.ID, ChildSessionID: childSessionID}, nil
-	})
-}
-
 // CloseReceipt confirms a closed worker.
 type CloseReceipt struct {
 	WorkerID string `json:"worker_id"`
@@ -467,8 +435,8 @@ func (s *Store) UpdatePlanned(ctx context.Context, actor Actor, op Op, workerID 
 	if err := validateSpec(spec); err != nil {
 		return Worker{}, err
 	}
-	pre := normalizePrerequisites(Prerequisites{AfterWorkers: afterWorkers})
-	return run(ctx, s, actor, op, "update_planned_worker", []any{workerID, spec, pre.AfterWorkers}, func(q *db.Queries, _ *sql.Tx) (Worker, error) {
+	afterWorkers = normalizeWorkerNames(afterWorkers)
+	return run(ctx, s, actor, op, "update_planned_worker", []any{workerID, spec, afterWorkers}, func(q *db.Queries, _ *sql.Tx) (Worker, error) {
 		w, err := coordinatorWorker(ctx, q, actor, workerID)
 		if err != nil {
 			return Worker{}, err
@@ -503,7 +471,7 @@ func (s *Store) UpdatePlanned(ctx context.Context, actor Actor, op Op, workerID 
 		if err := q.DeleteRoundlessWorkerProducerDependencies(ctx, w.ID); err != nil {
 			return Worker{}, err
 		}
-		for _, name := range pre.AfterWorkers {
+		for _, name := range afterWorkers {
 			producer, pErr := q.GetWorkerByName(ctx, db.GetWorkerByNameParams{SessionID: w.SessionID, Name: name})
 			if db.IsNoRows(pErr) {
 				return Worker{}, ErrPrerequisiteUnknown
