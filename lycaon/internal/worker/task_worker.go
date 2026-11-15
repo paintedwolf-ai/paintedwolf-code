@@ -90,9 +90,7 @@ func startWorkerRound(ctx context.Context, deps TaskToolDeps, tctx tools.ToolCon
 	return w.Name, nil
 }
 
-// bindReviewSubject names the sealed result review_of addresses. A reviewer
-// reads, starts on nothing else and holds no workflow work; WC07 binds
-// workflow review assignments.
+// bindReviewSubject validates review_of and resolves the sealed result it addresses.
 func bindReviewSubject(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, args map[string]any, workflowWorkID string, after []string, scope api.TaskScope) (*workerrecords.ReviewSubject, error) {
 	raw, given := args["review_of"]
 	if !given || raw == nil {
