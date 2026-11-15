@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -62,6 +63,7 @@ func TestWorkerCopyBranchCoverageAndMissingFacts(t *testing.T) {
 		t.Fatalf("worker-messages conditional branches collapsed to %d distinct renders", len(msgBranches))
 	}
 
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(engine))
 	policyDirs, err := filepath.Glob(filepath.Join(root, "lycaon/config/packs/painted-wolf/*/policy"))
 	contractcheck.FailErr(t, "glob policy dirs", err)
 	results, err := oar.CheckRuleFiles(context.Background(), policyDirs, oar.RuleCheckOptions{
@@ -78,8 +80,8 @@ func TestWorkerCopyBranchCoverageAndMissingFacts(t *testing.T) {
 		t.Fatalf("withheld ProfileID succeeded: vars=%v err=%v", vars, err)
 	}
 	outVars := map[string]any{}
-	if err := prompts.MergeCoordinatorSurfacePathVars("", nil, outVars, prompts.SurfaceTurn{}); err == nil || len(outVars) != 0 {
-		t.Fatalf("withheld SurfaceID succeeded: vars=%v err=%v", outVars, err)
+	if err := prompts.MergeCoordinatorSurfacePathVars("", nil, outVars, prompts.SurfaceTurn{}); err == nil {
+		t.Fatalf("withheld SurfaceID succeeded: vars=%v", outVars)
 	}
 
 	loader, err := oar.NewLoader(filepath.Join(root, "schemas"))

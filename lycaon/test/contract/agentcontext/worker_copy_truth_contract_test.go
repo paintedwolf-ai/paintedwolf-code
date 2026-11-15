@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -100,6 +101,7 @@ func TestWorkerCopyStateMatrixAndReachability(t *testing.T) {
 		}
 	}
 
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(engine))
 	policyDirs, err := filepath.Glob(filepath.Join(root, "lycaon/config/packs/painted-wolf/*/policy"))
 	contractcheck.FailErr(t, "glob policy dirs", err)
 	results, err := oar.CheckRuleFiles(context.Background(), policyDirs, oar.RuleCheckOptions{
@@ -186,7 +188,7 @@ func TestWorkerCopyAdmissionAgreement(t *testing.T) {
 	_, err = records.AdmitRound(t.Context(), actor, workerrecords.Op{ID: "r1"}, w.WorkerID, workerrecords.RoundSpec{JobID: "j1", ExecutionTarget: "local"})
 	contractcheck.FailErr(t, "admit r1", err)
 
-	decs["child"] = api.WorkerDecisionRequest{Question: "port?"}
+	decs["child"] = api.WorkerDecisionRequest{WorkerID: "j1", Question: "port?"}
 	_, err = svc.Instruct(t.Context(), actor, workerrecords.Op{ID: "i-ask"}, workerops.Instruction{Worker: "w-live", Instructions: "go"}, nil)
 	var ref *workerops.Refusal
 	if !errors.As(err, &ref) || ref.View.State != workerstate.Asking || !ref.View.Admits(workerstate.OpAnswer) {
