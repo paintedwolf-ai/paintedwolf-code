@@ -596,7 +596,7 @@ func TestBlockingQuestionStopLineageAndOrdinaryPathContracts(t *testing.T) {
 	_, _, err = e.invoke(t, "answer_decision", "ans-hidden", map[string]any{"worker": "asker", "answer": "UTF-8"})
 	wantReject(t, err, DecisionNotShownCode)
 	_, _, err = e.invoke(t, InstructWorkerTool, "instruct-while-asking", map[string]any{"worker": "asker", "instructions": "guess UTF-8"})
-	wantReject(t, err, "INSTRUCT_WORKER_NOT_ADMITTED")
+	wantReject(t, err, "INSTRUCT_WORKER_ASKING")
 
 	// Shown question resumes the same job; second answer in the same batch is refused.
 	delete(e.shown.hidden, askJob.ID)
