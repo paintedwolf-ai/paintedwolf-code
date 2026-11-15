@@ -21,32 +21,7 @@ func TestLongHistoryPagingFrameBoundsAndRevisionCache(t *testing.T) {
 	})
 
 	const settledRounds = 120
-	for i := 1; i <= settledRounds; i++ {
-		jobID := fmt.Sprintf("job-%03d", i)
-		resID := fmt.Sprintf("result-%03d", i)
-		f.insertJob(t, jobID, coordSession, "child-long", "pending")
-		if i == 1 {
-			_, err := f.store.AdmitRound(t.Context(), f.coord, op(fmt.Sprintf("admit-%03d", i)), w.WorkerID, workerrecords.RoundSpec{
-				JobID: jobID, ExecutionTarget: "local",
-			})
-			testutil.FailErr(t, "admit round 1", err)
-		} else {
-			_, err := f.store.StartRound(t.Context(), f.coord, op(fmt.Sprintf("start-%03d", i)), w.WorkerID, workerrecords.RoundStart{
-				JobID: jobID, ExecutionTarget: "local", Instruction: fmt.Sprintf("round %d goal", i),
-			})
-			testutil.FailErr(t, "start round", err)
-		}
-		f.insertResult(t, resID, jobID)
-		cp := ""
-		if i == settledRounds {
-			cp = "cp-120"
-		}
-		f.settle(t, jobID, cp)
-		if i < settledRounds {
-			_, err := f.store.AccountResult(t.Context(), f.coord, op(fmt.Sprintf("acct-%03d", i)), resID)
-			testutil.FailErr(t, "account result", err)
-		}
-	}
+	seedSettledRounds(t, f, w.WorkerID, "child-long", settledRounds)
 
 	f.insertLanded(t, "landed-120", "job-120")
 	_, err := f.store.SetChange(t.Context(), f.coord, op("land-120"), "result-120", workerrecords.Change{State: workerrecords.ChangeLanded, LandedChangeID: "landed-120"})
@@ -180,6 +155,36 @@ func TestLongHistoryPagingFrameBoundsAndRevisionCache(t *testing.T) {
 	testutil.FailErr(t, "earlier results after settle", err)
 	if len(earlier) != workerrecords.MaxFrameEarlierResults || earlier[len(earlier)-1] != "result-121" {
 		t.Fatalf("earlier results = len %d, last %q", len(earlier), earlier[len(earlier)-1])
+	}
+}
+
+func seedSettledRounds(t *testing.T, f *fixture, workerID, childID string, settledRounds int) {
+	t.Helper()
+	for i := 1; i <= settledRounds; i++ {
+		jobID := fmt.Sprintf("job-%03d", i)
+		resID := fmt.Sprintf("result-%03d", i)
+		f.insertJob(t, jobID, coordSession, childID, "pending")
+		if i == 1 {
+			_, err := f.store.AdmitRound(t.Context(), f.coord, op(fmt.Sprintf("admit-%03d", i)), workerID, workerrecords.RoundSpec{
+				JobID: jobID, ExecutionTarget: "local",
+			})
+			testutil.FailErr(t, "admit round 1", err)
+		} else {
+			_, err := f.store.StartRound(t.Context(), f.coord, op(fmt.Sprintf("start-%03d", i)), workerID, workerrecords.RoundStart{
+				JobID: jobID, ExecutionTarget: "local", Instruction: fmt.Sprintf("round %d goal", i),
+			})
+			testutil.FailErr(t, "start round", err)
+		}
+		f.insertResult(t, resID, jobID)
+		cp := ""
+		if i == settledRounds {
+			cp = "cp-120"
+		}
+		f.settle(t, jobID, cp)
+		if i < settledRounds {
+			_, err := f.store.AccountResult(t.Context(), f.coord, op(fmt.Sprintf("acct-%03d", i)), resID)
+			testutil.FailErr(t, "account result", err)
+		}
 	}
 }
 
