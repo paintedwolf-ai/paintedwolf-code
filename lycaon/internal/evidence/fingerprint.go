@@ -284,19 +284,14 @@ func HandlesSorted(ev Ledger) []string {
 	return out
 }
 
-// HandlesNewestFirst returns handle keys in reverse chronological assembly order,
-// falling back to reversed HandlesSorted when assembled without observation order.
+// HandlesNewestFirst returns handle keys in reverse chronological assembly order.
 func HandlesNewestFirst(ev Ledger) []string {
-	src := ev.observationOrder
-	if len(src) == 0 {
-		src = HandlesSorted(ev)
-	}
-	if len(src) == 0 {
+	if len(ev.observationOrder) == 0 {
 		return nil
 	}
-	out := make([]string, len(src))
-	for i := range src {
-		out[i] = src[len(src)-1-i]
+	out := make([]string, len(ev.observationOrder))
+	for i := range ev.observationOrder {
+		out[i] = ev.observationOrder[len(ev.observationOrder)-1-i]
 	}
 	return out
 }

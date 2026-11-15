@@ -33,9 +33,27 @@ type fakeReproducedDeps struct {
 	opens       []recordedOpen
 }
 
+func (f *fakeReproducedDeps) Get(context.Context, string) (*api.Session, error) {
+	return nil, nil
+}
+
+func (f *fakeReproducedDeps) SettingsPath(context.Context, *api.Session) string {
+	return ""
+}
+
 func (f *fakeReproducedDeps) Roots(context.Context, *api.Session) ([]projectroot.RootRef, error) {
 	f.rootsCalls++
 	return f.roots, nil
+}
+
+func newTestReproducedService(deps *fakeReproducedDeps, withAuthorship bool, reader candidateReader) *Service {
+	svc := New(nil)
+	svc.SetSources(deps, deps, nil, nil)
+	if withAuthorship {
+		svc.SetSourceAuthorship(deps)
+	}
+	svc.candidateReader = reader
+	return svc
 }
 
 func (f *fakeReproducedDeps) LoadLedger(context.Context, string) (evidence.Ledger, error) {
@@ -102,8 +120,7 @@ func TestReproducedSourceOpensOnlyDeduplicatedTouchedCandidates(t *testing.T) {
 		},
 	}
 
-	svc := New(nil)
-	svc.SetReproducedSourceSources(deps, deps, deps, deps.Read)
+	svc := newTestReproducedService(deps, true, deps.Read)
 	sess := &api.Session{ID: "sess-1", ProjectID: "proj-1", WorkspaceRootID: "r1"}
 
 	answer := strings.Join([]string{
@@ -157,8 +174,7 @@ func TestReproducedSourceShortCircuitsAndEnforcesCaps(t *testing.T) {
 			ledger: evidence.AssembleLedger([]evidence.Record{{Handle: "read#1", Kind: "read", RootID: "r1", Path: "a.go"}}),
 			files:  map[string][]byte{"r1:a.go": []byte("package a\nfunc AlphaWork() {}\n")},
 		}
-		svc := New(nil)
-		svc.SetReproducedSourceSources(deps, deps, deps, deps.Read)
+		svc := newTestReproducedService(deps, true, deps.Read)
 		sess := &api.Session{ID: "sess-1", ProjectID: "proj-1", WorkspaceRootID: "r1"}
 
 		rule := &oar.Rule{
@@ -196,8 +212,7 @@ func TestReproducedSourceShortCircuitsAndEnforcesCaps(t *testing.T) {
 				ledger: evidence.AssembleLedger([]evidence.Record{{Handle: "read#1", Kind: "read", RootID: "r1", Path: "a.go"}}),
 				files:  map[string][]byte{"r1:a.go": []byte("package a\nfunc AlphaWork() {}\n")},
 			}
-			svc := New(nil)
-			svc.SetReproducedSourceSources(deps, deps, deps, deps.Read)
+			svc := newTestReproducedService(deps, true, deps.Read)
 			sess := &api.Session{ID: "sess-1", ProjectID: "proj-1", WorkspaceRootID: "r1"}
 
 			gc := oar.NewGuardContext()
@@ -245,8 +260,7 @@ func TestReproducedSourceShortCircuitsAndEnforcesCaps(t *testing.T) {
 			ledger: evidence.AssembleLedger(records),
 			files:  files,
 		}
-		svc := New(nil)
-		svc.SetReproducedSourceSources(deps, deps, deps, deps.Read)
+		svc := newTestReproducedService(deps, true, deps.Read)
 		sess := &api.Session{ID: "sess-1", ProjectID: "proj-1", WorkspaceRootID: "r1"}
 
 		// Match inside the first 256 KiB succeeds while opening at most 64 files.
@@ -299,8 +313,7 @@ func TestReadConfinedCandidateReadsPrefixAndSkipsOutsideSymlinks(t *testing.T) {
 			{Handle: "read#4", Kind: "read", RootID: "r1", Path: "local.go"},
 		}),
 	}
-	svc := New(nil)
-	svc.SetReproducedSourceSources(deps, deps, nil, nil)
+	svc := newTestReproducedService(deps, false, nil)
 	sess := &api.Session{ID: "sess-1", ProjectID: "proj-1", WorkspaceRootID: "r1"}
 
 	gcEscape := oar.NewGuardContext()
@@ -315,5 +328,42 @@ func TestReadConfinedCandidateReadsPrefixAndSkipsOutsideSymlinks(t *testing.T) {
 	testutil.FailErr(t, "ensure local", gcLocal.Ensure("paintedwolf.reproduced_source_lines"))
 	if gcLocal.Source.ReproducedSourceLines != 3 || gcLocal.Source.ReproducedSourcePath != "local.go" {
 		t.Fatalf("local confined match = %+v", gcLocal.Source)
+	}
+}
+
+func BenchmarkMeasureReproducedSourceAtCap(b *testing.B) {
+	wsDir := b.TempDir()
+	records := make([]evidence.Record, 0, touchedpaths.MaxCandidates)
+	for i := range touchedpaths.MaxCandidates {
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "package bench\nfunc Candidate%02dStart() error {\n\treturn step%02d()\n}\n", i, i)
+		for line := 0; buf.Len() < MaxReproducedCandidateBytes; line++ {
+			fmt.Fprintf(&buf, "func filler%02d_%04d(x int) int { return x + %d }\n", i, line, line)
+		}
+		rel := fmt.Sprintf("file%02d.go", i)
+		if err := os.WriteFile(filepath.Join(wsDir, rel), buf.Bytes()[:MaxReproducedCandidateBytes], 0o600); err != nil {
+			b.Fatal(err)
+		}
+		records = append(records, evidence.Record{
+			Handle: fmt.Sprintf("read#%d", i+1),
+			Kind:   "read",
+			RootID: "r1",
+			Path:   rel,
+		})
+	}
+	deps := &fakeReproducedDeps{
+		roots:  []projectroot.RootRef{{ID: "r1", Label: "app", Path: wsDir, IsPrimary: true}},
+		ledger: evidence.AssembleLedger(records),
+	}
+	svc := newTestReproducedService(deps, false, nil)
+	sess := &api.Session{ID: "sess-1", ProjectID: "proj-1", WorkspaceRootID: "r1"}
+	answer := "Summary.\n\n```go\nfunc Candidate00Start() error {\n\treturn step00()\n}\n```\n"
+
+	b.ResetTimer()
+	for range b.N {
+		res := svc.measureReproducedSource(context.Background(), sess, answer)
+		if res.Lines != 3 {
+			b.Fatalf("res = %+v", res)
+		}
 	}
 }

@@ -194,6 +194,10 @@ func TestReproducedSourcePostTurnEndToEnd(t *testing.T) {
 				ToolCalls:    []api.ToolCall{{ID: "call_cmd_1", Name: "command", Args: map[string]any{"command": "cat service.go"}}},
 			},
 			{FinishReason: "stop", Content: pastedAnswer},
+			{
+				FinishReason: "tool_calls",
+				ToolCalls:    []api.ToolCall{{ID: "call_cmd_t2", Name: "command", Args: map[string]any{"command": "cat service.go"}}},
+			},
 			{FinishReason: "stop", Content: "Summarized the handler responsibilities."},
 			{FinishReason: "stop", Content: "Answered third question."},
 		})
@@ -217,19 +221,24 @@ func TestReproducedSourcePostTurnEndToEnd(t *testing.T) {
 		if len(nudges1) != 1 {
 			t.Fatalf("persisted nudges after turn 1 = %d, want 1", len(nudges1))
 		}
-		if nudges1[0].Effect != string(oar.EffectNudge) || nudges1[0].Anchor != oar.AnchorCoordinatorPostTurn {
+		if nudges1[0].Effect != string(oar.EffectNudge) ||
+			nudges1[0].Anchor != oar.AnchorCoordinatorPostTurn ||
+			nudges1[0].Retain != api.PolicyFeedbackRetainNextTurn {
 			t.Fatalf("nudge metadata = %+v", nudges1[0])
 		}
 
-		_, err = fix.mgr.Submissions.Prompt(t.Context(), sess.ID, "follow up without pasting")
+		_, err = fix.mgr.Submissions.Prompt(t.Context(), sess.ID, "follow up with a tool step first")
 		testutil.FailErr(t, "turn 2 prompt", err)
 
 		reqs := fix.client.Requests()
-		if len(reqs) != 3 {
-			t.Fatalf("LLM requests = %d, want 3", len(reqs))
+		if len(reqs) != 4 {
+			t.Fatalf("LLM requests after turn 2 = %d, want 4 (opening + post-tool final answer)", len(reqs))
 		}
-		if turn2Delivered := extractPolicyFeedbackByCode(t, reqs[2].Messages, reproducedSourceRuleID); len(turn2Delivered) != 1 {
-			t.Fatalf("turn 2 request nudges = %d, want 1", len(turn2Delivered))
+		if turn2Opening := extractPolicyFeedbackByCode(t, reqs[2].Messages, reproducedSourceRuleID); len(turn2Opening) != 1 {
+			t.Fatalf("turn 2 opening request nudges = %d, want 1", len(turn2Opening))
+		}
+		if turn2Final := extractPolicyFeedbackByCode(t, reqs[3].Messages, reproducedSourceRuleID); len(turn2Final) != 1 {
+			t.Fatalf("turn 2 post-tool final request nudges = %d, want 1", len(turn2Final))
 		}
 		transcript2, err := fix.store.GetMessages(t.Context(), sess.ID)
 		testutil.FailErr(t, "read transcript after turn 2", err)
@@ -240,11 +249,11 @@ func TestReproducedSourcePostTurnEndToEnd(t *testing.T) {
 		_, err = fix.mgr.Submissions.Prompt(t.Context(), sess.ID, "third question")
 		testutil.FailErr(t, "turn 3 prompt", err)
 		reqs = fix.client.Requests()
-		if len(reqs) != 4 {
-			t.Fatalf("LLM requests after turn 3 = %d, want 4", len(reqs))
+		if len(reqs) != 5 {
+			t.Fatalf("LLM requests after turn 3 = %d, want 5", len(reqs))
 		}
-		if turn3Delivered := extractPolicyFeedbackByCode(t, reqs[3].Messages, reproducedSourceRuleID); len(turn3Delivered) != 0 {
-			t.Fatalf("turn 3 request nudges = %d, want 0 (retired after turn 2)", len(turn3Delivered))
+		if turn3Delivered := extractPolicyFeedbackByCode(t, reqs[4].Messages, reproducedSourceRuleID); len(turn3Delivered) != 0 {
+			t.Fatalf("turn 3 request nudges = %d, want 0 (retired after turn 2 final answer)", len(turn3Delivered))
 		}
 	})
 

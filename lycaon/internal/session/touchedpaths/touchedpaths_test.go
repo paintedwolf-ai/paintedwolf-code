@@ -44,15 +44,13 @@ func TestListDeduplicatesAcrossRootsAndOrdersAuthoredBeforeNewestObserved(t *tes
 
 	ev := evidence.AssembleLedger([]evidence.Record{
 		{Handle: "read#1", Kind: "read", RootID: "r1", Path: "old.go"},
-		{Handle: "grep#1", Kind: "grep", RootID: "r2", Path: "guide.md"},
-		{Handle: "read#2", Kind: "read", RootID: "r1", Path: "superseded.go", SupersededBy: "read#3"},
+		{Handle: "read#2", Kind: "read", RootID: "r2", Path: "guide.md"},
+		{Handle: "read#3", Kind: "read", RootID: "r1", Path: "superseded.go", SupersededBy: "read#4"},
 		{Handle: "verify#1", GateType: "verify", RootID: "r1", Path: "gate.go"},
 		{Handle: "command#1", Kind: "command", Path: "@docs/extra.md"},
-		{Handle: "grep#2", Kind: "grep", RootID: "r1", Path: "newest.go"},
+		{Handle: "read#4", Kind: "read", RootID: "r1", Path: "newest.go"},
+		{Handle: "grep#1", Kind: "grep", RootID: "r1", Path: "search_hit.go"},
 	})
-	// Secondary-root ByPath fallback entries share canonical identity with rooted rows.
-	ev.ByPath["@docs/guide.md"] = []string{"orphan#9"}
-	ev.ByPath["@docs/fallback.md"] = []string{"orphan#4"}
 
 	got := touchedpaths.List(
 		context.Background(),
@@ -72,10 +70,43 @@ func TestListDeduplicatesAcrossRootsAndOrdersAuthoredBeforeNewestObserved(t *tes
 		{RootID: "r1", RelPath: "newest.go"},
 		{RootID: "r2", RelPath: "extra.md"},
 		{RootID: "r1", RelPath: "old.go"},
-		{RootID: "r2", RelPath: "fallback.md"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("List() =\n  %#v\nwant\n  %#v", got, want)
+	}
+}
+
+func TestListExcludesGrepMatchesSoReadsKeepCap(t *testing.T) {
+	roots := []projectroot.RootRef{
+		{ID: "r1", Label: "app", Path: "/ws/app", IsPrimary: true},
+	}
+
+	records := []evidence.Record{
+		{Handle: "read#1", Kind: "read", RootID: "r1", Path: "opened.go"},
+	}
+	for i := range 100 {
+		records = append(records, evidence.Record{
+			Handle: fmt.Sprintf("grep#%d", i+1),
+			Kind:   "grep",
+			RootID: "r1",
+			Path:   fmt.Sprintf("match/m%03d.go", i),
+		})
+	}
+
+	got := touchedpaths.List(
+		context.Background(),
+		"proj-1",
+		"sess-1",
+		"r1",
+		roots,
+		stubLedger{ev: evidence.AssembleLedger(records)},
+		nil,
+		touchedpaths.MaxCandidates,
+	)
+
+	want := []touchedpaths.Path{{RootID: "r1", RelPath: "opened.go"}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("List() = %#v, want %#v", got, want)
 	}
 }
 

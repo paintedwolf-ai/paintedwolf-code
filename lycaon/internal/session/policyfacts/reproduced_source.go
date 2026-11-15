@@ -19,11 +19,7 @@ import (
 
 const MaxReproducedCandidateBytes = 256 * 1024
 
-type RootSource interface {
-	Roots(context.Context, *api.Session) ([]projectroot.RootRef, error)
-}
-
-type CandidateReader func(ctx context.Context, root projectroot.RootRef, relPath string, maxBytes int) ([]byte, bool, error)
+type candidateReader func(ctx context.Context, root projectroot.RootRef, relPath string, maxBytes int) ([]byte, bool, error)
 
 var reproducedSourceFactNames = []string{
 	"paintedwolf.reproduced_source_lines",
@@ -37,21 +33,6 @@ func (m *Service) SetSourceAuthorship(authorship touchedpaths.AuthoredSource) {
 	if m != nil {
 		m.authorship = authorship
 	}
-}
-
-func (m *Service) SetReproducedSourceSources(
-	ledger touchedpaths.LedgerSource,
-	roots RootSource,
-	authorship touchedpaths.AuthoredSource,
-	reader CandidateReader,
-) {
-	if m == nil {
-		return
-	}
-	m.ledger = ledger
-	m.roots = roots
-	m.authorship = authorship
-	m.candidateReader = reader
 }
 
 // RegisterReproducedSource binds lazy providers for the five reproduced-source
@@ -88,14 +69,14 @@ func (m *Service) measureReproducedSource(ctx context.Context, sess *api.Session
 	if !reproducedsource.HasMeasurableFence(doc, nil) {
 		return reproducedsource.Result{}
 	}
-	if m.roots == nil {
+	if m.workspace == nil {
 		return reproducedsource.Result{}
 	}
-	roots, err := m.roots.Roots(ctx, sess)
+	roots, err := m.workspace.Roots(ctx, sess)
 	if err != nil || len(roots) == 0 {
 		return reproducedsource.Result{}
 	}
-	touched := touchedpaths.List(ctx, sess.ProjectID, sess.ID, sess.WorkspaceRootID, roots, m.ledger, m.authorship, touchedpaths.MaxCandidates)
+	touched := touchedpaths.List(ctx, sess.ProjectID, sess.ID, sess.WorkspaceRootID, roots, m.store, m.authorship, touchedpaths.MaxCandidates)
 	if len(touched) == 0 {
 		return reproducedsource.Result{}
 	}

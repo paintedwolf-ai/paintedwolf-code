@@ -711,7 +711,7 @@
       "summary": "This turn uses ambient worker dispatch rather than workflow delegation legs."
     },
     "COORDINATOR_GROUNDING_ESCALATED": {
-      "branch_instruction": "Stop asserting completion and wait for user guidance",
+      "branch_instruction": "Do not assert completion without grounded worker evidence.",
       "category": "recoverable",
       "emit": "guard:grounding",
       "summary": "Repeated ungrounded completion claims — delegation required before continuing"

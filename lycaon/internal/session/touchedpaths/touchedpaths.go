@@ -124,52 +124,13 @@ func List(
 		return out
 	}
 
-	handles := evidence.HandlesNewestFirst(ev)
-	covered := make(map[string]struct{}, len(handles))
-	for _, h := range handles {
-		covered[h] = struct{}{}
+	for _, h := range evidence.HandlesNewestFirst(ev) {
 		rec, ok := ev.Handles[h]
 		if !ok || rec.IsGate() || rec.SupersededBy != "" {
 			continue
 		}
 		for _, id := range evidence.PathIdentitiesForRecord(rec) {
 			if p, ok := canonicalize(id.RootID, id.ScopeRel); ok {
-				if !add(p) {
-					return out
-				}
-			}
-		}
-	}
-
-	if len(ev.ByPath) > 0 && !full() {
-		type fallbackEntry struct {
-			key     string
-			ordinal int
-		}
-		var extras []fallbackEntry
-		for key, hs := range ev.ByPath {
-			allCovered := len(hs) > 0
-			bestOrd := 0
-			for _, h := range hs {
-				if _, ok := covered[h]; !ok {
-					allCovered = false
-				}
-				if _, ord := evidence.ParseHandleOrdinal(h); ord > bestOrd {
-					bestOrd = ord
-				}
-			}
-			if !allCovered {
-				extras = append(extras, fallbackEntry{key: key, ordinal: bestOrd})
-			}
-		}
-		sort.Slice(extras, func(i, j int) bool {
-			if extras[i].ordinal != extras[j].ordinal {
-				return extras[i].ordinal > extras[j].ordinal
-			}
-			return extras[i].key < extras[j].key
-		})
-		for _, item := range extras {
-			if p, ok := canonicalize("", item.key); ok {
 				if !add(p) {
 					return out
 				}

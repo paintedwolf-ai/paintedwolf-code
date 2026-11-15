@@ -58,49 +58,52 @@ func isPolicyFeedbackMessage(msg Message) bool {
 		msg.Origin == MessageOriginHost && msg.Authority == ContentAuthoritySystem
 }
 
+// PolicyFeedbackRetainNextTurn keeps a post-turn policy advisory in prompt
+// history until the session delivers its next final assistant reply.
+const PolicyFeedbackRetainNextTurn = "next_turn"
+
 type policyFeedbackMeta struct {
-	Anchor string `json:"anchor"`
-	Effect string `json:"effect"`
+	Retain string `json:"retain"`
 }
 
-func isPostTurnNudgeFeedback(msg Message) bool {
+func retainsPolicyFeedbackForNextTurn(msg Message) bool {
 	for _, part := range msg.ContentParts {
 		if part.Source != "policy_feedback" {
 			continue
 		}
 		var meta policyFeedbackMeta
 		if json.Unmarshal([]byte(part.Content), &meta) == nil &&
-			meta.Anchor == "coordinator.post_turn" && meta.Effect == "nudge" {
+			meta.Retain == PolicyFeedbackRetainNextTurn {
 			return true
 		}
 	}
 	return false
 }
 
-func isConsumedPolicyFeedback(msg Message, idx, lastAssistant, lastBoundary int) bool {
+func isConsumedPolicyFeedback(msg Message, idx, lastFinalAssistant, lastBoundary int) bool {
 	if !isPolicyFeedbackMessage(msg) {
 		return false
 	}
-	if isPostTurnNudgeFeedback(msg) {
-		return idx < lastAssistant
+	if retainsPolicyFeedbackForNextTurn(msg) {
+		return idx < lastFinalAssistant
 	}
 	return idx < lastBoundary
 }
 
-// dropConsumedPolicyFeedback removes non-blocking policy feedback advisories once superseded.
-// Post-turn nudges commit after a turn's final reply, so they stay until the next assistant turn.
+// dropConsumedPolicyFeedback removes non-blocking policy advisories once superseded.
+// Advisories marked next_turn stay across the next turn's tool steps until its final reply.
 func dropConsumedPolicyFeedback(messages []Message) []Message {
-	lastAssistant := -1
+	lastFinalAssistant := -1
 	lastBoundary := -1
 	for i := len(messages) - 1; i >= 0; i-- {
 		isAssistant := messages[i].Role == MessageRoleAssistant && !IsAgentNoteMessage(messages[i])
-		if isAssistant && lastAssistant < 0 {
-			lastAssistant = i
+		if isAssistant && len(messages[i].ToolCalls) == 0 && lastFinalAssistant < 0 {
+			lastFinalAssistant = i
 		}
 		if (isAssistant || IsUserIntentMessage(messages[i])) && lastBoundary < 0 {
 			lastBoundary = i
 		}
-		if lastAssistant >= 0 && lastBoundary >= 0 {
+		if lastFinalAssistant >= 0 && lastBoundary >= 0 {
 			break
 		}
 	}
@@ -109,7 +112,7 @@ func dropConsumedPolicyFeedback(messages []Message) []Message {
 	}
 	hasConsumed := false
 	for i := 0; i < lastBoundary; i++ {
-		if isConsumedPolicyFeedback(messages[i], i, lastAssistant, lastBoundary) {
+		if isConsumedPolicyFeedback(messages[i], i, lastFinalAssistant, lastBoundary) {
 			hasConsumed = true
 			break
 		}
@@ -119,7 +122,7 @@ func dropConsumedPolicyFeedback(messages []Message) []Message {
 	}
 	out := make([]Message, 0, len(messages))
 	for i, msg := range messages {
-		if isConsumedPolicyFeedback(msg, i, lastAssistant, lastBoundary) {
+		if isConsumedPolicyFeedback(messages[i], i, lastFinalAssistant, lastBoundary) {
 			continue
 		}
 		out = append(out, msg)

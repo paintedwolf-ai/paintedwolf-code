@@ -1,7 +1,6 @@
 package evidence
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -145,9 +144,13 @@ func DisplayPathsForRecord(rec Record) []string {
 	return out
 }
 
-// PathIdentitiesForRecord returns the (root, scope-relative) pairs indexed on rec
-// in deterministic order.
+// PathIdentitiesForRecord returns the (root, scope-relative) pairs opened or
+// modified on rec in deterministic order. Grep match results do not open files
+// and are excluded.
 func PathIdentitiesForRecord(rec Record) []PathIdentity {
+	if rec.Kind == "grep" {
+		return nil
+	}
 	seen := map[PathIdentity]struct{}{}
 	out := make([]PathIdentity, 0, len(rec.pathsTouched)+1)
 	add := func(stored string) {
@@ -165,16 +168,6 @@ func PathIdentitiesForRecord(rec Record) []PathIdentity {
 	add(rec.Path)
 	for _, p := range rec.pathsTouched {
 		add(p)
-	}
-	if len(rec.grepLines) > 0 {
-		grepPaths := make([]string, 0, len(rec.grepLines))
-		for p := range rec.grepLines {
-			grepPaths = append(grepPaths, p)
-		}
-		sort.Strings(grepPaths)
-		for _, p := range grepPaths {
-			add(p)
-		}
 	}
 	return out
 }

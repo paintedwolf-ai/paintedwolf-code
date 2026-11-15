@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/people"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretmint"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
@@ -35,10 +36,8 @@ type Service struct {
 	credentialSlots            func(context.Context, *api.Session) *secretmint.Inspector
 	socketResources            func(ctx context.Context, projectID string, paths []string) []string
 	credentialDecisions        credentialDecisions
-	ledger                     touchedpaths.LedgerSource
-	roots                      RootSource
 	authorship                 touchedpaths.AuthoredSource
-	candidateReader            CandidateReader
+	candidateReader            candidateReader
 }
 
 // observeSocketResources names the host resources whose local service each
@@ -91,9 +90,11 @@ func (m *Service) FillSessionFacts(ctx context.Context, gc *oar.GuardContext, se
 
 type Sessions interface {
 	Get(context.Context, string) (*api.Session, error)
+	touchedpaths.LedgerSource
 }
 type Workspace interface {
 	SettingsPath(context.Context, *api.Session) string
+	Roots(context.Context, *api.Session) ([]projectroot.RootRef, error)
 }
 type Feedback interface {
 	RenderResult(context.Context, string, *oar.PipelineResult) (*guidance.Refusal, bool, error)
@@ -111,12 +112,6 @@ func (m *Service) SetSources(sessions Sessions, workspace Workspace, feedback Fe
 	m.workspace = workspace
 	m.feedback = feedback
 	m.loading = loading
-	if ledger, ok := sessions.(touchedpaths.LedgerSource); ok {
-		m.ledger = ledger
-	}
-	if roots, ok := workspace.(RootSource); ok {
-		m.roots = roots
-	}
 }
 func (m *Service) SetSurface(surface TurnSurface)                 { m.surface = surface }
 func (m *Service) SetPipeline(pipeline *oar.GuardPipeline)        { m.Pipeline = pipeline }

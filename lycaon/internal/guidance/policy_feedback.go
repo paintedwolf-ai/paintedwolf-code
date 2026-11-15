@@ -12,6 +12,7 @@ type PolicyFeedback struct {
 	Anchor string `json:"anchor"`
 	Rule   string `json:"rule"`
 	Effect string `json:"effect"`
+	Retain string `json:"retain,omitempty"`
 	api.ToolFeedback
 	Copy map[string]string `json:"-"`
 }
