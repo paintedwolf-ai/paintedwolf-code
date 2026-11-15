@@ -84,9 +84,12 @@ func RegisterBoardTools(reg *tools.DefaultRegistry, deps ToolDeps) error {
 			packboard.EnrichSnapshotReservationsForSession(sessionID, snap, deps.ActiveReservations)
 		}
 		view := BuildBoardView(snap, sessionID, level, time.Now().UTC())
-		// The coordinator reads workers by name from Workers; the job-keyed
-		// roster and path rows stay on the board Den shows.
-		view.Roster, view.PromotePaths = nil, nil
+		// Path rows stay on the board Den shows; reserved paths reach the
+		// coordinator in the board text.
+		view.PromotePaths = nil
+		for i := range view.Workers {
+			view.Workers[i].Reservations = nil
+		}
 		if planFilter, _ := args["plan"].(string); strings.TrimSpace(planFilter) != "" && deps.PlanWorkers != nil {
 			matched, pErr := deps.PlanWorkers(ctx, sessionID, strings.TrimSpace(planFilter))
 			if pErr != nil {

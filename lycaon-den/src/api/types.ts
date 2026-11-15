@@ -5818,7 +5818,6 @@ export interface components {
             repo: components["schemas"]["RepoBrief"];
             git?: components["schemas"]["BoardGitSlice"];
             scans?: components["schemas"]["BoardScansSlice"];
-            roster?: components["schemas"]["BoardWorkerRosterEntry"][];
             /** @description Open workers in the session, needing the coordinator and most recent first. */
             workers?: components["schemas"]["BoardWorker"][];
             /** @description Opaque cursor for the next page of workers when workers_has_more is true. */
@@ -5840,27 +5839,6 @@ export interface components {
             /** Format: date-time */
             generated_at: string;
             now_line: string;
-        };
-        BoardWorkerRosterEntry: {
-            dependencies?: components["schemas"]["WorkerDependency"][];
-            /** Format: uuid */
-            worker_id: string;
-            agent_type: string;
-            status: components["schemas"]["WorkerStatus"];
-            merge_status?: components["schemas"]["WorkerMergeStatus"];
-            overlay_id?: string;
-            scope_summary?: string;
-            changed_paths?: string[];
-            touched_paths?: string[];
-            /** @description Worker assignment goal included in full board detail. */
-            brief?: string;
-            error?: string;
-            /** @description Completed tool rounds this worker run */
-            tool_loops_used?: number;
-            /** @description Repo-relative paths held by handoff_reserve for this worker */
-            reservations?: string[];
-            /** @description True when checkpoint SSE reports a pending human checkpoint for this worker child session */
-            blocked_on_approval?: boolean;
         };
         /** @description One worker as its coordinator sees it, with the state admission reads. */
         BoardWorker: {
@@ -5921,6 +5899,8 @@ export interface components {
             read_omitted?: number;
             changed_paths?: string[];
             changed_omitted?: number;
+            /** @description Repo-relative paths the worker's live round holds with handoff_reserve. */
+            reservations?: string[];
         };
         /** @description Project orientation summary — languages detected by content via enry, listed in dominant-bytes order. */
         RepoBrief: {
@@ -30852,7 +30832,6 @@ export type BoardScanCompareSlice = components["schemas"]["BoardScanCompareSlice
 export type BoardScanCompareStub = components["schemas"]["BoardScanCompareStub"];
 export type BoardScanSummary = components["schemas"]["BoardScanSummary"];
 export type BoardView = components["schemas"]["BoardView"];
-export type BoardWorkerRosterEntry = components["schemas"]["BoardWorkerRosterEntry"];
 export type BoardWorker = components["schemas"]["BoardWorker"];
 export type RepoBrief = components["schemas"]["RepoBrief"];
 export type RepoLayout = components["schemas"]["RepoLayout"];
