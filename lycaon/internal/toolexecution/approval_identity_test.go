@@ -3,6 +3,7 @@ package toolexecution
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/capabilitygrants"
+	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"slices"
 
 	"github.com/lycaon/lycaon/internal/toolapproval"
@@ -22,9 +23,9 @@ type identityCoalescer struct {
 	called bool
 }
 
-func (c *identityCoalescer) Begin(string, string) (toolapproval.ToolApprovalCoalesceBegin, string) {
+func (c *identityCoalescer) Begin(string, string) (approvalstate.ToolApprovalCoalesceBegin, string) {
 	c.called = true
-	return toolapproval.ToolApprovalCoalesceMint, ""
+	return approvalstate.ToolApprovalCoalesceMint, ""
 }
 
 func TestApprovalRejectsUnencodableIdentityBeforeCoalescing(t *testing.T) {
