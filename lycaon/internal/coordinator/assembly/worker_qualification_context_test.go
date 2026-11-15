@@ -128,9 +128,12 @@ func TestMultiRoundWorkerContextAcrossCompactionFitAndBriefReplacement(t *testin
 		{ID: "old-a", Role: api.MessageRoleAssistant, Content: strings.Repeat("Investigated parser state transitions. ", 400)},
 		{
 			ID: "call-1", Role: api.MessageRoleAssistant,
-			ToolCalls: []api.ToolCall{{ID: "tc-read-1", Name: "read", Arguments: `{"path":"parser.go"}`}},
+			ToolCalls: []api.ToolCall{{ID: "tc-read-1", Name: "read", Args: map[string]any{"path": "parser.go"}}},
 		},
-		{ID: "res-1", Role: api.MessageRoleTool, ToolCallID: "tc-read-1", Name: "read", Content: "package parser\n"},
+		{
+			ID: "res-1", Role: api.MessageRoleTool, Content: "package parser\n",
+			ToolResult: &api.ToolResult{Content: "package parser\n", Tool: "read", ToolCallID: "tc-read-1"},
+		},
 		{ID: "cur-req", Role: api.MessageRoleUser, Content: "continue round 1", ContextPinned: true},
 	}
 

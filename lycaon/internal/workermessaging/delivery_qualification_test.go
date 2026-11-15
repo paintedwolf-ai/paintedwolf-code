@@ -226,8 +226,8 @@ type staticWorkerLegCtx struct {
 	leg inject.WorkerLegContext
 }
 
-func (c staticWorkerLegCtx) BuildWorkerLegContext(context.Context, *api.Session, string) (inject.WorkerLegContext, bool) {
-	return c.leg, true
+func (c staticWorkerLegCtx) BuildWorkerPromptContext(context.Context, string, *api.Session) (inject.WorkerLegContext, error) {
+	return c.leg, nil
 }
 
 func TestFindingsAndMessagesStreamsNeverStarveOrCrossAcknowledge(t *testing.T) {

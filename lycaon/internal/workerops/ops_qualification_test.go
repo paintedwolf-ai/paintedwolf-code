@@ -414,7 +414,8 @@ func TestAgentTransitionRefusalAndResolutionMatrix(t *testing.T) {
 		VALUES ('child-bound', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now(), now(), now())
 	testutil.FailErr(t, "insert child-bound", err)
 	pw, err := f.records.CreateWorker(t.Context(), f.coord, op("create-bound"), workerrecords.WorkerSpec{
-		Name: "bound-leg", AgentType: "repo-researcher", ScopeMode: "read", ChildSessionID: "child-bound", DelegationID: "del-a", LegID: "leg-a",
+		Name: "bound-leg", AgentType: "repo-researcher", ScopeMode: "read", ChildSessionID: "child-bound",
+		DelegationID: "del-a", LegID: "leg-a", WorkflowWorkID: "work-leg-a",
 	})
 	testutil.FailErr(t, "create bound", err)
 	_, err = f.db.ExecContext(t.Context(), `INSERT INTO worker_jobs (id, project_id, parent_session_id, child_session_id, agent_type, status, prompt, brief, created_at)
@@ -435,7 +436,7 @@ func TestAgentTransitionRefusalAndResolutionMatrix(t *testing.T) {
 	}, func(_ context.Context, _ workerops.RoundJob) (string, string, error) {
 		return "bound-job-" + strconv.Itoa(len(f.enqueued)+1), "local", nil
 	})
-	if !errors.As(err, &refusal) || refusal.AgentChange != workerstate.AgentChangeSealed || refusal.LegID != "leg-a" {
+	if !errors.As(err, &refusal) || refusal.AgentChange != workerstate.AgentChangeSealed || refusal.WorkflowWorkID != "work-leg-a" {
 		t.Fatalf("bound agent change = %v (%+v), want sealed role", err, refusal)
 	}
 }

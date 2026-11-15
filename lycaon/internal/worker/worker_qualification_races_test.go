@@ -82,19 +82,24 @@ func (w *faultWorkspaces) EvictWorkerBranch(ctx context.Context, branchRoot stri
 }
 
 type mutableLaneState struct {
-	inner workerlane.LaneState
-	mu    sync.Mutex
-	hold  workerlane.Readiness
+	inner   workerlane.LaneState
+	mu      sync.Mutex
+	recover bool
+	holders bool
 }
 
-func (s *mutableLaneState) Readiness(ctx context.Context, workerID, currentJobID string) (workerlane.Readiness, error) {
+func (s *mutableLaneState) PromotionUnsettled(ctx context.Context, jobID string) (bool, error) {
+	return s.inner.PromotionUnsettled(ctx, jobID)
+}
+
+func (s *mutableLaneState) Readiness(ctx context.Context, root string) (bool, bool, error) {
 	s.mu.Lock()
-	hold := s.hold
+	rec, hold := s.recover, s.holders
 	s.mu.Unlock()
-	if hold != (workerlane.Readiness{}) {
-		return hold, nil
+	if rec || hold {
+		return rec, hold, nil
 	}
-	return s.inner.Readiness(ctx, workerID, currentJobID)
+	return s.inner.Readiness(ctx, root)
 }
 
 type raceQualificationEnv struct {
@@ -143,9 +148,13 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 	ops := &workerops.Service{
 		Reader: workerops.Reader{
 			Records: records, Jobs: queue, Decisions: decisions,
-			Recovering: func(ctx context.Context, workerID, jobID string) bool {
-				r, err := ls.Readiness(ctx, workerID, jobID)
-				return err == nil && (r.RecoveryRequired || r.HoldersUnresolved)
+			Readiness: func(ctx context.Context, actor workerrecords.Actor, workerID string) (bool, error) {
+				prep, ok, err := records.LatestPreparation(ctx, actor, workerID)
+				if err != nil || !ok {
+					return false, err
+				}
+				rec, hold, err := ls.Readiness(ctx, prep.PreparationRef)
+				return rec || hold, err
 			},
 		},
 		Agents:     prompts.AgentMutationCapable,
@@ -457,7 +466,7 @@ func TestPromotionRefreshFailureHoldAndClosedWorkerCallback(t *testing.T) {
 
 	// Unresolved writer custody / recovery hold blocks new round admission.
 	e.laneState.mu.Lock()
-	e.laneState.hold = workerlane.Readiness{HoldersUnresolved: true}
+	e.laneState.holders = true
 	e.laneState.mu.Unlock()
 	_, _, err = e.invoke(t, InstructWorkerTool, "instruct-held", map[string]any{
 		"worker": "builder", "instructions": "continue while writer held",
@@ -467,7 +476,7 @@ func TestPromotionRefreshFailureHoldAndClosedWorkerCallback(t *testing.T) {
 	// Clear writer hold; workspace fault still holds ClaimWorkerBranch without losing landed state;
 	// clearing workspace fault lets ClaimWorkerBranch retry preparation only and succeed.
 	e.laneState.mu.Lock()
-	e.laneState.hold = workerlane.Readiness{}
+	e.laneState.holders = false
 	e.laneState.mu.Unlock()
 
 	_, eff2, err := e.invoke(t, InstructWorkerTool, "instruct-retry", map[string]any{
