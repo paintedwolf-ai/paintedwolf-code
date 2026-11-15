@@ -360,26 +360,30 @@ func (s *Service) History(ctx context.Context, actor workerrecords.Actor, name s
 	return page, nil
 }
 
-// Result resolves a result handle for an operation on its changes. A handle
-// of a worker whose state does not admit op is refused: changes are not
-// promoted, rejected or previewed against a round that is still running.
-func (s *Service) Result(ctx context.Context, actor workerrecords.Actor, handle string, op workerstate.Operation) (workerrecords.ResultRef, error) {
+// Result resolves a result handle for an operation on its changes while
+// holding the worker's lock. A handle of a worker whose state does not admit
+// op is refused without holding the lock.
+func (s *Service) Result(ctx context.Context, actor workerrecords.Actor, handle string, op workerstate.Operation) (workerrecords.ResultRef, func(), error) {
 	ref, err := s.Reader.Records.Result(ctx, actor, strings.TrimSpace(handle))
 	if err != nil {
-		return workerrecords.ResultRef{}, err
+		return workerrecords.ResultRef{}, nil, err
 	}
+	unlock := s.lockWorker(ref.WorkerID)
 	w, err := s.Reader.Records.Worker(ctx, actor, ref.WorkerID)
 	if err != nil {
-		return workerrecords.ResultRef{}, err
+		unlock()
+		return workerrecords.ResultRef{}, nil, err
 	}
 	snap, err := s.Reader.Read(ctx, actor, w)
 	if err != nil {
-		return workerrecords.ResultRef{}, err
+		unlock()
+		return workerrecords.ResultRef{}, nil, err
 	}
 	if !snap.View.Admits(op) {
-		return workerrecords.ResultRef{}, refusal(snap, op)
+		unlock()
+		return workerrecords.ResultRef{}, nil, refusal(snap, op)
 	}
-	return ref, nil
+	return ref, unlock, nil
 }
 
 // Stop is what stopping a worker did.
@@ -398,6 +402,10 @@ type Stop struct {
 func (s *Service) Stop(ctx context.Context, actor workerrecords.Actor, op workerrecords.Op, name, reason string, cancel func(ctx context.Context, jobID string) error) (Stop, error) {
 	snap, err := s.resolve(ctx, actor, name)
 	if err != nil {
+		return Stop{}, err
+	}
+	defer s.lockWorker(snap.Worker.ID)()
+	if snap, err = s.resolve(ctx, actor, name); err != nil {
 		return Stop{}, err
 	}
 	out := Stop{Worker: snap.Worker.Name}
@@ -425,16 +433,22 @@ func (s *Service) Stop(ctx context.Context, actor workerrecords.Actor, op worker
 	return Stop{}, refusal(snap, workerstate.OpCancel)
 }
 
-// Asking returns the job of the round a worker's pending question
-// suspended; a worker that is not asking is refused.
-func (s *Service) Asking(ctx context.Context, actor workerrecords.Actor, name string) (string, error) {
+// Asking returns the job of the round a worker's pending question suspended
+// while holding the worker's lock; a worker that is not asking is refused.
+func (s *Service) Asking(ctx context.Context, actor workerrecords.Actor, name string) (string, func(), error) {
 	snap, err := s.resolve(ctx, actor, name)
 	if err != nil {
-		return "", err
+		return "", nil, err
+	}
+	unlock := s.lockWorker(snap.Worker.ID)
+	if snap, err = s.resolve(ctx, actor, name); err != nil {
+		unlock()
+		return "", nil, err
 	}
 	if !snap.View.Admits(workerstate.OpAnswer) {
-		return "", refusal(snap, workerstate.OpAnswer)
+		unlock()
+		return "", nil, refusal(snap, workerstate.OpAnswer)
 	}
 	latest, _ := snap.Latest()
-	return latest.JobID, nil
+	return latest.JobID, unlock, nil
 }

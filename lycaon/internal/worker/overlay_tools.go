@@ -22,14 +22,14 @@ type OverlayToolDeps struct {
 	Results *workerops.Service
 }
 
-// overlayJob resolves a result handle to the job whose changes it names.
-// overlayJob resolves a result handle to the job holding its changes.
-func overlayJob(ctx context.Context, deps OverlayToolDeps, tool string, tctx tools.ToolContext, handle string, op workerstate.Operation) (jobID, resultHandle string, err error) {
-	ref, err := deps.Results.Result(ctx, coordinatorActor(tctx), handle, op)
+// overlayJob resolves a result handle to the job holding its changes while
+// keeping the worker's lifecycle lock held for the caller.
+func overlayJob(ctx context.Context, deps OverlayToolDeps, tool string, tctx tools.ToolContext, handle string, op workerstate.Operation) (jobID, resultHandle string, unlock func(), err error) {
+	ref, unlock, err := deps.Results.Result(ctx, coordinatorActor(tctx), handle, op)
 	if err != nil {
-		return "", "", workerToolReject(tool, "", "", err, handle)
+		return "", "", nil, workerToolReject(tool, "", "", err, handle)
 	}
-	return ref.JobID, handle, nil
+	return ref.JobID, handle, unlock, nil
 }
 
 // RegisterOverlayTools registers coordinator overlay tools.
@@ -47,10 +47,11 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 		if handle == "" {
 			return "", fmt.Errorf("overlay_id is required")
 		}
-		overlayID, resultHandle, err := overlayJob(ctx, deps, "promote_overlay", tctx, handle, workerstate.OpPromote)
+		overlayID, resultHandle, unlock, err := overlayJob(ctx, deps, "promote_overlay", tctx, handle, workerstate.OpPromote)
 		if err != nil {
 			return "", err
 		}
+		defer unlock()
 		captureWorkerSubject(tctx, deps.Merge.Queue, overlayID)
 		resolutions := parsePromoteResolutions(args["resolutions"])
 		// A folder drop applies to every changed file below it.
@@ -87,10 +88,11 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 		if handle == "" {
 			return "", fmt.Errorf("overlay_id is required")
 		}
-		overlayID, _, err := overlayJob(ctx, deps, "reject_overlay", tctx, handle, workerstate.OpReject)
+		overlayID, _, unlock, err := overlayJob(ctx, deps, "reject_overlay", tctx, handle, workerstate.OpReject)
 		if err != nil {
 			return "", err
 		}
+		defer unlock()
 		captureWorkerSubject(tctx, deps.Merge.Queue, overlayID)
 		reason := strings.TrimSpace(stringArg(args["reason"]))
 		out, err := deps.Merge.RejectOverlay(ctx, tctx.Identity.SessionID, overlayID, reason)
@@ -115,10 +117,11 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 		if handle == "" {
 			return "", fmt.Errorf("overlay_id is required")
 		}
-		overlayID, resultHandle, err := overlayJob(ctx, deps, "preview_overlay", tctx, handle, workerstate.OpPreview)
+		overlayID, resultHandle, unlock, err := overlayJob(ctx, deps, "preview_overlay", tctx, handle, workerstate.OpPreview)
 		if err != nil {
 			return "", err
 		}
+		unlock()
 		captureWorkerSubject(tctx, deps.Merge.Queue, overlayID)
 		detail := parsePromoteDetailArg(args["detail"])
 		paths := parseOverlayPathFilter(args["path"])
