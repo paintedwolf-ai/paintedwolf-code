@@ -321,17 +321,30 @@ func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
 	})
 	testutil.FailErr(t, "enqueue worker", err)
 
-	quiet := (&serveBuilder{
+	quietBuilder := &serveBuilder{
 		storage:     persistence.Runtime{Database: store},
 		delegations: app.Delegations,
 		sessions:    app.Sessions,
 		worker:      workerCoordination{cfg: worker.DefaultWorkersConfig()},
-	}).quietRounds()
+	}
+	quiet := quietBuilder.quietRounds()
+	blocked := quietBuilder.blockedPrerequisites()
+	blockedList, err := blocked.List(t.Context())
+	testutil.FailErr(t, "list blocked prerequisites", err)
+	if len(blockedList) != 0 {
+		t.Fatalf("blocked prerequisites = %+v, want empty", blockedList)
+	}
 
 	jobs, err := quiet.Jobs(t.Context())
 	testutil.FailErr(t, "list quiet candidate jobs", err)
 	if len(jobs) != 1 || jobs[0].ID != jobID {
 		t.Fatalf("quiet jobs = %+v, want %s", jobs, jobID)
+	}
+	if quiet.Waiting(t.Context(), &jobs[0]) {
+		t.Fatal("expected unblocked job not to report waiting")
+	}
+	if !quiet.PauseEnded(t.Context(), "run-none").IsZero() {
+		t.Fatal("expected zero pause-ended timestamp for unknown run")
 	}
 	emptyProgress, err := quiet.Progress(t.Context(), child.ID)
 	testutil.FailErr(t, "empty turn progress", err)

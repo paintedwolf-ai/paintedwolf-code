@@ -38,4 +38,15 @@ func TestWorkerRoundNoticeAndMessageNeedsReplyQueueCoordinatorKicks(t *testing.T
 	if _, ok := rt.Anchors().Kicks().PeekPendingKickID("parent-reply"); !ok {
 		t.Fatal("message needs reply did not queue a coordinator kick")
 	}
+
+	nilWorkers.PrerequisiteBlocked(t.Context(), "parent-nil", "job-c", "job-p", "failed")
+	workers.PrerequisiteBlocked(t.Context(), "", "job-c", "job-p", "failed")
+	workers.PrerequisiteBlocked(t.Context(), "parent-blocked-empty", "   ", "job-p", "failed")
+	if _, ok := rt.Anchors().Kicks().PeekPendingKickID("parent-blocked-empty"); ok {
+		t.Fatal("empty consumer job id queued a blocked-prerequisite kick")
+	}
+	workers.PrerequisiteBlocked(t.Context(), "parent-blocked", "job-c", "job-p", "failed")
+	if _, ok := rt.Anchors().Kicks().PeekPendingKickID("parent-blocked"); !ok {
+		t.Fatal("prerequisite blocked did not queue a coordinator kick")
+	}
 }
