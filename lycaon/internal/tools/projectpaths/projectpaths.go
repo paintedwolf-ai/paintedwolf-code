@@ -71,7 +71,7 @@ func ResolveWrite(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolConte
 	if err != nil {
 		return Resolved{}, err
 	}
-	recordPrimaryMutation(ctx, tctx, resolved)
+	RecordResolvedMutation(ctx, tctx, resolved)
 	return resolved, nil
 }
 
@@ -118,11 +118,6 @@ func ChildResolved(tctx tools.ToolContext, parent Resolved, rel string) Resolved
 	}
 }
 
-// RecordResolvedMutation records a primary-tree write for an already-resolved path.
-func RecordResolvedMutation(ctx context.Context, tctx tools.ToolContext, resolved Resolved) {
-	recordPrimaryMutation(ctx, tctx, resolved)
-}
-
 // IsSpecialMutationRel reports whether rel names repository metadata or recovery paths.
 func IsSpecialMutationRel(rel string) bool {
 	if _, denied := repositoryMetadataClass(rel); denied {
@@ -131,9 +126,8 @@ func IsSpecialMutationRel(rel string) bool {
 	return settingsoverlay.IsRecoveryRelPath(rel) || settingsoverlay.HasRecoverySegment(rel)
 }
 
-// recordPrimaryMutation records a primary-tree write for the open rewind checkpoint.
-// Worker-branch writes are skipped; promote records those touches.
-func recordPrimaryMutation(ctx context.Context, tctx tools.ToolContext, resolved Resolved) {
+// RecordResolvedMutation records a primary-tree write for an already-resolved path.
+func RecordResolvedMutation(ctx context.Context, tctx tools.ToolContext, resolved Resolved) {
 	if tctx.Source.MutationRecorder == nil || resolved.External || strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
 		return
 	}

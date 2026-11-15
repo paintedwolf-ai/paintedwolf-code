@@ -217,7 +217,7 @@ func runCommandBackground(
 	if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
 		return "", err
 	}
-	if tr := rejectPwdEnvMismatch(tctx, args, canonicalCommandKey(tctx, args), cwd, cwdDisplay); tr != nil {
+	if tr := rejectPwdEnvMismatch(tctx, args, CanonicalCommandKey(tctx, args), cwd, cwdDisplay); tr != nil {
 		return "", tr
 	}
 	confReq, tr := tools.ConfineRequestForSpawn(ctx, tctx, extraWriteRoots)
@@ -230,7 +230,7 @@ func runCommandBackground(
 	}
 	confine.LogApplied("background", tctx.Identity.SessionID, confinement)
 	directIPApplied := tctx.Direct.DirectIPRequested && confinement != nil && confinement.Network == confine.NetworkDirectIP
-	commandLine := canonicalCommandKey(tctx, args)
+	commandLine := CanonicalCommandKey(tctx, args)
 	egressLease, err := confine.BindAction(confinement, commandEgressIdentity(tctx, toolName, commandLine))
 	if err != nil {
 		return "", err

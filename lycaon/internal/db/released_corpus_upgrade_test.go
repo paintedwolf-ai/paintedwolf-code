@@ -277,7 +277,7 @@ func TestReleasedCorpusUpgradesToCurrentAndRetainsUserData(t *testing.T) {
 
 			for boot := range 2 {
 				testutil.FailErr(t, "upgrade released store", UpgradeStaged(t.Context(), path))
-				reader, err := openReader(t.Context(), path)
+				reader, err := OpenReadOnly(t.Context(), path)
 				testutil.FailErr(t, "open upgraded store", err)
 				identity, err := inspectSchema(t.Context(), reader)
 				testutil.FailErr(t, "inspect upgraded store", err)

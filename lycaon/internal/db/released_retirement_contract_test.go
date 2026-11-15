@@ -159,7 +159,7 @@ func TestRegisteredRetirementsReproduceReleasedCorpusRows(t *testing.T) {
 					}
 					populated++
 					testutil.FailErr(t, "upgrade corpus store", UpgradeStaged(t.Context(), file))
-					upgraded, err := openReader(t.Context(), file)
+					upgraded, err := OpenReadOnly(t.Context(), file)
 					testutil.FailErr(t, "open upgraded store", err)
 					rebuilt := retirementRows(t, upgraded, r.Rebuild)
 					testutil.FailErr(t, "close upgraded store", upgraded.Close())

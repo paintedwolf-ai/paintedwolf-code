@@ -63,11 +63,11 @@ func runCommandTerminalCapture(
 	if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
 		return RunOutcome{}, err
 	}
-	if reject := rejectPwdEnvMismatch(tctx, args, canonicalCommandKey(tctx, args), cwd, cwdDisplay); reject != nil {
+	if reject := rejectPwdEnvMismatch(tctx, args, CanonicalCommandKey(tctx, args), cwd, cwdDisplay); reject != nil {
 		return RunOutcome{}, reject
 	}
-	commandLine := canonicalCommandKey(tctx, args)
-	approach := commandFailureApproachKey(canonicalToolArgs(tctx, args))
+	commandLine := CanonicalCommandKey(tctx, args)
+	approach := commandFailureApproachKey(CanonicalToolArgs(tctx, args))
 	observeSource, verificationSource := commandSourceReaders(ctx, tctx, cwd)
 	failureAttempt, reject := tracker.begin(tctx.Identity.SessionID, approach, commandLine, observeSource)
 	if reject != nil {

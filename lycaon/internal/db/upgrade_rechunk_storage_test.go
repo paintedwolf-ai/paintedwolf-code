@@ -37,7 +37,7 @@ func TestRetainedStorageCapsAmplifiedRechunkedRows(t *testing.T) {
 	testutil.FailErr(t, "count unique legacy rows", writer.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM source_manifest_entries").Scan(&before))
 	testutil.FailErr(t, "close shared fixture", writer.Close())
 	testutil.FailErr(t, "migrate amplified records", UpgradeStaged(t.Context(), path))
-	reader, err := openReader(t.Context(), path)
+	reader, err := OpenReadOnly(t.Context(), path)
 	testutil.FailErr(t, "open amplified target", err)
 	defer reader.Close()
 	var after, files, amplified int

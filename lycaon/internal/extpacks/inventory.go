@@ -141,8 +141,8 @@ func ProjectDisableAllowed(kindRoot string, deviceResolved bool) bool {
 	return class == ScopeShared || (class == ScopeAdditive && !deviceResolved)
 }
 
-// kindRootForRel returns the longest matching inventory root.
-func kindRootForRel(rel string) string {
+// KindRootForUnitID returns the matching inventory root, or empty for unknown roots.
+func KindRootForUnitID(rel string) string {
 	rel = strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(rel)), "/")
 	best := ""
 	for _, root := range inventoryKindRoots {
@@ -156,9 +156,6 @@ func kindRootForRel(rel string) string {
 	return best
 }
 
-// KindRootForUnitID returns the matching inventory root, or empty for unknown roots.
-func KindRootForUnitID(unitID string) string { return kindRootForRel(unitID) }
-
 // UnitKindRoots returns the inventoried pack roots.
 func UnitKindRoots() []string {
 	return append([]string(nil), inventoryKindRoots...)
@@ -170,7 +167,7 @@ func isUnitID(id string) bool {
 	if !strings.Contains(id, "/") {
 		return false
 	}
-	return kindRootForRel(id) != ""
+	return KindRootForUnitID(id) != ""
 }
 
 // InventoryPack assigns stable unit ids across a pack tree.
@@ -329,7 +326,7 @@ func UnitIDFor(packID, rel string) string {
 		return ""
 	}
 	parts := strings.Split(rel, "/")
-	kindRoot := kindRootForRel(rel)
+	kindRoot := KindRootForUnitID(rel)
 	if ProviderScoped(kindRoot) && strings.TrimSpace(packID) == "" {
 		return ""
 	}

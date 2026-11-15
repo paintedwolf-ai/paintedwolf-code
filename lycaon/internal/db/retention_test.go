@@ -326,7 +326,7 @@ func TestMaintenanceDrainsIdleFreelist(t *testing.T) {
 	_, err = writer.ExecContext(ctx, `PRAGMA page_size=512; PRAGMA auto_vacuum=INCREMENTAL; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL`)
 	testutil.FailErr(t, "configure small fixture pages", err)
 	testutil.FailErr(t, "create fixture schema", prepareStoreSchema(ctx, writer, true))
-	reader, err := openReader(ctx, path)
+	reader, err := OpenReadOnly(ctx, path)
 	testutil.FailErr(t, "open fixture reader", err)
 	database := newStore(writer, reader)
 	t.Cleanup(func() { _ = database.Close() })
