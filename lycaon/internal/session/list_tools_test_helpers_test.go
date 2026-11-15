@@ -211,7 +211,7 @@ func registerContextualToolsCoordinatorExtras(
 		Workers:       worker.DefaultWorkersConfig(),
 		WorkerRecords: workerrecords.New(sqlDB),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
