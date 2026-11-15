@@ -60,7 +60,10 @@ async function bodyOffset(page: Page): Promise<number> {
 async function openCard(page: Page, sessionId: string) {
   const stream = liveChatStage(page).locator(`[data-testid="chat-stream"][data-session-id="${sessionId}"]`);
   await stream.getByTestId("activity-span-card").locator(":scope > .den-transcript-disclosure-header").click();
-  await stream.getByTestId("tool-part-card").first().locator(":scope > .den-transcript-disclosure-header").click();
+  // The row settles once its result joins the call; opening earlier would open a row that is about to be replaced.
+  const card = stream.locator('[data-testid="tool-part-card"][data-status="done"]').first();
+  await expect(card).toBeVisible({ timeout: 30_000 });
+  await card.locator(":scope > .den-transcript-disclosure-header").click();
   await expect(page.getByTestId("activity-summary")).toHaveAttribute("data-state", "pending");
 }
 
