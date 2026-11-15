@@ -218,11 +218,12 @@ func (s mergeEngine) commitCompletedPromotion(ctx context.Context, in promoteFin
 	if err != nil {
 		return fmt.Errorf("commit merged overlay: %w", err)
 	}
-	in.facts.documents.release(ctx, true)
+	postCtx := context.WithoutCancel(ctx)
+	in.facts.documents.release(postCtx, true)
 	s.clearReconcilePaths(in.sessionID)
-	s.finalizeMergedOverlay(ctx, in.task, in.jobID, plan)
-	if _, refreshErr := s.Lanes.Refresh(ctx, in.task, s.taskRootRefs(ctx, in.task)); refreshErr != nil {
-		slog.WarnContext(ctx, "lane refresh after promotion deferred", "job_id", in.jobID, "err", refreshErr)
+	s.finalizeMergedOverlay(postCtx, in.task, in.jobID, plan)
+	if _, refreshErr := s.Lanes.Refresh(postCtx, in.task, s.taskRootRefs(postCtx, in.task)); refreshErr != nil {
+		slog.WarnContext(postCtx, "lane refresh after promotion deferred", "job_id", in.jobID, "err", refreshErr)
 		in.out.Error = refreshErr.Error()
 	}
 	in.out.Status = api.WorkerMergeStatusMerged
