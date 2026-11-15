@@ -28,7 +28,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
-	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerlane"
@@ -129,7 +128,6 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 	t.Helper()
 	primary := t.TempDir()
 	testutil.FailErr(t, "seed main.go", os.WriteFile(filepath.Join(primary, "main.go"), []byte("package main\n"), 0o644))
-	gittest.InitCommit(t, primary, "initial")
 	sqlDB := testdbfixture.Open(t, "worker-qual-races.db")
 	testdbseed.InsertProjectRootWithID(t, sqlDB, testdbseed.DefaultProjectID, "root-id", primary)
 	testdbseed.InsertSession(t, sqlDB, "coord", testdbseed.DefaultProjectID)
@@ -144,10 +142,8 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 	queue.SetBaselineStore(ledger.Baselines)
 
 	mgr := workspace.NewManager(filepath.Join(dataDir, "worker-branches"))
-	privateGit, err := workspace.OpenPrivateGit(mgr.BranchBase())
-	testutil.FailErr(t, "open private Git", err)
-	rec := openFixtureRecovery(t, mgr.BranchBase())
-	mgr.WithPrivateGit(privateGit).WithRecovery(rec)
+	rec, err := mgr.CheckpointCoordinator()
+	testutil.FailErr(t, "open checkpoint coordinator", err)
 	queue.SetWorkerWorkspaceManager(mgr)
 	fw := &faultWorkspaces{inner: mgr}
 	records := workerrecords.New(sqlDB)
