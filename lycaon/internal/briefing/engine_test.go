@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -203,6 +204,64 @@ func TestStoredResultsCompleteWithoutAModelCall(t *testing.T) {
 	}
 	if next := receive(t, log.seen); next.RecordID == first.RecordID {
 		t.Fatal("changed input reused the old record")
+	}
+}
+
+type recordedLog struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (l *recordedLog) Enabled(context.Context, slog.Level) bool { return true }
+func (l *recordedLog) WithAttrs([]slog.Attr) slog.Handler       { return l }
+func (l *recordedLog) WithGroup(string) slog.Handler            { return l }
+func (l *recordedLog) Handle(_ context.Context, record slog.Record) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.records = append(l.records, record)
+	return nil
+}
+
+func (l *recordedLog) requests() []map[string]string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []map[string]string
+	for _, record := range l.records {
+		if record.Message != "briefing request" {
+			continue
+		}
+		attrs := map[string]string{}
+		record.Attrs(func(attr slog.Attr) bool { attrs[attr.Key] = attr.Value.String(); return true })
+		out = append(out, attrs)
+	}
+	return out
+}
+
+// Each request leaves one line saying, per section, how it is produced and
+// whether its text was already stored.
+func TestRequestLogExplainsEachSection(t *testing.T) {
+	scheduler := NewScheduler(context.Background())
+	t.Cleanup(func() { scheduler.Stop(); scheduler.Wait(context.Background()) })
+	recorded := &recordedLog{}
+	snapshots := &snapshotLog{seen: make(chan Snapshot, 4)}
+	engine := NewEngine(scheduler, newMemStore(), &countingGenerator{text: "Clear the cached token."}, snapshots, slog.New(recorded))
+	ask := func() Snapshot {
+		snap, err := engine.Request(t.Context(), request("card", false, purposeSection("sign out", Generated), outcomeSection("exit 0")))
+		testutil.FailErr(t, "request", err)
+		return snap
+	}
+	ask()
+	receive(t, snapshots.seen)
+	ask()
+	lines := recorded.requests()
+	if len(lines) != 2 {
+		t.Fatalf("%d request lines", len(lines))
+	}
+	if got := lines[0]["sections"]; got != "purpose:generated:missing,outcome:deterministic:stored" || lines[0]["status"] != string(StatusPending) {
+		t.Fatalf("first request logged %v", lines[0])
+	}
+	if got := lines[1]["sections"]; got != "purpose:generated:stored,outcome:deterministic:stored" || lines[1]["status"] != string(StatusComplete) {
+		t.Fatalf("second request logged %v", lines[1])
 	}
 }
 

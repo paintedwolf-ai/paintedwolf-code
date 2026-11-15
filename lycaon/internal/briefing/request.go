@@ -12,6 +12,18 @@ const (
 	Deterministic
 )
 
+func (m SectionMode) String() string {
+	switch m {
+	case Generated:
+		return "generated"
+	case Lookup:
+		return "lookup"
+	case Deterministic:
+		return "deterministic"
+	}
+	return "unknown"
+}
+
 // SectionPlan is one resolved section of a target, built with bounded work
 // and no model call.
 type SectionPlan struct {

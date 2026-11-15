@@ -121,6 +121,29 @@ func (e *Engine) Request(ctx context.Context, request Request) (Snapshot, error)
 	if err != nil {
 		return Snapshot{}, err
 	}
+	snap, err := e.request(ctx, r)
+	e.logRequest(ctx, r, snap, err)
+	return snap, err
+}
+
+// logRequest records why a request produced what it did: each section's mode
+// and whether its text was already stored.
+func (e *Engine) logRequest(ctx context.Context, r resolved, snap Snapshot, err error) {
+	sections := make([]string, 0, len(r.request.Sections))
+	for i, section := range r.request.Sections {
+		state := "missing"
+		if _, ok := r.results[r.hashes[i].ManifestHash]; ok {
+			state = "stored"
+		}
+		sections = append(sections, section.ID+":"+section.Mode.String()+":"+state)
+	}
+	e.logger.InfoContext(ctx, "briefing request", "profile", r.request.ProfileID, "target", r.request.TargetKey,
+		"trigger", r.request.Trigger(), "status", string(snap.Status), "error_code", snap.ErrorCode,
+		"sections", strings.Join(sections, ","), "failed", err != nil)
+}
+
+func (e *Engine) request(ctx context.Context, r resolved) (Snapshot, error) {
+	request := r.request
 	stored := map[string]Result{}
 	for hash, result := range r.results {
 		stored[hash] = result
@@ -149,7 +172,11 @@ func (e *Engine) Request(ctx context.Context, request Request) (Snapshot, error)
 	if started.Joined && !e.scheduler.Has(jobKey(request)) {
 		// No run holds the attempt, so it can never settle: end it and start anew.
 		e.fail(ctx, r, attempt, Failure{Code: CodeInterrupted})
-		return e.Request(ctx, request)
+		again, err := e.resolve(ctx, request)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		return e.request(ctx, again)
 	}
 	if started.Joined {
 		// A manual request promotes queued work it joins.
