@@ -6195,7 +6195,7 @@ export interface components {
             scope: components["schemas"]["SettingsScope"];
             action: string;
         };
-        /** @description A durable visual artifact was written or deleted. Identity only: clients re-read the artifact list so one tile's metadata, reference counts, and bytes all render from one place. */
+        /** @description A durable visual artifact was written or deleted. Clients re-read the artifact list for metadata and reference counts; written events carry content_hash so byte caches only invalidate when stored bytes change. */
         ArtifactEvent: {
             /** Format: uuid */
             artifact_id: string;
@@ -6212,6 +6212,8 @@ export interface components {
              */
             root_session_id?: string;
             op: components["schemas"]["ArtifactChangeOp"];
+            /** @description SHA-256 hex digest of stored bytes when op is written. */
+            content_hash?: string;
         };
         /** @enum {string} */
         ArtifactChangeOp: "written" | "deleted";
@@ -8510,6 +8512,8 @@ export interface components {
             id: string;
             mime: string;
             source: components["schemas"]["VisualArtifactSource"];
+            /** @description Lowercase hex SHA-256 digest of the unencoded artifact body. */
+            content_hash?: string;
             caption?: string;
             evidence_handle?: string;
             /** @description Held browser page that produced live-tool media. */
@@ -8533,10 +8537,16 @@ export interface components {
             /** @description What would break if this artifact were deleted, counted by kind. Absent or empty means nothing durable claims it. */
             references?: components["schemas"]["ArtifactReferenceCount"][];
         };
+        /** @description Filter facets across live artifacts in the project, returned on the first page. */
+        ArtifactListFacets: {
+            /** @description Producer session IDs for live artifacts in the project, newest first. */
+            session_ids: string[];
+        };
         ArtifactListResponse: {
             artifacts: components["schemas"]["ArtifactListItem"][];
             /** @description Opaque cursor for the next project artifact page; empty at the end. */
             next_cursor?: string;
+            facets?: components["schemas"]["ArtifactListFacets"];
         };
         /** @enum {string} */
         WorkerSummaryStatus: "complete" | "partial" | "failed" | "canceled" | "held" | "open" | "needs_decision";
@@ -19815,6 +19825,10 @@ export interface operations {
                 limit?: number;
                 /** @description Opaque cursor returned as next_cursor by the previous page. */
                 cursor?: string;
+                /** @description Filter artifacts to one producer source. */
+                source?: components["schemas"]["VisualArtifactSource"];
+                /** @description Filter artifacts to one producer session. */
+                session_id?: string;
             };
             header?: never;
             path: {
@@ -30884,6 +30898,7 @@ export type ExternalAccessDirect = components["schemas"]["ExternalAccessDirect"]
 export type ExternalAccessDirectScope = components["schemas"]["ExternalAccessDirectScope"];
 export type ExternalAccessDetection = components["schemas"]["ExternalAccessDetection"];
 export type ArtifactListItem = components["schemas"]["ArtifactListItem"];
+export type ArtifactListFacets = components["schemas"]["ArtifactListFacets"];
 export type ArtifactListResponse = components["schemas"]["ArtifactListResponse"];
 export type WorkerSummaryStatus = components["schemas"]["WorkerSummaryStatus"];
 export type WorkerBlockerClass = components["schemas"]["WorkerBlockerClass"];

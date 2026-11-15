@@ -23,16 +23,27 @@ func ResolveInTree(ctx context.Context, store Store, rootSessionID, artifactID s
 	return store.Resolve(ctx, root, id)
 }
 
-// ListProject returns one bounded page of live project records, oldest first.
+// ListProject returns one bounded page of live project records, newest first.
 func (c recordsCatalog) ListProject(ctx context.Context, projectID string, query ArtifactPageQuery) ([]ArtifactRecord, bool, error) {
 	r := c.r
 	if !r.ready() {
 		return nil, false, nil
 	}
 	limit := query.effectiveLimit()
+	beforeCreatedAt := strings.TrimSpace(query.BeforeCreatedAt)
+	beforeID := strings.TrimSpace(query.BeforeID)
+	if beforeCreatedAt == "" {
+		// Upper sentinel preserves the (project_id, created_at, id) index range seek on page 1.
+		beforeCreatedAt = "\uffff"
+		beforeID = "\uffff"
+	}
 	rows, err := r.queries.PageProjectArtifacts(ctx, db.PageProjectArtifactsParams{
-		ProjectID: strings.TrimSpace(projectID), AfterCreatedAt: query.AfterCreatedAt,
-		AfterID: query.AfterID, PageLimit: int64(limit + 1),
+		ProjectID:       strings.TrimSpace(projectID),
+		SourceFilter:    strings.TrimSpace(string(query.Source)),
+		SessionFilter:   strings.TrimSpace(query.SessionID),
+		BeforeCreatedAt: beforeCreatedAt,
+		BeforeID:        beforeID,
+		PageLimit:       int64(limit + 1),
 	})
 	if err != nil {
 		return nil, false, err
@@ -46,6 +57,15 @@ func (c recordsCatalog) ListProject(ctx context.Context, projectID string, query
 		out = append(out, recordFrom(row))
 	}
 	return out, hasMore, nil
+}
+
+// ProjectSessions returns distinct producer sessions for live project artifacts, newest first.
+func (c recordsCatalog) ProjectSessions(ctx context.Context, projectID string) ([]string, error) {
+	r := c.r
+	if !r.ready() {
+		return nil, nil
+	}
+	return r.queries.ListProjectArtifactSessions(ctx, strings.TrimSpace(projectID))
 }
 
 // ListTree returns live records produced under one session tree, oldest first.

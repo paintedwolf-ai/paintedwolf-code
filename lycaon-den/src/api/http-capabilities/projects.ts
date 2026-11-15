@@ -23,6 +23,7 @@ import type {
   Project,
   ProjectListResponse,
   ArtifactListResponse,
+  VisualArtifactSource,
   ProjectBackgroundProcessListResponse,
   BackgroundProcessStopResult,
 } from "../types.ts";
@@ -30,7 +31,12 @@ import type {
 export interface ProjectsClient {
   listProjectArtifacts(
     projectId: string,
-    query?: { limit?: number; cursor?: string },
+    query?: {
+      limit?: number;
+      cursor?: string;
+      source?: VisualArtifactSource;
+      session_id?: string;
+    },
   ): Promise<ArtifactListResponse>;
   /** Existing references retain the id and resolve to a deleted artifact. */
   deleteProjectArtifact(
@@ -91,6 +97,8 @@ export function createProjectsClient(j: JsonRequester): ProjectsClient {
         `/v1/projects/${projectId}/artifacts${formatQuery({
           limit: query?.limit,
           cursor: query?.cursor,
+          source: query?.source,
+          session_id: query?.session_id,
         })}`,
       ),
     deleteProjectArtifact: (projectId, artifactId) =>

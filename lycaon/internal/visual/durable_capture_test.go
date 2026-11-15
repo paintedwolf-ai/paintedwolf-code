@@ -3,6 +3,7 @@ package visual
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -313,6 +314,73 @@ func TestDurableStoreStorageUsageReportsProjectBytes(t *testing.T) {
 	if lane.UsedBytes != info.Size() || lane.UsedBytes >= int64(len(raw)) {
 		t.Fatalf("lane = %+v want %d compressed deduplicated bytes", lane, info.Size())
 	}
+}
+
+func TestDurableStoreListProjectUpdatesContentHashOnSlotReplacement(t *testing.T) {
+	f := newDurableFixture(t, []string{"root-1"})
+	const slot = "live-tool-recording/root-1/root-1/page-9"
+	rawOne := []byte("recording-v1")
+	first, err := f.store.Put(t.Context(), "root-1", Entry{
+		Meta:       api.VisualArtifact{Mime: "video/mp4", Source: api.VisualArtifactSourceCapture, PageID: "page-9"},
+		NaturalKey: slot,
+		Bytes:      rawOne,
+	})
+	testutil.FailErr(t, "put first slot body", err)
+	rawTwo := []byte("recording-v2")
+	second, err := f.store.Put(t.Context(), "root-1", Entry{
+		Meta:       api.VisualArtifact{Mime: "video/mp4", Source: api.VisualArtifactSourceCapture, PageID: "page-9"},
+		NaturalKey: slot,
+		Bytes:      rawTwo,
+	})
+	testutil.FailErr(t, "put replaced slot body", err)
+	if second.ID != first.ID {
+		t.Fatalf("replaced slot id = %q want %q", second.ID, first.ID)
+	}
+	page, err := f.store.ListProject(t.Context(), f.project, ArtifactPageQuery{})
+	testutil.FailErr(t, "list project after replacement", err)
+	if len(page.Items) != 1 || page.Items[0].ID != first.ID || page.Items[0].ContentHash != artifactContentHash(rawTwo) {
+		t.Fatalf("listed item = %+v want id %q hash %q", page.Items, first.ID, artifactContentHash(rawTwo))
+	}
+
+	tx, err := f.sqlDB.BeginTx(t.Context(), nil)
+	testutil.FailErr(t, "begin handle bind tx", err)
+	testutil.FailErr(t, "bind evidence handle", f.store.records.BindEvidenceHandleTx(t.Context(), tx, f.project, first.ID, "vid1"))
+	testutil.FailErr(t, "commit handle bind tx", tx.Commit())
+	_, _, err = f.store.Delete(t.Context(), f.project, first.ID, "human_delete")
+	testutil.FailErr(t, "delete slot artifact", err)
+
+	events := readOutboxArtifactEvents(t, f.sqlDB)
+	want := []api.ArtifactEvent{
+		{ArtifactID: first.ID, ProjectID: f.project, SessionID: "root-1", RootSessionID: "root-1", Op: api.ArtifactChangeOpWritten, ContentHash: artifactContentHash(rawOne)},
+		{ArtifactID: first.ID, ProjectID: f.project, SessionID: "root-1", RootSessionID: "root-1", Op: api.ArtifactChangeOpWritten, ContentHash: artifactContentHash(rawTwo)},
+		{ArtifactID: first.ID, ProjectID: f.project, SessionID: "root-1", RootSessionID: "root-1", Op: api.ArtifactChangeOpWritten, ContentHash: artifactContentHash(rawTwo)},
+		{ArtifactID: first.ID, ProjectID: f.project, SessionID: "root-1", RootSessionID: "root-1", Op: api.ArtifactChangeOpDeleted},
+	}
+	if len(events) != len(want) {
+		t.Fatalf("artifact outbox events = %+v want %+v", events, want)
+	}
+	for i := range want {
+		if events[i] != want[i] {
+			t.Fatalf("artifact outbox event[%d] = %+v want %+v", i, events[i], want[i])
+		}
+	}
+}
+
+func readOutboxArtifactEvents(t *testing.T, sqlDB db.Handle) []api.ArtifactEvent {
+	t.Helper()
+	rows, err := sqlDB.QueryContext(t.Context(), `SELECT data_json FROM event_outbox WHERE topic = ? ORDER BY id ASC`, string(api.EventTopicArtifact))
+	testutil.FailErr(t, "query artifact outbox events", err)
+	defer rows.Close()
+	var out []api.ArtifactEvent
+	for rows.Next() {
+		var raw string
+		testutil.FailErr(t, "scan outbox payload", rows.Scan(&raw))
+		var ev api.ArtifactEvent
+		testutil.FailErr(t, "decode artifact event", json.Unmarshal([]byte(raw), &ev))
+		out = append(out, ev)
+	}
+	testutil.FailErr(t, "iterate outbox rows", rows.Err())
+	return out
 }
 
 func insertMessageRow(t *testing.T, sqlDB db.Handle, messageID, sessionID string) {
