@@ -288,22 +288,28 @@ func (s *Service) Shelve(ctx context.Context, actor workerrecords.Actor, op work
 	if err != nil {
 		return workerrecords.Disposition{}, err
 	}
-	if !snap.View.Admits(workerstate.OpShelve) {
-		return workerrecords.Disposition{}, refusal(snap, workerstate.OpShelve)
+	_, _, replayed, err := s.Reader.Records.Operation(ctx, actor, op.ID)
+	if err != nil {
+		return workerrecords.Disposition{}, err
 	}
-	changed := false
 	var carried []workerrecords.Round
-	for _, r := range snap.Rounds {
-		if r.ResultID == ref.ResultID {
-			changed = r.CheckpointID != ""
-			break
+	if !replayed {
+		if !snap.View.Admits(workerstate.OpShelve) {
+			return workerrecords.Disposition{}, refusal(snap, workerstate.OpShelve)
 		}
-		if r.ResultID != "" && r.CheckpointID != "" && snap.Dispositions[r.ResultID].ChangeState == "" {
-			carried = append(carried, r)
+		changed := false
+		for _, r := range snap.Rounds {
+			if r.ResultID == ref.ResultID {
+				changed = r.CheckpointID != ""
+				break
+			}
+			if r.ResultID != "" && r.CheckpointID != "" && snap.Dispositions[r.ResultID].ChangeState == "" {
+				carried = append(carried, r)
+			}
 		}
-	}
-	if !changed {
-		return workerrecords.Disposition{}, ErrNoChanges
+		if !changed {
+			return workerrecords.Disposition{}, ErrNoChanges
+		}
 	}
 	// The lane carried earlier pending changes into this result; they wait with it.
 	for _, r := range carried {

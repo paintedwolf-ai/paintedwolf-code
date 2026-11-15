@@ -467,3 +467,19 @@ func TestConcurrentInstructionsStartOneRound(t *testing.T) {
 		t.Fatalf("outcomes = %v, enqueued %d", outcomes, next.Load())
 	}
 }
+
+func TestShelveReplaysItsFirstDisposition(t *testing.T) {
+	f := newFixture(t)
+	f.round(t, "job-1", "complete", "checkpoint-1")
+	first, err := f.svc.Shelve(t.Context(), f.coord, op("shelve-op"), "result-job-1", "defer until migration")
+	testutil.FailErr(t, "shelve", err)
+	again, err := f.svc.Shelve(t.Context(), f.coord, op("shelve-op"), "result-job-1", "defer until migration")
+	testutil.FailErr(t, "replay shelve", err)
+	if again != first {
+		t.Fatalf("replay = %+v, want %+v", again, first)
+	}
+	_, err = f.svc.Shelve(t.Context(), f.coord, op("shelve-op"), "result-job-1", "different reason")
+	if !errors.Is(err, workerrecords.ErrOperationConflict) {
+		t.Fatalf("conflicting shelve replay = %v, want ErrOperationConflict", err)
+	}
+}
