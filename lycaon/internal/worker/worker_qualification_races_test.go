@@ -385,8 +385,8 @@ func TestSerializedPromotionRejectionAndAdmissionRaces(t *testing.T) {
 	_, err = e.merge.RejectOverlay(t.Context(), "coord", job2.ID, "discard")
 	wantReject(t, err, OverlayRejectWorkerWorkingCode)
 
-	// Deliver R3 with extra.go, reject R3, then send two concurrent instructions to the idle worker:
-	// one admits R4 on a reset lane (extra.go gone, landed v1 preserved) and the second queues on R4.
+	// Deliver R3 with extra.go, reject R3 only, then send two concurrent instructions to the idle worker:
+	// one admits R4 on a reset lane (rejected extra.go gone, unrejected R2 v2 preserved) and the second queues on R4.
 	job3 := e.claimAndBranch(t, effects3.Dispatch.WorkerID, "")
 	lane3Dir := lanePrimaryDir(t, job3.WorkspaceRoot)
 	testutil.FailErr(t, "write extra.go", os.WriteFile(filepath.Join(lane3Dir, "extra.go"), []byte("package main\n"), 0o644))
@@ -439,10 +439,15 @@ func TestSerializedPromotionRejectionAndAdmissionRaces(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(lane4Dir, "extra.go")); !os.IsNotExist(statErr) {
 		t.Fatalf("reset lane retained rejected extra.go: %v", statErr)
 	}
+	gotPrimaryMain, err := os.ReadFile(filepath.Join(e.primary, "main.go"))
+	testutil.FailErr(t, "read primary main.go", err)
+	if string(gotPrimaryMain) != "package main\n// v1\n" {
+		t.Fatalf("primary main.go = %q, want landed v1", string(gotPrimaryMain))
+	}
 	gotResetMain, err := os.ReadFile(filepath.Join(lane4Dir, "main.go"))
 	testutil.FailErr(t, "read reset main.go", err)
-	if string(gotResetMain) != "package main\n// v1\n" {
-		t.Fatalf("reset lane main.go = %q, want clean landed v1", string(gotResetMain))
+	if string(gotResetMain) != "package main\n// v2\n" {
+		t.Fatalf("reset lane main.go = %q, want unrejected r2 v2", string(gotResetMain))
 	}
 }
 
@@ -603,7 +608,7 @@ func TestBlockingQuestionStopLineageAndOrdinaryPathContracts(t *testing.T) {
 	_, _, err = e.invoke(t, "answer_decision", "ans-ok", map[string]any{"worker": "asker", "answer": "Use UTF-8 everywhere"})
 	testutil.FailErr(t, "answer asking worker", err)
 	_, _, err = e.invoke(t, "answer_decision", "ans-twice", map[string]any{"worker": "asker", "answer": "Actually Latin-1"})
-	wantReject(t, err, "ANSWER_DECISION_NOT_ASKING")
+	wantReject(t, err, DecisionNotFoundCode)
 
 	resumed, ok := e.queue.Get(askJob.ID)
 	if !ok || resumed.Status != api.WorkerStatusPending {
