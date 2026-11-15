@@ -109,6 +109,13 @@ func TestDispositionsSeparateAccountingFromChanges(t *testing.T) {
 	if d.ChangeState != workerrecords.ChangeLanded || d.LandedChangeID != "landed-1" || d.ShelveReason != "" {
 		t.Fatalf("landed = %+v", d)
 	}
+	listed, err := f.store.Dispositions(t.Context(), f.coord, w.WorkerID)
+	testutil.FailErr(t, "list dispositions", err)
+	if len(listed) != 1 || listed[0].ResultID != "result-1" || listed[0].ChangeState != workerrecords.ChangeLanded || listed[0].LandedChangeID != "landed-1" {
+		t.Fatalf("dispositions = %+v", listed)
+	}
+	_, err = f.store.Dispositions(t.Context(), f.other, w.WorkerID)
+	wantErr(t, "another session's dispositions", err, workerrecords.ErrWorkerNotFound)
 	_, err = f.store.SetChange(t.Context(), f.coord, op("reject"), "result-1", workerrecords.Change{State: workerrecords.ChangeRejected})
 	wantErr(t, "reject after landing", err, workerrecords.ErrDispositionFinal)
 	_, err = f.db.ExecContext(t.Context(), `UPDATE worker_result_dispositions SET change_state = 'rejected', landed_change_id = NULL WHERE result_id = 'result-1'`)
@@ -131,6 +138,13 @@ func TestPrerequisitesResolveAndRefuse(t *testing.T) {
 	if len(r.ProducerIDs) != 1 || r.ProducerIDs[0] != producer.WorkerID || r.BaseResultID != "result-p" {
 		t.Fatalf("receipt = %+v", r)
 	}
+	deps, err := f.store.Dependencies(t.Context(), f.coord, consumer.WorkerID)
+	testutil.FailErr(t, "list dependencies", err)
+	if len(deps) != 2 {
+		t.Fatalf("dependencies = %+v", deps)
+	}
+	_, err = f.store.Dependencies(t.Context(), f.other, consumer.WorkerID)
+	wantErr(t, "another session's dependencies", err, workerrecords.ErrWorkerNotFound)
 	_, err = f.store.AddPrerequisites(t.Context(), f.coord, op("pre-base-again"), consumer.WorkerID, workerrecords.Prerequisites{BaseResultID: "result-p"})
 	testutil.FailErr(t, "same base again", err)
 	f.workerWithRound(t, "other-producer", "child-o", "job-o")
@@ -196,5 +210,32 @@ func TestClosedWorkerKeepsHistoryAndRefusesWork(t *testing.T) {
 	_, err = f.store.AdmitRound(t.Context(), f.coord, op("admit-closed"), w.WorkerID, workerrecords.RoundSpec{JobID: "job-2", ExecutionTarget: "local"})
 	if !errors.Is(err, workerrecords.ErrWorkerClosed) {
 		t.Fatalf("admission on a closed worker = %v", err)
+	}
+}
+
+func TestWorkersListAndBindChildSessionOnce(t *testing.T) {
+	f := newFixture(t)
+	first := f.createWorker(t, "create-first", workerrecords.WorkerSpec{Name: "first"})
+	second := f.createWorker(t, "create-second", workerrecords.WorkerSpec{Name: "second"})
+	f.childActor(t, "child-a")
+	f.childActor(t, "child-b")
+
+	bound, err := f.store.BindChildSession(t.Context(), f.coord, op("bind-a"), first.WorkerID, "child-a")
+	testutil.FailErr(t, "bind child", err)
+	if bound.WorkerID != first.WorkerID || bound.ChildSessionID != "child-a" {
+		t.Fatalf("bound = %+v", bound)
+	}
+	again, err := f.store.BindChildSession(t.Context(), f.coord, op("bind-a-again"), first.WorkerID, "child-a")
+	testutil.FailErr(t, "bind same child again", err)
+	if again != bound {
+		t.Fatalf("idempotent bind = %+v, want %+v", again, bound)
+	}
+	_, err = f.store.BindChildSession(t.Context(), f.coord, op("bind-b"), first.WorkerID, "child-b")
+	wantErr(t, "rebind different child", err, workerrecords.ErrBindingInvalid)
+
+	workers, err := f.store.Workers(t.Context(), f.coord)
+	testutil.FailErr(t, "list workers", err)
+	if len(workers) != 2 || workers[0].ID != first.WorkerID || workers[0].ChildSessionID != "child-a" || workers[1].ID != second.WorkerID {
+		t.Fatalf("workers = %+v", workers)
 	}
 }
