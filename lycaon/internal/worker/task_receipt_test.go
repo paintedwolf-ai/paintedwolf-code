@@ -6,12 +6,16 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -154,5 +158,61 @@ func TestTaskToolPlannedWorkerDispatchNameValidationAndReplay(t *testing.T) {
 	testutil.FailErr(t, "replay planned worker", err)
 	if first != replay || len(enqueued.Files) != 1 || enqueued.Files[0] != "internal/api.go" {
 		t.Fatalf("planned replay mismatch: first=%s replay=%s files=%v", first, replay, enqueued.Files)
+	}
+
+	tctx.Identity.ToolCallID = "files-call-1"
+	_, err = reg.Run(t.Context(), "task", map[string]any{
+		"agent_type": "repo-researcher", "brief": taskBrief("inspect extra"),
+		"files": []any{"internal/extra.go"}, "scope": map[string]any{"mode": "read"},
+	}, tctx)
+	testutil.FailErr(t, "dispatch explicit files", err)
+	if len(enqueued.Files) != 1 || enqueued.Files[0] != "internal/extra.go" {
+		t.Fatalf("explicit files mismatch: %v", enqueued.Files)
+	}
+
+	q := worker.NewSQLQueue(sqlDB, 1)
+	q.SetWorkflowDomains(&worker.WorkflowDomains{Runs: receiptWorkflowChecker{}, Tasks: receiptWorkflowChecker{}})
+	ops := &workerops.Service{
+		Reader:     workerops.Reader{Records: records, Jobs: q},
+		Agents:     prompts.AgentMutationCapable,
+		WakeParked: func(context.Context, string) error { return nil },
+		Release:    q.ReleaseAdmitted,
+	}
+	now := db.FormatTime(time.Now().UTC())
+	_, err = sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
+		VALUES ('planned-child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'parent-1', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
+	testutil.FailErr(t, "insert planned child", err)
+	w, err := records.Resolve(t.Context(), actor, plannedName)
+	testutil.FailErr(t, "resolve planned worker", err)
+	rounds, err := records.Rounds(t.Context(), actor, w.ID)
+	testutil.FailErr(t, "list planned rounds", err)
+	_, err = sqlDB.ExecContext(t.Context(), `UPDATE workers SET child_session_id = 'planned-child' WHERE id = ?`, w.ID)
+	testutil.FailErr(t, "bind planned child", err)
+	_, err = sqlDB.ExecContext(t.Context(), `UPDATE worker_jobs SET child_session_id = 'planned-child', status = 'complete', completed_at = ? WHERE id = ?`, now, rounds[0].JobID)
+	testutil.FailErr(t, "complete first planned job", err)
+	_, err = db.New(sqlDB).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{
+		SettledAt: db.NullString(now), JobID: rounds[0].JobID,
+	})
+	testutil.FailErr(t, "settle first planned round", err)
+
+	boundInstruct := false
+	wReg := tools.NewDefaultRegistry()
+	testutil.FailErr(t, "register worker tools", worker.RegisterWorkerTools(wReg, worker.WorkerToolDeps{
+		Ops:   ops,
+		Queue: q,
+		Plan:  planSvc,
+		BindWorkflowTask: func(_ context.Context, _ tools.ToolContext, workID string, task *api.WorkerTask) error {
+			boundInstruct = workID == "leg-1"
+			task.WorkflowRunID = "run-plan"
+			return nil
+		},
+	}))
+	tctx.Identity.ToolCallID = "instruct-planned-1"
+	_, err = wReg.Run(t.Context(), worker.InstructWorkerTool, map[string]any{
+		"worker": plannedName, "instructions": "re-check internal/api.go",
+	}, tctx)
+	testutil.FailErr(t, "instruct planned worker", err)
+	if !boundInstruct {
+		t.Fatal("expected BindWorkflowTask on planned worker instruction")
 	}
 }
