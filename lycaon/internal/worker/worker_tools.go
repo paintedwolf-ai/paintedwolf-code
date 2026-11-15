@@ -275,6 +275,7 @@ func workerToolReject(tool, worker, agent string, err error, handle ...string) e
 			return &toolrejection.ToolReject{Code: DecisionNotFoundCode, Data: data}
 		case workerstate.OpPreview, workerstate.OpPromote, workerstate.OpReject, workerstate.OpShelve:
 			return &toolrejection.ToolReject{Code: "RESULT_CHANGES_NOT_ADMITTED", Data: data}
+		default:
 		}
 		if code, ok := agentChangeCodes[refusal.AgentChange]; ok {
 			return &toolrejection.ToolReject{Code: code, Data: data}

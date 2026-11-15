@@ -2,7 +2,6 @@ package packboard
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -227,16 +226,6 @@ func WorkerJobIDPrefix(id string) string {
 		return "????"
 	}
 	return runeclamp.ClampBytes(id, shortIDBytes)
-}
-
-func formatTouchSummary(paths []string) string {
-	if len(paths) == 0 {
-		return ""
-	}
-	if len(paths) == 1 {
-		return "touched · " + paths[0]
-	}
-	return "touched · " + paths[0] + " (+ " + strconv.Itoa(len(paths)-1) + " more)"
 }
 
 // FormatScansLines renders compact inject or full per-kind scan summaries.

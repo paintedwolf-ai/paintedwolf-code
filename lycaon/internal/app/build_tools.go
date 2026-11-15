@@ -53,7 +53,7 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 			if _, err := b.boards.WorkerRecords.Resolve(ctx, actor, handle); err == nil {
 				return true
 			}
-			task, ok := b.delegations.Queue.Get(handle)
+			task, ok := b.delegations.Queue.Lookup(ctx, handle)
 			return ok && task.ParentSessionID == sessionID
 		},
 	}); err != nil {

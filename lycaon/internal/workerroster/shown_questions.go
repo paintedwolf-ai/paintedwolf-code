@@ -25,7 +25,10 @@ func NewShownQuestions() *ShownQuestions {
 }
 
 func questionFingerprint(req api.WorkerDecisionRequest) string {
-	raw, _ := json.Marshal(req)
+	raw, err := json.Marshal(req)
+	if err != nil {
+		return ""
+	}
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }
