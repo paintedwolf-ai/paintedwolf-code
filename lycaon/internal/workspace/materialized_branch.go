@@ -381,7 +381,7 @@ func (m *Manager) republishLostCheckpoint(ctx context.Context, branchRoot string
 	if err != nil || meta.LastPublishedCheckpointID == "" {
 		return err
 	}
-	if storeDir, cid, ok := BranchCheckpoint(branchRoot); ok && checkpointManifestExists(storeDir, cid) {
+	if storeDir, cid, ok := BranchCheckpoint(branchRoot); ok {
 		store, err := checkpoint.NewStore(storeDir)
 		if err != nil {
 			return fmt.Errorf("%w: %w", recovery.ErrIncompleteCheckpoint, err)

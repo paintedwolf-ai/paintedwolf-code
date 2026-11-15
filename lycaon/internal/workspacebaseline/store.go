@@ -34,9 +34,8 @@ func New(database db.Handle, blobs *sourceblob.Store, root string) *Store {
 
 type CaptureFile struct {
 	// RootID and ScopeRel carry the structured identity; Path is the display
-	// spelling kept for legacy readers. Walkers that predate structured
-	// identity leave RootID and ScopeRel empty and Capture derives them from
-	// Path.
+	// spelling format 1 manifests were keyed by. RootID is empty only for a
+	// branch captured without its roots.
 	RootID   string
 	ScopeRel string
 	Path     string
@@ -50,11 +49,14 @@ type Walk func(context.Context, func(CaptureFile) error) error
 func (s *Store) Capture(ctx context.Context, jobID string, walk Walk) (path string, err error) {
 	return s.seal(ctx, jobID, func(ctx context.Context, w *manifestWriter) error {
 		return walk(ctx, func(file CaptureFile) error {
+			rootID, scopeRel, display, err := captureIdentity(file)
+			if err != nil {
+				return err
+			}
 			f, err := s.captureFile(ctx, w.pins, file, false)
 			if err != nil {
 				return err
 			}
-			rootID, scopeRel, display := captureIdentity(file)
 			return w.insert(ctx, rootID, scopeRel, display, f)
 		})
 	})
@@ -131,20 +133,16 @@ func (s *Store) CaptureOverlay(ctx context.Context, jobID, baselinePath string, 
 	return out, nil
 }
 
-// captureIdentity normalizes a captured file's identity. Walkers that predate
-// structured identity leave RootID and ScopeRel empty; the display path is then
-// the only spelling available, and it is already root-qualified.
-func captureIdentity(file CaptureFile) (rootID, scopeRel, display string) {
+// captureIdentity returns a captured file's structured identity and display path.
+func captureIdentity(file CaptureFile) (rootID, scopeRel, display string, err error) {
+	if file.ScopeRel == "" {
+		return "", "", "", fmt.Errorf("workspace baseline: %q has no root-relative path", file.Path)
+	}
 	display = file.Path
-	if file.ScopeRel != "" {
-		scopeRel = file.ScopeRel
-	} else {
-		scopeRel = filepath.ToSlash(filepath.Clean(file.Path))
-	}
 	if display == "" {
-		display = scopeRel
+		display = file.ScopeRel
 	}
-	return file.RootID, scopeRel, display
+	return file.RootID, file.ScopeRel, display, nil
 }
 
 type captureItem struct {
