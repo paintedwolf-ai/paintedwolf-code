@@ -76,16 +76,15 @@ func (s *Workers) handleWorkerHistory(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.sessionStore != nil {
 		sess, err := s.sessionStore.Get(r.Context(), sessionID)
+		if err == nil && (sess == nil || sess.ProjectID != projectID) {
+			err = store.ErrSessionNotFound
+		}
 		if err != nil {
 			if errors.Is(err, store.ErrSessionNotFound) {
 				s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "session not found")
 				return
 			}
 			s.responses.InternalError(w, r, err)
-			return
-		}
-		if sess == nil || sess.ProjectID != projectID {
-			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "session not found")
 			return
 		}
 	}

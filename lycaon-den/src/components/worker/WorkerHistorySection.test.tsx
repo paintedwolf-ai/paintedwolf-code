@@ -204,6 +204,7 @@ describe("WorkerHistorySection", () => {
             created_at: "2026-11-15T01:01:00Z",
           },
         ],
+        evidence_ref: { project_id: "proj-1", record_id: "e".repeat(64) },
       },
     }));
     setBriefingClient(() => ({
@@ -247,7 +248,8 @@ describe("WorkerHistorySection", () => {
     await waitFor(() =>
       expect(requestBriefing).toHaveBeenCalledWith("proj-1", {
         profile_id: "worker_result",
-        ref: { result_handle: "00000000-0000-4000-8000-0000000000b1" },
+        target_ref: { result_handle: "00000000-0000-4000-8000-0000000000b1" },
+        trigger: "automatic",
       }),
     );
     expect(await screen.findByText(/Checked round 1 auth invariants\./)).toBeTruthy();

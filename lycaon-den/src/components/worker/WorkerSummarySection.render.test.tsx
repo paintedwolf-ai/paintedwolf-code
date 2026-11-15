@@ -86,7 +86,8 @@ describe("WorkerSummarySection render", () => {
     await waitFor(() => expect(pendingView.getByTestId("worker-summary")).toBeTruthy());
     expect(requestBriefing).toHaveBeenCalledWith("proj-1", {
       profile_id: "worker_result",
-      ref: { result_handle: RESULT_HANDLE },
+      target_ref: { result_handle: RESULT_HANDLE },
+      trigger: "automatic",
     });
     expect(onPresence).toHaveBeenCalledWith(true);
     pendingView.unmount();
@@ -138,6 +139,7 @@ describe("WorkerSummarySection render", () => {
             evidence_quality: [],
             created_at: "2026-11-11T00:01:00Z",
           }],
+          evidence_ref: { project_id: "proj-1", record_id: "b".repeat(64) },
         },
       }),
     );
@@ -170,7 +172,8 @@ describe("WorkerSummarySection render", () => {
     await waitFor(() => expect(screen.getByTestId("worker-round-summary")).toBeTruthy());
     expect(requestBriefing).toHaveBeenCalledWith("proj-1", {
       profile_id: "worker_result",
-      ref: { result_handle: earlierHandle },
+      target_ref: { result_handle: earlierHandle },
+      trigger: "automatic",
     });
     expect(screen.getByText(/Earlier round summary\./)).toBeTruthy();
   });

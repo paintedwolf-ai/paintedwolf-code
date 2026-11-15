@@ -102,6 +102,7 @@
   "components/trust/ProjectTrustPanel.tsx": 1,
   "components/trust/TrustReviewPage.tsx": 1,
   "components/update/UpdatePanel.tsx": 3,
+  "components/worker/WorkerCollaborationNotice.tsx": 1,
   "components/worker/WorkersTab.tsx": 1,
   "components/worker/WorkerWorkingIndicator.tsx": 2,
   "components/workflow/DownloadReportButton.tsx": 1,

@@ -41,7 +41,7 @@ describe("worker-state-presentation", () => {
       derivedWorkerState(
         worker({
           status: "pending",
-          dependencies: [{ after_worker_id: "w0", state: "waiting" }],
+          dependencies: [{ worker_id: "w0", state: "waiting" }],
         }),
       ),
     ).toBe("waiting");
@@ -57,7 +57,9 @@ describe("worker-state-presentation", () => {
     expect(
       workerStateBadgeLabel(worker({ status: "running" }), undefined, {
         jobId: "job-1",
+        childSessionId: "child-1",
         checkpointId: "cp-1",
+        kind: "tool_approval",
         commandSummary: "cargo test",
       }),
     ).toBe("Waiting for approval");
@@ -128,7 +130,9 @@ describe("worker-state-presentation", () => {
     expect(
       workerFactActivityLine(worker(), undefined, {
         jobId: "job-1",
+        childSessionId: "child-1",
         checkpointId: "cp-1",
+        kind: "tool_approval",
         commandSummary: "rm -rf build",
       }),
     ).toBe("Waiting for approval · rm -rf build");
@@ -148,7 +152,11 @@ describe("worker-state-presentation", () => {
       workerFactActivityLine(
         worker({
           status: "failed",
-          failure: { kind: "workspace_disk_full", message: "Workspace disk is full" },
+          failure: {
+            code: "WORKSPACE_DISK_FULL",
+            title: "Workspace disk full",
+            message: "Workspace disk is full",
+          },
         }),
       ),
     ).toBe("Workspace disk is full");

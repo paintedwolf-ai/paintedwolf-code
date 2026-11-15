@@ -41,9 +41,9 @@ export function workerFailureDisplay(worker?: WorkerTask): WorkerFailureDisplay 
     };
   }
   const failure = worker.failure;
-  if (failure?.title?.trim() && failure.message?.trim()) {
+  if (failure?.message?.trim()) {
     return {
-      headline: failure.title.trim(),
+      headline: failure.title?.trim() || GENERIC_FAILED.headline,
       message: failure.message.trim(),
       suggestedAction: failure.suggested_action?.trim() || undefined,
       code: failure.code?.trim() || undefined,

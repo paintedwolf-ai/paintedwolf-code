@@ -17,6 +17,7 @@ import {
   WORKER_HISTORY_PAGE_LIMIT,
   mergeWorkerHistoryMessages,
   mergeWorkerHistoryRounds,
+  resolveHistoryFocusElement,
   workerHistorySectionId,
   workerHistorySenderLabel,
   workerInstructionStatusLabel,
@@ -153,30 +154,12 @@ export function WorkerHistorySection(props: {
     const target = props.focusTarget?.();
     if (!target || loading()) return;
     queueMicrotask(() => {
-      const root = sectionBodyEl;
-      let matchEl =
-        target.messageSeq != null
-          ? root?.querySelector<HTMLElement>(`[data-message-seq="${target.messageSeq}"]`) ?? null
-          : null;
-      let key = matchEl ? `msg:${target.messageSeq}` : null;
-      if (!matchEl && target.roundOrdinal != null) {
-        matchEl =
-          root?.querySelector<HTMLElement>(`[data-round-ordinal="${target.roundOrdinal}"]`) ?? null;
-        if (matchEl) key = `round:${target.roundOrdinal}`;
-      }
-      if (!matchEl) {
-        matchEl = root?.querySelector<HTMLElement>('[data-needs-reply="true"]') ?? null;
-        const seq = matchEl?.getAttribute("data-message-seq");
-        if (seq) key = `msg:${seq}`;
-      }
-      const revealEl =
-        matchEl ?? document.getElementById(workerHistorySectionId(props.worker().id));
+      const { element: matchEl, key } = resolveHistoryFocusElement(sectionBodyEl, target);
+      const revealEl = matchEl ?? document.getElementById(workerHistorySectionId(props.worker().id));
       if (revealEl) {
         const motion = scrollportMotionContaining(revealEl);
         if (motion) motion.revealElement(revealEl, { glide: true, block: "start" });
-        else if (typeof revealEl.scrollIntoView === "function") {
-          revealEl.scrollIntoView({ block: "nearest" });
-        }
+        else if (typeof revealEl.scrollIntoView === "function") revealEl.scrollIntoView({ block: "nearest" });
       }
       if (key) {
         setHighlightedKey(key);
@@ -187,21 +170,23 @@ export function WorkerHistorySection(props: {
   });
 
   const isEmpty = () => rounds().length === 0 && messages().length === 0 && !loading();
+  const visible = () => loading() || !isEmpty() || Boolean(props.focusTarget?.());
 
   return (
-    <WorkerTranscriptSection
-      title="History"
-      sectionKey="history"
-      id={workerHistorySectionId(props.worker().id)}
-      class="den-worker-transcript-history"
-      data-testid="worker-history-section"
-      status={loading() ? "working" : "complete"}
-      busy={loading() || loadingEarlier()}
-      bodyRef={(el) => {
-        sectionBodyEl = el;
-      }}
-      onSelect={props.onSelect}
-    >
+    <Show when={visible()}>
+      <WorkerTranscriptSection
+        title="History"
+        sectionKey="history"
+        id={workerHistorySectionId(props.worker().id)}
+        class="den-worker-transcript-history"
+        data-testid="worker-history-section"
+        status={loading() ? "working" : "complete"}
+        busy={loading() || loadingEarlier()}
+        bodyRef={(el) => {
+          sectionBodyEl = el;
+        }}
+        onSelect={props.onSelect}
+      >
       <Show when={hasMoreEarlier()}>
         <button
           type="button"
@@ -215,23 +200,17 @@ export function WorkerHistorySection(props: {
       </Show>
       <Show
         when={!isEmpty()}
-        fallback={
-          <p class="den-worker-transcript-empty den-worker-transcript-empty--inline">
-            No rounds or messages recorded yet.
-          </p>
-        }
+        fallback={<p class="den-worker-transcript-empty den-worker-transcript-empty--inline">No rounds or messages recorded yet.</p>}
       >
         <Show when={messages().length > 0}>
           <section class="den-worker-history-group">
-            <h4 class="den-worker-transcript-coordination-heading">Messages & instructions</h4>
+            <h4 class="den-worker-transcript-coordination-heading">Messages and instructions</h4>
             <ul class="den-worker-history-list">
               <For each={messages()}>
                 {(msg) => (
                   <li
                     class="den-worker-history-item"
-                    classList={{
-                      "den-worker-history-item--highlight": highlightedKey() === `msg:${msg.seq}`,
-                    }}
+                    classList={{ "den-worker-history-item--highlight": highlightedKey() === `msg:${msg.seq}` }}
                     data-testid="worker-history-message"
                     data-message-seq={msg.seq}
                     data-sender-role={msg.sender_role}
@@ -239,9 +218,7 @@ export function WorkerHistorySection(props: {
                     data-needs-reply={msg.needs_reply ? "true" : undefined}
                   >
                     <div class="den-worker-history-meta">
-                      <span class="den-worker-history-sender">
-                        {workerHistorySenderLabel(msg.sender_role)}
-                      </span>
+                      <span class="den-worker-history-sender">{workerHistorySenderLabel(msg.sender_role)}</span>
                       <Show when={(msg.round_ordinal ?? 0) > 0}>
                         <span class="den-worker-fact-badge">Round {msg.round_ordinal}</span>
                       </Show>
@@ -280,10 +257,7 @@ export function WorkerHistorySection(props: {
                   return (
                     <li
                       class="den-worker-history-item"
-                      classList={{
-                        "den-worker-history-item--highlight":
-                          highlightedKey() === `round:${round.ordinal}`,
-                      }}
+                      classList={{ "den-worker-history-item--highlight": highlightedKey() === `round:${round.ordinal}` }}
                       data-testid="worker-history-round"
                       data-round-ordinal={round.ordinal}
                     >
@@ -340,6 +314,7 @@ export function WorkerHistorySection(props: {
           </section>
         </Show>
       </Show>
-    </WorkerTranscriptSection>
+      </WorkerTranscriptSection>
+    </Show>
   );
 }

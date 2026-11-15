@@ -4,8 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { BoardView, Message, WorkerTask } from "../../api/types.ts";
 import { sessionWorkers } from "../../chat/actions/chat-actions.ts";
 import { createTranscriptDisplayProjector } from "../../chat/transcript/projection/transcript-display-projection.ts";
-import { sessionWorkerBranch } from "../../chat/worker/worker-branch-model.ts";
-import { matchTaskPartsToWorkers } from "../../chat/worker/workers-model.ts";
+import { workerOverlayOpen } from "../../chat/worker/worker-branch-model.ts";
+import { taskWorkerMatchesForTranscript } from "../../chat/worker/workers-model.ts";
 import { setLycaonClientForTest } from "../../platform/connection/app-connection.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { createShellWorkerDrawer } from "../shell/shell-worker-drawer.ts";
@@ -53,7 +53,17 @@ describe("persistent worker collaboration UI", () => {
     };
     const board: BoardView = {
       session_id: "sess-1",
+      summary: "ok",
+      repo: { languages: [], file_count: 0, generated_at: "2026-11-15T01:00:00Z" },
       roster: [],
+      cost: null,
+      pack_content_hash: "hash",
+      detail_level: "compact",
+      board: "",
+      board_chars: 0,
+      truncated: false,
+      generated_at: "2026-11-15T01:00:00Z",
+      now_line: "now",
       workers: [
         {
           worker_id: "rec-auth",
@@ -197,14 +207,7 @@ describe("persistent worker collaboration UI", () => {
     setLycaonClientForTest({ getWorkerHistory } as never);
 
     const items = createTranscriptDisplayProjector()(messages, undefined)[0]!;
-    const toolParts = items.flatMap((item) =>
-      item.kind === "worker_group"
-        ? item.parts
-        : item.kind === "tool"
-          ? [item.part]
-          : [],
-    );
-    const matches = matchTaskPartsToWorkers(toolParts, collapsed);
+    const matches = taskWorkerMatchesForTranscript(items, collapsed, "sess-1");
     const msgMap = new Map(messages.map((m) => [m.id, m]));
     const emptyReviews = new Map<string, string>();
 
@@ -271,7 +274,7 @@ describe("persistent worker collaboration UI", () => {
       appStore,
       recents: { state: { recents: [] } } as never,
       activeChat,
-      revealConversation: async () => {},
+      revealConversation: async () => false,
       resumeSession: async () => {},
       navigateFromSearch: async () => {},
       revealFromSearch: () => {},
@@ -335,20 +338,20 @@ describe("persistent worker collaboration UI", () => {
       parent_session_id: "sess-1",
       agent_type: "implementer",
       status: "complete",
-      merge_status: "ready",
-      touched_paths: ["src/auth.ts"],
+      merge_status: "pending",
+      scope: { mode: "write" },
       result_disposition: "open",
       created_at: "2026-11-15T01:00:00Z",
     };
-    expect(sessionWorkerBranch([openOverlayWorker], "sess-1")?.state).toBe("open");
+    expect(workerOverlayOpen(openOverlayWorker)).toBe(true);
     expect(
-      sessionWorkerBranch([{ ...openOverlayWorker, result_disposition: "shelved" }], "sess-1"),
-    ).toBeNull();
+      workerOverlayOpen({ ...openOverlayWorker, result_disposition: "shelved" }),
+    ).toBe(false);
     expect(
-      sessionWorkerBranch([{ ...openOverlayWorker, result_disposition: "landed" }], "sess-1"),
-    ).toBeNull();
+      workerOverlayOpen({ ...openOverlayWorker, result_disposition: "landed" }),
+    ).toBe(false);
     expect(
-      sessionWorkerBranch([{ ...openOverlayWorker, result_disposition: "rejected" }], "sess-1"),
-    ).toBeNull();
+      workerOverlayOpen({ ...openOverlayWorker, result_disposition: "rejected" }),
+    ).toBe(false);
   });
 });
