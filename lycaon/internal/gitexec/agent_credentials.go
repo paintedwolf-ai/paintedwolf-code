@@ -61,6 +61,14 @@ type AgentCredentials struct {
 	scope   *gitcredential.Scope
 }
 
+// Recipient and Credential restate the scoped service's release vocabulary:
+// agent code reaches saved credentials only through this door, so its release
+// callback names the types here rather than the credential store's package.
+type (
+	Recipient  = gitcredential.Recipient
+	Credential = gitcredential.Credential
+)
+
 // StartAgentCredentials starts a service with an empty scope; Admit adds each
 // recipient once its contact is authorized, and release reviews each found
 // credential before Git receives it.

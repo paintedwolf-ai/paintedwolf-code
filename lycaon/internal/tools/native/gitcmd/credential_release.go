@@ -2,9 +2,9 @@ package gitcmd
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/gitcredential"
 	"net/url"
 
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -16,7 +16,7 @@ const savedCredentialShape = "Saved Git credential"
 // decision names the credential and the recipient, so a remembered approval
 // covers that pair and nothing else. A fault or anything but sending it
 // unchanged keeps the credential.
-func (o *Owners) releaseCredential(ctx context.Context, r gitcredential.Recipient, c gitcredential.Credential) bool {
+func (o *Owners) releaseCredential(ctx context.Context, r gitexec.Recipient, c gitexec.Credential) bool {
 	if o.SecretAsk == nil || o.SecretMatcher == nil || c.Password == "" {
 		return false
 	}
@@ -36,7 +36,7 @@ func (o *Owners) releaseCredential(ctx context.Context, r gitcredential.Recipien
 	return err == nil && resolution.Decision == secretmatch.SendUnchanged
 }
 
-func credentialRecipient(r gitcredential.Recipient) (id, label string) {
+func credentialRecipient(r gitexec.Recipient) (id, label string) {
 	return secretmatch.HTTPDestination(&url.URL{Scheme: r.Protocol, Host: r.Host})
 }
 
