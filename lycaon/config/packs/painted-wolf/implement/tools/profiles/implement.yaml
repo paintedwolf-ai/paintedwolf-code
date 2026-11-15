@@ -51,7 +51,6 @@ tools:
   held_stop: true
   wait: sticky
 deny_tools:
-  - delegate_*
   - plan_from_blueprint
   - state_*
 wait_conditions: [process_done, http_ready, port_ready]

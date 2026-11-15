@@ -242,13 +242,6 @@
     "title": "Held tool call"
   },
   {
-    "tool": "delegate_status",
-    "args": {
-      "delegation_id": "opaque"
-    },
-    "title": "Delegated task"
-  },
-  {
     "tool": "delete",
     "args": {
       "paths": [

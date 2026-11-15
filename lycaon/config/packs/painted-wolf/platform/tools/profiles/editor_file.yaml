@@ -41,7 +41,6 @@ deny_tools:
   - render_view
   - capture_page
   - measure_page
-  - delegate_*
   - plan_from_blueprint
   - state_*
   - handoff_*

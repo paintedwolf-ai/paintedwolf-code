@@ -34,7 +34,6 @@ deny_tools:
   - git_checkout
   - git_merge
   - git_stash
-  - delegate_*
   - plan_from_blueprint
   - state_*
   - handoff_*

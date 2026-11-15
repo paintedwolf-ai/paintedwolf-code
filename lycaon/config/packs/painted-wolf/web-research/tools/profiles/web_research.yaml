@@ -24,7 +24,6 @@ deny_tools:
   - command
   - secret_*
   - git_*
-  - delegate_*
   - plan_from_blueprint
   - state_*
   - handoff_*

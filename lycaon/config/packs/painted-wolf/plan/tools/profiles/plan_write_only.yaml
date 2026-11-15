@@ -22,7 +22,6 @@ tools:
   secret_list: true
   secret_revoke: true
 deny_tools:
-  - delegate_*
   - plan_from_blueprint
   - state_*
   - handoff_*
