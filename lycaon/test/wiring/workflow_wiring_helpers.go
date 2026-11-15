@@ -48,50 +48,64 @@ func waitWorkflowPhase(t *testing.T, ctx context.Context, mgr *workflow.RunManag
 	})
 }
 
+func activeWorkflowVersion(workflowID string) string {
+	switch workflowID {
+	case "bugbash":
+		return "1.1.0"
+	case "recon-pack":
+		return "1.0.1"
+	default:
+		return "1.0.0"
+	}
+}
+
 func startTopologyWorkflowRun(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, workflowID string) *api.WorkflowRun {
 	t.Helper()
-	version := "1.0.0"
-	if workflowID == "bugbash" {
-		version = "1.1.0"
-	}
 	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
-		WorkflowID: workflowID, WorkflowVersion: version,
+		WorkflowID: workflowID, WorkflowVersion: activeWorkflowVersion(workflowID),
 	})
 	testutil.FailErr(t, "StartHuman "+workflowID, err)
 	return run
 }
 
-func fanOutLegsForSession(t *testing.T, h *Harness, sessionID string) []api.Leg {
+func fanOutWorkersForRun(t *testing.T, h *Harness, runID string) []api.WorkerTask {
 	t.Helper()
-	if h == nil || h.Delegations.Store == nil {
-		t.Fatal("delegation store required")
+	if h == nil || h.Delegations.Records == nil || h.Delegations.Queue == nil {
+		t.Fatal("worker records and queue required")
 	}
-	delegationID, ok := h.Delegations.Store.DelegationBySessionID(sessionID)
-	if !ok {
-		t.Fatal("expected topology delegation for session")
+	records, err := h.Delegations.Records.ByWorkflowRun(context.Background(), runID)
+	testutil.FailErr(t, "ByWorkflowRun", err)
+	if len(records) == 0 {
+		t.Fatal("expected topology workers for workflow run")
 	}
-	legs, err := h.Delegations.Store.ListLegs(context.Background(), delegationID)
-	testutil.FailErr(t, "ListLegs", err)
-	return legs
+	tasks, err := h.Delegations.Queue.ListByWorkflowRunID(context.Background(), runID)
+	testutil.FailErr(t, "ListByWorkflowRunID", err)
+	out := make([]api.WorkerTask, 0, len(tasks))
+	for _, task := range tasks {
+		if task.WorkflowWorkID != "" {
+			out = append(out, task)
+		}
+	}
+	return out
 }
 
-func assertFanOutWorkers(t *testing.T, legs []api.Leg, wantProfile string, wantCount int) {
+func assertFanOutWorkers(t *testing.T, tasks []api.WorkerTask, wantProfile string, wantCount int) {
 	t.Helper()
-	if len(legs) != wantCount {
-		t.Fatalf("fan_out legs = %d want %d", len(legs), wantCount)
+	if len(tasks) != wantCount {
+		t.Fatalf("fan_out workers = %d want %d", len(tasks), wantCount)
 	}
-	for _, leg := range legs {
-		if leg.AgentType != wantProfile {
-			t.Fatalf("leg %q agent = %q want %q", leg.ID, leg.AgentType, wantProfile)
+	for _, task := range tasks {
+		if task.AgentType != wantProfile {
+			t.Fatalf("worker %q agent = %q want %q", task.ID, task.AgentType, wantProfile)
 		}
-		if leg.Status != api.LegStatusComplete {
-			t.Fatalf("leg %q status = %q want complete", leg.ID, leg.Status)
+		if task.Status != api.WorkerStatusComplete {
+			t.Fatalf("worker %q status = %q want complete", task.ID, task.Status)
 		}
 	}
 }
 
 // Expected worker profiles and counts come from the run's topology.
-func assertFanOutWorkersMatchTopology(t *testing.T, h *Harness, runID string, legs []api.Leg) {
+func assertFanOutWorkersMatchTopology(t *testing.T, h *Harness, runID string, tasks []api.WorkerTask) {
 	t.Helper()
 	m, err := h.Workflows.Manager.Resolver.ForRunID(context.Background(), runID)
 	testutil.FailErr(t, "manifest for run "+runID, err)
@@ -105,7 +119,7 @@ func assertFanOutWorkersMatchTopology(t *testing.T, h *Harness, runID string, le
 	if spec.FanOut.MaxWorkers > 0 && spec.FanOut.MaxWorkers < wantCount {
 		wantCount = spec.FanOut.MaxWorkers
 	}
-	assertFanOutWorkers(t, legs, spec.FanOut.ProfileID, wantCount)
+	assertFanOutWorkers(t, tasks, spec.FanOut.ProfileID, wantCount)
 }
 
 func deliverTopologyReport(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, runID string) {
@@ -151,7 +165,7 @@ func scaffoldTopologyOutput(t *testing.T, mgr *workflow.RunManager, runID, stage
 func startWorkflowRunAt(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, workflowID, wantPhase string) *api.WorkflowRun {
 	t.Helper()
 	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
-		WorkflowID: workflowID, WorkflowVersion: "1.0.0",
+		WorkflowID: workflowID, WorkflowVersion: activeWorkflowVersion(workflowID),
 	})
 	testutil.FailErr(t, "StartHuman "+workflowID, err)
 	if run.CurrentPhase != wantPhase {
