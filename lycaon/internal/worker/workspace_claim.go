@@ -84,7 +84,7 @@ func (q *sqlQueuePromotion) ClaimWorkerBranch(ctx context.Context, jobID string)
 	if !ok || task == nil {
 		return nil, ErrWorkerBranchClaimFailed
 	}
-	if pending, err := workerops.PrerequisitePending(ctx, q.store.queries.LatestRoundJobForJob, q, *task); err != nil { //nolint:contextcheck // bounded Get
+	if pending, err := workerops.PrerequisitePending(ctx, q.store.queries.LatestRoundJobForJob, q, *task); err != nil {
 		return nil, err
 	} else if pending {
 		return nil, ErrWorkerPrerequisitesPending

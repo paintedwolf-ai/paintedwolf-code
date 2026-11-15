@@ -52,7 +52,7 @@ func (r *Runtime) WireGroundingAndFindings(ctx context.Context) error {
 	if err := r.wireVisualAndRenderTools(ctx); err != nil {
 		return err
 	}
-	if err := r.wireDecisionAndCallTools(); err != nil {
+	if err := r.wireDecisionAndCallTools(ctx); err != nil {
 		return err
 	}
 	r.wireApprovalRationaleAttacher()
@@ -233,7 +233,7 @@ func (r *Runtime) wireVisualAndRenderTools(ctx context.Context) error {
 	return nil
 }
 
-func (r *Runtime) wireDecisionAndCallTools() error {
+func (r *Runtime) wireDecisionAndCallTools(ctx context.Context) error {
 	r.deps.Sessions.Decisions = decisions.NewSQL(r.deps.Storage.Database)
 	r.deps.Sessions.Manager.SetDecisionStore(r.deps.Sessions.Decisions)
 	shown := workerroster.NewShownQuestions()
@@ -282,15 +282,17 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 	}
 	r.deps.Sessions.Manager.SetWorkerResultNotices(roster.ResultNotice)
 	records := r.WorkerRecords
+	baseCtx := context.WithoutCancel(ctx)
 	session.SetRoundCheckpoints(func(jobID string) (string, bool) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		lookupCtx, cancel := context.WithTimeout(baseCtx, 5*time.Second)
 		defer cancel()
-		round, ok, err := records.RoundByJob(ctx, jobID)
+		round, ok, err := records.RoundByJob(lookupCtx, jobID)
 		if err != nil || !ok || round.SettledAt == "" {
 			return "", false
 		}
 		return round.CheckpointID, true
 	})
+	r.deps.Resources.Track("round-checkpoints", 23, func(context.Context) error { session.SetRoundCheckpoints(nil); return nil })
 	coordinator := func(sessionID string) workerrecords.Actor {
 		return workerrecords.Actor{SessionID: sessionID, Role: workerrecords.RoleCoordinator, PrincipalID: sessionID}
 	}

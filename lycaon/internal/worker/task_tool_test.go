@@ -60,27 +60,6 @@ func TestTaskToolWorkflowWorkSuppliesOmittedFields(t *testing.T) {
 	}
 }
 
-// priorJobQueue supplies one resume target.
-type priorJobQueue struct {
-	worker.WorkerQueue
-	prior *api.WorkerTask
-	out   *api.WorkerTask
-}
-
-func (q *priorJobQueue) GetLatestByChildSessionID(context.Context, string) (*api.WorkerTask, bool) {
-	if q.prior == nil {
-		return nil, false
-	}
-	return q.prior, true
-}
-
-func (q *priorJobQueue) Enqueue(ctx context.Context, task api.WorkerTask) (string, error) {
-	if q.out != nil {
-		*q.out = task
-	}
-	return q.WorkerQueue.Enqueue(ctx, task)
-}
-
 // taskStore is a store whose project has root r1 at dir and holds the
 // given coordinator sessions.
 func taskStore(t *testing.T, dir string, sessions ...string) *db.Store {
