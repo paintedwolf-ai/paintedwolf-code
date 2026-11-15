@@ -23,6 +23,7 @@ func MergeLedger(dst *Ledger, src Ledger) {
 		dst.Handles[handle] = rec
 	}
 	dst.handleOrder = append(dst.handleOrder, src.handleOrder...)
+	dst.observationOrder = append(dst.observationOrder, src.observationOrder...)
 	for path, handles := range src.ByPath {
 		dst.ByPath[path] = append(dst.ByPath[path], handles...)
 	}
@@ -39,6 +40,11 @@ func AssembleLedger(records []Record) Ledger {
 	ev := InitLedger()
 	if len(records) == 0 {
 		return ev
+	}
+	for _, rec := range records {
+		if rec.Handle != "" {
+			ev.observationOrder = append(ev.observationOrder, rec.Handle)
+		}
 	}
 	chronological := append([]Record(nil), records...)
 	sort.SliceStable(chronological, func(i, j int) bool {

@@ -1,6 +1,7 @@
 package evidence
 
 import (
+	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -140,6 +141,40 @@ func DisplayPathsForRecord(rec Record) []string {
 	}
 	for p := range rec.grepLines {
 		add(p)
+	}
+	return out
+}
+
+// PathIdentitiesForRecord returns the (root, scope-relative) pairs indexed on rec
+// in deterministic order.
+func PathIdentitiesForRecord(rec Record) []PathIdentity {
+	seen := map[PathIdentity]struct{}{}
+	out := make([]PathIdentity, 0, len(rec.pathsTouched)+1)
+	add := func(stored string) {
+		stored = NormalizeLedgerPath(stored)
+		if stored == "" {
+			return
+		}
+		id := PathIdentity{RootID: rec.pathRootID(stored), ScopeRel: stored}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	add(rec.Path)
+	for _, p := range rec.pathsTouched {
+		add(p)
+	}
+	if len(rec.grepLines) > 0 {
+		grepPaths := make([]string, 0, len(rec.grepLines))
+		for p := range rec.grepLines {
+			grepPaths = append(grepPaths, p)
+		}
+		sort.Strings(grepPaths)
+		for _, p := range grepPaths {
+			add(p)
+		}
 	}
 	return out
 }

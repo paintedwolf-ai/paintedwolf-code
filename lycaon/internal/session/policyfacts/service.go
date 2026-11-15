@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretmint"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
+	"github.com/lycaon/lycaon/internal/session/touchedpaths"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -34,6 +35,10 @@ type Service struct {
 	credentialSlots            func(context.Context, *api.Session) *secretmint.Inspector
 	socketResources            func(ctx context.Context, projectID string, paths []string) []string
 	credentialDecisions        credentialDecisions
+	ledger                     touchedpaths.LedgerSource
+	roots                      RootSource
+	authorship                 touchedpaths.AuthoredSource
+	candidateReader            CandidateReader
 }
 
 // observeSocketResources names the host resources whose local service each
@@ -106,6 +111,12 @@ func (m *Service) SetSources(sessions Sessions, workspace Workspace, feedback Fe
 	m.workspace = workspace
 	m.feedback = feedback
 	m.loading = loading
+	if ledger, ok := sessions.(touchedpaths.LedgerSource); ok {
+		m.ledger = ledger
+	}
+	if roots, ok := workspace.(RootSource); ok {
+		m.roots = roots
+	}
 }
 func (m *Service) SetSurface(surface TurnSurface)                 { m.surface = surface }
 func (m *Service) SetPipeline(pipeline *oar.GuardPipeline)        { m.Pipeline = pipeline }

@@ -2266,6 +2266,12 @@
       "severity": "info",
       "summary": "This view contains no included entries at the requested path and depth. Check scope and filters before concluding that the repository is empty."
     },
+    "REPRODUCED_SOURCE_IN_ANSWER": {
+      "branch_instruction": "Quote only the few lines a point depends on.",
+      "category": "recoverable",
+      "emit": "guard:coordinator",
+      "summary": "Your last answer reproduced {{ paintedwolf.reproduced_source_path }}:{{ paintedwolf.reproduced_source_start_line }}-{{ paintedwolf.reproduced_source_end_line }} ({{ paintedwolf.reproduced_source_lines }} non-blank lines)."
+    },
     "REQUEST_BUDGET_ADDRESSED_SESSION": {
       "branch_instruction": "Branch on Code REQUEST_BUDGET_ADDRESSED_SESSION; do not retry here",
       "category": "recoverable",

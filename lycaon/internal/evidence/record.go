@@ -103,11 +103,12 @@ func (r *Record) SetCustodySeq(seq int) {
 
 // Ledger is the handle-keyed evidence ledger for citation grounding.
 type Ledger struct {
-	Handles      map[string]Record   // handle → record (single store)
-	ByPath       map[string][]string // normalized path → handles (newest last)
-	byPathOrder  map[string][]string // normalized path → handles in chronological assembly order
-	PathFidelity map[string]string   // normalized path → trust tier (structured wins)
-	handleOrder  []string            // observation order for stable HandlesSorted
+	Handles          map[string]Record   // handle → record (single store)
+	ByPath           map[string][]string // normalized path → handles (newest last)
+	byPathOrder      map[string][]string // normalized path → handles in chronological assembly order
+	PathFidelity     map[string]string   // normalized path → trust tier (structured wins)
+	handleOrder      []string            // stable (kind, ordinal) order for HandlesSorted
+	observationOrder []string            // chronological assembly order for HandlesNewestFirst
 }
 
 // OffenderReport is the bounded reject display for hint templates.
