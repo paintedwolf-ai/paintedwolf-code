@@ -120,33 +120,6 @@ func (r *WorkspaceTrackerRegistry) EnsureTracker(
 	return st.Tracker
 }
 
-// AttachTracker binds an existing *observation.Tracker (and optional VerificationBinding) to scoped keys.
-func (r *WorkspaceTrackerRegistry) AttachTracker(tracker *observation.Tracker, binding observation.VerificationBinding, checkpointID string, keys ...string) {
-	if r == nil || tracker == nil {
-		return
-	}
-	r.obsMu.Lock()
-	defer r.obsMu.Unlock()
-	if r.trackers == nil {
-		r.trackers = make(map[string]*WorkspaceObservationState)
-	}
-	st := lookupStateLocked(r, keys...)
-	if st == nil {
-		st = &WorkspaceObservationState{Bindings: make(map[string]observation.VerificationBinding)}
-	}
-	st.Tracker = tracker
-	if strings.TrimSpace(checkpointID) != "" {
-		st.CheckpointID = strings.TrimSpace(checkpointID)
-	}
-	if binding.ReceiptID != "" || binding.ViewID != "" || binding.ScopeSourceGeneration > 0 {
-		st.LatestBinding, st.HasBinding = binding, true
-		if binding.ReceiptID != "" {
-			st.Bindings[binding.ReceiptID] = binding
-		}
-	}
-	indexStateLocked(r, st, keys...)
-}
-
 // CleanupTracker removes tracker registrations for the given keys.
 func (r *WorkspaceTrackerRegistry) CleanupTracker(keys ...string) {
 	if r == nil {

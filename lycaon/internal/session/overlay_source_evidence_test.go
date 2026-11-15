@@ -466,7 +466,7 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	)
 	testutil.FailErr(t, "BindViewCapabilities job", err)
 
-	// Execute ordinary ReadTool calls (without workerharness.Service.Read and without calling ObserveReadPath).
+	// Execute ordinary ReadTool calls without workerharness.Service.Read.
 	_, err = reg.Run(workerCtx, "read", map[string]any{"path": "game.py"}, tctx)
 	testutil.FailErr(t, "ordinary ReadTool game.py", err)
 	_, err = reg.Run(workerCtx, "read", map[string]any{"path": "pkg/dep.py"}, tctx)
@@ -758,11 +758,11 @@ func TestWorkerReadAndWriteStructuredFactsWithoutSecondReadAndUnknownEvidence(t 
 		t.Fatalf("expected upper write observation to preserve exact write-time facts, got %+v (ok=%v)", writeObs, ok)
 	}
 
-	// When digest facts are unavailable (ObserveReadPath / Complete: false), explicit unknown/partial
+	// When digest facts are unavailable (Complete: false), explicit unknown/partial
 	// evidence is preserved without reading the file from disk, and receipt freshness refuses to certify.
-	unknownObs, ok := svc.ObserveReadPath("job-facts", "sess-facts", dir, "", nil, "mutated.py")
+	unknownObs, ok := svc.ObserveReadWithFacts("job-facts", "sess-facts", dir, "", nil, tools.WorkerFileObservationFacts{RelPath: "mutated.py"})
 	if !ok {
-		t.Fatal("expected ObserveReadPath to succeed")
+		t.Fatal("expected ObserveReadWithFacts to succeed")
 	}
 	if unknownObs.SHA256 != "" || unknownObs.Completeness != observation.CompletenessPartialKernelCached || !unknownObs.Uncertain {
 		t.Fatalf("expected unavailable digest facts to preserve explicit unknown/partial evidence, got %+v", unknownObs)
