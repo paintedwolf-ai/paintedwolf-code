@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -25,6 +26,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerlane"
@@ -520,8 +522,8 @@ func TestPromotionRefreshFailureHoldAndClosedWorkerCallback(t *testing.T) {
 	_, err = e.records.Close(t.Context(), e.coord, workerrecords.Op{ID: "close-builder"}, w.ID, "session_unusable")
 	testutil.FailErr(t, "close builder", err)
 
-	prepsBefore, err := e.records.Preparations(t.Context(), e.coord, w.ID)
-	testutil.FailErr(t, "preps before", err)
+	prepBefore, okBefore, err := e.records.LatestPreparation(t.Context(), e.coord, w.ID)
+	testutil.FailErr(t, "latest prep before", err)
 	_, _, err = e.lanes.Lanes.RefreshIdle(t.Context(), workerlane.Request{
 		Actor: e.coord, Op: workerrecords.Op{ID: "late-prep"}, WorkerID: w.ID,
 		Facts: workerlane.Facts{Write: true, HasLane: true, LastChange: workerlane.ChangeLanded},
@@ -530,10 +532,10 @@ func TestPromotionRefreshFailureHoldAndClosedWorkerCallback(t *testing.T) {
 	if !errors.Is(err, workerlane.ErrClosed) {
 		t.Fatalf("late preparation on closed worker = %v, want ErrClosed", err)
 	}
-	prepsAfter, err := e.records.Preparations(t.Context(), e.coord, w.ID)
-	testutil.FailErr(t, "preps after", err)
-	if len(prepsAfter) != len(prepsBefore) {
-		t.Fatalf("closed worker recorded late preparation: before=%d after=%d", len(prepsBefore), len(prepsAfter))
+	prepAfter, okAfter, err := e.records.LatestPreparation(t.Context(), e.coord, w.ID)
+	testutil.FailErr(t, "latest prep after", err)
+	if okAfter != okBefore || prepAfter != prepBefore {
+		t.Fatalf("closed worker recorded late preparation: before=%+v after=%+v", prepBefore, prepAfter)
 	}
 }
 
@@ -614,7 +616,9 @@ func TestBlockingQuestionStopLineageAndOrdinaryPathContracts(t *testing.T) {
 
 func assertCollaborationSchemasExcludeInternalTokens(t *testing.T) {
 	t.Helper()
-	schemas, err := extpacks.LoadEffectiveRegistrySchemas(extpacks.BundledCatalog())
+	nativeCfg, err := nativemanifest.Load()
+	testutil.FailErr(t, "load native manifest", err)
+	schemas, err := extpacks.LoadEffectiveRegistrySchemas(extpackstest.StockCatalog(t))
 	testutil.FailErr(t, "load stock schemas", err)
 	collabTools := []string{
 		"task", "instruct_worker", "answer_decision", "worker_cancel",
@@ -623,14 +627,14 @@ func assertCollaborationSchemasExcludeInternalTokens(t *testing.T) {
 	}
 	forbiddenParams := []string{"round_ordinal", "claim_token", "cursor", "page_token", "revision"}
 	for _, name := range collabTools {
-		schema, ok := schemas[name]
+		entry, ok := schemas.Tools[name]
 		if !ok {
 			t.Fatalf("missing collaboration tool %s in stock catalog", name)
 		}
-		if schema.ApprovalClass == "" || schema.Owner == "" {
-			t.Fatalf("tool %s missing single owner or approval class: %+v", name, schema)
+		if nativeCfg.ApprovalReversibility[name] == "" || nativeCfg.Owner[name] == "" {
+			t.Fatalf("tool %s missing single owner or approval reversibility", name)
 		}
-		raw, err := json.Marshal(schema.Parameters)
+		raw, err := json.Marshal(entry.Schema)
 		testutil.FailErr(t, "marshal params "+name, err)
 		var params struct {
 			Properties map[string]any `json:"properties"`
