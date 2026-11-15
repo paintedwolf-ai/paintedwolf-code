@@ -52,25 +52,40 @@ func (l *WorkerLanes) Prepare(ctx context.Context, task *api.WorkerTask, roots [
 	if err != nil {
 		return "", true, err
 	}
-	source := ""
-	rounds, err := l.Records.Rounds(ctx, actor, round.WorkerID)
-	if err != nil {
-		return "", true, err
-	}
-	for i := len(rounds) - 1; i >= 0; i-- {
-		if rounds[i].SettledAt != "" && rounds[i].ResultID != "" {
-			source = rounds[i].ResultID
-			break
-		}
-	}
 	binding, err := l.Lanes.Admit(ctx, workerlane.Request{
 		Actor: actor, Op: workerrecords.Op{ID: "lane:" + task.ID}, WorkerID: round.WorkerID, Facts: facts,
-		Roots: roots, ActiveRootID: strings.TrimSpace(task.WorkspaceRootID), SourceResultID: source,
+		Roots: roots, ActiveRootID: strings.TrimSpace(task.WorkspaceRootID),
 	})
 	if err != nil {
 		return "", true, err
 	}
 	return binding.Root, true, nil
+}
+
+// Refresh prepares a fresh lane view after a landing while the worker has no
+// unsettled round. ok is false when the job ran no write round or the worker
+// is already running another round.
+func (l *WorkerLanes) Refresh(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) (bool, error) {
+	if task == nil || !task.EffectiveScope().IsWrite() {
+		return false, nil
+	}
+	round, ok, err := l.round(ctx, task.ID)
+	if err != nil || !ok {
+		return false, err
+	}
+	if _, reviewer := round.Subject(); reviewer {
+		return false, nil
+	}
+	actor := workerrecords.Actor{SessionID: task.ParentSessionID, Role: workerrecords.RoleCoordinator, PrincipalID: task.ParentSessionID}
+	facts, err := l.Lanes.FactsFor(ctx, l.State, l.Checkpoints, actor, round.WorkerID, workerlane.Assignment{Write: true})
+	if err != nil {
+		return false, err
+	}
+	_, refreshed, err := l.Lanes.RefreshIdle(ctx, workerlane.Request{
+		Actor: actor, Op: workerrecords.Op{ID: "refresh:" + task.ID}, WorkerID: round.WorkerID, Facts: facts,
+		Roots: roots, ActiveRootID: strings.TrimSpace(task.WorkspaceRootID),
+	})
+	return refreshed, err
 }
 
 // Holds reports whether a job's workspace is its worker's lane, which
