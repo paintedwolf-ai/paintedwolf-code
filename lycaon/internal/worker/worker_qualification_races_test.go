@@ -144,6 +144,7 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 	mgr := workspace.NewManager(filepath.Join(dataDir, "worker-branches"))
 	rec, err := mgr.CheckpointCoordinator()
 	testutil.FailErr(t, "open checkpoint coordinator", err)
+	mgr.WithRecovery(rec)
 	queue.SetWorkerWorkspaceManager(mgr)
 	fw := &faultWorkspaces{inner: mgr}
 	records := workerrecords.New(sqlDB)
