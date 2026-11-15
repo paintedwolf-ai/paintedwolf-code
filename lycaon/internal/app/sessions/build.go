@@ -27,6 +27,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
@@ -244,8 +245,10 @@ func skillReaderOfferedTools(tctx tools.ToolContext) map[string]bool {
 			}
 		}
 	}
-	if offered["command"] && prompts.ScopeAllowsCommandMutation(scopeID) {
-		offered[toolvocab.ReachCommandMutation] = true
+	for mark, ok := range toolcontract.ReachMarks(offered["command"], prompts.ScopeCommandEffects(scopeID)) {
+		if ok {
+			offered[mark] = true
+		}
 	}
 	return offered
 }

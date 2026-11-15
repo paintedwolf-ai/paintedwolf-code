@@ -135,7 +135,7 @@ func UnreachableNames(c *Catalog, corpus string, reachable map[string]bool) []st
 // catalog can lack host runners like `command`), and sets ReachCommandMutation
 // when the profile runs mutating command programs.
 func profileReachable(c *Catalog, profileID string) map[string]bool {
-	held := make(map[string]bool, len(c.registered)+1)
+	held := make(map[string]bool, len(c.registered)+3)
 	for name := range c.registered {
 		held[name] = c.ProfileHolds(profileID, name)
 	}
@@ -147,7 +147,9 @@ func profileReachable(c *Catalog, profileID string) map[string]bool {
 			}
 		}
 	}
-	held[ReachCommandMutation] = c.profileCommandMutates(profileID)
+	for mark, ok := range toolcontract.ReachMarks(held["command"], c.profileCommandEffects(profileID)) {
+		held[mark] = ok
+	}
 	return held
 }
 
@@ -164,18 +166,15 @@ func plainToolName(name string) bool {
 	return name != "" && name[0] >= 'a' && name[0] <= 'z'
 }
 
-// profileCommandMutates reports whether profileID can run mutating command
-// programs, matching the profile_command_mutation template fact.
-func (c *Catalog) profileCommandMutates(profileID string) bool {
+func (c *Catalog) profileCommandEffects(profileID string) toolcontract.CommandEffects {
 	prof, ok := c.profiles[strings.TrimSpace(profileID)]
 	if !ok || !prof.ToolAllowed("command") {
-		return false
+		return 0
 	}
-	mutation, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
-	if err != nil {
-		return false
+	if prof.CommandEffects == 0 {
+		return toolcontract.AllCommandEffects()
 	}
-	return prof.CommandEffects == 0 || prof.CommandEffects.Allows(mutation)
+	return prof.CommandEffects
 }
 
 // skillRenderVars builds the template variables one skill text renders with for
@@ -188,7 +187,7 @@ func (c *Catalog) skillRenderVars(held map[string]bool, coordinator bool) map[st
 	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
 	spawn.RefreshSizingHintVars(vars)
 	for name, ok := range held {
-		if ok && name != ReachCommandMutation && toolschema.ValidToolName(name) {
+		if ok && !toolcontract.IsReachMark(name) && toolschema.ValidToolName(name) {
 			vars["profile_has_"+name] = true
 		}
 	}

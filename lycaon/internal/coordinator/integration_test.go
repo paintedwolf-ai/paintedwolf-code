@@ -317,7 +317,7 @@ func TestRenderCoordinatorTripartiteComposeDraft(t *testing.T) {
 	root := kickTestRoot(t)
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
 	vars := map[string]any{}
-	if err := prompts.MergeCoordinatorSurfacePathVars("implement_synthesis", nil, vars, prompts.SurfaceTurn{}); err != nil {
+	if err := prompts.MergeCoordinatorSurfacePathVars("implement_synthesis", nil, vars, prompts.ReaderInput{}); err != nil {
 		testutil.FailErr(t, "MergeCoordinatorSurfacePathVars", err)
 	}
 	profile := surface.ResolveTurnProfile(api.CoordinatorRunContext{HasComposeDraft: true}, nil, nil)

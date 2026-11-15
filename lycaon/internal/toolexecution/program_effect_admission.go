@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -65,7 +66,7 @@ func (e *Metadata) FreezeProgramSurface(ctx context.Context, filter platform.Too
 		return ProgramSurface{}, fmt.Errorf("coordinator program requires captured surface")
 	}
 	if filter.SurfaceID != "" {
-		restriction, err := surfaceCommandEffects(filter.SurfaceID)
+		restriction, err := surfacecatalog.CommandEffects(filter.SurfaceID)
 		if err != nil {
 			return ProgramSurface{}, err
 		}
@@ -76,6 +77,20 @@ func (e *Metadata) FreezeProgramSurface(ctx context.Context, filter platform.Too
 		return ProgramSurface{}, err
 	}
 	return ProgramSurface{selection: selection, allowed: allowed, profile: filter.ProfileID}, nil
+}
+
+// CommandEffectsForSurface resolves the command effects admitted for surfaceID under profiles.
+func CommandEffectsForSurface(surfaceID string, profiles []sandbox.ToolProfile) (toolcontract.CommandEffects, error) {
+	restriction, err := surfacecatalog.CommandEffects(surfaceID)
+	if err != nil {
+		return 0, err
+	}
+	for _, p := range profiles {
+		if p.ID == toolcontract.CoordinatorProfileID {
+			return restriction & p.CommandEffects, nil
+		}
+	}
+	return restriction, nil
 }
 
 // ProgramReach freezes which native programs a profile and surface can run: the
@@ -96,7 +111,7 @@ func (e *Metadata) ProgramReach(ctx context.Context, filter platform.ToolFilter)
 		return nil, err
 	}
 	if filter.SurfaceID != "" {
-		restriction, err := surfaceCommandEffects(filter.SurfaceID)
+		restriction, err := surfacecatalog.CommandEffects(filter.SurfaceID)
 		if err != nil {
 			return nil, err
 		}
@@ -171,18 +186,6 @@ func anyModeAllowed(spec toolcontract.CommandSpecification, allowed toolcontract
 		}
 	}
 	return false
-}
-
-func surfaceCommandEffects(surfaceID string) (toolcontract.CommandEffects, error) {
-	catalog, err := surfacecatalog.Load()
-	if err != nil {
-		return 0, err
-	}
-	row, err := catalog.Surface(surfaceID)
-	if err != nil {
-		return 0, err
-	}
-	return toolcontract.NewCommandEffects(row.CommandEffects...)
 }
 
 // ValidateBound checks a binder-selected exact catalog mode. The adapter must

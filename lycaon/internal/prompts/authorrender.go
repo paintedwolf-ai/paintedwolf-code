@@ -411,32 +411,40 @@ func skillReachableTools(profileID, surfaceID string) (map[string]bool, error) {
 			return nil, err
 		}
 		offered, requestable := OfferedTools(floor, loadable, nil)
-		out := make(map[string]bool, len(offered)+len(requestable)+1)
+		out := make(map[string]bool, len(offered)+len(requestable)+3)
 		for _, name := range offered {
 			out[name] = true
 		}
 		for _, name := range requestable {
 			out[name] = true
 		}
-		out[toolcontract.ReachCommandMutation] = out["command"] && CoordinatorSurfaceAllowsCommandMutation(surfaceID)
+		for mark, ok := range toolcontract.ReachMarks(out["command"], ScopeCommandEffects(surfaceID)) {
+			if ok {
+				out[mark] = true
+			}
+		}
 		return out, nil
 	}
 	profiles, err := sandbox.LoadToolProfiles()
 	if err != nil {
 		return nil, err
 	}
-	surface, err := LoadAgentToolSurface(profileID, nil, nil, SurfaceTurn{}, profiles)
+	surface, err := LoadAgentToolSurface(profileID, nil, nil, ReaderInput{}, profiles)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]bool, len(surface.Tools)+len(surface.Requestable)+1)
+	out := make(map[string]bool, len(surface.Tools)+len(surface.Requestable)+3)
 	for _, tool := range surface.Tools {
 		out[tool.Name] = true
 	}
 	for _, row := range surface.Requestable {
 		out[row.Name] = true
 	}
-	out[toolcontract.ReachCommandMutation] = out["command"] && ScopeAllowsCommandMutation(profileID)
+	for mark, ok := range toolcontract.ReachMarks(out["command"], ScopeCommandEffects(profileID)) {
+		if ok {
+			out[mark] = true
+		}
+	}
 	return out, nil
 }
 

@@ -10,7 +10,7 @@ func TestCoordinatorRosterFollowsTheTurnSurface(t *testing.T) {
 	roster := []map[string]any{{"name": "reach-a-network-service", "description": "…"}}
 
 	investigate := map[string]any{"agent_skills": roster}
-	if err := prompts.MergeCoordinatorSurfacePathVars("implement_investigate", nil, investigate, prompts.SurfaceTurn{}); err != nil {
+	if err := prompts.MergeCoordinatorSurfacePathVars("implement_investigate", nil, investigate, prompts.ReaderInput{}); err != nil {
 		t.Fatalf("merge investigate surface: %v", err)
 	}
 	if readable, _ := investigate["profile_has_skills_read"].(bool); !readable {
@@ -22,7 +22,7 @@ func TestCoordinatorRosterFollowsTheTurnSurface(t *testing.T) {
 
 	for _, surfaceID := range []string{"implement_routing", "implement_dispatch", "implement_synthesis"} {
 		vars := map[string]any{"agent_skills": roster}
-		if err := prompts.MergeCoordinatorSurfacePathVars(surfaceID, nil, vars, prompts.SurfaceTurn{}); err != nil {
+		if err := prompts.MergeCoordinatorSurfacePathVars(surfaceID, nil, vars, prompts.ReaderInput{}); err != nil {
 			t.Fatalf("merge %s: %v", surfaceID, err)
 		}
 		if readable, _ := vars["profile_has_skills_read"].(bool); readable {

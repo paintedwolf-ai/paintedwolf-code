@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -54,8 +55,10 @@ func (m *Service) decisionOfferedTools(sess *api.Session, decision *Decision) ma
 	for name := range decision.decision.Tools {
 		offered[name] = true
 	}
-	if offered["command"] && prompts.ScopeAllowsCommandMutation(decision.state.Surface) {
-		offered[toolvocab.ReachCommandMutation] = true
+	for mark, ok := range toolcontract.ReachMarks(offered["command"], prompts.ScopeCommandEffects(decision.state.Surface)) {
+		if ok {
+			offered[mark] = true
+		}
 	}
 	return offered
 }

@@ -48,6 +48,10 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 	}
 	transition := surface.ComputeModeTransition(previous, current, causes)
 
+	reader, err := e.turnReader(ctx, sess, frame, history, turn, rootCount)
+	if err != nil {
+		return "", err
+	}
 	in := standingPromptInputs{
 		PromptRevision: promptRevision,
 		Profile: standingProfileInputs{
@@ -56,15 +60,14 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 			ModeRefs:        profile.ModeRefs,
 		},
 		Vars:             vars,
-		RootCount:        rootCount,
+		RootCount:        reader.RootCount(),
 		EffectiveAgents:  roster.Effective,
 		WebSearchEnabled: webSearchEnabled,
 		LoadedTools:      sortedLoadedSet(e.loadedTools(sess)),
 		ExecutionMode:    transition.ExecutionMode,
 		VerifyCommand:    strings.TrimSpace(implState.VerifyCommand),
 		WorkerToolBudget: e.workerToolBudget(ctx, sess),
-	}
-	in = in.withCatalogView(e.sessionCatalogView(ctx, sess))
+	}.withReader(reader)
 	stableKey, err := in.cacheKey()
 	if err != nil {
 		return "", err
@@ -131,6 +134,10 @@ func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 	}
 	transition := surface.ComputeModeTransition(previous, current, causes)
 
+	reader, err := e.turnReader(ctx, sess, frame, history, turn, rootCount)
+	if err != nil {
+		return "", profile, transition, err
+	}
 	in := standingPromptInputs{
 		Profile: standingProfileInputs{
 			SurfaceID:       profile.SurfaceID,
@@ -138,15 +145,14 @@ func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 			ModeRefs:        profile.ModeRefs,
 		},
 		Vars:             vars,
-		RootCount:        rootCount,
+		RootCount:        reader.RootCount(),
 		EffectiveAgents:  roster.Effective,
 		WebSearchEnabled: webSearchEnabled,
 		LoadedTools:      sortedLoadedSet(e.loadedTools(sess)),
 		ExecutionMode:    transition.ExecutionMode,
 		VerifyCommand:    strings.TrimSpace(implState.VerifyCommand),
 		WorkerToolBudget: e.workerToolBudget(ctx, sess),
-	}
-	in = in.withCatalogView(e.sessionCatalogView(ctx, sess))
+	}.withReader(reader)
 	rendered, err := renderStandingPrompt(ctx, pe, in)
 	if err != nil {
 		return "", profile, transition, err

@@ -3,6 +3,7 @@ package prompts
 import (
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -12,11 +13,6 @@ type commandFlags struct {
 	mutation      bool
 	externalExec  bool
 	networkEgress bool
-}
-
-func allCommandEffects() toolcontract.CommandEffects {
-	effects, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandExternalExec, toolcontract.CommandNetworkEgress)
-	return effects
 }
 
 // commandEffectFlags projects an effect set. An empty set allows nothing.
@@ -54,13 +50,9 @@ func currentCommandEffectFlags(vars map[string]any, commandOffered bool) command
 func ScopeCommandEffects(scopeID string) toolcontract.CommandEffects {
 	scopeID = strings.TrimSpace(scopeID)
 	if scopeID == "" || scopeID == CoordinatorProfileID {
-		return allCommandEffects()
+		return toolcontract.AllCommandEffects()
 	}
-	if row, err := loadCoordinatorSurfaceRow(scopeID); err == nil {
-		effects, err := toolcontract.NewCommandEffects(row.CommandEffects...)
-		if err != nil {
-			return 0
-		}
+	if effects, err := surfacecatalog.CommandEffects(scopeID); err == nil {
 		return effects
 	}
 	if profileID, err := ToolProfileForAgent(scopeID); err == nil && profileID != "" {
@@ -68,32 +60,20 @@ func ScopeCommandEffects(scopeID string) toolcontract.CommandEffects {
 	}
 	profiles, err := sandbox.LoadToolProfiles()
 	if err != nil {
-		return allCommandEffects()
+		return toolcontract.AllCommandEffects()
 	}
 	for _, profile := range profiles {
 		if profile.ID == scopeID {
 			return profile.CommandEffects
 		}
 	}
-	return allCommandEffects()
+	return toolcontract.AllCommandEffects()
 }
 
-// coordinatorSurfaceCommandEffects narrows a surface row by the coordinator
-// profile the session resolved, which carries the session posture.
-func coordinatorSurfaceCommandEffects(surfaceID string, profiles []sandbox.ToolProfile) toolcontract.CommandEffects {
-	effects := ScopeCommandEffects(surfaceID)
-	for _, profile := range profiles {
-		if profile.ID == CoordinatorProfileID {
-			return effects & profile.CommandEffects
-		}
-	}
-	return effects
-}
-
-// RestrictCommandEffects narrows every variable derived from what command may
+// restrictCommandEffects narrows every variable derived from what command may
 // do. Restrictions intersect: applied in any order, the variables state only
 // what every one of them allows.
-func RestrictCommandEffects(effects toolcontract.CommandEffects, offered, requestable []string, into map[string]any) {
+func restrictCommandEffects(effects toolcontract.CommandEffects, offered, requestable []string, into map[string]any) {
 	if into == nil {
 		return
 	}

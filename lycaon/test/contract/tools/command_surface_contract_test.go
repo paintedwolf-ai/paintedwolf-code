@@ -41,7 +41,7 @@ func TestCommandEnabledToolProfilesRenderCommandSurface(t *testing.T) {
 	for _, profile := range commandEnabledToolProfiles(t) {
 		t.Run(profile.ID, func(t *testing.T) {
 			t.Parallel()
-			data, err := prompts.LoadAgentToolSurface(profile.ID, nil, hints, prompts.SurfaceTurn{Schemas: schemas}, []sandbox.ToolProfile{profile})
+			data, err := prompts.LoadAgentToolSurface(profile.ID, nil, hints, prompts.ReaderInput{Schemas: schemas}, []sandbox.ToolProfile{profile})
 			contractcheck.FailErr(t, "LoadAgentToolSurface", err)
 			vars := prompts.AgentToolSurfaceTemplateVars(data)
 			vars["session_scratch_dir"] = filepath.Join(t.TempDir(), "session-scratch")
@@ -85,7 +85,7 @@ func TestCommandFreeToolProfilesExcludeCommandSurface(t *testing.T) {
 		}
 		t.Run(profile.ID, func(t *testing.T) {
 			t.Parallel()
-			data, err := prompts.LoadAgentToolSurface(profile.ID, nil, hints, prompts.SurfaceTurn{Schemas: schemas}, []sandbox.ToolProfile{profile})
+			data, err := prompts.LoadAgentToolSurface(profile.ID, nil, hints, prompts.ReaderInput{Schemas: schemas}, []sandbox.ToolProfile{profile})
 			contractcheck.FailErr(t, "LoadAgentToolSurface", err)
 			vars := prompts.AgentToolSurfaceTemplateVars(data)
 			if offered, _ := vars["profile_has_command"].(bool); offered {

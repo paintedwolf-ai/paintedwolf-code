@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -66,7 +67,7 @@ func Resolve(input ResolveInput) (CapabilitySurface, error) {
 	spawnAllowlist := append([]string(nil), input.SpawnAllowlist...)
 	flags := Derive(input.RootCount, resolvedTools, spawnAllowlist)
 
-	surfaceToolOverride := coordinatorSurfaceToolOverride(spawnAllowlist, resolvedTools, prompts.CoordinatorSurfaceAllowsCommandMutation(surfaceID))
+	surfaceToolOverride := coordinatorSurfaceToolOverride(spawnAllowlist, resolvedTools, surfaceCommandMutates(surfaceID, input.ToolProfiles))
 	maxInFlight := input.MaxInFlight
 	if maxInFlight <= 0 {
 		maxInFlight = spawn.MaxInFlightTaskWorkers
@@ -102,15 +103,27 @@ func (s CapabilitySurface) MergeSpawnInjectVars() map[string]any {
 	vars := prompts.SpawnRosterTemplateVars(s.Roster, s.ExcludedDisclosures)
 	vars["surface_id"] = s.SurfaceID
 	vars["execution_mode"] = surface.ExecutionModeFamily(s.SurfaceID)
-	for key, value := range prompts.CoordinatorPolicyTemplateVars(s.ResolvedTools, s.DeferredTools) {
-		vars[key] = value
-	}
 	vars["repo_known_empty"] = s.RepoKnownEmpty
 	MergeVars(vars, s.Flags)
 	allowed := append([]string(nil), s.SpawnAllowlist...)
 	sort.Strings(allowed)
 	vars["allowed_agents"] = allowed
 	return vars
+}
+
+func surfaceCommandMutates(surfaceID string, profiles []sandbox.ToolProfile) bool {
+	effects, err := surfacecatalog.CommandEffects(surfaceID)
+	if err != nil {
+		return false
+	}
+	for _, p := range profiles {
+		if p.ID == coordinatorAgentID {
+			effects &= p.CommandEffects
+			break
+		}
+	}
+	mutation, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
+	return err == nil && effects.Allows(mutation)
 }
 
 func coordinatorSurfaceToolOverride(allowedAgents []string, resolvedTools []string, commandMutates bool) map[string]prompts.SpawnToolSurface {

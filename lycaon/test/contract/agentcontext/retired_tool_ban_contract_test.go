@@ -139,11 +139,11 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 		if !strings.HasPrefix(binding.Render, "coordinator-") {
 			continue
 		}
-		for id, plan := range plans {
+		for id := range plans {
 			t.Run("kick/"+binding.Render+"/"+id, func(t *testing.T) {
 				data := kickRenderFixture()
 				delete(data, "tools")
-				contractcheck.FailErr(t, "merge kick vars", prompts.MergeCoordinatorKickVarsForTools(data, plan.AddressableNames()))
+				prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, id, 1))
 				corpus, err := kickEngine.RenderKick(context.Background(), binding.Render, data)
 				contractcheck.FailErr(t, "render kick", err)
 				checkBannedMention(t, retiredToolMention, fmt.Sprintf("kick %s on %s", binding.Render, id), corpus)
@@ -245,13 +245,13 @@ func TestRenderedPhaseKicksNeverNameFullyRetiredTools(t *testing.T) {
 		}
 		for _, inject := range workflow.Injects {
 			id, known := surfaces[inject.Selector.Phase]
-			plan, planKnown := plans[id]
+			_, planKnown := plans[id]
 			if inject.On != "phase.entered" || !known || !planKnown {
 				continue
 			}
 			t.Run(filepath.Base(filepath.Dir(file))+"/"+inject.Selector.Phase, func(t *testing.T) {
 				data := kickRenderFixture()
-				contractcheck.FailErr(t, "merge kick vars", prompts.MergeCoordinatorKickVarsForTools(data, plan.AddressableNames()))
+				prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, id, 1))
 				corpus, err := kickEngine.RenderKick(context.Background(), inject.Render, data)
 				contractcheck.FailErr(t, "render kick", err)
 				checkBannedMention(t, retiredToolMention, fmt.Sprintf("phase kick %s on %s", inject.Render, id), corpus)

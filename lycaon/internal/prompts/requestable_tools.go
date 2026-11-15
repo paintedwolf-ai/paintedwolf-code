@@ -85,14 +85,6 @@ func requestableCapabilityIDs(rows []RequestableToolView) map[string]bool {
 	return present
 }
 
-// SurfaceTurn holds session-loaded tools and tool schemas for a turn.
-type SurfaceTurn struct {
-	// Plan bounds catalog availability when a runtime snapshot is present.
-	Plan    toolsurface.Plan
-	Loaded  map[string]bool
-	Schemas *toolschema.Config
-}
-
 // RequestableTools builds roster rows in the order given, truncating each
 // schema description to the turn catalog's option_words limit.
 func RequestableTools(names []string, schemas *toolschema.Config) ([]RequestableToolView, error) {

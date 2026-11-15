@@ -65,6 +65,7 @@ type promptProjection interface {
 	sessionCatalogView(context.Context, *api.Session) *catalogview.View
 	toolAddressable(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch, string) bool
 	taskOffered(*api.Session, string, int) bool
+	turnReader(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch, int) (prompts.Reader, error)
 	workspaceRootsForTurn(context.Context, *api.Session, *TurnAssemblyScratch) ([]map[string]any, int, string, int, bool)
 }
 

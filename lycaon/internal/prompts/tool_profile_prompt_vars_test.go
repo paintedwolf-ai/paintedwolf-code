@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
 func TestHTTPActionVarsFollowOfferedTools(t *testing.T) {
@@ -42,7 +43,7 @@ func loadProfileCapabilityVars(t *testing.T, profileID string) map[string]any {
 	into := map[string]any{}
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
-	err = prompts.MergeAgentToolSurfaceVars(profileID, nil, nil, prompts.SurfaceTurn{}, into, profiles)
+	err = prompts.MergeAgentToolSurfaceVars(profileID, nil, nil, prompts.ReaderInput{}, into, profiles)
 	testutil.FailErr(t, "MergeAgentToolSurfaceVars", err)
 	return into
 }
@@ -398,7 +399,23 @@ func TestCommandProgressGuidanceFollowsOfferedEffects(t *testing.T) {
 	}
 	readOnly, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
 	testutil.FailErr(t, "read-only effects", err)
-	prompts.RestrictCommandEffects(readOnly, offered, nil, vars)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "worker",
+		Plan:      toolsurface.Compile(offered, nil),
+		Profiles: []sandbox.ToolProfile{{
+			ID: "worker",
+			Tools: map[string]bool{
+				"command":         true,
+				"restore_version": true,
+				"task":            true,
+				"edit":            true,
+				"jq_edit":         true,
+			},
+			CommandEffects: readOnly,
+		}},
+	})
+	testutil.FailErr(t, "new reader", err)
+	vars = reader.Facts()
 	if got := vars["progress_gated_tools"]; !reflect.DeepEqual(got, []string{"restore_version", "task"}) {
 		t.Fatalf("read-only command progress guidance = %v", got)
 	}

@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/promptunit"
+	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
 func buildKickRenderData(meta kickMeta, live CoordinatorKickRenderContext, now time.Time) map[string]any {
@@ -105,14 +107,47 @@ func (k *KickEngine) renderCoordinatorKick(ctx context.Context, kickID string, m
 		return "", fmt.Errorf("kick %q: prompt engine not configured", kickID)
 	}
 	data := buildKickRenderData(meta, live, time.Now().UTC())
-	var err error
-	if live.ToolPlan.Compiled() {
-		err = prompts.MergeCoordinatorKickVarsForTools(data, live.ToolPlan.AddressableNames())
-	} else {
-		err = prompts.MergeCoordinatorKickPolicyVars(data)
-	}
+	reader, err := kickReader(live)
 	if err != nil {
+		return "", fmt.Errorf("kick reader: %w", err)
+	}
+	if err := prompts.MergeCoordinatorKickVarsForTools(data, reader); err != nil {
 		return "", fmt.Errorf("kick policy vars: %w", err)
 	}
 	return cfg.engine.RenderKick(ctx, strings.TrimSpace(kickID), data)
+}
+
+func kickReader(live CoordinatorKickRenderContext) (prompts.Reader, error) {
+	profiles, err := sandbox.LoadToolProfiles()
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	in := prompts.ReaderInput{
+		Host:      promptunit.HostCoordinator,
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: strings.TrimSpace(live.SurfaceID),
+		Profiles:  profiles,
+		RootCount: live.RootCount,
+		WebSearch: true,
+	}
+	if live.ToolPlan.Compiled() {
+		in.Plan = live.ToolPlan
+		loaded := make(map[string]bool)
+		for _, name := range live.ToolPlan.AddressableNames() {
+			loaded[name] = true
+		}
+		in.Loaded = loaded
+	} else if in.SurfaceID != "" {
+		plan, err := prompts.CompileSurfacePlan(in.SurfaceID, max(in.RootCount, 1))
+		if err != nil {
+			return prompts.Reader{}, err
+		}
+		in.Plan = plan
+		loaded := make(map[string]bool)
+		for _, name := range plan.AddressableNames() {
+			loaded[name] = true
+		}
+		in.Loaded = loaded
+	}
+	return prompts.NewReader(in)
 }

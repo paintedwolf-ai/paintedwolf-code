@@ -2,7 +2,6 @@ package prompts
 
 import (
 	"fmt"
-	"slices"
 	"sort"
 	"strings"
 
@@ -169,22 +168,13 @@ func LoadCoordinatorSurfaceLoadable(surfaceID string) ([]string, error) {
 	return out, nil
 }
 
-// MergeCoordinatorKickPolicyVars adds coordinator kick policy variables.
-func MergeCoordinatorKickPolicyVars(into map[string]any) error {
-	visible, err := CoordinatorProfileVisibleTools()
-	if err != nil {
-		return err
-	}
-	return MergeCoordinatorKickVarsForTools(into, visible)
-}
-
 // MergeCoordinatorKickVarsForTools answers tool facts from the tools the next
 // model call can reach.
-func MergeCoordinatorKickVarsForTools(into map[string]any, reachable []string) error {
+func MergeCoordinatorKickVarsForTools(into map[string]any, reader Reader) error {
 	if into == nil {
 		return fmt.Errorf("nil template vars map")
 	}
-	for k, v := range CoordinatorPolicyTemplateVars(reachable, nil) {
+	for k, v := range reader.Facts() {
 		if _, exists := into[k]; !exists {
 			into[k] = v
 		}
@@ -193,62 +183,59 @@ func MergeCoordinatorKickVarsForTools(into map[string]any, reachable []string) e
 	return nil
 }
 
-// MergeCoordinatorSurfacePathVars adds path and policy variables. The floor
-// plus the tools turn.Loaded names are offered on this call and teach their
-// copy; the rest of the loadable set lists as requestable, each with the
-// description turn.Schemas holds for it, and loads through request_tools.
-func MergeCoordinatorSurfacePathVars(surfaceID string, profiles []sandbox.ToolProfile, into map[string]any, turn SurfaceTurn) error {
+// MergeCoordinatorSurfacePathVars adds path and policy variables from a Reader
+// constructed for surfaceID and profiles.
+func MergeCoordinatorSurfacePathVars(surfaceID string, profiles []sandbox.ToolProfile, into map[string]any, in ReaderInput) error {
 	if into == nil {
 		return fmt.Errorf("nil template vars map")
 	}
-	var data CoordinatorPathScopeData
-	var err error
-	if strings.TrimSpace(surfaceID) == "implement_investigate" {
-		// Product path scopes are host YAML, not catalog units.
-		data, err = LoadInvestigatePathScopes()
-	} else if len(profiles) == 0 {
-		data, err = LoadCoordinatorPathScopes()
+	if len(profiles) == 0 {
+		loaded, err := sandbox.LoadToolProfiles()
+		if err != nil {
+			return err
+		}
+		profiles = loaded
+	}
+	if in.RootCount == 0 {
+		if rc, ok := into["root_count"].(int); ok {
+			in.RootCount = rc
+		}
+	}
+	if !in.HasGit {
+		if hg, ok := into["has_git"].(bool); ok {
+			in.HasGit = hg
+		}
+	}
+	if !in.OnWorkerBranch {
+		if wb, ok := into["on_worker_branch"].(bool); ok {
+			in.OnWorkerBranch = wb
+		}
+	}
+	if enabled, ok := into["web_search_enabled"].(bool); ok {
+		in.WebSearch = enabled
 	} else {
-		data, err = CoordinatorPathScopesFromProfiles(profiles)
+		in.WebSearch = true
 	}
+	if !in.Plan.Compiled() {
+		plan, err := CompileSurfacePlan(surfaceID, max(in.RootCount, 1))
+		if err != nil {
+			return err
+		}
+		in.Plan = plan
+	}
+	in.ProfileID = CoordinatorProfileID
+	in.SurfaceID = surfaceID
+	in.Profiles = profiles
+	reader, err := NewReader(in)
 	if err != nil {
 		return err
 	}
-	for k, v := range CoordinatorPathScopeTemplateVars(data) {
-		into[k] = v
-	}
-	floor, err := LoadCoordinatorSurfaceFloor(surfaceID)
-	if err != nil {
-		return err
-	}
-	loadable, err := LoadCoordinatorSurfaceLoadable(surfaceID)
-	if err != nil {
-		return err
-	}
-	floor = turn.available(floor)
-	loadable = turn.available(loadable)
-	offered, requestable := OfferedTools(floor, loadable, turn.Loaded)
-	if enabled, ok := into["web_search_enabled"].(bool); ok && !enabled {
-		offered = withoutResearchTools(offered)
-		requestable = withoutResearchTools(requestable)
-	}
-	for k, v := range CoordinatorPolicyTemplateVars(offered, requestable) {
+	for k, v := range reader.Facts() {
 		if isPreservedEnvironmentFact(k, into) {
 			continue
 		}
 		into[k] = v
 	}
-	into["is_coordinator"] = true
-	into["command_on_floor"] = slices.Contains(floor, "command")
-	RestrictCommandEffects(coordinatorSurfaceCommandEffects(surfaceID, profiles), offered, requestable, into)
-	syncCommandExternalFacts(into)
-	roster, err := RequestableTools(requestable, turn.Schemas)
-	if err != nil {
-		return err
-	}
-	into["surface_offered"] = offered
-	into["requestable_tools"] = requestableToolVars(roster)
-	into["requestable_capabilities"] = RequestableCapabilities(roster)
 	clearSkillRosterWithoutSkillsRead(into)
 	return nil
 }

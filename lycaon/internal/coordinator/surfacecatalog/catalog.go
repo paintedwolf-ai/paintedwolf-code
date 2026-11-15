@@ -178,6 +178,27 @@ func (c Catalog) Surface(id string) (Surface, error) {
 	return row, nil
 }
 
+// CommandEffects resolves the command effects declared for surfaceID.
+func (c Catalog) CommandEffects(surfaceID string) (toolcontract.CommandEffects, error) {
+	surf, err := c.Surface(surfaceID)
+	if err != nil {
+		return 0, err
+	}
+	if len(surf.CommandEffects) == 0 {
+		return toolcontract.AllCommandEffects(), nil
+	}
+	return toolcontract.NewCommandEffects(surf.CommandEffects...)
+}
+
+// CommandEffects resolves the command effects declared for surfaceID in the stock catalog.
+func CommandEffects(surfaceID string) (toolcontract.CommandEffects, error) {
+	cat, err := Load()
+	if err != nil {
+		return 0, err
+	}
+	return cat.CommandEffects(surfaceID)
+}
+
 // SurfaceIDs returns the sorted coordinator surface ids.
 func (c Catalog) SurfaceIDs() []string {
 	out := make([]string, 0, len(c.rows)-1)

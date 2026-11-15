@@ -144,7 +144,8 @@ func renderCoordinatorTripartiteForRunContextWithRoots(
 		ExecutionModeEntered: transition.ExecutionModeEntered, ExecutionModeLeft: transition.ExecutionModeLeft,
 	}, "", vars)
 	contractcheck.FailErr(t, "merge coordinator prompt vars", err)
-	if err := capability.MergeForTurn(vars, profile, len(roots), runCtx.AllowedAgents, true); err != nil {
+	reader := coordinatorTestReader(t, profile.SurfaceID, len(roots))
+	if err := capability.MergeForTurn(vars, reader, runCtx.AllowedAgents); err != nil {
 		t.Fatalf("MergeForTurn: %v", err)
 	}
 	mergeWidestUnitBlocks(t, engine, profile.SurfaceID, vars)

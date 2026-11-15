@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -22,6 +23,8 @@ func TestI14ExcludedDisclosuresMatchPolicyProjection(t *testing.T) {
 	t.Parallel()
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	renderer := prompts.NewInjectRenderer(engine)
+	profiles, err := sandbox.LoadToolProfiles()
+	contractcheck.FailErr(t, "LoadToolProfiles", err)
 	surfaces := []string{
 		surfaceImplementRouting,
 		surfaceImplementDispatch,
@@ -39,10 +42,20 @@ func TestI14ExcludedDisclosuresMatchPolicyProjection(t *testing.T) {
 					MaxInFlight:    spawn.MaxInFlightTaskWorkers,
 				})
 				contractcheck.FailErr(t, "Resolve", err)
+				plan, err := prompts.CompileSurfacePlan(surfaceID, rootCount)
+				contractcheck.FailErr(t, "CompileSurfacePlan", err)
+				reader, err := prompts.NewReader(prompts.ReaderInput{
+					ProfileID: prompts.CoordinatorProfileID,
+					SurfaceID: surfaceID,
+					Plan:      plan,
+					Profiles:  profiles,
+					RootCount: rootCount,
+					WebSearch: true,
+				})
+				contractcheck.FailErr(t, "NewReader", err)
 				block, err := inject.RenderImplementSpawnInject(
 					context.Background(), renderer, "sess-inject-test",
-					allowed, spawn.MaxInFlightTaskWorkers, surfaceID, rootCount, false, true,
-					nil, nil)
+					allowed, spawn.MaxInFlightTaskWorkers, reader, false)
 				contractcheck.FailErr(t, "RenderImplementSpawnInject", err)
 				got := parseExcludedAgentIDs(block)
 				want := excludedAgentIDs(surf.ExcludedDisclosures)

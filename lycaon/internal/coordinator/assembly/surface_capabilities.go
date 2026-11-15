@@ -7,9 +7,13 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/promptunit"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -209,4 +213,74 @@ func (e *promptSurface) taskOffered(sess *api.Session, surfaceID string, rootCou
 		return true
 	}
 	return plan.Deferred("task") && e.loadedTools(sess)["task"]
+}
+
+func (e *promptSurface) turnReader(
+	ctx context.Context,
+	sess *api.Session,
+	frame inject.CoordinatorTurnFrame,
+	history []api.Message,
+	turn *TurnAssemblyScratch,
+	fallbackRootCount int,
+) (prompts.Reader, error) {
+	if turn != nil && turn.Reader.Valid() {
+		return turn.Reader, nil
+	}
+	profile, _ := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
+	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
+	if !ok {
+		switch {
+		case fallbackRootCount > 0:
+			rootCount = fallbackRootCount
+		case frame.Roster != nil && frame.Roster.Facts.RootCount > 0:
+			rootCount = frame.Roster.Facts.RootCount
+		case sess != nil && strings.TrimSpace(sess.WorkspacePath) != "":
+			rootCount = 1
+		}
+	}
+	plan, err := surface.CompileToolPlan(profile, rootCount)
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	webSearchEnabled := true
+	if fn := e.deps.WebSearchEnabled; fn != nil {
+		webSearchEnabled = fn()
+	}
+	var (
+		profiles []sandbox.ToolProfile
+		schemas  *toolschema.Config
+		catalog  *extpacks.EffectiveCatalog
+	)
+	if view := e.sessionCatalogView(ctx, sess); view != nil {
+		profiles = view.ToolProfiles
+		schemas = view.ToolSchemas
+		catalog = view.Catalog
+	}
+	if len(profiles) == 0 {
+		loaded, err := sandbox.LoadToolProfiles()
+		if err != nil {
+			return prompts.Reader{}, err
+		}
+		profiles = loaded
+	}
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		Host:      promptunit.HostCoordinator,
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: profile.SurfaceID,
+		Mode:      surface.ExecutionModeFamily(profile.SurfaceID),
+		Profiles:  profiles,
+		Plan:      plan,
+		Loaded:    e.loadedTools(sess),
+		Schemas:   schemas,
+		Catalog:   catalog,
+		RootCount: rootCount,
+		WebSearch: webSearchEnabled,
+	})
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	if turn != nil {
+		turn.Reader = reader
+	}
+	return reader, nil
 }

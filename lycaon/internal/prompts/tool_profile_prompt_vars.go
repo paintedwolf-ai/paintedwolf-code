@@ -184,7 +184,7 @@ func VisibleToolsNativePartialVars(visibleTools []string) map[string]any {
 		views = append(views, AgentToolArgView{Name: name})
 	}
 	// Names carry no restriction; the caller narrows by scope.
-	return toolProfileCapabilityTemplateVars(AgentToolSurfaceData{Tools: views, CommandEffects: allCommandEffects()})
+	return toolProfileCapabilityTemplateVars(AgentToolSurfaceData{Tools: views, CommandEffects: toolcontract.AllCommandEffects()})
 }
 
 // MergeProfileRequestableVars sets profile_can_request for the tools profileID
@@ -249,12 +249,14 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 	// mutation. Today every dual-state form also requires its form tool, so
 	// the reach leg matches enablement; deriving through the reach tables
 	// keeps these vars tied to the SSOT if dispositions change.
-	reachHeld := make(map[string]bool, len(enabled)+1)
+	reachHeld := make(map[string]bool, len(enabled)+3)
 	for name, ok := range enabled {
 		reachHeld[name] = ok
 	}
-	if commandMutates {
-		reachHeld[toolcontract.ReachCommandMutation] = true
+	for mark, ok := range toolcontract.ReachMarks(enabled["command"], data.CommandEffects) {
+		if ok {
+			reachHeld[mark] = true
+		}
 	}
 	out := map[string]any{
 		"mints":                           evidenceMintsForCommand(enabled, commandMutates, command.externalExec),
@@ -443,7 +445,7 @@ func loadAgentSurfaceForCheck(agentType string) (AgentToolSurfaceData, []sandbox
 	if err != nil {
 		return AgentToolSurfaceData{}, nil, "", false
 	}
-	surface, err := LoadAgentToolSurface(profileID, nil, nil, SurfaceTurn{}, profiles)
+	surface, err := LoadAgentToolSurface(profileID, nil, nil, ReaderInput{}, profiles)
 	if err != nil {
 		return AgentToolSurfaceData{}, profiles, profileID, false
 	}
@@ -464,7 +466,7 @@ func ToolProfileMutationCapable(profile sandbox.ToolProfile) bool {
 	if strings.TrimSpace(profile.ID) == "" {
 		return false
 	}
-	surface, err := LoadAgentToolSurface(profile.ID, nil, nil, SurfaceTurn{}, []sandbox.ToolProfile{profile})
+	surface, err := LoadAgentToolSurface(profile.ID, nil, nil, ReaderInput{}, []sandbox.ToolProfile{profile})
 	return err == nil && ProfileMutationCapable(surface)
 }
 

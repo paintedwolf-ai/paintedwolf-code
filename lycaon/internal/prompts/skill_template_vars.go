@@ -37,7 +37,7 @@ func SkillSurfaceTemplateVars(in SkillSurfaceVarsInput) (map[string]any, error) 
 	coordinator := in.ProfileID == CoordinatorProfileID
 	setCallerShapeVars(vars, in, coordinator)
 	if coordinator && in.SurfaceID != "" {
-		turn := SurfaceTurn{Plan: in.Plan, Loaded: coordinatorSurfaceLoaded(in)}
+		turn := ReaderInput{Plan: in.Plan, Loaded: coordinatorSurfaceLoaded(in)}
 		if err := MergeCoordinatorSurfacePathVars(in.SurfaceID, nil, vars, turn); err != nil {
 			return nil, err
 		}
@@ -48,7 +48,7 @@ func SkillSurfaceTemplateVars(in SkillSurfaceVarsInput) (map[string]any, error) 
 	if err != nil {
 		return nil, err
 	}
-	surface, err := LoadAgentToolSurface(in.ProfileID, in.Offered, nil, SurfaceTurn{Plan: in.Plan, Loaded: toolNameSet(in.Offered)}, profiles)
+	surface, err := LoadAgentToolSurface(in.ProfileID, in.Offered, nil, ReaderInput{Plan: in.Plan, Loaded: toolNameSet(in.Offered)}, profiles)
 	if err != nil {
 		return nil, err
 	}

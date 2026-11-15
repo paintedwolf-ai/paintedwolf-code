@@ -125,9 +125,8 @@ func TestSkillSurfaceTemplateVarsDefaultsZeroBudget(t *testing.T) {
 }
 
 func TestSkillSurfaceTemplateVarsWorkerOfferedMarksDeferredLoaded(t *testing.T) {
-	// worker_readonly defers held_result/held_stop (tool: true in its
-	// profile), so an empty SurfaceTurn would mark them requestable and blank
-	// profile_has_held_result even when the turn offers the tool.
+	// worker_readonly defers held_result/held_stop in its profile, so Offered
+	// marks loaded deferred tools as held rather than requestable.
 	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{
 		ProfileID: "worker_readonly",
 		Offered:   []string{"command", "held_result"},

@@ -19,9 +19,11 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	scancoverage "github.com/lycaon/lycaon/internal/scan/coverage"
 	"github.com/lycaon/lycaon/internal/session/viewcontext"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/worker"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
 	"github.com/lycaon/lycaon/internal/workflow/verdictcall"
@@ -66,9 +68,9 @@ func measureCoordinatorInjectBlock(
 	case "execution_state":
 		return measureExecutionStateBlock(ctx, renderer)
 	case "tool_procedures", "worker_tool_procedures":
-		host, profile := promptunit.HostCoordinator, "coordinator"
+		host, profile, surfaceID := promptunit.HostCoordinator, "coordinator", "implement_investigate"
 		if spec.ID == "worker_tool_procedures" {
-			host, profile = promptunit.HostWorker, "implementer"
+			host, profile, surfaceID = promptunit.HostWorker, "implement", ""
 		}
 		catalog, err := renderer.UnitCatalog()
 		contractcheck.FailErr(t, "load procedure catalog", err)
@@ -78,7 +80,17 @@ func measureCoordinatorInjectBlock(
 				offered = append(offered, unit.Attaches...)
 			}
 		}
-		block, err := inject.RenderToolProceduresBlock(ctx, renderer, "sess-inject-test", profile, offered)
+		profiles, err := sandbox.LoadToolProfiles()
+		contractcheck.FailErr(t, "load tool profiles", err)
+		reader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: profile,
+			SurfaceID: surfaceID,
+			Plan:      toolsurface.Compile(offered, nil),
+			Profiles:  profiles,
+			RootCount: 1,
+		})
+		contractcheck.FailErr(t, "new procedure reader", err)
+		block, err := inject.RenderToolProceduresBlock(ctx, renderer, "sess-inject-test", reader)
 		contractcheck.FailErr(t, "render tool procedures", err)
 		return block
 	case "command_jobs", "worker_command_jobs":
@@ -152,8 +164,8 @@ func measureCoordinatorInjectBlock(
 		return inject.RenderViewContextBlock(ctx, renderer, "sess-inject-test", view, true)
 	case "implement_spawn":
 		block, err := inject.RenderImplementSpawnInject(
-			ctx, renderer, "sess-inject-test", spawn.AmbientAllowedAgents(), spawn.MaxInFlightTaskWorkers, spawn.SurfaceImplementSynthesis, 1, false, true,
-			nil, nil)
+			ctx, renderer, "sess-inject-test", spawn.AmbientAllowedAgents(), spawn.MaxInFlightTaskWorkers,
+			coordinatorTestReader(t, spawn.SurfaceImplementSynthesis, 1), false)
 		contractcheck.FailErr(t, "RenderImplementSpawnInject", err)
 		return block
 	case "worker_task_assignment":

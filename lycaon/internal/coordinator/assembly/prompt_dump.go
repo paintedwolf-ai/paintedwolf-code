@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -80,16 +81,35 @@ func RenderPromptDump(
 	prompts.MergeWorkspaceRootsVars(base, roots, promptDumpFixtureRootID)
 	rootCount, _ := base["root_count"].(int)
 	roster := inject.ResolveAgentRoster(profile.SurfaceID, spawn.AmbientAllowedAgents(), rootCount, false, true)
-	if err := capability.MergeForTurn(base, profile, rootCount, roster.Effective, true); err != nil {
+	profiles, err := sandbox.LoadToolProfiles()
+	if err != nil {
+		return "", err
+	}
+	plan, err := surface.CompileToolPlan(profile, rootCount)
+	if err != nil {
+		return "", err
+	}
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		Host:      promptunit.HostCoordinator,
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: profile.SurfaceID,
+		Mode:      current,
+		Profiles:  profiles,
+		Plan:      plan,
+		RootCount: rootCount,
+		WebSearch: true,
+	})
+	if err != nil {
+		return "", err
+	}
+	for k, v := range reader.Facts() {
+		base[k] = v
+	}
+	if err := capability.MergeForTurn(base, reader, roster.Effective); err != nil {
 		return "", fmt.Errorf("merge fixture capabilities: %w", err)
 	}
 	for key, value := range spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget()) {
 		base[key] = value
-	}
-	if configRoot != "" {
-		if err := prompts.MergeCoordinatorSurfacePathVars(profile.SurfaceID, nil, base, prompts.SurfaceTurn{}); err != nil {
-			return "", err
-		}
 	}
 	if err := prompts.MergeCoordinatorPromptVars(
 		profile.SurfaceID,

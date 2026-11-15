@@ -3,6 +3,7 @@ package promptsource
 import (
 	"context"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/browser/pagesession"
@@ -13,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
 	"github.com/lycaon/lycaon/internal/session/loading"
 	"github.com/lycaon/lycaon/internal/session/policyfacts"
@@ -27,6 +29,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workerworkspace"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -148,7 +151,71 @@ func (m *Context) Build() promptloop.ContextDeps {
 }
 
 func (m *Context) ToolProcedures(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error) {
-	return inject.RenderToolProceduresBlock(ctx, prompts.NewInjectRenderer(m.Prompts), sess.ID, profileID, offered)
+	reader, err := m.procedureReader(ctx, sess, profileID, offered)
+	if err != nil {
+		return "", err
+	}
+	return inject.RenderToolProceduresBlock(ctx, prompts.NewInjectRenderer(m.Prompts), sess.ID, reader)
+}
+
+func (m *Context) procedureReader(ctx context.Context, sess *api.Session, profileID string, offered []string) (prompts.Reader, error) {
+	profiles, err := sandbox.LoadToolProfiles()
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	if m != nil && m.Profiles != nil && sess != nil && sess.Posture != "" {
+		profiles = m.Profiles.ConstrainCommandProfiles(ctx, sess.ID, profiles)
+	}
+	surfaceID := ""
+	resolvedProfileID := strings.TrimSpace(profileID)
+	var deferred []string
+	if prompts.IsCoordinatorSurfaceID(resolvedProfileID) {
+		surfaceID = resolvedProfileID
+		resolvedProfileID = prompts.CoordinatorProfileID
+		deferred, _ = prompts.LoadCoordinatorSurfaceLoadable(surfaceID)
+	} else {
+		if mapped, err := prompts.ToolProfileForAgent(resolvedProfileID); err == nil && mapped != "" {
+			resolvedProfileID = mapped
+		}
+		for _, p := range profiles {
+			if p.ID == resolvedProfileID {
+				for name, enabled := range p.Tools {
+					if enabled && p.ToolAllowed(name) && !strings.HasSuffix(name, "*") {
+						deferred = append(deferred, name)
+					}
+				}
+				break
+			}
+		}
+	}
+	offeredSet := make(map[string]bool, len(offered))
+	for _, name := range offered {
+		offeredSet[name] = true
+	}
+	var remaining []string
+	for _, name := range deferred {
+		if !offeredSet[name] {
+			remaining = append(remaining, name)
+		}
+	}
+	visible := slices.Clone(offered)
+	if surfaceID == "" {
+		visible = append(visible, remaining...)
+	}
+	rootCount := 1
+	if m != nil && m.Workspace != nil && sess != nil {
+		_, rootCount, _, _ = m.Workspace.PromptRootRows(ctx, sess)
+	}
+	return prompts.NewReader(prompts.ReaderInput{
+		ProfileID: resolvedProfileID,
+		SurfaceID: surfaceID,
+		Profiles:  profiles,
+		Plan:      toolsurface.Compile(offered, remaining),
+		Loaded:    offeredSet,
+		Visible:   visible,
+		RootCount: rootCount,
+		WebSearch: m.WebSearchEnabled(),
+	})
 }
 
 // PromptSurface reports the host facts that shaped a request offering these
@@ -173,7 +240,11 @@ func (m *Context) PromptSurface(ctx context.Context, sess *api.Session, profileI
 		}
 		surface.Tools = append(surface.Tools, tool)
 	}
-	units, err := inject.ToolProcedureUnits(prompts.NewInjectRenderer(m.Prompts), profileID, offered)
+	reader, err := m.procedureReader(ctx, sess, profileID, offered)
+	if err != nil {
+		return surface, err
+	}
+	units, err := inject.ToolProcedureUnits(prompts.NewInjectRenderer(m.Prompts), reader)
 	if err != nil {
 		return surface, err
 	}

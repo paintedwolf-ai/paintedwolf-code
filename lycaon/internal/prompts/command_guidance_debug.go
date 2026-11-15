@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
 // CommandGuidanceFactKeys lists every structured fact branched on by the
@@ -88,7 +90,38 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	if strings.TrimSpace(in.SurfaceID) != "" {
 		scopeID = strings.TrimSpace(in.SurfaceID)
 	}
-	vars := VisibleToolsNativePartialVars(offered)
+	profiles, _ := sandbox.LoadToolProfiles()
+	profileID := strings.TrimSpace(in.ProfileID)
+	if profileID == "" || in.IsCoordinator || strings.TrimSpace(in.SurfaceID) != "" {
+		profileID = CoordinatorProfileID
+	}
+	var found bool
+	for _, p := range profiles {
+		if p.ID == profileID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		profiles = append(profiles, sandbox.ToolProfile{
+			ID:             profileID,
+			CommandEffects: ScopeCommandEffects(scopeID),
+		})
+	}
+	reader, err := NewReader(ReaderInput{
+		ProfileID: profileID,
+		SurfaceID: strings.TrimSpace(in.SurfaceID),
+		Profiles:  profiles,
+		Plan:      toolsurface.Compile(offered, deferred),
+		Loaded:    toolNameSet(offered),
+		Visible:   append(slices.Clone(offered), deferred...),
+		RootCount: in.RootCount,
+		WebSearch: true,
+	})
+	vars := map[string]any{}
+	if err == nil {
+		vars = reader.Facts()
+	}
 	vars["tool_profile"] = strings.TrimSpace(in.ProfileID)
 	vars["is_coordinator"] = in.IsCoordinator
 	vars["platform_os"] = runtime.GOOS
@@ -97,14 +130,6 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	vars["session_scratch_dir"] = strings.TrimSpace(in.SessionScratchDir)
 	vars["reviews_confined_writes"] = in.Posture.ReviewsConfinedWrites()
 	vars["command_external_hidden"] = in.CommandExternalHidden
-
-	if in.IsCoordinator && strings.TrimSpace(in.SurfaceID) != "" {
-		floor, _ := LoadCoordinatorSurfaceFloor(in.SurfaceID)
-		vars["command_on_floor"] = slices.Contains(floor, "command")
-	} else {
-		vars["command_on_floor"] = slices.Contains(offered, "command")
-	}
-	RestrictCommandEffects(ScopeCommandEffects(scopeID), offered, deferred, vars)
 	syncCommandExternalFacts(vars)
 
 	hasCommandOffered := slices.Contains(offered, "command")

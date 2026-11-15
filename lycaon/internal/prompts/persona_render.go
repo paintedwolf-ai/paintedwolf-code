@@ -89,7 +89,7 @@ func renderPersona(ctx context.Context, engine *FileTemplateEngine, agentID stri
 				loaded = raw
 			}
 		}
-		if err := MergeAgentToolSurfaceVars(toolProfile, visible, hints, SurfaceTurn{Loaded: loaded, Schemas: schemas}, data, profiles); err != nil {
+		if err := MergeAgentToolSurfaceVars(toolProfile, visible, hints, ReaderInput{Loaded: loaded, Schemas: schemas}, data, profiles); err != nil {
 			return "", fmt.Errorf("agent tool surface for %q: %w", id, err)
 		}
 		offered, _ := data["agent_tool_names"].([]string)

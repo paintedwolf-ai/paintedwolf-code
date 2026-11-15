@@ -1,13 +1,9 @@
 package prompts
 
-import (
-	"slices"
-	"strings"
-)
+import "strings"
 
-// MergeCoordinatorPromptVars adds ordered turn-surface variables. The offered
-// set comes from MergeCoordinatorSurfacePathVars when it ran first; otherwise
-// the surface floor is what this call offers.
+// MergeCoordinatorPromptVars adds turn-occurrence variables and ensures reader
+// facts are present when called standalone.
 func MergeCoordinatorPromptVars(
 	surfaceID string,
 	transition ExecutionModePromptTransition,
@@ -17,47 +13,26 @@ func MergeCoordinatorPromptVars(
 	if into == nil {
 		return nil
 	}
+	if _, err := loadCoordinatorSurfaceRow(surfaceID); err != nil {
+		return err
+	}
+	if _, hasCard := into["surface_card"]; !hasCard {
+		var loaded map[string]bool
+		if set, ok := into["surface_offered"].([]string); ok {
+			loaded = toolNameSet(set)
+		}
+		if err := MergeCoordinatorSurfacePathVars(surfaceID, nil, into, ReaderInput{
+			Mode:   strings.TrimSpace(transition.ExecutionMode),
+			Loaded: loaded,
+		}); err != nil {
+			return err
+		}
+	}
 	into["surface_id"] = strings.TrimSpace(surfaceID)
 	into["execution_mode"] = strings.TrimSpace(transition.ExecutionMode)
 	into["execution_mode_previous"] = strings.TrimSpace(transition.ExecutionModePrevious)
 	into["execution_mode_entered"] = strings.TrimSpace(transition.ExecutionModeEntered)
 	into["execution_mode_left"] = strings.TrimSpace(transition.ExecutionModeLeft)
-	floor, err := LoadCoordinatorSurfaceFloor(surfaceID)
-	if err != nil {
-		return err
-	}
-	offered := floor
-	if set, ok := into["surface_offered"].([]string); ok {
-		offered = set
-	}
-	loadable, err := LoadCoordinatorSurfaceLoadable(surfaceID)
-	if err != nil {
-		return err
-	}
-	offeredSet := toolNameSet(offered)
-	requestable := make([]string, 0, len(loadable))
-	for _, name := range loadable {
-		if !offeredSet[name] {
-			requestable = append(requestable, name)
-		}
-	}
-	into["is_coordinator"] = true
-	into["command_on_floor"] = slices.Contains(floor, "command")
-	RestrictCommandEffects(ScopeCommandEffects(surfaceID), offered, requestable, into)
-	commandMutates := currentCommandEffectFlags(into, offeredSet["command"]).mutation
-	card, err := LoadCoordinatorSurfaceCard(surfaceID)
-	if err != nil {
-		return err
-	}
-	runOffered := offered
-	if !commandMutates {
-		runOffered = filterToolName(offered, "command")
-	}
-	for k, v := range CoordinatorSurfaceCardVars(card, offered, requestable, commandMutates).TemplateVars() {
-		into[k] = v
-	}
-	MergeVisualShowVars(runOffered, requestable, into)
-	into["more_tools_loadable"] = len(requestable) > 0
 	into["verify_command"] = strings.TrimSpace(verifyCommand)
 	return nil
 }

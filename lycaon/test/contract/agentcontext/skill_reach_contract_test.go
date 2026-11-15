@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -75,12 +76,18 @@ func renderSkillParts(t *testing.T, sk skills.Skill, vars map[string]any) []rend
 // adding command mutation reachability from the rendered surface vars so the
 // map matches exactly what the reader's template facts claim.
 func readerHeld(reachable []string, vars map[string]any) map[string]bool {
-	held := make(map[string]bool, len(reachable)+1)
+	held := make(map[string]bool, len(reachable)+3)
 	for _, name := range reachable {
 		held[name] = true
 	}
 	if mutates, ok := vars["profile_command_mutation"].(bool); ok && mutates {
 		held[toolvocab.ReachCommandMutation] = true
+	}
+	if exec, ok := vars["profile_command_external_exec"].(bool); ok && exec {
+		held[toolcontract.ReachCommandExternalExec] = true
+	}
+	if net, ok := vars["profile_command_network_egress"].(bool); ok && net {
+		held[toolcontract.ReachCommandNetworkEgress] = true
 	}
 	return held
 }

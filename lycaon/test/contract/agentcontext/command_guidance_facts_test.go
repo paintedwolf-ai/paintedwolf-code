@@ -93,9 +93,9 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 			prompts.MergeWorkspaceRootsVars(vars, tc.roots, activeRootID)
 			if tc.isCoordinator {
 				vars["tool_profile"] = prompts.CoordinatorProfileID
-				contractcheck.FailErr(t, "merge coordinator surface", prompts.MergeCoordinatorSurfacePathVars(tc.scopeID, profiles, vars, prompts.SurfaceTurn{}))
+				contractcheck.FailErr(t, "merge coordinator surface", prompts.MergeCoordinatorSurfacePathVars(tc.scopeID, profiles, vars, prompts.ReaderInput{}))
 			} else {
-				contractcheck.FailErr(t, "merge agent surface", prompts.MergeAgentToolSurfaceVars(tc.scopeID, nil, nil, prompts.SurfaceTurn{}, vars, profiles))
+				contractcheck.FailErr(t, "merge agent surface", prompts.MergeAgentToolSurfaceVars(tc.scopeID, nil, nil, prompts.ReaderInput{}, vars, profiles))
 			}
 			vars["platform_os"] = tc.platformOS
 			vars["command_on_floor"] = tc.commandOnFloor

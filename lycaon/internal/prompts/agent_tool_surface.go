@@ -139,11 +139,11 @@ func groupHostResources(resources []AgentHostResourceView) []map[string]any {
 	return groups
 }
 
-// LoadAgentToolSurface builds one profile's prompt surface. turn.Loaded names
+// LoadAgentToolSurface builds one profile's prompt surface. in.Loaded names
 // the profile's deferred tools the session ledger has loaded; they are offered
 // on this call like sticky ones, and the rest list as requestable with the
-// description turn.Schemas holds for them.
-func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes map[string]hintCodeRow, turn SurfaceTurn, profiles []sandbox.ToolProfile) (AgentToolSurfaceData, error) {
+// description in.Schemas holds for them.
+func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes map[string]hintCodeRow, in ReaderInput, profiles []sandbox.ToolProfile) (AgentToolSurfaceData, error) {
 	profileID := strings.TrimSpace(toolProfileID)
 	if profileID == "" {
 		return AgentToolSurfaceData{}, fmt.Errorf("tool profile id required")
@@ -162,23 +162,23 @@ func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes
 		return AgentToolSurfaceData{}, fmt.Errorf("tool profile %q not found", profileID)
 	}
 
-	toolNames := turn.available(visibleToolNames(profile, visibleTools))
+	toolNames := availableToolsInPlan(visibleToolNames(profile, visibleTools), in.Plan)
 	toolViews := make([]AgentToolArgView, 0, len(toolNames))
 	var requestable []string
 	for _, name := range toolNames {
-		if (profile.ToolDeferred(name) && !turn.Loaded[name]) || !profile.ToolAllowed(name) {
+		if (profile.ToolDeferred(name) && !in.Loaded[name]) || !profile.ToolAllowed(name) {
 			requestable = append(requestable, name)
 			continue
 		}
 		view := AgentToolArgView{Name: name}
-		if turn.Schemas != nil {
-			if meta, ok := turn.Schemas.ToolMeta(name); ok {
+		if in.Schemas != nil {
+			if meta, ok := in.Schemas.ToolMeta(name); ok {
 				view.RequiredArgs, _ = toolschema.ArgFieldSummary(meta.ArgsSchema)
 			}
 		}
 		toolViews = append(toolViews, view)
 	}
-	roster, err := RequestableTools(requestable, turn.Schemas)
+	roster, err := RequestableTools(requestable, in.Schemas)
 	if err != nil {
 		return AgentToolSurfaceData{}, err
 	}
@@ -309,7 +309,7 @@ func AgentToolSurfaceTemplateVars(data AgentToolSurfaceData) map[string]any {
 }
 
 // MergeAgentToolSurfaceVars adds profile data to a render map.
-func MergeAgentToolSurfaceVars(toolProfileID string, visibleTools []string, hintCodes map[string]hintCodeRow, turn SurfaceTurn, into map[string]any, profiles []sandbox.ToolProfile) error {
+func MergeAgentToolSurfaceVars(toolProfileID string, visibleTools []string, hintCodes map[string]hintCodeRow, in ReaderInput, into map[string]any, profiles []sandbox.ToolProfile) error {
 	if into == nil {
 		return fmt.Errorf("nil template vars map")
 	}
@@ -318,7 +318,7 @@ func MergeAgentToolSurfaceVars(toolProfileID string, visibleTools []string, hint
 	if len(skills) == 0 {
 		visible = filterToolName(visible, "skills_read")
 	}
-	data, err := LoadAgentToolSurface(toolProfileID, visible, hintCodes, turn, profiles)
+	data, err := LoadAgentToolSurface(toolProfileID, visible, hintCodes, in, profiles)
 	if err != nil {
 		return err
 	}

@@ -61,7 +61,7 @@ func TestCoordinatorSkillCanTeachDeferredToolWithinRuntimePlan(t *testing.T) {
 
 func TestPromptSurfaceRespectsClosedRuntimePlan(t *testing.T) {
 	vars := map[string]any{}
-	testutil.FailErr(t, "closed runtime surface", MergeCoordinatorSurfacePathVars("implement_investigate", nil, vars, SurfaceTurn{Plan: toolsurface.Compile(nil, nil), Loaded: map[string]bool{"web_search": true, "fetch_url": true, "command": true}}))
+	testutil.FailErr(t, "closed runtime surface", MergeCoordinatorSurfacePathVars("implement_investigate", nil, vars, ReaderInput{Plan: toolsurface.Compile(nil, nil), Loaded: map[string]bool{"web_search": true, "fetch_url": true, "command": true}}))
 	if len(vars["surface_offered"].([]string)) != 0 || vars["more_tools_loadable"] != false {
 		t.Fatalf("closed plan widened: %v", vars)
 	}

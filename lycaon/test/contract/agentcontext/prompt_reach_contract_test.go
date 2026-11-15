@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -14,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
@@ -35,7 +37,7 @@ func promptNameCatalog(t *testing.T) (*toolvocab.Catalog, []sandbox.ToolProfile)
 
 func unreachableNames(t *testing.T, catalog *toolvocab.Catalog, corpus string, reachable []string, scopeID ...string) []string {
 	t.Helper()
-	held := make(map[string]bool, len(reachable)+1)
+	held := make(map[string]bool, len(reachable)+3)
 	for _, name := range reachable {
 		held[name] = true
 	}
@@ -43,9 +45,7 @@ func unreachableNames(t *testing.T, catalog *toolvocab.Catalog, corpus string, r
 	if len(scopeID) > 0 {
 		scope = scopeID[0]
 	}
-	if held["command"] && prompts.ScopeAllowsCommandMutation(scope) {
-		held[toolvocab.ReachCommandMutation] = true
-	}
+	maps.Copy(held, toolcontract.ReachMarks(held["command"], prompts.ScopeCommandEffects(scope)))
 	return toolvocab.UnreachableNames(catalog, corpus, held)
 }
 
@@ -132,7 +132,7 @@ func TestRenderedCoordinatorKicksNameOnlyReachableTools(t *testing.T) {
 				delete(data, "tools")
 				// The host digest quotes observations the reader already holds.
 				delete(data, "evidence_digest")
-				contractcheck.FailErr(t, "merge kick vars", prompts.MergeCoordinatorKickVarsForTools(data, reachable))
+				prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, id, 1))
 				corpus, err := engine.RenderKick(context.Background(), kickID, data)
 				contractcheck.FailErr(t, "render kick", err)
 				if names := unreachableNames(t, catalog, corpus, reachable); len(names) > 0 {
@@ -189,7 +189,7 @@ func TestRenderedPhaseKicksNameOnlyTheirSurfacesTools(t *testing.T) {
 				data := kickRenderFixture()
 				// The host digest quotes observations the reader already holds.
 				delete(data, "evidence_digest")
-				contractcheck.FailErr(t, "merge kick vars", prompts.MergeCoordinatorKickVarsForTools(data, reachable))
+				prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, id, 1))
 				corpus, err := engine.RenderKick(context.Background(), inject.Render, data)
 				contractcheck.FailErr(t, "render kick", err)
 				if names := unreachableNames(t, catalog, corpus, reachable); len(names) > 0 {

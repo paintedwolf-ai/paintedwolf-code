@@ -26,7 +26,7 @@ func TestResearchPromptInventoryFollowsSettingAndFamilyFloor(t *testing.T) {
 	for _, surface := range []string{"implement_investigate", "observe_plan"} {
 		for _, loaded := range []map[string]bool{nil, {"web_search": true, "fetch_url": true}} {
 			vars := map[string]any{"web_search_enabled": false}
-			testutil.FailErr(t, "disabled research surface", prompts.MergeCoordinatorSurfacePathVars(surface, nil, vars, prompts.SurfaceTurn{Loaded: loaded}))
+			testutil.FailErr(t, "disabled research surface", prompts.MergeCoordinatorSurfacePathVars(surface, nil, vars, prompts.ReaderInput{Loaded: loaded}))
 			for _, name := range []string{"web_search", "fetch_url"} {
 				if vars["profile_has_"+name] != false || slices.Contains(vars["surface_offered"].([]string), name) {
 					t.Fatalf("disabled tool %s taught on %s: %v", name, surface, vars)

@@ -8,8 +8,32 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 )
+
+func dispatchTestReader(t *testing.T) prompts.Reader {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	if err != nil {
+		t.Fatalf("LoadToolProfiles: %v", err)
+	}
+	plan, err := prompts.CompileSurfacePlan("implement_dispatch", 1)
+	if err != nil {
+		t.Fatalf("CompileSurfacePlan: %v", err)
+	}
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_dispatch",
+		Plan:      plan,
+		Profiles:  profiles,
+		RootCount: 1,
+	})
+	if err != nil {
+		t.Fatalf("NewReader: %v", err)
+	}
+	return reader
+}
 
 func excludedDisclosuresForTest(t *testing.T, data prompts.SpawnRosterData) []prompts.SpawnAgentView {
 	t.Helper()
@@ -84,9 +108,7 @@ func TestLoadSpawnRosterSurfaceImplementDefault(t *testing.T) {
 
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	spawnVars := spawnRosterTemplateVarsForTest(t, data)
-	if err := prompts.MergeCoordinatorKickPolicyVars(spawnVars); err != nil {
-		t.Fatalf("MergeCoordinatorKickPolicyVars: %v", err)
-	}
+	prompts.MergeCoordinatorKickVarsForTools(spawnVars, dispatchTestReader(t))
 	spawnOut, err := engine.Render(context.Background(), "inject/implement-spawn.md", spawnVars)
 	if err != nil {
 		t.Fatalf("Render implement-spawn: %v", err)
@@ -153,9 +175,7 @@ func TestSpawnRosterTemplateVars(t *testing.T) {
 			EnabledTools: []string{"fetch_url", "web_search"},
 		}},
 	}, nil)
-	if err := prompts.MergeCoordinatorKickPolicyVars(vars); err != nil {
-		t.Fatalf("MergeCoordinatorKickPolicyVars: %v", err)
-	}
+	prompts.MergeCoordinatorKickVarsForTools(vars, dispatchTestReader(t))
 	out, err := engine.Render(context.Background(), "inject/implement-spawn.md", vars)
 	if err != nil {
 		t.Fatalf("Render: %v", err)

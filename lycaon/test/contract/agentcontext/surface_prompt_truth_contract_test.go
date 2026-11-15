@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolexecution"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -70,10 +71,25 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 				declared, err := toolcontract.NewCommandEffects(row.CommandEffects...)
 				contractcheck.FailErr(t, "compile surface effects", err)
 				admitted := coordinator.CommandEffects & declared
+				execEffects, err := toolexecution.CommandEffectsForSurface(surfaceID, profiles)
+				contractcheck.FailErr(t, "executor effects", err)
+				plan, err := prompts.CompileSurfacePlan(surfaceID, 1)
+				contractcheck.FailErr(t, "compile surface plan", err)
+				reader, err := prompts.NewReader(prompts.ReaderInput{
+					ProfileID: prompts.CoordinatorProfileID,
+					SurfaceID: surfaceID,
+					Plan:      plan,
+					Profiles:  profiles,
+					RootCount: 1,
+				})
+				contractcheck.FailErr(t, "new reader", err)
+				if reader.Effects() != execEffects || reader.Effects() != admitted {
+					t.Fatalf("reader.Effects() = %v, executor = %v, admitted = %v", reader.Effects().Classes(), execEffects.Classes(), admitted.Classes())
+				}
 
 				vars := map[string]any{"root_count": 1}
 				mergePromptBudgetSkillRoster(t, vars)
-				contractcheck.FailErr(t, "merge surface vars", prompts.MergeCoordinatorSurfacePathVars(surfaceID, profiles, vars, prompts.SurfaceTurn{}))
+				contractcheck.FailErr(t, "merge surface vars", prompts.MergeCoordinatorSurfacePathVars(surfaceID, profiles, vars, prompts.ReaderInput{}))
 				contractcheck.FailErr(t, "merge prompt vars", prompts.MergeCoordinatorPromptVars(surfaceID, prompts.ExecutionModePromptTransition{}, "", vars))
 				offered, _ := vars["surface_offered"].([]string)
 				commandOffered := slices.Contains(offered, "command")
@@ -114,8 +130,18 @@ func TestWorkerPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 				continue
 			}
 			t.Run(string(posture.ID)+"/"+profile.ID, func(t *testing.T) {
+				reader, err := prompts.NewReader(prompts.ReaderInput{
+					ProfileID: profile.ID,
+					Profiles:  profiles,
+					RootCount: 1,
+					WebSearch: true,
+				})
+				contractcheck.FailErr(t, "new worker reader", err)
+				if reader.Effects() != profile.CommandEffects {
+					t.Fatalf("worker reader.Effects() = %v, want %v", reader.Effects().Classes(), profile.CommandEffects.Classes())
+				}
 				vars := map[string]any{}
-				contractcheck.FailErr(t, "merge profile vars", prompts.MergeAgentToolSurfaceVars(profile.ID, nil, nil, prompts.SurfaceTurn{}, vars, profiles))
+				contractcheck.FailErr(t, "merge profile vars", prompts.MergeAgentToolSurfaceVars(profile.ID, nil, nil, prompts.ReaderInput{}, vars, profiles))
 				commandOffered, _ := vars["profile_has_command"].(bool)
 				for name, class := range commandEffectVariables {
 					want := commandOffered && allowsEffect(t, profile.CommandEffects, class)

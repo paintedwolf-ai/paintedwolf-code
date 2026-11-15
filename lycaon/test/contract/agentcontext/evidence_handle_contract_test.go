@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -41,9 +42,7 @@ func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 		for _, tool := range slices.Concat(state.offered, state.requestable) {
 			held[tool] = true
 		}
-		if held["command"] && vars["profile_command_mutation"] != false {
-			held[toolvocab.ReachCommandMutation] = true
-		}
+		maps.Copy(held, toolcontract.ReachMarks(held["command"], toolcontract.AllCommandEffects()))
 		offered := map[string]bool{}
 		for _, tool := range state.offered {
 			offered[tool] = true

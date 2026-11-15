@@ -6,6 +6,8 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/webresearch"
@@ -81,7 +83,20 @@ func TestResolveCapabilitySurfaceSearchDisabled(t *testing.T) {
 func TestMergeForTurnInvestigateAsksForPageCapture(t *testing.T) {
 	vars := map[string]any{}
 	profile := surface.TurnProfile{SurfaceID: "implement_investigate"}
-	if err := capability.MergeForTurn(vars, profile, 1, spawn.AmbientAllowedAgents(), true); err != nil {
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load profiles", err)
+	plan, err := prompts.CompileSurfacePlan(profile.SurfaceID, 1)
+	testutil.FailErr(t, "compile plan", err)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: profile.SurfaceID,
+		Profiles:  profiles,
+		Plan:      plan,
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "new reader", err)
+	if err := capability.MergeForTurn(vars, reader, spawn.AmbientAllowedAgents()); err != nil {
 		testutil.FailErr(t, "merge investigate turn", err)
 	}
 	if vars["visual_show_page"] != false || vars["visual_show_needs_request"] != true {

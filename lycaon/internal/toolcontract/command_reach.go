@@ -5,9 +5,40 @@ import (
 	"sync"
 )
 
-// ReachCommandMutation marks a reader able to run command programs that mutate
-// the workspace.
-const ReachCommandMutation = "command_mutation"
+// Reach marks represent command effect axes in a reader's held set.
+const (
+	ReachCommandMutation      = "command_mutation"
+	ReachCommandExternalExec  = "command_external_exec"
+	ReachCommandNetworkEgress = "command_network_egress"
+)
+
+// ReachMarks returns the synthetic reach marks for a reader's command effects.
+func ReachMarks(holdsCommand bool, effects CommandEffects) map[string]bool {
+	out := make(map[string]bool)
+	if !holdsCommand {
+		return out
+	}
+	if effects.Allows(commandEffectBit(CommandMutation)) {
+		out[ReachCommandMutation] = true
+	}
+	if effects.Allows(commandEffectBit(CommandExternalExec)) {
+		out[ReachCommandExternalExec] = true
+	}
+	if effects.Allows(commandEffectBit(CommandNetworkEgress)) {
+		out[ReachCommandNetworkEgress] = true
+	}
+	return out
+}
+
+// IsReachMark reports whether name is a synthetic command-effect reach mark.
+func IsReachMark(name string) bool {
+	switch name {
+	case ReachCommandMutation, ReachCommandExternalExec, ReachCommandNetworkEgress:
+		return true
+	default:
+		return false
+	}
+}
 
 // namedForm matches backticked hyphenated command forms, which plain identifier
 // scanners cannot see because their character class omits hyphens.

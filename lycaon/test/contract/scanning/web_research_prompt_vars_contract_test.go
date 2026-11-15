@@ -9,7 +9,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -49,16 +50,11 @@ func TestWebResearchPromptVarsSuppliedAndGated(t *testing.T) {
 	if !strings.Contains(string(asm), "MergeForTurn(") {
 		t.Fatalf("%s must call capability.MergeForTurn", asmPath)
 	}
-	capPath := filepath.Join(lycaonRoot, "internal", "coordinator", "capability", "capability.go")
-	capBody, err := os.ReadFile(capPath)
-	contractcheck.FailErr(t, "read file", err)
-	capSrc := string(capBody)
-	if !strings.Contains(capSrc, `into["web_search_enabled"]`) {
-		t.Fatalf("%s must set web_search_enabled", capPath)
-	}
-	if !strings.Contains(capSrc, `into["can_spawn_web_research"]`) && !strings.Contains(capSrc, "can_spawn_web_research") {
-		t.Fatalf("%s must set can_spawn_web_research via MergeVars", capPath)
-	}
+
+	profiles, err := sandbox.LoadToolProfiles()
+	contractcheck.FailErr(t, "LoadToolProfiles", err)
+	plan, err := prompts.CompileSurfacePlan(spawn.SurfaceImplementRouting, 0)
+	contractcheck.FailErr(t, "CompileSurfacePlan", err)
 
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	for _, enabled := range []bool{false, true} {
@@ -66,12 +62,18 @@ func TestWebResearchPromptVarsSuppliedAndGated(t *testing.T) {
 			"execution_mode": "orchestrate",
 			"root_count":     0,
 		}
+		reader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: spawn.SurfaceImplementRouting,
+			Plan:      plan,
+			Profiles:  profiles,
+			WebSearch: enabled,
+		})
+		contractcheck.FailErr(t, "NewReader", err)
 		contractcheck.FailErr(t, "MergeForTurn", capability.MergeForTurn(
 			vars,
-			surface.TurnProfile{SurfaceID: spawn.SurfaceImplementRouting},
-			0,
+			reader,
 			inject.ResolveAgentRoster(spawn.SurfaceImplementRouting, spawn.AmbientAllowedAgents(), 0, false, enabled).Effective,
-			enabled,
 		))
 		if vars["web_search_enabled"] != enabled {
 			t.Fatalf("web_search_enabled = %v want %v", vars["web_search_enabled"], enabled)

@@ -11,10 +11,29 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
+
+func coordinatorTestReader(t *testing.T, surfaceID string, rootCount int) prompts.Reader {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	contractcheck.FailErr(t, "load tool profiles", err)
+	plan, err := prompts.CompileSurfacePlan(surfaceID, rootCount)
+	contractcheck.FailErr(t, "compile surface plan", err)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: surfaceID,
+		Plan:      plan,
+		Profiles:  profiles,
+		RootCount: rootCount,
+		WebSearch: true,
+	})
+	contractcheck.FailErr(t, "new reader", err)
+	return reader
+}
 
 func mergeCoordinatorSurfaceVars(t *testing.T, surfaceID string) map[string]any {
 	t.Helper()
@@ -28,7 +47,7 @@ func mergeCoordinatorSurfaceVars(t *testing.T, surfaceID string) map[string]any 
 	}
 	// The surface merge filters unavailable skills.
 	mergePromptBudgetSkillRoster(t, vars)
-	if err := prompts.MergeCoordinatorSurfacePathVars(surfaceID, nil, vars, prompts.SurfaceTurn{}); err != nil {
+	if err := prompts.MergeCoordinatorSurfacePathVars(surfaceID, nil, vars, prompts.ReaderInput{}); err != nil {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
 	}
 	return vars
@@ -37,9 +56,7 @@ func mergeCoordinatorSurfaceVars(t *testing.T, surfaceID string) map[string]any 
 func mergeCoordinatorTemplateVars(t *testing.T) map[string]any {
 	t.Helper()
 	vars := mergeCoordinatorSurfaceVars(t, "implement_synthesis")
-	if err := prompts.MergeCoordinatorKickPolicyVars(vars); err != nil {
-		t.Fatalf("MergeCoordinatorKickPolicyVars: %v", err)
-	}
+	prompts.MergeCoordinatorKickVarsForTools(vars, coordinatorTestReader(t, "implement_synthesis", 1))
 	mergeFixtureWorkspaceRoot(t, vars, "")
 	return vars
 }
@@ -87,7 +104,8 @@ func mergeCoordinatorPromptVarsForTripartite(
 	if c, ok := vars["root_count"].(int); ok {
 		rootCount = c
 	}
-	if err := capability.MergeForTurn(vars, profile, rootCount, spawn.AmbientAllowedAgents(), true); err != nil {
+	reader := coordinatorTestReader(t, profile.SurfaceID, rootCount)
+	if err := capability.MergeForTurn(vars, reader, spawn.AmbientAllowedAgents()); err != nil {
 		t.Fatalf("MergeForTurn: %v", err)
 	}
 	return vars
