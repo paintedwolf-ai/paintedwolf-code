@@ -163,7 +163,7 @@ anchors:
 
   - id: overlay.promote.complete
     title: Overlay promote complete
-    description: All write overlays integrated (zero pending).
+    description: No unresolved worker changes remain.
     trigger_class: overlay_state
     surface: coordinator
     planes: [inform]

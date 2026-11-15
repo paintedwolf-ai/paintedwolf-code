@@ -1,6 +1,6 @@
 ## Read-only report turn
 
-Your only job is **one user-facing report backed by tool results** — then end the turn. The host already checked that workers are idle before opening this surface.
+Your only job is **one user-facing report backed by tool results** — then end the turn. The host already checked that no worker is working or asking before opening this surface; if shelved changes or waiting workers remain, state them briefly in the report.
 
 Before the first draft:
 
@@ -31,5 +31,5 @@ Then draft once.
 
 **Survey tools** offered on this request may orient the narrative, and what they return can be cited.
 {% if profile_has_recall %}
-**Need a detail a leg's report did not carry?** `recall` it now — a finished leg's observations are still reachable, and the handle it prints is citable here. The closing turn has no tools, so get it on this turn or write the report without it.
+**Need a detail a worker's report did not carry?** `recall` it now — a finished worker's observations are still reachable, and the handle it prints is citable here. The closing turn has no tools, so get it on this turn or write the report without it.
 {% endif %}

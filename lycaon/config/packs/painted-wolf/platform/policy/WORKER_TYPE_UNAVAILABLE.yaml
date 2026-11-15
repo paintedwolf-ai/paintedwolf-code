@@ -11,8 +11,8 @@ x-paintedwolf-emit: guard:coordinator
 message: Worker type is unavailable
 what: The requested worker type is not available on this host.
 cause: The worker type or its tool profile could not be resolved on this host.
-why: Dispatching an unavailable type cannot create a worker or a durable task record.
-fix: Choose an agent type exposed on the current coordinator tool surface.
+why: Starting an unavailable type cannot create a worker or a durable round record.
+fix: Choose an agent type exposed on the current coordinator `task` schema, or instruct a waiting worker that already covers this role.
 instead: Branch on the code and select an available worker type
 x-paintedwolf-scenarios:
   - id: unknown_type

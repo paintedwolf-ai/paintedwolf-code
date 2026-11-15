@@ -1,4 +1,4 @@
 >>> Stacked child orphaned
-Overlay {{ overlay_id }} was orphaned because its base {{ base_overlay_id }} was rejected.
-This terminal overlay cannot be promoted, rejected again, or used as a worker base. Preserve useful retained findings. If remaining work is still required, dispatch a fresh task against the current primary or another live base with the intended scope.
+Result {{ overlay_id }} was orphaned because its base result {{ base_overlay_id }} was rejected.
+This result cannot be promoted, rejected again, or used as a worker base. Preserve useful retained findings. If remaining work is still required, instruct the producer or start a fresh worker against the current primary or another live result handle with the intended scope.
 Code: OVERLAY_PARENT_REJECTED

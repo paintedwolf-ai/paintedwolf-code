@@ -1,12 +1,12 @@
 id: closeout_gates_passed
 kind: workflow-closeout
 purpose: |
-  Closeout requires completed delegation and current source verification evidence.
+  Closeout requires settled worker obligations (no worker working or asking, complete results accounted for, and changes promoted, rejected, or shelved) and current source verification evidence.
 missing_signals:
   - id: closeout_pending
     when: "true"
-    detail: "Delegation, current source verification, or required security evidence is incomplete."
-    fix: "Finish active work and record passing current-source verification and required security evidence."
+    detail: "Worker accounting or change resolution, current source verification, or required security evidence is incomplete."
+    fix: "Account for complete worker results, resolve open changes (promote, reject, or shelve), and record passing current-source verification and required security evidence."
 satisfy:
-  - "Finish active delegation work."
+  - "Account for complete worker results and resolve open changes."
   - "Record passing current-source verification and required security evidence."
