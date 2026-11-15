@@ -253,38 +253,6 @@ func (s *Store) Workers(ctx context.Context, actor Actor) ([]Worker, error) {
 	return out, nil
 }
 
-// BindReceipt confirms a child session binding.
-type BindReceipt struct {
-	WorkerID       string `json:"worker_id"`
-	ChildSessionID string `json:"child_session_id"`
-}
-
-// BindChildSession records the worker's child session once.
-func (s *Store) BindChildSession(ctx context.Context, actor Actor, op Op, workerID, childSessionID string) (BindReceipt, error) {
-	childSessionID = strings.TrimSpace(childSessionID)
-	return run(ctx, s, actor, op, "bind_child_session", []string{workerID, childSessionID}, func(q *db.Queries, _ *sql.Tx) (BindReceipt, error) {
-		w, err := coordinatorWorker(ctx, q, actor, workerID)
-		if err != nil {
-			return BindReceipt{}, err
-		}
-		if w.ChildSessionID.Valid {
-			if w.ChildSessionID.String == childSessionID {
-				return BindReceipt{WorkerID: w.ID, ChildSessionID: childSessionID}, nil
-			}
-			return BindReceipt{}, ErrBindingInvalid
-		}
-		if err := checkChildSession(ctx, q, w.SessionID, childSessionID); err != nil {
-			return BindReceipt{}, err
-		}
-		if _, err := q.BindWorkerChildSession(ctx, db.BindWorkerChildSessionParams{
-			ChildSessionID: nullString(childSessionID), UpdatedAt: s.stamp(), ID: w.ID,
-		}); err != nil {
-			return BindReceipt{}, err
-		}
-		return BindReceipt{WorkerID: w.ID, ChildSessionID: childSessionID}, nil
-	})
-}
-
 // CloseReceipt confirms a closed worker.
 type CloseReceipt struct {
 	WorkerID string `json:"worker_id"`
