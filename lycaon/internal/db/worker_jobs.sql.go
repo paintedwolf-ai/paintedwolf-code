@@ -939,6 +939,47 @@ func (q *Queries) ListLandedPathDeltas(ctx context.Context, arg ListLandedPathDe
 	return items, nil
 }
 
+const listLandedPathDeltasForSession = `-- name: ListLandedPathDeltasForSession :many
+SELECT lc.changed_paths_json, lc.deleted_paths_json
+FROM landed_changes AS lc
+JOIN worker_jobs AS wj ON wj.id = lc.worker_job_id
+WHERE wj.parent_session_id = ?1 AND lc.canonical_path = ?2
+ORDER BY lc.rowid
+`
+
+type ListLandedPathDeltasForSessionParams struct {
+	ParentSessionID sql.NullString `json:"parent_session_id"`
+	CanonicalPath   string         `json:"canonical_path"`
+}
+
+type ListLandedPathDeltasForSessionRow struct {
+	ChangedPathsJson string `json:"changed_paths_json"`
+	DeletedPathsJson string `json:"deleted_paths_json"`
+}
+
+func (q *Queries) ListLandedPathDeltasForSession(ctx context.Context, arg ListLandedPathDeltasForSessionParams) ([]ListLandedPathDeltasForSessionRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLandedPathDeltasForSession, arg.ParentSessionID, arg.CanonicalPath)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLandedPathDeltasForSessionRow
+	for rows.Next() {
+		var i ListLandedPathDeltasForSessionRow
+		if err := rows.Scan(&i.ChangedPathsJson, &i.DeletedPathsJson); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMergeApplyingWorkerJobIDs = `-- name: ListMergeApplyingWorkerJobIDs :many
 SELECT id FROM worker_jobs WHERE merge_status = 'applying' ORDER BY created_at, id
 `

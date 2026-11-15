@@ -24,7 +24,6 @@ export const TOOL_TITLE_FALLBACKS: Readonly<Record<string, string>> = {
 answer_decision: "Worker decision",
 command_output: "Output from a command",
 command_stop: "Command process",
-delegate_status: "Delegated task",
 handoff_init: "Worker coordination",
 held_result: "Held tool call",
 held_stop: "Held tool call",
@@ -61,10 +60,6 @@ export const TOOL_CHICKLET_TITLE_KEYS: Readonly<
   command_stop: [],
   complete_leg: ["brief"],
   copy: ["copies"],
-  delegate_decompose: ["blueprint_path"],
-  delegate_dispatch: [],
-  delegate_init: ["task", "blueprint_path", "workflow_id"],
-  delegate_status: [],
   delete: ["paths"],
   diff: ["path_a", "path_b"],
   edit: ["path"],
@@ -108,8 +103,6 @@ export const TOOL_CHICKLET_TITLE_KEYS: Readonly<
   page_close: ["caption"],
   page_open: ["url", "project_dir"],
   page_snapshot: ["caption"],
-  parse_decomposition: [],
-  parse_delegation_plan: [],
   parse_evaluation: [],
   parse_extract_json: [],
   parse_validate: [],
@@ -179,7 +172,6 @@ export const TOOL_CARD_KINDS: Readonly<
   Record<string, string>
 > = {
   command: "command",
-  delegate_dispatch: "task",
   edit: "write",
   grep: "read",
   jq_edit: "write",
@@ -218,7 +210,6 @@ export const TOOL_CHICKLET_RUNNING_LABELS: Readonly<
   command_output: "Reading output…",
   command_stop: "Stopping process…",
   complete_leg: "Reporting round outcome…",
-  delegate_dispatch: "Dispatching leg…",
   delete: "Deleting files…",
   diff: "Comparing files…",
   edit: "Editing…",
@@ -252,8 +243,6 @@ export const TOOL_CHICKLET_RUNNING_LABELS: Readonly<
   page_close: "Closing page…",
   page_open: "Opening page…",
   page_snapshot: "Snapshotting page…",
-  parse_decomposition: "Validating decomposition…",
-  parse_delegation_plan: "Validating delegation plan…",
   parse_evaluation: "Validating evaluation…",
   parse_extract_json: "Extracting JSON…",
   parse_validate: "Validating JSON…",
@@ -323,7 +312,6 @@ export const LONG_RUNNING_COORDINATOR_TOOLS: readonly string[] = [
 
 /** Worker-dispatch tools. */
 export const TASK_DISPATCH_TOOLS: readonly string[] = [
-  "delegate_dispatch",
   "task",
 ] as const;
 
@@ -376,10 +364,6 @@ export const TOOL_ACTIVITY_PRESENTATION: Readonly<
   command_stop: { headline: "running commands", weight: 3, role: "command" },
   complete_leg: { headline: "delegating work", weight: 3, role: "coordination" },
   copy: { headline: "managing files", weight: 6, role: "mutation" },
-  delegate_decompose: { headline: "delegating work", weight: 3, role: "coordination" },
-  delegate_dispatch: { headline: "delegating work", weight: 6, role: "coordination" },
-  delegate_init: { headline: "delegating work", weight: 3, role: "coordination" },
-  delegate_status: { headline: "delegating work", weight: 3, role: "coordination" },
   delete: { headline: "managing files", weight: 6, role: "mutation" },
   diff: { headline: "comparing changes", weight: 1, role: "investigation" },
   edit: { headline: "editing files", weight: 6, role: "mutation" },
@@ -423,8 +407,6 @@ export const TOOL_ACTIVITY_PRESENTATION: Readonly<
   page_close: { headline: "testing the interface", weight: 6, role: "interface_test" },
   page_open: { headline: "testing the interface", weight: 6, role: "interface_test" },
   page_snapshot: { headline: "testing the interface", weight: 6, role: "interface_test" },
-  parse_decomposition: { headline: "coordinating", weight: 0, role: "coordination" },
-  parse_delegation_plan: { headline: "coordinating", weight: 0, role: "coordination" },
   parse_evaluation: { headline: "coordinating", weight: 0, role: "coordination" },
   parse_extract_json: { headline: "coordinating", weight: 0, role: "coordination" },
   parse_validate: { headline: "coordinating", weight: 0, role: "coordination" },

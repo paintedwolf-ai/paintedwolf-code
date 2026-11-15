@@ -404,48 +404,6 @@ type CredentialAuthoredValues struct {
 	CreatedAt        string `json:"created_at"`
 }
 
-type DelegationLegs struct {
-	ID                     string         `json:"id"`
-	DelegationID           string         `json:"delegation_id"`
-	Title                  string         `json:"title"`
-	Status                 string         `json:"status"`
-	ParentID               sql.NullString `json:"parent_id"`
-	DependsOnJson          sql.NullString `json:"depends_on_json"`
-	FilesJson              sql.NullString `json:"files_json"`
-	CompletionCriteriaJson sql.NullString `json:"completion_criteria_json"`
-	WorkspaceRoot          sql.NullString `json:"workspace_root"`
-	WorkspaceID            sql.NullString `json:"workspace_id"`
-	Prompt                 sql.NullString `json:"prompt"`
-	AgentType              sql.NullString `json:"agent_type"`
-	WorkerID               sql.NullString `json:"worker_id"`
-	ResultJson             sql.NullString `json:"result_json"`
-	CreatedAt              string         `json:"created_at"`
-	StartedAt              sql.NullString `json:"started_at"`
-	CompletedAt            sql.NullString `json:"completed_at"`
-}
-
-type Delegations struct {
-	ID                   string         `json:"id"`
-	ProjectID            string         `json:"project_id"`
-	WorkspaceRootID      sql.NullString `json:"workspace_root_id"`
-	WorkspacePath        string         `json:"workspace_path"`
-	CoordinatorSessionID sql.NullString `json:"coordinator_session_id"`
-	Task                 string         `json:"task"`
-	Strategy             string         `json:"strategy"`
-	InspectMode          sql.NullString `json:"inspect_mode"`
-	Status               string         `json:"status"`
-	Reason               sql.NullString `json:"reason"`
-	Phase                sql.NullString `json:"phase"`
-	WorkflowID           sql.NullString `json:"workflow_id"`
-	WorkflowVersion      sql.NullString `json:"workflow_version"`
-	WorkflowRunID        sql.NullString `json:"workflow_run_id"`
-	BlueprintPath        sql.NullString `json:"blueprint_path"`
-	BaseHeadSha          sql.NullString `json:"base_head_sha"`
-	OperationID          sql.NullString `json:"operation_id"`
-	InputDigest          sql.NullString `json:"input_digest"`
-	CreatedAt            string         `json:"created_at"`
-}
-
 type DraftVersions struct {
 	SessionID    string `json:"session_id"`
 	SlotID       string `json:"slot_id"`

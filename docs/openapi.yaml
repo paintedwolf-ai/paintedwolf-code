@@ -26,8 +26,6 @@ tags:
     description: Project identity, roots, source access, and project-scoped history.
   - name: blueprints
     description: Reusable project and workflow launch configurations.
-  - name: delegations
-    description: Coordinator work delegation and leg lifecycle.
   - name: workers
     description: Background worker tasks and cancellation.
   - name: board
@@ -7588,158 +7586,6 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         default:
           $ref: '#/components/responses/Error'
-  /v1/delegations:
-    post:
-      tags:
-        - delegations
-      operationId: createDelegation
-      x-person-action: record
-      summary: Create a delegation
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateDelegationRequest'
-      responses:
-        '201':
-          description: Delegation created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Delegation'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '413':
-          $ref: '#/components/responses/ContentTooLarge'
-        '415':
-          $ref: '#/components/responses/UnsupportedMediaType'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-        default:
-          $ref: '#/components/responses/Error'
-  /v1/delegations/{id}:
-    get:
-      tags:
-        - delegations
-      operationId: getDelegation
-      summary: Get delegation by ID
-      parameters:
-        - $ref: '#/components/parameters/DelegationId'
-      responses:
-        '200':
-          description: Delegation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Delegation'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        default:
-          $ref: '#/components/responses/Error'
-  /v1/delegations/{id}/legs:
-    get:
-      tags:
-        - delegations
-      operationId: listDelegationLegs
-      summary: List legs for a delegation
-      parameters:
-        - $ref: '#/components/parameters/DelegationId'
-      responses:
-        '200':
-          description: Legs
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DelegationLegListResponse'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        default:
-          $ref: '#/components/responses/Error'
-  /v1/delegations/{id}/dispatch:
-    post:
-      tags:
-        - delegations
-      operationId: dispatchDelegationLeg
-      x-person-action: record
-      summary: Dispatch a delegation leg to a worker
-      parameters:
-        - $ref: '#/components/parameters/DelegationId'
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DispatchRequest'
-      responses:
-        '200':
-          description: Dispatched leg
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Leg'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '409':
-          $ref: '#/components/responses/Conflict'
-        '413':
-          $ref: '#/components/responses/ContentTooLarge'
-        '415':
-          $ref: '#/components/responses/UnsupportedMediaType'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-        default:
-          $ref: '#/components/responses/Error'
-  /v1/delegations/{id}/abort:
-    post:
-      tags:
-        - delegations
-      operationId: abortDelegation
-      x-person-action: record
-      summary: Abort a delegation
-      parameters:
-        - $ref: '#/components/parameters/DelegationId'
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AbortDelegationRequest'
-      responses:
-        '200':
-          description: Aborted delegation
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Delegation'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '413':
-          $ref: '#/components/responses/ContentTooLarge'
-        '415':
-          $ref: '#/components/responses/UnsupportedMediaType'
-        '429':
-          $ref: '#/components/responses/TooManyRequests'
-        default:
-          $ref: '#/components/responses/Error'
   /v1/workflows:
     get:
       tags:
@@ -14672,13 +14518,6 @@ components:
       schema:
         type: string
         format: uuid
-    DelegationId:
-      name: id
-      in: path
-      required: true
-      schema:
-        type: string
-        format: uuid
     ProjectIDQuery:
       name: project_id
       in: query
@@ -15166,21 +15005,6 @@ components:
         fingerprint:
           type: string
       additionalProperties: false
-    BoardDelegationEntry:
-      x-go-generate: true
-      type: object
-      required:
-        - id
-        - phase
-      additionalProperties: false
-      properties:
-        id:
-          type: string
-          format: uuid
-        phase:
-          $ref: '#/components/schemas/DelegationPhase'
-        task:
-          type: string
     BoardDetailLevel:
       type: string
       enum:
@@ -15507,10 +15331,6 @@ components:
         overlay_merge_plan:
           x-go-pointer: true
           $ref: '#/components/schemas/OverlayMergePlan'
-        delegation:
-          type: array
-          items:
-            $ref: '#/components/schemas/BoardDelegationEntry'
         active_workflow_run:
           x-go-pointer: true
           $ref: '#/components/schemas/WorkflowRun'
@@ -15834,7 +15654,6 @@ components:
         - worker
         - checkpoint
         - board
-        - delegation
         - cost
         - llm
         - activity
@@ -15874,7 +15693,6 @@ components:
         - $ref: '#/components/schemas/EventEnvelopeWorker'
         - $ref: '#/components/schemas/EventEnvelopeCheckpoint'
         - $ref: '#/components/schemas/EventEnvelopeBoard'
-        - $ref: '#/components/schemas/EventEnvelopeDelegation'
         - $ref: '#/components/schemas/EventEnvelopeCost'
         - $ref: '#/components/schemas/EventEnvelopeLlm'
         - $ref: '#/components/schemas/EventEnvelopeActivity'
@@ -15914,7 +15732,6 @@ components:
           worker: '#/components/schemas/EventEnvelopeWorker'
           checkpoint: '#/components/schemas/EventEnvelopeCheckpoint'
           board: '#/components/schemas/EventEnvelopeBoard'
-          delegation: '#/components/schemas/EventEnvelopeDelegation'
           cost: '#/components/schemas/EventEnvelopeCost'
           llm: '#/components/schemas/EventEnvelopeLlm'
           activity: '#/components/schemas/EventEnvelopeActivity'
@@ -16065,26 +15882,6 @@ components:
           $ref: '#/components/schemas/BoardView'
         detail_level:
           $ref: '#/components/schemas/BoardDetailLevel'
-    DelegationEvent:
-      x-go-generate: true
-      type: object
-      required:
-        - delegation_id
-        - status
-        - leg_id
-        - phase
-      additionalProperties: false
-      properties:
-        delegation_id:
-          type: string
-          format: uuid
-        status:
-          $ref: '#/components/schemas/DelegationStatus'
-        leg_id:
-          type: string
-          format: uuid
-        phase:
-          $ref: '#/components/schemas/DelegationPhase'
     LLMTokenCounts:
       x-go-generate: true
       type: object
@@ -17258,194 +17055,6 @@ components:
         completion:
           type: integer
           minimum: 0
-    AbortDelegationRequest:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      properties:
-        reason:
-          type: string
-    CreateDelegationRequest:
-      x-go-generate: true
-      type: object
-      required:
-        - operation_id
-        - project_id
-        - task
-      additionalProperties: false
-      properties:
-        operation_id:
-          type: string
-          format: uuid
-          description: Idempotency key. Repeating a create with the same key and body answers the delegation the first create made; the same key with a different body is an idempotency_conflict.
-        project_id:
-          type: string
-          format: uuid
-        task:
-          type: string
-        strategy:
-          $ref: '#/components/schemas/HuntStrategy'
-          description: Decomposition strategy. The host uses file-based when the request omits it.
-        inspect_mode:
-          $ref: '#/components/schemas/InspectMode'
-        workflow_id:
-          type: string
-          pattern: ^[a-z0-9_-]+$
-        workflow_version:
-          type: string
-        workflow_run_id:
-          type: string
-          format: uuid
-        blueprint_path:
-          type: string
-          description: Project-relative path under the overlay blueprints/ directory
-    Delegation:
-      x-go-generate: true
-      type: object
-      required:
-        - id
-        - project_id
-        - task
-        - strategy
-        - status
-        - created_at
-      additionalProperties: false
-      properties:
-        id:
-          type: string
-          format: uuid
-        project_id:
-          type: string
-          format: uuid
-        workspace_root_id:
-          type: string
-          format: uuid
-        workspace_path:
-          type: string
-        coordinator_session_id:
-          type: string
-          format: uuid
-          description: Coordinator session created with the delegation (for prompts and grounding)
-        task:
-          type: string
-        strategy:
-          $ref: '#/components/schemas/HuntStrategy'
-        inspect_mode:
-          $ref: '#/components/schemas/InspectMode'
-        workflow_id:
-          type: string
-          pattern: ^[a-z0-9_-]+$
-        workflow_version:
-          type: string
-        workflow_run_id:
-          type: string
-          format: uuid
-        blueprint_path:
-          type: string
-          description: Project-relative path under the overlay blueprints/ directory
-        base_head_sha:
-          type: string
-        status:
-          $ref: '#/components/schemas/DelegationStatus'
-        reason:
-          type: string
-        phase:
-          $ref: '#/components/schemas/DelegationPhase'
-        legs:
-          type: array
-          items:
-            $ref: '#/components/schemas/Leg'
-        created_at:
-          type: string
-          format: date-time
-    DelegationPhase:
-      type: string
-      enum:
-        - setup
-        - worker
-        - closeout
-        - done
-    DispatchRequest:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      properties:
-        leg_id:
-          type: string
-          format: uuid
-    HuntStrategy:
-      type: string
-      enum:
-        - file-based
-        - feature-based
-        - risk-based
-        - research-based
-    InspectMode:
-      type: string
-      enum:
-        - standard
-        - turbo
-        - full
-    Leg:
-      type: object
-      required:
-        - id
-        - delegation_id
-        - title
-        - status
-        - created_at
-      additionalProperties: false
-      properties:
-        id:
-          type: string
-          format: uuid
-        delegation_id:
-          type: string
-          format: uuid
-        title:
-          type: string
-        agent_type:
-          type: string
-          description: Functional worker agent id stamped at dispatch
-        status:
-          $ref: '#/components/schemas/LegStatus'
-        worker_id:
-          type: string
-          format: uuid
-        parent_id:
-          type: string
-          format: uuid
-        depends_on:
-          type: array
-          description: Leg ids that must complete before this leg can dispatch.
-          items:
-            type: string
-            format: uuid
-        files:
-          type: array
-          items:
-            type: string
-        prompt:
-          type: string
-        completion_criteria:
-          type: array
-          items:
-            type: string
-        workspace_id:
-          type: string
-          pattern: ^[a-zA-Z0-9_.:/-]+$
-          description: Stable workspace binding id for scoped evidence
-        result:
-          $ref: '#/components/schemas/WorkerResult'
-        created_at:
-          type: string
-          format: date-time
-        started_at:
-          type: string
-          format: date-time
-        completed_at:
-          type: string
-          format: date-time
     LegStatus:
       type: string
       enum:
@@ -17456,14 +17065,6 @@ components:
         - complete
         - failed
         - held
-        - canceled
-    DelegationStatus:
-      type: string
-      enum:
-        - active
-        - done
-        - failed
-        - aborted
         - canceled
     LogDigest:
       x-go-generate: true
@@ -27312,8 +26913,6 @@ components:
         - draft_root_immutable
         - project_busy
         - checkpoint_not_pending
-        - delegation_not_found
-        - delegation_leg_not_found
         - feedback_not_pending
         - feedback_response_required
         - briefing_disabled
@@ -27541,7 +27140,6 @@ components:
         - forbidden
         - worker_not_found
         - worker_not_cancelable
-        - leg_not_pending
         - decision_not_pending
         - workflow_active
         - workflow_revision_conflict
@@ -37934,17 +37532,6 @@ components:
         truncated:
           type: boolean
           description: Present and true when older blueprints were cut from this answer.
-    DelegationLegListResponse:
-      x-go-generate: true
-      type: object
-      required:
-        - legs
-      additionalProperties: false
-      properties:
-        legs:
-          type: array
-          items:
-            $ref: '#/components/schemas/Leg'
     WorkflowRequestSpec:
       x-go-generate: true
       type: object
@@ -43221,18 +42808,6 @@ components:
               const: board
             data:
               $ref: '#/components/schemas/BoardEvent'
-    EventEnvelopeDelegation:
-      allOf:
-        - $ref: '#/components/schemas/EventEnvelopeBase'
-        - type: object
-          required:
-            - topic
-            - data
-          properties:
-            topic:
-              const: delegation
-            data:
-              $ref: '#/components/schemas/DelegationEvent'
     EventEnvelopeCost:
       allOf:
         - $ref: '#/components/schemas/EventEnvelopeBase'

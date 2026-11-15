@@ -626,12 +626,6 @@
       "emit": "guard:grounding",
       "summary": "Planned leg {{ paintedwolf.leg_id }} has unmet closeout criteria."
     },
-    "COORDINATOR_DELEGATE_DISPATCH_USE_TASK": {
-      "branch_instruction": "Use the worker-dispatch path this request offers, or report that worker dispatch is unavailable.",
-      "category": "recoverable",
-      "emit": "guard:coordinator",
-      "summary": "This turn uses ambient worker dispatch rather than workflow delegation legs."
-    },
     "COORDINATOR_GROUNDING_ESCALATED": {
       "branch_instruction": "Stop asserting completion and wait for user guidance",
       "category": "recoverable",
@@ -785,18 +779,6 @@
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "Worker {{ paintedwolf.worker }} is {{ paintedwolf.status }} and cannot resume from a decision."
-    },
-    "DELEGATE_DISPATCH_LEG_NOT_PENDING": {
-      "branch_instruction": "Branch on leg status; dispatch only legs whose status is pending",
-      "category": "recoverable",
-      "emit": "guard:coordinator",
-      "summary": "No pending leg to dispatch{% if paintedwolf.leg_id %} — leg `{{ paintedwolf.leg_id }}`{% else %} — the targeted leg{% endif %} was already dispatched, is running, or reached a terminal state."
-    },
-    "DELEGATE_DISPATCH_LEG_REQUIRED": {
-      "branch_instruction": "Branch on the code and dispatch a specific pending leg",
-      "category": "recoverable",
-      "emit": "guard:coordinator",
-      "summary": "The dispatch request did not identify a pending delegation leg."
     },
     "DELETE_BULK_DENIED": {
       "branch_instruction": "Branch on Code; reduce paths[] length",

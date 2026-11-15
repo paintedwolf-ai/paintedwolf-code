@@ -134,10 +134,6 @@ const (
 	// ApiErrorCodeCheckpointNotPending checkpoint resolve targeted a non-pending
 	// record
 	ApiErrorCodeCheckpointNotPending ApiErrorCode = "checkpoint_not_pending"
-	// ApiErrorCodeDelegationNotFound delegation id not found
-	ApiErrorCodeDelegationNotFound ApiErrorCode = "delegation_not_found"
-	// ApiErrorCodeDelegationLegNotFound delegation leg id not found
-	ApiErrorCodeDelegationLegNotFound ApiErrorCode = "delegation_leg_not_found"
 	// ApiErrorCodeFeedbackNotPending feedback resolve targeted a non-pending phase
 	ApiErrorCodeFeedbackNotPending ApiErrorCode = "feedback_not_pending"
 	// ApiErrorCodeFeedbackResponseRequired feedback resolve had empty response
@@ -758,9 +754,6 @@ const (
 	ApiErrorCodeWorkerNotFound ApiErrorCode = "worker_not_found"
 	// ApiErrorCodeWorkerNotCancelable worker cancel targeted a terminal job
 	ApiErrorCodeWorkerNotCancelable ApiErrorCode = "worker_not_cancelable"
-	// ApiErrorCodeLegNotPending delegation dispatch targeted a leg that already
-	// left pending
-	ApiErrorCodeLegNotPending ApiErrorCode = "leg_not_pending"
 	// ApiErrorCodeDecisionNotPending no pending needs_decision for the worker job
 	ApiErrorCodeDecisionNotPending ApiErrorCode = "decision_not_pending"
 	// ApiErrorCodeWorkflowActive cannot start workflow while another is active
@@ -999,8 +992,6 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeDraftRootImmutable,
 	ApiErrorCodeProjectBusy,
 	ApiErrorCodeCheckpointNotPending,
-	ApiErrorCodeDelegationNotFound,
-	ApiErrorCodeDelegationLegNotFound,
 	ApiErrorCodeFeedbackNotPending,
 	ApiErrorCodeFeedbackResponseRequired,
 	ApiErrorCodeBriefingDisabled,
@@ -1228,7 +1219,6 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeForbidden,
 	ApiErrorCodeWorkerNotFound,
 	ApiErrorCodeWorkerNotCancelable,
-	ApiErrorCodeLegNotPending,
 	ApiErrorCodeDecisionNotPending,
 	ApiErrorCodeWorkflowActive,
 	ApiErrorCodeWorkflowRevisionConflict,
@@ -1393,8 +1383,6 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeApprovalGrantNotFound,
 		ApiErrorCodeRewindAnchorNotFound,
 		ApiErrorCodePromotionNotFound,
-		ApiErrorCodeDelegationNotFound,
-		ApiErrorCodeDelegationLegNotFound,
 		ApiErrorCodeBriefingRecordNotFound,
 		ApiErrorCodeFileBriefingNotFound,
 		ApiErrorCodeChoiceTransitionNotFound,
@@ -1547,7 +1535,6 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeSessionPreparing,
 		ApiErrorCodeSessionStopping,
 		ApiErrorCodeWorkerNotCancelable,
-		ApiErrorCodeLegNotPending,
 		ApiErrorCodeDecisionNotPending,
 		ApiErrorCodeWorkflowActive,
 		ApiErrorCodeWorkflowRevisionConflict,

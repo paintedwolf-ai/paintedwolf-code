@@ -4,11 +4,6 @@ package api
 
 import "time"
 
-// AbortDelegationRequest
-type AbortDelegationRequest struct {
-	Reason string `json:"reason,omitempty"`
-}
-
 // AbortSessionRequest
 type AbortSessionRequest struct {
 	// Optional note for worker cancellation envelopes
@@ -822,13 +817,6 @@ type BlueprintSummary struct {
 	UpdatedAt           time.Time       `json:"updated_at"`
 }
 
-// BoardDelegationEntry
-type BoardDelegationEntry struct {
-	ID    string          `json:"id"`
-	Phase DelegationPhase `json:"phase"`
-	Task  string          `json:"task,omitempty"`
-}
-
 // BoardEvent
 type BoardEvent struct {
 	ProjectID   string           `json:"project_id"`
@@ -950,7 +938,6 @@ type BoardView struct {
 	WorkersOmitted    int                          `json:"workers_omitted,omitempty"`
 	PromotePaths      []WorkerPromoteJobPathStatus `json:"promote_paths,omitempty"`
 	OverlayMergePlan  *OverlayMergePlan            `json:"overlay_merge_plan,omitempty"`
-	Delegation        []BoardDelegationEntry       `json:"delegation,omitempty"`
 	ActiveWorkflowRun *WorkflowRun                 `json:"active_workflow_run,omitempty"`
 	ForensicWorkers   *BoardForensicWorkers        `json:"forensic_workers,omitempty"`
 	Cost              *CostSummary                 `json:"cost"`
@@ -2473,22 +2460,6 @@ type CreateCustomScannerRequest struct {
 	Env []string `json:"env,omitempty"`
 }
 
-// CreateDelegationRequest
-type CreateDelegationRequest struct {
-	// Idempotency key. Repeating a create with the same key and body answers the delegation the first create made; the same key with a different body is an idempotency_conflict.
-	OperationID string `json:"operation_id"`
-	ProjectID   string `json:"project_id"`
-	Task        string `json:"task"`
-	// Decomposition strategy. The host uses file-based when the request omits it.
-	Strategy        HuntStrategy `json:"strategy,omitempty"`
-	InspectMode     InspectMode  `json:"inspect_mode,omitempty"`
-	WorkflowID      string       `json:"workflow_id,omitempty"`
-	WorkflowVersion string       `json:"workflow_version,omitempty"`
-	WorkflowRunID   string       `json:"workflow_run_id,omitempty"`
-	// Project-relative path under the overlay blueprints/ directory
-	BlueprintPath string `json:"blueprint_path,omitempty"`
-}
-
 // CreateManagedSecretRequest Stores a value a person entered in project settings. This is the one managed-secret path where a credential travels in a request body: every other path either generates the bytes host-side or slices them from a document the host already holds. The response carries only the capability. Ordinary reads never return the value; authenticated reveal is the sole disclosure path.
 type CreateManagedSecretRequest struct {
 	Name string `json:"name"`
@@ -2596,43 +2567,6 @@ type CurrentComparisonSource struct {
 	DecodeAs string `json:"decode_as,omitempty"`
 }
 
-// Delegation
-type Delegation struct {
-	ID              string `json:"id"`
-	ProjectID       string `json:"project_id"`
-	WorkspaceRootID string `json:"workspace_root_id,omitempty"`
-	WorkspacePath   string `json:"workspace_path,omitempty"`
-	// Coordinator session created with the delegation (for prompts and grounding)
-	CoordinatorSessionID string       `json:"coordinator_session_id,omitempty"`
-	Task                 string       `json:"task"`
-	Strategy             HuntStrategy `json:"strategy"`
-	InspectMode          InspectMode  `json:"inspect_mode,omitempty"`
-	WorkflowID           string       `json:"workflow_id,omitempty"`
-	WorkflowVersion      string       `json:"workflow_version,omitempty"`
-	WorkflowRunID        string       `json:"workflow_run_id,omitempty"`
-	// Project-relative path under the overlay blueprints/ directory
-	BlueprintPath string           `json:"blueprint_path,omitempty"`
-	BaseHeadSHA   string           `json:"base_head_sha,omitempty"`
-	Status        DelegationStatus `json:"status"`
-	Reason        string           `json:"reason,omitempty"`
-	Phase         DelegationPhase  `json:"phase,omitempty"`
-	Legs          []Leg            `json:"legs,omitempty"`
-	CreatedAt     time.Time        `json:"created_at"`
-}
-
-// DelegationEvent
-type DelegationEvent struct {
-	DelegationID string           `json:"delegation_id"`
-	Status       DelegationStatus `json:"status"`
-	LegID        string           `json:"leg_id"`
-	Phase        DelegationPhase  `json:"phase"`
-}
-
-// DelegationLegListResponse
-type DelegationLegListResponse struct {
-	Legs []Leg `json:"legs"`
-}
-
 // DenPerfEvent
 type DenPerfEvent struct {
 	// Den-side observation time (RFC 3339)
@@ -2730,11 +2664,6 @@ type DetectionRuleSummary struct {
 // DismissVerifySettingsRequest
 type DismissVerifySettingsRequest struct {
 	Dismissed bool `json:"dismissed"`
-}
-
-// DispatchRequest
-type DispatchRequest struct {
-	LegID string `json:"leg_id,omitempty"`
 }
 
 // DraftVersion
