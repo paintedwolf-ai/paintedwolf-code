@@ -53,13 +53,19 @@ func TestRefusalsNameTheJobsWorkerAndResult(t *testing.T) {
 	}
 }
 
-// Overlapping siblings are named by result handle; a sibling with no settled
-// result has no handle and is left out.
+// Overlapping siblings and rebased children are named by result handle; a sibling
+// with no settled result has no handle and is left out.
 func TestMergeResultNamesOverlapsByHandle(t *testing.T) {
 	s := &MergeService{Names: names}
-	out := api.WorkerMergeResult{OverlapJobIDs: []string{"job-1", "job-2", "broken"}}
+	out := api.WorkerMergeResult{
+		OverlapJobIDs: []string{"job-1", "job-2", "broken"},
+		Rebased:       []api.OverlayRebaseOutcome{{OverlayID: "job-1", Status: api.WorkerMergeStatusRebasing}},
+	}
 	s.nameOverlaps(t.Context(), &out)
 	if !slices.Equal(out.OverlapOverlayIDs, []string{"result-1"}) {
 		t.Fatalf("overlaps = %v", out.OverlapOverlayIDs)
+	}
+	if out.Rebased[0].OverlayID != "result-1" {
+		t.Fatalf("rebased child = %q, want its result handle", out.Rebased[0].OverlayID)
 	}
 }
