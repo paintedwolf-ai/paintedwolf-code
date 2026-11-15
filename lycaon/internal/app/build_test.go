@@ -14,10 +14,12 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 
+	"github.com/lycaon/lycaon/internal/app/persistence"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/session"
@@ -289,5 +291,66 @@ func TestBuildClosePreservesNewerProjectSourceWatch(t *testing.T) {
 	testutil.FailErr(t, "close final app", current.Close())
 	if repochange.Coverage(root).Watching {
 		t.Fatal("final app left its physical stream alive")
+	}
+}
+
+func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
+	testutil.SkipIfShort(t, "assembles the full app graph with shipped config")
+	t.Setenv("LYCAON_LLM_MOCK", "1")
+	t.Setenv("LYCAON_API_TOKEN", "test-token")
+
+	cfg := testBuildConfig(t, configlayout.FindModuleRoot())
+	app, err := Build(t.Context(), cfg)
+	testutil.FailErr(t, "build app", err)
+	t.Cleanup(func() { _ = app.Close() })
+
+	store, ok := app.DB.(*db.Store)
+	if !ok {
+		t.Fatalf("app.DB = %T, want *db.Store", app.DB)
+	}
+	projectDir := t.TempDir()
+	testdbseed.InsertProjectRoot(t, store, testdbseed.DefaultProjectID, projectDir)
+	child, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{
+		ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild,
+	}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create child session", err)
+
+	jobID, err := app.Delegations.Queue.Enqueue(t.Context(), wire.WorkerTask{
+		Prompt: "fixture", Brief: "fixture", ProjectID: testdbseed.DefaultProjectID,
+		ChildSessionID: child.ID, WorkspacePath: projectDir,
+	})
+	testutil.FailErr(t, "enqueue worker", err)
+
+	quiet := (&serveBuilder{
+		storage:     persistence.Runtime{Database: store},
+		delegations: app.Delegations,
+		sessions:    app.Sessions,
+		worker:      workerCoordination{cfg: worker.DefaultWorkersConfig()},
+	}).quietRounds()
+
+	jobs, err := quiet.Jobs(t.Context())
+	testutil.FailErr(t, "list quiet candidate jobs", err)
+	if len(jobs) != 1 || jobs[0].ID != jobID {
+		t.Fatalf("quiet jobs = %+v, want %s", jobs, jobID)
+	}
+	emptyProgress, err := quiet.Progress(t.Context(), child.ID)
+	testutil.FailErr(t, "empty turn progress", err)
+	if !emptyProgress.IsZero() {
+		t.Fatalf("empty progress = %v, want zero", emptyProgress)
+	}
+
+	stamp := time.Date(2026, 11, 14, 15, 30, 0, 0, time.UTC)
+	rawStamp := db.FormatTime(stamp)
+	testutil.FailErr(t, "insert turn", db.New(store).InsertTurn(t.Context(), db.InsertTurnParams{
+		ID: "turn-1", SessionID: child.ID, ProjectID: testdbseed.DefaultProjectID,
+		Origin: "user", InputJson: "{}", CreatedAt: rawStamp, UpdatedAt: rawStamp, ProgressedAt: rawStamp,
+	}))
+	gotProgress, err := quiet.Progress(t.Context(), child.ID)
+	testutil.FailErr(t, "recorded turn progress", err)
+	if !gotProgress.Equal(stamp) {
+		t.Fatalf("turn progress = %v, want %v", gotProgress, stamp)
+	}
+	if quiet.AwaitingApproval(t.Context(), child.ID) {
+		t.Fatal("expected no pending approval on fresh session")
 	}
 }
