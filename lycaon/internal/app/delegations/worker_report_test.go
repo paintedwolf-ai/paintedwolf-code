@@ -2,6 +2,7 @@ package delegations
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -113,5 +114,57 @@ func TestWorkerReportRefusesAResultThatIsNotTheWorkersEarlier(t *testing.T) {
 	var reject *toolrejection.ToolReject
 	if record != nil || !errors.As(err, &reject) || reject.Code != workercompletion.ResultNotEarlierCode {
 		t.Fatalf("foreign result citation accepted: %+v, %v", record, err)
+	}
+}
+
+func TestReviewSubjectNamesResolvesSubjectWorkerAndResult(t *testing.T) {
+	database := testdbfixture.Open(t, "worker-review-subject-names.db")
+	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
+	runtime := New(database, nil, worker.WorkersConfig{})
+	records := workerrecords.New(database)
+	actor := workerrecords.Actor{Kind: workerrecords.ActorCoordinator, SessionID: "parent", ProjectID: testdbseed.DefaultProjectID}
+
+	if w, r, ok, err := reviewSubjectNames(t.Context(), records, "missing-job"); err != nil || ok || w != "" || r != "" {
+		t.Fatalf("missing job misreported: w=%q r=%q ok=%v err=%v", w, r, ok, err)
+	}
+
+	prodJob, err := runtime.Queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
+		ParentSessionID: "parent", AgentType: "implementer", Prompt: "Write parser", Brief: "Write parser", ExecutionTarget: api.ExecutionTargetLocal,
+	})
+	testutil.FailErr(t, "enqueue producer job", err)
+	prod, err := records.CreateWorker(t.Context(), actor, workerrecords.Op{ID: "op-prod"}, workerrecords.WorkerSpec{
+		Name: "parser", AgentType: "implementer", Scope: "write", Brief: "Write parser",
+	})
+	testutil.FailErr(t, "create producer worker", err)
+	_, err = records.AdmitRound(t.Context(), actor, workerrecords.Op{ID: "op-prod-r1"}, prod.Worker.ID, workerrecords.RoundSpec{
+		JobID: prodJob, ExecutionTarget: "local",
+	})
+	testutil.FailErr(t, "admit producer round", err)
+
+	if w, r, ok, err := reviewSubjectNames(t.Context(), records, prodJob); err != nil || ok || w != "" || r != "" {
+		t.Fatalf("non-reviewer round misreported: w=%q r=%q ok=%v err=%v", w, r, ok, err)
+	}
+
+	revJob, err := runtime.Queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
+		ParentSessionID: "parent", AgentType: "reviewer", Prompt: "Review parser", Brief: "Review parser", ExecutionTarget: api.ExecutionTargetLocal,
+	})
+	testutil.FailErr(t, "enqueue reviewer job", err)
+	rev, err := records.CreateWorker(t.Context(), actor, workerrecords.Op{ID: "op-rev"}, workerrecords.WorkerSpec{
+		Name: "checker", AgentType: "reviewer", Scope: "read", Brief: "Review parser",
+	})
+	testutil.FailErr(t, "create reviewer worker", err)
+	subjectJSON, err := json.Marshal(workerrecords.ReviewSubject{
+		ResultID: "res-1", WorkerID: prod.Worker.ID, JobID: prodJob, CheckpointID: "cp-1",
+	})
+	testutil.FailErr(t, "marshal review subject", err)
+	_, err = records.AdmitRound(t.Context(), actor, workerrecords.Op{ID: "op-rev-r1"}, rev.Worker.ID, workerrecords.RoundSpec{
+		JobID: revJob, ExecutionTarget: "local", ReviewSubject: subjectJSON,
+	})
+	testutil.FailErr(t, "admit reviewer round", err)
+
+	workerName, resultID, ok, err := reviewSubjectNames(t.Context(), records, revJob)
+	testutil.FailErr(t, "resolve review subject names", err)
+	if !ok || workerName != "parser" || resultID != "res-1" {
+		t.Fatalf("review subject names mismatch: worker=%q result=%q ok=%v", workerName, resultID, ok)
 	}
 }
