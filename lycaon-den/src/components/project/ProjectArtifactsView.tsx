@@ -312,6 +312,7 @@ export function ProjectArtifactsView(props: Props) {
       <BrowseStagePanel
         appStore={props.appStore}
         back={props.back}
+        requireClient={props.client == null}
         scrollHost="content"
         contentReady={artifacts.ready}
         title="Artifacts"
