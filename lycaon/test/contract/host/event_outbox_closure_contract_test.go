@@ -25,15 +25,15 @@ var outboxTableFloor = []string{
 var outboxSilentMutators = map[string]string{
 	// Worker rounds settle inside job completion and cancellation, which
 	// announce the job; no event payload carries a round.
-	"lycaon/internal/workerrecords/rounds.go:AdmitRound":  "records the round an admitted job runs; the job announces its own admission and no event carries the round",
-	"lycaon/internal/workerrecords/rounds.go:SettleRound": "settles a round after its job's result is published; the job announces its terminal state and no event carries the round",
-	"lycaon/internal/workerrecords/rounds.go:StartRound":  "records the round an instruction starts and the child session's agent; the job announces its admission, and neither the round nor the agent is on an event payload",
+	"lycaon/internal/workerrecords/rounds.go:AdmitRound": "records the round an admitted job runs; the job announces its own admission and no event carries the round",
+	"lycaon/internal/workerrecords/rounds.go:StartRound": "records the round an instruction starts and the child session's agent; the job announces its admission, and neither the round nor the agent is on an event payload",
 	// Workers bind inside the job's child-session transaction; the roster reads
 	// worker records on each request and no event payload carries one.
 	"lycaon/internal/workerrecords/workers.go:CreateWorker":     "creates a worker for the task that starts it; the job announces its admission",
 	"lycaon/internal/workerrecords/workers.go:BindChildSession": "binds a worker's child session; the session and the job announce themselves",
 	"lycaon/internal/workerrecords/workers.go:SetBrief":         "changes a worker's brief, which no event payload carries",
 	"lycaon/internal/workerrecords/workers.go:Close":            "closes a worker; the roster drops it on the next request",
+	"lycaon/internal/workerrecords/workers.go:Discard":          "rolls back a roundless worker and its create receipt when task admission fails before a job starts; no event announced the worker",
 	"lycaon/internal/workerrecords/messages.go:AppendMessage":   "stores a message and advances its worker's sequence; recipients read their page on their next request",
 
 	// Path reservations.
