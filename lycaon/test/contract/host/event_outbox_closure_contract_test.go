@@ -34,6 +34,7 @@ var outboxSilentMutators = map[string]string{
 	"lycaon/internal/workerrecords/workers.go:BindChildSession": "binds a worker's child session; the session and the job announce themselves",
 	"lycaon/internal/workerrecords/workers.go:SetBrief":         "changes a worker's brief, which no event payload carries",
 	"lycaon/internal/workerrecords/workers.go:Close":            "closes a worker; the roster drops it on the next request",
+	"lycaon/internal/workerrecords/workers.go:Discard":          "rolls back a roundless worker and its create receipt when task admission fails before a job starts; no event announced the worker",
 	"lycaon/internal/workerrecords/messages.go:AppendMessage":   "stores a message and advances its worker's sequence; recipients read their page on their next request",
 
 	// Path reservations.

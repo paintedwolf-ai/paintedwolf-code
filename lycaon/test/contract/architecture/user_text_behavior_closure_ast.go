@@ -295,6 +295,11 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"tokens":              true,
 	"spend_under_cent":    true,
 	"estimated_spend_usd": true,
+	"latest_message_seq":  true,
+	"tools":               true,
+	"tools_minutes":       true,
+	// Prerequisite-blocked notice names the blocking producer worker when resolved.
+	"producer": true,
 	// Bounded grounding repair samples carry host-populated sample strings, truthy when non-empty.
 	"observed_handles_sample": true,
 	"observed_paths_sample":   true,
