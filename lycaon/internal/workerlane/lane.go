@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workspace"
 )
 
-// Workspaces is the Milestone 14 branch service a lane prepares through.
+// Workspaces prepares and evicts workspace branches for a lane.
 type Workspaces interface {
 	CreateWorkerBranch(ctx context.Context, roots []projectroot.RootRef, activeRootID, viewID string) (*workspace.Binding, workspace.SandboxLayout, error)
 	CreateStackedWorkerBranch(ctx context.Context, roots []projectroot.RootRef, activeRootID, viewID, parentCheckpointID string) (*workspace.Binding, workspace.SandboxLayout, error)

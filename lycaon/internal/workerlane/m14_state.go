@@ -14,8 +14,8 @@ type JobLookup interface {
 	Get(jobID string) (*api.WorkerTask, bool)
 }
 
-// M14State reads lane readiness from Milestone 14's claim state and landing
-// state from the job's merge status.
+// M14State reads lane readiness from branch claim state and landing state from
+// the job's merge status.
 type M14State struct {
 	Jobs JobLookup
 	// BranchState returns a branch's recorded claim snapshot.

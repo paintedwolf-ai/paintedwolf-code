@@ -1,7 +1,7 @@
 // Package workerlane keeps a worker's workspace lane across rounds: one
-// Milestone 14 branch per worker, kept for corrections, rebuilt from source
-// after a landing and reset after a rejection. The host chooses the
-// workspace; neither agent does.
+// workspace branch per worker, kept for corrections, rebuilt from source after
+// a landing and reset after a rejection. The host chooses the workspace;
+// neither agent does.
 package workerlane
 
 // Action is how the next round's workspace is obtained.
@@ -45,8 +45,7 @@ const (
 	ChangeShelved  ChangeState = "shelved"
 )
 
-// Facts describe a worker at admission. They come from the worker records,
-// the last result and Milestone 14's lane and promotion state.
+// Facts describe a worker at admission.
 type Facts struct {
 	// Write reports the round's scope.
 	Write bool
@@ -85,8 +84,9 @@ type Selection struct {
 	Hold           HoldReason `json:"hold,omitempty"`
 }
 
-// Select applies lifecycle §5. A hold is checked first: a lane that is
-// recovering, landing or holding live resources admits nothing.
+// Select chooses the workspace action from admission facts. A hold is checked
+// first: a lane that is recovering, landing or holding live resources admits
+// nothing.
 func Select(f Facts) Selection {
 	switch {
 	case f.RecoveryRequired:

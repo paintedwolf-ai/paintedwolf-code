@@ -7,7 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workerrecords"
 )
 
-// LaneState reads Milestone 14's state for a worker's lane and landings.
+// LaneState reads workspace and landing state for a worker's lane.
 type LaneState interface {
 	// PromotionUnsettled reports a landing of the job's changes that is
 	// applying or failed without its recovery finishing.

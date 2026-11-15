@@ -12,8 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workspace"
 )
 
-// realLane wires a lane service to a Milestone 14 workspace manager over a
-// one-file project.
+// realLane wires a lane service to a workspace manager over a one-file project.
 func realLane(t *testing.T) (*roundFixture, []projectroot.RootRef) {
 	t.Helper()
 	f := newRoundFixture(t)
