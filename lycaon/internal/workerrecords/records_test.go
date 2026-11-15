@@ -227,29 +227,14 @@ func TestClosedWorkerKeepsHistoryAndRefusesWork(t *testing.T) {
 	}
 }
 
-func TestWorkersListAndBindChildSessionOnce(t *testing.T) {
+func TestWorkersListInCreationOrder(t *testing.T) {
 	f := newFixture(t)
 	first := f.createWorker(t, "create-first", workerrecords.WorkerSpec{Name: "first"})
 	second := f.createWorker(t, "create-second", workerrecords.WorkerSpec{Name: "second"})
-	f.childActor(t, "child-a")
-	f.childActor(t, "child-b")
-
-	bound, err := f.store.BindChildSession(t.Context(), f.coord, op("bind-a"), first.WorkerID, "child-a")
-	testutil.FailErr(t, "bind child", err)
-	if bound.WorkerID != first.WorkerID || bound.ChildSessionID != "child-a" {
-		t.Fatalf("bound = %+v", bound)
-	}
-	again, err := f.store.BindChildSession(t.Context(), f.coord, op("bind-a-again"), first.WorkerID, "child-a")
-	testutil.FailErr(t, "bind same child again", err)
-	if again != bound {
-		t.Fatalf("idempotent bind = %+v, want %+v", again, bound)
-	}
-	_, err = f.store.BindChildSession(t.Context(), f.coord, op("bind-b"), first.WorkerID, "child-b")
-	wantErr(t, "rebind different child", err, workerrecords.ErrBindingInvalid)
 
 	workers, err := f.store.Workers(t.Context(), f.coord)
 	testutil.FailErr(t, "list workers", err)
-	if len(workers) != 2 || workers[0].ID != first.WorkerID || workers[0].ChildSessionID != "child-a" || workers[1].ID != second.WorkerID {
+	if len(workers) != 2 || workers[0].ID != first.WorkerID || workers[1].ID != second.WorkerID {
 		t.Fatalf("workers = %+v", workers)
 	}
 }

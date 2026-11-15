@@ -246,7 +246,7 @@ func (s mergeEngine) resolvePromoteWork(ctx context.Context, sessionID, overlayI
 	}
 	if task.MergeStatus != api.WorkerMergeStatusPending {
 		return promoteWork{}, s.reject(ctx, OverlayPromoteNotPendingCode, map[string]any{
-			"overlay_id": overlayID, "merge_status": string(task.MergeStatus),
+			"job_id": overlayID, "merge_status": string(task.MergeStatus),
 		})
 	}
 	if s.Store != nil {
@@ -254,7 +254,7 @@ func (s mergeEngine) resolvePromoteWork(ctx context.Context, sessionID, overlayI
 			return promoteWork{}, err
 		} else if working {
 			return promoteWork{}, s.reject(ctx, OverlayPromoteNotPendingCode, map[string]any{
-				"overlay_id": overlayID, "merge_status": "worker_working",
+				"job_id": overlayID, "merge_status": "worker_working",
 			})
 		}
 	}

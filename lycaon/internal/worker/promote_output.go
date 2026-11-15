@@ -144,7 +144,7 @@ func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, 
 	}
 	if task.MergeStatus != api.WorkerMergeStatusPending && task.MergeStatus != api.WorkerMergeStatusRebasing {
 		return api.OverlayRejectOutcome{}, s.reject(ctx, OverlayPromoteNotPendingCode, map[string]any{
-			"overlay_id": overlayID, "merge_status": string(task.MergeStatus),
+			"job_id": overlayID, "merge_status": string(task.MergeStatus),
 		})
 	}
 	var later []string
@@ -154,7 +154,7 @@ func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, 
 			return api.OverlayRejectOutcome{}, err
 		}
 		if working {
-			return api.OverlayRejectOutcome{}, s.reject(ctx, OverlayRejectWorkerWorkingCode, map[string]any{"overlay_id": overlayID})
+			return api.OverlayRejectOutcome{}, s.reject(ctx, OverlayRejectWorkerWorkingCode, map[string]any{"job_id": overlayID})
 		}
 		later = pending
 	}
@@ -223,7 +223,7 @@ func (s *MergeService) RebaseChildren(ctx context.Context, sessionID, parentOver
 	}
 	parent, ok := s.Queue.Get(parentOverlayID)
 	if !ok || parent == nil {
-		return nil, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"overlay_id": parentOverlayID})
+		return nil, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": parentOverlayID})
 	}
 	lock, err := acquirePromoteFileLock(ctx, s.hostDataDirFor(parent))
 	if err != nil {
@@ -232,10 +232,10 @@ func (s *MergeService) RebaseChildren(ctx context.Context, sessionID, parentOver
 	defer lock.release()
 	parent, ok = s.Queue.Get(parentOverlayID)
 	if !ok || parent == nil {
-		return nil, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"overlay_id": parentOverlayID})
+		return nil, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": parentOverlayID})
 	}
 	if strings.TrimSpace(parent.ParentSessionID) != strings.TrimSpace(sessionID) {
-		return nil, s.reject(ctx, OverlayPromoteSessionMismatchCode, map[string]any{"overlay_id": parentOverlayID})
+		return nil, s.reject(ctx, OverlayPromoteSessionMismatchCode, map[string]any{"job_id": parentOverlayID})
 	}
 	outs, updates, err := s.engine().assessChildRebases(ctx, sessionID, parentOverlayID)
 	if err != nil || len(updates) == 0 || s.Store == nil {
