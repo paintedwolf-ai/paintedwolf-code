@@ -239,13 +239,25 @@ func copyAndDigestCapturedMetadataToStage(layout sourceRepoLayout, stageGitDir s
 			setDigest("index", "absent")
 			return
 		}
-		idxBytes, iErr := os.ReadFile(filepath.Join(layout.gitDir, "index"))
+		srcIndex := filepath.Join(layout.gitDir, "index")
+		idxInfo, sErr := os.Stat(srcIndex)
+		if sErr != nil {
+			setErr(sErr)
+			return
+		}
+		idxBytes, iErr := os.ReadFile(srcIndex)
 		if iErr != nil {
 			setErr(iErr)
 			return
 		}
 		setDigest("index", sha256HexBytes(idxBytes))
-		setErr(os.WriteFile(filepath.Join(stageGitDir, "index"), idxBytes, 0o644))
+		dstIndex := filepath.Join(stageGitDir, "index")
+		if wErr := os.WriteFile(dstIndex, idxBytes, 0o644); wErr != nil {
+			setErr(wErr)
+			return
+		}
+		// Keep the source index timestamp so Git re-hashes same-second same-size edits under checkStat=minimal.
+		setErr(os.Chtimes(dstIndex, idxInfo.ModTime(), idxInfo.ModTime()))
 	}()
 	go func() {
 		defer wg.Done()
