@@ -434,3 +434,23 @@ func TestLoadRejectsUnknownEntryField(t *testing.T) {
 		t.Fatal("a misspelled entry field should fail Load, not be dropped")
 	}
 }
+
+func TestValidateRequiresLabelsOutsideWorkerCards(t *testing.T) {
+	cfg, schemas := loadBundled(t)
+	read := cfg.Tools["read"]
+	read.Label = ""
+	cfg.Tools["read"] = read
+	task := cfg.Tools["task"]
+	task.Label = "Worker"
+	cfg.Tools["task"] = task
+
+	err := cfg.Validate(schemas)
+	if err == nil {
+		t.Fatal("expected a missing label and a worker card label to fail validation")
+	}
+	for _, want := range []string{`tool "read": label is required`, `tool "task": kind task keeps its worker card`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error should contain %q, got: %v", want, err)
+		}
+	}
+}

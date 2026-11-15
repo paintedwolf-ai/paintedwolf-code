@@ -52,25 +52,30 @@ fallback_title_keys:
 
 tools:
   process_list:
+    label: "Processes"
     title_keys: []
     running_label: "Inspecting processes…"
     activity: {headline: "inspecting processes", salience: supporting, role: process}
   process_signal:
+    label: "Signal process"
     title_keys: []
     running_label: "Signaling processes…"
     activity: {headline: "signaling processes", salience: primary, role: process}
   answer_decision:
+    label: "Answer decision"
     running_label: "Answering a worker…"
     title_keys: [option]
     # The reader needs to see which way a worker's question went.
     activity: {headline: "resolving decisions", salience: defining, role: coordination}
     title_fallback: "Worker decision"
   ask_user:
+    label: "Ask you"
     running_label: "Asking you…"
     title_keys: [prompt]
     # The question is a workflow_feedback card, not this row.
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   command:
+    label: "Run command"
     kind: command
     title_keys: [command]
     running_label: "Running command…"
@@ -78,48 +83,59 @@ tools:
     visibility: long_running
     activity: {headline: "running commands", salience: primary, role: command}
   command_output:
+    label: "Read command output"
     title_keys: []
     running_label: "Reading output…"
     activity: {headline: "running commands", salience: primary, role: command}
     title_fallback: "Output from a command"
   command_stop:
+    label: "Stop command"
     title_keys: []
     running_label: "Stopping process…"
     activity: {headline: "running commands", salience: primary, role: command}
     title_fallback: "Command process"
   complete_leg:
+    label: "Complete leg"
     title_keys: [brief]
     running_label: "Finishing the task…"
     activity: {headline: "delegating work", salience: primary, role: coordination}
   held_result:
+    label: "Read held result"
     title_keys: []
     running_label: "Reading a held call…"
     activity: {headline: "reading files", salience: incidental, role: investigation}
     title_fallback: "Held tool call"
   held_stop:
+    label: "Held call"
     title_keys: []
     running_label: "Stopping a held call…"
     activity: {headline: "reading files", salience: incidental, role: investigation}
     title_fallback: "Held tool call"
   capture_page:
+    label: "Capture page"
     title_keys: [caption, url, project_dir]
     running_label: "Capturing page…"
     activity: {headline: "testing the interface", salience: defining, role: interface_test}
   chmod:
+    label: "Change permissions"
     running_label: "Changing permissions…"
     title_keys: [paths, mode]
     activity: {headline: "managing files", salience: defining, role: mutation}
   chown:
+    label: "Change owner"
     title_keys: [paths, owner]
     activity: {headline: "managing files", salience: defining, role: mutation}
   code_rewrite:
+    label: "Rewrite code"
     running_label: "Rewriting code…"
     title_keys: [pattern, paths, path]
     activity: {headline: "editing files", salience: defining, role: mutation}
   copy:
+    label: "Copy"
     title_keys: [copies]
     activity: {headline: "managing files", salience: defining, role: mutation}
   delegate_decompose:
+    label: "Delegate"
     title_keys: [blueprint_path]
     activity: {headline: "delegating work", salience: primary, role: coordination}
   delegate_dispatch:
@@ -127,292 +143,361 @@ tools:
     running_label: "Dispatching leg…"
     activity: {headline: "delegating work", salience: defining, role: coordination}
   delegate_init:
+    label: "Delegate"
     title_keys: [task, blueprint_path, workflow_id]
     activity: {headline: "delegating work", salience: primary, role: coordination}
   delegate_status:
+    label: "Worker status"
     title_keys: []
     activity: {headline: "delegating work", salience: primary, role: coordination}
     title_fallback: "Delegated task"
   delete:
+    label: "Delete"
     running_label: "Deleting files…"
     title_keys: [paths]
     activity: {headline: "managing files", salience: defining, role: mutation}
   diff:
+    label: "Compare files"
     running_label: "Comparing files…"
     title_keys: [path_a, path_b]
     activity: {headline: "comparing changes", salience: supporting, role: investigation}
   edit:
+    label: "Edit file"
     running_label: "Editing…"
     kind: write
     title_keys: [path]
     path_entry: file
     activity: {headline: "editing files", salience: defining, role: mutation}
   decline_worker_budget:
+    label: "Worker budget"
     running_label: "Declining a task budget…"
     title_keys: []
     activity: {headline: "delegating work", salience: primary, role: coordination}
     title_fallback: "Worker task"
   extend_worker_budget:
+    label: "Worker budget"
     running_label: "Extending a task budget…"
     # max_tool_loops is an integer.
     title_keys: []
     activity: {headline: "delegating work", salience: primary, role: coordination}
     title_fallback: "Worker task"
   extract_archive:
+    label: "Extract archive"
     title_keys: [path, dest]
     path_entry: file
     activity: {headline: "archiving files", salience: defining, role: mutation}
   fanout_plan:
+    label: "Plan fan-out"
     running_label: "Splitting up the work…"
     # rationale supplies the card title; legs contains structured records.
     title_keys: [rationale]
     activity: {headline: "delegating work", salience: primary, role: coordination}
   fetch_url:
+    label: "Fetch page"
     title_keys: [url]
     running_label: "Fetching URL…"
     activity: {headline: "researching", salience: primary, role: research}
   http_request:
+    label: "HTTP request"
     title_keys: [url, response_path]
     running_label: "Sending HTTP request…"
     activity: {headline: "connecting to services", salience: primary, role: endpoint}
   find:
+    label: "Find files"
     running_label: "Finding files…"
     title_keys: [name_glob, path]
     activity: {headline: "searching codebase", salience: supporting, role: investigation}
   git_blame:
+    label: "Blame"
     title_keys: [path]
     running_label: "Loading blame…"
     activity: {headline: "inspecting Git", salience: supporting, role: investigation}
   source_history:
+    label: "Session changes"
     title_keys: [path]
     title_fallback: "Session changes"
     running_label: "Loading file history…"
     activity: {headline: "inspecting Git", salience: supporting, role: investigation}
   git_branches:
+    label: "Branches"
     title_keys: []
     running_label: "Listing branches…"
     activity: {headline: "inspecting Git", salience: supporting, role: investigation}
   git_commit:
+    label: "Commit"
     title_keys: [message]
     running_label: "Committing…"
     activity: {headline: "recording Git changes", salience: defining, role: mutation}
   git_diff:
+    label: "Git diff"
     title_keys: [paths]
     running_label: "Loading diff…"
     activity: {headline: "inspecting Git", salience: supporting, role: investigation}
   git_log:
+    label: "Git log"
     title_keys: [ref, path]
     running_label: "Loading log…"
     activity: {headline: "inspecting Git", salience: supporting, role: investigation}
   git_ref:
+    label: "Git refs"
     title_keys: [refs]
     running_label: "Resolving refs…"
     activity: {headline: "inspecting Git", salience: supporting, role: investigation}
   git_restore:
+    label: "Restore"
     title_keys: [paths]
     running_label: "Restoring paths…"
     activity: {headline: "managing Git branches", salience: defining, role: mutation}
   git_show:
+    label: "Git show"
     title_keys: [ref, path]
     running_label: "Loading git show…"
     activity: {headline: "inspecting Git", salience: supporting, role: investigation}
   git_status:
+    label: "Git status"
     title_keys: []
     running_label: "Checking git status…"
     visibility: coordinator_internal
     activity: {headline: "inspecting Git", salience: supporting, role: investigation}
   grep:
+    label: "Search code"
     kind: read
     # Search cards use a distinct running verb.
     running_label: "Searching…"
     title_keys: [pattern, path]
     activity: {headline: "searching codebase", salience: supporting, role: investigation}
   handoff_health:
+    label: "Handoff status"
     title_keys: []
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   handoff_init:
+    label: "Reserve files"
     title_keys: []
     title_fallback: "Worker coordination"
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   handoff_release:
+    label: "Release files"
     title_keys: [paths]
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   handoff_release_all:
+    label: "Release files"
     title_keys: []
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   handoff_reserve:
+    label: "Reserve files"
     title_keys: [paths]
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   jq:
+    label: "Query JSON"
     running_label: "Querying JSON…"
     title_keys: [query, path]
     path_entry: file
     activity: {headline: "searching codebase", salience: supporting, role: investigation}
   jq_edit:
+    label: "Edit JSON"
     running_label: "Updating document…"
     kind: write
     title_keys: [path, dest]
     path_entry: file
     activity: {headline: "editing files", salience: defining, role: mutation}
   list_dir:
+    label: "List folder"
     running_label: "Listing files…"
     title_keys: [path]
     path_entry: folder
     activity: {headline: "searching codebase", salience: supporting, role: investigation}
   measure_page:
+    label: "Measure page"
     title_keys: [caption, url, project_dir, selectors]
     running_label: "Measuring page…"
     activity: {headline: "testing the interface", salience: defining, role: interface_test}
   mkdir:
+    label: "Make folder"
     title_keys: [paths]
     activity: {headline: "managing files", salience: defining, role: mutation}
   move:
+    label: "Move"
     title_keys: [moves]
     activity: {headline: "managing files", salience: defining, role: mutation}
   pack_board:
+    label: "Coordination board"
     # detail_level is a closed enum.
     title_keys: []
     visibility: coordinator_internal
     activity: {headline: "coordinating", salience: primary, role: coordination}
   parse_decomposition:
+    label: "Parse plan"
     title_keys: []
     running_label: "Validating decomposition…"
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   parse_delegation_plan:
+    label: "Parse plan"
     title_keys: []
     running_label: "Validating delegation plan…"
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   parse_evaluation:
+    label: "Parse plan"
     title_keys: []
     running_label: "Validating evaluation…"
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   parse_extract_json:
+    label: "Parse plan"
     title_keys: []
     running_label: "Extracting JSON…"
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   parse_validate:
+    label: "Parse plan"
     title_keys: []
     running_label: "Validating JSON…"
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   page_act:
+    label: "Act on page"
     # Titled from the drive script by the Den resolver; a page id is a uuid.
     title_keys: []
     running_label: "Driving page…"
     activity: {headline: "testing the interface", salience: defining, role: interface_test}
   page_close:
+    label: "Close page"
     # snapshot: true attaches a final still, which the caption labels.
     title_keys: [caption]
     running_label: "Closing page…"
     activity: {headline: "testing the interface", salience: defining, role: interface_test}
   page_open:
+    label: "Open page"
     title_keys: [url, project_dir]
     running_label: "Opening page…"
     activity: {headline: "testing the interface", salience: defining, role: interface_test}
   page_snapshot:
+    label: "Page snapshot"
     # The caption is the only arg that says which state was shot.
     title_keys: [caption]
     running_label: "Snapshotting page…"
     activity: {headline: "testing the interface", salience: defining, role: interface_test}
   plan_append_review_evidence:
+    label: "Review evidence"
     title_keys: [blueprint_path, evidence]
     activity: {headline: "recording review", salience: primary, role: coordination}
   preview_overlay:
+    label: "Worker changes"
     running_label: "Comparing the changes…"
     title_keys: [path]
     activity: {headline: "comparing changes", salience: supporting, role: investigation}
     title_fallback: "Worker changes"
   promote_overlay:
+    label: "Worker changes"
     running_label: "Landing worker changes…"
     title_keys: []
     activity: {headline: "landing worker changes", salience: defining, role: mutation}
     title_fallback: "Worker changes"
   read:
+    label: "Read file"
     kind: read
     title_keys: [symbol, path]
     path_entry: file
     activity: {headline: "reading files", salience: supporting, role: investigation}
   record_finding:
+    label: "Record finding"
     title_keys: [summary]
     activity: {headline: "recording review", salience: incidental, role: coordination}
   reject_overlay:
+    label: "Worker changes"
     running_label: "Dropping worker changes…"
     title_keys: [reason]
     activity: {headline: "landing worker changes", salience: defining, role: mutation}
     title_fallback: "Worker changes"
   render_view:
+    label: "Render view"
     # mime is a closed enum and cannot supply a useful title.
     title_keys: [caption, dest]
     running_label: "Rendering view…"
     activity: {headline: "creating visuals", salience: defining, role: inspection}
     title_fallback: "Visual artifact"
   replace_lines:
+    label: "Replace lines"
     running_label: "Editing lines…"
     title_keys: [path]
     path_entry: file
     activity: {headline: "editing files", salience: defining, role: mutation}
   restore_version:
+    label: "Restore version"
     running_label: "Restoring file…"
     title_keys: [path]
     path_entry: file
     activity: {headline: "managing files", salience: defining, role: mutation}
   request_budget:
+    label: "Request budget"
     title_keys: [remaining_work]
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   request_decision:
+    label: "Decision"
     title_keys: [question]
     activity: {headline: "resolving decisions", salience: defining, role: coordination}
   request_tools:
+    label: "Request tools"
     title_keys: [need]
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   secret_generate:
+    label: "Create secret"
     title_keys: [name]
     running_label: "Generating secret…"
     activity: {headline: "configuring credentials", salience: defining, role: coordination}
   secret_list:
+    label: "Secrets"
     title_keys: []
     running_label: "Listing secret references…"
     activity: {headline: "configuring credentials", salience: supporting, role: coordination}
   secret_revoke:
+    label: "Revoke secret"
     title_keys: [reference]
     running_label: "Revoking secret…"
     activity: {headline: "configuring credentials", salience: defining, role: coordination}
   stat:
+    label: "File details"
     running_label: "Checking files…"
     title_keys: [paths]
     activity: {headline: "checking file metadata", salience: supporting, role: investigation}
   state_close:
+    label: "Workflow state"
     title_keys: [reason]
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   state_query:
+    label: "Workflow state"
     title_keys: [path]
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   state_start:
+    label: "Workflow state"
     title_keys: [workflow_id, blueprint_path]
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   state_update:
+    label: "Workflow state"
     title_keys: [path]
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   submit_verdict:
+    label: "Verdict"
     running_label: "Recording the verdict…"
     # verdict is an object; no key here can produce a display string.
     title_keys: []
     activity: {headline: "recording review", salience: primary, role: coordination}
   summarize:
+    label: "Summarize"
     title_keys: [task, path]
     running_label: "Summarizing…"
     visibility: long_running
     activity: {headline: "summarizing source", salience: primary, role: investigation}
   survey_repo:
+    label: "Map codebase"
     title_keys: [bundle, path]
     running_label: "Surveying…"
     visibility: long_running
     activity: {headline: "mapping codebase", salience: primary, role: investigation}
   skills_read:
+    label: "Load skill"
     kind: skill
     title_keys: [need, resource]
     running_label: "Reading skill…"
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   recall:
+    label: "Recall"
     title_keys: [query]
     running_label: "Recalling…"
     activity: {headline: "recalling context", salience: supporting, role: investigation}
@@ -421,138 +506,169 @@ tools:
     running_label: "Spawning worker…"
     activity: {headline: "delegating work", salience: defining, role: coordination}
   terminal_close:
+    label: "Terminal session"
     title_keys: []
     running_label: "Closing terminal…"
     activity: {headline: "running commands", salience: primary, role: command}
     title_fallback: "Terminal session"
   terminal_open:
+    label: "Terminal session"
     title_keys: [command, cwd]
     running_label: "Opening terminal…"
     activity: {headline: "running commands", salience: primary, role: command}
   terminal_read:
+    label: "Terminal session"
     title_keys: []
     running_label: "Reading terminal…"
     activity: {headline: "running commands", salience: primary, role: command}
     title_fallback: "Terminal session"
   terminal_send:
+    label: "Terminal session"
     title_keys: []
     running_label: "Sending to terminal…"
     activity: {headline: "running commands", salience: primary, role: command}
     title_fallback: "Terminal session"
   terminal_snapshot:
+    label: "Terminal session"
     title_keys: [caption]
     running_label: "Snapshotting terminal…"
     activity: {headline: "running commands", salience: primary, role: command}
   update_progress:
+    label: "Update progress"
     title_keys: [content]
     visibility: coordinator_internal
     activity: {headline: "coordinating", salience: incidental, role: coordination}
   verify:
+    label: "Run checks"
     kind: command
     title_keys: [command]
     running_label: "Running tests…"
     visibility: long_running
     activity: {headline: "checking work", salience: defining, role: automated_test}
   view_image:
+    label: "View image"
     title_keys: [path]
     running_label: "Viewing image…"
     activity: {headline: "viewing images", salience: supporting, role: inspection}
     title_fallback: "Image artifact"
   view_video:
+    label: "View video"
     title_keys: [path]
     running_label: "Viewing video…"
     activity: {headline: "viewing videos", salience: supporting, role: inspection}
   wait:
+    label: "Wait"
     title_keys: [reason]
     running_label: "Waiting…"
     activity: {headline: "waiting", salience: incidental, role: coordination}
   wc:
+    label: "Count lines"
     running_label: "Counting lines…"
     title_keys: [paths]
     activity: {headline: "checking file metadata", salience: supporting, role: investigation}
   web_search:
+    label: "Search the web"
     # period adds the declared search window to the summary.
     title_keys: [query, period]
     running_label: "Searching…"
     activity: {headline: "researching", salience: primary, role: research}
   worker_cancel:
+    label: "Cancel worker"
     running_label: "Stopping a task…"
     title_keys: [reason]
     activity: {headline: "delegating work", salience: primary, role: coordination}
     title_fallback: "Worker task"
   workflow_advance:
+    label: "Workflow step"
     running_label: "Moving to the next phase…"
     title_keys: []
     activity: {headline: "managing workflow", salience: primary, role: coordination}
   workflow_catalog_summaries:
+    label: "Workflow catalog"
     running_label: "Reading the workflow catalog…"
     title_keys: []
     activity: {headline: "managing workflow", salience: primary, role: coordination}
   workflow_compose:
+    label: "Workflow"
     running_label: "Composing the workflow…"
     title_keys: []
     activity: {headline: "managing workflow", salience: primary, role: coordination}
     title_fallback: "Workflow definition"
   workflow_compose_from_template:
+    label: "Workflow"
     running_label: "Starting from a template…"
     title_keys: [template_id]
     activity: {headline: "managing workflow", salience: primary, role: coordination}
   workflow_persist:
+    label: "Workflow"
     running_label: "Saving the workflow…"
     title_keys: [workflow_id, version]
     activity: {headline: "managing workflow", salience: primary, role: coordination}
   workflow_transition:
+    label: "Workflow step"
     title_keys: [transition_id]
     activity: {headline: "managing workflow", salience: primary, role: coordination}
   workflow_user_feedback:
+    label: "Workflow step"
     title_keys: []
     activity: {headline: "managing workflow", salience: primary, role: coordination}
   write:
+    label: "Write file"
     kind: write
     title_keys: [path]
     path_entry: file
     activity: {headline: "editing files", salience: defining, role: mutation}
 
   scan_pack:
+    label: "Scan pack"
     running_label: "Running scanners…"
     title_keys: [categories]
     activity: {headline: "scanning security", salience: primary, role: security_scan}
   scan_query:
+    label: "Scan findings"
     running_label: "Querying findings…"
     title_keys: [path, rule_id]
     activity: {headline: "scanning security", salience: primary, role: security_scan}
     title_fallback: "Scan findings"
   scan_list:
+    label: "Scan list"
     running_label: "Listing scans…"
     title_keys: []
     activity: {headline: "scanning security", salience: primary, role: security_scan}
   scan_summary:
+    label: "Scan results"
     running_label: "Reading the scan…"
     title_keys: []
     activity: {headline: "scanning security", salience: primary, role: security_scan}
     title_fallback: "Scan results"
   scan_compare:
+    label: "Compare scans"
     running_label: "Comparing scans…"
     title_keys: []
     activity: {headline: "scanning security", salience: primary, role: security_scan}
     title_fallback: "Baseline → current scan"
   git_compare:
+    label: "Compare refs"
     title_keys: [base_ref, head_ref]
     running_label: "Comparing branches\u2026"
     activity: {headline: "inspecting Git", salience: supporting, role: investigation}
   git_checkout:
+    label: "Check out"
     title_keys: [branch, ref]
     running_label: "Switching branches\u2026"
     activity: {headline: "managing Git branches", salience: defining, role: mutation}
   git_merge:
+    label: "Merge"
     title_keys: [ref, message]
     running_label: "Merging\u2026"
     activity: {headline: "managing Git branches", salience: defining, role: mutation}
   git_stash:
+    label: "Stash"
     title_keys: [ref, paths, message]
     running_label: "Updating stash\u2026"
     activity: {headline: "managing Git branches", salience: defining, role: mutation}
   git_stash_list:
+    label: "Stash list"
     title_keys: []
     running_label: "Listing stashes\u2026"
     activity: {headline: "inspecting Git", salience: supporting, role: investigation}

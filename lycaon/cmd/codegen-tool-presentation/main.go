@@ -253,6 +253,16 @@ func renderGo(cfg Config) []byte {
 	b.WriteString("func Role(name string) string {\n")
 	b.WriteString("\treturn activityRoles[strings.ToLower(strings.TrimSpace(name))]\n")
 	b.WriteString("}\n")
+	b.WriteString("\nvar actionLabels = map[string]string{\n")
+	labels := cfg.Labels()
+	for _, name := range sortedKeys(labels) {
+		fmt.Fprintf(&b, "%q: %q,\n", name, labels[name])
+	}
+	b.WriteString("}\n\n")
+	b.WriteString("// Label is the action card name a tool declares, or empty.\n")
+	b.WriteString("func Label(name string) string {\n")
+	b.WriteString("\treturn actionLabels[strings.ToLower(strings.TrimSpace(name))]\n")
+	b.WriteString("}\n")
 	b.WriteString("\nvar titleFallbacks = map[string]string{\n")
 	for _, name := range sortedKeys(cfg.Tools) {
 		if label := cfg.Tools[name].TitleFallback; label != "" {
