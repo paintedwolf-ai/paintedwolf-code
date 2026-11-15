@@ -1,5 +1,4 @@
-import { createEffect, createMemo, For, onCleanup, Show } from "solid-js";
-import { isImeComposition } from "../../../platform/interaction/ime-composition.ts";
+import { createEffect, createMemo, For, Show } from "solid-js";
 import { AnchoredSurface } from "../../primitives/AnchoredSurface.tsx";
 import { ShowLatest } from "../../primitives/ShowLatest.tsx";
 import type { LineFacts, LineFactRow } from "./line-facts.ts";
@@ -32,19 +31,6 @@ export function LineFactsCard(props: Props) {
       if (entryLine() === line && !surface?.contains(document.activeElement)) rows()[0]?.focus({ preventScroll: true });
     });
   });
-  createEffect(() => {
-    if (!props.state) return;
-    // Capture Escape before editor keymaps collapse an active selection.
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape" || event.defaultPrevented || isImeComposition(event)) return;
-      event.preventDefault();
-      event.stopPropagation();
-      if (surface?.contains(document.activeElement)) props.onReturnFocus();
-      else props.onDismiss();
-    };
-    document.addEventListener("keydown", onKeyDown, true);
-    onCleanup(() => document.removeEventListener("keydown", onKeyDown, true));
-  });
   return <ShowLatest when={props.state}>{state => (
     <AnchoredSurface
       ref={element => { surface = element; }}
@@ -68,7 +54,7 @@ export function LineFactsCard(props: Props) {
         else if (event.key === "ArrowUp") next = Math.max(0, at - 1);
         else if (event.key === "Home") next = 0;
         else if (event.key === "End") next = items.length - 1;
-        else if (event.key === "ArrowLeft" || event.key === "Escape") {
+        else if (event.key === "ArrowLeft") {
           event.preventDefault(); event.stopPropagation(); props.onReturnFocus(); return;
         }
         if (next < 0) return;
@@ -95,7 +81,7 @@ export function LineFactsCard(props: Props) {
                   <Show when={sectionRows()[0]?.effectId} keyed>
                     {(effectId) => (
                       <LineFactsBriefing projectId={projectId} effectId={effectId} line={state().line}
-                        onOpenEvidence={props.onDismiss} returnFocus={() => state().anchor.querySelector<HTMLButtonElement>(".files-line-gutter__facts")?.focus()} />
+                        onOpenEvidence={props.onDismiss} returnFocus={() => state().anchor.querySelector<HTMLButtonElement>(".files-line-gutter__facts")?.focus({ preventScroll: true })} />
                     )}
                   </Show>
                 )}

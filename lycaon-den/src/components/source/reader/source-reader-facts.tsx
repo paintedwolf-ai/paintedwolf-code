@@ -7,11 +7,13 @@ import { sourceContributorLabel } from "../annotations/source-contributor-label.
 export function createReaderFacts(path: () => string, activate: (author: SourceContributor, line: number) => void) {
   const [state, setState] = createSignal<LineFactsCardState | null>(null);
   let authors: SourceContributor[] = [];
-  const hide = () => {
+  const hide = (): boolean => {
     const held = state();
-    held?.anchor.classList.remove("is-open");
-    held?.anchor.querySelector(".files-line-gutter__facts")?.setAttribute("aria-expanded", "false");
+    if (!held) return false;
+    held.anchor.classList.remove("is-open");
+    held.anchor.querySelector(".files-line-gutter__facts")?.setAttribute("aria-expanded", "false");
     setState(null);
+    return true;
   };
   onCleanup(hide);
   return {

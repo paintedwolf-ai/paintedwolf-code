@@ -1,6 +1,6 @@
 /** Gutter handle, hint, and dismissal rules for the line facts card. */
-import { StateEffect, StateField, type EditorState } from "@codemirror/state";
-import { EditorView, GutterMarker, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+import { Prec, StateEffect, StateField, type EditorState } from "@codemirror/state";
+import { EditorView, GutterMarker, keymap, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { agentMarkLines, lineFacts, lineFactsHint, lineFactsHintLabel, type LineFactsInput } from "./line-facts.ts";
 import { agentWholeFile } from "../../../files/documents/agent-paint-lifetime.ts";
 import { gutterControl, type LineGutterControl } from "./line-gutter-controls.ts";
@@ -8,7 +8,7 @@ import { gutterControl, type LineGutterControl } from "./line-gutter-controls.ts
 export type LineFactsHandlers = {
   /** Opens the card for a line. `keyboard` moves focus to its first row. */
   open: (line: number, cell: HTMLElement, via: "pointer" | "keyboard") => void;
-  dismiss: () => void;
+  dismiss: () => boolean | void;
   refresh: () => void;
 };
 const setHandlers = StateEffect.define<LineFactsHandlers>();
@@ -94,20 +94,24 @@ export function lineFactsTint(input: LineFactsInput, line: number): string {
   return `linear-gradient(${color}, ${color})`;
 }
 
+function isTopmostFactsSurface(doc: Document): boolean {
+  const surfaces = doc.querySelectorAll<HTMLElement>('[data-den-anchored-surface]:not([role="tooltip"])');
+  return surfaces.length === 0 || Boolean(surfaces.item(surfaces.length - 1)?.classList.contains("files-line-facts"));
+}
+
 export function lineFactsGutter(input: (state: EditorState) => LineFactsInput) {
-  return [handlersField, ViewPlugin.fromClass(class {
+  // High precedence closes an open card before default keymaps collapse a selection.
+  const escapeKeymap = Prec.high(keymap.of([{
+    key: "Escape",
+    run: view => isTopmostFactsSurface(view.dom.ownerDocument) && Boolean(view.state.field(handlersField, false)?.dismiss()),
+  }]));
+  return [handlersField, escapeKeymap, ViewPlugin.fromClass(class {
     private readonly dismiss = () => this.handlers()?.dismiss();
     private readonly scroll = () => { this.dismiss(); };
     private readonly pointerDown = (event: PointerEvent) => {
       const target = event.target instanceof Element ? event.target : null;
       if (target?.closest(".files-line-facts") || target?.closest(HANDLE)) return;
       this.dismiss();
-    };
-    // Editor keymaps may prevent default on Escape before AnchoredSurface sees it.
-    private readonly keyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      const active = this.view.dom.ownerDocument.activeElement;
-      if (!active?.closest(".files-line-facts")) this.dismiss();
     };
     private readonly blur = (event: FocusEvent) => {
       const related = event.relatedTarget;
@@ -118,7 +122,6 @@ export function lineFactsGutter(input: (state: EditorState) => LineFactsInput) {
     constructor(readonly view: EditorView) {
       view.scrollDOM.addEventListener("scroll", this.scroll, { passive: true });
       view.dom.ownerDocument.addEventListener("pointerdown", this.pointerDown, true);
-      view.dom.ownerDocument.addEventListener("keydown", this.keyDown);
       view.dom.addEventListener("focusout", this.blur);
     }
     private handlers() { return this.view.state.field(handlersField, false); }
@@ -132,7 +135,6 @@ export function lineFactsGutter(input: (state: EditorState) => LineFactsInput) {
       this.handlers()?.dismiss();
       this.view.scrollDOM.removeEventListener("scroll", this.scroll);
       this.view.dom.ownerDocument.removeEventListener("pointerdown", this.pointerDown, true);
-      this.view.dom.ownerDocument.removeEventListener("keydown", this.keyDown);
       this.view.dom.removeEventListener("focusout", this.blur);
     }
   })];

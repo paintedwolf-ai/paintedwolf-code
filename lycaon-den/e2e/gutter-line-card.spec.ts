@@ -65,6 +65,21 @@ test("line facts show a hint on rest and open the card only on activation", asyn
   await expect(card).toHaveCount(0);
   expect(await readFocusState()).toEqual(before);
 
+  const treeFile = page.getByTestId("files-tree-file").filter({ hasText: "load.go" });
+  await treeFile.focus();
+  await expect(treeFile).toBeFocused();
+  await handle.click();
+  await expect(card).toBeVisible();
+  await expect(treeFile).toBeFocused();
+  await page.keyboard.press("ControlOrMeta+f");
+  await expect(page.getByTestId("find-bar-input")).toBeFocused();
+  await expect(card).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("find-bar")).toHaveCount(0);
+  await expect(card).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(card).toHaveCount(0);
+
   await handle.click();
   await expect(card).toBeVisible();
   await handle.click();

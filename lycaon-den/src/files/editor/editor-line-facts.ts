@@ -50,11 +50,13 @@ export function createEditorLineFacts(options: EditorLineFactsOptions) {
   const sessionTitleCache = new Map<string, string>();
   const sessionTitleRequests = new Set<string>();
   const [lineFactsCard, setLineFactsCard] = createSignal<LineFactsCardState | null>(null);
-  const hideLineFacts = () => {
+  const hideLineFacts = (): boolean => {
     const held = lineFactsCard();
-    held?.anchor.classList.remove("is-open");
-    held?.anchor.querySelector(".files-line-gutter__facts")?.setAttribute("aria-expanded", "false");
+    if (!held) return false;
+    held.anchor.classList.remove("is-open");
+    held.anchor.querySelector(".files-line-gutter__facts")?.setAttribute("aria-expanded", "false");
     setLineFactsCard(null);
+    return true;
   };
   const returnLineFactsFocus = () => {
     const button = lineFactsCard()?.anchor.querySelector<HTMLButtonElement>(".files-line-gutter__facts");

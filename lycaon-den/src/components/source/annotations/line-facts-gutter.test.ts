@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { EditorState, StateEffect, StateField } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { defaultKeymap } from "@codemirror/commands";
+import { EditorSelection, EditorState, StateEffect, StateField } from "@codemirror/state";
+import { EditorView, keymap } from "@codemirror/view";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessionPresence, SecurityFinding } from "../../../api/types.ts";
 import { agentDocumentMarks } from "../../../files/components/agent-presence.ts";
@@ -44,10 +45,23 @@ function mountPlugin() {
     parent,
     state: EditorState.create({
       doc: baseDoc,
-      extensions: [markField, lineFactsGutter(state => ({ doc: state.doc, marks: state.field(markField), attribution, findings }))],
+      extensions: [
+        markField,
+        keymap.of(defaultKeymap),
+        lineFactsGutter(state => ({ doc: state.doc, marks: state.field(markField), attribution, findings })),
+      ],
     }),
   });
-  const handlers = { open: vi.fn(), dismiss: vi.fn(), refresh: vi.fn() };
+  let open = true;
+  const handlers = {
+    open: vi.fn(() => { open = true; }),
+    dismiss: vi.fn(() => {
+      if (!open) return false;
+      open = false;
+      return true;
+    }),
+    refresh: vi.fn(),
+  };
   setLineFactsHandlers(view, handlers);
 
   const gutter = view.dom.appendChild(document.createElement("div"));
@@ -69,12 +83,13 @@ function mountPlugin() {
 
   const card = document.body.appendChild(document.createElement("div"));
   card.className = "files-line-facts";
+  card.dataset.denAnchoredSurface = "card";
   const cardRow = card.appendChild(document.createElement("button"));
   cardRow.className = "files-line-facts__row";
 
   const outside = document.body.appendChild(document.createElement("button"));
 
-  return { setMarks, handlers, targets: { handle, cardRow, foldNumber, findingGlyph, provenanceBar, code, outside } };
+  return { setMarks, setOpen: (value: boolean) => { open = value; }, handlers, targets: { handle, cardRow, foldNumber, findingGlyph, provenanceBar, code, outside } };
 }
 
 describe("line facts gutter", () => {
@@ -92,22 +107,45 @@ describe("line facts gutter", () => {
     expect(handlers.dismiss).toHaveBeenCalledTimes(expected);
   });
 
-  it("dismisses once on scroll, Escape outside the card, and focus leaving editor and card, and refreshes on input change", () => {
-    const { setMarks, handlers, targets } = mountPlugin();
+  it("dismisses once on scroll, editor Escape before selection collapse, and focus leaving editor and card, while yielding to front layers", () => {
+    const { setMarks, setOpen, handlers, targets } = mountPlugin();
     view!.scrollDOM.dispatchEvent(new Event("scroll"));
     expect(handlers.dismiss).toHaveBeenCalledTimes(1);
 
     handlers.dismiss.mockClear();
-    targets.code.focus();
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    setOpen(true);
+    view!.dispatch({ selection: EditorSelection.range(0, 3) });
+    view!.contentDOM.focus();
+    const front = document.body.appendChild(document.createElement("div"));
+    front.dataset.denAnchoredSurface = "menu";
+    view!.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(handlers.dismiss).toHaveBeenCalledTimes(0);
+    front.remove();
+
+    view!.dispatch({ selection: EditorSelection.range(0, 3) });
+    view!.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     expect(handlers.dismiss).toHaveBeenCalledTimes(1);
+    expect(view!.state.selection.main.from).toBe(0);
+    expect(view!.state.selection.main.to).toBe(3);
+
+    // Once closed, Escape falls through to simplifySelection.
+    view!.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(view!.state.selection.main.empty).toBe(true);
 
     handlers.dismiss.mockClear();
+    setOpen(true);
+    const panelInput = view!.dom.appendChild(document.createElement("input"));
+    panelInput.addEventListener("keydown", event => { if (event.key === "Escape") event.preventDefault(); });
+    panelInput.focus();
+    panelInput.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+    expect(handlers.dismiss).toHaveBeenCalledTimes(0);
+    panelInput.remove();
+
     targets.cardRow.focus();
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    targets.cardRow.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
     expect(handlers.dismiss).toHaveBeenCalledTimes(0);
 
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+    view!.contentDOM.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true, cancelable: true }));
     expect(handlers.dismiss).toHaveBeenCalledTimes(0);
 
     targets.handle.dispatchEvent(new FocusEvent("focusout", { bubbles: true, relatedTarget: targets.code }));
