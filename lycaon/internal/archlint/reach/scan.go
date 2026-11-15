@@ -4,18 +4,17 @@ import (
 	"go/constant"
 	"go/token"
 	"go/types"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/archlint"
 
 	"golang.org/x/tools/go/ssa"
 )
 
 // tableRead matches a table named where SQL reads it. DELETE FROM is a write.
 var tableRead = regexp.MustCompile(`(?i)(\bdelete\s+)?\b(?:from|join)\s+["` + "`" + `]?([a-z_][a-z0-9_]*)`)
-
-func environ() []string { return os.Environ() }
 
 func relPos(dir string, pos token.Position) string {
 	if rel, err := filepath.Rel(dir, pos.Filename); err == nil && !strings.HasPrefix(rel, "..") {
@@ -51,7 +50,7 @@ func scanFunction(fset *token.FileSet, fn *ssa.Function, cfg Config, p *pass) {
 			case common.IsInvoke() && common.Method.FullName() == "(context.Context).Value" && len(common.Args) == 1:
 				if id, ok := keyID(common.Args[0], cfg); ok {
 					if _, seen := p.keysRead[id]; !seen {
-						p.keysRead[id] = Finding{
+						p.keysRead[id] = archlint.Finding{
 							Kind: KindUnsetCtxKey, Key: id, Pos: relPos(cfg.Dir, fset.Position(call.Pos())),
 							Message: "context key " + id + " is read but no shipped program sets it",
 						}
@@ -89,9 +88,9 @@ func keyID(v ssa.Value, cfg Config) (string, bool) {
 }
 
 // unsetKeys reports keys some GOOS reads that no GOOS sets.
-func unsetKeys(passes []*pass) []Finding {
+func unsetKeys(passes []*pass) []archlint.Finding {
 	set := map[string]bool{}
-	read := map[string]Finding{}
+	read := map[string]archlint.Finding{}
 	for _, p := range passes {
 		for id := range p.keysSet {
 			set[id] = true
@@ -102,7 +101,7 @@ func unsetKeys(passes []*pass) []Finding {
 			}
 		}
 	}
-	var out []Finding
+	var out []archlint.Finding
 	for id, f := range read {
 		if !set[id] {
 			out = append(out, f)
@@ -112,7 +111,7 @@ func unsetKeys(passes []*pass) []Finding {
 }
 
 // writeOnlyTables reports tables no reachable query or schema view reads.
-func writeOnlyTables(schema Schema, passes []*pass) []Finding {
+func writeOnlyTables(schema Schema, passes []*pass) []archlint.Finding {
 	read := map[string]bool{}
 	for _, p := range passes {
 		for t := range p.reads {
@@ -126,10 +125,10 @@ func writeOnlyTables(schema Schema, passes []*pass) []Finding {
 			}
 		}
 	}
-	var out []Finding
+	var out []archlint.Finding
 	for _, t := range schema.Tables {
 		if !read[strings.ToLower(t.Name)] {
-			out = append(out, Finding{
+			out = append(out, archlint.Finding{
 				Kind: KindWriteOnlyTable, Key: t.Name, Pos: t.Pos,
 				Message: "table " + t.Name + " has no reader a shipped program reaches",
 			})

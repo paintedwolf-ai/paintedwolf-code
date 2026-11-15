@@ -10,11 +10,14 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/archlint"
 
 	"golang.org/x/tools/go/callgraph/rta"
 	"golang.org/x/tools/go/packages"
@@ -22,21 +25,12 @@ import (
 	"golang.org/x/tools/go/ssa/ssautil"
 )
 
-// Finding kinds.
+// archlint.Finding kinds.
 const (
 	KindDeadFunc       = "dead-func"
 	KindUnsetCtxKey    = "unset-context-key"
 	KindWriteOnlyTable = "write-only-table"
 )
-
-// Finding is one piece of unreachable code, keyed by symbol so a change can be
-// compared with its base regardless of line numbers.
-type Finding struct {
-	Kind    string `json:"kind"`
-	Key     string `json:"key"`
-	Pos     string `json:"pos"`
-	Message string `json:"message"`
-}
 
 // Config selects the program and what is reported.
 type Config struct {
@@ -54,18 +48,23 @@ type Config struct {
 
 // pass is one GOOS load: what it compiles and what its roots reach.
 type pass struct {
-	compiled  map[string]Finding // dead-func key → finding for every reported source func
+	compiled  map[string]archlint.Finding // dead-func key → finding for every reported source func
 	reachable map[string]bool
 	reads     map[string]bool // tables a reachable function names in a read
 	keysSet   map[string]bool
-	keysRead  map[string]Finding
+	keysRead  map[string]archlint.Finding
 }
 
 // Run loads each GOOS and combines the passes.
-func Run(cfg Config) ([]Finding, error) {
+func Run(cfg Config) ([]archlint.Finding, error) {
 	if len(cfg.GOOS) == 0 {
 		return nil, fmt.Errorf("reach: no GOOS")
 	}
+	abs, err := filepath.Abs(cfg.Dir)
+	if err != nil {
+		return nil, err
+	}
+	cfg.Dir = abs
 	var passes []*pass
 	for _, goos := range cfg.GOOS {
 		p, err := load(cfg, goos)
@@ -105,7 +104,7 @@ func (cfg Config) reported(pkgPath string) bool {
 }
 
 func load(cfg Config, goos string) (*pass, error) {
-	env := append(environ(), "GOOS="+goos)
+	env := append(os.Environ(), "GOOS="+goos)
 	lc := &packages.Config{
 		Dir:  cfg.Dir,
 		Env:  env,
@@ -159,11 +158,11 @@ func load(cfg Config, goos string) (*pass, error) {
 	res := rta.Analyze(roots, false)
 
 	p := &pass{
-		compiled:  map[string]Finding{},
+		compiled:  map[string]archlint.Finding{},
 		reachable: map[string]bool{},
 		reads:     map[string]bool{},
 		keysSet:   map[string]bool{},
-		keysRead:  map[string]Finding{},
+		keysRead:  map[string]archlint.Finding{},
 	}
 	reachablePos := map[token.Position]bool{}
 	for fn := range res.Reachable {
@@ -177,7 +176,7 @@ func load(cfg Config, goos string) (*pass, error) {
 			continue
 		}
 		pos := prog.Fset.Position(s.fn.Pos())
-		p.compiled[s.key] = Finding{
+		p.compiled[s.key] = archlint.Finding{
 			Kind: KindDeadFunc, Key: s.key, Pos: relPos(cfg.Dir, pos),
 			Message: "no shipped program reaches " + s.key,
 		}
@@ -189,8 +188,8 @@ func load(cfg Config, goos string) (*pass, error) {
 }
 
 // deadFuncs reports a function dead when no GOOS that compiles it reaches it.
-func deadFuncs(passes []*pass) []Finding {
-	dead := map[string]Finding{}
+func deadFuncs(passes []*pass) []archlint.Finding {
+	dead := map[string]archlint.Finding{}
 	live := map[string]bool{}
 	for _, p := range passes {
 		for key, f := range p.compiled {
@@ -201,7 +200,7 @@ func deadFuncs(passes []*pass) []Finding {
 			}
 		}
 	}
-	var out []Finding
+	var out []archlint.Finding
 	for key, f := range dead {
 		if !live[key] {
 			out = append(out, f)

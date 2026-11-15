@@ -3,7 +3,7 @@
 // unreferenced commands and Tauri commands Den never invokes.
 //
 //	arch-lint reach [flags] <main packages>   whole-program reachability, JSON
-//	arch-lint vet [analyzer flags] <packages>  per-package analyzers
+//	arch-lint vet [flags] <packages>           per-package analyzers, JSON
 //	arch-lint refs -root <repo>               commands and scripts nothing references, JSON
 //	arch-lint tauri -root <repo>              Tauri commands without a caller or permission, JSON
 package main
@@ -24,7 +24,7 @@ func main() {
 	case "reach":
 		err = runReach(args, os.Stdout)
 	case "vet":
-		runVet(args)
+		err = runVet(args, os.Stdout)
 	case "refs":
 		err = runRefs(args, os.Stdout)
 	case "tauri":
