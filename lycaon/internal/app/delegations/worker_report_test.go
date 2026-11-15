@@ -122,7 +122,7 @@ func TestReviewSubjectNamesResolvesSubjectWorkerAndResult(t *testing.T) {
 	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
 	runtime := New(database, nil, worker.WorkersConfig{})
 	records := workerrecords.New(database)
-	actor := workerrecords.Actor{Kind: workerrecords.ActorCoordinator, SessionID: "parent", ProjectID: testdbseed.DefaultProjectID}
+	actor := workerrecords.Actor{SessionID: "parent", Role: workerrecords.RoleCoordinator}
 
 	if w, r, ok, err := reviewSubjectNames(t.Context(), records, "missing-job"); err != nil || ok || w != "" || r != "" {
 		t.Fatalf("missing job misreported: w=%q r=%q ok=%v err=%v", w, r, ok, err)
@@ -133,10 +133,10 @@ func TestReviewSubjectNamesResolvesSubjectWorkerAndResult(t *testing.T) {
 	})
 	testutil.FailErr(t, "enqueue producer job", err)
 	prod, err := records.CreateWorker(t.Context(), actor, workerrecords.Op{ID: "op-prod"}, workerrecords.WorkerSpec{
-		Name: "parser", AgentType: "implementer", Scope: "write", Brief: "Write parser",
+		Name: "parser", AgentType: "implementer", ScopeMode: workerrecords.ScopeWrite, Brief: "Write parser",
 	})
 	testutil.FailErr(t, "create producer worker", err)
-	_, err = records.AdmitRound(t.Context(), actor, workerrecords.Op{ID: "op-prod-r1"}, prod.Worker.ID, workerrecords.RoundSpec{
+	_, err = records.AdmitRound(t.Context(), actor, workerrecords.Op{ID: "op-prod-r1"}, prod.WorkerID, workerrecords.RoundSpec{
 		JobID: prodJob, ExecutionTarget: "local",
 	})
 	testutil.FailErr(t, "admit producer round", err)
@@ -150,14 +150,14 @@ func TestReviewSubjectNamesResolvesSubjectWorkerAndResult(t *testing.T) {
 	})
 	testutil.FailErr(t, "enqueue reviewer job", err)
 	rev, err := records.CreateWorker(t.Context(), actor, workerrecords.Op{ID: "op-rev"}, workerrecords.WorkerSpec{
-		Name: "checker", AgentType: "reviewer", Scope: "read", Brief: "Review parser",
+		Name: "checker", AgentType: "reviewer", ScopeMode: workerrecords.ScopeRead, Brief: "Review parser",
 	})
 	testutil.FailErr(t, "create reviewer worker", err)
 	subjectJSON, err := json.Marshal(workerrecords.ReviewSubject{
-		ResultID: "res-1", WorkerID: prod.Worker.ID, JobID: prodJob, CheckpointID: "cp-1",
+		ResultID: "res-1", WorkerID: prod.WorkerID, JobID: prodJob, CheckpointID: "cp-1",
 	})
 	testutil.FailErr(t, "marshal review subject", err)
-	_, err = records.AdmitRound(t.Context(), actor, workerrecords.Op{ID: "op-rev-r1"}, rev.Worker.ID, workerrecords.RoundSpec{
+	_, err = records.AdmitRound(t.Context(), actor, workerrecords.Op{ID: "op-rev-r1"}, rev.WorkerID, workerrecords.RoundSpec{
 		JobID: revJob, ExecutionTarget: "local", ReviewSubject: subjectJSON,
 	})
 	testutil.FailErr(t, "admit reviewer round", err)
