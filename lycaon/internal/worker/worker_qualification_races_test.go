@@ -207,11 +207,22 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 	testutil.FailErr(t, "register cancel tool", RegisterWorkerCancelTool(reg, CancelToolDeps{Cancel: cancel, Workers: ops}))
 
 	return &raceQualificationEnv{
-		sqlDB: sqlDB, primary: primary,
+		sqlDB:      sqlDB,
+		primary:    primary,
 		roots:      []projectroot.RootRef{{ID: "root-id", Label: "primary", Path: primary, IsPrimary: true}},
-		queue:      queue, records: records, decisions: decisions, workspaces: fw, laneState: ls,
-		lanes: lanes, ops: ops, merge: merge, answer: answer, shown: shown, cancel: cancel, reg: reg,
-		coord: workerrecords.Actor{SessionID: "coord", Role: workerrecords.RoleCoordinator, PrincipalID: "coord"},
+		queue:      queue,
+		records:    records,
+		decisions:  decisions,
+		workspaces: fw,
+		laneState:  ls,
+		lanes:      lanes,
+		ops:        ops,
+		merge:      merge,
+		answer:     answer,
+		shown:      shown,
+		cancel:     cancel,
+		reg:        reg,
+		coord:      workerrecords.Actor{SessionID: "coord", Role: workerrecords.RoleCoordinator, PrincipalID: "coord"},
 	}
 }
 
@@ -267,7 +278,7 @@ func lanePrimaryDir(t *testing.T, branchRoot string) string {
 	return ""
 }
 
-func TestSerializedPromotionRejectionAndAdmissionRaces(t *testing.T) {
+func TestSerializedPromotionAndActiveExecutionRaces(t *testing.T) {
 	e := newRaceQualificationEnv(t)
 	e.insertChildSession(t, "child-fixer", "implementer")
 
@@ -296,7 +307,7 @@ func TestSerializedPromotionRejectionAndAdmissionRaces(t *testing.T) {
 		t.Fatalf("missing result handle for job 1: %+v", names1)
 	}
 
-	// Race 1: promote_overlay enters first and pauses inside idle lane refresh;
+	// promote_overlay enters first and pauses inside idle lane refresh;
 	// concurrent instruct_worker waits on the worker lock and runs on generation 2.
 	enterRefresh := make(chan struct{})
 	exitRefresh := make(chan struct{})
@@ -328,7 +339,6 @@ func TestSerializedPromotionRejectionAndAdmissionRaces(t *testing.T) {
 		})
 	}()
 
-	// While promote holds the worker lock inside refresh, instruct_worker cannot complete early.
 	select {
 	case <-instructDone:
 		t.Fatal("instruct_worker bypassed in-flight promote_overlay lock")
@@ -356,7 +366,7 @@ func TestSerializedPromotionRejectionAndAdmissionRaces(t *testing.T) {
 		t.Fatalf("lane 2 main.go = %q, want landed v1", string(gotMain))
 	}
 
-	// Deliver R2, then admit R3 FIRST: promoting or rejecting R2 is refused with active-execution conflict.
+	// Deliver R2, then admit R3 first: promoting or rejecting R2 is refused with active-execution conflict.
 	testutil.FailErr(t, "edit v2", os.WriteFile(filepath.Join(lane2Dir, "main.go"), []byte("package main\n// v2\n"), 0o644))
 	won, err = e.queue.Complete(t.Context(), job2, api.WorkerResult{
 		Status:           "complete",
@@ -371,7 +381,7 @@ func TestSerializedPromotionRejectionAndAdmissionRaces(t *testing.T) {
 	names2, _, err := e.records.NamesByJob(t.Context(), job2.ID)
 	testutil.FailErr(t, "names job 2", err)
 
-	_, effects3, err := e.invoke(t, InstructWorkerTool, "instruct-r3", map[string]any{
+	_, _, err = e.invoke(t, InstructWorkerTool, "instruct-r3", map[string]any{
 		"worker": "fixer", "instructions": "also add extra.go",
 	})
 	testutil.FailErr(t, "instruct r3", err)
@@ -384,9 +394,57 @@ func TestSerializedPromotionRejectionAndAdmissionRaces(t *testing.T) {
 	wantReject(t, err, OverlayPromoteNotPendingCode)
 	_, err = e.merge.RejectOverlay(t.Context(), "coord", job2.ID, "discard")
 	wantReject(t, err, OverlayRejectWorkerWorkingCode)
+}
 
-	// Deliver R3 with extra.go, reject R3 only, then send two concurrent instructions to the idle worker:
-	// one admits R4 on a reset lane (rejected extra.go gone, unrejected R2 v2 preserved) and the second queues on R4.
+func TestRejectionResetAndConcurrentIdleInstructions(t *testing.T) {
+	e := newRaceQualificationEnv(t)
+	e.insertChildSession(t, "child-fixer", "implementer")
+
+	_, effects1, err := e.invoke(t, "task", "start-fixer", map[string]any{
+		"name": "fixer", "agent_type": "implementer", "scope": map[string]any{"mode": "write"},
+		"brief": map[string]any{"goal": "Fix main.go", "done_when": []any{"main.go updated"}},
+	})
+	testutil.FailErr(t, "start fixer", err)
+	job1 := e.claimAndBranch(t, effects1.Dispatch.WorkerID, "child-fixer")
+	lane1Dir := lanePrimaryDir(t, job1.WorkspaceRoot)
+	testutil.FailErr(t, "edit v1", os.WriteFile(filepath.Join(lane1Dir, "main.go"), []byte("package main\n// v1\n"), 0o644))
+	won, err := e.queue.Complete(t.Context(), job1, api.WorkerResult{
+		Status:           "complete",
+		Summary:          "wrote v1",
+		ChangeReport:     &api.WorkerChangeReport{ChangedPaths: []string{"main.go"}},
+		CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"},
+	})
+	testutil.FailErr(t, "complete job 1", err)
+	if !won {
+		t.Fatal("job 1 completion lost claim")
+	}
+	names1, _, err := e.records.NamesByJob(t.Context(), job1.ID)
+	testutil.FailErr(t, "names job 1", err)
+	_, _, err = e.invoke(t, "promote_overlay", "promote-r1", map[string]any{"overlay_id": names1.Handle})
+	testutil.FailErr(t, "promote r1", err)
+
+	_, effects2, err := e.invoke(t, InstructWorkerTool, "instruct-r2", map[string]any{
+		"worker": "fixer", "instructions": "write v2",
+	})
+	testutil.FailErr(t, "instruct r2", err)
+	job2 := e.claimAndBranch(t, effects2.Dispatch.WorkerID, "")
+	lane2Dir := lanePrimaryDir(t, job2.WorkspaceRoot)
+	testutil.FailErr(t, "edit v2", os.WriteFile(filepath.Join(lane2Dir, "main.go"), []byte("package main\n// v2\n"), 0o644))
+	won, err = e.queue.Complete(t.Context(), job2, api.WorkerResult{
+		Status:           "complete",
+		Summary:          "wrote v2",
+		ChangeReport:     &api.WorkerChangeReport{ChangedPaths: []string{"main.go"}},
+		CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"},
+	})
+	testutil.FailErr(t, "complete job 2", err)
+	if !won {
+		t.Fatal("job 2 completion lost claim")
+	}
+
+	_, effects3, err := e.invoke(t, InstructWorkerTool, "instruct-r3", map[string]any{
+		"worker": "fixer", "instructions": "also add extra.go",
+	})
+	testutil.FailErr(t, "instruct r3", err)
 	job3 := e.claimAndBranch(t, effects3.Dispatch.WorkerID, "")
 	lane3Dir := lanePrimaryDir(t, job3.WorkspaceRoot)
 	testutil.FailErr(t, "write extra.go", os.WriteFile(filepath.Join(lane3Dir, "extra.go"), []byte("package main\n"), 0o644))
