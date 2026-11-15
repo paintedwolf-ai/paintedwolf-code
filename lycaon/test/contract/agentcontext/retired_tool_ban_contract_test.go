@@ -12,23 +12,22 @@ import (
 
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
 
-// fullyRetiredTools are tool names the host no longer registers anywhere: no
-// native tool, no command operation, and no command form survives under the
-// name or a hyphenated spelling. The catalog cannot see them — toolvocab
-// filters named calls to registered tools and operations — so UnreachableNames
-// stays silent when copy reintroduces one, on every reader profile. This test
-// is the only gate for the class (INV-5): agent-facing copy must never
-// instruct calling a retired tool.
+// fullyRetiredTools are tool names no longer registered anywhere. UnreachableNames
+// only sees registered tools and operations, so retired names need a direct check.
 var fullyRetiredTools = []string{
 	"git_read", "git_write", "web_fetch", "archive_extract", "archive_create", "file_info", "jq_query",
 	"git-read", "git-write", "web-fetch", "archive-extract", "archive-create", "file-info", "jq-query",
+	"extend_worker_budget", "decline_worker_budget", "request_budget", "request_budget_extension",
+	"extend-worker-budget", "decline-worker-budget", "request-budget", "request-budget-extension",
 }
 
 // backtickedNameMention matches a backtick-opened name in a call-like shape:
@@ -45,11 +44,8 @@ func backtickedNameMention(names []string) *regexp.Regexp {
 
 var retiredToolMention = backtickedNameMention(fullyRetiredTools)
 
-// mutationSubcommands are the command forms that mutate files. A profile that
-// holds command without mutation cannot reach any of them, so rendered copy
-// for such a reader must never name one: naming it teaches a call the reader
-// cannot make. The skill matrix pins the same class through UnreachableNames;
-// this test pins it at prompt level.
+// mutationSubcommands are command forms that mutate files and are unreachable on
+// read-only command profiles.
 var mutationSubcommands = []string{"edit", "replace-lines", "replace_lines", "code-rewrite", "code_rewrite", "jq-edit", "jq_edit"}
 
 var mutationSubcommandMention = backtickedNameMention(mutationSubcommands)
@@ -152,12 +148,8 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 	}
 }
 
-// TestReadOnlyCommandProfilesNeverNameMutationSubcommands renders every
-// persona and worker kick whose profile holds command without mutation and
-// fails when the render names an edit subcommand. The read-only branch of the
-// command surface and the guarded secret-reference copy already keep the
-// names out; this test pins that discipline so a regression cannot reintroduce
-// the call on a reader that cannot make it.
+// TestReadOnlyCommandProfilesNeverNameMutationSubcommands checks that personas and
+// worker kicks on read-only command profiles do not name file-mutating subcommands.
 func TestReadOnlyCommandProfilesNeverNameMutationSubcommands(t *testing.T) {
 	_, profiles := promptNameCatalog(t)
 	mutation, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
@@ -256,6 +248,21 @@ func TestRenderedPhaseKicksNeverNameFullyRetiredTools(t *testing.T) {
 				contractcheck.FailErr(t, "render kick", err)
 				checkBannedMention(t, retiredToolMention, fmt.Sprintf("phase kick %s on %s", inject.Render, id), corpus)
 			})
+		}
+	}
+}
+
+func TestRenderedSkillsAndHintsNeverNameFullyRetiredTools(t *testing.T) {
+	forEachStockSkillRender(t, func(t *testing.T, _ skills.Skill, reader string, _ []string, _ map[string]any, parts []renderedText) {
+		for _, part := range parts {
+			checkBannedMention(t, retiredToolMention, fmt.Sprintf("skill %s for %s", part.label, reader), part.text)
+		}
+	})
+	hints, err := guidance.LoadHintConfigStock()
+	contractcheck.FailErr(t, "load hint config", err)
+	for code, entry := range hints.HintCodes {
+		for _, text := range []string{entry.What, entry.Cause, entry.Why, entry.Fix, entry.Instead} {
+			checkBannedMention(t, retiredToolMention, "hint "+code, text)
 		}
 	}
 }

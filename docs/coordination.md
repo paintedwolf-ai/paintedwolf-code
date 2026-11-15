@@ -10,11 +10,11 @@ Coordination lets one session use parallel workers without sharing scratch state
 
 ## Why workers are isolated
 
-A worker is a durable child session with one bounded assignment. It receives the context required for that assignment, records its own tool calls and evidence, and returns one structured completion envelope. Workers do not share mutable transcript scratch, a common write tree, an implicit understanding of sibling intent, or authority merely because the coordinator has it. Each worker's `@scratch` folder is private to it, so what the coordinator needs comes back in the envelope, not as a scratch path.
+A worker is a durable named collaborator in a root session, backed by its own child session and, for write work, its own private workspace across rounds. Each round runs against the worker's standing brief and any instructions for that round, records its own tool calls and evidence, and delivers a structured completion envelope keyed by an immutable result handle. Workers do not share mutable transcript scratch, a common write tree, an implicit understanding of sibling intent, or authority merely because the coordinator has it. Each worker's `@scratch` folder is private to it, so what the coordinator needs comes back in the result or a message, not as a scratch path.
 
-Read workers may inspect the full attached project; their declared paths name the assignment focus, not an access-control boundary. Write workers operate on private overlays, and the host promotes observed overlay changes after current verification and conflict review.
+Read workers may inspect the full attached project; their declared paths name the assignment focus, not an access-control boundary. Write workers operate on private views, and the host promotes observed changes after verification and conflict review, or rejects or shelves them explicitly.
 
-Isolation makes the merge boundary explicit and interruption recoverable: a child can remain resumable, partial, or awaiting a decision without converting its uncertainty into parent prose.
+Isolation makes both collaboration and integration explicit: a worker can deliver a round, receive follow-up instructions in the same conversation, message the coordinator while working, or pause on a blocking decision without mixing child exploration into the parent transcript.
 
 ## Four planes
 
@@ -72,93 +72,69 @@ The batch sequence increases at each visible human intent. Host wakes, worker co
 
 ---
 
-## Worker task model
+## Worker model and rounds
 
-Every task declares the role or agent expected to perform it, a bounded brief and completion criteria, read-only or write intent, attached project/root identity and optional suggested paths, optional dependency on an existing overlay, and the evidence and result shape the parent expects. The assignment must be sufficient for a cold child session.
+`task` creates a new worker with an agent role (`agent_type`), an optional session-unique `name`, a structured `brief`, read or write `scope` with optional focus `paths`, optional `after_workers` or `scope.base_overlay_id` dependencies, or `review_of` to start a read-only reviewer bound to an exact result handle. Once started, an existing worker is addressed by name with `instruct_worker`, `answer_decision`, `worker_cancel`, and `worker_history`; results are addressed by result handle on `preview_overlay`, `promote_overlay`, `promote_sequence`, `reject_overlay`, `shelve_overlay`, and `task.review_of`.
 
-Task paths guide focus only. They do not grant, restrict, or filter reads, mutations, verification, or promotion. Worker permissions come from the tool profile and confinement; promotion uses observed overlay changes.
+Task paths guide focus only. They do not grant, restrict, or filter reads, mutations, verification, or promotion. Worker permissions come from the tool profile and confinement; promotion uses observed workspace changes.
 
 Committed runnable transitions notify the local claimer immediately; a slower maintenance pass repairs lost notifications and expired leases. The durable queue, workflow holds, claim transaction, and concurrency cap remain authoritative; event delivery is not part of claim eligibility.
 
-A worker job is one semantic unit with a stable child session and, for write work, a stable private workspace. Every claim appends a fenced worker attempt. A transient execution failure or expired lease may return the job to pending within the bounded retry policy; it preserves the child and workspace, closes the old attempt, and starts a new one when reclaimed, reusing the assignment already recorded. Permanent configuration, policy, capacity, and integrity failures settle the job immediately. Retries never write a failed parent summary between attempts.
+Each round executes as one worker job on the worker's durable child session and workspace. Every claim appends a fenced worker attempt. A transient execution failure or expired lease may return the job to pending within the bounded retry policy; it preserves the child and workspace, closes the old attempt, and starts a new one when reclaimed, reusing the recorded round input. Permanent configuration, policy, capacity, and integrity failures settle the round immediately. Retries never write a failed parent summary between attempts.
 
-`needs_decision` is a suspension, not a terminal success. It closes the current attempt as `suspended`, holds the job and workspace with a durable decision checkpoint, and projects that checkpoint to the parent. Resolving the decision starts another attempt on the same job and semantic turn. Only complete, failed, or canceled jobs receive an immutable terminal result. A committed terminal acknowledgement also settles an explicitly subscribed worker wait, including cancellation; unrelated waits and idle parents are not awakened.
+### Collaboration versus obligation
+
+Workers and the coordinator communicate over two distinct paths:
+
+| Path | Tools | Execution effect |
+|---|---|---|
+| **Collaboration** | `message_coordinator` (worker) · `instruct_worker` (coordinator) | Non-blocking for the sender. A worker message shares progress or asks a non-blocking question without stopping the round; `needs_reply: true` wakes the coordinator (ending a matching `wait` with outcome `message`). An instruction to a `working` worker lands before its next model call; an instruction to a `delivered`, `finished`, or `failed` worker admits one new round in the same child session and workspace. |
+| **Obligation** | `request_decision` (worker) · `answer_decision` (coordinator) | Blocking suspension. `request_decision` (with optional discrete `options`) suspends the attempt, puts the worker in `asking`, and holds its workspace with a durable checkpoint. `answer_decision` by worker name (selecting an option or supplying free text) resumes the same round. While `asking`, `instruct_worker` is refused so the blocking question is answered rather than bypassed. |
+
+Message delivery uses at-least-once paging: unread messages inject in arrival order and advance their delivery cursor only after the recipient's model response commits. Round-local coordinator instructions govern the active round and clear from the pinned frame when the round delivers, while the standing brief persists until replaced. `worker_history` pages one worker's rounds, result handles, and messages newest first without mutating state.
 
 ### Shared context, dependencies, and findings
 
-`task.shared_context` carries the interface agreements a cold child needs, up to
-8192 UTF-8 bytes independently of the 4096-character brief. Coordinators pass the
-same relevant contract to collaborating workers. It travels in the pinned
-assignment and survives compaction. Read workers see primary; write workers see
-a private snapshot captured when execution starts. A sibling path reference does
-not make that file available, and resuming a child retains its original snapshot.
+`task.shared_context` carries the interface agreements a worker needs, up to 8192 UTF-8 bytes independently of the 4096-character brief. Coordinators pass the same relevant contract to collaborating workers. It travels in the pinned assignment and survives compaction. Read workers see the primary tree; write workers see a private view isolated from sibling unlanded edits.
 
-`task.after_workers` names up to 32 existing sibling jobs in the same session,
-project, and root. The host leaves a consumer pending without occupying a worker
-slot until every producer returns `complete` or `open` and all write producers
-are promoted. Failed, canceled, partial, or rejected producer output cannot
-release the consumer. The host cancels waiting consumers whose producer output
-is unusable, including downstream chains, so whole-batch waits can settle.
-Repair the producer work and dispatch replacement consumers;
-resumed children and stacked overlays cannot declare fresh-primary prerequisites.
-Both job selection and the atomic claim enforce readiness. Promotion wakes
-claimers, and durable queue reconciliation repairs a missed notification.
+`task.after_workers` names up to 32 sibling workers in the same session, project, and root. The host holds the consumer in `waiting` without occupying a worker slot until every named producer delivers a complete result and lands its write changes. Sending a producer back for another round holds its waiting consumers until the new round delivers and lands. If a producer is closed or its changes are rejected without follow-up, waiting consumers remain held and raise an unsatisfiable-prerequisite notice so the coordinator can replace the producer or withdraw the consumer. `scope.base_overlay_id` instead stacks a fresh write worker directly onto a pending write result handle so both edit the same unlanded line of work.
 
-`record_finding` requires a reference and accepts a 320-character summary plus
-an optional 8192-byte body. Corrections and independent observations at the same
-reference are valid. Exact repeated content from the same author is a no-op.
-The retired `FINDING_ALREADY_LOGGED` and `FINDING_ECHOES_SIBLING` codes are reserved
-and no longer emitted.
+`record_finding` requires a reference and accepts a 320-character summary plus an optional 8192-byte body. Corrections and independent observations at the same reference are valid. Exact repeated content from the same author is a no-op. The retired `FINDING_ALREADY_LOGGED` and `FINDING_ECHOES_SIBLING` codes are reserved and no longer emitted.
 
-Workers receive at most eight finding summaries within a 4096-byte peer-context
-budget. The host delivers oldest unread notes first, retaining recent delivered
-notes in the remaining space. It records the cursor only after a successful
-model response; failed requests replay the same unread page, and restart recovers
-the delivered context from one bounded state row per worker. Findings from the current human request that precede a
-worker's creation are included; absent a human opener, the boundary is worker
-creation. A targeted opener query avoids loading transcript bodies. Overflow remains in the store rather than being
-dropped. The inject names its continuation cursor when more unread findings remain.
-`read_findings(finding_id)` reads one full finding;
-`read_findings(findings_after: 0)` starts ordered summary pagination and returns
-`next_after`. `pack_board` serves repository orientation and the named worker
-roster only, paging older workers via `cursor` and filtering planned legs via
-`plan`. Bodies appear in the worklog behind a details disclosure. Peer
-findings remain untrusted observations, not host instructions.
+Workers receive at most eight finding summaries within a 4096-byte peer-context budget. The host delivers oldest unread notes first, retaining recent delivered notes in the remaining space. It records the cursor only after a successful model response; failed requests replay the same unread page, and restart recovers the delivered context from one bounded state row per worker. Findings from the current human request that precede a worker's creation are included; absent a human opener, the boundary is worker creation. Overflow remains in the store rather than being dropped. The inject names its continuation cursor when more unread findings remain. `read_findings(finding_id)` reads one full finding; `read_findings(findings_after: 0)` starts ordered summary pagination and returns `next_after`. `read_review` inspects workflow review verdicts and subjects separately from the board. `pack_board` serves repository orientation and the named worker roster only, paging older workers via `cursor` and filtering planned legs via `plan`. Peer findings remain untrusted observations, not host instructions.
 
-### Worker rounds
+### Round bounds and supervision notices
 
-A worker round has no tool-round ceiling. It runs until the worker delivers with `complete_leg`, is stopped, or fails, and nothing counts down toward a forced hand-back: a worker that hands back because it ran out of rounds has produced a stop, not a result. What still bounds a round is what bounds any session: the spend limit a person arms, concurrency admission, supervision of each operation, and bounded repair of a specific failure.
+A worker round has no tool-round ceiling. It runs until the worker delivers with `complete_leg`, pauses on `request_decision`, is stopped, or fails, and nothing counts down toward a forced hand-back. What bounds a round is what bounds any session: an armed spend limit, concurrency admission, supervision of each operation, and bounded repair of a specific failure.
 
-Two failures end a round without a report. A worker that answers in prose instead of calling a tool gets the usual recovery guidance, and after three consecutive tool-less responses the round fails with `WORKER_COMPLETION_REPORT_MISSING`. A round that reaches the person's spend limit is fenced before its next model call and fails with `WORKER_SPEND_LIMIT_REACHED`; workers receive no wind-down round. Both are recorded as failed rounds the coordinator sees, never as host-written reports.
+Two failures end a round without a report. A worker that answers in prose instead of calling a tool receives recovery guidance with its full tool set intact, and after three consecutive tool-less responses the round fails with `WORKER_COMPLETION_REPORT_MISSING`. A round that reaches an armed spend ceiling is fenced before its next model call and fails with `WORKER_SPEND_LIMIT_REACHED`; workers receive no wind-down round, and the coordinator's wind-down round withholds `instruct_worker` and `answer_decision`. Both are recorded as failed rounds with their work preserved under a result handle, never as host-written reports.
 
-The coordinator judges whether a round is still worth its cost, so the host gives it measurements rather than deciding. A round that reaches 60 model calls raises a consumption notice with its calls, tokens and estimated spend, and recommends a check-in; a working round with no durable progress for ten minutes raises a quiet notice naming what it is on: queued for a model slot, a model call in flight, or a tool batch with how many calls have settled, which tools it runs and how long it has run. Both notices name the worker's latest message to the coordinator. Each notice repeats at every doubling, so it never becomes a renewal ritual. Neither stops anything and the worker is not told. A round held at an approval, parked, or asking is waiting on purpose and is never quiet. The quiet check runs on the worker poller's maintenance pass and counts from the later of the round's start, its last progress, the end of its workflow run's latest pause, and the host's start, so downtime and a paused run's hold do not count. The thresholds live in `workers.yaml` under `rounds`.
+The coordinator judges whether a running round is worth its cost from host measurements. A round that reaches the configured call threshold raises a consumption notice with calls, tokens, and estimated spend; a working round with no durable progress across the configured quiet interval raises a quiet notice naming whether it is queued for a model slot, awaiting a model response, or running a tool batch. Both notices include the worker's latest message to the coordinator, repeat only at each doubling, never interrupt the worker, and wake any coordinator `wait` covering that worker with outcome `notice`. A worker held on a tool approval, `asking`, or parked on an external process (`process_done`) is waiting on purpose and never triggers a quiet notice. To stop a round that is no longer worth continuing, the coordinator calls `worker_cancel` by worker name, which grants a running worker one report-only turn.
 
-The coordinator sees every fact that waited for it. Guidance about a job, leg, scan, or process queues per subject, so notices about two workers are two kicks, not one. A turn delivers every queued kick in arrival order, and a round notice wakes any wait on workers. Notices for a job that has finished are dropped rather than shown stale. To end a round that is no longer worth continuing, the coordinator uses `worker_cancel`.
+### Reusing workers across rounds
 
-A failed round's transcript and any partial work remain valid input. Resuming the child continues the same assignment: the resume keeps the child's agent, scope mode, and planned leg. A resume that restates a different agent or scope mode is refused, because that would be different work wearing the same transcript.
+A worker that delivered, finished, or failed retains its child session, compacted memory, path knowledge, and workspace. Calling `instruct_worker` on an idle worker admits one new round in that conversation:
 
-Task admission and execution share the resolver for explicit arguments, resumed children, and planned workflow legs. Coordinator OAR scope and capacity facts describe that effective identity; omitted inherited fields do not become a new read-only assignment. Resolution failures retain their typed rejection through OAR recovery. The original tool arguments remain the invocation and replay identity, and workflow binding and queue admission still validate the current workflow before enqueue.
+- Related follow-on work or repair of a partial or failed round goes to the worker that already knows the area.
+- Between rounds, `instruct_worker` may update `brief`, `scope`, and `agent_type` when lane admission permits it (for example, turning a read scout into an implementer once paths are known). Agent changes are refused mid-round, on sealed reviewer workers, or while the worker still holds unlanded write changes that have not been promoted or rejected.
+- An instruction arriving as a round settles is recorded as not applied rather than starting an unintended extra round, and the delivery notice reports it so the coordinator can decide whether it still applies.
 
 ### Worker scope coordination
 
-Path reservations are informational. They make intended scope visible and reduce accidental overlap, but the overlay operation remains responsible for detecting actual conflicts and deciding whether promotion is safe. Read-only work may overlap freely. Write legs should own coherent outputs rather than arbitrary file fragments. A dependency on another worker's integrated result should be declared, not approximated by polling.
+Path reservations bind to the worker across rounds until its changes resolve. They make intended scope visible and reduce accidental overlap, while overlay promotion remains authoritative for conflict detection. Read-only work may overlap freely. Write workers should own coherent outputs rather than arbitrary file fragments.
 
-### Worker workspace and promotion
+### Worker workspace, refresh, and dispositions
 
-A write job receives a private live tree plus host-only metadata. The child sees the private workspace, task mode, and focus hints; the parent receives summaries, findings, and an overlay handle rather than absolute engine paths.
+A write worker operates in a private view isolated from the primary tree and from sibling workers. Mounted Git views carry private Git metadata on the worker's branch (`has_git`), while materialized views do not; the worker's turn frame states which view it holds, and `source_history` provides live change history in both. Main-tree commit history and publication belong to a read worker or the coordinator on the primary tree.
 
-That private tree carries no version-control metadata, so no repository tool is offered on a write leg. Change history inside one comes from the host source ledger. Reading repository history, or recovering a past revision, belongs to a read-scoped leg or the coordinator turn, both of which run on the primary tree.
+Each write result carries an explicit disposition:
 
-Promotion is a host transition:
+- **Landed** (`promote_overlay` / `promote_sequence`): applies the result's changes atomically to the primary tree after verification and conflict checks, advances integrated source generation, and refreshes the idle worker's workspace to the new integrated head before its next round.
+- **Rejected** (`reject_overlay`): discards that result's unlanded changes and resets the worker's workspace to current integrated source while preserving the worker's conversation for a clean follow-up round.
+- **Shelved** (`shelve_overlay`): records a deliberate decision to leave a result's changes unlanded with a stated reason, accounting for the result so the batch can close without discarding the branch; starting a later round on that worker ends the shelved state.
+- **Open**: unlanded changes awaiting review, follow-up instructions, landing, rejection, or shelving.
 
-1. Confirm the overlay belongs to the expected task and project generation.
-2. Collect every observed overlay change.
-3. Confirm required source verification is current.
-4. Preview or resolve conflicts against the integration target.
-5. Apply the change and advance the integrated source generation.
-6. Record the landing result and any new verification obligation.
-
-A rejected or conflicting promotion preserves the overlay for repair. It does not delete the only copy of the worker's result.
+Reviewer workers started with `task(review_of: "<result_id>", ...)` inspect the exact snapshot of that delivered result in read-only mode, isolated from any later rounds on the producer worker.
 
 ---
 
@@ -176,15 +152,15 @@ Worker orientation is refreshed for every model request from the same branch roo
 
 The coordinator reconciles progress after worker completion. A worker envelope may prove that work is done, blocked, or no longer applicable, but the root checklist remains the single human-visible execution account.
 
-Completed output latches the checklist: until the checklist changes, the coordinator cannot dispatch or edit, and the refusal names the completed jobs it has not recorded. Only a completed leg arms the latch. A partial, failed, or held leg has closed nothing, so the honest checklist is unchanged, and resuming it is the same deliverable continuing; latching on it would force a cosmetic edit before every resume.
+Completed output latches the checklist: until the coordinator accounts for a completed result, `task`, `instruct_worker`, and source mutations are gated by `PROGRESS_RECONCILIATION_REQUIRED`, naming the unaccounted result handles. Accounting is satisfied by updating `update_progress` with the result's token, or by acting on the result through `promote_overlay`, `promote_sequence`, `reject_overlay`, `shelve_overlay`, `instruct_worker` on that worker, or `task(review_of: ...)`.
 
 ---
 
 ## Decisions and human checkpoints
 
-A worker may request a decision from its coordinator through `request_decision`; the coordinator replies with `answer_decision`, which its routing, dispatch, and park surfaces carry. Acceptance ends the worker tool cycle: the job becomes held, its attempt becomes suspended, and its workspace remains available. Pending decisions take precedence over completion reports. Answering resumes the same job and child; a changed question and a job that is not suspended have distinct rejection codes. The question is not automatically shown to the human because most worker ambiguity is internal orchestration.
+A worker requests a blocking decision through `request_decision` (with optional discrete `options`); the coordinator answers by worker name with `answer_decision`, supplying a chosen option or free text. Acceptance suspends the worker attempt into `asking` while keeping its workspace intact. Pending decisions take precedence over completion reports, and answering resumes the same round. Non-blocking questions and status updates use `message_coordinator` instead so the worker keeps working.
 
-When the coordinator needs human authority or information, it uses the explicit path: a tool checkpoint for a concrete effect, `ask_user` for a structured question, or a workflow human gate or choice transition for phase control.
+When the coordinator needs human authority or information, it uses the explicit path: a tool checkpoint for a concrete effect, `ask_user` for a structured question (including relaying an `asking` worker's blocker when human judgment is needed, leaving the batch open across an interim reply), or a workflow human gate or choice transition for phase control.
 
 ### Worker checkpoint surfacing
 
@@ -217,7 +193,7 @@ Details: [Worker result contract](worker-result-contract.md).
 
 ## Synthesis
 
-The coordinator may close the batch only after it has reconciled every terminal worker envelope, resolved pending overlays and decisions, updated progress, and satisfied current verification and grounding obligations.
+The coordinator may close the batch only after no worker is `working` or `asking`, every delivered write result is landed, rejected, or shelved, every completed result is accounted for on the checklist, and current verification and grounding obligations pass. Shelved changes and waiting workers are stated explicitly in the closing response.
 
 Synthesis uses the union of parent and child evidence but keeps provenance: a child observation does not become a parent first-hand read. The final answer is committed once, with citations the host can resolve. Missing citations do not require another coordinator turn; the host preserves the answer and attaches recorded references with visible host attribution. Supplied references that fail to resolve use the bounded [citation repair path](grounding.md#evidence-grounded-prose).
 
@@ -232,10 +208,11 @@ If the model cannot produce a valid closeout after bounded repair, the host may 
 - Human approvals remain with the effect checkpoint that raised them.
 - Progress, findings, board, and Blueprints keep separate state authorities.
 - Machine state selects coordinator surfaces; prose does not.
-- Worker retry adds an attempt under the same job, child session, workspace, and semantic turn.
+- Worker retry adds an attempt under the same round job, child session, and workspace.
 - A parent card or wake can lag a committed worker result; it cannot define that result.
-- A worker's ceiling rises only when its coordinator grants it; the host neither extends nor shrinks it.
-- A resume continues the child it names: same agent, scope mode, and planned leg.
+- Worker rounds run without an artificial round ceiling; consumption and quiet notices inform coordinator supervision without interrupting the worker.
+- Workers persist across rounds under stable session-unique names: `instruct_worker` directs an existing worker, `message_coordinator` shares non-blocking updates, and `request_decision` / `answer_decision` handle blocking obligations.
+- Every write result has an explicit handle and disposition (`open`, `landed`, `rejected`, or `shelved`); landing refreshes the idle worker's workspace and rejection resets it.
 
 ### Tool family loading
 

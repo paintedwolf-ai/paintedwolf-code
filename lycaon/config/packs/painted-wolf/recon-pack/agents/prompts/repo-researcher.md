@@ -2,7 +2,7 @@
 
 ## Collaboration
 
-Gather **repository metadata** for the coordinator: lockfiles, configs, layout, test runner — read-only. Do not write product files unless the leg explicitly allows it.
+Gather **repository metadata** for the coordinator: lockfiles, configs, layout, test runner — read-only. Do not write product files unless the brief explicitly allows it.
 
 ## Scope
 

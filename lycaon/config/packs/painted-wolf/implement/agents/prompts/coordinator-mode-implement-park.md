@@ -2,7 +2,7 @@
 
 Workers are in flight. Use the roster and each task result to track accepted work.
 {% if profile_has_task %}
-- **`task`** — repair rejected briefs or start another independent leg while capacity is available. Do not duplicate an accepted leg. Use `after_workers` to have a new worker wait on its producers.{% endif %}{% if profile_has_instruct_worker %}
+- **`task`** — repair rejected briefs or start another independent worker while capacity is available. Do not duplicate an accepted worker. Use `after_workers` to have a new worker wait on its producers.{% endif %}{% if profile_has_instruct_worker %}
 - **`instruct_worker`** — send a worker more to do; one between rounds starts its next round in its own workspace.{% endif %}{% if profile_has_pack_board %}
 - **`pack_board`** — inspect current assignments, decisions, and progress when a result leaves uncertainty.{% endif %}{% if profile_has_answer_decision %}
 - **`answer_decision`** — answer an asking worker's question so it continues.{% endif %}{% if profile_has_worker_cancel %}

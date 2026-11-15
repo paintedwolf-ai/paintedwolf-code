@@ -109,10 +109,13 @@ in `cited_urls`. Source rejection feedback distinguishes an unknown handle, a wr
 path, an uncovered delivered range, and an excerpt mismatch while retaining the
 observed range.
 
-A resumed child keeps its conversation, but a new worker job has a new evidence
-boundary. Earlier reads and fetches must be reacquired before the new job can
-cite them. Filtering unsupported claims at retry exhaustion preserves useful
-partial output; it does not prove the original assignment complete.
+A worker keeps its conversation across rounds, while each round job has its own
+current-source evidence boundary. Earlier results of the same worker may be
+cited as historical provenance in `cited_results`; current-source claims must
+reacquire evidence in the active round (and workspace refresh or rejection
+invalidates stale source observations by source identity). Filtering unsupported
+claims at retry exhaustion preserves useful partial output; it does not prove
+the assignment complete.
 
 A bare path names a file, not a claim: useful for navigation, insufficient as line evidence. A bare handle is sufficient for non-line observations such as a directory listing, command result, or scan artifact, because the handle already identifies one record.
 

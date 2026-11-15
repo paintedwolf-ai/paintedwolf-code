@@ -1,6 +1,6 @@
 # Worker result contract
 
-A worker result is the bounded, host-verifiable handoff from an isolated child session to its coordinator. It says what the worker concluded, what changed, what evidence exists, and whether the same child can safely advance, needs a decision, or remains partial.
+A worker result is the bounded, host-verifiable handoff from a worker round to its coordinator. Each settled round produces an immutable result keyed by a session-scoped result handle (`result_id`), recording what the worker concluded, what changed, what evidence exists, and the result's disposition while the worker itself stays available for follow-up instructions.
 
 **See also:** [Coordination](coordination.md) · [Grounding](grounding.md) · [Tools](tools.md#worker-scope-coordination) · [Session](session.md)
 
@@ -30,28 +30,24 @@ Anything omitted for context remains addressable through recall; anything requir
 
 ```mermaid
 flowchart LR
-    D[Dispatch task] --> C[Create isolated child session]
-    C --> W[Run worker in private workspace]
-    W --> F[Worker completes or blocks]
+    D[Start worker or instruct round] --> W[Run round in worker workspace]
+    W --> F[Worker delivers or pauses]
     F --> V[Host validates report and proof]
-    V -->|complete| T[Commit worker result]
-    T --> P[Project parent task card]
-    V -->|needs decision| H[Park with decision request]
-    V -->|partial| R[Preserve child and workspace for resume]
-    P --> S[Coordinator synthesis or promotion]
+    V -->|delivered| T[Commit immutable result handle]
+    T --> P[Project parent worker card and notice]
+    V -->|asking| H[Hold round with decision request]
+    P --> S[Promote, reject, shelve, review, or instruct next round]
 ```
 
-Child identity (parent session, job, task, and agent type) is committed before the worker loop starts. The worker's messages and tools remain in the child session and are never spliced into the parent transcript.
+Worker identity (parent session, worker name, child session, and agent role) is committed before the first round starts. The worker's messages and tool calls remain in the child session and are never spliced into the parent transcript.
 
-## One parent-card projection
+## Parent projection, briefings, and dispositions
 
-Every admitted worker job has one task row in the parent transcript. While the job runs, the row says it is enqueued or active. A decision suspension patches that row with the durable checkpoint; terminal settlement patches the same row with the final worker summary. The row does not move, duplicate, or remain stuck on an enqueue placeholder after a result exists.
+Each worker has one card in Den's parent projection, folding rounds, collaboration messages, blocking questions, and dispositions chronologically while keeping each round's `task` or `instruct_worker` row linked to the immutable result handle it produced. The card displays the worker's latest result summary, while briefings are keyed by `result_id` (`worker_result` briefing target) so each delivered round keeps its own briefing and earlier results remain reachable from worker history.
 
-The card is authoritative for presentation identity, not execution truth. The worker job, its append-only attempts, and its immutable terminal result are authoritative. If the result commits and the card patch is interrupted, outcome delivery repairs the same card from the result; the worker is not rerun and the result is not downgraded.
+For write results, the host tracks disposition (`open`, `landed`, `rejected`, or `shelved`) alongside accounting. Promoting a result marks it `landed` and schedules workspace refresh before the worker's next round; `reject_overlay` marks it `rejected` and resets the workspace to current source; `shelve_overlay` marks it `shelved` with a recorded reason, accounting for the result without landing or discarding the branch until a later round starts.
 
-For a completed job with a current merge status, Den uses that job state for the card badge. A later promotion therefore changes an `open` card to `done` even though the immutable completion summary still records the branch as open. Without current merge state, the persisted summary is the fallback.
-
-`needs_decision` is not a terminal worker result. It holds the job and workspace, records the attempt as suspended, and delivers a repairable parent checkpoint. A decision answer resumes the same semantic job with a new attempt; only its eventual completion, failure, or cancellation occupies the terminal-result slot.
+`request_decision` is not a terminal result. It holds the active round in `asking`, records the attempt as suspended, and delivers a repairable parent checkpoint. Answering with `answer_decision` by worker name resumes the same round; only round settlement (`complete_leg`, failure, or cancellation) mints a terminal result handle.
 
 A dispatch rejected before enqueue may remain verbose-only because no worker ran. Once a job is admitted, its outcome is normal transcript history even when it fails, is canceled, or needs a decision.
 
@@ -199,16 +195,16 @@ The worker result proves that a particular job ran and produced a particular hos
 
 After the parent-card projection is patched, a separate outcome event wakes the coordinator. The wake is a scheduling signal; the committed worker result, or the held decision checkpoint, is the execution record.
 
-Den derives its row state from the same structured outcome (`lycaon-den/src/chat/worker/workers-model.ts`), collapsing the execution vocabulary into what a person needs to act on: running, needs decision, done, partial, open, canceled, or error. A held job is still in flight, so it reads as running while the live job row exists; `failed` reads as error and `canceled` keeps its own neutral state. Only when the row must be rebuilt from a summary tag alone, with no live job to consult, does a held tag fall into error. A `complete_leg` acknowledgement remains a generic tool row inside the child; the parent task card shows the host-built summary.
+Den derives its worker card state from backend worker state and result dispositions (`lycaon-den/src/chat/worker/`), presenting one card per worker with chronological rounds, messages, and blocking questions alongside result disposition badges (`open`, `landed`, `rejected`, `shelved`) without client-side heuristics. A `complete_leg` acknowledgement remains a generic tool row inside the child; the parent card shows the latest host-built summary and links earlier round results through worker history.
 
 ## Invariants
 
-- Worker execution stays in an isolated child session and workspace.
-- One admitted job has one stable parent task-card projection.
+- Worker execution stays in an isolated child session and workspace across rounds.
+- Each settled round commits an immutable result handle; Den renders one card per worker with per-result briefings and dispositions.
 - The worker supplies explanation; the host supplies observable proof.
 - Changed paths derive from the overlay, never the worker report.
 - Verification receipts bind to the current source revision and digest.
 - Gate-critical fields are bounded but never silently dropped.
 - Omitted detail remains recallable with worker attribution.
-- Partial results preserve resumable work and do not authorize promotion.
+- Partial or failed rounds preserve the worker's conversation and workspace for follow-up instructions without authorizing promotion.
 - Grounding and synthesis branch on structured identity, evidence, and receipts, not prose.

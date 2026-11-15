@@ -1,6 +1,6 @@
 # Briefs and topologies
 
-The dispatch guidance below is coordinator-only: a worker leg applies the matching guidance within its own assignment and reports dispatch needs to the parent.
+The dispatch guidance below is coordinator-only: a worker applies the matching guidance within its own assignment and reports dispatch needs to the parent.
 
 ## Topology selection
 
@@ -10,10 +10,10 @@ The dispatch guidance below is coordinator-only: a worker leg applies the matchi
 | Current external fact changes design | Research, coordinator synthesis, then builders | Each blocking claim has fetched evidence or is reported unknown |
 | Supplemental external question | Research beside independent builders | Builders have a safe default that does not depend on the answer |
 | Stable cross-component interface | One write worker per assigned component | Every shared invariant appears in each affected brief |
-| Configuration matrix | One leg per independent configuration group | Every declared cell has an outcome or explicit omission |
+| Configuration matrix | One worker per independent configuration group | Every declared cell has an outcome or explicit omission |
 | Competing approaches | Independent alternatives against one frozen rubric | Reject losers and integrate one selected result |
-| Independent fix set | Partition by root cause and non-overlapping paths | Every finding maps to exactly one leg |
-| Integrated change needs confidence | Parallel read-only review and verification legs | Findings are resolved or reported as remaining risk |
+| Independent fix set | Partition by root cause and non-overlapping paths | Every finding maps to exactly one worker |
+| Integrated change needs confidence | Parallel read-only review and verification workers | Findings are resolved or reported as remaining risk |
 | Complementary facts from different roles | Role set in one wave (e.g. web + repo research, research + implement){% if profile_has_record_finding %}; brief `record_finding` sharing{% endif %} | Each role's questions have grounded notes or explicit unknowns |
 
 Do not mix read scouts and write workers in one slice when the scouts are expected to discover write assignments. Do not parallelize stages whose outputs determine the next stage's interface or scope.
@@ -28,10 +28,10 @@ Every row above names what to count — components, root causes, configuration g
 
 Name dependencies in the dispatch fields rather than hoping waves line up:
 
-- `after_workers` — the consumer leg starts only after each listed producer delivers a complete result and its write changes land. A producer sent back for corrections holds its consumers until it delivers again. Use it for stages that build on landed output, and do not combine it with `scope.base_overlay_id`.
-- `scope.base_overlay_id` — stacks a write leg on a pending, unpromoted overlay so both legs edit the same line of work; the base overlay must still promote for the stack to land.
+- `after_workers` — the consumer worker starts only after each listed producer worker delivers a complete result and its write changes land. A producer sent back for corrections holds its consumers until it delivers again. Use it for stages that build on landed output, and do not combine it with `scope.base_overlay_id`.
+- `scope.base_overlay_id` — stacks a fresh write worker on a pending result handle so both workers edit the same line of work; the base result must still promote for the stack to land.
 {% if profile_has_instruct_worker %}- Follow-up for an existing worker goes through `instruct_worker`, not `task`: the worker keeps its conversation and workspace, so it is not a way to pick up a sibling's new edits before they land.{% endif %}
-- `shared_context` — up to 8192 bytes of interface agreements copied to each collaborating leg; give every collaborator the same text so their interfaces cannot diverge.
+- `shared_context` — up to 8192 bytes of interface agreements copied to each collaborating worker; give every collaborator the same text so their interfaces cannot diverge.
 
 ## Self-contained worker brief
 
@@ -40,10 +40,10 @@ Use this order so a worker can act without the parent transcript:
 1. **Goal:** one observable outcome.
 2. **Known facts:** repository receipts or external evidence that the worker may trust as the coordinator's synthesis.
 3. **Decisions:** interfaces, formats, naming, compatibility bounds, and choices already settled.
-4. **Assigned output:** paths or external state assigned only to this leg.
+4. **Assigned output:** paths or external state assigned only to this worker.
 5. **Constraints:** project policy, generated-file rules, non-goals, and irreversible-action boundaries.
 6. **Recommended procedure:** at most one clearly applicable skill, stated as advice.
 7. **Done criteria:** edits, checks, evidence, and completion-report expectations.
-8. **Allowed uncertainty:** questions that may remain unresolved without blocking the leg.
+8. **Allowed uncertainty:** questions that may remain unresolved without blocking the round.
 
-Avoid pasted conversation, loaded conclusions, open-ended repository searches, or instructions to wait for sibling file state. If a worker must learn a fact before acting, make that a prior leg.
+Avoid pasted conversation, loaded conclusions, open-ended repository searches, or instructions to wait for sibling file state. If a worker must learn a fact before acting, run that research round first.

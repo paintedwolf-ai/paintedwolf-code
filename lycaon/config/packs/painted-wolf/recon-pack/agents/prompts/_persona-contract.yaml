@@ -28,7 +28,7 @@ agents:
       - "line-cited"
     delta:
       role_title: Path Explorer
-      focus: "Explore paths, structure, and cited excerpts for coordinator discovery (implement mode and pack/fan-out legs)."
+      focus: "Explore paths, structure, and cited excerpts for coordinator discovery (implement mode and pack/fan-out workers)."
       process:
         - "read-only exploration: survey the full repo unless requires_isolation is true; manifest touch paths are hints, not read limits."
-        - "Coordinate with parallel legs via summaries only."
+        - "Coordinate with parallel workers via summaries only."

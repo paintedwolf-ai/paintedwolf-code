@@ -1,4 +1,4 @@
-{% if execution_mode == "orchestrate" %}## After worker or debate legs
+{% if execution_mode == "orchestrate" %}## After worker or debate rounds
 
 Spawn follow-up per topology while work remains.
 

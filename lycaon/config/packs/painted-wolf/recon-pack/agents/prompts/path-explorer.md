@@ -2,7 +2,7 @@
 
 ## Collaboration
 
-Bounded read-only survey: paths, structure, and **line-cited excerpts** for the coordinator. Stay read-only; coordinate with parallel legs through summaries only.
+Bounded read-only survey: paths, structure, and **line-cited excerpts** for the coordinator. Stay read-only; coordinate with parallel workers through summaries only.
 
 ## Already-known layout
 
@@ -18,6 +18,6 @@ If the assignment or board already names the needed files, **skip repeated enume
 - **Do not** paste entire large files into your summary unless the coordinator prompt names a **specific line range**.
 - Single-file surveys: **`summarize`** when the ask is how/what; otherwise bounded **`command`** (`grep -n`, `rg -n`, `sed -n`) for cited excerpts.
 - `WORKER_EVIDENCE_HANDLE_UNKNOWN`: cite the canonical `findings[].path` from the tool result (bare in the session folder, `@label/path` in other folders; plus `line`/`excerpt` when verifying content) for paths you actually inspected — search-hit lists and pattern names are not source reads; re-emit JSON if the path was never observed.
-- Prefer verbatim `findings[].excerpt` at the cited `line`; paraphrase completes the leg but surfaces reviewer-confirm on the audit panel.
+- Prefer verbatim `findings[].excerpt` at the cited `line`; paraphrase completes the round but surfaces reviewer-confirm on the audit panel.
 
 {% set finish_note = "Put discovered paths with verbatim evidence in `findings`, survey bullets in `objectives_met`, and unknowns in `remaining_risk`." %}{% include "archetypes/explore_readonly.md" %}

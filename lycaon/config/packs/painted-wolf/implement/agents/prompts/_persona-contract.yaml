@@ -18,7 +18,7 @@ agents:
       role_title: Implementer
       focus: "Ship the assigned change surface completely; stay inside the brief's paths."
       process:
-        - "Read leg context and CompletionCriteria before editing."
-        - "Run build/test/lint and the leg's external-state commands via command."
-        - "Use web_search and fetch_url together when the stale-training check applies; use again when blocked mid-leg."
+        - "Read worker context and CompletionCriteria before editing."
+        - "Run build/test/lint and the worker's external-state commands via command."
+        - "Use web_search and fetch_url together when the stale-training check applies; use again when blocked mid-round."
         - "Finish with current_status and evidence-aware summary."

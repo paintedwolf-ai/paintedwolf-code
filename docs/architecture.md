@@ -46,7 +46,7 @@ The durable database is not sharded per project. Session, workflow, source, auth
 | **Phase** | A named workflow state with a tool surface, obligations, and declared ways to leave. |
 | **Gate** | A typed proof or human event required for a transition. A gate is evaluated from machine state. |
 | **Coordinator** | The root agent turn that investigates, divides work, integrates worker results, and reports to the human. |
-| **Worker** | One bounded worker job. Jobs may reuse a child session for conversational continuity, but every turn, message, progress record, result, and grounding audit is keyed to exactly one job. A write worker uses a private overlay until the host promotes it. |
+| **Worker** | A durable named collaborator in a root session, backed by a persistent child session and, for write work, a private workspace across rounds. Each round runs as one fenced job and settles an immutable result handle; `instruct_worker` starts follow-up rounds or directs a running round, while `promote_overlay`, `reject_overlay`, and `shelve_overlay` resolve write results. |
 | **Tool** | A structured capability published with schema, execution policy, a subsystem owner, and lifecycle. |
 | **Owner** | The single named subsystem whose contract determines the authoritative outcome of an invoked host operation. |
 | **Receipt** | Durable record of a tool invocation and its settled outcome. |
