@@ -95,8 +95,6 @@ func MergeForTurn(
 		RootCount:        reader.RootCount(),
 		SpawnAllowlist:   spawnAllowlist,
 		WebSearchEnabled: &webSearchEnabled,
-		Catalog:          reader.Catalog(),
-		ToolProfiles:     reader.Profiles(),
 	})
 	if err != nil {
 		return err

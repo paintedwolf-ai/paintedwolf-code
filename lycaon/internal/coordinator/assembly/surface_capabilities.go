@@ -7,9 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -254,12 +252,10 @@ func (e *promptSurface) turnReader(
 	var (
 		profiles []sandbox.ToolProfile
 		schemas  *toolschema.Config
-		catalog  *extpacks.EffectiveCatalog
 	)
 	if view := e.sessionCatalogView(ctx, sess); view != nil {
 		profiles = view.ToolProfiles
 		schemas = view.ToolSchemas
-		catalog = view.Catalog
 	}
 	if len(profiles) == 0 {
 		loaded, err := sandbox.LoadToolProfiles()
@@ -269,7 +265,6 @@ func (e *promptSurface) turnReader(
 		profiles = loaded
 	}
 	reader, err := prompts.NewReader(prompts.ReaderInput{
-		Host:      promptunit.HostCoordinator,
 		ProfileID: prompts.CoordinatorProfileID,
 		SurfaceID: profile.SurfaceID,
 		Mode:      surface.ExecutionModeFamily(profile.SurfaceID),
@@ -277,7 +272,6 @@ func (e *promptSurface) turnReader(
 		Plan:      plan,
 		Loaded:    e.loadedTools(sess),
 		Schemas:   schemas,
-		Catalog:   catalog,
 		RootCount: rootCount,
 		WebSearch: webSearchEnabled,
 	})

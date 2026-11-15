@@ -39,10 +39,6 @@ sizes:
             implementer:
                 cap: 36000
                 reason: The worker that implements changes; it alone carries the implement shell archetype and the implement addenda playbook.
-        agent_templates:
-            coordinator:
-                cap: 8500
-                reason: Single-root workspace addressing and the bundled host-resource inventory render in coordinator-core.md before tripartite assembly; the full tripartite prompts and static turn stacks remain within their caps and the model window.
         kicks:
             coordinator-process-finished:
                 cap: 6000

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
@@ -122,32 +121,28 @@ func kickReader(live CoordinatorKickRenderContext) (prompts.Reader, error) {
 	if err != nil {
 		return prompts.Reader{}, err
 	}
-	in := prompts.ReaderInput{
-		Host:      promptunit.HostCoordinator,
-		ProfileID: prompts.CoordinatorProfileID,
-		SurfaceID: strings.TrimSpace(live.SurfaceID),
-		Profiles:  profiles,
-		RootCount: live.RootCount,
-		WebSearch: true,
-	}
-	if live.ToolPlan.Compiled() {
-		in.Plan = live.ToolPlan
-		loaded := make(map[string]bool)
-		for _, name := range live.ToolPlan.AddressableNames() {
-			loaded[name] = true
-		}
-		in.Loaded = loaded
-	} else if in.SurfaceID != "" {
-		plan, err := prompts.CompileSurfacePlan(in.SurfaceID, max(in.RootCount, 1))
+	surfaceID := strings.TrimSpace(live.SurfaceID)
+	plan := live.ToolPlan
+	if !plan.Compiled() && surfaceID != "" {
+		plan, err = prompts.CompileSurfacePlan(surfaceID, max(live.RootCount, 1))
 		if err != nil {
 			return prompts.Reader{}, err
 		}
-		in.Plan = plan
-		loaded := make(map[string]bool)
+	}
+	var loaded map[string]bool
+	if plan.Compiled() {
+		loaded = make(map[string]bool, len(plan.AddressableNames()))
 		for _, name := range plan.AddressableNames() {
 			loaded[name] = true
 		}
-		in.Loaded = loaded
 	}
-	return prompts.NewReader(in)
+	return prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: surfaceID,
+		Profiles:  profiles,
+		Plan:      plan,
+		Loaded:    loaded,
+		RootCount: live.RootCount,
+		WebSearch: true,
+	})
 }

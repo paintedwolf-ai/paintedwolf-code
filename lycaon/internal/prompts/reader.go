@@ -11,10 +11,8 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolscope"
@@ -23,7 +21,6 @@ import (
 
 // ReaderInput is what a render knows about who will read it.
 type ReaderInput struct {
-	Host           promptunit.Host
 	ProfileID      string
 	SurfaceID      string
 	Mode           string
@@ -32,7 +29,6 @@ type ReaderInput struct {
 	Loaded         map[string]bool
 	Visible        []string
 	Schemas        *toolschema.Config
-	Catalog        *extpacks.EffectiveCatalog
 	RootCount      int
 	HasGit         bool
 	OnWorkerBranch bool
@@ -41,27 +37,16 @@ type ReaderInput struct {
 
 // Reader is an immutable projection of a prompt reader's tool reach and facts.
 type Reader struct {
-	valid          bool
-	host           promptunit.Host
-	profileID      string
-	surfaceID      string
-	mode           string
-	profiles       []sandbox.ToolProfile
-	plan           toolsurface.Plan
-	loaded         map[string]bool
-	visible        []string
-	schemas        *toolschema.Config
-	catalog        *extpacks.EffectiveCatalog
-	rootCount      int
-	hasGit         bool
-	onWorkerBranch bool
-	webSearch      bool
-	offered        []string
-	requestable    []string
-	commandOnFloor bool
-	effects        toolcontract.CommandEffects
-	held           map[string]bool
-	mints          map[string]bool
+	profileID   string
+	surfaceID   string
+	offered     []string
+	requestable []string
+	effects     toolcontract.CommandEffects
+	held        map[string]bool
+	mints       map[string]bool
+	selection   promptunit.Selection
+	facts       map[string]any
+	fingerprint string
 }
 
 // NewReader constructs a validated Reader from the executor's inputs.
@@ -85,19 +70,17 @@ func NewReader(in ReaderInput) (Reader, error) {
 		return Reader{}, fmt.Errorf("coordinator surface %q requires a compiled tool plan", surfaceID)
 	}
 
-	host := in.Host
-	if host == "" {
-		if profileID == CoordinatorProfileID || surfaceID != "" {
-			host = promptunit.HostCoordinator
-		} else {
-			host = promptunit.HostWorker
-		}
+	host := promptunit.HostWorker
+	if profileID == CoordinatorProfileID || surfaceID != "" {
+		host = promptunit.HostCoordinator
 	}
 
-	profileEffects := profile.CommandEffects
+	effects, err := surfacecatalog.AdmittedCommandEffects(in.Profiles, profileID, surfaceID)
+	if err != nil {
+		return Reader{}, err
+	}
 
 	var (
-		effects        toolcontract.CommandEffects
 		offered        []string
 		requestable    []string
 		commandOnFloor bool
@@ -113,12 +96,6 @@ func NewReader(in ReaderInput) (Reader, error) {
 		if err != nil {
 			return Reader{}, err
 		}
-		surfaceEffects, err := cat.CommandEffects(surfaceID)
-		if err != nil {
-			return Reader{}, err
-		}
-		effects = surfaceEffects & profileEffects
-
 		floor := availableToolsInPlan(row.FloorTools(), in.Plan)
 		loadable := availableToolsInPlan(row.LoadableTools(), in.Plan)
 		sort.Strings(floor)
@@ -142,7 +119,6 @@ func NewReader(in ReaderInput) (Reader, error) {
 		commandOnFloor = slices.Contains(floor, "command")
 
 	case profileID == CoordinatorProfileID:
-		effects = profileEffects
 		if in.Plan.Compiled() {
 			floor := in.Plan.ImmediateNames()
 			loadable := in.Plan.DeferredNames()
@@ -158,7 +134,6 @@ func NewReader(in ReaderInput) (Reader, error) {
 		}
 
 	default:
-		effects = profileEffects
 		toolNames := availableToolsInPlan(visibleToolNames(profile, in.Visible), in.Plan)
 		for _, name := range toolNames {
 			if (profile.ToolDeferred(name) && !in.Loaded[name]) || !profile.ToolAllowed(name) {
@@ -185,57 +160,31 @@ func NewReader(in ReaderInput) (Reader, error) {
 		}
 	}
 	mints := evidenceMints(held)
+	mode := strings.TrimSpace(in.Mode)
+	facts, err := buildReaderFacts(in, profile, profileID, surfaceID, mode, offered, requestable, commandOnFloor, effects)
+	if err != nil {
+		return Reader{}, err
+	}
 
 	return Reader{
-		valid:          true,
-		host:           host,
-		profileID:      profileID,
-		surfaceID:      surfaceID,
-		mode:           strings.TrimSpace(in.Mode),
-		profiles:       slices.Clone(in.Profiles),
-		plan:           in.Plan,
-		loaded:         maps.Clone(in.Loaded),
-		visible:        slices.Clone(in.Visible),
-		schemas:        in.Schemas,
-		catalog:        in.Catalog,
-		rootCount:      in.RootCount,
-		hasGit:         in.HasGit,
-		onWorkerBranch: in.OnWorkerBranch,
-		webSearch:      in.WebSearch,
-		offered:        offered,
-		requestable:    requestable,
-		commandOnFloor: commandOnFloor,
-		effects:        effects,
-		held:           held,
-		mints:          mints,
+		profileID:   profileID,
+		surfaceID:   surfaceID,
+		offered:     offered,
+		requestable: requestable,
+		effects:     effects,
+		held:        held,
+		mints:       mints,
+		selection:   UnitSelectionVars(host, mode, offered),
+		facts:       facts,
+		fingerprint: computeReaderFingerprint(host, profileID, surfaceID, mode, offered, requestable, commandOnFloor, effects, in),
 	}, nil
 }
 
 // Valid reports whether r was constructed by NewReader.
-func (r Reader) Valid() bool { return r.valid }
-
-// Input returns a copy of the inputs r was constructed from.
-func (r Reader) Input() ReaderInput {
-	return ReaderInput{
-		Host:           r.host,
-		ProfileID:      r.profileID,
-		SurfaceID:      r.surfaceID,
-		Mode:           r.mode,
-		Profiles:       slices.Clone(r.profiles),
-		Plan:           r.plan,
-		Loaded:         maps.Clone(r.loaded),
-		Visible:        slices.Clone(r.visible),
-		Schemas:        r.schemas,
-		Catalog:        r.catalog,
-		RootCount:      r.rootCount,
-		HasGit:         r.hasGit,
-		OnWorkerBranch: r.onWorkerBranch,
-		WebSearch:      r.webSearch,
-	}
-}
+func (r Reader) Valid() bool { return r.profileID != "" }
 
 // Host returns the prompt unit host (coordinator or worker).
-func (r Reader) Host() promptunit.Host { return r.host }
+func (r Reader) Host() promptunit.Host { return r.selection.Host }
 
 // ProfileID returns the reader's tool profile ID.
 func (r Reader) ProfileID() string { return r.profileID }
@@ -243,17 +192,17 @@ func (r Reader) ProfileID() string { return r.profileID }
 // SurfaceID returns the coordinator surface ID, or "" for worker readers.
 func (r Reader) SurfaceID() string { return r.surfaceID }
 
-// Profiles returns a copy of the reader's posture-narrowed tool profiles.
-func (r Reader) Profiles() []sandbox.ToolProfile { return slices.Clone(r.profiles) }
-
-// Catalog returns the reader's effective pack catalog.
-func (r Reader) Catalog() *extpacks.EffectiveCatalog { return r.catalog }
-
 // RootCount returns the project root count.
-func (r Reader) RootCount() int { return r.rootCount }
+func (r Reader) RootCount() int {
+	rc, _ := r.facts["root_count"].(int)
+	return rc
+}
 
 // WebSearch reports whether web search and fetch are enabled.
-func (r Reader) WebSearch() bool { return r.webSearch }
+func (r Reader) WebSearch() bool {
+	ws, _ := r.facts["web_search_enabled"].(bool)
+	return ws
+}
 
 // Offered returns the sorted tools offered on this request.
 func (r Reader) Offered() []string { return slices.Clone(r.offered) }
@@ -272,121 +221,27 @@ func (r Reader) Mints() map[string]bool { return maps.Clone(r.mints) }
 
 // Selection returns the promptunit.Selection for this reader.
 func (r Reader) Selection() promptunit.Selection {
-	return UnitSelectionVars(r.host, r.mode, r.offered)
+	return promptunit.Selection{
+		Host:    r.selection.Host,
+		Mode:    r.selection.Mode,
+		Offered: maps.Clone(r.selection.Offered),
+	}
 }
 
-// Facts builds the template variable map describing this reader.
-func (r Reader) Facts() map[string]any {
-	out := make(map[string]any, 64)
-	if !r.valid {
-		return out
-	}
-
-	if r.surfaceID != "" || r.profileID == CoordinatorProfileID {
-		var scopeData CoordinatorPathScopeData
-		var err error
-		if r.surfaceID == "implement_investigate" {
-			scopeData, err = LoadInvestigatePathScopes()
-		} else {
-			scopeData, err = CoordinatorPathScopesFromProfiles(r.profiles)
-		}
-		if err == nil {
-			for k, v := range CoordinatorPathScopeTemplateVars(scopeData) {
-				out[k] = v
-			}
-		}
-		for k, v := range CoordinatorPolicyTemplateVars(r.offered, r.requestable) {
-			out[k] = v
-		}
-		spawn.RefreshSizingHintVars(out)
-		out["is_coordinator"] = true
-		out["on_worker_branch"] = r.onWorkerBranch
-		out["has_git"] = r.hasGit
-		out["root_count"] = r.rootCount
-		out["command_on_floor"] = r.commandOnFloor
-		if r.surfaceID != "" {
-			out["surface_id"] = r.surfaceID
-		}
-		if r.mode != "" {
-			out["execution_mode"] = r.mode
-		}
-		restrictCommandEffects(r.effects, r.offered, r.requestable, out)
-		syncCommandExternalFacts(out)
-		canRequest := len(r.requestable) > 0 && slices.Contains(r.offered, "request_tools")
-		if canRequest {
-			if roster, err := RequestableTools(r.requestable, r.schemas); err == nil {
-				out["requestable_tools"] = requestableToolVars(roster)
-				out["requestable_capabilities"] = RequestableCapabilities(roster)
-			}
-		} else {
-			out["requestable_tools"] = []map[string]any(nil)
-			out["requestable_capabilities"] = []string(nil)
-		}
-		out["surface_offered"] = slices.Clone(r.offered)
-		commandMutates := currentCommandEffectFlags(out, slices.Contains(r.offered, "command")).mutation
-		if r.surfaceID != "" {
-			if card, err := LoadCoordinatorSurfaceCard(r.surfaceID); err == nil {
-				for k, v := range CoordinatorSurfaceCardVars(card, r.offered, r.requestable, commandMutates).TemplateVars() {
-					out[k] = v
-				}
-			}
-		}
-		runOffered := r.offered
-		if !commandMutates {
-			runOffered = filterToolName(r.offered, "command")
-		}
-		MergeVisualShowVars(runOffered, r.requestable, out)
-		out["more_tools_loadable"] = canRequest
-		out["web_search_enabled"] = r.webSearch
-		if !r.webSearch {
-			MergeWebResearchUnavailable(out)
-		}
-		clearSkillRosterWithoutSkillsRead(out)
-		return out
-	}
-
-	var profile sandbox.ToolProfile
-	for _, p := range r.profiles {
-		if p.ID == r.profileID {
-			profile = p
-			break
-		}
-	}
-	toolViews := make([]AgentToolArgView, 0, len(r.offered))
-	for _, name := range r.offered {
-		view := AgentToolArgView{Name: name}
-		if r.schemas != nil {
-			if meta, ok := r.schemas.ToolMeta(name); ok {
-				view.RequiredArgs, _ = toolschema.ArgFieldSummary(meta.ArgsSchema)
-			}
-		}
-		toolViews = append(toolViews, view)
-	}
-	roster, _ := RequestableTools(r.requestable, r.schemas)
-	data := AgentToolSurfaceData{
-		ToolProfile:     r.profileID,
-		Tools:           toolViews,
-		Requestable:     roster,
-		WriteGlobs:      slices.Clone(profile.WriteGlobs),
-		CommandEffects:  r.effects,
-		CommandDeferred: !r.commandOnFloor && slices.Contains(r.offered, "command"),
-	}
-	for k, v := range AgentToolSurfaceTemplateVars(data) {
-		out[k] = v
-	}
-	restrictCommandEffects(r.effects, r.offered, r.requestable, out)
-	syncCommandExternalFacts(out)
-	mergeVisualShowVarsFromSurface(data, out)
-	out["is_coordinator"] = false
-	out["on_worker_branch"] = r.onWorkerBranch
-	out["has_git"] = r.hasGit
-	out["root_count"] = r.rootCount
-	out["web_search_enabled"] = r.webSearch
-	return out
-}
+// Facts returns a copy of the template variable map describing this reader.
+func (r Reader) Facts() map[string]any { return maps.Clone(r.facts) }
 
 // Fingerprint returns a stable digest of the reader's inputs and derived reach.
-func (r Reader) Fingerprint() string {
+func (r Reader) Fingerprint() string { return r.fingerprint }
+
+func computeReaderFingerprint(
+	host promptunit.Host,
+	profileID, surfaceID, mode string,
+	offered, requestable []string,
+	commandOnFloor bool,
+	effects toolcontract.CommandEffects,
+	in ReaderInput,
+) string {
 	payload, err := json.Marshal(struct {
 		Host           promptunit.Host
 		ProfileID      string
@@ -401,18 +256,18 @@ func (r Reader) Fingerprint() string {
 		OnWorkerBranch bool
 		WebSearch      bool
 	}{
-		Host:           r.host,
-		ProfileID:      r.profileID,
-		SurfaceID:      r.surfaceID,
-		Mode:           r.mode,
-		Offered:        r.offered,
-		Requestable:    r.requestable,
-		CommandOnFloor: r.commandOnFloor,
-		Effects:        uint8(r.effects),
-		RootCount:      r.rootCount,
-		HasGit:         r.hasGit,
-		OnWorkerBranch: r.onWorkerBranch,
-		WebSearch:      r.webSearch,
+		Host:           host,
+		ProfileID:      profileID,
+		SurfaceID:      surfaceID,
+		Mode:           mode,
+		Offered:        offered,
+		Requestable:    requestable,
+		CommandOnFloor: commandOnFloor,
+		Effects:        uint8(effects),
+		RootCount:      in.RootCount,
+		HasGit:         in.HasGit,
+		OnWorkerBranch: in.OnWorkerBranch,
+		WebSearch:      in.WebSearch,
 	})
 	if err != nil {
 		return ""

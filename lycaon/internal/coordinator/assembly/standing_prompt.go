@@ -76,7 +76,7 @@ func renderStandingPrompt(ctx context.Context, pe prompts.PromptTemplateEngine, 
 		return "", fmt.Errorf("surface prompt vars: %w", err)
 	}
 
-	catalog, err := prompts.UnitCatalogFor(in.reader.Catalog())
+	catalog, err := prompts.UnitCatalogForEngine(pe)
 	if err != nil {
 		return "", fmt.Errorf("unit catalog: %w", err)
 	}

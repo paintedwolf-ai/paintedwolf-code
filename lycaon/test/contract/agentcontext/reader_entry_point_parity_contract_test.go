@@ -19,7 +19,6 @@ import (
 // Every coordinator render entry point receives identical values for every
 // reader-fact key on a given (surface, posture, root count) turn.
 func TestCoordinatorEntryPointsAgreeOnReaderFacts(t *testing.T) {
-	t.Parallel()
 	surfaces, err := surfacecatalog.Load()
 	contractcheck.FailErr(t, "load surfaces", err)
 	shipped, err := sandbox.LoadToolProfiles()
@@ -67,8 +66,7 @@ func TestCoordinatorEntryPointsAgreeOnReaderFacts(t *testing.T) {
 						SpawnAllowlist:   spawn.AmbientAllowedAgents(),
 						MaxInFlight:      spawn.MaxInFlightTaskWorkers,
 						WebSearchEnabled: &webSearchEnabled,
-						Catalog:          reader.Catalog(),
-						ToolProfiles:     reader.Profiles(),
+						ToolProfiles:     profiles,
 					})
 					contractcheck.FailErr(t, "resolve capability surface", err)
 					spawnVars := reader.Facts()

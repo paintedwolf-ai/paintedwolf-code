@@ -35,7 +35,6 @@ func SkillSurfaceTemplateVars(in SkillSurfaceVarsInput) (map[string]any, error) 
 	vars := spawn.PolicyTemplateVars(defaultDelegationBudget(in.DelegationBudget))
 	spawn.RefreshSizingHintVars(vars)
 	coordinator := in.ProfileID == CoordinatorProfileID
-	setCallerShapeVars(vars, in, coordinator)
 	if coordinator && in.SurfaceID != "" {
 		turn := ReaderInput{Plan: in.Plan, Loaded: coordinatorSurfaceLoaded(in)}
 		if err := MergeCoordinatorSurfacePathVars(in.SurfaceID, nil, vars, turn); err != nil {

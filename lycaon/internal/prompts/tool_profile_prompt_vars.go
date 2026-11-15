@@ -416,12 +416,6 @@ func IsCoordinatorSurfaceID(id string) bool {
 	return err == nil
 }
 
-// ScopeAllowsCommandMutation reports whether a profile ID, agent ID, or
-// coordinator surface ID lets command change the tree.
-func ScopeAllowsCommandMutation(scopeID string) bool {
-	return commandEffectFlags(true, ScopeCommandEffects(scopeID)).mutation
-}
-
 func toolSetMutationCapable(enabled map[string]bool) bool {
 	loadNativeToolFamilies()
 	for _, name := range nativeMutationTools {

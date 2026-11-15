@@ -90,7 +90,6 @@ func RenderPromptDump(
 		return "", err
 	}
 	reader, err := prompts.NewReader(prompts.ReaderInput{
-		Host:      promptunit.HostCoordinator,
 		ProfileID: prompts.CoordinatorProfileID,
 		SurfaceID: profile.SurfaceID,
 		Mode:      current,

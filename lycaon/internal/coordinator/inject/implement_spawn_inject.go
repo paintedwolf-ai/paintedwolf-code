@@ -35,8 +35,6 @@ func RenderImplementSpawnInject(
 		SpawnAllowlist:   allowedAgents,
 		MaxInFlight:      maxInFlight,
 		WebSearchEnabled: &webSearchEnabled,
-		Catalog:          reader.Catalog(),
-		ToolProfiles:     reader.Profiles(),
 	})
 	if err != nil {
 		return "", fmt.Errorf("resolve capability surface: %w", err)

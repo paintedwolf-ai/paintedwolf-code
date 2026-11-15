@@ -3,13 +3,12 @@ package toolexecution
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/platform"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -20,6 +19,11 @@ type ProgramSurface struct {
 	selection NativeOperationSelection
 	allowed   toolcontract.CommandEffects
 	profile   string
+}
+
+// Effects returns the command effects admitted on this program surface.
+func (s ProgramSurface) Effects() toolcontract.CommandEffects {
+	return s.allowed
 }
 
 // AllowsEffects reports the frozen profile and surface restriction only.
@@ -46,51 +50,44 @@ func (s ProgramSurface) ValidateOperation(bound toolcontract.BoundOperation) err
 	return nil
 }
 
-// FreezeProgramSurface uses the effective profile boundary and explicit native
-// definitions. Existing profile/path grants remain separate executing checks.
-func (e *Metadata) FreezeProgramSurface(ctx context.Context, filter platform.ToolFilter, active []toolcontract.OperationDefinition) (ProgramSurface, error) {
+// FreezeCommandEffects resolves the profile's command effects and narrows them
+// by the surface restriction when filter.SurfaceID is set.
+func (e *Metadata) FreezeCommandEffects(ctx context.Context, filter platform.ToolFilter) (context.Context, toolcontract.CommandEffects, error) {
 	if e == nil {
-		return ProgramSurface{}, fmt.Errorf("command metadata required")
+		return ctx, 0, fmt.Errorf("command metadata required")
 	}
 	source, ok := e.policy.(interface {
 		FreezeCommandProfile(context.Context, string) (context.Context, toolcontract.CommandEffects, error)
 	})
 	if !ok {
-		return ProgramSurface{}, fmt.Errorf("command profile effect boundary required")
+		return ctx, 0, fmt.Errorf("command profile effect boundary required")
 	}
 	frozen, allowed, err := source.FreezeCommandProfile(ctx, filter.ProfileID)
 	if err != nil {
-		return ProgramSurface{}, err
+		return ctx, 0, err
 	}
 	if filter.ProfileID == toolcontract.CoordinatorProfileID && filter.SurfaceID == "" {
-		return ProgramSurface{}, fmt.Errorf("coordinator program requires captured surface")
+		return ctx, 0, fmt.Errorf("coordinator program requires captured surface")
 	}
-	if filter.SurfaceID != "" {
-		restriction, err := surfacecatalog.CommandEffects(filter.SurfaceID)
-		if err != nil {
-			return ProgramSurface{}, err
-		}
-		allowed &= restriction
+	allowed, err = surfacecatalog.RestrictCommandEffects(allowed, filter.SurfaceID)
+	if err != nil {
+		return ctx, 0, err
+	}
+	return frozen, allowed, nil
+}
+
+// FreezeProgramSurface uses the effective profile boundary and explicit native
+// definitions. Existing profile/path grants remain separate executing checks.
+func (e *Metadata) FreezeProgramSurface(ctx context.Context, filter platform.ToolFilter, active []toolcontract.OperationDefinition) (ProgramSurface, error) {
+	frozen, allowed, err := e.FreezeCommandEffects(ctx, filter)
+	if err != nil {
+		return ProgramSurface{}, err
 	}
 	selection, err := e.SelectNativeOperations(frozen, filter, active)
 	if err != nil {
 		return ProgramSurface{}, err
 	}
 	return ProgramSurface{selection: selection, allowed: allowed, profile: filter.ProfileID}, nil
-}
-
-// CommandEffectsForSurface resolves the command effects admitted for surfaceID under profiles.
-func CommandEffectsForSurface(surfaceID string, profiles []sandbox.ToolProfile) (toolcontract.CommandEffects, error) {
-	restriction, err := surfacecatalog.CommandEffects(surfaceID)
-	if err != nil {
-		return 0, err
-	}
-	for _, p := range profiles {
-		if p.ID == toolcontract.CoordinatorProfileID {
-			return restriction & p.CommandEffects, nil
-		}
-	}
-	return restriction, nil
 }
 
 // ProgramReach freezes which native programs a profile and surface can run: the
@@ -110,12 +107,9 @@ func (e *Metadata) ProgramReach(ctx context.Context, filter platform.ToolFilter)
 	if err != nil {
 		return nil, err
 	}
-	if filter.SurfaceID != "" {
-		restriction, err := surfacecatalog.CommandEffects(filter.SurfaceID)
-		if err != nil {
-			return nil, err
-		}
-		allowed &= restriction
+	allowed, err = surfacecatalog.RestrictCommandEffects(allowed, filter.SurfaceID)
+	if err != nil {
+		return nil, err
 	}
 	surfaceTools, err := surfaceCommandFormTools(filter.SurfaceID)
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -197,6 +198,29 @@ func CommandEffects(surfaceID string) (toolcontract.CommandEffects, error) {
 		return 0, err
 	}
 	return cat.CommandEffects(surfaceID)
+}
+
+// RestrictCommandEffects narrows profileEffects by the surface's declared
+// command effects when surfaceID is set.
+func RestrictCommandEffects(profileEffects toolcontract.CommandEffects, surfaceID string) (toolcontract.CommandEffects, error) {
+	if strings.TrimSpace(surfaceID) == "" {
+		return profileEffects, nil
+	}
+	restriction, err := CommandEffects(surfaceID)
+	if err != nil {
+		return 0, err
+	}
+	return profileEffects & restriction, nil
+}
+
+// AdmittedCommandEffects resolves the command effects admitted for profileID
+// and surfaceID across profiles.
+func AdmittedCommandEffects(profiles []sandbox.ToolProfile, profileID, surfaceID string) (toolcontract.CommandEffects, error) {
+	allowed, err := sandbox.ProfileCommandEffects(profiles, profileID)
+	if err != nil {
+		return 0, err
+	}
+	return RestrictCommandEffects(allowed, surfaceID)
 }
 
 // SurfaceIDs returns the sorted coordinator surface ids.

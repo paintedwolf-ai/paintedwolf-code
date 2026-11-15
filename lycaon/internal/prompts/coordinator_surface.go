@@ -51,15 +51,6 @@ func LoadInvestigatePathScopes() (CoordinatorPathScopeData, error) {
 	}, nil
 }
 
-// LoadCoordinatorPathScopes loads the bundled coordinator profile path scopes.
-func LoadCoordinatorPathScopes() (CoordinatorPathScopeData, error) {
-	profiles, err := sandbox.LoadToolProfiles()
-	if err != nil {
-		return CoordinatorPathScopeData{}, err
-	}
-	return CoordinatorPathScopesFromProfiles(profiles)
-}
-
 // CoordinatorPathScopesFromProfiles finds the coordinator profile in profiles.
 func CoordinatorPathScopesFromProfiles(profiles []sandbox.ToolProfile) (CoordinatorPathScopeData, error) {
 	for _, p := range profiles {
@@ -91,33 +82,6 @@ func CoordinatorPathScopeTemplateVars(data CoordinatorPathScopeData) map[string]
 		"write_globs":      data.WriteGlobs,
 		"write_deny_globs": data.WriteDenyGlobs,
 	}
-}
-
-// CoordinatorProfileVisibleTools returns sorted coordinator tools.
-func CoordinatorProfileVisibleTools() ([]string, error) {
-	profiles, err := sandbox.LoadToolProfiles()
-	if err != nil {
-		return nil, err
-	}
-	return CoordinatorProfileVisibleToolsFromProfiles(profiles)
-}
-
-// CoordinatorProfileVisibleToolsFromProfiles finds enabled tools on the coordinator profile.
-func CoordinatorProfileVisibleToolsFromProfiles(profiles []sandbox.ToolProfile) ([]string, error) {
-	for _, p := range profiles {
-		if p.ID != CoordinatorProfileID {
-			continue
-		}
-		var out []string
-		for name, enabled := range p.Tools {
-			if enabled {
-				out = append(out, name)
-			}
-		}
-		sort.Strings(out)
-		return out, nil
-	}
-	return nil, fmt.Errorf("tool profile %q not found", CoordinatorProfileID)
 }
 
 // LoadCoordinatorSurfaceCard returns the surface banner copy and whether the

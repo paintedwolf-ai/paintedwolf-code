@@ -6,11 +6,14 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
+	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/tools"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -64,6 +67,11 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 	for _, posture := range postures.List() {
 		profiles := postureProfiles(shipped, posture.CommandEffects)
 		coordinator := profileByID(t, profiles, prompts.CoordinatorProfileID)
+		executor := toolexecution.NewExecutor(
+			toolprofiles.NewProfilePolicyEngine(sandbox.NewBoundary(sandbox.Config{}, profiles)),
+			tools.NewDefaultRegistry(),
+			prompts.CoordinatorProfileID,
+		)
 		for _, surfaceID := range surfaces.SurfaceIDs() {
 			t.Run(string(posture.ID)+"/"+surfaceID, func(t *testing.T) {
 				row, err := surfaces.Surface(surfaceID)
@@ -71,8 +79,12 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 				declared, err := toolcontract.NewCommandEffects(row.CommandEffects...)
 				contractcheck.FailErr(t, "compile surface effects", err)
 				admitted := coordinator.CommandEffects & declared
-				execEffects, err := toolexecution.CommandEffectsForSurface(surfaceID, profiles)
-				contractcheck.FailErr(t, "executor effects", err)
+				programSurface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{
+					ProfileID: prompts.CoordinatorProfileID,
+					SurfaceID: surfaceID,
+				}, nil)
+				contractcheck.FailErr(t, "freeze program surface", err)
+				execEffects := programSurface.Effects()
 				plan, err := prompts.CompileSurfacePlan(surfaceID, 1)
 				contractcheck.FailErr(t, "compile surface plan", err)
 				reader, err := prompts.NewReader(prompts.ReaderInput{
@@ -130,6 +142,15 @@ func TestWorkerPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 				continue
 			}
 			t.Run(string(posture.ID)+"/"+profile.ID, func(t *testing.T) {
+				executor := toolexecution.NewExecutor(
+					toolprofiles.NewProfilePolicyEngine(sandbox.NewBoundary(sandbox.Config{}, profiles)),
+					tools.NewDefaultRegistry(),
+					profile.ID,
+				)
+				programSurface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{
+					ProfileID: profile.ID,
+				}, nil)
+				contractcheck.FailErr(t, "freeze worker program surface", err)
 				reader, err := prompts.NewReader(prompts.ReaderInput{
 					ProfileID: profile.ID,
 					Profiles:  profiles,
@@ -137,8 +158,8 @@ func TestWorkerPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 					WebSearch: true,
 				})
 				contractcheck.FailErr(t, "new worker reader", err)
-				if reader.Effects() != profile.CommandEffects {
-					t.Fatalf("worker reader.Effects() = %v, want %v", reader.Effects().Classes(), profile.CommandEffects.Classes())
+				if reader.Effects() != programSurface.Effects() || reader.Effects() != profile.CommandEffects {
+					t.Fatalf("worker reader.Effects() = %v, executor = %v, want %v", reader.Effects().Classes(), programSurface.Effects().Classes(), profile.CommandEffects.Classes())
 				}
 				vars := map[string]any{}
 				contractcheck.FailErr(t, "merge profile vars", prompts.MergeAgentToolSurfaceVars(profile.ID, nil, nil, prompts.ReaderInput{}, vars, profiles))
