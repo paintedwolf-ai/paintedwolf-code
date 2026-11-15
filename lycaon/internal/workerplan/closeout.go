@@ -290,8 +290,14 @@ func (s *Service) SessionWorkIDs(ctx context.Context, sessionID string) ([]strin
 		if w.ClosedAt != "" {
 			continue
 		}
-		if w.State != workerrecords.WorkerWorking && w.State != workerrecords.WorkerWaiting &&
-			w.State != workerrecords.WorkerAsking && w.State != workerrecords.WorkerSettled {
+		if w.BlueprintPath == "" && len(w.Criteria) == 0 && strings.TrimSpace(w.WorkflowWorkID) == "" {
+			continue
+		}
+		rounds, rErr := s.Records.Rounds(ctx, actor, w.ID)
+		if rErr != nil {
+			return nil, rErr
+		}
+		if len(rounds) == 0 {
 			continue
 		}
 		out = append(out, legIdentifier(w))
