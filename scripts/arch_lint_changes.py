@@ -91,7 +91,8 @@ def unparam(root, base, linter):
         cwd=root / "lycaon", capture_output=True, text=True)
     if result.returncode not in (0, 1):
         raise RuntimeError(f"golangci-lint: {result.stderr.strip()}")
-    report = json.loads(result.stdout or "{}")
+    # The JSON report is the first document; golangci-lint may print a summary after it.
+    report = json.JSONDecoder().raw_decode(result.stdout.strip() or "{}")[0]
     return [{"kind": "unparam", "key": issue["Text"],
              "pos": f"lycaon/{issue['Pos']['Filename']}:{issue['Pos']['Line']}", "message": issue["Text"]}
             for issue in report.get("Issues") or []]

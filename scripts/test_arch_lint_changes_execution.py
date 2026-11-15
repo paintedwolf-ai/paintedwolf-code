@@ -29,6 +29,7 @@ print(json.dumps(data.get(args[0], [])))
 FAKE_LINTER = """#!/usr/bin/env python3
 import json, sys
 print(json.dumps({"Issues": [{"Text": "save - mode is unused", "Pos": {"Filename": "internal/store/save.go", "Line": 7}}]}))
+print("1 issues.")
 sys.exit(1)
 """
 
