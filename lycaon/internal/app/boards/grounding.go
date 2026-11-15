@@ -103,7 +103,6 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	r.deps.Sessions.Manager.Coordinator.ProgressClosure.SetNames(r.WorkerRecords)
 	r.deps.Sessions.Manager.SetWorkerNames(r.WorkerRecords.NameByJob)
 	if workers := r.deps.Sessions.Manager.Coordinator.Workers; workers != nil {
-		workers.LatestSent = r.WorkerRecords.LatestSentSeq
 		workers.RoundProvenance = func(ctx context.Context, jobID string) (string, int64, string, int64, bool, error) {
 			p, ok, err := r.WorkerRecords.RoundProvenanceByJob(ctx, jobID)
 			return p.Worker, p.Ordinal, p.WorkflowWorkID, p.LatestSentSeq, ok, err

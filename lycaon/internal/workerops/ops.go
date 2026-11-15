@@ -368,12 +368,6 @@ type HistoryPage struct {
 	BeforeRound int64
 }
 
-// History reads a worker's rounds and a page of messages before a sequence.
-// Reading resolves and acknowledges nothing.
-func (s *Service) History(ctx context.Context, actor workerrecords.Actor, name string, before int64, limit int) (HistoryPage, error) {
-	return s.HistoryPaged(ctx, actor, name, HistoryQuery{BeforeSeq: before, Limit: limit})
-}
-
 // HistoryPaged reads a bounded page of rounds and messages without scanning
 // full round or message history. Reading resolves and acknowledges nothing.
 func (s *Service) HistoryPaged(ctx context.Context, actor workerrecords.Actor, name string, q HistoryQuery) (HistoryPage, error) {

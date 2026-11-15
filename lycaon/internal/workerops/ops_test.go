@@ -322,12 +322,12 @@ func TestHistoryPagesWithoutResolving(t *testing.T) {
 		_, err := f.records.AppendMessage(t.Context(), f.coord, op("m"+string(rune('a'+i))), f.workerID, workerrecords.MessageSpec{Body: "note"})
 		testutil.FailErr(t, "append", err)
 	}
-	page, err := f.svc.History(t.Context(), f.coord, "surveyor", 0, 3)
+	page, err := f.svc.HistoryPaged(t.Context(), f.coord, "surveyor", workerops.HistoryQuery{BeforeSeq: 0, Limit: 3})
 	testutil.FailErr(t, "history", err)
 	if len(page.Messages) != 3 || page.Messages[0].Seq != 5 || page.Before != 3 || len(page.Rounds) != 1 {
 		t.Fatalf("page = %+v", page)
 	}
-	older, err := f.svc.History(t.Context(), f.coord, "surveyor", page.Before, 3)
+	older, err := f.svc.HistoryPaged(t.Context(), f.coord, "surveyor", workerops.HistoryQuery{BeforeSeq: page.Before, Limit: 3})
 	testutil.FailErr(t, "older", err)
 	if len(older.Messages) != 2 || older.Before != 0 {
 		t.Fatalf("older = %+v", older)
