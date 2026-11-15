@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"io"
 	"os"
 	"path/filepath"
@@ -241,7 +242,7 @@ func promotedFileSnapshot(target promoteTarget, after []byte, afterSHA string, o
 	if (target.existed && target.before == nil) || (afterSHA != "" && after == nil) {
 		return nil
 	}
-	limits := textfile.LimitsForRaw(sourceledger.MaxRevisionContentBytes)
+	limits := textfile.LimitsForRaw(sourceblob.MaxRevisionContentBytes)
 	beforeDoc, _, beforeErr := textfile.Open(target.before, limits)
 	afterDoc, _, afterErr := textfile.Open(after, limits)
 	if beforeErr != nil || afterErr != nil {
@@ -322,7 +323,7 @@ func readForLedger(abs string) (content []byte, sha string, err error) {
 	if info.IsDir() {
 		return nil, "", os.ErrNotExist
 	}
-	if info.Size() <= sourceledger.MaxRevisionContentBytes {
+	if info.Size() <= sourceblob.MaxRevisionContentBytes {
 		b, readErr := os.ReadFile(abs)
 		if readErr != nil {
 			return nil, "", readErr

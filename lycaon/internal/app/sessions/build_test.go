@@ -3,6 +3,7 @@ package sessions
 import (
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"log/slog"
 	"maps"
 	"os"
@@ -27,7 +28,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -214,7 +214,7 @@ func TestSkillReaderOfferedTools(t *testing.T) {
 				},
 			},
 			wantContains: []string{"custom_probe", "recall", "command", "command_output", "command_stop"},
-			wantMissing:  []string{toolvocab.ReachCommandMutation},
+			wantMissing:  []string{toolcontract.ReachCommandMutation},
 		},
 		{
 			name: "coordinator without a surface keeps the turn tools",
@@ -230,7 +230,7 @@ func TestSkillReaderOfferedTools(t *testing.T) {
 				Identity: tools.InvocationIdentity{Agent: "coordinator"},
 				Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"command"}},
 			},
-			wantContains: []string{toolvocab.ReachCommandMutation},
+			wantContains: []string{toolcontract.ReachCommandMutation},
 		},
 		{
 			name: "worker profile scope allows command mutation",
@@ -238,7 +238,7 @@ func TestSkillReaderOfferedTools(t *testing.T) {
 				Identity: tools.InvocationIdentity{Agent: "implementer"},
 				Turn:     tools.InvocationTurn{TurnOfferedToolNames: []string{"command"}},
 			},
-			wantContains: []string{toolvocab.ReachCommandMutation},
+			wantContains: []string{toolcontract.ReachCommandMutation},
 		},
 		{
 			name: "read-only profile scope forbids command mutation",
@@ -258,7 +258,7 @@ func TestSkillReaderOfferedTools(t *testing.T) {
 				},
 			},
 			wantContains: []string{"command", "recall"},
-			wantMissing:  []string{toolvocab.ReachCommandMutation},
+			wantMissing:  []string{toolcontract.ReachCommandMutation},
 		},
 		{
 			name: "unknown scope falls open and skips the surface merge",
@@ -269,7 +269,7 @@ func TestSkillReaderOfferedTools(t *testing.T) {
 					TurnOfferedToolNames: []string{"command"},
 				},
 			},
-			wantContains: []string{"command", toolvocab.ReachCommandMutation},
+			wantContains: []string{"command", toolcontract.ReachCommandMutation},
 			wantMissing:  []string{"recall"},
 		},
 	} {

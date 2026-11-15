@@ -2,6 +2,7 @@ package loading
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
@@ -55,7 +56,7 @@ func (m *Service) decisionOfferedTools(sess *api.Session, decision *Decision) ma
 		offered[name] = true
 	}
 	if offered["command"] && prompts.ScopeAllowsCommandMutation(decision.state.Surface) {
-		offered[toolvocab.ReachCommandMutation] = true
+		offered[toolcontract.ReachCommandMutation] = true
 	}
 	return offered
 }

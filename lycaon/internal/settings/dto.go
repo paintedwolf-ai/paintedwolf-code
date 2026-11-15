@@ -75,11 +75,6 @@ func LimitsToDTO(scope wire.SettingsScope, lim SessionLimits, mergedFrom []strin
 	}
 }
 
-// WireScope converts llm scope to API scope.
-func WireScope(scope string) wire.SettingsScope {
-	return wire.SettingsScope(scope)
-}
-
 // SecurityScannersToDTO converts effective Security scanners settings to API response.
 func SecurityScannersToDTO(cfg SecurityScannersConfig, mergedFrom []string) wire.SecurityScannersSettingsResponse {
 	scope := wire.LandedChangeScope(cfg.LandedChangeScope)

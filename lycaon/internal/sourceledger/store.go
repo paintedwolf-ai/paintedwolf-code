@@ -25,8 +25,6 @@ import (
 )
 
 const (
-	// MaxRevisionContentBytes bounds content retained for one version.
-	MaxRevisionContentBytes = sourceblob.MaxRevisionContentBytes
 	CauseOverlayPromote     = "overlay_promote"
 	CauseVersionRestore     = "version_restore"
 	CauseVersionRestoreBase = "version_restore_base"

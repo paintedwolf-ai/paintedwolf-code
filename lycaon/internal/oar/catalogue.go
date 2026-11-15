@@ -18,14 +18,6 @@ const (
 	FactTierHost     FactTier = "host"     // published under the host namespace
 )
 
-// Standard profile names. A profile is provided whole or not at all
-// ([OAR-FACT-13]).
-const (
-	ProfileFilesystem    = oarcopy.ProfileFilesystem
-	ProfileContentSafety = oarcopy.ProfileContentSafety
-	ProfileMCP           = oarcopy.ProfileMCP
-)
-
 // factDecl is one typed fact in the closed environment.
 type factDecl struct {
 	name    string
@@ -183,9 +175,9 @@ var factDecls = []factDecl{
 	{"last_audit_ungrounded", oarcore.TypeBool, FactTierHost, ""},
 	{"grounding_escalated", oarcore.TypeBool, FactTierHost, ""},
 	{"command_not_argv", oarcore.TypeBool, FactTierHost, ""},
-	{"is_directory", oarcore.TypeBool, FactTierStandard, ProfileFilesystem},
-	{"not_found", oarcore.TypeBool, FactTierStandard, ProfileFilesystem},
-	{"path_outside_scope", oarcore.TypeBool, FactTierStandard, ProfileFilesystem},
+	{"is_directory", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileFilesystem},
+	{"not_found", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileFilesystem},
+	{"path_outside_scope", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileFilesystem},
 	{"path_denied", oarcore.TypeBool, FactTierHost, ""},
 	{"bulk_denied", oarcore.TypeBool, FactTierHost, ""},
 	{"binary_denied", oarcore.TypeBool, FactTierHost, ""},
@@ -206,21 +198,21 @@ var factDecls = []factDecl{
 	{"selector_ambiguous", oarcore.TypeBool, FactTierHost, ""},
 	{"reject_observation", oarcore.TypeString, FactTierHost, ""},
 	{"rejection_code", oarcore.TypeString, FactTierHost, ""},
-	{"prompt_injection_score", oarcore.TypeDouble, FactTierStandard, ProfileContentSafety},
-	{"jailbreak_score", oarcore.TypeDouble, FactTierStandard, ProfileContentSafety},
-	{"pii_entities", oarcore.TypeListMap, FactTierStandard, ProfileContentSafety},
-	{"secret_matches", oarcore.TypeListMap, FactTierStandard, ProfileContentSafety},
-	{"mcp_server_id", oarcore.TypeString, FactTierStandard, ProfileMCP},
-	{"mcp_tool_name", oarcore.TypeString, FactTierStandard, ProfileMCP},
-	{"mcp_qualified_tool", oarcore.TypeString, FactTierStandard, ProfileMCP},
-	{"mcp_server_configured", oarcore.TypeBool, FactTierStandard, ProfileMCP},
-	{"mcp_server_enabled", oarcore.TypeBool, FactTierStandard, ProfileMCP},
-	{"mcp_configured_servers", oarcore.TypeListString, FactTierStandard, ProfileMCP},
-	{"mcp_enabled_servers", oarcore.TypeListString, FactTierStandard, ProfileMCP},
-	{"mcp_call_ok", oarcore.TypeBool, FactTierStandard, ProfileMCP},
-	{"mcp_error_code", oarcore.TypeString, FactTierStandard, ProfileMCP},
-	{"mcp_schema_matched", oarcore.TypeBool, FactTierStandard, ProfileMCP},
-	{"mcp_result", oarcore.TypeMap, FactTierStandard, ProfileMCP},
+	{"prompt_injection_score", oarcore.TypeDouble, FactTierStandard, oarcopy.ProfileContentSafety},
+	{"jailbreak_score", oarcore.TypeDouble, FactTierStandard, oarcopy.ProfileContentSafety},
+	{"pii_entities", oarcore.TypeListMap, FactTierStandard, oarcopy.ProfileContentSafety},
+	{"secret_matches", oarcore.TypeListMap, FactTierStandard, oarcopy.ProfileContentSafety},
+	{"mcp_server_id", oarcore.TypeString, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_tool_name", oarcore.TypeString, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_qualified_tool", oarcore.TypeString, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_server_configured", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_server_enabled", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_configured_servers", oarcore.TypeListString, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_enabled_servers", oarcore.TypeListString, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_call_ok", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_error_code", oarcore.TypeString, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_schema_matched", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_result", oarcore.TypeMap, FactTierStandard, oarcopy.ProfileMCP},
 	{"credential_length", oarcore.TypeInt, FactTierHost, ""},
 	{"credential_distinct_words", oarcore.TypeInt, FactTierHost, ""},
 	{"credential_longest_run", oarcore.TypeInt, FactTierHost, ""},
@@ -265,10 +257,10 @@ var observationFns = []observationFn{
 		return EvalToolArgBool(h.get(), s), nil
 	}},
 	// The members of mcp_result that selection cannot type.
-	{"mcp_field_bool", oarcore.TypeBool, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) (any, error) {
+	{"mcp_field_bool", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileMCP, func(h *evalHolder, s string) (any, error) {
 		return mcpMember[bool](h.get(), s)
 	}},
-	{"mcp_field_int", oarcore.TypeInt, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) (any, error) {
+	{"mcp_field_int", oarcore.TypeInt, FactTierStandard, oarcopy.ProfileMCP, func(h *evalHolder, s string) (any, error) {
 		return mcpMember[int64](h.get(), s)
 	}},
 }

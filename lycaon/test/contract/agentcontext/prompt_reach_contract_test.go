@@ -3,6 +3,7 @@ package contract
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"os"
 	"path/filepath"
 	"slices"
@@ -44,7 +45,7 @@ func unreachableNames(t *testing.T, catalog *toolvocab.Catalog, corpus string, r
 		scope = scopeID[0]
 	}
 	if held["command"] && prompts.ScopeAllowsCommandMutation(scope) {
-		held[toolvocab.ReachCommandMutation] = true
+		held[toolcontract.ReachCommandMutation] = true
 	}
 	return toolvocab.UnreachableNames(catalog, corpus, held)
 }

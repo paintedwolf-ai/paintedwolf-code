@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"os"
 	"path/filepath"
 	"testing"
@@ -82,7 +83,7 @@ func TestLargeStreamRecordsDigestAndSizeWithoutRetainingBody(t *testing.T) {
 	tctx.Source.GitMutations = ledger.Git
 	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(ledger.LedgerDB(), ledger)
 
-	body := bytes.Repeat([]byte("x"), sourceledger.MaxRevisionContentBytes+1)
+	body := bytes.Repeat([]byte("x"), sourceblob.MaxRevisionContentBytes+1)
 	path := filepath.Join(dir, "large.txt")
 	_, err := applyAgentStream(t.Context(), tctx, agentStreamRequest{
 		Target: testMutationTarget(path), Source: bytes.NewReader(body),

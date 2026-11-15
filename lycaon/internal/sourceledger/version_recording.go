@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -54,7 +55,7 @@ func (s *Store) insertVersionWithCache(ctx context.Context, q *db.Queries, spec 
 	case "content", "link":
 		captureState = "metadata_only"
 		captureReason = "content_not_captured"
-		if spec.Size > MaxRevisionContentBytes {
+		if spec.Size > sourceblob.MaxRevisionContentBytes {
 			captureReason = "content_too_large"
 		}
 		if s.contentWithheld(ctx, spec.ProjectID, spec.RootID, spec.Path) {

@@ -3,6 +3,7 @@ package sessions
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/app/configuration"
@@ -246,7 +247,7 @@ func skillReaderOfferedTools(tctx tools.ToolContext) map[string]bool {
 		}
 	}
 	if offered["command"] && prompts.ScopeAllowsCommandMutation(scopeID) {
-		offered[toolvocab.ReachCommandMutation] = true
+		offered[toolcontract.ReachCommandMutation] = true
 	}
 	return offered
 }

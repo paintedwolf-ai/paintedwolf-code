@@ -406,7 +406,7 @@ func (s *Store) prepareWithCache(ctx context.Context, inputs []RecordInput, shar
 			sha   string
 			bytes []byte
 		}{{in.BeforeSHA256, in.Before}, {in.AfterSHA256, in.After}} {
-			if sharedObjects != nil && content.sha != "" && content.bytes != nil && in.EntryKind != EntryKindDirectory && len(content.bytes) <= MaxRevisionContentBytes {
+			if sharedObjects != nil && content.sha != "" && content.bytes != nil && in.EntryKind != EntryKindDirectory && len(content.bytes) <= sourceblob.MaxRevisionContentBytes {
 				if cached, ok := sharedObjects[content.sha]; ok && cached.Size == int64(len(content.bytes)) && sourceblob.ContentSHA(content.bytes) == strings.ToLower(strings.TrimSpace(content.sha)) {
 					in.objects[content.sha] = cached
 					continue
@@ -442,7 +442,7 @@ func prepareContent(ctx context.Context, objects *sourceblob.Store, sha string, 
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if kind == EntryKindDirectory || content == nil || len(content) > MaxRevisionContentBytes {
+	if kind == EntryKindDirectory || content == nil || len(content) > sourceblob.MaxRevisionContentBytes {
 		return nil, nil
 	}
 	rel, stored, oids, err := objects.Put(ctx, sha, content)

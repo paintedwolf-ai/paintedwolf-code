@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"io"
 	"os"
 	"path/filepath"
@@ -18,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/sourceworkspace"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -272,7 +272,7 @@ func stageAgentStream(ctx context.Context, tctx tools.ToolContext, req agentStre
 // history in recovery before the write lands, so an overwrite never destroys
 // the only copy. The write then records as a create.
 func setAsideUnversionedFile(ctx context.Context, tctx tools.ToolContext, target mutationTarget, mutation *agentMutation) error {
-	if mutation.Op != api.SourceChangeOpWrite || mutation.BeforeSize <= sourceledger.MaxRevisionContentBytes {
+	if mutation.Op != api.SourceChangeOpWrite || mutation.BeforeSize <= sourceblob.MaxRevisionContentBytes {
 		return nil
 	}
 	if info, err := os.Lstat(target.Abs); err != nil || !info.Mode().IsRegular() {

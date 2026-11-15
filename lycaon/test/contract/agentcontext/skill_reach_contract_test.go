@@ -2,6 +2,7 @@ package contract
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"regexp"
 	"slices"
 	"strings"
@@ -80,7 +81,7 @@ func readerHeld(reachable []string, vars map[string]any) map[string]bool {
 		held[name] = true
 	}
 	if mutates, ok := vars["profile_command_mutation"].(bool); ok && mutates {
-		held[toolvocab.ReachCommandMutation] = true
+		held[toolcontract.ReachCommandMutation] = true
 	}
 	return held
 }

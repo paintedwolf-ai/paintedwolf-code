@@ -5,13 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/desktoptrash"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -117,7 +117,7 @@ func TestRetainedTrashRefusesChangesAfterCapture(t *testing.T) {
 
 func TestSourceCopyRetainsCompleteTreeAndBoundedHistory(t *testing.T) {
 	service, p, root, _ := sourceMutationFixture(t)
-	body := bytes.Repeat([]byte("x"), sourceledger.MaxRevisionContentBytes+1)
+	body := bytes.Repeat([]byte("x"), sourceblob.MaxRevisionContentBytes+1)
 	testutil.FailErr(t, "seed large file", os.WriteFile(filepath.Join(root, "file"), body, 0o600))
 	id := uuid.NewString()
 	_, err := service.Copy(t.Context(), id, p, SourceCopyRequest{RootID: p.Roots[0].ID, From: "file", To: "copy"})

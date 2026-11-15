@@ -2,6 +2,7 @@ package contract
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"maps"
 	"os"
 	"path/filepath"
@@ -42,7 +43,7 @@ func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 			held[tool] = true
 		}
 		if held["command"] && vars["profile_command_mutation"] != false {
-			held[toolvocab.ReachCommandMutation] = true
+			held[toolcontract.ReachCommandMutation] = true
 		}
 		offered := map[string]bool{}
 		for _, tool := range state.offered {

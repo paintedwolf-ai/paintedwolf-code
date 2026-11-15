@@ -326,7 +326,7 @@ func fetchVerifiedGitBlob(
 	mgr git.GitManager,
 	rootAbs, blobOID string,
 ) ([]byte, bool) {
-	raw, ok, err := mgr.BlobContent(ctx, rootAbs, blobOID, sourceledger.MaxRevisionContentBytes)
+	raw, ok, err := mgr.BlobContent(ctx, rootAbs, blobOID, sourceblob.MaxRevisionContentBytes)
 	if err != nil || !ok {
 		return nil, false
 	}

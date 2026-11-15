@@ -72,11 +72,6 @@ func AgentSurfaces(agents []agentdef.Profile, profiles []sandbox.ToolProfile) ([
 	return out, surfaces, nil
 }
 
-// ReachCommandMutation marks a reader able to run command programs that mutate
-// the workspace. Callers put it in a reachable map alongside tool names; copy
-// naming a mutating command form stays reachable only while it is set.
-const ReachCommandMutation = toolcontract.ReachCommandMutation
-
 // profileHasCapabilityAliases lists the capability aliases behind
 // profile_has_<alias> template facts that describe a surface capability rather
 // than a single tool name.
@@ -147,7 +142,7 @@ func profileReachable(c *Catalog, profileID string) map[string]bool {
 			}
 		}
 	}
-	held[ReachCommandMutation] = c.profileCommandMutates(profileID)
+	held[toolcontract.ReachCommandMutation] = c.profileCommandMutates(profileID)
 	return held
 }
 
@@ -188,11 +183,11 @@ func (c *Catalog) skillRenderVars(held map[string]bool, coordinator bool) map[st
 	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
 	spawn.RefreshSizingHintVars(vars)
 	for name, ok := range held {
-		if ok && name != ReachCommandMutation && toolschema.ValidToolName(name) {
+		if ok && name != toolcontract.ReachCommandMutation && toolschema.ValidToolName(name) {
 			vars["profile_has_"+name] = true
 		}
 	}
-	commandMutates := held["command"] && held[ReachCommandMutation]
+	commandMutates := held["command"] && held[toolcontract.ReachCommandMutation]
 	vars["profile_has_write_tools"] = held[writeToolMarker] || commandMutates
 	vars["profile_command_mutation"] = commandMutates
 	vars["profile_has_jq_edit"] = commandMutates

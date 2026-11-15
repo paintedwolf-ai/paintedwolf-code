@@ -76,12 +76,12 @@ func (c *Coordinator) ClaimWorkerView(
 	}
 
 	if err := checkStageBoundary(ctx, req.Hooks.Fault, StageValidateSelection); err != nil {
-		snap := c.recordFailedClaim(req, adapter.AdapterEagerCopy, classifyClaimReason(err), err.Error(), 0, 0)
+		snap := c.recordFailedClaim(req, adapter.AdapterEagerCopy, ClassifyFailureReason(err), err.Error(), 0, 0)
 		return nil, snap, err
 	}
 	grants, err := adapter.ValidateWorkspaceSelection(req.Grants, req.Selection)
 	if err != nil {
-		snap := c.recordFailedClaim(req, adapter.AdapterEagerCopy, classifyClaimReason(err), err.Error(), 0, 0)
+		snap := c.recordFailedClaim(req, adapter.AdapterEagerCopy, ClassifyFailureReason(err), err.Error(), 0, 0)
 		return nil, snap, err
 	}
 	choice, err := c.selector.Choose(ctx, adapter.ChooseRequest{
@@ -90,7 +90,7 @@ func (c *Coordinator) ClaimWorkerView(
 		HiddenPaths: req.HiddenPaths,
 	})
 	if err != nil {
-		snap := c.recordFailedClaim(req, choice.Probe.AdapterID, classifyClaimReason(err), err.Error(), 0, 0)
+		snap := c.recordFailedClaim(req, choice.Probe.AdapterID, ClassifyFailureReason(err), err.Error(), 0, 0)
 		return nil, snap, err
 	}
 	req.SelectionFacts, req.Materialization.CopyBudget = choice.Facts, choice.CopyBudget
@@ -105,7 +105,7 @@ func (c *Coordinator) ClaimSelectedView(
 	probeRes adapter.ProbeResult,
 ) (*ClaimedView, WorkspaceStateSnapshot, error) {
 	if err := checkStageBoundary(ctx, req.Hooks.Fault, StagePrepareAdapter); err != nil {
-		snap := c.recordFailedClaim(req, adp.ID(), classifyClaimReason(err), err.Error(), 0, 0)
+		snap := c.recordFailedClaim(req, adp.ID(), ClassifyFailureReason(err), err.Error(), 0, 0)
 		return nil, snap, err
 	}
 
@@ -138,7 +138,7 @@ func (c *Coordinator) ClaimSelectedView(
 	}
 
 	if err := checkStageBoundary(ctx, req.Hooks.Fault, StageRegisterRetention); err != nil {
-		return fail(classifyClaimReason(err), err)
+		return fail(ClassifyFailureReason(err), err)
 	}
 	if req.Hooks.Retention != nil {
 		cid, rErr := req.Hooks.Retention.RegisterClaim(ctx, req.Identity.WorkerID, req.Identity.ViewID, collectPreparedRootPaths(prepared.Roots))
@@ -149,18 +149,18 @@ func (c *Coordinator) ClaimSelectedView(
 	}
 
 	if err := checkStageBoundary(ctx, req.Hooks.Fault, StageVerifyConfinement); err != nil {
-		return fail(classifyClaimReason(err), err)
+		return fail(ClassifyFailureReason(err), err)
 	}
 	if err := verifyPreparedConfinement(ctx, adp, prepared, req.Hooks.VerifyConfinement); err != nil {
 		reason := adapter.ReasonBackingConfinementFailed
-		if classified := classifyClaimReason(err); classified == adapter.ReasonConfinementUnavailable {
+		if classified := ClassifyFailureReason(err); classified == adapter.ReasonConfinementUnavailable {
 			reason = classified
 		}
 		return fail(reason, err)
 	}
 
 	if err := checkStageBoundary(ctx, req.Hooks.Fault, StagePersistMetadata); err != nil {
-		return fail(classifyClaimReason(err), err)
+		return fail(ClassifyFailureReason(err), err)
 	}
 
 	meta := buildCommittedMetadataV2(req, adp, prepared)
