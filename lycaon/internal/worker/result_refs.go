@@ -20,7 +20,7 @@ type JobNamer interface {
 // the names a coordinator addresses them by.
 func withResultRef(ctx context.Context, refs JobNamer, data map[string]any) map[string]any {
 	if data == nil {
-		return data
+		return nil
 	}
 	jobID, _ := data["job_id"].(string)
 	delete(data, "job_id")

@@ -98,35 +98,10 @@ func (s *SQLStore) CommitPromotion(ctx context.Context, jobID, claimToken string
 	if s == nil || s.db == nil {
 		return fmt.Errorf("worker store not configured")
 	}
+	if err := validatePromotionCommit(jobID, commit); err != nil {
+		return err
+	}
 	plan := commit.Plan
-	if !plan.Empty() {
-		if strings.TrimSpace(plan.ID) == "" {
-			return fmt.Errorf("landed change id required")
-		}
-		if plan.WorkerJobID != jobID {
-			return fmt.Errorf("landed change worker %q does not match %q", plan.WorkerJobID, jobID)
-		}
-		if strings.TrimSpace(plan.CanonicalPath) == "" {
-			return fmt.Errorf("landed change canonical path required")
-		}
-		if !plan.Required && strings.TrimSpace(plan.ScanID) != "" {
-			return fmt.Errorf("optional landed change cannot carry a scan id")
-		}
-	}
-	childIDs := make(map[string]struct{}, len(commit.ChildStatuses))
-	for _, update := range commit.ChildStatuses {
-		childID := strings.TrimSpace(update.JobID)
-		if childID == "" || childID == jobID {
-			return fmt.Errorf("invalid promotion child overlay %q", childID)
-		}
-		if _, duplicate := childIDs[childID]; duplicate {
-			return fmt.Errorf("duplicate promotion child overlay %s", childID)
-		}
-		childIDs[childID] = struct{}{}
-		if update.Status != api.WorkerMergeStatusPending && update.Status != api.WorkerMergeStatusRebasing {
-			return fmt.Errorf("invalid promotion child status %q", update.Status)
-		}
-	}
 	var prepared sourceledger.PreparedRecording
 	if len(commit.Records) > 0 {
 		if commit.Recorder == nil {
@@ -251,6 +226,39 @@ func (s *SQLStore) CommitPromotion(ctx context.Context, jobID, claimToken string
 	}
 	s.notify()
 	delivery.DeliverCommitted()
+	return nil
+}
+
+func validatePromotionCommit(jobID string, commit PromotionCommit) error {
+	plan := commit.Plan
+	if !plan.Empty() {
+		if strings.TrimSpace(plan.ID) == "" {
+			return fmt.Errorf("landed change id required")
+		}
+		if plan.WorkerJobID != jobID {
+			return fmt.Errorf("landed change worker %q does not match %q", plan.WorkerJobID, jobID)
+		}
+		if strings.TrimSpace(plan.CanonicalPath) == "" {
+			return fmt.Errorf("landed change canonical path required")
+		}
+		if !plan.Required && strings.TrimSpace(plan.ScanID) != "" {
+			return fmt.Errorf("optional landed change cannot carry a scan id")
+		}
+	}
+	childIDs := make(map[string]struct{}, len(commit.ChildStatuses))
+	for _, update := range commit.ChildStatuses {
+		childID := strings.TrimSpace(update.JobID)
+		if childID == "" || childID == jobID {
+			return fmt.Errorf("invalid promotion child overlay %q", childID)
+		}
+		if _, duplicate := childIDs[childID]; duplicate {
+			return fmt.Errorf("duplicate promotion child overlay %s", childID)
+		}
+		childIDs[childID] = struct{}{}
+		if update.Status != api.WorkerMergeStatusPending && update.Status != api.WorkerMergeStatusRebasing {
+			return fmt.Errorf("invalid promotion child status %q", update.Status)
+		}
+	}
 	return nil
 }
 
