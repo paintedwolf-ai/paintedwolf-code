@@ -97,6 +97,8 @@ func (s *Service) Admit(ctx context.Context, req Request) (Binding, error) {
 		}
 		current.Action = ActionKeep
 		return current, nil
+	case ActionPrepare, ActionRefresh, ActionReset:
+		return s.switchLane(ctx, req, sel)
 	}
 	return s.switchLane(ctx, req, sel)
 }

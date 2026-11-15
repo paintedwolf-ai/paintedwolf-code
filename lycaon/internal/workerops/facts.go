@@ -228,6 +228,7 @@ func (r Reader) round(ctx context.Context, w workerrecords.Worker, latest worker
 			out.Held, out.Queued = waiting, !waiting
 		case api.WorkerStatusWaiting:
 			out.Parked = true
+		default:
 		}
 	}
 	if child != "" && r.ApprovalWait != nil {
