@@ -116,13 +116,13 @@ type Service struct {
 	// arrived; the worker resumes and reads it at its next model call.
 	WakeParked func(ctx context.Context, jobID string) error
 
-	// instructing serializes instructions to one worker, so two never both
-	// start its next round.
-	instructing sync.Map
+	// locks serializes operations on one worker so admission and result
+	// disposition observe one consistent state.
+	locks sync.Map
 }
 
 func (s *Service) lockWorker(workerID string) func() {
-	mu, _ := s.instructing.LoadOrStore(workerID, &sync.Mutex{})
+	mu, _ := s.locks.LoadOrStore(workerID, &sync.Mutex{})
 	m := mu.(*sync.Mutex)
 	m.Lock()
 	return m.Unlock
@@ -156,8 +156,8 @@ func (s *Service) Instruct(ctx context.Context, actor workerrecords.Actor, op wo
 	if err != nil {
 		return Receipt{}, err
 	}
-	// Read the worker again under its lock: another instruction may have
-	// started its round meanwhile.
+	// Read the worker again under its lock: another operation may have
+	// changed its state meanwhile.
 	defer s.lockWorker(snap.Worker.ID)()
 	if snap, err = s.resolve(ctx, actor, in.Worker); err != nil {
 		return Receipt{}, err
@@ -279,6 +279,7 @@ func (s *Service) Shelve(ctx context.Context, actor workerrecords.Actor, op work
 	if err != nil {
 		return workerrecords.Disposition{}, err
 	}
+	defer s.lockWorker(ref.WorkerID)()
 	w, err := s.Reader.Records.Worker(ctx, actor, ref.WorkerID)
 	if err != nil {
 		return workerrecords.Disposition{}, err
