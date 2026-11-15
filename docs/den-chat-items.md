@@ -114,6 +114,8 @@ Activity-span principles:
 
 A large set of file folds may receive a manifest group. That is presentation over the same rows, not a new source of change history.
 
+**Tool rows.** Every row in a span shows a status dot, the action, the outcome on the right, and the disclosure mark; what the call targeted is spoken in the row's accessible name and shown when it opens. A tool card whose call submitted a command, or whose summary names a path, URL, or query, opens with that target in monospace with a copy action, ahead of any briefing; a command shown there is left out of the card's input facts and keeps its replacement marks. Skill, verdict, and turn-decision cards state their subject in their own bodies and open without a separate target. An index warming row reads Finished or Skipped, opens with its host and page counts, and opens and closes with the span's other rows.
+
 ## Command activities
 
 Command activities describe structural operations over the host execution ledger.
@@ -140,10 +142,18 @@ activity's result. Retained transcripts resolve host activity summaries before
 mounting rows when their stored snapshot has no structural steps. Failed detail
 reads preserve the recorded command.
 
-Den keeps the existing group, single-line activity and expanded-detail structure.
-Activity grouping does not add a disclosure level. Rows show the action, target
-and outcome; row targets ellipsize without displacing status or disclosure
-controls.
+Activities sit in the span as single-line rows that open into details; grouping
+adds no further disclosure level. Rows show only the action and outcome, with
+any output-read or step count after the outcome, so neither is clipped by a
+target at chat widths. The target stays in the row's accessible name, in a
+single-entry span's hint, and in Find.
+
+When one command runs several statements, each activity shows the text at its
+own spans on the submitted source. Spans on an `eval` string or a sourced script
+index those units' bytes, and a replacement mark in the submitted text shifts
+every offset after it, so either case shows the activity's subject instead, as
+does a call whose arguments were not kept inline. The command wraps to at most
+four lines; copying it copies all of it.
 
 An expanded activity uses one fixed order, omitting any part with nothing to
 show: the command; a purpose sentence when a briefing supplies one; a result
@@ -156,6 +166,12 @@ host decisions in Files. The result line and output come from typed receipt
 facts, never from command text or output prose. Details use two text styles:
 interface text for sentences and labels, monospace for commands and output.
 Records load on demand in Files; details contain no record paging controls.
+
+The projection records each row's receipt scopes as it folds calls: a program
+and the host activity that produced the row, or the whole program when the
+activity names no executions, in first-seen order. **Receipt** appears whenever
+a row has a scope, including a program refused before it ran anything and a row
+whose execution preview failed to load.
 
 ## The two clocks
 
@@ -273,6 +289,8 @@ Tool documents are keyed by session, backing message, tool call, and pane; appro
 Pending approvals retain short action summaries, host impact, scope information, and decision controls in the card. Large target sets, long action text, secondary details, and repeated-request history open in Files, and completed approval details use the same document path. Opening a detail link, including with Enter, never submits an approval. Find can discover the linked recorded detail without mounting a text pane. Approval text currently comes from the loaded checkpoint payload; these links reduce rendering, not checkpoint bootstrap bytes.
 
 The host retains full tool text and sends a bounded first viewport with a revision reference. Opening the prepared viewport requires no additional read; CodeMirror requests further rows as needed, and Find and explicit copy can retrieve content beyond the loaded window. Redaction provenance travels with each row, using the same observer projection as the transcript. Disclosure state belongs to transcript identity and survives virtual row removal.
+
+**Receipt** opens a JSON Lines document the host writes from the program records ([`command-receipt-access.ts`](../lycaon-den/src/chat/transcript/content/command-receipt-access.ts)): for each receipt scope of the activity, one program record, its executions, then its syntax nodes. Opening reads one viewport per 64 scopes and the same paged reader shows it, so Find runs on the host, Go to line covers every record, and Pretty lays it out while it fits Pretty's input limit. Copy writes at most 8 MiB. While a program still runs, the tab is a snapshot with **Refresh**; a read that finds the records changed adopts the new revision, and Copy, Pretty or Find that meet a second change in one run stop and say so.
 
 ## Verification strategy
 

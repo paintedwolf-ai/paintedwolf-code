@@ -9,52 +9,45 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/workerplacement"
 )
 
-// ErrWorkspaceStorageExhausted identifies a branch or seed write that failed
-// because the central application-data volume cannot accept more data.
+var sharedBranchViews sync.Map // map[string]branchViewState
+
+// ErrWorkspaceStorageExhausted identifies a branch write that failed because
+// the central application-data volume cannot accept more data.
 var ErrWorkspaceStorageExhausted = errors.New("worker workspace storage exhausted")
 
 var queryAvailableStorageBytes = availableStorageBytes
 
 func classifyProvisionError(err error) error {
-	var capacityErr *CapacityError
+	var capacityErr *adapter.WorkspaceCapacityError
 	if err != nil && (isStorageExhausted(err) || errors.As(err, &capacityErr)) {
 		return errors.Join(ErrWorkspaceStorageExhausted, err)
 	}
 	return err
 }
 
-// CapacityError reports insufficient bridge-cache capacity.
-type CapacityError struct {
-	Path      string
-	Required  uint64
-	Available uint64
-}
-
-func (e *CapacityError) Error() string {
-	return fmt.Sprintf("worker workspace needs %d bytes but only %d bytes are available on %s", e.Required, e.Available, e.Path)
-}
-
-// ProvisionStrategy is the storage path selected from successful clone probes.
+// ProvisionStrategy is the storage path a materialized worker takes, from its clone probe.
 type ProvisionStrategy string
 
 const (
 	ProvisionDirectCoW  ProvisionStrategy = "direct_cow"
-	ProvisionBridgeCoW  ProvisionStrategy = "bridge_cow"
 	ProvisionDirectCopy ProvisionStrategy = "direct_copy"
 )
 
-// StageCostDeclared is reported before the first byte of a copy, with the cost in
-// TotalEntries and TotalBytes.
+// StageCostDeclared is reported once a materialized worker's cost is known, before its first byte
+// moves, with the cost in TotalEntries and TotalBytes.
 const StageCostDeclared = "cost_declared"
 
-// StageBranchPrepared closes one root's preparation with what it left out.
+// StageBranchPrepared closes a worker's preparation with what it left out.
 const StageBranchPrepared = "branch_prepared"
 
-// PreparationProgress is ephemeral worker-claim progress. The totals are known
-// only after a source survey has completed.
+// PreparationProgress is ephemeral worker-claim progress.
 type PreparationProgress struct {
 	Strategy          ProvisionStrategy
 	Stage             string
@@ -66,7 +59,15 @@ type PreparationProgress struct {
 	NotClonableReason workerplacement.NotClonableReason
 }
 
-type preparationReporterKey struct{}
+type (
+	preparationReporterKey struct{}
+	workspaceSelectionKey  struct{}
+)
+
+type workspaceSelectionContext struct {
+	selection     adapter.WorkspaceSelection
+	taskPathHints []string
+}
 
 const preparationReportInterval = 250 * time.Millisecond
 
@@ -92,57 +93,91 @@ func WithPreparationReporter(ctx context.Context, report func(PreparationProgres
 	return context.WithValue(ctx, preparationReporterKey{}, throttled)
 }
 
+// WithWorkspaceSelection attaches an explicit WorkspaceSelection and optional informational
+// task path hints to a workspace provisioning context.
+func WithWorkspaceSelection(ctx context.Context, selection adapter.WorkspaceSelection, taskPathHints ...string) context.Context {
+	return context.WithValue(ctx, workspaceSelectionKey{}, workspaceSelectionContext{
+		selection:     selection,
+		taskPathHints: append([]string(nil), taskPathHints...),
+	})
+}
+
+type workspaceProjectKey struct{}
+
+// WithWorkspaceProject names the project a worker view belongs to.
+func WithWorkspaceProject(ctx context.Context, projectID string) context.Context {
+	return context.WithValue(ctx, workspaceProjectKey{}, strings.TrimSpace(projectID))
+}
+
+func workspaceProjectFromContext(ctx context.Context, fallback string) string {
+	if id, ok := ctx.Value(workspaceProjectKey{}).(string); ok && id != "" {
+		return id
+	}
+	return fallback
+}
+
+func workspaceSelectionFromContext(ctx context.Context) (adapter.WorkspaceSelection, []string, bool) {
+	val, ok := ctx.Value(workspaceSelectionKey{}).(workspaceSelectionContext)
+	if !ok {
+		return adapter.WorkspaceSelection{}, nil, false
+	}
+	return val.selection, val.taskPathHints, true
+}
+
 func reportPreparation(ctx context.Context, progress PreparationProgress) {
 	if report, ok := ctx.Value(preparationReporterKey{}).(func(PreparationProgress)); ok {
 		report(progress)
 	}
 }
 
-// Binding is one isolated worker sandbox — a copy of the project tree living
+// Binding is one isolated worker sandbox: a view of the project tree living
 // outside the repo. There is no git interaction and no linked worktree.
 type Binding struct {
 	ID          string
 	Root        string
+	Selection   WorkspaceStrategySelection
+	View        *adapter.PreparedView
+	Adapter     adapter.Adapter
 	Preparation Preparation
 }
 
-// RootPreparation is what preparing one source root did, in counts and bytes.
-type RootPreparation struct {
-	Strategy          ProvisionStrategy
-	Files             int64
-	Directories       int64
-	Symlinks          int64
-	Bytes             int64
-	ClonedFiles       int64
-	ClonedBytes       int64
-	CopiedBytes       int64
-	UnreadableEntries int64
-	// DeclaredEntries and DeclaredBytes are the cost stated before copying.
-	DeclaredEntries int64
-	DeclaredBytes   int64
-}
-
-// Preparation records the placement decision and each root's result. It is empty
-// for a binding that reused an already complete branch.
+// Preparation records where a worker's branch was placed and what building its view did. It is
+// empty for a binding that reused an already complete branch.
 type Preparation struct {
 	Clonable          bool
 	NotClonableReason workerplacement.NotClonableReason
 	PlacementFolder   string
-	Roots             []RootPreparation
+	Materialized      adapter.MaterializeStats
 }
 
-// Manager creates and destroys per-job worker sandboxes, retaining a central
-// bridge only when it enables copy-on-write branches.
+type branchViewState struct {
+	selection WorkspaceStrategySelection
+	views     []*adapter.PreparedView
+	// writers records processes for a mounted view, whose settlement names them.
+	writers *recovery.Coordinator
+}
+
+// Manager creates and destroys per-job worker sandboxes.
 type Manager struct {
 	branchRoot string
-	seedRoot   string
 	// stateRoot holds the placement registry; branchRoot sits directly under it.
 	stateRoot string
-	locks     seedLockSet
+	// cloneProbe replaces the real source-to-volume clone probe in fixtures.
+	cloneProbe func(ctx context.Context, dir string) (bool, error)
+	cloneFile  adapter.FileCloner
+	selector   *adapter.Selector
+	recovery   *recovery.Coordinator
+	viewsMu    sync.Mutex
+	views      map[string]branchViewState
+	privateGit *privategit.Manager
+
+	layeredOnce sync.Once
+	services    *layeredServices
+	servicesErr error
 }
 
-// NewManager returns a workspace manager rooted at out-of-repo branch and seed bases.
-func NewManager(branchRoot, seedRoot string) *Manager {
+// NewManager returns a workspace manager rooted at an out-of-repo branch base.
+func NewManager(branchRoot string) *Manager {
 	branchRoot = strings.TrimSpace(branchRoot)
 	stateRoot := filepath.Dir(branchRoot)
 	if registry, err := workerplacement.Load(stateRoot); err == nil {
@@ -150,10 +185,152 @@ func NewManager(branchRoot, seedRoot string) *Manager {
 	}
 	return &Manager{
 		branchRoot: branchRoot,
-		seedRoot:   strings.TrimSpace(seedRoot),
 		stateRoot:  stateRoot,
-		locks:      newSeedLockSet(),
+		views:      make(map[string]branchViewState),
 	}
+}
+
+// BranchBase is the directory this manager keeps branches under.
+func (m *Manager) BranchBase() string { return m.branchRoot }
+
+// WithRecovery settles and rebuilds this manager's worker views through coord.
+func (m *Manager) WithRecovery(coord *recovery.Coordinator) *Manager {
+	m.recovery = coord
+	return m
+}
+
+// WithSelector configures an explicit workspace adapter Selector on the Manager.
+func (m *Manager) WithSelector(selector *adapter.Selector) *Manager {
+	m.selector = selector
+	return m
+}
+
+func (m *Manager) recordBranchViews(branchRoot string, sel WorkspaceStrategySelection, views ...*adapter.PreparedView) {
+	m.viewsMu.Lock()
+	defer m.viewsMu.Unlock()
+	if m.views == nil {
+		m.views = make(map[string]branchViewState)
+	}
+	clean := filepath.Clean(branchRoot)
+	st := branchViewState{
+		selection: sel,
+		views:     append([]*adapter.PreparedView(nil), views...),
+	}
+	if sel.Facts.PreparationKind == adapter.PreparationMounted {
+		st.writers = m.recovery
+		if st.writers == nil && m.services != nil {
+			st.writers = m.services.recovery
+		}
+	}
+	m.views[clean] = st
+	sharedBranchViews.Store(clean, st)
+}
+
+func (m *Manager) lookupBranchViews(branchRoot string) (WorkspaceStrategySelection, *adapter.PreparedView, bool) {
+	m.viewsMu.Lock()
+	defer m.viewsMu.Unlock()
+	st, ok := m.views[filepath.Clean(branchRoot)]
+	if !ok || len(st.views) == 0 {
+		return WorkspaceStrategySelection{}, nil, false
+	}
+	return st.selection, st.views[0], true
+}
+
+// forgetBranchViews drops the record of views a claim settlement already released.
+func (m *Manager) forgetBranchViews(branchRoot string) {
+	key := filepath.Clean(branchRoot)
+	m.viewsMu.Lock()
+	delete(m.views, key)
+	m.viewsMu.Unlock()
+	sharedBranchViews.Delete(key)
+}
+
+// releaseBranchViews releases the adapter views recorded for a branch and names the ones it settled.
+// A view that fails stays recorded with its data in custody, and the caller keeps the branch.
+func (m *Manager) releaseBranchViews(branchRoot string) (map[string]bool, error) {
+	key := filepath.Clean(branchRoot)
+	m.viewsMu.Lock()
+	st, ok := m.views[key]
+	m.viewsMu.Unlock()
+	settled := make(map[string]bool, len(st.views))
+	if !ok || st.selection.Adapter == nil {
+		return settled, nil
+	}
+	remaining := make([]*adapter.PreparedView, 0, len(st.views))
+	var errs []error
+	for _, v := range st.views {
+		if v == nil {
+			continue
+		}
+		if err := releaseAdapterView(st.selection.Adapter, v.ViewID); err != nil {
+			errs = append(errs, err)
+			remaining = append(remaining, v)
+			continue
+		}
+		settled[v.ViewID] = true
+		if m.services != nil {
+			if err := m.services.privateGit.ReleaseView(v.ViewID); err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	m.viewsMu.Lock()
+	defer m.viewsMu.Unlock()
+	if len(remaining) > 0 {
+		st.views = remaining
+		m.views[key] = st
+		sharedBranchViews.Store(key, st)
+		return settled, errors.Join(errs...)
+	}
+	delete(m.views, key)
+	sharedBranchViews.Delete(key)
+	return settled, errors.Join(errs...)
+}
+
+// releaseAdapterView releases one view and requires proof it settled. A view the adapter no longer
+// holds has nothing left to release.
+func releaseAdapterView(adp adapter.Adapter, viewID string) error {
+	receipt, err := adp.Release(context.Background(), viewID)
+	var adapterErr *adapter.AdapterError
+	if errors.As(err, &adapterErr) && adapterErr.ReasonCode == adapter.ReasonViewNotFound {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !receipt.Settled {
+		return fmt.Errorf("adapter %s left view %s unsettled: %s", adp.ID(), viewID, receipt.ReasonCode)
+	}
+	return nil
+}
+
+// LookupBranchPreparedView returns the active PreparedView (when in-process) and its
+// durable AdapterFacts and ViewID for a prepared worker branch root.
+func LookupBranchPreparedView(branchRoot string) (*adapter.PreparedView, adapter.AdapterFacts, string, bool) {
+	clean, err := cleanBranchRoot(branchRoot)
+	if err != nil {
+		return nil, adapter.AdapterFacts{}, "", false
+	}
+	if raw, ok := sharedBranchViews.Load(clean); ok {
+		st := raw.(branchViewState)
+		if len(st.views) > 0 && st.views[0] != nil {
+			v := st.views[0]
+			facts := v.Facts
+			if facts.AdapterID == "" {
+				facts = st.selection.Facts
+			}
+			return v, facts, v.ViewID, true
+		}
+	}
+	meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(clean))
+	if err != nil || !meta.SnapshotComplete || meta.AdapterFacts == nil || meta.AdapterFacts.AdapterID == "" {
+		return nil, adapter.AdapterFacts{}, "", false
+	}
+	viewID := strings.TrimSpace(meta.PreparedViewID)
+	if viewID == "" {
+		viewID = jobIDForBranch(clean)
+	}
+	return nil, *meta.AdapterFacts, viewID, true
 }
 
 func absDir(dir string) (string, error) {

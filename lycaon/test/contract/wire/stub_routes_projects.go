@@ -185,6 +185,32 @@ func registerStubProjectRoutes(mux *http.ServeMux, now time.Time, writeJSON stub
 			Path: fixtureProjectDir,
 		})
 	})
+	mux.HandleFunc("POST /v1/projects/{id}/briefings", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.BriefingSnapshot{
+			ProfileID:        "worker_result",
+			ProfileVersion:   "1",
+			TargetKey:        fixtureWorkerID + "@2026-01-01T00:00:00Z",
+			ScopeFingerprint: fixtureWorkerID + "@2026-01-01T00:00:00Z",
+			Target:           map[string]any{"worker_id": fixtureWorkerID, "result_revision": "2026-01-01T00:00:00Z"},
+			CacheEpoch:       "1",
+			Revision:         "0",
+			Status:           "absent",
+			PendingSections:  []string{},
+			Outcome:          api.BriefingOutcome{State: "unknown"},
+			ErrorCode:        "",
+			ErrorMessage:     "",
+		})
+	})
+	mux.HandleFunc("GET /v1/projects/{id}/briefings/records/{record_id}", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.BriefingRecord{
+			RecordID:       r.PathValue("record_id"),
+			ProfileID:      "worker_result",
+			ProfileVersion: "1",
+			Method:         "deterministic",
+			CreatedAt:      now.UTC().Format(time.RFC3339Nano),
+			Sections:       []api.BriefingRecordSection{},
+		})
+	})
 }
 
 func registerStubProjectSourceRoutes(mux *http.ServeMux, writeJSON stubJSONWriter) {

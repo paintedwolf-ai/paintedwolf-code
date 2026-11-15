@@ -444,8 +444,8 @@ func (m *denyingHITL) ApprovalReviewSuppressed(context.Context, string, string) 
 func (m *denyingHITL) SessionApprovalDenied(context.Context, string) (bool, error) {
 	return false, nil
 }
-func (m *denyingHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string) error {
-	return nil
+func (m *denyingHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string, string) (bool, error) {
+	return false, nil
 }
 func (m *denyingHITL) ClearPendingToolApprovalAIRationale(context.Context, string) error {
 	return nil

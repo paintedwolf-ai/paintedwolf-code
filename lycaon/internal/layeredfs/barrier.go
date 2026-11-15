@@ -1,0 +1,495 @@
+package layeredfs
+
+import (
+	"context"
+	"errors"
+	"os"
+	"sort"
+	"sync"
+	"sync/atomic"
+	"time"
+)
+
+// ReleaseView closes admission to new operations, waits for all in-flight mutations, reads,
+// and flushes to drain and settle their accounting, flushes and closes open handles and
+// directory descriptors, persists the recovery journal snapshot, and releases view resources.
+// If any durability or snapshot step fails, ReleaseView preserves settled recovery state and
+// returns the error so the caller can retry or inspect recovery state.
+func (c *Core) ReleaseView() error {
+	alreadyReleased, joinedAttempt, att := c.barrier.beginRelease()
+	if alreadyReleased {
+		return nil
+	}
+	if joinedAttempt {
+		return waitReleaseAttempt(c, att)
+	}
+
+	c.mu.Lock()
+	c.state.seq.closing = true
+	c.mu.Unlock()
+
+	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.ReleaseWaitHook != nil {
+		c.cfg.FaultHooks.ReleaseWaitHook("draining")
+	}
+	c.barrier.waitDrain()
+
+	var releaseErr error
+
+	c.mu.Lock()
+	type handleEntry struct {
+		id HandleID
+		h  *openHandle
+	}
+	entries := make([]handleEntry, 0, len(c.state.handles))
+	for id, h := range c.state.handles {
+		entries = append(entries, handleEntry{id: id, h: h})
+	}
+	hasRecoveryState := len(c.state.journal) > 0 || len(c.state.pathIndex) > 0 || len(c.state.deletedPaths) > 0 || len(c.state.basesByPath) > 0
+	c.mu.Unlock()
+
+	for _, e := range entries {
+		var sErr error
+		if e.h.file != nil {
+			sErr = errors.Join(runJournalSyncHook(c, "handle_sync"), flushFD(c, int(e.h.file.Fd())))
+		}
+		if sErr != nil {
+			releaseErr = errors.Join(releaseErr, sErr)
+			continue
+		}
+		c.mu.Lock()
+		e.h.closed = true
+		delete(c.state.handles, e.id)
+		c.mu.Unlock()
+		releaseErr = errors.Join(releaseErr, releaseHandleRef(c, e.h))
+	}
+
+	if c.backing.workDirFile != nil {
+		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "work_dir_sync"), flushFD(c, int(c.backing.workDirFile.Fd())))
+	}
+	if c.backing.baseDirFile != nil {
+		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "base_dir_sync"), flushFD(c, int(c.backing.baseDirFile.Fd())))
+	}
+
+	if hasRecoveryState {
+		_, snapErr := snapshotJournal(c)
+		releaseErr = errors.Join(releaseErr, snapErr)
+	} else if c.backing.journalDirFile != nil {
+		releaseErr = errors.Join(releaseErr, runJournalSyncHook(c, "journal_dir_sync"), flushFD(c, int(c.backing.journalDirFile.Fd())))
+	}
+
+	if releaseErr != nil {
+		c.barrier.endReleaseAttempt(att, releaseErr)
+		return releaseErr
+	}
+
+	c.mu.Lock()
+	c.state.dirCookies = make(map[uint64]dirCookieState)
+	c.state.released = true
+	c.mu.Unlock()
+
+	c.roots.close()
+	c.wal.close()
+	c.backing.close()
+	c.barrier.endReleaseAttempt(att, nil)
+	return nil
+}
+
+// BarrierToken identifies an acquired checkpoint barrier.
+type BarrierToken struct {
+	ViewID string
+	Seq    uint64
+}
+
+type releaseAttempt struct {
+	done chan struct{}
+	err  error
+}
+
+type barrierCoordinator struct {
+	viewID      string
+	mu          sync.Mutex
+	cond        *sync.Cond
+	active      bool
+	closing     bool
+	released    bool
+	curAttempt  *releaseAttempt
+	inFlight    int64
+	opsInFlight int64
+	seq         uint64
+	// parked is set while the backing is closed; resume reopens it for the next operation.
+	parked bool
+	// expired is the sequence of a barrier its hold bound ended before it was released; stopBound
+	// ends the active barrier's bound when it is released in time.
+	expired   uint64
+	stopBound chan struct{}
+	resume    func() error
+	// expiry fires when a barrier's hold bound passes; expiries counts the barriers it ended.
+	expiry   func() <-chan time.Time
+	expiries *atomic.Int64
+}
+
+// admitLocked reopens a parked backing before an operation uses it.
+func (b *barrierCoordinator) admitLocked() error {
+	if !b.parked {
+		return nil
+	}
+	if err := b.resume(); err != nil {
+		return err
+	}
+	b.parked = false
+	return nil
+}
+
+// park closes the backing when no operation or barrier holds it.
+func (b *barrierCoordinator) park(closeBacking func()) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closing || b.released || b.active || b.inFlight > 0 || b.opsInFlight > 0 {
+		return false
+	}
+	if !b.parked {
+		closeBacking()
+		b.parked = true
+	}
+	return true
+}
+
+func newBarrierCoordinator(viewID string) *barrierCoordinator {
+	b := &barrierCoordinator{viewID: viewID}
+	b.cond = sync.NewCond(&b.mu)
+	return b
+}
+
+func (b *barrierCoordinator) enterMutation() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closing || b.released {
+		return ErrViewReleased
+	}
+	if b.active {
+		return ErrBarrierActive
+	}
+	if err := b.admitLocked(); err != nil {
+		return err
+	}
+	b.inFlight++
+	return nil
+}
+
+func (b *barrierCoordinator) leaveMutation() {
+	b.mu.Lock()
+	b.inFlight--
+	if b.inFlight <= 0 {
+		b.inFlight = 0
+		b.cond.Broadcast()
+	}
+	b.mu.Unlock()
+}
+
+func (b *barrierCoordinator) enterOp() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closing || b.released {
+		return ErrViewReleased
+	}
+	if err := b.admitLocked(); err != nil {
+		return err
+	}
+	b.opsInFlight++
+	return nil
+}
+
+func (b *barrierCoordinator) leaveOp() {
+	b.mu.Lock()
+	b.opsInFlight--
+	if b.opsInFlight <= 0 {
+		b.opsInFlight = 0
+		b.cond.Broadcast()
+	}
+	b.mu.Unlock()
+}
+
+func (b *barrierCoordinator) beginRelease() (bool, bool, *releaseAttempt) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.released {
+		return true, false, nil
+	}
+	if b.curAttempt != nil {
+		return false, true, b.curAttempt
+	}
+	att := &releaseAttempt{done: make(chan struct{})}
+	b.closing = true
+	b.curAttempt = att
+	b.cond.Broadcast()
+	return false, false, att
+}
+
+func (b *barrierCoordinator) waitDrain() {
+	b.mu.Lock()
+	for b.inFlight > 0 || b.opsInFlight > 0 || b.active {
+		b.cond.Wait()
+	}
+	b.mu.Unlock()
+}
+
+func (b *barrierCoordinator) endReleaseAttempt(att *releaseAttempt, err error) {
+	b.mu.Lock()
+	att.err = err
+	close(att.done)
+	b.curAttempt = nil
+	if err == nil {
+		b.released = true
+		b.endBoundLocked()
+	}
+	b.cond.Broadcast()
+	b.mu.Unlock()
+}
+
+func waitReleaseAttempt(c *Core, att *releaseAttempt) error {
+	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.ReleaseWaitHook != nil {
+		c.cfg.FaultHooks.ReleaseWaitHook("joined")
+	}
+	<-att.done
+	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.ReleaseWaitHook != nil {
+		c.cfg.FaultHooks.ReleaseWaitHook("done")
+	}
+	return att.err
+}
+
+// BeginCheckpointBarrier blocks new mutation admission, waits for active mutations to drain,
+// and flushes all open writable handles and backing directories.
+func (c *Core) BeginCheckpointBarrier(ctx context.Context) (BarrierToken, error) {
+	b := c.barrier
+	b.mu.Lock()
+	if b.closing || b.released {
+		b.mu.Unlock()
+		return BarrierToken{}, ErrViewReleased
+	}
+	if b.active {
+		b.mu.Unlock()
+		return BarrierToken{}, ErrBarrierActive
+	}
+	if err := b.admitLocked(); err != nil {
+		b.mu.Unlock()
+		return BarrierToken{}, err
+	}
+	b.active = true
+	b.seq++
+	seq := b.seq
+
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			b.mu.Lock()
+			b.cond.Broadcast()
+			b.mu.Unlock()
+		case <-done:
+		}
+	}()
+	b.armBound(seq)
+
+	for b.inFlight > 0 {
+		if b.expired == seq {
+			b.mu.Unlock()
+			close(done)
+			return BarrierToken{}, ErrBarrierExpired
+		}
+		if b.closing || b.released {
+			b.active = false
+			b.endBoundLocked()
+			b.cond.Broadcast()
+			b.mu.Unlock()
+			close(done)
+			return BarrierToken{}, ErrViewReleased
+		}
+		if err := ctx.Err(); err != nil {
+			b.active = false
+			b.endBoundLocked()
+			b.cond.Broadcast()
+			b.mu.Unlock()
+			close(done)
+			return BarrierToken{}, err
+		}
+		b.cond.Wait()
+	}
+	b.mu.Unlock()
+	close(done)
+
+	if err := flushBackingState(c); err != nil {
+		_ = c.EndCheckpointBarrier(BarrierToken{ViewID: c.cfg.ViewID, Seq: seq})
+		return BarrierToken{}, err
+	}
+	return BarrierToken{ViewID: c.cfg.ViewID, Seq: seq}, nil
+}
+
+// EndCheckpointBarrier releases an active checkpoint barrier on every success or failure path.
+func (c *Core) EndCheckpointBarrier(token BarrierToken) error {
+	b := c.barrier
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if token.ViewID == b.viewID && token.Seq == b.expired {
+		return ErrBarrierExpired
+	}
+	if !b.active || token.ViewID != b.viewID || token.Seq != b.seq {
+		return ErrBarrierActive
+	}
+	b.active = false
+	b.endBoundLocked()
+	b.cond.Broadcast()
+	return nil
+}
+
+func (b *barrierCoordinator) endBoundLocked() {
+	if b.stopBound != nil {
+		close(b.stopBound)
+		b.stopBound = nil
+	}
+}
+
+// armBound ends barrier seq if it is still held when its bound passes: mutations are admitted
+// again, and the barrier's holder learns at release that its checkpoint did not hold. b.mu is held.
+func (b *barrierCoordinator) armBound(seq uint64) {
+	expiry := b.expiry()
+	stop := make(chan struct{})
+	b.stopBound = stop
+	go func() {
+		select {
+		case <-expiry:
+		case <-stop:
+			return
+		}
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		if b.active && b.seq == seq {
+			b.active = false
+			b.expired = seq
+			b.expiries.Add(1)
+			b.cond.Broadcast()
+		}
+	}()
+}
+
+// BarrierHoldBound is how long a checkpoint barrier of this view may hold its mutations.
+func (c *Core) BarrierHoldBound() time.Duration { return holdBound(c.cfg) }
+
+func holdBound(cfg Config) time.Duration {
+	if cfg.BarrierHoldBound > 0 {
+		return cfg.BarrierHoldBound
+	}
+	return DefaultBarrierHoldBound
+}
+
+func flushBackingState(c *Core) error {
+	c.mu.Lock()
+	if c.state.released {
+		c.mu.Unlock()
+		return ErrViewReleased
+	}
+	dirtyGenSnap := make(map[string]uint64, len(c.state.dirtyBackingFiles))
+	for p, gen := range c.state.dirtyBackingFiles {
+		dirtyGenSnap[p] = gen
+	}
+	type heldFlushItem struct {
+		h           *openHandle
+		backingPath string
+	}
+	var held []heldFlushItem
+	flushedPaths := make(map[string]struct{}, len(c.state.handles))
+	for _, h := range c.state.handles {
+		if !h.closed && h.file != nil {
+			h.refs++
+			var bPath string
+			if node := c.state.nodesByID[h.nodeID]; node != nil && node.flags.backingPath != "" {
+				bPath = node.flags.backingPath
+				flushedPaths[bPath] = struct{}{}
+			}
+			held = append(held, heldFlushItem{h: h, backingPath: bPath})
+		}
+	}
+	var dirtyPaths []string
+	for p := range dirtyGenSnap {
+		if _, already := flushedPaths[p]; !already {
+			dirtyPaths = append(dirtyPaths, p)
+		}
+	}
+	sort.Strings(dirtyPaths)
+	workFile := c.backing.workDirFile
+	baseFile := c.backing.baseDirFile
+	journalFile := c.backing.journalDirFile
+	c.mu.Unlock()
+
+	var flushErr error
+	flushedOK := make(map[string]uint64, len(dirtyGenSnap))
+	for _, item := range held {
+		hookErr := runJournalSyncHook(c, "handle_sync")
+		syncErr := flushFD(c, int(item.h.file.Fd()))
+		relErr := releaseHandleRef(c, item.h)
+		flushErr = errors.Join(flushErr, hookErr, syncErr, relErr)
+		if hookErr == nil && syncErr == nil && relErr == nil && item.backingPath != "" {
+			if gen, ok := dirtyGenSnap[item.backingPath]; ok {
+				flushedOK[item.backingPath] = gen
+			}
+		}
+	}
+	for _, p := range dirtyPaths {
+		hookErr := runJournalSyncHook(c, "dirty_backing:"+p)
+		f, openErr := os.Open(p)
+		if openErr != nil {
+			if errors.Is(openErr, os.ErrNotExist) {
+				flushErr = errors.Join(flushErr, hookErr)
+				if hookErr == nil {
+					flushedOK[p] = dirtyGenSnap[p]
+				}
+				continue
+			}
+			flushErr = errors.Join(flushErr, hookErr, openErr)
+			continue
+		}
+		syncErr := flushFD(c, int(f.Fd()))
+		closeErr := f.Close()
+		flushErr = errors.Join(flushErr, hookErr, syncErr, closeErr)
+		if hookErr == nil && syncErr == nil && closeErr == nil {
+			flushedOK[p] = dirtyGenSnap[p]
+		}
+	}
+	c.mu.Lock()
+	for p, gen := range flushedOK {
+		if cur, ok := c.state.dirtyBackingFiles[p]; ok && cur == gen {
+			delete(c.state.dirtyBackingFiles, p)
+		}
+	}
+	c.mu.Unlock()
+	if flushErr != nil {
+		return flushErr
+	}
+	if workFile != nil {
+		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "work_dir_sync"), flushFD(c, int(workFile.Fd())))
+	}
+	if baseFile != nil {
+		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "base_dir_sync"), flushFD(c, int(baseFile.Fd())))
+	}
+	if journalFile != nil {
+		flushErr = errors.Join(flushErr, runJournalSyncHook(c, "journal_dir_sync"), flushFD(c, int(journalFile.Fd())))
+	}
+	return flushErr
+}
+
+// ParkBacking closes the view's backing directories while nothing uses them, so the volume holding
+// them can be ejected; the next operation reopens them. A view with open handles stays as it is.
+func (c *Core) ParkBacking() bool {
+	c.mu.RLock()
+	handles := len(c.state.handles)
+	c.mu.RUnlock()
+	if handles > 0 {
+		return false
+	}
+	return c.barrier.park(func() {
+		c.wal.close()
+		c.backing.park()
+		for _, provider := range c.roots.ownedOS {
+			provider.park()
+		}
+	})
+}

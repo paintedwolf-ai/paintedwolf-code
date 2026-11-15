@@ -1,0 +1,31 @@
+export const briefingCopy = {
+  disclaimer: "Written by AI from the evidence shown. It can be incomplete or wrong.",
+  waiting: "Summarizing…",
+  evidenceLink: "Summary evidence",
+  evidenceLinkName: "Open summary evidence in Files",
+  evidence: {
+    title: "Summary evidence",
+    summary: "Summary",
+    used: "Evidence used",
+    coverage: "Coverage and limitations",
+    sources: "Source records",
+    generation: "Generation details",
+    unavailableSection: "You can't view the evidence for this section.",
+    expired: "This evidence record is no longer available.",
+    loadFailed: "Couldn't load this evidence record.",
+    nothingOmitted: "Every selected input was sent whole.",
+    noSources: "No source records.",
+    back: (label: string) => `Back to ${label}`,
+    inclusion: {
+      included: "Sent whole",
+      truncated: "Sent in part",
+      omitted: "Not sent",
+      unavailable: "Unavailable",
+    },
+    method: {
+      model: "Written by AI",
+      deterministic: "Computed from host facts",
+      mixed: "Written by AI and computed from host facts",
+    },
+  },
+} as const;

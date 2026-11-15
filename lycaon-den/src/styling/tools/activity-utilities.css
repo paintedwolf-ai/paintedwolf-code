@@ -34,46 +34,6 @@ display: grid;
 }
 
 
-@utility den-activity-span-composition {
-display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 5px;
-  min-width: 0;
-  padding: 8px 12px;
-  border-bottom: 1px solid color-mix(in srgb, var(--den-line) 26%, transparent);
-  pointer-events: none;
-}
-
-
-@utility den-activity-span-cmd {
-display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-  flex: 0 0 auto;
-  padding: 3px 8px;
-  border-radius: var(--den-radius-sm);
-  background: var(--den-tint-1);
-  box-shadow: none;
-  font-size: var(--text-den-hint);
-  line-height: 1.4;
-}
-
-
-@utility den-activity-span-cmd-name {
-font-weight: 500;
-  color: var(--den-text);
-  letter-spacing: -0.01em;
-}
-
-
-@utility den-activity-span-cmd-count {
-font-weight: 600;
-  color: var(--den-text-muted);
-  font-variant-numeric: tabular-nums;
-}
-
-
 @utility den-activity-span-chip {
 display: inline-flex;
   align-items: center;

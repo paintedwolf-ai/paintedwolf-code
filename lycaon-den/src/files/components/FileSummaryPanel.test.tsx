@@ -5,9 +5,9 @@ import {
   FileSummaryPanel,
   fileSummaryFallbackMarkdown,
   fileSummaryLocationsByName,
-  splitFileSummaryInline,
 } from "./FileSummaryPanel.tsx";
 import { assertNamedControl } from "../../test/controls.ts";
+import { registerOpenFilesSurfaceSink, resetOpenFilesSurfaceForTests } from "../../platform/navigation/open-files-surface.ts";
 
 const briefing: LiveFileBriefing = {
   target_key: "target-1",
@@ -31,6 +31,25 @@ const briefing: LiveFileBriefing = {
 
 describe("FileSummaryPanel", () => {
   afterEach(cleanup);
+
+  it("marks settled sections as AI-written and links their evidence", () => {
+    const opened: unknown[] = [];
+    registerOpenFilesSurfaceSink((req) => opened.push(req));
+    render(() => (
+      <FileSummaryPanel
+        target={{ root_id: "root-1", path: "src/main.ts", presentation: "current" }}
+        summary={{ ...briefing, evidence_ref: { project_id: "p1", record_id: "rec" } }}
+        requestFailed={false} contextLabel={null} loading={false}
+        onRetry={() => {}} onOpenLocation={() => {}}
+      />
+    ));
+    const sections = screen.getByTestId("file-summary-sections");
+    expect(sections.querySelectorAll(".den-briefing-mark")).toHaveLength(1);
+    expect(screen.getByTestId("file-summary-location")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("briefing-evidence-link"));
+    expect(opened).toEqual([{ kind: "briefing-evidence", projectId: "p1", recordId: "rec" }]);
+    resetOpenFilesSurfaceForTests();
+  });
 
   it.each([0, 1, 2])("labels a %i-line preview", (count) => {
     render(() => (
@@ -79,15 +98,14 @@ describe("FileSummaryPanel", () => {
     );
   });
 
-  it("holds the explanation until generation finishes, then renders markdown", () => {
+  it("shows waiting text per section until generation finishes, then renders markdown", () => {
     const { unmount } = render(() => (
       <FileSummaryPanel
         target={{ root_id: "root-1", path: "src/main.ts", presentation: "current" }}
         summary={{
           ...briefing,
-          status: "streaming",
+          status: "pending",
           sections: [],
-          streamText: "- **Purpose:** Builds the Review surface.",
         }}
         requestFailed={false}
         contextLabel={null}
@@ -97,7 +115,7 @@ describe("FileSummaryPanel", () => {
       />
     ));
 
-    expect(screen.getByTestId("file-summary-summarizing")).toBeTruthy();
+    expect(screen.getByTestId("file-summary-summarizing").querySelectorAll('[data-state="waiting"]')).toHaveLength(3);
     expect(screen.queryByTestId("file-summary-sections")).toBeNull();
     unmount();
 
@@ -128,9 +146,8 @@ describe("FileSummaryPanel", () => {
     expect(
       fileSummaryFallbackMarkdown({
         ...briefing,
-        status: "streaming",
+        status: "pending",
         sections: [],
-        streamText: "- **Purpose:** Builds the Review surface.",
       }),
     ).toBe("");
     expect(fileSummaryFallbackMarkdown(briefing)).toBe("");
@@ -298,16 +315,5 @@ describe("FileSummaryPanel", () => {
       { line: 10, name: "render", kind: "method" },
     ]);
     expect(locations.get("render")?.line).toBe(10);
-  });
-
-  it("parses only single-backtick inline code spans", () => {
-    expect(splitFileSummaryInline("Calls `buildReview` safely.")).toEqual([
-      { kind: "text", text: "Calls " },
-      { kind: "code", text: "buildReview" },
-      { kind: "text", text: " safely." },
-    ]);
-    expect(splitFileSummaryInline("Keeps ```raw``` literal.")).toEqual([
-      { kind: "text", text: "Keeps ```raw``` literal." },
-    ]);
   });
 });

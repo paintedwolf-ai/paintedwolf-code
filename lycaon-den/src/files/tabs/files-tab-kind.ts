@@ -15,6 +15,7 @@ const SPECIAL_TAB_KINDS = {
   diffs: { icon: "diff", label: "All diffs" },
   chat: { icon: "session", label: "Chat content" },
   trust: { icon: "shield", label: "Trust changes" },
+  briefing: { icon: "search", label: "Summary evidence" },
 } satisfies Partial<Record<FileBufferKind, FileTabKind>>;
 
 const CHAT_TAB_KINDS = {
@@ -29,6 +30,7 @@ export function specialTabKind(buffer: FileTabIdentity): FileTabKind | null {
     case "diffs":
     case "chat":
     case "trust":
+    case "briefing":
       return SPECIAL_TAB_KINDS[buffer.kind];
     default:
       return null;

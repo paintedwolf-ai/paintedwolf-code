@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -28,7 +28,7 @@ func (r *Renderer) RenderExecuteFailure(err error) api.WorkerFailure {
 		return out
 	}
 	var context map[string]any
-	var capacityErr *workspace.CapacityError
+	var capacityErr *adapter.WorkspaceCapacityError
 	if errors.As(err, &capacityErr) {
 		context = map[string]any{
 			"reason": "capacity_preflight", "required": humanBytes(capacityErr.Required), "available": humanBytes(capacityErr.Available),

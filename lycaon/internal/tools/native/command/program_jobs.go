@@ -173,24 +173,24 @@ func (j *SessionJobs) BeginProgram(ctx context.Context, origin ProgramJobOrigin)
 }
 
 // start runs the job body detached from the launching statement's context.
-func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error)) (string, error) {
+func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error)) (commandprogram.StartedJob, error) {
 	if j == nil || j.Registry == nil || run == nil {
-		return "", fmt.Errorf("program jobs require a session registry and body")
+		return commandprogram.StartedJob{}, fmt.Errorf("program jobs require a session registry and body")
 	}
 	binding, ok := ctx.Value(sessionJobsKey{}).(programJobsBinding)
 	if !ok || binding.owner != j || binding.origin.Tool == "" || binding.origin.ToolCallID == "" || binding.origin.RootSessionID == "" {
-		return "", fmt.Errorf("program job requires its initiating call")
+		return commandprogram.StartedJob{}, fmt.Errorf("program job requires its initiating call")
 	}
 	// Serialize registration against closing this retained session owner.
 	j.mu.Lock()
 	if j.closed.Load() {
 		j.mu.Unlock()
-		return "", ErrProgramStopped
+		return commandprogram.StartedJob{}, ErrProgramStopped
 	}
 	jobCtx, setStop, release, err := j.Supervisor.Hold(ctx)
 	if err != nil {
 		j.mu.Unlock()
-		return "", err
+		return commandprogram.StartedJob{}, err
 	}
 	var handle string
 	ready := make(chan struct{})
@@ -225,7 +225,7 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 		j.mu.Unlock()
 		release()
 		close(ready)
-		return "", err
+		return commandprogram.StartedJob{}, err
 	}
 	setStop(func() { _, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle, bgprocess.TerminationStoppedByAgent) })
 	if j.numbers == nil {
@@ -252,9 +252,9 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	case <-tracker.ready:
 	case <-done:
 	case <-ctx.Done():
-		return "", ctx.Err()
+		return commandprogram.StartedJob{}, ctx.Err()
 	}
-	return strconv.Itoa(j.publicID(handle)), nil
+	return commandprogram.StartedJob{ID: strconv.Itoa(j.publicID(handle)), Handle: handle}, nil
 }
 
 // publicID exposes the real process PID when one started. Native jobs use a

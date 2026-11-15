@@ -471,7 +471,7 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 		t.Fatalf("read record = %+v urls=%v, want UntrustedContent=true and propagated ObservedURLs", gotRead, gotURLs)
 	}
 
-	// 3. Partial mutation (edit) preserves external custody on a subsequent read, whereas full replacement (write)
+	// An edit keeps external custody and a full write clears it, in SQL and memory alike.
 	// clears it; verify SQL and Memory parity.
 	for _, backend := range []struct {
 		name string
@@ -508,7 +508,7 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 			)
 			testutil.FailErr(t, "read after edit", err)
 
-			// Full write replaces external custody so a later read of the replaced file does not inherit stale external provenance.
+			// A full write replaces external custody, so a later read inherits nothing stale.
 			_, _, err = backend.s.CommitEvidenceToolResult(
 				ctx, s2.ID, dir, "write",
 				map[string]any{"path": "item.txt"},
@@ -535,7 +535,7 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 		})
 	}
 
-	// 4. Bounded metadata ledger filtering: non-custody read/grep rows are skipped without retention in
+	// Rows without custody are skipped, not retained.
 	// buildMetadataLedgerFromRows.
 	rows, err := store.queries.ListEvidenceRecords(ctx, sess.ID)
 	testutil.FailErr(t, "ListEvidenceRecords", err)
@@ -547,7 +547,7 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 }
 
 func TestStoredLineRangesPayload_LegacyDecodeAndVersionGate(t *testing.T) {
-	// 1. Legacy v=1 JSON payload written before untrusted_content/external_custody existed decodes with false
+	// A v=1 payload from before the custody flags decodes with both false.
 	// flags and intact metadata.
 	const legacyRaw = `{"v":1,"ranges":[{"Start":1,"End":5}],"paths_touched":["saved.txt"],"urls_touched":["https://api.external.example/v1/item"],"surface":"http"}`
 	var legacyRec evidence.Record
@@ -564,7 +564,7 @@ func TestStoredLineRangesPayload_LegacyDecodeAndVersionGate(t *testing.T) {
 			evidence.IndexedPathsForRecord(legacyRec), evidence.ObservedURLsForRecord(legacyRec))
 	}
 
-	// 2. Clean records omit untrusted_content, external_custody, and custody_seq keys (omitempty), while
+	// Clean records omit the custody keys; records that carry them round-trip under v=1.
 	// provenance/sequenced records persist and round-trip them under v=1.
 	cleanRaw, err := marshalEvidenceLineRanges(legacyRec)
 	testutil.FailErr(t, "marshal clean record", err)
@@ -665,7 +665,7 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 		)
 		testutil.FailErr(t, "insert read/grep rows", err)
 	}
-	// Also insert non-custody command, partial edit (write with source_tool=edit), and inline pathless
+	// Rows without custody carry poisoned line ranges, which must never be decoded.
 	// http_response rows with poisoned LineRanges.
 	_, err = sqlDB.ExecContext(ctx, `
 		INSERT INTO evidence_records (
@@ -682,7 +682,7 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 	)
 	testutil.FailErr(t, "insert non-custody command/edit/inline-http rows", err)
 
-	// Insert the 2 custody-affecting rows with valid v=1 LineRanges and missing content_blob_sha256 (proving 0 blob reads).
+	// The two custody rows have valid ranges and no content blob, so a blob read would fail.
 	custodyDownloadRec := evidence.BuildEvidenceRecord(
 		dir,
 		"http_request",
@@ -714,9 +714,9 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 	)
 	testutil.FailErr(t, "insert custody rows", err)
 
-	// 2. Verify ListEvidenceRecords returns all 125 session rows, while buildMetadataLedgerFromRows decodes only
+	// Listing returns every row while the ledger decodes only the two custody candidates,
 	// the 2 custody-candidate rows
-	// (succeeding despite poisoned LineRanges on all 123 non-custody rows and missing content blobs on all 125
+	// so poisoned ranges and missing blobs elsewhere cannot fail it.
 	// rows) and retains only those 2 handles.
 	rows, err := store.queries.ListEvidenceRecords(ctx, sess.ID)
 	testutil.FailErr(t, "ListEvidenceRecords", err)
@@ -735,7 +735,7 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 		t.Fatalf("missing write#2 in metaLedger: %v", evidence.HandlesSorted(metaLedger))
 	}
 
-	// 3. Verify ExternalCustodyURLsForPaths and custody-only loadCommitLedgers (e.g., grep on saved.txt) succeed
+	// Custody lookups succeed without decoding other rows or reading blobs.
 	// without decoding non-custody rows or reading blobs.
 	urls, err := store.ExternalCustodyURLsForPaths(ctx, sess.ID, dir, []string{"saved.txt"})
 	testutil.FailErr(t, "ExternalCustodyURLsForPaths", err)
@@ -761,9 +761,7 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 		t.Fatal("grep exposing lines from external-custody saved.txt must mark untrusted content")
 	}
 
-	// 4. Converse sensitivity check: if a live custody-candidate row (path-bearing http_response or whole-file
-	// write) has poisoned LineRanges,
-	// buildMetadataLedgerFromRows DOES decode it and returns a decode error.
+	// A poisoned custody candidate does fail the ledger.
 	poisonedCustodyRows := append([]db.ListEvidenceRecordsRow(nil), rows...)
 	foundWrite := false
 	for i := range poisonedCustodyRows {
@@ -837,7 +835,7 @@ func chronologySkewCaseA(t *testing.T, ctx context.Context, s chronologyBackend,
 		t.Fatalf("h1 = %q, want http_response#1", h1)
 	}
 
-	// Advance write ordinals on unrelated paths (write#1..write#3), then full local write on alpha.txt
+	// Unrelated writes advance the write ordinal before alpha.txt is written.
 	// (write#4, ordinal=4).
 	for i := 1; i <= 3; i++ {
 		unrel := fmt.Sprintf("unrelated_%d.go", i)
@@ -861,7 +859,7 @@ func chronologySkewCaseA(t *testing.T, ctx context.Context, s chronologyBackend,
 		t.Fatalf("w4 = %q, want write#4", w4)
 	}
 
-	// Reopen/reload store, then commit fresh external download on alpha.txt (http_response#2, ordinal=2
+	// After reopening, a fresh download replaces alpha.txt.
 	// < write#4 ordinal=4).
 	s = reopen()
 	h2, _, err := s.CommitEvidenceToolResult(
@@ -874,7 +872,7 @@ func chronologySkewCaseA(t *testing.T, ctx context.Context, s chronologyBackend,
 		t.Fatalf("h2 = %q, want http_response#2", h2)
 	}
 
-	// Reopen/reload store and verify alpha.txt retains ONLY the fresh URL and marks a subsequent actual
+	// After reopening, alpha.txt carries only the fresh URL and a read ingests it.
 	// read as untrusted ingestion.
 	s = reopen()
 	alphaURLs, err := s.ExternalCustodyURLsForPaths(ctx, sessA.ID, dir, []string{"alpha.txt"})
@@ -949,7 +947,7 @@ func chronologySkewCaseB(t *testing.T, ctx context.Context, s chronologyBackend,
 		t.Fatalf("gh4 = %q, want http_response#4", gh4)
 	}
 
-	// Reopen/reload store, then overwrite beta.txt (write#1, ordinal=1 < 3) and gamma.txt (write#2,
+	// After reopening, clean local writes replace beta.txt and gamma.txt.
 	// ordinal=2 < 4) with clean local content.
 	s = reopen()
 	bw1, _, err := s.CommitEvidenceToolResult(
@@ -1060,8 +1058,8 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		t.Fatalf("ExternalCustodyURLsForPaths(legacy.txt) = %v, err=%v, want legacy URL", urls, err)
 	}
 
-	// 2. Commit a whole-file local write on legacy.txt (write#1). Because the session has 1 existing custody-candidate row,
-	// write#1 receives CustodySeq == 2 (> 0) and supersedes legacy http_response#1 (CustodySeq == 0) across reopen.
+	// A whole-file write takes a later sequence than the legacy download and
+	// supersedes it across a reopen.
 	w1, _, err := store.CommitEvidenceToolResult(
 		ctx, sess.ID, dir, "write",
 		map[string]any{"path": "legacy.txt"},
@@ -1076,9 +1074,7 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		t.Fatalf("ExternalCustodyURLsForPaths(legacy.txt) after write#1 = %v, err=%v, want empty", urls, err)
 	}
 
-	// 3. Commit multiple non-custody tool results (command, list_dir, find, inline http_request, read, grep, partial edit,
-	// CommitProgramObservation, inline CommitProgramHTTPProvenance) and verify none allocate CustodySeq or
-	// advance nextCustodySeq.
+	// Results without custody, and partial edits, allocate no custody sequence.
 	for _, nc := range []struct {
 		tool    string
 		args    map[string]any
@@ -1103,9 +1099,7 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 	})
 	testutil.FailErr(t, "inline CommitProgramHTTPProvenance", err)
 
-	// Next custody-replacing download (http_response#4) must receive CustodySeq == 3 (immediately after
-	// write#1's CustodySeq == 2,
-	// unaffected by the 9 non-custody / partial-edit commits above).
+	// The next custody-replacing download takes the next sequence.
 	h4, _, err := store.CommitEvidenceToolResult(
 		ctx, sess.ID, dir, "http_request",
 		map[string]any{"url": "https://reseeded.external.example/v1/new.txt", "response_path": "legacy.txt"},
@@ -1146,7 +1140,7 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		t.Fatalf("duplicate UpsertEvidenceRecord mutated existing record: %+v", got)
 	}
 
-	// 5. Superseded custody row with high CustodySeq (e.g. 20) still bounds subsequent CustodySeq allocation monotonically.
+	// A superseded row with a high sequence still bounds later allocation.
 	highWrite := evidence.Record{
 		Handle:     "write#10",
 		Kind:       "write",
@@ -1170,7 +1164,7 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		t.Fatalf("CustodySeq after superseded Seq=20 row = %d, want 21", gotSeq)
 	}
 
-	// 6. Deterministic zero-scan & fail-closed oracle: poison live custody row h4's line_ranges JSON with an
+	// An unsupported line-range version on a live custody row fails closed.
 	// unsupported version ({"v":99}).
 	// Ordinary non-custody writes must still succeed (0 custody scans/decodes), whereas custody reads and
 	// custody-replacing commits must fail closed on the corrupt custody row.

@@ -5,6 +5,7 @@ import type { TranscriptRevealTarget } from "../../chat/transcript/presentation/
 import { SurfaceDeck } from "../../components/primitives/SurfaceDeck.tsx";
 import { beginRenameCard } from "../../components/source/inline-edit/run-editor-action.ts";
 import { TrustReviewPage } from "../../components/trust/TrustReviewPage.tsx";
+import { BriefingEvidencePage } from "../../briefing/BriefingEvidencePage.tsx";
 import { editorWindow, type EditorWindow } from "../../platform/windows/editor-windows.ts";
 import { itemWindowViews } from "../../platform/windows/item-windows.ts";
 import type { Preparation } from "../../ui/presentation.ts";
@@ -153,6 +154,7 @@ export function FilesPaneDeck(props: {
                 if (paneKind === "chat" && buf.chatContent) return <ChatContentPage projectId={props.projectId} document={buf.chatContent} client={props.client}
                   onHandle={handle=>{if(handle) props.readerHandles.set(key,handle);else props.readerHandles.delete(key);}} />;
                 if (paneKind === "trust") return <TrustReviewPage projectId={props.projectId} />;
+                if (paneKind === "briefing" && buf.briefingRecordId) return <BriefingEvidencePage projectId={props.projectId} recordId={buf.briefingRecordId} client={props.client} />;
                 if (paneKind === "diffs" && buf.diffs) {
                   return (
                     <DiffsPage

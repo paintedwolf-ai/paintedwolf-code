@@ -341,7 +341,7 @@ func (b *bisect) first(oid string) error {
 }
 
 func (b *bisect) checkout(req git.OperationRequest) (int, error) {
-	res, err := (native.GitMutations{Git: b.p.owners.Git, Boundary: b.p.owners.Boundary}).Operate(b.ctx, b.tc, req)
+	res, err := (native.GitMutations{Git: b.p.owners.Git, Boundary: b.p.owners.Boundary, PrivateGit: b.p.owners.PrivateGit}).Operate(b.ctx, b.tc, req)
 	if res.Attempted {
 		b.effects = true
 	}

@@ -1,0 +1,8 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Summaries are busy
+message: The briefing queue for this project is currently full.
+suggested_action: Wait a few seconds and try requesting the summary again.
+scenarios:
+  - id: default
+    vars: {}

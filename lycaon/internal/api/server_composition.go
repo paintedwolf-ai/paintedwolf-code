@@ -42,7 +42,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 		sessionStore:   deps.Core.Store,
 		personActions:  deps.Core.PersonActions,
 		sessions:       deps.Core.Sessions,
-		fileBriefings:  deps.Source.FileBriefings,
+		fileBriefings:  deps.Source.Briefings.Files,
 		repoProvider:   deps.Source.RepoProvider,
 		events:         deps.Host.Events,
 		eventPublisher: deps.Host.EventPublisher,
@@ -51,7 +51,6 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 			dataDir:          strings.TrimSpace(deps.Storage.DataDir),
 			storePath:        strings.TrimSpace(deps.Storage.StorePath),
 			workerBranchRoot: strings.TrimSpace(deps.Storage.WorkerBranchRoot),
-			workerSeedRoot:   strings.TrimSpace(deps.Storage.WorkerSeedRoot),
 		},
 		health: health{
 			storeRevision:      deps.Storage.StoreRevision,
@@ -70,7 +69,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 		Git: &s.Admin.Git, MutationGate: deps.Core.MutationGate,
 		CatalogSnapshot: deps.Source.CatalogSnapshot, WatchNeedsSeed: deps.Source.WatchNeedsSeed,
 		EditorClients: deps.Source.EditorClients, EditorDocuments: deps.Source.EditorDocuments, ProjectViews: deps.Source.ProjectViews, Events: deps.Host.Events,
-		FileBriefings: deps.Source.FileBriefings, FileOperations: deps.Source.FileOperations, ManagedSecrets: deps.Approvals.ManagedSecrets,
+		Briefings: deps.Source.Briefings, FileOperations: deps.Source.FileOperations, ManagedSecrets: deps.Approvals.ManagedSecrets,
 		ProjectRegistry: deps.Core.Projects, ScanCadence: deps.Scans.ScanCadence,
 		SecretSpans: deps.Approvals.SecretSpans, SessionStore: deps.Core.Store, SourceInventory: deps.Source.SourceInventory,
 		SourceLedger: deps.Source.SourceLedger, SourceMutations: deps.Source.SourceMutations, VisualStore: deps.Source.VisualStore,
@@ -112,7 +111,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 		Extensions: &s.Admin.Extensions, Board: deps.Workflow.Board, Database: deps.Core.Database, DataDir: s.dataDir, Events: deps.Host.Events, LLMService: deps.Providers.LLM,
 		SecretIgnores: deps.Approvals.SecretIgnores, ManagedSecrets: deps.Approvals.ManagedSecrets, MutationGate: deps.Core.MutationGate, Registry: deps.Core.Projects,
 		ProjectRules: deps.Source.ProjectRules, ScanCadence: deps.Scans.ScanCadence, Store: deps.Core.Store, Sessions: deps.Core.Sessions,
-		Settings: deps.Core.Settings, WorkerSeedRoot: s.workerSeedRoot, WorkerBranchRoot: s.workerBranchRoot,
+		Settings: deps.Core.Settings, WorkerBranchRoot: s.workerBranchRoot,
 		Workers: deps.Workflow.Workers, Sources: &s.Sources, Git: &s.Admin.Git,
 	})
 	attachmentStore = s.Admin.Prompt.Attachments.AttachmentStore

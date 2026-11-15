@@ -1,9 +1,11 @@
-import { expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
-import { render } from "@solidjs/testing-library";
+import { disclosureToggle, expectSameCollapsedFace, rowSpokenLabel, rowVisibleText } from "../../test/transcript-disclosure-fixture.ts";
+import { fireEvent, render } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
+import type { IndexWarmingMeta } from "../../api/types.ts";
 import {
   indexWarmingChickletTitle,
   indexWarmingSkipNote,
+  indexWarmingStatsLine,
   indexWarmingToolName,
   indexWarmingTopicNote,
   indexWarmingTriggerDetail,
@@ -35,26 +37,19 @@ describe("IndexWarmingChicklet", () => {
     ).toBe("done");
   });
 
-  it("does not show topic text in the collapsed title", () => {
-    const { container } = render(() => (
-      <IndexWarmingChicklet
-        layout="chat"
-        meta={{
-          trigger: "search",
-          tier: "crawl",
-          topic: "tailwind dark mode",
-          hosts: ["tailwindcss.com"],
-          pages: 2,
-        }}
-      />
-    ));
-    const title = container.querySelector(".den-tool-part-title")?.textContent ?? "";
+  it("keeps the summary off the row and topic text out of the spoken label", () => {
+    const meta: IndexWarmingMeta = { trigger: "search", tier: "crawl", topic: "tailwind dark mode", hosts: ["tailwindcss.com"], pages: 2 };
+    const { container } = render(() => <IndexWarmingChicklet layout="chat" meta={meta} />);
+    const card = container.querySelector('[data-testid="index-warming-chicklet"]');
+    const title = rowSpokenLabel(card);
+    expect(rowVisibleText(card)).not.toContain(indexWarmingChickletTitle(meta));
+    expect(title).toContain(indexWarmingChickletTitle(meta));
     expect(title).toContain("after web_search");
     expect(title).toContain("1 host");
     expect(title).not.toContain("tailwind dark mode");
   });
 
-  it("prefers crawl stats over seed skip_reason in the title", () => {
+  it("prefers crawl stats over seed skip_reason in the spoken label", () => {
     const { container } = render(() => (
       <IndexWarmingChicklet
         layout="chat"
@@ -68,13 +63,27 @@ describe("IndexWarmingChicklet", () => {
         }}
       />
     ));
-    const title = container.querySelector(".den-tool-part-title")?.textContent ?? "";
+    const card = container.querySelector('[data-testid="index-warming-chicklet"]');
+    const title = rowSpokenLabel(card);
     expect(title).toContain("1 host");
     expect(title).not.toContain("hourly seed cap");
     expect(title).not.toContain("tailwind dark mode");
     expect(container.textContent).toContain(
       indexWarmingSkipNote("hourly seed cap"),
     );
+  });
+
+  it("states its outcome on the row and leads the opened body with its counts", () => {
+    const meta: IndexWarmingMeta = { trigger: "fetch", tier: "crawl", hosts: ["docs.example", "news.example"], pages: 3 };
+    const finished = render(() => <IndexWarmingChicklet layout="chat" meta={meta} entryKey="warm-finished" sessionId="warming-test" />);
+    const card = finished.container.querySelector('[data-testid="index-warming-chicklet"]');
+    const outcome = card?.querySelector('[data-testid="tool-part-completion"]')?.textContent ?? "";
+    expect(outcome).not.toBe("");
+    expect(rowSpokenLabel(card)).toContain(outcome);
+    fireEvent.click(disclosureToggle(card));
+    expect(card?.querySelector(".den-tool-part-card-note")?.textContent).toBe(indexWarmingStatsLine(meta));
+    const skipped = render(() => <IndexWarmingChicklet layout="chat" meta={{ ...meta, skip_reason: "discovery busy" }} />);
+    expect(skipped.container.querySelector('[data-testid="tool-part-completion"]')?.textContent).not.toBe(outcome);
   });
 
   it("explains declared-URL warms and site topic in the expanded body", () => {

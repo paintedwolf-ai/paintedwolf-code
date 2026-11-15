@@ -402,7 +402,6 @@ components:
       type: string
       enum:
       - direct_cow
-      - bridge_cow
       - direct_copy
     WorkspaceNotClonableReason:
       type: string
@@ -424,7 +423,7 @@ components:
           $ref: worker.yaml#/components/schemas/WorkspaceProvisionStrategy
         stage:
           type: string
-          enum: [probing, surveying_source, cost_declared, materializing_seed, snapshotting_branch, branch_prepared]
+          enum: [probing, surveying_source, cost_declared, snapshotting_branch, branch_prepared]
         files:
           type: integer
           format: int64

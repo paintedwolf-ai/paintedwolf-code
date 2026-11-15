@@ -142,6 +142,8 @@ type Confinement struct {
 	ReadRoots []string
 	// ReadDenyPaths are per-action read exclusions.
 	ReadDenyPaths []string
+	// View is what this command's mounted worker view keeps out of its reach.
+	View ViewBoundary
 	// EgressOff records the observed deny cause.
 	EgressOff EgressOffCause
 	// SocketGrants are exact AF_UNIX connect literals validated at the choke point.
@@ -216,6 +218,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 		SessionScratchRoot:          prepared.SessionScratchRoot,
 		ReadRoots:                   prepared.ReadRoots,
 		ReadDenyPaths:               prepared.ReadDenyPaths,
+		View:                        prepared.View,
 		SocketGrants:                prepared.SocketGrants,
 		HostServicePaths:            prepared.HostServicePaths,
 		DroppedSocketGrants:         prepared.Dropped,
@@ -334,6 +337,7 @@ func renderSeatbeltProfile(c Confinement) (string, error) {
 	if err := writeNetworkRules(&b, c); err != nil {
 		return "", err
 	}
+	writeViewListenerDenials(&b, c.View, deny)
 	writeHostCapabilityDenials(&b, deny)
 	return b.String(), nil
 }
@@ -468,6 +472,8 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 	rules.add(denySpecRule(specs, FloorBaseline, FloorProtected))
 	rules.add(fsRule{op: opWrite, allow: true, matches: subpathMatches(resolveEach(c.GrantedWriteRoots), "")})
 	rules.add(fsRule{op: opWrite, allow: true, matches: subpathMatches(workspaceAllowBacks(c), "")})
+	// The view floor precedes the protected floors, so reopening a worker's own roots never lifts them.
+	addViewStorageFloor(&rules, c.View)
 	rules.add(denySpecRule(specs, FloorProtected))
 	rules.add(protectedGrantRule(c.ProtectedWriteGrants))
 	rules.add(denySpecRule(specs, FloorAgentPolicy))
@@ -478,6 +484,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		{regex: "^/dev/disk", layer: FloorControlPlane},
 		{regex: "^/dev/rdisk", layer: FloorControlPlane},
 	}})
+	closeViewStorage(&rules, c.View)
 	if err := rules.checkStringLengths(); err != nil {
 		return rules, err
 	}
@@ -538,7 +545,6 @@ func workspaceAllowBacks(c Confinement) []string {
 	for _, folder := range placementFolders(dir) {
 		controls = append(controls, fspath.CanonicalPath(folder.Path))
 	}
-	sep := string(filepath.Separator)
 	var backs []string
 	candidates := append(append([]string(nil), c.Roots...), c.GrantedWriteRoots...)
 	if c.SessionScratchRoot != "" {
@@ -550,7 +556,7 @@ func workspaceAllowBacks(c Confinement) []string {
 		}
 		p := fspath.CanonicalPath(r)
 		for _, control := range controls {
-			if strings.HasPrefix(p, control+sep) {
+			if pathUnderTree(p, control) {
 				backs = append(backs, p)
 				break
 			}
@@ -558,6 +564,10 @@ func workspaceAllowBacks(c Confinement) []string {
 	}
 	sort.Strings(backs)
 	return backs
+}
+
+func pathUnderTree(path, tree string) bool {
+	return strings.HasPrefix(path, tree+string(filepath.Separator))
 }
 
 // protectedGrantRule emits approved protected-path write exceptions.
@@ -581,6 +591,9 @@ func writeHostCapabilityDenials(b *strings.Builder, deny string) {
 		b.WriteString("  " + strings.TrimSpace(deny) + "\n")
 	}
 	b.WriteString(")\n")
+	// A process that could detach its own view would lose the only path to its work.
+	b.WriteString("(deny file-mount" + deny + ")\n")
+	b.WriteString("(deny file-unmount" + deny + ")\n")
 }
 
 // pathUnder reports whether path is root or lies beneath it, with the remainder

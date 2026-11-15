@@ -236,7 +236,7 @@ describe("SessionTranscript workers and synthesis", () => {
     expect(container.textContent).toContain("rejected attempt");
   });
 
-  it("renders a mid-turn agent_note after its tool card with Note badge and chicklet", () => {
+  it("renders a mid-turn agent_note after its tool card with its chicklet", () => {
     const messages: Message[] = [
 		{ id: "u1", role: "user", origin: "user" as const, authority: "user" as const, trust_tier: "trusted" as const, content: "Where is auth?", created_at: "t", ord: 1 },
       {
@@ -291,7 +291,6 @@ describe("SessionTranscript workers and synthesis", () => {
       <SessionTranscript layout="chat" sessionId="s-note" messages={messages} />
     ));
 
-    expect(screen.getByTestId("agent-note-badge")).toBeTruthy();
     expect(
       container.querySelectorAll(
         '[data-testid="transcript-article-assistant"][data-kind="agent_note"]',

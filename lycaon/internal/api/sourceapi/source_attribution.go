@@ -116,6 +116,9 @@ func (s *History) HandleGetProjectSourceAttribution(w http.ResponseWriter, r *ht
 		if iv.ToolCallID != "" {
 			row.ToolCallID = &iv.ToolCallID
 		}
+		if iv.EffectID != "" {
+			row.EffectID = &iv.EffectID
+		}
 		intervals = append(intervals, row)
 	}
 	httpio.WriteJSON(w, http.StatusOK, wire.SourceAttributionResponse{
@@ -140,5 +143,6 @@ func (s *History) HandleGetWorkerChanges(w http.ResponseWriter, r *http.Request)
 	for _, row := range rows {
 		files = append(files, wire.WorkerJobChangedFile{RootID: row.RootID, Path: row.Path, Op: row.Op})
 	}
+	files = appendLayeredWorkerDivergenceChanges(r.Context(), task.WorkspaceRoot, r.URL.Query().Get("checkpoint_id"), files)
 	httpio.WriteJSON(w, http.StatusOK, wire.WorkerJobChangesResponse{Files: files})
 }

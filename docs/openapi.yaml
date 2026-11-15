@@ -615,6 +615,110 @@ paths:
           $ref: '#/components/responses/Conflict'
         default:
           $ref: '#/components/responses/Error'
+  /v1/sessions/{id}/program-receipt-document:
+    get:
+      tags:
+        - sessions
+      operationId: getCommandReceiptDocument
+      x-positional-window: true
+      summary: Read a row window of a command receipt document
+      description: The document is JSON Lines written by the host from durable program records. For each scope in order it holds one program row, then the scope's execution rows by ordinal, then the program's node rows by node id. Reads that name a revision answer chat_content_changed once the records behind it change.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CommandReceiptScopes'
+        - name: revision
+          in: query
+          description: Snapshot to read. Omit it to read the current snapshot.
+          schema:
+            type: string
+            pattern: ^[0-9a-f]{64}$
+        - name: offset
+          in: query
+          description: Zero-based row to start at.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 64
+      responses:
+        '200':
+          description: Rows from one snapshot of the receipt document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandReceiptDocumentPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/sessions/{id}/program-receipt-document/search:
+    get:
+      tags:
+        - sessions
+      operationId: searchCommandReceiptDocument
+      summary: Search a command receipt document without reading its rows
+      description: Each request scans a bounded number of rows, so a page may hold no matches and still carry next_cursor.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CommandReceiptScopes'
+        - name: revision
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-f]{64}$
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 1024
+        - name: case_sensitive
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+      responses:
+        '200':
+          description: Matches by row and rune column in the named snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandReceiptSearchPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
   /v1/sessions/{id}/invocations:
     get:
       tags:
@@ -6368,6 +6472,96 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/projects/{id}/briefings:
+    post:
+      tags:
+        - projects
+      operationId: requestBriefing
+      x-person-action: none
+      summary: Request or read the briefing for one step, activity or worker result
+      description: 'Returns the target''s snapshot: a stored result, an admitted or joined attempt, or a factual fallback. A manual request whose inputs are all answered already returns regenerate_outcome inputs_unchanged and makes no model call.'
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BriefingRequest'
+      responses:
+        '200':
+          description: Target snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BriefingSnapshot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '422':
+          $ref: '#/components/responses/UnprocessableContent'
+        '429':
+          description: The project's briefing queue is full (briefing_busy)
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Briefings are stopping with the engine (briefing_unavailable)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/projects/{id}/briefings/records/{record_id}:
+    get:
+      tags:
+        - projects
+      operationId: getBriefingRecord
+      summary: Read an immutable briefing evidence record
+      description: Lists each section's result and the evidence it was given. A section whose evidence the reader cannot read is marked unavailable and carries neither text nor items.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: record_id
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-f]{64}$
+      responses:
+        '200':
+          description: Evidence record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BriefingRecord'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
         default:
           $ref: '#/components/responses/Error'
   /v1/projects/{id}/source/seen:
@@ -14350,6 +14544,20 @@ components:
       schema:
         type: string
         format: uuid
+    CommandReceiptScopes:
+      name: scopes
+      in: query
+      required: true
+      description: Ordered scopes of the document. A scope is a program id, for all of its executions, or program_id:activity_id, for the executions that host activity selects. A scope may not repeat, and a program may not appear both whole and by activity.
+      style: form
+      explode: true
+      schema:
+        type: array
+        minItems: 1
+        maxItems: 64
+        items:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})?$
     DraftSlotId:
       name: slot_id
       in: path
@@ -15481,6 +15689,7 @@ components:
         - source_changed
         - source_operation
         - file_briefing
+        - briefing
         - artifact
         - agent_presence
         - editor_document
@@ -15520,6 +15729,7 @@ components:
         - $ref: '#/components/schemas/EventEnvelopeSourceChanged'
         - $ref: '#/components/schemas/EventEnvelopeSourceOperation'
         - $ref: '#/components/schemas/EventEnvelopeFileBriefing'
+        - $ref: '#/components/schemas/EventEnvelopeBriefing'
         - $ref: '#/components/schemas/EventEnvelopeArtifact'
         - $ref: '#/components/schemas/EventEnvelopeAgentPresence'
         - $ref: '#/components/schemas/EventEnvelopeEditorDocument'
@@ -15559,6 +15769,7 @@ components:
           source_changed: '#/components/schemas/EventEnvelopeSourceChanged'
           source_operation: '#/components/schemas/EventEnvelopeSourceOperation'
           file_briefing: '#/components/schemas/EventEnvelopeFileBriefing'
+          briefing: '#/components/schemas/EventEnvelopeBriefing'
           artifact: '#/components/schemas/EventEnvelopeArtifact'
           agent_presence: '#/components/schemas/EventEnvelopeAgentPresence'
           editor_document: '#/components/schemas/EventEnvelopeEditorDocument'
@@ -17776,6 +17987,10 @@ components:
           x-go-type: string
           type: string
           format: date-time
+        evidence_ref:
+          x-go-pointer: true
+          description: Present when the summary has an evidence record.
+          $ref: '#/components/schemas/BriefingEvidenceRef'
     FileBriefingEvent:
       x-go-generate: true
       type: object
@@ -17792,7 +18007,7 @@ components:
         - truncated
         - updated_at
       additionalProperties: false
-      description: Revision-keyed briefing update with delta, result, or error.
+      description: Revision-keyed briefing update with its result or error.
       properties:
         project_id:
           type: string
@@ -17820,7 +18035,6 @@ components:
           enum:
             - preview
             - pending
-            - streaming
             - complete
             - failed
         preview:
@@ -17837,9 +18051,6 @@ components:
         fallback_text:
           type: string
           maxLength: 8192
-        delta:
-          type: string
-          maxLength: 8192
         truncated:
           type: boolean
         error:
@@ -17848,6 +18059,509 @@ components:
           x-go-type: string
           type: string
           format: date-time
+        evidence_ref:
+          x-go-pointer: true
+          description: Present when the summary has an evidence record.
+          $ref: '#/components/schemas/BriefingEvidenceRef'
+    BriefingEvidenceRef:
+      x-go-generate: true
+      type: object
+      required:
+        - project_id
+        - record_id
+      additionalProperties: false
+      description: An immutable evidence record; its id derives from the ordered section manifest hashes.
+      properties:
+        project_id:
+          type: string
+          format: uuid
+        record_id:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+    SourceStepBriefingTarget:
+      x-go-generate: true
+      type: object
+      required:
+        - kind
+        - target_key
+        - scope_fingerprint
+        - scope
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum:
+            - effect
+            - command
+            - git
+            - outside
+        target_key:
+          type: string
+          minLength: 1
+        scope_fingerprint:
+          type: string
+          description: Frozen scope and membership identity; never the result identity.
+        scope:
+          $ref: '#/components/schemas/SourceStepBriefingScope'
+        effect_ids:
+          type: array
+          description: Exact ordered membership; required for outside targets.
+          minItems: 2
+          maxItems: 256
+          items:
+            type: string
+    SourceStepBriefingScope:
+      x-go-generate: true
+      type: object
+      required:
+        - kind
+        - root_ids
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum:
+            - file
+            - command
+            - git
+            - outside
+        branch_id:
+          type: string
+          pattern: ^\S+$
+        root_ids:
+          type: array
+          items:
+            type: string
+        file_id:
+          type: string
+          pattern: ^\S+$
+    ToolActivityBriefingTarget:
+      x-go-generate: true
+      type: object
+      required:
+        - session_id
+        - tool_call_ids
+      additionalProperties: false
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        members:
+          type: array
+          description: Host-issued activity ids, in order.
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/ToolActivityBriefingMember'
+        tool_call_ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+        activity_revision:
+          type: string
+    ToolActivityBriefingMember:
+      x-go-generate: true
+      type: object
+      required:
+        - program_id
+        - activity_id
+      additionalProperties: false
+      properties:
+        program_id:
+          type: string
+          pattern: ^\S+$
+        activity_id:
+          type: string
+          pattern: ^\S+$
+    WorkerResultBriefingTarget:
+      x-go-generate: true
+      type: object
+      required:
+        - worker_id
+        - result_revision
+      additionalProperties: false
+      properties:
+        worker_id:
+          type: string
+          format: uuid
+        result_revision:
+          type: string
+          description: The worker's completion time; a rerun is a new revision.
+    BriefingRequest:
+      x-go-generate: true
+      type: object
+      required:
+        - profile_id
+        - target_ref
+      additionalProperties: false
+      properties:
+        profile_id:
+          type: string
+          enum:
+            - source_step
+            - tool_activity
+            - worker_result
+        target_ref:
+          x-go-type: map[string]any
+          description: SourceStepBriefingTarget, ToolActivityBriefingTarget or WorkerResultBriefingTarget, validated against profile_id.
+          oneOf:
+            - $ref: '#/components/schemas/SourceStepBriefingTarget'
+            - $ref: '#/components/schemas/ToolActivityBriefingTarget'
+            - $ref: '#/components/schemas/WorkerResultBriefingTarget'
+        trigger:
+          type: string
+          enum:
+            - automatic
+            - manual
+    BriefingSummarySection:
+      x-go-generate: true
+      type: object
+      required:
+        - section_id
+        - text
+        - manifest_hash
+        - source
+        - reused
+        - provider_id
+        - model
+        - evidence_quality
+        - created_at
+      additionalProperties: false
+      properties:
+        section_id:
+          type: string
+          pattern: ^\S+$
+        text:
+          type: string
+        manifest_hash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        source:
+          type: string
+          enum:
+            - summarizer
+            - fallback
+            - deterministic
+        reused:
+          type: boolean
+          description: The result existed before this target asked for it.
+        provider_id:
+          type: string
+          pattern: ^\S*$
+        model:
+          type: string
+        evidence_quality:
+          type: array
+          items:
+            type: string
+            enum:
+              - structural_evidence
+              - causal_evidence
+              - purpose_reused
+              - causal_context_missing
+              - content_binary
+              - content_pruned
+              - content_omitted
+              - evidence_truncated
+              - outcome_unknown
+              - metadata_only
+              - reasoning_included
+              - reasoning_truncated
+              - reasoning_shared
+              - reasoning_unavailable
+              - output_truncated
+        created_at:
+          x-go-type: string
+          type: string
+          format: date-time
+    BriefingResult:
+      x-go-generate: true
+      type: object
+      required:
+        - summary
+        - evidence_ref
+      additionalProperties: false
+      properties:
+        summary:
+          type: array
+          items:
+            $ref: '#/components/schemas/BriefingSummarySection'
+        evidence_ref:
+          $ref: '#/components/schemas/BriefingEvidenceRef'
+    BriefingLinkedIntent:
+      x-go-generate: true
+      type: object
+      required:
+        - text
+        - checkpoint_id
+        - action_id
+        - scope
+      additionalProperties: false
+      description: Provenance only; a purpose section is reused by hash, not from this field.
+      properties:
+        text:
+          type: string
+        checkpoint_id:
+          type: string
+          pattern: ^\S*$
+        action_id:
+          type: string
+          pattern: ^\S*$
+        scope:
+          type: string
+    BriefingOutcome:
+      x-go-generate: true
+      type: object
+      required:
+        - state
+      additionalProperties: false
+      properties:
+        state:
+          type: string
+          enum:
+            - succeeded
+            - failed
+            - interrupted
+            - partial
+            - unknown
+        receipt_id:
+          type: string
+          pattern: ^\S+$
+        exit_code:
+          x-go-pointer: true
+          type: integer
+    BriefingSnapshot:
+      x-go-generate: true
+      type: object
+      required:
+        - profile_id
+        - profile_version
+        - target_key
+        - scope_fingerprint
+        - target
+        - cache_epoch
+        - revision
+        - status
+        - pending_sections
+        - outcome
+        - error_code
+        - error_message
+      additionalProperties: false
+      properties:
+        profile_id:
+          type: string
+          enum:
+            - source_step
+            - tool_activity
+            - worker_result
+        profile_version:
+          type: string
+        target_key:
+          type: string
+        scope_fingerprint:
+          type: string
+        target:
+          type: object
+          additionalProperties: true
+        cache_epoch:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: Decimal integer; compare numerically.
+        revision:
+          type: string
+          pattern: ^[0-9]+$
+          description: Decimal integer; zero only while absent.
+        status:
+          type: string
+          enum:
+            - absent
+            - idle
+            - pending
+            - complete
+            - failed
+            - canceled
+        attempt_id:
+          type: string
+          pattern: ^\S+$
+        attempt_trigger:
+          type: string
+          enum:
+            - automatic
+            - manual
+        invocation_class:
+          type: string
+          enum:
+            - overlay
+            - requested
+        reconcile_after_at:
+          x-go-type: string
+          type: string
+          format: date-time
+          description: Present while pending; ask again after it if no terminal event arrived.
+        result:
+          x-go-pointer: true
+          $ref: '#/components/schemas/BriefingResult'
+        pending_sections:
+          type: array
+          description: Sections an active attempt is still producing, in profile order.
+          items:
+            type: string
+        regenerate_outcome:
+          type: string
+          enum:
+            - inputs_unchanged
+            - started
+        linked_intent:
+          x-go-pointer: true
+          $ref: '#/components/schemas/BriefingLinkedIntent'
+        outcome:
+          $ref: '#/components/schemas/BriefingOutcome'
+        error_code:
+          type: string
+        error_message:
+          type: string
+        updated_at:
+          x-go-type: string
+          type: string
+          format: date-time
+    BriefingEvent:
+      x-go-generate: true
+      type: object
+      required:
+        - kind
+      additionalProperties: false
+      description: A snapshot of one target, or a reset clearing earlier epochs for the listed profiles.
+      properties:
+        kind:
+          type: string
+          enum:
+            - snapshot
+            - reset
+        snapshot:
+          x-go-pointer: true
+          $ref: '#/components/schemas/BriefingSnapshot'
+        profile_ids:
+          type: array
+          items:
+            type: string
+            enum:
+              - source_step
+              - tool_activity
+              - worker_result
+        cache_epoch:
+          type: string
+          pattern: ^[1-9][0-9]*$
+    BriefingRecordItem:
+      x-go-generate: true
+      type: object
+      required:
+        - key
+        - role
+        - source_kind
+        - inclusion
+      additionalProperties: false
+      properties:
+        key:
+          type: string
+        role:
+          type: string
+          enum:
+            - goal
+            - action
+            - observation
+            - structure
+            - verification
+            - context
+        source_kind:
+          type: string
+        ref:
+          type: string
+        revision:
+          type: string
+        inclusion:
+          type: string
+          enum:
+            - included
+            - truncated
+            - omitted
+            - unavailable
+        reason:
+          type: string
+        text:
+          type: string
+          description: The excerpt submitted; absent for items that were not sent.
+    BriefingRecordSection:
+      x-go-generate: true
+      type: object
+      required:
+        - section_id
+        - manifest_hash
+        - available
+      additionalProperties: false
+      properties:
+        section_id:
+          type: string
+          pattern: ^\S+$
+        manifest_hash:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        available:
+          type: boolean
+          description: False when the reader cannot read every item this section used.
+        result:
+          x-go-pointer: true
+          $ref: '#/components/schemas/BriefingSummarySection'
+        template_id:
+          type: string
+          pattern: ^\S+$
+        template_version:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BriefingRecordItem'
+    BriefingRecord:
+      x-go-generate: true
+      type: object
+      required:
+        - record_id
+        - profile_id
+        - profile_version
+        - method
+        - created_at
+        - sections
+      additionalProperties: false
+      properties:
+        record_id:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        profile_id:
+          type: string
+          enum:
+            - source_step
+            - tool_activity
+            - worker_result
+        profile_version:
+          type: string
+        method:
+          type: string
+          enum:
+            - model
+            - deterministic
+            - mixed
+        attempt_trigger:
+          type: string
+          enum:
+            - automatic
+            - manual
+        created_at:
+          x-go-type: string
+          type: string
+          format: date-time
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/BriefingRecordSection'
     SourcePin:
       x-go-generate: true
       type: object
@@ -21038,6 +21752,10 @@ components:
         ai_rationale_pending:
           x-go-name: AIRationalePending
           type: boolean
+        ai_rationale_evidence_ref:
+          x-go-name: AIRationaleEvidenceRef
+          x-go-pointer: true
+          $ref: '#/components/schemas/BriefingEvidenceRef'
         joined_count:
           type: integer
           minimum: 1
@@ -26171,6 +26889,11 @@ components:
         - delegation_leg_not_found
         - feedback_not_pending
         - feedback_response_required
+        - briefing_disabled
+        - briefing_target_unavailable
+        - briefing_busy
+        - briefing_unavailable
+        - briefing_record_not_found
         - file_briefing_disabled
         - file_briefing_not_found
         - file_briefing_unavailable
@@ -29231,7 +29954,6 @@ components:
       type: string
       enum:
         - direct_cow
-        - bridge_cow
         - direct_copy
     WorkspaceNotClonableReason:
       type: string
@@ -29260,7 +29982,6 @@ components:
             - probing
             - surveying_source
             - cost_declared
-            - materializing_seed
             - snapshotting_branch
             - branch_prepared
         files:
@@ -30371,6 +31092,91 @@ components:
           type: integer
         next_cursor:
           type: string
+    CommandReceiptRow:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - index
+        - text
+      properties:
+        index:
+          type: integer
+          minimum: 0
+        text:
+          type: string
+          description: One JSON record without its line break. type is program, execution or node. A program record holds program, progress when recorded, activity for an activity scope, execution_count and node_count. An execution record holds program_id, activity_id for an activity scope, and execution. A node record holds program_id and node.
+    CommandReceiptDocumentPage:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - revision
+        - total_rows
+        - settled
+        - offset
+        - end_offset
+        - complete
+        - rows
+      properties:
+        revision:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: Snapshot these rows belong to.
+        total_rows:
+          type: integer
+          minimum: 1
+        settled:
+          type: boolean
+          description: True when no scoped program is still running or waiting, so the revision is final.
+        offset:
+          type: integer
+          minimum: 0
+        end_offset:
+          type: integer
+          minimum: 0
+          description: Row just past this window; total_rows at the end of the document.
+        complete:
+          type: boolean
+          description: True when this window reaches the end of the document.
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandReceiptRow'
+    CommandReceiptMatch:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - row
+        - column
+        - length
+      properties:
+        row:
+          type: integer
+          minimum: 0
+        column:
+          type: integer
+          minimum: 0
+          description: Rune offset of the match within its row.
+        length:
+          type: integer
+          minimum: 1
+          description: Match length in runes.
+    CommandReceiptSearchPage:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - matches
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandReceiptMatch'
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next search page; absent when the search reached the end of the document.
     InvocationReceiptList:
       x-go-generate: true
       type: object
@@ -35319,6 +36125,20 @@ components:
             Every command observation window an effect on this page references
             by command_id, newest first. A window that observed nothing has no
             row, so there is no bare command to list.
+        briefing_targets:
+          type: object
+          description: Explanation target for each step on this page, keyed by the step's rail key (an effect id, git:<change id>, command:<window id> or outside:<first effect id>). Den reads targets from here rather than inventing them.
+          additionalProperties:
+            $ref: '#/components/schemas/SourceStepBriefingTarget'
+        briefings:
+          type: array
+          description: Stored briefings for this page's targets; passive reads never start one.
+          items:
+            $ref: '#/components/schemas/BriefingSnapshot'
+        briefing_epoch:
+          type: string
+          pattern: ^[1-9][0-9]*$
+          description: The project's briefing epoch, so a missed reset is noticed.
         commit_available:
           type: boolean
           description: False when the project root is not a git checkout
@@ -36610,6 +37430,11 @@ components:
           x-go-name: RecordedAt
           type: string
           format: date-time
+        effect_id:
+          x-go-pointer: true
+          type: string
+          pattern: ^\S+$
+          description: The change that wrote this text; its Walk step explains it.
     SourceAttributionResponse:
       x-go-generate: true
       type: object
@@ -38230,50 +39055,17 @@ components:
           format: int64
           minimum: 0
           description: Recorded entries on a volume that is absent right now; not in bytes, and left alone by clearing
-    WorkspaceCacheStatus:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - source_root
-        - logical_bytes
-        - allocated_bytes
-        - last_used_at
-      properties:
-        id:
-          type: string
-          pattern: ^[0-9a-f]{16}$
-        source_root:
-          type: string
-        logical_bytes:
-          type: integer
-          format: int64
-          minimum: 0
-        allocated_bytes:
-          type: integer
-          format: int64
-          minimum: 0
-          description: Best-effort allocated bytes retained by the immutable bridge cache
-        last_used_at:
-          type: string
-          format: date-time
     LocalDataStatus:
       x-go-generate: true
       type: object
       additionalProperties: false
       required:
         - buckets
-        - workspace_caches
       properties:
         buckets:
           type: array
           items:
             $ref: '#/components/schemas/LocalDataBucketStatus'
-        workspace_caches:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkspaceCacheStatus'
     HistoryRetentionRule:
       type: object
       x-go-generate: true
@@ -38518,13 +39310,6 @@ components:
           minItems: 1
           items:
             $ref: '#/components/schemas/LocalDataBucketId'
-        workspace_cache_ids:
-          x-go-name: WorkspaceCacheIDs
-          type: array
-          minItems: 1
-          items:
-            type: string
-            pattern: ^[0-9a-f]{16}$
     LocalDataClearResult:
       x-go-generate: true
       type: object
@@ -38543,41 +39328,17 @@ components:
         message:
           type: string
           description: Host copy when ok is false; branch on code.
-    WorkspaceCacheClearResult:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      required:
-        - id
-        - ok
-      properties:
-        id:
-          type: string
-          pattern: ^[0-9a-f]{16}$
-        ok:
-          x-go-name: OK
-          type: boolean
-        code:
-          $ref: '#/components/schemas/ApiErrorCode'
-        message:
-          type: string
-          description: Host copy when ok is false; branch on code.
     LocalDataClearResponse:
       x-go-generate: true
       type: object
       additionalProperties: false
       required:
         - results
-        - workspace_cache_results
       properties:
         results:
           type: array
           items:
             $ref: '#/components/schemas/LocalDataClearResult'
-        workspace_cache_results:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkspaceCacheClearResult'
     BackupCapabilities:
       x-go-generate: true
       type: object
@@ -42395,6 +43156,18 @@ components:
               const: file_briefing
             data:
               $ref: '#/components/schemas/FileBriefingEvent'
+    EventEnvelopeBriefing:
+      allOf:
+        - $ref: '#/components/schemas/EventEnvelopeBase'
+        - type: object
+          required:
+            - topic
+            - data
+          properties:
+            topic:
+              const: briefing
+            data:
+              $ref: '#/components/schemas/BriefingEvent'
     EventEnvelopeArtifact:
       allOf:
         - $ref: '#/components/schemas/EventEnvelopeBase'

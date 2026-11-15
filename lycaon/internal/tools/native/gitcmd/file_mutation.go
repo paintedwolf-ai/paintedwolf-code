@@ -165,7 +165,7 @@ func (r *fileMutation) stage(entries []git.IndexEntry, expected map[string]track
 	for i, entry := range entries {
 		paths[i] = entry.Path
 	}
-	result, err := (native.GitMutations{Git: r.p.owners.Git, Boundary: r.p.owners.Boundary}).Operate(r.ctx, r.reviewContext(expected, check), git.OperationRequest{Kind: "stage", Entries: entries, Paths: paths})
+	result, err := (native.GitMutations{Git: r.p.owners.Git, Boundary: r.p.owners.Boundary, PrivateGit: r.p.owners.PrivateGit}).Operate(r.ctx, r.reviewContext(expected, check), git.OperationRequest{Kind: "stage", Entries: entries, Paths: paths})
 	if result.Attempted && !result.AfterObserved {
 		r.indexUnknown = true
 	}

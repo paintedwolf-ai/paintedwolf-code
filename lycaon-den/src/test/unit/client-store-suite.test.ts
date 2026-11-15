@@ -24,6 +24,7 @@ describe("client + store suite", () => {
         topic === "source_operation" ||
         topic === "source_view" ||
         topic === "file_briefing" ||
+        topic === "briefing" ||
         topic === "editor_document" ||
         topic === "artifact" ||
         topic === "turn_clock" ||

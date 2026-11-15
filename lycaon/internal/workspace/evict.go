@@ -3,8 +3,10 @@ package workspace
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"os"
+
+	"github.com/lycaon/lycaon/internal/bloblifecycle"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 )
 
 // EvictJobTree removes a branch tree while keeping its .meta sibling, so the
@@ -16,16 +18,27 @@ func EvictJobTree(ctx context.Context, branchRoot string) error {
 	if err != nil {
 		return err
 	}
+	lifecycle := bloblifecycle.ForDevice(branchLifecycleDataDir(branchRoot))
+	lifecycle.Lock()
+	defer lifecycle.Unlock()
 	releaseUse, err := tryExclusiveBranchUse(branchRoot)
 	if err != nil {
 		return err
 	}
 	defer releaseUse()
+	return removeEvictedTree(ctx, branchRoot)
+}
+
+// removeEvictedTree requires the caller's exclusive use lease.
+func removeEvictedTree(ctx context.Context, branchRoot string) error {
 	releaseProvision, err := acquireWorkspaceProvisionLock(ctx, branchRoot)
 	if err != nil {
 		return err
 	}
 	defer releaseProvision()
+	if err := RefuseMountedBranch(branchRoot); err != nil {
+		return fmt.Errorf("%w: %w", ErrBranchRetained, err)
+	}
 	metaDir := enginepaths.MetaDirForBranchRoot(branchRoot)
 	meta, err := LoadJobMeta(metaDir)
 	if err != nil {
@@ -40,17 +53,21 @@ func EvictJobTree(ctx context.Context, branchRoot string) error {
 	if err := os.RemoveAll(branchRoot); err != nil {
 		return fmt.Errorf("evict worker branch: %w", err)
 	}
+	// A rebuild materializes a fresh base, so the old one only holds space. Its bytes that mattered
+	// are in the checkpoint: a capture stores the base of every file that changed.
+	if err := os.RemoveAll(enginepaths.PristineTreeForBranchRoot(branchRoot)); err != nil {
+		return fmt.Errorf("evict worker branch: %w", err)
+	}
+	if err := os.Remove(enginepaths.StatManifestForBranchRoot(branchRoot)); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("evict worker branch: %w", err)
+	}
 	return nil
 }
 
 // RebuildWorkerWorkspace recreates an evicted branch tree at its recorded path.
 // restore fills the fresh skeleton from the job's records; the layout is the
 // one captured at claim time. A tree that is already complete is left alone.
-func (m *Manager) RebuildWorkerWorkspace(
-	ctx context.Context,
-	branchRoot string,
-	restore func(ctx context.Context, layout SandboxLayout, branchRoot string) error,
-) (SandboxLayout, error) {
+func (m *Manager) RebuildWorkerWorkspace(ctx context.Context, branchRoot string, restore func(ctx context.Context, layout SandboxLayout, branchRoot string) error) (SandboxLayout, error) {
 	branchRoot, err := cleanBranchRoot(branchRoot)
 	if err != nil {
 		return SandboxLayout{}, err

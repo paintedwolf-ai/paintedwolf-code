@@ -105,7 +105,7 @@ func TestProgramReceiptRouteServesChildFactsFromTheStore(t *testing.T) {
 	})
 	const session = "11111111-2222-4333-8444-555555555555"
 	testdbseed.InsertSession(t, database, session, testdbseed.DefaultProjectID)
-	f := programReceiptFixtureOn(t, database, session, map[string]any{"command": "${op} arg"})
+	f := programReceiptFixtureOn(t, database, session, "actual-model-call", map[string]any{"command": "${op} arg"})
 	writeID, backgroundID := conflictedWrite(t, f)
 	rec := httptest.NewRecorder()
 	srv.ServeHTTP(rec, contractfixture.NewAuthedRequest(http.MethodGet, "/v1/sessions/"+session+"/program-receipts/"+f.program, nil))

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -176,4 +177,63 @@ func TestRebuildSealRefusesAnotherOpenConnection(t *testing.T) {
 	}
 	testutil.FailErr(t, "close WAL connection", writer.Close())
 	testutil.FailErr(t, "seal after connection closes", sealRebuiltStore(t.Context(), path))
+}
+
+// A reboot may change the device number recorded in a publication journal.
+func TestRebuildPublicationSurvivesDeviceNumberChange(t *testing.T) {
+	moved := func(record *rebuildJournal) {
+		record.OriginalIdentity = "9" + record.OriginalIdentity
+		record.ReplacementIdentity = "9" + record.ReplacementIdentity
+		record.DirectoryIdentity = "9" + record.DirectoryIdentity
+	}
+	t.Run("before the exchange the original stays authoritative", func(t *testing.T) {
+		path, record := preparedRebuildFixture(t)
+		moved(&record)
+		testutil.FailErr(t, "rewrite journal", writeRebuildJournal(path, record))
+		testutil.FailErr(t, "resume", ResumeStoreUpgrade(path))
+		raw, err := os.ReadFile(path)
+		testutil.FailErr(t, "read store", err)
+		if string(raw) != "original" {
+			t.Fatalf("store = %q, want the original kept", raw)
+		}
+	})
+	t.Run("after the exchange publication finishes", func(t *testing.T) {
+		path, record := preparedRebuildFixture(t)
+		interrupted := errors.New("process interrupted after durable move")
+		if err := finishRebuildPublication(path, record, func(string) error { return interrupted }); !errors.Is(err, interrupted) {
+			t.Fatalf("interruption = %v", err)
+		}
+		moved(&record)
+		testutil.FailErr(t, "rewrite journal", writeRebuildJournal(path, record))
+		testutil.FailErr(t, "resume", ResumeStoreUpgrade(path))
+		raw, err := os.ReadFile(path)
+		testutil.FailErr(t, "read store", err)
+		if string(raw) != "verified replacement" {
+			t.Fatalf("store = %q, want the replacement", raw)
+		}
+	})
+}
+
+func TestStoreQuarantineSurvivesDeviceNumberChange(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	testutil.FailErr(t, "seed store", os.WriteFile(path, []byte("store"), 0o600))
+	identity, err := fspath.EntryIdentity(fspath.CanonicalPath(path))
+	testutil.FailErr(t, "identify store", err)
+	write := func(identity string) {
+		raw, err := json.Marshal(integrityFailureRecord{Version: 1, Identity: identity, Detail: "damaged"})
+		testutil.FailErr(t, "encode record", err)
+		testutil.FailErr(t, "write record", os.WriteFile(path+IntegrityFailureSuffix, raw, 0o600))
+	}
+	write("9" + identity)
+	if err := CheckStoreHealth(path); err == nil {
+		t.Fatal("a device number change discarded quarantine evidence")
+	}
+	if _, err := os.Lstat(path + IntegrityFailureSuffix); err != nil {
+		t.Fatalf("quarantine record removed: %v", err)
+	}
+	write("9:1:1:1")
+	testutil.FailErr(t, "stale record", CheckStoreHealth(path))
+	if _, err := os.Lstat(path + IntegrityFailureSuffix); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("stale quarantine record kept: %v", err)
+	}
 }

@@ -174,7 +174,7 @@ describe("AssistantChatTurn ordinary completion", () => {
 });
 
 describe("AssistantChatTurn agent note", () => {
-  it("renders Note badge and citation chicklet for a grounded agent_note", () => {
+  it("renders a grounded agent_note unlabelled with its citation chicklet", () => {
     const messages = [
       groundedMessage({
         kind: "agent_note",
@@ -209,10 +209,8 @@ describe("AssistantChatTurn agent note", () => {
       />
     ));
 
-    const badge = screen.getByTestId("agent-note-badge");
-    expect(badge).toBeTruthy();
-    expect(badge.getAttribute("aria-label")).toBe("Note");
-    expect(badge.textContent).toBe("Note");
+    const article = screen.getByTestId("transcript-article-assistant");
+    expect(article.getAttribute("data-kind")).toBe("agent_note");
     expect(screen.getByTestId("citation-evidence-chicklet")).toBeTruthy();
     expect(screen.queryByTestId("workflow-download-report")).toBeNull();
   });
@@ -232,12 +230,14 @@ describe("AssistantChatTurn agent note", () => {
       />
     ));
 
-    expect(screen.getByTestId("agent-note-badge").textContent).toBe("Note");
+    expect(
+      screen.getByTestId("transcript-article-assistant").getAttribute("data-kind"),
+    ).toBe("agent_note");
     expect(screen.queryByTestId("citation-evidence-chicklet")).toBeNull();
     expect(screen.getByTestId("transcript-article-assistant").textContent).not.toMatch(/grounded/i);
   });
 
-  it("leaves a normal assistant row without the Note badge", () => {
+  it("leaves a normal assistant row unmarked as a note", () => {
     const messages = [groundedMessage()];
 
     render(() => (
@@ -247,8 +247,9 @@ describe("AssistantChatTurn agent note", () => {
       />
     ));
 
-    expect(screen.queryByTestId("agent-note-badge")).toBeNull();
-    expect(screen.getByTestId("transcript-article-assistant")).toBeTruthy();
+    expect(
+      screen.getByTestId("transcript-article-assistant").hasAttribute("data-kind"),
+    ).toBe(false);
   });
 });
 

@@ -22,7 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/extensionstate"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/harnessfixture"
@@ -82,7 +81,7 @@ func (b *serveBuilder) wireServer() error {
 		Events: b.events.Hub, EventPublisher: b.events.Publisher, Presence: b.events.Presence, HostIdentity: b.identity.Host,
 		HostResources: b.settings.HostResources, HostPower: b.settings.Power, Pricing: b.providers.Pricing, Preview: b.interactions.Preview,
 		PreflightEnv: readiness.New(b.providers.Service, b.decisions.Decider, b.processes.Path).Environment()}, Storage: api.StorageDependencies{
-		DataDir: b.storage.Directory, StorePath: b.storage.Path, WorkerBranchRoot: b.delegations.BranchRoot, WorkerSeedRoot: b.delegations.SeedRoot,
+		DataDir: b.storage.Directory, StorePath: b.storage.Path, WorkerBranchRoot: b.delegations.BranchRoot,
 		ModuleRoot: b.catalog.ModuleRoot, StoreRevision: b.storage.Revision, MinDenVersion: os.Getenv("LYCAON_MIN_DEN_VERSION")}, Approvals: api.ApprovalsDependencies{
 		SecretIgnores: b.security.Ignores, ManagedSecrets: b.security.Capabilities, SecretSpans: b.security.Spans,
 		Checkpoints: b.sessions.Checkpoints, ApprovalGate: b.execution.Host.Authority.ApprovalGate(),
@@ -208,6 +207,15 @@ func registerServerHooks(b *serveBuilder, extensionJournal *extensionstate.SQLJo
 	}); err != nil {
 		return err
 	}
+	if b.delegations != nil {
+		b.server.Server.Admin.Project.Sandboxes.SettleWorker = b.delegations.SandboxSettler()
+		if err := b.registerRecovery(bootrecovery.Entry{
+			Name: "worker-views", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
+			Run: b.delegations.RecoverWorkerViews,
+		}); err != nil {
+			return err
+		}
+	}
 	// Serve recovery begins after runtime gates are sealed.
 	if err := b.registerRecovery(bootrecovery.Entry{
 		Name: "prompt-submissions", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseServe,
@@ -254,27 +262,6 @@ func registerServerHooks(b *serveBuilder, extensionJournal *extensionstate.SQLJo
 	if err := b.server.Server.Admin.Extensions.Contributions.WarmContributionFrame(b.startup.ctx); err != nil {
 		b.startup.logger.Warn("contribution frame warm failed", "err", err)
 	}
-	return nil
-}
-
-// wireFileBriefings applies the briefing retention policy and builds the service.
-func wireFileBriefings(b *serveBuilder, deps *api.Dependencies) error {
-	fileBriefingConfig, err := filebriefing.LoadConfig()
-	if err != nil {
-		return fmt.Errorf("file briefing config: %w", err)
-	}
-	fileBriefingStore := filebriefing.NewSQL(b.storage.Database)
-	if b.settings.Service != nil && b.settings.Service.FileSummaries != nil && !b.settings.Service.FileSummaries.Enabled() {
-		if err := fileBriefingStore.Clear(b.startup.ctx); err != nil {
-			return fmt.Errorf("clear disabled file briefings: %w", err)
-		}
-	} else if err := fileBriefingStore.MaintainDevice(b.startup.ctx, fileBriefingConfig.Retention); err != nil {
-		return fmt.Errorf("maintain file briefings: %w", err)
-	}
-	deps.Source.FileBriefings = filebriefing.NewService(b.startup.ctx, filebriefing.Dependencies{
-		Store: fileBriefingStore, Config: fileBriefingConfig, Generator: filebriefing.NewModelGenerator(b.providers.Service, b.sessions.Manager.Coordinator.Model.Cost),
-		Events: b.events.Hub, Settings: b.settings.Service.FileSummaries, Logger: b.startup.logger,
-	})
 	return nil
 }
 

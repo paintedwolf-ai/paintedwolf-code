@@ -2,6 +2,7 @@ package inject
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -73,6 +74,12 @@ func commandJobsVars(jobs []bgprocess.JobSnapshot, held []heldcall.Running, now 
 	}
 }
 
+// commandLedgerLine keeps each ledger row on one line: a multiline statement's
+// lines are joined by single spaces, then fit within the row bound.
 func commandLedgerLine(command string) string {
-	return runeclamp.Clamp(strings.ToValidUTF8(command, "�"), maxCommandLedgerLineRunes)
+	lines := strings.FieldsFunc(strings.ToValidUTF8(command, "�"), func(r rune) bool { return r == '\n' || r == '\r' })
+	for i := range lines {
+		lines[i] = strings.TrimSpace(lines[i])
+	}
+	return runeclamp.Fit(strings.Join(slices.DeleteFunc(lines, func(line string) bool { return line == "" }), " "), maxCommandLedgerLineRunes)
 }

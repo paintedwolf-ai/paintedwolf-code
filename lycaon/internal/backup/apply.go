@@ -145,6 +145,20 @@ func (r *pendingRestore) installFiles(ctx context.Context, configDir string) err
 	return nil
 }
 
+func makeTreeWritable(root string) {
+	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil //nolint:nilerr // Making a tree writable is best effort; an entry it cannot read stays as it is.
+		}
+		if d.IsDir() {
+			_ = os.Chmod(p, 0o700) //nolint:gosec // A directory needs its search bit; the tree is the engine's own restore staging.
+		} else if d.Type().IsRegular() {
+			_ = os.Chmod(p, 0o600) //nolint:gosec // The tree is the engine's own restore staging, under its owner-only root.
+		}
+		return nil
+	})
+}
+
 func (r *pendingRestore) deleteFiles(configDir string) error {
 	for index, rel := range r.marker.DeleteRelPaths {
 		if _, done := r.appliedSet[rel]; done {
@@ -153,6 +167,10 @@ func (r *pendingRestore) deleteFiles(configDir string) error {
 		dest, err := joinUnder(configDir, rel)
 		if err != nil {
 			return fmt.Errorf("resolve delete %s: %w", rel, err)
+		}
+		_ = os.Chmod(filepath.Dir(dest), 0o700) //nolint:gosec // A directory needs its search bit.
+		if info, sErr := os.Lstat(dest); sErr == nil && info.Mode().IsRegular() {
+			_ = os.Chmod(dest, 0o600)
 		}
 		removeErr := os.Remove(dest)
 		if removeErr != nil && !os.IsNotExist(removeErr) {
@@ -188,11 +206,13 @@ func (r *pendingRestore) reconcileDirectory(liveDir, relDir string) error {
 	if err != nil {
 		return err
 	}
+	_ = os.Chmod(liveDir, 0o700) //nolint:gosec // A directory needs its search bit.
 	removed := false
 	for _, entry := range entries {
 		rel := relDir + "/" + entry.Name()
 		path := filepath.Join(liveDir, entry.Name())
 		if !r.keepsDirectoryEntry(rel) {
+			makeTreeWritable(path)
 			if err := os.RemoveAll(path); err != nil {
 				return fmt.Errorf("clear %s: %w", rel, err)
 			}

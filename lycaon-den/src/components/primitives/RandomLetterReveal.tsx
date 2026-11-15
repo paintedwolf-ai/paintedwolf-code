@@ -43,6 +43,8 @@ type Props = {
   onceKey?: string;
   class?: string;
   "data-testid"?: string;
+  /** Runs once every character shows, at once when motion is skipped. */
+  onRevealed?: () => void;
 };
 
 /** Animates characters while exposing the complete text. */
@@ -83,6 +85,7 @@ export function RandomLetterReveal(props: Props) {
       showAll(els);
       settledText = text;
       if (onceKey) markLetterRevealOnceKey(onceKey);
+      props.onRevealed?.();
       return;
     }
 
@@ -107,6 +110,7 @@ export function RandomLetterReveal(props: Props) {
         );
       } else {
         timer = undefined;
+        props.onRevealed?.();
       }
     };
     timer = setTimeout(

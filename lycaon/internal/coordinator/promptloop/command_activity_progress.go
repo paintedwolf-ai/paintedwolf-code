@@ -12,6 +12,9 @@ func commandActivityEdge(previous, next *api.ToolProgress) bool {
 	}
 	before := previous.CommandProgram
 	after := next.CommandProgram
+	if before.ID != after.ID || before.State != after.State {
+		return true
+	}
 	type edge struct {
 		state           string
 		failed, waiting int

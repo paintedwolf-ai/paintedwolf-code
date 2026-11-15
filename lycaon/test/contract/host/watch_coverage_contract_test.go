@@ -17,11 +17,20 @@ import (
 // Epoch equality is authoritative only within matching watch coverage.
 // Exempt comparisons do not use equality as a freshness signal.
 var epochTrustExemptions = map[string]string{
-	"lycaon/internal/editordoc/service.go:projectionVector":                 "compares retained CRDT replica identity to select a differential update; source freshness is established by the observed document open",
-	"lycaon/internal/editordoc/rewind_semantic.go:semanticRewindUndos":      "compares retained CRDT identity epochs",
-	"lycaon/internal/sourceledger/recorded_text_edits.go:recordedTextEdits": "compares CRDT identity epochs on immutable retained versions, not filesystem observation freshness",
-	"lycaon/internal/upgradefixture/editor_history.go:verifyEditorCore":     "verifies retained CRDT replica head epoch in upgrade rehearsal fixture against recorded evidence",
-	"lycaon/internal/repochange/notify.go:EpochCurrent":                     "the primitive itself; coverage is a separate question its callers ask",
+	"lycaon/internal/app/sessions/credential_index.go:changed":                           "checks contiguous repochange.Event sequence to fall back to a full scan on any gap; EnsureProject consults repochange.Coverage",
+	"lycaon/internal/briefingstore/store.go:checkEpoch":                                  "compares SQLite briefing cache_epoch invalidation counter, not filesystem watch state",
+	"lycaon/internal/briefingstore/targets.go:Resolve":                                   "compares SQLite briefing cache_epoch invalidation counter, not filesystem watch state",
+	"lycaon/internal/browser/timeline_record.go:sampleRegions":                           "compares in-page DOM geometry counter, not filesystem watch state",
+	"lycaon/internal/editordoc/agent_presence.go:anchorSpans":                            "compares CRDT document replica identity epoch, not filesystem watch state",
+	"lycaon/internal/editordoc/replica_commit.go:SubmitReplica":                          "compares CRDT replica identity epoch, not filesystem watch state",
+	"lycaon/internal/editordoc/replica_commit.go:acceptReplica":                          "compares CRDT replica identity epoch, not filesystem watch state",
+	"lycaon/internal/editordoc/service.go:projectionVector":                              "compares retained CRDT replica identity to select a differential update; source freshness is established by the observed document open",
+	"lycaon/internal/editordoc/rewind_semantic.go:semanticRewindUndos":                   "compares retained CRDT identity epochs",
+	"lycaon/internal/sourceledger/publication_authorship.go:recordPublicationAuthorship": "compares CRDT identity epochs on retained document versions, not filesystem observation freshness",
+	"lycaon/internal/sourceledger/recorded_text_authors.go:recordedTextAuthors":          "compares CRDT identity epochs on immutable retained versions, not filesystem observation freshness",
+	"lycaon/internal/sourceledger/recorded_text_edits.go:recordedTextEdits":              "compares CRDT identity epochs on immutable retained versions, not filesystem observation freshness",
+	"lycaon/internal/upgradefixture/editor_history.go:verifyEditorCore":                  "verifies retained CRDT replica head epoch in upgrade rehearsal fixture against recorded evidence",
+	"lycaon/internal/repochange/notify.go:EpochCurrent":                                  "the primitive itself; coverage is a separate question its callers ask",
 
 	"lycaon/internal/sourcecatalog/refresh.go:buildRoot": "the comparison rejects a catalog build whose tree moved under it; it reuses nothing, " +
 		"and any consumer of the stamped generation is the one that must trust it",

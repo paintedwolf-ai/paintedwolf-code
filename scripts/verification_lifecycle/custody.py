@@ -28,19 +28,46 @@ def _darwin_lease_holders(path):
     return {int(buf[index]) for index in range(count) if buf[index] > 0}
 
 
+def _descriptor_tables(process):
+    """A leader that exited shows no descriptors while its threads still hold them."""
+    yield process / "fd"
+    try:
+        tasks = list((process / "task").iterdir())
+    except OSError:
+        return
+    for task in tasks:
+        if task.name != process.name:
+            yield task / "fd"
+
+
+def _process_holds(process, path, expected):
+    """Compare link text before any stat: a stat through a held file on a wedged mount never returns."""
+    names = {path, path + " (deleted)"}
+    for table in _descriptor_tables(process):
+        try:
+            descriptors = list(table.iterdir())
+        except OSError:
+            continue
+        for descriptor in descriptors:
+            try:
+                if os.readlink(descriptor) in names and descriptor.stat().st_ino == expected[1] \
+                        and descriptor.stat().st_dev == expected[0]:
+                    return True
+            except OSError:
+                continue
+        if descriptors:
+            # Threads share one table unless they unshared it, which nothing here does.
+            return False
+    return False
+
+
 def lease_holders(path):
     """Find holders by device/inode, including descendants that changed sessions."""
     target = Path(path).stat()
     if Path("/proc/self/fd").is_dir():
-        found = set()
-        for descriptor in Path("/proc").glob("[0-9]*/fd/*"):
-            try:
-                opened = descriptor.stat()
-            except OSError:
-                continue
-            if (opened.st_dev, opened.st_ino) == (target.st_dev, target.st_ino):
-                found.add(int(descriptor.parts[2]))
-        return found
+        expected, resolved = (target.st_dev, target.st_ino), os.path.realpath(path)
+        return {int(process.name) for process in Path("/proc").glob("[0-9]*")
+                if _process_holds(process, resolved, expected)}
     try:
         result = subprocess.run([shutil.which("lsof") or "/usr/sbin/lsof", "-t", "-w", "--", str(path)],
                                 capture_output=True, text=True, timeout=30)
@@ -93,18 +120,7 @@ def birth(pid):
 def holds(pid, path, expected):
     """Recheck this process only; a global holder scan is not needed per signal."""
     if Path("/proc/self/fd").is_dir():
-        try:
-            descriptors = list(Path(f"/proc/{pid}/fd").iterdir())
-        except FileNotFoundError:
-            return False
-        for descriptor in descriptors:
-            try:
-                value = descriptor.stat()
-            except FileNotFoundError:
-                continue
-            if (value.st_dev, value.st_ino) == expected:
-                return True
-        return False
+        return _process_holds(Path(f"/proc/{pid}"), os.path.realpath(path), expected)
     value = Path(path).stat()
     if (value.st_dev, value.st_ino) != expected:
         raise OSError("Lease identity changed")

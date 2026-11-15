@@ -1,3 +1,4 @@
+import { useWalkStepBriefing } from "../walk/walk-briefing.tsx";
 import { loadSourceComparison } from "../source/source-comparison-cache.ts";
 import {
   Show,
@@ -120,6 +121,7 @@ export function ReviewLens(props: Props) {
     void walkTick();
     return walkState(props.projectId);
   });
+  const walkBriefing = useWalkStepBriefing(() => props.projectId, () => walkStepAt(walk().walk, walk().at)?.key, () => walk().walk.briefingTargets);
 
   onCleanup(
     subscribeWalk((id) => {
@@ -561,6 +563,7 @@ export function ReviewLens(props: Props) {
           ready={walk().status === "ready"}
           comparison={walk().comparison}
           walkSteps={walk().walk.steps}
+          briefing={walkBriefing}
         />
       </Show>
     </div>

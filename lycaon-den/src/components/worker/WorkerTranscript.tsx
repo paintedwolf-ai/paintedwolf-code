@@ -33,6 +33,7 @@ import {
   WorkerTranscriptSection,
   type WorkerSectionKey,
 } from "./WorkerTranscriptSection.tsx";
+import { WorkerSummarySection } from "./WorkerSummarySection.tsx";
 import { WorkerWorkingIndicator } from "./WorkerWorkingIndicator.tsx";
 import {
   pinDrawerTranscriptSection,
@@ -63,6 +64,7 @@ type WorkerTranscriptPaneProps = {
   evidenceHighlight: Accessor<boolean>;
   activityPreview: Accessor<string | null>;
   selectSection: (key: WorkerSectionKey) => void;
+  setSummaryShown: (shown: boolean) => void;
 };
 
 function WorkerTranscriptPane(props: WorkerTranscriptPaneProps) {
@@ -113,6 +115,7 @@ function WorkerTranscriptPane(props: WorkerTranscriptPaneProps) {
         props.setPaneEl(el);
       }}
     >
+      <WorkerSummarySection worker={props.worker} onSelect={() => props.selectSection("summary")} onPresence={props.setSummaryShown} />
       <Show when={props.dispatchPrompt()}>
         <WorkerTranscriptSection
           title="Task"
@@ -273,8 +276,10 @@ export function WorkerTranscript(props: Props) {
     return Boolean(buildWorkerEvidenceFallbackView(meta, row, row.id));
   });
 
+  const [summaryShown, setSummaryShown] = createSignal(false);
   const sectionOrder = createMemo((): WorkerSectionKey[] => {
     const keys: WorkerSectionKey[] = [];
+    if (summaryShown()) keys.push("summary");
     if (dispatchPrompt()) keys.push("task");
     keys.push("activity");
     keys.push("coordination");
@@ -372,6 +377,7 @@ export function WorkerTranscript(props: Props) {
               summaryMeta={summaryMeta}
               evidenceHighlight={evidenceHighlight}
               selectSection={selectSection}
+              setSummaryShown={setSummaryShown}
             />
           </ChatDestinationScope>
         </Show>

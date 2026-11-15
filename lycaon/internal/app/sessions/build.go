@@ -71,6 +71,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	}
 	mgr.ToolPolicy.SetMintedCredentialSource(deps.Security.Detections.MintedCredentialSource)
 	invocations := invocation.NewSQLRecorder(deps.Storage.Database)
+	invocations.SetRoots(mgr.Workspace.DisplayRoots)
 	mgr.SetInvocationRecorder(invocations)
 
 	if deps.RegisterRecovery != nil {

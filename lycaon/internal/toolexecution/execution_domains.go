@@ -93,8 +93,6 @@ type Network struct {
 	hostResourceSource HostResourceConnectionSource
 	execAlternates     func(name string) []string
 	hostLedger         SessionHostLedger
-	egressGather       *egressGathers
-	egressGatherOnce   sync.Once
 	destinations       *destconfig.Registry
 	registries         *pkgregistry.Catalog
 }

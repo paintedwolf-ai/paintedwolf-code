@@ -12,6 +12,9 @@ from verification_health import ownership, process_snapshot
 import verification_lifecycle.custody as custody
 from verification_state import read_state, write_json
 
+if os.name != "nt":
+    from verification_lifecycle import run_lease
+
 USAGE = 'usage: ./task test:cancel -- <ticket> --reason "<why>" [--force]'
 ADVERSE_HEALTH = {"supervision_lost", "supervisor_stopped", "suspected_stall"}
 MAX_RECORDS = 64
@@ -132,6 +135,7 @@ def reclaim(queue, ticket):
     """
     path = queue.root / (ticket + ".lease")
     stopped = {}
+    killed = set()
     for signum in (signal.SIGTERM, signal.SIGKILL):
         with queue.locked():
             try:
@@ -146,8 +150,14 @@ def reclaim(queue, ticket):
                     continue
                 stopped[pid] = {"pid": pid, "command": names.get(pid, stopped.get(pid, {}).get("command")),
                                 "signal": signal.Signals(signum).name}
+                if signum == signal.SIGKILL:
+                    killed.add((pid, custody.birth(pid)))
         if await_release(queue, ticket, RECLAIM_SECONDS):
             break
+    else:
+        # A killed holder may still wait on a mount of its own run.
+        run_lease.collect_runs(frozenset(killed))
+        await_release(queue, ticket, RECLAIM_SECONDS)
     return [stopped[pid] for pid in sorted(stopped)]
 
 

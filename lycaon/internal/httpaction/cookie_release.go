@@ -152,9 +152,7 @@ func managedJarCookieDelivery(
 			return err
 		}
 		target := hop.URL
-		hopSpec := spec
-		hopSpec.target = target
-		hopSpec.hostHeader = hop.HostHeader
+		hopSpec := spec.forHop(hop)
 		hopIssuer := cookieHopIssuer(hopSpec)
 		destination, label := requestDestination(hopSpec)
 		for {
@@ -264,9 +262,7 @@ func frontendJarCookieDelivery(
 	store.SetDelivery("", func(cookie httpcookies.Cookie) bool { return current[cookie] })
 	beforeHop := func(hopCtx context.Context, hop outboundhttp.HopRequest) error {
 		target := hop.URL
-		hopSpec := spec
-		hopSpec.target = target
-		hopSpec.hostHeader = hop.HostHeader
+		hopSpec := spec.forHop(hop)
 		hopIssuer := cookieHopIssuer(hopSpec)
 		destination, label := requestDestination(hopSpec)
 		selected := store.Selected(target)
@@ -353,9 +349,6 @@ func frontendJarCookieDelivery(
 		}
 		// Withhold/redaction on a cookie jar withholds only the denied cookie bytes
 		// so the HTTP hop can proceed credential-free.
-		if resolution.Decision.Blocks() {
-			tctx.Effects.Secrets.Withhold(hopCtx)
-		}
 		allowed := resolution.Decision == secretmatch.SendUnchanged
 		for _, cookie := range matchedCookies {
 			if reviewed[cookie] == nil {
