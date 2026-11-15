@@ -755,7 +755,8 @@ func TestInstructWorkerComposesAssignmentPrompt(t *testing.T) {
 
 func TestLookupByResultResolvesSettledRoundJob(t *testing.T) {
 	f := newWorkerToolsFixture(t)
-	resHandle := f.deliver(t, "job-1")
+	f.deliver(t, "job-1")
+	resHandle := "result-job-1"
 
 	var nilCore *sqlQueueCore
 	if got, ok := nilCore.LookupByResult(t.Context(), resHandle); ok || got != nil {
