@@ -73,6 +73,7 @@ func (s *Service) FactsFor(ctx context.Context, state LaneState, checkpoints Che
 		return Facts{}, err
 	}
 	switch f.LastChange {
+	case ChangeNone, ChangeShelved:
 	case ChangeLanded:
 		f.RefreshDone = hasLane && prep.SourceResultID == lastRound.ResultID
 	case ChangeRejected:
