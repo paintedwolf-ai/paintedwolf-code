@@ -752,3 +752,20 @@ func TestInstructWorkerComposesAssignmentPrompt(t *testing.T) {
 		t.Fatalf("composed job prompt = %+v", job)
 	}
 }
+
+func TestLookupByResultResolvesSettledRoundJob(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	resHandle := f.deliver(t, "job-1")
+
+	var nilCore *sqlQueueCore
+	if got, ok := nilCore.LookupByResult(t.Context(), resHandle); ok || got != nil {
+		t.Fatalf("nil core LookupByResult = (%+v, %v), want (nil, false)", got, ok)
+	}
+	if got, ok := f.queue.LookupByResult(t.Context(), "res-missing"); ok || got != nil {
+		t.Fatalf("missing handle LookupByResult = (%+v, %v), want (nil, false)", got, ok)
+	}
+	got, ok := f.queue.LookupByResult(t.Context(), " "+resHandle+" ")
+	if !ok || got == nil || got.ID != "job-1" {
+		t.Fatalf("LookupByResult(%q) = (%+v, %v), want job-1", resHandle, got, ok)
+	}
+}

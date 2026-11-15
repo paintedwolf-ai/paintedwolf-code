@@ -243,4 +243,38 @@ func TestPendingCoordinatorMessageWorkersOrdersByOldestUnreadAndBoundsBytes(t *t
 	if len(pendingAfter) != 1 || pendingAfter[0].ID != wA.WorkerID {
 		t.Fatalf("pending after = %+v, want [%s]", pendingAfter, wA.WorkerID)
 	}
+
+	unreadA, err := f.store.UnreadCoordinatorCount(t.Context(), f.coord, wA.WorkerID)
+	testutil.FailErr(t, "unread alpha", err)
+	if unreadA != 1 {
+		t.Fatalf("unread alpha = %d, want 1", unreadA)
+	}
+	unreadB, err := f.store.UnreadCoordinatorCount(t.Context(), f.coord, wB.WorkerID)
+	testutil.FailErr(t, "unread beta", err)
+	if unreadB != 0 {
+		t.Fatalf("unread beta = %d, want 0", unreadB)
+	}
+	if _, err := f.store.UnreadCoordinatorCount(t.Context(), workerrecords.Actor{}, wA.WorkerID); err == nil {
+		t.Fatal("expected actor check error on UnreadCoordinatorCount")
+	}
+	if _, err := f.store.UnreadCoordinatorCount(t.Context(), f.coord, "wkr-missing"); err == nil {
+		t.Fatal("expected unknown worker error on UnreadCoordinatorCount")
+	}
+
+	deliveredB, err := f.store.DeliveredThrough(t.Context(), f.coord, wB.WorkerID, f.coord.SessionID)
+	testutil.FailErr(t, "delivered through beta", err)
+	if deliveredB != 2 {
+		t.Fatalf("delivered through beta = %d, want 2", deliveredB)
+	}
+	emptyRecipient, err := f.store.DeliveredThrough(t.Context(), f.coord, wB.WorkerID, " ")
+	testutil.FailErr(t, "delivered through empty recipient", err)
+	if emptyRecipient != 0 {
+		t.Fatalf("delivered through empty recipient = %d, want 0", emptyRecipient)
+	}
+	if _, err := f.store.DeliveredThrough(t.Context(), workerrecords.Actor{}, wB.WorkerID, f.coord.SessionID); err == nil {
+		t.Fatal("expected actor check error on DeliveredThrough")
+	}
+	if _, err := f.store.DeliveredThrough(t.Context(), f.coord, "wkr-missing", f.coord.SessionID); err == nil {
+		t.Fatal("expected unknown worker error on DeliveredThrough")
+	}
 }
