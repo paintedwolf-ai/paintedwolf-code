@@ -1642,25 +1642,6 @@ func (q *Queries) SettleWorkerRoundByJob(ctx context.Context, arg SettleWorkerRo
 	return result.RowsAffected()
 }
 
-const settleWorkerRoundByJob = `-- name: SettleWorkerRoundByJob :execrows
-UPDATE worker_rounds SET settled_at = ?1, checkpoint_id = ?2
-WHERE job_id = ?3 AND settled_at IS NULL
-`
-
-type SettleWorkerRoundByJobParams struct {
-	SettledAt    sql.NullString `json:"settled_at"`
-	CheckpointID string         `json:"checkpoint_id"`
-	JobID        string         `json:"job_id"`
-}
-
-func (q *Queries) SettleWorkerRoundByJob(ctx context.Context, arg SettleWorkerRoundByJobParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, settleWorkerRoundByJob, arg.SettledAt, arg.CheckpointID, arg.JobID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const updateWorkerChildSessionAgent = `-- name: UpdateWorkerChildSessionAgent :execrows
 UPDATE sessions SET agent_type = ?1, updated_at = ?2
 WHERE id = ?3 AND parent_session_id = ?4

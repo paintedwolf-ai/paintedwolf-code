@@ -51,6 +51,7 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
@@ -209,11 +210,13 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 	agents := orchestration.NewMemoryAgentRegistry()
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
 	if err := worker.RegisterTaskTool(rt.Registry, worker.TaskToolDeps{
-		Queue:   worker.NewInMemoryQueue(2),
-		Agents:  agents,
-		Workers: worker.DefaultWorkersConfig(),
+		Queue:         worker.NewInMemoryQueue(2),
+		Agents:        agents,
+		Workers:       worker.DefaultWorkersConfig(),
+		WorkerRecords: workerrecords.New(sqlDB),
+		Reviews:       &workerops.Service{},
 	}); err != nil {
-		t.Fatal(err)
+		contractcheck.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
 	if err := worker.RegisterWorkerTools(rt.Registry, worker.WorkerToolDeps{
 		Ops:     &workerops.Service{},

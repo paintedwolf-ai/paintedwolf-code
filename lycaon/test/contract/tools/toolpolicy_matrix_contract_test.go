@@ -24,6 +24,8 @@ import (
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
@@ -200,7 +202,13 @@ func wireToolpolicyMatrixContract(
 	if err := delegation.RegisterDelegationTools(reg, delegMgr); err != nil {
 		contractcheck.FailErr(t, "delegation.RegisterDelegationTools failed", err)
 	}
-	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{Queue: queue, Agents: agents, Workers: worker.DefaultWorkersConfig()}); err != nil {
+	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
+		Queue:         queue,
+		Agents:        agents,
+		Workers:       worker.DefaultWorkersConfig(),
+		WorkerRecords: workerrecords.New(sqlDB),
+		Reviews:       &workerops.Service{},
+	}); err != nil {
 		contractcheck.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
 	policy, err := workflowcomposition.LoadComposePolicy()
