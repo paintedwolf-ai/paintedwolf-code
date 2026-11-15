@@ -12,9 +12,11 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerresults"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -230,5 +232,59 @@ func TestRunStopServiceHoldPatchesCanonicalWorkerRow(t *testing.T) {
 	got, ok := queue.Get(jobID)
 	if !ok || got.Status != api.WorkerStatusHeld {
 		t.Fatalf("queue status = %+v want held", got)
+	}
+}
+
+type stubDelegationRunStopper struct {
+	canceled []string
+	err      error
+}
+
+func (s *stubDelegationRunStopper) CancelActiveByWorkflowRunID(_ context.Context, runID string) error {
+	s.canceled = append(s.canceled, runID)
+	return s.err
+}
+
+func TestRunStopServiceWithdrawsUnstartedRunWorkersAndKeepsStarted(t *testing.T) {
+	sqlDB := testdbfixture.Open(t, "run_stop.db")
+	testdbseed.InsertWorkflowRun(t, sqlDB, "run-stop-1", "coord-1", testdbseed.DefaultProjectID)
+	records := workerrecords.New(sqlDB)
+	actor := workerrecords.Actor{SessionID: "coord-1", Role: workerrecords.RoleCoordinator, PrincipalID: "coord-1"}
+
+	unstarted, err := records.CreateWorker(t.Context(), actor, workerrecords.Op{ID: "op-unstarted"}, workerrecords.WorkerSpec{
+		Name: "planned-idle", AgentType: "implementer", ScopeMode: workerrecords.ScopeWrite, Brief: "todo", WorkflowRunID: "run-stop-1", WorkflowWorkID: "leg-idle",
+	})
+	testutil.FailErr(t, "create unstarted worker", err)
+
+	started, err := records.CreateWorker(t.Context(), actor, workerrecords.Op{ID: "op-started"}, workerrecords.WorkerSpec{
+		Name: "planned-busy", AgentType: "implementer", ScopeMode: workerrecords.ScopeWrite, Brief: "running", WorkflowRunID: "run-stop-1", WorkflowWorkID: "leg-busy",
+	})
+	testutil.FailErr(t, "create started worker", err)
+	_, err = sqlDB.ExecContext(t.Context(), `
+		INSERT INTO worker_jobs (id, project_id, parent_session_id, agent_type, status, prompt, brief, created_at)
+		VALUES ('job-busy-1', ?, 'coord-1', 'implementer', 'running', 'p', 'b', '2026-01-01T00:00:00Z')
+	`, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "insert started job", err)
+	_, err = records.AdmitRound(t.Context(), actor, workerrecords.Op{ID: "op-round"}, started.WorkerID, workerrecords.RoundSpec{
+		JobID: "job-busy-1", ExecutionTarget: "local",
+	})
+	testutil.FailErr(t, "admit round", err)
+
+	delegations := &stubDelegationRunStopper{}
+	svc := &RunStopService{Delegations: delegations, Records: records}
+	testutil.FailErr(t, "empty run id", svc.CancelDelegationsByRunID(t.Context(), " "))
+	testutil.FailErr(t, "cancel delegations by run", svc.CancelDelegationsByRunID(t.Context(), "run-stop-1"))
+	if len(delegations.canceled) != 1 || delegations.canceled[0] != "run-stop-1" {
+		t.Fatalf("delegations canceled = %v", delegations.canceled)
+	}
+	wIdle, err := records.Worker(t.Context(), actor, unstarted.WorkerID)
+	testutil.FailErr(t, "load idle worker", err)
+	if wIdle.ClosedReason != "withdrawn" || wIdle.ClosedAt == "" {
+		t.Fatalf("unstarted worker not withdrawn: %+v", wIdle)
+	}
+	wBusy, err := records.Worker(t.Context(), actor, started.WorkerID)
+	testutil.FailErr(t, "load busy worker", err)
+	if wBusy.ClosedAt != "" {
+		t.Fatalf("started worker closed during withdraw: %+v", wBusy)
 	}
 }

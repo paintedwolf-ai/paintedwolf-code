@@ -5,13 +5,18 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/profiles"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -305,5 +310,68 @@ func TestWorkerContextRejectsAnotherParentsDelegation(t *testing.T) {
 	c := &delegation.CompositeWorkerContext{Delegation: &delegation.WorkerContextLoader{Store: store, Tasks: contextTaskLookup{job}}}
 	if _, err = c.BuildWorkerPromptContext(t.Context(), sess.ID, sess); err == nil {
 		t.Fatal("another parent's delegation was accepted")
+	}
+}
+
+type phaseResolverStub struct{ phase string }
+
+func (p phaseResolverStub) PhaseForRun(context.Context, string) (string, error) {
+	return p.phase, nil
+}
+
+func TestCompositeWorkerContextReadsWorkerRecordAndWorkflowRun(t *testing.T) {
+	sqlDB := testdbfixture.Open(t, "worker_context.db")
+	testdbseed.InsertWorkflowRun(t, sqlDB, "run-1", "parent-1", testdbseed.DefaultProjectID)
+	now := db.FormatTime(time.Now().UTC())
+	_, err := sqlDB.ExecContext(t.Context(), `
+		INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at)
+		VALUES ('child-1', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'parent-1', ?, ?, ?)
+	`, testdbseed.DefaultProjectID, now, now, now)
+	testutil.FailErr(t, "insert child session", err)
+
+	records := workerrecords.New(sqlDB)
+	coord := workerrecords.Actor{SessionID: "parent-1", Role: workerrecords.RoleCoordinator, PrincipalID: "parent-1"}
+	_, err = records.CreateWorker(t.Context(), coord, workerrecords.Op{ID: "op-create"}, workerrecords.WorkerSpec{
+		Name:           "api-builder",
+		AgentType:      "implementer",
+		ScopeMode:      workerrecords.ScopeWrite,
+		Brief:          "build api",
+		ChildSessionID: "child-1",
+		WorkflowRunID:  "run-1",
+		Files:          []string{"internal/api.go"},
+		Criteria:       []string{"file_modified: internal/api.go"},
+	})
+	testutil.FailErr(t, "create worker record", err)
+
+	var seenPaths []string
+	loader := &delegation.WorkerContextLoader{
+		Store:    delegation.NewMemoryStore(),
+		Tasks:    contextTaskLookup{task: &api.WorkerTask{ID: "job-1", ChildSessionID: "child-1", ParentSessionID: "parent-1", AgentType: "implementer"}},
+		Runs:     phaseResolverStub{phase: "execute"},
+		Topology: func(workflowID string) string { return "parallel" },
+		AgentsMDChain: func(_ context.Context, _, _ string, paths []string) (api.Message, error) {
+			seenPaths = append([]string(nil), paths...)
+			return api.Message{}, nil
+		},
+	}
+	c := &delegation.CompositeWorkerContext{
+		Delegation:       loader,
+		Records:          records,
+		WorkflowIDForRun: func(_ context.Context, runID string) string { return "implement" },
+		ReviewSubject: func(_ context.Context, _ string) (string, string, bool, error) {
+			return "api-builder", "res-1", true, nil
+		},
+	}
+	sess := &api.Session{ID: "child-1", ParentSessionID: "parent-1", AgentType: "implementer"}
+	got, err := c.BuildWorkerPromptContext(t.Context(), sess.ID, sess)
+	testutil.FailErr(t, "build worker prompt context", err)
+	if got.LegID != "api-builder" || !got.RequiresIsolation || got.PhaseID != "execute" || got.WorkflowID != "implement" || got.TopologyPattern != "parallel" {
+		t.Fatalf("unexpected worker context: %+v", got)
+	}
+	if len(got.CompletionCriteria) != 1 || got.CompletionCriteria[0] != "file_modified: internal/api.go" {
+		t.Fatalf("criteria = %v", got.CompletionCriteria)
+	}
+	if !reflect.DeepEqual(seenPaths, []string{"internal/api.go"}) || got.ReviewHandle != "res-1" || got.ReviewWorker != "api-builder" {
+		t.Fatalf("paths=%v review=(%q,%q)", seenPaths, got.ReviewWorker, got.ReviewHandle)
 	}
 }
