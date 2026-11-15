@@ -92,11 +92,7 @@ func FormatNamedWorkerLine(w api.BoardWorker, includeDetail bool) string {
 	return strings.Join(parts, " · ")
 }
 
-// workerStateLines keeps completed execution distinct from pending integration.
-func workerStateLines(snapshot api.BoardSnapshot, now time.Time) []string {
-	return workerStateLinesWithDetail(snapshot, now, false)
-}
-
+// workerStateLinesWithDetail keeps completed execution distinct from pending integration.
 func workerStateLinesWithDetail(snapshot api.BoardSnapshot, now time.Time, includeDetail bool) []string {
 	tasks := WorkerTasksFromSnapshot(snapshot)
 	named := NamedWorkersFromSnapshot(snapshot)

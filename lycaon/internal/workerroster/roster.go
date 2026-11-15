@@ -109,7 +109,7 @@ func (s Source) Board(ctx context.Context, sessionID string) ([]api.BoardWorker,
 		w := api.BoardWorker{
 			Name: row.Name, AgentType: row.Agent, ScopeMode: row.ScopeMode,
 			WorkspaceState: row.WorkspaceState,
-			State: api.WorkerState(row.State), Reason: api.WorkerStateReason(row.Reason),
+			State:          api.WorkerState(row.State), Reason: api.WorkerStateReason(row.Reason),
 			StateLabel: row.StateLabel, WorkspaceLabel: row.WorkspaceLabel, UpdatedAt: row.UpdatedAt,
 			About: row.About, Question: row.Question,
 			ReadPaths: row.Read.Shown, ReadOmitted: row.Read.Omitted,
