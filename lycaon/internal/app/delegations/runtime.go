@@ -12,8 +12,11 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/repoinfo"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workerrecords"
+	"github.com/lycaon/lycaon/internal/workertopology"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -33,6 +36,8 @@ type Runtime struct {
 	ContextLoader   *delegation.WorkerContextLoader
 	BranchRoot      string
 	Records         *workerrecords.Store
+	Plan            *workerplan.Service
+	Topology        *workertopology.Runtime
 	// LaneRoots lists every open worker's current lane, which branch
 	// reconciliation keeps.
 	LaneRoots func(context.Context) ([]string, error)
@@ -62,9 +67,13 @@ func New(database *db.Store, outbox *eventoutbox.Outbox, workersCfg worker.Worke
 		queue.SetEventOutbox(outbox)
 	}
 	queue.SetWorkersConfig(workersCfg)
+	records := workerrecords.New(database)
 	return &Runtime{
-		Store: store,
-		Queue: queue,
+		Store:    store,
+		Queue:    queue,
+		Records:  records,
+		Plan:     &workerplan.Service{Records: records},
+		Topology: workertopology.New(records, queue),
 	}
 }
 
@@ -93,6 +102,11 @@ func (r *Runtime) SandboxSettler() workspace.SandboxSettler {
 		return nil
 	}
 	return r.Workspace.SettleBranchRuntime
+}
+
+// RegisterPlanTools registers coordinator blueprint planning tools.
+func (r *Runtime) RegisterPlanTools(reg *tools.DefaultRegistry) error {
+	return workerplan.RegisterPlanFromBlueprintTool(reg, r.Plan)
 }
 
 // RecoverWorkerViews runs once at engine startup, before the poller can claim. Collection runs

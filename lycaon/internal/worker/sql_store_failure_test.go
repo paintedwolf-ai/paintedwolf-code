@@ -38,7 +38,7 @@ func TestSQLStoreFailureJSONRoundtrip(t *testing.T) {
 	}
 	stale := *claimed
 	stale.ClaimToken = "stale"
-	won, err := store.FailJob(context.Background(), &stale, "stale failure", failure, "")
+	won, err := store.FailJob(context.Background(), &stale, "stale failure", failure, "", "")
 	testutil.FailErr(t, "store.FailJob stale", err)
 	if won {
 		t.Fatal("stale claim failed the worker")
@@ -48,6 +48,7 @@ func TestSQLStoreFailureJSONRoundtrip(t *testing.T) {
 		claimed,
 		"llm turn timed out: context deadline exceeded",
 		failure,
+		"",
 		"",
 	)
 	testutil.FailErr(t, "store.FailJob", err)

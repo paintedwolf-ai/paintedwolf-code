@@ -5,6 +5,7 @@ tools:
   recall: sticky
   record_finding: sticky
   pack_board: sticky
+  read_review: sticky
   request_decision: sticky
   message_coordinator: sticky
   complete_leg: sticky
@@ -23,6 +24,7 @@ deny_tools:
   - secret_*
   - git_*
   - delegate_*
+  - plan_from_blueprint
   - state_*
   - handoff_*
   - scan_pack

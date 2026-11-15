@@ -361,18 +361,17 @@ func wireSourceEditing(b *serveBuilder, deps *api.Dependencies) error {
 
 func (b *serveBuilder) wireOrchestrator() error {
 	orchDeps := orchestration.OrchestratorDeps{
-		Delegation: b.delegations.Manager,
-		Store:      b.delegations.Store,
-		Agents:     b.agents.Registry,
-		Workflows:  &orchestration.WorkflowRunLifecycle{Runs: b.workflows.Store.Runs, Starts: b.workflows.Manager.Starts, Controls: b.workflows.Manager.Controls, Policy: b.workflows.Manager.Policy, Topology: b.workflows.Manager.Phases},
-		Catalog:    extpacks.CatalogForConsumers,
+		Workers:   b.delegations.Topology,
+		Agents:    b.agents.Registry,
+		Workflows: &orchestration.WorkflowRunLifecycle{Runs: b.workflows.Store.Runs, Starts: b.workflows.Manager.Starts, Controls: b.workflows.Manager.Controls, Policy: b.workflows.Manager.Policy, Topology: b.workflows.Manager.Phases},
+		Catalog:   extpacks.CatalogForConsumers,
 	}
 	if b.startup.cfg.TestOrchestrator != nil {
 		b.server.Orchestrator = b.startup.cfg.TestOrchestrator(orchDeps)
 	} else {
 		b.server.Orchestrator = orchestration.NewOrchestratorImpl(orchDeps)
 	}
-	b.workflows.Manager.Presentation.TopologyLegs = orchestration.TopologyLegView{Store: b.delegations.Store, Catalog: extpacks.CatalogForConsumers}
+	b.workflows.Manager.Presentation.TopologyLegs = orchestration.TopologyLegView{Workers: b.delegations.Topology, Catalog: extpacks.CatalogForConsumers}
 
 	if err := b.sessions.Manager.Workers.Results.ValidateWorkflow(); err != nil {
 		return err

@@ -14,6 +14,7 @@ tools:
   scan_compare: true
   record_finding: sticky
   pack_board: sticky
+  read_review: sticky
   request_decision: sticky
   message_coordinator: sticky
   web_search: true
@@ -50,5 +51,6 @@ tools:
   wait: sticky
 deny_tools:
   - delegate_*
+  - plan_from_blueprint
   - state_*
 wait_conditions: [process_done, http_ready, port_ready]

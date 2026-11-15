@@ -221,6 +221,7 @@ var rejectCodeObservation = map[string]string{
 	"READ_IS_DIRECTORY":                         "is_directory",
 	"READ_OFFSET_BEYOND_EOF":                    "beyond_eof",
 	"READ_PATH_NOT_FOUND":                       "not_found",
+	"READ_REVIEW_INVALID":                       "read_review_invalid",
 	"RENDER_ASSET_DENIED":                       "forbidden",
 	"RENDER_ASSET_NOT_FOUND":                    "missing",
 	"RENDER_ASSET_TOO_LARGE":                    "resource_limit",

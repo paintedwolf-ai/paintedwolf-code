@@ -8,9 +8,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// WorkspaceBinder creates and destroys per-leg sandbox copies (out-of-repo, git-free).
+// WorkspaceBinder creates and destroys per-worker isolated workspace copies.
 type WorkspaceBinder interface {
-	CreateWorkerWorkspace(ctx context.Context, primaryDir, legID string) (*workspace.Binding, error)
+	CreateWorkerWorkspace(ctx context.Context, primaryDir, unitID string) (*workspace.Binding, error)
 	DestroyWorkerWorkspace(ctx context.Context, binding *workspace.Binding) error
 }
 
@@ -24,11 +24,11 @@ func (o *OrchestratorImpl) ensureWorkspaceManager(mode WorkspaceMode) error {
 	return nil
 }
 
-func (o *OrchestratorImpl) bindLegWorkspacesIfIsolated(
+func (o *OrchestratorImpl) bindUnitWorkspacesIfIsolated(
 	ctx context.Context,
 	spec TopologySpec,
-	projectDir, delegationID string,
-	legIDs []string,
+	projectDir, batchID string,
+	unitIDs []string,
 ) ([]*workspace.Binding, error) {
 	if effectiveWorkspaceMode(spec.WorkspaceMode) != WorkspaceIsolated {
 		return nil, nil
@@ -36,24 +36,24 @@ func (o *OrchestratorImpl) bindLegWorkspacesIfIsolated(
 	if err := o.ensureWorkspaceManager(spec.WorkspaceMode); err != nil {
 		return nil, err
 	}
-	bindings := make([]*workspace.Binding, 0, len(legIDs))
-	for _, legID := range legIDs {
-		leg, err := o.store.GetLeg(ctx, delegationID, legID)
+	bindings := make([]*workspace.Binding, 0, len(unitIDs))
+	for _, unitID := range unitIDs {
+		unit, err := o.workers.GetUnit(ctx, batchID, unitID)
 		if err != nil {
 			o.destroyBindings(ctx, bindings)
 			return nil, err
 		}
-		if leg.Status != api.LegStatusPending || leg.WorkspaceID != "" {
+		if unit.Status != api.LegStatusPending || unit.WorkspaceID != "" {
 			continue
 		}
-		binding, err := o.workspaces.CreateWorkerWorkspace(ctx, projectDir, legID)
+		binding, err := o.workspaces.CreateWorkerWorkspace(ctx, projectDir, unitID)
 		if err != nil {
 			o.destroyBindings(ctx, bindings)
 			return nil, err
 		}
-		leg.WorkspaceRoot = binding.Root
-		leg.WorkspaceID = binding.ID
-		if err := o.store.UpdateLeg(ctx, *leg); err != nil {
+		unit.WorkspaceRoot = binding.Root
+		unit.WorkspaceID = binding.ID
+		if err := o.workers.UpdateUnit(ctx, batchID, *unit); err != nil {
 			o.destroyBindings(ctx, append(bindings, binding))
 			return nil, err
 		}
@@ -62,14 +62,14 @@ func (o *OrchestratorImpl) bindLegWorkspacesIfIsolated(
 	return bindings, nil
 }
 
-// BindLegWorkspacesIfIsolatedForTest exposes bindLegWorkspacesIfIsolated for unit tests.
+// BindLegWorkspacesIfIsolatedForTest exposes bindUnitWorkspacesIfIsolated for unit tests.
 func (o *OrchestratorImpl) BindLegWorkspacesIfIsolatedForTest(
 	ctx context.Context,
 	spec TopologySpec,
-	projectDir, delegationID string,
-	legIDs []string,
+	projectDir, batchID string,
+	unitIDs []string,
 ) ([]*workspace.Binding, error) {
-	return o.bindLegWorkspacesIfIsolated(ctx, spec, projectDir, delegationID, legIDs)
+	return o.bindUnitWorkspacesIfIsolated(ctx, spec, projectDir, batchID, unitIDs)
 }
 
 func (o *OrchestratorImpl) destroyBindings(ctx context.Context, bindings []*workspace.Binding) {

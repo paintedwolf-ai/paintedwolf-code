@@ -242,6 +242,9 @@ func (s mergeEngine) finalizeMergedOverlay(ctx context.Context, task *api.Worker
 	if s.Closeout != nil && task != nil && task.DelegationID != "" {
 		_ = s.Closeout.RetryCloseout(ctx, task.DelegationID)
 	}
+	if s.OnPromoted != nil && task != nil {
+		s.OnPromoted(ctx, *task)
+	}
 	if err := s.teardownBranch(ctx, task); err != nil {
 		slog.WarnContext(ctx, "merged overlay cleanup deferred", "job_id", jobID, "err", err)
 		return

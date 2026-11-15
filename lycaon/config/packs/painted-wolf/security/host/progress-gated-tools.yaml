@@ -5,6 +5,7 @@ tools:
   - instruct_worker
   - delegate_dispatch
   - delegate_decompose
+  - plan_from_blueprint
   - write
   - edit
   - replace_lines

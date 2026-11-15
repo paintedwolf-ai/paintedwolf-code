@@ -14,7 +14,7 @@ import (
 
 func TestOrchestratorFanOutMarksWorkflowStage(t *testing.T) {
 	ctx := context.Background()
-	rec := &recordingDelegation{order: make([]string, 0, 4)}
+	rec := &recordingWorkers{order: make([]string, 0, 4)}
 	spy := &spyWorkflowRuns{}
 	orch, wfMgr, sessMgr, _, sqlDB, dir := newWorkflowOrchestrator(t, rec, spy)
 	sess := createOrchestrateSession(t, sqlDB, sessMgr, dir)

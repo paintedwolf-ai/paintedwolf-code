@@ -16,6 +16,7 @@ tools:
   scan_list: sticky
   record_finding: sticky
   pack_board: sticky
+  read_review: sticky
   wait: sticky
   skills_read: sticky
   secret_generate: sticky
@@ -40,6 +41,7 @@ deny_tools:
   - capture_page
   - measure_page
   - delegate_*
+  - plan_from_blueprint
   - state_*
   - handoff_*
   - git_commit

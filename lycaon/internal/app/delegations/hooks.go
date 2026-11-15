@@ -274,6 +274,21 @@ func (r *Runtime) OnDelegationCloseout(ctx context.Context, sessionID, workflowR
 	_, _ = r.deps.Workflows.Manager.Phases.TryAutoAdvance(ctx, workflowRunID)
 }
 
+// NotifySettledPlanCloseout advances the active workflow run once every planned worker is settled.
+func (r *Runtime) NotifySettledPlanCloseout(ctx context.Context, sessionID string) {
+	if r == nil || r.Plan == nil {
+		return
+	}
+	if runID := r.Plan.SettledWorkflowRunID(ctx, sessionID); runID != "" {
+		r.OnDelegationCloseout(ctx, sessionID, runID)
+	}
+}
+
+// NotifyPromotedTask advances settled workflow runs when a worker overlay promotes.
+func (r *Runtime) NotifyPromotedTask(ctx context.Context, task wire.WorkerTask) {
+	r.NotifySettledPlanCloseout(ctx, task.ParentSessionID)
+}
+
 // SessionVerdictCatalog is the session's effective submit_verdict schema, or
 // the registered one when the session has no catalog view.
 func (r *Runtime) SessionVerdictCatalog(ctx context.Context, sessionID string) map[string]any {

@@ -11,15 +11,18 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/session/profiles"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // CompositeWorkerContext selects delegation or task-spawn context.
 type CompositeWorkerContext struct {
-	Delegation *WorkerContextLoader
-	Tools      LegToolLister
-	AgentsFor  func(*api.Session) profiles.AgentProfileResolver
-	MatcherFor func(*api.Session) PlaybookMatcherInterface
+	Delegation       *WorkerContextLoader
+	Records          *workerrecords.Store
+	Tools            LegToolLister
+	AgentsFor        func(*api.Session) profiles.AgentProfileResolver
+	MatcherFor       func(*api.Session) PlaybookMatcherInterface
+	WorkflowIDForRun func(ctx context.Context, runID string) string
 	// ReviewSubject names the result a reviewer's job reads and the worker
 	// that delivered it; ok is false for any other job.
 	ReviewSubject func(ctx context.Context, jobID string) (worker, handle string, ok bool, err error)
@@ -63,19 +66,37 @@ func buildTaskSpawnWorkerContext(ctx context.Context, c *CompositeWorkerContext,
 		}
 	}
 	out.LegTools = resolveLegTools(ctx, lister, agents, sess, agentType)
-	if checklist, err := mergeTaskSpawnChecklist(matcher, agents, agentType, out.TopologyPattern); err != nil {
-		return out, err
-	} else if len(checklist) > 0 {
-		out.Checklist = checklist
-	}
 	var scans scan.WorkerScanLister
+	var legFiles []string
 	runID := ""
+	if c != nil && c.Records != nil {
+		actor := workerrecords.Actor{SessionID: sess.ID, Role: workerrecords.RoleWorker, PrincipalID: sess.ID}
+		if w, wErr := c.Records.Self(ctx, actor); wErr == nil {
+			out.LegID = w.WorkflowWorkID
+			if out.LegID == "" {
+				out.LegID = w.Name
+			}
+			out.PhaseID = w.WorkflowPhase
+			out.CompletionCriteria = append([]string(nil), w.Criteria...)
+			out.RequiresIsolation = w.ScopeMode == workerrecords.ScopeWrite
+			legFiles = append([]string(nil), w.Files...)
+			runID = w.WorkflowRunID
+		}
+	}
 	if c != nil && c.Delegation != nil {
 		scans = c.Delegation.Scans
 		if c.Delegation.Tasks != nil {
 			// The task tool stamps the run on the job; the session carries none.
 			if task, ok := c.Delegation.Tasks.GetLatestByChildSessionID(ctx, sess.ID); ok && task != nil {
-				runID = task.WorkflowRunID
+				if runID == "" {
+					runID = task.WorkflowRunID
+				}
+				if out.PhaseID == "" {
+					out.PhaseID = task.WorkflowPhase
+				}
+				if len(legFiles) == 0 {
+					legFiles = append([]string(nil), task.Files...)
+				}
 				if c.ReviewSubject != nil {
 					worker, handle, reviewer, err := c.ReviewSubject(ctx, task.ID)
 					if err != nil {
@@ -87,6 +108,27 @@ func buildTaskSpawnWorkerContext(ctx context.Context, c *CompositeWorkerContext,
 				}
 			}
 		}
+		if runID != "" {
+			if c.WorkflowIDForRun != nil {
+				out.WorkflowID = strings.TrimSpace(c.WorkflowIDForRun(ctx, runID))
+			}
+			if c.Delegation.Topology != nil && out.WorkflowID != "" {
+				if tp := strings.TrimSpace(c.Delegation.Topology(out.WorkflowID)); tp != "" {
+					out.TopologyPattern = tp
+				}
+			}
+			if out.PhaseID == "" && c.Delegation.Runs != nil {
+				if phase, pErr := c.Delegation.Runs.PhaseForRun(ctx, runID); pErr == nil {
+					out.PhaseID = strings.TrimSpace(phase)
+				}
+			}
+		}
+		out.LayoutTopLevel = layoutTopLevelForWorker(ctx, c.Delegation.Repo, sess.WorkspacePath)
+	}
+	if checklist, err := mergeTaskSpawnChecklist(matcher, agents, agentType, out.TopologyPattern, out.PhaseID); err != nil {
+		return out, err
+	} else if len(checklist) > 0 {
+		out.Checklist = checklist
 	}
 	var err error
 	out, err = attachWorkerScanDigest(ctx, out, sess.WorkspacePath, runID, scans)
@@ -94,11 +136,13 @@ func buildTaskSpawnWorkerContext(ctx context.Context, c *CompositeWorkerContext,
 		return out, err
 	}
 	if c != nil && c.Delegation != nil {
-		block, err := c.Delegation.attachAgentsMDChain(ctx, sess, nil)
+		block, err := c.Delegation.attachAgentsMDChain(ctx, sess, legFiles)
 		if err != nil {
 			return out, err
 		}
-		out.AgentsMDMessage = block
+		if strings.TrimSpace(block.Content) != "" {
+			out.AgentsMDMessage = block
+		}
 	}
 	return inject.BuildWorkerPromptContext(out), nil
 }

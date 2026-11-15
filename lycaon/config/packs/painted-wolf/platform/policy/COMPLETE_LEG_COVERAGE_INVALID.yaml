@@ -13,7 +13,7 @@ what: The coverage assessment is missing, incomplete, or stale.
 cause: "{{ paintedwolf.detail }}"
 why: The assigned coverage review needs an explicit assessment of every assigned scope fact.
 fix: 'Return coverage_review using this assignment''s subject.facts.revision and one cited assessment per fact. {{ paintedwolf.next_steps }} Retain unfinished material or essential work. Recorded assignment: {{ paintedwolf.assignment }}'
-instead: 'Repair the coverage assessment and resubmit within this leg.'
+instead: 'Repair the coverage assessment and resubmit within this round.'
 x-paintedwolf-scenarios:
   - id: missing
     vars:

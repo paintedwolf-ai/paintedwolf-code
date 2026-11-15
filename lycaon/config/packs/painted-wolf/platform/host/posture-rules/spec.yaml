@@ -58,7 +58,7 @@ rules:
       plan_awaiting_approval: true
     then:
       deny:
-        tools: [delegate_dispatch, delegate_init, delegate_decompose]
+        tools: [delegate_dispatch, delegate_init, delegate_decompose, plan_from_blueprint]
         code: SPEC_POSTURE_NOT_APPROVED
         phase_required: "6"
         phase_required_name: Plan approval
@@ -72,7 +72,7 @@ rules:
       plan_awaiting_approval: false
     then:
       deny:
-        tools: [delegate_dispatch, delegate_init, delegate_decompose]
+        tools: [delegate_dispatch, delegate_init, delegate_decompose, plan_from_blueprint]
         code: SPEC_POSTURE_DELEGATION_FORBIDDEN
         phase_required: "1"
         min_required: complete the plan workflow before delegation tools

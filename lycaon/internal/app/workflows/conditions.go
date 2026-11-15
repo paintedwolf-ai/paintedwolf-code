@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
@@ -29,6 +30,7 @@ import (
 type ConditionDependencies struct {
 	ModuleRoot              string
 	DelegationStore         *delegation.SQLStore
+	Plan                    *workerplan.Service
 	ScanStore               *scan.SQLStore
 	ScanObligation          *scan.WorkflowObligation
 	Snapshots               *sourcesnapshot.Store
@@ -52,6 +54,10 @@ func (r *Runtime) BuildConditions(ctx context.Context, deps ConditionDependencie
 		proactiveCategories = scancfg.DefaultGatesConfig().Gates.ProactiveCategories
 	}
 
+	closeoutComplete := delegation.CloseoutComplete(deps.DelegationStore)
+	if deps.Plan != nil {
+		closeoutComplete = deps.Plan.CloseoutComplete(closeoutComplete)
+	}
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		DelegationStore: deps.DelegationStore,
 		Evidence:        conditions.StoreEvidenceReader{Store: r.Evidence},
@@ -61,7 +67,7 @@ func (r *Runtime) BuildConditions(ctx context.Context, deps ConditionDependencie
 		BlueprintContent: func(_ context.Context, projectDir, relPath string) (string, error) {
 			return workflowblueprintfiles.ReadBlueprintFile(projectDir, relPath)
 		},
-		DelegationCloseout:      delegation.CloseoutComplete(deps.DelegationStore),
+		DelegationCloseout:      closeoutComplete,
 		SourceVerifyPassed:      deps.SourceVerifyPassed,
 		DeliveryReported:        deps.DeliveryReported,
 		ScanLedger:              deps.ScanStore,

@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workerstate"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -27,9 +28,11 @@ const (
 
 // WorkerToolDeps wires the worker tools.
 type WorkerToolDeps struct {
-	Ops     *workerops.Service
-	Queue   WorkerQueue
-	Workers WorkersConfig
+	Ops              *workerops.Service
+	Queue            WorkerQueue
+	Workers          WorkersConfig
+	Plan             *workerplan.Service
+	BindWorkflowTask func(context.Context, tools.ToolContext, string, *api.WorkerTask) error
 }
 
 // RegisterWorkerTools registers instruct_worker, shelve_overlay and
@@ -124,6 +127,20 @@ func roundEnqueuer(deps WorkerToolDeps, tctx tools.ToolContext, args map[string]
 		taskScope := &api.TaskScope{Mode: api.TaskScopeMode(mode)}
 		if prior, ok := deps.Queue.GetLatestByChildSessionID(ctx, w.ChildSessionID); ok && prior.EffectiveScope().Mode == taskScope.Mode {
 			taskScope.Paths = append([]string(nil), prior.EffectiveScope().Paths...)
+		} else if len(w.Files) > 0 && taskScope.Mode == api.TaskScopeMode(w.ScopeMode) {
+			taskScope.Paths = append([]string(nil), w.Files...)
+		}
+		if deps.Plan != nil {
+			if err := deps.Plan.CheckRoundAdmission(ctx, workerplan.RoundAdmissionRequest{
+				Actor:      coordinatorActor(tctx),
+				Tool:       InstructWorkerTool,
+				ProjectID:  scope.ProjectID,
+				Worker:     w,
+				ScopeMode:  string(taskScope.Mode),
+				WritePaths: taskScope.Paths,
+			}); err != nil {
+				return "", "", err
+			}
 		}
 		task := api.WorkerTask{
 			ID:               uuid.NewString(),
@@ -133,6 +150,10 @@ func roundEnqueuer(deps WorkerToolDeps, tctx tools.ToolContext, args map[string]
 			Prompt:           prompt,
 			Brief:            goal,
 			Scope:            taskScope,
+			Files:            append([]string(nil), w.Files...),
+			WorkflowRunID:    w.WorkflowRunID,
+			WorkflowPhase:    w.WorkflowPhase,
+			WorkflowWorkID:   w.WorkflowWorkID,
 			ProjectID:        scope.ProjectID,
 			WorkspaceRootID:  scope.WorkspaceRootID,
 			WorkspacePath:    scope.WorkspacePath,
@@ -144,6 +165,11 @@ func roundEnqueuer(deps WorkerToolDeps, tctx tools.ToolContext, args map[string]
 		}
 		if err := ApplyEnqueueDefaults(&task, scope, deps.Workers); err != nil {
 			return "", "", err
+		}
+		if deps.BindWorkflowTask != nil && (w.WorkflowRunID != "" || w.WorkflowWorkID != "") {
+			if err := deps.BindWorkflowTask(ctx, tctx, w.WorkflowWorkID, &task); err != nil {
+				return "", "", err
+			}
 		}
 		id, err := deps.Queue.Enqueue(ctx, task)
 		if err != nil {

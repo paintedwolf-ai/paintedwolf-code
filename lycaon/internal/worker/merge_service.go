@@ -123,6 +123,7 @@ type MergeService struct {
 	Captures      PromoteCapture
 	Coord         WorkerCoordinationCleanup
 	Closeout      DelegationCloseoutRetry
+	OnPromoted    func(ctx context.Context, task api.WorkerTask)
 	Projects      ProjectStore
 	Scans         OverlayScanHook
 	SourceLedger  sourceledger.PromoteRecorder

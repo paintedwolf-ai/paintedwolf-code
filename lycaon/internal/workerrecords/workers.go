@@ -161,7 +161,7 @@ func validateSpec(spec WorkerSpec) error {
 		return ErrInvalidScope
 	case spec.LegID != "" && spec.DelegationID == "":
 		return ErrBindingInvalid
-	case spec.WorkflowRunID == "" && (spec.WorkflowPhase != "" || (spec.WorkflowWorkID != "" && spec.BlueprintPath == "")):
+	case spec.WorkflowRunID == "" && spec.WorkflowPhase != "":
 		return ErrBindingInvalid
 	}
 	return nil

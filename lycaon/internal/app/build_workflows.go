@@ -109,6 +109,7 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 			}
 			return nil
 		},
+		OnSessionScanComplete: b.delegations.NotifySettledPlanCloseout,
 		WorkflowTerminals: func(ctx context.Context, scanID string) error {
 			return scanning.ReconcileTerminals(ctx, b.scanning.Store, scanID, b.workflows.Manager.Obligations.RecordObligationTerminal)
 		},
@@ -165,6 +166,7 @@ func (b *serveBuilder) wireWorkflowConditions() error {
 	err := b.workflows.BuildConditions(b.startup.ctx, workflows.ConditionDependencies{
 		ModuleRoot:              b.catalog.ModuleRoot,
 		DelegationStore:         b.delegations.Store,
+		Plan:                    b.delegations.Plan,
 		ScanStore:               b.scanning.Store,
 		ScanObligation:          b.scanning.Obligation,
 		Snapshots:               b.storage.SourceLedger.Snapshots,

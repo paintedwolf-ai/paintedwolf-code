@@ -182,7 +182,7 @@ func registerCoreTools(reg *ConditionRegistry) error {
 			return strings.HasPrefix(ec.ToolName, "state_"), nil
 		}},
 		{"tool_is_delegation", func(ec EvalContext) (bool, error) {
-			return strings.HasPrefix(ec.ToolName, "delegate_"), nil
+			return strings.HasPrefix(ec.ToolName, "delegate_") || ec.ToolName == "plan_from_blueprint", nil
 		}},
 		{"tool_is_handoff", func(ec EvalContext) (bool, error) {
 			return strings.HasPrefix(ec.ToolName, "handoff_"), nil
@@ -587,7 +587,7 @@ func namedAgent(name string, args map[string]any) (string, bool) {
 
 // isHighRiskTool classifies state transitions, handoffs, and implementation delegation.
 func isHighRiskTool(name string, args map[string]any) bool {
-	if strings.HasPrefix(name, "state_") || strings.HasPrefix(name, "handoff_") || strings.HasPrefix(name, "delegate_") {
+	if strings.HasPrefix(name, "state_") || strings.HasPrefix(name, "handoff_") || strings.HasPrefix(name, "delegate_") || name == "plan_from_blueprint" {
 		return true
 	}
 	agent, ok := namedAgent(name, args)

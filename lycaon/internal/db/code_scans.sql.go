@@ -947,6 +947,34 @@ func (q *Queries) LatestRequiredLandedChangeForDelegation(ctx context.Context, d
 	return i, err
 }
 
+const latestRequiredLandedChangeForSession = `-- name: LatestRequiredLandedChangeForSession :one
+SELECT lc.id, lc.worker_job_id, lc.canonical_path, lc.delegation_id, lc.workflow_run_id,
+       lc.changed_paths_json, lc.deleted_paths_json, lc.scan_required, lc.scan_id, lc.created_at
+FROM landed_changes lc
+JOIN worker_jobs wj ON wj.id = lc.worker_job_id
+WHERE wj.parent_session_id = ? AND lc.scan_required = 1
+ORDER BY lc.rowid DESC
+LIMIT 1
+`
+
+func (q *Queries) LatestRequiredLandedChangeForSession(ctx context.Context, parentSessionID sql.NullString) (LandedChanges, error) {
+	row := q.db.QueryRowContext(ctx, latestRequiredLandedChangeForSession, parentSessionID)
+	var i LandedChanges
+	err := row.Scan(
+		&i.ID,
+		&i.WorkerJobID,
+		&i.CanonicalPath,
+		&i.DelegationID,
+		&i.WorkflowRunID,
+		&i.ChangedPathsJson,
+		&i.DeletedPathsJson,
+		&i.ScanRequired,
+		&i.ScanID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const latestScanForDelegation = `-- name: LatestScanForDelegation :one
 SELECT id, canonical_path, categories_json, scanner_id, claimed_by, claim_token, attempt, heartbeat_at, lease_expires_at, status, result_json, created_at,
        delegation_id, head_sha, source_snapshot_id, replacement_scan_id, trigger, completed_at, paths_json, reuse_key, error,

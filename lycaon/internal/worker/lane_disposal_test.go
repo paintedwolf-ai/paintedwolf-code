@@ -107,7 +107,7 @@ func (f *workerToolsFixture) claimRound(t *testing.T, jobID string) *api.WorkerT
 func TestEndedRoundsKeepTheirChanges(t *testing.T) {
 	f := newWorkerToolsFixture(t)
 	claimed := f.claimRound(t, "job-1")
-	won, err := f.queue.store.FailJob(t.Context(), claimed, "limit", nil, "checkpoint-1")
+	won, err := f.queue.store.FailJob(t.Context(), claimed, "limit", nil, "checkpoint-1", "")
 	if err != nil || !won {
 		t.Fatalf("fail: won=%v err=%v", won, err)
 	}
@@ -134,7 +134,7 @@ func TestEndedRoundsKeepTheirChanges(t *testing.T) {
 	}
 
 	claimed = f.claimRound(t, "job-3")
-	won, err = f.queue.store.FailJob(t.Context(), claimed, "error", nil, "")
+	won, err = f.queue.store.FailJob(t.Context(), claimed, "error", nil, "", "")
 	if err != nil || !won {
 		t.Fatalf("fail without changes: won=%v err=%v", won, err)
 	}

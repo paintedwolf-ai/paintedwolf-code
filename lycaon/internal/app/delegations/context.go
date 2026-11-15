@@ -136,12 +136,26 @@ func (r *Runtime) wireWorkerContext(deps Dependencies) error {
 			return strings.TrimSpace(workflowID)
 		},
 	}
-	records := workerrecords.New(deps.Storage.Database)
+	records := r.Records
+	if records == nil {
+		records = workerrecords.New(deps.Storage.Database)
+	}
 	deps.Sessions.Manager.SetWorkerContextBuilder(&delegation.CompositeWorkerContext{
 		Delegation: r.ContextLoader,
+		Records:    records,
 		Tools:      legToolLister,
 		AgentsFor:  agentsForSession,
 		MatcherFor: playbooksForSession,
+		WorkflowIDForRun: func(ctx context.Context, runID string) string {
+			if deps.Workflows == nil || deps.Workflows.Store == nil || deps.Workflows.Store.Runs == nil {
+				return ""
+			}
+			run, getErr := deps.Workflows.Store.Runs.Get(ctx, runID)
+			if getErr != nil || run == nil {
+				return ""
+			}
+			return run.WorkflowID
+		},
 		ReviewSubject: func(ctx context.Context, jobID string) (string, string, bool, error) {
 			return reviewSubjectNames(ctx, records, jobID)
 		},

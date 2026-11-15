@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -38,6 +39,8 @@ type TaskToolDeps struct {
 	WorkerRecords *workerrecords.Store
 	// Reviews binds a reviewer to the sealed result it reads.
 	Reviews ReviewBinder
+	// Plan binds Blueprint and criteria-bearing planned legs onto worker rounds.
+	Plan *workerplan.Service
 }
 
 // ReviewBinder names a review's subject and accounts for it once the
@@ -49,7 +52,20 @@ type ReviewBinder interface {
 
 // IdentityResolver supplies the same plan source to task admission and execution.
 func (d TaskToolDeps) IdentityResolver() workeradmission.TaskIdentityResolver {
-	return workeradmission.TaskIdentityResolver{WorkflowWork: d.WorkflowWork}
+	return workeradmission.TaskIdentityResolver{WorkflowWork: d.resolveWorkflowWork}
+}
+
+func (d TaskToolDeps) resolveWorkflowWork(ctx context.Context, sessionID, workID string) (spawn.WorkflowWork, bool, error) {
+	if d.WorkflowWork != nil {
+		work, found, err := d.WorkflowWork(ctx, sessionID, workID)
+		if err != nil || found {
+			return work, found, err
+		}
+	}
+	if d.Plan != nil {
+		return d.Plan.ResolvePlannedWorkflowWork(ctx, sessionID, workID)
+	}
+	return spawn.WorkflowWork{}, false, nil
 }
 
 var taskToolLog = observability.LazyComponent("task_tool")
@@ -65,28 +81,8 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		if err != nil {
 			return "", err
 		}
-		if deps.TaskReceipt != nil && strings.TrimSpace(tctx.Identity.ToolCallID) != "" {
-			prior, err := deps.TaskReceipt(ctx, tctx.Identity.SessionID, strings.TrimSpace(tctx.Identity.ToolCallID))
-			if err != nil {
-				return "", err
-			}
-			if prior != nil {
-				if err := compareTaskReceipt(prior, api.WorkerTask{SourceToolCallID: tctx.Identity.ToolCallID, SourceArgsDigest: sourceDigest}); err != nil {
-					return "", err
-				}
-				scope := project.ScopeFromToolContext(tctx.Identity.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, tctx.ActiveRootPath())
-				name, err := startWorkerRound(ctx, deps, tctx, *prior, nil)
-				if err != nil {
-					return "", err
-				}
-				if err := accountReplayedReview(ctx, deps, tctx, prior.ID); err != nil {
-					return "", err
-				}
-				if err := deps.Queue.ReleaseAdmitted(ctx, prior.ID); err != nil {
-					return "", err
-				}
-				return taskEnqueueOutput(tctx, scope, *prior, name)
-			}
+		if replayed, handled, rErr := replayTaskCall(ctx, deps, tctx, sourceDigest); handled || rErr != nil {
+			return replayed, rErr
 		}
 		identity, err := identityResolver.Resolve(ctx, tctx.Identity.SessionID, args)
 		if err != nil {
@@ -108,16 +104,18 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			return "", err
 		}
 		prompt := formatTaskCharter(brief)
-		var files []string
-		if raw, ok := args["files"].([]any); ok {
-			for _, item := range raw {
-				if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
-					files = append(files, strings.TrimSpace(s))
-				}
-			}
-		}
+		files := parseTaskFilesArg(args)
 		normalizedScope := identity.Scope
 		scopePtr := &normalizedScope
+		name, err := workerNameArg(args)
+		if err != nil {
+			return "", err
+		}
+		projScope := project.ScopeFromToolContext(tctx.Identity.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, tctx.ActiveRootPath())
+		plannedWorker, after, files, err := applyPlannedWorkerTask(ctx, deps, tctx, projScope.ProjectID, identity.WorkflowWorkID, name, scopePtr, files, after)
+		if err != nil {
+			return "", err
+		}
 		subject, err := bindReviewSubject(ctx, deps, tctx, args, identity.WorkflowWorkID, after, normalizedScope)
 		if err != nil {
 			return "", err
@@ -126,12 +124,6 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			return "", err
 		}
 		jobID := uuid.NewString()
-		name, err := workerNameArg(args)
-		if err != nil {
-			return "", err
-		}
-
-		projScope := project.ScopeFromToolContext(tctx.Identity.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, tctx.ActiveRootPath())
 		if !projScope.HasRoots && !prompts.AgentRunsWithoutWorkspace(agentType) {
 			return "", &toolrejection.ToolReject{
 				Code: "WORKER_WORKSPACE_REQUIRED",
@@ -182,17 +174,16 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		}
 
 		task.SourceArgsDigest = sourceDigest
-		// The worker exists before its job, so a refused name enqueues nothing.
-		// The brief keeps the whole charter, which every round's frame shows.
-		created, err := createTaskWorker(ctx, deps, tctx, task, name, formatTaskCharter(brief))
+		created, discardOnFail, err := ensureTaskWorker(ctx, deps, tctx, task, name, formatTaskCharter(brief), plannedWorker)
 		if err != nil {
 			return "", err
 		}
 		enqueuedID, err := deps.Queue.Enqueue(ctx, task)
 		if err != nil {
-			// The job never existed, so neither does its worker.
-			if discardErr := deps.WorkerRecords.Discard(ctx, coordinatorActor(tctx), taskWorkerOp(tctx, "worker"), created.WorkerID); discardErr != nil {
-				return "", errors.Join(err, discardErr)
+			if discardOnFail {
+				if discardErr := deps.WorkerRecords.Discard(ctx, coordinatorActor(tctx), taskWorkerOp(tctx, "worker"), created.WorkerID); discardErr != nil {
+					return "", errors.Join(err, discardErr)
+				}
 			}
 			var active *ReviewAssignmentActiveError
 			if errors.As(err, &active) {
@@ -201,7 +192,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			return "", err
 		}
 		task.ID = enqueuedID
-		workerName, err := startWorkerRound(ctx, deps, tctx, task, subject)
+		workerName, err := startWorkerRound(ctx, deps, tctx, task, &created, subject)
 		if err != nil {
 			return "", err
 		}

@@ -277,6 +277,15 @@ WHERE delegation_id = ? AND scan_required = 1
 ORDER BY rowid DESC
 LIMIT 1;
 
+-- name: LatestRequiredLandedChangeForSession :one
+SELECT lc.id, lc.worker_job_id, lc.canonical_path, lc.delegation_id, lc.workflow_run_id,
+       lc.changed_paths_json, lc.deleted_paths_json, lc.scan_required, lc.scan_id, lc.created_at
+FROM landed_changes lc
+JOIN worker_jobs wj ON wj.id = lc.worker_job_id
+WHERE wj.parent_session_id = ? AND lc.scan_required = 1
+ORDER BY lc.rowid DESC
+LIMIT 1;
+
 -- name: CancelPendingScans :many
 UPDATE code_scans
 SET status = 'canceled', error = sqlc.arg(error), completed_at = sqlc.arg(completed_at)

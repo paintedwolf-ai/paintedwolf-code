@@ -51,6 +51,7 @@ import (
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
@@ -85,6 +86,9 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	blueprintMgr := blueprint.NewManager(blueprint.NewFileStoreForTest(t.TempDir()))
 	if err := blueprint.RegisterPlanTools(reg, blueprintMgr); err != nil {
 		contractcheck.FailErr(t, "blueprint.RegisterPlanTools failed", err)
+	}
+	if err := workerplan.RegisterPlanFromBlueprintTool(reg, &workerplan.Service{Records: workerrecords.New(sqlDB), Plans: blueprintMgr}); err != nil {
+		contractcheck.FailErr(t, "workerplan.RegisterPlanFromBlueprintTool failed", err)
 	}
 	boardSnap := &board.SnapshotBuilder{Repo: repotest.NewProvider(t)}
 	if err := board.RegisterBoardTools(reg, board.ToolDeps{Builder: boardSnap}); err != nil {
@@ -153,6 +157,9 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}
 	if err := workflowreview.RegisterSubmitVerdictTool(reg, workflowMgr.Verdicts); err != nil {
 		contractcheck.FailErr(t, "workflowreview.RegisterSubmitVerdictTool failed", err)
+	}
+	if err := workflowreview.RegisterReadReviewTool(reg, workflowMgr.Assignments.View); err != nil {
+		contractcheck.FailErr(t, "workflowreview.RegisterReadReviewTool failed", err)
 	}
 	c := workflowfixture.ContractWorkflowComposer(t)
 	c.Templates = templates

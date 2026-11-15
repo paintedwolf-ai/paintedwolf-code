@@ -42,11 +42,13 @@ tools:
   - fanout_plan
   - submit_verdict
 
-  # plan_* markdown helpers
+  # plan_* markdown and blueprint seeding helpers
   - plan_append_review_evidence
+  - plan_from_blueprint
 
-  # pack_* coordinator orientation board
+  # pack_board and read_review orientation and review readers
   - pack_board
+  - read_review
 
   # record_finding agent feed writer (grounded)
   - record_finding

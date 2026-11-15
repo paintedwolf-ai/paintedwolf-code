@@ -313,6 +313,10 @@ tools:
   plan_append_review_evidence:
     title_keys: [blueprint_path, evidence]
     activity: {headline: "recording review", salience: primary, role: coordination}
+  plan_from_blueprint:
+    running_label: "Seeding planned workers…"
+    title_keys: [blueprint_path]
+    activity: {headline: "delegating work", salience: primary, role: coordination}
   preview_overlay:
     running_label: "Comparing the changes…"
     title_keys: [path]
@@ -328,6 +332,11 @@ tools:
     title_keys: [symbol, path]
     path_entry: file
     activity: {headline: "reading files", salience: supporting, role: investigation}
+  read_review:
+    title_keys: [assignment_id]
+    title_fallback: "Review status"
+    visibility: coordinator_internal
+    activity: {headline: "recording review", salience: supporting, role: coordination}
   record_finding:
     title_keys: [summary]
     activity: {headline: "recording review", salience: incidental, role: coordination}

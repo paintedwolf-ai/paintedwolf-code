@@ -18,9 +18,12 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/localdata"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workerrecords"
+	"github.com/lycaon/lycaon/internal/workertopology"
 	"github.com/lycaon/lycaon/internal/workflow"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -58,7 +61,15 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 	r.Executor.SetPromptInjects(r.InjectRenderer)
 	r.Executor.SetPhaseTouchPaths(deps.Workflows.Manager.Ambient)
 	r.BranchRoot = enginepaths.WorkerBranchesRootUnder(deps.Storage.Directory)
-	r.Records = workerrecords.New(deps.Storage.Database)
+	if r.Records == nil {
+		r.Records = workerrecords.New(deps.Storage.Database)
+	}
+	if r.Plan == nil {
+		r.Plan = &workerplan.Service{Records: r.Records}
+	}
+	if r.Topology == nil {
+		r.Topology = workertopology.New(r.Records, r.Queue)
+	}
 	r.LaneRoots = r.Records.OpenLaneRoots
 	if err := localdata.ClearRetiredWorkerSeeds(deps.Storage.Directory); err != nil {
 		slog.WarnContext(ctx, "clear retired worker seeds", "err", err)
@@ -91,6 +102,7 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 		Cancellations: deps.Sessions.Manager.Workers.Cancellations,
 		Reports:       r.Cancel.Reports,
 		Delegations:   r.Store,
+		Records:       r.Records,
 	}
 	deps.Workflows.Manager.Recovery.Busy = func(c context.Context, sessionID string) bool {
 		sess, err := deps.Storage.Sessions.Get(c, sessionID)
@@ -102,18 +114,48 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 	r.Executor.Reports = r.Cancel.Reports
 	r.Queue.SetCancellationReports(r.Cancel.Reports)
 
+	workflowReady := workflow.RegistryWorkflowReadyChecker{
+		Registry: deps.Workflows.Conditions,
+		Sessions: deps.Storage.Sessions,
+		Runs:     deps.Workflows.Store.Runs,
+	}
+	r.Plan.Records = r.Records
+	r.Plan.Plans = deps.Workflows.Blueprints
+	r.Plan.Approvals = deps.Workflows.Blueprints
+	r.Plan.WorkflowReady = workflowReady
+	r.Plan.Runs = deps.Workflows.Manager.Policy
+	r.Plan.ActiveRuns = deps.Workflows.Store.Runs
+	r.Plan.HeadSHA = deps.Git
+	r.Plan.GitDiff = workerplan.NewGitDiffAdapter(deps.Git)
+	r.Plan.SourceRuns = deps.Sessions.Manager.Verification
+	r.Plan.Inspector = deps.Workflows.Inspector
+	r.Plan.Security = deps.Scanning.Closeout
+	r.Plan.Jobs = r.Queue
+	r.Plan.HostDataDir = func(_ context.Context, projectID string) (string, error) {
+		return project.EnsureHostDataDir(deps.Storage.Directory, projectID)
+	}
+	deps.Workflows.Manager.Fanout.PlannedWorkKnown = r.Plan.HasPlannedWorker
+	deps.Sessions.Manager.Coordinator.Guards.SetPlanCloseout(r.Plan)
+	r.Queue.SetRoundDeliveryHooks(
+		func(c context.Context, task *wire.WorkerTask, projectDir string, jobComplete bool, summary string, diverged []string, report *wire.WorkerChangeReport) string {
+			if task == nil {
+				return ""
+			}
+			outcomes := r.Plan.EvaluateRoundDelivery(c, task.ParentSessionID, task.ID, task.ChildSessionID, projectDir, jobComplete, summary, diverged, report)
+			return workerrecords.EncodeCriteriaOutcomes(outcomes)
+		},
+		r.NotifySettledPlanCloseout,
+	)
+
 	dispatchGate := delegation.ImplementWorkflowDispatchGate{
 		Inner: delegation.WorkflowDispatchGate{
 			Inner: delegation.AllowGate{},
 			Store: r.Store,
 			Runs:  deps.Workflows.Manager.Policy,
 		},
-		Store: r.Store,
-		Plans: deps.Workflows.Blueprints,
-		WorkflowReady: workflow.RegistryWorkflowReadyChecker{
-			Registry: deps.Workflows.Conditions,
-			Sessions: deps.Storage.Sessions,
-		},
+		Store:         r.Store,
+		Plans:         deps.Workflows.Blueprints,
+		WorkflowReady: workflowReady,
 	}
 	r.Manager = delegation.NewManager(r.Store, r.Queue, deps.Sessions.Manager, dispatchGate)
 	r.Manager.Projects = deps.Storage.Projects

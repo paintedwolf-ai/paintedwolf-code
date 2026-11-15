@@ -17,16 +17,17 @@ type FanoutRoster interface {
 	RosterFor(*api.WorkflowRun, workflowdef.Manifest) []string
 }
 type Fanout struct {
-	settlement  promptstate.MutexRegistry
-	Runs        runstate.RunsRepository
-	Vars        *runstate.Variables
-	Resolver    *catalog.Resolver
-	Journal     *runstate.Journal
-	Sessions    session.Store
-	Phases      *workflowphases.Service
-	Questions   *workflowreview.Questions
-	Assignments *workflowreview.Assignments
-	Policy      FanoutRoster
-	Progress    progress.RunScopedStore
-	WorkerTasks func(context.Context, string) ([]api.WorkerTask, error)
+	settlement       promptstate.MutexRegistry
+	Runs             runstate.RunsRepository
+	Vars             *runstate.Variables
+	Resolver         *catalog.Resolver
+	Journal          *runstate.Journal
+	Sessions         session.Store
+	Phases           *workflowphases.Service
+	Questions        *workflowreview.Questions
+	Assignments      *workflowreview.Assignments
+	Policy           FanoutRoster
+	Progress         progress.RunScopedStore
+	WorkerTasks      func(context.Context, string) ([]api.WorkerTask, error)
+	PlannedWorkKnown func(ctx context.Context, sessionID, workID string) (bool, error)
 }

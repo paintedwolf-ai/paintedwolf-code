@@ -17,18 +17,31 @@ import (
 // sqlQueueGetTimeout bounds lookups without caller contexts.
 const sqlQueueGetTimeout = 3 * time.Second
 
+// CriteriaEvaluator computes JSON-encoded criterion outcomes before a worker round settles.
+type CriteriaEvaluator func(
+	ctx context.Context,
+	task *api.WorkerTask,
+	projectDir string,
+	jobComplete bool,
+	summary string,
+	divergedPaths []string,
+	report *api.WorkerChangeReport,
+) string
+
 type sqlQueueConfig struct {
-	maxRunning       int
-	defaultTarget    api.ExecutionTarget
-	onRunningCancel  func(ctx context.Context, jobID string) error
-	activeExecution  func(jobID string) bool
-	workerWorkspace  WorkerWorkspaceManager
-	projects         ProjectStore
-	events           *events.Publisher
-	workflowRuns     *WorkflowDomains
-	sessionAdmission func(ctx context.Context, sessionID string, fn func() error) error
-	failureCatalog   ExecuteFailureRenderer
-	lanes            *WorkerLanes
+	maxRunning        int
+	defaultTarget     api.ExecutionTarget
+	onRunningCancel   func(ctx context.Context, jobID string) error
+	activeExecution   func(jobID string) bool
+	workerWorkspace   WorkerWorkspaceManager
+	projects          ProjectStore
+	events            *events.Publisher
+	workflowRuns      *WorkflowDomains
+	sessionAdmission  func(ctx context.Context, sessionID string, fn func() error) error
+	failureCatalog    ExecuteFailureRenderer
+	lanes             *WorkerLanes
+	criteriaEvaluator CriteriaEvaluator
+	onRoundSettled    func(ctx context.Context, parentSessionID string)
 }
 
 type sqlQueueCore struct {
@@ -90,6 +103,20 @@ func (q *SQLQueue) SetFailureRenderer(renderer ExecuteFailureRenderer) {
 	if q != nil {
 		q.failureCatalog = renderer
 	}
+}
+
+// SetRoundDeliveryHooks wires typed criteria evaluation and post-settlement closeout notification.
+func (q *SQLQueue) SetRoundDeliveryHooks(
+	eval CriteriaEvaluator,
+	onSettled func(ctx context.Context, parentSessionID string),
+) {
+	if q == nil {
+		return
+	}
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.criteriaEvaluator = eval
+	q.onRoundSettled = onSettled
 }
 
 // NewSQLQueue creates a persistent worker queue.

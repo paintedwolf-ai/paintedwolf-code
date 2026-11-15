@@ -29,13 +29,16 @@ var outboxSilentMutators = map[string]string{
 	"lycaon/internal/workerrecords/rounds.go:StartRound": "records the round an instruction starts and the child session's agent; the job announces its admission, and neither the round nor the agent is on an event payload",
 	// Workers bind inside the job's child-session transaction; the roster reads
 	// worker records on each request and no event payload carries one.
-	"lycaon/internal/workerrecords/workers.go:CreateWorker":     "creates a worker for the task that starts it; the job announces its admission",
-	"lycaon/internal/workerrecords/workers.go:UpdatePlanned":    "reconciles an unstarted planned worker from a blueprint; the roster reads worker records on each request",
-	"lycaon/internal/workerrecords/workers.go:BindChildSession": "binds a worker's child session; the session and the job announce themselves",
-	"lycaon/internal/workerrecords/workers.go:SetBrief":         "changes a worker's brief, which no event payload carries",
-	"lycaon/internal/workerrecords/workers.go:Close":            "closes a worker; the roster drops it on the next request",
-	"lycaon/internal/workerrecords/workers.go:Discard":          "rolls back a roundless worker and its create receipt when task admission fails before a job starts; no event announced the worker",
-	"lycaon/internal/workerrecords/messages.go:AppendMessage":   "stores a message and advances its worker's sequence; recipients read their page on their next request",
+	"lycaon/internal/workerrecords/workers.go:CreateWorker":       "creates a worker for the task that starts it; the job announces its admission",
+	"lycaon/internal/workerrecords/workers.go:UpdatePlanned":      "reconciles an unstarted planned worker from a blueprint; the roster reads worker records on each request",
+	"lycaon/internal/workerrecords/workers.go:BindChildSession":   "binds a worker's child session; the session and the job announce themselves",
+	"lycaon/internal/workerrecords/workers.go:SetBrief":           "changes a worker's brief, which no event payload carries",
+	"lycaon/internal/workerrecords/workers.go:Close":              "closes a worker; the roster drops it on the next request",
+	"lycaon/internal/workerrecords/workers.go:Discard":            "rolls back a roundless worker and its create receipt when task admission fails before a job starts; no event announced the worker",
+	"lycaon/internal/workerrecords/messages.go:AppendMessage":     "stores a message and advances its worker's sequence; recipients read their page on their next request",
+	"lycaon/internal/workerrecords/dispositions.go:AccountJobs":   "marks results accounted for a job list; the roster reads dispositions on each request and no event payload carries one",
+	"lycaon/internal/workerrecords/dispositions.go:AccountResult": "marks one result accounted; the roster reads dispositions on each request and no event payload carries one",
+	"lycaon/internal/workerrecords/dispositions.go:SetChange":     "records a result's change state; the roster reads dispositions on each request and no event payload carries one",
 
 	// Path reservations.
 	"lycaon/internal/call/sql_store.go:InsertReservation":             "records one path reservation; reservations are coordination state that worker promotion releases in its own transaction",

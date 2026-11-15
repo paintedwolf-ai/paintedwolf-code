@@ -34,6 +34,35 @@ func (c *SecurityCloseoutChecker) Check(ctx context.Context, delegationID, proje
 	if err != nil {
 		return err
 	}
+	return closeoutError(result)
+}
+
+// CheckSession evaluates durable scan evidence for the latest required landed change in sessionID.
+func (c *SecurityCloseoutChecker) CheckSession(ctx context.Context, sessionID, projectDir string) error {
+	if c == nil || sessionID == "" || projectDir == "" {
+		return nil
+	}
+	if c.Settings != nil && !c.Settings.Effective().Enabled {
+		return nil
+	}
+	if c.Store == nil {
+		return fmt.Errorf("security gate failed: scan obligation ledger is unavailable")
+	}
+	landed, err := c.Store.LatestRequiredLandedChangeForSession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if landed == nil {
+		return nil
+	}
+	result, err := c.evaluateLanded(ctx, landed, landed.DelegationID, projectDir)
+	if err != nil {
+		return err
+	}
+	return closeoutError(result)
+}
+
+func closeoutError(result closeoutEval) error {
 	if result.OK {
 		return nil
 	}
@@ -64,6 +93,10 @@ func (c *SecurityCloseoutChecker) evaluate(ctx context.Context, delegationID, pr
 	if landed == nil {
 		return closeoutEval{OK: true}, nil
 	}
+	return c.evaluateLanded(ctx, landed, delegationID, projectDir)
+}
+
+func (c *SecurityCloseoutChecker) evaluateLanded(ctx context.Context, landed *LandedChange, evidenceRunID, projectDir string) (closeoutEval, error) {
 	scan, err := c.Store.Get(ctx, landed.ScanID)
 	if err != nil {
 		return closeoutEval{}, err
@@ -89,7 +122,7 @@ func (c *SecurityCloseoutChecker) evaluate(ctx context.Context, delegationID, pr
 	if c.Evidence == nil {
 		return closeoutEval{ScanID: scan.ID, Reason: "security evidence store is unavailable"}, nil
 	}
-	records, readErr := c.Evidence.ReadAll(ctx, projectDir, delegationID, api.ScanTaskID(scan.ID), evidence.GateTypeSecurity)
+	records, readErr := c.Evidence.ReadAll(ctx, projectDir, evidenceRunID, api.ScanTaskID(scan.ID), evidence.GateTypeSecurity)
 	if readErr != nil {
 		return closeoutEval{}, readErr
 	}

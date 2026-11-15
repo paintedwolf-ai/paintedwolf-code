@@ -1497,6 +1497,23 @@
       "command_forms": []
     },
     {
+      "tool": "plan_from_blueprint",
+      "owner": "blueprints",
+      "disposition": "retain-domain-structured",
+      "command": "",
+      "lifecycle": "db_transaction",
+      "reuse": "Native registration over worker plan records; reconciles planned workers from an approved Blueprint.",
+      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/plan_from_blueprint.yaml",
+      "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
+      "cleanup": "Offered as a structured tool; the name keeps its meaning in receipts and history.",
+      "selected_disposition": "Retain domain capability",
+      "behavior_change_or_retention": "Keep explicit domain contract; language exposure only if it improves a real task",
+      "existing_semantic_difference": "Host-held blueprint and worker records; see current description",
+      "implementing_issues": [],
+      "existing_rejection_code": "",
+      "command_forms": []
+    },
+    {
       "tool": "preview_overlay",
       "owner": "worker_merge",
       "disposition": "retain-domain-structured",
@@ -1635,6 +1652,23 @@
         "od",
         "strings"
       ]
+    },
+    {
+      "tool": "read_review",
+      "owner": "board",
+      "disposition": "retain-domain-structured",
+      "command": "",
+      "lifecycle": "read_only",
+      "reuse": "Native registration over workflow review state; reads review summaries, assignments, and sealed subject pages.",
+      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/read_review.yaml",
+      "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
+      "cleanup": "Offered as a structured tool; the name keeps its meaning in receipts and history.",
+      "selected_disposition": "Retain domain capability",
+      "behavior_change_or_retention": "Keep explicit domain contract; language exposure only if it improves a real task",
+      "existing_semantic_difference": "Host-owned board and workflow review state; see current description",
+      "implementing_issues": [],
+      "existing_rejection_code": "",
+      "command_forms": []
     },
     {
       "tool": "recall",

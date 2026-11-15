@@ -63,12 +63,12 @@ func playbookPhaseForTaskSpawn(agentType, phaseID string) string {
 func mergeTaskSpawnChecklist(
 	matcher PlaybookMatcherInterface,
 	agents profiles.AgentProfileResolver,
-	agentType, topology string,
+	agentType, topology, phaseID string,
 ) ([]string, error) {
 	if matcher == nil {
 		return nil, nil
 	}
-	phase := playbookPhaseForTaskSpawn(agentType, "")
+	phase := playbookPhaseForTaskSpawn(agentType, phaseID)
 	return matcher.MatchForAgent(agentType, topology, phase)
 }
 

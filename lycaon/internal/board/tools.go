@@ -9,15 +9,17 @@ import (
 
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/packboard"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// PlanWorkersFunc returns the worker names in sessionID bound to a Blueprint path.
+type PlanWorkersFunc func(ctx context.Context, sessionID, plan string) (map[string]bool, error)
+
 // ToolDeps holds dependencies for board orientation tools.
 type ToolDeps struct {
-	ReviewView         func(context.Context, map[string]any, tools.ToolContext) (string, error)
 	Builder            *SnapshotBuilder
+	PlanWorkers        PlanWorkersFunc
 	Findings           func() findings.Store
 	RootSession        func(context.Context, string) string
 	PromotePaths       func(sessionID string) []api.WorkerPromoteJobPathStatus
@@ -31,12 +33,6 @@ func RegisterBoardTools(reg *tools.DefaultRegistry, deps ToolDeps) error {
 		return fmt.Errorf("registry and snapshot builder required")
 	}
 	if err := reg.Register("pack_board", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		if args["review_view"] != nil || args["assignment_id"] != nil || args["cursor"] != nil {
-			if deps.ReviewView == nil {
-				return "", &toolrejection.ToolReject{Code: "WORKFLOW_REVIEW_VIEW_INVALID", Data: map[string]any{"reason": "review_unavailable", "field": "review_view"}}
-			}
-			return deps.ReviewView(ctx, args, tctx)
-		}
 		if args["finding_id"] != nil || args["findings_after"] != nil {
 			return readFindings(ctx, args, tctx, deps)
 		}
@@ -65,6 +61,19 @@ func RegisterBoardTools(reg *tools.DefaultRegistry, deps ToolDeps) error {
 		// The coordinator reads workers by name from Workers; the job-keyed
 		// roster and path rows stay on the board Den shows.
 		view.Roster, view.PromotePaths = nil, nil
+		if planFilter, _ := args["plan"].(string); strings.TrimSpace(planFilter) != "" && deps.PlanWorkers != nil {
+			matched, pErr := deps.PlanWorkers(ctx, sessionID, strings.TrimSpace(planFilter))
+			if pErr != nil {
+				return "", pErr
+			}
+			filtered := make([]api.BoardWorker, 0, len(view.Workers))
+			for _, w := range view.Workers {
+				if matched[w.Name] {
+					filtered = append(filtered, w)
+				}
+			}
+			view.Workers = filtered
+		}
 		if deps.OverlayMergePlan != nil {
 			tasks := packboard.WorkerTasksFromSnapshot(*snap)
 			if plan := deps.OverlayMergePlan(ctx, sessionID, tasks); plan != nil && plan.PendingCount > 0 {

@@ -23,7 +23,7 @@ type JobCompletion struct {
 // CompleteJob commits a job's result. A job that runs a worker round settles
 // that round in the same transaction, linking the checkpoint its changes
 // published; a job suspended on a decision leaves its round open.
-func (s *SQLStore) CompleteJob(ctx context.Context, id string, result api.WorkerResult, claimToken string, mergeStatus api.WorkerMergeStatus, clearWorkspace bool, overlayPath, checkpointID string) (JobCompletion, error) {
+func (s *SQLStore) CompleteJob(ctx context.Context, id string, result api.WorkerResult, claimToken string, mergeStatus api.WorkerMergeStatus, clearWorkspace bool, overlayPath, checkpointID, criteriaOutcomesJSON string) (JobCompletion, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return JobCompletion{}, err
@@ -97,11 +97,19 @@ func (s *SQLStore) CompleteJob(ctx context.Context, id string, result api.Worker
 		return JobCompletion{}, fmt.Errorf("running worker %s missing active attempt", id)
 	}
 	if !suspended {
+		resultID := uuid.NewString()
 		if err := q.InsertWorkerResult(ctx, db.InsertWorkerResultParams{
-			ID: uuid.NewString(), WorkerJobID: id, Status: "complete", ResultJson: resultJSON,
+			ID: resultID, WorkerJobID: id, Status: "complete", ResultJson: resultJSON,
 			Error: "", FailureJson: sql.NullString{}, CreatedAt: completedAt, ClaimToken: claimToken,
 		}); err != nil {
 			return JobCompletion{}, err
+		}
+		if criteriaOutcomesJSON != "" && criteriaOutcomesJSON != "[]" {
+			if _, err := q.RecordWorkerResultCriteriaOutcomes(ctx, db.RecordWorkerResultCriteriaOutcomesParams{
+				CriteriaOutcomesJson: criteriaOutcomesJSON, ResultID: resultID,
+			}); err != nil {
+				return JobCompletion{}, err
+			}
 		}
 		if mergeStatus != api.WorkerMergeStatusPending {
 			checkpointID = ""
@@ -141,7 +149,7 @@ func (s *SQLStore) CompleteJob(ctx context.Context, id string, result api.Worker
 
 // FailJob atomically fails the active claim. A non-empty keptCheckpoint is
 // the checkpoint the round's branch published; its changes stay pending.
-func (s *SQLStore) FailJob(ctx context.Context, claimed *api.WorkerTask, errMsg string, failure *api.WorkerFailure, keptCheckpoint string) (bool, error) {
+func (s *SQLStore) FailJob(ctx context.Context, claimed *api.WorkerTask, errMsg string, failure *api.WorkerFailure, keptCheckpoint, criteriaOutcomesJSON string) (bool, error) {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("claimed worker task required")
 	}
@@ -178,12 +186,20 @@ func (s *SQLStore) FailJob(ctx context.Context, claimed *api.WorkerTask, errMsg 
 	if attemptRows != 1 {
 		return false, fmt.Errorf("running worker %s missing active attempt", claimed.ID)
 	}
+	resultID := uuid.NewString()
 	if err := q.InsertWorkerResult(ctx, db.InsertWorkerResultParams{
-		ID: uuid.NewString(), WorkerJobID: claimed.ID, Status: "failed",
+		ID: resultID, WorkerJobID: claimed.ID, Status: "failed",
 		ResultJson: sql.NullString{}, Error: errMsg, FailureJson: failureJSON,
 		CreatedAt: completedAt, ClaimToken: claimed.ClaimToken,
 	}); err != nil {
 		return false, err
+	}
+	if criteriaOutcomesJSON != "" && criteriaOutcomesJSON != "[]" {
+		if _, err := q.RecordWorkerResultCriteriaOutcomes(ctx, db.RecordWorkerResultCriteriaOutcomesParams{
+			CriteriaOutcomesJson: criteriaOutcomesJSON, ResultID: resultID,
+		}); err != nil {
+			return false, err
+		}
 	}
 	if _, err := q.SettleWorkerRoundByJob(ctx, db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(completedAt), CheckpointID: keptCheckpoint, JobID: claimed.ID}); err != nil {
 		return false, err

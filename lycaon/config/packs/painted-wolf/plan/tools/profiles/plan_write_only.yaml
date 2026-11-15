@@ -10,6 +10,7 @@ tools:
   recall: sticky
   record_finding: sticky
   pack_board: sticky
+  read_review: sticky
   request_decision: sticky
   message_coordinator: sticky
   restore_version: sticky
@@ -21,6 +22,7 @@ tools:
   secret_revoke: true
 deny_tools:
   - delegate_*
+  - plan_from_blueprint
   - state_*
   - handoff_*
 write_scope: plan_write

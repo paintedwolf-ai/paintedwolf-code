@@ -89,6 +89,9 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	if err := delegation.RegisterDelegationTools(b.execution.Host.Registry, b.delegations.Manager); err != nil {
 		return fmt.Errorf("delegation tools: %w", err)
 	}
+	if err := b.delegations.RegisterPlanTools(b.execution.Host.Registry); err != nil {
+		return fmt.Errorf("blueprint worker plan tools: %w", err)
+	}
 	parseSvc := parse.NewDefaultService()
 	if err := parse.RegisterParseTools(b.execution.Host.Registry, parseSvc); err != nil {
 		return fmt.Errorf("parse tools: %w", err)
@@ -103,10 +106,8 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	}
 	waits := &awaitstore.Store{DB: b.storage.Database}
 	workerOps := &workerops.Service{
-		Reader:    b.boards.WorkerReader(),
-		Agents:    prompts.AgentMutationCapable,
-		Accounted: b.boards.ReleaseAccounted,
-		Release:   b.delegations.Queue.ReleaseAdmitted,
+		Reader: b.boards.WorkerReader(), Agents: prompts.AgentMutationCapable,
+		Accounted: b.boards.ReleaseAccounted, Release: b.delegations.Queue.ReleaseAdmitted,
 		WakeParked: func(ctx context.Context, jobID string) error {
 			settled, err := waits.SettleWorkerWait(ctx, jobID, awaitstore.Condition{Kind: "instruction", Outcome: "received"})
 			if err != nil || !settled {
@@ -123,15 +124,12 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		return fmt.Errorf("task tool: %w", err)
 	}
 	if err := worker.RegisterAnswerDecisionTool(b.execution.Host.Registry, worker.AnswerDecisionToolDeps{
-		Answer:  b.boards.AnswerDecision,
-		Workers: workerOps,
+		Answer: b.boards.AnswerDecision, Workers: workerOps,
 	}); err != nil {
 		return fmt.Errorf("answer_decision tool: %w", err)
 	}
 	if err := worker.RegisterWorkerTools(b.execution.Host.Registry, worker.WorkerToolDeps{
-		Ops:     workerOps,
-		Queue:   b.delegations.Queue,
-		Workers: b.worker.cfg,
+		Ops: workerOps, Queue: b.delegations.Queue, Workers: b.worker.cfg, Plan: b.delegations.Plan, BindWorkflowTask: b.workflows.Manager.Fanout.BindWorkflowTask,
 	}); err != nil {
 		return fmt.Errorf("worker tools: %w", err)
 	}
@@ -146,23 +144,13 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	}
 	b.delegations.Queue.SetWorkerLanes(lanes)
 	workerMergeSvc := &worker.MergeService{
-		Lanes:         lanes,
-		Queue:         b.delegations.Queue,
-		Store:         b.delegations.Queue,
-		Workspace:     b.delegations.Workspace,
-		Reject:        b.execution.Rejections,
-		Names:         b.boards.WorkerRecords,
-		Sessions:      b.delegations.Queue,
-		Reconcile:     b.sessions.Manager.Promotion,
-		Captures:      b.sessions.Manager.Chats.Captures,
-		Coord:         b.sessions.Manager.Workers.Workspaces,
-		Closeout:      b.delegations.Manager,
-		Projects:      b.storage.Projects,
-		Scans:         b.scanning.Triggers,
-		SourceLedger:  b.storage.SourceLedger,
-		SourceHistory: b.storage.SourceLedger.Walk,
-		DataDir:       b.storage.Directory,
-		Accounted:     b.boards.ReleaseAccounted,
+		Lanes: lanes, Queue: b.delegations.Queue, Store: b.delegations.Queue, Workspace: b.delegations.Workspace,
+		Reject: b.execution.Rejections, Names: b.boards.WorkerRecords, Sessions: b.delegations.Queue,
+		Reconcile: b.sessions.Manager.Promotion, Captures: b.sessions.Manager.Chats.Captures,
+		Coord: b.sessions.Manager.Workers.Workspaces, Closeout: b.delegations.Manager,
+		OnPromoted: b.delegations.NotifyPromotedTask, Projects: b.storage.Projects, Scans: b.scanning.Triggers,
+		SourceLedger: b.storage.SourceLedger, SourceHistory: b.storage.SourceLedger.Walk,
+		DataDir: b.storage.Directory, Accounted: b.boards.ReleaseAccounted,
 		Reports: worker.ChangeReportDeps{
 			SourceRuns: b.sessions.Manager.Verification.WorkerSourceRuns,
 			Messages: func(ctx context.Context, childSessionID string) ([]wire.Message, error) {
@@ -224,6 +212,7 @@ func taskToolDeps(b *serveBuilder) worker.TaskToolDeps {
 		WorkflowWork:     b.workflows.Manager.Fanout.WorkflowWork,
 		TaskReceipt:      b.delegations.Queue.TaskReceipt,
 		WorkerRecords:    b.boards.WorkerRecords,
+		Plan:             b.delegations.Plan,
 		ComposePrompt:    b.composeWorkerAssignment,
 		WebSearchEnabled: func() bool {
 			if b.boards == nil || b.boards.WebRuntime.Config == nil {

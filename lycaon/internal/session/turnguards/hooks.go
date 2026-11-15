@@ -145,6 +145,9 @@ func (m *Service) BeforeFinish(
 	if reject, block := m.SourceEvidence(ctx, sess, history, draft.Verification, surfaceID, invokeAllowed); block {
 		return reject, true
 	}
+	if reject, block := m.PlanCloseout(ctx, sess, workersIdle, invokeAllowed); block {
+		return reject, true
+	}
 	if reject, block := m.OpenGates(ctx, sess, workersIdle, invokeAllowed); block {
 		return reject, true
 	}

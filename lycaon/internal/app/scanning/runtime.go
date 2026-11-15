@@ -80,6 +80,7 @@ type Dependencies struct {
 	OnDelta               func(context.Context, api.CodeScan, []api.SecurityFinding, []api.SecurityFinding)
 	OnScanDone            func(context.Context, api.CodeScan)
 	RetryCloseout         func(context.Context, string) error
+	OnSessionScanComplete func(context.Context, string)
 	WorkflowTerminals     func(context.Context, string) error
 	BindMovedFiles        func(context.Context, api.CodeScan) error
 }
@@ -198,6 +199,8 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		}
 		if completed.DelegationID != "" && deps.RetryCloseout != nil {
 			_ = deps.RetryCloseout(c, completed.DelegationID)
+		} else if completed.SessionID != "" && deps.OnSessionScanComplete != nil {
+			deps.OnSessionScanComplete(c, completed.SessionID)
 		}
 	}
 	runner.ReconcileTerminal = func(c context.Context) error {

@@ -1,0 +1,9 @@
+steps:
+  - when: "paintedwolf.workflow_work_id != ''"
+    tool: "task"
+    args:
+      workflow_work_id: "{{ paintedwolf.workflow_work_id }}"
+    say: "Start a new reviewer worker with {{ call }} without scope.base_overlay_id, preserving any after_workers prerequisites."
+  - when: "paintedwolf.workflow_work_id == ''"
+    tool: "task"
+    say: "Start a new reviewer worker with {{ call }} and the registered workflow_work_id without scope.base_overlay_id, preserving any after_workers prerequisites."

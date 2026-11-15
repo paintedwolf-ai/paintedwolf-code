@@ -11,7 +11,7 @@ func (p Plan) BoundedRetainedStorage() bool {
 
 func (p Plan) reviewedRetainedRoute() bool {
 	const sourceID = "2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76"
-	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Target != (Baseline{Revision: 5, Shape: "49765c12f34a2239fb02a1217a75a86d9e1224f37b906e7666d587f8bfd37546"}) {
+	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Target != (Baseline{Revision: 5, Shape: "9eb31eef61cd7795604186f5fb77128aecfd63c9c0e48d07f78b8b097dae31a3"}) {
 		return false
 	}
 	if p.Source != manifestLayoutSource || p.CopyPlan() == nil || len(p.steps) != 1 {
@@ -24,5 +24,5 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// rewrites and index sync through declared Writes estimates, adding no
 	// sorters or rebuilds.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
-		p.steps[0].Checksum == "a9d15a2930fae63db15cd262a8607d897ed3387cec13a17c3214dfeae493ec49"
+		p.steps[0].Checksum == "54ee5e31b9f33c0aa6cc105e6c7aaf366f3ff8c5090b37f7f86171b518b1c422"
 }

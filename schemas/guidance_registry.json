@@ -573,7 +573,7 @@
       "summary": "This session has no worker leg to close."
     },
     "COMPLETE_LEG_COVERAGE_INVALID": {
-      "branch_instruction": "Repair the coverage assessment and resubmit within this leg.",
+      "branch_instruction": "Repair the coverage assessment and resubmit within this round.",
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "The coverage assessment is missing, incomplete, or stale."
@@ -621,10 +621,10 @@
       "summary": "Final report has no answer"
     },
     "COORDINATOR_CRITERIA_UNMET": {
-      "branch_instruction": "Resolve the reported criterion using the existing job and its evidence before closing the delegation",
+      "branch_instruction": "Resolve the unmet criteria on the existing worker and its delivered result before closing out.",
       "category": "recoverable",
       "emit": "guard:grounding",
-      "summary": "Completed leg {{ paintedwolf.leg_id }} has unmet closeout criteria."
+      "summary": "Planned leg {{ paintedwolf.leg_id }} has unmet closeout criteria."
     },
     "COORDINATOR_DELEGATE_DISPATCH_USE_TASK": {
       "branch_instruction": "Use the worker-dispatch path this request offers, or report that worker dispatch is unavailable.",
@@ -2067,6 +2067,12 @@
       "emit": "guard:read",
       "summary": "{{ tool }} could not open {{ paintedwolf.path }} — path does not exist in the attached folders."
     },
+    "READ_REVIEW_INVALID": {
+      "branch_instruction": "Pass a valid view selector; ask the coordinator if no assignment is available.",
+      "category": "recoverable",
+      "emit": "guard:workflow",
+      "summary": "The requested review view is unavailable or invalid."
+    },
     "RECALL_HISTORY_INVALID": {
       "branch_instruction": "Pass a returned record_request as history, or a returned next_request as the complete recall arguments",
       "category": "recoverable",
@@ -3156,7 +3162,7 @@
       "summary": "Synthesis cited {{ paintedwolf.offender_count }} URL(s) absent from the coordinator and worker evidence available to this report."
     },
     "TASK_REVIEW_FRESH_WORKSPACE_REQUIRED": {
-      "branch_instruction": "Start a new reviewer with the registered work ID; retain earlier reviews as evidence.",
+      "branch_instruction": "Start a new reviewer worker with the registered work identity; retain earlier reviews as evidence.",
       "category": "recoverable",
       "emit": "guard:workflow",
       "summary": "A question reassessment requires a fresh worker workspace."
@@ -3657,12 +3663,6 @@
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "Tried to deliver the workflow's completion report while the durable run is still in phase `{{ paintedwolf.phase }}`."
-    },
-    "WORKFLOW_REVIEW_VIEW_INVALID": {
-      "branch_instruction": "Correct the named selector; ask the coordinator if no assignment is available.",
-      "category": "recoverable",
-      "emit": "guard:workflow",
-      "summary": "The requested review view is unavailable or invalid."
     },
     "WORKFLOW_SESSION_COMPOSE_REQUIRED": {
       "branch_instruction": "Use the current workflow contract and explicit human start action; do not invent a start or composition API call.",

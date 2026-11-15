@@ -11,7 +11,7 @@ User limits apply: `ask_user` before conflicting action. `topology` defines the 
 {% endif %}{% if topology_phase_id %}- **topology_phase_id**: `{{ topology_phase_id }}`
 {% endif %}{% if allowed_agents %}- **allowed_agents**: {% for agent in allowed_agents %}`{{ agent }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
 {% endif %}{% if excluded_agents %}- **unavailable this turn**: {% for agent in excluded_agents %}`{{ agent.name }}` ({{ agent.code }}){% if not forloop.Last %}, {% endif %}{% endfor %} — do not dispatch these
-{% endif %}{% if requires_isolation %}- **requires_isolation**: true — every write leg runs in its own isolated copy and lands through `promote_overlay`; do not edit product paths inline on this run
+{% endif %}{% if requires_isolation %}- **requires_isolation**: true — every write worker runs in its own isolated workspace and lands through `promote_overlay`; do not edit product paths inline on this run
 {% endif %}{% if failed_leaves %}- **failed_leaves**: {% for leaf in failed_leaves %}`{{ leaf }}`{% if not forloop.Last %}, {% endif %}{% endfor %} — these gate leaves were evaluated and did not pass. Produce the evidence each one names; do not call `workflow_advance` until they do, and do not claim the phase is done in chat
 {% endif %}{% if unsatisfied_gate_leaves and not failed_leaves %}- **unsatisfied_gate_leaves**: {% for leaf in unsatisfied_gate_leaves %}`{{ leaf }}`{% if not forloop.Last %}, {% endif %}{% endfor %} — not yet satisfied, and not yet failed. The phase work below is what satisfies them
 {% endif %}{% if pending_feedback %}- **pending_feedback**: phase `{{ pending_feedback.phase_id }}`{% if pending_feedback.prompt %} — "{{ pending_feedback.prompt }}"{% endif %}
@@ -38,7 +38,7 @@ You are at phase {{ phase_index }}/{{ phase_total }} — `{{ current_phase }}`{%
 Gates:{% for g in current_phase_gates %} [{% if g.satisfied %}x{% else %} {% endif %}] `{{ g.id }}`{% endfor %}
 {% endif %}{% if fanout_plan %}
 ### Stamped fan-out
-The plan is stamped, not automatically dispatched. If no leg from this plan has been dispatched, call `task` for every leg below with the bold agent id as `agent_type`, the leg text as `brief.goal`, concrete `brief.done_when`, and read scope. Dispatch them in one assistant turn, then call `wait(timeout_ms=1800000, conditions=[{"kind":"all_workers_idle"}])`. If workers or completion envelopes already exist, do not duplicate them; wait or retry only failed / missing legs. Do not synthesize until every completion envelope lands.
+The plan is stamped, not automatically started. If no planned worker from this plan has started, call `task` for every leg below with its `workflow_work_id` in one assistant turn, then call `wait(timeout_ms=1800000, conditions=[{"kind":"all_workers_idle"}])`. If workers or results already exist, do not duplicate them; wait, or recover incomplete legs within the attempt allowance{% if profile_has_instruct_worker %} with `instruct_worker`{% endif %}. Do not synthesize until every worker delivers.
 
 {{ fanout_plan }}
 {% endif %}{% if gate_obligations %}
@@ -55,9 +55,9 @@ When no phase work is required below, work the user's request directly.
 This is the last phase. There is no further advance to call.
 {% elif phase_exit.kind == "review_loop" %}{% if phase_exit.review_work_ids %}Use these exact `workflow_work_id` values: {% for agent, work_id in phase_exit.review_work_ids %}`{{ agent }}` → `{{ work_id }}`. {% endfor %}
 {% endif %}{% if phase_exit.review_agents %}
-1. Dispatch every owed reviewer ({% for a in phase_exit.review_agents %}`{{ a }}`{% if not forloop.Last %}, {% endif %}{% endfor %}) as `task` legs in **one assistant message**, within user limits. Ask before conflicting review. A terminal verdict needs each successful envelope.
+1. Start every owed reviewer ({% for a in phase_exit.review_agents %}`{{ a }}`{% if not forloop.Last %}, {% endif %}{% endfor %}) with `task` through its workflow review assignment in **one assistant message**, within user limits. Ask before conflicting review. A terminal verdict needs each completed review.
 {% endif %}{% if phase_exit.review_agents %}2{% else %}1{% endif %}. Weigh the critique, then call `submit_verdict`{% if phase_exit.verdict_outline %} with `verdict` shaped `{{ phase_exit.verdict_outline }}` (the first `verdict` value is terminal; the tool schema gives each member's type); arrays may be empty when no entry exists{% endif %}. Only that call records a verdict.{% if phase_exit.review_loop_key %}
-{% if phase_exit.review_agents %}3{% else %}2{% endif %}. A terminal verdict satisfies `evidence_passed:{{ phase_exit.review_loop_key }}`. {% if phase_exit.followup_attempts %}A non-terminal verdict registers open questions; dispatch their `workflow_work_id` for focused investigation ({{ phase_exit.followup_attempts }} completed attempts each).{% else %}A non-terminal verdict runs the loop again{% if phase_exit.review_loop_cap %}, up to {{ phase_exit.review_loop_cap }} time(s){% endif %}.{% endif %}{% endif %}
+{% if phase_exit.review_agents %}3{% else %}2{% endif %}. A terminal verdict satisfies `evidence_passed:{{ phase_exit.review_loop_key }}`. {% if phase_exit.followup_attempts %}A non-terminal verdict registers open questions; start their `workflow_work_id` for focused investigation ({{ phase_exit.followup_attempts }} completed attempts each).{% else %}A non-terminal verdict runs the loop again{% if phase_exit.review_loop_cap %}, up to {{ phase_exit.review_loop_cap }} time(s){% endif %}.{% endif %}{% endif %}
 {% elif phase_exit.kind == "human_approval" %}
 End the turn. The user approves the bound document themselves — chat prose is not approval, and `workflow_advance` will not stand in for it. Treat any message they send meanwhile as revision feedback on that document.
 {% elif phase_exit.kind == "invoke" %}
@@ -141,5 +141,5 @@ Answer in Markdown with citations inline, then end with one `json` fence of the 
 
 {{ coverage_review }}
 
-Assess the obligations and gaps in the current reconciliation subject, citing evidence and affected obligation IDs. Normal scanner limitations are disclosed; they do not alone reduce completeness. Mark work open when a planned question remains materially unanswered. Submit the supplied revision; the host checks review applicability and prerequisites. Read `pack_board(review_view: summary)` for current context and exact review work IDs.
+Assess the obligations and gaps in the current reconciliation subject, citing evidence and affected obligation IDs. Normal scanner limitations are disclosed; they do not alone reduce completeness. Mark work open when a planned question remains materially unanswered. Submit the supplied revision; the host checks review applicability and prerequisites. Read `read_review(view: "summary")` for current context and exact review work IDs.
 {% endif %}

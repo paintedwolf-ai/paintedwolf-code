@@ -47,15 +47,24 @@ func (p *GuidanceProvider) SetInjectRenderer(renderer *prompts.InjectRenderer) {
 
 // Prepend injects one system message when fresh guidance is available.
 func (p *GuidanceProvider) Prepend(ctx context.Context, sessionID, delegationID, taskID string, messages []api.Message) []api.Message {
-	if p == nil || p.Coordinator == nil || delegationID == "" {
+	if p == nil || p.Coordinator == nil {
 		return messages
 	}
-	summaries := p.pending(ctx, delegationID)
+	var summaries []api.ScanGuidanceSummary
+	var key string
+	if delegationID != "" {
+		summaries = p.pending(ctx, delegationID)
+		key = delegationID + ":" + taskID
+	} else if strings.TrimSpace(sessionID) != "" {
+		summaries = p.pendingSession(ctx, sessionID)
+		key = "session:" + strings.TrimSpace(sessionID)
+	} else {
+		return messages
+	}
 	if len(summaries) == 0 {
 		return messages
 	}
 	sig := guidanceSignature(summaries)
-	key := delegationID + ":" + taskID
 	p.mu.Lock()
 	if p.watermarks[key] == sig {
 		p.mu.Unlock()
@@ -116,7 +125,45 @@ func (p *GuidanceProvider) pending(ctx context.Context, delegationID string) []a
 	return guidance
 }
 
-// SessionGuidanceAdapter implements session.ScanGuidanceHook using delegation lookup.
+func (p *GuidanceProvider) pendingSession(ctx context.Context, sessionID string) []api.ScanGuidanceSummary {
+	scans, err := p.Coordinator.ListBySessionID(ctx, sessionID)
+	if err != nil {
+		return nil
+	}
+	var latest *api.CodeScan
+	for i := range scans {
+		sc := &scans[i]
+		if sc.Status != api.CodeScanStatusComplete || len(sc.Guidance) == 0 {
+			continue
+		}
+		if !hasSecurityOrSecretCategory(sc.Categories) {
+			continue
+		}
+		if latest == nil || sc.CreatedAt.After(latest.CreatedAt) {
+			latest = sc
+		}
+	}
+	if latest == nil {
+		return nil
+	}
+	guidance := latest.Guidance
+	cap := p.Budget.MaxHintsPerInjection
+	if cap > 0 && len(guidance) > cap {
+		guidance = guidance[:cap]
+	}
+	return guidance
+}
+
+func hasSecurityOrSecretCategory(cats []api.ScanCategory) bool {
+	for _, cat := range cats {
+		if cat == api.ScanCategorySecurity || cat == api.ScanCategorySecret {
+			return true
+		}
+	}
+	return false
+}
+
+// SessionGuidanceAdapter implements session.ScanGuidanceHook using delegation or session lookup.
 type SessionGuidanceAdapter struct {
 	Provider            *GuidanceProvider
 	DelegationBySession func(sessionID string) (delegationID, taskID string, ok bool)
@@ -127,9 +174,9 @@ func (a *SessionGuidanceAdapter) PrependGuidance(ctx context.Context, sessionID 
 	if a == nil || a.Provider == nil {
 		return messages
 	}
-	delegationID, taskID, ok := a.DelegationBySession(sessionID)
-	if !ok || delegationID == "" {
-		return messages
+	var delegationID, taskID string
+	if a.DelegationBySession != nil {
+		delegationID, taskID, _ = a.DelegationBySession(sessionID)
 	}
 	return a.Provider.Prepend(ctx, sessionID, delegationID, taskID, messages)
 }

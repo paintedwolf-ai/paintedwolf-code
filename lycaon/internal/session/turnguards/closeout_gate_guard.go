@@ -73,6 +73,59 @@ func (m *Service) OpenGates(ctx context.Context, sess *api.Session, workersIdle,
 	return reject, blocked
 }
 
+// PlanCloseout blocks batch closeout while a planned or criteria-bearing worker has unmet criteria or missing evidence.
+func (m *Service) PlanCloseout(ctx context.Context, sess *api.Session, workersIdle, invokeAllowed bool) (*guidance.Refusal, bool) {
+	if m == nil || sess == nil || sess.IsWorkerChild() || m.planCloseout == nil || !workersIdle {
+		return nil, false
+	}
+	workspacePath := ""
+	if m.Workspace != nil {
+		workspacePath, _ = m.Workspace.ActivePath(ctx, sess)
+	}
+	verdict, err := m.planCloseout.CheckSessionCloseout(ctx, sess.ID, sess.ProjectID, workspacePath)
+	if err != nil {
+		return guidance.NewRefusal("", err.Error()).WithCause(errors.Join(guidance.ErrCloseoutStopped, err)), true
+	}
+	if verdict.OK {
+		return nil, false
+	}
+	code := strings.TrimSpace(verdict.Code)
+	if code == "" {
+		code = "COORDINATOR_CRITERIA_UNMET"
+	}
+	root := sessiontree.RootID(ctx, m.store, sess.ID)
+	count, retry := m.closeouts.Delay(sess.ID, root, closeouts.GateDelay, invokeAllowed, closeoutGateDelayMaxPerPrompt)
+	reject, blocked := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
+		gc.Workers.WorkersIdle = workersIdle
+		gc.Grounding.ClaimsCompletion = true
+		gc.Grounding.HasMatchingLedgerJob = true
+		data := map[string]any{
+			"grounding_verdict": code,
+			"grounding_reason":  verdict.Reason,
+			"leg_id":            verdict.LegID,
+		}
+		if verdict.Worker != "" {
+			data["worker"] = verdict.Worker
+		}
+		if verdict.ResultID != "" {
+			data["overlay_id"] = verdict.ResultID
+		}
+		if len(verdict.Outcomes) > 0 {
+			data["criteria_outcomes"] = verdict.Outcomes
+		}
+		gc.PutRejectData(code, data)
+		return nil
+	})
+	if blocked && !retry {
+		cause := guidance.ErrCloseoutStopped
+		if !invokeAllowed && count == 0 {
+			cause = errors.Join(cause, guidance.ErrCloseoutNeedsRepairTurn)
+		}
+		reject = reject.WithCause(cause)
+	}
+	return reject, blocked
+}
+
 // AssertCompletion also covers host-assembled and forced closeouts.
 func (m *Service) AssertCompletion(ctx context.Context, sess *api.Session) error {
 	if m == nil || sess == nil || sess.IsWorkerChild() {
@@ -82,6 +135,9 @@ func (m *Service) AssertCompletion(ctx context.Context, sess *api.Session) error
 		return reject
 	}
 	idle := m.state.ForSession(ctx, sess).WorkersInFlight == 0
+	if reject, blocked := m.PlanCloseout(ctx, sess, idle, false); blocked {
+		return reject
+	}
 	reject, blocked := m.OpenGates(ctx, sess, idle, false)
 	if blocked {
 		return reject

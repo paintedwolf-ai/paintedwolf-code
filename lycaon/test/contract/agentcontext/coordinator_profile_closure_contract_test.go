@@ -30,6 +30,7 @@ var coordinatorPromptlessAllowlist = map[string]string{
 	"restore_version":     "worker mutations via task(); coordinator plan surfaces only",
 	"source_history":      "universal repo inspection",
 	"delegate_dispatch":   "delegation primitive; calling convention covered by topology docs",
+	"plan_from_blueprint": "blueprint planning primitive; taught by coordinator-mode-plan-execute and tool schema",
 	"task":                "delegation primitive; surfaced via leg-finished kick",
 	"workflow_persist":    "low-level upsert; coordinator uses compose/compose_from_template instead",
 	"workflow_transition": "taught via active-workflow Phase exit inject (choice arms)",

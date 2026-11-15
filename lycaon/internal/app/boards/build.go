@@ -36,6 +36,7 @@ import (
 	"github.com/lycaon/lycaon/internal/visualscreen"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 )
 
 // Dependencies holds the domain runtimes and services needed by boards.
@@ -118,9 +119,13 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 		return r.deps.Settings.Service.SecurityScanners.Effective().Enabled
 	})
 
+	var planWorkers board.PlanWorkersFunc
+	if r.deps.Delegations != nil && r.deps.Delegations.Plan != nil {
+		planWorkers = r.deps.Delegations.Plan.PlanWorkers
+	}
 	if err := board.RegisterBoardTools(r.deps.Execution.Host.Registry, board.ToolDeps{
-		ReviewView:         r.deps.Workflows.Manager.Assignments.View,
 		Builder:            r.Snapshot,
+		PlanWorkers:        planWorkers,
 		Findings:           func() findings.Store { return r.Findings },
 		RootSession:        r.rootSessionKey,
 		PromotePaths:       r.deps.Sessions.Manager.Promotion.PromotePathBoardLines,
@@ -128,6 +133,9 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 		ActiveReservations: r.deps.Sessions.Manager.Workers.Workspaces.ReservationEntries,
 	}); err != nil {
 		return fmt.Errorf("board tools: %w", err)
+	}
+	if err := workflowreview.RegisterReadReviewTool(r.deps.Execution.Host.Registry, r.deps.Workflows.Manager.Assignments.View); err != nil {
+		return fmt.Errorf("read_review tool: %w", err)
 	}
 
 	r.deps.Sessions.Manager.Coordinator.Loading.SetLedger(r.deps.Execution.TurnLoads)

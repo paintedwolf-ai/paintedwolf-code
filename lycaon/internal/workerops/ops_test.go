@@ -3,6 +3,7 @@ package workerops_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -483,7 +484,7 @@ func TestShelveReplaysItsFirstDisposition(t *testing.T) {
 	testutil.FailErr(t, "shelve", err)
 	again, err := f.svc.Shelve(t.Context(), f.coord, op("shelve-op"), "result-job-1", "defer until migration")
 	testutil.FailErr(t, "replay shelve", err)
-	if again != first {
+	if !reflect.DeepEqual(again, first) {
 		t.Fatalf("replay = %+v, want %+v", again, first)
 	}
 	_, err = f.svc.Shelve(t.Context(), f.coord, op("shelve-op"), "result-job-1", "different reason")

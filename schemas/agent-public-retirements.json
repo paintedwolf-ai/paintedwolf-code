@@ -684,6 +684,9 @@
       ],
       "BANNER_WORKER_INFLIGHT_ROSTER": [
         "COORDINATOR_WORKER_IN_FLIGHT"
+      ],
+      "WORKFLOW_REVIEW_VIEW_INVALID": [
+        "READ_REVIEW_INVALID"
       ]
     },
     "tools": {

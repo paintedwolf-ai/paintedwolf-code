@@ -404,3 +404,7 @@ retired:
     kind: hint_code
     summary: Promote banner that nothing rendered; promote_order rides on preview and promote.
     date: 2026-11-13
+  - id: WORKFLOW_REVIEW_VIEW_INVALID
+    kind: hint_code
+    summary: Rejected an invalid pack_board review view; review subjects moved to read_review with READ_REVIEW_INVALID.
+    date: 2026-11-15

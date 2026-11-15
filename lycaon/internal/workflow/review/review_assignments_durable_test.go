@@ -24,7 +24,7 @@ func reviewAssignmentFixture(t *testing.T) (*workflow.RunManager, *api.WorkflowR
 
 func assertReviewApplicable(t *testing.T, mgr *workflow.RunManager, run *api.WorkflowRun) {
 	t.Helper()
-	raw, err := mgr.Assignments.View(t.Context(), map[string]any{"review_view": "summary"}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: run.SessionID}})
+	raw, err := mgr.Assignments.View(t.Context(), map[string]any{"view": "summary"}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: run.SessionID}})
 	testutil.FailErr(t, "read public review applicability", err)
 	var view map[string]json.RawMessage
 	testutil.FailErr(t, "decode public applicability", json.Unmarshal([]byte(raw), &view))
@@ -122,7 +122,7 @@ func TestReviewAssignmentViewsFenceChildrenAndPageCandidate(t *testing.T) {
 	setReviewWorkerTasks(mgr, func(context.Context, string) ([]api.WorkerTask, error) {
 		return []api.WorkerTask{{ID: "job", ChildSessionID: "child"}}, nil
 	})
-	args := map[string]any{"review_view": "subject", "assignment_id": "job"}
+	args := map[string]any{"view": "subject", "assignment_id": "job"}
 	child := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "child", ParentSessionID: run.SessionID, WorkerJobID: "job"}}
 	raw, err := mgr.Assignments.View(t.Context(), args, child)
 	testutil.FailErr(t, "read child subject", err)
@@ -147,7 +147,7 @@ func TestReviewAssignmentViewsFenceChildrenAndPageCandidate(t *testing.T) {
 		t.Fatal("another child read the assignment")
 	}
 	child.Identity.SessionID = "child"
-	args["review_view"] = "summary"
+	args["view"] = "summary"
 	if _, err := mgr.Assignments.View(t.Context(), args, child); err == nil {
 		t.Fatal("worker read coordinator review state")
 	}
@@ -220,7 +220,7 @@ func TestReviewViewValidatesSelectorsAndMarksReservations(t *testing.T) {
 	task := api.WorkerTask{ID: "reserved", WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, AgentType: "auditor"}
 	testutil.FailErr(t, "reserve review", mgr.Assignments.Bind(t.Context(), run, &task))
 	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: run.SessionID}}
-	raw, err := mgr.Assignments.View(t.Context(), map[string]any{"review_view": "assignments"}, tctx)
+	raw, err := mgr.Assignments.View(t.Context(), map[string]any{"view": "assignments"}, tctx)
 	testutil.FailErr(t, "list reservations", err)
 	var page struct {
 		Assignments []struct {
@@ -231,14 +231,14 @@ func TestReviewViewValidatesSelectorsAndMarksReservations(t *testing.T) {
 	if len(page.Assignments) != 1 || page.Assignments[0].Status != "reserved" {
 		t.Fatalf("orphan reservation shown as job: %s", raw)
 	}
-	for _, args := range []map[string]any{{"cursor": "50"}, {"review_view": "subject"}, {"review_view": "summary", "assignment_id": "reserved"}, {"review_view": "summary", "cursor": "50"}, {"review_view": "subject", "assignment_id": "reserved", "cursor": "999"}, {"review_view": "assignments", "finding_id": 1}} {
+	for _, args := range []map[string]any{{"cursor": "50"}, {"view": "subject"}, {"view": "summary", "assignment_id": "reserved"}, {"view": "summary", "cursor": "50"}, {"view": "subject", "assignment_id": "reserved", "cursor": "999"}, {"view": "assignments", "finding_id": 1}} {
 		_, err := mgr.Assignments.View(t.Context(), args, tctx)
-		if rejected := toolrejection.AsToolReject(err); rejected == nil || rejected.Code != "WORKFLOW_REVIEW_VIEW_INVALID" {
+		if rejected := toolrejection.AsToolReject(err); rejected == nil || rejected.Code != "READ_REVIEW_INVALID" {
 			t.Fatalf("selector refusal not registered: %v", err)
 		}
 	}
 	mgr.Assignments.WorkerTasks = nil
-	_, err = mgr.Assignments.View(t.Context(), map[string]any{"review_view": "summary"}, tctx)
+	_, err = mgr.Assignments.View(t.Context(), map[string]any{"view": "summary"}, tctx)
 	if toolrejection.AsToolReject(err) == nil {
 		t.Fatalf("missing ledger not refused: %v", err)
 	}

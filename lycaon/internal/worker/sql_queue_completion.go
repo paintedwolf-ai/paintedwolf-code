@@ -54,7 +54,8 @@ func (q *sqlQueueClaims) completeAdmitted(ctx context.Context, claimed *api.Work
 			}
 		}
 	}
-	completion, err := q.store.CompleteJob(ctx, jobID, result, claimed.ClaimToken, mergeStatus, teardown, overlayPath, checkpointID)
+	criteriaJSON := q.evaluateRoundCriteria(ctx, task, strings.TrimSpace(result.Status) != "needs_decision", result.Summary, result.ChangeReport)
+	completion, err := q.store.CompleteJob(ctx, jobID, result, claimed.ClaimToken, mergeStatus, teardown, overlayPath, checkpointID, criteriaJSON)
 	if err != nil || !completion.Committed || completion.Suspended {
 		q.discardOverlay(ctx, overlayPath)
 	}
@@ -65,6 +66,9 @@ func (q *sqlQueueClaims) completeAdmitted(ctx context.Context, claimed *api.Work
 		q.destroyWorkerWorkspace(ctx, task)
 	}
 	q.refreshBoardByID(ctx, jobID)
+	if !completion.Suspended {
+		q.notifyRoundSettled(ctx, task)
+	}
 	return true, nil
 }
 
@@ -148,7 +152,8 @@ func (q *sqlQueueClaims) failAdmitted(ctx context.Context, claimed *api.WorkerTa
 		}
 	}
 	kept := q.keptCheckpoint(ctx, task)
-	won, err := q.store.FailJob(ctx, claimed, msg, failure, kept)
+	criteriaJSON := q.evaluateRoundCriteria(ctx, task, false, "", nil)
+	won, err := q.store.FailJob(ctx, claimed, msg, failure, kept, criteriaJSON)
 	if err != nil {
 		return false, err
 	}
@@ -159,6 +164,7 @@ func (q *sqlQueueClaims) failAdmitted(ctx context.Context, claimed *api.WorkerTa
 		q.destroyWorkerWorkspace(ctx, task)
 	}
 	q.refreshBoardByID(ctx, claimed.ID)
+	q.notifyRoundSettled(ctx, task)
 	return true, nil
 }
 
@@ -260,4 +266,50 @@ func hasLayeredOverlayDivergence(ctx context.Context, task *api.WorkerTask) (boo
 		return false, false
 	}
 	return err != nil || len(paths) > 0, true
+}
+
+func (q *sqlQueueClaims) evaluateRoundCriteria(
+	ctx context.Context,
+	task *api.WorkerTask,
+	jobComplete bool,
+	summary string,
+	report *api.WorkerChangeReport,
+) string {
+	if task == nil {
+		return ""
+	}
+	q.mu.Lock()
+	eval := q.criteriaEvaluator
+	projects := q.projects
+	q.mu.Unlock()
+	if eval == nil {
+		return ""
+	}
+	var diverged []string
+	if strings.TrimSpace(task.WorkspaceRoot) != "" {
+		if paths, handled, err := workspace.OverlayWorkspaceDivergencePaths(ctx, task.WorkspaceRoot); handled && err == nil {
+			diverged = paths
+		} else {
+			diverged = session.OverlayWorkspaceDivergencePaths(task, TaskRootRefs(ctx, task, projects)) //nolint:contextcheck // Divergence summary inspects baseline snapshots synchronously.
+		}
+	}
+	projectDir := strings.TrimSpace(task.WorkspacePath)
+	if projectDir == "" {
+		if refs := TaskRootRefs(ctx, task, projects); len(refs) > 0 {
+			projectDir = strings.TrimSpace(refs[0].Path)
+		}
+	}
+	return eval(ctx, task, projectDir, jobComplete, summary, diverged, report)
+}
+
+func (q *sqlQueueClaims) notifyRoundSettled(ctx context.Context, task *api.WorkerTask) {
+	if task == nil || strings.TrimSpace(task.ParentSessionID) == "" {
+		return
+	}
+	q.mu.Lock()
+	onSettled := q.onRoundSettled
+	q.mu.Unlock()
+	if onSettled != nil {
+		onSettled(ctx, task.ParentSessionID)
+	}
 }

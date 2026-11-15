@@ -19,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/mcp"
@@ -350,7 +349,7 @@ func applyTestHarnessRelaxations(sa *app.ServeApp) {
 
 // autoCompleteOrchestrator dispatches legs that complete immediately in mock workspaces.
 func autoCompleteOrchestrator(deps orchestration.OrchestratorDeps) orchestration.Orchestrator {
-	deps.Delegation = &autoCompleteDelegation{inner: deps.Delegation.(delegation.DelegationManager), store: deps.Store}
+	deps.Workers = &autoCompleteTopologyWorkers{TopologyWorkers: deps.Workers}
 	deps.Workspaces = &mockWorkspaceBinder{}
 	return orchestration.NewOrchestratorImpl(deps)
 }

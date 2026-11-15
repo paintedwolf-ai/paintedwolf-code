@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerops"
@@ -17,6 +18,109 @@ import (
 // TaskWorkerNameTakenCode refuses a task whose name another worker of the
 // session already holds; that worker is directed with instruct_worker.
 const TaskWorkerNameTakenCode = "TASK_WORKER_NAME_TAKEN"
+
+func replayTaskCall(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, sourceDigest string) (string, bool, error) {
+	if deps.TaskReceipt == nil || strings.TrimSpace(tctx.Identity.ToolCallID) == "" {
+		return "", false, nil
+	}
+	prior, err := deps.TaskReceipt(ctx, tctx.Identity.SessionID, strings.TrimSpace(tctx.Identity.ToolCallID))
+	if err != nil || prior == nil {
+		return "", false, err
+	}
+	if err := compareTaskReceipt(prior, api.WorkerTask{SourceToolCallID: tctx.Identity.ToolCallID, SourceArgsDigest: sourceDigest}); err != nil {
+		return "", true, err
+	}
+	scope := project.ScopeFromToolContext(tctx.Identity.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, tctx.ActiveRootPath())
+	name, err := startWorkerRound(ctx, deps, tctx, *prior, nil, nil)
+	if err != nil {
+		return "", true, err
+	}
+	if err := accountReplayedReview(ctx, deps, tctx, prior.ID); err != nil {
+		return "", true, err
+	}
+	if err := deps.Queue.ReleaseAdmitted(ctx, prior.ID); err != nil {
+		return "", true, err
+	}
+	out, err := taskEnqueueOutput(tctx, scope, *prior, name)
+	return out, true, err
+}
+
+func parseTaskFilesArg(args map[string]any) []string {
+	var files []string
+	if raw, ok := args["files"].([]any); ok {
+		for _, item := range raw {
+			if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
+				files = append(files, strings.TrimSpace(s))
+			}
+		}
+	}
+	return files
+}
+
+func applyPlannedWorkerTask(
+	ctx context.Context,
+	deps TaskToolDeps,
+	tctx tools.ToolContext,
+	projectID string,
+	workID string,
+	name string,
+	scope *api.TaskScope,
+	files []string,
+	after []string,
+) (*workerrecords.Worker, []string, []string, error) {
+	if deps.Plan == nil || strings.TrimSpace(workID) == "" {
+		return nil, after, files, nil
+	}
+	var mode string
+	var paths []string
+	if scope != nil {
+		mode = string(scope.Mode)
+		paths = scope.Paths
+	}
+	w, mergedAfter, ok, err := deps.Plan.PreparePlannedTask(ctx, coordinatorActor(tctx), projectID, workID, mode, paths, after)
+	if err != nil || !ok {
+		return nil, after, files, err
+	}
+	if name != "" && name != w.Name {
+		return nil, nil, nil, &toolrejection.ToolReject{
+			Code: "TOOL_ARGS_INVALID",
+			Data: map[string]any{"tool": "task", "field": "name", "worker": w.Name, "reason": "planned_worker_name_mismatch"},
+		}
+	}
+	if len(files) == 0 && len(w.Files) > 0 {
+		files = append([]string(nil), w.Files...)
+	}
+	if scope != nil && len(scope.Paths) == 0 && len(w.Files) > 0 {
+		scope.Paths = append([]string(nil), w.Files...)
+	}
+	return &w, mergedAfter, files, nil
+}
+
+func ensureTaskWorker(
+	ctx context.Context,
+	deps TaskToolDeps,
+	tctx tools.ToolContext,
+	task api.WorkerTask,
+	name string,
+	brief string,
+	planned *workerrecords.Worker,
+) (workerrecords.WorkerReceipt, bool, error) {
+	if planned != nil {
+		if brief != "" && brief != planned.Brief {
+			if _, err := deps.WorkerRecords.SetBrief(ctx, coordinatorActor(tctx), taskWorkerOp(tctx, "brief"), planned.ID, brief); err != nil {
+				return workerrecords.WorkerReceipt{}, false, err
+			}
+		}
+		return workerrecords.WorkerReceipt{WorkerID: planned.ID, Name: planned.Name}, false, nil
+	}
+	if deps.Plan != nil && task.WorkflowRunID != "" && task.WorkflowWorkID != "" {
+		if err := deps.Plan.SupersedeSettledWorkflowWorker(ctx, coordinatorActor(tctx), taskWorkerOp(tctx, "supersede"), task.WorkflowRunID, task.WorkflowPhase, task.WorkflowWorkID); err != nil {
+			return workerrecords.WorkerReceipt{}, false, err
+		}
+	}
+	created, err := createTaskWorker(ctx, deps, tctx, task, name, brief)
+	return created, err == nil, err
+}
 
 func workerNameArg(args map[string]any) (string, error) {
 	raw, ok := args["name"]
@@ -58,36 +162,69 @@ func createTaskWorker(ctx context.Context, deps TaskToolDeps, tctx tools.ToolCon
 // startWorkerRound admits the task's job as its worker's first round, bound
 // to subject for a reviewer, and returns the worker's name. A replayed task
 // call finds the worker and round its first call created.
-func startWorkerRound(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, task api.WorkerTask, subject *workerrecords.ReviewSubject) (string, error) {
+func startWorkerRound(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, task api.WorkerTask, created *workerrecords.WorkerReceipt, subject *workerrecords.ReviewSubject) (string, error) {
 	actor := coordinatorActor(tctx)
-	kind, raw, ok, err := deps.WorkerRecords.Operation(ctx, actor, taskWorkerOp(tctx, "worker").ID)
-	if err != nil {
+	if round, admitted, err := deps.WorkerRecords.RoundByJob(ctx, task.ID); err != nil {
 		return "", err
+	} else if admitted {
+		if created != nil && created.Name != "" {
+			return created.Name, nil
+		}
+		w, wErr := deps.WorkerRecords.Worker(ctx, actor, round.WorkerID)
+		if wErr != nil {
+			return "", wErr
+		}
+		return w.Name, nil
 	}
-	if !ok || kind != "create_worker" {
-		return "", fmt.Errorf("task %s started no worker", task.ID)
-	}
-	var w workerrecords.WorkerReceipt
-	if err := json.Unmarshal(raw, &w); err != nil {
-		return "", err
+	var receipt workerrecords.WorkerReceipt
+	if created != nil && created.WorkerID != "" {
+		receipt = *created
+	} else {
+		var err error
+		receipt, err = resolveReplayedWorkerReceipt(ctx, deps, actor, tctx, task)
+		if err != nil {
+			return "", err
+		}
 	}
 	target := string(task.ExecutionTarget)
 	if target == "" {
 		target = string(api.ExecutionTargetLocal)
 	}
-	if _, admitted, err := deps.WorkerRecords.RoundByJob(ctx, task.ID); err != nil || admitted {
-		return w.Name, err
-	}
 	spec := workerrecords.RoundSpec{JobID: task.ID, ExecutionTarget: target}
 	if subject != nil {
+		var err error
 		if spec.ReviewSubject, err = json.Marshal(subject); err != nil {
 			return "", err
 		}
 	}
-	if _, err := deps.WorkerRecords.AdmitRound(ctx, actor, taskWorkerOp(tctx, "round"), w.WorkerID, spec); err != nil {
+	if _, err := deps.WorkerRecords.AdmitRound(ctx, actor, taskWorkerOp(tctx, "round"), receipt.WorkerID, spec); err != nil {
 		return "", err
 	}
-	return w.Name, nil
+	return receipt.Name, nil
+}
+
+func resolveReplayedWorkerReceipt(ctx context.Context, deps TaskToolDeps, actor workerrecords.Actor, tctx tools.ToolContext, task api.WorkerTask) (workerrecords.WorkerReceipt, error) {
+	kind, raw, ok, err := deps.WorkerRecords.Operation(ctx, actor, taskWorkerOp(tctx, "worker").ID)
+	if err != nil {
+		return workerrecords.WorkerReceipt{}, err
+	}
+	if ok && kind == "create_worker" {
+		var w workerrecords.WorkerReceipt
+		err = json.Unmarshal(raw, &w)
+		return w, err
+	}
+	if strings.TrimSpace(task.WorkflowWorkID) != "" {
+		workers, wErr := deps.WorkerRecords.Workers(ctx, actor)
+		if wErr != nil {
+			return workerrecords.WorkerReceipt{}, wErr
+		}
+		for _, w := range workers {
+			if w.ClosedAt == "" && w.WorkflowWorkID == task.WorkflowWorkID {
+				return workerrecords.WorkerReceipt{WorkerID: w.ID, Name: w.Name}, nil
+			}
+		}
+	}
+	return workerrecords.WorkerReceipt{}, fmt.Errorf("task %s started no worker", task.ID)
 }
 
 // bindReviewSubject validates review_of and resolves the sealed result it addresses.
