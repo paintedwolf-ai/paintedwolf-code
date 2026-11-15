@@ -30,6 +30,7 @@ var outboxSilentMutators = map[string]string{
 	// Workers bind inside the job's child-session transaction; the roster reads
 	// worker records on each request and no event payload carries one.
 	"lycaon/internal/workerrecords/workers.go:CreateWorker":     "creates a worker for the task that starts it; the job announces its admission",
+	"lycaon/internal/workerrecords/workers.go:UpdatePlanned":    "reconciles an unstarted planned worker from a blueprint; the roster reads worker records on each request",
 	"lycaon/internal/workerrecords/workers.go:BindChildSession": "binds a worker's child session; the session and the job announce themselves",
 	"lycaon/internal/workerrecords/workers.go:SetBrief":         "changes a worker's brief, which no event payload carries",
 	"lycaon/internal/workerrecords/workers.go:Close":            "closes a worker; the roster drops it on the next request",

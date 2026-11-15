@@ -2391,6 +2391,7 @@ type WorkerResultDispositions struct {
 	LandedChangeID       sql.NullString `json:"landed_change_id"`
 	ShelveReason         string         `json:"shelve_reason"`
 	ChangedAt            sql.NullString `json:"changed_at"`
+	CriteriaOutcomesJson string         `json:"criteria_outcomes_json"`
 }
 
 type WorkerResults struct {
@@ -2434,26 +2435,31 @@ type WorkerWorkspacePreparations struct {
 }
 
 type Workers struct {
-	ID               string         `json:"id"`
-	ProjectID        string         `json:"project_id"`
-	SessionID        string         `json:"session_id"`
-	Name             string         `json:"name"`
-	AgentType        string         `json:"agent_type"`
-	ScopeMode        string         `json:"scope_mode"`
-	Brief            string         `json:"brief"`
-	ChildSessionID   sql.NullString `json:"child_session_id"`
-	DelegationID     sql.NullString `json:"delegation_id"`
-	LegID            sql.NullString `json:"leg_id"`
-	WorkflowRunID    sql.NullString `json:"workflow_run_id"`
-	WorkflowPhase    string         `json:"workflow_phase"`
-	WorkflowWorkID   string         `json:"workflow_work_id"`
-	ClosedAt         sql.NullString `json:"closed_at"`
-	ClosedReason     string         `json:"closed_reason"`
-	NextRoundOrdinal int64          `json:"next_round_ordinal"`
-	NextMessageSeq   int64          `json:"next_message_seq"`
-	OperationID      string         `json:"operation_id"`
-	CreatedAt        string         `json:"created_at"`
-	UpdatedAt        string         `json:"updated_at"`
+	ID                string         `json:"id"`
+	ProjectID         string         `json:"project_id"`
+	SessionID         string         `json:"session_id"`
+	Name              string         `json:"name"`
+	AgentType         string         `json:"agent_type"`
+	ScopeMode         string         `json:"scope_mode"`
+	Brief             string         `json:"brief"`
+	ChildSessionID    sql.NullString `json:"child_session_id"`
+	DelegationID      sql.NullString `json:"delegation_id"`
+	LegID             sql.NullString `json:"leg_id"`
+	WorkflowRunID     sql.NullString `json:"workflow_run_id"`
+	WorkflowPhase     string         `json:"workflow_phase"`
+	WorkflowWorkID    string         `json:"workflow_work_id"`
+	BlueprintPath     string         `json:"blueprint_path"`
+	BlueprintRevision string         `json:"blueprint_revision"`
+	BaseSha           string         `json:"base_sha"`
+	FilesJson         string         `json:"files_json"`
+	CriteriaJson      string         `json:"criteria_json"`
+	ClosedAt          sql.NullString `json:"closed_at"`
+	ClosedReason      string         `json:"closed_reason"`
+	NextRoundOrdinal  int64          `json:"next_round_ordinal"`
+	NextMessageSeq    int64          `json:"next_message_seq"`
+	OperationID       string         `json:"operation_id"`
+	CreatedAt         string         `json:"created_at"`
+	UpdatedAt         string         `json:"updated_at"`
 }
 
 type WorkflowCommands struct {

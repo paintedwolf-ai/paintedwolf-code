@@ -2,26 +2,60 @@
 INSERT INTO workers (
     id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
     delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+    blueprint_path, blueprint_revision, base_sha, files_json, criteria_json,
     operation_id, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetWorker :one
 SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
        delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       blueprint_path, blueprint_revision, base_sha, files_json, criteria_json,
        closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
 FROM workers WHERE id = ?;
 
 -- name: GetWorkerByName :one
 SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
        delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       blueprint_path, blueprint_revision, base_sha, files_json, criteria_json,
        closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
 FROM workers WHERE session_id = ? AND name = ?;
 
 -- name: ListSessionWorkers :many
 SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
        delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       blueprint_path, blueprint_revision, base_sha, files_json, criteria_json,
        closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
 FROM workers WHERE session_id = ? ORDER BY created_at, id;
+
+-- name: ListWorkflowRunWorkers :many
+SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
+       delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       blueprint_path, blueprint_revision, base_sha, files_json, criteria_json,
+       closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
+FROM workers WHERE workflow_run_id = ? ORDER BY created_at, id;
+
+-- name: ListSessionBlueprintWorkers :many
+SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
+       delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       blueprint_path, blueprint_revision, base_sha, files_json, criteria_json,
+       closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
+FROM workers WHERE session_id = ? AND blueprint_path = ? ORDER BY created_at, id;
+
+-- name: UpdatePlannedWorker :execrows
+UPDATE workers
+SET agent_type = sqlc.arg(agent_type),
+    scope_mode = sqlc.arg(scope_mode),
+    brief = sqlc.arg(brief),
+    workflow_run_id = sqlc.narg(workflow_run_id),
+    workflow_phase = sqlc.arg(workflow_phase),
+    blueprint_revision = sqlc.arg(blueprint_revision),
+    base_sha = sqlc.arg(base_sha),
+    files_json = sqlc.arg(files_json),
+    criteria_json = sqlc.arg(criteria_json),
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id)
+  AND closed_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM worker_rounds WHERE worker_rounds.worker_id = workers.id);
 
 -- name: CountSessionWorkersByAgent :one
 SELECT COUNT(*) FROM workers WHERE session_id = ? AND agent_type = ?;
@@ -164,13 +198,22 @@ WHERE worker_id = sqlc.arg(worker_id) AND recipient_session_id = sqlc.arg(recipi
 
 -- name: GetWorkerResultDisposition :one
 SELECT result_id, worker_id, accounted_operation_id, accounted_at, change_state,
-       change_operation_id, landed_change_id, shelve_reason, changed_at
+       change_operation_id, landed_change_id, shelve_reason, changed_at, criteria_outcomes_json
 FROM worker_result_dispositions WHERE result_id = ?;
 
 -- name: ListWorkerResultDispositions :many
 SELECT result_id, worker_id, accounted_operation_id, accounted_at, change_state,
-       change_operation_id, landed_change_id, shelve_reason, changed_at
+       change_operation_id, landed_change_id, shelve_reason, changed_at, criteria_outcomes_json
 FROM worker_result_dispositions WHERE worker_id = ? ORDER BY result_id;
+
+-- name: RecordWorkerResultCriteriaOutcomes :execrows
+INSERT INTO worker_result_dispositions (result_id, worker_id, criteria_outcomes_json)
+SELECT res.id, r.worker_id, sqlc.arg(criteria_outcomes_json)
+FROM worker_results res JOIN worker_rounds r ON r.job_id = res.worker_job_id
+WHERE res.id = sqlc.arg(result_id)
+ON CONFLICT (result_id) DO UPDATE SET
+    criteria_outcomes_json = excluded.criteria_outcomes_json
+WHERE worker_result_dispositions.criteria_outcomes_json = '[]';
 
 -- name: AccountWorkerResult :execrows
 INSERT INTO worker_result_dispositions (result_id, worker_id, accounted_operation_id, accounted_at)
@@ -227,6 +270,12 @@ WHERE worker_id = ? AND producer_worker_id IS NOT NULL ORDER BY producer_worker_
 SELECT worker_id FROM worker_dependencies
 WHERE producer_worker_id = ? ORDER BY worker_id;
 
+-- name: DeleteRoundlessWorkerProducerDependencies :exec
+DELETE FROM worker_dependencies
+WHERE worker_id = sqlc.arg(worker_id)
+  AND producer_worker_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM worker_rounds WHERE worker_rounds.worker_id = worker_dependencies.worker_id);
+
 -- name: GetWorkerOperation :one
 SELECT operation_id, session_id, kind, request_digest, receipt_json, created_at
 FROM worker_operations WHERE operation_id = ?;
@@ -251,6 +300,7 @@ SELECT worker_job_id FROM landed_changes WHERE id = ?;
 -- name: GetWorkerByChildSession :one
 SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
        delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       blueprint_path, blueprint_revision, base_sha, files_json, criteria_json,
        closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
 FROM workers WHERE child_session_id = ?;
 

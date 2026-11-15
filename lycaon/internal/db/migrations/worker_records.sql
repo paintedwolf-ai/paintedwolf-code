@@ -14,6 +14,11 @@ CREATE TABLE workers (
     workflow_run_id TEXT REFERENCES workflow_runs(id) ON DELETE SET NULL,
     workflow_phase TEXT NOT NULL DEFAULT '',
     workflow_work_id TEXT NOT NULL DEFAULT '',
+    blueprint_path TEXT NOT NULL DEFAULT '',
+    blueprint_revision TEXT NOT NULL DEFAULT '',
+    base_sha TEXT NOT NULL DEFAULT '',
+    files_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(files_json)),
+    criteria_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(criteria_json)),
     closed_at TEXT,
     closed_reason TEXT NOT NULL DEFAULT '',
     next_round_ordinal INTEGER NOT NULL DEFAULT 1 CHECK (next_round_ordinal > 0),
@@ -24,13 +29,17 @@ CREATE TABLE workers (
     UNIQUE (session_id, name),
     CHECK ((closed_at IS NULL) = (closed_reason = '')),
     CHECK ((leg_id IS NULL) OR (delegation_id IS NOT NULL)),
-    CHECK (workflow_run_id IS NOT NULL OR (workflow_phase = '' AND workflow_work_id = ''))
+    CHECK (workflow_run_id IS NOT NULL OR (workflow_phase = '' AND (workflow_work_id = '' OR blueprint_path != '')))
 ) STRICT;
 
 CREATE UNIQUE INDEX idx_workers_workflow_work
     ON workers(workflow_run_id, workflow_phase, workflow_work_id)
-    WHERE workflow_run_id IS NOT NULL AND workflow_work_id != '';
+    WHERE workflow_run_id IS NOT NULL AND workflow_work_id != '' AND closed_at IS NULL;
+CREATE UNIQUE INDEX idx_workers_blueprint_work
+    ON workers(session_id, blueprint_path, workflow_work_id)
+    WHERE blueprint_path != '' AND workflow_work_id != '' AND closed_at IS NULL;
 CREATE INDEX idx_workers_workflow_run ON workers(workflow_run_id);
+CREATE INDEX idx_workers_session_blueprint ON workers(session_id, blueprint_path) WHERE blueprint_path != '';
 CREATE INDEX idx_workers_project ON workers(project_id, created_at, id);
 
 -- A worker's child session is a child of its coordinator's session.
@@ -46,11 +55,14 @@ WHEN NEW.child_session_id IS NOT NULL AND NOT EXISTS (
 BEGIN SELECT RAISE(ABORT, 'worker child session belongs to another session'); END;
 CREATE TRIGGER workers_identity_immutable BEFORE UPDATE OF id, project_id, session_id, name, operation_id, created_at ON workers
 BEGIN SELECT RAISE(ABORT, 'worker identity is immutable'); END;
--- A deleted workflow run unbinds its workers whole: run, phase and work
--- together, which the binding check requires.
+-- A deleted workflow run clears run and phase bindings while keeping standalone
+-- blueprint task identifiers intact.
 CREATE TRIGGER workers_workflow_run_deleted BEFORE DELETE ON workflow_runs
 BEGIN
-    UPDATE workers SET workflow_run_id = NULL, workflow_phase = '', workflow_work_id = ''
+    UPDATE workers
+    SET workflow_run_id = NULL,
+        workflow_phase = '',
+        workflow_work_id = CASE WHEN blueprint_path != '' THEN workflow_work_id ELSE '' END
     WHERE workflow_run_id = OLD.id;
 END;
 
@@ -149,6 +161,7 @@ CREATE TABLE worker_result_dispositions (
     landed_change_id TEXT REFERENCES landed_changes(id) ON DELETE SET NULL,
     shelve_reason TEXT NOT NULL DEFAULT '',
     changed_at TEXT,
+    criteria_outcomes_json TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(criteria_outcomes_json)),
     CHECK ((accounted_at IS NULL) = (accounted_operation_id = '')),
     CHECK ((change_state = '') = (changed_at IS NULL)),
     CHECK ((change_state = '') = (change_operation_id = '')),
@@ -170,6 +183,7 @@ WHEN NEW.result_id IS NOT OLD.result_id OR NEW.worker_id IS NOT OLD.worker_id
     OR (OLD.accounted_at IS NOT NULL AND (NEW.accounted_at IS NOT OLD.accounted_at OR NEW.accounted_operation_id IS NOT OLD.accounted_operation_id))
     OR (OLD.change_state IN ('landed', 'rejected') AND (NEW.change_state IS NOT OLD.change_state OR NEW.change_operation_id IS NOT OLD.change_operation_id))
     OR (OLD.change_state != '' AND NEW.change_state = '')
+    OR (OLD.criteria_outcomes_json != '[]' AND NEW.criteria_outcomes_json IS NOT OLD.criteria_outcomes_json)
 BEGIN SELECT RAISE(ABORT, 'a recorded disposition cannot be undone'); END;
 
 -- Each workspace preparation for a worker: the promotion and preparation

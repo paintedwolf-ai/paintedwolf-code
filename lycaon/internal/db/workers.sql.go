@@ -233,6 +233,18 @@ func (q *Queries) DeleteRoundlessWorker(ctx context.Context, id string) (int64, 
 	return result.RowsAffected()
 }
 
+const deleteRoundlessWorkerProducerDependencies = `-- name: DeleteRoundlessWorkerProducerDependencies :exec
+DELETE FROM worker_dependencies
+WHERE worker_id = ?1
+  AND producer_worker_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM worker_rounds WHERE worker_rounds.worker_id = worker_dependencies.worker_id)
+`
+
+func (q *Queries) DeleteRoundlessWorkerProducerDependencies(ctx context.Context, workerID string) error {
+	_, err := q.db.ExecContext(ctx, deleteRoundlessWorkerProducerDependencies, workerID)
+	return err
+}
+
 const deleteWorkerOperation = `-- name: DeleteWorkerOperation :exec
 DELETE FROM worker_operations WHERE operation_id = ?
 `
@@ -365,6 +377,7 @@ func (q *Queries) GetUnsettledWorkerRound(ctx context.Context, workerID string) 
 const getWorker = `-- name: GetWorker :one
 SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
        delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       blueprint_path, blueprint_revision, base_sha, files_json, criteria_json,
        closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
 FROM workers WHERE id = ?
 `
@@ -386,6 +399,11 @@ func (q *Queries) GetWorker(ctx context.Context, id string) (Workers, error) {
 		&i.WorkflowRunID,
 		&i.WorkflowPhase,
 		&i.WorkflowWorkID,
+		&i.BlueprintPath,
+		&i.BlueprintRevision,
+		&i.BaseSha,
+		&i.FilesJson,
+		&i.CriteriaJson,
 		&i.ClosedAt,
 		&i.ClosedReason,
 		&i.NextRoundOrdinal,
@@ -400,6 +418,7 @@ func (q *Queries) GetWorker(ctx context.Context, id string) (Workers, error) {
 const getWorkerByChildSession = `-- name: GetWorkerByChildSession :one
 SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
        delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       blueprint_path, blueprint_revision, base_sha, files_json, criteria_json,
        closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
 FROM workers WHERE child_session_id = ?
 `
@@ -421,6 +440,11 @@ func (q *Queries) GetWorkerByChildSession(ctx context.Context, childSessionID sq
 		&i.WorkflowRunID,
 		&i.WorkflowPhase,
 		&i.WorkflowWorkID,
+		&i.BlueprintPath,
+		&i.BlueprintRevision,
+		&i.BaseSha,
+		&i.FilesJson,
+		&i.CriteriaJson,
 		&i.ClosedAt,
 		&i.ClosedReason,
 		&i.NextRoundOrdinal,
@@ -435,6 +459,7 @@ func (q *Queries) GetWorkerByChildSession(ctx context.Context, childSessionID sq
 const getWorkerByName = `-- name: GetWorkerByName :one
 SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
        delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       blueprint_path, blueprint_revision, base_sha, files_json, criteria_json,
        closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
 FROM workers WHERE session_id = ? AND name = ?
 `
@@ -461,6 +486,11 @@ func (q *Queries) GetWorkerByName(ctx context.Context, arg GetWorkerByNameParams
 		&i.WorkflowRunID,
 		&i.WorkflowPhase,
 		&i.WorkflowWorkID,
+		&i.BlueprintPath,
+		&i.BlueprintRevision,
+		&i.BaseSha,
+		&i.FilesJson,
+		&i.CriteriaJson,
 		&i.ClosedAt,
 		&i.ClosedReason,
 		&i.NextRoundOrdinal,
@@ -644,7 +674,7 @@ func (q *Queries) GetWorkerOperation(ctx context.Context, operationID string) (W
 
 const getWorkerResultDisposition = `-- name: GetWorkerResultDisposition :one
 SELECT result_id, worker_id, accounted_operation_id, accounted_at, change_state,
-       change_operation_id, landed_change_id, shelve_reason, changed_at
+       change_operation_id, landed_change_id, shelve_reason, changed_at, criteria_outcomes_json
 FROM worker_result_dispositions WHERE result_id = ?
 `
 
@@ -661,6 +691,7 @@ func (q *Queries) GetWorkerResultDisposition(ctx context.Context, resultID strin
 		&i.LandedChangeID,
 		&i.ShelveReason,
 		&i.ChangedAt,
+		&i.CriteriaOutcomesJson,
 	)
 	return i, err
 }
@@ -769,27 +800,33 @@ const insertWorker = `-- name: InsertWorker :exec
 INSERT INTO workers (
     id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
     delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+    blueprint_path, blueprint_revision, base_sha, files_json, criteria_json,
     operation_id, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertWorkerParams struct {
-	ID             string         `json:"id"`
-	ProjectID      string         `json:"project_id"`
-	SessionID      string         `json:"session_id"`
-	Name           string         `json:"name"`
-	AgentType      string         `json:"agent_type"`
-	ScopeMode      string         `json:"scope_mode"`
-	Brief          string         `json:"brief"`
-	ChildSessionID sql.NullString `json:"child_session_id"`
-	DelegationID   sql.NullString `json:"delegation_id"`
-	LegID          sql.NullString `json:"leg_id"`
-	WorkflowRunID  sql.NullString `json:"workflow_run_id"`
-	WorkflowPhase  string         `json:"workflow_phase"`
-	WorkflowWorkID string         `json:"workflow_work_id"`
-	OperationID    string         `json:"operation_id"`
-	CreatedAt      string         `json:"created_at"`
-	UpdatedAt      string         `json:"updated_at"`
+	ID                string         `json:"id"`
+	ProjectID         string         `json:"project_id"`
+	SessionID         string         `json:"session_id"`
+	Name              string         `json:"name"`
+	AgentType         string         `json:"agent_type"`
+	ScopeMode         string         `json:"scope_mode"`
+	Brief             string         `json:"brief"`
+	ChildSessionID    sql.NullString `json:"child_session_id"`
+	DelegationID      sql.NullString `json:"delegation_id"`
+	LegID             sql.NullString `json:"leg_id"`
+	WorkflowRunID     sql.NullString `json:"workflow_run_id"`
+	WorkflowPhase     string         `json:"workflow_phase"`
+	WorkflowWorkID    string         `json:"workflow_work_id"`
+	BlueprintPath     string         `json:"blueprint_path"`
+	BlueprintRevision string         `json:"blueprint_revision"`
+	BaseSha           string         `json:"base_sha"`
+	FilesJson         string         `json:"files_json"`
+	CriteriaJson      string         `json:"criteria_json"`
+	OperationID       string         `json:"operation_id"`
+	CreatedAt         string         `json:"created_at"`
+	UpdatedAt         string         `json:"updated_at"`
 }
 
 func (q *Queries) InsertWorker(ctx context.Context, arg InsertWorkerParams) error {
@@ -807,6 +844,11 @@ func (q *Queries) InsertWorker(ctx context.Context, arg InsertWorkerParams) erro
 		arg.WorkflowRunID,
 		arg.WorkflowPhase,
 		arg.WorkflowWorkID,
+		arg.BlueprintPath,
+		arg.BlueprintRevision,
+		arg.BaseSha,
+		arg.FilesJson,
+		arg.CriteriaJson,
 		arg.OperationID,
 		arg.CreatedAt,
 		arg.UpdatedAt,
@@ -1073,9 +1115,72 @@ func (q *Queries) ListRoundInstructionsAfter(ctx context.Context, arg ListRoundI
 	return items, nil
 }
 
+const listSessionBlueprintWorkers = `-- name: ListSessionBlueprintWorkers :many
+SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
+       delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       blueprint_path, blueprint_revision, base_sha, files_json, criteria_json,
+       closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
+FROM workers WHERE session_id = ? AND blueprint_path = ? ORDER BY created_at, id
+`
+
+type ListSessionBlueprintWorkersParams struct {
+	SessionID     string `json:"session_id"`
+	BlueprintPath string `json:"blueprint_path"`
+}
+
+func (q *Queries) ListSessionBlueprintWorkers(ctx context.Context, arg ListSessionBlueprintWorkersParams) ([]Workers, error) {
+	rows, err := q.db.QueryContext(ctx, listSessionBlueprintWorkers, arg.SessionID, arg.BlueprintPath)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Workers
+	for rows.Next() {
+		var i Workers
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.SessionID,
+			&i.Name,
+			&i.AgentType,
+			&i.ScopeMode,
+			&i.Brief,
+			&i.ChildSessionID,
+			&i.DelegationID,
+			&i.LegID,
+			&i.WorkflowRunID,
+			&i.WorkflowPhase,
+			&i.WorkflowWorkID,
+			&i.BlueprintPath,
+			&i.BlueprintRevision,
+			&i.BaseSha,
+			&i.FilesJson,
+			&i.CriteriaJson,
+			&i.ClosedAt,
+			&i.ClosedReason,
+			&i.NextRoundOrdinal,
+			&i.NextMessageSeq,
+			&i.OperationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSessionWorkers = `-- name: ListSessionWorkers :many
 SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
        delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       blueprint_path, blueprint_revision, base_sha, files_json, criteria_json,
        closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
 FROM workers WHERE session_id = ? ORDER BY created_at, id
 `
@@ -1103,6 +1208,11 @@ func (q *Queries) ListSessionWorkers(ctx context.Context, sessionID string) ([]W
 			&i.WorkflowRunID,
 			&i.WorkflowPhase,
 			&i.WorkflowWorkID,
+			&i.BlueprintPath,
+			&i.BlueprintRevision,
+			&i.BaseSha,
+			&i.FilesJson,
+			&i.CriteriaJson,
 			&i.ClosedAt,
 			&i.ClosedReason,
 			&i.NextRoundOrdinal,
@@ -1447,7 +1557,7 @@ func (q *Queries) ListWorkerProducerIDs(ctx context.Context, workerID string) ([
 
 const listWorkerResultDispositions = `-- name: ListWorkerResultDispositions :many
 SELECT result_id, worker_id, accounted_operation_id, accounted_at, change_state,
-       change_operation_id, landed_change_id, shelve_reason, changed_at
+       change_operation_id, landed_change_id, shelve_reason, changed_at, criteria_outcomes_json
 FROM worker_result_dispositions WHERE worker_id = ? ORDER BY result_id
 `
 
@@ -1470,6 +1580,7 @@ func (q *Queries) ListWorkerResultDispositions(ctx context.Context, workerID str
 			&i.LandedChangeID,
 			&i.ShelveReason,
 			&i.ChangedAt,
+			&i.CriteriaOutcomesJson,
 		); err != nil {
 			return nil, err
 		}
@@ -1543,6 +1654,63 @@ func (q *Queries) ListWorkerRounds(ctx context.Context, workerID string) ([]List
 	return items, nil
 }
 
+const listWorkflowRunWorkers = `-- name: ListWorkflowRunWorkers :many
+SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
+       delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       blueprint_path, blueprint_revision, base_sha, files_json, criteria_json,
+       closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
+FROM workers WHERE workflow_run_id = ? ORDER BY created_at, id
+`
+
+func (q *Queries) ListWorkflowRunWorkers(ctx context.Context, workflowRunID sql.NullString) ([]Workers, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkflowRunWorkers, workflowRunID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Workers
+	for rows.Next() {
+		var i Workers
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.SessionID,
+			&i.Name,
+			&i.AgentType,
+			&i.ScopeMode,
+			&i.Brief,
+			&i.ChildSessionID,
+			&i.DelegationID,
+			&i.LegID,
+			&i.WorkflowRunID,
+			&i.WorkflowPhase,
+			&i.WorkflowWorkID,
+			&i.BlueprintPath,
+			&i.BlueprintRevision,
+			&i.BaseSha,
+			&i.FilesJson,
+			&i.CriteriaJson,
+			&i.ClosedAt,
+			&i.ClosedReason,
+			&i.NextRoundOrdinal,
+			&i.NextMessageSeq,
+			&i.OperationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const openWorkerMessagePage = `-- name: OpenWorkerMessagePage :execrows
 INSERT INTO worker_message_deliveries (
     worker_id, recipient_session_id, generation, delivered_through_seq,
@@ -1577,6 +1745,29 @@ func (q *Queries) OpenWorkerMessagePage(ctx context.Context, arg OpenWorkerMessa
 		arg.PageLastSeq,
 		arg.UpdatedAt,
 	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const recordWorkerResultCriteriaOutcomes = `-- name: RecordWorkerResultCriteriaOutcomes :execrows
+INSERT INTO worker_result_dispositions (result_id, worker_id, criteria_outcomes_json)
+SELECT res.id, r.worker_id, ?1
+FROM worker_results res JOIN worker_rounds r ON r.job_id = res.worker_job_id
+WHERE res.id = ?2
+ON CONFLICT (result_id) DO UPDATE SET
+    criteria_outcomes_json = excluded.criteria_outcomes_json
+WHERE worker_result_dispositions.criteria_outcomes_json = '[]'
+`
+
+type RecordWorkerResultCriteriaOutcomesParams struct {
+	CriteriaOutcomesJson string `json:"criteria_outcomes_json"`
+	ResultID             string `json:"result_id"`
+}
+
+func (q *Queries) RecordWorkerResultCriteriaOutcomes(ctx context.Context, arg RecordWorkerResultCriteriaOutcomesParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, recordWorkerResultCriteriaOutcomes, arg.CriteriaOutcomesJson, arg.ResultID)
 	if err != nil {
 		return 0, err
 	}
@@ -1636,6 +1827,57 @@ type SettleWorkerRoundByJobParams struct {
 
 func (q *Queries) SettleWorkerRoundByJob(ctx context.Context, arg SettleWorkerRoundByJobParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, settleWorkerRoundByJob, arg.SettledAt, arg.CheckpointID, arg.JobID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updatePlannedWorker = `-- name: UpdatePlannedWorker :execrows
+UPDATE workers
+SET agent_type = ?1,
+    scope_mode = ?2,
+    brief = ?3,
+    workflow_run_id = ?4,
+    workflow_phase = ?5,
+    blueprint_revision = ?6,
+    base_sha = ?7,
+    files_json = ?8,
+    criteria_json = ?9,
+    updated_at = ?10
+WHERE id = ?11
+  AND closed_at IS NULL
+  AND NOT EXISTS (SELECT 1 FROM worker_rounds WHERE worker_rounds.worker_id = workers.id)
+`
+
+type UpdatePlannedWorkerParams struct {
+	AgentType         string         `json:"agent_type"`
+	ScopeMode         string         `json:"scope_mode"`
+	Brief             string         `json:"brief"`
+	WorkflowRunID     sql.NullString `json:"workflow_run_id"`
+	WorkflowPhase     string         `json:"workflow_phase"`
+	BlueprintRevision string         `json:"blueprint_revision"`
+	BaseSha           string         `json:"base_sha"`
+	FilesJson         string         `json:"files_json"`
+	CriteriaJson      string         `json:"criteria_json"`
+	UpdatedAt         string         `json:"updated_at"`
+	ID                string         `json:"id"`
+}
+
+func (q *Queries) UpdatePlannedWorker(ctx context.Context, arg UpdatePlannedWorkerParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updatePlannedWorker,
+		arg.AgentType,
+		arg.ScopeMode,
+		arg.Brief,
+		arg.WorkflowRunID,
+		arg.WorkflowPhase,
+		arg.BlueprintRevision,
+		arg.BaseSha,
+		arg.FilesJson,
+		arg.CriteriaJson,
+		arg.UpdatedAt,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}

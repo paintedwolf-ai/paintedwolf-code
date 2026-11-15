@@ -3,6 +3,7 @@ package workerrecords
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -16,17 +17,26 @@ const (
 	ChangeShelved  = "shelved"
 )
 
+// CriterionOutcome records whether one typed completion criterion passed when
+// a worker round settled.
+type CriterionOutcome struct {
+	Criterion string `json:"criterion"`
+	Passed    bool   `json:"passed"`
+	Detail    string `json:"detail,omitempty"`
+}
+
 // Disposition is how a result was handled.
 type Disposition struct {
-	ResultID             string `json:"result_id"`
-	WorkerID             string `json:"worker_id"`
-	AccountedOperationID string `json:"accounted_operation_id,omitempty"`
-	AccountedAt          string `json:"accounted_at,omitempty"`
-	ChangeState          string `json:"change_state,omitempty"`
-	ChangeOperationID    string `json:"change_operation_id,omitempty"`
-	LandedChangeID       string `json:"landed_change_id,omitempty"`
-	ShelveReason         string `json:"shelve_reason,omitempty"`
-	ChangedAt            string `json:"changed_at,omitempty"`
+	ResultID             string             `json:"result_id"`
+	WorkerID             string             `json:"worker_id"`
+	AccountedOperationID string             `json:"accounted_operation_id,omitempty"`
+	AccountedAt          string             `json:"accounted_at,omitempty"`
+	ChangeState          string             `json:"change_state,omitempty"`
+	ChangeOperationID    string             `json:"change_operation_id,omitempty"`
+	LandedChangeID       string             `json:"landed_change_id,omitempty"`
+	ShelveReason         string             `json:"shelve_reason,omitempty"`
+	ChangedAt            string             `json:"changed_at,omitempty"`
+	CriteriaOutcomes     []CriterionOutcome `json:"criteria_outcomes,omitempty"`
 }
 
 func dispositionFromRow(d db.WorkerResultDispositions) Disposition {
@@ -34,7 +44,33 @@ func dispositionFromRow(d db.WorkerResultDispositions) Disposition {
 		ResultID: d.ResultID, WorkerID: d.WorkerID, AccountedOperationID: d.AccountedOperationID,
 		AccountedAt: d.AccountedAt.String, ChangeState: d.ChangeState, ChangeOperationID: d.ChangeOperationID,
 		LandedChangeID: d.LandedChangeID.String, ShelveReason: d.ShelveReason, ChangedAt: d.ChangedAt.String,
+		CriteriaOutcomes: DecodeCriteriaOutcomes(d.CriteriaOutcomesJson),
 	}
+}
+
+// EncodeCriteriaOutcomes serializes criterion outcomes for storage.
+func EncodeCriteriaOutcomes(outcomes []CriterionOutcome) string {
+	if len(outcomes) == 0 {
+		return "[]"
+	}
+	raw, err := json.Marshal(outcomes)
+	if err != nil {
+		return "[]"
+	}
+	return string(raw)
+}
+
+// DecodeCriteriaOutcomes decodes stored criterion outcomes.
+func DecodeCriteriaOutcomes(raw string) []CriterionOutcome {
+	raw = strings.TrimSpace(raw)
+	if raw == "" || raw == "[]" {
+		return nil
+	}
+	var out []CriterionOutcome
+	if err := json.Unmarshal([]byte(raw), &out); err != nil || len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // resultWorker returns the open worker a result belongs to, for its coordinator.
