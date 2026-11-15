@@ -123,25 +123,6 @@ func (q *Queries) BindWorkerChildByJob(ctx context.Context, arg BindWorkerChildB
 	return result.RowsAffected()
 }
 
-const bindWorkerChildSession = `-- name: BindWorkerChildSession :execrows
-UPDATE workers SET child_session_id = ?1, updated_at = ?2
-WHERE id = ?3 AND child_session_id IS NULL
-`
-
-type BindWorkerChildSessionParams struct {
-	ChildSessionID sql.NullString `json:"child_session_id"`
-	UpdatedAt      string         `json:"updated_at"`
-	ID             string         `json:"id"`
-}
-
-func (q *Queries) BindWorkerChildSession(ctx context.Context, arg BindWorkerChildSessionParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, bindWorkerChildSession, arg.ChildSessionID, arg.UpdatedAt, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const closeWorker = `-- name: CloseWorker :execrows
 UPDATE workers SET closed_at = ?1, closed_reason = ?2, updated_at = ?1
 WHERE id = ?3 AND closed_at IS NULL
@@ -530,38 +511,6 @@ func (q *Queries) GetWorkerJobNames(ctx context.Context, jobID string) (GetWorke
 	row := q.db.QueryRowContext(ctx, getWorkerJobNames, jobID)
 	var i GetWorkerJobNamesRow
 	err := row.Scan(&i.Name, &i.ResultID, &i.ChangeState)
-	return i, err
-}
-
-const getWorkerMessage = `-- name: GetWorkerMessage :one
-SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
-       body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
-FROM worker_messages WHERE worker_id = ? AND seq = ?
-`
-
-type GetWorkerMessageParams struct {
-	WorkerID string `json:"worker_id"`
-	Seq      int64  `json:"seq"`
-}
-
-func (q *Queries) GetWorkerMessage(ctx context.Context, arg GetWorkerMessageParams) (WorkerMessages, error) {
-	row := q.db.QueryRowContext(ctx, getWorkerMessage, arg.WorkerID, arg.Seq)
-	var i WorkerMessages
-	err := row.Scan(
-		&i.ID,
-		&i.WorkerID,
-		&i.Seq,
-		&i.SenderRole,
-		&i.SenderID,
-		&i.RecipientRole,
-		&i.RoundOrdinal,
-		&i.Body,
-		&i.ArtifactRef,
-		&i.ReplyToSeq,
-		&i.NeedsReply,
-		&i.OperationID,
-		&i.CreatedAt,
-	)
 	return i, err
 }
 
@@ -1187,34 +1136,6 @@ func (q *Queries) ListWorkerAncestorPendingJobs(ctx context.Context, jobID strin
 			return nil, err
 		}
 		items = append(items, job_id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listWorkerConsumerIDs = `-- name: ListWorkerConsumerIDs :many
-SELECT worker_id FROM worker_dependencies
-WHERE producer_worker_id = ? ORDER BY worker_id
-`
-
-func (q *Queries) ListWorkerConsumerIDs(ctx context.Context, producerWorkerID sql.NullString) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, listWorkerConsumerIDs, producerWorkerID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []string
-	for rows.Next() {
-		var worker_id string
-		if err := rows.Scan(&worker_id); err != nil {
-			return nil, err
-		}
-		items = append(items, worker_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

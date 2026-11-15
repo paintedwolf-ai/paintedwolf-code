@@ -6,7 +6,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // WorkerRoundFrame is a worker's running round as each of its requests shows
@@ -45,10 +44,4 @@ func RenderWorkerRoundBlock(ctx context.Context, renderer *prompts.InjectRendere
 		data = append(data, "Instructions this round:\n"+workerMessageData(frame.Instructions, false))
 	}
 	return WorkerMessagesBlock{Header: strings.TrimSpace(header), Messages: strings.Join(data, "\n\n")}
-}
-
-// WorkerRoundParts places the frame: host framing, then the coordinator's
-// words with the authority of an instruction.
-func WorkerRoundParts(block WorkerMessagesBlock) []api.MessageContentPart {
-	return WorkerMessagesParts(block, "worker")
 }
