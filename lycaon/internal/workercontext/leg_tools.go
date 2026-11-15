@@ -1,4 +1,4 @@
-package delegation
+package workercontext
 
 import (
 	"context"
@@ -25,6 +25,11 @@ func (f LegToolListerFunc) ListLegTools(ctx context.Context, sess *api.Session, 
 	return f(ctx, sess, profileID)
 }
 
+// PlaybookMatcherInterface resolves playbook checklists for a worker profile.
+type PlaybookMatcherInterface interface {
+	MatchForAgent(agentID, topologyPattern, phaseID string) ([]string, error)
+}
+
 func resolveLegTools(
 	ctx context.Context,
 	lister LegToolLister,
@@ -33,7 +38,7 @@ func resolveLegTools(
 	agentType string,
 ) []string {
 	agentType = strings.TrimSpace(agentType)
-	if agentType == "" || agents == nil || sess == nil {
+	if agentType == "" || agents == nil || sess == nil || lister == nil {
 		return nil
 	}
 	prof, err := agents.Get(agentType)
@@ -44,13 +49,10 @@ func resolveLegTools(
 	if profileID == "" {
 		return nil
 	}
-	if lister == nil {
-		return nil
-	}
 	return sortedToolNames(lister.ListLegTools(ctx, sess, profileID))
 }
 
-func playbookPhaseForTaskSpawn(agentType, phaseID string) string {
+func playbookPhaseForWorker(agentType, phaseID string) string {
 	if strings.TrimSpace(phaseID) != "" {
 		return phaseID
 	}
@@ -60,21 +62,14 @@ func playbookPhaseForTaskSpawn(agentType, phaseID string) string {
 	return phaseID
 }
 
-func mergeTaskSpawnChecklist(
+func mergeWorkerChecklist(
 	matcher PlaybookMatcherInterface,
-	agents profiles.AgentProfileResolver,
 	agentType, topology, phaseID string,
 ) ([]string, error) {
 	if matcher == nil {
 		return nil, nil
 	}
-	phase := playbookPhaseForTaskSpawn(agentType, phaseID)
-	return matcher.MatchForAgent(agentType, topology, phase)
-}
-
-// PlaybookMatcherInterface is the playbook subset used for worker leg checklists.
-type PlaybookMatcherInterface interface {
-	MatchForAgent(agentID, topologyPattern, phaseID string) ([]string, error)
+	return matcher.MatchForAgent(agentType, topology, playbookPhaseForWorker(agentType, phaseID))
 }
 
 func sortedToolNames(names []string) []string {

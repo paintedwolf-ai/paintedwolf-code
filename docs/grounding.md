@@ -4,7 +4,7 @@ Grounding binds agent claims and workflow outcomes to observations the host can 
 
 **See also:** [Architecture](architecture.md#grounding-and-host-authority) · [Coordination](coordination.md) · [Tools](tools.md) · [Worker result contract](worker-result-contract.md) · [Search](search.md) · [Prompt assembly](prompt-assembly.md) · [Scan findings](scan-findings.md) · [Visual surface](visual-surface.md)
 
-**Machine truth:** enforcement policy in [`security/host/grounding.yaml`](../lycaon/config/packs/painted-wolf/security/host/grounding.yaml) · evidence-kind catalogs under `lycaon/config/` · records, handles, and verdicts in `lycaon/internal/evidence/` · circuit breaker in `lycaon/internal/grounding/` · closeout audit in `lycaon/internal/guidance/` and `lycaon/internal/delegation/`
+**Machine truth:** enforcement policy in [`security/host/grounding.yaml`](../lycaon/config/packs/painted-wolf/security/host/grounding.yaml) · evidence-kind catalogs under `lycaon/config/` · records, handles, and verdicts in `lycaon/internal/evidence/` · circuit breaker in `lycaon/internal/grounding/` · closeout audit in `lycaon/internal/guidance/` and `lycaon/internal/workerplan/`
 
 ---
 

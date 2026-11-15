@@ -131,7 +131,9 @@ const TOOL_PART_KINDS = new Set<string>([
 
 /** Host-declared card rendering family. */
 export function classifyToolKind(toolName: string): ToolPartKind {
-  const kind = TOOL_CARD_KINDS[toolName.toLowerCase()];
+  const lower = toolName.toLowerCase();
+  if (lower === "delegate_dispatch") return "task";
+  const kind = TOOL_CARD_KINDS[lower];
   return kind && TOOL_PART_KINDS.has(kind) ? (kind as ToolPartKind) : "generic";
 }
 

@@ -126,8 +126,8 @@ func TestCoordinatorInternalToolsNeverGate(t *testing.T) {
 	internal := []string{
 		"update_progress", "record_finding", "request_decision", "answer_decision",
 		"worker_cancel",
-		"preview_overlay", "promote_overlay", "reject_overlay",
-		"delegate_dispatch", "delegate_init", "delegate_status", "delegate_decompose",
+		"preview_overlay", "promote_overlay", "reject_overlay", "shelve_overlay",
+		"instruct_worker", "worker_history",
 		"plan_from_blueprint", "read_findings", "read_review",
 		"state_start", "state_close", "state_query", "state_update",
 		"workflow_catalog_summaries", "pack_board", "wait",

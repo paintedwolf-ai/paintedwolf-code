@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/grounding"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/session/closeouts"
@@ -97,8 +98,11 @@ func (m *Service) PlanCloseout(ctx context.Context, sess *api.Session, workersId
 	count, retry := m.closeouts.Delay(sess.ID, root, closeouts.GateDelay, invokeAllowed, closeoutGateDelayMaxPerPrompt)
 	reject, blocked := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
 		gc.Workers.WorkersIdle = workersIdle
-		gc.Grounding.ClaimsCompletion = true
-		gc.Grounding.HasMatchingLedgerJob = true
+		grounding.ObserveVerdict(gc, grounding.GroundingVerdict{
+			Code:   code,
+			Reason: verdict.Reason,
+			LegID:  verdict.LegID,
+		})
 		data := map[string]any{
 			"grounding_verdict": code,
 			"grounding_reason":  verdict.Reason,

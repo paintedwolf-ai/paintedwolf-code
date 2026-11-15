@@ -14,8 +14,6 @@ import (
 var outboxTableFloor = []string{
 	"worker_jobs",
 	"workflow_runs",
-	"delegations",
-	"delegation_legs",
 	"code_scans",
 }
 

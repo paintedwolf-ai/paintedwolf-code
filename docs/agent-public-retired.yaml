@@ -408,3 +408,39 @@ retired:
     kind: hint_code
     summary: Rejected an invalid pack_board review view; review subjects moved to read_review with READ_REVIEW_INVALID.
     date: 2026-11-15
+  - id: delegate_init
+    kind: tool_name
+    summary: Created a delegation record before dispatch; workers now start directly with task or seed from plan_from_blueprint.
+    date: 2026-11-15
+  - id: delegate_decompose
+    kind: tool_name
+    summary: Attached decomposed legs to a delegation record; plan_from_blueprint seeds planned legs directly onto worker records.
+    date: 2026-11-15
+  - id: delegate_dispatch
+    kind: tool_name
+    summary: Dispatched one leg of a delegation record; task starts ad-hoc and planned workers directly.
+    date: 2026-11-15
+  - id: delegate_status
+    kind: tool_name
+    summary: Polled a delegation record; the coordinator turn-state worker roster and pack_board report live worker state.
+    date: 2026-11-15
+  - id: parse_decomposition
+    kind: tool_name
+    summary: Validated a delegation decomposition payload; fanout_plan and plan_from_blueprint validate leg graphs directly.
+    date: 2026-11-15
+  - id: parse_delegation_plan
+    kind: tool_name
+    summary: Validated a delegation plan payload; fanout_plan and plan_from_blueprint validate leg graphs directly.
+    date: 2026-11-15
+  - id: COORDINATOR_DELEGATE_DISPATCH_USE_TASK
+    kind: hint_code
+    summary: Redirected ad-hoc delegate_dispatch calls to task; delegate_dispatch is retired.
+    date: 2026-11-15
+  - id: DELEGATE_DISPATCH_LEG_NOT_PENDING
+    kind: hint_code
+    summary: Rejected re-dispatching a non-pending delegation leg; planned worker admission is governed by task and instruct_worker rules.
+    date: 2026-11-15
+  - id: DELEGATE_DISPATCH_LEG_REQUIRED
+    kind: hint_code
+    summary: Rejected delegate_dispatch without a leg id; delegate_dispatch is retired.
+    date: 2026-11-15

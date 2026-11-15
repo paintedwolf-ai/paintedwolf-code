@@ -10,7 +10,6 @@ tools:
   read_findings: sticky
   read_review: sticky
   plan_from_blueprint: sticky
-  delegate_dispatch: sticky
   update_progress: sticky
   task: sticky
   worker_cancel: sticky

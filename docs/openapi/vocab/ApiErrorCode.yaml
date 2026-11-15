@@ -177,14 +177,6 @@ values:
     status: 409
     comment: >-
       checkpoint resolve targeted a non-pending record
-  - id: delegation_not_found
-    status: 404
-    comment: >-
-      delegation id not found
-  - id: delegation_leg_not_found
-    status: 404
-    comment: >-
-      delegation leg id not found
   - id: feedback_not_pending
     status: 409
     comment: >-
@@ -1109,10 +1101,6 @@ values:
     status: 409
     comment: >-
       worker cancel targeted a terminal job
-  - id: leg_not_pending
-    status: 409
-    comment: >-
-      delegation dispatch targeted a leg that already left pending
   - id: decision_not_pending
     status: 409
     comment: >-

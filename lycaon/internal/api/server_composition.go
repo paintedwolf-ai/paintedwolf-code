@@ -150,7 +150,6 @@ func requireDependencies(deps Dependencies) {
 		httpio.Required{Name: "Checkpoints", Present: deps.Approvals.Checkpoints != nil},
 		httpio.Required{Name: "CostTracker", Present: deps.Providers.CostTracker != nil},
 		httpio.Required{Name: "Database", Present: deps.Core.Database != nil},
-		httpio.Required{Name: "Delegations", Present: deps.Workflow.Delegations != nil},
 		httpio.Required{Name: "EventPublisher", Present: deps.Host.EventPublisher != nil},
 		httpio.Required{Name: "Events", Present: deps.Host.Events != nil},
 		httpio.Required{Name: "HostIdentity", Present: deps.Host.HostIdentity.HostID != ""},

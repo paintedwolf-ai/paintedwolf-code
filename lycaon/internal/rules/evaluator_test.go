@@ -17,10 +17,10 @@ func TestSimpleEngineDeniesDelegationInPlanMode(t *testing.T) {
 		testutil.FailErr(t, "RegisterRuleConditions failed", err)
 	}
 	engine := NewSimpleEngine(cfg, reg)
-	outcome, err := engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "delegate_dispatch"}})
+	outcome, err := engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint"}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if outcome.Allowed {
-		t.Fatal("expected delegate_dispatch denied in plan mode")
+		t.Fatal("expected plan_from_blueprint denied in plan mode")
 	}
 	if outcome.Code != "SPEC_POSTURE_DELEGATION_FORBIDDEN" {
 		t.Fatalf("code = %q", outcome.Code)

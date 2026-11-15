@@ -356,8 +356,6 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"profile_has_fetch_url":          true,
 	"fetch_url_needs_request":        true,
 	"profile_has_task":               true,
-	"profile_has_delegate_dispatch":  true,
-	"profile_has_delegate_decompose": true,
 	"progress_gated_tools":           true,
 	"profile_has_preview_overlay":    true,
 	"profile_has_promote_overlay":    true,

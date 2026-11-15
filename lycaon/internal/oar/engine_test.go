@@ -259,7 +259,7 @@ func TestRetiredRiskFactRequiresExplicitToolCategories(t *testing.T) {
 		tool string
 		want bool
 	}{
-		{"state_start", true}, {"delegate_dispatch", true}, {"handoff_complete", true}, {"task", true}, {"read", false}, {"command", false},
+		{"state_start", true}, {"plan_from_blueprint", true}, {"handoff_complete", true}, {"task", true}, {"read", false}, {"command", false},
 	} {
 		t.Run(tc.tool, func(t *testing.T) {
 			t.Parallel()

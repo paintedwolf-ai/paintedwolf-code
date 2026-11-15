@@ -14,16 +14,12 @@ func TestChildTablesNoProjectDirOnWire(t *testing.T) {
 		reflect.TypeOf(api.WorkerTask{}),
 		reflect.TypeOf(api.CreateBlueprintRequest{}),
 		reflect.TypeOf(api.Blueprint{}),
-		reflect.TypeOf(api.CreateDelegationRequest{}),
-		reflect.TypeOf(api.Delegation{}),
 	} {
 		assertNoJSONField(t, typ, "ProjectDir", "project_dir")
 	}
 	for _, typ := range []reflect.Type{
 		reflect.TypeOf(api.WorkerTask{}),
 		reflect.TypeOf(api.Blueprint{}),
-		reflect.TypeOf(api.CreateDelegationRequest{}),
-		reflect.TypeOf(api.Delegation{}),
 	} {
 		assertJSONField(t, typ, "ProjectID", "project_id")
 	}

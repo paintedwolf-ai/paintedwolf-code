@@ -115,9 +115,6 @@ func DrainPendingWorkerJobs(ctx context.Context, h *Harness, projectID, parentSe
 	defer cancel()
 	exec := wiringWorkerExecutor(h)
 	bridge := &worker.SessionOutcomeBridge{Workers: h.Sessions.Manager.Coordinator.Workers, Loop: h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges, Results: h.Sessions.Manager.Workers.Results, State: h.Sessions.Manager.Workers.State, Closure: h.Sessions.Manager.Coordinator.ProgressClosure}
-	if h.Delegations.Manager != nil {
-		bridge.Inner = h.Delegations.Manager
-	}
 	for {
 		if err := drainCtx.Err(); err != nil {
 			return err

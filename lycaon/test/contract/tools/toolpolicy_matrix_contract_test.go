@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/rules"
@@ -54,11 +53,11 @@ var frozenPostureToolMatrix = []postureToolExpectation{
 	{
 		posture: api.SessionPostureSpec,
 		include: []string{"restore_version", "workflow_compose", "command"},
-		exclude: []string{"delegate_dispatch", "plan_from_blueprint", "read", "write", "grep", "git_diff"},
+		exclude: []string{"plan_from_blueprint", "read", "write", "grep", "git_diff"},
 	},
 	{
 		posture: api.SessionPostureBuild,
-		include: []string{"delegate_dispatch", "plan_from_blueprint", "task", "state_start", "workflow_advance", "workflow_transition", "command"},
+		include: []string{"plan_from_blueprint", "task", "state_start", "workflow_advance", "workflow_transition", "command"},
 	},
 	{
 		posture: api.SessionPostureBuild,
@@ -197,12 +196,7 @@ func wireToolpolicyMatrixContract(
 		contractcheck.FailErr(t, "workflowinputs.RegisterAskUserTool failed", err)
 	}
 
-	delegStore := delegation.NewMemoryStore()
 	queue := worker.NewInMemoryQueue(4)
-	delegMgr := delegation.NewManager(delegStore, queue, mgr, delegation.AllowGate{})
-	if err := delegation.RegisterDelegationTools(reg, delegMgr); err != nil {
-		contractcheck.FailErr(t, "delegation.RegisterDelegationTools failed", err)
-	}
 	if err := workerplan.RegisterPlanFromBlueprintTool(reg, &workerplan.Service{Records: workerrecords.New(sqlDB), Plans: blueprintMgr}); err != nil {
 		contractcheck.FailErr(t, "workerplan.RegisterPlanFromBlueprintTool failed", err)
 	}

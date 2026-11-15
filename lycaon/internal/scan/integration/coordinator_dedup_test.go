@@ -373,7 +373,7 @@ func TestCoordinatorEnqueueDoesNotAdoptFailedUnboundScan(t *testing.T) {
 	}
 }
 
-func TestCoordinatorLatestForDelegation(t *testing.T) {
+func TestCoordinatorListBySessionIDOrdersNewestFirst(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	store := scan.NewSQLStore(sqlDB)
@@ -382,17 +382,17 @@ func TestCoordinatorLatestForDelegation(t *testing.T) {
 	dir := testProjectDir(t)
 	categories := []api.ScanCategory{api.ScanCategorySecurity}
 	if _, err := coord.Enqueue(ctx, scan.EnqueueRequest{
-		ProjectDir: dir, Categories: categories, DelegationID: "dep-1", HeadSHA: "old",
+		ProjectDir: dir, Categories: categories, SessionID: "sess-1", HeadSHA: "old",
 	}); err != nil {
 		testutil.FailErr(t, "enqueue old scan", err)
 	}
 	latest, err := coord.Enqueue(ctx, scan.EnqueueRequest{
-		ProjectDir: dir, Categories: categories, DelegationID: "dep-1", HeadSHA: "new",
+		ProjectDir: dir, Categories: categories, SessionID: "sess-1", HeadSHA: "new",
 	})
 	testutil.FailErr(t, "coord.Enqueue failed", err)
-	got, err := coord.LatestForDelegation(ctx, "dep-1", categories)
-	testutil.FailErr(t, "coord.LatestForDelegation failed", err)
-	if got.ID != latest.ID {
-		t.Fatalf("latest = %s want %s", got.ID, latest.ID)
+	got, err := coord.ListBySessionID(ctx, "sess-1")
+	testutil.FailErr(t, "coord.ListBySessionID failed", err)
+	if len(got) == 0 || got[0].ID != latest.ID {
+		t.Fatalf("latest = %+v want first %s", got, latest.ID)
 	}
 }

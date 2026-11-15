@@ -1,4 +1,4 @@
-package delegation
+package grounding
 
 import (
 	"strings"
@@ -7,8 +7,16 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 )
 
-// ObserveDelegationGroundingVerdict publishes the typed grounding verdict at its host boundary.
-func ObserveDelegationGroundingVerdict(gc *oar.GuardContext, verdict GroundingVerdict) {
+const (
+	AmbientUngroundedCompletionCode = "AMBIENT_UNGROUNDED_COMPLETION"
+	AmbientGroundingEscalatedCode   = "AMBIENT_GROUNDING_ESCALATED"
+	CoordinatorUngroundedClaimCode  = "COORDINATOR_UNGROUNDED_CLAIM"
+	CoordinatorCriteriaUnmetCode    = "COORDINATOR_CRITERIA_UNMET"
+	CoordinatorEscalatedCode        = "COORDINATOR_GROUNDING_ESCALATED"
+)
+
+// ObserveVerdict records a typed grounding verdict on the OAR guard context.
+func ObserveVerdict(gc *oar.GuardContext, verdict GroundingVerdict) {
 	if gc == nil || verdict.OK || verdict.Code == "" {
 		return
 	}
@@ -18,19 +26,19 @@ func ObserveDelegationGroundingVerdict(gc *oar.GuardContext, verdict GroundingVe
 		data["leg_id"] = verdict.LegID
 	}
 	switch code {
-	case "COORDINATOR_GROUNDING_ESCALATED":
+	case CoordinatorEscalatedCode:
 		gc.Grounding.GroundingEscalated = true
 		gc.Grounding.ClaimsCompletion = true
-	case ambientGroundingEscalatedCode:
+	case AmbientGroundingEscalatedCode:
 		gc.Grounding.GroundingEscalated = true
 		gc.Grounding.ClaimsCompletion = false
-	case "COORDINATOR_UNGROUNDED_CLAIM":
+	case CoordinatorUngroundedClaimCode:
 		gc.Grounding.ClaimsCompletion = true
 		gc.Grounding.HasMatchingLedgerJob = false
-	case "COORDINATOR_CRITERIA_UNMET":
+	case CoordinatorCriteriaUnmetCode:
 		gc.Grounding.ClaimsCompletion = true
 		gc.Grounding.HasMatchingLedgerJob = true
-	case ambientUngroundedCompletionCode:
+	case AmbientUngroundedCompletionCode:
 		gc.Grounding.LastAuditUngrounded = true
 		gc.Grounding.HasMatchingLedgerJob = false
 		gc.Grounding.ClaimsCompletion = false

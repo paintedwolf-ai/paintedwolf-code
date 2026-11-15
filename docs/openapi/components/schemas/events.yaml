@@ -274,26 +274,6 @@ components:
           $ref: board.yaml#/components/schemas/BoardView
         detail_level:
           $ref: board.yaml#/components/schemas/BoardDetailLevel
-    DelegationEvent:
-      x-go-generate: true
-      type: object
-      required:
-      - delegation_id
-      - status
-      - leg_id
-      - phase
-      additionalProperties: false
-      properties:
-        delegation_id:
-          type: string
-          format: uuid
-        status:
-          $ref: delegation.yaml#/components/schemas/DelegationStatus
-        leg_id:
-          type: string
-          format: uuid
-        phase:
-          $ref: delegation.yaml#/components/schemas/DelegationPhase
     LLMTokenCounts:
       x-go-generate: true
       type: object

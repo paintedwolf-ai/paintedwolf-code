@@ -102,14 +102,7 @@ func (m *Service) injectWorkerKickOnSpawn(ctx context.Context, child *api.Sessio
 			data["phase_id"] = strings.TrimSpace(legCtx.PhaseID)
 		}
 	}
-	m.guidance.EmitEager(ctx, child.ID, workerSpawnAnchor(data["leg_id"]), data)
-}
-
-func workerSpawnAnchor(legID string) anchor.ID {
-	if strings.TrimSpace(legID) != "" {
-		return anchor.WorkerLegStarted
-	}
-	return anchor.WorkerTaskStarted
+	m.guidance.EmitEager(ctx, child.ID, anchor.WorkerTaskStarted, data)
 }
 
 // WorkerSummaryFinalizeOpts returns host limits for worker survey bounding after child runs.

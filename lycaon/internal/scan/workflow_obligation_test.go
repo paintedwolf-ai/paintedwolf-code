@@ -357,7 +357,7 @@ func TestSecurityCloseoutCheckerAndSessionGuidance(t *testing.T) {
 	provider.SetInjectRenderer(renderer)
 	adapter := &SessionGuidanceAdapter{Provider: provider}
 	base := []api.Message{{Role: api.MessageRoleUser, Content: "continue"}}
-	if got := provider.Prepend(t.Context(), "", "", "", base); len(got) != 1 {
+	if got := provider.Prepend(t.Context(), "", base); len(got) != 1 {
 		t.Fatalf("empty ids prepended: %d", len(got))
 	}
 	prepended := adapter.PrependGuidance(t.Context(), "sess-scan", base)

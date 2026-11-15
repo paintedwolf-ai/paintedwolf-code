@@ -50,7 +50,6 @@ evidence_kinds:
 tools:
   task:          { produces_evidence: { kind: task } }
   instruct_worker: { produces_evidence: { kind: task } }
-  delegate_dispatch: { produces_evidence: { kind: task } }
   read:          { produces_evidence: { kind: read } }
   grep:          { produces_evidence: { kind: grep } }
   find:          { produces_evidence: { kind: find } }

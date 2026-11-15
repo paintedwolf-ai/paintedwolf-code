@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/delegation"
+	"github.com/lycaon/lycaon/internal/grounding"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session"
@@ -131,7 +131,7 @@ func TestCatalogGroundingVerdictsDoNotOverlap(t *testing.T) {
 	for _, code := range []string{"COORDINATOR_UNGROUNDED_CLAIM", "COORDINATOR_CRITERIA_UNMET", "COORDINATOR_GROUNDING_ESCALATED"} {
 		t.Run(code, func(t *testing.T) {
 			gc := oar.NewGuardContext()
-			delegation.ObserveDelegationGroundingVerdict(gc, delegation.GroundingVerdict{Code: code, Reason: "Missing {{ receipt }} — résumé", LegID: "fixture-leg"})
+			grounding.ObserveVerdict(gc, grounding.GroundingVerdict{Code: code, Reason: "Missing {{ receipt }} — résumé", LegID: "fixture-leg"})
 			if code == "COORDINATOR_GROUNDING_ESCALATED" {
 				result, err := sessionTestOARPipeline(t).EvaluateBlock(t.Context(), oar.AnchorCoordinatorPostTurn, gc)
 				testutil.FailErr(t, "evaluate escalation notice", err)

@@ -9,13 +9,13 @@ import (
 type InjectScope int
 
 const (
-	// InjectScopeFull includes repo, git, work, and delegation lines (first turn or orientation change).
+	// InjectScopeFull includes repo, git, and worker lines.
 	InjectScopeFull InjectScope = iota
-	// InjectScopePulse includes only Now, work, and delegation — stable repo/git omitted.
+	// InjectScopePulse includes only Now and worker state.
 	InjectScopePulse
 )
 
-// PackBoardPulseSentinel marks a delta inject block (worker/delegation pulse only).
+// PackBoardPulseSentinel marks a delta inject block.
 const PackBoardPulseSentinel = "<!-- pack-board:pulse -->"
 
 // BuildInjectLines assembles orientation lines for the given inject scope.
@@ -25,7 +25,6 @@ func BuildInjectLines(snapshot api.BoardSnapshot, scope InjectScope, opts Orient
 		now = time.Now().UTC()
 	}
 	tasks := WorkerTasksFromSnapshot(snapshot)
-	delegations := DelegationsFromSnapshot(snapshot)
 
 	var lines []string
 	lines = append(lines, FormatNowLine(now))
@@ -56,20 +55,10 @@ func BuildInjectLines(snapshot api.BoardSnapshot, scope InjectScope, opts Orient
 	if flags := FormatFlagsLine(StandingFlagsFromSnapshot(snapshot)); flags != "" {
 		lines = append(lines, flags)
 	}
-	if !opts.OmitDelegation && !opts.IncludeDetail {
-		if line := FormatDelegationLine(delegations); line != "" {
-			lines = append(lines, line)
-		}
-	}
 	if opts.IncludeDetail {
 		if len(NamedWorkersFromSnapshot(snapshot)) == 0 {
 			for _, t := range tasks {
 				lines = append(lines, FormatWorkerDetailLine(t, now))
-			}
-		}
-		for _, d := range delegations {
-			if line := FormatDelegationDetailLine(d); line != "" {
-				lines = append(lines, line)
 			}
 		}
 	}

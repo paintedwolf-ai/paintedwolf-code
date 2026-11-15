@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -86,9 +85,6 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 }
 
 func (b *serveBuilder) registerCoordinatorTools() error {
-	if err := delegation.RegisterDelegationTools(b.execution.Host.Registry, b.delegations.Manager); err != nil {
-		return fmt.Errorf("delegation tools: %w", err)
-	}
 	if err := b.delegations.RegisterPlanTools(b.execution.Host.Registry); err != nil {
 		return fmt.Errorf("blueprint worker plan tools: %w", err)
 	}
@@ -147,7 +143,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		Lanes: lanes, Queue: b.delegations.Queue, Store: b.delegations.Queue, Workspace: b.delegations.Workspace,
 		Reject: b.execution.Rejections, Names: b.boards.WorkerRecords, Sessions: b.delegations.Queue,
 		Reconcile: b.sessions.Manager.Promotion, Captures: b.sessions.Manager.Chats.Captures,
-		Coord: b.sessions.Manager.Workers.Workspaces, Closeout: b.delegations.Manager,
+		Coord: b.sessions.Manager.Workers.Workspaces,
 		OnPromoted: b.delegations.NotifyPromotedTask, Projects: b.storage.Projects, Scans: b.scanning.Triggers,
 		SourceLedger: b.storage.SourceLedger, SourceHistory: b.storage.SourceLedger.Walk,
 		DataDir: b.storage.Directory, Accounted: b.boards.ReleaseAccounted,

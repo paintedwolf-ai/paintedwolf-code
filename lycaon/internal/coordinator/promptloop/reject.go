@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"maps"
 	"strings"
@@ -183,10 +182,6 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 		}
 		data["offered_tools"] = append([]string(nil), toolCtx.Turn.TurnOfferedToolNames...)
 		data["tool_discovery_available"] = tools.ToolOffered(ctx, "request_tools") && len(toolCtx.Turn.TurnToolPlan.DeferredNames()) > 0
-	}
-	if code == "COORDINATOR_DELEGATE_DISPATCH_USE_TASK" {
-		agents, constrained := toolpolicy.TaskSpawnAllowlistFromContext(ctx)
-		data["task_dispatchable"] = !constrained || len(agents) > 0
 	}
 	tr := &toolrejection.ToolReject{Code: code, FailureClass: api.FailureClassPolicyRejection, Data: data}
 	if code == "TOOL_NOT_OFFERED" && data["tool_loadable"] == false && data["tool_discovery_available"] == true && data["tool_retired_to_content"] == false {

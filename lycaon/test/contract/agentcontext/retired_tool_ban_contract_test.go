@@ -28,6 +28,8 @@ var fullyRetiredTools = []string{
 	"git-read", "git-write", "web-fetch", "archive-extract", "archive-create", "file-info", "jq-query",
 	"extend_worker_budget", "decline_worker_budget", "request_budget", "request_budget_extension",
 	"extend-worker-budget", "decline-worker-budget", "request-budget", "request-budget-extension",
+	"delegate_init", "delegate_decompose", "delegate_dispatch", "delegate_status", "parse_decomposition", "parse_delegation_plan",
+	"delegate-init", "delegate-decompose", "delegate-dispatch", "delegate-status", "parse-decomposition", "parse-delegation-plan",
 }
 
 // backtickedNameMention matches a backtick-opened name in a call-like shape:

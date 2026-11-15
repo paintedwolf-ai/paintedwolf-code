@@ -105,13 +105,31 @@ ORDER BY assessment_id, scan_id;
 SELECT CAST(COALESCE(MAX(ordinal), 0) AS INTEGER) AS watermark_ordinal
 FROM code_scan_page_ordinals;
 
--- name: LatestScanForDelegation :one
-SELECT id, canonical_path, categories_json, scanner_id, claimed_by, claim_token, attempt, heartbeat_at, lease_expires_at, status, result_json, created_at,
-       delegation_id, head_sha, source_snapshot_id, replacement_scan_id, trigger, completed_at, paths_json, reuse_key, error,
-       guidance_json, ingest_json, runtime_json, progress_json, delta_json, started_at, long_running_at
-FROM code_scans
-WHERE delegation_id = ? AND categories_json = ?
-ORDER BY created_at DESC, rowid DESC
+-- name: LatestCompleteScanForSessionSnapshot :one
+SELECT scan.id, scan.canonical_path, scan.categories_json, scan.scanner_id, scan.claimed_by, scan.claim_token, scan.attempt, scan.heartbeat_at, scan.lease_expires_at, scan.status, scan.result_json, scan.created_at,
+       scan.delegation_id, scan.head_sha, scan.source_snapshot_id, scan.replacement_scan_id, scan.trigger, scan.completed_at, scan.paths_json, scan.reuse_key, scan.error,
+       scan.guidance_json, scan.ingest_json, scan.runtime_json, scan.progress_json, scan.delta_json, scan.started_at, scan.long_running_at
+FROM code_scans AS scan
+JOIN session_scan_bindings AS binding ON binding.scan_id = scan.id
+WHERE binding.session_id = sqlc.arg(session_id)
+  AND scan.categories_json = sqlc.arg(categories_json)
+  AND scan.status = 'complete'
+  AND scan.source_snapshot_id = sqlc.arg(source_snapshot_id)
+ORDER BY scan.created_at DESC, scan.rowid DESC
+LIMIT 1;
+
+-- name: FindInFlightScanForSessionSnapshot :one
+SELECT scan.id, scan.canonical_path, scan.categories_json, scan.scanner_id, scan.claimed_by, scan.claim_token, scan.attempt, scan.heartbeat_at, scan.lease_expires_at, scan.status, scan.result_json, scan.created_at,
+       scan.delegation_id, scan.head_sha, scan.source_snapshot_id, scan.replacement_scan_id, scan.trigger, scan.completed_at, scan.paths_json, scan.reuse_key, scan.error,
+       scan.guidance_json, scan.ingest_json, scan.runtime_json, scan.progress_json, scan.delta_json, scan.started_at, scan.long_running_at
+FROM code_scans AS scan
+JOIN session_scan_bindings AS binding ON binding.scan_id = scan.id
+WHERE binding.session_id = sqlc.arg(session_id)
+  AND scan.categories_json = sqlc.arg(categories_json)
+  AND scan.status IN ('pending', 'running')
+  AND scan.source_snapshot_id = sqlc.arg(source_snapshot_id)
+  AND scan.paths_json = sqlc.arg(paths_json)
+ORDER BY scan.created_at DESC, scan.rowid DESC
 LIMIT 1;
 
 -- name: LatestCompleteScanForDelegationSnapshot :one
@@ -268,14 +286,6 @@ SELECT id, worker_job_id, canonical_path, delegation_id, workflow_run_id,
        changed_paths_json, deleted_paths_json, scan_required, scan_id, created_at
 FROM landed_changes
 WHERE scan_id = ?;
-
--- name: LatestRequiredLandedChangeForDelegation :one
-SELECT id, worker_job_id, canonical_path, delegation_id, workflow_run_id,
-       changed_paths_json, deleted_paths_json, scan_required, scan_id, created_at
-FROM landed_changes
-WHERE delegation_id = ? AND scan_required = 1
-ORDER BY rowid DESC
-LIMIT 1;
 
 -- name: LatestRequiredLandedChangeForSession :one
 SELECT lc.id, lc.worker_job_id, lc.canonical_path, lc.delegation_id, lc.workflow_run_id,

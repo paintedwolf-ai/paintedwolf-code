@@ -114,12 +114,6 @@ func (s *Server) setupRoutes() {
 		s.registerV1Operation(r, operationGetCostSummary, s.Routes.Activity.handleCostSummary)
 		s.registerV1Operation(r, operationGetProjectCostReport, s.Routes.Activity.handleProjectCostReport)
 
-		s.registerV1Operation(r, operationCreateDelegation, s.Routes.Workers.handleCreateDelegation)
-		s.registerV1Operation(r, operationGetDelegation, s.Routes.Workers.handleGetDelegation)
-		s.registerV1Operation(r, operationListDelegationLegs, s.Routes.Workers.handleListDelegationLegs)
-		s.registerV1Operation(r, operationDispatchDelegationLeg, s.Routes.Workers.handleDispatchDelegationLeg)
-		s.registerV1Operation(r, operationAbortDelegation, s.Routes.Workers.handleAbortDelegation)
-
 		s.registerV1Operation(r, operationListWorkers, s.Routes.Workers.handleListWorkers)
 		s.registerV1Operation(r, operationGetWorkerHistory, s.Routes.Workers.handleWorkerHistory)
 		s.registerV1Operation(r, operationCancelWorker, s.Routes.Workers.handleWorkerCancel)

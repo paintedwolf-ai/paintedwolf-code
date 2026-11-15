@@ -105,7 +105,7 @@ func TestImplementerLegToolsMatchImplementProfile(t *testing.T) {
 			t.Fatalf("leg inject missing %q in %q", tool, block)
 		}
 	}
-	if strings.Contains(block, "## Leg tools (allowlisted)\n(none)") {
-		t.Fatalf("leg tools block must not show (none): %q", block)
+	if strings.Contains(block, "## Assignment tools (allowlisted)\n(none)") {
+		t.Fatalf("assignment tools block must not show (none): %q", block)
 	}
 }

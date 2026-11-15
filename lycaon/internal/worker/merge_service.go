@@ -91,11 +91,6 @@ type WorkerCoordinationCleanup interface {
 	ReleaseReservations(ctx context.Context, parentSessionID, jobID string) error
 }
 
-// DelegationCloseoutRetry re-evaluates closeout after promotion.
-type DelegationCloseoutRetry interface {
-	RetryCloseout(ctx context.Context, delegationID string) error
-}
-
 // OverlayScanHook runs promotion scan obligations.
 type OverlayScanHook interface {
 	PrepareOverlayPromotion(ctx context.Context, task api.WorkerTask, appliedPaths, deletedPaths []string) (obligation.Plan, error)
@@ -122,7 +117,6 @@ type MergeService struct {
 	Reconcile     MergeReconcileRegistrar
 	Captures      PromoteCapture
 	Coord         WorkerCoordinationCleanup
-	Closeout      DelegationCloseoutRetry
 	OnPromoted    func(ctx context.Context, task api.WorkerTask)
 	Projects      ProjectStore
 	Scans         OverlayScanHook

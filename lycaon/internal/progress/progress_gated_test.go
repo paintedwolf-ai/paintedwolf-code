@@ -23,8 +23,8 @@ func TestTurnHasProgressGatedTool(t *testing.T) {
 }
 
 func TestFirstProgressGatedTool(t *testing.T) {
-	if got := FirstProgressGatedTool([]string{"read", "delegate_dispatch"}); got != "delegate_dispatch" {
-		t.Fatalf("got %q want delegate_dispatch", got)
+	if got := FirstProgressGatedTool([]string{"read", "write"}); got != "write" {
+		t.Fatalf("got %q want write", got)
 	}
 	if got := FirstProgressGatedTool([]string{"read", "web_search"}); got != "task" {
 		t.Fatalf("got %q want task default when no progress-gated tool", got)

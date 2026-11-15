@@ -10,7 +10,7 @@ import (
 )
 
 // Worker jobs are project records, so they outlive the deleted chat with the
-// link cleared; delegations belong to the chat and go with it.
+// link cleared; workers belong to the chat and go with it.
 func TestDeleteSessionTreeClosesSessionReferences(t *testing.T) {
 	ctx := context.Background()
 	sqlDB := openTestDB(t)
@@ -31,11 +31,11 @@ func TestDeleteSessionTreeClosesSessionReferences(t *testing.T) {
 	testutil.FailErr(t, "insert worker job", err)
 
 	_, err = sqlDB.ExecContext(ctx, `
-		INSERT INTO delegations (
-			id, project_id, workspace_path, coordinator_session_id, task, strategy, status, created_at
-		) VALUES ('dep-1', ?, '/tmp/project', 'coordinator', 'ship it', 'file-based', 'active', '2026-01-01T00:00:00Z')
+		INSERT INTO workers (
+			id, project_id, session_id, name, agent_type, scope_mode, child_session_id, operation_id, created_at, updated_at
+		) VALUES ('w-del-1', ?, 'coordinator', 'implementer-1', 'implementer', 'write', 'worker-child', 'op-del-1', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')
 	`, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "insert delegation", err)
+	testutil.FailErr(t, "insert worker", err)
 
 	tx, err := sqlDB.BeginTx(ctx, nil)
 	testutil.FailErr(t, "begin tx", err)
@@ -60,11 +60,11 @@ func TestDeleteSessionTreeClosesSessionReferences(t *testing.T) {
 		t.Fatalf("worker job kept dangling session ids: parent=%v child=%v", parent, child)
 	}
 
-	var delegations int
-	testutil.FailErr(t, "count delegations", sqlDB.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM delegations WHERE id = 'dep-1'`).Scan(&delegations))
-	if delegations != 0 {
-		t.Fatal("delegation outlived its coordinator session")
+	var workers int
+	testutil.FailErr(t, "count workers", sqlDB.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM workers WHERE id = 'w-del-1'`).Scan(&workers))
+	if workers != 0 {
+		t.Fatal("worker outlived its coordinator session")
 	}
 }
 

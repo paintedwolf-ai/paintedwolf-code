@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/heldcall"
@@ -72,11 +71,6 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	parseSvc := parse.NewDefaultService()
 	if err := parse.RegisterParseTools(reg, parseSvc); err != nil {
 		contractcheck.FailErr(t, "parse.RegisterParseTools failed", err)
-	}
-	delegationStore := delegation.NewMemoryStore()
-	delegationMgr := delegation.NewManager(delegationStore, worker.NewInMemoryQueue(2), session.NewHost(store.NewMemory(), session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry()), nil)
-	if err := delegation.RegisterDelegationTools(reg, delegationMgr); err != nil {
-		contractcheck.FailErr(t, "delegation.RegisterDelegationTools failed", err)
 	}
 	sqlDB := testdbfixture.Open(t, "wf-contract.db")
 	workflowMgr := workflow.NewManager(workflowpersistence.New(sqlDB), store.NewMemory(), contractcheck.CatalogRegistry(t), nil)

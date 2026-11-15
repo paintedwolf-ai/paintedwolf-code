@@ -221,7 +221,7 @@ func TestSurveyToolsStayGenericKind(t *testing.T) {
 	for tool, want := range map[string]Kind{
 		"read": KindRead, "grep": KindRead,
 		"write": KindWrite, "edit": KindWrite,
-		"command": KindCommand, "task": KindTask, "delegate_dispatch": KindTask,
+		"command": KindCommand, "task": KindTask,
 	} {
 		if kinds[tool] != want {
 			t.Errorf("tool %q kind = %q, want %q", tool, kinds[tool], want)
@@ -260,8 +260,8 @@ func TestVisibilityClassMembership(t *testing.T) {
 		}
 	}
 
-	if got := cfg.ToolsWithKind(KindTask); strings.Join(got, ",") != "delegate_dispatch,task" {
-		t.Errorf("kind task = %v, want delegate_dispatch, task", got)
+	if got := cfg.ToolsWithKind(KindTask); strings.Join(got, ",") != "task" {
+		t.Errorf("kind task = %v, want task", got)
 	}
 }
 

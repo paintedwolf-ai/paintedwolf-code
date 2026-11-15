@@ -23,7 +23,6 @@ const (
 	FeedbackPending               ID = "feedback.pending"
 	FeedbackReceived              ID = "feedback.received"
 	WorkerTaskStarted             ID = "worker.task.started"
-	WorkerLegStarted              ID = "worker.leg.started"
 	WaitTimerFired                ID = "wait.timer.fired"
 	OverlayPromoteComplete        ID = "overlay.promote.complete"
 	ScanFinished                  ID = "scan.finished"

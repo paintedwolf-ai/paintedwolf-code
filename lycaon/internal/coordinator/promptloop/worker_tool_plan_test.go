@@ -139,7 +139,6 @@ func TestLiveProjectedToolCallsKeepsNamedLongRunningOnly(t *testing.T) {
 func TestLiveProjectedToolCallsWithholdsWorkerDispatch(t *testing.T) {
 	got := liveProjectedToolCalls([]api.ToolCall{
 		{ID: "t1", Name: "task", Args: map[string]any{"agent_type": "path-explorer"}},
-		{ID: "d1", Name: "delegate_dispatch", Args: map[string]any{"brief": "leg"}},
 	})
 	if got != nil {
 		t.Fatalf("liveProjectedToolCalls = %+v want no worker-dispatch projection", got)

@@ -124,20 +124,6 @@ tools:
   copy:
     title_keys: [copies]
     activity: {headline: "managing files", salience: defining, role: mutation}
-  delegate_decompose:
-    title_keys: [blueprint_path]
-    activity: {headline: "delegating work", salience: primary, role: coordination}
-  delegate_dispatch:
-    kind: task
-    running_label: "Dispatching leg…"
-    activity: {headline: "delegating work", salience: defining, role: coordination}
-  delegate_init:
-    title_keys: [task, blueprint_path, workflow_id]
-    activity: {headline: "delegating work", salience: primary, role: coordination}
-  delegate_status:
-    title_keys: []
-    activity: {headline: "delegating work", salience: primary, role: coordination}
-    title_fallback: "Delegated task"
   delete:
     running_label: "Deleting files…"
     title_keys: [paths]
@@ -272,14 +258,6 @@ tools:
     title_keys: []
     visibility: coordinator_internal
     activity: {headline: "coordinating", salience: primary, role: coordination}
-  parse_decomposition:
-    title_keys: []
-    running_label: "Validating decomposition…"
-    activity: {headline: "coordinating", salience: incidental, role: coordination}
-  parse_delegation_plan:
-    title_keys: []
-    running_label: "Validating delegation plan…"
-    activity: {headline: "coordinating", salience: incidental, role: coordination}
   parse_evaluation:
     title_keys: []
     running_label: "Validating evaluation…"

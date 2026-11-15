@@ -27,18 +27,12 @@ type WorkerRunStopSession interface {
 	Hold(ctx context.Context, parentID string, in workerresults.HoldInput) error
 }
 
-// DelegationRunStopper marks active delegations canceled for a workflow run.
-type DelegationRunStopper interface {
-	CancelActiveByWorkflowRunID(ctx context.Context, runID string) error
-}
-
-// RunStopService coordinates worker and delegation shutdown.
+// RunStopService coordinates worker shutdown and unstarted worker withdrawal.
 type RunStopService struct {
 	Queue          WorkerQueue
 	Holds          WorkerRunStopSession
 	Cancellations  WorkerCancellationProjection
 	Reports        ChangeReportDeps
-	Delegations    DelegationRunStopper
 	Records        *workerrecords.Store
 	ReleaseTimeout time.Duration
 }
@@ -117,8 +111,8 @@ func (s *RunStopService) HoldPendingWorkersByRunID(ctx context.Context, runID st
 	return errors.Join(errs...)
 }
 
-// CancelDelegationsByRunID cancels active delegations and withdraws unstarted workers for runID.
-func (s *RunStopService) CancelDelegationsByRunID(ctx context.Context, runID string) error {
+// WithdrawPlannedWorkersByRunID withdraws unstarted planned workers for runID.
+func (s *RunStopService) WithdrawPlannedWorkersByRunID(ctx context.Context, runID string) error {
 	if s == nil {
 		return nil
 	}
@@ -126,18 +120,10 @@ func (s *RunStopService) CancelDelegationsByRunID(ctx context.Context, runID str
 	if runID == "" {
 		return nil
 	}
-	var errs []error
-	if s.Delegations != nil {
-		if err := s.Delegations.CancelActiveByWorkflowRunID(ctx, runID); err != nil {
-			errs = append(errs, err)
-		}
+	if s.Records == nil {
+		return nil
 	}
-	if s.Records != nil {
-		if err := s.withdrawPlannedRunWorkers(ctx, runID); err != nil {
-			errs = append(errs, err)
-		}
-	}
-	return errors.Join(errs...)
+	return s.withdrawPlannedRunWorkers(ctx, runID)
 }
 
 func (s *RunStopService) withdrawPlannedRunWorkers(ctx context.Context, runID string) error {
@@ -254,7 +240,7 @@ var _ interface {
 	CancelWorkersByRunID(ctx context.Context, runID, reason string) error
 	SettleWorkerCancellationsByRunID(ctx context.Context, runID, reason string) error
 	HoldPendingWorkersByRunID(ctx context.Context, runID string) error
-	CancelDelegationsByRunID(ctx context.Context, runID string) error
+	WithdrawPlannedWorkersByRunID(ctx context.Context, runID string) error
 } = (*RunStopService)(nil)
 
 var (

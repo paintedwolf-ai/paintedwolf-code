@@ -8,7 +8,7 @@ import (
 
 // RegistryDeps supplies optional host services for domain predicates and core wiring.
 type RegistryDeps struct {
-	DelegationStore         DelegationReader
+	SessionWorkIDs          func(ctx context.Context, sessionID string) ([]string, error)
 	Evidence                EvidenceReader
 	GroundingBlocked        func(ctx context.Context, sessionID string) (bool, error)
 	DoomLoopExceeded        func(ctx context.Context, sessionID string) (bool, error)
@@ -33,7 +33,7 @@ type RegistryDeps struct {
 func NewDefaultRegistry(deps RegistryDeps) (*ConditionRegistry, error) {
 	reg := NewRegistry()
 	core := CoreDeps{
-		DelegationStore:         deps.DelegationStore,
+		SessionWorkIDs:          deps.SessionWorkIDs,
 		Evidence:                deps.Evidence,
 		DelegationCloseout:      deps.DelegationCloseout,
 		SourceVerifyPassed:      deps.SourceVerifyPassed,

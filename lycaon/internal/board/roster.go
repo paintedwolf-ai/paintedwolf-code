@@ -76,22 +76,3 @@ func AttachRosterReservations(roster []api.BoardWorkerRosterEntry, reservations 
 	}
 	return out
 }
-
-// BuildDelegationRoster maps delegations into slim pack_board rows.
-func BuildDelegationRoster(delegations []api.Delegation, level api.BoardDetailLevel) []api.BoardDelegationEntry {
-	if level == api.BoardDetailLevelStatus {
-		return nil
-	}
-	out := make([]api.BoardDelegationEntry, 0, len(delegations))
-	for _, d := range delegations {
-		if d.Phase == api.DelegationPhaseDone {
-			continue
-		}
-		out = append(out, api.BoardDelegationEntry{
-			ID:    d.ID,
-			Phase: d.Phase,
-			Task:  strings.TrimSpace(d.Task),
-		})
-	}
-	return out
-}

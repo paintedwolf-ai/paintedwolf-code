@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
@@ -21,9 +20,8 @@ import (
 func TestPackBoardToolReturnsSnapshot(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	builder := &SnapshotBuilder{
-		Delegations: delegation.NewMemoryStore(),
-		Workers:     worker.NewInMemoryQueue(10),
-		Repo:        repotest.NewProvider(t),
+		Workers: worker.NewInMemoryQueue(10),
+		Repo:    repotest.NewProvider(t),
 	}
 	if err := RegisterBoardTools(reg, ToolDeps{Builder: builder}); err != nil {
 		testutil.FailErr(t, "RegisterBoardTools failed", err)
@@ -51,9 +49,8 @@ func TestPackBoardToolReturnsSnapshot(t *testing.T) {
 func TestPackBoardToolFiltersWorkersByPlan(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	builder := &SnapshotBuilder{
-		Delegations: delegation.NewMemoryStore(),
-		Workers:     worker.NewInMemoryQueue(10),
-		Repo:        repotest.NewProvider(t),
+		Workers: worker.NewInMemoryQueue(10),
+		Repo:    repotest.NewProvider(t),
 		NamedWorkers: func(_ context.Context, _ string) ([]api.BoardWorker, error) {
 			return []api.BoardWorker{
 				{Name: "leg-auth", AgentType: "implementer", State: api.WorkerStatePlanned},
@@ -129,7 +126,6 @@ func TestPackBoardToolPagesFiftyWorkersAndFiltersBeforePaging(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register board tools", RegisterBoardTools(reg, ToolDeps{
 		Builder: &SnapshotBuilder{
-			Delegations:  delegation.NewMemoryStore(),
 			Workers:      worker.NewInMemoryQueue(10),
 			Repo:         repotest.NewProvider(t),
 			NamedWorkers: func(_ context.Context, _ string) ([]api.BoardWorker, error) { return all, nil },

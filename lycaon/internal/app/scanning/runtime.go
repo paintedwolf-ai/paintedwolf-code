@@ -74,7 +74,6 @@ type Dependencies struct {
 	ScanIgnores           scan.SecretIgnoreSource
 	InjectRenderer        *prompts.InjectRenderer
 	Fixtures              ScannerFixtures
-	DelegationBySession   func(string) (string, string, bool)
 	WorkflowRunsGet       func(context.Context, string) (*api.WorkflowRun, error)
 	WorkflowRunParams     func(context.Context, string, string, string) (map[string]any, error)
 	OnDelta               func(context.Context, api.CodeScan, []api.SecurityFinding, []api.SecurityFinding)
@@ -210,8 +209,7 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	scanProvider := scan.NewGuidanceProvider(coord, gatesCfg.Gates.AgentBudget)
 	scanProvider.SetInjectRenderer(deps.InjectRenderer)
 	guidance := &scan.SessionGuidanceAdapter{
-		Provider:            scanProvider,
-		DelegationBySession: deps.DelegationBySession,
+		Provider: scanProvider,
 	}
 
 	return &Runtime{

@@ -18,12 +18,6 @@ tools:
   - handoff_release_all
   - handoff_health
 
-  # delegate_* multi-worker orchestration
-  - delegate_init
-  - delegate_decompose
-  - delegate_dispatch
-  - delegate_status
-
   # scan_* host security scans and drill-down
   - scan_pack
   - scan_list
@@ -66,9 +60,7 @@ tools:
   - worker_history
 
 
-  # parse_* delegation plan parsing
+  # parse_* structured JSON extraction and validation
   - parse_extract_json
   - parse_validate
   - parse_evaluation
-  - parse_decomposition
-  - parse_delegation_plan

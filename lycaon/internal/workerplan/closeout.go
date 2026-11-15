@@ -126,6 +126,22 @@ func (s *Service) checkWorkerCloseout(
 			Reason: fmt.Sprintf("worker %s (leg %s) round %d is still active", w.Name, legID, last.Ordinal),
 		}, nil
 	}
+	var job *api.WorkerTask
+	if s.Jobs != nil {
+		if found, ok := s.Jobs.Get(last.JobID); ok {
+			job = found
+		}
+		if job == nil || job.Status != api.WorkerStatusComplete {
+			return CloseoutVerdict{
+				OK:       false,
+				Code:     "COORDINATOR_UNGROUNDED_CLAIM",
+				LegID:    legID,
+				Worker:   w.Name,
+				ResultID: last.ResultID,
+				Reason:   fmt.Sprintf("worker %s (leg %s) job not complete on ledger", w.Name, legID),
+			}, nil
+		}
+	}
 	disps, err := s.Records.Dispositions(ctx, actor, w.ID)
 	if err != nil {
 		return CloseoutVerdict{}, err
@@ -142,13 +158,11 @@ func (s *Service) checkWorkerCloseout(
 		jobComplete := false
 		summary := ""
 		var report *api.WorkerChangeReport
-		if s.Jobs != nil {
-			if job, ok := s.Jobs.Get(last.JobID); ok && job != nil {
-				jobComplete = job.Status == api.WorkerStatusComplete
-				if job.Result != nil {
-					summary = job.Result.Summary
-					report = job.Result.ChangeReport
-				}
+		if job != nil {
+			jobComplete = job.Status == api.WorkerStatusComplete
+			if job.Result != nil {
+				summary = job.Result.Summary
+				report = job.Result.ChangeReport
 			}
 		}
 		outcomes = s.EvaluateCriteria(ctx, DeliveryInput{
@@ -162,9 +176,13 @@ func (s *Service) checkWorkerCloseout(
 		})
 	}
 	if !allCriteriaPassed(w.Criteria, outcomes) {
+		code := "COORDINATOR_CRITERIA_UNMET"
+		if ungroundedCriterionFailed(w.Criteria, outcomes) {
+			code = "COORDINATOR_UNGROUNDED_CLAIM"
+		}
 		return CloseoutVerdict{
 			OK:       false,
-			Code:     "COORDINATOR_CRITERIA_UNMET",
+			Code:     code,
 			LegID:    legID,
 			Worker:   w.Name,
 			ResultID: last.ResultID,
@@ -172,18 +190,16 @@ func (s *Service) checkWorkerCloseout(
 			Reason:   formatCriteriaOutcomes(w.Name, last.ResultID, w.Criteria, outcomes),
 		}, nil
 	}
-	if s.Jobs != nil {
-		if job, ok := s.Jobs.Get(last.JobID); ok && job != nil && api.WorkerTaskOverlayOpen(job) && disp.ChangeState != workerrecords.ChangeShelved {
-			return CloseoutVerdict{
-				OK:       false,
-				Code:     "COORDINATOR_CRITERIA_UNMET",
-				LegID:    legID,
-				Worker:   w.Name,
-				ResultID: last.ResultID,
-				Outcomes: outcomes,
-				Reason:   fmt.Sprintf("worker %s result %s changes have not landed", w.Name, last.ResultID),
-			}, nil
-		}
+	if job != nil && api.WorkerTaskOverlayOpen(job) && disp.ChangeState != workerrecords.ChangeShelved {
+		return CloseoutVerdict{
+			OK:       false,
+			Code:     "COORDINATOR_CRITERIA_UNMET",
+			LegID:    legID,
+			Worker:   w.Name,
+			ResultID: last.ResultID,
+			Outcomes: outcomes,
+			Reason:   fmt.Sprintf("worker %s result %s changes have not landed", w.Name, last.ResultID),
+		}, nil
 	}
 	if hasFileModifiedCriterion(w.Criteria) && (disp.ChangeState == workerrecords.ChangeRejected || disp.ChangeState == workerrecords.ChangeShelved) {
 		return CloseoutVerdict{
@@ -222,16 +238,9 @@ func (s *Service) SettledWorkflowRunID(ctx context.Context, sessionID string) st
 	return ""
 }
 
-// CloseoutComplete builds the delegation_closeout_complete condition callback over workerrecords
-// with fallback to historical delegation records.
-func (s *Service) CloseoutComplete(fallback func(context.Context, string) (bool, error)) func(context.Context, string) (bool, error) {
+// CloseoutComplete builds the delegation_closeout_complete condition callback over workerrecords.
+func (s *Service) CloseoutComplete() func(context.Context, string) (bool, error) {
 	return func(ctx context.Context, sessionID string) (bool, error) {
-		if fallback != nil {
-			ok, err := fallback(ctx, sessionID)
-			if err != nil || !ok {
-				return ok, err
-			}
-		}
 		if s == nil || s.Records == nil {
 			return true, nil
 		}
@@ -260,6 +269,48 @@ func (s *Service) CloseoutComplete(fallback func(context.Context, string) (bool,
 		}
 		return verdict.OK, nil
 	}
+}
+
+// SessionWorkIDs returns active or completed planned work identities for sessionID.
+func (s *Service) SessionWorkIDs(ctx context.Context, sessionID string) ([]string, error) {
+	if s == nil || s.Records == nil || strings.TrimSpace(sessionID) == "" {
+		return nil, nil
+	}
+	actor := workerrecords.Actor{
+		SessionID:   strings.TrimSpace(sessionID),
+		Role:        workerrecords.RoleCoordinator,
+		PrincipalID: strings.TrimSpace(sessionID),
+	}
+	workers, err := s.Records.Workers(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, w := range workers {
+		if w.ClosedAt != "" {
+			continue
+		}
+		if w.State != workerrecords.WorkerWorking && w.State != workerrecords.WorkerWaiting &&
+			w.State != workerrecords.WorkerAsking && w.State != workerrecords.WorkerSettled {
+			continue
+		}
+		out = append(out, legIdentifier(w))
+	}
+	return out, nil
+}
+
+func ungroundedCriterionFailed(criteria []string, outcomes []workerrecords.CriterionOutcome) bool {
+	byName := make(map[string]bool, len(outcomes))
+	for _, o := range outcomes {
+		byName[strings.TrimSpace(o.Criterion)] = o.Passed
+	}
+	for _, raw := range criteria {
+		c := strings.TrimSpace(raw)
+		if (c == "job:complete" || c == "summary:present") && !byName[c] {
+			return true
+		}
+	}
+	return false
 }
 
 func legIdentifier(w workerrecords.Worker) string {

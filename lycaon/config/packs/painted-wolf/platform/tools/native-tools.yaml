@@ -78,10 +78,6 @@ multi_root:
     - handoff_release
     - handoff_release_all
     - handoff_health
-    - delegate_init
-    - delegate_decompose
-    - delegate_dispatch
-    - delegate_status
     - workflow_compose
     - workflow_compose_from_template
     - workflow_catalog_summaries
@@ -94,8 +90,6 @@ multi_root:
     - parse_extract_json
     - parse_validate
     - parse_evaluation
-    - parse_decomposition
-    - parse_delegation_plan
     - plan_append_review_evidence
     - plan_from_blueprint
     - read_findings
@@ -376,10 +370,6 @@ approval_reversibility:
   complete_leg: reversible
   command_stop: recoverable
   capture_page: recoverable
-  delegate_decompose: reversible
-  delegate_dispatch: reversible
-  delegate_init: reversible
-  delegate_status: reversible
   fetch_url: recoverable
   fanout_plan: reversible
   handoff_health: reversible
@@ -390,8 +380,6 @@ approval_reversibility:
   instruct_worker: recoverable
   measure_page: recoverable
   pack_board: reversible
-  parse_decomposition: reversible
-  parse_delegation_plan: reversible
   parse_evaluation: reversible
   parse_extract_json: reversible
   parse_validate: reversible
@@ -465,10 +453,6 @@ owner:
   complete_leg: workers
   command_stop: processes
   capture_page: browser
-  delegate_decompose: delegation
-  delegate_dispatch: delegation
-  delegate_init: delegation
-  delegate_status: delegation
   fanout_plan: blueprints
   fetch_url: web_research
   handoff_health: handoff
@@ -483,8 +467,6 @@ owner:
   page_close: browser
   page_open: browser
   page_snapshot: browser
-  parse_decomposition: parsing
-  parse_delegation_plan: parsing
   parse_evaluation: parsing
   parse_extract_json: parsing
   parse_validate: parsing
@@ -554,10 +536,6 @@ batch_policy:
   complete_leg: serial
   command_stop: serial
   capture_page: serial
-  delegate_decompose: serial
-  delegate_dispatch: serial
-  delegate_init: serial
-  delegate_status: shared
   fetch_url: same_tool
   fanout_plan: serial
   handoff_health: shared
@@ -568,8 +546,6 @@ batch_policy:
   instruct_worker: serial
   measure_page: serial
   pack_board: serial
-  parse_decomposition: shared
-  parse_delegation_plan: shared
   parse_evaluation: shared
   parse_extract_json: shared
   parse_validate: shared
@@ -665,10 +641,6 @@ lifecycle:
   complete_leg: db_transaction
   command_stop: ephemeral_control
   capture_page: effect_attempt
-  delegate_decompose: db_transaction
-  delegate_dispatch: db_transaction
-  delegate_init: db_transaction
-  delegate_status: read_only
   fetch_url: effect_attempt
   fanout_plan: db_transaction
   handoff_health: read_only
@@ -679,8 +651,6 @@ lifecycle:
   instruct_worker: durable_job
   measure_page: effect_attempt
   pack_board: read_only
-  parse_decomposition: read_only
-  parse_delegation_plan: read_only
   parse_evaluation: read_only
   parse_extract_json: read_only
   parse_validate: read_only

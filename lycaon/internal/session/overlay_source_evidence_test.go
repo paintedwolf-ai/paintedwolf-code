@@ -370,7 +370,7 @@ func TestAppendWorkerSummaryCarriesStructuredDecisionRequest(t *testing.T) {
 }
 
 func TestWorkerProjectionWaitsForOriginalDispatchResponse(t *testing.T) {
-	for _, tool := range []string{"task", "delegate_dispatch"} {
+	for _, tool := range []string{"task"} {
 		t.Run(tool, func(t *testing.T) {
 			ctx := context.Background()
 			messages := store.NewMemory()

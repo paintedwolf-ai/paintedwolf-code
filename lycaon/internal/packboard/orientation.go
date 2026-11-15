@@ -46,7 +46,6 @@ func BuildOrientationLines(snapshot api.BoardSnapshot, opts OrientOpts) []string
 		now = time.Now().UTC()
 	}
 	tasks := WorkerTasksFromSnapshot(snapshot)
-	delegations := DelegationsFromSnapshot(snapshot)
 
 	var lines []string
 	lines = append(lines, FormatNowLine(now))
@@ -76,20 +75,10 @@ func BuildOrientationLines(snapshot api.BoardSnapshot, opts OrientOpts) []string
 	if reserved := FormatReservedPathsLines(ReservationsFromSnapshot(snapshot)); len(reserved) > 0 {
 		lines = append(lines, reserved...)
 	}
-	if !opts.OmitDelegation && !opts.IncludeDetail {
-		if line := FormatDelegationLine(delegations); line != "" {
-			lines = append(lines, line)
-		}
-	}
 	if opts.IncludeDetail {
 		if len(NamedWorkersFromSnapshot(snapshot)) == 0 {
 			for _, t := range tasks {
 				lines = append(lines, FormatWorkerDetailLine(t, now))
-			}
-		}
-		for _, d := range delegations {
-			if line := FormatDelegationDetailLine(d); line != "" {
-				lines = append(lines, line)
 			}
 		}
 	}
@@ -506,26 +495,6 @@ func scanCategoriesLabel(cats []api.ScanCategory) string {
 	return strings.Join(out, ",")
 }
 
-// FormatDelegationLine summarizes the first unsettled delegation; detail
-// output lists every one through FormatDelegationDetailLine instead.
-func FormatDelegationLine(delegations []api.Delegation) string {
-	for _, d := range delegations {
-		if d.Phase == api.DelegationPhaseDone {
-			continue
-		}
-		phase := string(d.Phase)
-		if phase == "" {
-			phase = "active"
-		}
-		id := d.ID
-		if len(id) > 8 {
-			id = id[:8]
-		}
-		return "Delegation: " + id + " · " + phase
-	}
-	return ""
-}
-
 // Unknown workspaces retain the inspection suggestion.
 const GitNoneOrientationLine = "Git: none · verify with command"
 
@@ -664,17 +633,6 @@ func formatWorkerRoundSegment(t api.WorkerTask) string {
 		return ""
 	}
 	return fmt.Sprintf(" · %d turns", t.ToolLoopsUsed)
-}
-
-func FormatDelegationDetailLine(d api.Delegation) string {
-	if d.Phase == api.DelegationPhaseDone {
-		return ""
-	}
-	id := d.ID
-	if len(id) > 8 {
-		id = id[:8]
-	}
-	return "Delegation: " + id + " · " + string(d.Phase) + " · " + strings.TrimSpace(d.Task)
 }
 
 func oldestStartedAt(tasks []api.WorkerTask) *time.Time {

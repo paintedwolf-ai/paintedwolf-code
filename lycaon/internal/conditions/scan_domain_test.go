@@ -25,16 +25,16 @@ type stubScanLedger struct {
 	latest   *api.CodeScan
 }
 
-func (s stubScanLedger) LatestRequiredScanForDelegation(context.Context, string) (*api.CodeScan, error) {
+func (s stubScanLedger) LatestRequiredScanForSession(context.Context, string) (*api.CodeScan, error) {
 	return s.latest, nil
 }
 
-func scanKey(delegationID, snapshotID string, categories []api.ScanCategory) string {
+func scanKey(sessionID, snapshotID string, categories []api.ScanCategory) string {
 	cats := ""
 	for _, c := range categories {
 		cats += string(c) + ","
 	}
-	return delegationID + "/" + snapshotID + "/" + cats
+	return sessionID + "/" + snapshotID + "/" + cats
 }
 
 func completeSecurityArtifacts(snapshotID string) map[string]any {
@@ -48,25 +48,25 @@ func completeSecurityArtifacts(snapshotID string) map[string]any {
 	}
 }
 
-func (s stubScanLedger) FindInFlightForDelegationSnapshot(_ context.Context, delegationID, snapshotID string, categories []api.ScanCategory, _ []string) (*api.CodeScan, error) {
+func (s stubScanLedger) FindInFlightForSessionSnapshot(_ context.Context, sessionID, snapshotID string, categories []api.ScanCategory, _ []string) (*api.CodeScan, error) {
 	if s.inflight == nil {
 		return nil, nil
 	}
-	return s.inflight[scanKey(delegationID, snapshotID, categories)], nil
+	return s.inflight[scanKey(sessionID, snapshotID, categories)], nil
 }
 
-func (s stubScanLedger) LatestCompleteForDelegationSnapshot(_ context.Context, delegationID, snapshotID string, categories []api.ScanCategory) (*api.CodeScan, error) {
+func (s stubScanLedger) LatestCompleteForSessionSnapshot(_ context.Context, sessionID, snapshotID string, categories []api.ScanCategory) (*api.CodeScan, error) {
 	if s.complete == nil {
 		return nil, nil
 	}
-	return s.complete[scanKey(delegationID, snapshotID, categories)], nil
+	return s.complete[scanKey(sessionID, snapshotID, categories)], nil
 }
 
 func scanDomainDeps(ledger stubScanLedger, ev stubEvidence) conditions.RegistryDeps {
 	cats := []api.ScanCategory{api.ScanCategorySecurity, api.ScanCategorySecret}
 	return conditions.RegistryDeps{
-		DelegationStore: stubDelegationStore{
-			"dep-1": {id: "dep-1", legs: []api.Leg{{ID: "leg-1", Status: api.LegStatusComplete}}},
+		SessionWorkIDs: func(context.Context, string) ([]string, error) {
+			return []string{"leg-1"}, nil
 		},
 		Evidence:                ev,
 		ScanLedger:              ledger,
@@ -130,7 +130,7 @@ func TestRequiredScansEnqueued(t *testing.T) {
 }
 
 func TestLintGatePassed(t *testing.T) {
-	lintKey := scanKey("dep-1", "head-1", []api.ScanCategory{api.ScanCategoryLint})
+	lintKey := scanKey("sess-1", "head-1", []api.ScanCategory{api.ScanCategoryLint})
 	ledger := stubScanLedger{
 		complete: map[string]*api.CodeScan{
 			lintKey: {
@@ -175,7 +175,7 @@ func TestEvidencePassedSecurityUsesScanLedger(t *testing.T) {
 		latest: &api.CodeScan{ID: "sec-1", Status: api.CodeScanStatusComplete, SourceSnapshotID: "head-1"},
 	}
 	ev := stubEvidence{
-		"dep-1/scan:sec-1/security": {
+		"sess-1/scan:sec-1/security": {
 			GateType:    string(evidence.GateTypeSecurity),
 			GateVerdict: string(evidence.GateVerdictPassed),
 			Artifacts:   completeSecurityArtifacts("head-1"),
@@ -194,7 +194,7 @@ func TestEvidencePassedSecurityUsesScanLedger(t *testing.T) {
 		t.Fatalf("evidence_missing:security = %v err=%v want false", ok, err)
 	}
 
-	ev["dep-1/scan:sec-1/security"] = &evidence.Record{
+	ev["sess-1/scan:sec-1/security"] = &evidence.Record{
 		GateType:    string(evidence.GateTypeSecurity),
 		GateVerdict: string(evidence.GateVerdictPassed),
 		Artifacts:   completeSecurityArtifacts("stale-head"),

@@ -356,11 +356,8 @@ var StructGoInternal = map[string]string{
 	"BoardOrientationRoot":  "BoardSnapshot member; not carried by BoardView",
 	"BoardReservationEntry": "BoardSnapshot member; rendered into pack_board text, never serialized",
 
-	"ParseResult":              "LLM structured-output landing shape",
-	"ExtractResult":            "LLM structured-output landing shape",
-	"DelegationPlan":           "LLM structured-output landing shape",
-	"DelegationLegPlan":        "DelegationPlan member",
-	"DecompositionConstraints": "DelegationPlan member",
+	"ParseResult":   "LLM structured-output landing shape",
+	"ExtractResult": "LLM structured-output landing shape",
 
 	"SpawnChildRequest":         "session store CreateChild argument; tools spawn child sessions, not an endpoint",
 	"TranscriptPageQuery":       "query-string carrier; parameters are declared in docs/openapi/components/parameters.yaml",

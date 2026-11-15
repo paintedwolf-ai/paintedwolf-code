@@ -50,9 +50,6 @@ func TestImplementModeTaskEnqueue(t *testing.T) {
 	if run == nil || run.WorkflowID != "implement" {
 		t.Fatalf("expected ambient implement run, got %+v", run)
 	}
-	if dep, ok := h.Delegations.Manager.Store.DelegationBySessionID(sess.ID); ok && dep != "" {
-		t.Fatalf("expected no delegation, got %q", dep)
-	}
 	foundTask := false
 	testutil.WaitFor(t, func() bool {
 		msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)

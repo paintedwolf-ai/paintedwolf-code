@@ -7,13 +7,13 @@ import (
 
 	"github.com/lycaon/lycaon/internal/branchretention"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workercontext"
 	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workertopology"
@@ -21,19 +21,16 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-// Runtime manages delegation stores, workers, executors, cancellations, and workspaces.
+// Runtime manages worker queues, records, executors, cancellations, and workspaces.
 type Runtime struct {
-	Manager         *delegation.Manager
-	Store           *delegation.SQLStore
 	Queue           *worker.SQLQueue
 	Executor        *worker.LocalWorkerExecutor
 	Cancel          *worker.CancelService
 	Workspace       *workspace.Manager
 	Recovery        *recovery.Coordinator
-	Criteria        delegation.CriteriaChecker
 	InjectRenderer  *prompts.InjectRenderer
 	PlaybookMatcher *prompts.PlaybookMatcher
-	ContextLoader   *delegation.WorkerContextLoader
+	ContextLoader   *workercontext.CompositeWorkerContext
 	BranchRoot      string
 	Records         *workerrecords.Store
 	Plan            *workerplan.Service
@@ -51,17 +48,13 @@ func (r *Runtime) SetRepoProvider(p repoinfo.Provider) {
 	}
 }
 
-// SetDependencies binds dependencies for the delegation runtime.
+// SetDependencies binds dependencies for the worker runtime.
 func (r *Runtime) SetDependencies(deps Dependencies) {
 	r.deps = deps
 }
 
-// New initializes the delegation store and worker queue.
+// New initializes the worker queue, worker records, and topology services.
 func New(database *db.Store, outbox *eventoutbox.Outbox, workersCfg worker.WorkersConfig) *Runtime {
-	store := delegation.NewSQLStore(database)
-	if outbox != nil {
-		store.SetEventOutbox(outbox)
-	}
 	queue := worker.NewSQLQueue(database, workersCfg.Poller.MaxConcurrency)
 	if outbox != nil {
 		queue.SetEventOutbox(outbox)
@@ -69,7 +62,6 @@ func New(database *db.Store, outbox *eventoutbox.Outbox, workersCfg worker.Worke
 	queue.SetWorkersConfig(workersCfg)
 	records := workerrecords.New(database)
 	return &Runtime{
-		Store:    store,
 		Queue:    queue,
 		Records:  records,
 		Plan:     &workerplan.Service{Records: records},

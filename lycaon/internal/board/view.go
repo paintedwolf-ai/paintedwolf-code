@@ -70,7 +70,6 @@ func BuildBoardView(snapshot *api.BoardSnapshot, sessionID string, level api.Boa
 		view.Roster = roster
 		view.Workers = packboard.NamedWorkersFromSnapshot(snap)
 		view.PromotePaths = packboard.PromotePathsFromSnapshot(snap)
-		view.Delegation = BuildDelegationRoster(packboard.DelegationsFromSnapshot(snap), level)
 		view.ActiveWorkflowRun = snap.ActiveWorkflowRun
 	}
 	if level == api.BoardDetailLevelForensic && len(tasks) > 0 {

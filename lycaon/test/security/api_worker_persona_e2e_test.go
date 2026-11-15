@@ -6,10 +6,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/testdbseed"
-
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -22,27 +22,22 @@ func TestDelegateImplementerPromptContainsPersona(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
 	cancel := h.StartBackgroundWorkers(t, context.Background())
 	t.Cleanup(cancel)
-	delMgr := h.Delegations.Manager
 	ctx := context.Background()
-	testdbseed.InsertProjectRoot(t, h.DB, testdbseed.DefaultProjectID, t.TempDir())
+	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, t.TempDir())
+	testutil.FailErr(t, "CreateHarnessSession failed", err)
+	h.SeedProgress(t, ctx, parent.ID)
 
-	r, err := delMgr.Create(ctx, api.CreateDelegationRequest{
-		ProjectID: testdbseed.DefaultProjectID,
-		Task:      "implement feature",
-		Strategy:  api.HuntStrategyFileBased,
-	})
-	testutil.FailErr(t, "delMgr.Create failed", err)
-	legID := r.Legs[0].ID
-	if _, err := delMgr.DispatchLeg(ctx, r.ID, legID, ""); err != nil {
-		testutil.FailErr(t, "delMgr.DispatchLeg failed", err)
-	}
+	_, err = h.ToolRegistry.Run(
+		ctx,
+		"task",
+		wiring.TaskToolArgs(orchestration.ProfileImplementer, "implement feature"),
+		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: parent.ID}},
+	)
+	testutil.FailErr(t, "task tool failed", err)
 
 	testutil.WaitFor(t, func() bool {
-		st, err := delMgr.GetStatus(ctx, r.ID)
-		if err != nil {
-			return false
-		}
-		return st.Phase == api.DelegationPhaseDone
+		jobs, err := h.Delegations.Queue.ListBySession(ctx, parent.ProjectID, parent.ID, api.WorkerStatusComplete)
+		return err == nil && len(jobs) == 1 && jobs[0].OutcomeDeliveredAt != nil
 	})
 
 	var hasFocus, hasLeg bool
@@ -70,28 +65,22 @@ func TestDelegatePlanReviewerDistinctFromImplementer(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
 	cancel := h.StartBackgroundWorkers(t, context.Background())
 	t.Cleanup(cancel)
-	delMgr := h.Delegations.Manager
 	ctx := context.Background()
-	testdbseed.InsertProjectRoot(t, h.DB, testdbseed.DefaultProjectID, t.TempDir())
+	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, t.TempDir())
+	testutil.FailErr(t, "CreateHarnessSession failed", err)
+	h.SeedProgress(t, ctx, parent.ID)
 
-	r, err := delMgr.Create(ctx, api.CreateDelegationRequest{
-		ProjectID: testdbseed.DefaultProjectID,
-		Task:      "review plan",
-		Strategy:  api.HuntStrategyFileBased,
-	})
-	testutil.FailErr(t, "delMgr.Create failed", err)
-	leg := r.Legs[0]
-	leg.AgentType = "plan-reviewer"
-	if err := delMgr.Store.UpdateLeg(ctx, leg); err != nil {
-		testutil.FailErr(t, "delMgr.Store.UpdateLeg failed", err)
-	}
-	if _, err := delMgr.DispatchLeg(ctx, r.ID, leg.ID, ""); err != nil {
-		testutil.FailErr(t, "delMgr.DispatchLeg failed", err)
-	}
+	_, err = h.ToolRegistry.Run(
+		ctx,
+		"task",
+		wiring.TaskToolArgs("plan-reviewer", "review plan"),
+		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: parent.ID}},
+	)
+	testutil.FailErr(t, "task tool failed", err)
 
 	testutil.WaitFor(t, func() bool {
-		st, _ := delMgr.GetStatus(ctx, r.ID)
-		return st.Phase == api.DelegationPhaseDone
+		jobs, err := h.Delegations.Queue.ListBySession(ctx, parent.ProjectID, parent.ID, api.WorkerStatusComplete)
+		return err == nil && len(jobs) == 1 && jobs[0].OutcomeDeliveredAt != nil
 	})
 
 	var l1 string

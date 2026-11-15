@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -43,20 +44,20 @@ func TestBuildForTestBackgroundWorkersCompleteJob(t *testing.T) {
 	t.Cleanup(cancel)
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "worker")
-	testdbseed.InsertProjectRoot(t, h.DB, testdbseed.DefaultProjectID, dir)
+	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, dir)
+	testutil.FailErr(t, "CreateHarnessSession failed", err)
+	h.SeedProgress(t, ctx, sess.ID)
 
-	r, err := h.Delegations.Manager.Create(ctx, wire.CreateDelegationRequest{
-		ProjectID: testdbseed.DefaultProjectID,
-		Task:      "implement feature",
-		Strategy:  wire.HuntStrategyFileBased,
-	})
-	testutil.FailErr(t, "h.Delegations.Manager.Create failed", err)
-	if _, err := h.Delegations.Manager.DispatchLeg(ctx, r.ID, r.Legs[0].ID, ""); err != nil {
-		testutil.FailErr(t, "h.Delegations.Manager.DispatchLeg failed", err)
-	}
+	_, err = h.ToolRegistry.Run(
+		ctx,
+		"task",
+		TaskToolArgs(orchestration.ProfileRepoResearcher, "inspect feature"),
+		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
+	)
+	testutil.FailErr(t, "task tool failed", err)
 
 	testutil.WaitFor(t, func() bool {
-		st, err := h.Delegations.Manager.GetStatus(ctx, r.ID)
-		return err == nil && st.Phase == wire.DelegationPhaseDone
+		jobs, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusComplete)
+		return err == nil && len(jobs) == 1 && jobs[0].OutcomeDeliveredAt != nil
 	})
 }

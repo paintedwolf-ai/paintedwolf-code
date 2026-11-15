@@ -551,9 +551,9 @@ func TestQueueEagerDelivery(t *testing.T) {
 	testutil.FailErr(t, "LoadRegistryFromConfigRoot", err)
 	bus := anchor.NewBus(engine)
 	bus.SetRegistry(reg)
-	bus.EmitEager(t.Context(), "child-1", anchor.WorkerLegStarted, map[string]string{"leg_id": "leg-a"})
+	bus.EmitEager(t.Context(), "child-1", anchor.WorkerTaskStarted, map[string]string{"agent_type": "implementer"})
 	text, _, ok, _ := engine.RenderPendingNudge(t.Context(), "child-1", kick.CoordinatorKickRenderContext{})
-	if !ok || !strings.Contains(text, "leg-a") {
+	if !ok || !strings.Contains(text, "implementer") {
 		t.Fatalf("nudge=%q ok=%v", text, ok)
 	}
 }

@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -31,6 +30,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
@@ -119,6 +119,9 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	if err := workflowinputs.RegisterAskUserTool(rt.Registry, workflowMgr.Asks, rt.Boundary); err != nil {
 		testutil.FailErr(t, "workflowinputs.RegisterAskUserTool failed", err)
 	}
+	if err := workerplan.RegisterPlanFromBlueprintTool(rt.Registry, &workerplan.Service{Records: workerrecords.New(sqlDB), Plans: blueprintMgr}); err != nil {
+		testutil.FailErr(t, "workerplan.RegisterPlanFromBlueprintTool failed", err)
+	}
 	registerContextualToolsCoordinatorExtras(t, sqlDB, configRoot, rt.Registry, mgr, agents, sessionWF, bundledDir)
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
@@ -200,12 +203,7 @@ func registerContextualToolsCoordinatorExtras(
 	bundledDir string,
 ) {
 	t.Helper()
-	delegStore := delegation.NewMemoryStore()
 	queue := worker.NewInMemoryQueue(4)
-	delegMgr := delegation.NewManager(delegStore, queue, mgr, delegation.AllowGate{})
-	if err := delegation.RegisterDelegationTools(reg, delegMgr); err != nil {
-		testutil.FailErr(t, "delegation.RegisterDelegationTools failed", err)
-	}
 	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
 		Queue:         queue,
 		Agents:        agents,

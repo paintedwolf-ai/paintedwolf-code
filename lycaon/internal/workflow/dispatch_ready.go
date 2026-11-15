@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -50,5 +49,3 @@ func (c RegistryWorkflowReadyChecker) ImplementWorkflowReady(ctx context.Context
 	}
 	return c.Registry.Evaluate("implement_workflow_ready", ec)
 }
-
-var _ delegation.WorkflowReadyChecker = RegistryWorkflowReadyChecker{}

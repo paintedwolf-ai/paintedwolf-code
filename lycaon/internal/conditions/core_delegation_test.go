@@ -2,11 +2,11 @@ package conditions_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestCoreToolPredicates(t *testing.T) {
@@ -36,15 +36,32 @@ func TestCoreToolPredicates(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("high_risk_tool instruct_worker to implementer = %v err=%v", ok, err)
 	}
+	ok, err = reg.Evaluate("tool_is_delegation", ec)
+	if err != nil || !ok {
+		t.Fatalf("tool_is_delegation instruct_worker = %v err=%v", ok, err)
+	}
 	ec.ToolArgs = map[string]any{"worker": "scout"}
 	ok, err = reg.Evaluate("high_risk_tool", ec)
 	if err != nil || ok {
 		t.Fatalf("high_risk_tool instruct_worker without an agent = %v err=%v", ok, err)
 	}
-	ec.ToolName = "delegate_dispatch"
+	ec.ToolName = "plan_from_blueprint"
 	ok, err = reg.Evaluate("high_risk_tool", ec)
 	if err != nil || !ok {
-		t.Fatalf("high_risk_tool delegate = %v err=%v", ok, err)
+		t.Fatalf("high_risk_tool plan_from_blueprint = %v err=%v", ok, err)
+	}
+	ok, err = reg.Evaluate("tool_is_delegation", ec)
+	if err != nil || !ok {
+		t.Fatalf("tool_is_delegation plan_from_blueprint = %v err=%v", ok, err)
+	}
+	ec.ToolName = "delegate_dispatch"
+	ok, err = reg.Evaluate("tool_is_delegation", ec)
+	if err != nil || ok {
+		t.Fatalf("tool_is_delegation delegate_dispatch = %v err=%v want false", ok, err)
+	}
+	ok, err = reg.Evaluate("high_risk_tool", ec)
+	if err != nil || ok {
+		t.Fatalf("high_risk_tool delegate_dispatch = %v err=%v want false", ok, err)
 	}
 }
 
@@ -70,17 +87,8 @@ func TestCoreSpawnGuards(t *testing.T) {
 	}
 }
 
-func TestCoreDelegationPredicates(t *testing.T) {
-	dep := &api.Delegation{
-		ID:    "dep-1",
-		Phase: api.DelegationPhaseWorker,
-		Legs: []api.Leg{
-			{ID: "leg-1", Status: api.LegStatusRunning, WorkerID: "job-1"},
-			{ID: "leg-2", Status: api.LegStatusComplete, CompletionCriteria: []string{"tests"}},
-		},
-	}
+func TestCoreGroundingAndRetiredPredicates(t *testing.T) {
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		DelegationStore: conditions.StaticDelegationStore{Delegation: dep},
 		GroundingBlocked: func(context.Context, string) (bool, error) {
 			return true, nil
 		},
@@ -88,23 +96,27 @@ func TestCoreDelegationPredicates(t *testing.T) {
 	testutil.FailErr(t, "build conditions registry", err)
 	ec := conditions.EvalContext{Ctx: context.Background(), SessionID: "sess-1"}
 
-	cases := map[string]bool{
-		"delegation_active":       true,
-		"delegation_phase_worker": true,
-		"delegation_phase_setup":  false,
-		"leg_pending":             true,
-		"all_legs_complete":       false,
-		"worker_jobs_pending":     true,
-		"grounding_blocked":       true,
-		"completion_criteria_met": true,
+	ok, err := reg.Evaluate("grounding_blocked", ec)
+	if err != nil || !ok {
+		t.Fatalf("grounding_blocked = %v err=%v", ok, err)
 	}
-	for name, want := range cases {
+
+	retired := []string{
+		"delegation_active",
+		"delegation_phase_setup",
+		"delegation_phase_worker",
+		"delegation_phase_done",
+		"leg_pending",
+		"all_legs_complete",
+		"leg_failed",
+		"worker_jobs_pending",
+		"completion_criteria_met",
+		"file_modified_since_base",
+	}
+	for _, name := range retired {
 		ok, err := reg.Evaluate(name, ec)
-		if err != nil {
-			t.Fatalf("%s err=%v", name, err)
-		}
-		if ok != want {
-			t.Fatalf("%s = %v want %v", name, ok, want)
+		if ok || !errors.Is(err, conditions.ErrUnknownCondition) {
+			t.Fatalf("%s = (%v, %v) want (false, ErrUnknownCondition)", name, ok, err)
 		}
 	}
 }

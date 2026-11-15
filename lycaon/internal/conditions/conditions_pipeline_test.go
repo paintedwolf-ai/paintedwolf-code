@@ -26,10 +26,12 @@ func TestDelegationCloseoutCompleteInCore(t *testing.T) {
 	}
 }
 
-func TestCloseoutGatesPassedRequiresDelegationAndVerify(t *testing.T) {
-	depStore := stubDelegationStore{"dep-1": {id: "dep-1", legs: []api.Leg{{ID: "leg-1", Status: api.LegStatusComplete}}}}
+func TestCloseoutGatesPassedRequiresWorkerCloseoutAndVerify(t *testing.T) {
+	workIDs := func(context.Context, string) ([]string, error) {
+		return []string{"leg-1"}, nil
+	}
 	ev := stubEvidence{
-		"dep-1/leg-1/verify": {
+		"sess-1/leg-1/verify": {
 			GateType:    string(evidence.GateTypeVerify),
 			GateVerdict: string(evidence.GateVerdictPassed),
 			Artifacts: map[string]any{
@@ -40,7 +42,7 @@ func TestCloseoutGatesPassedRequiresDelegationAndVerify(t *testing.T) {
 	}
 	closeout := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		DelegationStore:    depStore,
+		SessionWorkIDs:     workIDs,
 		Evidence:           ev,
 		DelegationCloseout: closeout,
 	})
@@ -53,7 +55,7 @@ func TestCloseoutGatesPassedRequiresDelegationAndVerify(t *testing.T) {
 	}
 
 	regNoVerify, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		DelegationStore:    depStore,
+		SessionWorkIDs:     workIDs,
 		Evidence:           stubEvidence{},
 		DelegationCloseout: closeout,
 	})
@@ -63,24 +65,22 @@ func TestCloseoutGatesPassedRequiresDelegationAndVerify(t *testing.T) {
 		t.Fatalf("closeout without verify = %v err=%v want false", ok, err)
 	}
 
-	pendingLegs := stubDelegationStore{"dep-2": {id: "dep-2", legs: []api.Leg{{ID: "leg-1", Status: api.LegStatusRunning}}}}
 	pendingCloseout := func(_ context.Context, _ string) (bool, error) { return false, nil }
 	regPending, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		DelegationStore:    pendingLegs,
+		SessionWorkIDs:     workIDs,
 		Evidence:           ev,
 		DelegationCloseout: pendingCloseout,
 	})
 	testutil.FailErr(t, "build conditions registry", err)
 	ok, err = regPending.Evaluate("closeout_gates_passed", ec)
 	if err != nil || ok {
-		t.Fatalf("closeout with active delegation = %v err=%v want false", ok, err)
+		t.Fatalf("closeout with unfinished workers = %v err=%v want false", ok, err)
 	}
 }
 
 func TestCloseoutGatesPassedAcceptsCurrentSourceValidation(t *testing.T) {
-	depStore := stubDelegationStore{"dep-1": {id: "dep-1", legs: []api.Leg{{ID: "leg-1", Status: api.LegStatusComplete}}}}
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		DelegationStore:    depStore,
+		SessionWorkIDs:     func(context.Context, string) ([]string, error) { return []string{"leg-1"}, nil },
 		Evidence:           stubEvidence{},
 		DelegationCloseout: func(context.Context, string) (bool, error) { return true, nil },
 		SourceVerifyPassed: func(_ context.Context, sessionID string) (bool, error) {
@@ -97,9 +97,9 @@ func TestCloseoutGatesPassedAcceptsCurrentSourceValidation(t *testing.T) {
 
 func TestCloseoutGatesPassedRequiresSecurityEvidence(t *testing.T) {
 	proactive := []api.ScanCategory{api.ScanCategorySecurity, api.ScanCategorySecret}
-	depStore := stubDelegationStore{"dep-1": {id: "dep-1", legs: []api.Leg{{ID: "leg-1", Status: api.LegStatusComplete}}}}
+	workIDs := func(context.Context, string) ([]string, error) { return []string{"leg-1"}, nil }
 	verifyEv := stubEvidence{
-		"dep-1/leg-1/verify": {
+		"sess-1/leg-1/verify": {
 			GateType:    string(evidence.GateTypeVerify),
 			GateVerdict: string(evidence.GateVerdictPassed),
 			Artifacts: map[string]any{
@@ -113,7 +113,7 @@ func TestCloseoutGatesPassedRequiresSecurityEvidence(t *testing.T) {
 		ID: "sec-1", Status: api.CodeScanStatusComplete, SourceSnapshotID: "head-1",
 	}}
 	baseDeps := conditions.RegistryDeps{
-		DelegationStore:         depStore,
+		SessionWorkIDs:          workIDs,
 		Evidence:                verifyEv,
 		DelegationCloseout:      closeout,
 		ScanLedger:              ledger,
@@ -129,15 +129,15 @@ func TestCloseoutGatesPassedRequiresSecurityEvidence(t *testing.T) {
 	}
 
 	secEv := stubEvidence{
-		"dep-1/leg-1/verify": verifyEv["dep-1/leg-1/verify"],
-		"dep-1/scan:sec-1/security": {
+		"sess-1/leg-1/verify": verifyEv["sess-1/leg-1/verify"],
+		"sess-1/scan:sec-1/security": {
 			GateType:    string(evidence.GateTypeSecurity),
 			GateVerdict: string(evidence.GateVerdictPassed),
 			Artifacts:   completeSecurityArtifacts("head-1"),
 		},
 	}
 	regPass, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		DelegationStore:         depStore,
+		SessionWorkIDs:          workIDs,
 		Evidence:                secEv,
 		DelegationCloseout:      closeout,
 		ScanLedger:              ledger,
@@ -156,13 +156,13 @@ func TestCloseoutGatesPassedRequiresSecurityEvidence(t *testing.T) {
 }
 
 func TestCloseoutGatesPassedUsesCumulativeLandingObligation(t *testing.T) {
-	depStore := stubDelegationStore{"dep-1": {id: "dep-1", legs: []api.Leg{{ID: "leg-1", Status: api.LegStatusComplete}}}}
+	workIDs := func(context.Context, string) ([]string, error) { return []string{"leg-1"}, nil }
 	evidenceRows := stubEvidence{
-		"dep-1/leg-1/verify": {
+		"sess-1/leg-1/verify": {
 			GateType: string(evidence.GateTypeVerify), GateVerdict: string(evidence.GateVerdictPassed),
 			Artifacts: map[string]any{"exit_code": 0, "command": "./task check"},
 		},
-		"dep-1/scan:landing-scan/security": {
+		"sess-1/scan:landing-scan/security": {
 			GateType: string(evidence.GateTypeSecurity), GateVerdict: string(evidence.GateVerdictPassed),
 			Artifacts: completeSecurityArtifacts("landing-snapshot"),
 		},
@@ -171,7 +171,7 @@ func TestCloseoutGatesPassedUsesCumulativeLandingObligation(t *testing.T) {
 		ID: "landing-scan", Status: api.CodeScanStatusComplete, SourceSnapshotID: "landing-snapshot",
 	}}
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		DelegationStore: depStore, Evidence: evidenceRows, ScanLedger: ledger,
+		SessionWorkIDs: workIDs, Evidence: evidenceRows, ScanLedger: ledger,
 		DelegationCloseout: func(context.Context, string) (bool, error) { return true, nil },
 		SourceSnapshots:    staticSourceSnapshot{id: "unrelated-snapshot"},
 	})
@@ -185,15 +185,15 @@ func TestCloseoutGatesPassedUsesCumulativeLandingObligation(t *testing.T) {
 }
 
 func TestCloseoutGatesPassedHonorsScannerMasterOff(t *testing.T) {
-	depStore := stubDelegationStore{"dep-1": {id: "dep-1", legs: []api.Leg{{ID: "leg-1", Status: api.LegStatusComplete}}}}
+	workIDs := func(context.Context, string) ([]string, error) { return []string{"leg-1"}, nil }
 	verify := stubEvidence{
-		"dep-1/leg-1/verify": {
+		"sess-1/leg-1/verify": {
 			GateType: string(evidence.GateTypeVerify), GateVerdict: string(evidence.GateVerdictPassed),
 			Artifacts: map[string]any{"exit_code": 0, "command": "./task check"},
 		},
 	}
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		DelegationStore: depStore, Evidence: verify, ScanLedger: stubScanLedger{},
+		SessionWorkIDs: workIDs, Evidence: verify, ScanLedger: stubScanLedger{},
 		DelegationCloseout:      func(context.Context, string) (bool, error) { return true, nil },
 		SecurityScannersEnabled: func() bool { return false },
 	})

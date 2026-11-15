@@ -35,7 +35,7 @@ func TestRenderWorkerLegInject(t *testing.T) {
 		Checklist: []string{"do work"},
 	})
 	testutil.FailErr(t, "RenderWorkerLegInject failed", err)
-	for _, want := range []string{WorkerLegInjectSentinel, "## Leg", "leg-1", "phase_id: implement", "- read"} {
+	for _, want := range []string{WorkerLegInjectSentinel, "## Assignment", "leg-1", "phase_id: implement", "- read"} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in block = %q", want, block)
 		}

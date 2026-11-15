@@ -10,7 +10,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// SecurityCloseoutChecker validates anchored evidence for delegation closeout.
+// SecurityCloseoutChecker validates anchored security evidence for session closeout.
 type SecurityCloseoutChecker struct {
 	Store    *SQLStore
 	Evidence inspector.EvidenceStore
@@ -23,18 +23,6 @@ type closeoutEval struct {
 	ScanID   string
 	Guidance []api.ScanGuidanceSummary
 	Reason   string
-}
-
-// Check evaluates durable scan evidence without creating work.
-func (c *SecurityCloseoutChecker) Check(ctx context.Context, delegationID, projectDir string) error {
-	if c == nil {
-		return nil
-	}
-	result, err := c.evaluate(ctx, delegationID, projectDir)
-	if err != nil {
-		return err
-	}
-	return closeoutError(result)
 }
 
 // CheckSession evaluates durable scan evidence for the latest required landed change in sessionID.
@@ -74,26 +62,6 @@ func closeoutError(result closeoutEval) error {
 		}
 	}
 	return fmt.Errorf("security gate failed: %s", result.Reason)
-}
-
-func (c *SecurityCloseoutChecker) evaluate(ctx context.Context, delegationID, projectDir string) (closeoutEval, error) {
-	if delegationID == "" || projectDir == "" {
-		return closeoutEval{OK: true}, nil
-	}
-	if c.Settings != nil && !c.Settings.Effective().Enabled {
-		return closeoutEval{OK: true}, nil
-	}
-	if c.Store == nil {
-		return closeoutEval{Reason: "scan obligation ledger is unavailable"}, nil
-	}
-	landed, err := c.Store.LatestRequiredLandedChangeForDelegation(ctx, delegationID)
-	if err != nil {
-		return closeoutEval{}, err
-	}
-	if landed == nil {
-		return closeoutEval{OK: true}, nil
-	}
-	return c.evaluateLanded(ctx, landed, delegationID, projectDir)
 }
 
 func (c *SecurityCloseoutChecker) evaluateLanded(ctx context.Context, landed *LandedChange, evidenceRunID, projectDir string) (closeoutEval, error) {

@@ -83,6 +83,13 @@ func insertLandedChangeTx(ctx context.Context, q *db.Queries, plan obligation.Pl
 				return err
 			}
 		}
+		if strings.TrimSpace(plan.SessionID) != "" {
+			if _, err := q.BindScanSession(ctx, db.BindScanSessionParams{
+				SessionID: strings.TrimSpace(plan.SessionID), ScanID: plan.ScanID, CreatedAt: db.FormatTime(createdAt),
+			}); err != nil {
+				return err
+			}
+		}
 		requiredScanners := []string{}
 		if strings.TrimSpace(plan.ScannerID) != "" {
 			requiredScanners = append(requiredScanners, plan.ScannerID)
@@ -169,7 +176,24 @@ func accumulatedLandedDeltaTx(ctx context.Context, q *db.Queries, plan obligatio
 			}
 		}
 	}
-	if strings.TrimSpace(plan.DelegationID) != "" {
+	if strings.TrimSpace(plan.SessionID) != "" {
+		rows, err := q.ListLandedPathDeltasForSession(ctx, db.ListLandedPathDeltasForSessionParams{
+			ParentSessionID: db.NullString(strings.TrimSpace(plan.SessionID)), CanonicalPath: plan.CanonicalPath,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, row := range rows {
+			var changed, deleted []string
+			if err := json.Unmarshal([]byte(row.ChangedPathsJson), &changed); err != nil {
+				return nil, nil, fmt.Errorf("decode prior landed changed paths: %w", err)
+			}
+			if err := json.Unmarshal([]byte(row.DeletedPathsJson), &deleted); err != nil {
+				return nil, nil, fmt.Errorf("decode prior landed deleted paths: %w", err)
+			}
+			apply(changed, deleted)
+		}
+	} else if strings.TrimSpace(plan.DelegationID) != "" {
 		rows, err := q.ListLandedPathDeltas(ctx, db.ListLandedPathDeltasParams{
 			DelegationID: plan.DelegationID, CanonicalPath: plan.CanonicalPath,
 		})

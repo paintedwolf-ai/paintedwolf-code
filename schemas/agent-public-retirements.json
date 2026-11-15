@@ -687,6 +687,15 @@
       ],
       "WORKFLOW_REVIEW_VIEW_INVALID": [
         "READ_REVIEW_INVALID"
+      ],
+      "COORDINATOR_DELEGATE_DISPATCH_USE_TASK": [
+        "TOOL_NOT_OFFERED"
+      ],
+      "DELEGATE_DISPATCH_LEG_NOT_PENDING": [
+        "INSTRUCT_WORKER_WORKING"
+      ],
+      "DELEGATE_DISPATCH_LEG_REQUIRED": [
+        "TOOL_ARGS_INVALID"
       ]
     },
     "tools": {
@@ -810,10 +819,65 @@
       ],
       "decline_worker_budget": [
         "worker_cancel"
+      ],
+      "delegate_init": [
+        "plan_from_blueprint"
+      ],
+      "delegate_decompose": [
+        "plan_from_blueprint",
+        "fanout_plan"
+      ],
+      "delegate_dispatch": [
+        "task"
+      ],
+      "delegate_status": [
+        "pack_board"
+      ],
+      "parse_decomposition": [
+        "plan_from_blueprint",
+        "fanout_plan"
+      ],
+      "parse_delegation_plan": [
+        "plan_from_blueprint",
+        "fanout_plan"
       ]
     },
-    "workflow_terms": {},
+    "workflow_terms": {
+      "delegation_active": [
+        "delegation_closeout_complete"
+      ],
+      "delegation_phase_setup": [
+        "delegation_closeout_complete"
+      ],
+      "delegation_phase_worker": [
+        "delegation_closeout_complete"
+      ],
+      "delegation_phase_done": [
+        "delegation_closeout_complete"
+      ],
+      "leg_pending": [
+        "delegation_closeout_complete"
+      ],
+      "all_legs_complete": [
+        "delegation_closeout_complete"
+      ],
+      "leg_failed": [
+        "delegation_closeout_complete"
+      ],
+      "worker_jobs_pending": [
+        "delegation_closeout_complete"
+      ],
+      "completion_criteria_met": [
+        "delegation_closeout_complete"
+      ],
+      "file_modified_since_base": [
+        "delegation_closeout_complete"
+      ]
+    },
     "anchors": {
+      "worker.leg.started": [
+        "worker.task.started"
+      ],
       "worker.summary.trim": [
         "worker.report_check"
       ],

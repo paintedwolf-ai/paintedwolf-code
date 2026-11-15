@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -68,7 +67,6 @@ func TestCompletionCoverageValidationUsesDurableWorkerIdentity(t *testing.T) {
 func TestScanAndPromotionCloseoutHooks(t *testing.T) {
 	database := testdbfixture.Open(t, "closeout-hooks.db")
 	runtime := New(database, nil, worker.WorkersConfig{})
-	runtime.Manager = delegation.NewManager(runtime.Store, runtime.Queue, nil, delegation.AllowGate{})
 
 	var nilRuntime *Runtime
 	nilRuntime.NotifySettledPlanCloseout(t.Context(), "parent")
@@ -76,7 +74,4 @@ func TestScanAndPromotionCloseoutHooks(t *testing.T) {
 	runtime.NotifyPromotedTask(t.Context(), api.WorkerTask{ParentSessionID: "parent"})
 	testutil.FailErr(t, "session scan closeout", runtime.OnScanCloseout(t.Context(), api.CodeScan{SessionID: "parent"}))
 	testutil.FailErr(t, "idle scan closeout", runtime.OnScanCloseout(t.Context(), api.CodeScan{}))
-	if err := runtime.OnScanCloseout(t.Context(), api.CodeScan{DelegationID: "missing-delegation"}); err == nil {
-		t.Fatal("expected missing delegation retry error")
-	}
 }

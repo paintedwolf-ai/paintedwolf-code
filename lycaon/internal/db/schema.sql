@@ -2016,73 +2016,6 @@ CREATE TABLE IF NOT EXISTS worker_decisions (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_worker_decisions_job
     ON worker_decisions(job_id);
 
--- Multi-leg plans share their coordinator session's lifetime.
-CREATE TABLE IF NOT EXISTS delegations (
-    id TEXT PRIMARY KEY,
-    project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    workspace_root_id TEXT REFERENCES project_roots(id) ON DELETE SET NULL,
-    workspace_path TEXT NOT NULL DEFAULT '',
-    coordinator_session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,
-    task TEXT NOT NULL,
-    strategy TEXT NOT NULL CHECK (
-        strategy IN ('file-based', 'feature-based', 'risk-based', 'research-based')
-    ),
-    inspect_mode TEXT CHECK (
-        inspect_mode IS NULL OR inspect_mode IN ('standard', 'turbo', 'full')
-    ),
-    status TEXT NOT NULL CHECK (
-        status IN ('active', 'done', 'failed', 'aborted', 'canceled')
-    ),
-    reason TEXT,
-    phase TEXT,
-    workflow_id TEXT,
-    workflow_version TEXT,
-    workflow_run_id TEXT,
-    blueprint_path TEXT,
-    base_head_sha TEXT,
-    -- An API create's idempotency key and the digest of the input it was created from.
-    operation_id TEXT UNIQUE,
-    input_digest TEXT,
-    created_at TEXT NOT NULL,
-    CHECK ((operation_id IS NULL) = (input_digest IS NULL))
-) STRICT;
-
-CREATE INDEX IF NOT EXISTS idx_delegations_project ON delegations(project_id);
-CREATE INDEX IF NOT EXISTS idx_delegations_workspace_root
-    ON delegations(workspace_root_id);
-CREATE INDEX IF NOT EXISTS idx_delegations_coordinator
-    ON delegations(coordinator_session_id);
-CREATE INDEX IF NOT EXISTS idx_delegations_workflow_run
-    ON delegations(workflow_run_id);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_delegations_one_workflow_run
-    ON delegations(workflow_run_id)
-    WHERE workflow_run_id IS NOT NULL AND TRIM(workflow_run_id) != '';
-
--- Legs within a delegation.
-CREATE TABLE IF NOT EXISTS delegation_legs (
-    id TEXT PRIMARY KEY,
-    delegation_id TEXT NOT NULL REFERENCES delegations(id) ON DELETE CASCADE,
-    title TEXT NOT NULL,
-    status TEXT NOT NULL CHECK (
-        status IN ('pending', 'dispatched', 'running', 'retry_pending', 'complete', 'failed', 'held', 'canceled')
-    ),
-    parent_id TEXT,
-    depends_on_json TEXT CHECK (depends_on_json = '' OR json_valid(depends_on_json)),
-    files_json TEXT CHECK (files_json = '' OR json_valid(files_json)),
-    completion_criteria_json TEXT CHECK (completion_criteria_json = '' OR json_valid(completion_criteria_json)),
-    workspace_root TEXT,
-    workspace_id TEXT,
-    prompt TEXT,
-    agent_type TEXT,
-    worker_id TEXT,
-    result_json TEXT CHECK (result_json = '' OR json_valid(result_json)),
-    created_at TEXT NOT NULL,
-    started_at TEXT,
-    completed_at TEXT
-) STRICT;
-
-CREATE INDEX IF NOT EXISTS idx_delegation_legs_delegation ON delegation_legs(delegation_id);
-
 -- Inter-agent call path reservations.
 CREATE TABLE IF NOT EXISTS call_reservations (
     path TEXT NOT NULL,
@@ -3676,24 +3609,6 @@ WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
 )
 BEGIN
     SELECT RAISE(ABORT, 'worker_jobs workspace_root_id outside project');
-END;
-
-CREATE TRIGGER IF NOT EXISTS delegations_workspace_root_project_insert
-BEFORE INSERT ON delegations
-WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id
-)
-BEGIN
-    SELECT RAISE(ABORT, 'delegations workspace_root_id outside project');
-END;
-
-CREATE TRIGGER IF NOT EXISTS delegations_workspace_root_project_update
-BEFORE UPDATE OF project_id, workspace_root_id ON delegations
-WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id
-)
-BEGIN
-    SELECT RAISE(ABORT, 'delegations workspace_root_id outside project');
 END;
 
 CREATE TRIGGER IF NOT EXISTS file_briefings_root_project_insert

@@ -19,7 +19,6 @@ import (
 
 func (b *serveBuilder) wireWorkflows() error {
 	b.delegations = delegations.New(b.storage.Database, b.events.Outbox, b.worker.cfg)
-	b.sessions.Manager.Coordinator.Closeout.SetDelegations(b.delegations.Store)
 
 	var err error
 	b.workflows, err = workflows.Build(b.startup.ctx, workflows.Dependencies{
@@ -30,7 +29,6 @@ func (b *serveBuilder) wireWorkflows() error {
 		Projects:            b.storage.Projects,
 		Sessions:            b.storage.Sessions,
 		SessionManager:      b.sessions.Manager,
-		DelegationStore:     b.delegations.Store,
 		EventsOutbox:        b.events.Outbox,
 		EventPublisher:      b.events.Publisher,
 		AuthzRecorder:       b.security.Authority.Recorder,
@@ -85,13 +83,6 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 		Fixtures: scanning.ScannerFixtures{
 			Registry:         b.startup.cfg.TestScanRegistry,
 			AdvisoryDatabase: b.startup.cfg.TestAdvisoryDatabase,
-		},
-		DelegationBySession: func(sessionID string) (string, string, bool) {
-			delegationID, ok := b.delegations.Store.DelegationBySessionID(sessionID)
-			if !ok {
-				return "", "", false
-			}
-			return delegationID, "", true
 		},
 		WorkflowRunsGet:   b.workflows.Store.Runs.Get,
 		WorkflowRunParams: b.workflows.Manager.Obligations.ObligationParams,
@@ -159,7 +150,6 @@ func (b *serveBuilder) wireWorkflowConditions() error {
 	}
 	err := b.workflows.BuildConditions(b.startup.ctx, workflows.ConditionDependencies{
 		ModuleRoot:              b.catalog.ModuleRoot,
-		DelegationStore:         b.delegations.Store,
 		Plan:                    b.delegations.Plan,
 		ScanStore:               b.scanning.Store,
 		ScanObligation:          b.scanning.Obligation,

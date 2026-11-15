@@ -25,15 +25,6 @@ func NamedWorkersFromSnapshot(snap api.BoardSnapshot) []api.BoardWorker {
 	return raw
 }
 
-// DelegationsFromSnapshot returns the delegations embedded in a board snapshot.
-func DelegationsFromSnapshot(snap api.BoardSnapshot) []api.Delegation {
-	if snap.Delegation == nil {
-		return nil
-	}
-	raw, _ := (*snap.Delegation)["delegations"].([]api.Delegation)
-	return raw
-}
-
 // PromotePathsFromSnapshot returns cached promote path_status rows from a board snapshot.
 func PromotePathsFromSnapshot(snap api.BoardSnapshot) []api.WorkerPromoteJobPathStatus {
 	if snap.Workers == nil {

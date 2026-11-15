@@ -23,26 +23,28 @@ func TestWorkerSpawnUsesAgentSystemPrompt(t *testing.T) {
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
 	mgr := h.Sessions.Manager
 
-	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, t.TempDir())
+	dir := t.TempDir()
+	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, dir)
 	testutil.FailErr(t, "create session in store", err)
-	r, err := h.Delegations.Manager.Init(ctx, parent.ID, api.CreateDelegationRequest{
-		ProjectID: testdbseed.DefaultProjectID,
-		Task:      "add handler",
-		Strategy:  api.HuntStrategyFileBased,
+	jobID, err := h.Delegations.Queue.Enqueue(ctx, api.WorkerTask{
+		ProjectID:       testdbseed.DefaultProjectID,
+		WorkspacePath:   dir,
+		ParentSessionID: parent.ID,
+		AgentType:       orchestration.ProfileImplementer,
+		Prompt:          "add handler",
+		Brief:           "add handler",
+		ExecutionTarget: api.ExecutionTargetLocal,
 	})
-	testutil.FailErr(t, "h.Delegations.Manager.Init failed", err)
-	legID := r.Legs[0].ID
-	leg, err := h.Delegations.Manager.DispatchLeg(ctx, r.ID, legID, "")
-	testutil.FailErr(t, "h.Delegations.Manager.DispatchLeg failed", err)
+	testutil.FailErr(t, "Enqueue failed", err)
 	child, err := mgr.Workers.SpawnChild(ctx, parent.ID, api.SpawnChildRequest{
 		AgentType:   orchestration.ProfileImplementer,
 		Prompt:      "add handler",
-		WorkerJobID: leg.WorkerID,
+		WorkerJobID: jobID,
 	})
 	testutil.FailErr(t, "mgr.Workers.SpawnChild failed", err)
-	testutil.FailErr(t, "bind worker child", h.Delegations.Queue.SetChildSessionID(ctx, leg.WorkerID, child.ID))
+	testutil.FailErr(t, "bind worker child", h.Delegations.Queue.SetChildSessionID(ctx, jobID, child.ID))
 	// A worker child's turn resolves its queued task from the bound job.
-	if _, err := mgr.Submissions.Prompt(workercontext.WithJob(ctx, leg.WorkerID), child.ID, "add handler"); err != nil {
+	if _, err := mgr.Submissions.Prompt(workercontext.WithJob(ctx, jobID), child.ID, "add handler"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 

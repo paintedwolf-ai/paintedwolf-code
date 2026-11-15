@@ -449,6 +449,13 @@ FROM landed_changes
 WHERE delegation_id = sqlc.arg(delegation_id) AND canonical_path = sqlc.arg(canonical_path)
 ORDER BY rowid;
 
+-- name: ListLandedPathDeltasForSession :many
+SELECT lc.changed_paths_json, lc.deleted_paths_json
+FROM landed_changes AS lc
+JOIN worker_jobs AS wj ON wj.id = lc.worker_job_id
+WHERE wj.parent_session_id = sqlc.arg(parent_session_id) AND lc.canonical_path = sqlc.arg(canonical_path)
+ORDER BY lc.rowid;
+
 -- SetWorkerJobOverlay attaches the sealed overlay manifest to a completing
 -- claim. It is written once, under the claim that produced the branch.
 -- name: SetWorkerJobOverlay :execrows

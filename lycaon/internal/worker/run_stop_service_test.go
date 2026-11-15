@@ -235,16 +235,6 @@ func TestRunStopServiceHoldPatchesCanonicalWorkerRow(t *testing.T) {
 	}
 }
 
-type stubDelegationRunStopper struct {
-	canceled []string
-	err      error
-}
-
-func (s *stubDelegationRunStopper) CancelActiveByWorkflowRunID(_ context.Context, runID string) error {
-	s.canceled = append(s.canceled, runID)
-	return s.err
-}
-
 func TestRunStopServiceWithdrawsUnstartedRunWorkersAndKeepsStarted(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "run_stop.db")
 	testdbseed.InsertWorkflowRun(t, sqlDB, "run-stop-1", "coord-1", testdbseed.DefaultProjectID)
@@ -270,13 +260,9 @@ func TestRunStopServiceWithdrawsUnstartedRunWorkersAndKeepsStarted(t *testing.T)
 	})
 	testutil.FailErr(t, "admit round", err)
 
-	delegations := &stubDelegationRunStopper{}
-	svc := &RunStopService{Delegations: delegations, Records: records}
-	testutil.FailErr(t, "empty run id", svc.CancelDelegationsByRunID(t.Context(), " "))
-	testutil.FailErr(t, "cancel delegations by run", svc.CancelDelegationsByRunID(t.Context(), "run-stop-1"))
-	if len(delegations.canceled) != 1 || delegations.canceled[0] != "run-stop-1" {
-		t.Fatalf("delegations canceled = %v", delegations.canceled)
-	}
+	svc := &RunStopService{Records: records}
+	testutil.FailErr(t, "empty run id", svc.WithdrawPlannedWorkersByRunID(t.Context(), " "))
+	testutil.FailErr(t, "withdraw planned workers by run", svc.WithdrawPlannedWorkersByRunID(t.Context(), "run-stop-1"))
 	wIdle, err := records.Worker(t.Context(), actor, unstarted.WorkerID)
 	testutil.FailErr(t, "load idle worker", err)
 	if wIdle.ClosedReason != "withdrawn" || wIdle.ClosedAt == "" {

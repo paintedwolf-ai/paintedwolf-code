@@ -12,7 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/browser/renderhandle"
 	"github.com/lycaon/lycaon/internal/browserengine"
 	"github.com/lycaon/lycaon/internal/call"
-	"github.com/lycaon/lycaon/internal/delegation"
+	coordgrounding "github.com/lycaon/lycaon/internal/coordinator/grounding"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/grounding"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
@@ -60,27 +60,17 @@ func (r *Runtime) WireGroundingAndFindings(ctx context.Context) error {
 }
 
 func (r *Runtime) wireGroundingCoordinators() error {
-	groundingCfg, err := delegation.LoadGroundingConfig()
+	groundingCfg, err := grounding.LoadGroundingConfig()
 	if err != nil {
 		return fmt.Errorf("grounding config: %w", err)
 	}
-	groundingGate := delegation.NewSimpleDelegationGroundingGate(groundingCfg)
-	groundingGate.Criteria = r.deps.Delegations.Criteria
-	groundingState := grounding.NewStateStore()
-	r.deps.Delegations.Manager.Grounding = delegation.NewGroundingCoordinator(r.deps.Delegations.Store, r.deps.Delegations.Queue, groundingGate, groundingCfg, groundingState, r.deps.Sessions.Manager)
-	r.deps.Delegations.Manager.Grounding.InspectorCloseout = r.deps.Delegations.Manager.InspectorCloseout
-	r.deps.Delegations.Manager.Grounding.Events = r.deps.Events.Publisher
-	r.deps.Delegations.Manager.Grounding.Pipeline = r.deps.Sessions.Manager.ToolPolicy.Pipeline
-	ambientGate := delegation.NewSimpleAmbientGroundingGate(groundingCfg)
+	ambientGate := coordgrounding.NewSimpleAmbientGroundingGate(groundingCfg)
 	ambientState := grounding.NewStateStore()
-	ambientCoord := delegation.NewAmbientGroundingCoordinator(r.deps.Delegations.Store, r.deps.Delegations.Queue, ambientGate, groundingCfg, ambientState, r.deps.Sessions.Manager)
+	ambientCoord := coordgrounding.NewAmbientGroundingCoordinator(r.deps.Delegations.Queue, ambientGate, groundingCfg, ambientState, r.deps.Sessions.Manager)
 	ambientCoord.Events = r.deps.Events.Publisher
 	ambientCoord.Pipeline = r.deps.Sessions.Manager.ToolPolicy.Pipeline
 	ambientCoord.Names = r.WorkerRecords.NameByJob
-	r.deps.Sessions.Manager.SetGroundingHook(&delegation.ChainedGroundingCoordinator{
-		Delegation: r.deps.Delegations.Manager.Grounding,
-		Ambient:    ambientCoord,
-	})
+	r.deps.Sessions.Manager.SetGroundingHook(ambientCoord)
 	r.Grounding = &toolhost.GroundingService{
 		Config:    groundingCfg,
 		State:     grounding.NewStateStore(),

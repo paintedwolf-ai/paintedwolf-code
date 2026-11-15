@@ -91,9 +91,8 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	r.deps.Execution.Host.Survey.SetScopeGuards(scopeCfg)
 
 	r.Snapshot = &board.SnapshotBuilder{
-		Delegations:            r.deps.Delegations.Store,
-		Workers:                r.deps.Delegations.Queue,
-		Workflow:               &board.WorkflowRunSource{Runs: r.deps.Workflows.Manager.Store.Runs, Presentation: r.deps.Workflows.Manager.Presentation},
+		Workers:          r.deps.Delegations.Queue,
+		Workflow:         &board.WorkflowRunSource{Runs: r.deps.Workflows.Manager.Store.Runs, Presentation: r.deps.Workflows.Manager.Presentation},
 		Repo:                   r.RepoProvider,
 		Git:                    r.deps.GitMgr,
 		StatusCache:            r.deps.GitStatusCache,

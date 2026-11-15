@@ -25,19 +25,17 @@ func (r *Runtime) bindEvidence(deps Dependencies) {
 				}
 			}
 		}
-		if deps.Sessions != nil {
-			if sess, err := deps.Sessions.Get(c, runID); err == nil && sess != nil && strings.TrimSpace(sess.ProjectID) != "" {
-				return project.EnsureHostDataDir(deps.DataDir, sess.ProjectID)
-			}
-		}
-		if deps.DelegationStore == nil {
+		if deps.Sessions == nil {
 			return "", nil
 		}
-		rec, err := deps.DelegationStore.Get(c, runID)
-		if err != nil || rec == nil {
+		sess, err := deps.Sessions.Get(c, runID)
+		if err != nil || sess == nil {
 			return "", err
 		}
-		return project.EnsureHostDataDir(deps.DataDir, rec.ProjectID)
+		if strings.TrimSpace(sess.ProjectID) == "" {
+			return "", nil
+		}
+		return project.EnsureHostDataDir(deps.DataDir, sess.ProjectID)
 	}
 	r.Manager.Verdicts.EvidenceStore = evidenceStore
 	r.Manager.SetEvidenceProjectDir(func(c context.Context, sessionID string) (string, error) {

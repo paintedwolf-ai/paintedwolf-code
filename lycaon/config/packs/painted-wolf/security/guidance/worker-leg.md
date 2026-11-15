@@ -1,5 +1,5 @@
 <!-- lycaon-worker-leg:v1 -->
-## Leg
+## Assignment
 {% if leg_id %}- leg_id: {{ leg_id }}
 {% endif %}{% if workflow_id %}- workflow_id: {{ workflow_id }}
 {% endif %}{% if phase %}- phase_id: {{ phase }}
@@ -21,7 +21,7 @@ Top-level paths in canonical display form — search and file-read paths must ex
 {% if completion_criteria %}## Completion criteria
 {% for item in completion_criteria %}- {{ item }}
 {% endfor %}
-{% endif %}## Leg tools (allowlisted)
+{% endif %}## Assignment tools (allowlisted)
 {% if allowed_tools %}{% for tool in allowed_tools %}- {{ tool }}
 {% endfor %}{% else %}(none)
 {% endif %}

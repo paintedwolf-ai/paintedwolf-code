@@ -149,8 +149,6 @@ var tableLifetimes = map[string]TableLifetime{
 	"compaction_views":               cascadeOwnedBy("sessions"),
 	"content_blob_objects":           cascadeOwnedBy("projects"),
 	"credential_authored_values":     cascadeOwnedBy("projects"),
-	"delegations":                    cascadeOwnedBy("sessions"),
-	"delegation_legs":                cascadeOwnedBy("delegations"),
 	"draft_versions":                 cascadeOwnedBy("sessions"),
 	"editor_document_changes":        cascadeOwnedBy("editor_documents"),
 	"editor_document_snapshots":      cascadeOwnedBy("editor_documents"),

@@ -19,7 +19,11 @@ type Retirement struct {
 // through DropReleased. The contract suite upgrades the released corpus
 // fixtures that hold these rows and requires Rebuild to reproduce Capture.
 var retirements = map[string][]Retirement{
-	"source-manifests-and-command-records": {turnLoadReceiptRetirement},
+	"source-manifests-and-command-records": {
+		turnLoadReceiptRetirement,
+		delegationLegRetirement,
+		delegationRetirement,
+	},
 }
 
 // RegisteredRetirements returns a copy of the registered retirements by step ID.

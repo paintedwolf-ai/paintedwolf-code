@@ -90,39 +90,6 @@ func TestSchemaEnumValuesMatchGo(t *testing.T) {
 			),
 		},
 		{
-			table:  "delegations",
-			column: "strategy",
-			goVals: wirespec.GoEnumValues(
-				api.HuntStrategyFileBased,
-				api.HuntStrategyFeatureBased,
-				api.HuntStrategyRiskBased,
-				api.HuntStrategyResearchBased,
-			),
-		},
-		{
-			table:  "delegations",
-			column: "inspect_mode",
-			goVals: wirespec.GoEnumValues(
-				api.InspectModeStandard,
-				api.InspectModeTurbo,
-				api.InspectModeFull,
-			),
-		},
-		{
-			table:  "delegation_legs",
-			column: "status",
-			goVals: wirespec.GoEnumValues(
-				api.LegStatusPending,
-				api.LegStatusDispatched,
-				api.LegStatusRunning,
-				api.LegStatusRetryPending,
-				api.LegStatusComplete,
-				api.LegStatusFailed,
-				api.LegStatusHeld,
-				api.LegStatusCanceled,
-			),
-		},
-		{
 			table:  "code_scans",
 			column: "status",
 			goVals: wirespec.GoEnumValues(
@@ -154,7 +121,7 @@ func TestSchemaDefinesCoreTables(t *testing.T) {
 	contractcheck.FailErr(t, "read file", err)
 	sql := string(data)
 	for _, table := range []string{
-		"projects", "sessions", "messages", "worker_jobs", "delegations", "delegation_legs",
+		"projects", "sessions", "messages", "worker_jobs", "workers",
 		"code_scans",
 		"workflow_runs",
 	} {

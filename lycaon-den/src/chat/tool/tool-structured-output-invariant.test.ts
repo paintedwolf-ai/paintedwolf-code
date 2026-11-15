@@ -121,7 +121,6 @@ describe("tool structured output invariant", () => {
 
   it("has structured-output fixtures for every lycaon-tools.yaml catalog tool", () => {
     for (const tool of lycaonCatalogToolNames()) {
-      if (tool === "delegate_dispatch") continue;
       expect(TOOL_STRUCTURED_OUTPUT_FIXTURES[tool], tool).toBeDefined();
     }
   });

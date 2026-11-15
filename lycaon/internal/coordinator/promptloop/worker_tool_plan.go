@@ -66,17 +66,11 @@ func surfaceAllowsTool(plan toolsurface.Plan, surfaceID, toolName string) bool {
 	return plan.Compiled() && plan.Addressable(toolName)
 }
 
-func unofferedToolCode(toolName, surfaceID string) string {
-	if strings.TrimSpace(toolName) == "delegate_dispatch" && strings.HasPrefix(strings.TrimSpace(surfaceID), "implement") {
-		return "COORDINATOR_DELEGATE_DISPATCH_USE_TASK"
-	}
+func unofferedToolCode(_, _ string) string {
 	return "TOOL_NOT_OFFERED"
 }
 
-func offSurfaceCode(toolName, surfaceID string) string {
-	if strings.TrimSpace(toolName) == "delegate_dispatch" && strings.HasPrefix(strings.TrimSpace(surfaceID), "implement") {
-		return "COORDINATOR_DELEGATE_DISPATCH_USE_TASK"
-	}
+func offSurfaceCode(toolName, _ string) string {
 	if toolcontract.MutatesContent(toolName) {
 		return "COORDINATOR_ORCHESTRATE_WRITE_DENIED"
 	}

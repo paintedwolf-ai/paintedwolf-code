@@ -13,15 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/toolpresentation"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/webresearch"
-	"github.com/lycaon/lycaon/pkg/api"
 )
-
-// DelegationLegLookup supplies leg metadata for host closeout assembly.
-type DelegationLegLookup interface {
-	DelegationBySessionID(sessionID string) (string, bool)
-	GetLeg(ctx context.Context, delegationID, legID string) (*api.Leg, error)
-	ListLegs(ctx context.Context, delegationID string) ([]api.Leg, error)
-}
 
 func (m *Host) SetWebResearchConfig(cfg *webresearch.ConfigStore) {
 	if m == nil {

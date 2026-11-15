@@ -52,8 +52,6 @@ func TestCatalogIntrinsicRejectionsKeepTheirIdentity(t *testing.T) {
 		{"git_merge", "GIT_COMMIT_PATH_DENIED"},
 		{"git_stash", "GIT_COMMIT_PATH_DENIED"},
 
-		{"delegate_dispatch", "COORDINATOR_DELEGATE_DISPATCH_USE_TASK"},
-		{"delegate_dispatch", "DELEGATE_DISPATCH_LEG_REQUIRED"},
 		{"answer_decision", "DECISION_CHANGED"},
 		{"worker_cancel", "WORKER_CANCEL_TERMINAL"},
 		{"task", "WORKER_TYPE_UNAVAILABLE"},

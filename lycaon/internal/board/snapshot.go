@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/cost"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/packboard"
@@ -59,9 +58,8 @@ type ScanComparer interface {
 	BoardComparison(ctx context.Context, oldScan, newScan api.CodeScan) (*scan.Comparison, error)
 }
 
-// SnapshotBuilder assembles BoardSnapshot DTOs from delegation and worker state.
+// SnapshotBuilder assembles BoardSnapshot DTOs from worker and repository state.
 type SnapshotBuilder struct {
-	Delegations        delegation.Store
 	Workers            worker.WorkerQueue
 	Touches            WorkerTouchEnricher
 	ActiveReservations ActiveReservationLister
@@ -98,15 +96,6 @@ func (b *SnapshotBuilder) Build(ctx context.Context, projectID, workspacePath, s
 	}
 	sessionID = strings.TrimSpace(sessionID)
 
-	var delegations []api.Delegation
-	if b.Delegations != nil {
-		var err error
-		delegations, err = b.Delegations.ListByProject(ctx, projectID, sessionID)
-		if err != nil {
-			return nil, err
-		}
-	}
-
 	var tasks []api.WorkerTask
 	if b.Workers != nil && sessionID != "" {
 		var err error
@@ -123,9 +112,6 @@ func (b *SnapshotBuilder) Build(ctx context.Context, projectID, workspacePath, s
 		}
 	}
 
-	delegationSlice := api.BoardDelegationSlice{
-		"delegations": delegations,
-	}
 	workersSlice := api.BoardWorkersSlice{
 		"tasks": tasks,
 	}
@@ -152,7 +138,7 @@ func (b *SnapshotBuilder) Build(ctx context.Context, projectID, workspacePath, s
 	now := time.Now().UTC()
 	snap := &api.BoardSnapshot{
 		Repo: facts.repo, OrientationRoots: facts.roots, Host: b.loadHost(ctx, facts.repo.Languages),
-		Delegation: &delegationSlice, Workers: &workersSlice, ActiveWorkflowRun: activeRun,
+		Workers: &workersSlice, ActiveWorkflowRun: activeRun,
 		Cost: b.costSlice(ctx, sessionID), DetailLevel: level, Scans: facts.scans,
 	}
 	if facts.git != nil {

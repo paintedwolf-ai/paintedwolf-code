@@ -239,9 +239,6 @@ func (s mergeEngine) finalizeMergedOverlay(ctx context.Context, task *api.Worker
 	if s.Coord != nil && task != nil {
 		_ = s.Coord.ReleaseReservations(ctx, task.ParentSessionID, jobID)
 	}
-	if s.Closeout != nil && task != nil && task.DelegationID != "" {
-		_ = s.Closeout.RetryCloseout(ctx, task.DelegationID)
-	}
 	if s.OnPromoted != nil && task != nil {
 		s.OnPromoted(ctx, *task)
 	}

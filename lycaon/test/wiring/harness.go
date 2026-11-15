@@ -152,8 +152,6 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 		sa.Workflows.Manager.Resolver.Overlay = workflowdef.NewRegistry(o.replaceManifests)
 	}
 
-	applyTestHarnessRelaxations(sa)
-
 	trackHost(t.Name(), sa)
 
 	harnessStore := store.NewSQL(sa.DB)
@@ -334,17 +332,6 @@ func (testCostPricer) EstimateCost(_, _ string, usage cost.TokenUsage) (cost.Cos
 		PricingSource: "fixture",
 		PricedAsOf:    asOf,
 	}, nil
-}
-
-func applyTestHarnessRelaxations(sa *app.ServeApp) {
-	if sa == nil || sa.Delegations.Manager == nil {
-		return
-	}
-	if g := sa.Delegations.Manager.Grounding; g != nil {
-		cfg := g.Config
-		cfg.Closeout.Mode = "off"
-		g.Config = cfg
-	}
 }
 
 // autoCompleteOrchestrator dispatches legs that complete immediately in mock workspaces.

@@ -4,7 +4,7 @@ Coordination lets one session use parallel workers without sharing scratch state
 
 **See also:** [Architecture](architecture.md#coordination-planes) · [Session](session.md) · [Tools](tools.md#worker-scope-coordination) · [Grounding](grounding.md) · [Worker result contract](worker-result-contract.md)
 
-**Machine truth:** surface routing in `lycaon/config/packs/painted-wolf/platform/host/coordinator-flow.yaml` and `coordinator-surfaces.yaml`, compiled by `lycaon/internal/coordinator/surface/` · workers in `lycaon/internal/worker` and `lycaon/internal/spawn` · delegation in `lycaon/internal/delegation` · worker workspaces in `lycaon/internal/sourceworkspace`
+**Machine truth:** surface routing in `lycaon/config/packs/painted-wolf/platform/host/coordinator-flow.yaml` and `coordinator-surfaces.yaml`, compiled by `lycaon/internal/coordinator/surface/` · workers in `lycaon/internal/worker`, `lycaon/internal/workerrecords`, `lycaon/internal/workerplan`, and `lycaon/internal/spawn` · worker workspaces in `lycaon/internal/sourceworkspace`
 
 ---
 
@@ -168,18 +168,11 @@ A tool approval raised inside a worker remains attached to the child session. De
 
 ---
 
-## Delegation plane
+## Planned legs
 
-Delegation is the durable accounting for an explicitly decomposed body of work: the delegation record, its planned legs, dispatch, completion criteria, and each leg's latest result.
+`plan_from_blueprint` and `fanout_plan` seed planned legs directly onto durable worker records with their Blueprint or workflow binding, prerequisite worker names, and typed completion criteria. Each planned leg starts in `planned` state and enters execution when the coordinator calls `task` with its `workflow_work_id` (or when an upstream `after_workers` prerequisite lands).
 
-| Phase | Meaning |
-|-------|---------|
-| `setup` | The parent is defining the bounded plan and legs |
-| `worker` | One or more legs have been dispatched or remain to be reconciled |
-| `closeout` | Every leg is complete or failed; the host is checking grounding and closeout obligations |
-| `done` | The delegation is settled as `done` or `failed` |
-
-Workflow phases and delegation phases are separate. A workflow may use delegation during one phase, but delegation does not become the workflow state machine. The parent reads structured leg status, job identity, evidence tags, and completion envelopes; forward-declared wire values do not count as observed runtime states until the host assigns them.
+Workflow phases and planned worker settlement remain separate: a workflow phase may require every seeded leg to deliver with its typed criteria met before advancing or closing the batch, while individual workers retain their own rounds, result handles, and workspace lanes.
 
 ### Worker result boundary
 

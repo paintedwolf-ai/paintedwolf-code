@@ -12,8 +12,8 @@ import (
 )
 
 // maxScanGuidanceWatermarks bounds a process-lifetime map keyed by every
-// delegation:task pair seen. Past this size the map resets; worst case is one
-// redundant re-injection of guidance already shown.
+// session seen. Past this size the map resets; worst case is one redundant
+// re-injection of guidance already shown.
 const maxScanGuidanceWatermarks = 4096
 
 // GuidanceProvider prepends ephemeral scan guidance to CompletionRequest messages.
@@ -22,7 +22,7 @@ type GuidanceProvider struct {
 	Budget      scancfg.AgentBudgetConfig
 	injects     *prompts.InjectRenderer
 	mu          sync.Mutex
-	watermarks  map[string]string // delegation:task -> last injected guidance signature
+	watermarks  map[string]string // session -> last injected guidance signature
 }
 
 // NewGuidanceProvider constructs a guidance injector.
@@ -45,25 +45,20 @@ func (p *GuidanceProvider) SetInjectRenderer(renderer *prompts.InjectRenderer) {
 	p.injects = renderer
 }
 
-// Prepend injects one system message when fresh guidance is available.
-func (p *GuidanceProvider) Prepend(ctx context.Context, sessionID, delegationID, taskID string, messages []api.Message) []api.Message {
+// Prepend injects one system message when fresh guidance is available for sessionID.
+func (p *GuidanceProvider) Prepend(ctx context.Context, sessionID string, messages []api.Message) []api.Message {
 	if p == nil || p.Coordinator == nil {
 		return messages
 	}
-	var summaries []api.ScanGuidanceSummary
-	var key string
-	if delegationID != "" {
-		summaries = p.pending(ctx, delegationID)
-		key = delegationID + ":" + taskID
-	} else if strings.TrimSpace(sessionID) != "" {
-		summaries = p.pendingSession(ctx, sessionID)
-		key = "session:" + strings.TrimSpace(sessionID)
-	} else {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
 		return messages
 	}
+	summaries := p.pendingSession(ctx, sessionID)
 	if len(summaries) == 0 {
 		return messages
 	}
+	key := "session:" + sessionID
 	sig := guidanceSignature(summaries)
 	p.mu.Lock()
 	if p.watermarks[key] == sig {
@@ -111,20 +106,6 @@ func (p *GuidanceProvider) renderGuidance(ctx context.Context, sessionID string,
 	return anchor.RenderInform(ctx, anchor.InjectScanGuidance, anchor.MatchContext{Surface: "coordinator", SessionID: sessionID}, p.injects, map[string]any{"summaries": rows})
 }
 
-func (p *GuidanceProvider) pending(ctx context.Context, delegationID string) []api.ScanGuidanceSummary {
-	categories := []api.ScanCategory{api.ScanCategorySecurity, api.ScanCategorySecret}
-	scan, err := p.Coordinator.LatestForDelegation(ctx, delegationID, categories)
-	if err != nil || scan == nil || scan.Status != api.CodeScanStatusComplete {
-		return nil
-	}
-	guidance := scan.Guidance
-	cap := p.Budget.MaxHintsPerInjection
-	if cap > 0 && len(guidance) > cap {
-		guidance = guidance[:cap]
-	}
-	return guidance
-}
-
 func (p *GuidanceProvider) pendingSession(ctx context.Context, sessionID string) []api.ScanGuidanceSummary {
 	scans, err := p.Coordinator.ListBySessionID(ctx, sessionID)
 	if err != nil {
@@ -156,17 +137,16 @@ func (p *GuidanceProvider) pendingSession(ctx context.Context, sessionID string)
 
 func hasSecurityOrSecretCategory(cats []api.ScanCategory) bool {
 	for _, cat := range cats {
-		if cat == api.ScanCategorySecurity || cat == api.ScanCategorySecret {
+		if cat == api.ScanCategorySecurity || cat == api.ScanCategorySecret || cat == api.ScanCategorySAST {
 			return true
 		}
 	}
 	return false
 }
 
-// SessionGuidanceAdapter implements session.ScanGuidanceHook using delegation or session lookup.
+// SessionGuidanceAdapter implements session.ScanGuidanceHook using session scan bindings.
 type SessionGuidanceAdapter struct {
-	Provider            *GuidanceProvider
-	DelegationBySession func(sessionID string) (delegationID, taskID string, ok bool)
+	Provider *GuidanceProvider
 }
 
 // PrependGuidance prepends ephemeral scan guidance for a coordinator session.
@@ -174,11 +154,7 @@ func (a *SessionGuidanceAdapter) PrependGuidance(ctx context.Context, sessionID 
 	if a == nil || a.Provider == nil {
 		return messages
 	}
-	var delegationID, taskID string
-	if a.DelegationBySession != nil {
-		delegationID, taskID, _ = a.DelegationBySession(sessionID)
-	}
-	return a.Provider.Prepend(ctx, sessionID, delegationID, taskID, messages)
+	return a.Provider.Prepend(ctx, sessionID, messages)
 }
 
 func guidanceSignature(in []api.ScanGuidanceSummary) string {

@@ -6,13 +6,13 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/workercontext"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -67,9 +67,6 @@ func (r *Runtime) configureDelegationWorkflow(deps Dependencies) error {
 	deps.Workflows.Manager.Asks.OnToolAskOpened = r.OnWorkflowToolAskOpened
 	deps.Workflows.Manager.Feedback.OnFeedbackResolved = r.OnWorkflowFeedbackResolved
 	deps.Workflows.Manager.Verdicts.OnReviewLoopHeld = r.OnWorkflowReviewLoopHeld
-	r.Manager.OnCloseout = func(ctx context.Context, _, sessionID, workflowRunID string) {
-		r.OnDelegationCloseout(ctx, sessionID, workflowRunID)
-	}
 
 	deps.Sessions.Manager.SetCoordinatorTurnFrameSource(&workflowruntime.CoordinatorFrames{
 		Runs: deps.Workflows.Store.Runs, Resolver: &deps.Workflows.Manager.Resolver,
@@ -94,7 +91,7 @@ func (r *Runtime) wireWorkerContext(deps Dependencies) error {
 	if err != nil {
 		return fmt.Errorf("playbooks: %w", err)
 	}
-	legToolLister := delegation.LegToolListerFunc(func(ctx context.Context, sess *wire.Session, profileID string) []string {
+	legToolLister := workercontext.LegToolListerFunc(func(ctx context.Context, sess *wire.Session, profileID string) []string {
 		policy := deps.Sessions.Manager.Coordinator.Guards.Policy()
 		if sess == nil {
 			return nil
@@ -113,37 +110,30 @@ func (r *Runtime) wireWorkerContext(deps Dependencies) error {
 		}
 		return deps.Agents.Registry
 	}
-	playbooksForSession := func(sess *wire.Session) delegation.PlaybookMatcherInterface {
+	playbooksForSession := func(sess *wire.Session) workercontext.PlaybookMatcherInterface {
 		if view := deps.Sessions.Manager.Catalog.ViewForSession(context.Background(), sess); view != nil && view.Playbooks != nil {
 			return view.Playbooks
 		}
 		return r.PlaybookMatcher
 	}
-	r.ContextLoader = &delegation.WorkerContextLoader{
-		Store:         r.Store,
+	records := r.Records
+	if records == nil {
+		records = workerrecords.New(deps.Storage.Database)
+	}
+	r.ContextLoader = &workercontext.CompositeWorkerContext{
+		Records:       records,
 		Tasks:         r.Queue,
 		Runs:          deps.Workflows.Manager.Phases,
-		MatcherFor:    playbooksForSession,
-		AgentsFor:     agentsForSession,
 		Tools:         legToolLister,
 		Scans:         deps.Scanning.Coordinator,
 		AgentsMDChain: deps.Sessions.Manager.Coordinator.PolicyIndex.ForPaths,
-		Repo:          nil, // Set when repo provider is wired via SetRepoProvider
+		Repo:          nil, // Bound via SetRepoProvider.
 		Topology: func(workflowID string) string {
 			if strings.TrimSpace(workflowID) == "default-pipeline" {
 				return "pipeline"
 			}
 			return strings.TrimSpace(workflowID)
 		},
-	}
-	records := r.Records
-	if records == nil {
-		records = workerrecords.New(deps.Storage.Database)
-	}
-	deps.Sessions.Manager.SetWorkerContextBuilder(&delegation.CompositeWorkerContext{
-		Delegation: r.ContextLoader,
-		Records:    records,
-		Tools:      legToolLister,
 		AgentsFor:  agentsForSession,
 		MatcherFor: playbooksForSession,
 		WorkflowIDForRun: func(ctx context.Context, runID string) string {
@@ -159,7 +149,8 @@ func (r *Runtime) wireWorkerContext(deps Dependencies) error {
 		ReviewSubject: func(ctx context.Context, jobID string) (string, string, bool, error) {
 			return reviewSubjectNames(ctx, records, jobID)
 		},
-	})
+	}
+	deps.Sessions.Manager.SetWorkerContextBuilder(r.ContextLoader)
 	return nil
 }
 

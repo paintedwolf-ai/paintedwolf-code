@@ -105,26 +105,65 @@ func (s *sqlCore) ListBySessionID(ctx context.Context, sessionID string) ([]api.
 	return scans, err
 }
 
-// LatestForDelegation returns the newest scan for a delegation and category set.
-func (s *sqlCore) LatestForDelegation(ctx context.Context, delegationID string, categories []api.ScanCategory) (*api.CodeScan, error) {
-	if delegationID == "" {
-		return nil, fmt.Errorf("delegation_id required")
+// LatestCompleteForSessionSnapshot returns the newest complete scan bound to sessionID for a snapshot.
+func (s *sqlCore) LatestCompleteForSessionSnapshot(ctx context.Context, sessionID, snapshotID string, categories []api.ScanCategory) (*api.CodeScan, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil, fmt.Errorf("session_id required")
 	}
 	categoriesJSON, err := categoriesJSON(categories)
 	if err != nil {
 		return nil, err
 	}
-	row, err := s.queries.LatestScanForDelegation(ctx, db.LatestScanForDelegationParams{
-		DelegationID:   delegationID,
-		CategoriesJson: categoriesJSON,
+	row, err := s.queries.LatestCompleteScanForSessionSnapshot(ctx, db.LatestCompleteScanForSessionSnapshotParams{
+		SessionID:        sessionID,
+		CategoriesJson:   categoriesJSON,
+		SourceSnapshotID: strings.TrimSpace(snapshotID),
 	})
 	if db.IsNoRows(err) {
-		return nil, fmt.Errorf("code scan not found for delegation %s", delegationID)
+		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	return s.hydrateScan(ctx, codeScanFromRow(row))
+	scan, err := s.hydrateScan(ctx, codeScanFromRow(row))
+	if scan != nil {
+		scan.SessionID = sessionID
+	}
+	return scan, err
+}
+
+// FindInFlightForSessionSnapshot returns a matching pending or running scan bound to sessionID.
+func (s *sqlCore) FindInFlightForSessionSnapshot(ctx context.Context, sessionID, snapshotID string, categories []api.ScanCategory, paths []string) (*api.CodeScan, error) {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return nil, nil
+	}
+	categoriesJSON, err := categoriesJSON(categories)
+	if err != nil {
+		return nil, err
+	}
+	pathsJSON, err := db.MarshalJSON(NormalizeScanPaths(paths))
+	if err != nil {
+		return nil, err
+	}
+	row, err := s.queries.FindInFlightScanForSessionSnapshot(ctx, db.FindInFlightScanForSessionSnapshotParams{
+		SessionID:        sessionID,
+		CategoriesJson:   categoriesJSON,
+		SourceSnapshotID: strings.TrimSpace(snapshotID),
+		PathsJson:        pathsJSON.String,
+	})
+	if db.IsNoRows(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	scan, err := s.hydrateScan(ctx, codeScanFromRow(row))
+	if scan != nil {
+		scan.SessionID = sessionID
+	}
+	return scan, err
 }
 
 // LatestCompleteForDelegationSnapshot returns the newest complete scan for a delegation snapshot.

@@ -143,15 +143,6 @@ anchors:
     envelope:
       vars: {}
 
-  - id: worker.leg.started
-    title: Worker leg started
-    description: Delegation leg spawns a worker child.
-    trigger_class: host_api
-    surface: worker
-    planes: [inform]
-    envelope:
-      vars: {}
-
   - id: wait.timer.fired
     title: Wait timer fired
     description: A wait() deadline expires.
@@ -533,7 +524,7 @@ anchors:
 
   - id: inject.worker_leg
     title: Worker leg inject
-    description: L3 worker-leg.md inject for delegation legs.
+    description: L3 worker-leg.md context inject for worker sessions.
     trigger_class: assembly_inject
     surface: worker
     planes: [inform]

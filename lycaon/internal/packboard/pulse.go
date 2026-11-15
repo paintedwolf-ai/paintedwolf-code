@@ -75,14 +75,13 @@ func orientationRootsSig(roots []api.BoardOrientationRoot) string {
 	return strings.Join(parts, ";")
 }
 
-// PulseFingerprint hashes fast-changing board facts (clock day, workers, delegation, scans).
+// PulseFingerprint hashes fast-changing board facts (clock day, workers, scans).
 func PulseFingerprint(snap api.BoardSnapshot, now time.Time) string {
 	return strings.Join([]string{
 		OrientationDayKey(now),
 		WorkerPulseSig(WorkerTasksFromSnapshot(snap), now),
 		NamedWorkerPulseSig(NamedWorkersFromSnapshot(snap)),
 		PromotePathPulseSig(PromotePathsFromSnapshot(snap)),
-		DelegationPulseSig(DelegationsFromSnapshot(snap)),
 		ScanPulseSig(snap.Scans),
 		StandingFlagsPulseSig(StandingFlagsFromSnapshot(snap)),
 	}, "|")
@@ -191,23 +190,4 @@ func WorkerPulseSig(tasks []api.WorkerTask, now time.Time) string {
 	}
 	_ = now
 	return strings.Join(parts, ",")
-}
-
-// DelegationPulseSig returns active delegation id:phase or empty.
-func DelegationPulseSig(delegations []api.Delegation) string {
-	for _, d := range delegations {
-		if d.Phase == api.DelegationPhaseDone {
-			continue
-		}
-		id := d.ID
-		if len(id) > 8 {
-			id = id[:8]
-		}
-		phase := string(d.Phase)
-		if phase == "" {
-			phase = "active"
-		}
-		return id + ":" + phase
-	}
-	return ""
 }

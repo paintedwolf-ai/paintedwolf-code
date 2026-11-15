@@ -19,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/detectionpack"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/events"
@@ -148,7 +147,6 @@ type WorkflowDependencies struct {
 	WorkflowPersister *workflowcomposition.Persister
 	Blueprints        *blueprint.Manager
 	Orchestrator      orchestration.Orchestrator
-	Delegations       *delegation.Manager
 	Workers           worker.WorkerQueue
 	WorkerCancel      *worker.CancelService
 	Board             *board.SnapshotBuilder

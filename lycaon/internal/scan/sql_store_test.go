@@ -181,7 +181,7 @@ func TestSQLStoreListOpen(t *testing.T) {
 	}
 }
 
-func TestSQLStoreLatestForDelegationTieBreaksByInsertOrder(t *testing.T) {
+func TestSQLStoreListBySessionIDTieBreaksByInsertOrder(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 
 	store := NewSQLStore(sqlDB)
@@ -194,7 +194,7 @@ func TestSQLStoreLatestForDelegationTieBreaksByInsertOrder(t *testing.T) {
 		Categories:    categories,
 		Status:        api.CodeScanStatusPending,
 		CreatedAt:     stamp,
-		DelegationID:  "dep-1",
+		SessionID:     "sess-1",
 		HeadSHA:       "old",
 		Trigger:       api.ScanTriggerManual,
 	}
@@ -204,16 +204,16 @@ func TestSQLStoreLatestForDelegationTieBreaksByInsertOrder(t *testing.T) {
 		Categories:    categories,
 		Status:        api.CodeScanStatusPending,
 		CreatedAt:     stamp,
-		DelegationID:  "dep-1",
+		SessionID:     "sess-1",
 		HeadSHA:       "new",
 		Trigger:       api.ScanTriggerManual,
 	}
 	testutil.FailErr(t, "Insert older", store.Insert(ctx, older, nil, ""))
 	testutil.FailErr(t, "Insert newer", store.Insert(ctx, newer, nil, ""))
 
-	got, err := store.LatestForDelegation(ctx, "dep-1", categories)
-	testutil.FailErr(t, "LatestForDelegation", err)
-	if got.ID != newer.ID {
-		t.Fatalf("latest = %s want %s (same created_at must tie-break by insert order)", got.ID, newer.ID)
+	got, err := store.ListBySessionID(ctx, "sess-1")
+	testutil.FailErr(t, "ListBySessionID", err)
+	if len(got) < 2 || got[0].ID != newer.ID {
+		t.Fatalf("latest = %+v want first %s (same created_at must tie-break by insert order)", got, newer.ID)
 	}
 }

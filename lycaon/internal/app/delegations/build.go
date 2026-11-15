@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/localdata"
@@ -48,11 +47,6 @@ type Dependencies struct {
 // BuildWorkers constructs workers, executors, cancellations, and links workflow hooks.
 func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 	r.SetDependencies(deps)
-	r.Criteria = &delegation.GitInspectorCriteriaChecker{
-		Git:       deps.Git,
-		Inspector: deps.Workflows.Inspector,
-		Store:     r.Store,
-	}
 
 	r.InjectRenderer = prompts.NewInjectRenderer(deps.Sessions.PromptEngine)
 	r.Executor = worker.NewLocalWorkerExecutor(deps.Sessions.Manager.Workers, r.Queue, deps.Sessions.Manager.Workspace, deps.Sessions.Manager.Submissions, deps.Sessions.Manager.Runner.Transcript, deps.Sessions.Manager.Runner.Execution, deps.Sessions.Manager.Workers.Cancel, deps.Sessions.Manager.Workers.Cancellations)
@@ -101,7 +95,6 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 		Holds:         deps.Sessions.Manager.Workers.Cards,
 		Cancellations: deps.Sessions.Manager.Workers.Cancellations,
 		Reports:       r.Cancel.Reports,
-		Delegations:   r.Store,
 		Records:       r.Records,
 	}
 	deps.Workflows.Manager.Recovery.Busy = func(c context.Context, sessionID string) bool {
@@ -146,26 +139,6 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 		},
 		r.NotifySettledPlanCloseout,
 	)
-
-	dispatchGate := delegation.ImplementWorkflowDispatchGate{
-		Inner: delegation.WorkflowDispatchGate{
-			Inner: delegation.AllowGate{},
-			Store: r.Store,
-			Runs:  deps.Workflows.Manager.Policy,
-		},
-		Store:         r.Store,
-		Plans:         deps.Workflows.Blueprints,
-		WorkflowReady: workflowReady,
-	}
-	r.Manager = delegation.NewManager(r.Store, r.Queue, deps.Sessions.Manager, dispatchGate)
-	r.Manager.Projects = deps.Storage.Projects
-	r.Manager.Plans = deps.Workflows.Blueprints
-	r.Manager.HeadSHA = deps.Git
-	r.Manager.InspectorCloseout = &delegation.InspectorCloseoutGate{
-		Inspector: deps.Workflows.Inspector,
-		Store:     r.Store,
-		Security:  deps.Scanning.Closeout,
-	}
 
 	if err := r.configureDelegationWorkflow(deps); err != nil {
 		return err

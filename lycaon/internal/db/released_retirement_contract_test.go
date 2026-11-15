@@ -150,6 +150,9 @@ func TestRegisteredRetirementsReproduceReleasedCorpusRows(t *testing.T) {
 						testutil.FailErr(t, "close corpus store", database.Close())
 						continue
 					}
+					if r.Table == "delegations" || r.Table == "delegation_legs" {
+						seedReleasedDelegations(t, database)
+					}
 					captured := retirementRows(t, database, r.Capture)
 					var file string
 					testutil.FailErr(t, "locate corpus copy", database.QueryRowContext(t.Context(), `SELECT file FROM pragma_database_list WHERE name = 'main'`).Scan(&file))

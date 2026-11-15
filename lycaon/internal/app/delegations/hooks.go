@@ -289,11 +289,8 @@ func (r *Runtime) NotifyPromotedTask(ctx context.Context, task wire.WorkerTask) 
 	r.NotifySettledPlanCloseout(ctx, task.ParentSessionID)
 }
 
-// OnScanCloseout retries delegation or planned-worker closeout after a terminal code scan.
+// OnScanCloseout retries planned-worker closeout after a terminal code scan.
 func (r *Runtime) OnScanCloseout(ctx context.Context, completed wire.CodeScan) error {
-	if completed.DelegationID != "" && r.Manager != nil {
-		return r.Manager.RetryCloseout(ctx, completed.DelegationID)
-	}
 	if completed.SessionID != "" {
 		r.NotifySettledPlanCloseout(ctx, completed.SessionID)
 	}

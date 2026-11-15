@@ -130,7 +130,6 @@ describe("tool-chicklet-titles", () => {
 
   it("covers runtime task tools beyond tools/schemas", () => {
     expect(TOOL_CHICKLET_RUNNING_LABELS.task).toBeDefined();
-    expect(TOOL_CHICKLET_RUNNING_LABELS.delegate_dispatch).toBeDefined();
     expect(
       resolveChickletTitle("task", {
         agent_type: "implementer",

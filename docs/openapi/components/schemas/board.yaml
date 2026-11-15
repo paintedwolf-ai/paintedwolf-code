@@ -7,21 +7,6 @@ components:
       - compact
       - full
       - forensic
-    BoardDelegationEntry:
-      x-go-generate: true
-      type: object
-      required:
-      - id
-      - phase
-      additionalProperties: false
-      properties:
-        id:
-          type: string
-          format: uuid
-        phase:
-          $ref: delegation.yaml#/components/schemas/DelegationPhase
-        task:
-          type: string
     BoardWorkerRosterEntry:
       x-go-generate: true
       type: object
@@ -238,10 +223,6 @@ components:
         overlay_merge_plan:
           x-go-pointer: true
           $ref: board.yaml#/components/schemas/OverlayMergePlan
-        delegation:
-          type: array
-          items:
-            $ref: board.yaml#/components/schemas/BoardDelegationEntry
         active_workflow_run:
           x-go-pointer: true
           $ref: workflow.yaml#/components/schemas/WorkflowRun
