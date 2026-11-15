@@ -3,7 +3,6 @@ package contract
 import (
 	"context"
 	"errors"
-	"fmt"
 	"path/filepath"
 	"slices"
 	"strings"
