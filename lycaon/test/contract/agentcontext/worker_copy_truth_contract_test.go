@@ -225,14 +225,14 @@ func TestWorkerCopyInterpolationSensitivity(t *testing.T) {
 	renderer := prompts.NewInjectRenderer(engine)
 
 	b1, err := inject.RenderTurnStateBlock(context.Background(), renderer, "s1", inject.TurnStateInjectInput{
-		Workers: []map[string]any{{"name": "worker-one", "agent": "implementer", "state": "delivered", "result_handle": "res-one", "result_disposition": "open"}},
+		Workers: []map[string]any{{"name": "worker-one", "agent": "implementer", "state": "delivered", "parked_reason": "process_done", "result_handle": "res-one", "result_disposition": "shelved", "shelve_reason": "defer-alpha"}},
 	})
 	contractcheck.FailErr(t, "turn state 1", err)
 	b2, err := inject.RenderTurnStateBlock(context.Background(), renderer, "s2", inject.TurnStateInjectInput{
-		Workers: []map[string]any{{"name": "worker-two", "agent": "implementer", "state": "delivered", "result_handle": "res-two", "result_disposition": "open"}},
+		Workers: []map[string]any{{"name": "worker-two", "agent": "implementer", "state": "delivered", "parked_reason": "timer_elapsed", "result_handle": "res-two", "result_disposition": "shelved", "shelve_reason": "defer-beta"}},
 	})
 	contractcheck.FailErr(t, "turn state 2", err)
-	if b1 == b2 || !strings.Contains(b1, "worker-one") || !strings.Contains(b1, "res-one") || strings.Contains(b1, "worker-two") || strings.Contains(b1, "res-two") {
+	if b1 == b2 || !strings.Contains(b1, "worker-one") || !strings.Contains(b1, "res-one") || !strings.Contains(b1, "process_done") || !strings.Contains(b1, "defer-alpha") || strings.Contains(b1, "worker-two") || strings.Contains(b1, "res-two") || strings.Contains(b1, "defer-beta") {
 		t.Fatalf("turn-state interpolation failed:\nb1=%s\nb2=%s", b1, b2)
 	}
 

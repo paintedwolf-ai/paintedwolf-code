@@ -444,7 +444,8 @@ func (r Roster) Vars() []map[string]any {
 			"workspace_state": row.WorkspaceState, "workspace_label": row.WorkspaceLabel,
 			"state": string(row.State), "reason": strings.ReplaceAll(string(row.Reason), "_", " "),
 			"state_label": row.StateLabel, "updated_at": row.UpdatedAt, "about": row.About,
-			"question": row.Question, "read": row.Read.Shown, "read_omitted": row.Read.Omitted,
+			"question": row.Question, "parked_reason": row.ParkedReason, "shelve_reason": row.ShelveReason,
+			"read": row.Read.Shown, "read_omitted": row.Read.Omitted,
 			"changed": row.Changed.Shown, "changed_omitted": row.Changed.Omitted,
 		}
 		if row.Result != nil {

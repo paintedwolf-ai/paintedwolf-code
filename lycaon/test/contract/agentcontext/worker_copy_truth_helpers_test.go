@@ -112,6 +112,9 @@ func rosterMapForCell(cell workerStateMatrixCell, workerName, handle, workspace 
 	if cell.view.State == workerstate.Asking {
 		row["question"] = "Which audience claim applies?"
 	}
+	if cell.facts.Latest != nil && cell.facts.Latest.Parked {
+		row["parked_reason"] = "process_done"
+	}
 	if handle != "" && (cell.facts.OpenChanges || cell.facts.ShelvedChanges || cell.facts.UnaccountedComplete || cell.view.State == workerstate.Failed) {
 		disp := "accounted"
 		switch {
@@ -119,6 +122,7 @@ func rosterMapForCell(cell workerStateMatrixCell, workerName, handle, workspace 
 			disp = "open"
 		case cell.facts.ShelvedChanges:
 			disp = "shelved"
+			row["shelve_reason"] = "waiting on upstream check"
 		case cell.facts.UnaccountedComplete:
 			disp = "unaccounted"
 		}

@@ -639,7 +639,7 @@
       "summary": "Repeated ungrounded completion claims — delegation required before continuing"
     },
     "COORDINATOR_HOST_TURN_REQUIRES_WAIT": {
-      "branch_instruction": "Actionable work → reconcile or dispatch; outstanding work → wait; settled work on a synthesis surface → user prose",
+      "branch_instruction": "Actionable work → account, instruct, or dispatch; outstanding work → wait; settled work on a synthesis surface → user prose",
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "A host cycle turn ([host:loop-wake], or a turn the host opened to report a worker finished) ended with assistant prose and no tool calls"
@@ -657,10 +657,10 @@
       "summary": "The current {{ paintedwolf.turn_surface }} surface does not offer {{ tool }}."
     },
     "COORDINATOR_OVERLAY_PATH_READ_FORBIDDEN": {
-      "branch_instruction": "Preserve the worker and overlay identities. Do not read private sandbox paths, guess another filesystem route, or restart work merely to inspect an overlay.",
+      "branch_instruction": "Preserve the worker name and result handle. Do not read private worker paths, guess another filesystem route, or restart work merely to inspect changes.",
       "category": "recoverable",
       "emit": "guard:path_is_worker_branch",
-      "summary": "The coordinator request names a private worker sandbox path: {{ paintedwolf.path }}."
+      "summary": "The coordinator request names a private worker workspace path: {{ paintedwolf.path }}."
     },
     "COORDINATOR_PROGRESS_SHADOW_BOARD": {
       "branch_instruction": "Keep the checklist in the progress record.",
@@ -699,10 +699,10 @@
       "summary": "Completed leg {{ paintedwolf.leg_id }} lacks required completion evidence."
     },
     "COORDINATOR_WORKER_IN_FLIGHT": {
-      "branch_instruction": "Wait for a slot in the requested scope and the total worker limit, then dispatch only the remaining work",
+      "branch_instruction": "Wait for an active slot in the requested scope and total concurrency limit, then instruct a waiting worker or start only the remaining work.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "This dispatch would exceed the session worker limit: {{ paintedwolf.active_count }}/{{ paintedwolf.max_workers }} total, {{ paintedwolf.active_read_count }}/{{ paintedwolf.max_read_workers }} read, and {{ paintedwolf.active_write_count }}/{{ paintedwolf.max_write_workers }} write jobs are in flight."
+      "summary": "Starting another worker would exceed the session concurrency limit: {{ paintedwolf.active_count }}/{{ paintedwolf.max_workers }} total, {{ paintedwolf.active_read_count }}/{{ paintedwolf.max_read_workers }} read, and {{ paintedwolf.active_write_count }}/{{ paintedwolf.max_write_workers }} write workers are currently active."
     },
     "COPY_BULK_DENIED": {
       "branch_instruction": "Reduce the pair count while retaining each source–destination assignment",
@@ -840,10 +840,10 @@
       "summary": "diff path {{ paintedwolf.path }} exceeds max_path_bytes {{ paintedwolf.max_path_bytes }} (size {{ paintedwolf.size }})."
     },
     "DISALLOWED_AGENT": {
-      "branch_instruction": "Use only workflow-allowed functional agent ids.",
+      "branch_instruction": "Use only workflow-allowed agent ids.",
       "category": "recoverable",
       "emit": "rule:spec",
-      "summary": "Agent_type is not in the workflow allowed_agents allowlist"
+      "summary": "The requested agent_type is not in the workflow allowed_agents allowlist."
     },
     "DOOM_LOOP_CODE_REPEAT": {
       "branch_instruction": "{% if paintedwolf.worker_leg %}{% else %}Keep accepted peer work and existing evidence. Resolve the blocked requirement through the available tools. Describe unresolved work explicitly in closeout. {% endif %}{{ paintedwolf.next_steps }}",
@@ -1759,13 +1759,13 @@
       "summary": "The outbound {{ paintedwolf.surface }} secret screen failed at {{ paintedwolf.fault_stage }}; the protected send did not proceed."
     },
     "OVERLAY_BASE_MISSING": {
-      "branch_instruction": "Preserve the intended dependency; resolve the base or explicitly choose an independent task on primary before retrying.",
+      "branch_instruction": "Preserve the intended dependency; resolve the base or explicitly choose an independent worker on primary before retrying.",
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "Dispatch could not resolve base_overlay_id {{ paintedwolf.base_overlay_id }} to a write overlay on this session{% if paintedwolf.rejection_reason %}: {{ paintedwolf.rejection_reason }}{% endif %}"
     },
     "OVERLAY_BASE_NOT_PENDING": {
-      "branch_instruction": "Use the observed merge_status and current roster to preserve required base changes; do not assume a closed base was merged.",
+      "branch_instruction": "Use the observed merge_status and current worker roster to preserve required base changes; do not assume a closed base was merged.",
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "Dispatch base_overlay_id {{ paintedwolf.base_overlay_id }} is {{ paintedwolf.merge_status }}, so it cannot stack on it{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason }}){% endif %}"
@@ -1777,7 +1777,7 @@
       "summary": "{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}A worker{% endif %} finished, but its changes{% if paintedwolf.overlay_id %} (result `{{ paintedwolf.overlay_id }}`){% endif %} still await a decision."
     },
     "OVERLAY_PARENT_REJECTED": {
-      "branch_instruction": "Account for the orphaned child and re-dispatch only work still required",
+      "branch_instruction": "Account for the orphaned child and re-run only work still required",
       "category": "advisory",
       "emit": "banner",
       "severity": "info",
@@ -1833,7 +1833,7 @@
       "summary": "The worker overlay was not promoted because validation of {{ paintedwolf.path }} did not succeed."
     },
     "OVERLAY_REBASE_CONFLICT": {
-      "branch_instruction": "Branch on Code; resolve every conflicting path or reject the child before promoting",
+      "branch_instruction": "Branch on Code; resolve every conflicting path, instruct the child worker, or reject the child before promoting",
       "category": "recoverable",
       "emit": "banner",
       "severity": "warning",
@@ -1879,7 +1879,7 @@
       "branch_instruction": "Branch on Code PENDING_USER_INPUT_TASK_FORBIDDEN; wait for the pending ask to clear",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "`{{ tool }}` cannot dispatch workers while a question, workflow feedback, or HITL input is still open."
+      "summary": "`{{ tool }}` cannot start workers while a question, workflow feedback request, or decision is still open."
     },
     "POLICY_CONTEXT_CHANGED": {
       "branch_instruction": "Continue read-only investigation, then propose only the remaining effects after fresh guidance is delivered.",
@@ -1984,16 +1984,16 @@
       "summary": "Pending checklist label \"{{ paintedwolf.label }}\" appears after a `- [\u003e]` optional line."
     },
     "PROGRESS_RECONCILIATION_CHANGED": {
-      "branch_instruction": "Review the current listed finishes and submit their reconciliation_token with expected_revision.",
+      "branch_instruction": "Review the current listed worker rounds and submit their reconciliation_token with expected_revision.",
       "category": "recoverable",
       "emit": "guard:update_progress",
-      "summary": "The pending worker-finish set changed."
+      "summary": "The unacknowledged worker-round settlement set changed."
     },
     "PROGRESS_RECONCILIATION_REQUIRED": {
-      "branch_instruction": "Acknowledge the listed worker finishes with the current reconciliation_token and expected_revision, then retry the authorized action",
+      "branch_instruction": "Acknowledge the listed worker rounds with the current reconciliation_token and expected_revision, then retry the authorized action",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "Worker finishes await acknowledgement before **`{{ tool }}`**{% if paintedwolf.settled_work %}: {{ paintedwolf.settled_work }}{% endif %}."
+      "summary": "Settled worker rounds await acknowledgement before **`{{ tool }}`**{% if paintedwolf.settled_work %}: {{ paintedwolf.settled_work }}{% endif %}."
     },
     "PROGRESS_REVISION_CHANGED": {
       "branch_instruction": "Reconcile the replacement against the current snapshot and submit its expected_revision and item_ids.",
@@ -2900,7 +2900,7 @@
       "branch_instruction": "Stay in spec posture phases until the plan is approved and handed off",
       "category": "recoverable",
       "emit": "rule:spec",
-      "summary": "Implementer Task forbidden before planning handoff"
+      "summary": "Implementer worker dispatch forbidden before planning handoff"
     },
     "SPEC_POSTURE_NOT_APPROVED": {
       "branch_instruction": "Preserve the completed plan and wait for the approval decision",
@@ -2946,10 +2946,10 @@
       "summary": "State tracking tools are forbidden in spec posture"
     },
     "SPEC_POSTURE_STUB_REQUIRED": {
-      "branch_instruction": "Write blueprint stub with a staged command redirect before Task researchers",
+      "branch_instruction": "Write blueprint stub with a staged command redirect before starting research workers",
       "category": "recoverable",
       "emit": "rule:spec",
-      "summary": "Phase 1 plan stub required before Task(plan-writer)"
+      "summary": "Phase 1 plan stub required before starting a plan-writer worker"
     },
     "SPEC_POSTURE_UNRESOLVED": {
       "branch_instruction": "Establish spec posture before high-risk tools",
@@ -3168,7 +3168,7 @@
       "summary": "A question reassessment requires a fresh worker workspace."
     },
     "TASK_SCOPE_PROFILE_READ_ONLY": {
-      "branch_instruction": "Branch on Code: pick a mutation-capable profile for write overlays; keep read-only profiles on read scope.",
+      "branch_instruction": "Branch on Code: pick a mutation-capable profile for write workspaces; keep read-only profiles on read scope.",
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "**{{ paintedwolf.agent_type }}** uses a read-only tool profile and cannot take **`scope.mode: write`**."
@@ -3180,10 +3180,10 @@
       "summary": "Read-scoped worker **{{ paintedwolf.agent_type }}** cannot call file mutation tools on **{{ paintedwolf.path }}**."
     },
     "TASK_SCOPE_WRITE_REQUIRED": {
-      "branch_instruction": "Branch on Code: read-only profiles for survey; mutation-capable profiles only with write overlays.",
+      "branch_instruction": "Branch on Code: read-only profiles for inspection; mutation-capable profiles only with write workspaces.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "**{{ paintedwolf.agent_type }}** uses a mutation-capable tool profile and must dispatch with **`scope.mode: write`** so changes land in an isolated overlay."
+      "summary": "**{{ paintedwolf.agent_type }}** uses a mutation-capable tool profile and must start with **`scope.mode: write`** so changes land in an isolated worker workspace."
     },
     "TASK_WORKER_NAME_TAKEN": {
       "branch_instruction": "Branch on Code TASK_WORKER_NAME_TAKEN; do not retry the same call",
@@ -3516,10 +3516,10 @@
       "summary": "The worker round ended without an accepted completion report."
     },
     "WORKER_EVIDENCE_HANDLE_UNKNOWN": {
-      "branch_instruction": "Fix or drop only the listed citations and keep the rest of the report; leg_status reflects whether the remaining evidence delivers the assignment. Do not repeat a worker assignment solely to replace a bad citation.",
+      "branch_instruction": "Fix or drop only the listed citations and keep the rest of the report; round status reflects whether the remaining evidence delivers the assignment. Do not repeat a worker assignment solely to replace a bad citation.",
       "category": "recoverable",
       "emit": "guard:worker_summary",
-      "summary": "Worker cited {{ paintedwolf.offender_count }} finding reference(s) that did not resolve in this leg evidence."
+      "summary": "Worker cited {{ paintedwolf.offender_count }} finding reference(s) that did not resolve in this round evidence."
     },
     "WORKER_EXCERPT_HANDLE_MISMATCH": {
       "branch_instruction": "Traced findings complete the leg; prefer verbatim excerpts to reduce reviewer-confirm noise",
@@ -3562,7 +3562,7 @@
       "branch_instruction": "Treat the implementation claim as unverified until the actual artifact evidence or no-change justification is established",
       "category": "recoverable",
       "emit": "guard:worker_summary",
-      "summary": "Worker finished without disk proof of implementation (no successful file mutation or workspace change)"
+      "summary": "Worker round finished without disk proof of implementation (no successful file mutation or workspace change)"
     },
     "WORKER_SUMMARY_TOO_LONG": {
       "branch_instruction": "Keep the brief within {{ paintedwolf.max_chars }} characters. Reuse observed evidence and preserve unresolved risks when submitting the corrected report.",
@@ -3646,10 +3646,10 @@
       "summary": "The current phase gate has unmet leaves listed in failed_leaves."
     },
     "WORKFLOW_OBLIGATION_PENDING": {
-      "branch_instruction": "Dispatch workers after the execution phase begins.",
+      "branch_instruction": "Instruct waiting workers or start new workers after the phase obligations settle.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "Tried to dispatch a worker while workflow phase `{{ paintedwolf.phase }}` has unsettled host obligations ({{ paintedwolf.phase_obligation_kinds }})."
+      "summary": "Tried to start a worker while workflow phase `{{ paintedwolf.phase }}` has unsettled host obligations ({{ paintedwolf.phase_obligation_kinds }})."
     },
     "WORKFLOW_PHASE_EXIT_REQUIRED": {
       "branch_instruction": "Stop the current tool arc first.",
