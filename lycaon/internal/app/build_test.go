@@ -304,8 +304,12 @@ func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
 	testutil.FailErr(t, "build app", err)
 	t.Cleanup(func() { _ = app.Close() })
 
+	store, ok := app.DB.(*db.Store)
+	if !ok {
+		t.Fatalf("app.DB = %T, want *db.Store", app.DB)
+	}
 	projectDir := t.TempDir()
-	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, projectDir)
+	testdbseed.InsertProjectRoot(t, store, testdbseed.DefaultProjectID, projectDir)
 	child, err := app.Sessions.Store.Create(t.Context(), wire.CreateSessionRequest{
 		ProjectID: testdbseed.DefaultProjectID, Posture: wire.SessionPostureBuild,
 	}, testdbseed.DefaultProjectID)
@@ -318,7 +322,7 @@ func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
 	testutil.FailErr(t, "enqueue worker", err)
 
 	quiet := (&serveBuilder{
-		storage:     persistence.Runtime{Database: app.DB},
+		storage:     persistence.Runtime{Database: store},
 		delegations: app.Delegations,
 		sessions:    app.Sessions,
 		worker:      workerCoordination{cfg: worker.DefaultWorkersConfig()},
@@ -337,7 +341,7 @@ func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
 
 	stamp := time.Date(2026, 11, 14, 15, 30, 0, 0, time.UTC)
 	rawStamp := db.FormatTime(stamp)
-	testutil.FailErr(t, "insert turn", db.New(app.DB).InsertTurn(t.Context(), db.InsertTurnParams{
+	testutil.FailErr(t, "insert turn", db.New(store).InsertTurn(t.Context(), db.InsertTurnParams{
 		ID: "turn-1", SessionID: child.ID, ProjectID: testdbseed.DefaultProjectID,
 		Origin: "user", InputJson: "{}", CreatedAt: rawStamp, UpdatedAt: rawStamp, ProgressedAt: rawStamp,
 	}))
