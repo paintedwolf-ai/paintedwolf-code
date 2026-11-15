@@ -38,16 +38,16 @@ describe("FileSummaryPanel", () => {
   });
 
   it("fades sections in once when they arrive while the panel watches", () => {
-    const panel = (summary: LiveFileBriefing) => (
+    const settled = { ...briefing, evidence_ref: { project_id: "p1", record_id: "rec-fade" } };
+    const [summary, setSummary] = createSignal<LiveFileBriefing>({ ...briefing, status: "pending", sections: [] });
+    const panel = () => (
       <FileSummaryPanel
         target={{ root_id: "root-1", path: "src/main.ts", presentation: "current" }}
-        summary={summary} requestFailed={false} contextLabel={null} loading={false}
+        summary={summary()} requestFailed={false} contextLabel={null} loading={false}
         onRetry={() => {}} onOpenLocation={() => {}}
       />
     );
-    const settled = { ...briefing, evidence_ref: { project_id: "p1", record_id: "rec-fade" } };
-    const [summary, setSummary] = createSignal<LiveFileBriefing>({ ...briefing, status: "pending", sections: [] });
-    const watching = render(() => panel(summary()));
+    const watching = render(panel);
     setSummary(settled);
     const arrived = screen.getByTestId("file-summary-sections");
     expect(arrived.querySelectorAll(`.${SUMMARY_FADE_CLASS}`)).toHaveLength(1);
@@ -55,7 +55,7 @@ describe("FileSummaryPanel", () => {
     expect(screen.getByTestId("file-summary-location")).toBeTruthy();
     watching.unmount();
 
-    render(() => panel(settled));
+    render(panel);
     expect(screen.getByTestId("file-summary-sections").querySelector(`.${SUMMARY_FADE_CLASS}`)).toBeNull();
   });
 
