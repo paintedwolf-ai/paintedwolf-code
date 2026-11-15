@@ -25,9 +25,8 @@ var outboxTableFloor = []string{
 var outboxSilentMutators = map[string]string{
 	// Worker rounds settle inside job completion and cancellation, which
 	// announce the job; no event payload carries a round.
-	"lycaon/internal/workerrecords/rounds.go:AdmitRound":  "records the round an admitted job runs; the job announces its own admission and no event carries the round",
-	"lycaon/internal/workerrecords/rounds.go:SettleRound": "settles a round after its job's result is published; the job announces its terminal state and no event carries the round",
-	"lycaon/internal/workerrecords/rounds.go:StartRound":  "records the round an instruction starts and the child session's agent; the job announces its admission, and neither the round nor the agent is on an event payload",
+	"lycaon/internal/workerrecords/rounds.go:AdmitRound": "records the round an admitted job runs; the job announces its own admission and no event carries the round",
+	"lycaon/internal/workerrecords/rounds.go:StartRound": "records the round an instruction starts and the child session's agent; the job announces its admission, and neither the round nor the agent is on an event payload",
 	// Workers bind inside the job's child-session transaction; the roster reads
 	// worker records on each request and no event payload carries one.
 	"lycaon/internal/workerrecords/workers.go:CreateWorker":     "creates a worker for the task that starts it; the job announces its admission",

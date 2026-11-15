@@ -91,8 +91,13 @@ func (f *workerToolsFixture) deliverWith(t *testing.T, jobID, checkpoint string)
 		_, err = f.db.ExecContext(t.Context(), `UPDATE worker_jobs SET merge_status = 'pending' WHERE id = ?`, jobID)
 		testutil.FailErr(t, "pending changes", err)
 	}
-	_, err = f.records.SettleRound(t.Context(), f.coord, workerrecords.Op{ID: "settle-" + jobID}, f.workerID, jobID, checkpoint)
+	n, err := db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{
+		SettledAt: db.NullString(now), CheckpointID: checkpoint, JobID: jobID,
+	})
 	testutil.FailErr(t, "settle", err)
+	if n != 1 {
+		t.Fatalf("settle %s touched %d rounds", jobID, n)
+	}
 }
 
 func (f *workerToolsFixture) run(t *testing.T, tool, call string, args map[string]any) (string, error) {
@@ -299,8 +304,13 @@ func TestShelvedChangesLeavePendingPromotion(t *testing.T) {
 	testutil.FailErr(t, "complete", err)
 	_, err = f.db.ExecContext(t.Context(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES ('result-job-1', 'job-1', 'complete', ?)`, now)
 	testutil.FailErr(t, "result", err)
-	_, err = f.records.SettleRound(t.Context(), f.coord, workerrecords.Op{ID: "settle"}, f.workerID, "job-1", "checkpoint-1")
+	n, err := db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{
+		SettledAt: db.NullString(now), CheckpointID: "checkpoint-1", JobID: "job-1",
+	})
 	testutil.FailErr(t, "settle", err)
+	if n != 1 {
+		t.Fatalf("settle job-1 touched %d rounds", n)
+	}
 
 	pending, err := f.queue.ListPendingOverlayPromote(t.Context(), "coord")
 	testutil.FailErr(t, "pending before", err)
