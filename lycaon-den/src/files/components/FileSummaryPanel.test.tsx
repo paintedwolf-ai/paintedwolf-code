@@ -8,6 +8,8 @@ import {
 } from "./FileSummaryPanel.tsx";
 import { assertNamedControl } from "../../test/controls.ts";
 import { registerOpenFilesSurfaceSink, resetOpenFilesSurfaceForTests } from "../../platform/navigation/open-files-surface.ts";
+import { SUMMARY_FADE_CLASS, resetSummaryFadesForTests } from "../../briefing/summary-fade.ts";
+import { createSignal } from "solid-js";
 
 const briefing: LiveFileBriefing = {
   target_key: "target-1",
@@ -30,7 +32,32 @@ const briefing: LiveFileBriefing = {
 };
 
 describe("FileSummaryPanel", () => {
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    resetSummaryFadesForTests();
+  });
+
+  it("fades sections in once when they arrive while the panel watches", () => {
+    const panel = (summary: LiveFileBriefing) => (
+      <FileSummaryPanel
+        target={{ root_id: "root-1", path: "src/main.ts", presentation: "current" }}
+        summary={summary} requestFailed={false} contextLabel={null} loading={false}
+        onRetry={() => {}} onOpenLocation={() => {}}
+      />
+    );
+    const settled = { ...briefing, evidence_ref: { project_id: "p1", record_id: "rec-fade" } };
+    const [summary, setSummary] = createSignal<LiveFileBriefing>({ ...briefing, status: "pending", sections: [] });
+    const watching = render(() => panel(summary()));
+    setSummary(settled);
+    const arrived = screen.getByTestId("file-summary-sections");
+    expect(arrived.querySelectorAll(`.${SUMMARY_FADE_CLASS}`)).toHaveLength(1);
+    expect(arrived.textContent).toContain("Builds the buildReview surface.");
+    expect(screen.getByTestId("file-summary-location")).toBeTruthy();
+    watching.unmount();
+
+    render(() => panel(settled));
+    expect(screen.getByTestId("file-summary-sections").querySelector(`.${SUMMARY_FADE_CLASS}`)).toBeNull();
+  });
 
   it("marks settled sections as AI-written and links their evidence", () => {
     const opened: unknown[] = [];
