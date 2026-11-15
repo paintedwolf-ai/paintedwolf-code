@@ -227,6 +227,9 @@ func (e *promptSurface) turnReader(
 		return turn.Reader, nil
 	}
 	profile, _ := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
+	if frame.Roster != nil && strings.TrimSpace(frame.Roster.Facts.SurfaceID) != "" {
+		profile = surface.TurnProfile{SurfaceID: strings.TrimSpace(frame.Roster.Facts.SurfaceID)}
+	}
 	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
 	if !ok {
 		switch {
@@ -243,7 +246,9 @@ func (e *promptSurface) turnReader(
 		return prompts.Reader{}, err
 	}
 	webSearchEnabled := true
-	if fn := e.deps.WebSearchEnabled; fn != nil {
+	if frame.Roster != nil {
+		webSearchEnabled = frame.Roster.Facts.WebSearchEnabled
+	} else if fn := e.deps.WebSearchEnabled; fn != nil {
 		webSearchEnabled = fn()
 	}
 	var (

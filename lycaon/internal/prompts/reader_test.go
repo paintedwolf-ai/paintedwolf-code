@@ -72,7 +72,7 @@ func TestReaderHeldComposesToolsAndReachMarks(t *testing.T) {
 			name:        "coordinator decision adjudicate with command requestable",
 			profileID:   prompts.CoordinatorProfileID,
 			surfaceID:   "decision_adjudicate",
-			offered:     []string{"recall", "request_tools"},
+			offered:     []string{"recall"},
 			requestable: []string{"command"},
 		},
 		{
