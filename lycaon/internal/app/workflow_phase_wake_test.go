@@ -2,6 +2,11 @@ package app
 
 import (
 	"context"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/app/delegations"
 	"github.com/lycaon/lycaon/internal/app/sessions"
 	"github.com/lycaon/lycaon/internal/app/workflows"
@@ -24,10 +29,6 @@ import (
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	"github.com/lycaon/lycaon/pkg/api"
-	"slices"
-	"strings"
-	"testing"
-	"time"
 )
 
 func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
@@ -203,7 +204,7 @@ func TestPhaseEntryGuidanceUsesTheRunWorkflowVersion(t *testing.T) {
 			host.Coordinator.Guidance.Bind(kicks, bus)
 			rc := &workflowphases.RunContext{SessionID: sess.ID, RunID: "phase-guidance-run", WorkflowID: "security-survey", WorkflowVersion: tc.version, Phase: "plan"}
 			runtime.OnWorkflowPhaseEnter(ctx, rc, workflowdef.PhaseDef{ID: "plan"})
-			got := kicks.TakePendingKickID(sess.ID)
+			got := kicks.TakePendingKickIDUnless(sess.ID, nil)
 			if tc.wantGuidance && got != "coordinator-security-plan" {
 				t.Fatalf("versioned phase guidance = %q", got)
 			}
@@ -254,7 +255,7 @@ func TestPhaseHandoffCarriesDurableEvidenceAndResetsPreviousRunProgress(t *testi
 		t.Fatal("phase handoff retained previous run progress or missed topology")
 	}
 	kicks.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()}))
-	if got := kicks.TakePendingKickID("chat"); got != "coordinator-security-claims" {
+	if got := kicks.TakePendingKickIDUnless("chat", nil); got != "coordinator-security-claims" {
 		t.Fatalf("phase handoff guidance=%q", got)
 	}
 	text, _, ok, err := kicks.RenderPendingNudge(ctx, "chat", kick.CoordinatorKickRenderContext{WorkflowID: run.WorkflowID, CurrentPhase: run.CurrentPhase})

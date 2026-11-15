@@ -16,7 +16,7 @@ func TestKicksForDifferentSubjectsQueueSeparately(t *testing.T) {
 			WithSubject(job), WithWorkerBudget(WorkerBudgetFacts{JobID: job}))
 	}
 	var rendered []string
-	for kicks.TakePendingKickID("s1") != "" {
+	for kicks.TakePendingKickIDUnless("s1", nil) != "" {
 		text, lease, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{})
 		if err != nil || !ok {
 			t.Fatalf("render = %v %v", ok, err)
@@ -77,11 +77,11 @@ func TestProcessFinishedKicksQueuePerHandleAndSurviveClearPendingOnTurnAbort(t *
 	)
 
 	// Stage the first kick, then abort the turn (ClearPending).
-	_ = kicks.TakePendingKickID("s1")
+	_ = kicks.TakePendingKickIDUnless("s1", nil)
 	kicks.ClearPending("s1")
 
 	var rendered []string
-	for kicks.TakePendingKickID("s1") != "" {
+	for kicks.TakePendingKickIDUnless("s1", nil) != "" {
 		text, lease, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{})
 		if err != nil || !ok {
 			t.Fatalf("render = %v %v", ok, err)

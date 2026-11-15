@@ -48,7 +48,7 @@ func (s *Service) ApplyModelPolicy(ctx context.Context, scope SettingsScope, pro
 	if patch.empty() {
 		return &PolicyValidationError{Err: errors.New("model policy patch is empty")}
 	}
-	if err := validatePolicyShape(policyFromPatch(patch)); err != nil {
+	if err := validatePolicyShape(applyPolicyPatch(ModelPolicy{}, patch)); err != nil {
 		return &PolicyValidationError{Err: err}
 	}
 	if s.Policy == nil {

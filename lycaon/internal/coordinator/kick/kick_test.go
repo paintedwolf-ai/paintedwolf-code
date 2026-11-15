@@ -25,7 +25,7 @@ func TestRenderPendingNudgeRetainsKickAcrossRenderFailure(t *testing.T) {
 	kicks := &KickEngine{}
 	kicks.SetPromptEngine(engine)
 	kicks.QueueDeferred("s1", "coordinator-gate-blocked")
-	if id := kicks.TakePendingKickID("s1"); id != "coordinator-gate-blocked" {
+	if id := kicks.TakePendingKickIDUnless("s1", nil); id != "coordinator-gate-blocked" {
 		t.Fatalf("staged id = %q", id)
 	}
 	if _, _, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{}); ok || err == nil {
@@ -48,7 +48,7 @@ func TestRenderPendingNudgeRetainsKickAcrossRenderFailure(t *testing.T) {
 func TestAckPendingNudgeDoesNotConsumeReplacement(t *testing.T) {
 	kicks := &KickEngine{}
 	kicks.QueuePendingText("s1", "first", "kick-1")
-	if id := kicks.TakePendingKickID("s1"); id != "kick-1" {
+	if id := kicks.TakePendingKickIDUnless("s1", nil); id != "kick-1" {
 		t.Fatalf("staged id = %q", id)
 	}
 	_, lease, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{})
@@ -197,8 +197,8 @@ func TestNilEngineMethodsAreSafe(t *testing.T) {
 	if id, ok := k.PeekPendingKickID("s"); id != "" || ok {
 		t.Errorf("nil PeekPendingKickID = %q,%v", id, ok)
 	}
-	if id := k.TakePendingKickID("s"); id != "" {
-		t.Errorf("nil TakePendingKickID = %q", id)
+	if id := k.TakePendingKickIDUnless("s", nil); id != "" {
+		t.Errorf("nil TakePendingKickIDUnless = %q", id)
 	}
 	if n, _, ok, _ := k.RenderPendingNudge(t.Context(), "s", CoordinatorKickRenderContext{}); n != "" || ok {
 		t.Errorf("nil RenderPendingNudge = %q,%v", n, ok)
@@ -215,8 +215,8 @@ func TestQueuePendingTextWithKickID(t *testing.T) {
 	if id, ok := k.PeekPendingKickID("s1"); !ok || id != "kick-7" {
 		t.Fatalf("PeekPendingKickID = %q,%v want kick-7", id, ok)
 	}
-	if id := k.TakePendingKickID("s1"); id != "kick-7" {
-		t.Fatalf("TakePendingKickID = %q want kick-7", id)
+	if id := k.TakePendingKickIDUnless("s1", nil); id != "kick-7" {
+		t.Fatalf("TakePendingKickIDUnless = %q want kick-7", id)
 	}
 	if id, ok := k.PeekPendingKickID("s1"); !ok || id != "kick-7" {
 		t.Errorf("staged PeekPendingKickID = %q,%v want kick-7", id, ok)
@@ -243,8 +243,8 @@ func TestRenderPendingNudgeDropsStaleBatchSeq(t *testing.T) {
 	k := &KickEngine{}
 	k.SetPromptEngine(eng)
 	k.QueueDeferred("s1", "coordinator-scheduled", WithBatchSeq(2))
-	if id := k.TakePendingKickID("s1"); id != "coordinator-scheduled" {
-		t.Fatalf("TakePendingKickID = %q want %s", id, "coordinator-scheduled")
+	if id := k.TakePendingKickIDUnless("s1", nil); id != "coordinator-scheduled" {
+		t.Fatalf("TakePendingKickIDUnless = %q want %s", id, "coordinator-scheduled")
 	}
 	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{BatchSeq: 3}); ok {
 		t.Fatal("stale batch_seq kick should drop at render")
@@ -253,8 +253,8 @@ func TestRenderPendingNudgeDropsStaleBatchSeq(t *testing.T) {
 		t.Fatalf("stale kick should not render, got %q", eng.lastName)
 	}
 	k.QueueDeferred("s1", "coordinator-scheduled", WithBatchSeq(3))
-	if id := k.TakePendingKickID("s1"); id != "coordinator-scheduled" {
-		t.Fatalf("TakePendingKickID = %q", id)
+	if id := k.TakePendingKickIDUnless("s1", nil); id != "coordinator-scheduled" {
+		t.Fatalf("TakePendingKickIDUnless = %q", id)
 	}
 	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{BatchSeq: 3}); !ok {
 		t.Fatal("live batch_seq kick should render")
@@ -276,8 +276,8 @@ func TestQueueCoordinatorKickWithoutEngineReturnsRetryableError(t *testing.T) {
 	if id, ok := k.PeekPendingKickID("s1"); !ok || id != "coordinator-gate-blocked" {
 		t.Errorf("without engine kick should still queue, got %q,%v", id, ok)
 	}
-	if id := k.TakePendingKickID("s1"); id != "coordinator-gate-blocked" {
-		t.Fatalf("TakePendingKickID = %q want %s", id, "coordinator-gate-blocked")
+	if id := k.TakePendingKickIDUnless("s1", nil); id != "coordinator-gate-blocked" {
+		t.Fatalf("TakePendingKickIDUnless = %q want %s", id, "coordinator-gate-blocked")
 	}
 	if _, _, ok, err := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{}); ok || err == nil {
 		t.Errorf("RenderPendingNudge = ok %v, error %v", ok, err)
@@ -307,8 +307,8 @@ func TestQueueCoordinatorKickRendersAtTake(t *testing.T) {
 		t.Fatalf("RenderKick at queue time = %q want deferred", eng.lastName)
 	}
 
-	if id := k.TakePendingKickID("s1"); id != "coordinator-scan-finished" {
-		t.Fatalf("TakePendingKickID = %q want %s", id, "coordinator-scan-finished")
+	if id := k.TakePendingKickIDUnless("s1", nil); id != "coordinator-scan-finished" {
+		t.Fatalf("TakePendingKickIDUnless = %q want %s", id, "coordinator-scan-finished")
 	}
 	live := CoordinatorKickRenderContext{
 		PendingOverlayJobs: []string{"job-a"},
@@ -340,8 +340,8 @@ func TestQueueCoordinatorKickEmptyRenderIsNoop(t *testing.T) {
 	if id, ok := k.PeekPendingKickID("s1"); !ok || id != "coordinator-gate-blocked" {
 		t.Errorf("deferred kick should queue before render, got %q,%v", id, ok)
 	}
-	if id := k.TakePendingKickID("s1"); id != "coordinator-gate-blocked" {
-		t.Fatalf("TakePendingKickID = %q", id)
+	if id := k.TakePendingKickIDUnless("s1", nil); id != "coordinator-gate-blocked" {
+		t.Fatalf("TakePendingKickIDUnless = %q", id)
 	}
 	if _, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{}); ok {
 		t.Errorf("empty render should not produce nudge")
@@ -408,7 +408,7 @@ func TestSessionKickQueueDedupAndFIFO(t *testing.T) {
 		t.Fatalf("peek = %+v,%v want first push", item, ok)
 	}
 
-	if id := k.TakePendingKickID("s1"); id != "a" {
+	if id := k.TakePendingKickIDUnless("s1", nil); id != "a" {
 		t.Fatalf("first take = %q", id)
 	}
 	first := q.stagedItem()
@@ -416,7 +416,7 @@ func TestSessionKickQueueDedupAndFIFO(t *testing.T) {
 		t.Fatal("first kick was not staged")
 	}
 	k.AckPendingNudge("s1", first.lease)
-	if id := k.TakePendingKickID("s1"); id != "b" {
+	if id := k.TakePendingKickIDUnless("s1", nil); id != "b" {
 		t.Fatalf("second take = %q", id)
 	}
 	second := q.stagedItem()
@@ -424,7 +424,7 @@ func TestSessionKickQueueDedupAndFIFO(t *testing.T) {
 		t.Fatal("second kick was not staged")
 	}
 	k.AckPendingNudge("s1", second.lease)
-	if id := k.TakePendingKickID("s1"); id != "" {
+	if id := k.TakePendingKickIDUnless("s1", nil); id != "" {
 		t.Errorf("queue retained %q", id)
 	}
 }
@@ -434,7 +434,7 @@ func TestQueueDeferredLatestReplacesStagedLifecycleGuidance(t *testing.T) {
 	k := &KickEngine{}
 	k.SetPromptEngine(engine)
 	k.QueueDeferredLatest("s1", "phase.entered", "phase-old")
-	if got := k.TakePendingKickID("s1"); got != "phase-old" {
+	if got := k.TakePendingKickIDUnless("s1", nil); got != "phase-old" {
 		t.Fatalf("staged kick = %q want phase-old", got)
 	}
 	k.QueueDeferredLatest("s1", "phase.entered", "phase-current")
@@ -468,16 +468,16 @@ func TestDropKickIDRemovesQueuedAndStaged(t *testing.T) {
 	k.QueueDeferred("s1", "coordinator-feedback-pending")
 	k.QueueDeferred("s1", "coordinator-feedback-received")
 	k.DropKickID("s1", "coordinator-feedback-pending")
-	if id := k.TakePendingKickID("s1"); id != "coordinator-feedback-received" {
-		t.Fatalf("TakePendingKickID = %q want %s", id, "coordinator-feedback-received")
+	if id := k.TakePendingKickIDUnless("s1", nil); id != "coordinator-feedback-received" {
+		t.Fatalf("TakePendingKickIDUnless = %q want %s", id, "coordinator-feedback-received")
 	}
 	k.DropKickID("s1", "coordinator-feedback-received")
-	if id := k.TakePendingKickID("s1"); id != "" {
+	if id := k.TakePendingKickIDUnless("s1", nil); id != "" {
 		t.Fatalf("extra kick %q", id)
 	}
 
 	k.QueueDeferred("s2", "coordinator-feedback-pending")
-	if id := k.TakePendingKickID("s2"); id != "coordinator-feedback-pending" {
+	if id := k.TakePendingKickIDUnless("s2", nil); id != "coordinator-feedback-pending" {
 		t.Fatalf("stage pending = %q", id)
 	}
 	k.DropKickID("s2", "coordinator-feedback-pending")
@@ -518,7 +518,7 @@ func TestDropPendingKicksForBatchSeq(t *testing.T) {
 	k.sessionKickQueue("s1").push(kickQueueItem{kickID: "scheduled", deferred: true, batchSeq: 2, hasSeq: true})
 	k.sessionKickQueue("s1").push(kickQueueItem{kickID: "other", deferred: true, batchSeq: 3, hasSeq: true})
 	k.DropPendingKicksForBatchSeq("s1", 2)
-	if id := k.TakePendingKickID("s1"); id != "other" {
+	if id := k.TakePendingKickIDUnless("s1", nil); id != "other" {
 		t.Fatalf("take = %q want surviving kick", id)
 	}
 	item := k.sessionKickQueue("s1").stagedItem()
@@ -526,7 +526,7 @@ func TestDropPendingKicksForBatchSeq(t *testing.T) {
 		t.Fatal("surviving kick was not staged")
 	}
 	k.AckPendingNudge("s1", item.lease)
-	if id := k.TakePendingKickID("s1"); id != "" {
+	if id := k.TakePendingKickIDUnless("s1", nil); id != "" {
 		t.Fatal("expected only one kick after drop")
 	}
 }
@@ -536,7 +536,7 @@ func TestDropPendingKicksBeforeBatchSeq(t *testing.T) {
 	k.sessionKickQueue("s1").push(kickQueueItem{kickID: "old", deferred: true, batchSeq: 1, hasSeq: true})
 	k.sessionKickQueue("s1").push(kickQueueItem{kickID: "live", deferred: true, batchSeq: 3, hasSeq: true})
 	k.DropPendingKicksBeforeBatchSeq("s1", 3)
-	if id := k.TakePendingKickID("s1"); id != "live" {
+	if id := k.TakePendingKickIDUnless("s1", nil); id != "live" {
 		t.Fatalf("take = %q want live kick", id)
 	}
 }

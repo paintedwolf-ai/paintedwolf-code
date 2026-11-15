@@ -13,10 +13,11 @@ import (
 	"syscall"
 	"testing"
 
+	"golang.org/x/sys/unix"
+
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"golang.org/x/sys/unix"
 )
 
 func TestLinuxTrashMetadataAndRecovery(t *testing.T) {
@@ -50,16 +51,16 @@ func TestLinuxTrashMetadataAndRecovery(t *testing.T) {
 		t.Fatalf("incorrect metadata: %q", metadata)
 	}
 	destination := fseffect.Location{Root: root, Rel: name}
-	if err := Restore(canceled, receipt, destination); !errors.Is(err, context.Canceled) {
+	if err := RestoreWith(canceled, receipt, destination, nil); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled restoration = %v, want cancellation", err)
 	}
 	tampered := receipt
 	tampered.Identity += "-different-entry"
-	if err := Restore(t.Context(), tampered, destination); !errors.Is(err, ErrUnavailable) {
+	if err := RestoreWith(t.Context(), tampered, destination, nil); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("changed receipt identity = %v, want unavailable", err)
 	}
 	testutil.FailErr(t, "occupy restoration destination", os.WriteFile(path, []byte("new entry"), 0600))
-	if err := Restore(t.Context(), receipt, destination); err == nil {
+	if err := RestoreWith(t.Context(), receipt, destination, nil); err == nil {
 		t.Fatal("restoration overwrote an occupied destination")
 	}
 	if body, err := os.ReadFile(path); err != nil || string(body) != "new entry" {
@@ -72,7 +73,7 @@ func TestLinuxTrashMetadataAndRecovery(t *testing.T) {
 		t.Fatalf("refused restorations changed recovery metadata: %q, %v", info, err)
 	}
 	testutil.FailErr(t, "release restoration destination", os.Remove(path))
-	if err := Restore(t.Context(), receipt, destination); err != nil {
+	if err := RestoreWith(t.Context(), receipt, destination, nil); err != nil {
 		testutil.FailErr(t, "restore native Trash receipt", err)
 	}
 	if _, err := os.Stat(receipt.Metadata); !os.IsNotExist(err) {
@@ -82,7 +83,7 @@ func TestLinuxTrashMetadataAndRecovery(t *testing.T) {
 	if err != nil || string(body) != "kept" {
 		t.Fatalf("restored contents = %q, %v", body, err)
 	}
-	if err := Restore(t.Context(), receipt, destination); !errors.Is(err, ErrUnavailable) {
+	if err := RestoreWith(t.Context(), receipt, destination, nil); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("consumed receipt = %v, want unavailable", err)
 	}
 	if body, err := os.ReadFile(path); err != nil || string(body) != "kept" {
@@ -251,7 +252,7 @@ func TestLinuxTrashKeepsOtherVolumesInPlace(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(home, "Trash")); !os.IsNotExist(err) {
 		t.Fatalf("home Trash was created for another volume: %v", err)
 	}
-	testutil.FailErr(t, "restore volume entry", Restore(t.Context(), receipt, fseffect.Location{Root: volume, Rel: filepath.Join("nested dir", "entry ü.txt")}))
+	testutil.FailErr(t, "restore volume entry", RestoreWith(t.Context(), receipt, fseffect.Location{Root: volume, Rel: filepath.Join("nested dir", "entry ü.txt")}, nil))
 	after, err := fspath.EntryIdentity(path)
 	testutil.FailErr(t, "inspect restored entry", err)
 	if after != before {
@@ -274,7 +275,7 @@ func TestLinuxTrashPreservesMaximumLengthName(t *testing.T) {
 	if filepath.Dir(receipt.Path) != filepath.Join(root, ".local", "share", "Trash", "files") {
 		t.Fatalf("relative XDG data home did not fall back to HOME: %q", receipt.Path)
 	}
-	testutil.FailErr(t, "restore original name", Restore(t.Context(), receipt, fseffect.Location{Root: root, Rel: name}))
+	testutil.FailErr(t, "restore original name", RestoreWith(t.Context(), receipt, fseffect.Location{Root: root, Rel: name}, nil))
 	body, err := os.ReadFile(path)
 	testutil.FailErr(t, "read restored file", err)
 	if string(body) != "kept" {
@@ -340,11 +341,11 @@ func TestLinuxTrashSameMountSubvolumeRelocation(t *testing.T) {
 	}
 	dest := fseffect.Location{Root: filepath.Join(root, "subvol"), Rel: "tree"}
 	testutil.FailErr(t, "occupy destination", os.WriteFile(subvol, []byte("occupied"), 0o600))
-	if err := Restore(t.Context(), receipt, dest); !errors.Is(err, os.ErrExist) {
+	if err := RestoreWith(t.Context(), receipt, dest, nil); !errors.Is(err, os.ErrExist) {
 		t.Fatalf("occupied restore = %v, want ErrExist", err)
 	}
 	testutil.FailErr(t, "clear occupied destination", os.Remove(subvol))
-	testutil.FailErr(t, "restore tree across subvolume boundary", Restore(t.Context(), receipt, dest))
+	testutil.FailErr(t, "restore tree across subvolume boundary", RestoreWith(t.Context(), receipt, dest, nil))
 	if body, err := os.ReadFile(filepath.Join(subvol, "nested", "item.txt")); err != nil || string(body) != "subvol-data" {
 		t.Fatalf("restored file = %q, %v", body, err)
 	}
@@ -373,7 +374,7 @@ func TestLinuxTrashBindMountBoundary(t *testing.T) {
 		if want := filepath.Join(mnt, fmt.Sprintf(".Trash-%d", os.Getuid()), "files"); filepath.Dir(receipt.Path) != want {
 			t.Fatalf("bind mount trash path = %q, want under %q", receipt.Path, want)
 		}
-		testutil.FailErr(t, "restore file on bind mount", Restore(t.Context(), receipt, fseffect.Location{Root: mnt, Rel: filepath.Join("nested", "item.txt")}))
+		testutil.FailErr(t, "restore file on bind mount", RestoreWith(t.Context(), receipt, fseffect.Location{Root: mnt, Rel: filepath.Join("nested", "item.txt")}, nil))
 		return
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=^TestLinuxTrashBindMountBoundary$")

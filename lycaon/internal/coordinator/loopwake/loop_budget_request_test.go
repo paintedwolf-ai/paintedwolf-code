@@ -2,17 +2,18 @@ package loopwake
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/coordinator/kick"
-	"github.com/lycaon/lycaon/internal/promptresult"
-	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/pkg/api"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/kick"
+	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // drainAsyncTurns waits for host turns before temporary resources close.
@@ -94,7 +95,7 @@ func TestBudgetRequestKickCarriesRequestWhileBusy(t *testing.T) {
 	drainAsyncTurns(t, engine)
 
 	wantID := anchor.InformRender(anchor.WorkerBudgetRequested)
-	if id := kicks.TakePendingKickID("s1"); id != wantID {
+	if id := kicks.TakePendingKickIDUnless("s1", nil); id != wantID {
 		t.Fatalf("pending kick id = %q want %q", id, wantID)
 	}
 	text, _, ok, _ := kicks.RenderPendingNudge(t.Context(), "s1", kick.CoordinatorKickRenderContext{})

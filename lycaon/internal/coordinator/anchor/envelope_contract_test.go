@@ -9,13 +9,14 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"gopkg.in/yaml.v3"
 )
 
 func loadTestRegistry(t *testing.T) *anchor.Registry {
@@ -136,7 +137,7 @@ func TestGoldenKickRenderByteIdenticalViaEmit(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			bus.Emit(context.Background(), "sess-golden", tc.id, tc.env)
-			id := kicks.TakePendingKickID("sess-golden")
+			id := kicks.TakePendingKickIDUnless("sess-golden", nil)
 			if id != anchor.InformRender(tc.id) {
 				t.Fatalf("pending id = %q want %q", id, anchor.InformRender(tc.id))
 			}
@@ -146,7 +147,7 @@ func TestGoldenKickRenderByteIdenticalViaEmit(t *testing.T) {
 			}
 			kicks.AckPendingNudge("sess-golden", lease)
 			bus.Emit(context.Background(), "sess-golden2", tc.id, tc.env)
-			_ = kicks.TakePendingKickID("sess-golden2")
+			_ = kicks.TakePendingKickIDUnless("sess-golden2", nil)
 			text2, lease2, ok, _ := kicks.RenderPendingNudge(t.Context(), "sess-golden2", tc.live)
 			if !ok {
 				t.Fatal("second render missing")
