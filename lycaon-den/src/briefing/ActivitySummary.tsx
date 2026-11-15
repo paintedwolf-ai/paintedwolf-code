@@ -36,22 +36,31 @@ export function ActivitySummary(props: Props) {
   const held = props.state.kind !== "ready";
   const fadeKey = (recordId: string) => `${recordId}\0activity`;
   if (props.state.kind === "ready") markSummaryShown(fadeKey(props.state.recordId));
-  let text: HTMLParagraphElement | undefined;
+  let box: HTMLDivElement | undefined;
+  let measure: HTMLParagraphElement | undefined;
   const [clamped, setClamped] = createSignal(false);
   const [expanded, setExpanded] = createSignal(false);
+  // An unclamped copy at the same width gives the text's real height; a
+  // clamped element reports only its visible lines.
   createEffect(() => {
     void props.state;
-    if (!text || expanded() || typeof ResizeObserver === "undefined") return;
-    const measure = () => setClamped(text!.scrollHeight > text!.clientHeight + 1);
-    const observer = new ResizeObserver(measure);
-    observer.observe(text);
-    measure();
+    if (!box || !measure || expanded() || typeof ResizeObserver === "undefined") return;
+    const check = () => {
+      const style = getComputedStyle(box!);
+      const lines = Number.parseFloat(style.getPropertyValue("--den-activity-summary-lines")) || 3;
+      const lineHeight = Number.parseFloat(getComputedStyle(measure!).lineHeight) || 0;
+      setClamped(lineHeight > 0 && measure!.getBoundingClientRect().height > lines * lineHeight + 1);
+    };
+    const observer = new ResizeObserver(check);
+    observer.observe(measure);
+    check();
     onCleanup(() => observer.disconnect());
   });
   const later = () => props.running ? briefingCopy.resultPending : briefingCopy.waiting;
   return (
     <div class="den-activity-summary-frame">
       <div
+        ref={(el) => (box = el)}
         class="den-activity-summary"
         data-testid="activity-summary"
         data-state={props.state.kind}
@@ -61,7 +70,7 @@ export function ActivitySummary(props: Props) {
         <BriefingMark />
         <div class="den-activity-summary__body">
           <Show when={props.state.kind === "ready" ? props.state : undefined} keyed fallback={
-            <p class="den-activity-summary__text" ref={(el) => (text = el)}>
+            <p class="den-activity-summary__text">
               <Show when={props.state.purpose}>{(purpose) => <><span class="den-activity-summary__purpose"><Inline text={purpose()} /></span>{" "}</>}</Show>
               <Show when={props.state.kind === "missing"} fallback={<span class="den-activity-summary__waiting">{briefingCopy.waiting}</span>}>
                 <span class="den-activity-summary__waiting">{briefingCopy.notArrived}</span>{" "}
@@ -74,12 +83,19 @@ export function ActivitySummary(props: Props) {
                 class="den-activity-summary__text"
                 classList={{ [SUMMARY_FADE_CLASS]: claimSummaryFade(fadeKey(ready.recordId)) }}
                 data-expanded={expanded() ? "" : undefined}
-                ref={(el) => (text = el)}
+               
               >
                 <Show when={ready.purpose}>{(purpose) => <><span class="den-activity-summary__purpose"><Inline text={purpose()} /></span>{" "}</>}</Show>
                 <Show when={ready.change} fallback={<Show when={ready.changePending || props.running}><span class="den-activity-summary__waiting">{later()}</span></Show>}>
                   {(change) => <span class="den-activity-summary__change"><Inline text={change()} /></span>}
                 </Show>
+              </p>
+            )}
+          </Show>
+          <Show when={props.state.kind === "ready" ? props.state : undefined} keyed>
+            {(ready) => (
+              <p class="den-activity-summary__text den-activity-summary__measure" aria-hidden="true" ref={(el) => (measure = el)}>
+                <Show when={ready.purpose}>{(purpose) => <><Inline text={purpose()} />{" "}</>}</Show><Show when={ready.change}>{(change) => <Inline text={change()} />}</Show>
               </p>
             )}
           </Show>

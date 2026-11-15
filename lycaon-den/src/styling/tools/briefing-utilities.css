@@ -171,9 +171,20 @@
 }
 
 @utility den-activity-summary__body {
+  position: relative;
   display: grid;
   min-width: 0;
   line-height: 1.5;
+}
+
+@utility den-activity-summary__measure {
+  position: absolute;
+  inset: 0 0 auto;
+  display: block;
+  visibility: hidden;
+  pointer-events: none;
+  -webkit-line-clamp: none;
+  line-clamp: none;
 }
 
 @utility den-activity-summary__text {

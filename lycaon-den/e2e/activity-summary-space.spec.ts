@@ -1,8 +1,12 @@
 import { expect, type Page, type Route } from "@playwright/test";
 import {
+  activateProject,
   apiSeedSessionTranscript,
   bootstrapChatSession,
+  expectShellReady,
   liveChatStage,
+  openSessionRow,
+  settledChatSessionId,
   transcriptMessages,
   webE2e,
 } from "./helpers.ts";
@@ -15,9 +19,8 @@ const LONG = {
 };
 
 async function seedReadCard(page: Page, request: Parameters<typeof bootstrapChatSession>[1]) {
-  await bootstrapChatSession(page, request);
-  const sessionId = ((await liveChatStage(page).getByTestId("chat-stream").getAttribute("data-session-id")) ?? "").trim();
-  expect(sessionId).toBeTruthy();
+  const project = await bootstrapChatSession(page, request);
+  const sessionId = await settledChatSessionId(page);
   const carrier = crypto.randomUUID();
   await apiSeedSessionTranscript(request ?? page.request, sessionId, transcriptMessages([
     { id: crypto.randomUUID(), role: "user", content: "Where is auth?", created_at: "2026-07-23T20:00:00Z", seq: 1, ord: 1 },
@@ -26,6 +29,11 @@ async function seedReadCard(page: Page, request: Parameters<typeof bootstrapChat
     { id: crypto.randomUUID(), role: "tool", content: "package auth", created_at: "2026-07-23T20:00:02Z", seq: 3, ord: 3,
       tool_result: { tool_call_id: "call_read_1", assistant_message_id: carrier, tool: "read", content: "package auth", outcome: "completed" } },
   ]));
+  // Reopen the seeded session so it is activated once, before any card opens.
+  await page.reload();
+  await expectShellReady(page);
+  await activateProject(page, project.id);
+  await openSessionRow(page, sessionId);
   return sessionId;
 }
 
@@ -61,9 +69,13 @@ async function openCard(page: Page, sessionId: string) {
   const stream = liveChatStage(page).locator(`[data-testid="chat-stream"][data-session-id="${sessionId}"]`);
   await stream.getByTestId("activity-span-card").locator(":scope > .den-transcript-disclosure-header").click();
   // The row settles once its result joins the call; opening earlier would open a row that is about to be replaced.
-  const card = stream.locator('[data-testid="tool-part-card"][data-status="done"]').first();
+  const card = stream.locator('[data-testid="tool-part-card"][data-tool-call-id="call_read_1"][data-status="done"]');
   await expect(card).toBeVisible({ timeout: 30_000 });
-  await card.locator(":scope > .den-transcript-disclosure-header").click();
+  // A span with a single action opens it along with the span.
+  if ((await card.getAttribute("data-expanded")) !== "true") await card.locator(":scope > .den-transcript-disclosure-header").click();
+  await expect(card).toHaveAttribute("data-expanded", "true");
+  // Measure only once the opening motion has finished.
+  await card.evaluate((element) => Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished)));
   await expect(page.getByTestId("activity-summary")).toHaveAttribute("data-state", "pending");
 }
 
