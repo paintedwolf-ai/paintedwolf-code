@@ -85,5 +85,5 @@ func failRecoveredTask(ctx context.Context, queue WorkerQueue, task *api.WorkerT
 		_, err := queue.Fail(ctx, task, failure)
 		return err
 	}
-	return queue.Cancel(ctx, task.ID, &api.WorkerResult{Summary: failure.Error(), HintCode: string(failure.Reason), HostAssembled: true})
+	return queue.Cancel(ctx, task.ID, &api.WorkerResult{Summary: failure.Error(), HintCode: string(failure.Reason)})
 }
