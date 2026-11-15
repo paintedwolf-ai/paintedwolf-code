@@ -10,6 +10,14 @@ import (
 	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
+func toolSetMap(names []string) map[string]bool {
+	m := make(map[string]bool, len(names))
+	for _, n := range names {
+		m[n] = true
+	}
+	return m
+}
+
 func effectSet(t *testing.T, classes ...toolcontract.CommandEffectClass) toolcontract.CommandEffects {
 	t.Helper()
 	effects, err := toolcontract.NewCommandEffects(classes...)
@@ -44,7 +52,7 @@ func TestReaderProjectsEachCommandEffect(t *testing.T) {
 				Plan:      toolsurface.Compile(tc.offered, nil),
 				Profiles: []sandbox.ToolProfile{{
 					ID:             "worker",
-					EnabledTools:   tc.offered,
+					Tools:          toolSetMap(tc.offered),
 					CommandEffects: effectSet(t, tc.effects...),
 				}},
 			})
@@ -79,7 +87,7 @@ func TestCommandEffectRestrictionsIntersect(t *testing.T) {
 		Plan:      toolsurface.Compile(offered, nil),
 		Profiles: []sandbox.ToolProfile{{
 			ID:             prompts.CoordinatorProfileID,
-			EnabledTools:   offered,
+			Tools:          toolSetMap(offered),
 			CommandEffects: reaches,
 		}},
 	})

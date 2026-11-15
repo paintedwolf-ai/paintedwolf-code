@@ -96,6 +96,7 @@ func TestReaderHeldComposesToolsAndReachMarks(t *testing.T) {
 				Plan:      toolsurface.Compile(tc.offered, tc.requestable),
 				Profiles:  profiles,
 				RootCount: 1,
+				WebSearch: true,
 			})
 			testutil.FailErr(t, "NewReader", err)
 

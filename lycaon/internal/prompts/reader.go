@@ -160,9 +160,6 @@ func NewReader(in ReaderInput) (Reader, error) {
 	default:
 		effects = profileEffects
 		toolNames := availableToolsInPlan(visibleToolNames(profile, in.Visible), in.Plan)
-		if !in.WebSearch {
-			toolNames = withoutResearchTools(toolNames)
-		}
 		for _, name := range toolNames {
 			if (profile.ToolDeferred(name) && !in.Loaded[name]) || !profile.ToolAllowed(name) {
 				requestable = append(requestable, name)
@@ -380,9 +377,6 @@ func (r Reader) Facts() map[string]any {
 	out["has_git"] = r.hasGit
 	out["root_count"] = r.rootCount
 	out["web_search_enabled"] = r.webSearch
-	if !r.webSearch {
-		MergeWebResearchUnavailable(out)
-	}
 	return out
 }
 
