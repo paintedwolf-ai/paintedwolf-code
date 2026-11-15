@@ -52,6 +52,43 @@ describe("worker approval model", () => {
     ).toBeUndefined();
   });
 
+  it("projects approval_wait onto working board workers by child session or latest job", () => {
+    expect(boardWithWorkerApprovalState(undefined, [worker], [pending])).toBeUndefined();
+    const emptyBoard = {} as unknown as BoardView;
+    expect(boardWithWorkerApprovalState(emptyBoard, [worker], [pending])).toBe(emptyBoard);
+
+    const board = {
+      workers: [
+        {
+          worker_id: "wkr-1",
+          name: "impl",
+          agent_type: "implementer",
+          state: "working",
+          child_session_id: "child-1",
+        },
+        {
+          worker_id: "wkr-2",
+          name: "rev",
+          agent_type: "code-reviewer",
+          state: "working",
+          latest_job_id: "job-1",
+        },
+        {
+          worker_id: "wkr-3",
+          name: "idle",
+          agent_type: "repo-researcher",
+          state: "waiting",
+          child_session_id: "child-1",
+        },
+      ],
+    } as unknown as BoardView;
+    const projected = boardWithWorkerApprovalState(board, [worker], [pending]);
+    expect(projected?.workers?.[0]?.reason).toBe("approval_wait");
+    expect(projected?.workers?.[0]?.state_label).toBe("Waiting for approval");
+    expect(projected?.workers?.[1]?.reason).toBe("approval_wait");
+    expect(projected?.workers?.[2]?.reason).toBeUndefined();
+  });
+
   it("ignores parent, resolved, and unrelated checkpoint kinds", () => {
     expect(
       pendingWorkerApprovals([worker], [
