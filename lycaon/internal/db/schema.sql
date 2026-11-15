@@ -1257,8 +1257,7 @@ CREATE TABLE IF NOT EXISTS turn_attempts (
 CREATE INDEX IF NOT EXISTS idx_turn_attempts_turn
     ON turn_attempts(turn_id, attempt);
 
--- Provider output is immutable after settlement. Streaming bytes live in the
--- bounded live_model_outputs projection and are copied here exactly once.
+-- Provider output is recorded here once, when it settles, and is immutable.
 -- content, tool_calls, and reasoning are packed into one content-addressed
 -- envelope blob (content_blob_objects); empty sha256 means no body.
 CREATE TABLE IF NOT EXISTS model_outputs (
@@ -1318,23 +1317,6 @@ CREATE TABLE IF NOT EXISTS turn_attempt_closeouts (
     turn_attempt_id TEXT PRIMARY KEY REFERENCES turn_attempts(id) ON DELETE CASCADE,
     closeout_json TEXT NOT NULL CHECK (json_valid(closeout_json))
 ) STRICT;
-
-CREATE TABLE IF NOT EXISTS live_model_outputs (
-    id TEXT PRIMARY KEY,
-    turn_attempt_id TEXT NOT NULL REFERENCES turn_attempts(id) ON DELETE CASCADE,
-    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    iteration INTEGER NOT NULL CHECK (iteration > 0),
-    message_id TEXT NOT NULL,
-    content TEXT NOT NULL DEFAULT '',
-    tool_calls_json TEXT CHECK (tool_calls_json = '' OR json_valid(tool_calls_json)),
-    reasoning_json TEXT CHECK (reasoning_json = '' OR json_valid(reasoning_json)),
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    UNIQUE (turn_attempt_id, iteration)
-) STRICT;
-
-CREATE INDEX IF NOT EXISTS idx_live_model_outputs_session
-    ON live_model_outputs(session_id, updated_at, id);
 
 CREATE TABLE IF NOT EXISTS prompt_attachment_blobs (
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,

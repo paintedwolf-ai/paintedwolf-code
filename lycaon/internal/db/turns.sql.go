@@ -111,24 +111,6 @@ func (q *Queries) CompleteSubmissionsForRecoveredTurns(ctx context.Context, comp
 	return err
 }
 
-const deleteLiveModelOutput = `-- name: DeleteLiveModelOutput :exec
-DELETE FROM live_model_outputs WHERE id = ?
-`
-
-func (q *Queries) DeleteLiveModelOutput(ctx context.Context, id string) error {
-	_, err := q.db.ExecContext(ctx, deleteLiveModelOutput, id)
-	return err
-}
-
-const deleteLiveModelOutputs = `-- name: DeleteLiveModelOutputs :exec
-DELETE FROM live_model_outputs WHERE 1 = 1
-`
-
-func (q *Queries) DeleteLiveModelOutputs(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, deleteLiveModelOutputs)
-	return err
-}
-
 const deleteTurnsFromSessionOrd = `-- name: DeleteTurnsFromSessionOrd :exec
 DELETE FROM turns
 WHERE turns.session_id = ?1 AND turns.id IN (
@@ -749,45 +731,4 @@ func (q *Queries) TouchCheckpointedTurn(ctx context.Context, arg TouchCheckpoint
 		return 0, err
 	}
 	return result.RowsAffected()
-}
-
-const upsertLiveModelOutput = `-- name: UpsertLiveModelOutput :exec
-INSERT INTO live_model_outputs (
-    id, turn_attempt_id, session_id, iteration, message_id, content,
-    tool_calls_json, reasoning_json, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(id) DO UPDATE SET
-    content = excluded.content,
-    tool_calls_json = excluded.tool_calls_json,
-    reasoning_json = excluded.reasoning_json,
-    updated_at = excluded.updated_at
-`
-
-type UpsertLiveModelOutputParams struct {
-	ID            string         `json:"id"`
-	TurnAttemptID string         `json:"turn_attempt_id"`
-	SessionID     string         `json:"session_id"`
-	Iteration     int64          `json:"iteration"`
-	MessageID     string         `json:"message_id"`
-	Content       string         `json:"content"`
-	ToolCallsJson sql.NullString `json:"tool_calls_json"`
-	ReasoningJson sql.NullString `json:"reasoning_json"`
-	CreatedAt     string         `json:"created_at"`
-	UpdatedAt     string         `json:"updated_at"`
-}
-
-func (q *Queries) UpsertLiveModelOutput(ctx context.Context, arg UpsertLiveModelOutputParams) error {
-	_, err := q.db.ExecContext(ctx, upsertLiveModelOutput,
-		arg.ID,
-		arg.TurnAttemptID,
-		arg.SessionID,
-		arg.Iteration,
-		arg.MessageID,
-		arg.Content,
-		arg.ToolCallsJson,
-		arg.ReasoningJson,
-		arg.CreatedAt,
-		arg.UpdatedAt,
-	)
-	return err
 }

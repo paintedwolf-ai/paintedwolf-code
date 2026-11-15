@@ -163,7 +163,6 @@ var tableLifetimes = map[string]TableLifetime{
 	"full_pass_workflow_bindings":    cascadeOwnedBy("workflow_runs"),
 	"history_protections":            cascadeOwnedBy("sessions"),
 	"landed_changes":                 cascadeOwnedBy("worker_jobs"),
-	"live_model_outputs":             cascadeOwnedBy("turn_attempts"),
 	"managed_cookie_jar_saves":       cascadeOwnedBy("managed_secrets"),
 	"managed_secret_reveals":         cascadeOwnedBy("managed_secrets"),
 	"managed_secret_uses":            cascadeOwnedBy("managed_secrets"),

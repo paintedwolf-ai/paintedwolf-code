@@ -58,17 +58,6 @@ WHERE id = ? AND turn_id = ? AND status = 'running';
 UPDATE turns SET revision = revision + 1, updated_at = ?, progressed_at = ?
 WHERE id = ? AND active_attempt_id = ? AND status = 'running';
 
--- name: UpsertLiveModelOutput :exec
-INSERT INTO live_model_outputs (
-    id, turn_attempt_id, session_id, iteration, message_id, content,
-    tool_calls_json, reasoning_json, created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(id) DO UPDATE SET
-    content = excluded.content,
-    tool_calls_json = excluded.tool_calls_json,
-    reasoning_json = excluded.reasoning_json,
-    updated_at = excluded.updated_at;
-
 -- name: InsertModelOutput :exec
 INSERT INTO model_outputs (
     id, turn_attempt_id, session_id, project_id, iteration, message_id, provider_id,
@@ -91,9 +80,6 @@ ORDER BY settled_at, id;
 SELECT CAST(COALESCE(MAX(iteration), 0) AS INTEGER) AS max_iteration
 FROM model_outputs
 WHERE turn_attempt_id = ?;
-
--- name: DeleteLiveModelOutput :exec
-DELETE FROM live_model_outputs WHERE id = ?;
 
 -- name: ListPendingModelOutputs :many
 SELECT output.*
@@ -194,9 +180,6 @@ SET status = CASE WHEN origin IN ('user', 'worker') THEN 'recovering' ELSE 'inte
     completed_at = CASE WHEN origin IN ('user', 'worker') THEN NULL ELSE ? END,
     error = 'host stopped during turn execution'
 WHERE status = 'running';
-
--- name: DeleteLiveModelOutputs :exec
-DELETE FROM live_model_outputs WHERE 1 = 1;
 
 -- name: ListRecoveringTurns :many
 SELECT id, session_id, project_id, origin, input_json, status, revision,

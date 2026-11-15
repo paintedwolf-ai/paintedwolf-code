@@ -1001,19 +1001,6 @@ type LandedChanges struct {
 	CreatedAt        string         `json:"created_at"`
 }
 
-type LiveModelOutputs struct {
-	ID            string         `json:"id"`
-	TurnAttemptID string         `json:"turn_attempt_id"`
-	SessionID     string         `json:"session_id"`
-	Iteration     int64          `json:"iteration"`
-	MessageID     string         `json:"message_id"`
-	Content       string         `json:"content"`
-	ToolCallsJson sql.NullString `json:"tool_calls_json"`
-	ReasoningJson sql.NullString `json:"reasoning_json"`
-	CreatedAt     string         `json:"created_at"`
-	UpdatedAt     string         `json:"updated_at"`
-}
-
 type LlmCallRollups struct {
 	ProjectID           string `json:"project_id"`
 	SessionID           string `json:"session_id"`

@@ -282,14 +282,5 @@ func recoverTurnsMatching(ctx context.Context, s *memoryCore, sessionID string) 
 			recovered = append(recovered, turn)
 		}
 	}
-	if sessionID == "" {
-		s.liveModelOutputs = make(map[string]LiveModelOutput)
-	} else {
-		for id, out := range s.liveModelOutputs {
-			if out.SessionID == sessionID {
-				delete(s.liveModelOutputs, id)
-			}
-		}
-	}
 	return recovered, nil
 }

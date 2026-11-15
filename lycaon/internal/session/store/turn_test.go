@@ -24,7 +24,6 @@ type turnTestStore interface {
 	CheckpointTurn(context.Context, string, string, TurnPhase, string) error
 	RecoverTurns(context.Context) ([]Turn, error)
 	RecoverTurnsForSession(context.Context, string) ([]Turn, error)
-	ProjectLiveModelOutput(context.Context, LiveModelOutput) error
 	SettleModelOutput(context.Context, ModelOutput) (ModelOutput, error)
 	ListPendingModelOutputProjections(context.Context) ([]PendingModelOutputProjection, error)
 	AppendMessages(context.Context, string, ...api.Message) error
@@ -154,10 +153,6 @@ func TestSettledModelOutputRepairsProjectionParity(t *testing.T) {
 			})
 			testutil.FailErr(t, "begin turn", err)
 			outputID := uuid.NewString()
-			testutil.FailErr(t, "project live output", st.ProjectLiveModelOutput(ctx, LiveModelOutput{
-				ID: outputID, TurnAttemptID: execution.Attempt.ID, SessionID: sess.ID,
-				Iteration: 1, MessageID: outputID, Content: "partial",
-			}))
 			settled, err := st.SettleModelOutput(ctx, ModelOutput{
 				ID: outputID, TurnAttemptID: execution.Attempt.ID, SessionID: sess.ID,
 				Iteration: 1, MessageID: outputID, Content: "complete", FinishReason: "stop",

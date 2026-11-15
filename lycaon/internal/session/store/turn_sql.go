@@ -200,24 +200,6 @@ func (t *sqlTurns) CheckpointTurn(ctx context.Context, turnID, attemptID string,
 	return tx.Commit()
 }
 
-// ProjectLiveModelOutput replaces the bounded stream projection.
-func (t *sqlTurns) ProjectLiveModelOutput(ctx context.Context, out LiveModelOutput) error {
-	s := t.core
-	if out.ID == "" || out.TurnAttemptID == "" || out.SessionID == "" || out.MessageID == "" || out.Iteration <= 0 {
-		return fmt.Errorf("live model output identity required")
-	}
-	now := time.Now().UTC()
-	if out.CreatedAt.IsZero() {
-		out.CreatedAt = now
-	}
-	return s.queries.UpsertLiveModelOutput(ctx, db.UpsertLiveModelOutputParams{
-		ID: out.ID, TurnAttemptID: out.TurnAttemptID, SessionID: out.SessionID,
-		Iteration: int64(out.Iteration), MessageID: out.MessageID, Content: out.Content,
-		ToolCallsJson: db.NullString(out.ToolCallsJSON), ReasoningJson: db.NullString(out.ReasoningJSON),
-		CreatedAt: db.FormatTime(out.CreatedAt), UpdatedAt: db.FormatTime(now),
-	})
-}
-
 // SettleModelOutput copies one live output into immutable storage exactly once.
 func (t *sqlTurns) SettleModelOutput(ctx context.Context, out ModelOutput) (ModelOutput, error) {
 	return settleModelOutputSQL(ctx, t.core, out)
@@ -280,9 +262,6 @@ func settleModelOutputSQL(ctx context.Context, s *sqlCore, out ModelOutput) (Mod
 	}
 	committed.SettledAt, err = db.ParseTime(committedRow.SettledAt)
 	if err != nil {
-		return ModelOutput{}, err
-	}
-	if err := q.DeleteLiveModelOutput(ctx, out.ID); err != nil {
 		return ModelOutput{}, err
 	}
 	if err := tx.Commit(); err != nil {

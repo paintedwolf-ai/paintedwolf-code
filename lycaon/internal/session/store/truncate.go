@@ -133,8 +133,6 @@ func (s *memoryTranscript) TruncateMessagesFrom(ctx context.Context, sessionID, 
 				continue
 			}
 			delete(core.modelOutputs, outputID)
-
-			delete(core.liveModelOutputs, outputID)
 			delete(core.projectedModelOutputs, outputID)
 			for turnID, attempts := range core.turnAttempts {
 				for _, attempt := range attempts {

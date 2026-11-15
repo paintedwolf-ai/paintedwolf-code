@@ -99,9 +99,6 @@ func recoverTurnsSQL(ctx context.Context, s *sqlCore) ([]Turn, error) {
 	}); err != nil {
 		return nil, err
 	}
-	if err := q.DeleteLiveModelOutputs(ctx); err != nil {
-		return nil, err
-	}
 	rows, err := q.ListRecoveringTurns(ctx)
 	if err != nil {
 		return nil, err
@@ -161,9 +158,6 @@ func recoverTurnsForSessionSQL(ctx context.Context, s *sqlCore, sessionID string
 	if err := q.RecoverRunningTurnsForSession(ctx, db.RecoverRunningTurnsForSessionParams{
 		UpdatedAt: recoveredAt, CompletedAt: timestamp, SessionID: sessionID,
 	}); err != nil {
-		return nil, err
-	}
-	if err := q.DeleteLiveModelOutputsForSession(ctx, sessionID); err != nil {
 		return nil, err
 	}
 	rows, err := q.ListRecoveringTurnsForSession(ctx, sessionID)

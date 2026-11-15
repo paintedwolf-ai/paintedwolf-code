@@ -64,9 +64,6 @@ SET status = CASE WHEN origin IN ('user', 'worker') THEN 'recovering' ELSE 'inte
     error = 'host stopped during turn execution'
 WHERE turns.session_id = ? AND turns.status = 'running';
 
--- name: DeleteLiveModelOutputsForSession :exec
-DELETE FROM live_model_outputs WHERE session_id = ?;
-
 -- name: ListRecoveringTurnsForSession :many
 SELECT id, session_id, project_id, origin, input_json, status, revision,
        active_attempt_id, final_output_id, result_json, error,

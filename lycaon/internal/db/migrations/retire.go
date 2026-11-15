@@ -10,16 +10,21 @@ import (
 // Retirement is a released table, or one released column, that a step drops.
 // Capture selects the released rows; Rebuild selects the same columns from
 // what the upgraded store keeps, or from the table the rows moved to.
+// Discard instead states why no reader needs the released rows, for in-flight
+// scratch that settlement or startup recovery already clears; a discard has no
+// Capture or Rebuild.
 type Retirement struct {
 	Table, Column    string
 	Capture, Rebuild string
+	Discard          string
 }
 
 // retirements lists, by step ID, every released table or column a step drops
 // through DropReleased. The contract suite upgrades the released corpus
-// fixtures that hold these rows and requires Rebuild to reproduce Capture.
+// fixtures that hold these rows and requires Rebuild to reproduce Capture, or,
+// for a discard, that the upgraded store no longer has the table or column.
 var retirements = map[string][]Retirement{
-	"source-manifests-and-command-records": {turnLoadReceiptRetirement},
+	"source-manifests-and-command-records": {turnLoadReceiptRetirement, liveModelOutputsRetirement},
 }
 
 // RegisteredRetirements returns a copy of the registered retirements by step ID.
