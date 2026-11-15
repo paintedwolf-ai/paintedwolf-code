@@ -433,31 +433,6 @@ func SourceEvidenceView(proof WorkerCompletionProof) (status, reason string, ref
 	return obligations[0].Status, obligations[0].Reason, append([]string(nil), obligations[0].EvidenceRefs...)
 }
 
-func synthesizeObjectivesFromProof(proof WorkerCompletionProof, excerpts string) []string {
-	var out []string
-	if proof.ReceiptCount > 0 {
-		out = append(out, "Survey receipts: "+strconv.Itoa(proof.ReceiptCount))
-	}
-	if len(proof.MutationTools) > 0 {
-		out = append(out, "Mutation tools: "+strings.Join(proof.MutationTools, ", "))
-	}
-	if excerpts != "" {
-		lines := strings.Split(excerpts, "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "###") || strings.HasPrefix(line, "---") {
-				continue
-			}
-			line = runeclamp.Clamp(line, 160)
-			out = append(out, line)
-			if len(out) >= 5 {
-				break
-			}
-		}
-	}
-	return normalizeReportStringList(out, 5)
-}
-
 // AnnotateWorkerReportForBranch adds merge routing hints for isolated write workers.
 func AnnotateWorkerReportForBranch(report WorkerCompletionReport, task *api.WorkerTask) WorkerCompletionReport {
 	if task == nil || !task.EffectiveScope().IsWrite() || strings.TrimSpace(task.WorkspaceRoot) == "" {
@@ -467,20 +442,6 @@ func AnnotateWorkerReportForBranch(report WorkerCompletionReport, task *api.Work
 		report.SuggestedNextTask = "preview_overlay then promote_overlay for overlay " + strings.TrimSpace(task.ID)
 	}
 	return report
-}
-
-func synthesizeBrief(agentType string, proof WorkerCompletionProof) string {
-	agent := strings.TrimSpace(agentType)
-	if agent == "" {
-		agent = "worker"
-	}
-	if proof.ReceiptCount > 0 {
-		return agent + " finished survey without an accepted completion report; host compiled tool receipts."
-	}
-	if len(proof.ChangedPaths) > 0 {
-		return agent + " changed " + strings.Join(proof.ChangedPaths, ", ") + " without completion JSON."
-	}
-	return agent + " finished without structured completion JSON; host compiled tool excerpts."
 }
 
 func mergeChangedPaths(groups ...[]string) []string {
