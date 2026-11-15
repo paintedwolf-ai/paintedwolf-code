@@ -195,7 +195,10 @@
 .den-msg-actions__time {
   position: relative;
   z-index: 1;
+  min-width: 0;
   padding-inline: 8px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--den-text-muted);
   font-size: var(--text-den-caption);
   line-height: 1.4;
@@ -205,6 +208,7 @@
 }
 
 .den-msg-actions__sep {
+  flex-shrink: 0;
   width: 1px;
   height: 14px;
   margin-inline: 2px;
@@ -242,6 +246,15 @@
   overflow-wrap: anywhere;
 }
 
+.user-turn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--transcript-part-gap);
+  width: 100%;
+  min-width: 0;
+}
+
 .bubble--user {
   align-self: flex-end;
   max-width: var(--transcript-user-width);
@@ -261,14 +274,46 @@
   border-style: dashed;
 }
 
-/* Floats above the message's top-right corner without taking space. */
-.den-msg-actions {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 4px);
-  z-index: 2;
+.den-user-msg-footer {
+  align-self: flex-end;
   display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  margin-top: calc(var(--transcript-message-time-gap) - var(--transcript-part-gap));
+}
+
+.den-user-msg-footer--actions {
+  height: calc(1.5rem + 4px);
+}
+
+.den-user-msg-footer > .den-msg-actions {
+  align-self: center;
+}
+
+.den-user-msg-footer > .den-msg-time-below {
+  align-self: center;
+  min-width: 0;
+  margin-top: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Single-line fixed height keeps virtualized row boxes stable across hover and resize. */
+.den-msg-actions {
+  position: relative;
+  align-self: flex-end;
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: nowrap;
   width: max-content;
+  min-width: 0;
+  max-width: 100%;
+  height: calc(1.5rem + 4px);
   align-items: center;
   gap: 1px;
   padding: 1px;
@@ -281,8 +326,20 @@
   transition: opacity 140ms ease 240ms;
 }
 
-.bubble:hover > .den-msg-actions,
-.bubble:focus-within > .den-msg-actions,
+.den-msg-actions--start {
+  align-self: flex-start;
+}
+
+.assistant-turn > .den-msg-actions {
+  margin-top: calc(var(--transcript-message-time-gap) - var(--transcript-part-gap));
+}
+
+.bubble--user:hover ~ .den-user-msg-footer > .den-msg-actions,
+.den-view-context:hover ~ .den-user-msg-footer > .den-msg-actions,
+.den-user-msg-footer:hover > .den-msg-actions,
+.den-user-msg-footer:focus-within > .den-msg-actions,
+.assistant-turn:hover > .den-msg-actions,
+.assistant-turn:focus-within > .den-msg-actions,
 .den-msg-actions:hover,
 .den-msg-actions:focus-within {
   opacity: 1;
@@ -290,25 +347,10 @@
   transition: opacity 80ms ease 0ms;
 }
 
-/* Bridges the gap into the message bubble. */
-.den-msg-actions::after {
-  content: "";
-  position: absolute;
-  inset-inline: 0;
-  top: 100%;
-  height: 6px;
-  pointer-events: none;
-}
-
-.bubble:hover > .den-msg-actions::after,
-.bubble:focus-within > .den-msg-actions::after,
-.den-msg-actions:hover::after {
-  pointer-events: auto;
-}
-
 .den-msg-actions__btn {
   position: relative;
   z-index: 1;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -375,6 +417,36 @@
 .assistant-turn .bubble {
   max-width: 100%;
   min-width: 0;
+}
+
+/* WebKitGTK AT-SPI workaround: a flex turn ending in a message-actions toolbar aborts
+   GetAttributeRun; lay out transcript turns as block containers while keeping the strip in flow. */
+:root[data-den-webkit-atspi-workaround] .user-turn,
+:root[data-den-webkit-atspi-workaround] .assistant-turn {
+  display: block;
+}
+
+:root[data-den-webkit-atspi-workaround] .bubble--user,
+:root[data-den-webkit-atspi-workaround] .bubble--assistant {
+  width: fit-content;
+}
+
+:root[data-den-webkit-atspi-workaround] .bubble--user {
+  margin-left: auto;
+}
+
+:root[data-den-webkit-atspi-workaround] .den-view-context,
+:root[data-den-webkit-atspi-workaround] .den-user-msg-footer {
+  width: fit-content;
+  margin: var(--transcript-message-time-gap) 0 0 auto;
+}
+
+:root[data-den-webkit-atspi-workaround] .assistant-turn > * + * {
+  margin-top: var(--transcript-part-gap);
+}
+
+:root[data-den-webkit-atspi-workaround] .assistant-turn > .den-msg-actions {
+  margin-top: var(--transcript-message-time-gap);
 }
 
 .den-turn-walk {

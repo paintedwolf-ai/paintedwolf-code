@@ -1342,3 +1342,18 @@ host_facts:
    type: bool
  - name: paintedwolf.missing_capability_write_root
    type: bool
+ - name: paintedwolf.reproduced_source_lines
+   type: int
+   observation: Non-blank lines in the longest fence run matching a session-touched file at coordinator.post_turn; 0 when none matches.
+ - name: paintedwolf.reproduced_source_file_lines
+   type: int
+   observation: Non-blank lines in the matched candidate file slice at coordinator.post_turn; 0 when none matches.
+ - name: paintedwolf.reproduced_source_path
+   type: string
+   observation: Session display path of the matched candidate file at coordinator.post_turn; empty when none matches.
+ - name: paintedwolf.reproduced_source_start_line
+   type: int
+   observation: First 1-based line number of the matched run in the candidate file at coordinator.post_turn; 0 when none matches.
+ - name: paintedwolf.reproduced_source_end_line
+   type: int
+   observation: Last 1-based line number of the matched run in the candidate file at coordinator.post_turn; 0 when none matches.

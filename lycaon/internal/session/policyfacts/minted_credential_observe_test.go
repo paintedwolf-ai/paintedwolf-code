@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -69,3 +70,6 @@ func TestMintedCredentialObservationTracksReloads(t *testing.T) {
 type mintWorkspace struct{}
 
 func (mintWorkspace) SettingsPath(context.Context, *api.Session) string { return "" }
+func (mintWorkspace) Roots(context.Context, *api.Session) ([]projectroot.RootRef, error) {
+	return nil, nil
+}

@@ -45,3 +45,11 @@ values:
     comment: The `[fmt]` section of Foundry's `foundry.toml`.
   - id: taplo
     comment: Taplo `taplo.toml` and `.taplo.toml`.
+  - id: golangci
+    comment: golangci-lint `.golangci.yml` and `.golangci.yaml`.
+  - id: mix_format
+    comment: Elixir `mix format` `.formatter.exs`.
+  - id: phpcs
+    comment: PHP_CodeSniffer `phpcs.xml`, `.phpcs.xml`, `phpcs.xml.dist`, and `.phpcs.xml.dist`.
+  - id: checkstyle
+    comment: Checkstyle `checkstyle.xml` and `config/checkstyle/checkstyle.xml`.

@@ -2,6 +2,7 @@ package api
 
 import (
 	"crypto/sha1" //nolint:gosec // RFC 9562 version 5 names an identity; it protects nothing.
+	"encoding/json"
 	"fmt"
 	"strings"
 )
@@ -57,22 +58,61 @@ func isPolicyFeedbackMessage(msg Message) bool {
 		msg.Origin == MessageOriginHost && msg.Authority == ContentAuthoritySystem
 }
 
-// dropConsumedPolicyFeedback removes non-blocking policy feedback advisories once a
-// subsequent assistant turn or new user intent has superseded them.
+// PolicyFeedbackRetainNextTurn keeps a post-turn policy advisory in prompt
+// history until the session delivers its next final assistant reply.
+const PolicyFeedbackRetainNextTurn = "next_turn"
+
+type policyFeedbackMeta struct {
+	Retain string `json:"retain"`
+}
+
+func retainsPolicyFeedbackForNextTurn(msg Message) bool {
+	for _, part := range msg.ContentParts {
+		if part.Source != "policy_feedback" {
+			continue
+		}
+		var meta policyFeedbackMeta
+		if json.Unmarshal([]byte(part.Content), &meta) == nil &&
+			meta.Retain == PolicyFeedbackRetainNextTurn {
+			return true
+		}
+	}
+	return false
+}
+
+func isConsumedPolicyFeedback(msg Message, idx, lastFinalAssistant, lastBoundary int) bool {
+	if !isPolicyFeedbackMessage(msg) {
+		return false
+	}
+	if retainsPolicyFeedbackForNextTurn(msg) {
+		return idx < lastFinalAssistant
+	}
+	return idx < lastBoundary
+}
+
+// dropConsumedPolicyFeedback removes non-blocking policy advisories once superseded.
+// Advisories marked next_turn stay across the next turn's tool steps until its final reply.
 func dropConsumedPolicyFeedback(messages []Message) []Message {
-	consumedBefore := -1
+	lastFinalAssistant := -1
+	lastBoundary := -1
 	for i := len(messages) - 1; i >= 0; i-- {
-		if (messages[i].Role == MessageRoleAssistant && !IsAgentNoteMessage(messages[i])) || IsUserIntentMessage(messages[i]) {
-			consumedBefore = i
+		isAssistant := messages[i].Role == MessageRoleAssistant && !IsAgentNoteMessage(messages[i])
+		if isAssistant && len(messages[i].ToolCalls) == 0 && lastFinalAssistant < 0 {
+			lastFinalAssistant = i
+		}
+		if (isAssistant || IsUserIntentMessage(messages[i])) && lastBoundary < 0 {
+			lastBoundary = i
+		}
+		if lastFinalAssistant >= 0 && lastBoundary >= 0 {
 			break
 		}
 	}
-	if consumedBefore <= 0 {
+	if lastBoundary <= 0 {
 		return messages
 	}
 	hasConsumed := false
-	for i := 0; i < consumedBefore; i++ {
-		if isPolicyFeedbackMessage(messages[i]) {
+	for i := 0; i < lastBoundary; i++ {
+		if isConsumedPolicyFeedback(messages[i], i, lastFinalAssistant, lastBoundary) {
 			hasConsumed = true
 			break
 		}
@@ -82,7 +122,7 @@ func dropConsumedPolicyFeedback(messages []Message) []Message {
 	}
 	out := make([]Message, 0, len(messages))
 	for i, msg := range messages {
-		if i < consumedBefore && isPolicyFeedbackMessage(msg) {
+		if isConsumedPolicyFeedback(messages[i], i, lastFinalAssistant, lastBoundary) {
 			continue
 		}
 		out = append(out, msg)
