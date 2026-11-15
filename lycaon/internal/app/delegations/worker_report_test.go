@@ -122,7 +122,7 @@ func TestReviewSubjectNamesResolvesSubjectWorkerAndResult(t *testing.T) {
 	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
 	runtime := New(database, nil, worker.WorkersConfig{})
 	records := workerrecords.New(database)
-	actor := workerrecords.Actor{SessionID: "parent", Role: workerrecords.RoleCoordinator}
+	actor := workerrecords.Actor{SessionID: "parent", Role: workerrecords.RoleCoordinator, PrincipalID: "parent"}
 
 	if w, r, ok, err := reviewSubjectNames(t.Context(), records, "missing-job"); err != nil || ok || w != "" || r != "" {
 		t.Fatalf("missing job misreported: w=%q r=%q ok=%v err=%v", w, r, ok, err)
