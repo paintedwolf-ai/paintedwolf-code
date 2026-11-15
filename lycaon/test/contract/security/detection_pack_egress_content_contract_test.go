@@ -178,7 +178,7 @@ func TestDetectionPackApiActionFromArgvAST(t *testing.T) {
 	}
 }
 
-// TestDetectionPackConnectHoldComposition exercises exported confine setters + DecideAttributedHost.
+// TestDetectionPackConnectHoldComposition exercises exported confine setters and attributed-host decisions.
 // Not parallel: mutates process-wide egress broker state.
 func TestDetectionPackConnectHoldComposition(t *testing.T) {
 	confine.SetEgressPosture(confine.PostureObserve)
