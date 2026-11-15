@@ -129,7 +129,6 @@ export function ProjectArtifactsView(props: Props) {
       if (args.chat !== "all") query.session_id = args.chat;
       return c.listProjectArtifacts(args.projectId, query);
     },
-    required: false,
   });
   const refetchList = artifacts.refresh;
   const displayedPage = () => artifacts.displayed()?.source.args.page ?? 0;
@@ -146,8 +145,15 @@ export function ProjectArtifactsView(props: Props) {
   const items = createMemo(() => artifacts.value()?.artifacts ?? []);
   const hasActiveFilter = () =>
     sourceFilter() !== "all" || chatFilter() !== "all";
+  // Cursor follow-up pages omit facets, so keep the last session list for this project.
+  const retainedSessions = createMemo<readonly string[]>((previous) => {
+    const displayed = artifacts.displayed();
+    const pid = props.projectId.trim();
+    if (!displayed || displayed.source.args.projectId !== pid) return [];
+    return displayed.value.facets?.session_ids ?? previous;
+  }, []);
   const chatOptions = createMemo(() => {
-    const sessions = artifacts.value()?.facets?.session_ids ?? [];
+    const sessions = retainedSessions();
     const active = chatFilter();
     if (active !== "all" && !sessions.includes(active)) {
       return [active, ...sessions];
@@ -316,11 +322,7 @@ export function ProjectArtifactsView(props: Props) {
         scrollHost="content"
         contentReady={artifacts.ready}
         title="Artifacts"
-        error={
-          artifacts.error() !== undefined
-            ? artifacts.error()
-            : undefined
-        }
+        error={artifacts.error()}
         errorTestId="project-artifacts-error"
         chips={
           <div

@@ -175,18 +175,22 @@ describe("ProjectArtifactsView", () => {
     expect(badges.map((el) => el.textContent)).toEqual(["Render", "Capture", "User"]);
   });
 
-  it("pages through the opaque cursor, keeps prior pages available, and steps back when a later page empties", async () => {
+  it("pages through the opaque cursor, retains Page 1 session facets, surfaces page errors, and steps back when empty", async () => {
     const items = fixtureItems();
     let page2Items = [items[2]!];
-    listProjectArtifacts.mockImplementation(
-      async (_pid: string, query?: { cursor?: string }) =>
-        query?.cursor === "cursor-1"
-          ? { artifacts: page2Items }
-          : { artifacts: items.slice(0, 2), next_cursor: page2Items.length > 0 ? "cursor-1" : undefined },
-    );
-    deleteProjectArtifact.mockImplementation(async () => {
-      page2Items = [];
+    let failPage2 = true;
+    listProjectArtifacts.mockImplementation(async (_pid: string, query?: { cursor?: string }) => {
+      if (query?.cursor === "cursor-1") {
+        if (failPage2) throw new Error("page 2 failed");
+        return { artifacts: page2Items };
+      }
+      return {
+        artifacts: items.slice(0, 2),
+        next_cursor: page2Items.length > 0 ? "cursor-1" : undefined,
+        facets: { session_ids: FIXTURE_SESSIONS },
+      };
     });
+    deleteProjectArtifact.mockImplementation(async () => { page2Items = []; });
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
     render(() => <ProjectArtifactsView projectId="proj-1" appStore={appStore} />);
@@ -199,12 +203,23 @@ describe("ProjectArtifactsView", () => {
     expect(gallery.contains(screen.getByTestId("project-artifacts-pager"))).toBe(false);
 
     fireEvent.click(screen.getByTestId("project-artifacts-pager-next"));
+    expect((await screen.findByTestId("project-artifacts-error")).textContent).toBe("page 2 failed");
+    expect(screen.getAllByTestId("project-artifact-tile")).toHaveLength(2);
+    expect(screen.getByText("Page 1")).toBeTruthy();
+    fireEvent.click(screen.getByTestId("project-artifacts-pager-prev"));
+    expect(screen.queryByTestId("project-artifacts-error")).toBeNull();
+
+    failPage2 = false;
+    fireEvent.click(screen.getByTestId("project-artifacts-pager-next"));
     await waitFor(() => {
       expect(listProjectArtifacts).toHaveBeenLastCalledWith("proj-1", { limit: 12, cursor: "cursor-1" });
       expect(screen.getAllByTestId("project-artifact-tile")).toHaveLength(1);
     });
     expect(screen.getByText("Page 2")).toBeTruthy();
     expect(screen.getByTestId("project-artifacts-pager-next").hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByTestId("project-artifacts-chat-filter"));
+    expect(screen.getAllByRole("option").map((el) => el.getAttribute("data-value"))).toEqual(["all", ...FIXTURE_SESSIONS]);
+    fireEvent.keyDown(document, { key: "Escape" });
 
     fireEvent.click(screen.getByTestId("project-artifacts-pager-prev"));
     expect(screen.getAllByTestId("project-artifact-tile")).toHaveLength(2);
@@ -323,36 +338,24 @@ describe("ProjectArtifactsView", () => {
   it("narrows the grid via server source and chat filters and shows filter-empty copy", async () => {
     const all = fixtureItems();
     listProjectArtifacts.mockImplementation(
-      async (
-        _pid: string,
-        query?: { source?: VisualArtifactSource; session_id?: string },
-      ) => ({
+      async (_pid: string, query?: { source?: VisualArtifactSource; session_id?: string }) => ({
         artifacts: all.filter(
-          (item) =>
-            (!query?.source || item.source === query.source) &&
-            (!query?.session_id || item.session_id === query.session_id),
+          (item) => (!query?.source || item.source === query.source) && (!query?.session_id || item.session_id === query.session_id),
         ),
         facets: { session_ids: FIXTURE_SESSIONS },
       }),
     );
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
-    render(() => (
-      <ProjectArtifactsView projectId="proj-1" appStore={appStore} />
-    ));
+    render(() => <ProjectArtifactsView projectId="proj-1" appStore={appStore} />);
     await screen.findByTestId("project-artifacts-gallery");
 
     fireEvent.click(screen.getByTestId("project-artifacts-source-capture"));
     await waitFor(() => {
-      expect(listProjectArtifacts).toHaveBeenLastCalledWith("proj-1", {
-        limit: 12,
-        source: "capture",
-      });
+      expect(listProjectArtifacts).toHaveBeenLastCalledWith("proj-1", { limit: 12, source: "capture" });
       expect(screen.getAllByTestId("project-artifact-tile")).toHaveLength(1);
     });
-    expect(
-      screen.getByTestId("project-artifact-tile").getAttribute("data-artifact-id"),
-    ).toBe("art-capture");
+    expect(screen.getByTestId("project-artifact-tile").getAttribute("data-artifact-id")).toBe("art-capture");
 
     fireEvent.click(screen.getByTestId("project-artifacts-source-workspace"));
     expect(await screen.findByTestId("project-artifacts-filter-empty")).toBeTruthy();
@@ -360,25 +363,14 @@ describe("ProjectArtifactsView", () => {
 
     fireEvent.click(screen.getByTestId("project-artifacts-source-all"));
     fireEvent.click(screen.getByTestId("project-artifacts-chat-filter"));
-    const chat = screen
-      .getAllByRole("option")
-      .find(
-        (option) =>
-          option.getAttribute("data-value") ===
-          "sess-eeee-ffff-0000-111111111111",
-      );
+    const chat = screen.getAllByRole("option").find((opt) => opt.getAttribute("data-value") === "sess-eeee-ffff-0000-111111111111");
     if (!chat) throw new Error("Missing chat filter option");
     fireEvent.click(chat);
     await waitFor(() => {
-      expect(listProjectArtifacts).toHaveBeenLastCalledWith("proj-1", {
-        limit: 12,
-        session_id: "sess-eeee-ffff-0000-111111111111",
-      });
+      expect(listProjectArtifacts).toHaveBeenLastCalledWith("proj-1", { limit: 12, session_id: "sess-eeee-ffff-0000-111111111111" });
       expect(screen.getAllByTestId("project-artifact-tile")).toHaveLength(1);
     });
-    expect(
-      screen.getByTestId("project-artifact-tile").getAttribute("data-artifact-id"),
-    ).toBe("art-capture");
+    expect(screen.getByTestId("project-artifact-tile").getAttribute("data-artifact-id")).toBe("art-capture");
   });
 
   it("opens lightbox on tile click and reveals in transcript", async () => {
