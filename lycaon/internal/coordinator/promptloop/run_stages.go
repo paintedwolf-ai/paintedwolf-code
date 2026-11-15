@@ -285,7 +285,9 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			return l.Closeout.applyAcceptedCloseoutReport(ctx, sess, sessionID, userPrompt, surfaceID, st, assistantMsg, read)
 		}
 	} else {
-		st.toollessResponses = 0
+		if st != nil {
+			st.toollessResponses = 0
+		}
 		settleRetained := l.Closeout.keepRetainedForObservers(ctx, sessionID, st, completion.ToolCalls)
 		if st != nil && st.turnID != "" && st.attemptID != "" && l.Projection.Deps.CheckpointTurn != nil {
 			checkpoint := fmt.Sprintf(`{"model_output_id":%q,"assistant_message_id":%q}`, st.output.id, assistantMsg.ID)
