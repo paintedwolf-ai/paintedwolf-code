@@ -20,7 +20,7 @@ func realLane(t *testing.T) (*roundFixture, []projectroot.RootRef) {
 	f.lanes = workerlane.New(mgr, f.records)
 	project := t.TempDir()
 	testutil.FailErr(t, "seed project", os.WriteFile(filepath.Join(project, "main.go"), []byte("package main\n"), 0o644))
-	return f, []projectroot.RootRef{{ID: "primary", Path: project, IsPrimary: true}}
+	return f, []projectroot.RootRef{{ID: "primary", Label: "primary", Path: project, IsPrimary: true}}
 }
 
 func primaryPath(t *testing.T, branchRoot string) string {
