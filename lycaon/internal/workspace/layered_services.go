@@ -95,7 +95,6 @@ func (m *Manager) openLayeredServices() (*layeredServices, error) {
 	if strings.TrimSpace(m.branchRoot) == "" {
 		return nil, fmt.Errorf("worker branch root is unavailable")
 	}
-	stateDir := filepath.Join(m.branchRoot, adapterRuntimeDirName)
 	gitManager := m.privateGit
 	if gitManager == nil {
 		var err error
@@ -106,13 +105,14 @@ func (m *Manager) openLayeredServices() (*layeredServices, error) {
 	}
 	claims := m.recovery
 	if claims == nil {
-		recoveryDir := filepath.Join(stateDir, "recovery")
-		store, err := checkpoint.NewStore(filepath.Join(recoveryDir, "checkpoints"))
+		// Without the engine's coordinator, open one at the same place the engine keeps it.
+		recoveryRoot := enginepaths.WorkerRecoveryRootUnder(m.stateRoot)
+		store, err := checkpoint.NewStore(filepath.Join(recoveryRoot, "checkpoints"))
 		if err != nil {
 			return nil, err
 		}
 		claims, err = recovery.NewCoordinator(recovery.CoordinatorConfig{
-			RootDir: recoveryDir, CheckpointStore: store, GitStore: gitManager.Store(), GitManager: gitManager,
+			RootDir: filepath.Join(recoveryRoot, "state"), CheckpointStore: store, GitStore: gitManager.Store(), GitManager: gitManager,
 			ProcessCtrl: recovery.RecordedProcessController{},
 		})
 		if err != nil {
@@ -343,6 +343,10 @@ func BranchCheckpoint(branchRoot string) (storeDir, checkpointID string, ok bool
 		return "", "", false
 	}
 	storeDir = branchCheckpointStoreDir(clean, meta, meta.LastPublishedCheckpointID)
+	if storeDir == "" {
+		// A recorded checkpoint that is gone stays named, so loading it fails instead of finding none.
+		storeDir = meta.CheckpointStoreDir
+	}
 	return storeDir, meta.LastPublishedCheckpointID, storeDir != ""
 }
 
