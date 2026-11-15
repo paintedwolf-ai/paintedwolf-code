@@ -501,14 +501,31 @@ func mergeAuthorUnits(ctx context.Context, engine *FileTemplateEngine, vars map[
 	if err != nil {
 		return fmt.Errorf("unit catalog: %w", err)
 	}
-	var offered []string
+	held := make(map[string]bool)
 	for key, value := range vars {
 		if name, ok := strings.CutPrefix(key, "profile_has_"); ok && value == true {
-			offered = append(offered, name)
+			held[name] = true
 		}
 	}
+	if canRequest, ok := vars["profile_can_request"].(map[string]bool); ok {
+		for name, ok := range canRequest {
+			if ok {
+				held[name] = true
+			}
+		}
+	}
+	if vars["profile_command_mutation"] == true {
+		held[toolcontract.ReachCommandMutation] = true
+	}
+	if vars["profile_command_external_exec"] == true {
+		held[toolcontract.ReachCommandExternalExec] = true
+		held[toolcontract.ReachCommandExternalExecSelector] = true
+	}
+	if vars["profile_command_network_egress"] == true {
+		held[toolcontract.ReachCommandNetworkEgress] = true
+	}
 	mode, _ := vars["execution_mode"].(string)
-	sel := UnitSelectionVars(promptunit.HostCoordinator, mode, offered)
+	sel := promptunit.Selection{Host: promptunit.HostCoordinator, Mode: strings.TrimSpace(mode), Held: held}
 	blocks, err := RenderUnitSlots(ctx, UnitRendererFor(engine), catalog, sel, vars)
 	if err != nil {
 		return err

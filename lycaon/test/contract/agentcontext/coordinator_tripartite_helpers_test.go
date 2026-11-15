@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -186,7 +187,21 @@ func mergeWidestUnitBlocks(t *testing.T, engine prompts.PromptTemplateEngine, su
 		contractcheck.FailErr(t, "filter loadable for root count", err)
 	}
 	offered := append(append([]string(nil), floor...), loadable...)
-	sel := prompts.UnitSelectionVars(promptunit.HostCoordinator, surface.ExecutionModeFamily(surfaceID), offered)
+	held := make(map[string]bool, len(offered)+4)
+	for _, name := range offered {
+		held[name] = true
+	}
+	if vars["profile_command_mutation"] == true {
+		held[toolcontract.ReachCommandMutation] = true
+	}
+	if vars["profile_command_external_exec"] == true {
+		held[toolcontract.ReachCommandExternalExec] = true
+		held[toolcontract.ReachCommandExternalExecSelector] = true
+	}
+	if vars["profile_command_network_egress"] == true {
+		held[toolcontract.ReachCommandNetworkEgress] = true
+	}
+	sel := promptunit.Selection{Host: promptunit.HostCoordinator, Mode: surface.ExecutionModeFamily(surfaceID), Held: held}
 	blocks, err := prompts.RenderUnitSlots(context.Background(), prompts.UnitRendererFor(engine), catalog, sel, vars)
 	contractcheck.FailErr(t, "render unit slots", err)
 	prompts.MergeUnitVars(vars, blocks)

@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -124,20 +123,11 @@ func RenderPromptDump(
 		return "", fmt.Errorf("merge coordinator prompt vars: %w", err)
 	}
 
-	// The fixture is the widest prompt the surface can render: every loadable
-	// tool counts as offered, so every unit that could join the turn does.
-	floor, _ := base["surface_offered"].([]string)
-	loadable, err := prompts.LoadCoordinatorSurfaceLoadable(profile.SurfaceID)
-	if err != nil {
-		return "", fmt.Errorf("surface loadable: %w", err)
-	}
-	offered := append(append([]string(nil), floor...), loadable...)
 	unitCatalog, err := prompts.UnitCatalogForEngine(engine)
 	if err != nil {
 		return "", fmt.Errorf("unit catalog: %w", err)
 	}
-	sel := prompts.UnitSelectionVars(promptunit.HostCoordinator, current, offered)
-	blocks, err := prompts.RenderUnitSlots(ctx, prompts.UnitRendererFor(engine), unitCatalog, sel, base)
+	blocks, err := prompts.RenderUnitSlots(ctx, prompts.UnitRendererFor(engine), unitCatalog, reader.Selection(), base)
 	if err != nil {
 		return "", fmt.Errorf("render units: %w", err)
 	}

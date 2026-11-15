@@ -177,6 +177,9 @@ func Parse(stem string, content []byte) (Unit, error) {
 	if err != nil {
 		return Unit{}, err
 	}
+	if err := validateAttaches(stem, attaches); err != nil {
+		return Unit{}, err
+	}
 	modes, err := names(stem, "modes", fm.Modes)
 	if err != nil {
 		return Unit{}, err

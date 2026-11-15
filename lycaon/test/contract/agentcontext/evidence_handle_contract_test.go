@@ -39,10 +39,6 @@ func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 		maps.Copy(vars, prompts.VisibleToolsNativePartialVars(state.offered))
 		prompts.MergeVisualShowVars(state.offered, state.requestable, vars)
 		vars["is_coordinator"] = state.host == promptunit.HostCoordinator
-		offered := map[string]bool{}
-		for _, tool := range state.offered {
-			offered[tool] = true
-		}
 		allTools := map[string]bool{}
 		for _, tool := range slices.Concat(state.offered, state.requestable) {
 			allTools[tool] = true
@@ -50,6 +46,10 @@ func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 		deferred := map[string]bool{}
 		for _, tool := range state.requestable {
 			deferred[tool] = true
+		}
+		offered := map[string]bool{}
+		for _, tool := range state.offered {
+			offered[tool] = true
 		}
 		profileID := "synthetic"
 		if state.host == promptunit.HostCoordinator {
@@ -73,7 +73,7 @@ func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 		})
 		contractcheck.FailErr(t, "build state reader", err)
 		held := reader.Held()
-		selection := promptunit.Selection{Host: state.host, Mode: state.mode, Offered: offered}
+		selection := reader.Selection()
 		for _, slot := range units.Rendered(selection) {
 			for _, unit := range slot {
 				if !unit.Stock {

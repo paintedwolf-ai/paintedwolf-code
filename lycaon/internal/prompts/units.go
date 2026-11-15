@@ -71,16 +71,6 @@ func UnitCatalogFor(eff *extpacks.EffectiveCatalog) (promptunit.Catalog, error) 
 	return promptunit.LoadCached(eff)
 }
 
-// UnitSelectionVars builds the selection for host from the tool names a
-// render offers.
-func UnitSelectionVars(host promptunit.Host, mode string, offered []string) promptunit.Selection {
-	return promptunit.Selection{
-		Host:    host,
-		Mode:    strings.TrimSpace(mode),
-		Offered: toolNameSet(offered),
-	}
-}
-
 // UnitRendererFor adapts a prompt engine to the unit renderer.
 func UnitRendererFor(engine PromptTemplateEngine) UnitRenderer {
 	if engine == nil {
