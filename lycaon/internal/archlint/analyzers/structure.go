@@ -9,11 +9,12 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
-// SelfEmbed reports a struct that embeds another struct of its own package
-// carrying methods, which splits one receiver's methods across types.
+// SelfEmbed reports a struct with methods that embeds a pointer to another
+// struct of its own package with methods: one receiver's methods split across
+// types.
 var SelfEmbed = &analysis.Analyzer{
 	Name: "selfembed",
-	Doc:  "report structs embedding a same-package struct with methods",
+	Doc:  "report structs with methods embedding a pointer to a same-package struct with methods",
 	Run:  runSelfEmbed,
 }
 
@@ -28,8 +29,12 @@ func runSelfEmbed(pass *analysis.Pass) (any, error) {
 			if !ok {
 				return false
 			}
+			self, ok := pass.TypesInfo.Defs[spec.Name].(*types.TypeName)
+			if !ok || !hasOwnMethods(self.Type()) {
+				return false
+			}
 			for _, field := range st.Fields.List {
-				if len(field.Names) > 0 {
+				if _, isPtr := field.Type.(*ast.StarExpr); len(field.Names) > 0 || !isPtr {
 					continue
 				}
 				named := namedOf(pass.TypesInfo.TypeOf(field.Type))
@@ -39,7 +44,7 @@ func runSelfEmbed(pass *analysis.Pass) (any, error) {
 				if _, isStruct := named.Underlying().(*types.Struct); !isStruct {
 					continue
 				}
-				if types.NewMethodSet(types.NewPointer(named)).Len() > 0 {
+				if hasOwnMethods(named) {
 					pass.Reportf(field.Pos(), "%s embeds %s from its own package", spec.Name.Name, named.Obj().Name())
 				}
 			}
@@ -49,8 +54,9 @@ func runSelfEmbed(pass *analysis.Pass) (any, error) {
 	return nil, nil
 }
 
-// CopyDrop reports a struct literal built from several fields of one value
-// that omits a field both types share with the same type.
+// CopyDrop reports a struct literal built from several fields of one value of
+// a same-named type, such as a twin in another package, that omits a field
+// both types share with the same type.
 var CopyDrop = &analysis.Analyzer{
 	Name: "copydrop",
 	Doc:  "report struct literals copying from one value that drop a shared field",
@@ -95,7 +101,7 @@ func runCopyDrop(pass *analysis.Pass) (any, error) {
 					continue
 				}
 				source := namedOf(v.Type())
-				if source == nil {
+				if source == nil || source.Obj().Name() != target.Obj().Name() {
 					continue
 				}
 				sourceStruct, ok := source.Underlying().(*types.Struct)
@@ -149,6 +155,12 @@ func runTestImport(pass *analysis.Pass) (any, error) {
 		}
 	}
 	return nil, nil
+}
+
+// hasOwnMethods reports methods declared on the named type itself.
+func hasOwnMethods(t types.Type) bool {
+	named, ok := types.Unalias(t).(*types.Named)
+	return ok && named.NumMethods() > 0
 }
 
 func namedOf(t types.Type) *types.Named {

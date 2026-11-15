@@ -38,6 +38,7 @@ var (
 	handlerBlock   = regexp.MustCompile(`(?s)generate_handler!\[(.*?)\]`)
 	rustComment    = regexp.MustCompile(`(?m)//.*$`)
 	rustAttribute  = regexp.MustCompile(`#\[[^\]]*\]`)
+	commandRename  = regexp.MustCompile(`(?s)#\[tauri::command\(\s*rename\s*=\s*"([^"]+)"[^\]]*\)\]\s*(?:#\[[^\]]*\]\s*)*pub(?:\([a-z]+\))?\s+(?:async\s+)?fn\s+([A-Za-z0-9_]+)`)
 	invokeLiteral  = regexp.MustCompile(`\binvoke(?:<[^>()]*>)?\(\s*["']([A-Za-z0-9_]+)["']`)
 	stringLiteral  = regexp.MustCompile(`["']([a-z][a-z0-9_]*)["']`)
 	permissionID   = regexp.MustCompile(`(?m)^\s*identifier\s*=\s*"([^"]+)"`)
@@ -53,7 +54,17 @@ func Tauri(root string, layout TauriLayout) ([]archlint.Finding, error) {
 	if err != nil {
 		return nil, err
 	}
-	commands := registeredCommands(string(handler))
+	renames, err := commandRenames(filepath.Dir(filepath.Join(root, layout.Handler)))
+	if err != nil {
+		return nil, err
+	}
+	var commands []string
+	for _, fn := range registeredCommands(string(handler)) {
+		if name, ok := renames[fn]; ok {
+			fn = name
+		}
+		commands = append(commands, fn)
+	}
 
 	named := map[string]bool{}
 	type invoke struct{ name, pos string }
@@ -133,6 +144,26 @@ func registeredCommands(src string) []string {
 		out = append(out, entry)
 	}
 	return out
+}
+
+// commandRenames maps Rust functions to the names their command attribute
+// gives them.
+func commandRenames(dir string) (map[string]string, error) {
+	out := map[string]string{}
+	err := filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || filepath.Ext(p) != ".rs" {
+			return err
+		}
+		raw, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		for _, m := range commandRename.FindAllStringSubmatch(string(raw), -1) {
+			out[m[2]] = m[1]
+		}
+		return nil
+	})
+	return out, err
 }
 
 // permittedCommands are the commands some permission allows when a capability
