@@ -165,7 +165,7 @@ A database table is not automatically a fact. Classification depends on whether 
 
 Projection updates happen in the source transaction when cheap and deterministic. Otherwise the source transaction writes a durable repair marker or reconciliation can find the missing projection from facts.
 
-Streaming uses a deliberately different shape. `live_model_outputs` is one bounded replaceable row per active output. Settlement copies the final bytes and structured calls into immutable `model_outputs`, removes the live row, and only then projects transcript/search state. Startup deletes abandoned live rows and repairs only settled outputs missing a projection acknowledgement; it never scans or replays the whole transcript.
+Streaming uses a deliberately different shape. Streaming prose and in-flight tool calls patch the transcript message in place without advancing its sequence or enqueuing an outbox event. Settlement records the final bytes and structured calls once in immutable `model_outputs`, and only then projects transcript/search state. Startup repairs only settled outputs missing a projection acknowledgement; it never scans or replays the whole transcript.
 
 Coordinator retries retain a stable draft row and its version rail. Recovery guidance carries a host-written draft reference in `host_signal_id` and persists before retrying. The shared model-history projection places that guidance before the replacement draft and its tool-result group; stored ordinals, transcript pagination, and the visible rail remain unchanged. Compaction consumes the same ordered projection and retains the reference when rehydrating surviving rows.
 
