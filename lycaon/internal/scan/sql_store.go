@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"sync"
 	"time"
 
@@ -118,7 +119,7 @@ func (s *sqlCore) Insert(ctx context.Context, scan api.CodeScan, paths []string,
 			LeaseExpiresAt:    db.NullTimePtr(scan.LeaseExpiresAt),
 			Status:            string(scan.Status),
 			ResultJson:        resultJSON,
-			CreatedAt:         db.FormatTime(scan.CreatedAt),
+			CreatedAt:         timelayout.Format(scan.CreatedAt),
 			DelegationID:      scan.DelegationID,
 			HeadSha:           scan.HeadSHA,
 			SourceSnapshotID:  scan.SourceSnapshotID,

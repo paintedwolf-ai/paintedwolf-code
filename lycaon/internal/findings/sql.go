@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -37,7 +38,7 @@ func (s *SQLStore) Append(ctx context.Context, sessionID, agent, summary, ref, b
 		Summary:   summary,
 		Body:      body,
 		Ref:       ref,
-		CreatedAt: db.FormatTime(time.Now().UTC()),
+		CreatedAt: timelayout.Format(time.Now().UTC()),
 	})
 	if err != nil {
 		return false, err
@@ -66,7 +67,7 @@ func (s *SQLStore) Recent(ctx context.Context, sessionID, excludeAgent string, a
 	} else {
 		rows, err := s.queries.ListFindingsSinceAfterID(ctx, db.ListFindingsSinceAfterIDParams{
 			SessionID:    key,
-			CreatedAt:    db.FormatTime(since.UTC()),
+			CreatedAt:    timelayout.Format(since.UTC()),
 			ExcludeAgent: strings.TrimSpace(excludeAgent),
 			ID:           afterID,
 		})

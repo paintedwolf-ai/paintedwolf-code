@@ -1,29 +1,13 @@
 package httpaction
 
 import (
-	"context"
 	"net/url"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/egress"
-	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretcap"
 )
-
-// ExchangeProvenance summarizes external HTTP provenance for a completed command exchange.
-type ExchangeProvenance = evidence.ExchangeProvenance
-
-// WithExchangeProvenanceObserver attaches a callback that receives ExchangeProvenance
-// for each HTTP exchange completed within ctx.
-func WithExchangeProvenanceObserver(ctx context.Context, fn func(ExchangeProvenance)) context.Context {
-	return evidence.WithExchangeProvenanceObserver(ctx, fn)
-}
-
-// ReportExchangeProvenance notifies the context's exchange provenance observer, if any.
-func ReportExchangeProvenance(ctx context.Context, p ExchangeProvenance) {
-	evidence.ReportExchangeProvenance(ctx, p)
-}
 
 func hopIsLocal(target *url.URL, resolve []outboundhttp.ResolveMapping) bool {
 	if target == nil || !egress.SyntacticLoopback(target.Hostname()) {

@@ -4,9 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strconv"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -97,5 +97,5 @@ func chainTimestamp(c Context) string {
 	if c.SealedAt.IsZero() {
 		return ""
 	}
-	return db.FormatTime(c.SealedAt)
+	return timelayout.Format(c.SealedAt)
 }

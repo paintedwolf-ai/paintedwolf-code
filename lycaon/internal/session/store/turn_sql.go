@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -68,14 +69,14 @@ func beginTurnSQL(ctx context.Context, s *sqlCore, in TurnStart) (TurnExecution,
 	if err := q.InsertTurn(ctx, db.InsertTurnParams{
 		ID: in.ID, SessionID: in.SessionID, ProjectID: in.ProjectID,
 		Origin: string(in.Origin), InputJson: in.InputJSON,
-		ActiveAttemptID: db.NullString(attemptID), CreatedAt: db.FormatTime(now), UpdatedAt: db.FormatTime(now),
-		ProgressedAt: db.FormatTime(now),
+		ActiveAttemptID: db.NullString(attemptID), CreatedAt: timelayout.Format(now), UpdatedAt: timelayout.Format(now),
+		ProgressedAt: timelayout.Format(now),
 	}); err != nil {
 		return TurnExecution{}, fmt.Errorf("insert turn: %w", err)
 	}
 	if err := q.InsertTurnAttempt(ctx, db.InsertTurnAttemptParams{
 		ID: attemptID, TurnID: in.ID, Attempt: 1,
-		StartedAt: db.FormatTime(now), UpdatedAt: db.FormatTime(now),
+		StartedAt: timelayout.Format(now), UpdatedAt: timelayout.Format(now),
 	}); err != nil {
 		return TurnExecution{}, fmt.Errorf("insert turn attempt: %w", err)
 	}
@@ -146,12 +147,12 @@ func resumeTurnTx(
 	}
 	if err := q.InsertTurnAttempt(ctx, db.InsertTurnAttemptParams{
 		ID: attemptID, TurnID: turnID, Attempt: nextAttempt,
-		StartedAt: db.FormatTime(now), UpdatedAt: db.FormatTime(now),
+		StartedAt: timelayout.Format(now), UpdatedAt: timelayout.Format(now),
 	}); err != nil {
 		return TurnExecution{}, err
 	}
 	rows, err := q.ResumeTurn(ctx, db.ResumeTurnParams{
-		ActiveAttemptID: db.NullString(attemptID), UpdatedAt: db.FormatTime(now), ID: turnID,
+		ActiveAttemptID: db.NullString(attemptID), UpdatedAt: timelayout.Format(now), ID: turnID,
 	})
 	if err != nil {
 		return TurnExecution{}, err
@@ -187,7 +188,7 @@ func (t *sqlTurns) CheckpointTurn(ctx context.Context, turnID, attemptID string,
 	if strings.TrimSpace(checkpointJSON) == "" {
 		checkpointJSON = "{}"
 	}
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -214,7 +215,7 @@ func (t *sqlTurns) ProjectLiveModelOutput(ctx context.Context, out LiveModelOutp
 		ID: out.ID, TurnAttemptID: out.TurnAttemptID, SessionID: out.SessionID,
 		Iteration: int64(out.Iteration), MessageID: out.MessageID, Content: out.Content,
 		ToolCallsJson: db.NullString(out.ToolCallsJSON), ReasoningJson: db.NullString(out.ReasoningJSON),
-		CreatedAt: db.FormatTime(out.CreatedAt), UpdatedAt: db.FormatTime(now),
+		CreatedAt: timelayout.Format(out.CreatedAt), UpdatedAt: timelayout.Format(now),
 	})
 }
 
@@ -296,7 +297,7 @@ func insertSettledModelOutput(ctx context.Context, q *db.Queries, out ModelOutpu
 		ID: out.ID, TurnAttemptID: out.TurnAttemptID, SessionID: out.SessionID, ProjectID: projectID,
 		Iteration: int64(out.Iteration), MessageID: out.MessageID, ProviderID: out.ProviderID,
 		Model: out.Model, ContentBlobSha256: sha, FinishReason: out.FinishReason, Scripted: boolInt(out.Scripted),
-		CreatedAt: db.FormatTime(out.CreatedAt), SettledAt: db.FormatTime(out.SettledAt),
+		CreatedAt: timelayout.Format(out.CreatedAt), SettledAt: timelayout.Format(out.SettledAt),
 	})
 	if err != nil && db.IsUniqueConstraint(err) {
 		return &ModelOutputIterationCollisionError{TurnAttemptID: out.TurnAttemptID, Iteration: out.Iteration}

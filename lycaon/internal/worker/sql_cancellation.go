@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,7 +36,7 @@ func (s *SQLStore) CancelJob(ctx context.Context, id string, result *api.WorkerR
 		return false, err
 	}
 
-	completedAt := db.FormatTime(time.Now().UTC())
+	completedAt := timelayout.Format(time.Now().UTC())
 	n, err := q.CancelWorkerJob(ctx, db.CancelWorkerJobParams{
 		ResultJson:  resultJSON,
 		CompletedAt: sql.NullString{String: completedAt, Valid: true},

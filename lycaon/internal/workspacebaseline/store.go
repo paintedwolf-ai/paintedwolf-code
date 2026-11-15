@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -334,7 +335,7 @@ func (s *Store) seal(ctx context.Context, jobID string, fill func(context.Contex
 		return "", err
 	}
 	if s.db != nil {
-		err = s.queries.InsertWorkerBaseline(ctx, db.InsertWorkerBaselineParams{ID: id, JobID: jobID, CreatedAt: db.FormatTime(time.Now())})
+		err = s.queries.InsertWorkerBaseline(ctx, db.InsertWorkerBaselineParams{ID: id, JobID: jobID, CreatedAt: timelayout.Format(time.Now())})
 		if err != nil {
 			return "", err
 		}

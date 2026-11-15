@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"testing"
 	"testing/synctest"
@@ -18,7 +19,7 @@ func TestRunRetentionPreservesProjectAndSessionHistory(t *testing.T) {
 	database := openTestDB(t)
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
 	insertTestSession(t, database, "parent")
-	old := FormatTime(time.Now().UTC().Add(-400 * 24 * time.Hour))
+	old := timelayout.Format(time.Now().UTC().Add(-400 * 24 * time.Hour))
 	_, err := database.ExecContext(ctx, `
 INSERT INTO sessions(id, project_id, owner_person_id, posture, status, parent_session_id, created_at, activity_at, updated_at)
 VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'parent', ?, ?, ?);
@@ -61,7 +62,7 @@ func TestRunRetentionDisabledByEnv(t *testing.T) {
 func TestSourceRequestRetentionKeepsRecoveryReceipts(t *testing.T) {
 	database := openTestDB(t)
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
-	old := FormatTime(time.Now().UTC().Add(-40 * 24 * time.Hour))
+	old := timelayout.Format(time.Now().UTC().Add(-40 * 24 * time.Hour))
 	for _, state := range []string{"completed", "canceled", "failed", "interrupted", "running"} {
 		var completed any
 		if state != "running" {
@@ -98,8 +99,8 @@ func TestRunRetentionAgesOutOnlyTerminalOperationReceipts(t *testing.T) {
 	database := openTestDB(t)
 	testdbseed.InsertProject(t, database, testdbseed.DefaultProjectID)
 	insertTestSession(t, database, "sess-1")
-	old := FormatTime(time.Now().UTC().Add(-40 * 24 * time.Hour))
-	fresh := FormatTime(time.Now().UTC().Add(-time.Hour))
+	old := timelayout.Format(time.Now().UTC().Add(-40 * 24 * time.Hour))
+	fresh := timelayout.Format(time.Now().UTC().Add(-time.Hour))
 	seedPromptSubmissionRow(t, database, "old", 1, "complete", old)
 	seedPromptSubmissionRow(t, database, "fresh", 2, "complete", fresh)
 	seedPromptSubmissionRow(t, database, "running", 3, "running", old)
@@ -170,7 +171,7 @@ func TestRollupLLMCallIDsPreservesUnselectedReceipts(t *testing.T) {
 			t.Fatalf("unselected receipt %s was removed", id)
 		}
 	}
-	day := FormatTime(old)[:10]
+	day := timelayout.Format(old)[:10]
 	var callCount, promptTokens, completionTokens, estimatedNanoUSD int64
 	err = database.QueryRowContext(t.Context(), `
 		SELECT call_count, prompt_tokens, completion_tokens, estimated_nano_usd
@@ -255,7 +256,7 @@ func seedLLMCallRow(t *testing.T, database Handle, id, projectID, sessionID stri
 	t.Helper()
 	_, err := database.ExecContext(t.Context(), `
 INSERT INTO llm_calls (id, session_id, project_id, status, started_at)
-VALUES (?, ?, ?, 'reported', ?)`, id, sessionID, projectID, FormatTime(at))
+VALUES (?, ?, ?, 'reported', ?)`, id, sessionID, projectID, timelayout.Format(at))
 	testutil.FailErr(t, "insert llm call", err)
 }
 
@@ -267,7 +268,7 @@ INSERT INTO llm_calls (
 	prompt_tokens, completion_tokens, estimated_nano_usd, started_at, completed_at
 ) VALUES (?, ?, ?, ?, ?, 'reported', ?, ?, ?, ?, ?)`,
 		id, sessionID, projectID, providerID, model, promptTokens, completionTokens, estimatedNanoUSD,
-		FormatTime(at), FormatTime(at))
+		timelayout.Format(at), timelayout.Format(at))
 	testutil.FailErr(t, "insert reported llm call", err)
 }
 

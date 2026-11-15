@@ -41,7 +41,7 @@ type askResult struct {
 // for one saved credential: the guards keep it without asking, a faulting or
 // declining review keeps it, and only sending it unchanged releases it.
 func TestReleaseCredentialReviewsEachSavedRelease(t *testing.T) {
-	recipient := gitexec.Recipient{Protocol: "https", Host: "Example.test", Path: "org/repo.git"}
+	recipient := gitcredential.Recipient{Protocol: "https", Host: "Example.test", Path: "org/repo.git"}
 
 	cases := []struct {
 		name     string
@@ -68,7 +68,7 @@ func TestReleaseCredentialReviewsEachSavedRelease(t *testing.T) {
 			if tc.withAsk {
 				owners.SecretAsk = ask
 			}
-			credential := gitexec.Credential{Protocol: "https", Host: "example.test", Username: fixtureCredentialUser, Password: tc.password}
+			credential := gitcredential.Credential{Protocol: "https", Host: "example.test", Username: fixtureCredentialUser, Password: tc.password}
 			if got := owners.releaseCredential(t.Context(), recipient, credential); got != tc.want {
 				t.Fatalf("releaseCredential: want %v, got %v", tc.want, got)
 			}

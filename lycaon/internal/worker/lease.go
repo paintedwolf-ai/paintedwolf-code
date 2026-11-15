@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -19,7 +20,7 @@ var ErrClaimLost = fmt.Errorf("worker claim lost")
 func (s *SQLStore) RenewClaim(ctx context.Context, jobID, claimToken string) (bool, error) {
 	now := time.Now().UTC()
 	rows, err := s.queries.RenewWorkerClaim(ctx, db.RenewWorkerClaimParams{
-		HeartbeatAt: db.NullString(db.FormatTime(now)), LeaseExpiresAt: db.NullString(db.FormatTime(now.Add(workerClaimLease))),
+		HeartbeatAt: db.NullString(timelayout.Format(now)), LeaseExpiresAt: db.NullString(timelayout.Format(now.Add(workerClaimLease))),
 		ID: jobID, ClaimToken: db.NullString(claimToken),
 	})
 	if err != nil {
@@ -67,7 +68,7 @@ func recoverExpiredWorkerJobs(ctx context.Context, queue WorkerQueue, ids []stri
 
 // A persisted stop still joins any surviving local runtime before cleanup.
 func (q *sqlQueueClaims) recoverCancellations(ctx context.Context) ([]api.WorkerTask, error) {
-	ids, err := q.store.queries.ListInterruptedWorkerCancellationIDs(ctx, db.NullString(db.FormatTime(time.Now().UTC())))
+	ids, err := q.store.queries.ListInterruptedWorkerCancellationIDs(ctx, db.NullString(timelayout.Format(time.Now().UTC())))
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +172,7 @@ func (q *sqlQueueClaims) RecoverExpiredClaims(ctx context.Context) ([]api.Worker
 	canceled, cancelErr := q.recoverCancellations(ctx)
 	canceled = append(prerequisites, canceled...)
 	cancelErr = errors.Join(prerequisiteErr, cancelErr)
-	ids, err := q.store.queries.ListExpiredWorkerJobIDs(ctx, db.NullString(db.FormatTime(time.Now().UTC())))
+	ids, err := q.store.queries.ListExpiredWorkerJobIDs(ctx, db.NullString(timelayout.Format(time.Now().UTC())))
 	if err != nil {
 		return canceled, errors.Join(cancelErr, err)
 	}

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 
 	"github.com/google/uuid"
@@ -107,7 +108,7 @@ func insertTask(ctx context.Context, queries *db.Queries, task api.WorkerTask) e
 		ResultJson:       resultJSON,
 		Error:            db.NullString(task.Error),
 		FailureJson:      failureJSON,
-		CreatedAt:        db.FormatTime(task.CreatedAt),
+		CreatedAt:        timelayout.Format(task.CreatedAt),
 		StartedAt:        db.NullTimePtr(task.StartedAt),
 		CompletedAt:      db.NullTimePtr(task.CompletedAt),
 		OverlayID:        db.NullString(task.OverlayID),

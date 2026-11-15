@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"strings"
 	"time"
@@ -147,9 +148,9 @@ func retentionDisabledByEnv() bool {
 
 func cutoffTime(now time.Time, retention time.Duration) string {
 	if retention <= 0 {
-		return FormatTime(now)
+		return timelayout.Format(now)
 	}
-	return FormatTime(now.Add(-retention))
+	return timelayout.Format(now.Add(-retention))
 }
 
 type operationJournal struct {
@@ -414,7 +415,7 @@ func RollupLLMCallIDs(ctx context.Context, sqlDB Handle, ids []string) (int64, e
 		return 0, fmt.Errorf("encode receipt row selection: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO history_pruned_bodies(class,owner_id,project_id,pruned_at,reason)
- SELECT 'receipt_detail',id,project_id,?,'retention_policy' FROM llm_calls WHERE rowid IN (SELECT value FROM json_each(?)) ON CONFLICT(class,owner_id) DO NOTHING`, FormatTime(time.Now().UTC()), string(rowIDsJSON)); err != nil {
+ SELECT 'receipt_detail',id,project_id,?,'retention_policy' FROM llm_calls WHERE rowid IN (SELECT value FROM json_each(?)) ON CONFLICT(class,owner_id) DO NOTHING`, timelayout.Format(time.Now().UTC()), string(rowIDsJSON)); err != nil {
 		return 0, fmt.Errorf("retain receipt tombstones: %w", err)
 	}
 	if _, err := tx.ExecContext(ctx,
@@ -452,7 +453,7 @@ func optimizeFTSTables(ctx context.Context, sqlDB Handle, now time.Time, interva
 		if _, err := sqlDB.ExecContext(ctx, `
 			INSERT INTO fts_maintenance (name, last_optimized_at) VALUES (?, ?)
 			ON CONFLICT(name) DO UPDATE SET last_optimized_at = excluded.last_optimized_at
-		`, name, FormatTime(now)); err != nil {
+		`, name, timelayout.Format(now)); err != nil {
 			return optimized, fmt.Errorf("stamp fts optimize latch %s: %w", name, err)
 		}
 		optimized = append(optimized, name)

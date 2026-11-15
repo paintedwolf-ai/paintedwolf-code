@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -28,7 +29,7 @@ func (s *SQLStore) CompleteJob(ctx context.Context, id string, result api.Worker
 	}
 	defer func() { _ = tx.Rollback() }()
 	q := s.queries.WithTx(tx)
-	completedAt := db.FormatTime(time.Now().UTC())
+	completedAt := timelayout.Format(time.Now().UTC())
 	_, decisionErr := q.GetWorkerDecisionByJob(ctx, id)
 	if decisionErr != nil && !db.IsNoRows(decisionErr) {
 		return JobCompletion{}, decisionErr
@@ -144,7 +145,7 @@ func (s *SQLStore) FailJob(ctx context.Context, claimed *api.WorkerTask, errMsg 
 	}
 	defer func() { _ = tx.Rollback() }()
 	q := s.queries.WithTx(tx)
-	completedAt := db.FormatTime(time.Now().UTC())
+	completedAt := timelayout.Format(time.Now().UTC())
 	n, err := q.FailWorkerJob(ctx, db.FailWorkerJobParams{
 		Error:       db.NullString(errMsg),
 		FailureJson: failureJSON,
@@ -205,7 +206,7 @@ func (s *SQLStore) RetryJob(ctx context.Context, claimed *api.WorkerTask, errMsg
 	if err != nil || rows != 1 {
 		return rows == 1, err
 	}
-	completedAt := db.FormatTime(time.Now().UTC())
+	completedAt := timelayout.Format(time.Now().UTC())
 	attemptRows, err := q.CompleteWorkerAttempt(ctx, db.CompleteWorkerAttemptParams{
 		Status: "retryable_failed", Error: errMsg, FailureJson: failureJSON,
 		CompletedAt: sql.NullString{String: completedAt, Valid: true},
@@ -237,7 +238,7 @@ func (s *SQLStore) ParkJob(ctx context.Context, claimed *api.WorkerTask) (bool, 
 		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	q := s.queries.WithTx(tx)
 	rows, err := q.ParkWorkerJob(ctx, db.ParkWorkerJobParams{
 		ID: claimed.ID, ClaimToken: sql.NullString{String: claimed.ClaimToken, Valid: true},

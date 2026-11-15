@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -195,7 +196,7 @@ func (q *sqlQueueClaims) RequestCancellation(ctx context.Context, jobID string) 
 	var n int64
 	err := q.retryOnFullDisk(func() (err error) {
 		n, err = q.store.queries.RequestWorkerCancellation(ctx, db.RequestWorkerCancellationParams{
-			ID: jobID, RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+			ID: jobID, RequestedAt: db.NullString(timelayout.Format(time.Now().UTC())),
 		})
 		return err
 	})
@@ -221,7 +222,7 @@ func (q *sqlQueueClaims) RequestClaimCancellation(ctx context.Context, claimed *
 				return nil
 			}
 			n, err := queries.RequestWorkerCancellation(ctx, db.RequestWorkerCancellationParams{
-				ID: claimed.ID, RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+				ID: claimed.ID, RequestedAt: db.NullString(timelayout.Format(time.Now().UTC())),
 			})
 			won = n == 1
 			return err

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -110,7 +111,7 @@ func (s *sqlRunStore) CancelPendingScans(ctx context.Context, reason string) ([]
 	var canceled []api.CodeScan
 	err := db.InTx(ctx, s.db, s.queries, s.notify, func(qtx *db.Queries, tx *sql.Tx) error {
 		ids, err := qtx.CancelPendingScans(ctx, db.CancelPendingScansParams{
-			Error: db.NullString(reason), CompletedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+			Error: db.NullString(reason), CompletedAt: db.NullString(timelayout.Format(time.Now().UTC())),
 		})
 		if err != nil {
 			return err

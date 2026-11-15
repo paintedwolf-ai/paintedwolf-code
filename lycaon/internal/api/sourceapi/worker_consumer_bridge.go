@@ -9,7 +9,6 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/consumer"
 	"github.com/lycaon/lycaon/internal/project"
@@ -32,7 +31,7 @@ func (s *Workspace) readLayeredWorkerProjectSource(
 	if branchRoot == "" || p == nil {
 		return nil, false, nil
 	}
-	eng, ok := requestscope.ResolveBranchConsumerEngine(branchRoot)
+	eng, ok := consumer.LookupBranchEngine(branchRoot)
 	if !ok || eng == nil {
 		return nil, false, nil
 	}
@@ -119,7 +118,7 @@ func appendLayeredWorkerDivergenceChanges(
 	if strings.TrimSpace(branchRoot) == "" {
 		return files
 	}
-	eng, ok := requestscope.ResolveBranchConsumerEngine(branchRoot)
+	eng, ok := consumer.LookupBranchEngine(branchRoot)
 	if !ok || eng == nil {
 		return files
 	}

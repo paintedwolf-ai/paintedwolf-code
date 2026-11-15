@@ -3,12 +3,12 @@ package native
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitstate"
 	"github.com/lycaon/lycaon/internal/sourceblob"
@@ -54,7 +54,7 @@ func newNativeWalkFixture(t *testing.T) nativeWalkFixture {
 	testdbseed.InsertSession(t, sqlDB, "s1", "p1")
 	_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO project_roots
  (id, project_id, path, label, is_primary, added_at, kind)
- VALUES ('r1','p1',?,'Repository',1,?,'attached')`, dir, db.FormatTime(time.Now().UTC()))
+ VALUES ('r1','p1',?,'Repository',1,?,'attached')`, dir, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "seed source root", err)
 	manager := git.NewManager()
 	ledger := sourceledger.New(sqlDB, t.TempDir())

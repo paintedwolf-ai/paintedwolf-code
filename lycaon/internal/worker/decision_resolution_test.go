@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"testing"
 	"time"
@@ -104,7 +105,7 @@ func TestSQLDecisionResolverRequeuesSameWorkerWithBranchContinuity(t *testing.T)
 	queue.SetEventOutbox(outbox)
 	testutil.FailErr(t, "ack decision checkpoint", db.New(database).MarkWorkerOutcomeDelivered(
 		t.Context(), db.MarkWorkerOutcomeDeliveredParams{
-			WorkerJobID: "job-1", DeliveredAt: db.FormatTime(time.Now().UTC()),
+			WorkerJobID: "job-1", DeliveredAt: timelayout.Format(time.Now().UTC()),
 		},
 	))
 

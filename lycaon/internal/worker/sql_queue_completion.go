@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -181,7 +182,7 @@ func (q *sqlQueueClaims) parkAdmitted(ctx context.Context, claimed *api.WorkerTa
 
 // ResumeReadyWaits atomically expires deadlines and makes every resolved worker runnable.
 func (q *sqlQueueClaims) ResumeReadyWaits(ctx context.Context) (int, error) {
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	tx, err := q.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -65,7 +66,7 @@ func (s *SQLStore) AppendContext(ctx context.Context, c Context) (bool, error) {
 	if sealed.IsZero() {
 		sealed = time.Now().UTC()
 	}
-	ts := db.FormatTime(sealed)
+	ts := timelayout.Format(sealed)
 	hashVersion := c.HashVersion
 	if hashVersion == 0 {
 		hashVersion = HashVersion1
@@ -387,7 +388,7 @@ func (s *SQLStore) AppendEventTx(ctx context.Context, tx *sql.Tx, e Event) error
 	if recorded.IsZero() {
 		recorded = time.Now().UTC()
 	}
-	ts := db.FormatTime(recorded)
+	ts := timelayout.Format(recorded)
 	hashVersion := e.HashVersion
 	if hashVersion == 0 {
 		hashVersion = HashVersion1
@@ -459,7 +460,7 @@ func (s *SQLStore) ListApprovalDecisionsSince(ctx context.Context, since time.Ti
 		FROM authz_events
 		WHERE action = ? AND ts >= ?
 		ORDER BY ts ASC, event_seq ASC
-	`, string(EventActionApprovalDecision), db.FormatTime(since))
+	`, string(EventActionApprovalDecision), timelayout.Format(since))
 	if err != nil {
 		return nil, fmt.Errorf("authzcontext list approval decisions: %w", err)
 	}

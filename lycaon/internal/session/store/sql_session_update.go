@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -17,7 +18,7 @@ func (s *sqlSessions) SetPostureTx(ctx context.Context, tx *sql.Tx, sessionID st
 		return fmt.Errorf("posture transaction required")
 	}
 	_, err := s.core.queries.WithTx(tx).SetSessionPosture(ctx, db.SetSessionPostureParams{
-		Posture: string(posture), UpdatedAt: db.FormatTime(time.Now().UTC()), ID: sessionID,
+		Posture: string(posture), UpdatedAt: timelayout.Format(time.Now().UTC()), ID: sessionID,
 	})
 	return err
 }
@@ -89,7 +90,7 @@ func updateSession(
 		CompactionGeneration: int64(sess.CompactionGeneration),
 		ArchivedAt:           db.NullTimePtr(sess.ArchivedAt),
 		SeenAt:               db.NullTimePtr(sess.SeenAt),
-		UpdatedAt:            db.FormatTime(sess.UpdatedAt),
+		UpdatedAt:            timelayout.Format(sess.UpdatedAt),
 		ID:                   id,
 	}); err != nil {
 		return err
@@ -129,7 +130,7 @@ func (s *sqlSessions) UpdateTitleIfUnset(ctx context.Context, id, title string) 
 	qtx := core.queries.WithTx(tx)
 	n, err := qtx.UpdateSessionTitleIfUnset(ctx, db.UpdateSessionTitleIfUnsetParams{
 		Title:     db.NullString(title),
-		UpdatedAt: db.FormatTime(time.Now().UTC()),
+		UpdatedAt: timelayout.Format(time.Now().UTC()),
 		ID:        id,
 	})
 	if err != nil {

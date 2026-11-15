@@ -3,6 +3,7 @@ package delegation
 import (
 	"context"
 	"database/sql"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -129,7 +130,7 @@ func (s *SQLStore) create(ctx context.Context, delegation api.Delegation, sessio
 		BaseHeadSha:          db.NullString(delegation.BaseHeadSHA),
 		OperationID:          db.NullString(receipt.OperationID),
 		InputDigest:          db.NullString(receipt.InputDigest),
-		CreatedAt:            db.FormatTime(delegation.CreatedAt),
+		CreatedAt:            timelayout.Format(delegation.CreatedAt),
 	}); err != nil {
 		return nil, err
 	}

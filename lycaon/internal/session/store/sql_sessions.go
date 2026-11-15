@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -141,9 +142,9 @@ func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req ap
 		MaxToolLoops:    maxLoops,
 		Title:           db.NullString(sess.Title),
 		Status:          string(sess.Status),
-		CreatedAt:       db.FormatTime(sess.CreatedAt),
-		ActivityAt:      db.FormatTime(sess.ActivityAt),
-		UpdatedAt:       db.FormatTime(sess.UpdatedAt),
+		CreatedAt:       timelayout.Format(sess.CreatedAt),
+		ActivityAt:      timelayout.Format(sess.ActivityAt),
+		UpdatedAt:       timelayout.Format(sess.UpdatedAt),
 	}); err != nil {
 		return nil, fmt.Errorf("insert session: %w", err)
 	}

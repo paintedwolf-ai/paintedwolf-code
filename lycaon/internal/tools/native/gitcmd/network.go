@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/gitcredential"
 	"io"
 	"net"
 	"net/url"
@@ -264,7 +265,7 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 		SessionID: tc.Identity.SessionID, RootSessionID: tc.ChatSessionID(), ProjectID: tc.Identity.ProjectID,
 		ProjectDir: tc.ActiveRootPath(), ToolCallID: tc.Identity.ToolCallID,
 	})
-	credentials, err := gitexec.StartAgentCredentials(ctx, func(r gitexec.Recipient, c gitexec.Credential) bool {
+	credentials, err := gitexec.StartAgentCredentials(ctx, func(r gitcredential.Recipient, c gitcredential.Credential) bool {
 		return p.owners.releaseCredential(reviewCtx, r, c)
 	})
 	if err != nil {

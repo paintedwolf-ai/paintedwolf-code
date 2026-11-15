@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"sort"
 	"strings"
 	"time"
@@ -45,7 +46,7 @@ func writeModelOutputBlob(ctx context.Context, s *sqlCore, q *db.Queries, projec
 	}
 	if err := q.UpsertContentBlobObject(ctx, db.UpsertContentBlobObjectParams{
 		ProjectID: projectID, Sha256: sha, ByteSize: byteSize, StoredSize: storedSize,
-		CreatedAt: db.FormatTime(time.Now().UTC()),
+		CreatedAt: timelayout.Format(time.Now().UTC()),
 	}); err != nil {
 		return "", fmt.Errorf("upsert content blob object: %w", err)
 	}

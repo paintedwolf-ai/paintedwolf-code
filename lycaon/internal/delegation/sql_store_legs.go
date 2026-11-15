@@ -3,6 +3,7 @@ package delegation
 import (
 	"context"
 	"database/sql"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 
 	"github.com/google/uuid"
@@ -375,7 +376,7 @@ func insertLeg(ctx context.Context, q *db.Queries, leg api.Leg) error {
 		AgentType:              db.NullString(leg.AgentType),
 		WorkerID:               db.NullString(leg.WorkerID),
 		ResultJson:             resultJSON,
-		CreatedAt:              db.FormatTime(leg.CreatedAt),
+		CreatedAt:              timelayout.Format(leg.CreatedAt),
 		StartedAt:              db.NullTimePtr(leg.StartedAt),
 		CompletedAt:            db.NullTimePtr(leg.CompletedAt),
 	})

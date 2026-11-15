@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"path/filepath"
 	"strings"
@@ -145,7 +146,7 @@ func TestSQLDeleteRemovesSessionTreeAndPreservesReviewHistory(t *testing.T) {
 	dir := t.TempDir()
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
 	rootID := testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	seed := func(label, query string, args ...any) {
 		t.Helper()
 		_, seedErr := sqlDB.ExecContext(ctx, query, args...)
@@ -258,7 +259,7 @@ func TestSQLDeleteRevokesBlueprintGrantsSealedByTheSessionTree(t *testing.T) {
 	dir := t.TempDir()
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
 	rootID := testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	seed := func(label, query string, args ...any) {
 		t.Helper()
 		_, seedErr := sqlDB.ExecContext(ctx, query, args...)

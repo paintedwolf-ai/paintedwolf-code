@@ -6,11 +6,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workspace"
 )
 
-// ResolveBranchConsumerEngine returns the active layered consumer.Engine registered for branchRoot, if any (#1664).
-func ResolveBranchConsumerEngine(branchRoot string) (*consumer.Engine, bool) {
-	return consumer.LookupBranchEngine(branchRoot)
-}
-
 func SourceProjectInBranch(p *project.Project, branchRoot string) (*project.Project, error) {
 	if branchRoot == "" || p == nil {
 		return p, nil

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"sort"
 	"strings"
 	"time"
@@ -84,8 +85,8 @@ func (q *sqlQueuePromotion) ListSessionPage(ctx context.Context, query SessionPa
 	}
 	rows, err := q.store.queries.ListSessionWorkerPage(ctx, db.ListSessionWorkerPageParams{
 		ProjectID: query.ProjectID, ParentSessionID: db.NullString(query.SessionID),
-		Status: string(query.Status), BeforeCreatedAt: db.FormatTime(p.Before),
-		AfterCreatedAt: db.FormatTime(p.CreatedAt), AfterID: p.ID, PageLimit: int64(query.Limit + 1),
+		Status: string(query.Status), BeforeCreatedAt: timelayout.Format(p.Before),
+		AfterCreatedAt: timelayout.Format(p.CreatedAt), AfterID: p.ID, PageLimit: int64(query.Limit + 1),
 	})
 	if err != nil {
 		return SessionPage{}, err
