@@ -21,7 +21,6 @@ func (b *serveBuilder) composeWorkerAssignment(ctx context.Context, tctx tools.T
 		Charter:          brief,
 		AgentType:        agentType,
 		WorkerJobID:      task.ID,
-		MaxToolLoops:     task.MaxToolLoops,
 		Attachments:      surface.SessionForwardedAttachments(msgs),
 		RecordedVerdicts: recordedVerdictsForLeg(ctx, b.workflows.Manager, tctx.Identity.SessionID),
 	}

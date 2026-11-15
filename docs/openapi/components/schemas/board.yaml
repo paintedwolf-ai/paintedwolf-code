@@ -62,15 +62,6 @@ components:
           description: Worker assignment goal included in full board detail.
         error:
           type: string
-        max_tool_loops:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Effective worker tool-round ceiling when known (host default 20, maximum 120)
-        budget_request:
-          x-go-pointer: true
-          $ref: worker.yaml#/components/schemas/WorkerBudgetRequest
-          description: The worker's unanswered request for more tool rounds; grant it with extend_worker_budget
         tool_loops_used:
           type: integer
           minimum: 0

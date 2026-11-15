@@ -33,7 +33,7 @@ func (e *LocalWorkerExecutor) completeGracefulStop(
 		return api.WorkerResult{}, fmt.Errorf("worker task missing parent_session_id")
 	}
 
-	outcome, err := workercloseout.FinalizeWorkerSummaryForCanceled(ctx, e.Transcripts, e.Prompts, child.ID, task.AgentType, cancelReason, finalizeOpts)
+	outcome, err := workercloseout.FinalizeWorkerSummaryForCanceled(ctx, e.Transcripts, e.Prompts, child.ID, cancelReason, finalizeOpts)
 	if err != nil {
 		return api.WorkerResult{}, err
 	}

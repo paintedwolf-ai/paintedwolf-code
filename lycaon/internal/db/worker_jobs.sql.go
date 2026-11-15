@@ -223,20 +223,6 @@ func (q *Queries) CountRunningWorkerJobs(ctx context.Context, executionTarget st
 	return count, err
 }
 
-const declineWorkerJobBudget = `-- name: DeclineWorkerJobBudget :execrows
-UPDATE worker_jobs SET budget_request_json = ''
-WHERE id = ? AND status IN ('pending', 'running') AND budget_request_json != ''
-`
-
-// A decline closes a live job's open request and leaves its ceiling.
-func (q *Queries) DeclineWorkerJobBudget(ctx context.Context, id string) (int64, error) {
-	result, err := q.db.ExecContext(ctx, declineWorkerJobBudget, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const expireWorkerWaitLeases = `-- name: ExpireWorkerWaitLeases :execrows
 UPDATE wait_leases
 SET status = 'timed_out', winner_json = '{"kind":"timer"}',
@@ -509,25 +495,6 @@ func (q *Queries) GetWorkerJobBySourceToolCall(ctx context.Context, arg GetWorke
 	return i, err
 }
 
-const grantWorkerJobBudget = `-- name: GrantWorkerJobBudget :execrows
-UPDATE worker_jobs SET max_tool_loops = ?, budget_request_json = ''
-WHERE id = ? AND status IN ('pending', 'running')
-`
-
-type GrantWorkerJobBudgetParams struct {
-	MaxToolLoops sql.NullInt64 `json:"max_tool_loops"`
-	ID           string        `json:"id"`
-}
-
-// A grant raises the ceiling and answers any open request.
-func (q *Queries) GrantWorkerJobBudget(ctx context.Context, arg GrantWorkerJobBudgetParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, grantWorkerJobBudget, arg.MaxToolLoops, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const holdWorkerJob = `-- name: HoldWorkerJob :execrows
 UPDATE worker_jobs SET status = 'held' WHERE id = ? AND status = 'pending' AND cancel_requested_at IS NULL
 `
@@ -646,8 +613,8 @@ INSERT INTO worker_jobs (
     execution_target, runner_id, claimed_by, claim_token, attempt, heartbeat_at, lease_expires_at,
     agent_type, status, spawn_reason,
     prompt, brief, files_json, scope_json, result_json, error, failure_json, created_at, started_at, completed_at,
-    overlay_id, max_tool_loops, tool_loops_used, tool_calls_used
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    overlay_id, tool_loops_used, tool_calls_used
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertWorkerJobParams struct {
@@ -686,7 +653,6 @@ type InsertWorkerJobParams struct {
 	StartedAt        sql.NullString `json:"started_at"`
 	CompletedAt      sql.NullString `json:"completed_at"`
 	OverlayID        sql.NullString `json:"overlay_id"`
-	MaxToolLoops     sql.NullInt64  `json:"max_tool_loops"`
 	ToolLoopsUsed    sql.NullInt64  `json:"tool_loops_used"`
 	ToolCallsUsed    sql.NullInt64  `json:"tool_calls_used"`
 }
@@ -733,7 +699,6 @@ func (q *Queries) InsertWorkerJob(ctx context.Context, arg InsertWorkerJobParams
 		arg.StartedAt,
 		arg.CompletedAt,
 		arg.OverlayID,
-		arg.MaxToolLoops,
 		arg.ToolLoopsUsed,
 		arg.ToolCallsUsed,
 	)
@@ -1880,25 +1845,6 @@ func (q *Queries) RequestWorkerCancellation(ctx context.Context, arg RequestWork
 	return result.RowsAffected()
 }
 
-const requestWorkerJobBudget = `-- name: RequestWorkerJobBudget :execrows
-UPDATE worker_jobs SET budget_request_json = ?1
-WHERE id = ?2 AND status IN ('pending', 'running') AND budget_request_json = ''
-`
-
-type RequestWorkerJobBudgetParams struct {
-	BudgetRequestJson string `json:"budget_request_json"`
-	ID                string `json:"id"`
-}
-
-// A live job holds at most one open request.
-func (q *Queries) RequestWorkerJobBudget(ctx context.Context, arg RequestWorkerJobBudgetParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, requestWorkerJobBudget, arg.BudgetRequestJson, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const resumeWaitingWorkerJob = `-- name: ResumeWaitingWorkerJob :execrows
 UPDATE worker_jobs SET status = 'pending'
 WHERE id = ?1 AND status = 'waiting' AND cancel_requested_at IS NULL
@@ -2075,8 +2021,7 @@ type SetWorkerJobProgressParams struct {
 	ID            string        `json:"id"`
 }
 
-// SetWorkerJobProgress stores counters at a round boundary. The ceiling is
-// written only at creation and by a grant, so a round never overwrites one.
+// SetWorkerJobProgress stores usage counters at a model-turn boundary.
 func (q *Queries) SetWorkerJobProgress(ctx context.Context, arg SetWorkerJobProgressParams) error {
 	_, err := q.db.ExecContext(ctx, setWorkerJobProgress, arg.ToolLoopsUsed, arg.ToolCallsUsed, arg.ID)
 	return err

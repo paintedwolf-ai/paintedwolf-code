@@ -55,7 +55,7 @@ func (m *Fanout) WorkflowWork(ctx context.Context, sessionID, workID string) (sp
 	}
 	for _, leg := range plan.Legs {
 		if leg.ID == workID {
-			work := spawn.WorkflowWork{RunID: run.ID, Phase: run.CurrentPhase, AgentType: leg.AgentType, Scope: leg.Scope, MaxToolLoops: leg.MaxToolLoops}
+			work := spawn.WorkflowWork{RunID: run.ID, Phase: run.CurrentPhase, AgentType: leg.AgentType, Scope: leg.Scope}
 			if len(leg.DoneWhen) > 0 {
 				work.Charter = &api.WorkerTaskCharter{Goal: leg.Prompt, DoneWhen: leg.DoneWhen, SharedContext: plan.ThreatModel}
 			}

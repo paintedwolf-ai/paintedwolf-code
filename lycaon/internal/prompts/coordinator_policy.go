@@ -44,7 +44,7 @@ func CoordinatorPolicyTemplateVars(offered, requestable []string) map[string]any
 		"lane_s_sync_tools":           laneS,
 		"visual_review_cadence":       "on_request",
 	}
-	for k, v := range spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget()) {
+	for k, v := range spawn.PolicyTemplateVars() {
 		out[k] = v
 	}
 	for k, v := range progress.ProgressTemplateVars() {

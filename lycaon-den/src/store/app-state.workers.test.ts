@@ -38,29 +38,25 @@ describe("createAppStore", () => {
     expect(store.state.workers[0]?.merge_status).toBe("merged");
   });
 
-  it("updateWorker merges live tool-loop budget from worker SSE", () => {
+  it("updateWorker keeps the turn count from worker SSE", () => {
     const store = createAppStore();
     store.actions.setWorkers([
       {
         id: "w1",
         agent_type: "web-researcher",
         status: "running",
-        max_tool_loops: 40,
         created_at: "t",
       },
     ]);
     store.actions.updateWorker({
       worker_id: "w1",
       status: "running",
-      max_tool_loops: 40,
       tool_loops_used: 7,
     });
     expect(store.state.workers[0]?.tool_loops_used).toBe(7);
-    expect(store.state.workers[0]?.max_tool_loops).toBe(40);
 
     store.actions.updateWorker({ worker_id: "w1", status: "complete" });
     expect(store.state.workers[0]?.tool_loops_used).toBe(7);
-    expect(store.state.workers[0]?.max_tool_loops).toBe(40);
   });
 
   it("updateWorker keeps the higher tool_loops_used", () => {
@@ -70,7 +66,6 @@ describe("createAppStore", () => {
         id: "w1",
         agent_type: "implementer",
         status: "running",
-        max_tool_loops: 40,
         tool_loops_used: 12,
         created_at: "t",
       },
@@ -78,7 +73,6 @@ describe("createAppStore", () => {
     store.actions.updateWorker({
       worker_id: "w1",
       status: "running",
-      max_tool_loops: 40,
       tool_loops_used: 3,
     });
     expect(store.state.workers[0]?.tool_loops_used).toBe(12);
@@ -91,7 +85,6 @@ describe("createAppStore", () => {
         id: "w1",
         agent_type: "implementer",
         status: "running",
-        max_tool_loops: 40,
         tool_loops_used: 12,
         tool_calls_used: 96,
         created_at: "t",
@@ -100,7 +93,6 @@ describe("createAppStore", () => {
     store.actions.updateWorker({
       worker_id: "w1",
       status: "running",
-      max_tool_loops: 40,
       tool_loops_used: 12,
       tool_calls_used: 40,
     });
@@ -113,7 +105,6 @@ describe("createAppStore", () => {
     store.actions.updateWorker({
       worker_id: "w-batch",
       status: "running",
-      max_tool_loops: 40,
       tool_loops_used: 3,
       turn_tool_calls: 6,
       turn_tools_done: 2,
@@ -123,7 +114,6 @@ describe("createAppStore", () => {
     store.actions.updateWorker({
       worker_id: "w-batch",
       status: "running",
-      max_tool_loops: 40,
       tool_loops_used: 3,
       turn_tool_calls: 6,
       turn_tools_done: 5,
@@ -133,7 +123,6 @@ describe("createAppStore", () => {
     store.actions.updateWorker({
       worker_id: "w-batch",
       status: "running",
-      max_tool_loops: 40,
       tool_loops_used: 4,
     });
     expect(store.state.workers[0]?.turn_tool_calls).toBeUndefined();
@@ -168,7 +157,6 @@ describe("createAppStore", () => {
         parent_session_id: "sess-1",
         agent_type: "implementer",
         status: "running",
-        max_tool_loops: 40,
         tool_loops_used: 12,
         created_at: "t",
       },
@@ -179,7 +167,6 @@ describe("createAppStore", () => {
         parent_session_id: "sess-1",
         agent_type: "implementer",
         status: "running",
-        max_tool_loops: 40,
         created_at: "t",
       },
     ], 0);
@@ -195,7 +182,6 @@ describe("createAppStore", () => {
         parent_session_id: "sess-1",
         agent_type: "implementer",
         status: "running",
-        max_tool_loops: 40,
         tool_loops_used: 12,
         tool_calls_used: 96,
         turn_tool_calls: 6,
@@ -209,7 +195,6 @@ describe("createAppStore", () => {
         parent_session_id: "sess-1",
         agent_type: "implementer",
         status: "running",
-        max_tool_loops: 40,
         tool_loops_used: 12,
         tool_calls_used: 96,
         created_at: "t",

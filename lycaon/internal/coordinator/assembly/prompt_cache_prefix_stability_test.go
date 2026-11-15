@@ -213,7 +213,6 @@ func TestStandingPromptInputsKeyDerivationCoversEveryField(t *testing.T) {
 		LoadedTools:      []string{"tool-1"},
 		ExecutionMode:    "mode-1",
 		VerifyCommand:    "verify-cmd",
-		WorkerToolBudget: spawn.WorkerToolBudget{Default: 10, Min: 2, Max: 50},
 	}
 	baseKey, err := base.cacheKey()
 	if err != nil {
@@ -235,7 +234,6 @@ func TestStandingPromptInputsKeyDerivationCoversEveryField(t *testing.T) {
 		{"LoadedTools", func(in *standingPromptInputs) { in.LoadedTools = []string{"tool-2"} }},
 		{"ExecutionMode", func(in *standingPromptInputs) { in.ExecutionMode = "mode-2" }},
 		{"VerifyCommand", func(in *standingPromptInputs) { in.VerifyCommand = "verify-cmd-2" }},
-		{"WorkerToolBudget", func(in *standingPromptInputs) { in.WorkerToolBudget.Default = 20 }},
 	}
 
 	for _, mc := range mutateCases {

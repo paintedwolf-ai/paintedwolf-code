@@ -90,8 +90,8 @@ func buildKickRenderData(meta kickMeta, live CoordinatorKickRenderContext, now t
 		data["scan_categories"] = meta.scanCategories
 		data["scan_findings_count"] = meta.scanFindingsCount
 	}
-	if meta.workerBudget != nil {
-		meta.workerBudget.renderData(data)
+	if meta.workerRoundNotice != nil {
+		meta.workerRoundNotice.renderData(data)
 	}
 	for k, v := range meta.vars {
 		data[k] = v

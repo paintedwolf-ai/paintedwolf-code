@@ -343,11 +343,8 @@ type WorkerTask struct {
 	// changes; with the baseline it rebuilds the branch tree on demand.
 	WorkspaceOverlayPath string `json:"-"`
 	// OverlayID identifies a write overlay and its stacked children.
-	OverlayID    string `json:"overlay_id,omitempty"`
-	MaxToolLoops int    `json:"max_tool_loops,omitempty"`
-	// BudgetRequest is the worker's unanswered ask for a higher ceiling.
-	BudgetRequest *WorkerBudgetRequest `json:"budget_request,omitempty"`
-	ToolLoopsUsed int                  `json:"tool_loops_used,omitempty"`
+	OverlayID     string `json:"overlay_id,omitempty"`
+	ToolLoopsUsed int    `json:"tool_loops_used,omitempty"`
 	// ToolCallsUsed counts settled calls across all rounds.
 	ToolCallsUsed int `json:"tool_calls_used,omitempty"`
 	// TurnToolCalls and TurnToolsDone describe the active batch.

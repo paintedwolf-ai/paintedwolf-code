@@ -29,13 +29,15 @@ const WorkerSummaryNoProseCode = "WORKER_TURN_NO_PROSE"
 
 // WorkerSummaryEvalInput binds a report to its worker evidence.
 type WorkerSummaryEvalInput struct {
-	AgentType      string
-	MissingReport  bool
-	MaxChars       int
-	Report         WorkerCompletionReport
-	ChildSessionID string
-	ChildMessages  []api.Message
-	ProjectDir     string
+	AgentType     string
+	MissingReport bool
+	// SpendLimitReached marks a round fenced at the armed spend limit.
+	SpendLimitReached bool
+	MaxChars          int
+	Report            WorkerCompletionReport
+	ChildSessionID    string
+	ChildMessages     []api.Message
+	ProjectDir        string
 	// ProjectRoots are the session's folder roots for @label citation keys.
 	ProjectRoots     []projectroot.RootRef
 	ActiveRootID     string
@@ -69,6 +71,7 @@ type workerSummaryObs struct {
 	Offenders              []string
 	NoProse                bool
 	MissingReport          bool
+	SpendLimitReached      bool
 	ActualChars            int
 	MaxChars               int
 	NoSurveyEvidence       bool
@@ -91,8 +94,12 @@ func EvaluateWorkerSummary(ctx context.Context, in WorkerSummaryEvalInput) (Work
 	report := in.Report
 	report.Normalize()
 	brief := strings.TrimSpace(report.Brief)
-	obs := workerSummaryObs{MissingReport: in.MissingReport, NoProse: brief == "" && !in.MissingReport}
-	if obs.MissingReport {
+	missing := in.MissingReport || in.SpendLimitReached
+	obs := workerSummaryObs{MissingReport: in.MissingReport && !in.SpendLimitReached, SpendLimitReached: in.SpendLimitReached, NoProse: brief == "" && !missing}
+	switch {
+	case obs.SpendLimitReached:
+		obs.RejectDataCodes = append(obs.RejectDataCodes, WorkerSpendLimitReachedCode)
+	case obs.MissingReport:
 		obs.RejectDataCodes = append(obs.RejectDataCodes, WorkerCompletionReportMissingCode)
 	}
 	if in.MaxChars > 0 && utf8.RuneCountInString(brief) > in.MaxChars {
@@ -245,9 +252,12 @@ func publishWorkerSummaryFacts(gc *oar.GuardContext, agentType string, obs worke
 		gc.Grounding.ProfileFetchesURLs = fetches
 	}
 	gc.Workers.AgentIsImplementer = isImplementerAgent(agentType)
-	gc.Grounding.WorkerSummaryPresent = !obs.NoProse && !obs.MissingReport
+	gc.Grounding.WorkerSummaryPresent = !obs.NoProse && !obs.MissingReport && !obs.SpendLimitReached
 	if obs.MissingReport {
 		gc.Rejection.Missing = true
+	}
+	if obs.SpendLimitReached {
+		gc.Rejection.ResourceLimit = true
 	}
 	if obs.MaxChars > 0 {
 		gc.Rejection.RejectObservation = "summary_too_long"

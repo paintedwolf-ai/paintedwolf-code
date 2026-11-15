@@ -23,7 +23,7 @@ tools:
   secret_revoke: sticky
   held_result: true
   held_stop: true
-wait_conditions: [http_ready, port_ready]
+wait_conditions: [process_done, http_ready, port_ready]
 deny_tools:
   - web_search
   - fetch_url

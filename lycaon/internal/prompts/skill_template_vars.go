@@ -22,8 +22,6 @@ type SkillSurfaceVarsInput struct {
 	HasGit bool
 	// RootCount is the number of workspace roots on the source.
 	RootCount int
-	// DelegationBudget is the spawn budget backing sizing hint vars.
-	DelegationBudget spawn.WorkerToolBudget
 }
 
 // SkillSurfaceTemplateVars builds the template variables one skill read renders
@@ -32,8 +30,7 @@ type SkillSurfaceVarsInput struct {
 // coordinator path scopes and policy for coordinator profiles, profile
 // capability vars for every other reader.
 func SkillSurfaceTemplateVars(in SkillSurfaceVarsInput) (map[string]any, error) {
-	vars := spawn.PolicyTemplateVars(defaultDelegationBudget(in.DelegationBudget))
-	spawn.RefreshSizingHintVars(vars)
+	vars := spawn.PolicyTemplateVars()
 	coordinator := in.ProfileID == CoordinatorProfileID
 	setCallerShapeVars(vars, in, coordinator)
 	if coordinator && in.SurfaceID != "" {
@@ -57,22 +54,6 @@ func SkillSurfaceTemplateVars(in SkillSurfaceVarsInput) (map[string]any, error) 
 	}
 	setCallerShapeVars(vars, in, coordinator)
 	return vars, nil
-}
-
-// defaultDelegationBudget fills zero fields with the host default so a caller
-// that omits sizing facts does not render 0 budgets into skill copy.
-func defaultDelegationBudget(budget spawn.WorkerToolBudget) spawn.WorkerToolBudget {
-	def := spawn.DefaultWorkerToolBudget()
-	if budget.Default == 0 {
-		budget.Default = def.Default
-	}
-	if budget.Min == 0 {
-		budget.Min = def.Min
-	}
-	if budget.Max == 0 {
-		budget.Max = def.Max
-	}
-	return budget
 }
 
 // coordinatorSurfaceLoaded teaches reachable operations, including deferred tools.

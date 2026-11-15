@@ -276,3 +276,59 @@ retired:
     kind: tool_name
     summary: Retired as a callable tool; the work runs through native forms in command.
     date: 2026-11-04
+  - id: REQUEST_BUDGET_ADDRESSED_SESSION
+    kind: hint_code
+    summary: Retired with the worker round ceiling; a worker round has no tool-round budget to set, request, extend or exhaust.
+    date: 2026-11-12
+  - id: TASK_MAX_TOOL_LOOPS_INVALID
+    kind: hint_code
+    summary: Retired with the worker round ceiling; a worker round has no tool-round budget to set, request, extend or exhaust.
+    date: 2026-11-12
+  - id: WORKER_BUDGET_DECLINE_NO_REQUEST
+    kind: hint_code
+    summary: Retired with the worker round ceiling; a worker round has no tool-round budget to set, request, extend or exhaust.
+    date: 2026-11-12
+  - id: WORKER_BUDGET_DECLINE_SESSION_MISMATCH
+    kind: hint_code
+    summary: Retired with the worker round ceiling; a worker round has no tool-round budget to set, request, extend or exhaust.
+    date: 2026-11-12
+  - id: WORKER_BUDGET_EXHAUSTED
+    kind: hint_code
+    summary: Retired with the worker round ceiling; a worker round has no tool-round budget to set, request, extend or exhaust.
+    date: 2026-11-12
+  - id: WORKER_BUDGET_EXTEND_INVALID
+    kind: hint_code
+    summary: Retired with the worker round ceiling; a worker round has no tool-round budget to set, request, extend or exhaust.
+    date: 2026-11-12
+  - id: WORKER_BUDGET_EXTEND_NOT_INCREASE
+    kind: hint_code
+    summary: Retired with the worker round ceiling; a worker round has no tool-round budget to set, request, extend or exhaust.
+    date: 2026-11-12
+  - id: WORKER_BUDGET_EXTEND_NOT_RUNNING
+    kind: hint_code
+    summary: Retired with the worker round ceiling; a worker round has no tool-round budget to set, request, extend or exhaust.
+    date: 2026-11-12
+  - id: WORKER_BUDGET_EXTEND_SESSION_MISMATCH
+    kind: hint_code
+    summary: Retired with the worker round ceiling; a worker round has no tool-round budget to set, request, extend or exhaust.
+    date: 2026-11-12
+  - id: WORKER_BUDGET_REQUEST_AT_HOST_MAX
+    kind: hint_code
+    summary: Retired with the worker round ceiling; a worker round has no tool-round budget to set, request, extend or exhaust.
+    date: 2026-11-12
+  - id: WORKER_BUDGET_REQUEST_OPEN
+    kind: hint_code
+    summary: Retired with the worker round ceiling; a worker round has no tool-round budget to set, request, extend or exhaust.
+    date: 2026-11-12
+  - id: request_budget
+    kind: tool_name
+    summary: Retired with the worker round ceiling; a worker runs until it delivers and names any remaining work in its complete_leg report.
+    date: 2026-11-12
+  - id: extend_worker_budget
+    kind: tool_name
+    summary: Retired with the worker round ceiling; the coordinator hears about long rounds through round notices and stops one with worker_cancel.
+    date: 2026-11-12
+  - id: decline_worker_budget
+    kind: tool_name
+    summary: Retired with the worker round ceiling; there is no request to decline, and worker_cancel stops a round that is no longer worth continuing.
+    date: 2026-11-12

@@ -54,8 +54,6 @@ tools:
   # request_decision worker escalation (resumable)
   - request_decision
 
-  # request_budget worker ask for a higher tool-round ceiling
-  - request_budget
 
   # parse_* delegation plan parsing
   - parse_extract_json

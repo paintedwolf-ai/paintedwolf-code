@@ -389,7 +389,7 @@ describe("SessionTranscript tools and progress", () => {
     );
   });
 
-  it("updates task card progress when the matched worker budget ticks", async () => {
+  it("updates the task card turns chip when the matched worker advances", async () => {
     const sessionId = "2464e5bf-18f9-4995-8c6b-740347362a49";
     const jobId = "fd5c17f1-e76a-48d1-845e-9a9f35b0e8f4";
     const messages: Message[] = [
@@ -404,7 +404,6 @@ describe("SessionTranscript tools and progress", () => {
             args: {
               agent_type: "web-researcher",
               brief: { goal: "Research AI trends", done_when: ["Return results."] },
-              max_tool_loops: 10,
             },
           },
         ],
@@ -432,7 +431,6 @@ describe("SessionTranscript tools and progress", () => {
           tool_args: {
             agent_type: "web-researcher",
             brief: { goal: "Research AI trends", done_when: ["Return results."] },
-            max_tool_loops: 10,
           },
         },
         created_at: "2026-06-06T13:14:29.063328Z",
@@ -444,7 +442,6 @@ describe("SessionTranscript tools and progress", () => {
         parent_session_id: sessionId,
         agent_type: "web-researcher",
         status: "running",
-        max_tool_loops: 10,
         tool_loops_used: 1,
         created_at: "2026-06-06T13:14:29.024243Z",
       },
@@ -457,9 +454,8 @@ describe("SessionTranscript tools and progress", () => {
         workers={workers()}
       />
     ));
-    const fill = () =>
-      container.querySelector(".den-task-card-progress-fill") as HTMLElement;
-    expect(fill()?.style.width).toBe("10%");
+    const turns = () => container.querySelector(".den-worker-turns")?.textContent;
+    expect(turns()).toBe("1 turn");
 
     setWorkers([
       {
@@ -468,7 +464,7 @@ describe("SessionTranscript tools and progress", () => {
       },
     ]);
     await Promise.resolve();
-    expect(fill()?.style.width).toBe("40%");
+    expect(turns()).toBe("4 turns");
   });
 
 });

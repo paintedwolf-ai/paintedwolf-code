@@ -9,7 +9,6 @@ import (
 const (
 	TaskScopeWriteRequiredCode   = "TASK_SCOPE_WRITE_REQUIRED"
 	TaskScopeProfileReadOnlyCode = "TASK_SCOPE_PROFILE_READ_ONLY"
-	TaskMaxToolLoopsInvalidCode  = "TASK_MAX_TOOL_LOOPS_INVALID"
 	RepoEmptyReadOnlyWorkerCode  = "REPO_EMPTY_READ_ONLY_WORKER"
 )
 

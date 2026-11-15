@@ -28,7 +28,7 @@ Pack skill bodies use the isolated pongo profile, so includes are unavailable. T
 
 The vars describe the caller:
 
-- Sizing: `max_in_flight`, `worker_tool_budget_default`, `worker_tool_budget_min` / `_max`, `hunt_wave_workers`, `throwaway_tool_loops_min` / `_max`, `deep_tool_loops_hint`.
+- Sizing: `max_in_flight`, `max_read_workers`, `max_write_workers`, `hunt_wave_workers`.
 - Reach: `profile_has_<tool>` is true when the caller's surface offers that tool; `profile_command_mutation`, `profile_has_write_tools`, and `profile_can_request` describe its command effects, write scope, and tool requests.
 - Posture: `is_coordinator`, `on_worker_branch`, `has_git`, `root_count`.
 - Configuration: `configuration.<property>` resolves the caller pack's effective configuration values.

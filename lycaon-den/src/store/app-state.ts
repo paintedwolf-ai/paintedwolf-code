@@ -707,8 +707,6 @@ export function createAppStore(
               failure: event.failure ?? row.failure,
               error: event.error ?? row.error,
               ...mergedWorkerProgressFromEvent(row, event),
-              // Job events project the whole row, so absence means answered.
-              budget_request: event.budget_request,
               context_usage: event.context_usage ?? row.context_usage,
               workspace_preparation:
                 event.workspace_preparation ??
@@ -736,8 +734,6 @@ export function createAppStore(
             result: event.result,
             failure: event.failure,
             error: event.error,
-            max_tool_loops: event.max_tool_loops,
-            budget_request: event.budget_request,
             tool_loops_used: event.tool_loops_used,
             tool_calls_used: event.tool_calls_used,
             turn_tool_calls: event.turn_tool_calls,

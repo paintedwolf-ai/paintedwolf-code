@@ -206,7 +206,6 @@ func (b *serveBuilder) wireWorkflowConditions() error {
 	b.workflows.Manager.Coverage.WorkerTasks = workflowTaskQuery1
 	b.workflows.Manager.Verdicts.Questions.WorkerTasks = workflowTaskQuery1
 	b.workflows.Manager.Verdicts.WorkerTasks = workflowTaskQuery1
-	b.workflows.Manager.Fanout.WorkerToolBudget = b.sessions.WorkerToolBudgetFor
 	b.security.BindSpawnAgents(b.workflows.Manager.Policy.AllowedAgents)
 	b.workflows.Manager.Verdicts.Evidence.EvidenceDigests = append(b.workflows.Manager.Verdicts.Evidence.EvidenceDigests, scan.WorkflowEvidenceDigest(b.scanning.Store))
 	return nil

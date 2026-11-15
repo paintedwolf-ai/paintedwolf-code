@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -212,7 +211,9 @@ func TestRecordOutcomeDoesNotMarkIncompleteWorkComplete(t *testing.T) {
 	}
 }
 
-func TestBudgetExhaustedLegResumesPreservedChild(t *testing.T) {
+// A leg stored as retry_pending by an earlier release resumes on its preserved
+// child session.
+func TestStoredRetryPendingLegResumesPreservedChild(t *testing.T) {
 	_, store, queue, manager, reg := newDelegationTestManager(t)
 	ctx := t.Context()
 	projectID := seedDelegationProject(t, reg, t.TempDir())
@@ -229,14 +230,12 @@ func TestBudgetExhaustedLegResumesPreservedChild(t *testing.T) {
 		t.Fatal("initial worker task missing")
 	}
 	testutil.FailErr(t, "bind child", queue.SetChildSessionID(ctx, prior.ID, "child-session"))
-	testutil.FailErr(t, "record budget exhaustion", manager.RecordOutcome(ctx, delegation.ID, leg.ID, dispatched.WorkerID, api.WorkerResult{
-		Status: "partial", HintCode: workeroutcomes.WorkerBudgetExhaustedCode, Summary: "survey is incomplete",
-	}))
 	pending, err := store.GetLeg(ctx, delegation.ID, leg.ID)
-	testutil.FailErr(t, "load retry pending leg", err)
-	if pending.Status != api.LegStatusRetryPending || pending.CompletedAt != nil {
-		t.Fatalf("retry pending leg = %+v", pending)
-	}
+	testutil.FailErr(t, "load dispatched leg", err)
+	pending.Status = api.LegStatusRetryPending
+	pending.Result = &api.WorkerResult{Status: "partial", Summary: "survey is incomplete"}
+	_, err = store.RecordLegOutcome(ctx, *pending)
+	testutil.FailErr(t, "store retry pending leg", err)
 
 	resumed, err := manager.ResumeLeg(ctx, delegation.ID, leg.ID)
 	testutil.FailErr(t, "resume leg", err)
@@ -246,9 +245,6 @@ func TestBudgetExhaustedLegResumesPreservedChild(t *testing.T) {
 	}
 	if next.ChildSessionID != "child-session" || next.SpawnReason != api.SpawnReasonRetry {
 		t.Fatalf("continuation identity = %+v", next)
-	}
-	if next.MaxToolLoops <= prior.MaxToolLoops {
-		t.Fatalf("continuation max_tool_loops = %d want > %d", next.MaxToolLoops, prior.MaxToolLoops)
 	}
 	if resumed.Status != api.LegStatusDispatched || resumed.Result != nil {
 		t.Fatalf("resumed leg = %+v", resumed)

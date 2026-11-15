@@ -98,16 +98,6 @@ func (m *Summaries) Append(ctx context.Context, parentID string, in SummaryInput
 		}
 		summary = eval.Summary
 	}
-	budget := m.budget.BudgetForTask(ctx, task)
-	if exhaustCode, exhaustData := BudgetExhaustedHint(status, task, childMessages, budget); exhaustCode != "" && feedback == nil {
-		hintCode = exhaustCode
-		if m.workflowHints != nil {
-			formatted, err := guidance.FormatWorkerSummaryFeedback(m.workflowHints, hintCode, exhaustData)
-			if err == nil && strings.TrimSpace(formatted) != "" {
-				summary = formatted
-			}
-		}
-	}
 	body := ""
 	if feedback != nil {
 		rendered, err := guidance.RenderPolicyCopy(ctx, feedback.Code, feedback.Effect, feedback.Copy, feedback.Details)

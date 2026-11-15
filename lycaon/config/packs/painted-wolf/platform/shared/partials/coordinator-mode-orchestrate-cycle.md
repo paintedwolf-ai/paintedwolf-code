@@ -16,8 +16,8 @@
 | Fan-out you will only act on as a set | use `{kind: all_workers_idle}` and raise the timeout (900000–1800000 ms) |
 | Host — idle, not synthesis | **`wait(resume=true)`** — text only if cited |
 | Host — dispatch/park | Tool call (`Code: COORDINATOR_HOST_TURN_REQUIRES_WAIT`) |
-| After `answer_decision`, `extend_worker_budget`, or `decline_worker_budget`, when no other work is ready | **`wait(resume=true)`** — resume the interrupted wait |
+| After `answer_decision`, when no other work is ready | **`wait(resume=true)`** — resume the interrupted wait |
 
 After dispatch, inspect receipts, repair rejected calls, and start remaining ready work within capacity. Resolve worker decisions and integrate available results. Use `wait` when the next useful action depends on a worker result.
 
-Prefer **`wait(resume=true)`** when the only expected wake is the worker you just answered or extended — a new lease is for a new wait, not decision/budget resume.
+Prefer **`wait(resume=true)`** when the only expected wake is the worker you just answered — a new lease is for a new wait, not a decision resume.

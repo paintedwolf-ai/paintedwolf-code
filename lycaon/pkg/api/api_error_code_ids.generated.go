@@ -718,9 +718,9 @@ const (
 	// ApiErrorCodeHostFault the host could not record a tool call's outcome and
 	// stopped the turn (SSE host_error)
 	ApiErrorCodeHostFault ApiErrorCode = "host_fault"
-	// ApiErrorCodeWorkerCloseoutExhausted worker hit LLM turn limit after
-	// scheduled and recovery closeout (SSE worker.failure)
-	ApiErrorCodeWorkerCloseoutExhausted ApiErrorCode = "worker_closeout_exhausted"
+	// ApiErrorCodeWorkerModelTimeout the model did not answer a worker within the
+	// turn time limit (SSE worker.failure)
+	ApiErrorCodeWorkerModelTimeout ApiErrorCode = "worker_model_timeout"
 	// ApiErrorCodeWorkerExecuteFailed generic worker execute failure (SSE
 	// worker.failure)
 	ApiErrorCodeWorkerExecuteFailed ApiErrorCode = "worker_execute_failed"
@@ -1212,7 +1212,7 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodePromptFailed,
 	ApiErrorCodeTurnCloseoutToolCall,
 	ApiErrorCodeHostFault,
-	ApiErrorCodeWorkerCloseoutExhausted,
+	ApiErrorCodeWorkerModelTimeout,
 	ApiErrorCodeWorkerExecuteFailed,
 	ApiErrorCodeWorkerWorkspaceDiskFull,
 	ApiErrorCodeWorkerOwnerUnsettled,
@@ -1628,7 +1628,6 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodePromptFailed,
 		ApiErrorCodeTurnCloseoutToolCall,
 		ApiErrorCodeHostFault,
-		ApiErrorCodeWorkerCloseoutExhausted,
 		ApiErrorCodeWorkerExecuteFailed,
 		ApiErrorCodeWorkerOwnerUnsettled,
 		ApiErrorCodeSessionPreparationFailed:
@@ -1674,7 +1673,8 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodePresenceUnavailable,
 		ApiErrorCodeAuthUnavailable:
 		return 503
-	case ApiErrorCodeProviderSilent:
+	case ApiErrorCodeProviderSilent,
+		ApiErrorCodeWorkerModelTimeout:
 		return 504
 	case ApiErrorCodeWorkerWorkspaceDiskFull:
 		return 507

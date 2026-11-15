@@ -128,8 +128,6 @@ export function workerStoreFingerprint(worker: WorkerTask): string {
     worker.failure?.message ?? "",
     worker.error ?? "",
     worker.created_at ?? "",
-    String(worker.max_tool_loops ?? ""),
-    String(worker.budget_request?.requested_max ?? ""),
     String(worker.tool_loops_used ?? ""),
     String(worker.tool_calls_used ?? ""),
     String(worker.turn_tool_calls ?? ""),
@@ -174,9 +172,8 @@ function preferWorkerContextUsage(
   return incomingTokens >= existingTokens ? incoming : existing;
 }
 
-/** The progress slice of a worker row: budget, lifetime counters, in-flight batch. */
+/** The progress slice of a worker row: lifetime counters and the in-flight batch. */
 export type WorkerProgressFields = {
-  max_tool_loops?: number;
   tool_loops_used?: number;
   tool_calls_used?: number;
   turn_tool_calls?: number;
@@ -197,7 +194,6 @@ function mergedLifetimeCounters(
   incoming: WorkerProgressFields,
 ): WorkerProgressFields {
   return {
-    max_tool_loops: incoming.max_tool_loops ?? existing?.max_tool_loops,
     tool_loops_used: monotonic(existing?.tool_loops_used, incoming.tool_loops_used),
     tool_calls_used: monotonic(existing?.tool_calls_used, incoming.tool_calls_used),
   };
@@ -350,12 +346,6 @@ function dispatchAgentTypeFromArgs(args?: Record<string, unknown>): string {
   return "";
 }
 
-function dispatchMaxToolLoops(args?: Record<string, unknown>): number | undefined {
-  const raw = args?.max_tool_loops;
-  if (typeof raw === "number" && raw > 0) return raw;
-  return undefined;
-}
-
 function formatDispatchParamValue(key: string, value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (key === "scope" && typeof value === "object" && !Array.isArray(value)) {
@@ -492,7 +482,6 @@ export function workerEventFromTaskToolMessage(
   if (!jobId) return null;
   const call = taskDispatchCallForWorker(messages, jobId);
   const brief = dispatchBriefFromArgs(call?.args);
-  const maxToolLoops = dispatchMaxToolLoops(call?.args);
   const agentFromArgs = dispatchAgentTypeFromArgs(call?.args);
   return {
     worker_id: jobId,
@@ -505,7 +494,6 @@ export function workerEventFromTaskToolMessage(
       taskEnqueueAgentType(messages, toolMessage) ||
       undefined,
     brief: brief || undefined,
-    max_tool_loops: maxToolLoops,
   };
 }
 
@@ -544,13 +532,11 @@ export function syncWorkerFromTaskToolMessage(
     existing.child_session_id?.trim() || ev.child_session_id;
   const agentType = existing.agent_type?.trim() || ev.agent_type;
   const brief = existing.brief?.trim() || ev.brief?.trim();
-  const maxToolLoops = existing.max_tool_loops ?? ev.max_tool_loops;
   if (
     parentSessionId === existing.parent_session_id?.trim() &&
     childSessionId === existing.child_session_id?.trim() &&
     agentType === existing.agent_type?.trim() &&
-    brief === existing.brief?.trim() &&
-    maxToolLoops === existing.max_tool_loops
+    brief === existing.brief?.trim()
   ) {
     return;
   }
@@ -561,7 +547,6 @@ export function syncWorkerFromTaskToolMessage(
     child_session_id: childSessionId,
     agent_type: agentType,
     brief,
-    max_tool_loops: maxToolLoops,
     merge_status: existing.merge_status,
     result: existing.result,
     failure: existing.failure,
