@@ -11,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/hintregistry"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
@@ -89,15 +88,24 @@ func renderPersona(ctx context.Context, engine *FileTemplateEngine, agentID stri
 				loaded = raw
 			}
 		}
+		reader, err := NewReader(ReaderInput{
+			ProfileID: toolProfile,
+			Profiles:  profiles,
+			Loaded:    loaded,
+			Visible:   visible,
+			Schemas:   schemas,
+		})
+		if err != nil {
+			return "", fmt.Errorf("reader for %q: %w", id, err)
+		}
 		if err := MergeAgentToolSurfaceVars(toolProfile, visible, hints, ReaderInput{Loaded: loaded, Schemas: schemas}, data, profiles); err != nil {
 			return "", fmt.Errorf("agent tool surface for %q: %w", id, err)
 		}
-		offered, _ := data["agent_tool_names"].([]string)
 		unitCatalog, err := UnitCatalogFor(eff)
 		if err != nil {
 			return "", fmt.Errorf("unit catalog for %q: %w", id, err)
 		}
-		blocks, err := RenderUnitSlots(ctx, engine, unitCatalog, UnitSelectionVars(promptunit.HostWorker, "", offered), data)
+		blocks, err := RenderUnitSlots(ctx, engine, unitCatalog, reader.Selection(), data)
 		if err != nil {
 			return "", fmt.Errorf("units for %q: %w", id, err)
 		}

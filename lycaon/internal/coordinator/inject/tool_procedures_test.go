@@ -24,12 +24,16 @@ func testProcedureReader(t *testing.T, profileID string, offered []string) promp
 	for _, name := range offered {
 		loaded[name] = true
 	}
+	visible := offered
+	if visible == nil {
+		visible = []string{}
+	}
 	reader, err := prompts.NewReader(prompts.ReaderInput{
 		ProfileID: profileID,
 		Profiles:  profiles,
 		Plan:      toolsurface.Compile(offered, nil),
 		Loaded:    loaded,
-		Visible:   offered,
+		Visible:   visible,
 		RootCount: 1,
 		WebSearch: true,
 	})
@@ -41,7 +45,7 @@ func TestToolProceduresRenderTheUnitsTheirOfferedToolsAttach(t *testing.T) {
 	renderer := promptstest.InjectRenderer(t)
 	catalog, err := renderer.UnitCatalog()
 	testutil.FailErr(t, "load instruction catalog", err)
-	selection := promptunit.Selection{Host: promptunit.HostCoordinator, Offered: map[string]bool{"edit": true, "update_progress": true}}
+	selection := promptunit.Selection{Host: promptunit.HostCoordinator, Held: map[string]bool{"command_mutation": true, "update_progress": true}}
 	rendered := catalog.Rendered(selection)
 	for _, id := range []string{"coordinator-progress-procedure", "visual-show-the-design"} {
 		found := false
@@ -68,10 +72,13 @@ func TestToolProcedureUnitsAreTheUnitsTheBlockRenders(t *testing.T) {
 	renderer := promptstest.InjectRenderer(t)
 	catalog, err := renderer.UnitCatalog()
 	testutil.FailErr(t, "load instruction catalog", err)
-	offered := []string{"edit", "update_progress"}
-	units, err := inject.ToolProcedureUnits(renderer, testProcedureReader(t, prompts.CoordinatorProfileID, offered))
+	offered := []string{"command", "update_progress"}
+	reader := testProcedureReader(t, prompts.CoordinatorProfileID, offered)
+	units, err := inject.ToolProcedureUnits(renderer, reader)
 	testutil.FailErr(t, "list rendered units", err)
-	want := catalog.Rendered(prompts.UnitSelectionVars(promptunit.HostCoordinator, "", offered))
+	sel := reader.Selection()
+	sel.Mode = ""
+	want := catalog.Rendered(sel)
 	count := 0
 	for _, slotUnits := range want {
 		count += len(slotUnits)
@@ -83,8 +90,8 @@ func TestToolProcedureUnitsAreTheUnitsTheBlockRenders(t *testing.T) {
 	for _, unit := range units {
 		if len(unit.Attaches) > 0 {
 			attached++
-			if !unit.AttachedTo(map[string]bool{"edit": true, "update_progress": true}) {
-				t.Fatalf("unit %q attaches none of the offered tools", unit.ID)
+			if !unit.AttachedTo(reader.Held()) {
+				t.Fatalf("unit %q attaches none of the held entries", unit.ID)
 			}
 		}
 	}

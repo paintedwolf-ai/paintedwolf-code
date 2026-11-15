@@ -196,7 +196,7 @@ func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes
 }
 
 func visibleToolNames(profile sandbox.ToolProfile, visible []string) []string {
-	if len(visible) > 0 {
+	if visible != nil {
 		out := append([]string(nil), visible...)
 		sort.Strings(out)
 		return out

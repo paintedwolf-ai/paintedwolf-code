@@ -21,7 +21,8 @@ func RenderToolProceduresBlock(
 	if err != nil {
 		return "", err
 	}
-	sel := prompts.UnitSelectionVars(reader.Host(), "", reader.Offered())
+	sel := reader.Selection()
+	sel.Mode = ""
 	blocks, err := prompts.RenderUnitSlots(ctx, renderer, catalog, sel, vars)
 	if err != nil {
 		return "", err
@@ -49,7 +50,8 @@ func ToolProcedureUnits(renderer *prompts.InjectRenderer, reader prompts.Reader)
 	if err != nil {
 		return nil, err
 	}
-	sel := prompts.UnitSelectionVars(reader.Host(), "", reader.Offered())
+	sel := reader.Selection()
+	sel.Mode = ""
 	rendered := catalog.Rendered(sel)
 	var out []promptunit.Unit
 	for _, slot := range promptunit.Slots() {

@@ -5,9 +5,10 @@ description: >-
   images and recordings as evidence.
 slot: conduct
 order: 40
+attaches: [render_view, view_image, view_video, capture_page, page_open, command_mutation, terminal_open, terminal_snapshot]
 hosts: [coordinator, worker]
 ---
-{% if visual_show_available or profile_has_render_view or profile_has_view_image or profile_has_view_video %}### Visual evidence
+### Visual evidence
 
 When building, changing, or showing an interface, run its real entry point, exercise the affected flow, and capture it running before closing. Check normal use and relevant repeat/reset behavior. Routine test/build output needs no snapshot. {% if profile_has_update_progress %}Use `update_progress` to track{% else %}Track{% endif %} behavior verification and the UI or terminal snapshot separately; captures establish appearance, not interaction correctness.{% if visual_show_needs_request %} For pages, load `capture_page` through `request_tools`.{% endif %}
 
@@ -23,4 +24,3 @@ When building, changing, or showing an interface, run its real entry point, exer
 {% endif %}{% if profile_has_view_video %}- Recordings: see the moments a user's screen recording shows with `view_video`.
 {% endif %}
 Use the app harness or runner; fix console/runtime errors before the final snapshot. Use a still per claim or a filmstrip for async flows; recapture after fixes. Logs or failed captures do not close the row; disclose remaining blockers.
-{% endif %}

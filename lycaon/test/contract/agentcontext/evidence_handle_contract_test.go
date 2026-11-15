@@ -43,11 +43,7 @@ func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 			held[tool] = true
 		}
 		maps.Copy(held, toolcontract.ReachMarks(held["command"], toolcontract.AllCommandEffects()))
-		offered := map[string]bool{}
-		for _, tool := range state.offered {
-			offered[tool] = true
-		}
-		selection := promptunit.Selection{Host: state.host, Mode: state.mode, Offered: offered}
+		selection := promptunit.Selection{Host: state.host, Mode: state.mode, Held: held}
 		for _, slot := range units.Rendered(selection) {
 			for _, unit := range slot {
 				if !unit.Stock {

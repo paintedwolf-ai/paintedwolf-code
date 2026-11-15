@@ -174,7 +174,11 @@ func NewReader(in ReaderInput) (Reader, error) {
 		effects:     effects,
 		held:        held,
 		mints:       mints,
-		selection:   UnitSelectionVars(host, mode, offered),
+		selection: promptunit.Selection{
+			Host: host,
+			Mode: mode,
+			Held: held,
+		},
 		facts:       facts,
 		fingerprint: computeReaderFingerprint(host, profileID, surfaceID, mode, offered, requestable, commandOnFloor, effects, in),
 	}, nil
@@ -222,9 +226,9 @@ func (r Reader) Mints() map[string]bool { return maps.Clone(r.mints) }
 // Selection returns the promptunit.Selection for this reader.
 func (r Reader) Selection() promptunit.Selection {
 	return promptunit.Selection{
-		Host:    r.selection.Host,
-		Mode:    r.selection.Mode,
-		Offered: maps.Clone(r.selection.Offered),
+		Host: r.selection.Host,
+		Mode: r.selection.Mode,
+		Held: maps.Clone(r.selection.Held),
 	}
 }
 

@@ -7,9 +7,10 @@ import (
 
 // Reach marks represent command effect axes in a reader's held set.
 const (
-	ReachCommandMutation      = "command_mutation"
-	ReachCommandExternalExec  = "command_external_exec"
-	ReachCommandNetworkEgress = "command_network_egress"
+	ReachCommandMutation             = "command_mutation"
+	ReachCommandExternalExec         = "command_external_exec"
+	ReachCommandExternalExecSelector = "command_external_exec_selector"
+	ReachCommandNetworkEgress        = "command_network_egress"
 )
 
 // ReachMarks returns the synthetic reach marks for a reader's command effects.
@@ -23,6 +24,7 @@ func ReachMarks(holdsCommand bool, effects CommandEffects) map[string]bool {
 	}
 	if effects.Allows(commandEffectBit(CommandExternalExec)) {
 		out[ReachCommandExternalExec] = true
+		out[ReachCommandExternalExecSelector] = true
 	}
 	if effects.Allows(commandEffectBit(CommandNetworkEgress)) {
 		out[ReachCommandNetworkEgress] = true
@@ -33,7 +35,7 @@ func ReachMarks(holdsCommand bool, effects CommandEffects) map[string]bool {
 // IsReachMark reports whether name is a synthetic command-effect reach mark.
 func IsReachMark(name string) bool {
 	switch name {
-	case ReachCommandMutation, ReachCommandExternalExec, ReachCommandNetworkEgress:
+	case ReachCommandMutation, ReachCommandExternalExec, ReachCommandExternalExecSelector, ReachCommandNetworkEgress:
 		return true
 	default:
 		return false
