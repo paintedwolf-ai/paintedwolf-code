@@ -92,7 +92,6 @@ var (
 	ErrPrerequisiteSelf    = errors.New("a worker cannot wait on itself")
 	ErrPrerequisiteCycle   = errors.New("prerequisites would form a cycle")
 	ErrPrerequisiteDepth   = errors.New("prerequisite chain too long to check")
-	ErrBaseResultSet       = errors.New("worker already starts from another result")
 )
 
 // Store reads and writes worker records.

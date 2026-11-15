@@ -430,8 +430,8 @@ func (s *Store) UpdatePlanned(ctx context.Context, actor Actor, op Op, workerID 
 	if err := validateSpec(spec); err != nil {
 		return Worker{}, err
 	}
-	pre := normalizePrerequisites(Prerequisites{AfterWorkers: afterWorkers})
-	return run(ctx, s, actor, op, "update_planned_worker", []any{workerID, spec, pre.AfterWorkers}, func(q *db.Queries, _ *sql.Tx) (Worker, error) {
+	afterWorkers = normalizeWorkerNames(afterWorkers)
+	return run(ctx, s, actor, op, "update_planned_worker", []any{workerID, spec, afterWorkers}, func(q *db.Queries, _ *sql.Tx) (Worker, error) {
 		w, err := coordinatorWorker(ctx, q, actor, workerID)
 		if err != nil {
 			return Worker{}, err
@@ -466,7 +466,7 @@ func (s *Store) UpdatePlanned(ctx context.Context, actor Actor, op Op, workerID 
 		if err := q.DeleteRoundlessWorkerProducerDependencies(ctx, w.ID); err != nil {
 			return Worker{}, err
 		}
-		for _, name := range pre.AfterWorkers {
+		for _, name := range afterWorkers {
 			producer, pErr := q.GetWorkerByName(ctx, db.GetWorkerByNameParams{SessionID: w.SessionID, Name: name})
 			if db.IsNoRows(pErr) {
 				return Worker{}, ErrPrerequisiteUnknown

@@ -140,46 +140,34 @@ func TestDispositionsSeparateAccountingFromChanges(t *testing.T) {
 	wantErr(t, "shelving without a reason", err, workerrecords.ErrInvalidDisposition)
 }
 
-func TestPrerequisitesResolveAndRefuse(t *testing.T) {
+// A planned worker's prerequisites resolve by name in its session; the worker
+// itself, a missing name and a cycle are refused.
+func TestPlannedPrerequisitesResolveAndRefuse(t *testing.T) {
 	f := newFixture(t)
 	producer, _ := f.workerWithRound(t, "producer", "child-p", "job-p")
-	f.insertResult(t, "result-p", "job-p")
 	consumer := f.createWorker(t, "create-consumer", workerrecords.WorkerSpec{Name: "consumer"})
 	third := f.createWorker(t, "create-third", workerrecords.WorkerSpec{Name: "third"})
-
-	r, err := f.store.AddPrerequisites(t.Context(), f.coord, op("pre-1"), consumer.WorkerID, workerrecords.Prerequisites{AfterWorkers: []string{"producer", " producer "}, BaseResultID: "result-p"})
-	testutil.FailErr(t, "add prerequisites", err)
-	if len(r.ProducerIDs) != 1 || r.ProducerIDs[0] != producer.WorkerID || r.BaseResultID != "result-p" {
-		t.Fatalf("receipt = %+v", r)
+	spec := func(name string) workerrecords.WorkerSpec {
+		return workerrecords.WorkerSpec{Name: name, AgentType: "implementer", ScopeMode: "write"}
 	}
+
+	_, err := f.store.UpdatePlanned(t.Context(), f.coord, op("plan-1"), consumer.WorkerID, spec("consumer"), []string{"producer", " producer "})
+	testutil.FailErr(t, "plan after producer", err)
 	deps, err := f.store.Dependencies(t.Context(), f.coord, consumer.WorkerID)
 	testutil.FailErr(t, "list dependencies", err)
-	if len(deps) != 2 {
+	if len(deps) != 1 || deps[0].ProducerWorkerID != producer.WorkerID {
 		t.Fatalf("dependencies = %+v", deps)
 	}
 	_, err = f.store.Dependencies(t.Context(), f.other, consumer.WorkerID)
 	wantErr(t, "another session's dependencies", err, workerrecords.ErrWorkerNotFound)
-	_, err = f.store.AddPrerequisites(t.Context(), f.coord, op("pre-base-again"), consumer.WorkerID, workerrecords.Prerequisites{BaseResultID: "result-p"})
-	testutil.FailErr(t, "same base again", err)
-	f.workerWithRound(t, "other-producer", "child-o", "job-o")
-	f.insertResult(t, "result-o", "job-o")
-	_, err = f.store.AddPrerequisites(t.Context(), f.coord, op("pre-base-other"), consumer.WorkerID, workerrecords.Prerequisites{BaseResultID: "result-o"})
-	wantErr(t, "another base", err, workerrecords.ErrBaseResultSet)
-	_, err = f.store.AddPrerequisites(t.Context(), f.coord, op("pre-self"), consumer.WorkerID, workerrecords.Prerequisites{AfterWorkers: []string{"consumer"}})
+	_, err = f.store.UpdatePlanned(t.Context(), f.coord, op("plan-self"), consumer.WorkerID, spec("consumer"), []string{"consumer"})
 	wantErr(t, "self", err, workerrecords.ErrPrerequisiteSelf)
-	_, err = f.store.AddPrerequisites(t.Context(), f.coord, op("pre-missing"), consumer.WorkerID, workerrecords.Prerequisites{AfterWorkers: []string{"nobody"}})
+	_, err = f.store.UpdatePlanned(t.Context(), f.coord, op("plan-missing"), consumer.WorkerID, spec("consumer"), []string{"nobody"})
 	wantErr(t, "missing", err, workerrecords.ErrPrerequisiteUnknown)
-	_, err = f.store.AddPrerequisites(t.Context(), f.coord, op("pre-chain"), third.WorkerID, workerrecords.Prerequisites{AfterWorkers: []string{"consumer"}})
+	_, err = f.store.UpdatePlanned(t.Context(), f.coord, op("plan-chain"), third.WorkerID, spec("third"), []string{"consumer"})
 	testutil.FailErr(t, "chain", err)
-	_, err = f.store.AddPrerequisites(t.Context(), f.coord, op("pre-cycle"), producer.WorkerID, workerrecords.Prerequisites{AfterWorkers: []string{"third"}})
+	_, err = f.store.UpdatePlanned(t.Context(), f.coord, op("plan-cycle"), consumer.WorkerID, spec("consumer"), []string{"third"})
 	wantErr(t, "cycle", err, workerrecords.ErrPrerequisiteCycle)
-
-	_, err = f.store.CreateWorker(t.Context(), f.other, op("other-w"), workerrecords.WorkerSpec{Name: "producer", AgentType: "implementer", ScopeMode: "write"})
-	testutil.FailErr(t, "other session worker", err)
-	foreign, err := f.store.Resolve(t.Context(), f.other, "producer")
-	testutil.FailErr(t, "resolve other", err)
-	_, err = f.store.AddPrerequisites(t.Context(), f.other, op("pre-foreign-result"), foreign.ID, workerrecords.Prerequisites{BaseResultID: "result-p"})
-	wantErr(t, "another session's result", err, workerrecords.ErrResultNotFound)
 }
 
 func TestPreparationsAppendInOrder(t *testing.T) {
