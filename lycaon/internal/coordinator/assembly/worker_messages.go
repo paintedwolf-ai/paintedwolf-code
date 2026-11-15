@@ -75,7 +75,8 @@ func (e *turnContextAssembler) workerRoundInject(ctx context.Context, sess *api.
 	}
 	return api.Message{
 		Role: api.MessageRoleSystem, Content: strings.TrimSpace(block.Header + "\n\n" + block.Messages),
-		Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
+		ContextPinned: true,
+		Origin:        api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
 		ContentParts: inject.WorkerRoundParts(block),
 	}, true, nil
 }

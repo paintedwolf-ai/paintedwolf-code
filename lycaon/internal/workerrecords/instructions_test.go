@@ -7,19 +7,12 @@ import (
 	"github.com/lycaon/lycaon/internal/workerrecords"
 )
 
-// settle ends the worker's running round on jobID.
-func (f *fixture) settle(t *testing.T, workerID, jobID string) {
-	t.Helper()
-	_, err := f.store.SettleRound(t.Context(), f.coord, op("settle-"+jobID), workerID, jobID, "")
-	testutil.FailErr(t, "settle "+jobID, err)
-}
-
 // A coordinator instructs only a running round; a stopped worker is started
 // with StartRound.
 func TestInstructionsNeedARunningRound(t *testing.T) {
 	f := newFixture(t)
 	w, _ := f.workerWithRound(t, "fixer", "child-1", "job-1")
-	f.settle(t, w.WorkerID, "job-1")
+	f.settle(t, "job-1", "")
 	_, err := f.store.AppendMessage(t.Context(), f.coord, op("late"), w.WorkerID, workerrecords.MessageSpec{Body: "also the caller"})
 	wantErr(t, "instruct a stopped worker", err, workerrecords.ErrNoRunningRound)
 }
@@ -32,7 +25,7 @@ func TestRoundsCarryOnlyTheirOwnInstructions(t *testing.T) {
 	w, child := f.workerWithRound(t, "fixer", "child-1", "job-1")
 	_, err := f.store.AppendMessage(t.Context(), f.coord, op("queued"), w.WorkerID, workerrecords.MessageSpec{Body: "check the encoder too"})
 	testutil.FailErr(t, "queue instruction", err)
-	f.settle(t, w.WorkerID, "job-1")
+	f.settle(t, "job-1", "")
 
 	missed, err := f.store.NotApplied(t.Context(), f.coord, w.WorkerID, 1)
 	testutil.FailErr(t, "not applied", err)
@@ -59,7 +52,7 @@ func TestRoundsCarryOnlyTheirOwnInstructions(t *testing.T) {
 		t.Fatalf("round 2 page = %+v", page.Messages)
 	}
 	testutil.FailErr(t, "commit", f.store.CommitPage(t.Context(), child, w.WorkerID, 0, page.ID))
-	f.settle(t, w.WorkerID, "job-2")
+	f.settle(t, "job-2", "")
 	missed, err = f.store.NotApplied(t.Context(), f.coord, w.WorkerID, 2)
 	testutil.FailErr(t, "round 2 not applied", err)
 	if len(missed) != 0 {
@@ -72,7 +65,7 @@ func TestRoundsCarryOnlyTheirOwnInstructions(t *testing.T) {
 func TestStartRoundAppliesProfileChanges(t *testing.T) {
 	f := newFixture(t)
 	w, _ := f.workerWithRound(t, "fixer", "child-1", "job-1")
-	f.settle(t, w.WorkerID, "job-1")
+	f.settle(t, "job-1", "")
 	f.insertJob(t, "job-2", coordSession, "child-1", "pending")
 	start := workerrecords.RoundStart{JobID: "job-2", ExecutionTarget: "local", Instruction: "implement what you found",
 		Brief: "Survey the parser", AgentType: "repo-researcher", ScopeMode: "read"}

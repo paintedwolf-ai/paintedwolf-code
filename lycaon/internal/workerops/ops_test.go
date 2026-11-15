@@ -107,8 +107,13 @@ func (f *fixture) settle(t *testing.T, jobID, legStatus, checkpoint string) {
 	t.Helper()
 	_, err := f.db.ExecContext(t.Context(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES (?, ?, 'complete', ?)`, "result-"+jobID, jobID, now())
 	testutil.FailErr(t, "insert result", err)
-	_, err = f.records.SettleRound(t.Context(), f.coord, workerrecords.Op{ID: "settle-" + jobID}, f.workerID, jobID, checkpoint)
+	n, err := db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{
+		SettledAt: db.NullString(now()), CheckpointID: checkpoint, JobID: jobID,
+	})
 	testutil.FailErr(t, "settle", err)
+	if n != 1 {
+		t.Fatalf("settle %s touched %d rounds", jobID, n)
+	}
 	status := api.WorkerStatusComplete
 	if legStatus == "" {
 		status = api.WorkerStatusFailed
