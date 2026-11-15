@@ -60,6 +60,7 @@ var toolsNativeSchemaOnly = map[string]string{
 	"delegate_decompose":             "delegation tool — registered at serve boot",
 	"plan_from_blueprint":            "blueprint planning tool — registered at serve boot",
 	"pack_board":                     "board tool — registered at serve boot",
+	"read_findings":                  "findings tool — registered at serve boot",
 	"read_review":                    "board review tool — registered at serve boot",
 	"parse_decomposition":            "parser tool — registered at serve boot",
 	"parse_delegation_plan":          "parser tool — registered at serve boot",

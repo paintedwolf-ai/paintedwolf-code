@@ -332,6 +332,11 @@ tools:
     title_keys: [symbol, path]
     path_entry: file
     activity: {headline: "reading files", salience: supporting, role: investigation}
+  read_findings:
+    title_keys: []
+    title_fallback: "Shared findings"
+    visibility: coordinator_internal
+    activity: {headline: "coordinating", salience: incidental, role: coordination}
   read_review:
     title_keys: [assignment_id]
     title_fallback: "Review status"

@@ -199,6 +199,7 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		"batches": true, "tools": true,
 		"scan_id": true, "scan_status": true, "scan_categories": true, "scan_findings_count": true,
 		"job_id": true, "remaining": true, "notice_kind": true, "model_calls": true, "tokens": true,
+		"round_ordinal": true, "workflow_work_id": true, "latest_message_seq": true, "tools_minutes": true,
 		"spend_under_cent": true, "estimated_spend_usd": true, "quiet_minutes": true, "in_flight": true,
 		"tool_calls": true, "tools_done": true, "child_session_id": true,
 		"workspace_path": true, "project_id": true, "config_root": true,

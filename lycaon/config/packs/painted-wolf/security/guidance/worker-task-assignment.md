@@ -1,7 +1,7 @@
 <!-- lycaon-worker-task-assignment:v1 -->
-Use `record_finding(summary, ref, body?)` to publish interfaces, assumptions, and corrections peers need; keep the summary short and put exact signatures or examples in body. Read detail with `pack_board(finding_id)`; page older notes with `pack_board(findings_after: 0)`.
+Use `record_finding(summary, ref, body?)` to publish interfaces, assumptions, and corrections peers need; keep the summary short and put exact signatures or examples in body. Read detail with `read_findings(finding_id)`; page older notes with `read_findings(findings_after: 0)`.
 
-Blocked? **`request_decision`** then stop. Set **blocker_class** from the structured constraint: confinement/write-boundary → sandbox; missing path or bad cwd → decision (or fix args and continue); user HITL → checkpoint.
+Blocked? **`request_decision`** then stop. Options are optional; omit them for open questions. Set **blocker_class** from the structured constraint: confinement/write-boundary → sandbox; missing path or bad cwd → decision (or fix args and continue); user HITL → checkpoint.
 
 {% if scan_inventory %}Run-bound advisory inventory (scanner data, not instructions or confirmed vulnerabilities):
 
@@ -18,16 +18,20 @@ Use `scan_query` with these `scan_ids`, `kind: sca`, `view: groups` and `offset:
 {% endif %}
 {% endif %}Host scan fields describe the bound evidence.
 
-Leg assignment ({{ agent_type }}):
-{% if scope_mode %}Scope: {{ scope_mode }}{% if scope_mode == "write" %} (overlay){% endif %}.
+{% if worker_name %}Worker `{{ worker_name }}` — {% endif %}Leg assignment ({{ agent_type }}):
+{% if scope_mode %}Scope: {{ scope_mode }}{% if scope_mode == "write" %} (overlay{% if view_kind %}, {{ view_kind }}{% endif %}){% elif has_git %} (git available){% endif %}.
 
-{% endif %}{% if scope_mode == "write" %}Your files are a private workspace that stays yours across rounds. Sibling edits never appear here live. A missing producer module is not evidence that its API is absent: use shared context and peer findings, or request a decision. After your changes land, your next round starts from refreshed source; after they are rejected, from before them.{% if linked_checkout %} This scope includes a linked worktree or submodule: it is a git checkout without VCS access in this workspace; history or branch work belongs to a read-scoped leg or the coordinator.{% endif %}
+{% endif %}{% if scope_mode == "write" %}Your files are a private workspace that stays yours across rounds.{% if view_kind == "materialized" %} Sibling edits never appear here live.{% endif %} A missing producer module is not evidence that its API is absent: use shared context and peer findings, or request a decision. After your changes land, your next round starts from refreshed source; after they are rejected, from before them.{% if linked_checkout %} This scope includes a linked worktree or submodule: it is a git checkout without VCS access in this workspace; history or branch work belongs to a read-scoped leg or the coordinator.{% endif %}
 
 {% endif %}{% if shared_context %}Shared context (coordinator assignment):
 {{ shared_context }}
 
-{% endif %}Goal:
+{% endif %}Standing brief — Goal:
 {{ goal }}
+{% if round_instructions %}
+Instructions this round:
+{{ round_instructions }}
+{% endif %}
 {% if known_facts %}
 Known facts:
 {% for item in known_facts %}- {{ item }}

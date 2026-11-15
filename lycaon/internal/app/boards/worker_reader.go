@@ -29,13 +29,11 @@ func (r *Runtime) WorkerReader() workerops.Reader {
 			if err != nil || recovery {
 				return recovery, err
 			}
-			rounds, err := records.Rounds(ctx, actor, workerID)
-			for i := len(rounds) - 1; err == nil && i >= 0; i-- {
-				if rounds[i].SettledAt != "" && rounds[i].ResultID != "" {
-					return lanes.PromotionUnsettled(ctx, rounds[i].JobID)
-				}
+			round, _, hasResult, err := records.LatestSettledResult(ctx, actor, workerID)
+			if err != nil || !hasResult {
+				return false, err
 			}
-			return false, err
+			return lanes.PromotionUnsettled(ctx, round.JobID)
 		},
 		ApprovalWait: func(ctx context.Context, childSessionID string) bool {
 			pending, err := checkpoints.ListPending(ctx, childSessionID, &toolApproval)

@@ -98,7 +98,7 @@ func renderPeerNotesData(notes []inject.SiblingNote) string {
 			line = fmt.Sprintf("finding %d: %s", note.ID, line)
 		}
 		if note.HasBody {
-			line += " [detail: pack_board finding_id]"
+			line += " [detail: read_findings finding_id]"
 		}
 		if agent := strings.TrimSpace(note.Agent); agent != "" {
 			line = agent + ": " + line

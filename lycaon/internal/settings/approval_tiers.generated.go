@@ -33,6 +33,7 @@ var (
 		"plan_from_blueprint",
 		"preview_overlay",
 		"promote_overlay",
+		"read_findings",
 		"read_review",
 		"recall",
 		"record_finding",

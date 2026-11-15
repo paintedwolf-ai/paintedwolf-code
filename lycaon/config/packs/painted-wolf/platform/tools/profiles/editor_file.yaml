@@ -16,6 +16,7 @@ tools:
   scan_list: sticky
   record_finding: sticky
   pack_board: sticky
+  read_findings: sticky
   read_review: sticky
   wait: sticky
   skills_read: sticky

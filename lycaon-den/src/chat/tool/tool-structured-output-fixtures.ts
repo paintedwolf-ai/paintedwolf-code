@@ -34,6 +34,7 @@ const CATALOG_OK_TOOLS = [
   "workflow_transition",
   "fanout_plan",
   "plan_from_blueprint",
+  "read_findings",
   "read_review",
   "submit_verdict",
   "skills_read",

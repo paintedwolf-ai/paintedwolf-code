@@ -118,9 +118,11 @@ the delivered context from one bounded state row per worker. Findings from the c
 worker's creation are included; absent a human opener, the boundary is worker
 creation. A targeted opener query avoids loading transcript bodies. Overflow remains in the store rather than being
 dropped. The inject names its continuation cursor when more unread findings remain.
-`pack_board(finding_id)` reads one full finding;
-`pack_board(findings_after: 0)` starts ordered summary pagination and returns
-`next_after`. Bodies appear in the worklog behind a details disclosure. Peer
+`read_findings(finding_id)` reads one full finding;
+`read_findings(findings_after: 0)` starts ordered summary pagination and returns
+`next_after`. `pack_board` serves repository orientation and the named worker
+roster only, paging older workers via `cursor` and filtering planned legs via
+`plan`. Bodies appear in the worklog behind a details disclosure. Peer
 findings remain untrusted observations, not host instructions.
 
 ### Worker rounds

@@ -232,6 +232,8 @@ anchors:
       vars:
         worker: { type: string }
         agent_type: { type: string, required: true }
+        round_ordinal: { type: int }
+        workflow_work_id: { type: string }
         notice_kind: { type: string, required: true }
         model_calls: { type: int, required: true }
         tokens: { type: int, required: true }

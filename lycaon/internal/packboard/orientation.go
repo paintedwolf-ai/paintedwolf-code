@@ -66,7 +66,7 @@ func BuildOrientationLines(snapshot api.BoardSnapshot, opts OrientOpts) []string
 	if other := FormatOtherReposLine(snapshot.Git); other != "" {
 		lines = append(lines, other)
 	}
-	lines = append(lines, workerStateLines(snapshot, now)...)
+	lines = append(lines, workerStateLinesWithDetail(snapshot, now, opts.IncludeDetail)...)
 	if scanLines := FormatScansLines(snapshot.Scans, gitHeadShort(snapshot.Git), now, opts.IncludeDetail); len(scanLines) > 0 {
 		lines = append(lines, scanLines...)
 	}
@@ -82,8 +82,10 @@ func BuildOrientationLines(snapshot api.BoardSnapshot, opts OrientOpts) []string
 		}
 	}
 	if opts.IncludeDetail {
-		for _, t := range tasks {
-			lines = append(lines, FormatWorkerDetailLine(t, now))
+		if len(NamedWorkersFromSnapshot(snapshot)) == 0 {
+			for _, t := range tasks {
+				lines = append(lines, FormatWorkerDetailLine(t, now))
+			}
 		}
 		for _, d := range delegations {
 			if line := FormatDelegationDetailLine(d); line != "" {

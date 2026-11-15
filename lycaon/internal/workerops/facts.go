@@ -7,6 +7,7 @@ package workerops
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/workerrecords"
@@ -39,11 +40,13 @@ type Reader struct {
 
 // Snapshot is one worker with its rounds, dispositions and derived state.
 type Snapshot struct {
-	Worker       workerrecords.Worker
-	Rounds       []workerrecords.Round
-	Dispositions map[string]workerrecords.Disposition
-	Facts        workerstate.Facts
-	View         workerstate.View
+	Worker               workerrecords.Worker
+	Rounds               []workerrecords.Round
+	Dispositions         map[string]workerrecords.Disposition
+	Facts                workerstate.Facts
+	View                 workerstate.View
+	LatestResultRound    *workerrecords.Round
+	LatestChangedSettled *workerrecords.Round
 }
 
 // Latest returns the worker's latest round, if any.
@@ -56,8 +59,24 @@ func (s Snapshot) Latest() (workerrecords.Round, bool) {
 
 // LatestResult returns the newest round that settled with a result.
 func (s Snapshot) LatestResult() (workerrecords.Round, bool) {
+	if s.LatestResultRound != nil {
+		return *s.LatestResultRound, true
+	}
 	for i := len(s.Rounds) - 1; i >= 0; i-- {
 		if s.Rounds[i].SettledAt != "" && s.Rounds[i].ResultID != "" {
+			return s.Rounds[i], true
+		}
+	}
+	return workerrecords.Round{}, false
+}
+
+// LatestChanged returns the newest settled round that recorded file changes.
+func (s Snapshot) LatestChanged() (workerrecords.Round, bool) {
+	if s.LatestChangedSettled != nil {
+		return *s.LatestChangedSettled, true
+	}
+	for i := len(s.Rounds) - 1; i >= 0; i-- {
+		if s.Rounds[i].SettledAt != "" && s.Rounds[i].CheckpointID != "" && s.Rounds[i].ResultID != "" {
 			return s.Rounds[i], true
 		}
 	}
@@ -130,6 +149,77 @@ func (r Reader) Read(ctx context.Context, actor workerrecords.Actor, w workerrec
 	return snap, nil
 }
 
+// ReadBounded derives one worker's state and loads at most recentLimit newest
+// rounds (zero loads only the latest round when present), keeping query work
+// independent of total round history.
+func (r Reader) ReadBounded(ctx context.Context, actor workerrecords.Actor, w workerrecords.Worker, recentLimit int) (Snapshot, error) {
+	summary, err := r.Records.ReadStateSummary(ctx, actor, w.ID)
+	if err != nil {
+		return Snapshot{}, err
+	}
+	snap := Snapshot{
+		Worker:               w,
+		Dispositions:         map[string]workerrecords.Disposition{},
+		LatestResultRound:    summary.LatestResult,
+		LatestChangedSettled: summary.LatestChangedSettled,
+	}
+	if summary.LatestResult != nil {
+		snap.Dispositions[summary.LatestResult.ResultID] = summary.LatestResultDisp
+	}
+	if summary.LatestChangedSettled != nil && summary.LatestChangedSettled.ResultID != "" {
+		if _, exists := snap.Dispositions[summary.LatestChangedSettled.ResultID]; !exists {
+			snap.Dispositions[summary.LatestChangedSettled.ResultID] = summary.LatestChangedDisp
+		}
+	}
+	if recentLimit > 0 && summary.HasRounds {
+		recent, rErr := r.Records.RoundsBefore(ctx, actor, w.ID, 0, recentLimit)
+		if rErr != nil {
+			return Snapshot{}, rErr
+		}
+		slices.Reverse(recent)
+		snap.Rounds = recent
+	} else if summary.LatestRound != nil {
+		snap.Rounds = []workerrecords.Round{*summary.LatestRound}
+	}
+	f := workerstate.Facts{
+		Closed:         w.ClosedAt != "",
+		Planned:        w.LegID != "" && !summary.HasRounds,
+		Role:           workerstate.RoleUnbound,
+		OpenChanges:    summary.HasOpenChanges,
+		ShelvedChanges: summary.HasShelvedChanges,
+	}
+	if w.LegID != "" || w.WorkflowWorkID != "" {
+		f.Role = workerstate.RolePlanned
+	}
+	if summary.HasReviewerRound {
+		f.Role = workerstate.RoleReviewer
+	}
+	for _, jobID := range summary.UnaccountedJobs {
+		job, _ := r.job(jobID)
+		if api.WorkerTaskLegStatus(job) == "complete" {
+			f.UnaccountedComplete = true
+			break
+		}
+	}
+	if !f.Closed && w.ChildSessionID == "" && summary.HasSettledRound {
+		f.SessionUnusable = true
+	}
+	if summary.LatestRound != nil {
+		f.Latest, err = r.round(ctx, w, *summary.LatestRound)
+		if err != nil {
+			return Snapshot{}, err
+		}
+	}
+	if r.Readiness != nil && !f.Closed {
+		if f.Recovery, err = r.Readiness(ctx, actor, w.ID); err != nil {
+			return Snapshot{}, err
+		}
+	}
+	snap.Facts = f
+	snap.View = workerstate.Derive(f)
+	return snap, nil
+}
+
 // LatestResultJob names the job of the named worker's latest result. ok is
 // false for a name with no worker or a worker with no result yet.
 func (r Reader) LatestResultJob(ctx context.Context, actor workerrecords.Actor, name string) (string, bool, error) {
@@ -140,7 +230,7 @@ func (r Reader) LatestResultJob(ctx context.Context, actor workerrecords.Actor, 
 	if err != nil {
 		return "", false, err
 	}
-	snap, err := r.Read(ctx, actor, w)
+	snap, err := r.ReadBounded(ctx, actor, w, 0)
 	if err != nil {
 		return "", false, err
 	}
@@ -156,7 +246,7 @@ func (r Reader) CountState(ctx context.Context, actor workerrecords.Actor, state
 	}
 	n := 0
 	for _, w := range workers {
-		snap, err := r.Read(ctx, actor, w)
+		snap, err := r.ReadBounded(ctx, actor, w, 0)
 		if err != nil {
 			return 0, err
 		}

@@ -104,6 +104,7 @@ var implementInvestigateDeferredTools = []string{
 	"scan_compare",
 	"task",
 	"pack_board",
+	"read_findings",
 	"worker_cancel",
 	"answer_decision",
 	"instruct_worker",

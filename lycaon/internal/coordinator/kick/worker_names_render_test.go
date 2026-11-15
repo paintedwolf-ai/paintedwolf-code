@@ -13,7 +13,7 @@ import (
 // only when offered.
 func TestWorkerKickCopyRendersEveryState(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configRoot(t)})
-	named := []string{"preview_overlay", "instruct_worker", "pack_board", "wait"}
+	named := []string{"preview_overlay", "instruct_worker", "pack_board", "read_findings", "worker_history", "worker_cancel", "wait"}
 	cases := []struct {
 		kick string
 		data map[string]any
@@ -23,7 +23,7 @@ func TestWorkerKickCopyRendersEveryState(t *testing.T) {
 		{"coordinator-scheduled", map[string]any{"batch_phase": "open"}, nil},
 		{"coordinator-worker-task-finished", map[string]any{"pending_overlays": 1}, []string{"1"}},
 		{"coordinator-worker-task-finished", map[string]any{"partial_workers": 3}, []string{"3"}},
-		{"coordinator-worker-round-notice", map[string]any{"notice_kind": "consumption", "worker": "parser-fix", "agent_type": "implementer", "model_calls": 7, "tokens": 0}, []string{"`parser-fix`", "7"}},
+		{"coordinator-worker-round-notice", map[string]any{"notice_kind": "consumption", "worker": "parser-fix", "agent_type": "implementer", "round_ordinal": int64(3), "workflow_work_id": "leg-parse", "model_calls": 7, "tokens": 0}, []string{"`parser-fix`", "round 3", "`leg-parse`", "7"}},
 		{"coordinator-worker-round-notice", map[string]any{"notice_kind": "quiet", "agent_type": "implementer", "quiet_minutes": 12, "model_calls": 1, "tokens": 0}, []string{"12"}},
 		{"coordinator-worker-round-notice", map[string]any{"notice_kind": "quiet", "agent_type": "implementer", "quiet_minutes": 12, "model_calls": 1, "tokens": 0, "in_flight": "tools", "tool_calls": 3, "tools_done": 1, "tools": []string{"command", "read"}, "tools_minutes": 9, "latest_message_seq": int64(4)}, []string{"1 of 3", "`command`, `read`", "9 minutes", "#4"}},
 		{"coordinator-worker-round-notice", map[string]any{"notice_kind": "consumption", "agent_type": "implementer", "model_calls": 7, "tokens": 0, "latest_message_seq": int64(2)}, []string{"7", "#2"}},

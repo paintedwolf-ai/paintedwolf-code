@@ -20,9 +20,12 @@ const (
 	RecipientWorker      = "worker"
 )
 
-// maxCoordinatorLines bounds how many messages one coordinator request
-// carries across its workers; the rest wait for the next request.
-const maxCoordinatorLines = 32
+// Line and byte bounds across one coordinator or worker request; any remaining
+// messages stay queued for later requests.
+const (
+	maxCoordinatorLines = 32
+	maxCoordinatorBytes = workerrecords.MaxHistoryPageBytes
+)
 
 // Delivery prepares and commits message pages through the worker records.
 type Delivery struct {
@@ -40,7 +43,8 @@ func actorFor(sess *api.Session) workerrecords.Actor {
 }
 
 // PrepareMessages opens the session's undelivered pages. A worker gets the
-// instructions addressed to it; a coordinator gets what its workers said.
+// instructions addressed to it; a coordinator gets fair, byte-bounded slices
+// across its active workers ordered by oldest unread message.
 func (d *Delivery) PrepareMessages(ctx context.Context, sess *api.Session) (assembly.MessageDelivery, error) {
 	if d == nil || d.Records == nil || sess == nil {
 		return assembly.MessageDelivery{}, nil
@@ -56,44 +60,55 @@ func (d *Delivery) PrepareMessages(ctx context.Context, sess *api.Session) (asse
 			return assembly.MessageDelivery{}, err
 		}
 		out := assembly.MessageDelivery{Recipient: RecipientWorker}
-		if err := d.openPage(ctx, actor, w, generation, workerrecords.MaxPageMessages, &out); err != nil {
+		_, err = d.openPage(ctx, actor, w.ID, w.Name, generation, workerrecords.MaxPageMessages, maxCoordinatorBytes, &out)
+		if err != nil {
 			return assembly.MessageDelivery{}, err
 		}
 		return out, nil
 	}
-	workers, err := d.Records.Workers(ctx, actor)
+	pending, err := d.Records.PendingCoordinatorMessageWorkers(ctx, actor)
 	if err != nil {
 		return assembly.MessageDelivery{}, err
 	}
 	out := assembly.MessageDelivery{Recipient: RecipientCoordinator}
-	for _, w := range workers {
-		if len(out.Lines) >= maxCoordinatorLines {
+	usedBytes := 0
+	for i, w := range pending {
+		remLines := maxCoordinatorLines - len(out.Lines)
+		remBytes := maxCoordinatorBytes - usedBytes
+		if remLines <= 0 || remBytes <= 0 {
 			out.More = true
 			break
 		}
-		if err := d.openPage(ctx, actor, w, generation, maxCoordinatorLines-len(out.Lines), &out); err != nil {
+		remWorkers := len(pending) - i
+		lineQuota := max(1, remLines/remWorkers)
+		byteQuota := max(1, remBytes/remWorkers)
+		addedBytes, err := d.openPage(ctx, actor, w.ID, w.Name, generation, lineQuota, byteQuota, &out)
+		if err != nil {
 			return assembly.MessageDelivery{}, err
 		}
+		usedBytes += addedBytes
 	}
 	return out, nil
 }
 
-func (d *Delivery) openPage(ctx context.Context, actor workerrecords.Actor, w workerrecords.Worker, generation int64, limit int, out *assembly.MessageDelivery) error {
-	page, err := d.Records.OpenPage(ctx, actor, w.ID, generation, limit)
+func (d *Delivery) openPage(ctx context.Context, actor workerrecords.Actor, workerID, workerName string, generation int64, limit, maxBytes int, out *assembly.MessageDelivery) (int, error) {
+	page, err := d.Records.OpenPageBounded(ctx, actor, workerID, generation, limit, maxBytes)
 	if err != nil || page.ID == "" {
-		return err
+		return 0, err
 	}
-	out.Pages = append(out.Pages, assembly.MessagePageRef{WorkerID: w.ID, PageID: page.ID, Generation: generation})
-	if len(page.Messages) >= limit {
+	out.Pages = append(out.Pages, assembly.MessagePageRef{WorkerID: workerID, PageID: page.ID, Generation: generation})
+	if page.More {
 		out.More = true
 	}
+	addedBytes := 0
 	for _, m := range page.Messages {
+		addedBytes += len(m.Body) + len(m.ArtifactRef)
 		out.Lines = append(out.Lines, inject.WorkerMessageLine{
-			Worker: w.Name, Seq: m.Seq, ReplyToSeq: m.ReplyToSeq, NeedsReply: m.NeedsReply,
+			Worker: workerName, Seq: m.Seq, ReplyToSeq: m.ReplyToSeq, NeedsReply: m.NeedsReply,
 			Body: m.Body, ArtifactRef: m.ArtifactRef,
 		})
 	}
-	return nil
+	return addedBytes, nil
 }
 
 // CommitMessages records that the response carrying the pages succeeded.

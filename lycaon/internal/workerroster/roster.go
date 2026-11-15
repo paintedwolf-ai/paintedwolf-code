@@ -20,18 +20,24 @@ import (
 
 // Bounds keep the roster small; the full story is a worker_history read.
 const (
-	MaxRows      = 12
-	MaxPaths     = 6
-	MaxAboutRune = 160
+	MaxRows          = 12
+	MaxPaths         = 6
+	MaxAboutRune     = 160
+	MaxRoundPathScan = 32
 )
 
 // Row is one worker as the coordinator's request shows it.
 type Row struct {
-	Name      string
-	Agent     string
-	ScopeMode string
-	State     workerstate.State
-	Reason    workerstate.Reason
+	Name             string
+	Agent            string
+	ScopeMode        string
+	WorkspaceState   string
+	State            workerstate.State
+	Reason           workerstate.Reason
+	StateLabel       string
+	DispositionLabel string
+	WorkspaceLabel   string
+	UpdatedAt        string
 	// About is what the worker is on: its latest instruction, else its brief.
 	About string
 	// Question is the pending decision a worker in asking waits on.
@@ -102,7 +108,9 @@ func (s Source) Board(ctx context.Context, sessionID string) ([]api.BoardWorker,
 	for _, row := range rows {
 		w := api.BoardWorker{
 			Name: row.Name, AgentType: row.Agent, ScopeMode: row.ScopeMode,
+			WorkspaceState: row.WorkspaceState,
 			State: api.WorkerState(row.State), Reason: api.WorkerStateReason(row.Reason),
+			StateLabel: row.StateLabel, WorkspaceLabel: row.WorkspaceLabel, UpdatedAt: row.UpdatedAt,
 			About: row.About, Question: row.Question,
 			ReadPaths: row.Read.Shown, ReadOmitted: row.Read.Omitted,
 			ChangedPaths: row.Changed.Shown, ChangedOmitted: row.Changed.Omitted,
@@ -110,6 +118,7 @@ func (s Source) Board(ctx context.Context, sessionID string) ([]api.BoardWorker,
 		if row.Result != nil {
 			w.ResultHandle = row.Result.Handle
 			w.ResultDisposition = api.WorkerResultDisposition(row.Result.Disposition)
+			w.DispositionLabel = row.DispositionLabel
 		}
 		out = append(out, w)
 	}
@@ -126,7 +135,7 @@ func (s Source) LatestResults(ctx context.Context, sessionID string) (map[string
 	}
 	out := map[string]overlayplan.LatestResult{}
 	for _, w := range workers {
-		snap, err := s.Reader.Read(ctx, actor, w)
+		snap, err := s.Reader.ReadBounded(ctx, actor, w, 0)
 		if err != nil {
 			return nil, err
 		}
@@ -148,7 +157,7 @@ func (s Source) rows(ctx context.Context, sessionID string) ([]Row, error) {
 	}
 	var rows []Row
 	for _, w := range workers {
-		snap, err := s.Reader.Read(ctx, actor, w)
+		snap, err := s.Reader.ReadBounded(ctx, actor, w, MaxRoundPathScan)
 		if err != nil {
 			return nil, err
 		}
@@ -164,6 +173,9 @@ func (s Source) rows(ctx context.Context, sessionID string) ([]Row, error) {
 	sort.SliceStable(rows, func(i, j int) bool {
 		if a, b := priority(rows[i].State), priority(rows[j].State); a != b {
 			return a < b
+		}
+		if rows[i].UpdatedAt != rows[j].UpdatedAt {
+			return rows[i].UpdatedAt > rows[j].UpdatedAt
 		}
 		return rows[i].Name < rows[j].Name
 	})
@@ -184,9 +196,17 @@ func priority(s workerstate.State) int {
 
 func (s Source) row(ctx context.Context, actor workerrecords.Actor, snap workerops.Snapshot) (Row, error) {
 	w := snap.Worker
+	wsState, err := s.workspaceState(ctx, actor, snap)
+	if err != nil {
+		return Row{}, err
+	}
 	row := Row{
 		Name: w.Name, Agent: w.AgentType, ScopeMode: w.ScopeMode,
-		State: snap.View.State, Reason: snap.View.Reason,
+		WorkspaceState: wsState,
+		State:          snap.View.State, Reason: snap.View.Reason,
+		StateLabel:     stateLabel(snap.View.State, snap.View.Reason),
+		WorkspaceLabel: workspaceLabel(wsState),
+		UpdatedAt:      latestActivityAt(snap),
 	}
 	about, err := s.about(ctx, actor, snap)
 	if err != nil {
@@ -206,10 +226,16 @@ func (s Source) row(ctx context.Context, actor workerrecords.Actor, snap workero
 		}
 	}
 	if round, ok := snap.LatestResult(); ok {
-		row.Result = &Result{Handle: round.ResultID, Disposition: disposition(snap, round)}
+		disp := disposition(snap, round)
+		row.Result = &Result{Handle: round.ResultID, Disposition: disp}
+		row.DispositionLabel = dispositionLabel(disp)
+	}
+	start := 0
+	if len(snap.Rounds) > MaxRoundPathScan {
+		start = len(snap.Rounds) - MaxRoundPathScan
 	}
 	var read, changed []string
-	for _, round := range snap.Rounds {
+	for _, round := range snap.Rounds[start:] {
 		if s.Touches != nil {
 			read = append(read, s.Touches.Paths(round.JobID)...)
 		}
@@ -217,6 +243,100 @@ func (s Source) row(ctx context.Context, actor workerrecords.Actor, snap workero
 	}
 	row.Read, row.Changed = bound(read), bound(changed)
 	return row, nil
+}
+
+func (s Source) workspaceState(ctx context.Context, actor workerrecords.Actor, snap workerops.Snapshot) (string, error) {
+	if snap.Facts.Recovery || snap.View.State == workerstate.Recovering {
+		return "recovering", nil
+	}
+	if snap.Worker.ScopeMode != "write" {
+		return "shared", nil
+	}
+	prep, hadPrep, err := s.Reader.Records.LatestPreparation(ctx, actor, snap.Worker.ID)
+	if err != nil {
+		return "", err
+	}
+	if latest, ok := snap.Latest(); ok && latest.SettledAt == "" && s.Reader.Jobs != nil {
+		if job, found := s.Reader.Jobs.Get(latest.JobID); found && job != nil && job.WorkspacePreparation != nil {
+			return "preparing", nil
+		}
+	}
+	if !hadPrep && len(snap.Rounds) == 0 {
+		return "preparing", nil
+	}
+	if prior, ok := snap.LatestChanged(); ok && prior.ResultID != "" {
+		change := snap.Dispositions[prior.ResultID].ChangeState
+		if hadPrep && (prep.SourceResultID == prior.ResultID || (prior.SettledAt != "" && prep.CreatedAt >= prior.SettledAt)) {
+			switch change {
+			case workerrecords.ChangeLanded:
+				return "refreshed", nil
+			case workerrecords.ChangeRejected:
+				return "reset", nil
+			}
+		} else if !hadPrep && change == workerrecords.ChangeRejected {
+			return "reset", nil
+		}
+	}
+	return "retained", nil
+}
+
+func latestActivityAt(snap workerops.Snapshot) string {
+	best := snap.Worker.UpdatedAt
+	if latest, ok := snap.Latest(); ok {
+		if latest.SettledAt > best {
+			best = latest.SettledAt
+		}
+		if latest.CreatedAt > best {
+			best = latest.CreatedAt
+		}
+	}
+	return best
+}
+
+func stateLabel(state workerstate.State, reason workerstate.Reason) string {
+	base := strings.ReplaceAll(string(state), "_", " ")
+	if reason == "" {
+		return base
+	}
+	return base + " (" + strings.ReplaceAll(string(reason), "_", " ") + ")"
+}
+
+func dispositionLabel(disp string) string {
+	switch disp {
+	case "unaccounted":
+		return "unaccounted"
+	case "accounted":
+		return "accounted for"
+	case "open":
+		return "changes open"
+	case "landed":
+		return "changes landed"
+	case "rejected":
+		return "changes rejected"
+	case "shelved":
+		return "changes shelved"
+	default:
+		return strings.ReplaceAll(disp, "_", " ")
+	}
+}
+
+func workspaceLabel(ws string) string {
+	switch ws {
+	case "shared":
+		return "shared read view"
+	case "retained":
+		return "workspace retained"
+	case "preparing":
+		return "preparing workspace"
+	case "refreshed":
+		return "workspace refreshed"
+	case "reset":
+		return "workspace reset"
+	case "recovering":
+		return "workspace recovering"
+	default:
+		return ws
+	}
 }
 
 // about is the latest instruction a worker was started with, else its brief.
@@ -291,13 +411,16 @@ func (r Roster) Vars() []map[string]any {
 	for _, row := range r.Rows {
 		m := map[string]any{
 			"name": row.Name, "agent": row.Agent, "scope_mode": row.ScopeMode,
-			"state": string(row.State), "reason": strings.ReplaceAll(string(row.Reason), "_", " "), "about": row.About,
+			"workspace_state": row.WorkspaceState, "workspace_label": row.WorkspaceLabel,
+			"state": string(row.State), "reason": strings.ReplaceAll(string(row.Reason), "_", " "),
+			"state_label": row.StateLabel, "updated_at": row.UpdatedAt, "about": row.About,
 			"question": row.Question, "read": row.Read.Shown, "read_omitted": row.Read.Omitted,
 			"changed": row.Changed.Shown, "changed_omitted": row.Changed.Omitted,
 		}
 		if row.Result != nil {
 			m["result_handle"] = row.Result.Handle
 			m["result_disposition"] = row.Result.Disposition
+			m["disposition_label"] = row.DispositionLabel
 		}
 		out = append(out, m)
 	}
@@ -332,15 +455,13 @@ func (s Source) ResultNotice(ctx context.Context, jobID string) (map[string]any,
 	if err != nil {
 		return nil, false, err
 	}
-	rounds, err := s.Reader.Records.Rounds(ctx, actor, w.ID)
+	names, hasNames, err := s.Reader.Records.NamesByJob(ctx, jobID)
 	if err != nil {
 		return nil, false, err
 	}
 	notice := map[string]any{"worker": w.Name, "leg_status": api.WorkerTaskLegStatus(*job)}
-	for _, r := range rounds {
-		if r.Ordinal == round.Ordinal && r.ResultID != "" {
-			notice["result_handle"] = r.ResultID
-		}
+	if hasNames && names.Handle != "" {
+		notice["result_handle"] = names.Handle
 	}
 	changed := bound(s.changedPaths(jobID))
 	notice["changed"], notice["changed_omitted"] = changed.Shown, changed.Omitted

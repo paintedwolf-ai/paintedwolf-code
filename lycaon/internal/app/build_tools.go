@@ -129,7 +129,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		return fmt.Errorf("answer_decision tool: %w", err)
 	}
 	if err := worker.RegisterWorkerTools(b.execution.Host.Registry, worker.WorkerToolDeps{
-		Ops: workerOps, Queue: b.delegations.Queue, Workers: b.worker.cfg, Plan: b.delegations.Plan, BindWorkflowTask: b.workflows.Manager.Fanout.BindWorkflowTask,
+		Ops: workerOps, Queue: b.delegations.Queue, Workers: b.worker.cfg, Plan: b.delegations.Plan, BindWorkflowTask: b.workflows.Manager.Fanout.BindWorkflowTask, ComposePrompt: b.composeWorkerAssignment,
 	}); err != nil {
 		return fmt.Errorf("worker tools: %w", err)
 	}

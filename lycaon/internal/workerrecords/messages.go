@@ -10,8 +10,11 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 )
 
-// MaxPageMessages bounds one delivery page.
-const MaxPageMessages = 64
+// MaxPageMessages and MaxHistoryPageBytes bound message pages by count and bytes.
+const (
+	MaxPageMessages     = 64
+	MaxHistoryPageBytes = 16 * 1024
+)
 
 // Message is one stored message.
 type Message struct {
@@ -117,19 +120,31 @@ func (s *Store) AppendMessage(ctx context.Context, actor Actor, op Op, workerID 
 type Page struct {
 	ID       string    `json:"id"`
 	Messages []Message `json:"messages"`
+	More     bool      `json:"more,omitempty"`
 }
 
 // OpenPage returns up to limit messages a recipient session has not yet been
-// shown, oldest first, at most MaxPageMessages. Until CommitPage records a
-// successful response the same page is returned again, so a failed request
-// replays it.
+// shown, oldest first, at most MaxPageMessages and MaxHistoryPageBytes. Until
+// CommitPage records a successful response the same page is returned again, so
+// a failed request replays it.
 func (s *Store) OpenPage(ctx context.Context, actor Actor, workerID string, generation int64, limit int) (Page, error) {
+	return s.OpenPageBounded(ctx, actor, workerID, generation, limit, MaxHistoryPageBytes)
+}
+
+// OpenPageBounded opens or replays an undelivered page bounded by message
+// count and byte budget, always delivering at least one message when unread
+// messages exist so oversized bodies never stall delivery.
+func (s *Store) OpenPageBounded(ctx context.Context, actor Actor, workerID string, generation int64, limit, maxBytes int) (Page, error) {
 	if err := actor.check(); err != nil {
 		return Page{}, err
 	}
 	if generation < 0 {
 		return Page{}, ErrPageStale
 	}
+	if maxBytes <= 0 {
+		maxBytes = MaxHistoryPageBytes
+	}
+	countCap := min(max(limit, 1), MaxPageMessages)
 	tx, err := s.handle.BeginTx(ctx, nil)
 	if err != nil {
 		return Page{}, err
@@ -172,14 +187,15 @@ func (s *Store) OpenPage(ctx context.Context, actor Actor, workerID string, gene
 		}
 	}
 	if err == nil && state.PageID != "" {
-		msgs, err := pageMessages(ctx, q, w.ID, recipient, round, state.PageFirstSeq.Int64-1, state.PageLastSeq.Int64)
+		msgs, more, err := pageMessages(ctx, q, w.ID, recipient, round, state.PageFirstSeq.Int64-1, state.PageLastSeq.Int64)
 		if err != nil {
 			return Page{}, err
 		}
-		return Page{ID: state.PageID, Messages: msgs}, tx.Commit()
+		return Page{ID: state.PageID, Messages: msgs, More: more}, tx.Commit()
 	}
 	rows, err := q.ListWorkerMessagesAfter(ctx, db.ListWorkerMessagesAfterParams{
-		WorkerID: w.ID, AfterSeq: max(state.DeliveredThroughSeq, after), RecipientRole: string(recipient), RoundOrdinal: round, PageLimit: int64(min(max(limit, 1), MaxPageMessages)),
+		WorkerID: w.ID, AfterSeq: max(state.DeliveredThroughSeq, after), RecipientRole: string(recipient),
+		RoundOrdinal: round, PageLimit: int64(countCap + 1),
 	})
 	if err != nil {
 		return Page{}, err
@@ -188,33 +204,52 @@ func (s *Store) OpenPage(ctx context.Context, actor Actor, workerID string, gene
 		return Page{}, nil
 	}
 	page := Page{ID: uuid.Must(uuid.NewV7()).String()}
-	for _, m := range rows {
-		page.Messages = append(page.Messages, messageFromRow(m))
+	usedBytes := 0
+	for i, row := range rows {
+		if i >= countCap {
+			page.More = true
+			break
+		}
+		m := messageFromRow(row)
+		msgBytes := messageByteLen(m)
+		if len(page.Messages) > 0 && usedBytes+msgBytes > maxBytes {
+			page.More = true
+			break
+		}
+		page.Messages = append(page.Messages, m)
+		usedBytes += msgBytes
 	}
+	lastSeq := page.Messages[len(page.Messages)-1].Seq
 	if _, err := q.OpenWorkerMessagePage(ctx, db.OpenWorkerMessagePageParams{
 		WorkerID: w.ID, RecipientSessionID: actor.SessionID, Generation: generation, PageID: page.ID,
-		PageFirstSeq: nullInt(rows[0].Seq), PageLastSeq: nullInt(rows[len(rows)-1].Seq), UpdatedAt: s.stamp(),
+		PageFirstSeq: nullInt(rows[0].Seq), PageLastSeq: nullInt(lastSeq), UpdatedAt: s.stamp(),
 	}); err != nil {
 		return Page{}, err
 	}
 	return page, tx.Commit()
 }
 
-func pageMessages(ctx context.Context, q *db.Queries, workerID string, recipient Role, round sql.NullInt64, after, last int64) ([]Message, error) {
+func pageMessages(ctx context.Context, q *db.Queries, workerID string, recipient Role, round sql.NullInt64, after, last int64) ([]Message, bool, error) {
 	rows, err := q.ListWorkerMessagesAfter(ctx, db.ListWorkerMessagesAfterParams{
-		WorkerID: workerID, AfterSeq: after, RecipientRole: string(recipient), RoundOrdinal: round, PageLimit: MaxPageMessages,
+		WorkerID: workerID, AfterSeq: after, RecipientRole: string(recipient), RoundOrdinal: round, PageLimit: MaxPageMessages + 1,
 	})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	var out []Message
+	more := false
 	for _, m := range rows {
 		if m.Seq > last {
+			more = true
 			break
 		}
 		out = append(out, messageFromRow(m))
 	}
-	return out, nil
+	return out, more, nil
+}
+
+func messageByteLen(m Message) int {
+	return len(m.Body) + len(m.ArtifactRef)
 }
 
 // CommitPage records that a response including the page succeeded.
@@ -275,6 +310,85 @@ func (s *Store) History(ctx context.Context, actor Actor, workerID string, befor
 	out := make([]Message, 0, len(rows))
 	for _, m := range rows {
 		out = append(out, messageFromRow(m))
+	}
+	return out, nil
+}
+
+// HistoryBounded reads up to limit messages before beforeSeq within maxBytes,
+// newest first, returning nextBefore > 0 when older messages remain. Reading
+// history never changes delivery cursors.
+func (s *Store) HistoryBounded(ctx context.Context, actor Actor, workerID string, beforeSeq int64, limit, maxBytes int) ([]Message, int64, error) {
+	if err := actor.check(); err != nil {
+		return nil, 0, err
+	}
+	w, _, err := loadWorker(ctx, s.q, actor, workerID)
+	if err != nil {
+		return nil, 0, err
+	}
+	if limit <= 0 || limit >= MaxPageMessages {
+		limit = MaxPageMessages - 1
+	}
+	if maxBytes <= 0 {
+		maxBytes = MaxHistoryPageBytes
+	}
+	if beforeSeq <= 0 {
+		beforeSeq = w.NextMessageSeq
+	}
+	rows, err := s.q.ListWorkerMessagesBefore(ctx, db.ListWorkerMessagesBeforeParams{
+		WorkerID: w.ID, BeforeSeq: beforeSeq, PageLimit: int64(limit + 1),
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	if len(rows) == 0 {
+		return nil, 0, nil
+	}
+	out := make([]Message, 0, min(len(rows), limit))
+	usedBytes := 0
+	for i, row := range rows {
+		if i >= limit {
+			break
+		}
+		m := messageFromRow(row)
+		msgBytes := messageByteLen(m)
+		if len(out) > 0 && usedBytes+msgBytes > maxBytes {
+			break
+		}
+		out = append(out, m)
+		usedBytes += msgBytes
+	}
+	var nextBefore int64
+	if len(rows) > len(out) && len(out) > 0 {
+		nextBefore = out[len(out)-1].Seq
+	}
+	return out, nextBefore, nil
+}
+
+// PendingMessageWorker names a worker with undelivered coordinator messages.
+type PendingMessageWorker struct {
+	ID   string
+	Name string
+}
+
+// PendingCoordinatorMessageWorkers lists the session's workers that have
+// undelivered messages addressed to the coordinator, ordered by oldest unread
+// message timestamp so multi-worker paging never starves quieter workers.
+func (s *Store) PendingCoordinatorMessageWorkers(ctx context.Context, actor Actor) ([]PendingMessageWorker, error) {
+	if err := actor.check(); err != nil {
+		return nil, err
+	}
+	if actor.Role != RoleCoordinator {
+		return nil, ErrCoordinatorOnly
+	}
+	rows, err := s.q.ListPendingCoordinatorMessageWorkers(ctx, db.ListPendingCoordinatorMessageWorkersParams{
+		SessionID: actor.SessionID, RecipientSessionID: actor.SessionID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PendingMessageWorker, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, PendingMessageWorker{ID: r.ID, Name: r.Name})
 	}
 	return out, nil
 }

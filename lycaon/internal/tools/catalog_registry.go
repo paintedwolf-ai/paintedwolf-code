@@ -41,7 +41,7 @@ var bootToolClaimNames = []string{
 	"workflow_compose", "workflow_compose_from_template", "workflow_persist",
 	"workflow_catalog_summaries", "workflow_user_feedback", "ask_user", "workflow_advance", "fanout_plan", "submit_verdict",
 	"wait",
-	"pack_board", "read_review", "plan_from_blueprint",
+	"pack_board", "read_findings", "read_review", "plan_from_blueprint",
 	"web_search", "fetch_url",
 }
 

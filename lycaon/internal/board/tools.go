@@ -4,14 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/packboard"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// MaxBoardWorkersPage bounds one pack_board worker page.
+const MaxBoardWorkersPage = 20
 
 // PlanWorkersFunc returns the worker names in sessionID bound to a Blueprint path.
 type PlanWorkersFunc func(ctx context.Context, sessionID, plan string) (map[string]bool, error)
@@ -27,14 +32,35 @@ type ToolDeps struct {
 	ActiveReservations func(sessionID string) []api.BoardReservationEntry
 }
 
-// RegisterBoardTools registers pack_board on the tool registry.
+// RegisterBoardTools registers pack_board and read_findings on the tool registry.
 func RegisterBoardTools(reg *tools.DefaultRegistry, deps ToolDeps) error {
 	if reg == nil || deps.Builder == nil {
 		return fmt.Errorf("registry and snapshot builder required")
 	}
+	if err := reg.Register("read_findings", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
+		return readFindings(ctx, args, tctx, deps)
+	}); err != nil {
+		return err
+	}
 	if err := reg.Register("pack_board", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		if args["finding_id"] != nil || args["findings_after"] != nil {
-			return readFindings(ctx, args, tctx, deps)
+			field := "finding_id"
+			if args["finding_id"] == nil {
+				field = "findings_after"
+			}
+			return "", &toolrejection.ToolReject{
+				Code: "TOOL_ARGS_INVALID",
+				Data: map[string]any{
+					"tool":             "pack_board",
+					"field":            field,
+					"reason":           "moved_to_read_findings",
+					"replacement_tool": "read_findings",
+				},
+			}
+		}
+		offset, err := parseBoardWorkerCursor(args["cursor"])
+		if err != nil {
+			return "", err
 		}
 		if strings.TrimSpace(tctx.ActiveRootPath()) == "" {
 			return "", fmt.Errorf("project_dir required")
@@ -74,6 +100,7 @@ func RegisterBoardTools(reg *tools.DefaultRegistry, deps ToolDeps) error {
 			}
 			view.Workers = filtered
 		}
+		pageBoardWorkers(&view, offset)
 		if deps.OverlayMergePlan != nil {
 			tasks := packboard.WorkerTasksFromSnapshot(*snap)
 			if plan := deps.OverlayMergePlan(ctx, sessionID, tasks); plan != nil && plan.PendingCount > 0 {
@@ -89,4 +116,43 @@ func RegisterBoardTools(reg *tools.DefaultRegistry, deps ToolDeps) error {
 		return err
 	}
 	return nil
+}
+
+func parseBoardWorkerCursor(raw any) (int, error) {
+	if raw == nil {
+		return 0, nil
+	}
+	s, ok := raw.(string)
+	if !ok {
+		return 0, &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "pack_board", "field": "cursor", "reason": "invalid_cursor"}}
+	}
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return 0, &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "pack_board", "field": "cursor", "reason": "invalid_cursor"}}
+	}
+	return n, nil
+}
+
+func pageBoardWorkers(view *api.BoardView, offset int) {
+	total := len(view.Workers)
+	if total == 0 {
+		return
+	}
+	if offset >= total {
+		view.Workers = []api.BoardWorker{}
+		return
+	}
+	end := offset + MaxBoardWorkersPage
+	if end < total {
+		view.WorkersHasMore = true
+		view.WorkersOmitted = total - end
+		view.WorkersNextCursor = strconv.Itoa(end)
+		view.Workers = view.Workers[offset:end]
+		return
+	}
+	view.Workers = view.Workers[offset:]
 }

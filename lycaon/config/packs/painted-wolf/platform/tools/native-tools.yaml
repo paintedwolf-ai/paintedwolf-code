@@ -98,6 +98,7 @@ multi_root:
     - parse_delegation_plan
     - plan_append_review_evidence
     - plan_from_blueprint
+    - read_findings
     - read_review
     - state_update
     - state_close
@@ -402,6 +403,7 @@ approval_reversibility:
   plan_append_review_evidence: reversible
   plan_from_blueprint: reversible
   promote_overlay: reversible
+  read_findings: reversible
   read_review: reversible
   recall: reversible
   message_coordinator: reversible
@@ -490,6 +492,7 @@ owner:
   plan_from_blueprint: blueprints
   preview_overlay: worker_merge
   promote_overlay: worker_merge
+  read_findings: findings
   read_review: board
   recall: sessions
   message_coordinator: workers
@@ -578,6 +581,7 @@ batch_policy:
   plan_append_review_evidence: serial
   plan_from_blueprint: serial
   promote_overlay: serial
+  read_findings: shared
   read_review: shared
   recall: shared
   message_coordinator: serial
@@ -688,6 +692,7 @@ lifecycle:
   plan_append_review_evidence: effect_attempt
   plan_from_blueprint: db_transaction
   promote_overlay: journaled_mutation
+  read_findings: read_only
   read_review: read_only
   recall: read_only
   message_coordinator: db_transaction

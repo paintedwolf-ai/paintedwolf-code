@@ -33,6 +33,7 @@ type WorkerToolDeps struct {
 	Workers          WorkersConfig
 	Plan             *workerplan.Service
 	BindWorkflowTask func(context.Context, tools.ToolContext, string, *api.WorkerTask) error
+	ComposePrompt    func(context.Context, tools.ToolContext, string, api.WorkerTaskCharter, *api.WorkerTask) (string, error)
 }
 
 // RegisterWorkerTools registers instruct_worker, shelve_overlay and
@@ -171,6 +172,15 @@ func roundEnqueuer(deps WorkerToolDeps, tctx tools.ToolContext, args map[string]
 				return "", "", err
 			}
 		}
+		if deps.ComposePrompt != nil {
+			task.Prompt = job.Instructions
+			charter := api.WorkerTaskCharter{Goal: goal, DoneWhen: []string{"Complete this round's instructions and report grounded results."}}
+			composed, err := deps.ComposePrompt(ctx, tctx, agent, charter, &task)
+			if err != nil {
+				return "", "", err
+			}
+			task.Prompt = composed
+		}
 		id, err := deps.Queue.Enqueue(ctx, task)
 		if err != nil {
 			return "", "", err
@@ -220,8 +230,13 @@ func workerHistoryHandler(deps WorkerToolDeps) tools.ToolHandler {
 			return "", fmt.Errorf("worker is required")
 		}
 		before, _ := args["before"].(float64)
+		beforeRound, _ := args["before_round"].(float64)
 		limit, _ := args["limit"].(float64)
-		page, err := deps.Ops.History(ctx, coordinatorActor(tctx), name, int64(before), int(limit))
+		page, err := deps.Ops.HistoryPaged(ctx, coordinatorActor(tctx), name, workerops.HistoryQuery{
+			BeforeSeq:   int64(before),
+			BeforeRound: int64(beforeRound),
+			Limit:       int(limit),
+		})
 		if err != nil {
 			return "", workerToolReject(WorkerHistoryTool, name, "", err)
 		}
@@ -254,6 +269,9 @@ func workerHistoryHandler(deps WorkerToolDeps) tools.ToolHandler {
 		}
 		if page.Before > 0 {
 			out["before"] = page.Before
+		}
+		if page.BeforeRound > 0 {
+			out["before_round"] = page.BeforeRound
 		}
 		raw, err := json.Marshal(out)
 		return string(raw), err

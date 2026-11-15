@@ -333,6 +333,15 @@ func LookupBranchPreparedView(branchRoot string) (*adapter.PreparedView, adapter
 	return nil, *meta.AdapterFacts, viewID, true
 }
 
+// BranchViewKind returns "mounted" or "materialized" when a prepared branch
+// view is recorded for branchRoot, or empty when none is prepared yet.
+func BranchViewKind(branchRoot string) string {
+	if _, facts, _, ok := LookupBranchPreparedView(branchRoot); ok && facts.PreparationKind != "" {
+		return string(facts.PreparationKind)
+	}
+	return ""
+}
+
 func absDir(dir string) (string, error) {
 	dir = strings.TrimSpace(dir)
 	if dir == "" {

@@ -429,3 +429,94 @@ SELECT CAST(COALESCE((SELECT latest.job_id FROM worker_rounds origin
 SELECT CAST(COALESCE(MAX(m.seq), 0) AS INTEGER) AS seq
 FROM worker_messages m JOIN worker_rounds r ON r.worker_id = m.worker_id
 WHERE r.job_id = ? AND m.sender_role = 'worker' AND m.recipient_role = 'coordinator';
+
+-- name: ListWorkerRoundsBefore :many
+SELECT r.worker_id, r.ordinal, r.job_id, r.instruction_first_seq, r.instruction_last_seq,
+       r.execution_target, r.review_subject_json, r.operation_id, r.created_at, r.settled_at, r.checkpoint_id,
+       COALESCE(res.id, '') AS result_id
+FROM worker_rounds r LEFT JOIN worker_results res ON res.worker_job_id = r.job_id
+WHERE r.worker_id = sqlc.arg(worker_id) AND r.ordinal < sqlc.arg(before_ordinal)
+ORDER BY r.ordinal DESC LIMIT sqlc.arg(page_limit);
+
+-- name: GetLatestSettledWorkerResultRound :one
+SELECT r.worker_id, r.ordinal, r.job_id, r.instruction_first_seq, r.instruction_last_seq,
+       r.execution_target, r.review_subject_json, r.operation_id, r.created_at, r.settled_at, r.checkpoint_id,
+       res.id AS result_id,
+       CAST(COALESCE(d.change_state, '') AS TEXT) AS change_state,
+       CAST(COALESCE(d.accounted_at, '') AS TEXT) AS accounted_at
+FROM worker_rounds r
+JOIN worker_results res ON res.worker_job_id = r.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.worker_id = sqlc.arg(worker_id) AND r.settled_at IS NOT NULL
+ORDER BY r.ordinal DESC LIMIT 1;
+
+-- name: GetLatestSettledChangedWorkerRoundBefore :one
+SELECT r.ordinal, r.job_id,
+       CAST(COALESCE(res.id, '') AS TEXT) AS result_id,
+       CAST(COALESCE(r.settled_at, '') AS TEXT) AS settled_at,
+       CAST(COALESCE(d.change_state, '') AS TEXT) AS change_state
+FROM worker_rounds r
+LEFT JOIN worker_results res ON res.worker_job_id = r.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.worker_id = sqlc.arg(worker_id) AND r.ordinal < sqlc.arg(before_ordinal)
+  AND r.settled_at IS NOT NULL AND r.checkpoint_id != ''
+ORDER BY r.ordinal DESC LIMIT 1;
+
+-- name: ListRecentSettledWorkerResultIDsBefore :many
+SELECT res.id
+FROM worker_rounds r JOIN worker_results res ON res.worker_job_id = r.job_id
+WHERE r.worker_id = sqlc.arg(worker_id) AND r.ordinal < sqlc.arg(before_ordinal)
+  AND r.settled_at IS NOT NULL
+ORDER BY r.ordinal DESC LIMIT sqlc.arg(page_limit);
+
+-- name: GetWorkerStateSummary :one
+SELECT CAST(EXISTS (SELECT 1 FROM worker_rounds r WHERE r.worker_id = w.id) AS INTEGER) AS has_rounds,
+       CAST(EXISTS (SELECT 1 FROM worker_rounds r WHERE r.worker_id = w.id AND r.settled_at IS NOT NULL) AS INTEGER) AS has_settled_round,
+       CAST(EXISTS (SELECT 1 FROM worker_rounds r WHERE r.worker_id = w.id AND r.review_subject_json != '') AS INTEGER) AS has_reviewer_round,
+       CAST(EXISTS (
+           SELECT 1 FROM worker_rounds r
+           JOIN worker_results res ON res.worker_job_id = r.job_id
+           LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+           WHERE r.worker_id = w.id AND r.settled_at IS NOT NULL AND r.checkpoint_id != ''
+             AND COALESCE(d.change_state, '') = ''
+       ) AS INTEGER) AS has_open_changes,
+       CAST(EXISTS (
+           SELECT 1 FROM worker_rounds r
+           JOIN worker_results res ON res.worker_job_id = r.job_id
+           JOIN worker_result_dispositions d ON d.result_id = res.id
+           WHERE r.worker_id = w.id AND r.settled_at IS NOT NULL AND r.checkpoint_id != ''
+             AND d.change_state = 'shelved'
+       ) AS INTEGER) AS has_shelved_changes
+FROM workers w
+WHERE w.id = ?;
+
+-- name: ListUnaccountedWorkerResultJobs :many
+SELECT r.job_id
+FROM worker_rounds r
+JOIN worker_results res ON res.worker_job_id = r.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.worker_id = sqlc.arg(worker_id) AND r.settled_at IS NOT NULL AND d.accounted_at IS NULL
+ORDER BY r.ordinal DESC LIMIT sqlc.arg(page_limit);
+
+-- name: GetWorkerRoundProvenanceByJob :one
+SELECT w.name, r.ordinal, w.workflow_work_id,
+       CAST(COALESCE((
+           SELECT MAX(m.seq) FROM worker_messages m
+           WHERE m.worker_id = w.id AND m.sender_role = 'worker' AND m.recipient_role = 'coordinator'
+       ), 0) AS INTEGER) AS latest_sent_seq
+FROM worker_rounds r JOIN workers w ON w.id = r.worker_id
+WHERE r.job_id = ?;
+
+-- name: ListPendingCoordinatorMessageWorkers :many
+SELECT w.id, w.name, CAST(COALESCE(MIN(m.created_at), '') AS TEXT) AS oldest_unread_at
+FROM workers w
+JOIN worker_messages m ON m.worker_id = w.id
+WHERE w.session_id = sqlc.arg(session_id)
+  AND m.recipient_role = 'coordinator'
+  AND m.seq > COALESCE((
+      SELECT MAX(md.delivered_through_seq)
+      FROM worker_message_deliveries md
+      WHERE md.worker_id = w.id AND md.recipient_session_id = sqlc.arg(recipient_session_id)
+  ), 0)
+GROUP BY w.id, w.name, w.created_at
+ORDER BY oldest_unread_at, w.created_at, w.id;

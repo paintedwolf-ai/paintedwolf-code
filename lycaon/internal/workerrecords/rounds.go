@@ -287,6 +287,187 @@ func (s *Store) NamesByJob(ctx context.Context, jobID string) (JobNames, bool, e
 	return JobNames{Worker: row.Name, Handle: row.ResultID, Change: row.ChangeState}, true, nil
 }
 
+// MaxPageRounds bounds one round-history page; maxUnaccountedScan bounds how
+// many unaccounted results one state read inspects.
+const (
+	MaxPageRounds      = 20
+	maxRoundQueryLimit = 64
+	maxUnaccountedScan = 64
+)
+
+// RoundsBefore lists up to limit rounds of a worker before beforeOrdinal,
+// newest first.
+func (s *Store) RoundsBefore(ctx context.Context, actor Actor, workerID string, beforeOrdinal int64, limit int) ([]Round, error) {
+	if err := actor.check(); err != nil {
+		return nil, err
+	}
+	w, _, err := loadWorker(ctx, s.q, actor, workerID)
+	if err != nil {
+		return nil, err
+	}
+	if limit <= 0 {
+		limit = MaxPageRounds
+	} else if limit > maxRoundQueryLimit {
+		limit = maxRoundQueryLimit
+	}
+	if beforeOrdinal <= 0 {
+		beforeOrdinal = w.NextRoundOrdinal
+	}
+	rows, err := s.q.ListWorkerRoundsBefore(ctx, db.ListWorkerRoundsBeforeParams{
+		WorkerID: w.ID, BeforeOrdinal: beforeOrdinal, PageLimit: int64(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Round, 0, len(rows))
+	for _, r := range rows {
+		round := roundFromRow(db.WorkerRounds{
+			WorkerID: r.WorkerID, Ordinal: r.Ordinal, JobID: r.JobID, InstructionFirstSeq: r.InstructionFirstSeq,
+			InstructionLastSeq: r.InstructionLastSeq, ExecutionTarget: r.ExecutionTarget, ReviewSubjectJson: r.ReviewSubjectJson,
+			OperationID: r.OperationID, CreatedAt: r.CreatedAt, SettledAt: r.SettledAt, CheckpointID: r.CheckpointID,
+		})
+		round.ResultID = r.ResultID
+		out = append(out, round)
+	}
+	return out, nil
+}
+
+// LatestSettledResult returns the newest settled round that recorded a result.
+func (s *Store) LatestSettledResult(ctx context.Context, actor Actor, workerID string) (Round, Disposition, bool, error) {
+	if err := actor.check(); err != nil {
+		return Round{}, Disposition{}, false, err
+	}
+	w, _, err := loadWorker(ctx, s.q, actor, workerID)
+	if err != nil {
+		return Round{}, Disposition{}, false, err
+	}
+	return latestSettledResult(ctx, s.q, w.ID)
+}
+
+func latestSettledResult(ctx context.Context, q *db.Queries, workerID string) (Round, Disposition, bool, error) {
+	r, err := q.GetLatestSettledWorkerResultRound(ctx, workerID)
+	if db.IsNoRows(err) {
+		return Round{}, Disposition{}, false, nil
+	}
+	if err != nil {
+		return Round{}, Disposition{}, false, err
+	}
+	round := roundFromRow(db.WorkerRounds{
+		WorkerID: r.WorkerID, Ordinal: r.Ordinal, JobID: r.JobID, InstructionFirstSeq: r.InstructionFirstSeq,
+		InstructionLastSeq: r.InstructionLastSeq, ExecutionTarget: r.ExecutionTarget, ReviewSubjectJson: r.ReviewSubjectJson,
+		OperationID: r.OperationID, CreatedAt: r.CreatedAt, SettledAt: r.SettledAt, CheckpointID: r.CheckpointID,
+	})
+	round.ResultID = r.ResultID
+	disp := Disposition{ResultID: r.ResultID, WorkerID: r.WorkerID, ChangeState: r.ChangeState, AccountedAt: r.AccountedAt}
+	return round, disp, true, nil
+}
+
+// StateSummary carries the bounded facts a worker's state and roster row
+// derive from without scanning every historical round.
+type StateSummary struct {
+	HasRounds            bool
+	HasSettledRound      bool
+	HasReviewerRound     bool
+	HasOpenChanges       bool
+	HasShelvedChanges    bool
+	LatestRound          *Round
+	LatestResult         *Round
+	LatestResultDisp     Disposition
+	LatestChangedSettled *Round
+	LatestChangedDisp    Disposition
+	UnaccountedJobs      []string
+}
+
+// ReadStateSummary gathers a worker's state summary with bounded SQL queries.
+func (s *Store) ReadStateSummary(ctx context.Context, actor Actor, workerID string) (StateSummary, error) {
+	if err := actor.check(); err != nil {
+		return StateSummary{}, err
+	}
+	w, _, err := loadWorker(ctx, s.q, actor, workerID)
+	if err != nil {
+		return StateSummary{}, err
+	}
+	raw, err := s.q.GetWorkerStateSummary(ctx, w.ID)
+	if err != nil {
+		return StateSummary{}, err
+	}
+	out := StateSummary{
+		HasRounds:         raw.HasRounds != 0,
+		HasSettledRound:   raw.HasSettledRound != 0,
+		HasReviewerRound:  raw.HasReviewerRound != 0,
+		HasOpenChanges:    raw.HasOpenChanges != 0,
+		HasShelvedChanges: raw.HasShelvedChanges != 0,
+	}
+	if !out.HasRounds {
+		return out, nil
+	}
+	latestRows, err := s.q.ListWorkerRoundsBefore(ctx, db.ListWorkerRoundsBeforeParams{
+		WorkerID: w.ID, BeforeOrdinal: w.NextRoundOrdinal, PageLimit: 1,
+	})
+	if err != nil {
+		return StateSummary{}, err
+	}
+	if len(latestRows) > 0 {
+		r := latestRows[0]
+		round := roundFromRow(db.WorkerRounds{
+			WorkerID: r.WorkerID, Ordinal: r.Ordinal, JobID: r.JobID, InstructionFirstSeq: r.InstructionFirstSeq,
+			InstructionLastSeq: r.InstructionLastSeq, ExecutionTarget: r.ExecutionTarget, ReviewSubjectJson: r.ReviewSubjectJson,
+			OperationID: r.OperationID, CreatedAt: r.CreatedAt, SettledAt: r.SettledAt, CheckpointID: r.CheckpointID,
+		})
+		round.ResultID = r.ResultID
+		out.LatestRound = &round
+	}
+	if resRound, resDisp, ok, err := latestSettledResult(ctx, s.q, w.ID); err != nil {
+		return StateSummary{}, err
+	} else if ok {
+		out.LatestResult = &resRound
+		out.LatestResultDisp = resDisp
+	}
+	if changed, err := s.q.GetLatestSettledChangedWorkerRoundBefore(ctx, db.GetLatestSettledChangedWorkerRoundBeforeParams{
+		WorkerID: w.ID, BeforeOrdinal: w.NextRoundOrdinal,
+	}); err == nil {
+		out.LatestChangedSettled = &Round{
+			WorkerID: w.ID, Ordinal: changed.Ordinal, JobID: changed.JobID,
+			ResultID: changed.ResultID, SettledAt: changed.SettledAt, CheckpointID: "present",
+		}
+		out.LatestChangedDisp = Disposition{ResultID: changed.ResultID, WorkerID: w.ID, ChangeState: changed.ChangeState}
+	} else if !db.IsNoRows(err) {
+		return StateSummary{}, err
+	}
+	jobs, err := s.q.ListUnaccountedWorkerResultJobs(ctx, db.ListUnaccountedWorkerResultJobsParams{
+		WorkerID: w.ID, PageLimit: maxUnaccountedScan,
+	})
+	if err != nil {
+		return StateSummary{}, err
+	}
+	out.UnaccountedJobs = jobs
+	return out, nil
+}
+
+// RoundProvenance identifies a job's worker, round ordinal, workflow work ID,
+// and latest worker-to-coordinator message sequence.
+type RoundProvenance struct {
+	Worker         string
+	Ordinal        int64
+	WorkflowWorkID string
+	LatestSentSeq  int64
+}
+
+// RoundProvenanceByJob resolves provenance facts for a round notice.
+func (s *Store) RoundProvenanceByJob(ctx context.Context, jobID string) (RoundProvenance, bool, error) {
+	row, err := s.q.GetWorkerRoundProvenanceByJob(ctx, strings.TrimSpace(jobID))
+	if db.IsNoRows(err) {
+		return RoundProvenance{}, false, nil
+	}
+	if err != nil {
+		return RoundProvenance{}, false, err
+	}
+	return RoundProvenance{
+		Worker: row.Name, Ordinal: row.Ordinal,
+		WorkflowWorkID: row.WorkflowWorkID, LatestSentSeq: row.LatestSentSeq,
+	}, true, nil
+}
+
 // NameByJob names the worker whose round a job runs, for host copy that
 // reports on jobs. ok is false for a job that runs no worker round.
 func (s *Store) NameByJob(ctx context.Context, jobID string) (string, bool, error) {

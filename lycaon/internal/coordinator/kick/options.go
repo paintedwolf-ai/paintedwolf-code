@@ -233,9 +233,11 @@ const (
 type WorkerRoundNoticeFacts struct {
 	JobID string
 	// Worker is the name the coordinator addresses the worker by.
-	Worker    string
-	AgentType string
-	Kind      string
+	Worker         string
+	AgentType      string
+	RoundOrdinal   int64
+	WorkflowWorkID string
+	Kind           string
 	// ModelCalls, Tokens and SpendNanoUSD measure the round so far.
 	ModelCalls   int
 	Tokens       int
@@ -268,6 +270,12 @@ const nanoUSDPerCent = 10_000_000
 func (f WorkerRoundNoticeFacts) renderData(data map[string]any) {
 	data["worker"] = f.Worker
 	data["agent_type"] = f.AgentType
+	if f.RoundOrdinal > 0 {
+		data["round_ordinal"] = f.RoundOrdinal
+	}
+	if f.WorkflowWorkID != "" {
+		data["workflow_work_id"] = f.WorkflowWorkID
+	}
 	data["notice_kind"] = f.Kind
 	data["model_calls"] = f.ModelCalls
 	data["tokens"] = f.Tokens

@@ -5802,8 +5802,12 @@ export interface components {
             git?: components["schemas"]["BoardGitSlice"];
             scans?: components["schemas"]["BoardScansSlice"];
             roster?: components["schemas"]["BoardWorkerRosterEntry"][];
-            /** @description Every open worker in the session, needing the coordinator first. */
+            /** @description Open workers in the session, needing the coordinator and most recent first. */
             workers?: components["schemas"]["BoardWorker"][];
+            /** @description Opaque cursor for the next page of workers when workers_has_more is true. */
+            workers_next_cursor?: string;
+            workers_has_more?: boolean;
+            workers_omitted?: number;
             promote_paths?: components["schemas"]["WorkerPromoteJobPathStatus"][];
             overlay_merge_plan?: components["schemas"]["OverlayMergePlan"];
             delegation?: components["schemas"]["BoardDelegationEntry"][];
@@ -15136,8 +15140,12 @@ export interface components {
             name: string;
             agent_type: string;
             scope_mode?: string;
+            /** @description Derived workspace state for this worker (shared, retained, preparing, refreshed, reset, recovering). */
+            workspace_state?: string;
             state: components["schemas"]["WorkerState"];
             reason?: components["schemas"]["WorkerStateReason"];
+            /** @description Derived display label for state and reason. */
+            state_label?: string;
             /** @description The worker's latest instruction, else its brief, clipped to one line. */
             about?: string;
             /** @description The pending decision an asking worker waits on. */
@@ -15145,6 +15153,12 @@ export interface components {
             /** @description Handle of the worker's latest result. */
             result_handle?: string;
             result_disposition?: components["schemas"]["WorkerResultDisposition"];
+            /** @description Derived display label for result_disposition. */
+            disposition_label?: string;
+            /** @description Derived display label for workspace_state. */
+            workspace_label?: string;
+            /** @description Most recent activity timestamp for recency ordering. */
+            updated_at?: string;
             read_paths?: string[];
             read_omitted?: number;
             changed_paths?: string[];

@@ -37,6 +37,10 @@ type WorkerTaskAssignmentInput struct {
 	SessionID          string
 	ProjectDir         string
 	Charter            api.WorkerTaskCharter
+	WorkerName         string
+	RoundInstructions  string
+	ViewKind           string
+	HasGit             bool
 	AgentType          string
 	WorkerJobID        string
 	Scope              api.TaskScope
@@ -50,6 +54,10 @@ type WorkerTaskAssignmentData struct {
 	CoverageRequired   bool
 	CoverageAssignment string
 	ScanInventory      string
+	WorkerName         string
+	RoundInstructions  string
+	ViewKind           string
+	HasGit             bool
 	AgentType          string
 	WorkerJobID        string
 	SharedContext      string
@@ -98,10 +106,20 @@ func BuildWorkerTaskAssignmentData(ctx context.Context, in WorkerTaskAssignmentI
 		}
 		verdicts[i].Fields = fields
 	}
+	viewKind := strings.TrimSpace(in.ViewKind)
+	if viewKind == "" && norm.Mode == api.TaskScopeModeWrite {
+		viewKind = "materialized"
+	}
+	_, discoveredGit := gitrepo.Discover(in.ProjectDir)
+	hasGit := norm.Mode != api.TaskScopeModeWrite && (in.HasGit || discoveredGit)
 	data := WorkerTaskAssignmentData{
-		AgentType:      strings.TrimSpace(in.AgentType),
-		WorkerJobID:    strings.TrimSpace(in.WorkerJobID),
-		Goal:           strings.TrimSpace(in.Charter.Goal),
+		WorkerName:        strings.TrimSpace(in.WorkerName),
+		RoundInstructions: strings.TrimSpace(in.RoundInstructions),
+		ViewKind:          viewKind,
+		HasGit:            hasGit,
+		AgentType:         strings.TrimSpace(in.AgentType),
+		WorkerJobID:       strings.TrimSpace(in.WorkerJobID),
+		Goal:              strings.TrimSpace(in.Charter.Goal),
 		SharedContext:  in.Charter.SharedContext,
 		KnownFacts:     charter("known facts", in.Charter.KnownFacts),
 		Constraints:    charter("constraints", in.Charter.Constraints),
@@ -197,6 +215,10 @@ func WorkerTaskAssignmentToMap(data WorkerTaskAssignmentData) map[string]any {
 		"scan_inventory":      data.ScanInventory,
 		"coverage_assignment": data.CoverageAssignment,
 		"coverage_required":   data.CoverageRequired,
+		"worker_name":         data.WorkerName,
+		"round_instructions":  data.RoundInstructions,
+		"view_kind":           data.ViewKind,
+		"has_git":             data.HasGit,
 		"agent_type":          data.AgentType,
 		"worker_job_id":       data.WorkerJobID,
 		"goal":                data.Goal,

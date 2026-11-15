@@ -97,14 +97,20 @@ var (
 
 // Store reads and writes worker records.
 type Store struct {
-	handle db.Handle
-	q      *db.Queries
-	now    func() time.Time
+	handle     db.Handle
+	q          *db.Queries
+	now        func() time.Time
+	frameCache *roundFrameCache
 }
 
 // New returns a store over handle.
 func New(handle db.Handle) *Store {
-	return &Store{handle: handle, q: db.New(handle), now: func() time.Time { return time.Now().UTC() }}
+	return &Store{
+		handle:     handle,
+		q:          db.New(handle),
+		now:        func() time.Time { return time.Now().UTC() },
+		frameCache: newRoundFrameCache(MaxCachedRoundFrames),
+	}
 }
 
 func (s *Store) stamp() string { return db.FormatTime(s.now()) }

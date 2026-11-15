@@ -1654,6 +1654,23 @@
       ]
     },
     {
+      "tool": "read_findings",
+      "owner": "findings",
+      "disposition": "retain-domain-structured",
+      "command": "",
+      "lifecycle": "read_only",
+      "reuse": "Native registration over the session findings store; reads one finding body by ID or ordered summary pages after a sequence number.",
+      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/read_findings.yaml",
+      "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
+      "cleanup": "Offered as a structured tool; the name keeps its meaning in receipts and history.",
+      "selected_disposition": "Retain domain capability",
+      "behavior_change_or_retention": "Keep explicit domain contract; language exposure only if it improves a real task",
+      "existing_semantic_difference": "Host-owned findings state and lifecycle; see current description",
+      "implementing_issues": [],
+      "existing_rejection_code": "",
+      "command_forms": []
+    },
+    {
       "tool": "read_review",
       "owner": "board",
       "disposition": "retain-domain-structured",

@@ -10,6 +10,10 @@ schema:
       type: integer
       minimum: 1
       description: Continue with messages older than this sequence, from the previous page's before.
+    before_round:
+      type: integer
+      minimum: 1
+      description: Continue with rounds older than this round ordinal, from the previous page's before_round.
     limit:
       type: integer
       minimum: 1

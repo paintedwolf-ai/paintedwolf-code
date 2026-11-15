@@ -80,11 +80,32 @@ func PulseFingerprint(snap api.BoardSnapshot, now time.Time) string {
 	return strings.Join([]string{
 		OrientationDayKey(now),
 		WorkerPulseSig(WorkerTasksFromSnapshot(snap), now),
+		NamedWorkerPulseSig(NamedWorkersFromSnapshot(snap)),
 		PromotePathPulseSig(PromotePathsFromSnapshot(snap)),
 		DelegationPulseSig(DelegationsFromSnapshot(snap)),
 		ScanPulseSig(snap.Scans),
 		StandingFlagsPulseSig(StandingFlagsFromSnapshot(snap)),
 	}, "|")
+}
+
+// NamedWorkerPulseSig hashes named worker rows for inject dedup.
+func NamedWorkerPulseSig(workers []api.BoardWorker) string {
+	if len(workers) == 0 {
+		return ""
+	}
+	shown := workers
+	if len(shown) > MaxOrientationWorkers {
+		shown = shown[:MaxOrientationWorkers]
+	}
+	parts := make([]string, 0, len(shown)+1)
+	for _, w := range shown {
+		parts = append(parts, fmt.Sprintf("%s:%s:%s:%s:%s:%s:%s",
+			w.Name, w.State, w.Reason, w.WorkspaceState, w.ResultHandle, w.ResultDisposition, w.Question))
+	}
+	if len(workers) > MaxOrientationWorkers {
+		parts = append(parts, fmt.Sprintf("omitted:%d", len(workers)-MaxOrientationWorkers))
+	}
+	return strings.Join(parts, ",")
 }
 
 // PromotePathPulseSig hashes cached promote path_status for inject dedup.

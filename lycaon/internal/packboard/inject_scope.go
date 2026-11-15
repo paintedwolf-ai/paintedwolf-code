@@ -49,7 +49,7 @@ func BuildInjectLines(snapshot api.BoardSnapshot, scope InjectScope, opts Orient
 			lines = append(lines, other)
 		}
 	}
-	lines = append(lines, workerStateLines(snapshot, now)...)
+	lines = append(lines, workerStateLinesWithDetail(snapshot, now, opts.IncludeDetail)...)
 	if scanLines := FormatScansLines(snapshot.Scans, gitHeadShort(snapshot.Git), now, false); len(scanLines) > 0 {
 		lines = append(lines, scanLines...)
 	}
@@ -62,8 +62,10 @@ func BuildInjectLines(snapshot api.BoardSnapshot, scope InjectScope, opts Orient
 		}
 	}
 	if opts.IncludeDetail {
-		for _, t := range tasks {
-			lines = append(lines, FormatWorkerDetailLine(t, now))
+		if len(NamedWorkersFromSnapshot(snapshot)) == 0 {
+			for _, t := range tasks {
+				lines = append(lines, FormatWorkerDetailLine(t, now))
+			}
 		}
 		for _, d := range delegations {
 			if line := FormatDelegationDetailLine(d); line != "" {

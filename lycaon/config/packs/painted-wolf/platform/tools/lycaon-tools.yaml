@@ -46,8 +46,9 @@ tools:
   - plan_append_review_evidence
   - plan_from_blueprint
 
-  # pack_board and read_review orientation and review readers
+  # pack_board, read_findings, and read_review orientation and review readers
   - pack_board
+  - read_findings
   - read_review
 
   # record_finding agent feed writer (grounded)

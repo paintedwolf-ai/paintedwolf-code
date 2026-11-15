@@ -13,6 +13,7 @@ tools:
   view_video: sticky
   record_finding: sticky
   pack_board: sticky
+  read_findings: sticky
   read_review: sticky
   source_history: sticky
   wait: sticky

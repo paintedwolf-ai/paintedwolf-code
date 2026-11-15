@@ -26,6 +26,7 @@ type WorkerLegContext struct {
 	// the worker that delivered it.
 	ReviewHandle string
 	ReviewWorker string
+	ViewKind     string
 }
 
 // SiblingNote is one cross-cutting finding from another worker, pushed into a

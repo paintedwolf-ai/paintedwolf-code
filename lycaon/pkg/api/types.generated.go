@@ -942,8 +942,12 @@ type BoardView struct {
 	Git     *BoardGitSlice           `json:"git,omitempty"`
 	Scans   *BoardScansSlice         `json:"scans,omitempty"`
 	Roster  []BoardWorkerRosterEntry `json:"roster,omitempty"`
-	// Every open worker in the session, needing the coordinator first.
-	Workers           []BoardWorker                `json:"workers,omitempty"`
+	// Open workers in the session, needing the coordinator and most recent first.
+	Workers []BoardWorker `json:"workers,omitempty"`
+	// Opaque cursor for the next page of workers when workers_has_more is true.
+	WorkersNextCursor string                       `json:"workers_next_cursor,omitempty"`
+	WorkersHasMore    bool                         `json:"workers_has_more,omitempty"`
+	WorkersOmitted    int                          `json:"workers_omitted,omitempty"`
 	PromotePaths      []WorkerPromoteJobPathStatus `json:"promote_paths,omitempty"`
 	OverlayMergePlan  *OverlayMergePlan            `json:"overlay_merge_plan,omitempty"`
 	Delegation        []BoardDelegationEntry       `json:"delegation,omitempty"`
@@ -962,11 +966,15 @@ type BoardView struct {
 
 // BoardWorker One worker as its coordinator sees it, with the state admission reads.
 type BoardWorker struct {
-	Name      string            `json:"name"`
-	AgentType string            `json:"agent_type"`
-	ScopeMode string            `json:"scope_mode,omitempty"`
-	State     WorkerState       `json:"state"`
-	Reason    WorkerStateReason `json:"reason,omitempty"`
+	Name      string `json:"name"`
+	AgentType string `json:"agent_type"`
+	ScopeMode string `json:"scope_mode,omitempty"`
+	// Derived workspace state for this worker (shared, retained, preparing, refreshed, reset, recovering).
+	WorkspaceState string            `json:"workspace_state,omitempty"`
+	State          WorkerState       `json:"state"`
+	Reason         WorkerStateReason `json:"reason,omitempty"`
+	// Derived display label for state and reason.
+	StateLabel string `json:"state_label,omitempty"`
 	// The worker's latest instruction, else its brief, clipped to one line.
 	About string `json:"about,omitempty"`
 	// The pending decision an asking worker waits on.
@@ -974,10 +982,16 @@ type BoardWorker struct {
 	// Handle of the worker's latest result.
 	ResultHandle      string                  `json:"result_handle,omitempty"`
 	ResultDisposition WorkerResultDisposition `json:"result_disposition,omitempty"`
-	ReadPaths         []string                `json:"read_paths,omitempty"`
-	ReadOmitted       int                     `json:"read_omitted,omitempty"`
-	ChangedPaths      []string                `json:"changed_paths,omitempty"`
-	ChangedOmitted    int                     `json:"changed_omitted,omitempty"`
+	// Derived display label for result_disposition.
+	DispositionLabel string `json:"disposition_label,omitempty"`
+	// Derived display label for workspace_state.
+	WorkspaceLabel string `json:"workspace_label,omitempty"`
+	// Most recent activity timestamp for recency ordering.
+	UpdatedAt      string   `json:"updated_at,omitempty"`
+	ReadPaths      []string `json:"read_paths,omitempty"`
+	ReadOmitted    int      `json:"read_omitted,omitempty"`
+	ChangedPaths   []string `json:"changed_paths,omitempty"`
+	ChangedOmitted int      `json:"changed_omitted,omitempty"`
 }
 
 // BoardWorkerRosterEntry

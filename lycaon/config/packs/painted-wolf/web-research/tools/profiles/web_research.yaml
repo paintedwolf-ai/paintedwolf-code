@@ -5,6 +5,7 @@ tools:
   recall: sticky
   record_finding: sticky
   pack_board: sticky
+  read_findings: sticky
   read_review: sticky
   request_decision: sticky
   message_coordinator: sticky

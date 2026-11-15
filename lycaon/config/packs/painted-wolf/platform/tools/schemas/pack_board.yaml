@@ -1,20 +1,15 @@
-description: "Inspect worker and project state, or read shared findings. Use detail_level (and optional plan) for the board, finding_id for one full finding, or findings_after for an ordered summary page; choose one view."
+description: "Inspect the worker roster and project state. Recent and unresolved workers appear first; use cursor for older workers and plan to filter by Blueprint."
 schema:
   type: object
   properties:
     plan:
       type: string
-      description: Filter the worker roster to legs seeded from the matching Blueprint path.
-    finding_id:
-      type: integer
-      minimum: 1
-      description: Read the retained body of one finding from this coordination session.
-    findings_after:
-      type: integer
-      minimum: 0
-      description: Page findings in sequence; use 0 to start and next_after to continue.
+      description: Filter the worker roster to workers bound to the matching Blueprint path.
+    cursor:
+      type: string
+      description: Continuation token to page older workers beyond the current roster page.
     detail_level:
       type: string
       enum: [status, compact, full, forensic]
-      description: "status: summary + board only (~20 lines). compact (default): slim roster with changed_paths. full: roster + worker briefs + extra board lines. forensic: adds full job records with baselines for host debugging."
+      description: "status: board summary and pulse. compact (default): worker states, result dispositions, workspace state, and paths. full: adds worker briefs, instructions, and questions. forensic: adds host job records per worker."
   additionalProperties: false

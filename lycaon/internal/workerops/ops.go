@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 
@@ -344,6 +345,17 @@ func (s *Service) shelveOne(ctx context.Context, actor workerrecords.Actor, op w
 	return d, nil
 }
 
+// MaxHistoryRounds bounds how many rounds one worker_history page carries.
+const MaxHistoryRounds = workerrecords.MaxPageRounds
+
+// HistoryQuery selects a bounded page of rounds and messages.
+type HistoryQuery struct {
+	BeforeSeq   int64
+	BeforeRound int64
+	Limit       int
+	MaxBytes    int
+}
+
 // HistoryPage is one page of a worker's story, newest first.
 type HistoryPage struct {
 	Worker   workerrecords.Worker
@@ -352,28 +364,52 @@ type HistoryPage struct {
 	Messages []workerrecords.Message
 	// Before continues to older messages; zero when none are left.
 	Before int64
+	// BeforeRound continues to older rounds; zero when none are left.
+	BeforeRound int64
 }
 
 // History reads a worker's rounds and a page of messages before a sequence.
 // Reading resolves and acknowledges nothing.
 func (s *Service) History(ctx context.Context, actor workerrecords.Actor, name string, before int64, limit int) (HistoryPage, error) {
-	if limit <= 0 || limit >= workerrecords.MaxPageMessages {
-		limit = workerrecords.MaxPageMessages - 1
+	return s.HistoryPaged(ctx, actor, name, HistoryQuery{BeforeSeq: before, Limit: limit})
+}
+
+// HistoryPaged reads a bounded page of rounds and messages without scanning
+// full round or message history. Reading resolves and acknowledges nothing.
+func (s *Service) HistoryPaged(ctx context.Context, actor workerrecords.Actor, name string, q HistoryQuery) (HistoryPage, error) {
+	if q.Limit <= 0 || q.Limit >= workerrecords.MaxPageMessages {
+		q.Limit = workerrecords.MaxPageMessages - 1
 	}
-	snap, err := s.resolve(ctx, actor, name)
+	w, err := s.Reader.Records.Resolve(ctx, actor, strings.TrimSpace(name))
 	if err != nil {
 		return HistoryPage{}, err
 	}
-	msgs, err := s.Reader.Records.History(ctx, actor, snap.Worker.ID, before, limit+1)
+	snap, err := s.Reader.ReadBounded(ctx, actor, w, 0)
 	if err != nil {
 		return HistoryPage{}, err
 	}
-	page := HistoryPage{Worker: snap.Worker, State: snap.View, Rounds: snap.Rounds, Messages: msgs}
-	if len(msgs) > limit {
-		page.Messages = msgs[:limit]
-		page.Before = msgs[limit-1].Seq
+	rounds, err := s.Reader.Records.RoundsBefore(ctx, actor, w.ID, q.BeforeRound, MaxHistoryRounds+1)
+	if err != nil {
+		return HistoryPage{}, err
 	}
-	return page, nil
+	var beforeRound int64
+	if len(rounds) > MaxHistoryRounds {
+		rounds = rounds[:MaxHistoryRounds]
+		beforeRound = rounds[len(rounds)-1].Ordinal
+	}
+	slices.Reverse(rounds)
+	msgs, nextBefore, err := s.Reader.Records.HistoryBounded(ctx, actor, w.ID, q.BeforeSeq, q.Limit, q.MaxBytes)
+	if err != nil {
+		return HistoryPage{}, err
+	}
+	return HistoryPage{
+		Worker:      snap.Worker,
+		State:       snap.View,
+		Rounds:      rounds,
+		Messages:    msgs,
+		Before:      nextBefore,
+		BeforeRound: beforeRound,
+	}, nil
 }
 
 // Result resolves a result handle for an operation on its changes while

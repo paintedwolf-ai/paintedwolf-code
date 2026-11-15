@@ -50,11 +50,15 @@ func (s *SQLStore) Recent(ctx context.Context, sessionID, excludeAgent string, a
 		return nil, afterID, fmt.Errorf("findings store not configured")
 	}
 	key := normalizeKey(sessionID)
+	pageLimit := limit
+	if pageLimit <= 0 {
+		pageLimit = defaultHistoryLimit
+	}
 
 	var scanned []Finding
 	if since.IsZero() {
 		rows, err := s.queries.ListFindingsAfterID(ctx, db.ListFindingsAfterIDParams{
-			SessionID: key, ID: afterID, ExcludeAgent: strings.TrimSpace(excludeAgent),
+			SessionID: key, ID: afterID, ExcludeAgent: strings.TrimSpace(excludeAgent), PageLimit: int64(pageLimit),
 		})
 		if err != nil {
 			return nil, afterID, err
@@ -69,6 +73,7 @@ func (s *SQLStore) Recent(ctx context.Context, sessionID, excludeAgent string, a
 			CreatedAt:    db.FormatTime(since.UTC()),
 			ExcludeAgent: strings.TrimSpace(excludeAgent),
 			ID:           afterID,
+			PageLimit:    int64(pageLimit),
 		})
 		if err != nil {
 			return nil, afterID, err
@@ -122,7 +127,7 @@ func findingFromRow(id int64, agent, summary, ref, body, createdAt string) Findi
 	if err != nil || ts.IsZero() {
 		ts, _ = time.Parse(time.RFC3339, createdAt)
 	}
-	return Finding{ID: id, Agent: agent, Summary: summary, Ref: ref, Body: body, TS: ts}
+	return Finding{ID: id, Agent: agent, Summary: summary, Ref: ref, Body: body, HasBody: body != "", TS: ts}
 }
 
 func (s *SQLStore) Get(ctx context.Context, sessionID string, id int64) (Finding, error) {

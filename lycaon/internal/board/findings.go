@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/findings"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -17,21 +17,28 @@ func readFindings(ctx context.Context, args map[string]any, tctx tools.ToolConte
 	if deps.Findings == nil || deps.Findings() == nil || deps.RootSession == nil {
 		return "", fmt.Errorf("findings unavailable")
 	}
-	if _, id := args["finding_id"]; id && args["findings_after"] != nil {
+	_, hasID := args["finding_id"]
+	_, hasAfter := args["findings_after"]
+	if hasID == hasAfter {
 		return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "finding_id", "reason": "choose_one_findings_view"}}
 	}
-	if args["detail_level"] != nil {
-		return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "detail_level", "reason": "choose_board_or_findings_view"}}
+	for k := range args {
+		if k != "finding_id" && k != "findings_after" {
+			return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": k, "reason": "unexpected_argument"}}
+		}
 	}
 	store := deps.Findings()
 	root := deps.RootSession(ctx, tctx.Identity.SessionID)
 	if root == "" {
 		return "", fmt.Errorf("findings session required")
 	}
-	if raw, ok := args["finding_id"]; ok {
-		id, err := findingIndex(raw)
+	if hasID {
+		id, err := findingIndex(args["finding_id"])
 		if err != nil {
 			return "", err
+		}
+		if id < 1 {
+			return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"field": "finding_id", "reason": "positive_integer_required"}}
 		}
 		f, err := store.Get(ctx, root, id)
 		if errors.Is(err, findings.ErrNotFound) {

@@ -43,7 +43,10 @@ type Worker struct {
 	Criteria          []string `json:"criteria,omitempty"`
 	ClosedAt          string   `json:"closed_at,omitempty"`
 	ClosedReason      string   `json:"closed_reason,omitempty"`
+	NextRoundOrdinal  int64    `json:"next_round_ordinal,omitempty"`
+	NextMessageSeq    int64    `json:"next_message_seq,omitempty"`
 	CreatedAt         string   `json:"created_at"`
+	UpdatedAt         string   `json:"updated_at,omitempty"`
 }
 
 func workerFromRow(w db.Workers) Worker {
@@ -54,7 +57,9 @@ func workerFromRow(w db.Workers) Worker {
 		WorkflowPhase: w.WorkflowPhase, WorkflowWorkID: w.WorkflowWorkID,
 		BlueprintPath: w.BlueprintPath, BlueprintRevision: w.BlueprintRevision, BaseSHA: w.BaseSha,
 		Files: decodeStringSlice(w.FilesJson), Criteria: decodeStringSlice(w.CriteriaJson),
-		ClosedAt: w.ClosedAt.String, ClosedReason: w.ClosedReason, CreatedAt: w.CreatedAt,
+		ClosedAt: w.ClosedAt.String, ClosedReason: w.ClosedReason,
+		NextRoundOrdinal: w.NextRoundOrdinal, NextMessageSeq: w.NextMessageSeq,
+		CreatedAt: w.CreatedAt, UpdatedAt: w.UpdatedAt,
 	}
 }
 

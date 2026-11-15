@@ -10,7 +10,7 @@ import (
 // SummaryMaxChars bounds automatic peer announcements.
 const SummaryMaxChars = 320
 
-// BodyMaxBytes bounds retained detail, read through pack_board.
+// BodyMaxBytes bounds retained detail, read through read_findings.
 const BodyMaxBytes = 8192
 
 // DefaultListCap is the default max findings returned for worklog projection.

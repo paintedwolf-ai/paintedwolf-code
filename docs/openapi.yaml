@@ -15427,9 +15427,17 @@ components:
             $ref: '#/components/schemas/BoardWorkerRosterEntry'
         workers:
           type: array
-          description: Every open worker in the session, needing the coordinator first.
+          description: Open workers in the session, needing the coordinator and most recent first.
           items:
             $ref: '#/components/schemas/BoardWorker'
+        workers_next_cursor:
+          type: string
+          description: Opaque cursor for the next page of workers when workers_has_more is true.
+        workers_has_more:
+          type: boolean
+        workers_omitted:
+          type: integer
+          minimum: 0
         promote_paths:
           type: array
           items:
@@ -37855,10 +37863,16 @@ components:
           type: string
         scope_mode:
           type: string
+        workspace_state:
+          type: string
+          description: Derived workspace state for this worker (shared, retained, preparing, refreshed, reset, recovering).
         state:
           $ref: '#/components/schemas/WorkerState'
         reason:
           $ref: '#/components/schemas/WorkerStateReason'
+        state_label:
+          type: string
+          description: Derived display label for state and reason.
         about:
           type: string
           description: The worker's latest instruction, else its brief, clipped to one line.
@@ -37870,6 +37884,15 @@ components:
           description: Handle of the worker's latest result.
         result_disposition:
           $ref: '#/components/schemas/WorkerResultDisposition'
+        disposition_label:
+          type: string
+          description: Derived display label for result_disposition.
+        workspace_label:
+          type: string
+          description: Derived display label for workspace_state.
+        updated_at:
+          type: string
+          description: Most recent activity timestamp for recency ordering.
         read_paths:
           type: array
           items:
