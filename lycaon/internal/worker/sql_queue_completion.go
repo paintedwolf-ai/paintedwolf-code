@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/worker/jobstate"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -29,18 +30,25 @@ func (q *sqlQueueClaims) completeAdmitted(ctx context.Context, claimed *api.Work
 	task, mergeStatus, teardown := q.resolveWriteCompletionTarget(ctx, claimed, result)
 	jobID := claimed.ID
 	overlayPath := ""
-	// A missing baseline or budget-exceeded overlay leaves the overlay unsealed for review.
-	if mergeStatus == api.WorkerMergeStatusPending && strings.TrimSpace(task.WorkspaceOverlayPath) == "" && strings.TrimSpace(task.WorkspaceBaselinePath) != "" {
-		captured, err := q.captureOverlay(ctx, task)
+	// A view publishes its checkpoint; an earlier-format branch seals an overlay against its baseline.
+	// A budget-exceeded overlay stays unsealed for review.
+	if mergeStatus == api.WorkerMergeStatusPending && strings.TrimSpace(task.WorkspaceOverlayPath) == "" {
+		published, err := workspace.PublishBranchCheckpoint(ctx, task.WorkspaceRoot)
 		if err != nil {
-			if errors.Is(err, workspacebaseline.ErrOverlayBudgetExceeded) {
-				workerWorkspaceLog.Warn("write overlay exceeds budget; leaving unsealed for review",
-					"job_id", task.ID, "error", err)
+			return false, fmt.Errorf("worker %s: publish checkpoint: %w", task.ID, err)
+		}
+		if !published && strings.TrimSpace(task.WorkspaceBaselinePath) != "" {
+			captured, err := q.captureOverlay(ctx, task)
+			if err != nil {
+				if errors.Is(err, workspacebaseline.ErrOverlayBudgetExceeded) {
+					workerWorkspaceLog.Warn("write overlay exceeds budget; leaving unsealed for review",
+						"job_id", task.ID, "error", err)
+				} else {
+					return false, err
+				}
 			} else {
-				return false, err
+				overlayPath = captured
 			}
-		} else {
-			overlayPath = captured
 		}
 	}
 	completion, err := q.store.CompleteJob(ctx, jobID, result, claimed.ClaimToken, mergeStatus, teardown, overlayPath)
@@ -68,9 +76,14 @@ func (q *sqlQueueClaims) resolveWriteCompletionTarget(ctx context.Context, claim
 			task = loaded
 		}
 	}
+	layeredDiverges, layeredHandled := hasLayeredOverlayDivergence(ctx, task)
 	switch {
 	case strings.TrimSpace(result.Status) == "needs_decision":
 		return task, "", false
+	case layeredHandled && layeredDiverges:
+		return task, api.WorkerMergeStatusPending, false
+	case layeredHandled:
+		return task, api.WorkerMergeStatusAborted, true
 	case session.OverlayAwaitingPromote(ctx, task):
 		return task, api.WorkerMergeStatusPending, false
 	case q.overlayDivergesFromProject(ctx, task):
@@ -208,4 +221,17 @@ func (q *sqlQueueClaims) ResumeReadyWaits(ctx context.Context) (int, error) {
 		q.NotifyRunnable()
 	}
 	return len(jobIDs), nil
+}
+
+// hasLayeredOverlayDivergence answers from a branch's view when it has one: whether the worker changed
+// anything, and whether the view could answer.
+func hasLayeredOverlayDivergence(ctx context.Context, task *api.WorkerTask) (bool, bool) {
+	if task == nil || strings.TrimSpace(task.WorkspaceRoot) == "" {
+		return false, false
+	}
+	paths, handled, err := workspace.OverlayWorkspaceDivergencePaths(ctx, task.WorkspaceRoot)
+	if !handled {
+		return false, false
+	}
+	return err != nil || len(paths) > 0, true
 }

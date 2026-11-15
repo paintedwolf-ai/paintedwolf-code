@@ -192,8 +192,12 @@ func (q *sqlQueueClaims) StopExecution(ctx context.Context, jobID string) error 
 
 // RequestCancellation durably fences claims and execution outcomes before joining runtime.
 func (q *sqlQueueClaims) RequestCancellation(ctx context.Context, jobID string) (bool, error) {
-	n, err := q.store.queries.RequestWorkerCancellation(ctx, db.RequestWorkerCancellationParams{
-		ID: jobID, RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+	var n int64
+	err := q.retryOnFullDisk(func() (err error) {
+		n, err = q.store.queries.RequestWorkerCancellation(ctx, db.RequestWorkerCancellationParams{
+			ID: jobID, RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+		})
+		return err
 	})
 	return n == 1, err
 }
@@ -204,28 +208,33 @@ func (q *sqlQueueClaims) RequestClaimCancellation(ctx context.Context, claimed *
 		return false, fmt.Errorf("claimed worker task required")
 	}
 	var won bool
-	err := q.store.inTx(ctx, func(queries *db.Queries, _ *sql.Tx) error {
-		job, err := queries.GetWorkerJob(ctx, claimed.ID)
-		if db.IsNoRows(err) {
-			return nil
-		}
-		if err != nil {
+	err := q.retryOnFullDisk(func() error {
+		return q.store.inTx(ctx, func(queries *db.Queries, _ *sql.Tx) error {
+			job, err := queries.GetWorkerJob(ctx, claimed.ID)
+			if db.IsNoRows(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			if job.Status != "running" || db.StringFromNull(job.ClaimToken) != claimed.ClaimToken || job.CancelRequestedAt.Valid {
+				return nil
+			}
+			n, err := queries.RequestWorkerCancellation(ctx, db.RequestWorkerCancellationParams{
+				ID: claimed.ID, RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+			})
+			won = n == 1
 			return err
-		}
-		if job.Status != "running" || db.StringFromNull(job.ClaimToken) != claimed.ClaimToken || job.CancelRequestedAt.Valid {
-			return nil
-		}
-		n, err := queries.RequestWorkerCancellation(ctx, db.RequestWorkerCancellationParams{
-			ID: claimed.ID, RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())),
 		})
-		won = n == 1
-		return err
 	})
 	return won, err
 }
 
-// FinishCanceled records cancellation after execution exits.
+// FinishCanceled records cancellation after execution exits and its runtime settled.
 func (q *sqlQueueClaims) FinishCanceled(ctx context.Context, jobID string, result *api.WorkerResult) error {
+	if err := q.settleCanceledRuntime(ctx, jobID); err != nil {
+		return err
+	}
 	if result == nil {
 		q.mu.Lock()
 		deps := q.cancelReports
@@ -263,8 +272,11 @@ func (q *sqlQueueClaims) finalizeCanceled(ctx context.Context, jobID string, res
 	if task.Status.IsTerminal() {
 		return nil
 	}
-	won, err := q.store.CancelJob(ctx, jobID, result)
-	if err != nil {
+	var won bool
+	if err := q.retryOnFullDisk(func() (err error) {
+		won, err = q.store.CancelJob(ctx, jobID, result)
+		return err
+	}); err != nil {
 		return err
 	}
 	if !won {

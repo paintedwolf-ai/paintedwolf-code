@@ -101,17 +101,6 @@ func TestRewriteWorkerBranchPaths(t *testing.T) {
 	}
 }
 
-func TestProjectSeedDirLayout(t *testing.T) {
-	root := WorkerSeedsRootUnder("/state/paintedwolf")
-	if root != filepath.FromSlash("/state/paintedwolf/worker-seeds") {
-		t.Fatalf("seed root = %q", root)
-	}
-	want := filepath.Join(root, ProjectKey("/Users/me/repo"))
-	if got := ProjectSeedDir(root, "/Users/me/repo"); got != want {
-		t.Fatalf("seed dir = %q want %q", got, want)
-	}
-}
-
 func TestWorkerBranchPathsAtAVolumeRootKeepWorking(t *testing.T) {
 	stateRoot := "/home/u/.config/paintedwolf"
 	folder := "/Volumes/My Disk/" + WorkerPlacementDirName(501, stateRoot)

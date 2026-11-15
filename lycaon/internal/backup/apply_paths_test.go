@@ -6,8 +6,14 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/localdata"
+	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
+
+func TestMain(m *testing.M) {
+	gittestsetup.Enable()
+	os.Exit(m.Run())
+}
 
 func TestRestoreTransactionRejectsSymlinkDirectory(t *testing.T) {
 	config := t.TempDir()

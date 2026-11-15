@@ -47,6 +47,9 @@ func StartPTY(ctx context.Context, name string, args []string, opts PTYOpts) (PT
 		return nil, err
 	}
 	err = guard.onStarted(cmd)
+	if record := opts.Launch.startRecorder(opts.Dir); err == nil && record != nil {
+		err = record(cmd.Process.Pid)
+	}
 	if err == nil {
 		err = confine.ConfirmProcessLaunch(ctx, cmd)
 	}

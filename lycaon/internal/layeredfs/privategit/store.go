@@ -1,0 +1,580 @@
+package privategit
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/fseffect"
+)
+
+const maxPersistedLeaseRecordBytes = 16 << 20
+
+type leaseRecord struct {
+	id     string
+	kind   LeaseKind
+	holder string
+	oids   map[string]struct{}
+	packs  map[string]struct{}
+}
+
+type persistedLeaseRecord struct {
+	FormatVersion int       `json:"format_version"`
+	ID            string    `json:"id"`
+	Kind          LeaseKind `json:"kind"`
+	Holder        string    `json:"holder"`
+	OIDs          []string  `json:"oids,omitempty"`
+	Packs         []string  `json:"packs,omitempty"`
+}
+
+type storeStock struct {
+	packOIDs              map[string]map[string]struct{}
+	compactPacks          map[string]*compactPackIndex
+	packSizes             map[string]int64
+	looseSizes            map[string]int64
+	logicalOIDRefs        map[string]int
+	compactObjectsTotal   int64
+	nonCompactOnlyObjects int64
+	looseBytesTotal       int64
+	packBytesTotal        int64
+	startupDuration       time.Duration
+}
+
+// RetainedObjectStore manages the engine-retained content-addressed Git object store.
+type RetainedObjectStore struct {
+	rootDir    string
+	objectsDir string
+	importsDir string
+
+	mu                  sync.Mutex
+	nextLease           uint64
+	leases              map[string]*leaseRecord
+	releasedLeases      map[string]struct{}
+	stock               storeStock
+	removeLeaseRecordFn func(string) error
+
+	objectsImported   atomic.Int64
+	objectsReused     atomic.Int64
+	bytesImported     atomic.Int64
+	bytesReused       atomic.Int64
+	bytesNewlyWritten atomic.Int64
+}
+
+// NewRetainedObjectStore initializes or opens an engine-retained Git object store at rootDir.
+func NewRetainedObjectStore(rootDir string) (*RetainedObjectStore, error) {
+	return NewRetainedObjectStoreContext(context.Background(), rootDir)
+}
+
+// NewRetainedObjectStoreContext initializes or opens an engine-retained Git object store at rootDir,
+// honoring ctx cancellation while reconstructing preexisting stock on disk.
+func NewRetainedObjectStoreContext(ctx context.Context, rootDir string) (*RetainedObjectStore, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(rootDir) == "" {
+		return nil, fmt.Errorf("privategit: retained store rootDir is required")
+	}
+	absRoot, err := filepath.Abs(rootDir)
+	if err != nil {
+		return nil, err
+	}
+	objectsDir := filepath.Join(absRoot, "objects")
+	importsDir := filepath.Join(absRoot, "imports")
+	for _, d := range []string{
+		absRoot,
+		objectsDir,
+		filepath.Join(objectsDir, "info"),
+		filepath.Join(objectsDir, "pack"),
+		filepath.Join(absRoot, "refs"),
+		filepath.Join(absRoot, "leases"),
+		importsDir,
+	} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			return nil, fmt.Errorf("privategit: create store dir %s: %w", d, err)
+		}
+	}
+	headPath := filepath.Join(absRoot, "HEAD")
+	if _, err := os.Stat(headPath); os.IsNotExist(err) {
+		_ = os.WriteFile(headPath, []byte("ref: refs/heads/main\n"), 0o644)
+	}
+	s := &RetainedObjectStore{
+		rootDir:        absRoot,
+		objectsDir:     objectsDir,
+		importsDir:     importsDir,
+		leases:         make(map[string]*leaseRecord),
+		releasedLeases: make(map[string]struct{}),
+		stock: storeStock{
+			packOIDs:       make(map[string]map[string]struct{}),
+			compactPacks:   make(map[string]*compactPackIndex),
+			packSizes:      make(map[string]int64),
+			looseSizes:     make(map[string]int64),
+			logicalOIDRefs: make(map[string]int),
+		},
+	}
+	if err := initStockFromDiskLocked(ctx, s); err != nil {
+		return nil, err
+	}
+	if err := loadPersistedLeasesFromDiskLocked(ctx, s); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// RootDir returns the store's top-level directory.
+func (s *RetainedObjectStore) RootDir() string {
+	return s.rootDir
+}
+
+// ObjectsDir returns the read-only content-addressed objects directory used for alternates.
+func (s *RetainedObjectStore) ObjectsDir() string {
+	return s.objectsDir
+}
+
+// Metrics returns an O(1) snapshot of the store's cumulative and retained stock counters.
+func (s *RetainedObjectStore) Metrics() StoreMetrics {
+	s.mu.Lock()
+	retainedObjects := s.stock.compactObjectsTotal + s.stock.nonCompactOnlyObjects
+	retainedBytes := s.stock.looseBytesTotal + s.stock.packBytesTotal
+	startupDur := s.stock.startupDuration
+	s.mu.Unlock()
+	return StoreMetrics{
+		ObjectsImported:     s.objectsImported.Load(),
+		ObjectsReused:       s.objectsReused.Load(),
+		BytesImported:       s.bytesImported.Load(),
+		BytesReused:         s.bytesReused.Load(),
+		BytesNewlyWritten:   s.bytesNewlyWritten.Load(),
+		RetainedObjects:     retainedObjects,
+		RetainedBytes:       retainedBytes,
+		StartupInitDuration: startupDur,
+	}
+}
+
+// RecordPrivateWriteBytes adds newly written private object bytes to the store metrics.
+func (s *RetainedObjectStore) RecordPrivateWriteBytes(n int64) {
+	if n > 0 {
+		s.bytesNewlyWritten.Add(n)
+	}
+}
+
+// RetainForView creates an active object retention lease for a mounted or materialized view.
+func (s *RetainedObjectStore) RetainForView(viewID string, oids []string) (string, error) {
+	return createStoreLease(s, LeaseView, viewID, oids)
+}
+
+// RetainForCheckpoint creates an immutable checkpoint retention lease.
+func (s *RetainedObjectStore) RetainForCheckpoint(checkpointID string, oids []string) (string, error) {
+	return createStoreLease(s, LeaseCheckpoint, checkpointID, oids)
+}
+
+// RetainForStackedChild creates an active lease for a stacked child workspace over a checkpoint.
+func (s *RetainedObjectStore) RetainForStackedChild(childViewID, parentCheckpointID string, oids []string) (string, error) {
+	return createStoreLease(s, LeaseStackedChild, childViewID+":"+parentCheckpointID, oids)
+}
+
+func createStoreLease(s *RetainedObjectStore, kind LeaseKind, holder string, oids []string) (string, error) {
+	if strings.TrimSpace(holder) == "" {
+		return "", fmt.Errorf("privategit: lease holder is required")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.nextLease++
+	id := fmt.Sprintf("lease-%s-%06d", kind, s.nextLease)
+	oidSet := make(map[string]struct{}, len(oids))
+	packSet := make(map[string]struct{})
+	for _, raw := range oids {
+		oid := strings.ToLower(strings.TrimSpace(raw))
+		if oid == "" {
+			continue
+		}
+		if strings.HasPrefix(oid, "pack:") {
+			base := strings.TrimPrefix(oid, "pack:")
+			base = strings.TrimSuffix(strings.TrimSuffix(base, ".pack"), ".idx")
+			if base != "" {
+				packSet[base] = struct{}{}
+			}
+			continue
+		}
+		oidSet[oid] = struct{}{}
+		for packName, members := range s.stock.packOIDs {
+			if _, ok := members[oid]; ok {
+				packSet[packName] = struct{}{}
+			}
+		}
+		for packName, comp := range s.stock.compactPacks {
+			if comp.containsHex(oid) {
+				packSet[packName] = struct{}{}
+			}
+		}
+	}
+	for packName := range s.stock.packOIDs {
+		if len(s.stock.packOIDs[packName]) == 0 {
+			packSet[packName] = struct{}{}
+		}
+	}
+	for packName, comp := range s.stock.compactPacks {
+		if comp.count() == 0 {
+			packSet[packName] = struct{}{}
+		}
+	}
+	rec := &leaseRecord{
+		id:     id,
+		kind:   kind,
+		holder: holder,
+		oids:   oidSet,
+		packs:  packSet,
+	}
+	if err := persistStoreLeaseRecordLocked(s, rec); err != nil {
+		return "", err
+	}
+	s.leases[id] = rec
+	delete(s.releasedLeases, id)
+	return id, nil
+}
+
+// ReleaseLease releases an active retention lease so unreferenced objects may be collected.
+func (s *RetainedObjectStore) ReleaseLease(leaseID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := parseValidLeaseID(leaseID, ""); !ok {
+		return fmt.Errorf("privategit: unknown or already released lease %q", leaseID)
+	}
+	_, inMem := s.leases[leaseID]
+	if _, wasReleased := s.releasedLeases[leaseID]; wasReleased && !inMem {
+		return fmt.Errorf("privategit: unknown or already released lease %q", leaseID)
+	}
+	removeFn := s.removeLeaseRecordFn
+	if removeFn == nil {
+		removeFn = os.Remove
+	}
+	diskErr := removeFn(storeLeaseRecordPath(s, leaseID))
+	if diskErr != nil {
+		if !errors.Is(diskErr, fs.ErrNotExist) {
+			return fmt.Errorf("privategit: remove persisted lease %q: %w", leaseID, diskErr)
+		}
+		if !inMem {
+			return fmt.Errorf("privategit: unknown or already released lease %q", leaseID)
+		}
+	}
+	delete(s.leases, leaseID)
+	s.releasedLeases[leaseID] = struct{}{}
+	return nil
+}
+
+func storeLeaseRecordPath(s *RetainedObjectStore, leaseID string) string {
+	return filepath.Join(s.rootDir, "leases", filepath.Base(leaseID)+".json")
+}
+
+func isValidLeaseKind(kind LeaseKind) bool {
+	switch kind {
+	case LeaseView, LeaseCheckpoint, LeaseStackedChild:
+		return true
+	default:
+		return false
+	}
+}
+
+func parseValidLeaseID(id string, expectedKind LeaseKind) (uint64, bool) {
+	if id == "" || filepath.Base(id) != id || strings.ContainsAny(id, `/\`) {
+		return 0, false
+	}
+	for _, kind := range []LeaseKind{LeaseView, LeaseCheckpoint, LeaseStackedChild} {
+		if expectedKind != "" && kind != expectedKind {
+			continue
+		}
+		prefix := "lease-" + string(kind) + "-"
+		if !strings.HasPrefix(id, prefix) {
+			continue
+		}
+		seqStr := strings.TrimPrefix(id, prefix)
+		if len(seqStr) < 6 {
+			return 0, false
+		}
+		for i := 0; i < len(seqStr); i++ {
+			if seqStr[i] < '0' || seqStr[i] > '9' {
+				return 0, false
+			}
+		}
+		seq, err := strconv.ParseUint(seqStr, 10, 64)
+		if err != nil || seq == 0 {
+			return 0, false
+		}
+		return seq, true
+	}
+	return 0, false
+}
+
+func isValidPackBaseName(name string) bool {
+	if !strings.HasPrefix(name, "pack-") || filepath.Base(name) != name || strings.ContainsAny(name, `/\`) {
+		return false
+	}
+	hexPart := strings.TrimPrefix(name, "pack-")
+	return (len(hexPart) == 40 || len(hexPart) == 64) && isHexString(hexPart) && hexPart == strings.ToLower(hexPart)
+}
+
+func decodeAndValidatePersistedLeaseFile(path, expectedID string) (*leaseRecord, uint64, error) {
+	info, err := os.Lstat(path)
+	if err != nil {
+		return nil, 0, fmt.Errorf("%w: lstat lease record %s: %w", ErrCorruptObjectStore, path, err)
+	}
+	if !info.Mode().IsRegular() || info.Size() <= 0 || info.Size() > maxPersistedLeaseRecordBytes {
+		return nil, 0, fmt.Errorf("%w: invalid lease record mode or size for %s", ErrCorruptObjectStore, path)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, 0, fmt.Errorf("%w: read lease record %s: %w", ErrCorruptObjectStore, path, err)
+	}
+	var p persistedLeaseRecord
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&p); err != nil {
+		return nil, 0, fmt.Errorf("%w: decode lease record %s: %w", ErrCorruptObjectStore, path, err)
+	}
+	var extra any
+	if err := dec.Decode(&extra); err != io.EOF {
+		return nil, 0, fmt.Errorf("%w: trailing data in lease record %s", ErrCorruptObjectStore, path)
+	}
+	if p.FormatVersion != 1 {
+		return nil, 0, fmt.Errorf("%w: unsupported lease format_version %d in %s", ErrCorruptObjectStore, p.FormatVersion, path)
+	}
+	if !isValidLeaseKind(p.Kind) {
+		return nil, 0, fmt.Errorf("%w: invalid lease kind %q in %s", ErrCorruptObjectStore, p.Kind, path)
+	}
+	seq, ok := parseValidLeaseID(p.ID, p.Kind)
+	if !ok || (expectedID != "" && p.ID != expectedID) {
+		return nil, 0, fmt.Errorf("%w: invalid lease id %q in %s", ErrCorruptObjectStore, p.ID, path)
+	}
+	if strings.TrimSpace(p.Holder) == "" {
+		return nil, 0, fmt.Errorf("%w: empty lease holder in %s", ErrCorruptObjectStore, path)
+	}
+	oidSet := make(map[string]struct{}, len(p.OIDs))
+	for _, oid := range p.OIDs {
+		if len(oid) != 40 || !isHexString(oid) || oid != strings.ToLower(oid) {
+			return nil, 0, fmt.Errorf("%w: invalid lease oid %q in %s", ErrCorruptObjectStore, oid, path)
+		}
+		oidSet[oid] = struct{}{}
+	}
+	packSet := make(map[string]struct{}, len(p.Packs))
+	for _, pk := range p.Packs {
+		if !isValidPackBaseName(pk) {
+			return nil, 0, fmt.Errorf("%w: invalid lease pack %q in %s", ErrCorruptObjectStore, pk, path)
+		}
+		packSet[pk] = struct{}{}
+	}
+	return &leaseRecord{
+		id:     p.ID,
+		kind:   p.Kind,
+		holder: p.Holder,
+		oids:   oidSet,
+		packs:  packSet,
+	}, seq, nil
+}
+
+func bindLeaseRecordPacksToStockLocked(s *RetainedObjectStore, rec *leaseRecord) {
+	if s == nil || rec == nil {
+		return
+	}
+	for oid := range rec.oids {
+		for packName, members := range s.stock.packOIDs {
+			if _, ok := members[oid]; ok {
+				rec.packs[packName] = struct{}{}
+			}
+		}
+		for packName, comp := range s.stock.compactPacks {
+			if comp.containsHex(oid) {
+				rec.packs[packName] = struct{}{}
+			}
+		}
+	}
+}
+
+func loadPersistedLeasesFromDiskLocked(ctx context.Context, s *RetainedObjectStore) error {
+	if s == nil || s.rootDir == "" {
+		return nil
+	}
+	leasesDir := filepath.Join(s.rootDir, "leases")
+	entries, err := os.ReadDir(leasesDir)
+	if err != nil {
+		return fmt.Errorf("%w: read store leases dir %s: %w", ErrCorruptObjectStore, leasesDir, err)
+	}
+	for _, entry := range entries {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		name := entry.Name()
+		if fseffect.IsStaging(leasesDir, name) {
+			continue
+		}
+		if entry.IsDir() || !strings.HasSuffix(name, ".json") {
+			return fmt.Errorf("%w: invalid entry %q in store leases dir %s", ErrCorruptObjectStore, name, leasesDir)
+		}
+		leaseID := strings.TrimSuffix(name, ".json")
+		rec, seq, err := decodeAndValidatePersistedLeaseFile(filepath.Join(leasesDir, name), leaseID)
+		if err != nil {
+			return err
+		}
+		if seq > s.nextLease {
+			s.nextLease = seq
+		}
+		if _, released := s.releasedLeases[leaseID]; released {
+			continue
+		}
+		bindLeaseRecordPacksToStockLocked(s, rec)
+		s.leases[leaseID] = rec
+	}
+	return nil
+}
+
+func persistStoreLeaseRecordLocked(s *RetainedObjectStore, rec *leaseRecord) error {
+	if s == nil || s.rootDir == "" || rec == nil {
+		return nil
+	}
+	oids := make([]string, 0, len(rec.oids))
+	for oid := range rec.oids {
+		oids = append(oids, oid)
+	}
+	sort.Strings(oids)
+	packs := make([]string, 0, len(rec.packs))
+	for p := range rec.packs {
+		packs = append(packs, p)
+	}
+	sort.Strings(packs)
+	payload, err := json.Marshal(persistedLeaseRecord{
+		FormatVersion: 1,
+		ID:            rec.id,
+		Kind:          rec.kind,
+		Holder:        rec.holder,
+		OIDs:          oids,
+		Packs:         packs,
+	})
+	if err != nil {
+		return err
+	}
+	_, err = fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.PathLocation(storeLeaseRecordPath(s, rec.id)),
+		Source:   bytes.NewReader(payload),
+		Mode:     0o600,
+		DirMode:  0o755,
+	})
+	return err
+}
+
+func reacquirePersistedStoreLease(s *RetainedObjectStore, holder, leaseID string) error {
+	if s == nil || s.rootDir == "" || strings.TrimSpace(leaseID) == "" {
+		return fmt.Errorf("privategit: lease id is required")
+	}
+	if _, ok := parseValidLeaseID(leaseID, ""); !ok {
+		return fmt.Errorf("privategit: invalid lease id %q", leaseID)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, released := s.releasedLeases[leaseID]; released {
+		return fmt.Errorf("privategit: lease %q was released", leaseID)
+	}
+	rec, seq, err := decodeAndValidatePersistedLeaseFile(storeLeaseRecordPath(s, leaseID), leaseID)
+	if err != nil {
+		return err
+	}
+	if holder != "" && rec.holder != holder {
+		return fmt.Errorf("privategit: lease %q holder mismatch (%q != %q)", leaseID, rec.holder, holder)
+	}
+	if seq > s.nextLease {
+		s.nextLease = seq
+	}
+	bindLeaseRecordPacksToStockLocked(s, rec)
+	s.leases[leaseID] = rec
+	return nil
+}
+
+// ActiveLeases returns the count of currently active retention leases.
+func (s *RetainedObjectStore) ActiveLeases() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.leases)
+}
+
+func storeLeaseBoundAndIntactOnDisk(s *RetainedObjectStore, holder, leaseID string) bool {
+	if s == nil || s.objectsDir == "" || strings.TrimSpace(leaseID) == "" {
+		return false
+	}
+	if _, err := os.Stat(s.objectsDir); err != nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	l, ok := s.leases[leaseID]
+	if !ok || l == nil {
+		return false
+	}
+	if holder != "" && l.holder != holder {
+		return false
+	}
+	if len(l.oids) == 0 && len(l.packs) == 0 {
+		return false
+	}
+	for p := range l.packs {
+		if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", p+".pack")); err != nil {
+			return false
+		}
+		if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", p+".idx")); err != nil {
+			return false
+		}
+	}
+	for oid := range l.oids {
+		if !storeHasObjectLockedOnDisk(s, oid) {
+			return false
+		}
+	}
+	return true
+}
+
+func storeHasObjectOnDisk(s *RetainedObjectStore, oid string) bool {
+	if s == nil || s.objectsDir == "" || len(oid) != 40 || !isHexString(oid) {
+		return false
+	}
+	if _, err := os.Stat(s.objectsDir); err != nil {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return storeHasObjectLockedOnDisk(s, oid)
+}
+
+func storeHasObjectLockedOnDisk(s *RetainedObjectStore, oid string) bool {
+	if len(oid) != 40 || !isHexString(oid) {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(s.objectsDir, oid[:2], oid[2:])); err == nil {
+		return true
+	}
+	for base, members := range s.stock.packOIDs {
+		if _, ok := members[oid]; ok {
+			if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".pack")); err == nil {
+				if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".idx")); err == nil {
+					return true
+				}
+			}
+		}
+	}
+	for base, comp := range s.stock.compactPacks {
+		if comp.containsHex(oid) {
+			if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".pack")); err == nil {
+				if _, err := os.Stat(filepath.Join(s.objectsDir, "pack", base+".idx")); err == nil {
+					return true
+				}
+			}
+		}
+	}
+	return false
+}

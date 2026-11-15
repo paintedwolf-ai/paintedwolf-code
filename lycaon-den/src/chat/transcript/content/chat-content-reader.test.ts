@@ -13,7 +13,6 @@ describe("retained chat content", () => {
     const reader = createChatContentAccess({ client: stubClient({ getChatContent: fetch }), sessionId: "s", messageId: "m", reference: reference("🌲 happened.\n") });
     for (let i = 0; i < 64; i++) {
       expect(reader.peek(i)?.text).toBe("🌲 happened.\n");
-      expect(reader.peek(i)?.offset).toBe(i * 12);
     }
     expect(fetch).not.toHaveBeenCalled();
   });
@@ -32,8 +31,8 @@ describe("retained chat content", () => {
       const { offset, limit } = position;
       return { reference: ref, offset, end_offset: offset+limit, text: Array.from(text).slice(offset, offset+limit).join(""), complete: offset+limit===20000, spans: [] };
     });
-    const reader = createChatContentAccess({ client: stubClient({ getChatContent: get }), sessionId: "s", messageId: "m", reference: reference("seed") });
-    expect(await reader.text(0,20000,new AbortController().signal)).toBe(text);
+    const reader = createChatContentAccess({ client: stubClient({ getChatContent: get }), sessionId: "s", messageId: "m", reference: { ...reference("seed"), total_runes: 20000 } });
+    expect(await reader.copyAll(new AbortController().signal)).toBe(text);
     expect(get).toHaveBeenCalledTimes(2);
     expect(get.mock.calls[0]?.[3]).toEqual({ offset: 0, limit: 16384 });
   });
@@ -72,10 +71,9 @@ describe("retained chat content", () => {
       };
     });
     const reader = createChatContentAccess({ client: stubClient({ getChatContent: get }), sessionId: "s", messageId: "m", reference: ref });
-    const snap = await reader.readBoundedSnapshot(new AbortController().signal);
+    const snap = await reader.prettySnapshot(new AbortController().signal);
     expect(snap).toEqual({
-      sha256: "sha-ok",
-      totalRunes: ref.total_runes,
+      revision: "sha-ok",
       text: '{"secret":"[REDACTED]","b":2}',
       spans: [{ field: "tool_result.content", start: 11, length: 10, kind: "secret", rule_title: "API Key" }],
     });
@@ -91,6 +89,22 @@ describe("retained chat content", () => {
       spans: [],
     }));
     const badReader = createChatContentAccess({ client: stubClient({ getChatContent: badShaGet }), sessionId: "s", messageId: "m", reference: ref });
-    expect(await badReader.readBoundedSnapshot(new AbortController().signal)).toBeNull();
+    expect(await badReader.prettySnapshot(new AbortController().signal)).toBeNull();
+  });
+
+  it("reports the length of content too large for Pretty without reading it", async () => {
+    const get = vi.fn();
+    const reader = createChatContentAccess({ client: stubClient({ getChatContent: get }), sessionId: "s", messageId: "m", reference: { ...reference("x"), total_runes: 3_000_000, size_bytes: 3_000_000 } });
+    expect(await reader.prettySnapshot(new AbortController().signal)).toEqual({ limit: 3_000_000 });
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("reveals a document offset as a range of its row", async () => {
+    const rows: ChatContentRow[] = [{ index: 7, offset: 70, text: "🌲 needle here\n", spans: [] }];
+    const get = vi.fn(async (..._args: Parameters<LycaonClient["getChatContent"]>) => ({ reference: reference("x"), rows, offset: 70, end_offset: 85, complete: false, text: "", spans: [] }));
+    const reader = createChatContentAccess({ client: stubClient({ getChatContent: get }), sessionId: "s", messageId: "m", reference: reference("x") });
+    const target = await reader.revealTarget({ offset: 72, length: 6 }, new AbortController().signal);
+    expect(get.mock.calls[0]?.[3]).toEqual({ locate: 72 });
+    expect(target).toEqual({ rows, row: 7, from: 3, to: 9 });
   });
 });

@@ -16,7 +16,6 @@ import type { ToolActivityRole } from "./tool-presentation.generated.ts";
 import type { ToolPartStatus, ToolPartView } from "./tool-part-model.ts";
 import type { ActivitySpanEntry, DisplayTranscriptItem, RawTranscriptItem } from "../transcript/projection/transcript-item-model.ts";
 import type { TranscriptLayout } from "../transcript/layout/transcript-layout.ts";
-import { formatSentenceCase } from "../../format/format-sentence-case.ts";
 import { LOCAL_AI_LABEL, turnLoadRowSummary } from "../turnload/turn-load-rows.ts";
 
 const INDEX_WARMING_ACTIVITY = { headline: "researching", weight: 1, role: "research" as const } as const;
@@ -156,36 +155,6 @@ export function activitySpanFailureCount(
   return activitySpanToolParts(entries).filter(
     (part) => toolPartDisplayStatus(part, sessionId) === "error",
   ).length;
-}
-
-export type ActivitySpanCompositionPart = {
-  label: string;
-  count: number;
-};
-
-/** Ordered tool-call composition for the expanded span. */
-export function activitySpanComposition(
-  entries: readonly ActivitySpanEntry[],
-): ActivitySpanCompositionPart[] {
-  const order: string[] = [];
-  const counts = new Map<string, number>();
-  for (const entry of entries) {
-    const label = entryCommandLabel(entry);
-    if (!counts.has(label)) {
-      order.push(label);
-      counts.set(label, 0);
-    }
-    counts.set(label, (counts.get(label) ?? 0) + 1);
-  }
-  return order.map((label) => ({ label, count: counts.get(label) ?? 0 }));
-}
-
-export function formatActivitySpanComposition(
-  parts: readonly ActivitySpanCompositionPart[],
-): string {
-  return parts
-    .map((part) => `${formatSentenceCase(part.label)} ×${part.count}`)
-    .join(" · ");
 }
 
 /** Resolves the specificity tier for a candidate from its role. */

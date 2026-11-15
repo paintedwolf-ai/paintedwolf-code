@@ -4,6 +4,7 @@ version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "mlx==0.32.4; sys_platform == 'darwin'",
+  "mlx[cpu]==0.32.4; sys_platform == 'linux'",
   "mlx-lm; sys_platform == 'darwin'",
   "numpy",
   "safetensors",

@@ -109,6 +109,7 @@ export const TOPIC_STORE_INVALIDATION: Readonly<
   source_operation: [],
   source_view: [],
   file_briefing: [],
+  briefing: [],
   // Topic handlers update document caches.
   editor_document: [],
   // Clients tick locally between clock edges.

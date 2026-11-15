@@ -270,9 +270,12 @@ func (s *SQLStore) OldestPendingBySession(ctx context.Context) (map[string]time.
 }
 
 // SetPendingAIRationale writes Payload["ai_rationale"] only while the row is pending.
-func (s *SQLStore) SetPendingAIRationale(ctx context.Context, checkpointID, text string) (bool, error) {
+func (s *SQLStore) SetPendingAIRationale(ctx context.Context, checkpointID, text, recordID string) (bool, error) {
 	return s.mutatePendingPayload(ctx, checkpointID, "ai_rationale patch", func(payload map[string]any) bool {
 		payload["ai_rationale"] = text
+		if recordID != "" {
+			payload["ai_rationale_record_id"] = recordID
+		}
 		delete(payload, "ai_rationale_pending")
 		return true
 	})

@@ -14,6 +14,7 @@ import { subscribeEvents, type EventOpenReason, type EventSubscription } from ".
 import { requestSourceProjectionResync } from "../../files/source/source-events.ts";
 import { resyncSourceOperations } from "../../store/source-operations.ts";
 import { requestFileBriefingResync } from "../../files/components/file-briefing-live.ts";
+import { requestBriefingResync, setBriefingClient } from "../../briefing/briefing-live.ts";
 import type { AttentionView, CLIOpenEvent, ProjectEvent, SessionEvent } from "../../api/types.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import type { RecentsStore } from "../../store/recents-store.ts";
@@ -39,6 +40,7 @@ type EventPorts = {
   retire(): EntityRetire | null;
 };
 export function createConnectionEvents(ports: EventPorts) {
+  setBriefingClient(() => ports.host.client);
   let eventSubscription: EventSubscription | null = null;
   let pendingEventCursor = "";
   let sseSubscribedProjectId: string | null = null;
@@ -247,6 +249,7 @@ export function createConnectionEvents(ports: EventPorts) {
         resyncPresence();
         appStore.actions.setSidecarStatus("connected");
         requestFileBriefingResync();
+        requestBriefingResync();
         for (const listener of attentionResyncListeners) listener();
         void (reason === "reconnect"
           ? invalidateContributionFrame()

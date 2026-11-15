@@ -12,6 +12,7 @@ import {
   mergeSourceWalkFiles,
 } from "../source/source-walk-pages.ts";
 import { buildWalk, type Walk } from "./walk-model.ts";
+import { WalkBriefingTargets } from "./walk-briefing-targets.ts";
 
 const PAGE_LIMIT = 500;
 
@@ -25,6 +26,7 @@ async function fetchWalk(
   const gitChanges: SourceGitChange[] = [];
   const commands: SourceCommandWindow[] = [];
   const turns = new Map<string, SourceWalkTurn>();
+  const targets = new WalkBriefingTargets();
   let cursor: string | undefined;
   for (;;) {
     const page = await client.listProjectSourceWalk(projectId, {
@@ -37,6 +39,7 @@ async function fetchWalk(
     files.push(...page.files);
     gitChanges.push(...page.git_changes);
     commands.push(...page.commands);
+    targets.add(page.briefing_targets);
     for (const turn of page.turns) {
       if (!turns.has(turn.message_id)) turns.set(turn.message_id, turn);
     }
@@ -47,13 +50,14 @@ async function fetchWalk(
     }
     cursor = next;
   }
-  return buildWalk(
+  const walk = buildWalk(
     baseline,
     mergeSourceWalkFiles(files),
     mergeSourceGitChanges(gitChanges),
     mergeSourceCommandWindows(commands),
     [...turns.values()],
   );
+  return { ...walk, briefingTargets: targets.resolved() };
 }
 
 const MAX_WALKS = 16;

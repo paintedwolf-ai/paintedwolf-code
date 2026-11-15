@@ -1,0 +1,8 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Summaries are off
+message: Summaries are disabled on this device.
+suggested_action: Enable summaries in Settings to request an explanation.
+scenarios:
+  - id: default
+    vars: {}

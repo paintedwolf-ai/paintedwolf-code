@@ -2,14 +2,17 @@ package workspace
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/enginepaths"
+	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/filelock"
+	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/claim"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/workerplacement"
 )
@@ -42,11 +45,84 @@ func validateLayout(layout SandboxLayout) error {
 	return nil
 }
 
-// CreateWorkerWorkspaceFromSources snapshots sources under canonical root identities.
+// CreateWorkerWorkspaceSelected narrows attached roots and subroots using an explicit WorkspaceSelection
+// (keeping informational taskPathHints separate) before provisioning the worker workspace.
+func (m *Manager) CreateWorkerWorkspaceSelected(
+	ctx context.Context,
+	roots []projectroot.RootRef,
+	selection adapter.WorkspaceSelection,
+	taskPathHints []string,
+	activeRootID, jobID string,
+) (*Binding, SandboxLayout, error) {
+	ctx = WithWorkspaceSelection(ctx, selection, taskPathHints...)
+	return m.CreateWorkerBranch(ctx, roots, activeRootID, jobID)
+}
+
+func applyWorkspaceSelectionToLayout(
+	layout, sources SandboxLayout,
+	selection adapter.WorkspaceSelection,
+	taskPathHints []string,
+	activeRootID string,
+) (SandboxLayout, SandboxLayout, string, error) {
+	narrowedGrants, narrowedSources, err := ResolveDispatchWorkspaceSelection(sources.Roots, selection, taskPathHints)
+	if err != nil {
+		return SandboxLayout{}, SandboxLayout{}, "", err
+	}
+	layoutByID := make(map[string]projectroot.RootRef, len(layout.Roots))
+	for _, r := range layout.Roots {
+		layoutByID[r.ID] = r
+	}
+	narrowedLayout := make([]projectroot.RootRef, 0, len(narrowedGrants))
+	activeFound := false
+	primaryID := ""
+	for i, g := range narrowedGrants {
+		lr := layoutByID[g.RootID]
+		lr.IsPrimary = g.IsPrimary
+		if g.Subroot != "" {
+			lr.Path = filepath.Join(lr.Path, filepath.FromSlash(g.Subroot))
+		}
+		narrowedLayout = append(narrowedLayout, lr)
+		if lr.ID == activeRootID {
+			activeFound = true
+		}
+		if narrowedSources[i].IsPrimary {
+			primaryID = narrowedSources[i].ID
+		}
+	}
+	if !activeFound && primaryID != "" {
+		activeRootID = primaryID
+	}
+	return SandboxLayout{Roots: narrowedLayout}, SandboxLayout{Roots: narrowedSources}, activeRootID, nil
+}
+
+// CreateWorkerBranch creates a worker's branch over live project roots.
+func (m *Manager) CreateWorkerBranch(ctx context.Context, roots []projectroot.RootRef, activeRootID, jobID string) (*Binding, SandboxLayout, error) {
+	return createWorkerWorkspaceFromSources(ctx, m, roots, roots, activeRootID, jobID, "")
+}
+
+// CreateWorkerWorkspaceFromSources prepares a view of sources under canonical root identities.
 func (m *Manager) CreateWorkerWorkspaceFromSources(
 	ctx context.Context,
 	roots, sourceRoots []projectroot.RootRef,
 	activeRootID, jobID string,
+) (*Binding, SandboxLayout, error) {
+	return createWorkerWorkspaceFromSources(ctx, m, roots, sourceRoots, activeRootID, jobID, "")
+}
+
+// CreateStackedWorkerBranch creates a worker's branch over live project roots and a parent's immutable
+// checkpoint. Nothing reads the parent's working tree.
+func (m *Manager) CreateStackedWorkerBranch(ctx context.Context, roots []projectroot.RootRef, activeRootID, jobID, parentCheckpointID string) (*Binding, SandboxLayout, error) {
+	if strings.TrimSpace(parentCheckpointID) == "" {
+		return nil, SandboxLayout{}, fmt.Errorf("stacked worker %q names no parent checkpoint", jobID)
+	}
+	return createWorkerWorkspaceFromSources(ctx, m, roots, roots, activeRootID, jobID, parentCheckpointID)
+}
+
+func createWorkerWorkspaceFromSources(
+	ctx context.Context,
+	m *Manager,
+	roots, sourceRoots []projectroot.RootRef,
+	activeRootID, jobID, parentCheckpointID string,
 ) (*Binding, SandboxLayout, error) {
 	if len(roots) == 0 {
 		return nil, SandboxLayout{}, fmt.Errorf("project roots required")
@@ -77,6 +153,13 @@ func (m *Manager) CreateWorkerWorkspaceFromSources(
 			return nil, SandboxLayout{}, fmt.Errorf("workspace source root %d identity mismatch", i)
 		}
 	}
+	if sel, hints, ok := workspaceSelectionFromContext(ctx); ok {
+		var selErr error
+		layout, sources, activeRootID, selErr = applyWorkspaceSelectionToLayout(layout, sources, sel, hints, activeRootID)
+		if selErr != nil {
+			return nil, SandboxLayout{}, selErr
+		}
+	}
 	if err := validateLayout(layout); err != nil {
 		return nil, SandboxLayout{}, err
 	}
@@ -96,7 +179,11 @@ func (m *Manager) CreateWorkerWorkspaceFromSources(
 	if existing, err := m.completeBranch(logicalRoot, layout); err != nil {
 		return nil, SandboxLayout{}, err
 	} else if existing != "" {
-		return &Binding{ID: jobID, Root: existing}, layout, nil
+		b := &Binding{ID: jobID, Root: existing}
+		if sel, view, ok := m.lookupBranchViews(existing); ok {
+			b.Selection, b.View, b.Adapter = sel, view, sel.Adapter
+		}
+		return b, layout, nil
 	}
 	decision, err := m.decidePlacement(ctx, layout.Roots, sources.Roots)
 	if err != nil {
@@ -117,12 +204,10 @@ func (m *Manager) CreateWorkerWorkspaceFromSources(
 	if err != nil {
 		return nil, SandboxLayout{}, err
 	}
-	preparation, err := m.snapshotSourceRoots(ctx, binding.Root, sources.Roots, decision)
-	if err != nil {
-		_ = m.DestroyWorkerWorkspace(ctx, binding)
-		return nil, SandboxLayout{}, err
+	binding.Preparation = placementPreparation(decision)
+	if err := snapshotSourceRoots(ctx, m, binding, sources.Roots, parentCheckpointID, decision); err != nil {
+		return nil, SandboxLayout{}, errors.Join(err, m.DestroyWorkerWorkspace(ctx, binding))
 	}
-	binding.Preparation = preparation
 	return binding, layout, nil
 }
 
@@ -141,61 +226,6 @@ func branchKeyPath(layout SandboxLayout, activeRootID string) (string, error) {
 	return active.Path, nil
 }
 
-const provisionLockSuffix = ".provision.lock"
-
-func tryWorkspaceProvisionLock(branchRoot string) (func(), error) {
-	if err := branchVolumeAvailable(branchRoot); err != nil {
-		return nil, err
-	}
-	file, err := filelock.Open(branchRoot + provisionLockSuffix)
-	if err != nil {
-		return nil, err
-	}
-	held, err := filelock.TryExclusive(file)
-	if err != nil || !held {
-		_ = file.Close()
-		if err != nil {
-			return nil, err
-		}
-		return nil, ErrBranchInUse
-	}
-	return func() {
-		_ = filelock.Unlock(file)
-		_ = file.Close()
-	}, nil
-}
-
-func acquireWorkspaceProvisionLock(ctx context.Context, branchRoot string) (func(), error) {
-	if err := branchVolumeAvailable(branchRoot); err != nil {
-		return nil, err
-	}
-	file, err := filelock.Open(branchRoot + provisionLockSuffix)
-	if err != nil {
-		return nil, err
-	}
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		held, lockErr := filelock.TryExclusive(file)
-		if lockErr != nil {
-			_ = file.Close()
-			return nil, lockErr
-		}
-		if held {
-			return func() {
-				_ = filelock.Unlock(file)
-				_ = file.Close()
-			}, nil
-		}
-		select {
-		case <-ctx.Done():
-			_ = file.Close()
-			return nil, ctx.Err()
-		case <-ticker.C:
-		}
-	}
-}
-
 func completeBranchMatchesLayout(branchRoot string, want SandboxLayout) bool {
 	got, err := LoadBranchLayout(branchRoot)
 	if err != nil || len(got.Roots) != len(want.Roots) {
@@ -211,58 +241,128 @@ func completeBranchMatchesLayout(branchRoot string, want SandboxLayout) bool {
 	return true
 }
 
-func (m *Manager) snapshotSourceRoots(ctx context.Context, branchRoot string, sources []projectroot.RootRef, decision workerplacement.Decision) (Preparation, error) {
+// snapshotSourceRoots gives a worker its one provider. A copy that passes its budget has cleaned up
+// after itself, so the rule runs again knowing that and moves on to the mount.
+func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sources []projectroot.RootRef, parentCheckpointID string, decision workerplacement.Decision) error {
+	services, err := m.layered() //nolint:contextcheck // The shared private Git store opens once for the engine, not for this call.
+	if err != nil {
+		return err
+	}
+	grants := grantsForSources(sources)
+	projectID := workspaceProjectFromContext(ctx, "")
+	_, hints, _ := workspaceSelectionFromContext(ctx)
+	var overrun *adapter.BudgetOverrunError
+	for {
+		reportPreparation(ctx, PreparationProgress{Stage: "probing"})
+		choice, err := m.chooseWorkspaceAdapter(ctx, binding.Root, grants, projectID, decision, overrun, false)
+		if err != nil {
+			return classifyProvisionError(err)
+		}
+		binding.Selection, binding.Adapter = choice, choice.Adapter
+		if choice.Facts.PreparationKind == adapter.PreparationMaterialized {
+			reportPreparation(ctx, PreparationProgress{
+				Strategy: preparationStrategy(choice.Selection), Stage: StageCostDeclared,
+				TotalEntries: choice.Selection.DeclaredCost.Entries, TotalBytes: choice.Selection.DeclaredCost.UncloneableBytes,
+				NotClonableReason: decision.Reason,
+			})
+		}
+
+		var view *adapter.PreparedView
+		var cv *claim.ClaimedView
+		prepare := func(ctx context.Context, parents recovery.StackedParents) (*adapter.PreparedView, error) {
+			var prepErr error
+			if choice.Facts.PreparationKind == adapter.PreparationMounted {
+				view, cv, prepErr = prepareMountedWorkspaceView(ctx, m, binding, sources, choice, parents)
+			} else {
+				view, cv, prepErr = m.prepareMaterializedWorkspaceView(ctx, binding, sources, choice, parents)
+			}
+			return view, prepErr
+		}
+		if parentCheckpointID == "" {
+			_, err = prepare(ctx, recovery.StackedParents{})
+		} else {
+			_, err = services.recovery.PrepareStackedWorkerView(ctx, recovery.StackedViewRequest{
+				ChildWorkerID: binding.ID, ChildViewID: binding.ID, ProjectID: projectID,
+				ParentCheckpointID: parentCheckpointID, AdapterID: choice.Adapter.ID(),
+				Prepare: prepare,
+				// The caller destroys a branch whose creation failed, which settles its views.
+				Release: func(context.Context, *adapter.PreparedView) error { return nil },
+			})
+		}
+		if errors.As(err, &overrun) && choice.CopyBudget != nil {
+			if err := restoreBranchDirectories(binding, sources); err != nil {
+				return classifyProvisionError(err)
+			}
+			continue
+		}
+		if err != nil {
+			return classifyProvisionError(err)
+		}
+		binding.View = view
+		binding.Preparation.Materialized = view.Materialize
+		reportPreparation(ctx, PreparationProgress{
+			Strategy: preparationStrategy(choice.Selection), Stage: StageBranchPrepared,
+			UnreadableEntries: view.Materialize.UnreadableEntries, NotClonableReason: decision.Reason,
+		})
+		m.recordBranchViews(binding.Root, choice, view)
+		err = markSnapshotCompleteWithClaim(binding.Root, choice, view, cv, hints)
+		parkIdleView(view)
+		return err
+	}
+}
+
+// restoreBranchDirectories puts back the empty directories a cleaned-up copy took with it.
+func restoreBranchDirectories(binding *Binding, sources []projectroot.RootRef) error {
+	if err := os.MkdirAll(binding.Root, 0o750); err != nil {
+		return err
+	}
+	if len(sources) == 1 {
+		return nil
+	}
+	for _, source := range sources {
+		dir, err := projectroot.BranchDirForID(source.ID)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(filepath.Join(binding.Root, dir), 0o750); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// placementPreparation is what the placement decision contributes to a binding's preparation facts.
+func placementPreparation(decision workerplacement.Decision) Preparation {
 	out := Preparation{Clonable: decision.Clonable, NotClonableReason: decision.Reason}
 	if decision.Folder != nil {
 		out.PlacementFolder = decision.Folder.Path
 	}
-	for _, source := range sources {
-		target := branchRoot
-		if len(sources) > 1 {
-			dir, err := projectroot.BranchDirForID(source.ID)
-			if err != nil {
-				return out, err
-			}
-			target = filepath.Join(branchRoot, dir)
-		}
-		prepared, err := m.provisionRoot(ctx, source.Path, target, decision)
-		if err != nil {
-			return out, err
-		}
-		out.Roots = append(out.Roots, prepared)
-	}
-	return out, markSnapshotComplete(enginepaths.MetaDirForBranchRoot(branchRoot))
+	return out
 }
 
 // jobIDForBranch is the branch directory name: the worker job id.
-func jobIDForBranch(branchRoot string) string {
-	return filepath.Base(filepath.Clean(branchRoot))
-}
+func jobIDForBranch(branchRoot string) string { return filepath.Base(filepath.Clean(branchRoot)) }
 
 // BranchRootRefs returns branch paths with canonical root identities.
 func BranchRootRefs(branchRoot string) ([]projectroot.RootRef, error) {
-	branchRoot, err := cleanBranchRoot(branchRoot)
-	if err != nil {
+	if clean, err := cleanBranchRoot(branchRoot); err != nil {
 		return nil, err
-	}
-	layout, err := LoadBranchLayout(branchRoot)
-	if err != nil {
+	} else if layout, err := LoadBranchLayout(clean); err != nil {
 		return nil, err
+	} else {
+		return branchRootPaths(clean, layout.Roots)
 	}
-	return branchRootPaths(branchRoot, layout.Roots)
 }
 
 // BranchRootAddresses maps recorded topology without requiring a materialized tree.
 func BranchRootAddresses(branchRoot string) ([]projectroot.RootRef, error) {
-	branchRoot, err := cleanBranchRoot(branchRoot)
-	if err != nil {
+	if clean, err := cleanBranchRoot(branchRoot); err != nil {
 		return nil, err
-	}
-	roots, err := LoadBranchRoots(branchRoot)
-	if err != nil {
+	} else if roots, err := LoadBranchRoots(clean); err != nil {
 		return nil, err
+	} else {
+		return branchRootPaths(clean, roots)
 	}
-	return branchRootPaths(branchRoot, roots)
 }
 
 func branchRootPaths(branchRoot string, source []projectroot.RootRef) ([]projectroot.RootRef, error) {

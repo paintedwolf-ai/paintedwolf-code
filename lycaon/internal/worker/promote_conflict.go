@@ -1,11 +1,13 @@
 package worker
 
 import (
+	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"syscall"
 
 	"github.com/lycaon/lycaon/internal/oswalk"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -49,6 +51,7 @@ type PromoteAssessment struct {
 	MergeResults  []PromoteMergeResult
 	OverlapJobIDs []string           `json:"overlap_job_ids,omitempty"`
 	PathOrders    []PromotePathOrder `json:"-"`
+	checkpointID  string
 	primary       map[string]promotePrimarySnapshot
 }
 
@@ -81,7 +84,7 @@ func expandOverlayPromoteFilesFlat(workspaceRoot string, roots []string) ([]stri
 		abs := filepath.Join(workspaceRoot, filepath.FromSlash(raw))
 		info, err := os.Stat(abs)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) {
 				continue
 			}
 			return nil, err
@@ -145,7 +148,7 @@ func expandOverlayPromoteFilesMultiRoot(promote PromoteRoots, roots []string) ([
 		}
 		info, err := os.Stat(branchAbs)
 		if err != nil {
-			if os.IsNotExist(err) {
+			if os.IsNotExist(err) || errors.Is(err, syscall.ENOTDIR) {
 				continue
 			}
 			return nil, err

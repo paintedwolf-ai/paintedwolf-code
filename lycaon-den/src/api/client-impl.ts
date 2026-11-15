@@ -8,6 +8,7 @@ import { createWorkflowsClient } from "./http-capabilities/workflows.ts";
 import { createProjectsClient } from "./http-capabilities/projects.ts";
 import { createSourceClient } from "./http-capabilities/source.ts";
 import { createSourceHistoryClient } from "./http-capabilities/source-history.ts";
+import { createBriefingsClient } from "./http-capabilities/briefings.ts";
 import { createDocumentsClient } from "./http-capabilities/documents.ts";
 import { createSearchClient } from "./http-capabilities/search.ts";
 import { createGitClient } from "./http-capabilities/git.ts";
@@ -62,6 +63,7 @@ export function createLycaonClient(connection: BackendConnection): LycaonClient 
     ...createProjectsClient(j),
     ...createSourceClient(j, connection),
     ...createSourceHistoryClient(j),
+    ...createBriefingsClient(j),
     ...createDocumentsClient(j),
     ...createSearchClient(j, connection),
     ...createGitClient(j),

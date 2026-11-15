@@ -6,7 +6,7 @@ import { ACTIVITY_OUTPUT_LINES, activityExceptions, activityOutput, activityResu
 
 function view(fact: Partial<CommandActivity>, calls: Partial<ToolPartView>[] = []): CommandActivityView {
   const base: CommandActivity = { id: "activity", group: "Group", phase: "inspect", label: "Label", subject: "subject", state: "completed", outcome: "Finished", execution_ids: ["execution"], spans: [] };
-  return { fact: { ...base, ...fact }, members: [], calls: calls as ToolPartView[], programIds: [] };
+  return { fact: { ...base, ...fact }, members: [], calls: calls as ToolPartView[], receiptScopes: [] };
 }
 
 function output(stream: "stdout" | "stderr", text: string, extra: Partial<CommandExecutionOutput> = {}): CommandExecutionOutput {

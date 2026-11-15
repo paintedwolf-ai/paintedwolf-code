@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -15,7 +14,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Service) completeFileBriefing(ctx context.Context, briefing Briefing, prompt, projectDir string) {
+func (s *Service) completeFileBriefing(ctx context.Context, briefing Briefing, material Material, projectDir string) {
 	startedAt := time.Now()
 	if s.generator == nil {
 		if briefing.Trigger == "automatic" {
@@ -27,25 +26,22 @@ func (s *Service) completeFileBriefing(ctx context.Context, briefing Briefing, p
 	}
 	generationCtx, cancel := context.WithTimeout(curationctx.WithoutLane(ctx), s.config.GenerationTimeout())
 	defer cancel()
-	emitter := newFileBriefingDeltaEmitter(ctx, s, briefing)
 	var collected strings.Builder
 	collectedRunes := 0
 	streamClamped := false
 	generatedText, err := s.generator.Generate(
-		generationCtx, GenerationRequest{ProjectID: briefing.ProjectID, ProjectDir: projectDir, Trigger: briefing.Trigger, SystemPrompt: s.config.SystemPrompt, Prompt: prompt, MaxTokens: s.config.Generation.MaxOutputTokens},
+		generationCtx, GenerationRequest{ProjectID: briefing.ProjectID, ProjectDir: projectDir, Trigger: briefing.Trigger, SystemPrompt: s.config.SystemPrompt, Prompt: material.Prompt, MaxTokens: s.config.Generation.MaxOutputTokens},
 		func(delta string) {
 			remaining := s.config.Generation.MaxOutputChars - collectedRunes
 			boundedDelta := runeclamp.Fit(delta, max(remaining, 0))
 			streamClamped = streamClamped || boundedDelta != delta
 			collected.WriteString(boundedDelta)
 			collectedRunes += utf8.RuneCountInString(boundedDelta)
-			emitter.Add(generationCtx, boundedDelta)
 		},
 	)
 	if ctx.Err() != nil {
 		return
 	}
-	emitter.Flush(ctx)
 	if strings.TrimSpace(generatedText) == "" {
 		generatedText = collected.String()
 	}
@@ -88,6 +84,7 @@ func (s *Service) completeFileBriefing(ctx context.Context, briefing Briefing, p
 	outcome := Outcome{
 		ProjectID: briefing.ProjectID, RootID: briefing.RootID, Path: briefing.Path, TargetKey: briefing.TargetKey,
 		AttemptID: briefing.AttemptID, Sections: sections, Truncated: truncated, UpdatedAt: time.Now().UTC(),
+		RecordID: s.recorder.record(ctx, briefing, material.Manifest, generatedText, truncated),
 	}
 	if err := s.store.Complete(ctx, outcome); err != nil {
 		if !errors.Is(err, ErrNotFound) {
@@ -97,7 +94,7 @@ func (s *Service) completeFileBriefing(ctx context.Context, briefing Briefing, p
 	}
 	briefing.Status, briefing.Truncated, briefing.Error, briefing.UpdatedAt =
 		StatusComplete, truncated, "", outcome.UpdatedAt
-	briefing.Sections = outcome.Sections
+	briefing.Sections, briefing.RecordID = outcome.Sections, outcome.RecordID
 	s.publishFileBriefingEvent(context.WithoutCancel(ctx), fileBriefingEvent(briefing, "complete"))
 	s.maintainFileBriefings(context.WithoutCancel(ctx), briefing)
 	slog.InfoContext(ctx, "file briefing complete", "project_id", briefing.ProjectID, "path", briefing.Path,
@@ -191,7 +188,7 @@ func fileBriefingEvent(b Briefing, status string) wire.FileBriefingEvent {
 		Status: status, Preview: &preview, Locations: fileBriefingLocationsDTO(b.Locations),
 		Sections: fileBriefingSectionsDTO(b.Sections), FallbackText: b.FallbackText,
 		Truncated: b.Truncated, Error: b.Error,
-		UpdatedAt: b.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		UpdatedAt: b.UpdatedAt.UTC().Format(time.RFC3339Nano), EvidenceRef: evidenceRef(b),
 	}
 }
 
@@ -213,59 +210,6 @@ func fileBriefingSectionsDTO(sections []Section) []wire.FileBriefingSection {
 		out = append(out, wire.FileBriefingSection{Kind: section.Kind, Text: section.Text})
 	}
 	return out
-}
-
-type fileBriefingDeltaEmitter struct {
-	context   context.Context
-	service   *Service
-	briefing  Briefing
-	mu        sync.Mutex
-	pending   strings.Builder
-	emitted   bool
-	lastFlush time.Time
-}
-
-func newFileBriefingDeltaEmitter(ctx context.Context, service *Service, briefing Briefing) *fileBriefingDeltaEmitter {
-	return &fileBriefingDeltaEmitter{context: ctx, service: service, briefing: briefing}
-}
-
-func (e *fileBriefingDeltaEmitter) Add(ctx context.Context, delta string) {
-	if delta == "" {
-		return
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.pending.WriteString(delta)
-	now := time.Now()
-	if e.emitted && utf8.RuneCountInString(e.pending.String()) < e.service.config.Stream.ChunkChars && now.Sub(e.lastFlush) < e.service.config.StreamFlushInterval() {
-		return
-	}
-	e.flushLocked(ctx, now)
-}
-
-func (e *fileBriefingDeltaEmitter) Flush(ctx context.Context) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.flushLocked(ctx, time.Now())
-}
-
-func (e *fileBriefingDeltaEmitter) flushLocked(ctx context.Context, now time.Time) {
-	if e.pending.Len() == 0 {
-		return
-	}
-	delta := e.pending.String()
-	e.pending.Reset()
-	e.service.gate.RLock()
-	defer e.service.gate.RUnlock()
-	if e.context.Err() != nil || e.service.admissionError() != nil {
-		return
-	}
-	e.emitted, e.lastFlush = true, now
-	event := fileBriefingEvent(e.briefing, "streaming")
-	event.Preview, event.Locations, event.Sections = nil, nil, nil
-	event.Delta = delta
-	event.UpdatedAt = now.UTC().Format(time.RFC3339Nano)
-	e.service.publishFileBriefingEvent(ctx, event)
 }
 
 func completedPartial(value string, minChars int) string {

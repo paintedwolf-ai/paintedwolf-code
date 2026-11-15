@@ -36,10 +36,6 @@ generation:
   timeout_ms: 20000
   min_partial_chars: 120
 
-stream:
-  chunk_chars: 48
-  flush_ms: 100
-
 retention:
   revisions_per_file: 4
   project_bytes: 8388608

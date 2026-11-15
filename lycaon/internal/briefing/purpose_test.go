@@ -1,6 +1,7 @@
 package briefing
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
@@ -75,7 +76,7 @@ func TestPurposeSectionClampsAsTheApprovalCardAlwaysHas(t *testing.T) {
 			t.Fatalf("intent not clamped: %d runes, %s", len([]rune(item.Text)), item.Inclusion)
 		}
 	}
-	if section.Manifest.Contract != OneSentence || section.Prompt.MaxTokens != purposeMaxTokens {
+	if !reflect.DeepEqual(section.Manifest.Contract, OneSentence) || section.Prompt.MaxTokens != purposeMaxTokens {
 		t.Fatalf("contract %+v tokens %d", section.Manifest.Contract, section.Prompt.MaxTokens)
 	}
 }

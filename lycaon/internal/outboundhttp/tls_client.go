@@ -19,6 +19,8 @@ import (
 
 // ClientTLS is one request's added trust and client identity. Roots extend
 // the system roots for verification; nothing here disables verification.
+// The identity is presented only to the request's own origin: a cross-origin
+// redirect keeps the trust and drops the certificate.
 type ClientTLS struct {
 	Roots        *x509.CertPool
 	Certificates []tls.Certificate
@@ -33,6 +35,13 @@ type TLSMaterialError struct {
 }
 
 func (e *TLSMaterialError) Error() string { return e.Reason }
+
+func (c *ClientTLS) trustOnly() *ClientTLS {
+	if c == nil || len(c.Certificates) == 0 {
+		return c
+	}
+	return &ClientTLS{Roots: c.Roots}
+}
 
 func (c *ClientTLS) apply(transport *http.Transport) {
 	if c == nil {

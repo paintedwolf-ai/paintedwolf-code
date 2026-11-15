@@ -151,6 +151,11 @@ func fdIsDir(fd int) bool {
 // fail with EACCES afterwards.
 type landlockProbe struct{ fd int }
 
+var (
+	probeOpenat   = unix.Openat
+	probeUnlinkat = unix.Unlinkat
+)
+
 func newLandlockProbe() (landlockProbe, error) {
 	fd, err := newTmpfs("0700", maskTmpfsSize)
 	if err != nil {
@@ -165,18 +170,25 @@ func newLandlockProbe() (landlockProbe, error) {
 }
 
 func (p landlockProbe) create() error {
-	fd, err := unix.Openat(p.fd, "probe", unix.O_CREAT|unix.O_WRONLY|unix.O_CLOEXEC, 0o600)
+	fd, err := probeOpenat(p.fd, "probe", unix.O_CREAT|unix.O_WRONLY|unix.O_CLOEXEC, 0o600)
 	if err != nil {
 		return err
 	}
 	_ = unix.Close(fd)
-	return unix.Unlinkat(p.fd, "probe", 0)
+	return probeUnlinkat(p.fd, "probe", 0)
 }
 
-// refused reports that the ruleset now denies the probe.
+// refused reports that the ruleset now denies creating the probe file.
+// A successful Openat means creation was allowed and MUST NOT attest
+// restriction even if subsequent close/unlink cleanup fails with EACCES.
 func (p landlockProbe) refused() bool {
-	err := p.create()
-	return errors.Is(err, unix.EACCES)
+	fd, err := probeOpenat(p.fd, "probe", unix.O_CREAT|unix.O_WRONLY|unix.O_CLOEXEC, 0o600)
+	if err != nil {
+		return errors.Is(err, unix.EACCES)
+	}
+	_ = unix.Close(fd)
+	_ = probeUnlinkat(p.fd, "probe", 0)
+	return false
 }
 
 func (p landlockProbe) close() {

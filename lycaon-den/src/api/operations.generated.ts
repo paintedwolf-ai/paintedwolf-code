@@ -101,10 +101,12 @@ export const API_OPERATIONS = {
   getBackupCapabilities: { method: "GET", path: "/v1/backup/capabilities" },
   getBlueprint: { method: "GET", path: "/v1/projects/{id}/blueprints/{blueprint_id}" },
   getBoard: { method: "GET", path: "/v1/projects/{id}/board" },
+  getBriefingRecord: { method: "GET", path: "/v1/projects/{id}/briefings/records/{record_id}" },
   getChatContent: { method: "GET", path: "/v1/sessions/{id}/messages/{message_id}/content" },
   getChatVault: { method: "GET", path: "/v1/sessions/{id}/vault" },
   getCodeScan: { method: "GET", path: "/v1/projects/{id}/scans/{scan_id}" },
   getCommandProgramReceipt: { method: "GET", path: "/v1/sessions/{id}/program-receipts/{program_id}" },
+  getCommandReceiptDocument: { method: "GET", path: "/v1/sessions/{id}/program-receipt-document" },
   getContributions: { method: "GET", path: "/v1/contributions" },
   getCoordinatorContext: { method: "GET", path: "/v1/sessions/{id}/coordinator-context" },
   getCostSummary: { method: "GET", path: "/v1/cost/summary" },
@@ -265,6 +267,7 @@ export const API_OPERATIONS = {
   replaceScannerSlot: { method: "PUT", path: "/v1/scanners/slots/{category}" },
   replaceSourceViewportInterest: { method: "PUT", path: "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}" },
   replaceWebResearchCredential: { method: "PUT", path: "/v1/web-research/providers/{provider_id}/credential" },
+  requestBriefing: { method: "POST", path: "/v1/projects/{id}/briefings" },
   requestFileBriefing: { method: "POST", path: "/v1/projects/{id}/source/file-briefings" },
   resetStore: { method: "POST", path: "/v1/store/reset" },
   resolveCheckpoint: { method: "POST", path: "/v1/sessions/{id}/checkpoints/{checkpoint_id}" },
@@ -292,6 +295,7 @@ export const API_OPERATIONS = {
   saveEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/save" },
   search: { method: "POST", path: "/v1/search" },
   searchChatContent: { method: "GET", path: "/v1/sessions/{id}/messages/{message_id}/content/search" },
+  searchCommandReceiptDocument: { method: "GET", path: "/v1/sessions/{id}/program-receipt-document/search" },
   searchContributionSource: { method: "POST", path: "/v1/projects/{id}/contribution-search/{source_id}" },
   searchProjectSource: { method: "GET", path: "/v1/projects/{id}/source/search" },
   searchSourceView: { method: "GET", path: "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/search" },
@@ -448,10 +452,12 @@ export type OperationPathParameters = {
   getBackupCapabilities: Record<string, never>;
   getBlueprint: { id: string | number; blueprint_id: string | number; };
   getBoard: { id: string | number; };
+  getBriefingRecord: { id: string | number; record_id: string | number; };
   getChatContent: { id: string | number; message_id: string | number; };
   getChatVault: { id: string | number; };
   getCodeScan: { id: string | number; scan_id: string | number; };
   getCommandProgramReceipt: { id: string | number; program_id: string | number; };
+  getCommandReceiptDocument: { id: string | number; };
   getContributions: Record<string, never>;
   getCoordinatorContext: { id: string | number; };
   getCostSummary: Record<string, never>;
@@ -612,6 +618,7 @@ export type OperationPathParameters = {
   replaceScannerSlot: { category: string | number; };
   replaceSourceViewportInterest: { id: string | number; view_id: string | number; interest_id: string | number; };
   replaceWebResearchCredential: { provider_id: string | number; };
+  requestBriefing: { id: string | number; };
   requestFileBriefing: { id: string | number; };
   resetStore: Record<string, never>;
   resolveCheckpoint: { id: string | number; checkpoint_id: string | number; };
@@ -639,6 +646,7 @@ export type OperationPathParameters = {
   saveEditorDocument: { id: string | number; document_id: string | number; };
   search: Record<string, never>;
   searchChatContent: { id: string | number; message_id: string | number; };
+  searchCommandReceiptDocument: { id: string | number; };
   searchContributionSource: { id: string | number; source_id: string | number; };
   searchProjectSource: { id: string | number; };
   searchSourceView: { id: string | number; view_id: string | number; presentation_id: string | number; };

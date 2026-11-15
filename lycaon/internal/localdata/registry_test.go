@@ -110,7 +110,7 @@ func TestClearDoesNotTouchDurable(t *testing.T) {
 	draft := filepath.Join(base, "drafts", "d1")
 	testutil.FailErr(t, "mkdir draft", os.MkdirAll(draft, 0o700))
 	testutil.FailErr(t, "write draft", os.WriteFile(filepath.Join(draft, "f"), []byte("y"), 0o600))
-	seed := filepath.Join(enginepaths.WorkerSeedsRootUnder(base), "0123456789abcdef", "generation")
+	seed := filepath.Join(base, retiredWorkerSeedsDirName, "0123456789abcdef", "generation")
 	testutil.FailErr(t, "mkdir worker seed", os.MkdirAll(seed, 0o700))
 	testutil.FailErr(t, "write worker seed", os.WriteFile(filepath.Join(seed, "f"), []byte("z"), 0o600))
 	catalog := filepath.Join(enginepaths.SourceCatalogCacheRootUnder(base), "tree-v1")
@@ -387,4 +387,23 @@ func TestSessionScratchClearDefersToTheEngine(t *testing.T) {
 	if _, err := os.Stat(kept); err != nil {
 		t.Fatalf("registry removed scratch the engine kept: %v", err)
 	}
+}
+
+func TestClearRetiredWorkerSeedsRemovesThatDirectoryAlone(t *testing.T) {
+	base := t.TempDir()
+	seed := filepath.Join(base, retiredWorkerSeedsDirName, "0123456789abcdef", "generations", "g1")
+	testutil.FailErr(t, "mkdir seed", os.MkdirAll(seed, 0o700))
+	testutil.FailErr(t, "write seed", os.WriteFile(filepath.Join(seed, "f"), []byte("z"), 0o600))
+	branch := filepath.Join(enginepaths.WorkerBranchesRootUnder(base), "key", "job")
+	testutil.FailErr(t, "mkdir branch", os.MkdirAll(branch, 0o700))
+	testutil.FailErr(t, "write branch", os.WriteFile(filepath.Join(branch, "f"), []byte("y"), 0o600))
+
+	testutil.FailErr(t, "clear", ClearRetiredWorkerSeeds(base))
+	if pathExists(filepath.Join(base, retiredWorkerSeedsDirName)) {
+		t.Fatal("the retired directory remains")
+	}
+	if !pathExists(filepath.Join(branch, "f")) {
+		t.Fatal("clearing retired seeds touched a worker branch")
+	}
+	testutil.FailErr(t, "clear again", ClearRetiredWorkerSeeds(base))
 }

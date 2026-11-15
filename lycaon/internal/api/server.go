@@ -98,7 +98,6 @@ type storagePaths struct {
 	dataDir          string
 	storePath        string
 	workerBranchRoot string
-	workerSeedRoot   string
 }
 
 // health is the boot metadata GET /health reports.

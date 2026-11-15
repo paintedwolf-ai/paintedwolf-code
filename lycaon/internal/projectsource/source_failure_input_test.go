@@ -1,6 +1,7 @@
 package projectsource
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -49,5 +50,21 @@ func TestFailureClassificationPreservesPartialPublication(t *testing.T) {
 				t.Fatalf("release observation scope = %v, want %v", got, tc.safe)
 			}
 		})
+	}
+}
+
+func TestRequireSourceIdentityIgnoresOnlyTheDevice(t *testing.T) {
+	dir := t.TempDir()
+	first, second := filepath.Join(dir, "first"), filepath.Join(dir, "second")
+	testutil.FailErr(t, "seed first", os.WriteFile(first, nil, 0o600))
+	testutil.FailErr(t, "seed second", os.WriteFile(second, nil, 0o600))
+	identity, err := fspath.EntryIdentity(first)
+	testutil.FailErr(t, "identify first", err)
+	testutil.FailErr(t, "moved device", requireSourceIdentity(first, "9"+identity))
+	if err := requireSourceIdentity(second, "9"+identity); !errors.Is(err, ErrSourceMutationDiverged) {
+		t.Fatalf("another entry = %v", err)
+	}
+	if err := requireSourceIdentity(first, ""); !errors.Is(err, ErrSourceMutationDiverged) {
+		t.Fatalf("no recorded identity = %v", err)
 	}
 }
