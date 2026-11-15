@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -72,26 +71,6 @@ func renderSkillParts(t *testing.T, sk skills.Skill, vars map[string]any) []rend
 	return parts
 }
 
-// readerHeld turns a reachable tool list into the map UnreachableNames checks,
-// adding command mutation reachability from the rendered surface vars so the
-// map matches exactly what the reader's template facts claim.
-func readerHeld(reachable []string, vars map[string]any) map[string]bool {
-	held := make(map[string]bool, len(reachable)+3)
-	for _, name := range reachable {
-		held[name] = true
-	}
-	if mutates, ok := vars["profile_command_mutation"].(bool); ok && mutates {
-		held[toolvocab.ReachCommandMutation] = true
-	}
-	if exec, ok := vars["profile_command_external_exec"].(bool); ok && exec {
-		held[toolcontract.ReachCommandExternalExec] = true
-	}
-	if net, ok := vars["profile_command_network_egress"].(bool); ok && net {
-		held[toolcontract.ReachCommandNetworkEgress] = true
-	}
-	return held
-}
-
 func checkSkillReach(t *testing.T, catalog *toolvocab.Catalog, sk skills.Skill, reader string, corpus string, held map[string]bool) {
 	t.Helper()
 	if names := toolvocab.UnreachableNames(catalog, corpus, held); len(names) > 0 {
@@ -104,7 +83,7 @@ func checkSkillReach(t *testing.T, catalog *toolvocab.Catalog, sk skills.Skill, 
 // coordinator surfaces across root counts, and every worker profile across
 // branch and git states — renders each eligible skill for that reader, and
 // calls check with the rendered parts.
-func forEachStockSkillRender(t *testing.T, check func(t *testing.T, sk skills.Skill, reader string, reachable []string, vars map[string]any, parts []renderedText)) {
+func forEachStockSkillRender(t *testing.T, check func(t *testing.T, sk skills.Skill, readerLabel string, reader prompts.Reader, vars map[string]any, parts []renderedText)) {
 	t.Helper()
 	skillSet := stockSkillCorpus(t)
 	_, profiles := promptNameCatalog(t)
@@ -117,27 +96,29 @@ func forEachStockSkillRender(t *testing.T, check func(t *testing.T, sk skills.Sk
 			if rootCount == 0 && !slices.Contains(noFolderSurfaces, id) {
 				continue
 			}
-			reachable := plan.AddressableNames()
-			offered := make(map[string]bool, len(reachable))
-			for _, name := range reachable {
-				offered[name] = true
+			loaded := make(map[string]bool, len(plan.AddressableNames()))
+			for _, name := range plan.AddressableNames() {
+				loaded[name] = true
 			}
+			reader, err := prompts.NewReader(prompts.ReaderInput{
+				ProfileID: prompts.CoordinatorProfileID,
+				SurfaceID: id,
+				Profiles:  profiles,
+				Plan:      plan,
+				Loaded:    loaded,
+				RootCount: rootCount,
+				HasGit:    rootCount > 0,
+				WebSearch: true,
+			})
+			contractcheck.FailErr(t, "build coordinator skill reader", err)
+			held := reader.Held()
 			for _, sk := range skillSet {
-				if sk.Project || !toolvocab.SkillToolsOffered(sk, offered) {
+				if sk.Project || !toolvocab.SkillToolsOffered(sk, held) {
 					continue
 				}
 				t.Run(fmt.Sprintf("coordinator/%s/%d-roots/%s", id, rootCount, sk.Name), func(t *testing.T) {
-					vars, err := prompts.SkillSurfaceTemplateVars(prompts.SkillSurfaceVarsInput{
-						ProfileID:        prompts.CoordinatorProfileID,
-						SurfaceID:        id,
-						Plan:             plan,
-						Offered:          reachable,
-						HasGit:           rootCount > 0,
-						RootCount:        rootCount,
-						DelegationBudget: spawn.DefaultWorkerToolBudget(),
-					})
-					contractcheck.FailErr(t, "build skill vars", err)
-					check(t, sk, fmt.Sprintf("surface %s at %d roots", id, rootCount), reachable, vars, renderSkillParts(t, sk, vars))
+					vars := prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
+					check(t, sk, fmt.Sprintf("surface %s at %d roots", id, rootCount), reader, vars, renderSkillParts(t, sk, vars))
 				})
 			}
 		}
@@ -156,34 +137,25 @@ func forEachStockSkillRender(t *testing.T, check func(t *testing.T, sk skills.Sk
 			continue
 		}
 		seenProfiles[agent.ToolProfile] = true
-		profile := profiles[idx]
-		reachable := make([]string, 0, len(profile.Tools))
-		for name, enabled := range profile.Tools {
-			if enabled {
-				reachable = append(reachable, name)
-			}
-		}
-		offered := make(map[string]bool, len(reachable))
-		for _, name := range reachable {
-			offered[name] = true
-		}
 		for _, onBranch := range []bool{false, true} {
 			for _, hasGit := range []bool{false, true} {
+				reader, err := prompts.NewReader(prompts.ReaderInput{
+					ProfileID:      agent.ToolProfile,
+					Profiles:       profiles,
+					OnWorkerBranch: onBranch,
+					HasGit:         hasGit,
+					RootCount:      1,
+					WebSearch:      true,
+				})
+				contractcheck.FailErr(t, "build worker skill reader", err)
+				held := reader.Held()
 				for _, sk := range skillSet {
-					if sk.Project || !toolvocab.SkillToolsOffered(sk, offered) {
+					if sk.Project || !toolvocab.SkillToolsOffered(sk, held) {
 						continue
 					}
 					t.Run(fmt.Sprintf("worker/%s/on-branch=%t/has-git=%t/%s", agent.ToolProfile, onBranch, hasGit, sk.Name), func(t *testing.T) {
-						vars, err := prompts.SkillSurfaceTemplateVars(prompts.SkillSurfaceVarsInput{
-							ProfileID:        agent.ToolProfile,
-							Offered:          reachable,
-							OnWorkerBranch:   onBranch,
-							HasGit:           hasGit,
-							RootCount:        1,
-							DelegationBudget: spawn.DefaultWorkerToolBudget(),
-						})
-						contractcheck.FailErr(t, "build skill vars", err)
-						check(t, sk, fmt.Sprintf("profile %s (on branch: %t, git: %t)", agent.ToolProfile, onBranch, hasGit), reachable, vars, renderSkillParts(t, sk, vars))
+						vars := prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
+						check(t, sk, fmt.Sprintf("profile %s (on branch: %t, git: %t)", agent.ToolProfile, onBranch, hasGit), reader, vars, renderSkillParts(t, sk, vars))
 					})
 				}
 			}
@@ -197,12 +169,12 @@ func forEachStockSkillRender(t *testing.T, check func(t *testing.T, sk skills.Sk
 // teach what no longer exists.
 func TestStockSkillsNameOnlyReachableToolsAndPrograms(t *testing.T) {
 	catalog, _ := promptNameCatalog(t)
-	forEachStockSkillRender(t, func(t *testing.T, sk skills.Skill, reader string, reachable []string, vars map[string]any, parts []renderedText) {
+	forEachStockSkillRender(t, func(t *testing.T, sk skills.Skill, readerLabel string, reader prompts.Reader, _ map[string]any, parts []renderedText) {
 		corpus := make([]string, len(parts))
 		for i, part := range parts {
 			corpus[i] = part.text
 		}
-		checkSkillReach(t, catalog, sk, reader, strings.Join(corpus, "\n"), readerHeld(reachable, vars))
+		checkSkillReach(t, catalog, sk, readerLabel, strings.Join(corpus, "\n"), reader.Held())
 	})
 }
 
@@ -211,7 +183,7 @@ func TestStockSkillsNameOnlyReachableToolsAndPrograms(t *testing.T) {
 // and a body that only fits unrendered would still ride every model call of
 // the turn over budget.
 func TestStockPackSkillsRenderedBudgets(t *testing.T) {
-	forEachStockSkillRender(t, func(t *testing.T, sk skills.Skill, reader string, _ []string, _ map[string]any, parts []renderedText) {
+	forEachStockSkillRender(t, func(t *testing.T, sk skills.Skill, reader string, _ prompts.Reader, _ map[string]any, parts []renderedText) {
 		for _, part := range parts {
 			budget := skills.BundledBodyBudget
 			kind := "body"
@@ -259,7 +231,7 @@ func prosePunctuationDrift(prose string) bool {
 // leave an empty backtick span, put space before punctuation, or blank a
 // markdown table cell on any reader state.
 func TestStockSkillsRenderedProseStructure(t *testing.T) {
-	forEachStockSkillRender(t, func(t *testing.T, sk skills.Skill, reader string, _ []string, _ map[string]any, parts []renderedText) {
+	forEachStockSkillRender(t, func(t *testing.T, sk skills.Skill, reader string, _ prompts.Reader, _ map[string]any, parts []renderedText) {
 		for _, part := range parts {
 			checkRenderedProseStructure(t, sk.Name, part, reader)
 		}

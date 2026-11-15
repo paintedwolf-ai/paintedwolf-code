@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -38,15 +39,40 @@ func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 		maps.Copy(vars, prompts.VisibleToolsNativePartialVars(state.offered))
 		prompts.MergeVisualShowVars(state.offered, state.requestable, vars)
 		vars["is_coordinator"] = state.host == promptunit.HostCoordinator
-		held := map[string]bool{}
-		for _, tool := range slices.Concat(state.offered, state.requestable) {
-			held[tool] = true
-		}
-		maps.Copy(held, toolcontract.ReachMarks(held["command"], toolcontract.AllCommandEffects()))
 		offered := map[string]bool{}
 		for _, tool := range state.offered {
 			offered[tool] = true
 		}
+		allTools := map[string]bool{}
+		for _, tool := range slices.Concat(state.offered, state.requestable) {
+			allTools[tool] = true
+		}
+		deferred := map[string]bool{}
+		for _, tool := range state.requestable {
+			deferred[tool] = true
+		}
+		profileID := "synthetic"
+		if state.host == promptunit.HostCoordinator {
+			profileID = prompts.CoordinatorProfileID
+		}
+		reader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: profileID,
+			Mode:      state.mode,
+			Profiles: []sandbox.ToolProfile{{
+				ID:             profileID,
+				Tools:          allTools,
+				DeferredTools:  deferred,
+				CommandEffects: toolcontract.AllCommandEffects(),
+			}},
+			Plan:      toolsurface.Compile(state.offered, state.requestable),
+			Loaded:    offered,
+			Visible:   slices.Concat(state.offered, state.requestable),
+			RootCount: 1,
+			HasGit:    true,
+			WebSearch: true,
+		})
+		contractcheck.FailErr(t, "build state reader", err)
+		held := reader.Held()
 		selection := promptunit.Selection{Host: state.host, Mode: state.mode, Offered: offered}
 		for _, slot := range units.Rendered(selection) {
 			for _, unit := range slot {

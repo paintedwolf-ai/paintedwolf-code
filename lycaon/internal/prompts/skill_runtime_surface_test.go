@@ -4,11 +4,15 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
 func TestSkillRuntimePlanBoundsCatalogCapabilities(t *testing.T) {
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load tool profiles", err)
 	for _, profile := range []string{CoordinatorProfileID, "web_research", "implement"} {
 		for _, state := range []struct {
 			name          string
@@ -21,12 +25,22 @@ func TestSkillRuntimePlanBoundsCatalogCapabilities(t *testing.T) {
 			{"family", toolsurface.Compile([]string{"web_search", "fetch_url"}, nil), true, true},
 		} {
 			t.Run(profile+"/"+state.name, func(t *testing.T) {
-				in := SkillSurfaceVarsInput{ProfileID: profile, Plan: state.plan, Offered: state.plan.ImmediateNames(), RootCount: 1}
+				in := ReaderInput{
+					ProfileID: profile,
+					Profiles:  profiles,
+					Plan:      state.plan,
+					Visible:   state.plan.ImmediateNames(),
+					Loaded:    toolNameSet(state.plan.AddressableNames()),
+					RootCount: 1,
+					WebSearch: true,
+				}
 				if profile == CoordinatorProfileID {
 					in.SurfaceID = "implement_investigate"
+					in.Visible = nil
 				}
-				vars, err := SkillSurfaceTemplateVars(in)
-				testutil.FailErr(t, "render runtime capability facts", err)
+				reader, err := NewReader(in)
+				testutil.FailErr(t, "new reader", err)
+				vars := SkillVars(reader, spawn.DefaultWorkerToolBudget())
 				for name, want := range map[string]bool{"web_search": state.search, "fetch_url": state.fetch, "command": false, "task": false} {
 					if vars["profile_has_"+name] != want {
 						t.Fatalf("%s=%v want=%v", name, vars["profile_has_"+name], want)
@@ -48,9 +62,19 @@ func TestSkillRuntimePlanBoundsCatalogCapabilities(t *testing.T) {
 }
 
 func TestCoordinatorSkillCanTeachDeferredToolWithinRuntimePlan(t *testing.T) {
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load tool profiles", err)
 	plan := toolsurface.Compile([]string{"request_tools"}, []string{"fetch_url", "web_search"})
-	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{ProfileID: CoordinatorProfileID, SurfaceID: "implement_investigate", Offered: plan.ImmediateNames(), Plan: plan})
-	testutil.FailErr(t, "deferred research vars", err)
+	reader, err := NewReader(ReaderInput{
+		ProfileID: CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Profiles:  profiles,
+		Plan:      plan,
+		Loaded:    toolNameSet(plan.AddressableNames()),
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "new reader", err)
+	vars := SkillVars(reader, spawn.DefaultWorkerToolBudget())
 	if vars["profile_has_fetch_url"] != true || vars["profile_has_web_search"] != true {
 		t.Fatal("reachable research workflow was blanked")
 	}

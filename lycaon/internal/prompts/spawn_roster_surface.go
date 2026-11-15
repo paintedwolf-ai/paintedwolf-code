@@ -64,10 +64,7 @@ func LoadSpawnRosterSurface(allowedAgentIDs []string, maxInFlight int, surfaceTo
 	}
 
 	if len(profiles) == 0 {
-		profiles, err = sandbox.LoadToolProfiles()
-		if err != nil {
-			return SpawnRosterData{}, fmt.Errorf("load tool profiles: %w", err)
-		}
+		return SpawnRosterData{}, fmt.Errorf("tool profiles required")
 	}
 	profileByID := make(map[string]sandbox.ToolProfile, len(profiles))
 	for _, p := range profiles {

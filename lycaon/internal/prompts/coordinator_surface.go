@@ -154,11 +154,11 @@ func MergeCoordinatorSurfacePathVars(surfaceID string, profiles []sandbox.ToolPr
 		return fmt.Errorf("nil template vars map")
 	}
 	if len(profiles) == 0 {
-		loaded, err := sandbox.LoadToolProfiles()
+		var err error
+		profiles, err = declaredToolProfiles(nil)
 		if err != nil {
 			return err
 		}
-		profiles = loaded
 	}
 	hasRootCount := false
 	if in.RootCount == 0 {

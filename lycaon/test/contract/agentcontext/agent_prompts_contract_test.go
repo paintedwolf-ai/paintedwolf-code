@@ -25,7 +25,9 @@ func TestBundledAgentTemplatesExist(t *testing.T) {
 			continue
 		}
 		if contract != nil && contract.IsWorkerAgent(profile.ID) {
-			if _, err := prompts.RenderPersona(context.Background(), engine, profile.ID, nil); err != nil {
+			reader, err := prompts.DeclaredReader(nil, profile.ID)
+			contractcheck.FailErr(t, "DeclaredReader "+profile.ID, err)
+			if _, err := prompts.RenderPersona(context.Background(), engine, profile.ID, reader, nil); err != nil {
 				t.Fatalf("agent %q persona render: %v", profile.ID, err)
 			}
 			continue

@@ -6,102 +6,91 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/hintregistry"
-	"github.com/lycaon/lycaon/internal/promptunit"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 // RenderPersona renders a runtime worker persona and enforces its final contract.
-func RenderPersona(ctx context.Context, engine *FileTemplateEngine, agentID string, extra map[string]any) (string, error) {
-	return renderPersona(ctx, engine, agentID, extra, true)
+func RenderPersona(ctx context.Context, engine *FileTemplateEngine, agentID string, reader Reader, occurrence map[string]any) (string, error) {
+	return renderPersona(ctx, engine, agentID, reader, occurrence, true)
 }
 
-// renderPersona composes a persona with optional validation.
-func renderPersona(ctx context.Context, engine *FileTemplateEngine, agentID string, extra map[string]any, validate bool) (string, error) {
+// PersonaVars builds the variable map RenderPersona hands the template engine.
+func PersonaVars(ctx context.Context, engine *FileTemplateEngine, agentID string, reader Reader, occurrence map[string]any) (map[string]any, error) {
+	_, _, _, data, err := personaVars(ctx, engine, agentID, reader, occurrence)
+	return data, err
+}
+
+func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string, reader Reader, occurrence map[string]any) (*FileTemplateEngine, string, string, map[string]any, error) {
 	if engine == nil {
-		return "", fmt.Errorf("prompt engine not configured")
+		return nil, "", "", nil, fmt.Errorf("prompt engine not configured")
+	}
+	if !reader.Valid() {
+		return nil, "", "", nil, fmt.Errorf("persona render requires a valid reader")
 	}
 	eff := engine.Layers().Catalog
 	if eff == nil {
 		var err error
 		eff, err = extpacks.CatalogForConsumers()
 		if err != nil {
-			return "", fmt.Errorf("persona effective catalog: %w", err)
+			return nil, "", "", nil, fmt.Errorf("persona effective catalog: %w", err)
 		}
 	}
 	engine = engine.WithEffectiveCatalog(eff)
 	cfg, err := loadPersonaContractCached(eff)
 	if err != nil {
-		return "", err
+		return nil, "", "", nil, err
 	}
 	id := strings.TrimSpace(agentID)
 	def, ok := cfg.Agents[id]
 	if !ok {
-		return "", fmt.Errorf("%w: persona contract: agent %q not in contract", ErrUnknownAgent, id)
+		return nil, "", "", nil, fmt.Errorf("%w: persona contract: agent %q not in contract", ErrUnknownAgent, id)
 	}
 	ref, err := TemplateRefForAgent(id)
 	if err != nil {
-		return "", err
+		return nil, "", "", nil, err
 	}
 	data := PersonaDataMap(def)
-	if _, ok := extra["web_search_enabled"]; !ok {
-		data["web_search_enabled"] = true
-	}
-	for k, v := range extra {
+	for k, v := range occurrence {
 		data[k] = v
 	}
 	if err := MergeWorkerPolicyTemplateVars(id, data); err != nil {
-		return "", fmt.Errorf("agent spawn vars for %q: %w", id, err)
+		return nil, "", "", nil, fmt.Errorf("agent spawn vars for %q: %w", id, err)
 	}
-	toolProfile, err := ToolProfileForAgent(id)
+	for k, v := range reader.Facts() {
+		if k == "agent_skills" {
+			if existing := agentSkillViewsFromVars(data); len(existing) > 0 && slices.Contains(reader.Offered(), "skills_read") {
+				continue
+			}
+		}
+		if isPreservedEnvironmentFact(k, data) {
+			continue
+		}
+		data[k] = v
+	}
+	syncCommandExternalFacts(data)
+	unitCatalog, err := UnitCatalogFor(eff)
 	if err != nil {
-		return "", fmt.Errorf("agent tool profile for %q: %w", id, err)
+		return nil, "", "", nil, fmt.Errorf("unit catalog for %q: %w", id, err)
 	}
-	{
-		schemas, err := loadToolSchemaCached(eff)
-		if err != nil {
-			return "", fmt.Errorf("agent tool schemas for %q: %w", id, err)
-		}
-		policy, err := hintregistry.ListEffectiveWithCatalog(eff)
-		if err != nil {
-			return "", fmt.Errorf("agent hint policy for %q: %w", id, err)
-		}
-		hints, err := loadHintCodeRowsCached(eff.Revision, policy)
-		if err != nil {
-			return "", fmt.Errorf("agent hint codes for %q: %w", id, err)
-		}
-		profiles, err := sandbox.LoadToolProfilesWithCatalog(eff)
-		if err != nil {
-			return "", fmt.Errorf("agent tool profiles for %q: %w", id, err)
-		}
-		var visible []string
-		var loaded map[string]bool
-		if extra != nil {
-			if raw, ok := extra["visible_tools"].([]string); ok {
-				visible = raw
-			}
-			if raw, ok := extra["loaded_tools"].(map[string]bool); ok {
-				loaded = raw
-			}
-		}
-		if err := MergeAgentToolSurfaceVars(toolProfile, visible, hints, ReaderInput{Loaded: loaded, Schemas: schemas}, data, profiles); err != nil {
-			return "", fmt.Errorf("agent tool surface for %q: %w", id, err)
-		}
-		offered, _ := data["agent_tool_names"].([]string)
-		unitCatalog, err := UnitCatalogFor(eff)
-		if err != nil {
-			return "", fmt.Errorf("unit catalog for %q: %w", id, err)
-		}
-		blocks, err := RenderUnitSlots(ctx, engine, unitCatalog, UnitSelectionVars(promptunit.HostWorker, "", offered), data)
-		if err != nil {
-			return "", fmt.Errorf("units for %q: %w", id, err)
-		}
-		MergeUnitVars(data, blocks)
+	blocks, err := RenderUnitSlots(ctx, engine, unitCatalog, reader.Selection(), data)
+	if err != nil {
+		return nil, "", "", nil, fmt.Errorf("units for %q: %w", id, err)
+	}
+	MergeUnitVars(data, blocks)
+	return engine, id, ref, data, nil
+}
+
+// renderPersona composes a persona with optional validation.
+func renderPersona(ctx context.Context, engine *FileTemplateEngine, agentID string, reader Reader, occurrence map[string]any, validate bool) (string, error) {
+	engine, id, ref, data, err := personaVars(ctx, engine, agentID, reader, occurrence)
+	if err != nil {
+		return "", err
 	}
 	body, err := engine.Render(ctx, ref, data)
 	if err != nil {

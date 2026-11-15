@@ -187,46 +187,6 @@ func VisibleToolsNativePartialVars(visibleTools []string) map[string]any {
 	return toolProfileCapabilityTemplateVars(AgentToolSurfaceData{Tools: views, CommandEffects: toolcontract.AllCommandEffects()})
 }
 
-// MergeProfileRequestableVars sets profile_can_request for the tools profileID
-// can still load when request_tools is offered.
-func MergeProfileRequestableVars(profileID string, offered []string, into map[string]any) {
-	if into == nil {
-		return
-	}
-	into["profile_can_request"] = requestableToolSet(offered, profileAllowedToolNames(profileID))
-}
-
-func profileAllowedToolNames(profileID string) []string {
-	profileID = strings.TrimSpace(profileID)
-	if profileID == "" {
-		return nil
-	}
-	if profiles, err := sandbox.LoadToolProfiles(); err == nil {
-		resolvedID := profileID
-		if mapped, err := ToolProfileForAgent(profileID); err == nil {
-			resolvedID = mapped
-		}
-		for _, p := range profiles {
-			if p.ID != profileID && p.ID != resolvedID {
-				continue
-			}
-			var out []string
-			for _, name := range visibleToolNames(p, nil) {
-				if p.ToolAllowed(name) {
-					out = append(out, name)
-				}
-			}
-			return out
-		}
-	}
-	if IsCoordinatorSurfaceID(profileID) {
-		if loadable, err := LoadCoordinatorSurfaceLoadable(profileID); err == nil {
-			return loadable
-		}
-	}
-	return nil
-}
-
 func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any {
 	loadNativeToolFamilies()
 	enabled := enabledToolSet(data.Tools)
@@ -243,21 +203,7 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 	if commandMutates {
 		writeTools = append([]string{"command"}, writeTools...)
 	}
-	// Dual-state capability vars follow the command-reach contract rather
-	// than raw enablement: a form tool plus a reachable command leg admits
-	// the operation, and mutating forms additionally require command
-	// mutation. Today every dual-state form also requires its form tool, so
-	// the reach leg matches enablement; deriving through the reach tables
-	// keeps these vars tied to the SSOT if dispositions change.
-	reachHeld := make(map[string]bool, len(enabled)+3)
-	for name, ok := range enabled {
-		reachHeld[name] = ok
-	}
-	for mark, ok := range toolcontract.ReachMarks(enabled["command"], data.CommandEffects) {
-		if ok {
-			reachHeld[mark] = true
-		}
-	}
+	reachHeld := readerHeldSet(enabled, data.CommandEffects)
 	out := map[string]any{
 		"mints":                           evidenceMintsForCommand(enabled, commandMutates, command.externalExec),
 		"receipt_kind":                    evidence.ActiveBinding().ReceiptKinds(),
@@ -299,6 +245,14 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 			out[key] = enabled[name]
 		}
 	}
+	for name, ok := range enabled {
+		if ok && toolschema.ValidToolName(name) {
+			key := "profile_has_" + name
+			if _, derived := out[key]; !derived {
+				out[key] = true
+			}
+		}
+	}
 	offeredNames := toolViewNames(data.Tools)
 	MergeRunnerCapabilityVars(offeredNames, out)
 	MergeHTTPActionVars(offeredNames, out)
@@ -307,26 +261,34 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 	return out
 }
 
+var (
+	currentToolNamesOnce sync.Once
+	currentToolNamesList []string
+)
+
 // currentToolNames lists every tool declared by a stock profile or the manifest.
 // Operations are excluded: agents cannot call them as tools, and the guidance
 // facts that name operations are answered in mergeOfferedToolGuidance.
-var currentToolNames = sync.OnceValue(func() []string {
-	var names []string
-	if cfg, err := nativemanifest.Load(); err == nil {
-		names = append(names, cfg.AllTools()...)
-		names = append(names, cfg.HostProducedTools...)
-	}
-	if profiles, err := sandbox.LoadToolProfiles(); err == nil {
-		for _, profile := range profiles {
-			for name := range profile.Tools {
-				if toolschema.ValidToolName(name) {
-					names = append(names, name)
+func currentToolNames() []string {
+	currentToolNamesOnce.Do(func() {
+		var names []string
+		if cfg, err := nativemanifest.Load(); err == nil {
+			names = append(names, cfg.AllTools()...)
+			names = append(names, cfg.HostProducedTools...)
+		}
+		if profiles, err := declaredToolProfiles(nil); err == nil {
+			for _, profile := range profiles {
+				for name := range profile.Tools {
+					if toolschema.ValidToolName(name) {
+						names = append(names, name)
+					}
 				}
 			}
 		}
-	}
-	return names
-})
+		currentToolNamesList = names
+	})
+	return currentToolNamesList
+}
 
 // MergeRunnerCapabilityVars populates runner_<capability>_tools for offered
 // tools. command is listed for a capability only while the surface lets it
@@ -391,25 +353,6 @@ func ToolNamesMutationCapable(names []string) bool {
 	return toolSetMutationCapable(toolNameSet(names))
 }
 
-// CoordinatorSurfaceMutationCapable reports whether a coordinator surface can mutate the tree.
-func CoordinatorSurfaceMutationCapable(surfaceID string) bool {
-	row, err := loadCoordinatorSurfaceRow(surfaceID)
-	if err != nil {
-		return false
-	}
-	enabled := toolNameSet(append(append([]string(nil), row.Floor...), row.LoadableTools()...))
-	if !CoordinatorSurfaceAllowsCommandMutation(surfaceID) {
-		delete(enabled, "command")
-	}
-	return toolSetMutationCapable(enabled)
-}
-
-// CoordinatorSurfaceAllowsCommandMutation reports whether a coordinator surface
-// lets command change the tree.
-func CoordinatorSurfaceAllowsCommandMutation(surfaceID string) bool {
-	return IsCoordinatorSurfaceID(surfaceID) && commandEffectFlags(true, ScopeCommandEffects(surfaceID)).mutation
-}
-
 // IsCoordinatorSurfaceID reports whether id is a declared coordinator turn surface.
 func IsCoordinatorSurfaceID(id string) bool {
 	_, err := loadCoordinatorSurfaceRow(id)
@@ -435,9 +378,9 @@ func loadAgentSurfaceForCheck(agentType string) (AgentToolSurfaceData, []sandbox
 	if err != nil {
 		return AgentToolSurfaceData{}, nil, "", false
 	}
-	profiles, err := sandbox.LoadToolProfiles()
+	profiles, err := declaredToolProfiles(nil)
 	if err != nil {
-		return AgentToolSurfaceData{}, nil, "", false
+		return AgentToolSurfaceData{}, nil, profileID, false
 	}
 	surface, err := LoadAgentToolSurface(profileID, nil, nil, ReaderInput{}, profiles)
 	if err != nil {

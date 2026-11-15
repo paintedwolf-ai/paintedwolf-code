@@ -100,7 +100,7 @@ func TestCommandEffectRestrictionsIntersect(t *testing.T) {
 	}
 }
 
-func TestScopeCommandEffectsFollowsDeclaredCatalogs(t *testing.T) {
+func TestDeclaredReaderEffectsFollowCatalogs(t *testing.T) {
 	mutation := effectSet(t, toolcontract.CommandMutation)
 	programs := effectSet(t, toolcontract.CommandExternalExec)
 	for scope, want := range map[string][2]bool{
@@ -109,7 +109,9 @@ func TestScopeCommandEffectsFollowsDeclaredCatalogs(t *testing.T) {
 		"implement_routing":     {false, false},
 		"worker_readonly":       {false, false},
 	} {
-		got := prompts.ScopeCommandEffects(scope)
+		reader, err := prompts.DeclaredReader(nil, scope)
+		testutil.FailErr(t, "DeclaredReader "+scope, err)
+		got := reader.Effects()
 		if got.Allows(mutation) != want[0] || got.Allows(programs) != want[1] {
 			t.Errorf("%s effects = %v", scope, got.Classes())
 		}

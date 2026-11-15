@@ -1,10 +1,6 @@
 package prompts
 
 import (
-	"strings"
-
-	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -42,32 +38,6 @@ func currentCommandEffectFlags(vars map[string]any, commandOffered bool) command
 		externalExec:  read("profile_command_external_exec"),
 		networkEgress: read("profile_command_network_egress"),
 	}
-}
-
-// ScopeCommandEffects is what the shipped catalogs let command do under a
-// coordinator surface, tool profile, or agent id. A scope they do not declare
-// is bounded by its own profile where the prompt is rendered.
-func ScopeCommandEffects(scopeID string) toolcontract.CommandEffects {
-	scopeID = strings.TrimSpace(scopeID)
-	if scopeID == "" || scopeID == CoordinatorProfileID {
-		return toolcontract.AllCommandEffects()
-	}
-	if effects, err := surfacecatalog.CommandEffects(scopeID); err == nil {
-		return effects
-	}
-	if profileID, err := ToolProfileForAgent(scopeID); err == nil && profileID != "" {
-		scopeID = profileID
-	}
-	profiles, err := sandbox.LoadToolProfiles()
-	if err != nil {
-		return toolcontract.AllCommandEffects()
-	}
-	for _, profile := range profiles {
-		if profile.ID == scopeID {
-			return profile.CommandEffects
-		}
-	}
-	return toolcontract.AllCommandEffects()
 }
 
 // restrictCommandEffects narrows every variable derived from what command may

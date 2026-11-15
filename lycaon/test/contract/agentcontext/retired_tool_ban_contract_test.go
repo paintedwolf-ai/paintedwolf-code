@@ -99,7 +99,9 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 			continue
 		}
 		t.Run("persona/"+agent.ID, func(t *testing.T) {
-			corpus, err := prompts.RenderPersona(context.Background(), personaEngine, agent.ID, nil)
+			reader, err := prompts.DeclaredReader(eff, agent.ID)
+			contractcheck.FailErr(t, "DeclaredReader "+agent.ID, err)
+			corpus, err := prompts.RenderPersona(context.Background(), personaEngine, agent.ID, reader, nil)
 			contractcheck.FailErr(t, "render persona", err)
 			checkBannedMention(t, retiredToolMention, "persona "+agent.ID, corpus)
 		})
@@ -183,7 +185,9 @@ func TestReadOnlyCommandProfilesNeverNameMutationSubcommands(t *testing.T) {
 		}
 		checked++
 		t.Run("persona/"+agent.ID, func(t *testing.T) {
-			corpus, err := prompts.RenderPersona(context.Background(), personaEngine, agent.ID, nil)
+			reader, err := prompts.DeclaredReader(eff, agent.ID)
+			contractcheck.FailErr(t, "DeclaredReader "+agent.ID, err)
+			corpus, err := prompts.RenderPersona(context.Background(), personaEngine, agent.ID, reader, nil)
 			contractcheck.FailErr(t, "render persona", err)
 			checkBannedMention(t, mutationSubcommandMention,
 				fmt.Sprintf("read-only profile %s (agent %s)", agent.ToolProfile, agent.ID), corpus)

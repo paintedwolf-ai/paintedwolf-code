@@ -1,13 +1,111 @@
 package prompts
 
 import (
+	"fmt"
 	"slices"
+	"strings"
+	"sync/atomic"
 
+	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 )
+
+var cachedDeclaredProfiles atomic.Pointer[[]sandbox.ToolProfile]
+
+// DeclaredReader constructs a Reader for a shipped profile, agent, or surface
+// without a session.
+func DeclaredReader(catalog *extpacks.EffectiveCatalog, scopeID string) (Reader, error) {
+	if catalog == nil {
+		var err error
+		catalog, err = extpacks.CatalogForConsumers()
+		if err != nil {
+			return Reader{}, err
+		}
+	}
+	profiles, err := sandbox.LoadToolProfilesWithCatalog(catalog)
+	if err != nil {
+		return Reader{}, err
+	}
+	cloned := slices.Clone(profiles)
+	cachedDeclaredProfiles.Store(&cloned)
+	scopeID = strings.TrimSpace(scopeID)
+	if scopeID == "-" {
+		return Reader{}, nil
+	}
+	profileID := ""
+	surfaceID := ""
+	mode := ""
+	var plan toolsurface.Plan
+	switch {
+	case scopeID == "" || scopeID == CoordinatorProfileID:
+		profileID = CoordinatorProfileID
+	case hasProfileID(profiles, scopeID):
+		profileID = scopeID
+	case IsCoordinatorSurfaceID(scopeID):
+		profileID = CoordinatorProfileID
+		surfaceID = scopeID
+		plan, err = CompileSurfacePlan(surfaceID, 1)
+		if err != nil {
+			return Reader{}, err
+		}
+	default:
+		if mapped, mapErr := ToolProfileForAgent(scopeID); mapErr == nil && hasProfileID(profiles, mapped) {
+			profileID = mapped
+		} else if agents, loadErr := agentdef.LoadEffectiveWithCatalog(catalog); loadErr == nil {
+			for _, a := range agents {
+				if a.ID == scopeID {
+					profileID = strings.TrimSpace(a.ToolProfile)
+					break
+				}
+			}
+		}
+		if profileID == "" {
+			return Reader{}, fmt.Errorf("unknown reader scope %q", scopeID)
+		}
+	}
+	schemas, _ := loadToolSchemaCached(catalog)
+	return NewReader(ReaderInput{
+		ProfileID: profileID,
+		SurfaceID: surfaceID,
+		Mode:      mode,
+		Profiles:  profiles,
+		Plan:      plan,
+		Schemas:   schemas,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	})
+}
+
+func declaredToolProfiles(catalog *extpacks.EffectiveCatalog) ([]sandbox.ToolProfile, error) {
+	if catalog == nil {
+		if p := cachedDeclaredProfiles.Load(); p != nil {
+			return slices.Clone(*p), nil
+		}
+	}
+	if _, err := DeclaredReader(catalog, "-"); err != nil {
+		return nil, err
+	}
+	if p := cachedDeclaredProfiles.Load(); p != nil {
+		return slices.Clone(*p), nil
+	}
+	return nil, fmt.Errorf("tool profiles unavailable")
+}
+
+func hasProfileID(profiles []sandbox.ToolProfile, id string) bool {
+	for _, p := range profiles {
+		if p.ID == id {
+			return true
+		}
+	}
+	return false
+}
 
 func buildReaderFacts(
 	in ReaderInput,
@@ -89,27 +187,41 @@ func buildReaderFacts(
 		return out, nil
 	}
 
+	catalog, _ := extpacks.CatalogForConsumers()
+	schemas := in.Schemas
+	if schemas == nil && catalog != nil {
+		schemas, _ = loadToolSchemaCached(catalog)
+	}
 	toolViews := make([]AgentToolArgView, 0, len(offered))
 	for _, name := range offered {
 		view := AgentToolArgView{Name: name}
-		if in.Schemas != nil {
-			if meta, ok := in.Schemas.ToolMeta(name); ok {
+		if schemas != nil {
+			if meta, ok := schemas.ToolMeta(name); ok {
 				view.RequiredArgs, _ = toolschema.ArgFieldSummary(meta.ArgsSchema)
 			}
 		}
 		toolViews = append(toolViews, view)
 	}
-	roster, err := RequestableTools(requestable, in.Schemas)
+	roster, err := RequestableTools(requestable, schemas)
 	if err != nil {
 		return nil, err
+	}
+	var rejectCodes []AgentRejectCodeView
+	if catalog != nil {
+		if policy, err := hintregistry.ListEffectiveWithCatalog(catalog); err == nil {
+			if hints, err := loadHintCodeRowsCached(catalog.Revision, policy); err == nil {
+				rejectCodes = recoverableRejectCodes(hints, append(slices.Clone(offered), requestable...))
+			}
+		}
 	}
 	data := AgentToolSurfaceData{
 		ToolProfile:     profileID,
 		Tools:           toolViews,
 		Requestable:     roster,
+		RejectCodes:     rejectCodes,
 		WriteGlobs:      slices.Clone(profile.WriteGlobs),
 		CommandEffects:  effects,
-		CommandDeferred: !commandOnFloor && slices.Contains(offered, "command"),
+		CommandDeferred: profile.ToolDeferred("command"),
 	}
 	for k, v := range AgentToolSurfaceTemplateVars(data) {
 		out[k] = v

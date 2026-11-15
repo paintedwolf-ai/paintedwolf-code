@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -104,15 +105,32 @@ func TestMergeVisualShowVarsAskForLoadableHeldTerminal(t *testing.T) {
 }
 
 func TestMergeCoordinatorPromptVarsInvestigateFloorAsksForCapture(t *testing.T) {
-	into := map[string]any{}
-	err := prompts.MergeCoordinatorPromptVars("implement_investigate", prompts.ExecutionModePromptTransition{
+	reader, err := prompts.DeclaredReader(nil, "implement_investigate")
+	testutil.FailErr(t, "DeclaredReader implement_investigate", err)
+	into := reader.Facts()
+	err = prompts.MergeCoordinatorPromptVars("implement_investigate", prompts.ExecutionModePromptTransition{
 		ExecutionMode: "investigate",
 	}, "", into)
 	testutil.FailErr(t, "merge investigate prompt vars", err)
 	if into["visual_show_page"] != false || into["visual_show_needs_request"] != true || into["visual_show_available"] != true {
 		t.Fatalf("the investigate floor carries no capture tool but must ask to load one: %#v", into)
 	}
-	loaded := map[string]any{"surface_offered": []string{"read", "capture_page", "request_tools"}}
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	plan, err := prompts.CompileSurfacePlan("implement_investigate", 1)
+	testutil.FailErr(t, "CompileSurfacePlan", err)
+	loadedReader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Profiles:  profiles,
+		Plan:      plan,
+		Loaded:    map[string]bool{"capture_page": true},
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "loaded reader", err)
+	loaded := loadedReader.Facts()
 	err = prompts.MergeCoordinatorPromptVars("implement_investigate", prompts.ExecutionModePromptTransition{
 		ExecutionMode: "investigate",
 	}, "", loaded)
@@ -123,8 +141,10 @@ func TestMergeCoordinatorPromptVarsInvestigateFloorAsksForCapture(t *testing.T) 
 }
 
 func TestMergeCoordinatorPromptVarsSynthesisDoesNotRequireRuntimeCapture(t *testing.T) {
-	into := map[string]any{}
-	err := prompts.MergeCoordinatorPromptVars("implement_synthesis", prompts.ExecutionModePromptTransition{
+	reader, err := prompts.DeclaredReader(nil, "implement_synthesis")
+	testutil.FailErr(t, "DeclaredReader implement_synthesis", err)
+	into := reader.Facts()
+	err = prompts.MergeCoordinatorPromptVars("implement_synthesis", prompts.ExecutionModePromptTransition{
 		ExecutionMode: "wrapup",
 	}, "", into)
 	testutil.FailErr(t, "merge synthesis prompt vars", err)

@@ -78,7 +78,9 @@ func TestInstalledPacksReachEngines(t *testing.T) {
 	t.Run("agents/prompts/_persona-contract → rendered persona", func(t *testing.T) {
 		engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()}).
 			WithEffectiveCatalog(cat)
-		body, err := prompts.RenderPersona(ctx, engine, "example-docs-writer", map[string]any{})
+		reader, err := prompts.DeclaredReader(cat, "example-docs-writer")
+		testutil.FailErr(t, "declared reader for pack agent", err)
+		body, err := prompts.RenderPersona(ctx, engine, "example-docs-writer", reader, map[string]any{})
 		testutil.FailErr(t, "render pack agent persona", err)
 		for _, want := range []string{"complete_leg", "Example Docs Writer"} {
 			if !strings.Contains(body, want) {

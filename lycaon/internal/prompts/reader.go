@@ -147,18 +147,14 @@ func NewReader(in ReaderInput) (Reader, error) {
 		commandOnFloor = slices.Contains(offered, "command") && !profile.ToolDeferred("command")
 	}
 
-	held := make(map[string]bool, len(offered)+len(requestable)+3)
+	toolSet := make(map[string]bool, len(offered)+len(requestable))
 	for _, name := range offered {
-		held[name] = true
+		toolSet[name] = true
 	}
 	for _, name := range requestable {
-		held[name] = true
+		toolSet[name] = true
 	}
-	for mark, ok := range toolcontract.ReachMarks(held["command"], effects) {
-		if ok {
-			held[mark] = true
-		}
-	}
+	held := readerHeldSet(toolSet, effects)
 	mints := evidenceMints(held)
 	mode := strings.TrimSpace(in.Mode)
 	facts, err := buildReaderFacts(in, profile, profileID, surfaceID, mode, offered, requestable, commandOnFloor, effects)
@@ -178,6 +174,21 @@ func NewReader(in ReaderInput) (Reader, error) {
 		facts:       facts,
 		fingerprint: computeReaderFingerprint(host, profileID, surfaceID, mode, offered, requestable, commandOnFloor, effects, in),
 	}, nil
+}
+
+func readerHeldSet(tools map[string]bool, effects toolcontract.CommandEffects) map[string]bool {
+	held := make(map[string]bool, len(tools)+3)
+	for name, ok := range tools {
+		if ok {
+			held[name] = true
+		}
+	}
+	for mark, ok := range toolcontract.ReachMarks(held["command"], effects) {
+		if ok {
+			held[mark] = true
+		}
+	}
+	return held
 }
 
 // Valid reports whether r was constructed by NewReader.

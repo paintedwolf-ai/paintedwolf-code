@@ -12,12 +12,18 @@ import (
 	"github.com/lycaon/lycaon/internal/spawn"
 )
 
-func dispatchTestReader(t *testing.T) prompts.Reader {
+func loadSpawnTestProfiles(t *testing.T) []sandbox.ToolProfile {
 	t.Helper()
 	profiles, err := sandbox.LoadToolProfiles()
 	if err != nil {
 		t.Fatalf("LoadToolProfiles: %v", err)
 	}
+	return profiles
+}
+
+func dispatchTestReader(t *testing.T) prompts.Reader {
+	t.Helper()
+	profiles := loadSpawnTestProfiles(t)
 	plan, err := prompts.CompileSurfacePlan("implement_dispatch", 1)
 	if err != nil {
 		t.Fatalf("CompileSurfacePlan: %v", err)
@@ -66,7 +72,7 @@ func TestSpawnRosterRoleVarsSplitByEditAndSkipCoordinator(t *testing.T) {
 }
 
 func TestLoadSpawnRosterSurfaceImplementDefault(t *testing.T) {
-	data, err := prompts.LoadSpawnRosterSurface(spawn.AmbientAllowedAgents(), spawn.MaxInFlightTaskWorkers, nil, nil, nil)
+	data, err := prompts.LoadSpawnRosterSurface(spawn.AmbientAllowedAgents(), spawn.MaxInFlightTaskWorkers, nil, nil, loadSpawnTestProfiles(t))
 	if err != nil {
 		t.Fatalf("LoadSpawnRosterSurface: %v", err)
 	}
@@ -140,14 +146,14 @@ func TestLoadSpawnRosterSurfaceImplementDefault(t *testing.T) {
 }
 
 func TestLoadSpawnRosterSurfaceUnknownAgent(t *testing.T) {
-	_, err := prompts.LoadSpawnRosterSurface([]string{"not-a-real-agent"}, 3, nil, nil, nil)
+	_, err := prompts.LoadSpawnRosterSurface([]string{"not-a-real-agent"}, 3, nil, nil, loadSpawnTestProfiles(t))
 	if err == nil {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestLoadSpawnRosterSurfaceNoAllowedAgents(t *testing.T) {
-	data, err := prompts.LoadSpawnRosterSurface(nil, 3, nil, nil, nil)
+	data, err := prompts.LoadSpawnRosterSurface(nil, 3, nil, nil, loadSpawnTestProfiles(t))
 	if err != nil {
 		t.Fatalf("LoadSpawnRosterSurface: %v", err)
 	}

@@ -4,11 +4,14 @@ import (
 	"context"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/promptunit"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -33,34 +36,59 @@ func (m *Service) selectSkillPreload(ctx context.Context, sess *api.Session, pro
 	if err != nil {
 		return
 	}
+	reader, err := m.decisionReader(ctx, sess, profileID, decision)
+	if err != nil {
+		return
+	}
 	roster, _ := m.skills(ctx, sess, profileID, roots)
-	roster = eligibleSkillsForOfferedTools(roster, m.decisionOfferedTools(sess, decision))
+	roster = eligibleSkillsForOfferedTools(roster, reader.Held())
 	decision.ranking = turnload.RankSkills(ctx, m.Decider(), decision.catalog.Turn.Deadline(), text, roster)
 	decision.skill, decision.skillScore = RankedSkillPreload(decision.ranking, roster, decision.catalog.Turn.Skills)
 }
 
-func (m *Service) decisionOfferedTools(sess *api.Session, decision *Decision) map[string]bool {
-	offered := nameSet(decision.floor)
-	// The loadable set is addressable this turn (request_tools can reach it),
-	// so skills naming loadable tools stay preload-eligible, matching the
-	// contract matrix and skills_read discovery.
-	for _, name := range decision.loadable {
-		offered[name] = true
+func (m *Service) decisionReader(ctx context.Context, sess *api.Session, profileID string, decision *Decision) (prompts.Reader, error) {
+	var profiles []sandbox.ToolProfile
+	if m != nil && m.profiles != nil {
+		profiles = m.profiles(ctx, sess)
 	}
+	if len(profiles) == 0 {
+		var err error
+		profiles, err = sandbox.LoadToolProfiles()
+		if err != nil {
+			return prompts.Reader{}, err
+		}
+	}
+	loaded := nameSet(decision.loadable)
 	if m != nil && m.Ledger != nil && sess != nil {
 		for name := range m.Ledger.Active(sess.ID) {
-			offered[name] = true
+			loaded[name] = true
 		}
 	}
 	for name := range decision.decision.Tools {
-		offered[name] = true
+		loaded[name] = true
 	}
-	for mark, ok := range toolcontract.ReachMarks(offered["command"], prompts.ScopeCommandEffects(decision.state.Surface)) {
-		if ok {
-			offered[mark] = true
+	loadable := make([]string, 0, len(loaded))
+	for name := range loaded {
+		loadable = append(loadable, name)
+	}
+	surfaceID := ""
+	if decision.host == promptunit.HostCoordinator || guard.IsCoordinatorProfile(profileID) {
+		if cand := strings.TrimSpace(decision.state.Surface); prompts.IsCoordinatorSurfaceID(cand) {
+			surfaceID = cand
 		}
 	}
-	return offered
+	plan := toolsurface.Compile(decision.floor, loadable)
+	visible := append(append([]string(nil), decision.floor...), loadable...)
+	return prompts.NewReader(prompts.ReaderInput{
+		ProfileID: profileID,
+		SurfaceID: surfaceID,
+		Profiles:  profiles,
+		Plan:      plan,
+		Loaded:    loaded,
+		Visible:   visible,
+		RootCount: decision.state.RootCount,
+		WebSearch: true,
+	})
 }
 
 func eligibleSkillsForOfferedTools(roster []skills.Skill, offered map[string]bool) []skills.Skill {

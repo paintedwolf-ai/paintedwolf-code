@@ -90,22 +90,16 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	if strings.TrimSpace(in.SurfaceID) != "" {
 		scopeID = strings.TrimSpace(in.SurfaceID)
 	}
-	profiles, _ := sandbox.LoadToolProfiles()
+	base, _ := DeclaredReader(nil, scopeID)
+	profiles, _ := declaredToolProfiles(nil)
 	profileID := strings.TrimSpace(in.ProfileID)
 	if profileID == "" || in.IsCoordinator || strings.TrimSpace(in.SurfaceID) != "" {
 		profileID = CoordinatorProfileID
 	}
-	var found bool
-	for _, p := range profiles {
-		if p.ID == profileID {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !hasProfileID(profiles, profileID) {
 		profiles = append(profiles, sandbox.ToolProfile{
 			ID:             profileID,
-			CommandEffects: ScopeCommandEffects(scopeID),
+			CommandEffects: base.Effects(),
 		})
 	}
 	reader, err := NewReader(ReaderInput{
