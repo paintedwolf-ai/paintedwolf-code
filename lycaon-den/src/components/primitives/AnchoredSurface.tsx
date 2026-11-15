@@ -265,7 +265,7 @@ function yieldsEscapeToFocusedOverlay(
   anchor: AnchoredTarget | null | undefined,
   target: EventTarget | null,
 ): boolean {
-  const front = target instanceof Element ? target.closest('[aria-modal="true"], .den-find-bar') : null;
+  const front = target instanceof Element ? target.closest("[aria-modal='true'], .den-find-bar") : null;
   return Boolean(front && !surfaceContainsTarget(surface, target) && !(anchor instanceof Element && front.contains(anchor)));
 }
 
