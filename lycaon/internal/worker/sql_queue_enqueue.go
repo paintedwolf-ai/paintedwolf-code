@@ -241,7 +241,6 @@ func (q *sqlQueueClaims) FinishCanceled(ctx context.Context, jobID string, resul
 	return q.finalizeCanceled(ctx, jobID, result)
 }
 
-// Hold moves a pending job to held without terminating it.
 // ReleaseAdmitted makes a job enqueued held claimable once its worker round
 // is recorded. A job already released or canceled is left as it is.
 func (q *sqlQueueClaims) ReleaseAdmitted(ctx context.Context, jobID string) error {
@@ -254,6 +253,7 @@ func (q *sqlQueueClaims) ReleaseAdmitted(ctx context.Context, jobID string) erro
 	return nil
 }
 
+// Hold moves a pending job to held without terminating it.
 func (q *sqlQueueClaims) Hold(ctx context.Context, jobID string) error {
 	task, ok := q.Get(jobID) //nolint:contextcheck // Get has internal sqlQueueGetTimeout
 	if !ok {
