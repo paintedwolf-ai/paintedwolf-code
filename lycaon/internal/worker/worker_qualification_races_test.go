@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
@@ -27,6 +28,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerlane"
@@ -127,23 +129,30 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 	t.Helper()
 	primary := t.TempDir()
 	testutil.FailErr(t, "seed main.go", os.WriteFile(filepath.Join(primary, "main.go"), []byte("package main\n"), 0o644))
+	gittest.InitCommit(t, primary, "initial")
 	sqlDB := testdbfixture.Open(t, "worker-qual-races.db")
 	testdbseed.InsertProjectRootWithID(t, sqlDB, testdbseed.DefaultProjectID, "root-id", primary)
 	testdbseed.InsertSession(t, sqlDB, "coord", testdbseed.DefaultProjectID)
+	projects := project.NewSQLRegistry(sqlDB)
 
 	outbox := eventoutbox.New(sqlDB, nil)
 	queue := NewSQLQueue(sqlDB, 4)
 	queue.SetEventOutbox(outbox)
+	queue.SetProjectStore(projects)
 	dataDir := testbaseline.DataDir(t, sqlDB)
 	ledger := sourceledger.New(sqlDB, filepath.Join(dataDir, "source-content"))
 	queue.SetBaselineStore(ledger.Baselines)
 
 	mgr := workspace.NewManager(filepath.Join(dataDir, "worker-branches"))
+	privateGit, err := workspace.OpenPrivateGit(mgr.BranchBase())
+	testutil.FailErr(t, "open private Git", err)
+	rec := openFixtureRecovery(t, mgr.BranchBase())
+	mgr.WithPrivateGit(privateGit).WithRecovery(rec)
 	queue.SetWorkerWorkspaceManager(mgr)
 	fw := &faultWorkspaces{inner: mgr}
 	records := workerrecords.New(sqlDB)
 	ls := &mutableLaneState{inner: workerlane.NewM14State(queue)}
-	lanes := &WorkerLanes{Lanes: workerlane.New(fw, records), Records: records, State: ls}
+	lanes := &WorkerLanes{Lanes: workerlane.New(fw, records), Records: records, State: ls, Checkpoints: rec}
 	queue.SetWorkerLanes(lanes)
 
 	decisions := sessiondecisions.NewSQL(sqlDB)
@@ -171,7 +180,8 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 
 	merge := &MergeService{
 		Queue:        queue,
-		Store:        queue.store,
+		Store:        queue,
+		Projects:     projects,
 		Workspace:    mgr,
 		Reject:       rejectFmt,
 		Names:        records,
@@ -305,7 +315,11 @@ func TestSerializedPromotionRejectionAndAdmissionRaces(t *testing.T) {
 		defer close(promoteDone)
 		_, _, promoteErr = e.invoke(t, "promote_overlay", "promote-r1", map[string]any{"overlay_id": names1.Handle})
 	}()
-	<-enterRefresh
+	select {
+	case <-enterRefresh:
+	case <-promoteDone:
+		t.Fatalf("promote_overlay exited before refresh: %v", promoteErr)
+	}
 
 	instructDone := make(chan struct{})
 	var instructOut string
@@ -524,13 +538,21 @@ func TestPromotionRefreshFailureHoldAndClosedWorkerCallback(t *testing.T) {
 
 	prepBefore, okBefore, err := e.records.LatestPreparation(t.Context(), e.coord, w.ID)
 	testutil.FailErr(t, "latest prep before", err)
-	_, _, err = e.lanes.Lanes.RefreshIdle(t.Context(), workerlane.Request{
+	_, refreshed, err := e.lanes.Lanes.RefreshIdle(t.Context(), workerlane.Request{
 		Actor: e.coord, Op: workerrecords.Op{ID: "late-prep"}, WorkerID: w.ID,
 		Facts: workerlane.Facts{Write: true, HasLane: true, LastChange: workerlane.ChangeLanded},
 		Roots: e.roots, ActiveRootID: "root-id",
 	})
-	if !errors.Is(err, workerlane.ErrClosed) {
-		t.Fatalf("late preparation on closed worker = %v, want ErrClosed", err)
+	if err != nil || refreshed {
+		t.Fatalf("late idle refresh on closed worker = (refreshed=%v, err=%v), want (false, nil)", refreshed, err)
+	}
+	_, admitErr := e.lanes.Lanes.Admit(t.Context(), workerlane.Request{
+		Actor: e.coord, Op: workerrecords.Op{ID: "late-admit"}, WorkerID: w.ID,
+		Facts: workerlane.Facts{Write: true, HasLane: true, LastChange: workerlane.ChangeLanded},
+		Roots: e.roots, ActiveRootID: "root-id",
+	})
+	if !errors.Is(admitErr, workerlane.ErrClosed) {
+		t.Fatalf("late admit on closed worker = %v, want ErrClosed", admitErr)
 	}
 	prepAfter, okAfter, err := e.records.LatestPreparation(t.Context(), e.coord, w.ID)
 	testutil.FailErr(t, "latest prep after", err)
