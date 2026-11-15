@@ -235,29 +235,12 @@ func copyAndDigestCapturedMetadataToStage(layout sourceRepoLayout, stageGitDir s
 	}()
 	go func() {
 		defer wg.Done()
-		if !gitNames["index"] {
-			setDigest("index", "absent")
-			return
-		}
-		srcIndex := filepath.Join(layout.gitDir, "index")
-		idxInfo, sErr := os.Stat(srcIndex)
-		if sErr != nil {
-			setErr(sErr)
-			return
-		}
-		idxBytes, iErr := os.ReadFile(srcIndex)
+		digest, iErr := stageCapturedIndex(layout.gitDir, stageGitDir, gitNames["index"])
 		if iErr != nil {
 			setErr(iErr)
 			return
 		}
-		setDigest("index", sha256HexBytes(idxBytes))
-		dstIndex := filepath.Join(stageGitDir, "index")
-		if wErr := os.WriteFile(dstIndex, idxBytes, 0o644); wErr != nil {
-			setErr(wErr)
-			return
-		}
-		// Keep the source index timestamp so Git re-hashes same-second same-size edits under checkStat=minimal.
-		setErr(os.Chtimes(dstIndex, idxInfo.ModTime(), idxInfo.ModTime()))
+		setDigest("index", digest)
 	}()
 	go func() {
 		defer wg.Done()
@@ -353,6 +336,30 @@ func copyAndDigestCapturedMetadataToStage(layout sourceRepoLayout, stageGitDir s
 		return nil, false, firstErr
 	}
 	return digests, hasLock, nil
+}
+
+func stageCapturedIndex(gitDir, stageGitDir string, present bool) (string, error) {
+	if !present {
+		return "absent", nil
+	}
+	srcIndex := filepath.Join(gitDir, "index")
+	idxInfo, err := os.Stat(srcIndex)
+	if err != nil {
+		return "", err
+	}
+	idxBytes, err := os.ReadFile(srcIndex)
+	if err != nil {
+		return "", err
+	}
+	dstIndex := filepath.Join(stageGitDir, "index")
+	if err := os.WriteFile(dstIndex, idxBytes, 0o644); err != nil {
+		return "", err
+	}
+	// Keep the source index timestamp so Git re-hashes same-second same-size edits under checkStat=minimal.
+	if err := os.Chtimes(dstIndex, idxInfo.ModTime(), idxInfo.ModTime()); err != nil {
+		return "", err
+	}
+	return sha256HexBytes(idxBytes), nil
 }
 
 func copyOptionalStageFile(src, dst string) error {
