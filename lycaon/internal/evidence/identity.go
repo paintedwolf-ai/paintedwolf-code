@@ -143,3 +143,31 @@ func DisplayPathsForRecord(rec Record) []string {
 	}
 	return out
 }
+
+// PathIdentitiesForRecord returns the (root, scope-relative) pairs opened or
+// modified on rec in deterministic order. Grep match results do not open files
+// and are excluded.
+func PathIdentitiesForRecord(rec Record) []PathIdentity {
+	if rec.Kind == "grep" {
+		return nil
+	}
+	seen := map[PathIdentity]struct{}{}
+	out := make([]PathIdentity, 0, len(rec.pathsTouched)+1)
+	add := func(stored string) {
+		stored = NormalizeLedgerPath(stored)
+		if stored == "" {
+			return
+		}
+		id := PathIdentity{RootID: rec.pathRootID(stored), ScopeRel: stored}
+		if _, ok := seen[id]; ok {
+			return
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	add(rec.Path)
+	for _, p := range rec.pathsTouched {
+		add(p)
+	}
+	return out
+}

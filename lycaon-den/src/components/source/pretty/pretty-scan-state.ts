@@ -1,7 +1,10 @@
 import type { Text } from "@codemirror/state";
 import type { Container, Frame } from "./pretty-bracket.ts";
+import { type ChainState, INITIAL_CHAIN_STATE } from "./pretty-chain.ts";
+import { type ClauseState, INITIAL_CLAUSE_STATE } from "./pretty-clause.ts";
 import type { PrettyLexer } from "./pretty-lexers.ts";
 import type { MarkupState } from "./pretty-markup.ts";
+import type { SexpFrame } from "./pretty-sexp.ts";
 import type { TextWindow } from "./pretty-text-window.ts";
 import type { PrettyTokenSource } from "./pretty-tokens.ts";
 
@@ -28,7 +31,7 @@ export interface BracketRule {
   /** `;` separates statements. */
   readonly statements: boolean;
   /** Which tokens after a `}` start a new visual line. */
-  readonly afterBlock: "script" | "style" | null;
+  readonly afterBlock: "script" | "style" | "block" | null;
   /** Each line is its own record; containers never span lines. */
   readonly records: boolean;
   /** Protected text comes from the editor's syntax tree, so only parsed text is laid out. */
@@ -51,11 +54,24 @@ export interface ClauseRule {
   readonly kind: "clause";
 }
 
-export type PrettyRule = BracketRule | MarkupRule | ClauseRule;
+export interface SexpRule {
+  readonly kind: "sexp";
+  readonly data: boolean;
+}
+
+export interface ChainRule {
+  readonly kind: "chain";
+}
+
+export interface JsxRule {
+  readonly kind: "jsx";
+}
+
+export type PrettyRule = BracketRule | MarkupRule | ClauseRule | SexpRule | ChainRule | JsxRule;
 
 /** Whether a rule reads the editor's syntax tree and so lays out only what it has parsed. */
 export function readsSyntaxTree(rule: PrettyRule): boolean {
-  return rule.kind === "clause" || (rule.kind === "bracket" && rule.parsed);
+  return rule.kind === "clause" || rule.kind === "sexp" || (rule.kind === "bracket" && rule.parsed);
 }
 
 /** Where a document's rules apply. */
@@ -98,6 +114,8 @@ export interface Fence {
   readonly char: number;
   readonly length: number;
   readonly rule: PrettyRule | null;
+  readonly quoteDepth?: number;
+  readonly unlabelled?: boolean;
 }
 
 /** Everything a scan carries from one position to the next. */
@@ -106,9 +124,10 @@ export class ScanState {
   lexer: PrettyLexer | null = null;
   frames: Frame | null = null;
   containers: Container | null = null;
+  sexpFrames: SexpFrame | null = null;
+  chainState: ChainState = INITIAL_CHAIN_STATE;
+  clauseState: ClauseState = INITIAL_CLAUSE_STATE;
   markup: MarkupState;
-  /** Group depth whose commas break as a SQL clause list, or -1. */
-  listDepth = -1;
   fence: Fence | null = null;
   inLine = false;
   /** The current source line is laid out. */

@@ -122,8 +122,13 @@ func Resolve(path string, configs []File) Properties {
 // matched, nearest first.
 func resolveContributors(path string, configs []File) (Properties, []string) {
 	file := strings.TrimPrefix(strings.ReplaceAll(path, "\\", "/"), "./")
+	lowerFile := strings.ToLower(file)
+	isKotlin := strings.HasSuffix(lowerFile, ".kt") || strings.HasSuffix(lowerFile, ".kts")
 	var props Properties
 	var dirs []string
+	var maxLineSet bool
+	var ijKotlinWidth int
+	var ktlintDisabled bool
 	for _, config := range configs {
 		dir := strings.TrimSuffix(config.Dir, "/")
 		rel := file
@@ -136,10 +141,32 @@ func resolveContributors(path string, configs []File) (Properties, []string) {
 				continue
 			}
 			props = props.merge(section.Pairs)
+			if v, ok := section.Pairs["max_line_length"]; ok {
+				switch {
+				case isUnset(v):
+					maxLineSet = false
+				case strings.EqualFold(v, "off"):
+					maxLineSet = true
+				default:
+					if _, valid := boundedInt(v, 10_000); valid {
+						maxLineSet = true
+					}
+				}
+			}
+			if isKotlin {
+				ijKotlinWidth, ktlintDisabled = mergeKotlinLineState(ijKotlinWidth, ktlintDisabled, section.Pairs)
+			}
 			matched = true
 		}
 		if matched {
 			dirs = append([]string{config.Dir}, dirs...)
+		}
+	}
+	if isKotlin {
+		if ktlintDisabled {
+			props.MaxLineLength = 0
+		} else if !maxLineSet {
+			props.MaxLineLength = ijKotlinWidth
 		}
 	}
 	return props, dirs
@@ -211,6 +238,26 @@ func (p Properties) merge(raw map[string]string) Properties {
 		}
 	}
 	return next
+}
+
+// mergeKotlinLineState updates `ij_kotlin_max_line_length` and `ktlint_standard_max-line-length`.
+func mergeKotlinLineState(ijWidth int, ktlintDisabled bool, raw map[string]string) (int, bool) {
+	if v, ok := raw["ij_kotlin_max_line_length"]; ok {
+		if isUnset(v) || strings.EqualFold(v, "off") {
+			ijWidth = 0
+		} else if n, valid := boundedInt(v, 10_000); valid {
+			ijWidth = n
+		}
+	}
+	if v, ok := raw["ktlint_standard_max-line-length"]; ok {
+		switch strings.ToLower(v) {
+		case "disabled":
+			ktlintDisabled = true
+		case "enabled", "unset":
+			ktlintDisabled = false
+		}
+	}
+	return ijWidth, ktlintDisabled
 }
 
 func mergeBool(current *bool, raw string) *bool {
