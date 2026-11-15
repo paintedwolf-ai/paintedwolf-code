@@ -176,6 +176,11 @@ func load(cfg Config, goos string) (*pass, error) {
 			continue
 		}
 		pos := prog.Fset.Position(s.fn.Pos())
+		// cgo writes its generated sources to the build cache; only the
+		// module's own files can be edited.
+		if !strings.HasPrefix(pos.Filename, cfg.Dir+string(filepath.Separator)) {
+			continue
+		}
 		p.compiled[s.key] = archlint.Finding{
 			Kind: KindDeadFunc, Key: s.key, Pos: relPos(cfg.Dir, pos),
 			Message: "no shipped program reaches " + s.key,
