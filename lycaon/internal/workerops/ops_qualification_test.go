@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerrecords"
@@ -28,7 +30,7 @@ func stateMatrixCells() []stateCell {
 			setup: func(t *testing.T) (*fixture, string) {
 				f := newFixture(t)
 				w, err := f.records.CreateWorker(t.Context(), f.coord, op("create-planned"), workerrecords.WorkerSpec{
-					Name: "planned-leg", AgentType: "implementer", ScopeMode: "write", LegID: "leg-1", WorkflowWorkID: "work-1",
+					Name: "planned-leg", AgentType: "implementer", ScopeMode: "write", DelegationID: "del-1", LegID: "leg-1",
 				})
 				testutil.FailErr(t, "create planned", err)
 				f.workerID = w.WorkerID
@@ -259,7 +261,9 @@ func verifyStopCell(t *testing.T, cell stateCell, view workerstate.View) {
 	testutil.FailErr(t, "worker", err)
 	stop, err := f.svc.Stop(t.Context(), f.coord, op("stop-matrix"), w.Name, "stop test", func(_ context.Context, jobID string) error {
 		if round, ok, rerr := f.records.RoundByJob(t.Context(), jobID); rerr == nil && ok && round.SettledAt == "" {
-			_, serr := f.records.SettleRound(t.Context(), f.coord, op("settle-"+jobID), f.workerID, jobID, "")
+			_, serr := db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{
+				SettledAt: db.NullString(now()), JobID: jobID,
+			})
 			return serr
 		}
 		return nil
@@ -405,17 +409,24 @@ func TestAgentTransitionRefusalAndResolutionMatrix(t *testing.T) {
 		t.Fatalf("receipt = %+v", receipt)
 	}
 
-	// Planned/workflow-bound worker seals its agent across rounds.
+	// Planned leg worker seals its agent across rounds.
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
+		VALUES ('child-bound', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now(), now(), now())
+	testutil.FailErr(t, "insert child-bound", err)
 	pw, err := f.records.CreateWorker(t.Context(), f.coord, op("create-bound"), workerrecords.WorkerSpec{
-		Name: "bound-leg", AgentType: "repo-researcher", ScopeMode: "read", ChildSessionID: "child", LegID: "leg-a", WorkflowWorkID: "work-a",
+		Name: "bound-leg", AgentType: "repo-researcher", ScopeMode: "read", ChildSessionID: "child-bound", DelegationID: "del-a", LegID: "leg-a",
 	})
 	testutil.FailErr(t, "create bound", err)
-	f.job(t, "bound-job-1", api.WorkerStatusRunning, "")
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO worker_jobs (id, project_id, parent_session_id, child_session_id, agent_type, status, prompt, brief, created_at)
+		VALUES ('bound-job-1', ?, 'coord', 'child-bound', 'repo-researcher', 'running', 'p', 'b', ?)`, testdbseed.DefaultProjectID, now())
+	testutil.FailErr(t, "insert bound job", err)
 	_, err = f.records.AdmitRound(t.Context(), f.coord, op("admit-bound-1"), pw.WorkerID, workerrecords.RoundSpec{JobID: "bound-job-1", ExecutionTarget: "local"})
 	testutil.FailErr(t, "admit bound", err)
 	_, err = f.db.ExecContext(t.Context(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES ('result-bound-1', 'bound-job-1', 'complete', ?)`, now())
 	testutil.FailErr(t, "insert bound result", err)
-	_, err = f.records.SettleRound(t.Context(), f.coord, op("settle-bound-1"), pw.WorkerID, "bound-job-1", "")
+	_, err = db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{
+		SettledAt: db.NullString(now()), JobID: "bound-job-1",
+	})
 	testutil.FailErr(t, "settle bound", err)
 	f.jobs["bound-job-1"] = &api.WorkerTask{ID: "bound-job-1", Status: api.WorkerStatusComplete, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}}
 
@@ -424,7 +435,7 @@ func TestAgentTransitionRefusalAndResolutionMatrix(t *testing.T) {
 	}, func(_ context.Context, _ workerops.RoundJob) (string, string, error) {
 		return "bound-job-" + strconv.Itoa(len(f.enqueued)+1), "local", nil
 	})
-	if !errors.As(err, &refusal) || refusal.AgentChange != workerstate.AgentChangeSealed || refusal.WorkflowWorkID != "work-a" {
+	if !errors.As(err, &refusal) || refusal.AgentChange != workerstate.AgentChangeSealed || refusal.LegID != "leg-a" {
 		t.Fatalf("bound agent change = %v (%+v), want sealed role", err, refusal)
 	}
 }
