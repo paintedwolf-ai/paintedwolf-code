@@ -63,14 +63,3 @@ func RenderOverlayParentRejectedBanners(ctx context.Context, parentOverlayID str
 	}
 	return out.String(), nil
 }
-
-// RenderSynthesizedSurveyPreamble renders enrich/worker-survey-preamble.md for host-compiled surveys.
-func RenderSynthesizedSurveyPreamble(ctx context.Context, agentType string) (string, error) {
-	block, err := RenderGuidance(ctx, "enrich/worker-survey-preamble", map[string]any{
-		"agent_type": strings.TrimSpace(agentType),
-	})
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(block), nil
-}
