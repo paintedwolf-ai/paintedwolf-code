@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -509,5 +510,45 @@ func TestMountedDirectMutableGitCoherenceLockContentionAndStoreStockMetrics(t *t
 		if e.Name == "live-branch" {
 			t.Fatalf("expected deleted ref live-branch to be absent from Core.ReadDir")
 		}
+	}
+}
+
+func TestCapturedIndexPreservesModTimeForSameSecondSameSizeEdits(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	trunk := filepath.Join(tmp, "trunk")
+	testutil.FailErr(t, "mkdir trunk", os.MkdirAll(trunk, 0o755))
+	gittest.Init(t, trunk)
+	gittest.Run(t, trunk, "checkout", "-b", "main")
+
+	unstagedPath := filepath.Join(trunk, "unstaged.txt")
+	cleanPath := filepath.Join(trunk, "clean.txt")
+	testutil.FailErr(t, "write unstaged v1", os.WriteFile(unstagedPath, []byte("unstaged-v1\n"), 0o644))
+	testutil.FailErr(t, "write clean", os.WriteFile(cleanPath, []byte("clean-v1\n"), 0o644))
+	gittest.CommitAll(t, trunk, "seed")
+
+	baseSec := time.Now().Truncate(time.Second).Add(-5 * time.Second)
+	testutil.FailErr(t, "chtimes unstaged v1", os.Chtimes(unstagedPath, baseSec, baseSec))
+	testutil.FailErr(t, "chtimes clean", os.Chtimes(cleanPath, baseSec, baseSec))
+	gittest.Run(t, trunk, "update-index", "-q", "--refresh")
+	srcIdx := filepath.Join(trunk, ".git", "index")
+	testutil.FailErr(t, "chtimes index", os.Chtimes(srcIdx, baseSec, baseSec))
+
+	// Simulate an unstaged edit of identical byte length within the same whole second the index was written.
+	testutil.FailErr(t, "write unstaged v2", os.WriteFile(unstagedPath, []byte("unstaged-v2\n"), 0o644))
+	testutil.FailErr(t, "chtimes unstaged v2", os.Chtimes(unstagedPath, baseSec, baseSec))
+	testutil.FailErr(t, "chtimes clean +1s", os.Chtimes(cleanPath, baseSec.Add(time.Second), baseSec.Add(time.Second)))
+
+	mgr := newTestManager(t, tmp)
+	_ = newMountedViewWithManager(t, mgr, "view-racy", trunk)
+	wtDir, finish, managed, err := PrepareViewGitOperation(t.Context(), trunk, "worker-view-racy")
+	testutil.FailErr(t, "PrepareViewGitOperation", err)
+	if !managed {
+		t.Fatalf("expected managed mounted view")
+	}
+	stOut, code, err := gitexec.Run(t.Context(), wtDir, []string{"status", "--porcelain=v1"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
+	testutil.FailErr(t, "finish prepare", finish())
+	if err != nil || code != 0 || !strings.Contains(string(stOut), " M unstaged.txt") {
+		t.Fatalf("expected same-second same-size unstaged edit to remain dirty, got (code %d, err %v):\n%s", code, err, string(stOut))
 	}
 }
