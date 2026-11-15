@@ -21,7 +21,7 @@ func TestOrchestratorFanOutMarksWorkflowStage(t *testing.T) {
 
 	wfRun, err := wfMgr.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID:      "recon-pack",
-		WorkflowVersion: "1.0.0",
+		WorkflowVersion: "1.0.1",
 	})
 	testutil.FailErr(t, "wfMgr.Starts.StartHuman failed", err)
 
@@ -45,7 +45,7 @@ func TestOrchestratorFanOutMarksWorkflowStage(t *testing.T) {
 			"project_id":       testdbseed.DefaultProjectID,
 			"workflow_run_id":  wfRun.ID,
 			"workflow_id":      "recon-pack",
-			"workflow_version": "1.0.0",
+			"workflow_version": "1.0.1",
 		},
 	})
 	testutil.FailErr(t, "orch.Run failed", err)

@@ -79,8 +79,7 @@ type Dependencies struct {
 	WorkflowRunParams     func(context.Context, string, string, string) (map[string]any, error)
 	OnDelta               func(context.Context, api.CodeScan, []api.SecurityFinding, []api.SecurityFinding)
 	OnScanDone            func(context.Context, api.CodeScan)
-	RetryCloseout         func(context.Context, string) error
-	OnSessionScanComplete func(context.Context, string)
+	OnScanCloseout        func(context.Context, api.CodeScan) error
 	WorkflowTerminals     func(context.Context, string) error
 	BindMovedFiles        func(context.Context, api.CodeScan) error
 }
@@ -197,10 +196,8 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		if deps.WorkflowTerminals != nil {
 			_ = deps.WorkflowTerminals(c, completed.ID)
 		}
-		if completed.DelegationID != "" && deps.RetryCloseout != nil {
-			_ = deps.RetryCloseout(c, completed.DelegationID)
-		} else if completed.SessionID != "" && deps.OnSessionScanComplete != nil {
-			deps.OnSessionScanComplete(c, completed.SessionID)
+		if deps.OnScanCloseout != nil {
+			_ = deps.OnScanCloseout(c, completed)
 		}
 	}
 	runner.ReconcileTerminal = func(c context.Context) error {

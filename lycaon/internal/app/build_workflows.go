@@ -103,13 +103,7 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 		OnScanDone: func(ctx context.Context, completed api.CodeScan) {
 			b.sessions.Manager.Coordinator.Scans.Finished(ctx, completed)
 		},
-		RetryCloseout: func(ctx context.Context, delegationID string) error {
-			if b.delegations != nil && b.delegations.Manager != nil {
-				return b.delegations.Manager.RetryCloseout(ctx, delegationID)
-			}
-			return nil
-		},
-		OnSessionScanComplete: b.delegations.NotifySettledPlanCloseout,
+		OnScanCloseout: b.delegations.OnScanCloseout,
 		WorkflowTerminals: func(ctx context.Context, scanID string) error {
 			return scanning.ReconcileTerminals(ctx, b.scanning.Store, scanID, b.workflows.Manager.Obligations.RecordObligationTerminal)
 		},

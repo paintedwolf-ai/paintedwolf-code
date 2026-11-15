@@ -24,7 +24,7 @@ func TestReconProgressiveScoutCanReportOrDrill(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mgr, _, _, projectDir := testManagerWithRegistry(t)
 			ctx := context.Background()
-			run, err := startRun(ctx, mgr, "sess-1", "recon-pack", "1.0.0")
+			run, err := startRun(ctx, mgr, "sess-1", "recon-pack", "1.0.1")
 			testutil.FailErr(t, "start recon", err)
 			if run.CurrentPhase != "plan" {
 				t.Fatalf("start phase = %q want plan", run.CurrentPhase)
