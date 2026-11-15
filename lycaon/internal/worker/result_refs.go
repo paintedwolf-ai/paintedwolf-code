@@ -62,8 +62,8 @@ func overlayHandles(ctx context.Context, refs JobNamer, jobIDs []string) []strin
 	return out
 }
 
-// nameOverlaps names the sibling results a merge result refers to by their
-// handles. Path rows are copied first: the promotion cache keeps their jobs.
+// nameOverlaps names the sibling and stacked results a merge result refers to by
+// their handles. Rows are copied first: the promotion cache keeps their jobs.
 func (s *MergeService) nameOverlaps(ctx context.Context, out *api.WorkerMergeResult) {
 	if s == nil || out == nil {
 		return
@@ -75,5 +75,11 @@ func (s *MergeService) nameOverlaps(ctx context.Context, out *api.WorkerMergeRes
 	for i := range out.PathStatus {
 		out.PathStatus[i].PromoteAfter = overlayHandles(ctx, s.Names, out.PathStatus[i].PromoteAfter)
 		out.PathStatus[i].BlockedBy = overlayHandles(ctx, s.Names, out.PathStatus[i].BlockedBy)
+	}
+	out.Rebased = slices.Clone(out.Rebased)
+	for i := range out.Rebased {
+		if handles := overlayHandles(ctx, s.Names, []string{out.Rebased[i].OverlayID}); len(handles) == 1 {
+			out.Rebased[i].OverlayID = handles[0]
+		}
 	}
 }

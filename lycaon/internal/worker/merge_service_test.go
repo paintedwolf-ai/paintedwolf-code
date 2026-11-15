@@ -2,12 +2,16 @@ package worker_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
@@ -576,5 +580,30 @@ func TestPromoteOverlayInvalidResolutionLeavesCleanPathsUntouched(t *testing.T) 
 	}
 	if _, statErr := os.Stat(filepath.Join(dir, "safe.go")); !os.IsNotExist(statErr) {
 		t.Fatalf("clean path changed before conflict resolution: %v", statErr)
+	}
+}
+
+type mergeNamesStub map[string]workerrecords.JobNames
+
+func (n mergeNamesStub) NamesByJob(_ context.Context, jobID string) (workerrecords.JobNames, bool, error) {
+	names, ok := n[jobID]
+	return names, ok, nil
+}
+
+// Refusing a result that is no longer pending names the worker and its result handle, never the job.
+func TestRejectOverlayNotPendingNamesTheResult(t *testing.T) {
+	task := &api.WorkerTask{ID: "job-9", ParentSessionID: "parent-1", MergeStatus: api.WorkerMergeStatusMerged}
+	svc := &worker.MergeService{
+		Queue:  &mergeQueueStub{task: task},
+		Reject: mergeRejectFmt(t),
+		Names:  mergeNamesStub{"job-9": {Worker: "parser-fix", Handle: "result-9"}},
+	}
+	_, err := svc.RejectOverlay(t.Context(), "parent-1", "job-9", "no longer needed")
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != worker.OverlayPromoteNotPendingCode {
+		t.Fatalf("err = %v, want %s", err, worker.OverlayPromoteNotPendingCode)
+	}
+	if reject.Data["overlay_id"] != "result-9" || reject.Data["worker"] != "parser-fix" || reject.Data["job_id"] != nil {
+		t.Fatalf("reject data = %v, want the worker and result handle without the job", reject.Data)
 	}
 }

@@ -26,10 +26,6 @@ FROM workers WHERE session_id = ? ORDER BY created_at, id;
 -- name: CountSessionWorkersByAgent :one
 SELECT COUNT(*) FROM workers WHERE session_id = ? AND agent_type = ?;
 
--- name: BindWorkerChildSession :execrows
-UPDATE workers SET child_session_id = sqlc.arg(child_session_id), updated_at = sqlc.arg(updated_at)
-WHERE id = sqlc.arg(id) AND child_session_id IS NULL;
-
 -- name: CloseWorker :execrows
 UPDATE workers SET closed_at = sqlc.arg(closed_at), closed_reason = sqlc.arg(closed_reason), updated_at = sqlc.arg(closed_at)
 WHERE id = sqlc.arg(id) AND closed_at IS NULL;
@@ -118,11 +114,6 @@ SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal
 FROM worker_messages
 WHERE worker_id = sqlc.arg(worker_id) AND seq < sqlc.arg(before_seq)
 ORDER BY seq DESC LIMIT sqlc.arg(page_limit);
-
--- name: GetWorkerMessage :one
-SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
-       body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
-FROM worker_messages WHERE worker_id = ? AND seq = ?;
 
 -- name: GetWorkerMessageDelivery :one
 SELECT worker_id, recipient_session_id, generation, delivered_through_seq,
@@ -222,10 +213,6 @@ FROM worker_dependencies WHERE worker_id = ? ORDER BY created_at, dependency_key
 -- name: ListWorkerProducerIDs :many
 SELECT producer_worker_id FROM worker_dependencies
 WHERE worker_id = ? AND producer_worker_id IS NOT NULL ORDER BY producer_worker_id;
-
--- name: ListWorkerConsumerIDs :many
-SELECT worker_id FROM worker_dependencies
-WHERE producer_worker_id = ? ORDER BY worker_id;
 
 -- name: GetWorkerOperation :one
 SELECT operation_id, session_id, kind, request_digest, receipt_json, created_at
