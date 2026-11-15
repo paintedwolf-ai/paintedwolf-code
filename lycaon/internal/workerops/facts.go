@@ -151,6 +151,7 @@ func (r Reader) round(ctx context.Context, w workerrecords.Worker, latest worker
 			out.Queued = true
 		case api.WorkerStatusWaiting:
 			out.Parked = true
+		default:
 		}
 	}
 	child := w.ChildSessionID
