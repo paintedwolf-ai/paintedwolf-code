@@ -119,14 +119,9 @@ func (m *Manager) openLayeredServices() (*layeredServices, error) {
 			return nil, err
 		}
 	}
-	selector := m.selector
-	if selector == nil {
-		selector = DefaultWorkspaceSelector()
-		m.selector = selector
-	}
 	return &layeredServices{
 		privateGit: gitManager, recovery: claims, retention: durableRetention{claims: claims},
-		coordinator: claim.NewCoordinator(selector),
+		coordinator: claim.NewCoordinator(m.selector),
 	}, nil
 }
 

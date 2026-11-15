@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -28,7 +29,7 @@ func TestClaimNextDoesNotProvisionBranch(t *testing.T) {
 
 	q := NewSQLQueue(sqlDB, 4)
 	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
-	q.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches")))
+	q.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), platform.NewSelector(platform.Config{})))
 
 	id, err := q.Enqueue(context.Background(), api.WorkerTask{
 		ProjectID:       testdbseed.DefaultProjectID,
@@ -111,7 +112,7 @@ func TestClaimWorkerBranchMountedViewSkipsBaselineTreeWalkAndExposesWorkspaceSta
 	sel := adapter.NewSelector(runtime.GOOS, mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter())
 	sel.BudgetFor = adapter.ZeroBudget
 	sel.Confinement = fixtureConfinement{}
-	wsMgr := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches")).WithSelector(sel)
+	wsMgr := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), sel)
 
 	q := NewSQLQueue(sqlDB, 4)
 	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)

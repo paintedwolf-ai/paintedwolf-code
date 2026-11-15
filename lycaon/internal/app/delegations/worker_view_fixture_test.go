@@ -3,6 +3,7 @@ package delegations
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -76,6 +77,8 @@ type engineFixture struct {
 	writeHook func(dir, name string, raw []byte) error
 	faults    recovery.FaultInjector
 	engine    *Runtime
+	// selector is the next boot's workspace selector; nil means this host's unenforced selector.
+	selector *adapter.Selector
 }
 
 func newEngineFixture(t *testing.T) *engineFixture {
@@ -115,11 +118,19 @@ func (f *engineFixture) boot() *Runtime {
 	})
 	testutil.FailErr(f.t, "open coordinator", err)
 	engine.Recovery = coordinator
-	engine.Workspace = workspace.NewManager(engine.BranchRoot).WithRecovery(coordinator)
-	engine.Queue.SetWorkerWorkspaceManager(engine.Workspace)
-	engine.Queue.SetBaselineStore(sourceledger.New(f.database, filepath.Join(f.dataRoot, "source-content")).Baselines)
 	f.engine = engine
+	f.bindWorkspace(f.selector)
+	engine.Queue.SetBaselineStore(sourceledger.New(f.database, filepath.Join(f.dataRoot, "source-content")).Baselines)
 	return engine
+}
+
+// bindWorkspace gives the running engine a workspace manager that chooses adapters with selector.
+func (f *engineFixture) bindWorkspace(selector *adapter.Selector) {
+	if selector == nil {
+		selector = platform.NewSelector(platform.Config{})
+	}
+	f.engine.Workspace = workspace.NewManager(f.engine.BranchRoot, selector).WithRecovery(f.engine.Recovery)
+	f.engine.Queue.SetWorkerWorkspaceManager(f.engine.Workspace)
 }
 
 // mountedSelector makes the ordinary claim path prepare a mounted view without a kernel mount.
@@ -142,7 +153,7 @@ func mountedSelector() *adapter.Selector {
 func (f *engineFixture) claimMountedWorker() *api.WorkerTask {
 	f.t.Helper()
 	ctx := f.t.Context()
-	f.engine.Workspace.WithSelector(mountedSelector())
+	f.bindWorkspace(mountedSelector())
 	id, err := f.engine.Queue.Enqueue(ctx, api.WorkerTask{
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: f.project, WorkspaceRootID: "root-id",
 		Scope:     &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}},

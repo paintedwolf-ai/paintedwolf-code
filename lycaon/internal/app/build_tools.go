@@ -136,6 +136,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		},
 	}
 	workerMergeSvc.Evidence = worker.SourceEvidenceContext{
+		Workspaces:     b.sessions.Manager.Workers.Workspaces,
 		SourceRevision: b.sessions.Manager.Verification.WorkerRevision,
 		DeclaredCommand: func(ctx context.Context, task *wire.WorkerTask) string {
 			if task == nil {

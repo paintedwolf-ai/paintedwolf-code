@@ -499,7 +499,7 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	childHistory, err := mem.GetMessages(ctx, child.ID)
 	testutil.FailErr(t, "GetMessages", err)
 
-	// 1. Unobserved lower source change via real repochange.Notify keeps GateState and OverlaySourceProof valid.
+	// 1. Unobserved lower source change via real repochange.Notify keeps GateState and the source proof valid.
 	testutil.FailErr(t, "WriteFile unrelated", os.WriteFile(filepath.Join(primary, "unrelated.py"), []byte("u = 2\n"), 0o644))
 	repochange.Notify(ctx, repochange.Event{
 		ProjectDir: primary,
@@ -512,7 +512,7 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	}
 	proofFresh := session.OverlaySourceProofWithWorkspaces(workerCtx, mgr.Workers.Workspaces, task, childHistory, "selected-check", curRev)
 	if status, _, _ := workercompletion.SourceEvidenceView(proofFresh); status != workercompletion.EvidenceStatusSatisfied {
-		t.Fatalf("expected unobserved lower change to preserve satisfied OverlaySourceProof, got %s", status)
+		t.Fatalf("expected unobserved lower change to preserve a satisfied source proof, got %s", status)
 	}
 
 	// 2. Lower source change on a dirty upper override (dirty_upper.py) via repochange.Notify stays pinned and immune.
@@ -531,7 +531,7 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	}
 
 	// 3. Lower source change on observed pkg/dep.py via real repochange.Notify invalidates GateState &
-	// OverlaySourceProof and queues trunk.changed.
+	// the source proof and queues trunk.changed.
 	testutil.FailErr(t, "WriteFile dep v2", os.WriteFile(filepath.Join(primary, "pkg", "dep.py"), []byte("dep = 2\n"), 0o644))
 	repochange.Notify(ctx, repochange.Event{
 		ProjectDir: primary,
@@ -665,9 +665,9 @@ func assertObservedChangeInvalidatesProof(
 	depPath layeredfs.QualifiedPath,
 ) {
 	t.Helper()
-	proofStale := session.OverlaySourceProof(workerworkspace.WithService(workerCtx, mgr.Workers.Workspaces), task, childHistory, "selected-check", curRev)
+	proofStale := session.OverlaySourceProofWithWorkspaces(workerCtx, mgr.Workers.Workspaces, task, childHistory, "selected-check", curRev)
 	if status, _, _ := workercompletion.SourceEvidenceView(proofStale); status == workercompletion.EvidenceStatusSatisfied {
-		t.Fatalf("expected observed dependency change via repochange.Notify to invalidate OverlaySourceProof receipt, got %s", status)
+		t.Fatalf("expected observed dependency change via repochange.Notify to invalidate the source proof receipt, got %s", status)
 	}
 	assessment, ok := session.OverlayObservationAssessmentWithWorkspaces(mgr.Workers.Workspaces, task)
 	if !ok || !assessment.VerificationInvalidated || !assessment.Freshness.Stale || assessment.Freshness.StaleReason != observation.StaleReasonObservedDependencyChanged {

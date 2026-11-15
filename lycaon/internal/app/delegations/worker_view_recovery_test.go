@@ -610,8 +610,8 @@ func TestRebuiltMountedViewPublishesAndSettlesLikeAClaimedOne(t *testing.T) {
 	mutate(t, view, "checkpoint-A\n")
 	f.publish(task, view, "cp-A")
 
+	f.selector = mountedSelector()
 	engine := f.boot()
-	engine.Workspace.WithSelector(mountedSelector())
 	testutil.FailErr(t, "startup recovery", engine.RecoverWorkerViews(t.Context()))
 
 	root := task.WorkspaceRoot

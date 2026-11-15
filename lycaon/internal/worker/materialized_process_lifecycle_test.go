@@ -126,14 +126,14 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	branches := filepath.Join(testbaseline.DataDir(t, database), "worker-branches")
 	gitManager, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	selector := workspace.DefaultWorkspaceSelector()
+	selector := platform.NewSelector(platform.Config{})
 	selector.BudgetFor = func(class adapter.BudgetClass) adapter.BudgetFact {
 		return adapter.BudgetFact{Class: class, Limit: 1 << 20, EntryCost: 1}
 	}
 	if mounted {
 		confine.TestingSetAutoConfine(t)
 		t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(branches))
-		selector = workspace.EnforcedWorkspaceSelector()
+		selector = workspace.HostSelector()
 		selector.BudgetFor = adapter.ZeroBudget
 	}
 	recoveryRoot := filepath.Join(branches, ".adapter", "recovery")
@@ -150,7 +150,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 		MountReconciler: recovery.ConnectionReconciler{Recoveries: platform.ConnectionRecoveries()},
 	})
 	testutil.FailErr(t, "open recovery coordinator", err)
-	manager := workspace.NewManager(branches).WithPrivateGit(gitManager).WithSelector(selector).WithRecovery(coordinator)
+	manager := workspace.NewManager(branches, selector).WithPrivateGit(gitManager).WithRecovery(coordinator)
 	queue := NewSQLQueue(database, 4)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(root, "source-content")).Baselines)
 	queue.SetWorkerWorkspaceManager(manager)

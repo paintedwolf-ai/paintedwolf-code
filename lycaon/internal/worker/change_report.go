@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workerworkspace"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -67,6 +68,9 @@ func BuildChangeReport(ctx context.Context, task api.WorkerTask, deps ChangeRepo
 
 // SourceEvidenceContext supplies source identity for advisory validation evidence.
 type SourceEvidenceContext struct {
+	// Workspaces owns the observation trackers that invalidate receipts made stale by source changes.
+	// Without it no receipt can be proved current, so evidence is unmet.
+	Workspaces      *workerworkspace.Service
 	DeclaredCommand func(context.Context, *api.WorkerTask) string
 	SourceRevision  func(context.Context, *api.WorkerTask) workercompletion.SourceRevision
 }

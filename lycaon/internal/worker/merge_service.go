@@ -225,7 +225,11 @@ func (s mergeEngine) attachSourceEvidence(ctx context.Context, task *api.WorkerT
 	if s.MergeService == nil || out == nil || task == nil {
 		return
 	}
-	proof := session.OverlaySourceProof(ctx, task, s.overlayMessages(ctx, task), s.Evidence.command(ctx, task), s.Evidence.revision(ctx, task))
+	if s.Evidence.Workspaces == nil {
+		out.SourceEvidence = &api.WorkerSourceEvidence{Kind: "source_validation", Status: workercompletion.EvidenceStatusUnmet, Reason: "Workspace observations are unavailable."}
+		return
+	}
+	proof := session.OverlaySourceProofWithWorkspaces(ctx, s.Evidence.Workspaces, task, s.overlayMessages(ctx, task), s.Evidence.command(ctx, task), s.Evidence.revision(ctx, task))
 	if s.Reports.SourceRuns != nil {
 		runs, err := s.Reports.SourceRuns(ctx, task.ChildSessionID)
 		if err != nil {

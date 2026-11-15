@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,12 +56,12 @@ func openMaterializedRecovery(t *testing.T, branches string) *recovery.Coordinat
 	return coordinator
 }
 
-func newMaterializedManager(t *testing.T, branches string) *Manager {
+func newMaterializedManager(t *testing.T, branches string, selector *adapter.Selector) *Manager {
 	t.Helper()
 	coordinator := openMaterializedRecovery(t, branches)
 	gitManager, err := OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	return NewManager(branches).WithRecovery(coordinator).WithPrivateGit(gitManager)
+	return NewManager(branches, selector).WithRecovery(coordinator).WithPrivateGit(gitManager)
 }
 
 func manifestByPath(t *testing.T, store *checkpoint.Store, checkpointID string) map[string]checkpoint.ManifestEntry {
@@ -77,7 +78,7 @@ func manifestByPath(t *testing.T, store *checkpoint.Store, checkpointID string) 
 func TestCompletionCheckpointTakesBaseBytesFromThePristineTree(t *testing.T) {
 	source := materializedSource(t)
 	branches := t.TempDir()
-	mgr := newMaterializedManager(t, branches)
+	mgr := newMaterializedManager(t, branches, platform.NewSelector(platform.Config{}))
 	binding, err := mgr.CreateWorkerWorkspace(t.Context(), source, "job-base")
 	testutil.FailErr(t, "create", err)
 	if binding.Selection.Selection.Reason != adapter.SelectionUnderBudget {
@@ -151,7 +152,7 @@ func TestACopyThatPassesItsBudgetMovesOnToTheMount(t *testing.T) {
 		return adapter.BudgetFact{Class: class, Limit: 30, EntryCost: 1}
 	}
 	branches := t.TempDir()
-	mgr := newMaterializedManager(t, branches).WithSelector(selector)
+	mgr := newMaterializedManager(t, branches, selector)
 	mgr.cloneProbe = func(context.Context, string) (bool, error) { return true, nil }
 	mgr.cloneFile = func(string, string) (bool, error) { return false, nil }
 
@@ -182,7 +183,7 @@ func TestTheCostIsDeclaredBeforeTheFirstCopy(t *testing.T) {
 	selector.BudgetFor = func(class adapter.BudgetClass) adapter.BudgetFact {
 		return adapter.BudgetFact{Class: class, Limit: 100_000, EntryCost: 1000}
 	}
-	mgr := newMaterializedManager(t, t.TempDir()).WithSelector(selector)
+	mgr := newMaterializedManager(t, t.TempDir(), selector)
 	mgr.cloneProbe = func(context.Context, string) (bool, error) { return false, nil }
 	var declaredBeforeCopy atomic.Bool
 	var declared atomic.Int64
@@ -220,7 +221,7 @@ func TestAWorkspaceTheDiskCannotHoldIsRefused(t *testing.T) {
 	saved := queryAvailableStorageBytes
 	t.Cleanup(func() { queryAvailableStorageBytes = saved })
 	queryAvailableStorageBytes = func(string) (uint64, bool, error) { return 16, true, nil }
-	mgr := NewManager(t.TempDir())
+	mgr := NewManager(t.TempDir(), platform.NewSelector(platform.Config{}))
 	_, err := mgr.CreateWorkerWorkspace(t.Context(), materializedSource(t), "job-full")
 	var capacity *adapter.WorkspaceCapacityError
 	if !errors.As(err, &capacity) || capacity.Available != 16 || !errors.Is(err, ErrWorkspaceStorageExhausted) {
@@ -232,7 +233,7 @@ func TestRestartReDerivesChangesAndRepositoryState(t *testing.T) {
 	source := materializedSource(t)
 	gittest.InitCommit(t, source, "initial")
 	branches := t.TempDir()
-	first := newMaterializedManager(t, branches)
+	first := newMaterializedManager(t, branches, platform.NewSelector(platform.Config{}))
 	binding, err := first.CreateWorkerWorkspace(t.Context(), source, "job-restart")
 	testutil.FailErr(t, "create", err)
 	root := binding.Root
@@ -244,7 +245,7 @@ func TestRestartReDerivesChangesAndRepositoryState(t *testing.T) {
 	// Nothing in memory crosses a restart.
 	releaseBranchClaimState(root)
 	sharedBranchViews.Delete(filepath.Clean(root))
-	next := newMaterializedManager(t, branches)
+	next := newMaterializedManager(t, branches, platform.NewSelector(platform.Config{}))
 	_, err = next.RecoverWorkerViews(t.Context())
 	testutil.FailErr(t, "startup recovery", err)
 
@@ -282,7 +283,7 @@ func TestRestartReDerivesChangesAndRepositoryState(t *testing.T) {
 
 func TestEvictedMaterializedBranchRebuildsFromItsCheckpoint(t *testing.T) {
 	source := materializedSource(t)
-	mgr := newMaterializedManager(t, t.TempDir())
+	mgr := newMaterializedManager(t, t.TempDir(), platform.NewSelector(platform.Config{}))
 	binding, err := mgr.CreateWorkerWorkspace(t.Context(), source, "job-evict")
 	testutil.FailErr(t, "create", err)
 	root := binding.Root
@@ -326,7 +327,7 @@ func TestEvictedMaterializedBranchRebuildsFromItsCheckpoint(t *testing.T) {
 
 func TestCanceledWorkKeepsOnlyWhatChanged(t *testing.T) {
 	source := materializedSource(t)
-	mgr := newMaterializedManager(t, t.TempDir())
+	mgr := newMaterializedManager(t, t.TempDir(), platform.NewSelector(platform.Config{}))
 	binding, err := mgr.CreateWorkerWorkspace(t.Context(), source, "job-cancel")
 	testutil.FailErr(t, "create", err)
 	testutil.FailErr(t, "edit", os.WriteFile(filepath.Join(binding.Root, "main.go"), []byte("package edited\n"), 0o644))
@@ -354,7 +355,7 @@ func TestOneMaterializedViewServesEveryRoot(t *testing.T) {
 		{ID: "p", Label: "primary", Path: primary, IsPrimary: true},
 		{ID: "s", Label: "secondary", Path: secondary},
 	}
-	mgr := newMaterializedManager(t, t.TempDir())
+	mgr := newMaterializedManager(t, t.TempDir(), platform.NewSelector(platform.Config{}))
 	binding, _, err := mgr.CreateWorkerWorkspaceFromSources(t.Context(), roots, roots, "p", "job-roots")
 	testutil.FailErr(t, "create", err)
 	if len(binding.View.Roots) != 2 {
@@ -420,7 +421,7 @@ func TestMaterializedBranchRecoveryFailsClosedOnMissingGitObjectsOrSymlinkEscape
 	source := materializedSource(t)
 	gittest.InitCommit(t, source, "initial")
 	branches := t.TempDir()
-	first := newMaterializedManager(t, branches)
+	first := newMaterializedManager(t, branches, platform.NewSelector(platform.Config{}))
 	binding, err := first.CreateWorkerWorkspace(t.Context(), source, "job-fail-closed")
 	testutil.FailErr(t, "create", err)
 	root := binding.Root
@@ -452,7 +453,7 @@ func TestMaterializedBranchRecoveryFailsClosedOnMissingGitObjectsOrSymlinkEscape
 
 	releaseBranchClaimState(root)
 	sharedBranchViews.Delete(filepath.Clean(root))
-	next := newMaterializedManager(t, branches)
+	next := newMaterializedManager(t, branches, platform.NewSelector(platform.Config{}))
 	_, err = next.RecoverWorkerViews(t.Context())
 	if !errors.Is(err, recovery.ErrIncompleteCheckpoint) {
 		t.Fatalf("RecoverWorkerViews with missing Git objects err = %v, want ErrIncompleteCheckpoint", err)

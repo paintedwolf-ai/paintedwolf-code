@@ -1,7 +1,6 @@
 package workerworkspace
 
 import (
-	"context"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -11,26 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/workspace"
 )
-
-type serviceContextKey struct{}
-
-// WithService attaches a scoped *Service to ctx so callers without a direct Host receiver
-// can resolve workspace-owned observation trackers without process-global state.
-func WithService(ctx context.Context, svc *Service) context.Context {
-	if ctx == nil || svc == nil {
-		return ctx
-	}
-	return context.WithValue(ctx, serviceContextKey{}, svc)
-}
-
-// FromContext retrieves a scoped *Service from ctx if present.
-func FromContext(ctx context.Context) *Service {
-	if ctx == nil {
-		return nil
-	}
-	svc, _ := ctx.Value(serviceContextKey{}).(*Service)
-	return svc
-}
 
 // WorkspaceObservationState holds the scoped observation.Tracker and verification bindings.
 type WorkspaceObservationState struct {

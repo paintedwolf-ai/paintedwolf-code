@@ -2,6 +2,7 @@ package workspace_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
@@ -181,7 +182,7 @@ func TestResolveDispatchWorkspaceSelectionNarrowsRootsAndIgnoresTaskPathHints(t 
 	testutil.FailErr(t, "write docs readme", os.WriteFile(filepath.Join(rootB, "README.md"), []byte("# docs\n"), 0o644))
 
 	branches := t.TempDir()
-	mgr := workspace.NewManager(branches)
+	mgr := workspace.NewManager(branches, platform.NewSelector(platform.Config{}))
 	narrowSel := adapter.WorkspaceSelection{
 		RootIDs:  []string{"primary"},
 		Subroots: map[string]string{"primary": "services/api"},

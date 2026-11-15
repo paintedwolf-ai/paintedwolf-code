@@ -297,7 +297,7 @@ func TestStackedWorkerClaimsAndPromotesThroughTheOneTransaction(t *testing.T) {
 	}
 	t.Run("fixture view", func(t *testing.T) { testStackedWorkerPromotion(t, fixtureMountedSelector(), writeCore) })
 	t.Run("real mount", func(t *testing.T) {
-		selector := workspace.EnforcedWorkspaceSelector()
+		selector := workspace.HostSelector()
 		selector.BudgetFor = adapter.ZeroBudget
 		skipWithoutMount(t, selector)
 		testStackedWorkerPromotion(t, selector, func(t *testing.T, task *api.WorkerTask, rel, content string) {
@@ -324,10 +324,10 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 	branches := enginepaths.WorkerBranchesRootUnder(base)
 	privateGit, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	selector := workspace.EnforcedWorkspaceSelector()
+	selector := workspace.HostSelector()
 	selector.BudgetFor = adapter.ZeroBudget
 	skipWithoutMount(t, selector)
-	manager := workspace.NewManager(branches).WithPrivateGit(privateGit).WithSelector(selector)
+	manager := workspace.NewManager(branches, selector).WithPrivateGit(privateGit)
 	binding, _, err := manager.CreateWorkerBranch(workspace.WithWorkspaceProject(t.Context(), testdbseed.DefaultProjectID), roots, "p", "job-roots")
 	testutil.FailErr(t, "create branch", err)
 	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(t.Context(), binding) })

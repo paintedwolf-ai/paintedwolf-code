@@ -65,7 +65,7 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 		return err
 	}
 	r.Recovery = coordinator
-	r.Workspace = workspace.NewManager(r.BranchRoot).WithPrivateGit(deps.Execution.PrivateGit).WithRecovery(coordinator)
+	r.Workspace = workspace.NewManager(r.BranchRoot, workspace.HostSelector()).WithPrivateGit(deps.Execution.PrivateGit).WithRecovery(coordinator)
 	r.Queue.SetWorkerWorkspaceManager(r.Workspace)
 	r.Queue.SetBaselineStore(deps.Storage.SourceLedger.Baselines)
 	r.Queue.SetProjectStore(deps.Storage.Projects)

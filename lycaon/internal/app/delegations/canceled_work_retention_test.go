@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"slices"
@@ -26,7 +27,7 @@ import (
 func (f *engineFixture) claimMaterializedWorker() *api.WorkerTask {
 	f.t.Helper()
 	ctx := f.t.Context()
-	f.engine.Workspace.WithSelector(adapter.NewSelector("", nil, nil, adapter.NewEagerCopyAdapter()))
+	f.bindWorkspace(adapter.NewSelector("", nil, nil, adapter.NewEagerCopyAdapter()))
 	_, err := f.engine.Queue.Enqueue(ctx, api.WorkerTask{
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: f.project, WorkspaceRootID: fixtureRootID,
 		Scope:     &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}},
@@ -341,7 +342,7 @@ func TestCancelWithoutARecoveryCoordinatorStaysUnresolved(t *testing.T) {
 	f := newEngineFixture(t)
 	task := f.claimMaterializedWorker()
 	writeTreeFile(t, task.WorkspaceRoot, "app.txt", "unpromoted edit\n")
-	unrecorded := workspace.NewManager(f.engine.BranchRoot)
+	unrecorded := workspace.NewManager(f.engine.BranchRoot, platform.NewSelector(platform.Config{}))
 	f.engine.Queue.SetWorkerWorkspaceManager(unrecorded)
 
 	err := f.engine.Queue.Cancel(t.Context(), task.ID, nil)
