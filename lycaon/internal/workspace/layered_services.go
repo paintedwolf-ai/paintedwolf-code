@@ -105,14 +105,13 @@ func (m *Manager) openLayeredServices() (*layeredServices, error) {
 	}
 	claims := m.recovery
 	if claims == nil {
-		// Without the engine's coordinator, open one at the same place the engine keeps it.
-		recoveryRoot := enginepaths.WorkerRecoveryRootUnder(m.stateRoot)
-		store, err := checkpoint.NewStore(filepath.Join(recoveryRoot, "checkpoints"))
+		recoveryDir := filepath.Join(m.branchRoot, adapterRuntimeDirName, "recovery")
+		store, err := checkpoint.NewStore(filepath.Join(recoveryDir, "checkpoints"))
 		if err != nil {
 			return nil, err
 		}
 		claims, err = recovery.NewCoordinator(recovery.CoordinatorConfig{
-			RootDir: filepath.Join(recoveryRoot, "state"), CheckpointStore: store, GitStore: gitManager.Store(), GitManager: gitManager,
+			RootDir: recoveryDir, CheckpointStore: store, GitStore: gitManager.Store(), GitManager: gitManager,
 			ProcessCtrl: recovery.RecordedProcessController{},
 		})
 		if err != nil {

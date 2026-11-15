@@ -5,6 +5,9 @@ import (
 	"context"
 	"database/sql"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -300,7 +303,8 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 	initialBranches := filepath.Join(dataDir, "worker-branches")
 	initialGit, err := workspace.OpenPrivateGit(initialBranches)
 	testutil.FailErr(t, "open initial private Git", err)
-	initialManager := workspace.NewManager(initialBranches, platform.NewSelector(platform.Config{})).WithPrivateGit(initialGit)
+	initialManager := workspace.NewManager(initialBranches, platform.NewSelector(platform.Config{})).WithPrivateGit(initialGit).
+		WithRecovery(openEngineRecovery(t, dataDir, initialGit))
 	queue := NewSQLQueue(database, 1)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
 	queue.SetWorkerWorkspaceManager(initialManager)
@@ -388,7 +392,7 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 	restoredGit, err := workspace.OpenPrivateGit(manager.BranchBase())
 	testutil.FailErr(t, "open restored private Git", err)
 	restored.SetWorkerWorkspaceManager(manager.WithPrivateGit(restoredGit))
-	coordinator := openFixtureRecovery(t, manager.BranchBase())
+	coordinator := openEngineRecovery(t, newRoot, restoredGit)
 	manager.WithRecovery(coordinator)
 	_, err = manager.RecoverWorkerViews(ctx)
 	testutil.FailErr(t, "startup recovery", err)
@@ -545,4 +549,17 @@ func TestUnfinishedMaterializedWorkerGitAndEditsSurviveRelocatedArchiveWithTrunk
 		t.Fatalf("checkpoint lost commit history: %v", manifest.PrivateGit.RetainedObjects)
 	}
 	testutil.FailErr(t, "destroy", manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: id, Root: task.WorkspaceRoot}))
+}
+
+// openEngineRecovery opens the recovery coordinator where the engine keeps it under stateRoot.
+func openEngineRecovery(t *testing.T, stateRoot string, privateGit *privategit.Manager) *recovery.Coordinator {
+	t.Helper()
+	root := enginepaths.WorkerRecoveryRootUnder(stateRoot)
+	store, err := checkpoint.NewStore(filepath.Join(root, "checkpoints"))
+	testutil.FailErr(t, "open checkpoint store", err)
+	coordinator, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
+		RootDir: filepath.Join(root, "state"), CheckpointStore: store, GitStore: privateGit.Store(), GitManager: privateGit,
+	})
+	testutil.FailErr(t, "open coordinator", err)
+	return coordinator
 }
