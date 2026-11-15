@@ -283,7 +283,7 @@ func TestFindingsAndMessagesStreamsNeverStarveOrCrossAcknowledge(t *testing.T) {
 		}
 	}
 
-	// Commit turn 1: findings advances to page 2 and messages advances to page 2 (65..70), while RoundFrame still retains 1..70!
+	// Commit turn 1: findings and messages advance to page 2 while RoundFrame retains active instructions.
 	testutil.FailErr(t, "commit turn 1", eng.CommitTurnContext(t.Context(), sess.ID, "resp-1"))
 	if findings.committed != 1 {
 		t.Fatalf("findings committed = %d, want 1", findings.committed)
