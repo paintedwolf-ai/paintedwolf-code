@@ -1,0 +1,239 @@
+// Package reach finds production code no shipped program reaches: functions,
+// context keys read but never set, and tables nothing reads.
+//
+// A program is loaded once per target GOOS without tests. A function is dead
+// only when every GOOS that compiles it leaves it unreachable from the roots.
+package reach
+
+import (
+	"fmt"
+	"go/ast"
+	"go/token"
+	"go/types"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"sort"
+	"strings"
+
+	"golang.org/x/tools/go/callgraph/rta"
+	"golang.org/x/tools/go/packages"
+	"golang.org/x/tools/go/ssa"
+	"golang.org/x/tools/go/ssa/ssautil"
+)
+
+// Finding kinds.
+const (
+	KindDeadFunc       = "dead-func"
+	KindUnsetCtxKey    = "unset-context-key"
+	KindWriteOnlyTable = "write-only-table"
+)
+
+// Finding is one piece of unreachable code, keyed by symbol so a change can be
+// compared with its base regardless of line numbers.
+type Finding struct {
+	Kind    string `json:"kind"`
+	Key     string `json:"key"`
+	Pos     string `json:"pos"`
+	Message string `json:"message"`
+}
+
+// Config selects the program and what is reported.
+type Config struct {
+	Dir      string
+	Patterns []string // main packages that ship or run
+	GOOS     []string
+	Tags     []string
+	// Report limits findings to matching package paths; Skip removes
+	// test-support packages that only tests import.
+	Report *regexp.Regexp
+	Skip   []*regexp.Regexp
+	// Schema is the complete fresh schema; empty skips table liveness.
+	Schema string
+}
+
+// pass is one GOOS load: what it compiles and what its roots reach.
+type pass struct {
+	compiled  map[string]Finding // dead-func key → finding for every reported source func
+	reachable map[string]bool
+	reads     map[string]bool // tables a reachable function names in a read
+	keysSet   map[string]bool
+	keysRead  map[string]Finding
+}
+
+// Run loads each GOOS and combines the passes.
+func Run(cfg Config) ([]Finding, error) {
+	if len(cfg.GOOS) == 0 {
+		return nil, fmt.Errorf("reach: no GOOS")
+	}
+	var passes []*pass
+	for _, goos := range cfg.GOOS {
+		p, err := load(cfg, goos)
+		if err != nil {
+			return nil, fmt.Errorf("reach: GOOS=%s: %w", goos, err)
+		}
+		passes = append(passes, p)
+	}
+	out := deadFuncs(passes)
+	out = append(out, unsetKeys(passes)...)
+	if cfg.Schema != "" {
+		tables, err := ParseSchema(cfg.Schema)
+		if err != nil {
+			return nil, err
+		}
+		for i := range tables.Tables {
+			if rel, err := filepath.Rel(cfg.Dir, tables.Tables[i].Pos); err == nil && !strings.HasPrefix(rel, "..") {
+				tables.Tables[i].Pos = rel
+			}
+		}
+		out = append(out, writeOnlyTables(tables, passes)...)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Kind != out[j].Kind {
+			return out[i].Kind < out[j].Kind
+		}
+		return out[i].Key < out[j].Key
+	})
+	return out, nil
+}
+
+func (cfg Config) reported(pkgPath string) bool {
+	if cfg.Report != nil && !cfg.Report.MatchString(pkgPath) {
+		return false
+	}
+	return !slices.ContainsFunc(cfg.Skip, func(re *regexp.Regexp) bool { return re.MatchString(pkgPath) })
+}
+
+func load(cfg Config, goos string) (*pass, error) {
+	env := append(environ(), "GOOS="+goos)
+	lc := &packages.Config{
+		Dir:  cfg.Dir,
+		Env:  env,
+		Mode: packages.LoadAllSyntax | packages.NeedModule,
+	}
+	if len(cfg.Tags) > 0 {
+		lc.BuildFlags = []string{"-tags=" + strings.Join(cfg.Tags, ",")}
+	}
+	initial, err := packages.Load(lc, cfg.Patterns...)
+	if err != nil {
+		return nil, err
+	}
+	if packages.PrintErrors(initial) > 0 {
+		return nil, fmt.Errorf("packages contain errors")
+	}
+	prog, pkgs := ssautil.AllPackages(initial, ssa.InstantiateGenerics)
+	var roots []*ssa.Function
+	for _, main := range ssautil.MainPackages(pkgs) {
+		roots = append(roots, main.Func("init"), main.Func("main"))
+	}
+	if len(roots) == 0 {
+		return nil, fmt.Errorf("no main packages in %v", cfg.Patterns)
+	}
+
+	type source struct {
+		fn  *ssa.Function
+		key string
+	}
+	var sources []source
+	interfaces := map[*types.Package][]*types.Interface{}
+	packages.Visit(initial, nil, func(p *packages.Package) {
+		if !cfg.reported(p.PkgPath) {
+			return
+		}
+		scope := p.Types.Scope()
+		for _, name := range scope.Names() {
+			if tn, ok := scope.Lookup(name).(*types.TypeName); ok && types.IsInterface(tn.Type()) {
+				interfaces[p.Types] = append(interfaces[p.Types], tn.Type().Underlying().(*types.Interface))
+			}
+		}
+		for _, file := range p.Syntax {
+			for _, decl := range file.Decls {
+				if fd, ok := decl.(*ast.FuncDecl); ok {
+					fn := prog.FuncValue(p.TypesInfo.Defs[fd.Name].(*types.Func))
+					sources = append(sources, source{fn, p.PkgPath + "." + prettyName(fn)})
+				}
+			}
+		}
+	})
+	prog.Build()
+	res := rta.Analyze(roots, false)
+
+	p := &pass{
+		compiled:  map[string]Finding{},
+		reachable: map[string]bool{},
+		reads:     map[string]bool{},
+		keysSet:   map[string]bool{},
+		keysRead:  map[string]Finding{},
+	}
+	reachablePos := map[token.Position]bool{}
+	for fn := range res.Reachable {
+		if fn.Pos().IsValid() {
+			reachablePos[prog.Fset.Position(fn.Pos())] = true
+		}
+		scanFunction(prog.Fset, fn, cfg, p)
+	}
+	for _, s := range sources {
+		if isMarkerMethod(s.fn, interfaces[s.fn.Pkg.Pkg]) {
+			continue
+		}
+		pos := prog.Fset.Position(s.fn.Pos())
+		p.compiled[s.key] = Finding{
+			Kind: KindDeadFunc, Key: s.key, Pos: relPos(cfg.Dir, pos),
+			Message: "no shipped program reaches " + s.key,
+		}
+		if reachablePos[pos] {
+			p.reachable[s.key] = true
+		}
+	}
+	return p, nil
+}
+
+// deadFuncs reports a function dead when no GOOS that compiles it reaches it.
+func deadFuncs(passes []*pass) []Finding {
+	dead := map[string]Finding{}
+	live := map[string]bool{}
+	for _, p := range passes {
+		for key, f := range p.compiled {
+			if p.reachable[key] {
+				live[key] = true
+			} else if _, seen := dead[key]; !seen {
+				dead[key] = f
+			}
+		}
+	}
+	var out []Finding
+	for key, f := range dead {
+		if !live[key] {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
+func prettyName(fn *ssa.Function) string {
+	if recv := fn.Signature.Recv(); recv != nil {
+		t := recv.Type()
+		if ptr, ok := t.(*types.Pointer); ok {
+			t = ptr.Elem()
+		}
+		if named, ok := t.(*types.Named); ok {
+			return named.Obj().Name() + "." + fn.Name()
+		}
+	}
+	return fn.Name()
+}
+
+// isMarkerMethod reports an empty unexported method that seals a package
+// interface; nothing calls it by design.
+func isMarkerMethod(fn *ssa.Function, interfaces []*types.Interface) bool {
+	if fn.Signature.Recv() == nil || ast.IsExported(fn.Name()) || fn.Signature.Params() != nil || fn.Signature.Results() != nil {
+		return false
+	}
+	decl, ok := fn.Syntax().(*ast.FuncDecl)
+	if !ok || decl.Body == nil || len(decl.Body.List) > 0 {
+		return false
+	}
+	return slices.ContainsFunc(interfaces, func(iface *types.Interface) bool {
+		return types.Implements(fn.Signature.Recv().Type(), iface)
+	})
+}
