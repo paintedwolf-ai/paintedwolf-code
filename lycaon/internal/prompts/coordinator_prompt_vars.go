@@ -16,7 +16,7 @@ func MergeCoordinatorPromptVars(
 	if _, err := loadCoordinatorSurfaceRow(surfaceID); err != nil {
 		return err
 	}
-	if _, hasCard := into["surface_card"]; !hasCard {
+	if _, hasCard := into["surface_card_label"]; !hasCard {
 		var loaded map[string]bool
 		if set, ok := into["surface_offered"].([]string); ok {
 			loaded = toolNameSet(set)

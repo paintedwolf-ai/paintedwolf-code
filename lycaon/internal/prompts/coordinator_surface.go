@@ -196,9 +196,11 @@ func MergeCoordinatorSurfacePathVars(surfaceID string, profiles []sandbox.ToolPr
 		}
 		profiles = loaded
 	}
+	hasRootCount := false
 	if in.RootCount == 0 {
 		if rc, ok := into["root_count"].(int); ok {
 			in.RootCount = rc
+			hasRootCount = true
 		}
 	}
 	if !in.HasGit {
@@ -217,7 +219,11 @@ func MergeCoordinatorSurfacePathVars(surfaceID string, profiles []sandbox.ToolPr
 		in.WebSearch = true
 	}
 	if !in.Plan.Compiled() {
-		plan, err := CompileSurfacePlan(surfaceID, max(in.RootCount, 1))
+		rc := in.RootCount
+		if !hasRootCount && rc == 0 {
+			rc = 1
+		}
+		plan, err := CompileSurfacePlan(surfaceID, rc)
 		if err != nil {
 			return err
 		}

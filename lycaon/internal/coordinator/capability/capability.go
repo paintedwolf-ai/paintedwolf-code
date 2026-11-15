@@ -77,12 +77,17 @@ func MergeForTurn(
 	if into == nil {
 		return fmt.Errorf("nil template vars map")
 	}
-	if _, hasOffered := into["surface_offered"]; !hasOffered {
-		for k, v := range reader.Facts() {
-			if _, exists := into[k]; !exists {
-				into[k] = v
-			}
+	for k, v := range reader.Facts() {
+		if (k == "has_git" || k == "on_worker_branch") && into[k] != nil {
+			continue
 		}
+		into[k] = v
+	}
+	if has, _ := into["profile_has_skills_read"].(bool); !has {
+		delete(into, "skills_roster")
+		into["skills_count"] = 0
+		into["has_skills"] = false
+		delete(into, "skills_auto_loaded")
 	}
 	webSearchEnabled := reader.WebSearch()
 	surf, err := Resolve(ResolveInput{

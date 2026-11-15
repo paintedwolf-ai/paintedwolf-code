@@ -312,10 +312,15 @@ func (r Reader) Facts() map[string]any {
 		}
 		restrictCommandEffects(r.effects, r.offered, r.requestable, out)
 		syncCommandExternalFacts(out)
-		roster, err := RequestableTools(r.requestable, r.schemas)
-		if err == nil {
-			out["requestable_tools"] = requestableToolVars(roster)
-			out["requestable_capabilities"] = RequestableCapabilities(roster)
+		canRequest := len(r.requestable) > 0 && slices.Contains(r.offered, "request_tools")
+		if canRequest {
+			if roster, err := RequestableTools(r.requestable, r.schemas); err == nil {
+				out["requestable_tools"] = requestableToolVars(roster)
+				out["requestable_capabilities"] = RequestableCapabilities(roster)
+			}
+		} else {
+			out["requestable_tools"] = []map[string]any(nil)
+			out["requestable_capabilities"] = []string(nil)
 		}
 		out["surface_offered"] = slices.Clone(r.offered)
 		commandMutates := currentCommandEffectFlags(out, slices.Contains(r.offered, "command")).mutation
@@ -331,7 +336,7 @@ func (r Reader) Facts() map[string]any {
 			runOffered = filterToolName(r.offered, "command")
 		}
 		MergeVisualShowVars(runOffered, r.requestable, out)
-		out["more_tools_loadable"] = len(r.requestable) > 0
+		out["more_tools_loadable"] = canRequest
 		out["web_search_enabled"] = r.webSearch
 		if !r.webSearch {
 			MergeWebResearchUnavailable(out)
