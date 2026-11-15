@@ -1,5 +1,5 @@
-// Package workerbriefing summarizes a finished worker: what it contributed,
-// how that was verified, and what remains.
+// Package workerbriefing summarizes one settled worker round result: what that
+// round contributed, how that was verified, and what remains.
 package workerbriefing
 
 import (
@@ -8,8 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/observability"
@@ -18,7 +18,7 @@ import (
 
 const (
 	ProfileID      = "worker_result"
-	profileVersion = "1"
+	profileVersion = "2"
 	// sectionRunes bounds each source block; summaryMaxTokens bounds the answer.
 	sectionRunes     = 2000
 	summaryMaxTokens = 400
@@ -28,13 +28,13 @@ const (
 var summaryLabels = []string{"Contribution", "Verification", "Remaining"}
 
 var (
-	summaryTemplate = briefing.Template{ID: "worker_result", Version: "1"}
+	summaryTemplate = briefing.Template{ID: "worker_result", Version: "2"}
 	summaryContract = briefing.Contract{MaxRunes: 1800, Labels: summaryLabels}
 )
 
-// Workers reads a worker job.
+// Workers resolves a result handle to the settled round job that produced it.
 type Workers interface {
-	Get(jobID string) (*wire.WorkerTask, bool)
+	LookupByResult(ctx context.Context, resultHandle string) (*wire.WorkerTask, bool)
 }
 
 type Profile struct{ workers Workers }
@@ -47,55 +47,54 @@ func (*Profile) ID() string              { return ProfileID }
 func (*Profile) Version() string         { return profileVersion }
 func (*Profile) Policy() briefing.Policy { return briefing.QueuedPolicy }
 
-// Resolve reads the worker by id and checks it finished at the revision
-// the person is looking at.
+// Resolve reads the settled round by result handle.
 func (p *Profile) Resolve(ctx context.Context, target briefing.Target) (briefing.Request, error) {
 	var wanted wire.WorkerResultBriefingTarget
 	decoder := json.NewDecoder(bytes.NewReader(target.Ref))
 	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&wanted); err != nil || strings.TrimSpace(wanted.WorkerID) == "" || strings.TrimSpace(wanted.ResultRevision) == "" {
-		return briefing.Request{}, fmt.Errorf("%w: worker_id and result_revision are required", briefing.ErrInvalidTarget)
+	if err := decoder.Decode(&wanted); err != nil {
+		return briefing.Request{}, fmt.Errorf("%w: result_handle is required", briefing.ErrInvalidTarget)
 	}
-	task, ok := p.workers.Get(wanted.WorkerID)
-	if !ok || task == nil || task.ProjectID != target.ProjectID {
-		return briefing.Request{}, fmt.Errorf("%w: unknown worker", briefing.ErrTargetUnavailable)
+	handle := strings.TrimSpace(wanted.ResultHandle)
+	if handle == "" {
+		return briefing.Request{}, fmt.Errorf("%w: result_handle is required", briefing.ErrInvalidTarget)
 	}
-	revision, err := time.Parse(time.RFC3339Nano, wanted.ResultRevision)
-	if err != nil {
-		return briefing.Request{}, fmt.Errorf("%w: result_revision is a completion time", briefing.ErrInvalidTarget)
+	if _, err := uuid.Parse(handle); err != nil {
+		return briefing.Request{}, fmt.Errorf("%w: result_handle must be a uuid", briefing.ErrInvalidTarget)
 	}
-	if task.CompletedAt == nil || !task.CompletedAt.Equal(revision) {
-		return briefing.Request{}, fmt.Errorf("%w: the worker has not finished at that revision", briefing.ErrTargetUnavailable)
+	task, ok := p.workers.LookupByResult(ctx, handle)
+	if !ok || task == nil || task.ProjectID != target.ProjectID || task.CompletedAt == nil {
+		return briefing.Request{}, fmt.Errorf("%w: unknown worker result", briefing.ErrTargetUnavailable)
 	}
-	section, err := summarySection(ctx, task)
-	if err != nil {
-		return briefing.Request{}, err
-	}
-	canonical, err := json.Marshal(wanted)
+	section, err := summarySection(ctx, task, handle)
 	if err != nil {
 		return briefing.Request{}, err
 	}
-	key := wanted.WorkerID + "@" + resultRevision(task)
+	canonical, err := json.Marshal(wire.WorkerResultBriefingTarget{ResultHandle: handle})
+	if err != nil {
+		return briefing.Request{}, err
+	}
 	return briefing.Request{
 		ProjectID: target.ProjectID, ProjectDir: target.ProjectDir, ProfileID: ProfileID, Version: profileVersion,
-		TargetKey: key, TargetKind: "worker", TargetJSON: string(canonical), ScopeFingerprint: key,
+		TargetKey: handle, TargetKind: "worker_result", TargetJSON: string(canonical), ScopeFingerprint: handle,
 		Manual: target.Manual, Policy: p.Policy(), Sections: []briefing.SectionPlan{section},
 	}, nil
 }
 
-// resultRevision identifies a worker's settled result.
-func resultRevision(task *wire.WorkerTask) string {
-	return task.CompletedAt.UTC().Format(time.RFC3339Nano)
-}
-
-// summarySection keeps the worker's own report apart from host receipts, so
-// the summary can tell claims from what was observed.
-func summarySection(ctx context.Context, task *wire.WorkerTask) (briefing.SectionPlan, error) {
-	vars := map[string]any{}
+// summarySection keeps the round's own report apart from host receipts, so the
+// summary can tell claims from what was observed.
+func summarySection(ctx context.Context, task *wire.WorkerTask, resultHandle string) (briefing.SectionPlan, error) {
+	vars := map[string]any{"result_handle": resultHandle}
+	if task.Round > 0 {
+		vars["round"] = task.Round
+	}
+	if strings.TrimSpace(task.WorkerName) != "" {
+		vars["worker"] = strings.TrimSpace(task.WorkerName)
+	}
 	var items []briefing.Item
 	add := func(key string, role briefing.Role, kind, text string) {
 		text = observability.RedactCaptureText(strings.TrimSpace(text))
-		item := briefing.Item{Key: key, Role: role, SourceKind: kind, Ref: "worker_job:" + task.ID, Audience: task.ParentSessionID}
+		item := briefing.Item{Key: key, Role: role, SourceKind: kind, Ref: "worker_result:" + resultHandle, Audience: task.ParentSessionID}
 		switch runes := []rune(text); {
 		case text == "":
 			item.Inclusion, item.Reason = briefing.Unavailable, "absent"
@@ -128,6 +127,12 @@ func summarySection(ctx context.Context, task *wire.WorkerTask) (briefing.Sectio
 
 func outcome(task *wire.WorkerTask) string {
 	text := "status: " + string(task.Status)
+	if task.ResultDisposition != "" {
+		text += "\ndisposition: " + string(task.ResultDisposition)
+	}
+	if task.ShelveReason != "" {
+		text += "\nshelve_reason: " + task.ShelveReason
+	}
 	if task.Failure != nil {
 		text += "\nfailure: " + task.Failure.Code + " " + task.Failure.Message
 	} else if task.Error != "" {

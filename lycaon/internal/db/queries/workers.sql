@@ -520,3 +520,34 @@ WHERE w.session_id = sqlc.arg(session_id)
   ), 0)
 GROUP BY w.id, w.name, w.created_at
 ORDER BY oldest_unread_at, w.created_at, w.id;
+
+-- name: GetWorkerRoundWireByJob :one
+SELECT w.id AS worker_record_id, w.name AS worker_name, r.ordinal,
+       CAST(COALESCE(res.id, '') AS TEXT) AS result_id,
+       r.checkpoint_id, r.review_subject_json,
+       CAST(COALESCE(r.settled_at, '') AS TEXT) AS settled_at,
+       CAST(COALESCE(d.accounted_at, '') AS TEXT) AS accounted_at,
+       CAST(COALESCE(d.change_state, '') AS TEXT) AS change_state,
+       CAST(COALESCE(d.shelve_reason, '') AS TEXT) AS shelve_reason
+FROM worker_rounds r
+JOIN workers w ON w.id = r.worker_id
+LEFT JOIN worker_results res ON res.worker_job_id = r.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.job_id = ?;
+
+-- name: GetArmedWorkerWaitLease :one
+SELECT reason, CAST(COALESCE(deadline_at, '') AS TEXT) AS deadline_at
+FROM wait_leases
+WHERE worker_job_id = sqlc.arg(worker_job_id) AND status = 'armed'
+ORDER BY created_at DESC, id DESC LIMIT 1;
+
+-- name: CountUnreadCoordinatorWorkerMessages :one
+SELECT COUNT(*)
+FROM worker_messages m
+WHERE m.worker_id = sqlc.arg(worker_id)
+  AND m.recipient_role = 'coordinator'
+  AND m.seq > COALESCE((
+      SELECT MAX(md.delivered_through_seq)
+      FROM worker_message_deliveries md
+      WHERE md.worker_id = m.worker_id AND md.recipient_session_id = sqlc.arg(recipient_session_id)
+  ), 0);

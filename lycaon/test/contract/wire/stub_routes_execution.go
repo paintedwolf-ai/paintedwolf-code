@@ -109,6 +109,21 @@ func registerStubExecutionRoutes(mux *http.ServeMux, now time.Time, writeJSON st
 	mux.HandleFunc("GET /v1/workers", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.WorkerListResponse{Workers: []api.WorkerTask{worker}})
 	})
+	mux.HandleFunc("GET /v1/workers/history", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.WorkerHistoryResponse{
+			WorkerID:  fixtureWorkerID,
+			Name:      "implementer-1",
+			AgentType: "implementer",
+			State:     api.WorkerStateWorking,
+			Rounds: []api.WorkerHistoryRound{{
+				Ordinal:   1,
+				JobID:     fixtureWorkerID,
+				Status:    api.WorkerStatusRunning,
+				CreatedAt: now.Format("2006-01-02T15:04:05Z07:00"),
+			}},
+			Messages: []api.WorkerHistoryMessage{},
+		})
+	})
 	mux.HandleFunc("POST /v1/workers/{id}/cancel", func(w http.ResponseWriter, r *http.Request) {
 		wt := worker
 		wt.Status = api.WorkerStatusCanceled

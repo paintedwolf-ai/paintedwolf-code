@@ -54,6 +54,7 @@ tools:
   instruct_worker:
     running_label: "Instructing a worker…"
     title_keys: [worker]
+    visibility: long_running
     activity: {headline: "directing workers", salience: defining, role: coordination}
   process_list:
     title_keys: []
@@ -93,7 +94,7 @@ tools:
     title_fallback: "Command process"
   complete_leg:
     title_keys: [brief]
-    running_label: "Finishing the task…"
+    running_label: "Reporting round outcome…"
     activity: {headline: "delegating work", salience: primary, role: coordination}
   held_result:
     title_keys: []
@@ -487,10 +488,10 @@ tools:
     running_label: "Searching…"
     activity: {headline: "researching", salience: primary, role: research}
   worker_cancel:
-    running_label: "Stopping a task…"
-    title_keys: [reason]
-    activity: {headline: "delegating work", salience: primary, role: coordination}
-    title_fallback: "Worker task"
+    running_label: "Stopping a worker…"
+    title_keys: [worker, reason]
+    activity: {headline: "directing workers", salience: primary, role: coordination}
+    title_fallback: "Worker"
   worker_history:
     running_label: "Reading worker history…"
     title_keys: [worker]

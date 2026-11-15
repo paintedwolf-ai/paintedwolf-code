@@ -121,6 +121,7 @@ func (s *Server) setupRoutes() {
 		s.registerV1Operation(r, operationAbortDelegation, s.Routes.Workers.handleAbortDelegation)
 
 		s.registerV1Operation(r, operationListWorkers, s.Routes.Workers.handleListWorkers)
+		s.registerV1Operation(r, operationGetWorkerHistory, s.Routes.Workers.handleWorkerHistory)
 		s.registerV1Operation(r, operationCancelWorker, s.Routes.Workers.handleWorkerCancel)
 		s.registerV1Operation(r, operationGetWorkerChanges, s.Sources.History.HandleGetWorkerChanges)
 

@@ -2,6 +2,7 @@ package jobstate
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -65,6 +66,9 @@ func FromRow(ctx context.Context, database db.DBTX, r db.WorkerJobs) (*api.Worke
 	if err := loadWorkerPrerequisites(ctx, database, &task); err != nil {
 		return nil, err
 	}
+	if err := loadWorkerRoundWire(ctx, database, &task); err != nil {
+		return nil, err
+	}
 	task.CreatedAt, err = db.ParseTime(r.CreatedAt)
 	if err != nil {
 		return nil, err
@@ -102,4 +106,55 @@ func loadWorkerPrerequisites(ctx context.Context, database db.DBTX, task *api.Wo
 		task.Dependencies = append(task.Dependencies, api.WorkerDependency{WorkerID: row.ID, State: api.WorkerOutputState(&upstream)})
 	}
 	return nil
+}
+
+func loadWorkerRoundWire(ctx context.Context, database db.DBTX, task *api.WorkerTask) error {
+	q := db.New(database)
+	round, err := q.GetWorkerRoundWireByJob(ctx, task.ID)
+	switch {
+	case err == nil:
+		task.WorkerRecordID = round.WorkerRecordID
+		task.WorkerName = round.WorkerName
+		task.Round = int(round.Ordinal)
+		if round.SettledAt != "" && round.ResultID != "" {
+			task.ResultHandle = round.ResultID
+			task.ResultDisposition = wireDisposition(round.ChangeState, round.CheckpointID, round.AccountedAt)
+			task.ShelveReason = round.ShelveReason
+		}
+		if round.ReviewSubjectJson != "" {
+			var subject struct {
+				ResultID string `json:"result_id"`
+			}
+			if json.Unmarshal([]byte(round.ReviewSubjectJson), &subject) == nil && subject.ResultID != "" {
+				task.ReviewOf = subject.ResultID
+			}
+		}
+	case !db.IsNoRows(err):
+		return err
+	}
+	if task.Status != api.WorkerStatusWaiting {
+		return nil
+	}
+	lease, err := q.GetArmedWorkerWaitLease(ctx, db.NullString(task.ID))
+	switch {
+	case err == nil:
+		task.ParkedReason = lease.Reason
+		task.ParkedUntil = lease.DeadlineAt
+	case !db.IsNoRows(err):
+		return err
+	}
+	return nil
+}
+
+func wireDisposition(changeState, checkpointID, accountedAt string) api.WorkerResultDisposition {
+	switch {
+	case changeState != "":
+		return api.WorkerResultDisposition(changeState)
+	case checkpointID != "":
+		return api.WorkerResultDispositionOpen
+	case accountedAt != "":
+		return api.WorkerResultDispositionAccounted
+	default:
+		return api.WorkerResultDispositionUnaccounted
+	}
 }

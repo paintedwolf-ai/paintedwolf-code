@@ -84,6 +84,9 @@ func EventKey(task api.WorkerTask) events.PublishKey {
 func JobEvent(task api.WorkerTask) api.WorkerEvent {
 	return api.WorkerEvent{
 		WorkerID:             task.ID,
+		WorkerRecordID:       task.WorkerRecordID,
+		WorkerName:           task.WorkerName,
+		Round:                task.Round,
 		Dependencies:         task.Dependencies,
 		Status:               task.Status,
 		AgentType:            task.AgentType,
@@ -91,6 +94,12 @@ func JobEvent(task api.WorkerTask) api.WorkerEvent {
 		ParentSessionID:      task.ParentSessionID,
 		Brief:                task.Brief,
 		MergeStatus:          task.MergeStatus,
+		ResultHandle:         task.ResultHandle,
+		ResultDisposition:    task.ResultDisposition,
+		ShelveReason:         task.ShelveReason,
+		ReviewOf:             task.ReviewOf,
+		ParkedReason:         task.ParkedReason,
+		ParkedUntil:          task.ParkedUntil,
 		ToolLoopsUsed:        task.ToolLoopsUsed,
 		ToolCallsUsed:        task.ToolCallsUsed,
 		ContextUsage:         task.ContextUsage,

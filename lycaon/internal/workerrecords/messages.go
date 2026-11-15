@@ -438,3 +438,37 @@ func (s *Store) NotApplied(ctx context.Context, actor Actor, workerID string, or
 func (s *Store) LatestSentSeq(ctx context.Context, jobID string) (int64, error) {
 	return s.q.GetLatestWorkerSentSeqByJob(ctx, strings.TrimSpace(jobID))
 }
+
+// UnreadCoordinatorCount counts messages sent to the coordinator that have not
+// been delivered in a coordinator request yet.
+func (s *Store) UnreadCoordinatorCount(ctx context.Context, actor Actor, workerID string) (int, error) {
+	if err := actor.check(); err != nil {
+		return 0, err
+	}
+	w, err := coordinatorWorkerAnyState(ctx, s.q, actor, workerID)
+	if err != nil {
+		return 0, err
+	}
+	n, err := s.q.CountUnreadCoordinatorWorkerMessages(ctx, db.CountUnreadCoordinatorWorkerMessagesParams{
+		WorkerID: w.ID, RecipientSessionID: actor.SessionID,
+	})
+	return int(n), err
+}
+
+// DeliveredThrough reports the highest message sequence delivered to recipientSessionID.
+func (s *Store) DeliveredThrough(ctx context.Context, actor Actor, workerID, recipientSessionID string) (int64, error) {
+	if err := actor.check(); err != nil {
+		return 0, err
+	}
+	w, _, err := loadWorker(ctx, s.q, actor, workerID)
+	if err != nil {
+		return 0, err
+	}
+	recipientSessionID = strings.TrimSpace(recipientSessionID)
+	if recipientSessionID == "" {
+		return 0, nil
+	}
+	return s.q.GetWorkerDeliveredThrough(ctx, db.GetWorkerDeliveredThroughParams{
+		WorkerID: w.ID, RecipientSessionID: recipientSessionID,
+	})
+}

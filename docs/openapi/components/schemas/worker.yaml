@@ -525,6 +525,38 @@ components:
         id:
           type: string
           format: uuid
+        worker_record_id:
+          type: string
+          format: uuid
+          description: Durable worker record identity across rounds.
+        worker_name:
+          type: string
+          description: Canonical worker name on the session roster.
+        round:
+          type: integer
+          minimum: 1
+          description: 1-based round ordinal within the worker record.
+        result_handle:
+          type: string
+          format: uuid
+          description: Settled result handle recorded for this round.
+        result_disposition:
+          $ref: worker.yaml#/components/schemas/WorkerResultDisposition
+          description: Disposition of this round's settled result.
+        shelve_reason:
+          type: string
+          description: Coordinator reason recorded when this round's result is shelved.
+        review_of:
+          type: string
+          format: uuid
+          description: Sealed result handle reviewed by this round when it is a reviewer round.
+        parked_reason:
+          type: string
+          description: Active wait lease reason while this round is parked.
+        parked_until:
+          type: string
+          format: date-time
+          description: Active wait lease deadline while this round is parked.
         child_session_id:
           type: string
           format: uuid
@@ -648,6 +680,142 @@ components:
           type: array
           items:
             $ref: worker.yaml#/components/schemas/WorkerTask
+    WorkerMessageSenderRole:
+      type: string
+      enum:
+      - coordinator
+      - worker
+    WorkerInstructionStatus:
+      type: string
+      enum:
+      - applied
+      - queued
+      - not_applied
+    WorkerHistoryRound:
+      x-go-generate: true
+      type: object
+      required:
+      - ordinal
+      - job_id
+      - created_at
+      additionalProperties: false
+      properties:
+        ordinal:
+          type: integer
+          minimum: 1
+        job_id:
+          type: string
+          format: uuid
+        status:
+          $ref: worker.yaml#/components/schemas/WorkerStatus
+        instruction_first_seq:
+          type: integer
+          minimum: 1
+        instruction_last_seq:
+          type: integer
+          minimum: 1
+        result_handle:
+          type: string
+          format: uuid
+        result_disposition:
+          $ref: worker.yaml#/components/schemas/WorkerResultDisposition
+        shelve_reason:
+          type: string
+        checkpoint_id:
+          type: string
+        review_of:
+          type: string
+          format: uuid
+        result:
+          $ref: worker.yaml#/components/schemas/WorkerResult
+        failure:
+          $ref: worker.yaml#/components/schemas/WorkerFailure
+        created_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+        settled_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+    WorkerHistoryMessage:
+      x-go-generate: true
+      type: object
+      required:
+      - seq
+      - sender_role
+      - body
+      - delivered
+      - created_at
+      additionalProperties: false
+      properties:
+        seq:
+          type: integer
+          minimum: 1
+        sender_role:
+          $ref: worker.yaml#/components/schemas/WorkerMessageSenderRole
+        round_ordinal:
+          type: integer
+          minimum: 1
+        body:
+          type: string
+        artifact_ref:
+          type: string
+        needs_reply:
+          type: boolean
+        reply_to_seq:
+          type: integer
+          minimum: 1
+        delivered:
+          type: boolean
+        instruction_status:
+          $ref: worker.yaml#/components/schemas/WorkerInstructionStatus
+        created_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+    WorkerHistoryResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - worker_id
+      - name
+      - agent_type
+      - state
+      - rounds
+      - messages
+      additionalProperties: false
+      properties:
+        worker_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        agent_type:
+          type: string
+        brief:
+          type: string
+        child_session_id:
+          type: string
+          format: uuid
+        state:
+          $ref: worker.yaml#/components/schemas/WorkerState
+        reason:
+          $ref: worker.yaml#/components/schemas/WorkerStateReason
+        rounds:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerHistoryRound
+        messages:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerHistoryMessage
+        before:
+          type: integer
+          minimum: 0
+        before_round:
+          type: integer
+          minimum: 0
     WorkerPromoteResolutionAction:
       type: string
       description: |

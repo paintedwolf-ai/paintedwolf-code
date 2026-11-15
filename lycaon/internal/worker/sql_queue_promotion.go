@@ -232,6 +232,18 @@ func (q *sqlQueueCore) Lookup(ctx context.Context, jobID string) (*api.WorkerTas
 	return task, ok
 }
 
+// LookupByResult resolves a settled round's result handle to the job that produced it.
+func (q *sqlQueueCore) LookupByResult(ctx context.Context, resultHandle string) (*api.WorkerTask, bool) {
+	if q == nil || q.store == nil {
+		return nil, false
+	}
+	owner, err := q.store.queries.GetWorkerResultOwner(ctx, strings.TrimSpace(resultHandle))
+	if err != nil {
+		return nil, false
+	}
+	return q.Lookup(ctx, owner.WorkerJobID)
+}
+
 // TaskReceipt resolves a durable native-tool receipt before mutable spawn checks.
 func (q *sqlQueueCore) TaskReceipt(ctx context.Context, sessionID, callID string) (*api.WorkerTask, error) {
 	row, err := q.store.queries.GetWorkerJobBySourceToolCall(ctx, db.GetWorkerJobBySourceToolCallParams{

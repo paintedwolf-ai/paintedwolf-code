@@ -28,16 +28,24 @@ const (
 
 // Row is one worker as the coordinator's request shows it.
 type Row struct {
-	Name             string
-	Agent            string
-	ScopeMode        string
-	WorkspaceState   string
-	State            workerstate.State
-	Reason           workerstate.Reason
-	StateLabel       string
-	DispositionLabel string
-	WorkspaceLabel   string
-	UpdatedAt        string
+	WorkerID           string
+	ChildSessionID     string
+	LatestJobID        string
+	Round              int
+	Name               string
+	Agent              string
+	ScopeMode          string
+	WorkspaceState     string
+	State              workerstate.State
+	Reason             workerstate.Reason
+	StateLabel         string
+	DispositionLabel   string
+	WorkspaceLabel     string
+	UpdatedAt          string
+	ParkedReason       string
+	ParkedUntil        string
+	ShelveReason       string
+	UnreadMessageCount int
 	// About is what the worker is on: its latest instruction, else its brief.
 	About string
 	// Question is the pending decision a worker in asking waits on.
@@ -107,11 +115,15 @@ func (s Source) Board(ctx context.Context, sessionID string) ([]api.BoardWorker,
 	out := make([]api.BoardWorker, 0, len(rows))
 	for _, row := range rows {
 		w := api.BoardWorker{
+			WorkerID: row.WorkerID, ChildSessionID: row.ChildSessionID,
+			LatestJobID: row.LatestJobID, Round: row.Round,
 			Name: row.Name, AgentType: row.Agent, ScopeMode: row.ScopeMode,
 			WorkspaceState: row.WorkspaceState,
-			State: api.WorkerState(row.State), Reason: api.WorkerStateReason(row.Reason),
+			State:          api.WorkerState(row.State), Reason: api.WorkerStateReason(row.Reason),
 			StateLabel: row.StateLabel, WorkspaceLabel: row.WorkspaceLabel, UpdatedAt: row.UpdatedAt,
 			About: row.About, Question: row.Question,
+			ParkedReason: row.ParkedReason, ParkedUntil: row.ParkedUntil,
+			ShelveReason: row.ShelveReason, UnreadMessageCount: row.UnreadMessageCount,
 			ReadPaths: row.Read.Shown, ReadOmitted: row.Read.Omitted,
 			ChangedPaths: row.Changed.Shown, ChangedOmitted: row.Changed.Omitted,
 		}
@@ -201,13 +213,30 @@ func (s Source) row(ctx context.Context, actor workerrecords.Actor, snap workero
 		return Row{}, err
 	}
 	row := Row{
-		Name: w.Name, Agent: w.AgentType, ScopeMode: w.ScopeMode,
+		WorkerID:       w.ID,
+		ChildSessionID: w.ChildSessionID,
+		Name:           w.Name, Agent: w.AgentType, ScopeMode: w.ScopeMode,
 		WorkspaceState: wsState,
 		State:          snap.View.State, Reason: snap.View.Reason,
 		StateLabel:     stateLabel(snap.View.State, snap.View.Reason),
 		WorkspaceLabel: workspaceLabel(wsState),
 		UpdatedAt:      latestActivityAt(snap),
 	}
+	if latest, has := snap.Latest(); has {
+		row.LatestJobID = latest.JobID
+		row.Round = int(latest.Ordinal)
+		if s.Reader.Jobs != nil {
+			if job, found := s.Reader.Jobs.Get(latest.JobID); found && job != nil {
+				row.ParkedReason = job.ParkedReason
+				row.ParkedUntil = job.ParkedUntil
+			}
+		}
+	}
+	unread, err := s.Reader.Records.UnreadCoordinatorCount(ctx, actor, w.ID)
+	if err != nil {
+		return Row{}, err
+	}
+	row.UnreadMessageCount = unread
 	about, err := s.about(ctx, actor, snap)
 	if err != nil {
 		return Row{}, err
@@ -229,6 +258,7 @@ func (s Source) row(ctx context.Context, actor workerrecords.Actor, snap workero
 		disp := disposition(snap, round)
 		row.Result = &Result{Handle: round.ResultID, Disposition: disp}
 		row.DispositionLabel = dispositionLabel(disp)
+		row.ShelveReason = snap.Dispositions[round.ResultID].ShelveReason
 	}
 	start := 0
 	if len(snap.Rounds) > MaxRoundPathScan {

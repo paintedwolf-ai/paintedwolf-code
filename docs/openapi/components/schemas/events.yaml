@@ -190,6 +190,30 @@ components:
         worker_id:
           type: string
           format: uuid
+        worker_record_id:
+          type: string
+          format: uuid
+        worker_name:
+          type: string
+        round:
+          type: integer
+          minimum: 1
+        result_handle:
+          type: string
+          format: uuid
+        result_disposition:
+          $ref: worker.yaml#/components/schemas/WorkerResultDisposition
+        shelve_reason:
+          type: string
+        review_of:
+          type: string
+          format: uuid
+        parked_reason:
+          type: string
+        parked_until:
+          x-go-pointer: true
+          type: string
+          format: date-time
         status:
           $ref: worker.yaml#/components/schemas/WorkerStatus
         agent_type:

@@ -42,6 +42,65 @@ paths:
           $ref: ../components/responses.yaml#/components/responses/NotFound
         '409':
           $ref: ../components/responses.yaml#/components/responses/Conflict
+  /v1/workers/history:
+    get:
+      tags:
+      - workers
+      operationId: getWorkerHistory
+      summary: Read bounded round and message history for a session worker
+      parameters:
+      - $ref: ../components/parameters.yaml#/components/parameters/ProjectIDQuery
+      - name: session_id
+        in: query
+        required: true
+        description: Coordinator session that owns the worker.
+        schema:
+          type: string
+          format: uuid
+      - name: worker
+        in: query
+        required: true
+        description: Worker name or round job id on the session roster.
+        schema:
+          type: string
+          minLength: 1
+      - name: before
+        in: query
+        required: false
+        description: Exclusive message sequence cursor for older messages.
+        schema:
+          type: integer
+          minimum: 1
+      - name: before_round
+        in: query
+        required: false
+        description: Exclusive 1-based round ordinal cursor for older rounds.
+        schema:
+          type: integer
+          minimum: 1
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+      responses:
+        '200':
+          description: Bounded worker collaboration history page
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/worker.yaml#/components/schemas/WorkerHistoryResponse
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
   /v1/workers/{id}/cancel:
     post:
       tags:

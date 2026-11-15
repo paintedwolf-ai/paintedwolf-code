@@ -84,10 +84,26 @@ components:
       - state
       additionalProperties: false
       properties:
+        worker_id:
+          type: string
+          format: uuid
+          description: Durable worker record identity across rounds.
         name:
           type: string
         agent_type:
           type: string
+        child_session_id:
+          type: string
+          format: uuid
+          description: Child session reused across rounds once spawned.
+        latest_job_id:
+          type: string
+          format: uuid
+          description: Latest round job identity when at least one round exists.
+        round:
+          type: integer
+          minimum: 1
+          description: Latest 1-based round ordinal when at least one round exists.
         scope_mode:
           type: string
         workspace_state:
@@ -106,17 +122,32 @@ components:
         question:
           type: string
           description: The pending decision an asking worker waits on.
+        parked_reason:
+          type: string
+          description: Active wait lease reason when the round is parked.
+        parked_until:
+          x-go-type: "string"
+          type: string
+          format: date-time
+          description: Active wait lease deadline when the round is parked.
         result_handle:
           type: string
           description: Handle of the worker's latest result.
         result_disposition:
           $ref: worker.yaml#/components/schemas/WorkerResultDisposition
+        shelve_reason:
+          type: string
+          description: Coordinator reason recorded when the latest result is shelved.
         disposition_label:
           type: string
           description: Derived display label for result_disposition.
         workspace_label:
           type: string
           description: Derived display label for workspace_state.
+        unread_message_count:
+          type: integer
+          minimum: 0
+          description: Worker messages not yet delivered to a coordinator turn.
         updated_at:
           x-go-type: "string"
           type: string

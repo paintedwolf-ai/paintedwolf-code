@@ -311,26 +311,35 @@ const (
 )
 
 type WorkerTask struct {
-	Dependencies     []WorkerDependency `json:"dependencies,omitempty"`
-	AfterWorkers     []string           `json:"after_workers,omitempty"`
-	ID               string             `json:"id"`
-	ChildSessionID   string             `json:"child_session_id,omitempty"`
-	ProjectID        string             `json:"project_id,omitempty"`
-	WorkspaceRootID  string             `json:"workspace_root_id,omitempty"`
-	WorkspacePath    string             `json:"workspace_path,omitempty"`
-	DelegationID     string             `json:"delegation_id,omitempty"`
-	LegID            string             `json:"leg_id,omitempty"`
-	ParentSessionID  string             `json:"parent_session_id,omitempty"`
-	SourceToolCallID string             `json:"-"`
-	SourceArgsDigest string             `json:"-"`
-	WorkflowRunID    string             `json:"workflow_run_id,omitempty"`
-	WorkflowPhase    string             `json:"workflow_phase,omitempty"`
-	WorkflowWorkID   string             `json:"workflow_work_id,omitempty"`
-	AgentType        string             `json:"agent_type"`
-	Status           WorkerStatus       `json:"status"`
-	ExecutionTarget  ExecutionTarget    `json:"execution_target,omitempty"`
-	RunnerID         string             `json:"runner_id,omitempty"`
-	ClaimedBy        string             `json:"claimed_by,omitempty"`
+	Dependencies      []WorkerDependency      `json:"dependencies,omitempty"`
+	AfterWorkers      []string                `json:"after_workers,omitempty"`
+	ID                string                  `json:"id"`
+	WorkerRecordID    string                  `json:"worker_record_id,omitempty"`
+	WorkerName        string                  `json:"worker_name,omitempty"`
+	Round             int                     `json:"round,omitempty"`
+	ResultHandle      string                  `json:"result_handle,omitempty"`
+	ResultDisposition WorkerResultDisposition `json:"result_disposition,omitempty"`
+	ShelveReason      string                  `json:"shelve_reason,omitempty"`
+	ReviewOf          string                  `json:"review_of,omitempty"`
+	ParkedReason      string                  `json:"parked_reason,omitempty"`
+	ParkedUntil       *time.Time              `json:"parked_until,omitempty"`
+	ChildSessionID    string                  `json:"child_session_id,omitempty"`
+	ProjectID         string                  `json:"project_id,omitempty"`
+	WorkspaceRootID   string                  `json:"workspace_root_id,omitempty"`
+	WorkspacePath     string                  `json:"workspace_path,omitempty"`
+	DelegationID      string                  `json:"delegation_id,omitempty"`
+	LegID             string                  `json:"leg_id,omitempty"`
+	ParentSessionID   string                  `json:"parent_session_id,omitempty"`
+	SourceToolCallID  string                  `json:"-"`
+	SourceArgsDigest  string                  `json:"-"`
+	WorkflowRunID     string                  `json:"workflow_run_id,omitempty"`
+	WorkflowPhase     string                  `json:"workflow_phase,omitempty"`
+	WorkflowWorkID    string                  `json:"workflow_work_id,omitempty"`
+	AgentType         string                  `json:"agent_type"`
+	Status            WorkerStatus            `json:"status"`
+	ExecutionTarget   ExecutionTarget         `json:"execution_target,omitempty"`
+	RunnerID          string                  `json:"runner_id,omitempty"`
+	ClaimedBy         string                  `json:"claimed_by,omitempty"`
 	// Claim metadata binds updates to one durable attempt.
 	ClaimToken     string      `json:"-"`
 	Attempt        int         `json:"-"`
