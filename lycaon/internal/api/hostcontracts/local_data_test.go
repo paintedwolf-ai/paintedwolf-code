@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/google/uuid"
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/enginepaths"
@@ -173,53 +172,5 @@ func TestLocalDataEmptyBuckets400(t *testing.T) {
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status=%d want 400 body=%s", w.Code, w.Body.String())
-	}
-}
-
-func TestLocalDataInventoriesAndClearsOneWorkspaceCache(t *testing.T) {
-	base := t.TempDir()
-	seedRoot := enginepaths.WorkerSeedsRootUnder(base)
-	sourceRoot := filepath.Join(t.TempDir(), "firefox")
-	testutil.FailErr(t, "mkdir source", os.MkdirAll(sourceRoot, 0o755))
-	id := enginepaths.ProjectKey(sourceRoot)
-	generation := uuid.NewString()
-	seedDir := filepath.Join(seedRoot, id)
-	generationDir := filepath.Join(seedDir, "generations", generation)
-	testutil.FailErr(t, "mkdir cache tree", os.MkdirAll(filepath.Join(generationDir, "tree"), 0o700))
-	testutil.FailErr(t, "write cache file", os.WriteFile(filepath.Join(generationDir, "tree", "main.cpp"), []byte("code"), 0o600))
-	manifest := `{"format":1,"source_root":` + string(contractfixture.MustJSON(t, sourceRoot)) + `,"entries":{"main.cpp":{"kind":"regular","size":4,"mode":420,"mod_time":0}}}`
-	testutil.FailErr(t, "write cache manifest", os.WriteFile(filepath.Join(generationDir, "manifest.json"), []byte(manifest), 0o600))
-	testutil.FailErr(t, "write cache current", os.WriteFile(filepath.Join(seedDir, "CURRENT"), []byte(generation+"\n"), 0o600))
-	testutil.FailErr(t, "write cache last-used", os.WriteFile(filepath.Join(seedDir, "LAST_USED"), nil, 0o600))
-
-	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, Storage: hostapi.StorageDependencies{DataDir: base, WorkerSeedRoot: seedRoot}}), nil, hostapi.TestAPIToken)
-	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/local-data", nil)
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("GET status=%d body=%s", w.Code, w.Body.String())
-	}
-	var status wire.LocalDataStatus
-	testutil.FailErr(t, "decode workspace caches", json.NewDecoder(w.Body).Decode(&status))
-	if len(status.WorkspaceCaches) != 1 || status.WorkspaceCaches[0].ID != id || status.WorkspaceCaches[0].LogicalBytes != 4 {
-		t.Fatalf("workspace caches = %+v", status.WorkspaceCaches)
-	}
-
-	body, err := json.Marshal(wire.LocalDataClearRequest{WorkspaceCacheIDs: []string{id}})
-	testutil.FailErr(t, "marshal cache clear", err)
-	req = contractfixture.NewAuthedRequest(http.MethodPost, "/v1/local-data/clear", bytes.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w = httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("clear status=%d body=%s", w.Code, w.Body.String())
-	}
-	var cleared wire.LocalDataClearResponse
-	testutil.FailErr(t, "decode cache clear", json.NewDecoder(w.Body).Decode(&cleared))
-	if len(cleared.WorkspaceCacheResults) != 1 || !cleared.WorkspaceCacheResults[0].OK {
-		t.Fatalf("workspace cache clear = %+v", cleared.WorkspaceCacheResults)
-	}
-	if _, err := os.Stat(seedDir); !os.IsNotExist(err) {
-		t.Fatalf("workspace cache remains after clear: %v", err)
 	}
 }

@@ -13,6 +13,8 @@ export type ToolFact = {
   label: string;
   value: string;
   wide?: boolean;
+  /** The tool argument this fact renders. */
+  argument?: string;
   /** Host field path for the unchanged rendered value. */
   redactionField?: string;
   /** Source location carried by a tool argument or result. */

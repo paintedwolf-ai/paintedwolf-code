@@ -3,12 +3,12 @@ import type {
   SourceEncoding,
 } from "../../api/types.ts";
 
-export const FILE_BUFFER_KINDS = ["text", "image", "info", "diff", "diffs", "walk", "trust", "chat"] as const;
+export const FILE_BUFFER_KINDS = ["text", "image", "info", "diff", "diffs", "walk", "trust", "chat", "briefing"] as const;
 export type FileBufferKind = typeof FILE_BUFFER_KINDS[number];
 
 /** A pane the stage composes itself, with no file document behind it. */
-export function isComposedBufferKind(kind: FileBufferKind): kind is "diff" | "diffs" | "walk" | "trust" | "chat" {
-  return kind === "diff" || kind === "diffs" || kind === "walk" || kind === "trust" || kind === "chat";
+export function isComposedBufferKind(kind: FileBufferKind): kind is "diff" | "diffs" | "walk" | "trust" | "chat" | "briefing" {
+  return kind === "diff" || kind === "diffs" || kind === "walk" || kind === "trust" || kind === "chat" || kind === "briefing";
 }
 
 /** Image MIME values accepted from host sniffing. */

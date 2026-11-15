@@ -60,6 +60,9 @@ var (
 )
 
 func secretReferenceReject(err error) *toolrejection.ToolReject {
+	if reject, ok := toolrejection.SecretCapabilityReject(err); ok {
+		return reject
+	}
 	code := "SECRET_REFERENCE_FAILED"
 	retryable := false
 	switch {
@@ -67,16 +70,6 @@ func secretReferenceReject(err error) *toolrejection.ToolReject {
 		code = "SECRET_REFERENCE_UNAVAILABLE"
 	case errors.Is(err, errSecretReferenceMalformed):
 		code, retryable = "SECRET_REFERENCE_MALFORMED", true
-	case errors.Is(err, secretcap.ErrNotFound):
-		code, retryable = "SECRET_REFERENCE_NOT_FOUND", true
-	case errors.Is(err, secretcap.ErrNotVisible):
-		code, retryable = "SECRET_REFERENCE_OUT_OF_SCOPE", true
-	case errors.Is(err, secretcap.ErrRevoked):
-		code, retryable = "SECRET_REFERENCE_REVOKED", true
-	case errors.Is(err, secretcap.ErrAgentUseExpired):
-		code, retryable = "SECRET_REFERENCE_AGENT_USE_EXPIRED", true
-	case errors.Is(err, secretcap.ErrValueMissing):
-		code = "SECRET_REFERENCE_VALUE_UNAVAILABLE"
 	case errors.Is(err, secretcap.ErrTooManyReferences):
 		code, retryable = "SECRET_REFERENCE_LIMIT", true
 	}

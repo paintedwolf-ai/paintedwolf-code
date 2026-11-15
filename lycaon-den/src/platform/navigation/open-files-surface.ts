@@ -32,8 +32,11 @@ type OpenFilesDiffsRequest = {
   address: DiffsAddress;
 };
 
+type OpenFilesBriefingEvidenceRequest = { kind: "briefing-evidence"; projectId: string; recordId: string };
+
 type OpenFilesSurfaceRequest =
   | { kind: "chat-content"; projectId: string; document: ChatContentDocument }
+  | OpenFilesBriefingEvidenceRequest
   | OpenFilesTrustReviewRequest
   | OpenFilesDiffsRequest
   | OpenFilesStageRequest
@@ -62,6 +65,8 @@ export function openFilesSurface(req: OpenFilesSurfaceRequest): void {
   else pending = req;
 }
 
+let chatContentOpenSeq = 0;
+
 export function applyOpenFilesSurfaceRequest(
   req: OpenFilesSurfaceRequest,
   roots: readonly ResolveProjectRoot[],
@@ -71,7 +76,7 @@ export function applyOpenFilesSurfaceRequest(
 
   if (req.kind === "chat-content") {
     openFilesBuffer(projectId, { kind: "chat", rootId: "", rootLabel: "", path: "",
-      chatContent: req.document, name: req.document.title, intent: "permanent" });
+      chatContent: { ...req.document, openSeq: ++chatContentOpenSeq }, name: req.document.title, intent: "permanent" });
     return;
   }
   if (req.kind === "diffs") {
@@ -79,6 +84,11 @@ export function applyOpenFilesSurfaceRequest(
     const name = diffsPageCopy(req.address, resolvedLensView(projectId)).tab;
     openFilesBuffer(projectId, { kind: "diffs", rootId: "", rootLabel: "", path: "",
       diffs: req.address, name, intent: "transient" });
+    return;
+  }
+  if (req.kind === "briefing-evidence") {
+    openFilesBuffer(projectId, { kind: "briefing", rootId: "", rootLabel: "", path: "",
+      briefingRecordId: req.recordId, name: "Summary evidence", intent: "permanent" });
     return;
   }
   if (req.kind === "trust-review") {

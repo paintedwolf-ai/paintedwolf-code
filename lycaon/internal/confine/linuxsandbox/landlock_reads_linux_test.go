@@ -58,3 +58,44 @@ func TestReadRulesKeepTheWholeTreeWhenEveryDeniedPathExists(t *testing.T) {
 		t.Fatalf("rules = %+v, want only /", rules)
 	}
 }
+
+func TestLandlockProbeRefusedSeparatesCreationFromCleanup(t *testing.T) {
+	dir := t.TempDir()
+	dirFD, err := unix.Open(dir, unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC, 0)
+	testutil.FailErr(t, "open probe dir", err)
+	probe := landlockProbe{fd: dirFD}
+	t.Cleanup(probe.close)
+
+	origOpenat, origUnlinkat := probeOpenat, probeUnlinkat
+	t.Cleanup(func() {
+		probeOpenat, probeUnlinkat = origOpenat, origUnlinkat
+	})
+
+	// Creation succeeds on the real directory fd, while unlink cleanup fails with EACCES:
+	// refused() MUST return false (cleanup EACCES must never attest Landlock restriction).
+	probeOpenat = origOpenat
+	probeUnlinkat = func(dirfd int, path string, flags int) error {
+		_ = origUnlinkat(dirfd, path, flags)
+		return unix.EACCES
+	}
+	if probe.refused() {
+		t.Fatal("probe.refused() = true when Openat succeeded and only Unlinkat cleanup returned EACCES")
+	}
+
+	// Non-EACCES Openat failure must not attest restriction.
+	probeOpenat = func(int, string, int, uint32) (int, error) {
+		return -1, unix.ENOSPC
+	}
+	probeUnlinkat = origUnlinkat
+	if probe.refused() {
+		t.Fatal("probe.refused() = true when Openat failed with ENOSPC")
+	}
+
+	// Only EACCES on Openat itself attests Landlock creation denial.
+	probeOpenat = func(int, string, int, uint32) (int, error) {
+		return -1, unix.EACCES
+	}
+	if !probe.refused() {
+		t.Fatal("probe.refused() = false when Openat failed with EACCES")
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -97,5 +98,95 @@ func TestReadRootKeepsTheAdmittedDirectory(t *testing.T) {
 	testutil.FailErr(t, "read after retarget", err)
 	if got != "admitted" {
 		t.Fatalf("held root read %q after its path was retargeted", got)
+	}
+}
+
+// Retargeting or removing a previously warmed ancestor alias while retaining
+// the old tree must never allow subsequent reads or mutations of an uncached
+// child through the original alias spelling to reach the stale old tree.
+func TestRetargetedOrRemovedAncestorAliasDoesNotReachOldTree(t *testing.T) {
+	parent := t.TempDir()
+	oldTree := filepath.Join(parent, "old")
+	newTree := filepath.Join(parent, "new")
+	alias := filepath.Join(parent, "alias")
+
+	for path, content := range map[string]string{
+		filepath.Join(oldTree, "warm", "seed.txt"):             "old-warm",
+		filepath.Join(oldTree, "uncached", "target.txt"):       "old-uncached",
+		filepath.Join(oldTree, "uncached-removed", "keep.txt"): "old-keep",
+		filepath.Join(newTree, "uncached", "target.txt"):       "new-uncached",
+	} {
+		testutil.FailErr(t, "mkdir fixture", os.MkdirAll(filepath.Dir(path), 0o755))
+		testutil.FailErr(t, "seed fixture", os.WriteFile(path, []byte(content), 0o600))
+	}
+	testutil.FailErr(t, "create ancestor alias", os.Symlink(oldTree, alias))
+
+	// Warm both the ancestor alias root and a child under the alias.
+	warmRoot, err := fseffect.OpenReadRoot(alias)
+	testutil.FailErr(t, "warm ancestor alias root", err)
+	gotWarm, err := readFromRoot(t, warmRoot, "warm/seed.txt")
+	testutil.FailErr(t, "read warm seed", err)
+	if gotWarm != "old-warm" {
+		t.Fatalf("warm read = %q, want old-warm", gotWarm)
+	}
+	testutil.FailErr(t, "close warm root", warmRoot.Close())
+
+	warmChildFile, err := fseffect.OpenRead(fseffect.Location{Root: filepath.Join(alias, "warm"), Rel: "seed.txt"})
+	testutil.FailErr(t, "warm child through alias", err)
+	_ = warmChildFile.Close()
+
+	// Retarget alias -> newTree while retaining oldTree intact, then access a
+	// previously uncached child through the original alias spelling.
+	testutil.FailErr(t, "remove old alias", os.Remove(alias))
+	testutil.FailErr(t, "retarget alias to new tree", os.Symlink(newTree, alias))
+
+	uncachedViaAlias := filepath.Join(alias, "uncached")
+	retargetedRoot, err := fseffect.OpenReadRoot(uncachedViaAlias)
+	testutil.FailErr(t, "open uncached child after retarget", err)
+	gotRetargeted, err := readFromRoot(t, retargetedRoot, "target.txt")
+	testutil.FailErr(t, "read uncached child after retarget", err)
+	testutil.FailErr(t, "close retargeted root", retargetedRoot.Close())
+	if gotRetargeted != "new-uncached" {
+		t.Fatalf("read through retargeted alias = %q, want new-uncached", gotRetargeted)
+	}
+
+	_, err = fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.Location{Root: uncachedViaAlias, Rel: "written.txt"},
+		Source:   strings.NewReader("new-mutation"),
+		Mode:     0o600,
+	})
+	testutil.FailErr(t, "replace through retargeted alias", err)
+	if _, statErr := os.Stat(filepath.Join(oldTree, "uncached", "written.txt")); !os.IsNotExist(statErr) {
+		t.Fatalf("mutation through retargeted alias reached old tree: %v", statErr)
+	}
+	gotNewWritten, err := os.ReadFile(filepath.Join(newTree, "uncached", "written.txt"))
+	testutil.FailErr(t, "read new tree written file", err)
+	if string(gotNewWritten) != "new-mutation" {
+		t.Fatalf("new tree written bytes = %q, want new-mutation", gotNewWritten)
+	}
+
+	// Remove the alias completely while retaining oldTree intact, then access
+	// another previously uncached child through the original alias spelling.
+	testutil.FailErr(t, "remove alias completely", os.Remove(alias))
+	removedViaAlias := filepath.Join(alias, "uncached-removed")
+	if r, openErr := fseffect.OpenReadRoot(removedViaAlias); openErr == nil {
+		_ = r.Close()
+		t.Fatal("OpenReadRoot succeeded through removed ancestor alias")
+	}
+	if f, openErr := fseffect.OpenRead(fseffect.Location{Root: removedViaAlias, Rel: "keep.txt"}); openErr == nil {
+		_ = f.Close()
+		t.Fatal("OpenRead succeeded through removed ancestor alias")
+	}
+	if _, replaceErr := fseffect.Replace(fseffect.ReplaceRequest{
+		Location: fseffect.Location{Root: removedViaAlias, Rel: "keep.txt"},
+		Source:   strings.NewReader("clobbered"),
+		Mode:     0o600,
+	}); replaceErr == nil {
+		t.Fatal("Replace succeeded through removed ancestor alias")
+	}
+	gotOldKeep, err := os.ReadFile(filepath.Join(oldTree, "uncached-removed", "keep.txt"))
+	testutil.FailErr(t, "read retained old tree file", err)
+	if string(gotOldKeep) != "old-keep" {
+		t.Fatalf("retained old tree file = %q, want old-keep", gotOldKeep)
 	}
 }

@@ -68,16 +68,11 @@ func (q *memoryQueueQuery) materializeMemoryWorkerBranch(
 	if len(roots) == 0 {
 		return nil, ErrWorkerBranchClaimFailed
 	}
-	baseLease, err := holdBaseOverlay(ctx, q.self, &task)
+	parentCheckpoint, err := stackedParentCheckpoint(ctx, &task, roots, q.self, ws)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
 	}
-	defer baseLease.Release()
-	sources, err := workspaceSourceRoots(&task, roots, q.self)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
-	}
-	binding, layout, err := ws.CreateWorkerWorkspaceFromSources(ctx, roots, sources, strings.TrimSpace(task.WorkspaceRootID), task.ID)
+	binding, layout, err := createTaskBranch(ctx, ws, roots, strings.TrimSpace(task.WorkspaceRootID), task.ID, parentCheckpoint)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
 	}
@@ -85,9 +80,12 @@ func (q *memoryQueueQuery) materializeMemoryWorkerBranch(
 		return nil, ErrWorkerBranchClaimFailed
 	}
 	baselines := transientBaselines(binding.Root)
-	baselinePath, err := baselines.Capture(ctx, task.ID, workspacebaseline.Branch(layout.Roots, binding.Root))
-	if err != nil {
-		return nil, fmt.Errorf("%w: snapshot workspace: %w", ErrWorkerBranchClaimFailed, err)
+	baselinePath := ""
+	if !workspace.BranchUsesCheckpoints(binding.Root) {
+		baselinePath, err = baselines.Capture(ctx, task.ID, workspacebaseline.Branch(layout.Roots, binding.Root))
+		if err != nil {
+			return nil, fmt.Errorf("%w: snapshot workspace: %w", ErrWorkerBranchClaimFailed, err)
+		}
 	}
 	return q.publishMemoryWorkerBranch(ctx, jobID, binding, baselines, baselinePath)
 }
@@ -167,22 +165,6 @@ func (q *memoryQueueCore) EnsureWorkerBranch(ctx context.Context, jobID string) 
 	return task, lease, nil
 }
 
-func holdBaseOverlay(ctx context.Context, q *InMemoryQueue, task *api.WorkerTask) (*BranchLease, error) {
-	baseID := strings.TrimSpace(task.EffectiveScope().BaseOverlayID)
-	if baseID == "" {
-		return nil, nil
-	}
-	base, ok := q.Get(baseID)
-	if !ok || base == nil || base.MergeStatus == api.WorkerMergeStatusMerged || strings.TrimSpace(base.WorkspaceRoot) == "" {
-		return nil, nil
-	}
-	_, lease, err := q.EnsureWorkerBranch(ctx, baseID)
-	if err != nil {
-		return nil, fmt.Errorf("base overlay %q: %w", baseID, err)
-	}
-	return lease, nil
-}
-
 // destroyWorkspaceRoot removes an isolated sandbox copy after a terminal
 // transition; a queue without a workspace manager leaves the path alone.
 func destroyWorkspaceRoot(ctx context.Context, q *InMemoryQueue, jobID, root string) {
@@ -205,16 +187,20 @@ func workerWorkspaceIdentity(ctx context.Context, database db.DBTX, root, baseli
 	if err != nil {
 		return "", "", err
 	}
-	id, err := workspacebaseline.ID(baseline)
-	if err != nil {
-		return "", "", err
-	}
-	resolved, err := workspacebaseline.Path(dataDir, id)
-	if err != nil {
-		return "", "", err
-	}
-	if filepath.Clean(baseline) != resolved {
-		return "", "", fmt.Errorf("worker baseline is outside the active installation")
+	// A branch captured by checkpoint records no baseline.
+	id := ""
+	if strings.TrimSpace(baseline) != "" {
+		id, err = workspacebaseline.ID(baseline)
+		if err != nil {
+			return "", "", err
+		}
+		resolved, err := workspacebaseline.Path(dataDir, id)
+		if err != nil {
+			return "", "", err
+		}
+		if filepath.Clean(baseline) != resolved {
+			return "", "", fmt.Errorf("worker baseline is outside the active installation")
+		}
 	}
 	rel, ok, err := workerplacement.LogicalFromPhysical(dataDir, root)
 	if err != nil {
@@ -259,18 +245,27 @@ func TaskRootRefs(ctx context.Context, task *api.WorkerTask, projects ProjectSto
 	}}
 }
 
-// ReconcileProjectSandboxes removes snapshotted sandboxes absent from current task state.
+// ReconcileProjectSandboxes removes sandboxes absent from current task state. Each candidate
+// settles first; a candidate that cannot keeps its data and its retry state. Live workers are
+// retained, so this runs safely while the engine serves them.
 func ReconcileProjectSandboxes(
 	ctx context.Context,
 	sandboxRoot, primaryDir string,
+	settle workspace.SandboxSettler,
 	loadTasks func(context.Context) ([]api.WorkerTask, error),
 ) (removed int, err error) {
-	return workspace.ReconcileStaleSandboxes(ctx, sandboxRoot, primaryDir, func(ctx context.Context) (map[string]struct{}, error) {
+	return workspace.ReconcileStaleSandboxes(ctx, sandboxRoot, primaryDir, settle, func(ctx context.Context) (map[string]struct{}, error) {
 		tasks, loadErr := loadTasks(ctx)
 		if loadErr != nil {
 			return nil, loadErr
 		}
-		return ActiveSandboxJobIDs(tasks), nil
+		retained := ActiveSandboxJobIDs(tasks)
+		for _, task := range tasks {
+			if task.EffectiveScope().IsWrite() && task.WorkspaceOverlayPath != "" && task.MergeStatus == api.WorkerMergeStatusPending {
+				retained[task.ID] = struct{}{}
+			}
+		}
+		return retained, nil
 	})
 }
 

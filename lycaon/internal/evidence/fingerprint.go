@@ -428,7 +428,6 @@ func carriesServerText(obj map[string]any) bool {
 	}
 	return false
 }
-
 func isSyntacticLoopbackURL(rawURL string) bool {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || u.Hostname() == "" {

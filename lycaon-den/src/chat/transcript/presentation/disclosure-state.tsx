@@ -3,6 +3,8 @@ import type { TranscriptDisclosureKey } from "./transcript-disclosure-key.ts";
 
 export type TranscriptDisclosureStore = {
   isOpen: (key: TranscriptDisclosureKey) => boolean;
+  /** Open because a person opened it, not only revealed for Find or navigation. */
+  isUserOpen: (key: TranscriptDisclosureKey) => boolean;
   setUserOpen: (key: TranscriptDisclosureKey, open: boolean) => void;
   acquire: (key: TranscriptDisclosureKey, lease?: symbol) => () => void;
   /** A surface whose key changed keeps its open state and leases under the new key. */
@@ -25,6 +27,7 @@ export function createTranscriptDisclosureStore(onUserChange?: () => void): Tran
   const prune = (key: TranscriptDisclosureKey) => { const row=rows.get(key); if (row && !row.userOpen && !row.leases.size) rows.delete(key); };
   return {
     isOpen: key => { version(); const row=rows.get(key); return row?.userOpen===true || Boolean(row?.leases.size); },
+    isUserOpen: key => { version(); return rows.get(key)?.userOpen===true; },
     setUserOpen: (key,open) => {
       const row=ensure(key); row.userOpen=open; row.leases.clear(); prune(key); changed(); onUserChange?.();
     },

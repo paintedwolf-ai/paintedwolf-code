@@ -434,6 +434,9 @@ const CATALOG = {
   txt: { grammar: null, label: "Plain text", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
 } satisfies Record<string, CatalogEntry>;
 
+/** Label for text with no language. */
+export const PLAIN_TEXT_LABEL = "Plain text";
+
 type CatalogKey = keyof typeof CATALOG;
 
 function catalogEntry(ext: string): CatalogEntry | undefined {
@@ -515,7 +518,7 @@ export function languageLabelForDetectedLanguage(
   const key = language.trim().toLowerCase();
   if (!key) return languageLabelForPath(path);
   if (key === "vimdoc" && extensionOf(basenameOf(path)) === "txt") {
-    return "Plain text";
+    return PLAIN_TEXT_LABEL;
   }
   const known = DETECTED_LANGUAGE_TO_LABEL[key] ?? catalogEntry(key)?.label;
   if (known) return known;

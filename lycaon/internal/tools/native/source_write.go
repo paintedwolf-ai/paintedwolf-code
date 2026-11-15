@@ -115,6 +115,7 @@ func applyAgentFileAdmitted(ctx context.Context, tctx tools.ToolContext, target 
 	})
 	if result.Publication.Committed() {
 		delivery.Commit(ctx)
+		observeCommittedWorkerWrite(ctx, tctx, target.Abs, mutation.AfterSHA256, int64(len(after)))
 	}
 	return finishAgentMutation(ctx, tctx, mutation, journal, err)
 }
@@ -638,7 +639,7 @@ func publishAgentStreams(ctx context.Context, tc tools.ToolContext, memory *tool
 			tc.Effects.Out.OwnerRef = ids[i]
 		}
 		completions[i].Attempted = true
-		completions[i].Result, completions[i].Err = stream.publish(ctx)
+		completions[i].Result, completions[i].Err = stream.publish(ctx, tc)
 		if completions[i].Err != nil {
 			publicationErr = completions[i].Err
 			break
@@ -663,7 +664,7 @@ func publishIndividualStreams(ctx context.Context, tc tools.ToolContext, streams
 	completions := make([]sourceeffect.Completion, len(streams))
 	for i, stream := range streams {
 		completions[i].Attempted = true
-		result, err := stream.publish(ctx)
+		result, err := stream.publish(ctx, tc)
 		completions[i].Result = result
 		completions[i].Err = finishAgentMutation(ctx, tc, stream.mutation, stream.journal, err)
 		if completions[i].Err != nil {
@@ -675,6 +676,6 @@ func publishIndividualStreams(ctx context.Context, tc tools.ToolContext, streams
 
 // Commit publishes and settles one attributed stream.
 func (s *agentStreamStage) Commit(ctx context.Context, tc tools.ToolContext) (fseffect.Result, error) {
-	result, err := s.publish(ctx)
+	result, err := s.publish(ctx, tc)
 	return result, finishAgentMutation(ctx, tc, s.mutation, s.journal, err)
 }

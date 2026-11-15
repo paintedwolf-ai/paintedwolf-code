@@ -14,7 +14,13 @@ func File(f *os.File) error {
 	if relaxed.Load() {
 		return nil
 	}
-	return f.Sync()
+	return flush(f)
+}
+
+// Always flushes f whatever the process relaxed. It is for flushes that are themselves the behavior
+// under test, such as a checkpoint barrier pushing client data.
+func Always(f *os.File) error {
+	return flush(f)
 }
 
 // Relaxed reports whether flushes are skipped; platform code with its own

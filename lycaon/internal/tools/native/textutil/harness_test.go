@@ -145,7 +145,7 @@ func newHarness(t *testing.T) *harness {
 	mutations.Admission = &spillQuota{maximum: 1 << 30}
 	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
 	testutil.FailErr(t, "program paths", err)
-	publication := &mutation.Publication{Owners: mutations, Program: mutation.Program{Paths: paths}, Tools: tc, Admission: func(_ context.Context, _ commandprogram.OutputDestination, _ string) (tools.CommandOutputWrite, error) {
+	publication := &mutation.Publication{Owners: mutations, Program: mutation.Program{Paths: paths}, Tools: tc, Admission: func(context.Context, commandprogram.OutputDestination, string, string) (tools.CommandOutputWrite, error) {
 		return tools.CommandOutputWrite{Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
 			return apply(ctx, tc)
 		}, Abandon: func(context.Context, error) error { return nil }}, nil

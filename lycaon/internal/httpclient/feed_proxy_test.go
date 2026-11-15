@@ -1,10 +1,12 @@
 package httpclient
 
 import (
+	"context"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"net/url"
 	"sync"
 	"testing"
@@ -31,7 +33,10 @@ func TestFeedUsesAuthenticatedProxyForEachPinnedHopAndPreservesTLSIdentity(t *te
 		}
 	}))
 	defer origin.Close()
-	pinned := origin.Listener.Addr().String()
+	originURL, err := url.Parse(origin.URL)
+	testutil.FailErr(t, "parse pinned TLS origin", err)
+	pinnedIP := netip.MustParseAddr("203.0.113.7")
+	pinned := net.JoinHostPort(pinnedIP.String(), originURL.Port())
 	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		proxyTargets = append(proxyTargets, r.Host)
@@ -46,7 +51,7 @@ func TestFeedUsesAuthenticatedProxyForEachPinnedHopAndPreservesTLSIdentity(t *te
 			w.WriteHeader(407)
 			return
 		}
-		upstream, err := net.Dial("tcp", pinned)
+		upstream, err := net.Dial("tcp", origin.Listener.Addr().String())
 		if err != nil {
 			t.Error(err)
 			w.WriteHeader(502)
@@ -75,9 +80,11 @@ func TestFeedUsesAuthenticatedProxyForEachPinnedHopAndPreservesTLSIdentity(t *te
 	t.Setenv("https_proxy", "")
 	t.Setenv("NO_PROXY", "")
 	t.Setenv("no_proxy", "")
-	originURL, err := url.Parse(origin.URL)
-	testutil.FailErr(t, "parse pinned TLS origin", err)
-	body, err := getFeed(t.Context(), "https://example.com:"+originURL.Port()+"/start?port="+originURL.Port(), feedTestOptions(), feedTLSNetwork(t, origin))
+	netw := feedTLSNetwork(t, origin)
+	netw.resolve = func(context.Context, string) ([]netip.Addr, error) {
+		return []netip.Addr{pinnedIP}, nil
+	}
+	body, err := getFeed(t.Context(), "https://example.com:"+originURL.Port()+"/start?port="+originURL.Port(), feedTestOptions(), netw)
 	testutil.FailErr(t, "fetch through authenticated pinned hops", err)
 	mu.Lock()
 	defer mu.Unlock()

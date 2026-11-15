@@ -33,7 +33,9 @@ UNION SELECT 'baseline', '', b.id FROM worker_baselines b WHERE EXISTS (SELECT 1
 UNION SELECT 'branch-meta', '', workspace_relpath || '.meta/state.json' FROM worker_jobs WHERE workspace_relpath IS NOT NULL AND workspace_relpath != ''
 `
 
-func validateArchiveReferences(ctx context.Context, snapshot db.DBTX, files map[string]archiveSource) error {
+// validateArchiveReferences checks that files holds everything the captured store refers to. A
+// worker tree for which leftInPlace reports true stays where it is and is not required in files.
+func validateArchiveReferences(ctx context.Context, snapshot db.DBTX, files map[string]archiveSource, leftInPlace func(root string) bool) error {
 	rows, err := snapshot.QueryContext(ctx, retainedFilesQuery)
 	if err != nil {
 		return fmt.Errorf("backup: read retained file references: %w", err)
@@ -73,6 +75,9 @@ func validateArchiveReferences(ctx context.Context, snapshot db.DBTX, files map[
 		return err
 	}
 	if err := validateWorkerManifests(ctx, snapshot, files); err != nil {
+		return err
+	}
+	if err := validateWorkerCheckpoints(ctx, snapshot, files, leftInPlace); err != nil {
 		return err
 	}
 	if err := validateRewindJournals(ctx, snapshot, files); err != nil {
@@ -144,14 +149,14 @@ func validateStagedReferences(ctx context.Context, stagingDir string, manifest M
 		return fmt.Errorf("backup: open captured store: %w", err)
 	}
 	defer func() { _ = snapshot.Close() }()
-	if err := validateRequiredBranchTrees(ctx, snapshot, manifest, configDir); err != nil {
+	if err := validateRequiredBranchTrees(ctx, stagingDir, snapshot, manifest, configDir); err != nil {
 		return err
 	}
 	files := make(map[string]archiveSource, len(manifest.Files))
 	for _, file := range manifest.Files {
 		files[file.RelPath] = archiveSource{path: filepath.Join(stagingDir, filepath.FromSlash(file.RelPath)), kind: file.Kind}
 	}
-	return validateArchiveReferences(ctx, snapshot, files)
+	return validateArchiveReferences(ctx, snapshot, files, placedOnDevice(configDir))
 }
 
 func validateWorkerManifests(ctx context.Context, snapshot db.DBTX, files map[string]archiveSource) error {

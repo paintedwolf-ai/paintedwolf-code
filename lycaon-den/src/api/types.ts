@@ -217,6 +217,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sessions/{id}/program-receipt-document": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a row window of a command receipt document
+         * @description The document is JSON Lines written by the host from durable program records. For each scope in order it holds one program row, then the scope's execution rows by ordinal, then the program's node rows by node id. Reads that name a revision answer chat_content_changed once the records behind it change.
+         */
+        get: operations["getCommandReceiptDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/{id}/program-receipt-document/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search a command receipt document without reading its rows
+         * @description Each request scans a bounded number of rows, so a page may hold no matches and still carry next_cursor.
+         */
+        get: operations["searchCommandReceiptDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sessions/{id}/invocations": {
         parameters: {
             query?: never;
@@ -2414,6 +2454,46 @@ export interface paths {
         put?: never;
         /** Request an AI briefing for one exact source presentation */
         post: operations["requestFileBriefing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/briefings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request or read the briefing for one step, activity or worker result
+         * @description Returns the target's snapshot: a stored result, an admitted or joined attempt, or a factual fallback. A manual request whose inputs are all answered already returns regenerate_outcome inputs_unchanged and makes no model call.
+         */
+        post: operations["requestBriefing"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/projects/{id}/briefings/records/{record_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read an immutable briefing evidence record
+         * @description Lists each section's result and the evidence it was given. A section whose evidence the reader cannot read is marked unavailable and carries neither text nor items.
+         */
+        get: operations["getBriefingRecord"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -5824,9 +5904,9 @@ export interface components {
             actions?: components["schemas"]["NoticeAction"][];
         };
         /** @enum {string} */
-        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "delegation" | "cost" | "llm" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "project_background" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "chat_vault" | "source_view";
+        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "delegation" | "cost" | "llm" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "project_background" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "chat_vault" | "source_view";
         /** @description Topic-discriminated EventHub SSE envelope. */
-        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeDelegation"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProjectBackground"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeChatVault"] | components["schemas"]["EventEnvelopeSourceView"];
+        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeDelegation"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProjectBackground"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeChatVault"] | components["schemas"]["EventEnvelopeSourceView"];
         /** @description One transcript row change. message is always the full post-write row: apply it as a whole-row snapshot ordered by seq, never a field merge onto a cached row — an absent field means the row no longer has it. */
         MessageEvent: {
             /** Format: uuid */
@@ -6768,8 +6848,10 @@ export interface components {
             error?: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description Present when the summary has an evidence record. */
+            evidence_ref?: components["schemas"]["BriefingEvidenceRef"];
         };
-        /** @description Revision-keyed briefing update with delta, result, or error. */
+        /** @description Revision-keyed briefing update with its result or error. */
         FileBriefingEvent: {
             /** Format: uuid */
             project_id: string;
@@ -6783,16 +6865,178 @@ export interface components {
             presentation: "current" | "document" | "version";
             source_sha256: string;
             /** @enum {string} */
-            status: "preview" | "pending" | "streaming" | "complete" | "failed";
+            status: "preview" | "pending" | "complete" | "failed";
             preview?: components["schemas"]["FileBriefingPreview"];
             locations?: components["schemas"]["FileBriefingLocation"][];
             sections?: components["schemas"]["FileBriefingSection"][];
             fallback_text: string;
-            delta?: string;
             truncated: boolean;
             error?: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description Present when the summary has an evidence record. */
+            evidence_ref?: components["schemas"]["BriefingEvidenceRef"];
+        };
+        /** @description An immutable evidence record; its id derives from the ordered section manifest hashes. */
+        BriefingEvidenceRef: {
+            /** Format: uuid */
+            project_id: string;
+            record_id: string;
+        };
+        SourceStepBriefingTarget: {
+            /** @enum {string} */
+            kind: "effect" | "command" | "git" | "outside";
+            target_key: string;
+            /** @description Frozen scope and membership identity; never the result identity. */
+            scope_fingerprint: string;
+            scope: components["schemas"]["SourceStepBriefingScope"];
+            /** @description Exact ordered membership; required for outside targets. */
+            effect_ids?: string[];
+        };
+        SourceStepBriefingScope: {
+            /** @enum {string} */
+            kind: "file" | "command" | "git" | "outside";
+            branch_id?: string;
+            root_ids: string[];
+            file_id?: string;
+        };
+        ToolActivityBriefingTarget: {
+            /** Format: uuid */
+            session_id: string;
+            /** @description Host-issued activity ids, in order. */
+            members?: components["schemas"]["ToolActivityBriefingMember"][];
+            tool_call_ids: string[];
+            activity_revision?: string;
+        };
+        ToolActivityBriefingMember: {
+            program_id: string;
+            activity_id: string;
+        };
+        WorkerResultBriefingTarget: {
+            /** Format: uuid */
+            worker_id: string;
+            /** @description The worker's completion time; a rerun is a new revision. */
+            result_revision: string;
+        };
+        BriefingRequest: {
+            /** @enum {string} */
+            profile_id: "source_step" | "tool_activity" | "worker_result";
+            /** @description SourceStepBriefingTarget, ToolActivityBriefingTarget or WorkerResultBriefingTarget, validated against profile_id. */
+            target_ref: components["schemas"]["SourceStepBriefingTarget"] | components["schemas"]["ToolActivityBriefingTarget"] | components["schemas"]["WorkerResultBriefingTarget"];
+            /** @enum {string} */
+            trigger?: "automatic" | "manual";
+        };
+        BriefingSummarySection: {
+            section_id: string;
+            text: string;
+            manifest_hash: string;
+            /** @enum {string} */
+            source: "summarizer" | "fallback" | "deterministic";
+            /** @description The result existed before this target asked for it. */
+            reused: boolean;
+            provider_id: string;
+            model: string;
+            evidence_quality: ("structural_evidence" | "causal_evidence" | "purpose_reused" | "causal_context_missing" | "content_binary" | "content_pruned" | "content_omitted" | "evidence_truncated" | "outcome_unknown" | "metadata_only" | "reasoning_included" | "reasoning_truncated" | "reasoning_shared" | "reasoning_unavailable" | "output_truncated")[];
+            /** Format: date-time */
+            created_at: string;
+        };
+        BriefingResult: {
+            summary: components["schemas"]["BriefingSummarySection"][];
+            evidence_ref: components["schemas"]["BriefingEvidenceRef"];
+        };
+        /** @description Provenance only; a purpose section is reused by hash, not from this field. */
+        BriefingLinkedIntent: {
+            text: string;
+            checkpoint_id: string;
+            action_id: string;
+            scope: string;
+        };
+        BriefingOutcome: {
+            /** @enum {string} */
+            state: "succeeded" | "failed" | "interrupted" | "partial" | "unknown";
+            receipt_id?: string;
+            exit_code?: number;
+        };
+        BriefingSnapshot: {
+            /** @enum {string} */
+            profile_id: "source_step" | "tool_activity" | "worker_result";
+            profile_version: string;
+            target_key: string;
+            scope_fingerprint: string;
+            target: {
+                [key: string]: unknown;
+            };
+            /** @description Decimal integer; compare numerically. */
+            cache_epoch: string;
+            /** @description Decimal integer; zero only while absent. */
+            revision: string;
+            /** @enum {string} */
+            status: "absent" | "idle" | "pending" | "complete" | "failed" | "canceled";
+            attempt_id?: string;
+            /** @enum {string} */
+            attempt_trigger?: "automatic" | "manual";
+            /** @enum {string} */
+            invocation_class?: "overlay" | "requested";
+            /**
+             * Format: date-time
+             * @description Present while pending; ask again after it if no terminal event arrived.
+             */
+            reconcile_after_at?: string;
+            result?: components["schemas"]["BriefingResult"];
+            /** @description Sections an active attempt is still producing, in profile order. */
+            pending_sections: string[];
+            /** @enum {string} */
+            regenerate_outcome?: "inputs_unchanged" | "started";
+            linked_intent?: components["schemas"]["BriefingLinkedIntent"];
+            outcome: components["schemas"]["BriefingOutcome"];
+            error_code: string;
+            error_message: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        /** @description A snapshot of one target, or a reset clearing earlier epochs for the listed profiles. */
+        BriefingEvent: {
+            /** @enum {string} */
+            kind: "snapshot" | "reset";
+            snapshot?: components["schemas"]["BriefingSnapshot"];
+            profile_ids?: ("source_step" | "tool_activity" | "worker_result")[];
+            cache_epoch?: string;
+        };
+        BriefingRecordItem: {
+            key: string;
+            /** @enum {string} */
+            role: "goal" | "action" | "observation" | "structure" | "verification" | "context";
+            source_kind: string;
+            ref?: string;
+            revision?: string;
+            /** @enum {string} */
+            inclusion: "included" | "truncated" | "omitted" | "unavailable";
+            reason?: string;
+            /** @description The excerpt submitted; absent for items that were not sent. */
+            text?: string;
+        };
+        BriefingRecordSection: {
+            section_id: string;
+            manifest_hash: string;
+            /** @description False when the reader cannot read every item this section used. */
+            available: boolean;
+            result?: components["schemas"]["BriefingSummarySection"];
+            template_id?: string;
+            template_version?: string;
+            items?: components["schemas"]["BriefingRecordItem"][];
+        };
+        BriefingRecord: {
+            record_id: string;
+            /** @enum {string} */
+            profile_id: "source_step" | "tool_activity" | "worker_result";
+            profile_version: string;
+            /** @enum {string} */
+            method: "model" | "deterministic" | "mixed";
+            /** @enum {string} */
+            attempt_trigger?: "automatic" | "manual";
+            /** Format: date-time */
+            created_at: string;
+            sections: components["schemas"]["BriefingRecordSection"][];
         };
         /** @description Named source comparison boundary. */
         SourcePin: {
@@ -8079,6 +8323,7 @@ export interface components {
             plan: components["schemas"]["ApprovalPlan"];
             ai_rationale?: string;
             ai_rationale_pending?: boolean;
+            ai_rationale_evidence_ref?: components["schemas"]["BriefingEvidenceRef"];
             joined_count?: number;
             joined_tool_call_ids?: string[];
             /** @description Live presentation override for an open card. Raised when joiners escalate via MaxConsequence; mint-time plan.presentation is unchanged. */
@@ -10239,7 +10484,7 @@ export interface components {
          * @description Closed machine-readable error identity emitted by the private Den-sidecar API.
          * @enum {string}
          */
-        ApiErrorCode: "approval_capacity_exceeded" | "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "delegation_not_found" | "delegation_leg_not_found" | "feedback_not_pending" | "feedback_response_required" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "command_program_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "project_removal_operation_conflict" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_closeout_exhausted" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "leg_not_pending" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
+        ApiErrorCode: "approval_capacity_exceeded" | "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "delegation_not_found" | "delegation_leg_not_found" | "feedback_not_pending" | "feedback_response_required" | "briefing_disabled" | "briefing_target_unavailable" | "briefing_busy" | "briefing_unavailable" | "briefing_record_not_found" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "command_program_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "project_removal_operation_conflict" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_closeout_exhausted" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "leg_not_pending" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
         /** @enum {string} */
         NoticeAction: "open_ai_providers" | "retry_contribution_frame" | "prompt_retry" | "prompt_keep_going" | "prompt_rewind_and_retry";
         /** @enum {string} */
@@ -11411,13 +11656,13 @@ export interface components {
             compaction_threshold?: number;
         };
         /** @enum {string} */
-        WorkspaceProvisionStrategy: "direct_cow" | "bridge_cow" | "direct_copy";
+        WorkspaceProvisionStrategy: "direct_cow" | "direct_copy";
         /** @enum {string} */
         WorkspaceNotClonableReason: "roots_span_volumes" | "volume_cannot_clone" | "volume_root_inside_attached_root" | "volume_root_unwritable" | "volume_not_identified" | "placement_folder_not_private" | "volume_ignores_ownership";
         WorkspacePreparation: {
             strategy?: components["schemas"]["WorkspaceProvisionStrategy"];
             /** @enum {string} */
-            stage: "probing" | "surveying_source" | "cost_declared" | "materializing_seed" | "snapshotting_branch" | "branch_prepared";
+            stage: "probing" | "surveying_source" | "cost_declared" | "snapshotting_branch" | "branch_prepared";
             /** Format: int64 */
             files: number;
             /** Format: int64 */
@@ -11865,6 +12110,36 @@ export interface components {
             activities?: components["schemas"]["CommandActivity"][];
             executions_omitted: number;
             nodes_omitted: number;
+            next_cursor?: string;
+        };
+        CommandReceiptRow: {
+            index: number;
+            /** @description One JSON record without its line break. type is program, execution or node. A program record holds program, progress when recorded, activity for an activity scope, execution_count and node_count. An execution record holds program_id, activity_id for an activity scope, and execution. A node record holds program_id and node. */
+            text: string;
+        };
+        CommandReceiptDocumentPage: {
+            /** @description Snapshot these rows belong to. */
+            revision: string;
+            total_rows: number;
+            /** @description True when no scoped program is still running or waiting, so the revision is final. */
+            settled: boolean;
+            offset: number;
+            /** @description Row just past this window; total_rows at the end of the document. */
+            end_offset: number;
+            /** @description True when this window reaches the end of the document. */
+            complete: boolean;
+            rows: components["schemas"]["CommandReceiptRow"][];
+        };
+        CommandReceiptMatch: {
+            row: number;
+            /** @description Rune offset of the match within its row. */
+            column: number;
+            /** @description Match length in runes. */
+            length: number;
+        };
+        CommandReceiptSearchPage: {
+            matches: components["schemas"]["CommandReceiptMatch"][];
+            /** @description Opaque cursor for the next search page; absent when the search reached the end of the document. */
             next_cursor?: string;
         };
         InvocationReceiptList: {
@@ -14107,6 +14382,14 @@ export interface components {
              *     row, so there is no bare command to list.
              */
             commands: components["schemas"]["SourceCommandWindow"][];
+            /** @description Explanation target for each step on this page, keyed by the step's rail key (an effect id, git:<change id>, command:<window id> or outside:<first effect id>). Den reads targets from here rather than inventing them. */
+            briefing_targets?: {
+                [key: string]: components["schemas"]["SourceStepBriefingTarget"];
+            };
+            /** @description Stored briefings for this page's targets; passive reads never start one. */
+            briefings?: components["schemas"]["BriefingSnapshot"][];
+            /** @description The project's briefing epoch, so a missed reset is noticed. */
+            briefing_epoch?: string;
             /** @description False when the project root is not a git checkout */
             commit_available: boolean;
         };
@@ -14714,6 +14997,8 @@ export interface components {
             tool_call_id?: string;
             /** Format: date-time */
             recorded_at: string;
+            /** @description The change that wrote this text; its Walk step explains it. */
+            effect_id?: string;
         };
         /**
          * @description Line provenance for one file. head_sha256 is the tip after hash the
@@ -15380,22 +15665,8 @@ export interface components {
              */
             unavailable_entries?: number;
         };
-        WorkspaceCacheStatus: {
-            id: string;
-            source_root: string;
-            /** Format: int64 */
-            logical_bytes: number;
-            /**
-             * Format: int64
-             * @description Best-effort allocated bytes retained by the immutable bridge cache
-             */
-            allocated_bytes: number;
-            /** Format: date-time */
-            last_used_at: string;
-        };
         LocalDataStatus: {
             buckets: components["schemas"]["LocalDataBucketStatus"][];
-            workspace_caches: components["schemas"]["WorkspaceCacheStatus"][];
         };
         HistoryRetentionRule: {
             /** @enum {string} */
@@ -15493,7 +15764,6 @@ export interface components {
         };
         LocalDataClearRequest: {
             buckets?: components["schemas"]["LocalDataBucketId"][];
-            workspace_cache_ids?: string[];
         };
         LocalDataClearResult: {
             id: components["schemas"]["LocalDataBucketId"];
@@ -15502,16 +15772,8 @@ export interface components {
             /** @description Host copy when ok is false; branch on code. */
             message?: string;
         };
-        WorkspaceCacheClearResult: {
-            id: string;
-            ok: boolean;
-            code?: components["schemas"]["ApiErrorCode"];
-            /** @description Host copy when ok is false; branch on code. */
-            message?: string;
-        };
         LocalDataClearResponse: {
             results: components["schemas"]["LocalDataClearResult"][];
-            workspace_cache_results: components["schemas"]["WorkspaceCacheClearResult"][];
         };
         BackupCapabilities: {
             format_version: number;
@@ -17169,6 +17431,17 @@ export interface components {
              */
             topic: "file_briefing";
         };
+        EventEnvelopeBriefing: components["schemas"]["EventEnvelopeBase"] & {
+            /** @constant */
+            topic: "briefing";
+            data: components["schemas"]["BriefingEvent"];
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            topic: "briefing";
+        };
         EventEnvelopeArtifact: components["schemas"]["EventEnvelopeBase"] & {
             /** @constant */
             topic: "artifact";
@@ -17497,6 +17770,8 @@ export interface components {
     };
     parameters: {
         SessionId: string;
+        /** @description Ordered scopes of the document. A scope is a program id, for all of its executions, or program_id:activity_id, for the executions that host activity selects. A scope may not repeat, and a program may not appear both whole and by activity. */
+        CommandReceiptScopes: string[];
         /** @description Stable coordinator draft message id for the turn */
         DraftSlotId: string;
         ProjectId: string;
@@ -17944,6 +18219,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CommandProgramReceiptPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getCommandReceiptDocument: {
+        parameters: {
+            query: {
+                /** @description Ordered scopes of the document. A scope is a program id, for all of its executions, or program_id:activity_id, for the executions that host activity selects. A scope may not repeat, and a program may not appear both whole and by activity. */
+                scopes: components["parameters"]["CommandReceiptScopes"];
+                /** @description Snapshot to read. Omit it to read the current snapshot. */
+                revision?: string;
+                /** @description Zero-based row to start at. */
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rows from one snapshot of the receipt document */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandReceiptDocumentPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    searchCommandReceiptDocument: {
+        parameters: {
+            query: {
+                /** @description Ordered scopes of the document. A scope is a program id, for all of its executions, or program_id:activity_id, for the executions that host activity selects. A scope may not repeat, and a program may not appear both whole and by activity. */
+                scopes: components["parameters"]["CommandReceiptScopes"];
+                revision: string;
+                q: string;
+                case_sensitive?: boolean;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matches by row and rune column in the named snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandReceiptSearchPage"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -23333,6 +23678,88 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
+            default: components["responses"]["Error"];
+        };
+    };
+    requestBriefing: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BriefingRequest"];
+            };
+        };
+        responses: {
+            /** @description Target snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefingSnapshot"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["ContentTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            422: components["responses"]["UnprocessableContent"];
+            /** @description The project's briefing queue is full (briefing_busy) */
+            429: {
+                headers: {
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Briefings are stopping with the engine (briefing_unavailable) */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getBriefingRecord: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+                record_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Evidence record */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BriefingRecord"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
             default: components["responses"]["Error"];
         };
     };
@@ -30298,6 +30725,22 @@ export type FileBriefingLocation = components["schemas"]["FileBriefingLocation"]
 export type FileBriefingSection = components["schemas"]["FileBriefingSection"];
 export type FileBriefingResponse = components["schemas"]["FileBriefingResponse"];
 export type FileBriefingEvent = components["schemas"]["FileBriefingEvent"];
+export type BriefingEvidenceRef = components["schemas"]["BriefingEvidenceRef"];
+export type SourceStepBriefingTarget = components["schemas"]["SourceStepBriefingTarget"];
+export type SourceStepBriefingScope = components["schemas"]["SourceStepBriefingScope"];
+export type ToolActivityBriefingTarget = components["schemas"]["ToolActivityBriefingTarget"];
+export type ToolActivityBriefingMember = components["schemas"]["ToolActivityBriefingMember"];
+export type WorkerResultBriefingTarget = components["schemas"]["WorkerResultBriefingTarget"];
+export type BriefingRequest = components["schemas"]["BriefingRequest"];
+export type BriefingSummarySection = components["schemas"]["BriefingSummarySection"];
+export type BriefingResult = components["schemas"]["BriefingResult"];
+export type BriefingLinkedIntent = components["schemas"]["BriefingLinkedIntent"];
+export type BriefingOutcome = components["schemas"]["BriefingOutcome"];
+export type BriefingSnapshot = components["schemas"]["BriefingSnapshot"];
+export type BriefingEvent = components["schemas"]["BriefingEvent"];
+export type BriefingRecordItem = components["schemas"]["BriefingRecordItem"];
+export type BriefingRecordSection = components["schemas"]["BriefingRecordSection"];
+export type BriefingRecord = components["schemas"]["BriefingRecord"];
 export type SourcePin = components["schemas"]["SourcePin"];
 export type SourcePinList = components["schemas"]["SourcePinList"];
 export type SourcePinCreate = components["schemas"]["SourcePinCreate"];
@@ -30786,6 +31229,10 @@ export type CommandRevisionConflict = components["schemas"]["CommandRevisionConf
 export type CommandExecutionReceipt = components["schemas"]["CommandExecutionReceipt"];
 export type CommandProgramNode = components["schemas"]["CommandProgramNode"];
 export type CommandProgramReceiptPage = components["schemas"]["CommandProgramReceiptPage"];
+export type CommandReceiptRow = components["schemas"]["CommandReceiptRow"];
+export type CommandReceiptDocumentPage = components["schemas"]["CommandReceiptDocumentPage"];
+export type CommandReceiptMatch = components["schemas"]["CommandReceiptMatch"];
+export type CommandReceiptSearchPage = components["schemas"]["CommandReceiptSearchPage"];
 export type InvocationReceiptList = components["schemas"]["InvocationReceiptList"];
 export type PromptRecovery = components["schemas"]["PromptRecovery"];
 export type PromptReferencePathFile = components["schemas"]["PromptReferencePathFile"];
@@ -31092,7 +31539,6 @@ export type DismissVerifySettingsRequest = components["schemas"]["DismissVerifyS
 export type SourceVerify = components["schemas"]["SourceVerify"];
 export type LocalDataBucketId = components["schemas"]["LocalDataBucketId"];
 export type LocalDataBucketStatus = components["schemas"]["LocalDataBucketStatus"];
-export type WorkspaceCacheStatus = components["schemas"]["WorkspaceCacheStatus"];
 export type LocalDataStatus = components["schemas"]["LocalDataStatus"];
 export type HistoryRetentionRule = components["schemas"]["HistoryRetentionRule"];
 export type HistoryRetentionPolicy = components["schemas"]["HistoryRetentionPolicy"];
@@ -31106,7 +31552,6 @@ export type HistoryRetentionPreview = components["schemas"]["HistoryRetentionPre
 export type HistoryPruneResult = components["schemas"]["HistoryPruneResult"];
 export type LocalDataClearRequest = components["schemas"]["LocalDataClearRequest"];
 export type LocalDataClearResult = components["schemas"]["LocalDataClearResult"];
-export type WorkspaceCacheClearResult = components["schemas"]["WorkspaceCacheClearResult"];
 export type LocalDataClearResponse = components["schemas"]["LocalDataClearResponse"];
 export type BackupCapabilities = components["schemas"]["BackupCapabilities"];
 export type BackupRestoreResult = components["schemas"]["BackupRestoreResult"];
@@ -31285,6 +31730,7 @@ export type EventEnvelopeSourceChanged = components["schemas"]["EventEnvelopeSou
 export type SourceOperationEvent = components["schemas"]["SourceOperationEvent"];
 export type EventEnvelopeSourceOperation = components["schemas"]["EventEnvelopeSourceOperation"];
 export type EventEnvelopeFileBriefing = components["schemas"]["EventEnvelopeFileBriefing"];
+export type EventEnvelopeBriefing = components["schemas"]["EventEnvelopeBriefing"];
 export type EventEnvelopeArtifact = components["schemas"]["EventEnvelopeArtifact"];
 export type AgentPresenceEvent = components["schemas"]["AgentPresenceEvent"];
 export type EventEnvelopeAgentPresence = components["schemas"]["EventEnvelopeAgentPresence"];

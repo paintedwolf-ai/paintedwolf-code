@@ -147,6 +147,10 @@ func (s *History) HandleListProjectSourceWalk(w http.ResponseWriter, r *http.Req
 		return
 	}
 	out := MapSourceWalk(res)
+	if err := s.attachBriefings(r.Context(), p.ID, &out); err != nil {
+		s.responses.InternalError(w, r, err)
+		return
+	}
 	if res.NextBeforeOrdinal > 0 {
 		out.NextCursor, err = sourceWalkPages.Encode(scope, sourceWalkPosition{BeforeOrdinal: res.NextBeforeOrdinal})
 		if err != nil {

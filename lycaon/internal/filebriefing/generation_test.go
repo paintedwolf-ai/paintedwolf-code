@@ -1,6 +1,7 @@
 package filebriefing
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -11,46 +12,34 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestFileBriefingDeltaEmitterPreservesWhitespaceChunks(t *testing.T) {
-	projectID := uuid.NewString()
+// Summaries are never shown while they are written, so a generation that
+// streams publishes only its settled states.
+func TestGenerationPublishesNoPartialText(t *testing.T) {
+	service, _, _ := serviceFixture(t, generationFunc(func(_ context.Context, _ GenerationRequest, emit func(string)) (string, error) {
+		emit("- Purpose: Builds")
+		emit(" the binary")
+		return recordedSummary, nil
+	}))
 	hub := events.NewMemoryHub()
-	stream, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: projectID, Viewer: testutil.HostOwner()})
-	testutil.FailErr(t, "subscribe file briefing events", err)
+	service.events = hub
+	target := serviceTarget("main.go")
+	target.ProjectID = uuid.NewString()
+	stream, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: target.ProjectID, Viewer: testutil.HostOwner()})
+	testutil.FailErr(t, "subscribe", err)
 	defer unsubscribe()
-
-	cfg, err := LoadConfig()
-	testutil.FailErr(t, "load file briefing config", err)
-	cfg.Stream.ChunkChars = 1_000
-	cfg.Stream.FlushMS = 10_000
-	server := NewService(t.Context(), Dependencies{Store: NewMemory(), Config: cfg, Events: hub})
-	emitter := newFileBriefingDeltaEmitter(t.Context(), server, Briefing{
-		ProjectID: projectID, RootID: "root-1", Path: "main.go", SourceSHA256: "sha-1",
-		AttemptID: "attempt-1", UpdatedAt: time.Now().UTC(),
-	})
-	emitter.Add(t.Context(), "Purpose:")
-	emitter.Add(t.Context(), " ")
-	emitter.Add(t.Context(), "builds the app")
-	emitter.Flush(t.Context())
-
-	var combined string
-	for range 2 {
+	_, err = service.Request(t.Context(), target, "manual")
+	testutil.FailErr(t, "request", err)
+	for _, want := range []string{"pending", "complete"} {
 		select {
 		case envelope := <-stream:
-			if envelope.Topic != wire.EventTopicFileBriefing {
-				t.Fatalf("topic = %q", envelope.Topic)
-			}
 			var event wire.FileBriefingEvent
-			testutil.FailErr(t, "decode file briefing event", json.Unmarshal(envelope.Data, &event))
-			if event.Status != "streaming" || event.SourceSHA256 != "sha-1" || event.AttemptID != "attempt-1" {
-				t.Fatalf("event = %+v", event)
+			testutil.FailErr(t, "decode", json.Unmarshal(envelope.Data, &event))
+			if event.Status != want {
+				t.Fatalf("published %q; want %q", event.Status, want)
 			}
-			combined += event.Delta
 		case <-t.Context().Done():
-			t.Fatal("timed out waiting for file briefing delta")
+			t.Fatalf("no %s event", want)
 		}
-	}
-	if combined != "Purpose: builds the app" {
-		t.Fatalf("combined delta = %q", combined)
 	}
 }
 

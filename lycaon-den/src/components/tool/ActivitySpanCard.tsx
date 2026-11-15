@@ -1,4 +1,4 @@
-import { Index, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js";
+import { Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js";
 import {
   activitySpanEnterFadeKey,
   useTranscriptEntry,
@@ -21,10 +21,7 @@ import {
   activitySpanHint,
   activitySpanStatus,
 } from "../../chat/tool/activity-span-model.ts";
-import {
-  commandActivityProgression,
-  formatCommandActivityProgression,
-} from "../../chat/tool/command-activity-model.ts";
+import { commandActivityGroups } from "../../chat/tool/command-activity-model.ts";
 import type { ActivitySpanEntry } from "../../chat/transcript/projection/transcript-item-model.ts";
 import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-layout.ts";
 import { bindFindRevealHost } from "../../find/use-findable-view.ts";
@@ -215,16 +212,13 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
     return activitySpanFailureCount(entries(), props.sessionId);
   };
 
-  const summary = createMemo(() => {
-    const progression = commandActivityProgression(entries());
-    const path = progression.groups.join(" → ");
+  const detail = createMemo(() => {
+    const groups = commandActivityGroups(entries());
+    const path = groups.join(" → ");
     const directory = commandActivityDirectory(entries());
-    return {
-      progression,
-      detail: progression.groups.length > 1
-        ? directory ? `${directory} · ${path}` : path
-        : directory || activitySpanHint(entries(), props.label, props.sessionId) || path,
-    };
+    return groups.length > 1
+      ? directory ? `${directory} · ${path}` : path
+      : directory || activitySpanHint(entries(), props.label, props.sessionId) || path;
   });
   const singletonToolKey = () => {
     const entry = entries()[0];
@@ -274,27 +268,10 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
             <ActivityFailureChip failed={failed()} />
           </span>
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
-          <span class="den-activity-span-hint" data-tip={summary().detail} data-tip-when-clipped="">{summary().detail}</span>
+          <span class="den-activity-span-hint" data-tip={detail()} data-tip-when-clipped="">{detail()}</span>
         </span>
       </TranscriptDisclosureToggle>
       <TranscriptDisclosurePanel disclosure={disclosure} class="den-activity-span-items">
-        <span
-          class="den-activity-span-composition"
-          aria-label={formatCommandActivityProgression(summary().progression)}
-        >
-          <Index each={summary().progression.chips}>
-            {(chip) => (
-              <span class="den-activity-span-cmd">
-                <span class="den-activity-span-cmd-name">
-                  {formatSentenceCase(chip().group)}
-                </span>
-                <Show when={chip().steps > 0}>
-                  <span class="den-activity-span-cmd-count">{chip().steps} {chip().steps === 1 ? "step" : "steps"}</span>
-                </Show>
-              </span>
-            )}
-          </Index>
-        </span>
         <ActivitySpanAccordionProvider value={accordion}>
           <VirtualCardList threshold={100} scroll="ancestor" items={entries()} keyOf={entryLeadKey} label="Actions"
             pinnedKeys={[accordion.activeKey(), findToolKey()].filter((key): key is string => !!key)}

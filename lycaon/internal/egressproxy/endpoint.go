@@ -146,10 +146,11 @@ func normalizeHost(host string) (string, error) {
 		if err != nil || !addr.Is6() {
 			return "", fmt.Errorf("invalid host")
 		}
-		return addr.String(), nil
+		// An IPv4-mapped address is the IPv4 host, for rules and decisions alike.
+		return addr.Unmap().String(), nil
 	}
 	if addr, err := netip.ParseAddr(host); err == nil {
-		return addr.String(), nil
+		return addr.Unmap().String(), nil
 	}
 	host = strings.TrimSuffix(host, ".")
 	if host == "" {

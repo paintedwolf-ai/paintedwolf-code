@@ -15,6 +15,7 @@ import { SkillCard } from "../skill/SkillCard.tsx";
 import { TaskCard } from "../TaskCard.tsx";
 import { VerdictCard } from "../verdict/VerdictCard.tsx";
 import type { ToolBriefingSlots } from "./tool-briefing-slots.ts";
+import { useActivityBriefingSlots } from "../../chat/tool/activity-briefing.tsx";
 
 type Props = {
   part: ToolPartView;
@@ -32,12 +33,15 @@ type Props = {
 
 /** Route tool parts to specialized or generic cards. */
 export function ToolPartCard(props: Props) {
+  // Task cards open no activity detail, so they never ask for a briefing.
+  const slots = props.slots ?? (isTaskToolPart(props.part) ? undefined
+    : useActivityBriefingSlots({ part: () => (props.part.commandActivity || props.part.commandProgram ? commandActivityPart(props.part) : props.part), sessionId: () => props.sessionId, projectId: () => props.projectId }));
   return (
     <Show
       when={Boolean(props.part.commandActivity || props.part.commandProgram)}
-      fallback={<NonCommandToolPartCard {...props} />}
+      fallback={<NonCommandToolPartCard {...props} slots={slots} />}
     >
-      <CommandActivityCard {...props} part={commandActivityPart(props.part)} />
+      <CommandActivityCard {...props} part={commandActivityPart(props.part)} slots={slots} />
     </Show>
   );
 }

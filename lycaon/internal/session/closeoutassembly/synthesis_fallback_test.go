@@ -43,7 +43,7 @@ func TestSynthesisAssemblyProjectsHistoricalChecksWithoutChecklist(t *testing.T)
 		t.Run(string(match), func(t *testing.T) {
 			s.SetSourceVerification(observedSourceChecks{&verification.SourceCheckObservations{
 				Checks: []verification.SourceCheckObservation{{
-					CheckID: "internal-check-id", SourceRevision: "internal-source-hash", RootDigest: "internal-root-hash",
+					CheckID: "internal-check-id",
 					Command: "go test ./parser", Cwd: "module", Verdict: "passed", Match: match, PriorIntent: true,
 				}},
 			}})

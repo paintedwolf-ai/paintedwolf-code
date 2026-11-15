@@ -124,6 +124,18 @@ func TestCurlClientCertificateAndPassphrase(t *testing.T) {
 	h.write("client.key", string(tlstest.EncryptPKCS8(t, client.KeyDER, passphrase)))
 	h.write("plain.key", string(client.KeyPEM))
 	h.write("bundle.pem", string(client.CertPEM)+string(client.KeyPEM))
+	// Presenting the certificate is a disclosure reviewed for its recipient.
+	identityMatcher := secretmatch.NewInertMatcher()
+	identityFP, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("i", 32)))
+	testutil.FailErr(t, "identity fingerprinter", err)
+	identityMatcher.SetFingerprinter(identityFP)
+	var identityAsks []secretmatch.Alert
+	presentIdentity := secretmatch.SendUnchanged
+	h.owners.HTTP.SecretMatcher = identityMatcher
+	h.owners.HTTP.SecretAsk = func(_ context.Context, a secretmatch.Alert) (secretmatch.Resolution, error) {
+		identityAsks = append(identityAsks, a)
+		return secretmatch.Resolution{Decision: presentIdentity}, nil
+	}
 
 	r := h.curl(t.Context(), "-sS", "--cacert", "ca.pem", f.server.URL)
 	if r.result.Status != 56 || f.hits.Load() != 0 || !contains(r.stderr, "curl: (56)") {
@@ -149,6 +161,21 @@ func TestCurlClientCertificateAndPassphrase(t *testing.T) {
 	if peers != "deploy-bot,deploy-bot,deploy-bot,deploy-bot" {
 		t.Fatalf("server saw client identities %q", peers)
 	}
+	if len(identityAsks) != len(accepted) {
+		t.Fatalf("identity reviews = %d, want one per presenting request", len(identityAsks))
+	}
+	for _, ask := range identityAsks {
+		if ask.Container != "client certificate" || len(ask.Fingerprints) != 1 || !strings.Contains(ask.DestinationLabel, "127.0.0.1") {
+			t.Fatalf("identity review = %+v", ask)
+		}
+	}
+	presentIdentity = secretmatch.Withhold
+	hitsBefore := f.hits.Load()
+	declined := h.curl(t.Context(), "-sS", "--cacert", "ca.pem", "--cert", "bundle.pem", f.server.URL)
+	if reject := toolrejection.AsToolReject(declined.err); reject == nil || reject.Code != toolrejection.OutboundSecretDeniedCode || f.hits.Load() != hitsBefore {
+		t.Fatalf("declined identity was presented: %+v %v", declined.result, declined.err)
+	}
+	presentIdentity = secretmatch.SendUnchanged
 	for _, bad := range [][]string{{"--pass", "wrong"}, {}} {
 		r := h.curl(t.Context(), append(append([]string{"-sS", "--cacert", "ca.pem", "--cert", "client.pem", "--key", "client.key"}, bad...), f.server.URL)...)
 		if r.result.Status != 58 || r.result.EffectCertainty != toolcontract.NoEffect || !contains(r.stderr, "curl: (58) unable to use client certificate") {

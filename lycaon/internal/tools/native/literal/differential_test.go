@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -77,12 +78,24 @@ func referenceBinary(name string) (string, bool) {
 		}
 		for _, flag := range []string{"--version", "-v"} {
 			out, _ := exec.Command(path, flag).CombinedOutput()
-			if strings.Contains(string(out), family) {
+			if strings.Contains(string(out), family) && !coreutilsBeforeTarget(string(out)) {
 				return path, true
 			}
 		}
 	}
 	return "", false
+}
+
+// coreutilsBeforeTarget reports GNU coreutils older than 9, which formats stat's device differently
+// and lacks its %Hd and %Ld directives.
+func coreutilsBeforeTarget(version string) bool {
+	_, after, found := strings.Cut(version, "(GNU coreutils) ")
+	if !found {
+		return false
+	}
+	major, _, _ := strings.Cut(after, ".")
+	n, err := strconv.Atoi(major)
+	return err == nil && n < 9
 }
 
 // TestDifferentialAgainstReferenceUtilities compares each form with the

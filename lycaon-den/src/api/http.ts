@@ -83,13 +83,15 @@ function assertV1Path(path: string): void {
 }
 
 /** Builds "?key=val&…" from params, dropping absent and empty values; "" when none remain. */
+/** Builds a query string; an array value repeats its key once per item. */
 export function formatQuery(
-  entries: Record<string, string | number | boolean | undefined | null>,
+  entries: Record<string, string | number | boolean | readonly string[] | undefined | null>,
 ): string {
   const params = new URLSearchParams();
   for (const [key, value] of Object.entries(entries)) {
     if (value == null || value === "") continue;
-    params.set(key, String(value));
+    if (Array.isArray(value)) for (const item of value) params.append(key, item);
+    else params.set(key, String(value));
   }
   const q = params.toString();
   return q ? `?${q}` : "";

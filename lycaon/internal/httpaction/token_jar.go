@@ -145,6 +145,33 @@ func openTokenJar(ctx context.Context, deps Deps, tctx tools.ToolContext, args m
 	return jar, req, nil
 }
 
+func checkTokenJarState(ctx context.Context, deps Deps, req secretcap.TokenJarRequest, jar *secretcap.TokenJar) error {
+	if deps.Secrets == nil || jar == nil || jar.Reference == "" || req.ProjectID == "" || req.ChatSessionID == "" {
+		return nil
+	}
+	meta, err := deps.Secrets.Describe(ctx, req.ProjectID, req.ChatSessionID, jar.Reference)
+	if err != nil {
+		return &toolrejection.ToolReject{
+			Code: TokenJarFailedCode, Data: map[string]any{"jar": jar.Name, "token_jar_name": jar.Name, "reason": err.Error()},
+		}
+	}
+	switch meta.State {
+	case secretcap.StateRevoked:
+		return &toolrejection.ToolReject{
+			Code: TokenJarFailedCode, Data: map[string]any{"jar": jar.Name, "token_jar_name": jar.Name, "reason": secretcap.ErrRevoked.Error()},
+		}
+	case secretcap.StateAgentUseExpired:
+		return &toolrejection.ToolReject{
+			Code: TokenJarFailedCode, Data: map[string]any{"jar": jar.Name, "token_jar_name": jar.Name, "reason": secretcap.ErrAgentUseExpired.Error()},
+		}
+	case secretcap.StateUnavailable:
+		return &toolrejection.ToolReject{
+			Code: TokenJarFailedCode, Data: map[string]any{"jar": jar.Name, "token_jar_name": jar.Name, "reason": secretcap.ErrValueMissing.Error()},
+		}
+	}
+	return nil
+}
+
 func extractTokens(resp outboundhttp.Response, rules []captureTokenRule) (map[string]string, []string) {
 	if len(rules) == 0 {
 		return nil, nil
@@ -262,8 +289,13 @@ func captureResponseTokens(
 		return nil, invalid(fmt.Errorf("capture_tokens requires token_jar"))
 	}
 	if len(rules) == 0 {
-		receipt := saveTokenJar(ctx, deps, req, jar, 0)
-		return receipt, nil
+		// Nothing was captured: rewriting the stored jar from this request's
+		// snapshot would only drop what a concurrent request captured. A jar
+		// not yet stored is saved so the reference exists.
+		if jar.Reference != "" {
+			return heldTokens(jar), nil
+		}
+		return saveTokenJar(ctx, deps, req, jar, 0), nil
 	}
 	captured, missing := extractTokens(resp, rules)
 	if len(missing) > 0 {

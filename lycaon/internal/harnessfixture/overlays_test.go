@@ -29,7 +29,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 	parent, err := sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: project.Roots[0].ID}, project.ID)
 	testutil.FailErr(t, "create parent", err)
 	queue := &fixtureQueue{SQLQueue: worker.NewSQLQueue(database, 2)}
-	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), t.TempDir())
+	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"))
 	ledger := sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
 	queue.SetBaselineStore(ledger.Baselines)
 	queue.SetProjectStore(projects)
@@ -72,11 +72,10 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 		t.Fatalf("first promotion: %+v", landed)
 	}
 	second := evidence.Overlays[1].JobID
-	task, _ := queue.Get(second)
-	assessment, err := worker.AssessPromotePaths3Way(t.Context(), service, parent.ID, task, []string{"catalog.py"})
-	testutil.FailErr(t, "assess second overlay", err)
-	if len(assessment.Conflicts) != 1 {
-		t.Fatalf("expected actual conflict: %+v", assessment)
+	preview, err := service.PreviewForSession(t.Context(), parent.ID, second, "", []string{"catalog.py"})
+	testutil.FailErr(t, "preview second overlay", err)
+	if len(preview.Conflicts) != 1 {
+		t.Fatalf("expected actual conflict: %+v", preview)
 	}
 	resolved, err := service.PromoteOverlay(t.Context(), parent.ID, second, api.PromoteOverlayInput{
 		Resolutions: []api.WorkerPromoteResolution{{Path: "catalog.py", Content: "value = 'filter-then-page'\n"}},

@@ -81,7 +81,7 @@ export function factsFromArgs(
       key === "prompt" ||
       key === "command" ||
       text.length > 80;
-    const fact: ToolFact = { label: humanizeKey(key), value: text, wide };
+    const fact: ToolFact = { label: humanizeKey(key), value: text, wide, argument: key };
     const field = argFieldFor(fieldPrefix, key, value, text);
     if (field) fact.redactionField = field;
     if (

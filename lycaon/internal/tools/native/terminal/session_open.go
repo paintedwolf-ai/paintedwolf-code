@@ -126,6 +126,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 		hostRunner := hostcmd.NewRunner()
 		launch := lycexec.AgentLaunch(lycexec.LaunchAgentCommand, "terminal_open", confinement)
 		launch.CurrentAuthority = tools.AgentLaunchAuthority(tctx, confinement, egressLease, egress)
+		launch.RecordStart = tctx.Source.RecordViewProcess
 		req := hostcmd.Request{
 			Launch:     launch,
 			ProjectDir: cwd,

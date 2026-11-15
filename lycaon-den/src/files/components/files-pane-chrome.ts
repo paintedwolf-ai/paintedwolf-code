@@ -22,6 +22,7 @@ const PANE_CHROME: Record<FileBufferKind, FilesPaneChrome> = {
   // Pages over a set of changes.
   walk: { address: false, document: false, page: true },
   trust: { address: false, document: false, page: true },
+  briefing: { address: false, document: false, page: true },
   // One reader document of every changed file.
   diffs: { address: false, document: true, page: true },
 };

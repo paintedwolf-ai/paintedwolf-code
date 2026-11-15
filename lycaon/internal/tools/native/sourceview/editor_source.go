@@ -22,6 +22,7 @@ type Text struct {
 	Disk *textfile.UntrustedDocument
 	// editor is the open document; nil when the file served the text.
 	Editor *tools.EditorDocumentText
+	Stat   FileStatFacts
 }
 
 // SHA256 identifies the served bytes.
@@ -56,13 +57,53 @@ func LoadText(ctx context.Context, tool string, access Access, tctx tools.ToolCo
 		if size := int64(len(doc.Text)); size > access.MaxBytes() {
 			return Text{}, access.SizeReject(tool, resolved.DisplayPath, size, access.MaxBytes())
 		}
-		return Text{Content: doc.Text, Editor: &doc}, nil
+		st := Text{Content: doc.Text, Editor: &doc, Stat: FileStatFacts{Size: int64(len(doc.Text))}}
+		if access == AccessRead {
+			observeWorkerSourceRead(ctx, tctx, resolved, st)
+		}
+		return st, nil
 	}
-	disk, err := ReadTextDocument(tool, access, resolved, tctx.Host.MaxToolSpillBytes)
+	disk, stat, err := ReadTextDocumentWithStat(tool, access, resolved, tctx.Host.MaxToolSpillBytes)
 	if err != nil {
 		return Text{}, err
 	}
-	return Text{Content: disk.Text(), Disk: &disk}, nil
+	st := Text{Content: disk.Text(), Disk: &disk, Stat: stat}
+	if access == AccessRead {
+		observeWorkerSourceRead(ctx, tctx, resolved, st)
+	}
+	return st, nil
+}
+
+func observeWorkerSourceRead(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, st Text) {
+	if resolved.External || resolved.ToolOutput {
+		return
+	}
+	coord, ok := tctx.Source.WorkerCoord.(tools.WorkerObservationCoordinator)
+	if !ok || coord == nil {
+		return
+	}
+	rootID := strings.TrimSpace(resolved.Root.ID)
+	rel := strings.TrimSpace(resolved.ScopeRel)
+	if root, locRel, located := tctx.SourceLocation(resolved.Abs); located {
+		rootID = root.ID
+		rel = locRel
+	}
+	if rootID == "" || rootID == "worker-branch" {
+		rootID = "primary"
+	}
+	if rel == "" {
+		rel = resolved.DisplayPath
+	}
+	sha := st.SHA256()
+	size := st.Stat.Size
+	if size == 0 && len(st.Content) > 0 {
+		size = int64(len(st.Content))
+	}
+	coord.ObserveWorkerRead(ctx, tctx, tools.WorkerFileObservationFacts{
+		RootID: rootID, RelPath: rel, AbsPath: resolved.Abs,
+		SHA256: sha, Size: size, ModTimeNS: st.Stat.ModTimeNS,
+		Ino: st.Stat.Ino, Dev: st.Stat.Dev, Complete: sha != "",
+	})
 }
 
 // Unsaved editor text has no recorded source version.

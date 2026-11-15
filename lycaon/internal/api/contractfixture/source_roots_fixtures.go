@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/api/briefingadmin"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -82,7 +83,7 @@ func NewTestSources(t *testing.T, workers worker.WorkerQueue) *sourceapi.Handler
 	var deps apitestdeps.Deps
 	apitestdeps.Fill(t, &deps)
 	sources := sourceapi.New(&httpio.Responder{Logger: slog.Default()}, &taskgroup.Group{}, sourceapi.Operations{}, sourceapi.Deps{
-		EditorDocuments: deps.EditorDocuments, FileBriefings: deps.FileBriefings, ManagedSecrets: deps.ManagedSecrets,
+		EditorDocuments: deps.EditorDocuments, Briefings: briefingadmin.Services{Files: deps.FileBriefings}, ManagedSecrets: deps.ManagedSecrets,
 		MutationGate: deps.MutationGate, ProjectRegistry: deps.Projects, SessionStore: deps.Store,
 		SourceLedger: deps.SourceLedger, SourceInventory: deps.SourceLedger.Inventory, SourceMutations: deps.SourceMutations, FileOperations: deps.FileOperations,
 		Workers: workers,

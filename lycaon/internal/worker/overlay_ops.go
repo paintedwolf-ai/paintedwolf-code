@@ -60,19 +60,28 @@ func (s *MergeService) PromoteOverlay(ctx context.Context, sessionID, overlayID 
 	return eng.applyPromoteOverlayPlans(ctx, work, in, plans, applied)
 }
 
+// promotePlans are the file effects a promotion validates and the ones its transaction writes
+// itself. A checkpoint writes its own merged files, so only resolutions are written directly.
+type promotePlans struct {
+	all    []promoteMutation
+	direct []promoteMutation
+	// resolved are the paths a resolution decided, which the checkpoint leaves to it.
+	resolved []string
+}
+
 func (s mergeEngine) preparePromoteOverlayPlans(
 	ctx context.Context,
 	work promoteWork,
 	in api.PromoteOverlayInput,
-) ([]promoteMutation, []string, api.WorkerMergeResult, error) {
+) (promotePlans, []string, api.WorkerMergeResult, error) {
 	allowed, err := allowedPromotePathSet(work.task, work.roots, work.paths)
 	if err != nil {
-		return nil, nil, api.WorkerMergeResult{}, err
+		return promotePlans{}, nil, api.WorkerMergeResult{}, err
 	}
 	callerResolutions := expandResolutionDropFolders(in.Resolutions, allowed)
 	assessment, err := s.assessPromoteOverlay(ctx, work, callerResolutions)
 	if err != nil {
-		return nil, nil, api.WorkerMergeResult{}, err
+		return promotePlans{}, nil, api.WorkerMergeResult{}, err
 	}
 	autoResolutions := readyResolutionsToPromote(buildReadyResolutions(assessment), true)
 	resolutions := unionPromoteResolutions(autoResolutions, callerResolutions)
@@ -91,7 +100,7 @@ func (s mergeEngine) preparePromoteOverlayPlans(
 		s.attachPromoteSpill(s.hostDataDirFor(work.task), work.overlayID, &out, assessment)
 		s.registerReconcilePaths(work.sessionID, assessment)
 		s.recordPromoteOutput(work.sessionID, work.overlayID, &out)
-		return nil, nil, out, s.rejectConflict(work.overlayID, assessment)
+		return promotePlans{}, nil, out, s.rejectConflict(work.overlayID, assessment)
 	}
 	return s.buildValidatedPromotePlans(ctx, work, assessment, resolutions, resolutionByPath)
 }
@@ -125,30 +134,34 @@ func (s mergeEngine) buildValidatedPromotePlans(
 	assessment PromoteAssessment,
 	resolutions []api.WorkerPromoteResolution,
 	resolutionByPath map[string]api.WorkerPromoteResolution,
-) ([]promoteMutation, []string, api.WorkerMergeResult, error) {
+) (promotePlans, []string, api.WorkerMergeResult, error) {
 	validated, err := validatePromoteResolutionPaths(work.task, work.roots, work.paths, resolutions)
 	if err != nil {
-		return nil, nil, api.WorkerMergeResult{}, err
+		return promotePlans{}, nil, api.WorkerMergeResult{}, err
 	}
 	resolutionPlans, err := preparePromoteResolutions(work.task, work.roots, validated, resolutionByPath)
 	if err != nil {
-		return nil, nil, api.WorkerMergeResult{}, s.reject(OverlayPromoteResolutionsRequiredCode, map[string]any{
+		return promotePlans{}, nil, api.WorkerMergeResult{}, s.reject(OverlayPromoteResolutionsRequiredCode, map[string]any{
 			"job_id": work.overlayID,
 			"reason": err.Error(),
 		})
 	}
-	mergePlans, err := prepareMergeMutations(work.task, assessment)
+	mergePlans, err := prepareMergeMutations(ctx, work.task, work.roots, assessment)
 	if err != nil {
-		return nil, nil, api.WorkerMergeResult{}, err
+		return promotePlans{}, nil, api.WorkerMergeResult{}, err
 	}
 	plans := append(append([]promoteMutation(nil), mergePlans...), resolutionPlans...)
 	if issue := validatePromoteSyntax(ctx, plans); issue != nil {
-		return nil, nil, api.WorkerMergeResult{}, s.reject(OverlayPromoteSyntaxUnhealthyCode, issue.rejectData(work.overlayID))
+		return promotePlans{}, nil, api.WorkerMergeResult{}, s.reject(OverlayPromoteSyntaxUnhealthyCode, issue.rejectData(work.overlayID))
 	}
-	return plans, unionPromotePaths(assessment.CleanPaths, validated), api.WorkerMergeResult{}, nil
+	out := promotePlans{all: plans, direct: plans, resolved: validated}
+	if assessment.checkpointID != "" {
+		out.direct = resolutionPlans
+	}
+	return out, unionPromotePaths(assessment.CleanPaths, validated), api.WorkerMergeResult{}, nil
 }
 
-func (s mergeEngine) applyPromoteOverlayPlans(ctx context.Context, work promoteWork, in api.PromoteOverlayInput, plans []promoteMutation, applied []string) (api.WorkerMergeResult, error) {
+func (s mergeEngine) applyPromoteOverlayPlans(ctx context.Context, work promoteWork, in api.PromoteOverlayInput, plans promotePlans, applied []string) (api.WorkerMergeResult, error) {
 	// The hold outlives any rollback of landed bytes, so observation never sees them first.
 	documents, err := s.holdPromotedDocuments(ctx, work.task, work.targets, applied)
 	if err != nil {
@@ -161,36 +174,36 @@ func (s mergeEngine) applyPromoteOverlayPlans(ctx context.Context, work promoteW
 	}
 	revertPending := func() error { return s.releaseMergeClaim(ctx, claim) }
 	if s.Captures != nil {
-		s.Captures.RecordPromotedPrimaryPaths(ctx, work.sessionID, promoteMutationIdentities(plans))
+		s.Captures.RecordPromotedPrimaryPaths(ctx, work.sessionID, promoteMutationIdentities(plans.all))
 	}
 	promote := PromoteRootsForTask(work.task, work.roots)
-	tx, err := beginPromoteTransaction(s.hostDataDirFor(work.task), work.overlayID, plans)
+	tx, err := beginPromoteTransaction(s.hostDataDirFor(work.task), work.overlayID, plans.direct)
 	if err != nil {
 		return api.WorkerMergeResult{}, errors.Join(err, revertPending())
 	}
-	if err := tx.apply(claimCtx, promote, work.task); err != nil {
-		return api.WorkerMergeResult{}, s.failPromoteTransaction(tx, promote, work.task, revertPending, err)
+	if err := s.applyPromoteEffects(claimCtx, tx, promote, work.task, plans.resolved); err != nil {
+		return api.WorkerMergeResult{}, failPromoteTransaction(ctx, tx, revertPending, err)
 	}
-	if len(plans) > 0 {
+	if len(plans.all) > 0 {
 		notifyMergeWorktreeChanged(ctx, work.task, work.roots)
 	}
 	facts, err := s.promotedSourceFacts(claimCtx, work.sessionID, in.ToolCallID, sourceworkspace.ID(work.task.ProjectID, work.roots), in.UserTurn, work.task, work.targets, applied, documents)
 	if err != nil {
-		return api.WorkerMergeResult{}, s.failPromoteTransaction(tx, promote, work.task, revertPending, err)
+		return api.WorkerMergeResult{}, failPromoteTransaction(ctx, tx, revertPending, err)
 	}
 	rebased, childStatuses, err := s.assessChildRebases(claimCtx, work.sessionID, work.overlayID)
 	if err != nil {
-		return api.WorkerMergeResult{}, s.failPromoteTransaction(tx, promote, work.task, revertPending, err)
+		return api.WorkerMergeResult{}, failPromoteTransaction(ctx, tx, revertPending, err)
 	}
 	out := api.WorkerMergeResult{JobID: work.overlayID, Mode: "merge", AgentType: work.task.AgentType, Paths: work.paths, Rebased: rebased}
-	finishIn := promoteFinishInput{sessionID: work.sessionID, task: work.task, jobID: work.overlayID, out: &out, resolved: applied, landed: promoteMutationPaths(plans), detail: in.Detail, claim: claim, facts: facts, childStatuses: childStatuses}
+	finishIn := promoteFinishInput{sessionID: work.sessionID, task: work.task, jobID: work.overlayID, out: &out, resolved: applied, landed: promoteMutationPaths(plans.all), detail: in.Detail, claim: claim, facts: facts, childStatuses: childStatuses}
 	if err := s.finishPromoteState(claimCtx, finishIn); err != nil {
-		return api.WorkerMergeResult{}, s.failPromoteTransaction(tx, promote, work.task, revertPending, err)
+		return api.WorkerMergeResult{}, failPromoteTransaction(ctx, tx, revertPending, err)
 	}
 	if out.Status != api.WorkerMergeStatusMerged {
-		return api.WorkerMergeResult{}, s.failPromoteTransaction(tx, promote, work.task, revertPending, fmt.Errorf("promote plan incomplete after apply"))
+		return api.WorkerMergeResult{}, failPromoteTransaction(ctx, tx, revertPending, fmt.Errorf("promote plan incomplete after apply"))
 	}
-	s.closeCommittedPromoteTransaction(ctx, tx, work.overlayID)
+	closeCommittedPromoteTransaction(ctx, tx, work.overlayID)
 	if len(facts.files) > 0 {
 		out.OverlayPromotion = &api.OverlayPromotion{Files: facts.files}
 	}
@@ -274,12 +287,21 @@ func (s mergeEngine) finalizeEmptyPromote(ctx context.Context, sessionID string,
 		return out, errors.Join(err, s.releaseMergeClaim(ctx, claim))
 	}
 	out.Rebased = rebased
+	zeroTx, err := beginPromoteTransaction(s.hostDataDirFor(task), jobID, nil)
+	if err != nil {
+		return out, errors.Join(err, s.releaseMergeClaim(ctx, claim))
+	}
+	revertPending := func() error { return s.releaseMergeClaim(ctx, claim) }
+	if err := applyTaskCheckpoint(claimCtx, s.MergeService, zeroTx, task, nil); err != nil {
+		return out, failPromoteTransaction(ctx, zeroTx, revertPending, err)
+	}
 	if err := s.finishPromoteState(claimCtx, promoteFinishInput{
 		sessionID: sessionID, task: task, jobID: jobID, out: &out,
 		detail: detail, claim: claim, childStatuses: childStatuses,
 	}); err != nil {
-		return out, errors.Join(err, s.releaseMergeClaim(ctx, claim))
+		return out, failPromoteTransaction(ctx, zeroTx, revertPending, err)
 	}
+	closeCommittedPromoteTransaction(ctx, zeroTx, jobID)
 	s.recordPromoteOutput(sessionID, jobID, &out)
 	return out, nil
 }
@@ -292,4 +314,12 @@ func enrichMergeChangedPaths(out *api.WorkerMergeResult, task api.WorkerTask, de
 	if len(report.ChangedPaths) > 0 {
 		out.ChangedPaths = append([]string(nil), report.ChangedPaths...)
 	}
+}
+
+// applyPromoteEffects applies file effects, then commits checkpoint effects to the same promotion.
+func (s mergeEngine) applyPromoteEffects(ctx context.Context, tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask, resolvedPaths []string) error {
+	if err := tx.apply(ctx, promote, task); err != nil {
+		return err
+	}
+	return applyTaskCheckpoint(ctx, s.MergeService, tx, task, resolvedPaths)
 }

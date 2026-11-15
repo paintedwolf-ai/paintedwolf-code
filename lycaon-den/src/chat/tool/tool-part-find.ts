@@ -1,4 +1,5 @@
 import type { ToolPartView } from "./tool-part-model.ts";
+import { isApiErrorCode } from "../../api/http.ts";
 import { findLiteralOffsets } from "../../find/find-match.ts";
 import type { VirtualListMatch } from "../../find/virtual-list-find.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
@@ -38,13 +39,23 @@ export async function searchToolPart(part: ToolPartView, sessionId: string | und
       matches.push(...findLiteralOffsets(text, query, sensitive, 10000-matches.length).map(match => ({ from: match.start, to: match.start+match.length, field })));
       continue;
     }
-    for (let cursor: string | undefined = undefined; matches.length < 10000; ) {
-      const page = await client.searchChatContent(sessionId, messageId, reference, query, cursor, sensitive, signal);
-      if (signal.aborted) return [];
-      matches.push(...page.matches.map(match => ({ from: match.offset, to: match.offset+match.length, field })));
-      if (!page.next_cursor) break;
-      cursor = page.next_cursor;
-    }
+    const collect = async () => {
+      const found: typeof matches = [];
+      for (let cursor: string | undefined = undefined; matches.length + found.length < 10000; ) {
+        const page = await client.searchChatContent(sessionId, messageId, reference, query, cursor, sensitive, signal);
+        if (signal.aborted) return [];
+        found.push(...page.matches.map(match => ({ from: match.offset, to: match.offset+match.length, field })));
+        if (!page.next_cursor) break;
+        cursor = page.next_cursor;
+      }
+      return found;
+    };
+    // An engine restart expires cursors; the field is searched again once.
+    matches.push(...await collect().catch(cause => {
+      if (isApiErrorCode(cause, ["cursor_generation_expired"])) return collect();
+      throw cause;
+    }));
+    if (signal.aborted) return [];
   }
   return matches.slice(0,10000);
 }

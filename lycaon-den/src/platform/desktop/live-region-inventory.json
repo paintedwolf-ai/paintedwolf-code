@@ -1,4 +1,5 @@
 {
+  "briefing/BriefingEvidencePage.tsx": 2,
   "components/blueprint/BlueprintCard.tsx": 2,
   "components/blueprint/BlueprintReviewModal.tsx": 3,
   "components/chatview/chat-view-composer.tsx": 1,
@@ -89,7 +90,7 @@
   "components/source/secrets/MarkSecretDialog.tsx": 2,
   "components/SpendCeilingApproachingNudge.tsx": 1,
   "components/SpendCeilingReachedNudge.tsx": 1,
-  "components/tool/CommandActivityRegions.tsx": 1,
+  "components/tool/ActivityTarget.tsx": 1,
   "components/transcript/ChatSpanBlocks.tsx": 3,
   "components/transcript/LiveToolRecordingPlayer.tsx": 2,
   "components/transcript/NavigationChooser.tsx": 1,
@@ -113,7 +114,6 @@
   "files/components/FilesEditorWorkspace.tsx": 1,
   "files/components/FilesTreePane.tsx": 1,
   "files/components/FileSummaryDrawer.tsx": 3,
-  "files/components/FileSummaryPanel.tsx": 1,
   "files/components/ProjectFilesView.tsx": 1,
   "files/editor/BufferMergeView.tsx": 1,
   "files/editor/FileMarkdownPreview.tsx": 1,

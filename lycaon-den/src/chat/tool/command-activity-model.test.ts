@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CommandActivity, CommandActivityStep, CommandProgramReceipt } from "../../api/types.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
-import { commandActivityHeadline, commandActivityProgression, commandActivityRank, createCommandActivityProjection } from "./command-activity-model.ts";
+import { commandActivityGroups, commandActivityHeadline, commandActivityRank, createCommandActivityProjection } from "./command-activity-model.ts";
 
 function fact(id: string, overrides: Partial<CommandActivity> = {}): CommandActivity {
   return { id, group: "Exploring project files", phase: "inspect", label: "Read source", subject: "source.rs", state: "completed", outcome: "Exited 0", status_code: 0, execution_ids: [id], spans: [], ...overrides };
@@ -33,7 +33,7 @@ describe("command activity composition", () => {
   expect(after.map(row => row.id)).toEqual([before[0]!.id]);
   expect(after[0]!.commandActivity!.calls.map(call => call.toolCallId)).toEqual(["a", "b"]);
   expect(after[0]!.commandActivity!.members.map(member => member.id)).toEqual(["read-a", "read-b"]);
-  expect(after[0]!.commandActivity!.programIds).toEqual(["program:a", "program:b"]);
+  expect(after[0]!.commandActivity!.receiptScopes).toEqual([{ programId: "program:a", activityId: "read-a" }, { programId: "program:b", activityId: "read-b" }]);
  });
  it("keeps coalescing idempotent across re-projections", () => {
   const project = createCommandActivityProjection();
@@ -203,7 +203,7 @@ it("holds running FormTool calls back and coalesces the settled inspect sequence
  expect(rows[0]!.id).toBe("call-0");
  expect(rows[0]!.commandActivity!.calls.map(call => call.toolCallId)).toEqual(["call-0", "call-1", "call-2", "call-3"]);
  expect(rows[0]!.commandActivity!.members.map(member => member.id)).toEqual(["fact-0", "fact-1", "fact-2", "fact-3"]);
- expect(rows[0]!.commandActivity!.programIds).toEqual(["program:call-0", "program:call-1", "program:call-2", "program:call-3"]);
+ expect(rows[0]!.commandActivity!.receiptScopes.map(scope => scope.programId)).toEqual(["program:call-0", "program:call-1", "program:call-2", "program:call-3"]);
  const interrupted = parts(project([
   entry("side-a", [fact("side-a")], "summarize"),
   entry("read", undefined, "read"),
@@ -218,19 +218,14 @@ it("holds running FormTool calls back and coalesces the settled inspect sequence
  expect(jobBetween.map(row => row.id)).toEqual(["side-c", "job", "side-d"]);
 });
 
-it("orders the progression by first appearance and counts steps per chip run", () => {
+it("lists activity groups in first-appearance order", () => {
  const project = createCommandActivityProjection();
  const entries = [
   entry("a", [fact("a", { steps: [step("s1"), step("s2")] })]),
   entry("b", [fact("b", { steps: [step("s3")] })]),
   entry("c", [fact("c", { group: "Changing files", label: "Change files", phase: "mutate" })]),
  ];
- const progression = commandActivityProgression(project(entries));
- expect(progression.groups).toEqual(["Exploring project files", "Changing files"]);
- expect(progression.chips).toEqual([
-  { group: "Exploring project files", steps: 3 },
-  { group: "Changing files", steps: 0 },
- ]);
+ expect(commandActivityGroups(project(entries))).toEqual(["Exploring project files", "Changing files"]);
 });
 
 it("keeps a program-level failure visible after successful child activities", () => {
@@ -244,4 +239,37 @@ it("keeps a program-level failure visible after successful child activities", ()
  expect(rows[0]!.status).toBe("completed");
  expect(rows[1]!.status).toBe("error");
  expect(rows[1]!.commandActivity!.fact.subject).toBe("PROGRAM_TRACE_LIMIT");
+});
+
+describe("receipt scopes", () => {
+ function scopes(entries: ActivitySpanEntry[]) {
+  return parts(createCommandActivityProjection()(entries)).map(row => row.commandActivity!.receiptScopes);
+ }
+ it("records each folded program's own activity in call order", () => {
+  expect(scopes([entry("a", [fact("read-a")]), entry("b", [fact("read-b")]), entry("c", [fact("read-c")])])).toEqual([[
+   { programId: "program:a", activityId: "read-a" }, { programId: "program:b", activityId: "read-b" }, { programId: "program:c", activityId: "read-c" },
+  ]]);
+ });
+ it("records a fact without executions as its whole program", () => {
+  expect(scopes([entry("a", [fact("refused", { execution_ids: [], state: "refused" })])])).toEqual([[{ programId: "program:a" }]]);
+ });
+ it("records one scope per row when a call splits into rows", () => {
+  expect(scopes([entry("call", [fact("build", { phase: "execute", group: "Running commands" }), fact("test", { phase: "execute", group: "Running programs" })])])).toEqual([
+   [{ programId: "program:call", activityId: "build" }], [{ programId: "program:call", activityId: "test" }],
+  ]);
+ });
+ it("keeps a repeated scope once and lets a whole program replace its activities in place", () => {
+  // Calls that ran under one program carry its id with their own facts.
+  const onProgramA = (id: string, facts: CommandActivity[]): ActivitySpanEntry => {
+   const value = entry(id, facts);
+   if (value.kind === "tool" && value.part.commandProgram) value.part.commandProgram = { ...value.part.commandProgram, id: "program:a" };
+   return value;
+  };
+  expect(scopes([entry("a", [fact("read-a")]), onProgramA("b", [fact("read-a")])])).toEqual([[{ programId: "program:a", activityId: "read-a" }]]);
+  expect(scopes([entry("a", [fact("read-a")]), entry("b", [fact("read-b")]), onProgramA("c", [fact("read-c", { execution_ids: [] })])])).toEqual([[{ programId: "program:a" }, { programId: "program:b", activityId: "read-b" }]]);
+  expect(scopes([entry("a", [fact("read-a", { execution_ids: [] })]), onProgramA("b", [fact("read-b")])])).toEqual([[{ programId: "program:a" }]]);
+ });
+ it("records nothing for a call without a recorded program", () => {
+  expect(parts(createCommandActivityProjection()([entry("plain")])).map(row => row.commandActivity?.receiptScopes)).toEqual([undefined]);
+ });
 });

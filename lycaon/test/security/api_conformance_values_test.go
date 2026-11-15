@@ -81,17 +81,27 @@ func (v *conformanceValues) requiredQuery(op *conformanceOp) url.Values {
 	query := url.Values{}
 	for _, p := range op.Query {
 		if p.Required {
-			query.Set(p.Name, v.queryValue(p))
+			for _, value := range v.queryValues(p) {
+				query.Add(p.Name, value)
+			}
 		}
 	}
 	return query
 }
 
-func (v *conformanceValues) queryValue(p *openapi3.Parameter) string {
+func (v *conformanceValues) queryValues(p *openapi3.Parameter) []string {
 	if value, ok := v.byName[p.Name]; ok {
-		return value
+		return []string{value}
 	}
-	return scalarString(v.schemaValue(paramSchema(p), p.Name, nil))
+	raw := v.schemaValue(paramSchema(p), p.Name, nil)
+	if items, ok := raw.([]any); ok {
+		out := make([]string, len(items))
+		for i, item := range items {
+			out[i] = scalarString(item)
+		}
+		return out
+	}
+	return []string{scalarString(raw)}
 }
 
 // body synthesizes a request body that validates against schema. secret, when

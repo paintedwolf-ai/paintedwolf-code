@@ -3,6 +3,7 @@ import { render } from "@solidjs/testing-library";
 import type { PendingCheckpoint } from "../../chat/checkpoint/checkpoint-model.ts";
 import { toolApprovalFixture } from "../../chat/checkpoint/approval-test-fixtures.ts";
 import { ApprovalCard } from "./ApprovalCard.tsx";
+import { ContextZone } from "./ApprovalShell.tsx";
 
 const checkpoint: PendingCheckpoint = {
   checkpointId: "checkpoint-shell",
@@ -70,5 +71,17 @@ describe("approval shell invariants", () => {
     expect(repeat).toBeTruthy();
     if (!context || !repeat) return;
     expect(context.compareDocumentPosition(repeat) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("renders pending and settled agent rationale with evidence link in ContextZone", () => {
+    const settled = render(() => (
+      <ContextZone agent={{ text: "Ships the fix", onceKey: "rec-1", evidence: { project_id: "p1", record_id: "rec-1" } }} />
+    ));
+    expect(settled.getByTestId("approval-agent-line").textContent).toContain("Ships the fix");
+    expect(settled.getByTestId("briefing-evidence-link")).toBeTruthy();
+    settled.unmount();
+
+    const waiting = render(() => <ContextZone agent={{ pending: true, onceKey: "rec-2" }} />);
+    expect(waiting.getByTestId("approval-agent-line").querySelector('[data-state="waiting"]')).toBeTruthy();
   });
 });

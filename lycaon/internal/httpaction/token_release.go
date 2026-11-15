@@ -2,11 +2,11 @@ package httpaction
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
