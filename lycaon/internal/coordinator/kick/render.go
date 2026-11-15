@@ -52,11 +52,11 @@ func buildKickRenderData(meta kickMeta, live CoordinatorKickRenderContext, now t
 	if live.BatchPhase != "" {
 		data["batch_phase"] = live.BatchPhase
 	}
-	if len(live.PendingOverlayJobs) > 0 {
-		data["pending_overlay_jobs"] = live.PendingOverlayJobs
+	if live.PendingOverlays > 0 {
+		data["pending_overlays"] = live.PendingOverlays
 	}
-	if len(live.PartialWorkerJobs) > 0 {
-		data["partial_worker_jobs"] = live.PartialWorkerJobs
+	if live.PartialWorkers > 0 {
+		data["partial_workers"] = live.PartialWorkers
 	}
 	if len(meta.promotedPaths) > 0 {
 		data["promoted_paths"] = append([]string(nil), meta.promotedPaths...)

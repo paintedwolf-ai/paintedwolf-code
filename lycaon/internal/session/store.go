@@ -122,6 +122,7 @@ type CommandStore interface {
 	BeginTurn(ctx context.Context, in store.TurnStart) (store.TurnExecution, error)
 	LatestTurnStatus(ctx context.Context, sessionID string) (store.TurnStatus, error)
 	CheckpointTurn(ctx context.Context, turnID, attemptID string, phase store.TurnPhase, checkpointJSON string) error
+	TouchTurnProgress(ctx context.Context, turnID string) error
 	ProjectLiveModelOutput(ctx context.Context, out store.LiveModelOutput) error
 	ConfigureModelLimit(ctx context.Context, sessionID string, limit int) error
 	AdmitModelResponse(ctx context.Context, sessionID, attemptID string) error

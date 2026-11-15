@@ -1,8 +1,8 @@
 steps:
-  - when: "paintedwolf.job_id != ''"
+  - when: "paintedwolf.worker != ''"
     tool: "worker_cancel"
     args:
-      job_id: "{{ paintedwolf.job_id }}"
+      worker: "{{ paintedwolf.worker }}"
     complete: true
     say: "It starts on its own when its prerequisite lands; to withdraw it instead, call {{ call }}."
     otherwise: "It starts on its own when its prerequisite lands."

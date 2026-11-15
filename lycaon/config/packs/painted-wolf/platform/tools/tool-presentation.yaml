@@ -65,7 +65,7 @@ tools:
     activity: {headline: "signaling processes", salience: primary, role: process}
   answer_decision:
     running_label: "Answering a worker…"
-    title_keys: [option]
+    title_keys: [answer]
     # The reader needs to see which way a worker's question went.
     activity: {headline: "resolving decisions", salience: defining, role: coordination}
     title_fallback: "Worker decision"

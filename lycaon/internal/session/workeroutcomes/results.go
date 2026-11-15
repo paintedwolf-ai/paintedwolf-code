@@ -43,7 +43,13 @@ type Results struct {
 	digests        *Digests
 	sessions       SessionReader
 	limits         SessionLimits
+	workerNames    workercompletion.WorkerNames
+	resultNotices  ResultNotices
 }
+
+// ResultNotices describes a settled worker round for its coordinator's
+// notice; ok is false for a job that runs no worker round.
+type ResultNotices func(ctx context.Context, jobID string) (notice map[string]any, ok bool, err error)
 
 type ResultPorts struct {
 	Tasks          TaskReader
@@ -65,6 +71,14 @@ func (m *Results) SetWorkers(tasks TaskReader)              { m.tasks = tasks }
 func (m *Results) SetProofs(proofs TerminalProofs)          { m.proofs = proofs }
 func (m *Results) SetDecisions(decisions WorkerDecisions)   { m.decisions = decisions }
 func (m *Results) SetWorkflowSource(source ActiveWorkflow)  { m.workflowSource = source }
+
+// SetWorkerNames names the worker a job's round belongs to in its facts.
+func (m *Results) SetWorkerNames(names workercompletion.WorkerNames) {
+	m.workerNames = names
+}
+
+// SetResultNotices sets how a settled round is described to its coordinator.
+func (m *Results) SetResultNotices(notices ResultNotices) { m.resultNotices = notices }
 
 // ValidateWorkflow rejects incomplete worker-to-workflow composition.
 func (m *Results) ValidateWorkflow() error {
@@ -124,12 +138,23 @@ func (m *Results) EnvelopeForTerminal(ctx context.Context, sessionID, completing
 	if digest := m.digests.Take(jobID); digest != "" {
 		env.WorkerDigest = digest
 	}
+	if m.resultNotices != nil {
+		notice, ok, err := m.resultNotices(ctx, jobID)
+		if err != nil {
+			slog.WarnContext(ctx, "describe worker result for coordinator envelope", "job_id", jobID, "error", err)
+		} else if ok {
+			if env.Vars == nil {
+				env.Vars = map[string]any{}
+			}
+			env.Vars["worker_result"] = notice
+		}
+	}
 	if m.decisions != nil {
 		req, ok, err := m.decisions.GetByJob(ctx, jobID)
 		if err != nil {
 			slog.WarnContext(ctx, "load worker decision for coordinator envelope", "job_id", jobID, "error", err)
 		} else if ok {
-			env.WithWorkerDecision(req)
+			env.WithWorkerDecision(req, m.workerName(ctx, jobID))
 		}
 	}
 	return env
@@ -232,4 +257,18 @@ func (m *Results) RoundRunning(jobID string) bool {
 		return false
 	}
 	return task.Status == api.WorkerStatusPending || task.Status == api.WorkerStatusRunning
+}
+
+func (m *Results) workerName(ctx context.Context, jobID string) string {
+	if m.workerNames == nil {
+		return ""
+	}
+	name, ok, err := m.workerNames(ctx, jobID)
+	if err != nil {
+		slog.WarnContext(ctx, "name worker for coordinator envelope", "job_id", jobID, "error", err)
+	}
+	if !ok {
+		return ""
+	}
+	return name
 }

@@ -124,9 +124,6 @@ func (q *sqlQueueClaims) PublishEnqueued(ctx context.Context, jobID string) {
 
 // ClaimNext claims the next pending job when under the running cap.
 func (q *sqlQueueClaims) ClaimNext(ctx context.Context, req ClaimRequest) (*api.WorkerTask, error) {
-	if _, err := q.recoverPrerequisites(ctx); err != nil {
-		return nil, err
-	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -272,9 +269,10 @@ func (q *sqlQueueClaims) finalizeCanceled(ctx context.Context, jobID string, res
 	if task.Status.IsTerminal() {
 		return nil
 	}
+	kept := q.keptCheckpoint(ctx, task)
 	var won bool
 	if err := q.retryOnFullDisk(func() (err error) {
-		won, err = q.store.CancelJob(ctx, jobID, result)
+		won, err = q.store.CancelJob(ctx, jobID, result, kept)
 		return err
 	}); err != nil {
 		return err
@@ -282,7 +280,9 @@ func (q *sqlQueueClaims) finalizeCanceled(ctx context.Context, jobID string, res
 	if !won {
 		return nil
 	}
-	q.destroyWorkerWorkspace(ctx, task)
+	if kept == "" {
+		q.destroyWorkerWorkspace(ctx, task)
+	}
 	q.refreshBoardByID(ctx, jobID)
 	return nil
 }

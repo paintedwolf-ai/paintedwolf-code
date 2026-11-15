@@ -28,9 +28,9 @@ Every row above names what to count — components, root causes, configuration g
 
 Name dependencies in the dispatch fields rather than hoping waves line up:
 
-- `after_workers` — the consumer leg starts only after the listed producer jobs finish and their write overlays are promoted; unusable producer output cancels the wait. Use it for stages that build on promoted output, and do not combine it with `child_session_id` or `scope.base_overlay_id`.
+- `after_workers` — the consumer leg starts only after each listed producer delivers a complete result and its write changes land. A producer sent back for corrections holds its consumers until it delivers again. Use it for stages that build on landed output, and do not combine it with `scope.base_overlay_id`.
 - `scope.base_overlay_id` — stacks a write leg on a pending, unpromoted overlay so both legs edit the same line of work; the base overlay must still promote for the stack to land.
-- `child_session_id` — resumes the same worker on its existing snapshot for follow-up with new facts or budget; it keeps the old snapshot, so it is not a way to pick up a sibling's new edits.
+{% if profile_has_instruct_worker %}- Follow-up for an existing worker goes through `instruct_worker`, not `task`: the worker keeps its conversation and workspace, so it is not a way to pick up a sibling's new edits before they land.{% endif %}
 - `shared_context` — up to 8192 bytes of interface agreements copied to each collaborating leg; give every collaborator the same text so their interfaces cannot diverge.
 
 ## Self-contained worker brief

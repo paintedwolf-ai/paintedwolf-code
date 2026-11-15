@@ -148,9 +148,7 @@ func (l *toolBatch) toolContextForCall(ctx context.Context, sess *api.Session, b
 type toolBatchOutcome struct {
 	history              []api.Message
 	turnTools            []string
-	anyTaskEnqueued      bool
 	taskEnqueuedThisTurn int
-	lastTaskMessageID    string
 	breakToolLoop        bool
 	progress             batchProgressOutcome
 }
@@ -232,7 +230,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 		return result, err
 	}
 	// Batch closure survives request cancellation.
-	l.Nudges.publishWorkerProgress(ctx, sess, st.workerRunID(), st.progress().BeginBatch(len(toolCalls)), false)
+	l.Nudges.publishWorkerProgress(ctx, sess, st.workerRunID(), st.progress().BeginBatch(toolCallNames(toolCalls), time.Now()), false)
 	defer func() {
 		l.Nudges.publishWorkerProgress(context.WithoutCancel(ctx), sess, st.workerRunID(), st.progress().EndBatch(), false)
 	}()
@@ -260,9 +258,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 			}
 			result.turnTools = l.settleToolRow(ctx, sess, sessionID, out.toolName, result.turnTools, st)
 			if out.taskCommitted {
-				result.anyTaskEnqueued = true
 				result.taskEnqueuedThisTurn++
-				result.lastTaskMessageID = out.toolMsg.ID
 			}
 			if out.endTurn != nil {
 				result.history, result.turnTools, err = l.closeBatchForHostFault(ctx, sess, sessionID, assistantMessageID, result.history, toolCalls, result.turnTools, &lastToolTS, st, out.endTurn)
@@ -280,7 +276,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 		}
 
 		commit := newParallelBatchCommit(
-			result.history, run, &lastToolTS, result.turnTools, result.anyTaskEnqueued, result.taskEnqueuedThisTurn, result.lastTaskMessageID, st, sess, sessionID,
+			result.history, run, &lastToolTS, result.turnTools, result.taskEnqueuedThisTurn, st, sess, sessionID,
 		)
 		outcomes := l.runConcurrentToolBatch(ctx, sess, sessionID, userPrompt, result.history, run, baseToolCtx, taskAllowlist, assistantMessageID, frame.RunContext, machine, commit, st != nil && st.proseFinish)
 
@@ -289,7 +285,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 		}
 
 		var err error
-		result.history, result.turnTools, result.anyTaskEnqueued, result.taskEnqueuedThisTurn, result.lastTaskMessageID, err =
+		result.history, result.turnTools, result.taskEnqueuedThisTurn, err =
 			l.applyParallelToolOutcomes(ctx, outcomes, commit)
 		if fault := batchHostFault(outcomes); err == nil && fault != nil {
 			result.history, result.turnTools, err = l.closeBatchForHostFault(ctx, sess, sessionID, assistantMessageID, result.history, toolCalls, result.turnTools, &lastToolTS, st, fault)
@@ -406,26 +402,26 @@ func (l *toolBatch) applyParallelToolOutcomes(
 	ctx context.Context,
 	outcomes []toolCallOutcome,
 	commit *parallelBatchCommit,
-) ([]api.Message, []string, bool, int, string, error) {
+) ([]api.Message, []string, int, error) {
 	if err := l.finishParallelToolOutcomes(ctx, commit, outcomes); err != nil {
-		history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID := commitSnapshot(commit)
-		return history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, err
+		history, turnTools, taskEnqueuedThisTurn := commitSnapshot(commit)
+		return history, turnTools, taskEnqueuedThisTurn, err
 	}
-	history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID := commitSnapshot(commit)
+	history, turnTools, taskEnqueuedThisTurn := commitSnapshot(commit)
 	for i := 0; i < len(outcomes); i++ {
 		out := outcomes[i]
 		if out.err != nil {
-			return history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, out.err
+			return history, turnTools, taskEnqueuedThisTurn, out.err
 		}
 	}
-	return history, turnTools, anyTaskEnqueued, taskEnqueuedThisTurn, lastTaskMessageID, nil
+	return history, turnTools, taskEnqueuedThisTurn, nil
 }
 
-func commitSnapshot(commit *parallelBatchCommit) ([]api.Message, []string, bool, int, string) {
+func commitSnapshot(commit *parallelBatchCommit) ([]api.Message, []string, int) {
 	if commit == nil {
-		return nil, nil, false, 0, ""
+		return nil, nil, 0
 	}
-	return commit.history, commit.turnTools, commit.anyTaskEnqueued, commit.taskEnqueuedThisTurn, commit.lastTaskMessageID
+	return commit.history, commit.turnTools, commit.taskEnqueuedThisTurn
 }
 
 func (l *toolBatch) syncAssistantToolCallsOnStore(
@@ -585,4 +581,13 @@ func (l *toolBatch) executeOneToolCall(
 		handleEligible: sess != nil && toolEvidenceEligible(run, tc.Name, tc.Args),
 		deliveries:     run.captures.sourceDeliveries,
 	}
+}
+
+// toolCallNames names each call of a batch, in order.
+func toolCallNames(calls []api.ToolCall) []string {
+	out := make([]string, len(calls))
+	for i := range calls {
+		out[i] = calls[i].Name
+	}
+	return out
 }

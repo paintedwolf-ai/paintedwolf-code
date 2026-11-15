@@ -85,7 +85,6 @@ type ToolsDeps struct {
 	BeforeToolRun               func(ctx context.Context, sess *api.Session, history []api.Message, userPrompt, tool string, args map[string]any) (output string, skipRun bool, err error)
 	AfterToolRun                func(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, succeeded bool, out *tools.ToolInvocationOut) string
 	EnrichToolOutput            func(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, raised guidance.ToolResultFacts, completion *api.ToolCompletion, doomCompletionCountAfter int) (string, guidance.ToolResultFacts)
-	InFlightWorkerRosterNote    func(ctx context.Context, sess *api.Session) string
 	DataDir                     string
 	ReloadHistory               func(ctx context.Context, sessionID string, sess *api.Session, surfaceID string) ([]api.Message, error)
 	CompactOversizedToolResults func(ctx context.Context, sessionID string, sess *api.Session) error
@@ -140,8 +139,10 @@ type ProjectionDeps struct {
 	SettleModelOutput           func(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error)
 	MarkModelOutputProjected    func(ctx context.Context, outputID string) error
 	CheckpointTurn              func(ctx context.Context, turnID, attemptID string, phase store.TurnPhase, checkpointJSON string) error
-	AppendDraftVersion          func(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error)
-	CountDraftVersions          func(ctx context.Context, sessionID, slotID string) (int, error)
+	// TouchTurnProgress records that a running turn made durable progress.
+	TouchTurnProgress  func(ctx context.Context, turnID string) error
+	AppendDraftVersion func(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error)
+	CountDraftVersions func(ctx context.Context, sessionID, slotID string) (int, error)
 }
 
 type NudgesDeps struct {

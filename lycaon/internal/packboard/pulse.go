@@ -168,7 +168,6 @@ func WorkerPulseSig(tasks []api.WorkerTask, now time.Time) string {
 	for _, r := range rows {
 		parts = append(parts, fmt.Sprintf("%s:%s:%d", r.id, r.status, r.started))
 	}
-	parts = append(parts, partialWorkerLines(tasks)...)
 	_ = now
 	return strings.Join(parts, ",")
 }

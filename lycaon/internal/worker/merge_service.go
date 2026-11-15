@@ -31,6 +31,7 @@ const (
 	OverlayPromoteConflictCode            = "OVERLAY_PROMOTE_CONFLICT"
 	OverlayPromoteResolutionsRequiredCode = "OVERLAY_PROMOTE_RESOLUTIONS_REQUIRED"
 	OverlayPromoteSyntaxUnhealthyCode     = "OVERLAY_PROMOTE_SYNTAX_UNHEALTHY"
+	OverlayRejectWorkerWorkingCode        = "OVERLAY_REJECT_WORKER_WORKING"
 )
 
 // mergeHostPurpose names the Git a merge operation runs: the coordinator
@@ -52,6 +53,9 @@ type MergeStore interface {
 	ListMergeApplying(ctx context.Context) ([]string, error)
 	SetMergeStatus(ctx context.Context, jobID string, status api.WorkerMergeStatus) error
 	SetMergeStatuses(ctx context.Context, updates []MergeStatusUpdate) error
+	// LaterRounds reports the worker's later rounds carrying this job's
+	// changes: those whose changes are pending, and whether one still runs.
+	LaterRounds(ctx context.Context, jobID string) (pending []string, working bool, err error)
 	CommitPromotion(ctx context.Context, jobID, claimToken string, commit PromotionCommit) error
 	ClearWorkerWorkspace(ctx context.Context, jobID string) error
 }
@@ -106,12 +110,14 @@ type OverlayDocumentSynchronizer interface {
 
 // MergeService applies coordinator merge tools to worker branches.
 type MergeService struct {
-	Queue         MergeQueue
-	Store         MergeStore
-	Reports       ChangeReportDeps
-	Evidence      SourceEvidenceContext
-	Workspace     WorkerWorkspaceManager
-	Reject        *guidance.StaticRejectFormatter
+	Queue     MergeQueue
+	Store     MergeStore
+	Reports   ChangeReportDeps
+	Evidence  SourceEvidenceContext
+	Workspace WorkerWorkspaceManager
+	Reject    *guidance.StaticRejectFormatter
+	// Results names the worker and result a refused job belongs to.
+	Names         JobNamer
 	Sessions      MergeSessionLister
 	Reconcile     MergeReconcileRegistrar
 	Captures      PromoteCapture
@@ -134,6 +140,12 @@ type MergeService struct {
 // PreviewForSession assesses one overlay without changing state.
 func (s *MergeService) PreviewForSession(ctx context.Context, sessionID, jobID, detail string, paths []string) (api.WorkerMergeResult, error) {
 	ctx = gitexec.WithHostPurpose(ctx, mergeHostPurpose)
+	out, err := s.previewForSession(ctx, sessionID, jobID, detail, paths)
+	s.nameOverlaps(ctx, &out)
+	return out, err
+}
+
+func (s *MergeService) previewForSession(ctx context.Context, sessionID, jobID, detail string, paths []string) (api.WorkerMergeResult, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	jobID = strings.TrimSpace(jobID)
 	if s == nil || s.Queue == nil {
@@ -141,16 +153,16 @@ func (s *MergeService) PreviewForSession(ctx context.Context, sessionID, jobID, 
 	}
 	task, ok := s.Queue.Get(jobID)
 	if !ok || task == nil {
-		return api.WorkerMergeResult{}, s.reject(OverlayPromoteNotFoundCode, map[string]any{"job_id": jobID})
+		return api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": jobID})
 	}
 	if strings.TrimSpace(task.ParentSessionID) != sessionID {
-		return api.WorkerMergeResult{}, s.reject(OverlayPromoteSessionMismatchCode, map[string]any{"job_id": jobID})
+		return api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteSessionMismatchCode, map[string]any{"job_id": jobID})
 	}
 	if strings.TrimSpace(task.WorkspaceRoot) == "" && session.CheckpointStoreDirForTask(task) == "" {
-		return api.WorkerMergeResult{}, s.reject(OverlayPromoteNotPendingCode, map[string]any{"job_id": jobID, "reason": "no isolated branch"})
+		return api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteNotPendingCode, map[string]any{"job_id": jobID, "reason": "no isolated branch"})
 	}
 	if task.MergeStatus != api.WorkerMergeStatusPending {
-		return api.WorkerMergeResult{}, s.reject(OverlayPromoteNotPendingCode, map[string]any{
+		return api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteNotPendingCode, map[string]any{
 			"job_id":       jobID,
 			"merge_status": string(task.MergeStatus),
 		})
@@ -205,7 +217,7 @@ func (s mergeEngine) resolvePreviewMergePaths(ctx context.Context, jobID string,
 		mergePaths = validated
 	}
 	if len(mergePaths) == 0 {
-		return nil, s.reject(OverlayPromoteNoPathsCode, map[string]any{"job_id": jobID, "remaining_overlay_paths": changed})
+		return nil, s.reject(ctx, OverlayPromoteNoPathsCode, map[string]any{"job_id": jobID, "remaining_overlay_paths": changed})
 	}
 	return mergePaths, nil
 }
@@ -300,12 +312,13 @@ func (s *MergeService) reports() ChangeReportDeps {
 	return s.Reports
 }
 
-func (s *MergeService) reject(code string, data map[string]any) error {
+func (s *MergeService) reject(ctx context.Context, code string, data map[string]any) error {
 	var formatter *guidance.StaticRejectFormatter
+	var refs JobNamer
 	if s != nil {
-		formatter = s.Reject
+		formatter, refs = s.Reject, s.Names
 	}
-	return toolrejection.FormatDecisionReject(code, data, formatter)
+	return toolrejection.FormatDecisionReject(code, withResultRef(ctx, refs, data), formatter)
 }
 
 func normalizeMergePaths(ctx context.Context, paths []string, task api.WorkerTask, roots []projectroot.RootRef) []string {

@@ -193,7 +193,7 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		"completed_ago": true, "worker_digest": true, "last_worker_decision_request": true,
 		"evidence_digest": true, "command_completion": true, "command_refusal": true, "topology_output": true, "options_criterion": true,
 		"fanout_plan": true, "max_fanout_legs": true, "batch_phase": true,
-		"pending_overlay_jobs": true, "partial_worker_jobs": true, "promoted_paths": true,
+		"pending_overlays": true, "partial_workers": true, "promoted_paths": true,
 		"advance_when_gate_met": true, "failed_leaves": true, "gate_obligations": true,
 		"progress_open_items": true, "progress_closure_armed": true,
 		"batches": true, "tools": true,
@@ -225,6 +225,10 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		"held_call_handle": true, "held_call_tool": true, "held_call_outcome": true,
 		// The worker message page counts the messages it carries.
 		"message_count": true,
+		// The worker round frame names its round, what it carries and, on a
+		// later round, its starting point and earlier results.
+		"round": true, "has_brief": true, "instruction_count": true,
+		"workspace": true, "prior_change": true, "earlier_results": true,
 	}
 	entries, err := config.List(config.PlatformGuidance)
 	testutil.FailErr(t, "readdir kicks", err)

@@ -15,6 +15,7 @@ tools:
   record_finding: sticky
   pack_board: sticky
   request_decision: sticky
+  message_coordinator: sticky
   web_search: true
   fetch_url: true
   handoff_reserve: true

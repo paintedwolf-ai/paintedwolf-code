@@ -31,6 +31,16 @@ func TestCoreToolPredicates(t *testing.T) {
 	if err != nil || !ok {
 		t.Fatalf("high_risk_tool implementer = %v err=%v", ok, err)
 	}
+	ec.ToolName = "instruct_worker"
+	ok, err = reg.Evaluate("high_risk_tool", ec)
+	if err != nil || !ok {
+		t.Fatalf("high_risk_tool instruct_worker to implementer = %v err=%v", ok, err)
+	}
+	ec.ToolArgs = map[string]any{"worker": "scout"}
+	ok, err = reg.Evaluate("high_risk_tool", ec)
+	if err != nil || ok {
+		t.Fatalf("high_risk_tool instruct_worker without an agent = %v err=%v", ok, err)
+	}
 	ec.ToolName = "delegate_dispatch"
 	ok, err = reg.Evaluate("high_risk_tool", ec)
 	if err != nil || !ok {

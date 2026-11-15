@@ -103,7 +103,7 @@ func TestRoundNoticeKickCarriesMeasurementsWhileBusy(t *testing.T) {
 		t.Fatal("round notice rendered empty")
 	}
 	facts := roundNoticeEnvelope("job-A").WorkerRoundNotice
-	for _, want := range []string{facts.JobID, facts.AgentType, strconv.Itoa(facts.ModelCalls)} {
+	for _, want := range []string{facts.Worker, facts.AgentType, strconv.Itoa(facts.ModelCalls)} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("round notice = %q want %q", text, want)
 		}

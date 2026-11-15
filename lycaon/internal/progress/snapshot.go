@@ -129,8 +129,10 @@ func ClassifyTransitions(before, after Snapshot) Transitions {
 
 // Reconciliation identifies the worker finishes awaiting acknowledgement.
 type Reconciliation struct {
-	Token string   `json:"token"`
-	Jobs  []string `json:"jobs"`
+	Token string `json:"token"`
+	// Jobs are host identity behind the token; Settled names them by worker.
+	Jobs    []string `json:"-"`
+	Settled []string `json:"settled_work"`
 }
 
 func snapshotVersion(runID, content string, itemIDs []string, version string, docVersion uint64) Snapshot {

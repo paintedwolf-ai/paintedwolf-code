@@ -3,12 +3,16 @@ package worker_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -22,95 +26,13 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// A resume continues its child: the host supplies the agent, scope and planned
-// leg.
-func TestTaskToolResumeInheritsTheChild(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
-	var enqueued api.WorkerTask
-	q := &priorJobQueue{
-		WorkerQueue: worker.NewInMemoryQueue(2),
-		prior: &api.WorkerTask{
-			ID: "prior-job", ChildSessionID: "child-1", AgentType: "implementer",
-			Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"src/**"}},
-		},
-		out: &enqueued,
-	}
-	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:  q,
-		Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
-	}))
-	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
-	out, err := exec.Invoke(context.Background(), "task", map[string]any{
-		"brief":            taskBrief("continue"),
-		"child_session_id": "child-1",
-	}, toolContext("parent-1", t.TempDir()))
-	testutil.FailErr(t, "resume without restating the child", err)
-	if enqueued.ChildSessionID != "child-1" || enqueued.AgentType != "implementer" {
-		t.Fatalf("task = %+v", enqueued)
-	}
-	if !enqueued.EffectiveScope().IsWrite() || len(enqueued.EffectiveScope().Paths) != 1 {
-		t.Fatalf("scope = %+v want the child's write scope", enqueued.Scope)
-	}
-	var payload map[string]any
-	testutil.FailErr(t, "unmarshal JSON document", json.Unmarshal([]byte(out), &payload))
-	if payload["child_session_id"] != "child-1" {
-		t.Fatalf("payload = %v", payload)
-	}
-}
-
-func TestTaskToolResumeRefusesToChangeTheChild(t *testing.T) {
-	prior := &api.WorkerTask{
-		ID: "prior-job", ChildSessionID: "child-1", AgentType: "security-reviewer",
-		Scope: &api.TaskScope{Mode: api.TaskScopeModeRead},
-	}
-	for _, tc := range []struct {
-		name  string
-		args  map[string]any
-		field string
-	}{
-		{"agent", map[string]any{"agent_type": "implementer"}, "agent_type"},
-		{"scope", map[string]any{"scope": map[string]any{"mode": "write"}}, "scope"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			reg := tools.NewDefaultRegistry()
-			testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-				Queue:  &priorJobQueue{WorkerQueue: worker.NewInMemoryQueue(2), prior: prior},
-				Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
-			}))
-			args := map[string]any{"brief": taskBrief("continue"), "child_session_id": "child-1"}
-			for k, v := range tc.args {
-				args[k] = v
-			}
-			_, err := reg.Run(t.Context(), "task", args, toolContext("parent-1", t.TempDir()))
-			reject := toolrejection.AsToolReject(err)
-			if reject == nil || reject.Code != "WORKER_RESUME_MISMATCH" || reject.Data["resume_field"] != tc.field {
-				t.Fatalf("err = %v want WORKER_RESUME_MISMATCH on %s", err, tc.field)
-			}
-		})
-	}
-}
-
-func TestTaskToolResumeOfUnknownChildRejects(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:  &priorJobQueue{WorkerQueue: worker.NewInMemoryQueue(2)},
-		Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
-	}))
-	_, err := reg.Run(t.Context(), "task", map[string]any{
-		"agent_type": "implementer", "brief": taskBrief("continue"), "child_session_id": "missing",
-	}, toolContext("parent-1", t.TempDir()))
-	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "WORKER_RESUME_CHILD_UNKNOWN" {
-		t.Fatalf("err = %v want WORKER_RESUME_CHILD_UNKNOWN", err)
-	}
-}
-
 func TestTaskToolWorkflowWorkSuppliesOmittedFields(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
 	var enqueued api.WorkerTask
 	var boundWorkID string
-	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:  &captureQueue{WorkerQueue: worker.NewInMemoryQueue(2), out: &enqueued},
-		Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
+	dir := t.TempDir()
+	sqlDB := taskStore(t, dir)
+	testdbseed.InsertWorkflowRun(t, sqlDB, "run-1", "parent-1", testdbseed.DefaultProjectID)
+	reg := taskTool(t, sqlDB, capture(&enqueued), worker.TaskToolDeps{
 		WorkflowWork: func(_ context.Context, _ string, workID string) (spawn.WorkflowWork, bool, error) {
 			if workID != "leg-2" {
 				return spawn.WorkflowWork{}, false, nil
@@ -124,55 +46,16 @@ func TestTaskToolWorkflowWorkSuppliesOmittedFields(t *testing.T) {
 			boundWorkID = workID
 			return nil
 		},
-	}))
+	})
 	_, err := reg.Run(t.Context(), "task", map[string]any{
 		"brief": taskBrief("trace the subsystem"), "workflow_work_id": "leg-2",
-	}, toolContext("parent-1", t.TempDir()))
+	}, toolContext("parent-1", dir))
 	testutil.FailErr(t, "dispatch a planned leg by id", err)
 	if enqueued.AgentType != "repo-researcher" || boundWorkID != "leg-2" {
 		t.Fatalf("task = %+v bound=%q want the leg's agent", enqueued, boundWorkID)
 	}
 	if paths := enqueued.EffectiveScope().Paths; len(paths) != 1 || paths[0] != "internal/**" {
 		t.Fatalf("scope paths = %v want the leg's", paths)
-	}
-}
-
-// A resumed child keeps its work identity only in the owning run and phase.
-func TestTaskToolResumeKeepsItsWorkOnlyInItsPhase(t *testing.T) {
-	for _, tc := range []struct {
-		name, phase, priorWorkID, wantWorkID string
-	}{
-		{"same phase", "execute", "leg-1", "leg-1"},
-		{"review question", "execute", "question/c6", "question/c6"},
-		{"later phase", "challenge", "leg-1", ""},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			reg := tools.NewDefaultRegistry()
-			var boundWorkID string
-			prior := &api.WorkerTask{
-				ID: "prior-job", ChildSessionID: "child-1", AgentType: "repo-researcher",
-				Scope: &api.TaskScope{Mode: api.TaskScopeModeRead}, WorkflowRunID: "run-1",
-				WorkflowPhase: "execute", WorkflowWorkID: tc.priorWorkID,
-			}
-			testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-				Queue:  &priorJobQueue{WorkerQueue: worker.NewInMemoryQueue(2), prior: prior},
-				Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
-				WorkflowWork: func(context.Context, string, string) (spawn.WorkflowWork, bool, error) {
-					return spawn.WorkflowWork{RunID: "run-1", Phase: tc.phase, AgentType: "repo-researcher"}, true, nil
-				},
-				BindWorkflowTask: func(_ context.Context, _ tools.ToolContext, workID string, _ *api.WorkerTask) error {
-					boundWorkID = workID
-					return nil
-				},
-			}))
-			_, err := reg.Run(t.Context(), "task", map[string]any{
-				"brief": taskBrief("continue"), "child_session_id": "child-1",
-			}, toolContext("parent-1", t.TempDir()))
-			testutil.FailErr(t, "resume", err)
-			if boundWorkID != tc.wantWorkID {
-				t.Fatalf("bound workflow_work_id = %q want %q", boundWorkID, tc.wantWorkID)
-			}
-		})
 	}
 }
 
@@ -197,106 +80,38 @@ func (q *priorJobQueue) Enqueue(ctx context.Context, task api.WorkerTask) (strin
 	return q.WorkerQueue.Enqueue(ctx, task)
 }
 
-func TestTaskToolResumeRejectsPendingDecision(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
-	q := &priorJobQueue{
-		WorkerQueue: worker.NewInMemoryQueue(2),
-		prior: &api.WorkerTask{
-			ID: "prior-job", ChildSessionID: "child-1", AgentType: "repo-researcher",
-			Scope: &api.TaskScope{Mode: api.TaskScopeModeRead},
-		},
+// taskStore is a store whose project has root r1 at dir and holds the
+// given coordinator sessions.
+func taskStore(t *testing.T, dir string, sessions ...string) *db.Store {
+	t.Helper()
+	sqlDB := testdbfixture.Open(t, "task.db")
+	testdbseed.InsertProjectRootWithID(t, sqlDB, testdbseed.DefaultProjectID, "r1", dir)
+	for _, id := range sessions {
+		testdbseed.InsertSession(t, sqlDB, id, testdbseed.DefaultProjectID)
 	}
-	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:   q,
-		Agents:  orchestration.NewMemoryAgentRegistryForTest(),
-		Workers: worker.DefaultWorkersConfig(),
-		PendingDecision: func(_ context.Context, childSessionID string) (string, bool, error) {
-			if childSessionID == "child-1" {
-				return "job-dec", true, nil
-			}
-			return "", false, nil
-		},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
-	_, err := exec.Invoke(context.Background(), "task", map[string]any{
-		"agent_type":       "repo-researcher",
-		"brief":            taskBrief("continue the same audit"),
-		"child_session_id": "child-1",
-		"scope":            map[string]any{"mode": "read", "paths": []any{"src/**"}},
-	}, toolContext("parent-1", t.TempDir()))
-	var reject *toolrejection.ToolReject
-	if err == nil || !errors.As(err, &reject) || reject.Code != "TASK_DECISION_PENDING" {
-		t.Fatalf("err = %v want TASK_DECISION_PENDING reject", err)
-	}
-	if reject.Data["job_id"] != "job-dec" || reject.Data["child_session_id"] != "child-1" {
-		t.Fatalf("reject data = %#v", reject.Data)
-	}
+	return sqlDB
 }
 
-func TestTaskToolResumeRejectsDiscardedOverlay(t *testing.T) {
-	for _, status := range []api.WorkerMergeStatus{api.WorkerMergeStatusRejected, api.WorkerMergeStatusAborted} {
-		t.Run(string(status), func(t *testing.T) {
-			reg := tools.NewDefaultRegistry()
-			q := &priorJobQueue{
-				WorkerQueue: worker.NewInMemoryQueue(2),
-				prior: &api.WorkerTask{
-					ID: "prior-job", ChildSessionID: "child-1", MergeStatus: status, AgentType: "implementer",
-					Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite},
-				},
-			}
-			if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-				Queue:   q,
-				Agents:  orchestration.NewMemoryAgentRegistryForTest(),
-				Workers: worker.DefaultWorkersConfig(),
-			}); err != nil {
-				t.Fatal(err)
-			}
-			exec := toolexecution.NewExecutor(nil, reg, "coordinator")
-			_, err := exec.Invoke(context.Background(), "task", map[string]any{
-				"agent_type":       "implementer",
-				"brief":            taskBrief("fix it"),
-				"child_session_id": "child-1",
-				"scope":            map[string]any{"mode": "write", "paths": []any{"pkg"}},
-			}, toolContext("parent-1", t.TempDir()))
-			var reject *toolrejection.ToolReject
-			if err == nil || !errors.As(err, &reject) || reject.Code != "WORKER_RESUME_OVERLAY_DISCARDED" {
-				t.Fatalf("err = %v want WORKER_RESUME_OVERLAY_DISCARDED reject", err)
-			}
-		})
+// taskTool registers the task tool over sqlDB's queue and worker records;
+// wrap observes the queue.
+func taskTool(t *testing.T, sqlDB *db.Store, wrap func(worker.WorkerQueue) worker.WorkerQueue, deps worker.TaskToolDeps) *tools.DefaultRegistry {
+	t.Helper()
+	var queue worker.WorkerQueue = worker.NewSQLQueue(sqlDB, 4)
+	if wrap != nil {
+		queue = wrap(queue)
 	}
+	deps.Queue, deps.WorkerRecords = queue, workerrecords.New(sqlDB)
+	if deps.Agents == nil {
+		deps.Agents = orchestration.NewMemoryAgentRegistryForTest()
+	}
+	deps.Workers = worker.DefaultWorkersConfig()
+	reg := tools.NewDefaultRegistry()
+	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, deps))
+	return reg
 }
 
-func TestTaskToolResumePendingOverlayAllowed(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
-	var enqueued api.WorkerTask
-	q := &priorJobQueue{
-		WorkerQueue: worker.NewInMemoryQueue(2),
-		prior: &api.WorkerTask{
-			ID: "prior-job", ChildSessionID: "child-1", MergeStatus: api.WorkerMergeStatusPending, AgentType: "implementer",
-			Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite},
-		},
-		out: &enqueued,
-	}
-	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:   q,
-		Agents:  orchestration.NewMemoryAgentRegistryForTest(),
-		Workers: worker.DefaultWorkersConfig(),
-	}); err != nil {
-		t.Fatal(err)
-	}
-	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
-	_, err := exec.Invoke(context.Background(), "task", map[string]any{
-		"agent_type":       "implementer",
-		"brief":            taskBrief("continue the live overlay"),
-		"child_session_id": "child-1",
-		"scope":            map[string]any{"mode": "write", "paths": []any{"pkg"}},
-	}, toolContext("parent-1", t.TempDir()))
-	testutil.FailErr(t, "resume on pending overlay must enqueue", err)
-	if enqueued.ChildSessionID != "child-1" {
-		t.Fatalf("task = %+v", enqueued)
-	}
+func capture(out *api.WorkerTask) func(worker.WorkerQueue) worker.WorkerQueue {
+	return func(q worker.WorkerQueue) worker.WorkerQueue { return &captureQueue{WorkerQueue: q, out: out} }
 }
 
 func taskBrief(goal string) map[string]any {
@@ -316,16 +131,7 @@ func (c *captureQueue) Enqueue(ctx context.Context, task api.WorkerTask) (string
 func TestTaskToolDraftScratchSpawnsImplementerWithWorkspacePath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	reg := tools.NewDefaultRegistry()
 	var enqueued api.WorkerTask
-	cq := &captureQueue{WorkerQueue: worker.NewInMemoryQueue(2), out: &enqueued}
-	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:   cq,
-		Agents:  orchestration.NewMemoryAgentRegistryForTest(),
-		Workers: worker.DefaultWorkersConfig(),
-	}); err != nil {
-		t.Fatal(err)
-	}
 	ctx := context.Background()
 	projReg := project.NewMemoryRegistry()
 	p, err := projReg.Create(ctx, project.CreateParams{Draft: true})
@@ -335,13 +141,17 @@ func TestTaskToolDraftScratchSpawnsImplementerWithWorkspacePath(t *testing.T) {
 	if len(roots) != 1 {
 		t.Fatalf("len(roots) = %d want 1", len(roots))
 	}
+	sqlDB := taskStore(t, t.TempDir())
+	testdbseed.InsertProjectRootWithID(t, sqlDB, p.ID, roots[0].ID, scratch)
+	testdbseed.InsertSession(t, sqlDB, "parent-draft", p.ID)
+	reg := taskTool(t, sqlDB, capture(&enqueued), worker.TaskToolDeps{})
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	_, err = exec.Invoke(ctx, "task", map[string]any{
 		"agent_type": "implementer",
 		"brief":      taskBrief("ship core module"),
 		"scope":      map[string]any{"mode": "write", "paths": []any{"src"}},
 	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "parent-draft",
-		ProjectID: p.ID}, Source: tools.InvocationSource{Roots: roots,
+		ProjectID: p.ID, ToolCallID: "call-draft"}, Source: tools.InvocationSource{Roots: roots,
 		ActiveRootID: roots[0].ID},
 	})
 	testutil.FailErr(t, "task implementer on draft scratch", err)
@@ -354,15 +164,11 @@ func TestTaskToolDraftScratchSpawnsImplementerWithWorkspacePath(t *testing.T) {
 }
 
 func TestTaskToolFreshDispatchRequiresAgentType(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:   worker.NewInMemoryQueue(1),
-		Agents:  orchestration.NewMemoryAgentRegistryForTest(),
-		Workers: worker.DefaultWorkersConfig(),
-	}))
+	dir := t.TempDir()
+	reg := taskTool(t, taskStore(t, dir, "p"), nil, worker.TaskToolDeps{})
 	_, err := reg.Run(t.Context(), "task", map[string]any{
 		"brief": taskBrief("new work"),
-	}, toolContext("p", t.TempDir()))
+	}, toolContext("p", dir))
 	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("err = %v want TOOL_ARGS_INVALID", err)
@@ -374,13 +180,8 @@ func TestTaskToolFreshDispatchRequiresAgentType(t *testing.T) {
 }
 
 func TestTaskToolCapsAggregateBriefText(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
-	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:  worker.NewInMemoryQueue(1),
-		Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
-	}); err != nil {
-		t.Fatal(err)
-	}
+	dir := t.TempDir()
+	reg := taskTool(t, taskStore(t, dir, "parent-1"), nil, worker.TaskToolDeps{})
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	_, err := exec.Invoke(context.Background(), "task", map[string]any{
 		"agent_type": "implementer",
@@ -388,16 +189,20 @@ func TestTaskToolCapsAggregateBriefText(t *testing.T) {
 			"goal":      strings.Repeat("x", spawn.MaxTaskCharterRunes),
 			"done_when": []any{"done"},
 		},
-	}, toolContext("parent-1", t.TempDir()))
+	}, toolContext("parent-1", dir))
 	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" || reject.Data["max_runes"] != spawn.MaxTaskCharterRunes {
 		t.Fatalf("err = %v want aggregate brief cap reject", err)
 	}
 }
 
+var toolCalls atomic.Int64
+
+// toolContext is one coordinator tool call in a project rooted at dir.
 func toolContext(sessionID, dir string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	return tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sessionID, ProjectID: testdbseed.DefaultProjectID}, Source: tools.InvocationSource{Roots: roots, ActiveRootID: "r1"}}
+	call := "call-" + strconv.FormatInt(toolCalls.Add(1), 10)
+	return tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sessionID, ProjectID: testdbseed.DefaultProjectID, ToolCallID: call}, Source: tools.InvocationSource{Roots: roots, ActiveRootID: "r1"}}
 }
 
 func TestTaskToolDispatchWriteScopeInsideLinkedWorktree(t *testing.T) {
@@ -407,14 +212,8 @@ func TestTaskToolDispatchWriteScopeInsideLinkedWorktree(t *testing.T) {
 	testutil.FailErr(t, "write worktree .git", os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: /real/repo/.git/worktrees/wt\n"), 0o644))
 	testutil.FailErr(t, "write worktree file", os.WriteFile(filepath.Join(wt, "pkg", "a.go"), []byte("package pkg\n"), 0o644))
 
-	reg := tools.NewDefaultRegistry()
 	var enqueued api.WorkerTask
-	cq := &captureQueue{WorkerQueue: worker.NewInMemoryQueue(4), out: &enqueued}
-	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:   cq,
-		Agents:  orchestration.NewMemoryAgentRegistryForTest(),
-		Workers: worker.DefaultWorkersConfig(),
-	}))
+	reg := taskTool(t, taskStore(t, root, "parent-wt"), capture(&enqueued), worker.TaskToolDeps{})
 
 	rawReceipt, err := reg.Run(t.Context(), "task", map[string]any{
 		"agent_type": "implementer",

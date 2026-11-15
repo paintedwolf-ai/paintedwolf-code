@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"log/slog"
 	"strings"
 
@@ -118,13 +119,19 @@ func (l *turnNudges) maybeSpendSoftStopNudge(
 	return l.appendHostNudge(ctx, sessionID, history, nudge, "", st)
 }
 
+// windDownWithholds names the tools the spend wind-down round withholds:
+// every tool that starts or resumes a worker.
+func windDownWithholds(tool string) bool {
+	return guidance.StartsWorkerRound(tool) || strings.EqualFold(strings.TrimSpace(tool), "answer_decision")
+}
+
 func filterSpendSoftStopToolCalls(calls []api.ToolCall) []api.ToolCall {
 	if len(calls) == 0 {
 		return calls
 	}
 	out := make([]api.ToolCall, 0, len(calls))
 	for _, call := range calls {
-		if isTaskToolName(call.Name) {
+		if windDownWithholds(call.Name) {
 			continue
 		}
 		out = append(out, call)
@@ -138,7 +145,7 @@ func filterSpendSoftStopToolMetas(metas []tools.ToolMeta) []tools.ToolMeta {
 	}
 	out := make([]tools.ToolMeta, 0, len(metas))
 	for _, meta := range metas {
-		if isTaskToolName(meta.Name) {
+		if windDownWithholds(meta.Name) {
 			continue
 		}
 		out = append(out, meta)

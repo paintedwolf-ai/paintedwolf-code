@@ -44,19 +44,27 @@ UPDATE worker_jobs
 SET status = 'canceled', result_json = ?1, error = NULL, failure_json = NULL,
     completed_at = COALESCE(completed_at, ?2),
     claim_token = NULL, heartbeat_at = NULL, lease_expires_at = NULL,
-    merge_status = 'aborted', workspace_relpath = NULL,
+    merge_status = CASE WHEN CAST(?3 AS TEXT) != '' THEN 'pending' ELSE 'aborted' END,
+    workspace_relpath = CASE WHEN CAST(?3 AS TEXT) != '' THEN workspace_relpath ELSE NULL END,
     merge_claim_token = NULL, merge_heartbeat_at = NULL, merge_lease_expires_at = NULL
-WHERE id = ?3 AND status IN ('pending', 'running', 'waiting', 'held')
+WHERE id = ?4 AND status IN ('pending', 'running', 'waiting', 'held')
 `
 
 type CancelWorkerJobParams struct {
-	ResultJson  sql.NullString `json:"result_json"`
-	CompletedAt sql.NullString `json:"completed_at"`
-	ID          string         `json:"id"`
+	ResultJson     sql.NullString `json:"result_json"`
+	CompletedAt    sql.NullString `json:"completed_at"`
+	KeptCheckpoint string         `json:"kept_checkpoint"`
+	ID             string         `json:"id"`
 }
 
+// A stopped write round with changes keeps them pending on its branch.
 func (q *Queries) CancelWorkerJob(ctx context.Context, arg CancelWorkerJobParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, cancelWorkerJob, arg.ResultJson, arg.CompletedAt, arg.ID)
+	result, err := q.db.ExecContext(ctx, cancelWorkerJob,
+		arg.ResultJson,
+		arg.CompletedAt,
+		arg.KeptCheckpoint,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -86,7 +94,7 @@ func (q *Queries) CancelWorkerWaitLeases(ctx context.Context, arg CancelWorkerWa
 
 const claimWorkerJob = `-- name: ClaimWorkerJob :one
 UPDATE worker_jobs
-SET status = 'running', started_at = ?1, claimed_by = ?2,
+SET status = 'running', started_at = COALESCE(started_at, ?1), claimed_by = ?2,
     claim_token = ?3, attempt = attempt + 1,
     heartbeat_at = ?4, lease_expires_at = ?5
 WHERE worker_jobs.id = ?6 AND status = 'pending' AND cancel_requested_at IS NULL
@@ -253,25 +261,29 @@ UPDATE worker_jobs
 SET status = 'failed', error = ?1, failure_json = ?2,
     completed_at = COALESCE(completed_at, ?3),
     claim_token = NULL, heartbeat_at = NULL, lease_expires_at = NULL,
-    merge_status = 'aborted', workspace_relpath = NULL,
+    merge_status = CASE WHEN CAST(?4 AS TEXT) != '' THEN 'pending' ELSE 'aborted' END,
+    workspace_relpath = CASE WHEN CAST(?4 AS TEXT) != '' THEN workspace_relpath ELSE NULL END,
     merge_claim_token = NULL, merge_heartbeat_at = NULL, merge_lease_expires_at = NULL
-WHERE id = ?4 AND status = 'running'
-  AND claim_token = ?5 AND cancel_requested_at IS NULL
+WHERE id = ?5 AND status = 'running'
+  AND claim_token = ?6 AND cancel_requested_at IS NULL
 `
 
 type FailWorkerJobParams struct {
-	Error       sql.NullString `json:"error"`
-	FailureJson sql.NullString `json:"failure_json"`
-	CompletedAt sql.NullString `json:"completed_at"`
-	ID          string         `json:"id"`
-	ClaimToken  sql.NullString `json:"claim_token"`
+	Error          sql.NullString `json:"error"`
+	FailureJson    sql.NullString `json:"failure_json"`
+	CompletedAt    sql.NullString `json:"completed_at"`
+	KeptCheckpoint string         `json:"kept_checkpoint"`
+	ID             string         `json:"id"`
+	ClaimToken     sql.NullString `json:"claim_token"`
 }
 
+// A failed write round with changes keeps them pending on its branch.
 func (q *Queries) FailWorkerJob(ctx context.Context, arg FailWorkerJobParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, failWorkerJob,
 		arg.Error,
 		arg.FailureJson,
 		arg.CompletedAt,
+		arg.KeptCheckpoint,
 		arg.ID,
 		arg.ClaimToken,
 	)
@@ -762,7 +774,13 @@ func (q *Queries) InsertWorkerResult(ctx context.Context, arg InsertWorkerResult
 }
 
 const listBlockedWorkerPrerequisites = `-- name: ListBlockedWorkerPrerequisites :many
-SELECT DISTINCT consumer.id FROM worker_prerequisites dependency
+SELECT DISTINCT consumer.id AS consumer_id, dependency.prerequisite_id AS producer_job_id,
+    CAST(CASE
+        WHEN origin.job_id IS NOT NULL AND producer.closed_at IS NOT NULL THEN 'closed'
+        WHEN origin.job_id IS NULL AND upstream.status IN ('failed', 'canceled') THEN 'failed'
+        ELSE 'rejected'
+    END AS TEXT) AS reason
+FROM worker_prerequisites dependency
 JOIN worker_jobs consumer ON consumer.id = dependency.worker_job_id
 JOIN worker_jobs upstream ON upstream.id = dependency.prerequisite_id
 LEFT JOIN worker_rounds origin ON origin.job_id = dependency.prerequisite_id
@@ -788,22 +806,28 @@ WHERE consumer.status = 'pending' AND (
 ORDER BY consumer.id
 `
 
+type ListBlockedWorkerPrerequisitesRow struct {
+	ConsumerID    string `json:"consumer_id"`
+	ProducerJobID string `json:"producer_job_id"`
+	Reason        string `json:"reason"`
+}
+
 // A job-only producer that failed, or whose changes are gone, can never be
 // met. A long-lived producer can be instructed again, so only closing it, or
 // a rejection of its latest round's changes with no round after, ends it.
-func (q *Queries) ListBlockedWorkerPrerequisites(ctx context.Context) ([]string, error) {
+func (q *Queries) ListBlockedWorkerPrerequisites(ctx context.Context) ([]ListBlockedWorkerPrerequisitesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listBlockedWorkerPrerequisites)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListBlockedWorkerPrerequisitesRow
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var i ListBlockedWorkerPrerequisitesRow
+		if err := rows.Scan(&i.ConsumerID, &i.ProducerJobID, &i.Reason); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -1446,7 +1470,7 @@ func (q *Queries) ListWorkerJobs(ctx context.Context, statusesJson string) ([]Wo
 }
 
 const listWorkerJobsForBranchRetention = `-- name: ListWorkerJobsForBranchRetention :many
-SELECT id, project_id, status, merge_status, workspace_overlay_id
+SELECT id, project_id, status, merge_status, workspace_overlay_id, workspace_relpath
 FROM worker_jobs
 ORDER BY created_at, id
 `
@@ -1457,6 +1481,7 @@ type ListWorkerJobsForBranchRetentionRow struct {
 	Status             string         `json:"status"`
 	MergeStatus        sql.NullString `json:"merge_status"`
 	WorkspaceOverlayID sql.NullString `json:"workspace_overlay_id"`
+	WorkspaceRelpath   sql.NullString `json:"workspace_relpath"`
 }
 
 // Jobs own provisioning before their branch path and baseline are published.
@@ -1475,6 +1500,7 @@ func (q *Queries) ListWorkerJobsForBranchRetention(ctx context.Context) ([]ListW
 			&i.Status,
 			&i.MergeStatus,
 			&i.WorkspaceOverlayID,
+			&i.WorkspaceRelpath,
 		); err != nil {
 			return nil, err
 		}

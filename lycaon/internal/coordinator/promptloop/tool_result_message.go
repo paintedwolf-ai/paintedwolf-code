@@ -118,7 +118,7 @@ func (l *toolInvocations) truncateToolResultForSession(
 
 	var out tooloutput.WireSpillOutcome
 	if overlayPromote && hostDataDir != "" {
-		rel := tooloutput.PromoteSpillRelPath(extractOverlayIDFromToolOutput(durableContent))
+		rel := tooloutput.PromoteSpillRelPath(toolOutputField(durableContent, "job_id"))
 		out = tooloutput.WireSpillOverlayPromote(hostDataDir, rel, screened, inline, maxBytes, maxSpillBytes)
 	} else {
 		out = tooloutput.WireSpillToolOutput(ctx, hostDataDir, screened, maxBytes, maxSpillBytes)
@@ -156,7 +156,7 @@ func (l *toolInvocations) truncateToolResultForSession(
 	}
 	hintVars := spillHintVars(out)
 	if overlayPromote {
-		hintVars["job_id"] = extractOverlayIDFromToolOutput(durableContent)
+		hintVars["overlay_id"] = toolOutputField(durableContent, "result_handle")
 		hint := guidance.EnvelopeHintMessage(ctx, l.Closeout.Deps.HintConfig, l.Closeout.Deps.HintNextSteps, "OVERLAY_PROMOTE_SPILL", hintVars)
 		return toolResultProjection{
 			content: guidance.AppendOutputBanner(out.Preview, "OVERLAY_PROMOTE_SPILL", hint),
@@ -186,23 +186,20 @@ func spillHintVars(out tooloutput.WireSpillOutcome) map[string]any {
 	}
 }
 
-func extractOverlayIDFromToolOutput(content string) string {
+// toolOutputField reads a string member of the last JSON object in a tool's
+// own output.
+func toolOutputField(content, key string) string {
 	content = strings.TrimSpace(content)
-	if content == "" {
-		return ""
-	}
 	for i := len(content) - 1; i >= 0; i-- {
 		if content[i] != '{' {
 			continue
 		}
-		var payload struct {
-			JobID string `json:"job_id"`
-		}
+		var payload map[string]any
 		if err := json.Unmarshal([]byte(content[i:]), &payload); err != nil {
 			continue
 		}
-		if id := strings.TrimSpace(payload.JobID); id != "" {
-			return id
+		if v, ok := payload[key].(string); ok && strings.TrimSpace(v) != "" {
+			return strings.TrimSpace(v)
 		}
 	}
 	return ""

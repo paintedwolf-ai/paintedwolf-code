@@ -3,6 +3,9 @@ package workerops_test
 import (
 	"context"
 	"errors"
+	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -36,6 +39,7 @@ type fixture struct {
 	coord    workerrecords.Actor
 	workerID string
 	enqueued []workerops.RoundJob
+	woken    []string
 }
 
 func now() string { return db.FormatTime(time.Now().UTC()) }
@@ -52,6 +56,10 @@ func newFixture(t *testing.T) *fixture {
 		coord: workerrecords.Actor{SessionID: "coord", Role: workerrecords.RoleCoordinator, PrincipalID: "coord"}}
 	f.svc = &workerops.Service{
 		Reader: workerops.Reader{Records: records, Jobs: f.jobs, Decisions: f.dec},
+		WakeParked: func(_ context.Context, jobID string) error {
+			f.woken = append(f.woken, jobID)
+			return nil
+		},
 		Agents: func(agent string) (bool, bool) {
 			switch agent {
 			case "implementer":
@@ -177,6 +185,26 @@ func TestInstructQueuesForARunningRound(t *testing.T) {
 	var refusal *workerops.Refusal
 	if !errors.As(err, &refusal) || refusal.AgentChange != workerstate.AgentChangeBusy {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// An instruction to a parked worker settles its wait so it resumes and reads
+// the instruction; one to a running worker only queues.
+func TestInstructWakesAParkedWorker(t *testing.T) {
+	f := newFixture(t)
+	f.job(t, "job-1", api.WorkerStatusRunning, "")
+	_, err := f.records.AdmitRound(t.Context(), f.coord, op("admit"), f.workerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	_, err = f.svc.Instruct(t.Context(), f.coord, op("running"), workerops.Instruction{Worker: "surveyor", Instructions: "also read the encoder"}, f.enqueue("unused"))
+	testutil.FailErr(t, "instruct running", err)
+	if len(f.woken) != 0 {
+		t.Fatalf("a running worker was woken: %v", f.woken)
+	}
+	f.jobs["job-1"].Status = api.WorkerStatusWaiting
+	receipt, err := f.svc.Instruct(t.Context(), f.coord, op("parked"), workerops.Instruction{Worker: "surveyor", Instructions: "the server is up now"}, f.enqueue("unused"))
+	testutil.FailErr(t, "instruct parked", err)
+	if receipt.Outcome != workerops.OutcomeQueued || len(f.woken) != 1 || f.woken[0] != "job-1" {
+		t.Fatalf("receipt = %+v woken = %v", receipt, f.woken)
 	}
 }
 
@@ -309,5 +337,128 @@ func TestInstructReplaysItsFirstReceipt(t *testing.T) {
 	testutil.FailErr(t, "replay queued", err)
 	if replayed != queued || queued.JobID != "job-2" {
 		t.Fatalf("queued = %+v, replayed = %+v", queued, replayed)
+	}
+}
+
+// A worker name resolves to the job of its latest result, and delivered
+// workers are counted; a name with no worker, or no result yet, resolves to
+// nothing.
+func TestLatestResultJobAndDeliveredCount(t *testing.T) {
+	f := newFixture(t)
+	if _, ok, err := f.svc.Reader.LatestResultJob(t.Context(), f.coord, "surveyor"); ok || err != nil {
+		t.Fatalf("before any result: ok=%v err=%v", ok, err)
+	}
+	if n, err := f.svc.Reader.CountState(t.Context(), f.coord, workerstate.Delivered); n != 0 || err != nil {
+		t.Fatalf("delivered before any result = %d, %v", n, err)
+	}
+	f.round(t, "job-1", "complete", "")
+	job, ok, err := f.svc.Reader.LatestResultJob(t.Context(), f.coord, "surveyor")
+	if !ok || err != nil || job != "job-1" {
+		t.Fatalf("latest result job = %q ok=%v err=%v", job, ok, err)
+	}
+	if n, err := f.svc.Reader.CountState(t.Context(), f.coord, workerstate.Delivered); n != 1 || err != nil {
+		t.Fatalf("delivered = %d, %v", n, err)
+	}
+	if _, ok, err := f.svc.Reader.LatestResultJob(t.Context(), f.coord, "nobody"); ok || err != nil {
+		t.Fatalf("unknown name: ok=%v err=%v", ok, err)
+	}
+}
+
+// A round suspended on its decision is held like a prerequisite wait, but its
+// worker is asking: the answer, not a producer, releases it.
+func TestRoundSuspendedOnItsDecisionIsAsking(t *testing.T) {
+	f := newFixture(t)
+	f.job(t, "job-1", api.WorkerStatusRunning, "")
+	_, err := f.records.AdmitRound(t.Context(), f.coord, workerrecords.Op{ID: "admit"}, f.workerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	f.jobs["job-1"].Status = api.WorkerStatusHeld
+	if v := f.state(t); v.State != workerstate.Waiting || v.Reason != workerstate.ReasonPrerequisite {
+		t.Fatalf("held without a decision = %+v", v)
+	}
+	f.dec["child"] = api.WorkerDecisionRequest{WorkerID: "job-1", Question: "Which parser?"}
+	if v := f.state(t); v.State != workerstate.Asking {
+		t.Fatalf("held on its decision = %+v", v)
+	}
+}
+
+// A worker that has run and then lost its child session reads as closed
+// because its session is unusable.
+func TestLostChildSessionMakesTheWorkerUnusable(t *testing.T) {
+	f := newFixture(t)
+	f.round(t, "job-1", "complete", "")
+	if v := f.state(t); v.Reason == workerstate.ReasonSessionUnusable {
+		t.Fatalf("a worker with its session was unusable: %+v", v)
+	}
+	_, err := f.db.ExecContext(t.Context(), `UPDATE workers SET child_session_id = NULL WHERE id = ?`, f.workerID)
+	testutil.FailErr(t, "lose child", err)
+	if v := f.state(t); v.State != workerstate.Closed || v.Reason != workerstate.ReasonSessionUnusable {
+		t.Fatalf("after losing the child session: %+v", v)
+	}
+}
+
+// A pending round whose producer has not delivered waits on its
+// prerequisite and queues once the producer's output is ready; withdrawing
+// the waiting worker cancels that round first, so the worker can close.
+func TestWaitingOnAPrerequisiteAndWithdrawal(t *testing.T) {
+	f := newFixture(t)
+	f.job(t, "producer-job", api.WorkerStatusRunning, "")
+	f.job(t, "job-1", api.WorkerStatusPending, "")
+	f.jobs["job-1"].AfterWorkers = []string{"producer-job"}
+	_, err := f.records.AdmitRound(t.Context(), f.coord, op("admit"), f.workerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	if v := f.state(t); v.State != workerstate.Waiting {
+		t.Fatalf("before the producer delivers: %+v", v)
+	}
+	f.jobs["producer-job"].Status = api.WorkerStatusComplete
+	f.jobs["producer-job"].Result = &api.WorkerResult{Status: "complete"}
+	if v := f.state(t); v.State != workerstate.Working || v.Reason != workerstate.ReasonQueued {
+		t.Fatalf("once the producer delivered: %+v", v)
+	}
+	f.jobs["producer-job"].Status = api.WorkerStatusRunning
+	var cancelled []string
+	stop, err := f.svc.Stop(t.Context(), f.coord, op("withdraw"), "surveyor", "", func(_ context.Context, jobID string) error {
+		cancelled = append(cancelled, jobID)
+		_, err := db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(now()), JobID: jobID})
+		return err
+	})
+	testutil.FailErr(t, "withdraw", err)
+	if !stop.Withdrawn || len(cancelled) != 1 || cancelled[0] != "job-1" {
+		t.Fatalf("stop = %+v cancelled = %v", stop, cancelled)
+	}
+	if v := f.state(t); v.State != workerstate.Closed {
+		t.Fatalf("after withdrawal: %+v", v)
+	}
+}
+
+// Two instructions to an idle worker at once start one round; the other
+// joins it as a queued instruction instead of failing.
+func TestConcurrentInstructionsStartOneRound(t *testing.T) {
+	f := newFixture(t)
+	f.round(t, "job-1", "complete", "")
+	for _, id := range []string{"job-a", "job-b"} {
+		f.job(t, id, api.WorkerStatusPending, "")
+	}
+	var next atomic.Int32
+	enqueue := func(context.Context, workerops.RoundJob) (string, string, error) {
+		return []string{"job-a", "job-b"}[next.Add(1)-1], "local", nil
+	}
+	var wg sync.WaitGroup
+	receipts := make([]workerops.Receipt, 2)
+	errs := make([]error, 2)
+	for i := range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			receipts[i], errs[i] = f.svc.Instruct(t.Context(), f.coord, op("concurrent-"+strconv.Itoa(i)), workerops.Instruction{Worker: "surveyor", Instructions: "look again " + strconv.Itoa(i)}, enqueue)
+		}()
+	}
+	wg.Wait()
+	outcomes := map[workerops.Outcome]int{}
+	for i := range 2 {
+		testutil.FailErr(t, "instruct "+strconv.Itoa(i), errs[i])
+		outcomes[receipts[i].Outcome]++
+	}
+	if outcomes[workerops.OutcomeStarted] != 1 || outcomes[workerops.OutcomeQueued] != 1 || next.Load() != 1 {
+		t.Fatalf("outcomes = %v, enqueued %d", outcomes, next.Load())
 	}
 }

@@ -17,9 +17,9 @@ The dispatch steps below are coordinator-only: a worker leg applies the matching
 7. Set the remaining fields deliberately:
    - `files` — likely starting points only, not a reading list.
    - `scope.paths` — optional focus hints for any worker; they do not limit access or promotion.
-   - `child_session_id` — only to continue the same leg with new facts.
-   - `scope.base_overlay_id` — only for an intentional dependency on a pending write overlay.
-   - `after_workers` — sibling producer job ids the host must finish and promote before this leg starts; unusable producer output cancels the wait. Do not combine it with `child_session_id` or `scope.base_overlay_id`.
+{% if profile_has_instruct_worker %}   - To continue an existing worker's leg, use `instruct_worker` instead of `task`.
+{% endif %}   - `scope.base_overlay_id` — only for an intentional dependency on a pending write overlay.
+   - `after_workers` — sibling producers that must deliver a complete result and land their changes before this leg starts; a producer sent back holds this leg until it delivers again. Do not combine it with `scope.base_overlay_id`.
    - `shared_context` — up to 8192 bytes of interface agreements copied to each collaborating leg; give collaborators the same text.
 8. Add a recommended worker procedure to `brief.constraints` when one listed skill clearly fits: `Recommended procedure: use the <name> skill.` This does not replace a complete brief. Do not prescribe a skill because its name is adjacent to the topic, and do not invent a task argument for skills.
 9. Keep dependent stages sequential; when a consumer must start only after a producer's overlay is promoted, name the producer jobs with `after_workers`.{% if profile_has_record_finding %} Workers may exchange short grounded findings via `record_finding`, but a message arriving after a design choice is not a prerequisite.{% endif %}

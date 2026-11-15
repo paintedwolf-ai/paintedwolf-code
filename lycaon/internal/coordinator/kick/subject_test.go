@@ -7,13 +7,13 @@ import (
 
 func TestKicksForDifferentSubjectsQueueSeparately(t *testing.T) {
 	engine := &stubEngine{render: func(name string, data map[string]any) (string, error) {
-		return name + ":" + data["job_id"].(string), nil
+		return name + ":" + data["worker"].(string), nil
 	}}
 	kicks := &KickEngine{}
 	kicks.SetPromptEngine(engine)
 	for _, job := range []string{"job-a", "job-b", "job-a"} {
 		kicks.QueueDeferred("s1", "coordinator-worker-round-notice",
-			WithSubject(job), WithWorkerRoundNotice(WorkerRoundNoticeFacts{JobID: job}))
+			WithSubject(job), WithWorkerRoundNotice(WorkerRoundNoticeFacts{JobID: job, Worker: job}))
 	}
 	var rendered []string
 	for kicks.TakePendingKickID("s1") != "" {

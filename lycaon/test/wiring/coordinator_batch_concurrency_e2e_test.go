@@ -212,8 +212,11 @@ func TestCoordinatorBatchOverCapRejectedInSameTurnE2E(t *testing.T) {
 	}
 }
 
-func TestCoordinatorBatchRosterNoteOnMultiTaskE2E(t *testing.T) {
-	h := BuildForTest(t, WithLLMClient(batchThreeTaskMock()))
+// After a batched dispatch, the next request's worker roster names every
+// worker the batch started.
+func TestCoordinatorBatchWorkersOnNextRequestRosterE2E(t *testing.T) {
+	rec := llm.NewRecordingClient(batchThreeTaskMock())
+	h := BuildForTest(t, WithLLMClient(rec))
 	ctx := context.Background()
 	dir := t.TempDir()
 	testutil.FailErr(t, "write README", writeReadme(t, dir))
@@ -228,40 +231,34 @@ func TestCoordinatorBatchRosterNoteOnMultiTaskE2E(t *testing.T) {
 
 	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
-	if !messageContains(msgs, "batch dispatch") {
-		t.Fatal("expected batch roster note when ≥2 task() enqueue in one turn")
+	var names []string
+	for _, msg := range msgs {
+		if msg.Role != api.MessageRoleTool {
+			continue
+		}
+		var out struct {
+			Worker string `json:"worker"`
+			Status string `json:"status"`
+		}
+		body := msg.Content
+		if i := strings.Index(body, "{"); i >= 0 {
+			body = body[i:]
+		}
+		if json.Unmarshal([]byte(strings.TrimSpace(body)), &out) == nil && out.Status == "enqueued" && out.Worker != "" {
+			names = append(names, out.Worker)
+		}
 	}
-	if !messageContains(msgs, "repo-researcher") || !messageContains(msgs, "path-explorer") {
-		t.Fatalf("roster note missing agent types: %+v", msgs)
+	if len(names) != 3 {
+		t.Fatalf("dispatched workers = %v, want three", names)
 	}
-}
-
-func TestCoordinatorBatchRosterNoteAbsentOnSingleTaskE2E(t *testing.T) {
-	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
-		Pattern: "^SINGLE_TASK_ONLY",
-		ToolCalls: []llm.MockToolCall{{
-			ID: "tc1", Name: "task", Args: TaskToolArgs("implementer", "do work"),
-		}},
-	}}})
-	h := BuildForTest(t, WithLLMClient(mock))
-	ctx := context.Background()
-	dir := t.TempDir()
-
-	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
-	testutil.FailErr(t, "create session", err)
-	h.SeedProgress(t, ctx, sess.ID)
-
-	if _, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "SINGLE_TASK_ONLY"); err != nil {
-		testutil.FailErr(t, "Prompt", err)
+	var request strings.Builder
+	for _, m := range rec.LastRequest().Messages {
+		request.WriteString(m.Content)
 	}
-
-	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
-	testutil.FailErr(t, "GetMessages", err)
-	if messageContains(msgs, "batch dispatch") {
-		t.Fatal("batch roster note must not appear for single task() enqueue")
-	}
-	if !messageContains(msgs, "BANNER_TASK_QUEUED") {
-		t.Fatalf("expected per-task enqueue banner on single spawn, msgs=%+v", msgs)
+	for _, name := range names {
+		if !strings.Contains(request.String(), "`"+name+"`") {
+			t.Fatalf("next request roster missing worker %q", name)
+		}
 	}
 }
 

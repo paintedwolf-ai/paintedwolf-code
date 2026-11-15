@@ -67,7 +67,7 @@ ORDER BY created_at, id LIMIT 1;
 -- Admission holds the session gate before the claim transaction starts.
 -- name: ClaimWorkerJob :one
 UPDATE worker_jobs
-SET status = 'running', started_at = sqlc.arg(started_at), claimed_by = sqlc.arg(claimed_by),
+SET status = 'running', started_at = COALESCE(started_at, sqlc.arg(started_at)), claimed_by = sqlc.arg(claimed_by),
     claim_token = sqlc.arg(claim_token), attempt = attempt + 1,
     heartbeat_at = sqlc.arg(heartbeat_at), lease_expires_at = sqlc.arg(lease_expires_at)
 WHERE worker_jobs.id = sqlc.arg(id) AND status = 'pending' AND cancel_requested_at IS NULL
@@ -150,12 +150,14 @@ SET status = 'held', result_json = sqlc.arg(result_json), error = NULL, failure_
 WHERE id = sqlc.arg(id) AND status = 'running'
   AND claim_token = sqlc.arg(claim_token) AND cancel_requested_at IS NULL;
 
+-- A failed write round with changes keeps them pending on its branch.
 -- name: FailWorkerJob :execrows
 UPDATE worker_jobs
 SET status = 'failed', error = sqlc.arg(error), failure_json = sqlc.arg(failure_json),
     completed_at = COALESCE(completed_at, sqlc.arg(completed_at)),
     claim_token = NULL, heartbeat_at = NULL, lease_expires_at = NULL,
-    merge_status = 'aborted', workspace_relpath = NULL,
+    merge_status = CASE WHEN CAST(sqlc.arg(kept_checkpoint) AS TEXT) != '' THEN 'pending' ELSE 'aborted' END,
+    workspace_relpath = CASE WHEN CAST(sqlc.arg(kept_checkpoint) AS TEXT) != '' THEN workspace_relpath ELSE NULL END,
     merge_claim_token = NULL, merge_heartbeat_at = NULL, merge_lease_expires_at = NULL
 WHERE id = sqlc.arg(id) AND status = 'running'
   AND claim_token = sqlc.arg(claim_token) AND cancel_requested_at IS NULL;
@@ -168,12 +170,14 @@ SET status = 'pending', error = sqlc.arg(error), failure_json = sqlc.arg(failure
 WHERE id = sqlc.arg(id) AND status = 'running'
   AND claim_token = sqlc.arg(claim_token) AND cancel_requested_at IS NULL;
 
+-- A stopped write round with changes keeps them pending on its branch.
 -- name: CancelWorkerJob :execrows
 UPDATE worker_jobs
 SET status = 'canceled', result_json = sqlc.arg(result_json), error = NULL, failure_json = NULL,
     completed_at = COALESCE(completed_at, sqlc.arg(completed_at)),
     claim_token = NULL, heartbeat_at = NULL, lease_expires_at = NULL,
-    merge_status = 'aborted', workspace_relpath = NULL,
+    merge_status = CASE WHEN CAST(sqlc.arg(kept_checkpoint) AS TEXT) != '' THEN 'pending' ELSE 'aborted' END,
+    workspace_relpath = CASE WHEN CAST(sqlc.arg(kept_checkpoint) AS TEXT) != '' THEN workspace_relpath ELSE NULL END,
     merge_claim_token = NULL, merge_heartbeat_at = NULL, merge_lease_expires_at = NULL
 WHERE id = sqlc.arg(id) AND status IN ('pending', 'running', 'waiting', 'held');
 
@@ -449,7 +453,7 @@ WHERE id = sqlc.arg(id) AND claim_token = sqlc.arg(claim_token) AND workspace_ov
 
 -- Jobs own provisioning before their branch path and baseline are published.
 -- name: ListWorkerJobsForBranchRetention :many
-SELECT id, project_id, status, merge_status, workspace_overlay_id
+SELECT id, project_id, status, merge_status, workspace_overlay_id, workspace_relpath
 FROM worker_jobs
 ORDER BY created_at, id;
 
@@ -477,7 +481,13 @@ ORDER BY dependency.worker_job_id;
 -- A job-only producer that failed, or whose changes are gone, can never be
 -- met. A long-lived producer can be instructed again, so only closing it, or
 -- a rejection of its latest round's changes with no round after, ends it.
-SELECT DISTINCT consumer.id FROM worker_prerequisites dependency
+SELECT DISTINCT consumer.id AS consumer_id, dependency.prerequisite_id AS producer_job_id,
+    CAST(CASE
+        WHEN origin.job_id IS NOT NULL AND producer.closed_at IS NOT NULL THEN 'closed'
+        WHEN origin.job_id IS NULL AND upstream.status IN ('failed', 'canceled') THEN 'failed'
+        ELSE 'rejected'
+    END AS TEXT) AS reason
+FROM worker_prerequisites dependency
 JOIN worker_jobs consumer ON consumer.id = dependency.worker_job_id
 JOIN worker_jobs upstream ON upstream.id = dependency.prerequisite_id
 LEFT JOIN worker_rounds origin ON origin.job_id = dependency.prerequisite_id

@@ -90,6 +90,10 @@ func (s *mergeStoreStub) SetMergeStatuses(_ context.Context, updates []worker.Me
 	return nil
 }
 
+func (s *mergeStoreStub) LaterRounds(context.Context, string) ([]string, bool, error) {
+	return nil, false, nil
+}
+
 func (s *mergeStoreStub) CommitPromotion(ctx context.Context, _ string, _ string, commit worker.PromotionCommit) error {
 	if commit.Documents != nil {
 		if err := commit.Documents.CommitTx(ctx, nil); err != nil {

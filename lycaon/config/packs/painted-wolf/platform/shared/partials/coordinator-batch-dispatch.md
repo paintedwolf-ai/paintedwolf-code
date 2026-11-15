@@ -1,4 +1,4 @@
 **Parallel dispatch.** Work inline directly for localized changes. Delegate with task when work benefits from parallel acceleration across concurrent legs (rapid prototyping, multi-subtree research, or concurrent research + implementation), up to {{ max_in_flight }} workers. Dispatch ready legs together or launch companion legs (such as tests or secondary features) while a leg runs.
 - A row may need complementary roles; broad hunts may use about {{ hunt_wave_workers }} nonduplicating read legs. Provide shared agreements before launching collaborators and declare producer-file dependencies.
-- Accepted workers keep running when a sibling request fails. Repair only rejected requests. Resume unfinished work in the same snapshot; start a fresh child when newly promoted files are needed.
+- Accepted workers keep running when a sibling request fails. Repair only rejected requests. Send unfinished work back to the same worker; it continues in its own workspace, refreshed from source once its changes land.
 - A leg runs as long as its work takes. Split work by outcome, not by how long you expect it to run.

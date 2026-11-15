@@ -7,7 +7,7 @@ Finish through **`complete_leg`**, not prose JSON.
 - `findings[]`: strongest excerpts; counts and report-file requests belong in narrative fields. Optional: `adversary`, `precondition`, and `claim`: `vulnerability` (exploitable within scope), `hardening` (improvement without an in-scope exploit), `accepted_residual` (documented, accepted risk), or `model` (assets, entry points, trust boundaries). Only `vulnerability` retains `severity`: `high` | `medium` | `low`.
 - `excerpt` is verbatim file/diff/command text at `path`, never a count or “no result”.
 - URLs use `cited_urls`, never `findings[].path`.{% if mints.web %} For web findings, use the observed `web#N` in `evidence` and explain the conclusion in `note`; omit source coordinates.{% endif %} Changed files come from the host.
-- Evidence is scoped to this job. After a child resume, reacquire the source or URL before citing an earlier job’s observation; transcript continuity does not carry its evidence into this job.
+- Evidence is scoped to this job. After a child resume, reacquire the source or URL before citing an earlier job’s observation; transcript continuity does not carry its evidence into this job. To build on one of your earlier results, cite its handle in `cited_results`; that is historical evidence, not an observation of current source.
 {% if profile_has_write_tools and profile_has_verify %}- Source edits need the validation described under **Validate your changes**. Report its scope and limits honestly; incomplete delivery is `partial`, while completed work may have blocked validation. Explicit workflow checks still require passing evidence.
 {% endif %}
 {% if mints.scan %}- Board `Scan:` tails are not proof; cite the `scan#N` result itself.

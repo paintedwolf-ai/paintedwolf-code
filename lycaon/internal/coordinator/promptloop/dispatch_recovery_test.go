@@ -103,7 +103,7 @@ func TestPartialDispatchRepairsFailedPeerWhileAcceptedWorkerRuns(t *testing.T) {
 	wakes := loopwake.NewLoopEngine()
 	wakes.SetDeps(loopwake.LoopDeps{GetSession: storage.Get, WorkerCycleIdle: func(context.Context, *api.Session, string) (bool, error) { return false, nil }})
 	t.Cleanup(func() { wakes.ForgetSession(context.Background(), sess.ID) })
-	testutil.FailErr(t, "register wait", loopwake.RegisterWaitTool(reg, wakes.Subscriptions, loopwake.WaitToolDeps{}))
+	testutil.FailErr(t, "register wait", loopwake.RegisterWaitTool(reg, wakes.Subscriptions, loopwake.WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}))
 	backend, ui, repaired := taskCallArgs("implementer", "backend"), taskCallArgs("implementer", "ui"), taskCallArgs("implementer", "ui")
 	backend["goal"], ui["goal"], repaired["goal"] = "backend", "ui", "ui"
 	ui["invalid"] = true

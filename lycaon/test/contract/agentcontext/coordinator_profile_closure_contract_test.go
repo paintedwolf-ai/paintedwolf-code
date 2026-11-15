@@ -25,6 +25,8 @@ var coordinatorPromptlessAllowlist = map[string]string{
 	"ask_user":            "taught by its schema; prompts say to ask the user",
 	"promote_overlay":     "taught by the overlay-promote partial on its surface",
 	"reject_overlay":      "taught by the overlay-promote partial on its surface",
+	"shelve_overlay":      "taught by the turn-state roster lines for delivered results",
+	"worker_history":      "taught by its schema; the roster carries each worker's bounded summary",
 	"restore_version":     "worker mutations via task(); coordinator plan surfaces only",
 	"source_history":      "universal repo inspection",
 	"delegate_dispatch":   "delegation primitive; calling convention covered by topology docs",

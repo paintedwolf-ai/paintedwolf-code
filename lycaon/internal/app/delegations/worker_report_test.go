@@ -10,12 +10,15 @@ import (
 	"github.com/lycaon/lycaon/internal/app/sessions"
 	"github.com/lycaon/lycaon/internal/session"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -95,5 +98,20 @@ func TestWorkerReportAssemblesSummaryInputFromDurableChild(t *testing.T) {
 	}
 	if err == nil && record == nil {
 		t.Fatalf("acceptance returned neither record nor error: %+v", record)
+	}
+}
+
+func TestWorkerReportRefusesAResultThatIsNotTheWorkersEarlier(t *testing.T) {
+	database := testdbfixture.Open(t, "worker-report-cited-results.db")
+	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
+	runtime := New(database, nil, worker.WorkersConfig{})
+	runtime.Records = workerrecords.New(database)
+	id, err := runtime.Queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{ParentSessionID: "parent", AgentType: "implementer", Prompt: "Inspect source", Brief: "Inspect source", ExecutionTarget: api.ExecutionTargetLocal})
+	testutil.FailErr(t, "enqueue citing worker", err)
+	invocation := tools.ToolContext{Identity: tools.InvocationIdentity{WorkerJobID: id, SessionID: "child"}}
+	record, err := runtime.DecodeCompleteLeg(t.Context(), map[string]any{"leg_status": "partial", "brief": "Observed result", "cited_results": []any{"res-9"}}, invocation, nil)
+	var reject *toolrejection.ToolReject
+	if record != nil || !errors.As(err, &reject) || reject.Code != workercompletion.ResultNotEarlierCode {
+		t.Fatalf("foreign result citation accepted: %+v, %v", record, err)
 	}
 }

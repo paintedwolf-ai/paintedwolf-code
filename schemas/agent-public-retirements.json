@@ -495,7 +495,28 @@
       "paintedwolf.host_max": {
         "content_contract": "paintedwolf.worker_round_without_ceiling",
         "version": 1
-      }
+      },
+      "paintedwolf.missing_summary_job_ids": [
+        "paintedwolf.missing_summary_workers"
+      ],
+      "paintedwolf.overlap_job_ids": [
+        "paintedwolf.overlap_overlay_ids"
+      ],
+      "paintedwolf.prior_job_id": [
+        "paintedwolf.worker"
+      ],
+      "paintedwolf.resume_field": [
+        "paintedwolf.worker"
+      ],
+      "paintedwolf.resume_recorded": [
+        "paintedwolf.worker"
+      ],
+      "paintedwolf.resume_requested": [
+        "paintedwolf.worker"
+      ],
+      "paintedwolf.threshold": [
+        "paintedwolf.conflict_count"
+      ]
     },
     "rejection_codes": {
       "COORDINATOR_CLOSEOUT_ENVELOPE_ONLY": [
@@ -609,6 +630,60 @@
       ],
       "WORKER_BUDGET_REQUEST_OPEN": [
         "WORKER_COMPLETION_REPORT_MISSING"
+      ],
+      "DECISION_JOB_ID_MISMATCH": [
+        "DECISION_CHANGED"
+      ],
+      "DECISION_SESSION_MISMATCH": [
+        "WORKER_NAME_UNKNOWN"
+      ],
+      "TASK_DECISION_PENDING": [
+        "INSTRUCT_WORKER_ASKING"
+      ],
+      "WORKER_RESUME_CHILD_UNKNOWN": [
+        "WORKER_NAME_UNKNOWN"
+      ],
+      "WORKER_RESUME_MISMATCH": [
+        "INSTRUCT_WORKER_AGENT_CHANGES_OPEN"
+      ],
+      "WORKER_RESUME_OVERLAY_DISCARDED": [
+        "OVERLAY_PROMOTE_NOT_PENDING"
+      ],
+      "BANNER_TAKE_BRANCH_OVERLAP": [
+        "OVERLAY_PROMOTE_CONFLICT"
+      ],
+      "BANNER_PROMOTE_PARTIAL_PATH": [
+        "OVERLAY_PROMOTE_CONFLICT"
+      ],
+      "BANNER_PROMOTE_CONFLICT_DIGEST": [
+        "OVERLAY_PROMOTE_CONFLICT"
+      ],
+      "BANNER_PROMOTE_HIGH_CONFLICT": [
+        "OVERLAY_PROMOTE_CONFLICT"
+      ],
+      "BANNER_PROMOTE_HUNK_PICK": [
+        "OVERLAY_PROMOTE_CONFLICT"
+      ],
+      "BANNER_PROMOTE_SPILL_FIRST": [
+        "OVERLAY_PROMOTE_CONFLICT"
+      ],
+      "BANNER_PROMOTE_SCOPED_HUNKS": [
+        "OVERLAY_PROMOTE_CONFLICT"
+      ],
+      "BANNER_PROMOTE_ORDER": [
+        "OVERLAY_PROMOTE_CONFLICT"
+      ],
+      "BANNER_OVERLAY_MERGE_PLAN": [
+        "OVERLAY_PROMOTE_CONFLICT"
+      ],
+      "BANNER_PROMOTE_OVERLAY_BODY": [
+        "OVERLAY_DISPOSITION_REQUIRED_BEFORE_CLOSEOUT"
+      ],
+      "BANNER_TASK_QUEUED": [
+        "COORDINATOR_WORKER_IN_FLIGHT"
+      ],
+      "BANNER_WORKER_INFLIGHT_ROSTER": [
+        "COORDINATOR_WORKER_IN_FLIGHT"
       ]
     },
     "tools": {

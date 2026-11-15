@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/worker/jobstate"
@@ -176,58 +175,6 @@ func (q *memoryQueueQuery) PublishWorkerProgress(ctx context.Context, workerJobI
 	return nil
 }
 
-// recoverPrerequisiteJobs settles consumers that cannot obtain successful input.
-func recoverPrerequisiteJobs(ctx context.Context, queue WorkerQueue, blocked func(context.Context) ([]string, error)) ([]api.WorkerTask, error) {
-	var canceled []api.WorkerTask
-	for {
-		ids, err := blocked(ctx)
-		if err != nil {
-			return canceled, err
-		}
-		if len(ids) == 0 {
-			return canceled, nil
-		}
-		for _, id := range ids {
-			result := api.WorkerResult{Status: "canceled", Summary: "A prerequisite worker cannot supply successful output."}
-			if err := queue.Cancel(ctx, id, &result); err != nil {
-				return canceled, err
-			}
-			if task, ok := queue.Get(id); ok {
-				canceled = append(canceled, *task)
-			}
-		}
-	}
-}
-
-func (q *sqlQueueCore) recoverPrerequisites(ctx context.Context) ([]api.WorkerTask, error) {
-	return recoverPrerequisiteJobs(ctx, q.self, q.store.queries.ListBlockedWorkerPrerequisites)
-}
-
-func (q *memoryQueueCore) recoverPrerequisites(ctx context.Context) ([]api.WorkerTask, error) {
-	return recoverPrerequisiteJobs(ctx, q.self, q.blockedPrerequisites)
-}
-
-func (q *memoryQueueCore) blockedPrerequisites(ctx context.Context) ([]string, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	q.mu.Lock()
-	defer q.mu.Unlock()
-	var ids []string
-	for id, job := range q.jobs {
-		if job.task.Status != api.WorkerStatusPending {
-			continue
-		}
-		for _, dependency := range q.withDependencies(job.task).Dependencies {
-			if dependency.State == "blocked" {
-				ids = append(ids, id)
-				break
-			}
-		}
-	}
-	return ids, nil
-}
-
 const MaxWorkerPrerequisites = 32
 
 var ErrWorkerPrerequisitesPending = errors.New("worker prerequisites not ready")
@@ -243,22 +190,22 @@ func parseAfterWorkers(args map[string]any) ([]string, error) {
 		for _, v := range values {
 			s, ok := v.(string)
 			if !ok {
-				return nil, invalidTaskCharter("after_workers", "expected_job_ids")
+				return nil, invalidTaskCharter("after_workers", "expected_worker_names")
 			}
-			ids = append(ids, s)
+			ids = append(ids, strings.TrimSpace(s))
 		}
 	case []string:
 		ids = append(ids, values...)
 	default:
-		return nil, invalidTaskCharter("after_workers", "expected_job_ids")
+		return nil, invalidTaskCharter("after_workers", "expected_worker_names")
 	}
 	if len(ids) > MaxWorkerPrerequisites {
 		return nil, invalidTaskCharter("after_workers", "too_many_prerequisites")
 	}
 	seen := make(map[string]bool, len(ids))
 	for _, id := range ids {
-		if _, err := uuid.Parse(id); err != nil || seen[id] {
-			return nil, invalidTaskCharter("after_workers", "invalid_or_repeated_job_id")
+		if id == "" || seen[id] {
+			return nil, invalidTaskCharter("after_workers", "empty_or_repeated_worker_name")
 		}
 		seen[id] = true
 	}

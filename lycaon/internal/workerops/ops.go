@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workerstate"
@@ -17,28 +18,24 @@ type Refusal struct {
 	View   workerstate.View
 	// AgentChange is set when an agent or scope change was refused.
 	AgentChange workerstate.AgentChange
-	// JobID is the worker's latest round's job; ChangedJobID is the job of
-	// its newest result whose changes are open, else of its newest changed
-	// result; WorkflowWorkID is a planned leg's work identity. Recovery
-	// steps are built from them.
-	JobID, ChangedJobID, WorkflowWorkID string
+	// ChangedResult is the handle of the newest result whose changes are
+	// open, else of the newest changed result; WorkflowWorkID is a planned
+	// leg's work identity. Recovery steps are built from them.
+	ChangedResult, WorkflowWorkID string
 }
 
 func refusal(snap Snapshot, op workerstate.Operation) *Refusal {
 	r := &Refusal{Worker: snap.Worker.Name, Op: op, View: snap.View, WorkflowWorkID: snap.Worker.WorkflowWorkID}
-	if latest, ok := snap.Latest(); ok {
-		r.JobID = latest.JobID
-	}
 	for i := len(snap.Rounds) - 1; i >= 0; i-- {
 		round := snap.Rounds[i]
 		if round.ResultID == "" || round.CheckpointID == "" {
 			continue
 		}
-		if r.ChangedJobID == "" {
-			r.ChangedJobID = round.JobID
+		if r.ChangedResult == "" {
+			r.ChangedResult = round.ResultID
 		}
 		if snap.Dispositions[round.ResultID].ChangeState == "" {
-			r.ChangedJobID = round.JobID
+			r.ChangedResult = round.ResultID
 			break
 		}
 	}
@@ -115,6 +112,20 @@ type Service struct {
 	// Accounted hears of results an operation accounted for, by job, so the
 	// checklist latch can release them.
 	Accounted func(sessionID string, jobIDs []string)
+	// WakeParked settles a parked round's wait because an instruction
+	// arrived; the worker resumes and reads it at its next model call.
+	WakeParked func(ctx context.Context, jobID string) error
+
+	// instructing serializes instructions to one worker, so two never both
+	// start its next round.
+	instructing sync.Map
+}
+
+func (s *Service) lockWorker(workerID string) func() {
+	mu, _ := s.instructing.LoadOrStore(workerID, &sync.Mutex{})
+	m := mu.(*sync.Mutex)
+	m.Lock()
+	return m.Unlock
 }
 
 func (s *Service) accounted(sessionID, jobID string) {
@@ -143,6 +154,12 @@ func (s *Service) Instruct(ctx context.Context, actor workerrecords.Actor, op wo
 	}
 	snap, err := s.resolve(ctx, actor, in.Worker)
 	if err != nil {
+		return Receipt{}, err
+	}
+	// Read the worker again under its lock: another instruction may have
+	// started its round meanwhile.
+	defer s.lockWorker(snap.Worker.ID)()
+	if snap, err = s.resolve(ctx, actor, in.Worker); err != nil {
 		return Receipt{}, err
 	}
 	if prior, ok, err := s.replay(ctx, actor, op, snap); err != nil || ok {
@@ -181,6 +198,11 @@ func (s *Service) Instruct(ctx context.Context, actor workerrecords.Actor, op wo
 			return Receipt{}, err
 		}
 		latest, _ := snap.Latest()
+		if snap.Facts.Latest != nil && snap.Facts.Latest.Parked {
+			if err := s.WakeParked(ctx, latest.JobID); err != nil {
+				return Receipt{}, err
+			}
+		}
 		return Receipt{Worker: w.Name, Outcome: OutcomeQueued, State: view.State, Round: latest.Ordinal, JobID: latest.JobID, InstructionSeq: m.Seq}, nil
 	}
 	jobID, target, err := enqueue(ctx, RoundJob{Worker: w, Instructions: in.Instructions, Brief: in.Brief, AgentType: in.AgentType, ScopeMode: scope})
@@ -269,22 +291,39 @@ func (s *Service) Shelve(ctx context.Context, actor workerrecords.Actor, op work
 		return workerrecords.Disposition{}, refusal(snap, workerstate.OpShelve)
 	}
 	changed := false
+	var carried []workerrecords.Round
 	for _, r := range snap.Rounds {
-		changed = changed || (r.ResultID == ref.ResultID && r.CheckpointID != "")
+		if r.ResultID == ref.ResultID {
+			changed = r.CheckpointID != ""
+			break
+		}
+		if r.ResultID != "" && r.CheckpointID != "" && snap.Dispositions[r.ResultID].ChangeState == "" {
+			carried = append(carried, r)
+		}
 	}
 	if !changed {
 		return workerrecords.Disposition{}, ErrNoChanges
 	}
-	d, err := s.Reader.Records.SetChange(ctx, actor, op, ref.ResultID, workerrecords.Change{State: workerrecords.ChangeShelved, ShelveReason: reason})
+	// The lane carried earlier pending changes into this result; they wait with it.
+	for _, r := range carried {
+		if _, err := s.shelveOne(ctx, actor, workerrecords.Op{ID: op.ID + ":carried:" + r.ResultID}, r.ResultID, r.JobID, reason); err != nil {
+			return workerrecords.Disposition{}, err
+		}
+	}
+	return s.shelveOne(ctx, actor, op, ref.ResultID, ref.JobID, reason)
+}
+
+func (s *Service) shelveOne(ctx context.Context, actor workerrecords.Actor, op workerrecords.Op, resultID, jobID, reason string) (workerrecords.Disposition, error) {
+	d, err := s.Reader.Records.SetChange(ctx, actor, op, resultID, workerrecords.Change{State: workerrecords.ChangeShelved, ShelveReason: reason})
 	if err != nil {
 		return workerrecords.Disposition{}, err
 	}
 	if d.AccountedAt == "" {
-		if d, err = s.Reader.Records.AccountResult(ctx, actor, workerrecords.Op{ID: op.ID + ":account"}, ref.ResultID); err != nil && !errors.Is(err, workerrecords.ErrAlreadyAccounted) {
+		if d, err = s.Reader.Records.AccountResult(ctx, actor, workerrecords.Op{ID: op.ID + ":account"}, resultID); err != nil && !errors.Is(err, workerrecords.ErrAlreadyAccounted) {
 			return workerrecords.Disposition{}, err
 		}
 	}
-	s.accounted(actor.SessionID, ref.JobID)
+	s.accounted(actor.SessionID, jobID)
 	return d, nil
 }
 
@@ -318,4 +357,83 @@ func (s *Service) History(ctx context.Context, actor workerrecords.Actor, name s
 		page.Before = msgs[limit-1].Seq
 	}
 	return page, nil
+}
+
+// Result resolves a result handle for an operation on its changes. A handle
+// of a worker whose state does not admit op is refused: changes are not
+// promoted, rejected or previewed against a round that is still running.
+func (s *Service) Result(ctx context.Context, actor workerrecords.Actor, handle string, op workerstate.Operation) (workerrecords.ResultRef, error) {
+	ref, err := s.Reader.Records.Result(ctx, actor, strings.TrimSpace(handle))
+	if err != nil {
+		return workerrecords.ResultRef{}, err
+	}
+	w, err := s.Reader.Records.Worker(ctx, actor, ref.WorkerID)
+	if err != nil {
+		return workerrecords.ResultRef{}, err
+	}
+	snap, err := s.Reader.Read(ctx, actor, w)
+	if err != nil {
+		return workerrecords.ResultRef{}, err
+	}
+	if !snap.View.Admits(op) {
+		return workerrecords.ResultRef{}, refusal(snap, op)
+	}
+	return ref, nil
+}
+
+// Stop is what stopping a worker did.
+type Stop struct {
+	Worker string `json:"worker"`
+	// JobID is the round stopped, or the held job withdrawn.
+	JobID string `json:"job_id,omitempty"`
+	// Withdrawn closes a planned or waiting worker that never started.
+	Withdrawn bool `json:"withdrawn,omitempty"`
+}
+
+// Stop stops a worker for worker_cancel. A working or asking worker's round
+// is stopped through cancel and keeps its work. A waiting worker's round is
+// cancelled, which settles it, and the worker is closed; a planned worker is
+// closed.
+func (s *Service) Stop(ctx context.Context, actor workerrecords.Actor, op workerrecords.Op, name, reason string, cancel func(ctx context.Context, jobID string) error) (Stop, error) {
+	snap, err := s.resolve(ctx, actor, name)
+	if err != nil {
+		return Stop{}, err
+	}
+	out := Stop{Worker: snap.Worker.Name}
+	latest, hasRound := snap.Latest()
+	switch {
+	case snap.View.Admits(workerstate.OpCancel):
+		out.JobID = latest.JobID
+		return out, cancel(ctx, latest.JobID)
+	case snap.View.Admits(workerstate.OpWithdraw):
+		if hasRound && latest.SettledAt == "" {
+			out.JobID = latest.JobID
+			if err := cancel(ctx, latest.JobID); err != nil {
+				return Stop{}, err
+			}
+		}
+		if strings.TrimSpace(reason) == "" {
+			reason = "withdrawn"
+		}
+		if _, err := s.Reader.Records.Close(ctx, actor, op, snap.Worker.ID, reason); err != nil {
+			return Stop{}, err
+		}
+		out.Withdrawn = true
+		return out, nil
+	}
+	return Stop{}, refusal(snap, workerstate.OpCancel)
+}
+
+// Asking returns the job of the round a worker's pending question
+// suspended; a worker that is not asking is refused.
+func (s *Service) Asking(ctx context.Context, actor workerrecords.Actor, name string) (string, error) {
+	snap, err := s.resolve(ctx, actor, name)
+	if err != nil {
+		return "", err
+	}
+	if !snap.View.Admits(workerstate.OpAnswer) {
+		return "", refusal(snap, workerstate.OpAnswer)
+	}
+	latest, _ := snap.Latest()
+	return latest.JobID, nil
 }

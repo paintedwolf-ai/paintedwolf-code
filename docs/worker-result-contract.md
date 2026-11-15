@@ -140,17 +140,15 @@ Worker observations are indexed under the root session tree, including completed
 
 Workers close through the structured `complete_leg` tool. Submission validates the report shape, durable worker identity, assigned coverage, size, and evidence against the current worker job. Success stores a `worker_report` acceptance receipt on the tool result containing the validated report and its grounding decision. The acknowledgement may be compacted; the retained receipt is the completion record.
 
-While tool invocation remains available, prose without an accepted report produces `WORKER_REPORT_REQUIRED` through the normal finish guard. Rejected submissions retain the normal tool surface so the worker can correct its report or acquire missing evidence within the existing run budget. A pending human decision parks the worker without requiring a report.
+A later round may build on the worker's own earlier results. Its round frame lists their handles, and the report cites them in `cited_results`. Submission refuses a handle that is not a settled result of the same worker with `COMPLETE_LEG_RESULT_NOT_EARLIER`. A cited result is historical provenance: it is immutable, and it never stands in for an observation of current source, which still needs evidence from this job.
 
-With no decision outstanding, finalization resolves a report in this order:
+While tool invocation remains available, prose without an accepted report produces `WORKER_REPORT_REQUIRED` through the normal finish guard. Rejected submissions retain the normal tool surface so the worker can correct its report or acquire missing evidence within its round. A pending human decision parks the worker without requiring a report.
 
-1. the latest accepted receipt for the current worker job;
-2. bounded, partial synthesis from the child's observed tool transcript;
-3. a partial result with `WORKER_COMPLETION_REPORT_MISSING` when no report can be assembled.
+With no decision outstanding, finalization uses the latest accepted receipt for the current worker job. Without one the round fails with `WORKER_COMPLETION_REPORT_MISSING` and keeps its work; nothing is synthesized from the transcript.
 
-Finalization consumes an accepted report without reevaluating its evidence or requesting another repair turn. Cancellation retains an existing acceptance receipt without another model turn. Otherwise it permits one graceful closeout interaction and preserves the canceled result's partial status. Fallback summaries cannot fabricate findings or passing verification receipts.
+Finalization consumes an accepted report without reevaluating its evidence or requesting another repair turn. Cancellation retains an existing acceptance receipt without another model turn. Otherwise a coordinator's stop gives the worker one report-only turn: a report delivered there is a partial result, and without one the round fails as stopped. A person's stop fences at once with no model turn.
 
-The acceptance receipt is additive `bundle` wire retained in the existing `durable-db` tool-result JSON. Existing messages remain readable without a receipt, but their argument snapshots do not establish host acceptance. No SQL shape changes. The bundled worker-only grounding retry limit is removed; repairs use the ordinary run budget and rejection controls.
+The acceptance receipt is additive `bundle` wire retained in the existing `durable-db` tool-result JSON. Existing messages remain readable without a receipt, but their argument snapshots do not establish host acceptance. No SQL shape changes. The bundled worker-only grounding retry limit is removed; repairs use the ordinary rejection controls.
 
 ## Grounding validation
 

@@ -281,28 +281,12 @@ func TestTaskPolicyRejectsPendingPhaseObligation(t *testing.T) {
 	}
 }
 
-type stubChildLookup map[string]*api.WorkerTask
-
-func (s stubChildLookup) GetLatestByChildSessionID(_ context.Context, id string) (*api.WorkerTask, bool) {
-	task, ok := s[id]
-	return task, ok
-}
-
 func TestBeforeToolResolvesTaskIdentityAndRendersRejects(t *testing.T) {
 	ctx := context.Background()
 	mgr, sess := newSynthesisDelayManager(t)
 	mgr.RewindRuntime.Progress.Set(sess.ID, "## Progress\n- [ ] active item")
 
 	resolver := workeradmission.TaskIdentityResolver{
-		Children: stubChildLookup{
-			"child-ok": {
-				AgentType:      "path-explorer",
-				Scope:          &api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"**"}},
-				WorkflowRunID:  "run-1",
-				WorkflowPhase:  "build",
-				WorkflowWorkID: "work-stale",
-			},
-		},
 		WorkflowWork: func(_ context.Context, _, workID string) (spawn.WorkflowWork, bool, error) {
 			if workID == "work-err" {
 				return spawn.WorkflowWork{}, false, errors.New("workflow lookup failed")
@@ -325,11 +309,7 @@ func TestBeforeToolResolvesTaskIdentityAndRendersRejects(t *testing.T) {
 	if _, skip, err := mgr.Coordinator.Guards.BeforeTool(ctx, sess, nil, "", "task", map[string]any{"workflow_work_id": "work-planned"}); err != nil || skip {
 		t.Fatalf("planned leg BeforeTool: skip=%v err=%v", skip, err)
 	}
-	// 2. Valid resumed child resolution with stale inherited workflow_work_id cleared.
-	if _, skip, err := mgr.Coordinator.Guards.BeforeTool(ctx, sess, nil, "", "task", map[string]any{"child_session_id": "child-ok"}); err != nil || skip {
-		t.Fatalf("resumed child BeforeTool: skip=%v err=%v", skip, err)
-	}
-	// 3. Non-ToolReject error from resolver (WorkflowWork error, bad scope).
+	// 2. Non-ToolReject error from resolver (WorkflowWork error, bad scope).
 	for _, badArgs := range []map[string]any{
 		{"workflow_work_id": "work-err", "agent_type": "path-explorer"},
 		{"agent_type": "path-explorer", "scope": "not-an-object"},
@@ -338,13 +318,10 @@ func TestBeforeToolResolvesTaskIdentityAndRendersRejects(t *testing.T) {
 			t.Fatalf("expected error for args %#v", badArgs)
 		}
 	}
-	// 4. Structured ToolRejects rendered via fallback formatter and via OAR BlockPlane.
+	// 3. Structured ToolRejects rendered via fallback formatter and via OAR BlockPlane.
 	for _, rejectArgs := range []map[string]any{
 		{},
 		{"agent_type": "unknown-agent-profile"},
-		{"child_session_id": "missing-child"},
-		{"child_session_id": "child-ok", "agent_type": "implementer"},
-		{"child_session_id": "child-ok", "scope": map[string]any{"mode": "write", "paths": []any{"a.go"}}},
 	} {
 		if _, _, err := mgr.Coordinator.Guards.BeforeTool(ctx, sess, nil, "", "task", rejectArgs); err == nil {
 			t.Fatalf("expected structured reject for args %#v", rejectArgs)

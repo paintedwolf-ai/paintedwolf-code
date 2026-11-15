@@ -86,8 +86,6 @@ func uiVisibilityForEntry(entry HintEntry) api.ToolResultUiVisibility {
 	emit := strings.ToLower(strings.TrimSpace(entry.Emit))
 
 	switch {
-	case category == "worker_dispatch":
-		return api.ToolResultUiVisibilityNormal
 	case category == "informational" || category == "advisory" || category == "expected_behavior":
 		return api.ToolResultUiVisibilityBenign
 	case severity == "info" || severity == "warning":

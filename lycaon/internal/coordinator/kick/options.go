@@ -11,28 +11,26 @@ import (
 type KickOption func(*kickMeta)
 
 type kickMeta struct {
-	subject                   string
-	completedAt               *time.Time
-	workerDigest              string
-	evidenceDigest            string
-	commandCompletion         string
-	commandRefusal            string
-	topologyOutput            string
-	pendingOverlayPromoteJobs []string
-	partialWorkerJobs         []string
-	promotedPaths             []string
-	scanID                    string
-	scanStatus                string
-	scanCategories            string
-	scanFindingsCount         int
-	workerRoundNotice         *WorkerRoundNoticeFacts
-	batchSeq                  int
-	batchSeqSet               bool
-	vars                      map[string]any
-	designForkCriterion       string
-	fanoutPlanText            string
-	maxFanoutLegs             int
-	workerDecisionRequest     map[string]any
+	subject               string
+	completedAt           *time.Time
+	workerDigest          string
+	evidenceDigest        string
+	commandCompletion     string
+	commandRefusal        string
+	topologyOutput        string
+	promotedPaths         []string
+	scanID                string
+	scanStatus            string
+	scanCategories        string
+	scanFindingsCount     int
+	workerRoundNotice     *WorkerRoundNoticeFacts
+	batchSeq              int
+	batchSeqSet           bool
+	vars                  map[string]any
+	designForkCriterion   string
+	fanoutPlanText        string
+	maxFanoutLegs         int
+	workerDecisionRequest map[string]any
 }
 
 // WithSubject names the job, leg, scan, or process a kick reports, so kicks
@@ -110,7 +108,7 @@ func WithWorkerDigest(digest string) KickOption {
 }
 
 // WithWorkerDecisionRequest passes a structured worker request_decision into coordinator kicks.
-func WithWorkerDecisionRequest(req api.WorkerDecisionRequest) KickOption {
+func WithWorkerDecisionRequest(req api.WorkerDecisionRequest, worker string) KickOption {
 	return func(m *kickMeta) {
 		question := strings.TrimSpace(req.Question)
 		if question == "" {
@@ -127,6 +125,7 @@ func WithWorkerDecisionRequest(req api.WorkerDecisionRequest) KickOption {
 			class = string(api.WorkerBlockerDecision)
 		}
 		m.workerDecisionRequest = map[string]any{
+			"worker":           strings.TrimSpace(worker),
 			"job_id":           strings.TrimSpace(req.WorkerID),
 			"child_session_id": strings.TrimSpace(req.ChildSessionID),
 			"question":         question,
@@ -204,20 +203,6 @@ func WorkerDecisionRequestFromOptions(opts []KickOption) (api.WorkerDecisionRequ
 	return api.WorkerDecisionRequest{}, false
 }
 
-// WithPendingOverlayPromote records overlays awaiting review.
-func WithPendingOverlayPromote(jobIDs []string) KickOption {
-	return func(m *kickMeta) {
-		m.pendingOverlayPromoteJobs = append([]string(nil), jobIDs...)
-	}
-}
-
-// WithPartialWorkerJobs lists implementer job ids whose envelopes are still partial.
-func WithPartialWorkerJobs(jobIDs []string) KickOption {
-	return func(m *kickMeta) {
-		m.partialWorkerJobs = append([]string(nil), jobIDs...)
-	}
-}
-
 // WithScanFinished passes terminal scan facts into the scan-finished kick template.
 func WithScanFinished(scanID, status, categories string, findingsCount int) KickOption {
 	return func(m *kickMeta) {
@@ -246,7 +231,9 @@ const (
 // WorkerRoundNoticeFacts are the measurements a round notice carries to the
 // coordinator. They inform; nothing in them stops or judges the round.
 type WorkerRoundNoticeFacts struct {
-	JobID     string
+	JobID string
+	// Worker is the name the coordinator addresses the worker by.
+	Worker    string
 	AgentType string
 	Kind      string
 	// ModelCalls, Tokens and SpendNanoUSD measure the round so far.
@@ -254,11 +241,17 @@ type WorkerRoundNoticeFacts struct {
 	Tokens       int
 	SpendNanoUSD int64
 	SpendPriced  bool
-	// QuietFor and InFlight describe a quiet round.
+	// QuietFor and InFlight describe a quiet round; Tools and ToolsFor name
+	// its in-flight batch and how long it has run.
 	QuietFor  time.Duration
 	InFlight  string
 	ToolCalls int
 	ToolsDone int
+	Tools     []string
+	ToolsFor  time.Duration
+	// LatestMessageSeq is the seq of the worker's latest message; zero when
+	// it has sent none.
+	LatestMessageSeq int64
 }
 
 // WithWorkerRoundNotice passes one round notice's measurements into its kick.
@@ -273,11 +266,12 @@ const nanoUSDPerCent = 10_000_000
 
 // renderData projects round notice facts under the names the template reads.
 func (f WorkerRoundNoticeFacts) renderData(data map[string]any) {
-	data["job_id"] = f.JobID
+	data["worker"] = f.Worker
 	data["agent_type"] = f.AgentType
 	data["notice_kind"] = f.Kind
 	data["model_calls"] = f.ModelCalls
 	data["tokens"] = f.Tokens
+	data["latest_message_seq"] = f.LatestMessageSeq
 	// A priced round that cost nothing has no spend to report; one under a
 	// cent would round to a misleading $0.00.
 	switch {
@@ -292,6 +286,8 @@ func (f WorkerRoundNoticeFacts) renderData(data map[string]any) {
 		data["in_flight"] = f.InFlight
 		data["tool_calls"] = f.ToolCalls
 		data["tools_done"] = f.ToolsDone
+		data["tools"] = f.Tools
+		data["tools_minutes"] = int(f.ToolsFor / time.Minute)
 	}
 }
 
@@ -361,12 +357,6 @@ func cloneKickMeta(m kickMeta) kickMeta {
 		for k, v := range m.workerDecisionRequest {
 			out.workerDecisionRequest[k] = v
 		}
-	}
-	if len(m.pendingOverlayPromoteJobs) > 0 {
-		out.pendingOverlayPromoteJobs = append([]string(nil), m.pendingOverlayPromoteJobs...)
-	}
-	if len(m.partialWorkerJobs) > 0 {
-		out.partialWorkerJobs = append([]string(nil), m.partialWorkerJobs...)
 	}
 	if len(m.promotedPaths) > 0 {
 		out.promotedPaths = append([]string(nil), m.promotedPaths...)

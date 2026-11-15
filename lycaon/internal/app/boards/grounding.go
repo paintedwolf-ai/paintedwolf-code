@@ -4,8 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/workermessaging"
-	"github.com/lycaon/lycaon/internal/workerrecords"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/briefingstore"
 	"github.com/lycaon/lycaon/internal/browser"
@@ -33,11 +32,16 @@ import (
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/visualscreen"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workermessaging"
+	"github.com/lycaon/lycaon/internal/workerrecords"
+	"github.com/lycaon/lycaon/internal/workerroster"
+	"github.com/lycaon/lycaon/internal/workerstate"
 )
 
 // WireGroundingAndFindings wires grounding coordinators, progress, visual, and decision tools.
 func (r *Runtime) WireGroundingAndFindings(ctx context.Context) error {
 	r.deps.Sessions.Manager.Coordinator.Guards.SetRules(r.deps.Workflows.Rules)
+	r.WorkerRecords = workerrecords.New(r.deps.Storage.Database)
 	if err := r.wireGroundingCoordinators(); err != nil {
 		return err
 	}
@@ -71,6 +75,7 @@ func (r *Runtime) wireGroundingCoordinators() error {
 	ambientCoord := delegation.NewAmbientGroundingCoordinator(r.deps.Delegations.Store, r.deps.Delegations.Queue, ambientGate, groundingCfg, ambientState, r.deps.Sessions.Manager)
 	ambientCoord.Events = r.deps.Events.Publisher
 	ambientCoord.Pipeline = r.deps.Sessions.Manager.ToolPolicy.Pipeline
+	ambientCoord.Names = r.WorkerRecords.NameByJob
 	r.deps.Sessions.Manager.SetGroundingHook(&delegation.ChainedGroundingCoordinator{
 		Delegation: r.deps.Delegations.Manager.Grounding,
 		Ambient:    ambientCoord,
@@ -89,9 +94,17 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	r.Findings = findings.NewSQLStore(r.deps.Storage.Database)
 	r.deps.Sessions.Manager.Workers.Notes.SetFindings(r.Findings)
 	r.deps.Sessions.Manager.SetPeerRejectionFeed(workeroutcomes.NewPeerRejectionFeed())
-	r.WorkerRecords = workerrecords.New(r.deps.Storage.Database)
+	if r.deps.Delegations.Cancel != nil {
+		r.deps.Delegations.Cancel.Names = r.WorkerRecords
+	}
 	r.deps.Sessions.Manager.SetWorkerMessages(&workermessaging.Delivery{Records: r.WorkerRecords})
 	r.deps.Sessions.Manager.Coordinator.ProgressClosure.SetAccounts(r.WorkerRecords)
+	r.deps.Sessions.Manager.Coordinator.ProgressClosure.SetNames(r.WorkerRecords)
+	r.deps.Sessions.Manager.SetWorkerNames(r.WorkerRecords.NameByJob)
+	if workers := r.deps.Sessions.Manager.Coordinator.Workers; workers != nil {
+		workers.LatestSent = r.WorkerRecords.LatestSentSeq
+	}
+	r.deps.Sessions.Manager.SetJobNames(r.WorkerRecords)
 	if err := native.RegisterMessageCoordinatorTool(r.deps.Execution.Host.Registry, workertools.MessageCoordinatorDeps{
 		Records:    r.WorkerRecords,
 		NeedsReply: r.deps.Sessions.Manager.Coordinator.Workers.MessageNeedsReply,
@@ -222,11 +235,13 @@ func (r *Runtime) wireVisualAndRenderTools(ctx context.Context) error {
 func (r *Runtime) wireDecisionAndCallTools() error {
 	r.deps.Sessions.Decisions = decisions.NewSQL(r.deps.Storage.Database)
 	r.deps.Sessions.Manager.SetDecisionStore(r.deps.Sessions.Decisions)
+	shown := workerroster.NewShownQuestions()
 	r.AnswerDecision = &worker.AnswerDecisionService{
 		Queue:     r.deps.Delegations.Queue,
 		Decisions: r.deps.Sessions.Decisions,
 		Resolver:  worker.NewSQLDecisionResolver(r.deps.Storage.Sessions, r.deps.Delegations.Queue),
 		Reject:    r.deps.Execution.Rejections,
+		Shown:     shown,
 	}
 	if err := native.RegisterRequestDecisionTool(r.deps.Execution.Host.Registry, workertools.RequestDecisionDeps{
 		Recorder:      r.deps.Sessions.Decisions,
@@ -254,6 +269,36 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 	r.deps.Sessions.Manager.SetWorkerQueue(r.deps.Delegations.Queue)
 	r.deps.Sessions.Manager.SetWorkerRounds(r.deps.WorkersCfg.RoundPolicy())
 	r.deps.Sessions.Manager.SetSessionWorkerAbort(r.deps.Delegations.Cancel)
+	roster := workerroster.Source{
+		Reader:  r.WorkerReader(),
+		Touches: r.deps.Sessions.Manager.Workers.Workspaces.Touches,
+		Shown:   shown,
+	}
+	r.deps.Sessions.Manager.SetWorkerRoster(roster.Template)
+	r.deps.Sessions.Manager.Promotion.SetLatestResults(roster.LatestResults)
+	if r.Snapshot != nil {
+		r.Snapshot.NamedWorkers = roster.Board
+	}
+	r.deps.Sessions.Manager.SetWorkerResultNotices(roster.ResultNotice)
+	records := r.WorkerRecords
+	session.SetRoundCheckpoints(func(jobID string) (string, bool) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		round, ok, err := records.RoundByJob(ctx, jobID)
+		if err != nil || !ok || round.SettledAt == "" {
+			return "", false
+		}
+		return round.CheckpointID, true
+	})
+	coordinator := func(sessionID string) workerrecords.Actor {
+		return workerrecords.Actor{SessionID: sessionID, Role: workerrecords.RoleCoordinator, PrincipalID: sessionID}
+	}
+	r.deps.Sessions.Manager.SetWorkerResults(func(ctx context.Context, sessionID, name string) (string, bool, error) {
+		return roster.Reader.LatestResultJob(ctx, coordinator(sessionID), name)
+	})
+	r.deps.Sessions.Manager.SetDeliveredWorkers(func(ctx context.Context, sessionID string) (int, error) {
+		return roster.Reader.CountState(ctx, coordinator(sessionID), workerstate.Delivered)
+	})
 	r.ParentWaiter = worker.NewParentWorkerWaiter()
 
 	if err := call.RegisterHandoffTools(r.deps.Execution.Host.Registry, call.HandoffToolDeps{Calls: r.Calls, Sessions: callLookup}); err != nil {

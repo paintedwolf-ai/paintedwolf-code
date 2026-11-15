@@ -130,6 +130,18 @@ SELECT worker_id, recipient_session_id, generation, delivered_through_seq,
 FROM worker_message_deliveries
 WHERE worker_id = ? AND recipient_session_id = ? AND generation = ?;
 
+-- name: DeleteRoundlessWorker :execrows
+DELETE FROM workers WHERE id = ?
+  AND NOT EXISTS (SELECT 1 FROM worker_rounds WHERE worker_rounds.worker_id = workers.id);
+
+-- name: DeleteWorkerOperation :exec
+DELETE FROM worker_operations WHERE operation_id = ?;
+
+-- name: GetWorkerMessageDeliveredThrough :one
+-- How far any earlier generation delivered a worker's messages to a session.
+SELECT CAST(COALESCE(MAX(delivered_through_seq), 0) AS INTEGER) AS delivered_through_seq
+FROM worker_message_deliveries WHERE worker_id = ? AND recipient_session_id = ?;
+
 -- name: OpenWorkerMessagePage :execrows
 INSERT INTO worker_message_deliveries (
     worker_id, recipient_session_id, generation, delivered_through_seq,
@@ -242,6 +254,41 @@ SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_se
        closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
 FROM workers WHERE child_session_id = ?;
 
+-- name: ListWorkerAncestorPendingJobs :many
+-- The earlier rounds of the worker that ran this job whose changes are still
+-- pending. A worker's lane carries every undisposed earlier result into its
+-- later rounds, so landing a later round lands these with it.
+SELECT prior.job_id
+FROM worker_rounds r
+JOIN worker_rounds prior ON prior.worker_id = r.worker_id AND prior.ordinal < r.ordinal
+JOIN worker_results res ON res.worker_job_id = prior.job_id
+JOIN worker_jobs j ON j.id = prior.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.job_id = ?
+  AND j.merge_status = 'pending'
+  AND COALESCE(d.change_state, '') IN ('', 'shelved')
+ORDER BY prior.ordinal;
+
+-- name: ListWorkerLaterPendingJobs :many
+-- The later rounds of the worker that ran this job whose changes are still
+-- pending. Their lanes carried this job's changes, so rejecting it rejects
+-- these with it.
+SELECT later.job_id
+FROM worker_rounds r
+JOIN worker_rounds later ON later.worker_id = r.worker_id AND later.ordinal > r.ordinal
+JOIN worker_results res ON res.worker_job_id = later.job_id
+JOIN worker_jobs j ON j.id = later.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.job_id = ?
+  AND j.merge_status = 'pending'
+  AND COALESCE(d.change_state, '') IN ('', 'shelved')
+ORDER BY later.ordinal;
+
+-- name: CountWorkerLaterUnsettledRounds :one
+SELECT COUNT(*) FROM worker_rounds r
+JOIN worker_rounds later ON later.worker_id = r.worker_id AND later.ordinal > r.ordinal
+WHERE r.job_id = ? AND later.settled_at IS NULL;
+
 -- name: DisposeWorkerResultsByJob :execrows
 -- Records how a landing or rejection resolved a worker round's changes, in
 -- the transaction that resolved them. Landed and rejected are final; a
@@ -289,6 +336,37 @@ JOIN worker_rounds r ON r.job_id = res.worker_job_id
 JOIN workers w ON w.id = r.worker_id
 WHERE w.session_id = sqlc.arg(session_id) AND d.change_state = 'shelved';
 
+-- name: BindWorkerChildByJob :execrows
+-- A worker's first round spawns its child session; the worker keeps that
+-- session for every later round.
+UPDATE workers SET child_session_id = sqlc.arg(child_session_id), updated_at = sqlc.arg(updated_at)
+WHERE id = (SELECT worker_id FROM worker_rounds WHERE job_id = sqlc.arg(job_id))
+  AND child_session_id IS NULL;
+
+-- name: GetWorkerNameByJob :one
+SELECT w.name FROM worker_rounds r JOIN workers w ON w.id = r.worker_id WHERE r.job_id = ?;
+
+-- name: ListOpenWorkerLaneRefs :many
+-- The current lane of every open worker.
+SELECT p.preparation_ref
+FROM worker_workspace_preparations p
+JOIN workers w ON w.id = p.worker_id
+WHERE w.closed_at IS NULL
+  AND p.preparation_ref != ''
+  AND p.generation = (SELECT MAX(q.generation) FROM worker_workspace_preparations q WHERE q.worker_id = p.worker_id);
+
+-- name: GetWorkerJobNames :one
+-- A job's worker name and, once its round settles, the result handle and what
+-- became of the result's changes.
+SELECT w.name,
+       CAST(CASE WHEN r.settled_at IS NOT NULL THEN COALESCE(res.id, '') ELSE '' END AS TEXT) AS result_id,
+       CAST(COALESCE(d.change_state, '') AS TEXT) AS change_state
+FROM worker_rounds r
+JOIN workers w ON w.id = r.worker_id
+LEFT JOIN worker_results res ON res.worker_job_id = r.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.job_id = ?;
+
 -- name: LatestRoundJobForJob :one
 -- The job of the latest round of the worker that ran this job, or the job
 -- itself when it ran no worker round.
@@ -296,3 +374,8 @@ SELECT CAST(COALESCE((SELECT latest.job_id FROM worker_rounds origin
     JOIN worker_rounds latest ON latest.worker_id = origin.worker_id
     WHERE origin.job_id = sqlc.arg(job_id) ORDER BY latest.ordinal DESC LIMIT 1), sqlc.arg(job_id)) AS TEXT) AS job_id;
 
+
+-- name: GetLatestWorkerSentSeqByJob :one
+SELECT CAST(COALESCE(MAX(m.seq), 0) AS INTEGER) AS seq
+FROM worker_messages m JOIN worker_rounds r ON r.worker_id = m.worker_id
+WHERE r.job_id = ? AND m.sender_role = 'worker' AND m.recipient_role = 'coordinator';

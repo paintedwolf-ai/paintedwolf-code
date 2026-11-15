@@ -2,6 +2,7 @@ package workerrecords_test
 
 import (
 	"errors"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -23,7 +24,7 @@ func TestDeliveryPagesReplayUntilCommitted(t *testing.T) {
 	_, err := f.store.AppendMessage(t.Context(), child, op("out-1"), w.WorkerID, workerrecords.MessageSpec{Body: "question", NeedsReply: true})
 	testutil.FailErr(t, "append worker message", err)
 
-	first, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 0)
+	first, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 0, workerrecords.MaxPageMessages)
 	testutil.FailErr(t, "open page", err)
 	if len(first.Messages) != workerrecords.MaxPageMessages || first.Messages[0].Seq != 1 {
 		t.Fatalf("first page = %d messages from seq %d", len(first.Messages), first.Messages[0].Seq)
@@ -34,7 +35,7 @@ func TestDeliveryPagesReplayUntilCommitted(t *testing.T) {
 		}
 	}
 	// The provider request failed: the same page comes back.
-	replay, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 0)
+	replay, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 0, workerrecords.MaxPageMessages)
 	testutil.FailErr(t, "reopen page", err)
 	if replay.ID != first.ID || len(replay.Messages) != len(first.Messages) {
 		t.Fatalf("replayed page %s (%d) != %s (%d)", replay.ID, len(replay.Messages), first.ID, len(first.Messages))
@@ -46,22 +47,35 @@ func TestDeliveryPagesReplayUntilCommitted(t *testing.T) {
 	testutil.FailErr(t, "commit", f.store.CommitPage(t.Context(), child, w.WorkerID, 0, first.ID))
 	testutil.FailErr(t, "commit again", f.store.CommitPage(t.Context(), child, w.WorkerID, 0, first.ID))
 
-	second, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 0)
+	second, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 0, workerrecords.MaxPageMessages)
 	testutil.FailErr(t, "second page", err)
 	if len(second.Messages) != 6 || second.ID == first.ID {
 		t.Fatalf("second page = %d messages, id %s", len(second.Messages), second.ID)
 	}
 	// A new session generation is shown everything again.
-	fresh, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 1)
+	fresh, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 1, workerrecords.MaxPageMessages)
 	testutil.FailErr(t, "next generation", err)
 	if len(fresh.Messages) != workerrecords.MaxPageMessages || fresh.Messages[0].Seq != 1 {
 		t.Fatalf("generation 1 page = %d from %d", len(fresh.Messages), fresh.Messages[0].Seq)
 	}
 
-	coordPage, err := f.store.OpenPage(t.Context(), f.coord, w.WorkerID, 0)
+	coordPage, err := f.store.OpenPage(t.Context(), f.coord, w.WorkerID, 0, workerrecords.MaxPageMessages)
 	testutil.FailErr(t, "coordinator page", err)
 	if len(coordPage.Messages) != 1 || !coordPage.Messages[0].NeedsReply || coordPage.Messages[0].RoundOrdinal != 1 || coordPage.Messages[0].SenderID != "child-1" {
 		t.Fatalf("coordinator page = %+v", coordPage.Messages)
+	}
+	// A coordinator's compaction does not replay what it was already shown.
+	testutil.FailErr(t, "commit coordinator page", f.store.CommitPage(t.Context(), f.coord, w.WorkerID, 0, coordPage.ID))
+	compacted, err := f.store.OpenPage(t.Context(), f.coord, w.WorkerID, 1, workerrecords.MaxPageMessages)
+	testutil.FailErr(t, "coordinator after compaction", err)
+	if len(compacted.Messages) != 0 {
+		t.Fatalf("compaction replayed %d messages to the coordinator", len(compacted.Messages))
+	}
+	// A page honors the room the request has left.
+	limited, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 2, 3)
+	testutil.FailErr(t, "limited page", err)
+	if len(limited.Messages) != 3 {
+		t.Fatalf("limited page = %d messages", len(limited.Messages))
 	}
 	_, err = f.db.ExecContext(t.Context(), `UPDATE worker_messages SET body = 'edited' WHERE seq = 1`)
 	if err == nil {
@@ -238,4 +252,42 @@ func TestWorkersListAndBindChildSessionOnce(t *testing.T) {
 	if len(workers) != 2 || workers[0].ID != first.WorkerID || workers[0].ChildSessionID != "child-a" || workers[1].ID != second.WorkerID {
 		t.Fatalf("workers = %+v", workers)
 	}
+}
+
+// Open lane roots are each open worker's current lane; earlier generations
+// and closed workers' lanes are not listed.
+func TestOpenLaneRootsListCurrentLanesOfOpenWorkers(t *testing.T) {
+	f := newFixture(t)
+	open, _ := f.workerWithRound(t, "open", "child-1", "job-1")
+	closed, _ := f.workerWithRound(t, "closed", "child-2", "job-2")
+	f.settle(t, "job-2", "")
+	for i, ref := range []string{"/lanes/open.1", "/lanes/open.2"} {
+		_, err := f.store.RecordPreparation(t.Context(), f.coord, op("prep-open-"+strconv.Itoa(i)), open.WorkerID, workerrecords.Preparation{PreparationRef: ref, BindingGeneration: int64(i + 1)})
+		testutil.FailErr(t, "record open lane", err)
+	}
+	_, err := f.store.RecordPreparation(t.Context(), f.coord, op("prep-closed"), closed.WorkerID, workerrecords.Preparation{PreparationRef: "/lanes/closed.1", BindingGeneration: 1})
+	testutil.FailErr(t, "record closed lane", err)
+	_, err = f.store.Close(t.Context(), f.coord, op("close"), closed.WorkerID, "withdrawn")
+	testutil.FailErr(t, "close", err)
+
+	roots, err := f.store.OpenLaneRoots(t.Context())
+	testutil.FailErr(t, "open lane roots", err)
+	if !slices.Equal(roots, []string{"/lanes/open.2"}) {
+		t.Fatalf("open lane roots = %v", roots)
+	}
+}
+
+// A worker whose start failed before any round is discarded with its create
+// receipt, freeing its name; a worker that ran a round cannot be discarded.
+func TestDiscardRemovesOnlyARoundlessWorker(t *testing.T) {
+	f := newFixture(t)
+	created := f.createWorker(t, "create-scout", workerrecords.WorkerSpec{Name: "scout"})
+	testutil.FailErr(t, "discard", f.store.Discard(t.Context(), f.coord, op("create-scout"), created.WorkerID))
+	again := f.createWorker(t, "create-scout", workerrecords.WorkerSpec{Name: "scout"})
+	if again.WorkerID == created.WorkerID {
+		t.Fatal("the create receipt survived the discard")
+	}
+	ran, _ := f.workerWithRound(t, "fixer", "child-1", "job-1")
+	err := f.store.Discard(t.Context(), f.coord, op("create-fixer"), ran.WorkerID)
+	wantErr(t, "discard a worker that ran", err, workerrecords.ErrRoundUnsettled)
 }

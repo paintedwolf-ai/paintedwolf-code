@@ -2,6 +2,8 @@ package worker
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -17,7 +19,14 @@ type WorkerLanes struct {
 	Lanes   *workerlane.Service
 	Records *workerrecords.Store
 	State   workerlane.LaneState
+	// Checkpoints confirms a stacked worker's base result can still be
+	// reconstructed before its first lane is prepared from it.
+	Checkpoints workerlane.Checkpoints
 }
+
+// ErrStackedBaseUnavailable refuses a stacked worker whose base result
+// cannot be named or reconstructed.
+var ErrStackedBaseUnavailable = errors.New("stacked base result is unavailable")
 
 func (l *WorkerLanes) round(ctx context.Context, jobID string) (workerrecords.Round, bool, error) {
 	if l == nil || l.Records == nil || l.Lanes == nil {
@@ -34,7 +43,11 @@ func (l *WorkerLanes) Prepare(ctx context.Context, task *api.WorkerTask, roots [
 		return "", false, err
 	}
 	actor := workerrecords.Actor{SessionID: task.ParentSessionID, Role: workerrecords.RoleCoordinator, PrincipalID: task.ParentSessionID}
-	facts, err := l.Lanes.FactsFor(ctx, l.State, nil, actor, round.WorkerID, workerlane.Assignment{Write: true})
+	assignment, err := l.assignment(ctx, task)
+	if err != nil {
+		return "", true, err
+	}
+	facts, err := l.Lanes.FactsFor(ctx, l.State, l.Checkpoints, actor, round.WorkerID, assignment)
 	if err != nil {
 		return "", true, err
 	}
@@ -67,4 +80,26 @@ func (l *WorkerLanes) Holds(ctx context.Context, task *api.WorkerTask) bool {
 	}
 	_, ok, err := l.round(ctx, task.ID)
 	return err == nil && ok
+}
+
+// assignment is a write round's lane assignment; a stacked task starts on its
+// base job's settled result.
+func (l *WorkerLanes) assignment(ctx context.Context, task *api.WorkerTask) (workerlane.Assignment, error) {
+	a := workerlane.Assignment{Write: true}
+	baseJob := strings.TrimSpace(task.EffectiveScope().BaseOverlayID)
+	if baseJob == "" {
+		return a, nil
+	}
+	names, ok, err := l.Records.NamesByJob(ctx, baseJob)
+	if err != nil {
+		return a, err
+	}
+	if !ok || names.Handle == "" {
+		return a, fmt.Errorf("%w: %s has no settled result", ErrStackedBaseUnavailable, baseJob)
+	}
+	if l.Checkpoints == nil {
+		return a, fmt.Errorf("%w: no checkpoint store", ErrStackedBaseUnavailable)
+	}
+	a.BaseResultID = names.Handle
+	return a, nil
 }

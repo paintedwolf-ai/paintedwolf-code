@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -31,7 +32,11 @@ type Runtime struct {
 	PlaybookMatcher *prompts.PlaybookMatcher
 	ContextLoader   *delegation.WorkerContextLoader
 	BranchRoot      string
-	deps            Dependencies
+	Records         *workerrecords.Store
+	// LaneRoots lists every open worker's current lane, which branch
+	// reconciliation keeps.
+	LaneRoots func(context.Context) ([]string, error)
+	deps      Dependencies
 }
 
 // SetRepoProvider binds the repo provider to the worker context loader.
@@ -134,8 +139,11 @@ func (r *Runtime) ReconcileWorkerSandboxes(ctx context.Context, roots []string) 
 		retained := make(map[string]struct{}, len(jobs))
 		for _, job := range jobs {
 			retained[job.ID] = struct{}{}
+			if job.Branch != "" {
+				retained[job.Branch] = struct{}{}
+			}
 		}
-		return retained, nil
+		return retained, worker.RetainLanes(c, retained, r.LaneRoots)
 	}
 	settle := r.SandboxSettler()
 	removed, err := workspace.ReconcileSandboxRoots(ctx, r.BranchRoot, roots, settle, loadRetainedJobs)
@@ -146,7 +154,7 @@ func (r *Runtime) ReconcileWorkerSandboxes(ctx context.Context, roots []string) 
 	for _, root := range roots {
 		removedJobs, jobErr := worker.ReconcileProjectSandboxes(ctx, r.BranchRoot, root, settle, func(c context.Context) ([]wire.WorkerTask, error) {
 			return r.Queue.ListByWorkspacePath(c, root)
-		})
+		}, r.LaneRoots)
 		removed += removedJobs
 		if jobErr != nil {
 			errs = append(errs, jobErr)

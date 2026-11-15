@@ -120,6 +120,11 @@ func roundEnqueuer(deps WorkerToolDeps, tctx tools.ToolContext, args map[string]
 			return "", "", err
 		}
 		scope := project.ScopeFromToolContext(tctx.Identity.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, tctx.ActiveRootPath())
+		// The paths a worker was scoped to carry over while its mode holds.
+		taskScope := &api.TaskScope{Mode: api.TaskScopeMode(mode)}
+		if prior, ok := deps.Queue.GetLatestByChildSessionID(ctx, w.ChildSessionID); ok && prior.EffectiveScope().Mode == taskScope.Mode {
+			taskScope.Paths = append([]string(nil), prior.EffectiveScope().Paths...)
+		}
 		task := api.WorkerTask{
 			ID:               uuid.NewString(),
 			ParentSessionID:  w.SessionID,
@@ -127,7 +132,7 @@ func roundEnqueuer(deps WorkerToolDeps, tctx tools.ToolContext, args map[string]
 			AgentType:        agent,
 			Prompt:           prompt,
 			Brief:            goal,
-			Scope:            &api.TaskScope{Mode: api.TaskScopeMode(mode)},
+			Scope:            taskScope,
 			ProjectID:        scope.ProjectID,
 			WorkspaceRootID:  scope.WorkspaceRootID,
 			WorkspacePath:    scope.WorkspacePath,
@@ -259,12 +264,17 @@ func workerToolReject(tool, worker, agent string, err error, handle ...string) e
 		return &toolrejection.ToolReject{Code: "SHELVE_OVERLAY_NO_CHANGES", Data: map[string]any{"overlay_id": firstOf(handle)}}
 	case errors.As(err, &refusal):
 		data := map[string]any{"tool": tool, "worker": refusal.Worker, "state": string(refusal.View.State), "admitted": admittedOps(refusal.View),
-			"job_id": refusal.JobID, "overlay_id": refusal.ChangedJobID, "workflow_work_id": refusal.WorkflowWorkID}
+			"overlay_id": refusal.ChangedResult, "workflow_work_id": refusal.WorkflowWorkID}
 		if refusal.View.Reason != workerstate.ReasonNone {
 			data["reason"] = string(refusal.View.Reason)
 		}
-		if tool == ShelveOverlayTool {
-			return &toolrejection.ToolReject{Code: "SHELVE_OVERLAY_NOT_ADMITTED", Data: data}
+		switch refusal.Op {
+		case workerstate.OpCancel:
+			return &toolrejection.ToolReject{Code: "WORKER_CANCEL_NOT_RUNNING", Data: data}
+		case workerstate.OpAnswer:
+			return &toolrejection.ToolReject{Code: DecisionNotFoundCode, Data: data}
+		case workerstate.OpPreview, workerstate.OpPromote, workerstate.OpReject, workerstate.OpShelve:
+			return &toolrejection.ToolReject{Code: "RESULT_CHANGES_NOT_ADMITTED", Data: data}
 		}
 		if code, ok := agentChangeCodes[refusal.AgentChange]; ok {
 			return &toolrejection.ToolReject{Code: code, Data: data}

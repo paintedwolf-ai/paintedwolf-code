@@ -157,19 +157,20 @@ func (m *Summaries) completeWorkerSummary(
 	}
 	proof := draft.proof
 	draft.report = workercompletion.EnrichWorkerCompletionReport(draft.report, proof, draft.status)
-	draft.report = workercompletion.AnnotateWorkerReportForBranch(draft.report, draft.task)
 	if decisionReq == nil {
 		draft.status = string(m.overlayStatus(
 			ctx, api.WorkerSummaryStatus(draft.status), draft.task,
 		))
 	}
+	worker := m.names.Name(ctx, draft.input.JobID)
 	digest := workercompletion.FormatWorkerDigest(
-		draft.input.AgentType, draft.input.JobID, draft.status, draft.summary, proof, draft.report,
+		draft.input.AgentType, worker, draft.status, draft.summary, proof, draft.report,
 	)
 	if decisionReq != nil {
 		digest = workercompletion.AppendWorkerDecisionDigest(digest, *decisionReq)
 	}
 	env := workercompletion.WorkerCompletionEnvelope{
+		Worker:          worker,
 		JobID:           draft.input.JobID,
 		ChildSessionID:  draft.input.ChildSessionID,
 		AgentType:       draft.input.AgentType,

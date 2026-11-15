@@ -5802,6 +5802,8 @@ export interface components {
             git?: components["schemas"]["BoardGitSlice"];
             scans?: components["schemas"]["BoardScansSlice"];
             roster?: components["schemas"]["BoardWorkerRosterEntry"][];
+            /** @description Every open worker in the session, needing the coordinator first. */
+            workers?: components["schemas"]["BoardWorker"][];
             promote_paths?: components["schemas"]["WorkerPromoteJobPathStatus"][];
             overlay_merge_plan?: components["schemas"]["OverlayMergePlan"];
             delegation?: components["schemas"]["BoardDelegationEntry"][];
@@ -10020,8 +10022,8 @@ export interface components {
         };
         /** @description The promote_overlay and preview_overlay tool result. */
         WorkerMergeResult: {
-            /** Format: uuid */
-            job_id: string;
+            /** @description The result these changes belong to. */
+            result_handle: string;
             mode: string;
             merge_status?: components["schemas"]["WorkerMergeStatus"];
             agent_type?: string;
@@ -10030,9 +10032,11 @@ export interface components {
             clean_paths?: string[];
             applied?: string[];
             path_status?: components["schemas"]["WorkerPromotePathStatus"][];
-            overlap_job_ids?: string[];
+            overlap_overlay_ids?: string[];
             promote_order?: components["schemas"]["WorkerPromoteOrderKind"];
+            /** @description Handles of results that must land before these changes are clean. */
             promote_after?: string[];
+            /** @description Handles of results these changes must land before. */
             blocked_by?: string[];
             conflict_digest?: components["schemas"]["WorkerPromoteConflictDigest"][];
             conflicts?: components["schemas"]["WorkerMergeConflict"][];
@@ -10060,7 +10064,9 @@ export interface components {
             reason?: string;
             hunk_count?: number;
             promote_order?: components["schemas"]["WorkerPromoteOrderKind"];
+            /** @description Handles of results that must land before this path is clean. */
             promote_after?: string[];
+            /** @description Handles of results this path must land before. */
             blocked_by?: string[];
             promote_order_note?: string;
             conflict_tier?: components["schemas"]["WorkerPromoteConflictTier"];
@@ -10109,6 +10115,13 @@ export interface components {
             turn_tool_calls?: number;
             /** @description Calls already settled in that in-flight batch; never exceeds turn_tool_calls */
             turn_tools_done?: number;
+            /** @description Distinct tool names in the in-flight batch, in call order; empty between turns */
+            turn_tools?: string[];
+            /**
+             * Format: date-time
+             * @description When the in-flight batch began; absent between turns
+             */
+            turn_started_at?: string;
             /** @description Live per-worker context occupancy for the Den worker-card ring; absent until the first turn completes */
             context_usage?: components["schemas"]["WorkerContextUsage"];
             /** @description Ephemeral progress while an isolated write workspace is being prepared */
@@ -11271,6 +11284,8 @@ export interface components {
             brief?: string;
             findings?: components["schemas"]["WorkerCompletionFinding"][];
             cited_urls?: string[];
+            /** @description Handles of the worker's own earlier results this report builds on, cited as historical evidence. */
+            cited_results?: string[];
             evidence_obligations?: components["schemas"]["WorkerEvidenceObligation"][];
         };
         /**
@@ -15101,24 +15116,68 @@ export interface components {
             next_cursor?: string;
             workers: components["schemas"]["WorkerTask"][];
         };
+        /**
+         * @description A worker's derived state.
+         * @enum {string}
+         */
+        WorkerState: "planned" | "waiting" | "working" | "asking" | "delivered" | "idle" | "failed" | "recovering" | "closed";
+        /**
+         * @description What qualifies a worker's state.
+         * @enum {string}
+         */
+        WorkerStateReason: "queued" | "parked" | "approval_wait" | "prerequisite" | "result_unaccounted" | "changes_unresolved" | "no_report" | "recovery_required" | "withdrawn" | "session_unusable";
+        /**
+         * @description What became of a worker's latest result.
+         * @enum {string}
+         */
+        WorkerResultDisposition: "unaccounted" | "accounted" | "open" | "landed" | "rejected" | "shelved";
+        /** @description One worker as its coordinator sees it, with the state admission reads. */
+        BoardWorker: {
+            name: string;
+            agent_type: string;
+            scope_mode?: string;
+            state: components["schemas"]["WorkerState"];
+            reason?: components["schemas"]["WorkerStateReason"];
+            /** @description The worker's latest instruction, else its brief, clipped to one line. */
+            about?: string;
+            /** @description The pending decision an asking worker waits on. */
+            question?: string;
+            /** @description Handle of the worker's latest result. */
+            result_handle?: string;
+            result_disposition?: components["schemas"]["WorkerResultDisposition"];
+            read_paths?: string[];
+            read_omitted?: number;
+            changed_paths?: string[];
+            changed_omitted?: number;
+        };
         OverlayMergeSharedPath: {
             path: string;
-            worker_ids: string[];
+            /** @description Handles of the pending results that change this path. */
+            overlay_ids: string[];
         };
+        /** @description One worker's latest pending result. */
         OverlayMergePlanEntry: {
-            /** Format: uuid */
-            worker_id: string;
+            /**
+             * Format: uuid
+             * @description Handle of the result.
+             */
+            overlay_id: string;
+            /** @description Name of the worker that delivered it. */
+            worker: string;
             agent_type?: string;
             changed_paths?: string[];
             clean_paths?: string[];
             conflict_paths?: string[];
             promote_order?: components["schemas"]["WorkerPromoteOrderKind"];
+            /** @description Handles of results that must land before this one is clean. */
             promote_after?: string[];
+            /** @description Handles of results this one must land before. */
             blocked_by?: string[];
             preview_stale?: boolean;
         };
         OverlayMergePlan: {
             pending_count: number;
+            /** @description Result handles in landing order. */
             promote_sequence?: string[];
             shared_paths?: components["schemas"]["OverlayMergeSharedPath"][];
             entries?: components["schemas"]["OverlayMergePlanEntry"][];
@@ -31434,6 +31493,10 @@ export type WorkflowTopologyLeg = components["schemas"]["WorkflowTopologyLeg"];
 export type WorkflowRunUi = components["schemas"]["WorkflowRunUi"];
 export type WorkflowRunPage = components["schemas"]["WorkflowRunPage"];
 export type WorkerListResponse = components["schemas"]["WorkerListResponse"];
+export type WorkerState = components["schemas"]["WorkerState"];
+export type WorkerStateReason = components["schemas"]["WorkerStateReason"];
+export type WorkerResultDisposition = components["schemas"]["WorkerResultDisposition"];
+export type BoardWorker = components["schemas"]["BoardWorker"];
 export type OverlayMergeSharedPath = components["schemas"]["OverlayMergeSharedPath"];
 export type OverlayMergePlanEntry = components["schemas"]["OverlayMergePlanEntry"];
 export type OverlayMergePlan = components["schemas"]["OverlayMergePlan"];

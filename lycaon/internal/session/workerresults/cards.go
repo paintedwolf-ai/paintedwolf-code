@@ -32,7 +32,11 @@ type Cards struct {
 	messages   MessageReader
 	transcript TranscriptWriter
 	queue      TaskLookup
+	names      workercompletion.WorkerNames
 }
+
+// SetWorkerNames names the worker a held job's round belongs to.
+func (m *Cards) SetWorkerNames(names workercompletion.WorkerNames) { m.names = names }
 
 func NewCards(messages MessageReader, transcript TranscriptWriter, queue TaskLookup, closeouts CloseoutRecovery) *Cards {
 	return &Cards{messages: messages, transcript: transcript, queue: queue, closeouts: closeouts}
@@ -245,7 +249,7 @@ func validateWorkerSummary(jobID string, ws *api.WorkerSummaryMeta) error {
 	if !ok {
 		return fmt.Errorf("worker summary envelope invalid")
 	}
-	if env.JobID != ws.WorkerID || env.ChildSessionID != ws.ChildSessionID || env.AgentType != ws.AgentType || workercompletion.NormalizeWorkerCompletionState(env.State) != workercompletion.NormalizeWorkerCompletionState(string(ws.Status)) {
+	if env.AgentType != ws.AgentType || workercompletion.NormalizeWorkerCompletionState(env.State) != workercompletion.NormalizeWorkerCompletionState(string(ws.Status)) {
 		return fmt.Errorf("worker summary envelope identity mismatch")
 	}
 	return nil

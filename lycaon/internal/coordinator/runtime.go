@@ -376,7 +376,7 @@ func (r *Runtime) SetPromotePathOverlay(fn func(sessionID string) []api.WorkerPr
 }
 
 // SetOverlayMergePlan wires session-level overlay overlap planning into pack board inject.
-func (r *Runtime) SetOverlayMergePlan(fn func(sessionID string, tasks []api.WorkerTask) *api.OverlayMergePlan) {
+func (r *Runtime) SetOverlayMergePlan(fn func(ctx context.Context, sessionID string, tasks []api.WorkerTask) *api.OverlayMergePlan) {
 	if r == nil {
 		return
 	}

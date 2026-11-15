@@ -1,10 +1,12 @@
 package progressclosure_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
@@ -13,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/reporting"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 )
 
 func TestWorkerAcknowledgementDoesNotRequireClosingUnfinishedRows(t *testing.T) {
@@ -249,5 +252,36 @@ func TestReleaseDropsAccountedFinishes(t *testing.T) {
 	closure.Release("session", []string{"worker-b"})
 	if closure.Reconciliation("session") != nil {
 		t.Fatal("latch kept after its last finish was accounted for")
+	}
+}
+
+type finishNames map[string]string
+
+func (n finishNames) NamesByJob(_ context.Context, jobID string) (workerrecords.JobNames, bool, error) {
+	name, ok := n[jobID]
+	return workerrecords.JobNames{Worker: name}, ok, nil
+}
+
+// The reconciliation the coordinator reads names each finish by its worker;
+// the jobs behind the token stay host identity, and a release keeps the
+// remaining finishes named.
+func TestReconciliationNamesFinishesByWorker(t *testing.T) {
+	store := progress.NewMemoryStore()
+	testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Implement"))
+	closure := progressclosure.New()
+	closure.SetProgress(store)
+	closure.SetNames(finishNames{"job-fixer": "fixer", "job-docs": "docs"})
+	closure.Arm(t.Context(), "session", "job-fixer")
+	closure.Arm(t.Context(), "session", "job-docs")
+	raw, err := json.Marshal(closure.Reconciliation("session"))
+	testutil.FailErr(t, "marshal", err)
+	var view map[string]any
+	testutil.FailErr(t, "decode", json.Unmarshal(raw, &view))
+	if bytes.Contains(raw, []byte("job-")) || len(view["settled_work"].([]any)) != 2 {
+		t.Fatalf("reconciliation = %s", raw)
+	}
+	closure.Release("session", []string{"job-fixer"})
+	if got := closure.Reconciliation("session").Settled; len(got) != 1 || !strings.Contains(got[0], "docs") {
+		t.Fatalf("after release = %v", got)
 	}
 }

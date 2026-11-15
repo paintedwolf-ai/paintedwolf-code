@@ -56,7 +56,7 @@ func TestExecuteFailureCodeWorkspaceSetup(t *testing.T) {
 	}
 }
 
-func TestActiveSandboxJobIDs(t *testing.T) {
+func TestActiveSandboxBranches(t *testing.T) {
 	tasks := []api.WorkerTask{
 		{ID: "live-run", Status: api.WorkerStatusRunning, WorkspaceRoot: "/tmp/w1", Scope: writeScope()},
 		{ID: "await-promote", Status: api.WorkerStatusComplete, WorkspaceRoot: "/tmp/w2", Scope: writeScope(), MergeStatus: api.WorkerMergeStatusPending},
@@ -64,15 +64,15 @@ func TestActiveSandboxJobIDs(t *testing.T) {
 		{ID: "failed", Status: api.WorkerStatusFailed, WorkspaceRoot: "/tmp/w4", Scope: writeScope()},
 		{ID: "read-only", Status: api.WorkerStatusRunning, WorkspaceRoot: "/tmp/w5", Scope: &api.TaskScope{Mode: api.TaskScopeModeRead}},
 	}
-	got := worker.ActiveSandboxJobIDs(tasks)
-	for _, id := range []string{"live-run", "await-promote"} {
+	got := worker.ActiveSandboxBranches(tasks)
+	for _, id := range []string{"live-run", "await-promote", "w1", "w2"} {
 		if _, ok := got[id]; !ok {
-			t.Fatalf("ActiveSandboxJobIDs missing %q: %v", id, got)
+			t.Fatalf("ActiveSandboxBranches missing %q: %v", id, got)
 		}
 	}
-	for _, id := range []string{"merged", "failed", "read-only"} {
+	for _, id := range []string{"merged", "failed", "read-only", "w3", "w4", "w5"} {
 		if _, ok := got[id]; ok {
-			t.Fatalf("ActiveSandboxJobIDs should not retain %q: %v", id, got)
+			t.Fatalf("ActiveSandboxBranches should not retain %q: %v", id, got)
 		}
 	}
 }

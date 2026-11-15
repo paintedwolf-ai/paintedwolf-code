@@ -2,11 +2,13 @@ package delegations
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -18,6 +20,16 @@ func (r *Runtime) DecodeCompleteLeg(ctx context.Context, args map[string]any, tc
 	task, ok := r.Queue.Lookup(ctx, tctx.Identity.WorkerJobID)
 	if !ok {
 		return nil, fmt.Errorf("worker job %q unavailable", tctx.Identity.WorkerJobID)
+	}
+	if len(report.CitedResults) > 0 {
+		actor := workerrecords.Actor{SessionID: tctx.Identity.SessionID, Role: workerrecords.RoleWorker, PrincipalID: tctx.Identity.SessionID}
+		earlier, err := r.Records.EarlierResults(ctx, actor)
+		if err != nil && !errors.Is(err, workerrecords.ErrWorkerNotFound) {
+			return nil, err
+		}
+		if err := workercompletion.CheckCitedResults(report.CitedResults, earlier); err != nil {
+			return nil, err
+		}
 	}
 	if report.LegStatus == "complete" && validateCoverage != nil {
 		if err := validateCoverage(ctx, task, report.CoverageReview); err != nil {

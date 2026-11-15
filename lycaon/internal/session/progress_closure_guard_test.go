@@ -86,8 +86,8 @@ func TestProgressClosureRejectWhenArmedAndNothingClosed(t *testing.T) {
 	if !strings.Contains(refusal.Body, "PROGRESS_RECONCILIATION_REQUIRED") {
 		t.Fatalf("body = %q", refusal.Body)
 	}
-	if !strings.Contains(refusal.Body, "job-1") {
-		t.Fatalf("body = %q want the completed job it waits on", refusal.Body)
+	if strings.Contains(refusal.Body, "job-1") {
+		t.Fatalf("body = %q names the job", refusal.Body)
 	}
 }
 
@@ -100,7 +100,7 @@ func TestProgressClosureAccumulatesCompletedWork(t *testing.T) {
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-2")
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	baseline, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1")
-	if !armed || len(baseline.Settled) != 2 || baseline.Settled[0] != "job-1" || baseline.Settled[1] != "job-2" {
+	if !armed || len(baseline.JobIDs) != 2 || baseline.JobIDs[0] != "job-1" || baseline.JobIDs[1] != "job-2" || len(baseline.Settled) != 2 {
 		t.Fatalf("baseline = %+v armed=%v want job-1 then job-2 once each", baseline, armed)
 	}
 }

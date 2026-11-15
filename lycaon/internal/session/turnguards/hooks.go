@@ -41,6 +41,7 @@ func (m *Service) BeforeTool(
 	progressState := m.progressPrerequisites(ctx, sess)
 	root, currentProgress, reviewLoopActive := progressState.RootSessionID, progressState.Content, progressState.ReviewLoopActive
 	closureBaseline, closureArmed := m.ProgressClosure.Baseline(root)
+	closureArmed = closureArmed && !m.instructsLatchedWorker(ctx, sess, tool, args, closureBaseline)
 	guardDeps := m.WorkerAdmission()
 	declaredVerify := ""
 	if tool == "verify" {

@@ -99,6 +99,21 @@ func resumeTurnLocked(s *memoryCore, turnID string, in TurnStart, attempt TurnAt
 	return TurnExecution{Turn: turn, Attempt: attempt}, nil
 }
 
+// TouchTurnProgress records durable progress of a running turn.
+func (t *memoryTurns) TouchTurnProgress(ctx context.Context, turnID string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s := t.core
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if turn, ok := s.turns[turnID]; ok && turn.Status == TurnStatusRunning {
+		turn.ProgressedAt = time.Now().UTC()
+		s.turns[turnID] = turn
+	}
+	return nil
+}
+
 func (t *memoryTurns) CheckpointTurn(ctx context.Context, turnID, attemptID string, phase TurnPhase, checkpointJSON string) error {
 	s := t.core
 	if err := ctx.Err(); err != nil {

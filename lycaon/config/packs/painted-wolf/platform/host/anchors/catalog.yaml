@@ -46,8 +46,8 @@ anchors:
         worker_digest: { type: string }
         evidence_digest: { type: string }
         batch_phase: { type: string }
-        pending_overlay_jobs: { type: "string[]" }
-        partial_worker_jobs: { type: "string[]" }
+        pending_overlays: { type: int }
+        partial_workers: { type: int }
     dedup:
       key: leg_finished
       omit_inform_when: [board_reinjected]
@@ -64,6 +64,7 @@ anchors:
         worker_digest: { type: string }
         evidence_digest: { type: string }
         last_worker_decision_request: { type: object }
+        worker_result: { type: object }
         job_id: { type: string }
         child_session_id: { type: string }
 
@@ -229,7 +230,7 @@ anchors:
     planes: [inform]
     envelope:
       vars:
-        job_id: { type: string, required: true }
+        worker: { type: string }
         agent_type: { type: string, required: true }
         notice_kind: { type: string, required: true }
         model_calls: { type: int, required: true }
@@ -240,6 +241,21 @@ anchors:
         in_flight: { type: string }
         tool_calls: { type: int }
         tools_done: { type: int }
+        tools: { type: "string[]" }
+        tools_minutes: { type: int }
+        latest_message_seq: { type: int }
+
+  - id: worker.prerequisite.blocked
+    title: Worker prerequisite blocked
+    description: A waiting worker's prerequisite can no longer be met because its producer was closed or its changes were rejected; the worker keeps waiting until the coordinator replaces or withdraws it.
+    trigger_class: wait_trigger
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        worker: { type: string }
+        producer: { type: string }
+        producer_state: { type: string, required: true }
 
   - id: worker.message.received
     title: Worker message received
@@ -602,8 +618,8 @@ anchors:
         progress_missing: { type: bool }
         profile_has_update_progress: { type: bool }
         verify_required: { type: bool }
-        pending_overlay_jobs: { type: "string[]" }
-        partial_worker_jobs: { type: "string[]" }
+        pending_overlays: { type: int }
+        partial_workers: { type: int }
 
   - id: inject.command_jobs
     title: Live handles inject
@@ -636,6 +652,25 @@ anchors:
         message_count: { type: int, required: true }
         has_needs_reply: { type: bool, required: true }
         more: { type: bool, required: true }
+
+  - id: inject.worker_round
+    title: Worker round inject
+    description: >-
+      A worker's running round on every request: its standing brief and the
+      instructions the round received, kept after delivery and compaction
+      until the round delivers, and on a later round how its workspace was
+      prepared and what became of its last changes.
+    trigger_class: assembly_inject
+    surface: agent
+    planes: [inform]
+    envelope:
+      vars:
+        round: { type: int, required: true }
+        has_brief: { type: bool, required: true }
+        instruction_count: { type: int, required: true }
+        workspace: { type: string }
+        prior_change: { type: string }
+        earlier_results: { type: "string[]" }
 
   - id: inject.source_changes
     title: Source change brief inject

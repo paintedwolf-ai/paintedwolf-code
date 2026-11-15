@@ -86,7 +86,7 @@ func TestCardsRejectMismatchedEnvelopeBeforeChangingTranscript(t *testing.T) {
 	parent, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	cards := NewCards(messages, memoryTranscript{messages}, nil, nil)
-	envelope := workercompletion.FormatWorkerCompletionEnvelope(workercompletion.WorkerCompletionEnvelope{JobID: "another-job", ChildSessionID: "child", AgentType: "implementer", State: "complete"})
+	envelope := workercompletion.FormatWorkerCompletionEnvelope(workercompletion.WorkerCompletionEnvelope{JobID: "job", ChildSessionID: "child", AgentType: "reviewer", State: "complete"})
 	summary := &api.WorkerSummaryMeta{WorkerID: "job", ChildSessionID: "child", AgentType: "implementer", Status: api.WorkerSummaryStatusComplete, Envelope: envelope}
 	if err := cards.Project(t.Context(), parent.ID, "job", summary); err == nil {
 		t.Fatal("mismatched completion identity admitted")

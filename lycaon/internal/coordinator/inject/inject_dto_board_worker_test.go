@@ -121,7 +121,7 @@ func TestRenderBoardOrientationInject_CharBudget(t *testing.T) {
 	}
 }
 
-func TestRenderBoardOrientationInject_PartialIdentityWithinBudget(t *testing.T) {
+func TestRenderBoardOrientationInject_PartialWithinBudget(t *testing.T) {
 	renderer := testInjectRenderer(t)
 	now := time.Date(2026, 10, 15, 7, 1, 0, 0, time.FixedZone("PDT", -7*60*60))
 	partial := api.WorkerTask{
@@ -149,7 +149,7 @@ func TestRenderBoardOrientationInject_PartialIdentityWithinBudget(t *testing.T) 
 		if len(body) > api.MaxBoardInjectChars {
 			t.Fatalf("board exceeds budget: %d bytes: %s", len(body), body)
 		}
-		for _, want := range []string{"Host: darwin/arm64", "Work: 1 partial", "Merge: pending 5550…", "Overlay plan: 1 pending", "Partial: job_id=" + partial.ID + " · child_session_id=" + partial.ChildSessionID} {
+		for _, want := range []string{"Host: darwin/arm64", "Work: 1 partial", "Merge: 1 pending", "Overlay plan: 1 pending"} {
 			if !strings.Contains(body, want) {
 				t.Fatalf("scope %v missing %q: %s", scope, want, body)
 			}

@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/batchcontrol"
 	"github.com/lycaon/lycaon/internal/session/turnadmission"
 	"github.com/lycaon/lycaon/internal/session/turnsettlement"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 )
 
@@ -20,6 +21,11 @@ type Workers struct {
 	Admission  *turnadmission.Service
 	Digests    *workeroutcomes.Digests
 	Results    *workeroutcomes.Results
+	// Names names the worker a round notice is about.
+	Names workercompletion.WorkerNames
+	// LatestSent is the seq of the latest message the worker running a job
+	// sent to its coordinator; zero when it has sent none.
+	LatestSent func(ctx context.Context, jobID string) (int64, error)
 }
 
 func (m *Workers) Terminal(ctx context.Context, parentID, completingJobID string) {
@@ -40,7 +46,33 @@ func (m *Workers) RoundNotice(ctx context.Context, parentID string, facts kick.W
 	if m == nil || parentID == "" || strings.TrimSpace(facts.JobID) == "" {
 		return
 	}
+	facts = m.addressed(ctx, facts)
 	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerRoundNotice(ctx, parentID, facts.JobID, anchor.Envelope{WorkerRoundNotice: &facts})
+}
+
+// addressed adds what the coordinator knows the round's worker by: its name
+// and its latest message.
+func (m *Workers) addressed(ctx context.Context, facts kick.WorkerRoundNoticeFacts) kick.WorkerRoundNoticeFacts {
+	facts.Worker = m.Names.Name(ctx, facts.JobID)
+	if m.LatestSent != nil {
+		if seq, err := m.LatestSent(ctx, facts.JobID); err == nil {
+			facts.LatestMessageSeq = seq
+		}
+	}
+	return facts
+}
+
+// PrerequisiteBlocked tells a coordinator that a waiting worker's
+// prerequisite can no longer be met, naming both workers and why.
+func (m *Workers) PrerequisiteBlocked(ctx context.Context, parentID, consumerJobID, producerJobID, reason string) {
+	parentID = strings.TrimSpace(parentID)
+	if m == nil || parentID == "" || strings.TrimSpace(consumerJobID) == "" {
+		return
+	}
+	env := anchor.Envelope{Vars: map[string]any{
+		"worker": m.Names.Name(ctx, consumerJobID), "producer": m.Names.Name(ctx, producerJobID), "producer_state": reason,
+	}}
+	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerPrerequisiteBlocked(ctx, parentID, consumerJobID, env)
 }
 
 // MessageNeedsReply wakes a coordinator for a running worker's message that

@@ -12,9 +12,12 @@ tools:
   task: sticky
   worker_cancel: sticky
   answer_decision: sticky
+  instruct_worker: sticky
+  worker_history: sticky
   promote_overlay: sticky
   reject_overlay: sticky
   preview_overlay: sticky
+  shelve_overlay: sticky
   workflow_compose: sticky
   workflow_compose_from_template: sticky
   workflow_catalog_summaries: sticky

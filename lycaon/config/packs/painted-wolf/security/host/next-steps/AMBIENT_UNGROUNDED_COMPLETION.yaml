@@ -1,5 +1,5 @@
 steps:
-  - when: "size(paintedwolf.missing_summary_job_ids) == 0"
+  - when: "paintedwolf.missing_summary_count == 0"
     tool: "recall"
     args:
       query: "handle:<handle>"

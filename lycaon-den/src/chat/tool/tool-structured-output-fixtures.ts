@@ -396,7 +396,7 @@ export const TOOL_STRUCTURED_OUTPUT_FIXTURES: Record<string, string> = {
   handoff_release_all: JSON.stringify({ released: 2 }),
   handoff_health: JSON.stringify({ healthy: true, conflicts: [] }),
   promote_overlay: JSON.stringify({
-    job_id: "overlay-1",
+    result_handle: "result-1",
     merge_status: "merged",
     applied: ["main.go", "util.go"],
     clean_paths: ["main.go", "util.go"],
@@ -407,7 +407,7 @@ export const TOOL_STRUCTURED_OUTPUT_FIXTURES: Record<string, string> = {
     status: "rejected",
   }),
   preview_overlay: JSON.stringify({
-    job_id: "overlay-1",
+    result_handle: "result-1",
     merge_status: "pending",
     path_status: [{ path: "main.go", status: "clean" }],
     clean_paths: ["main.go"],
@@ -714,7 +714,7 @@ export const TOOL_COMPACTION_FIXTURES: Record<string, string> = {
 /** Spill-path-only payloads (no compaction banner) — overlay promote, etc. */
 export const TOOL_SPILL_FIXTURES: Record<string, string> = {
   promote_overlay_spill: JSON.stringify({
-    job_id: "overlay-1",
+    result_handle: "result-1",
     merge_status: "pending",
     spill_path: "promote-spills/job-mix.json",
     path_status: [{ path: "main.go", status: "conflict", hunk_count: 2 }],

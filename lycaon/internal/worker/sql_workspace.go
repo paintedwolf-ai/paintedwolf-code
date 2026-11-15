@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/workspace"
@@ -17,10 +18,16 @@ func (s *SQLStore) SetChildSessionID(ctx context.Context, jobID, childSessionID 
 		return fmt.Errorf("job_id and child_session_id required")
 	}
 	return s.mutateInTx(ctx, jobID, func(q *db.Queries) error {
-		return q.SetWorkerJobChildSession(ctx, db.SetWorkerJobChildSessionParams{
+		if err := q.SetWorkerJobChildSession(ctx, db.SetWorkerJobChildSessionParams{
 			ChildSessionID: db.NullString(childSessionID),
 			ID:             jobID,
+		}); err != nil {
+			return err
+		}
+		_, err := q.BindWorkerChildByJob(ctx, db.BindWorkerChildByJobParams{
+			ChildSessionID: db.NullString(childSessionID), UpdatedAt: db.FormatTime(time.Now().UTC()), JobID: jobID,
 		})
+		return err
 	})
 }
 

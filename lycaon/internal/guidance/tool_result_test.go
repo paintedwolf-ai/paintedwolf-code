@@ -75,12 +75,6 @@ func TestComposeToolResultUiVisibilityFollowsRegistry(t *testing.T) {
 			outcome: api.ToolResultOutcomeCompleted,
 			vis:     api.ToolResultUiVisibilityBenign,
 		},
-		"worker dispatch stays on the transcript": {
-			hints:   bundled,
-			facts:   ToolResultFacts{Codes: []string{"BANNER_TASK_QUEUED"}},
-			outcome: api.ToolResultOutcomeCompleted,
-			vis:     api.ToolResultUiVisibilityNormal,
-		},
 		"phase exit required is visible": {
 			hints:   bundled,
 			facts:   ToolResultFacts{Codes: []string{"WORKFLOW_PHASE_EXIT_REQUIRED"}},
