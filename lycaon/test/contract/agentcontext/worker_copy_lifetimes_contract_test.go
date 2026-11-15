@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -90,22 +91,40 @@ func TestWorkerCopyBranchCoverageAndMissingFacts(t *testing.T) {
 	contractcheck.FailErr(t, "load effective policy", err)
 	checkedMissing := 0
 	for _, rule := range rs.All() {
-		if !strings.HasPrefix(rule.ID, "INSTRUCT_WORKER_") || len(rule.RequiresFacts) == 0 {
+		if !strings.HasPrefix(rule.ID, "INSTRUCT_WORKER_") &&
+			!strings.HasPrefix(rule.ID, "OVERLAY_SHELVE_") &&
+			!strings.HasPrefix(rule.ID, "TASK_REVIEW_") &&
+			rule.ID != "WORKER_CANCEL_TERMINAL" {
 			continue
 		}
-		for _, fact := range rule.RequiresFacts {
-			if fact == oar.NextStepsFact {
-				continue
+		if rule.When != "" {
+			matched, evalErr := oar.EvaluateCondition(rule.When, oar.NewGuardContext())
+			if evalErr != nil || matched {
+				t.Errorf("rule %s fired or errored without required facts: matched=%v err=%v", rule.ID, matched, evalErr)
 			}
-			checkedMissing++
-			rendered := oar.RenderRuleCopy(rule, map[string]any{fact: struct{}{}})
-			if len(rendered) != 0 {
-				t.Errorf("rule %s with invalid/missing fact %s emitted copy %v", rule.ID, fact, rendered)
+		}
+		seenBindings := map[string]bool{}
+		for _, field := range []string{
+			rule.Copy.Title, rule.Copy.What, rule.Copy.Cause, rule.Copy.Why,
+			rule.Copy.Fix, rule.Copy.Instead, rule.Copy.Message,
+		} {
+			bindings, parseErr := oarcore.ParseCopy(field)
+			contractcheck.FailErr(t, "parse rule copy "+rule.ID, parseErr)
+			for _, b := range bindings {
+				if seenBindings[b.Name] {
+					continue
+				}
+				seenBindings[b.Name] = true
+				checkedMissing++
+				rendered := oar.RenderRuleCopy(rule, map[string]any{b.Name: struct{}{}})
+				if len(rendered) != 0 {
+					t.Errorf("rule %s with invalid copy fact %s emitted copy %v", rule.ID, b.Name, rendered)
+				}
 			}
 		}
 	}
 	if checkedMissing == 0 {
-		t.Fatal("no INSTRUCT_WORKER_* required facts checked")
+		t.Fatal("no worker rule copy bindings checked")
 	}
 }
 
