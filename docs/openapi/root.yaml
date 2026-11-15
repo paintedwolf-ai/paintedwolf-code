@@ -417,6 +417,8 @@ paths:
     $ref: paths/workflows.yaml#/paths/~1v1~1workflow-runs~1{id}~1feedback~1{phase_id}~1secret
   /v1/workers:
     $ref: paths/workers.yaml#/paths/~1v1~1workers
+  /v1/workers/history:
+    $ref: paths/workers.yaml#/paths/~1v1~1workers~1history
   /v1/workers/{id}/cancel:
     $ref: paths/workers.yaml#/paths/~1v1~1workers~1{id}~1cancel
   /v1/projects/{id}/board:
@@ -717,6 +719,8 @@ components:
       $ref: components/schemas/board.yaml#/components/schemas/BoardView
     BoardWorkerRosterEntry:
       $ref: components/schemas/board.yaml#/components/schemas/BoardWorkerRosterEntry
+    BoardWorker:
+      $ref: components/schemas/board.yaml#/components/schemas/BoardWorker
     RepoBrief:
       $ref: components/schemas/board.yaml#/components/schemas/RepoBrief
     RepoLayout:
@@ -1517,6 +1521,12 @@ components:
       $ref: components/schemas/worker.yaml#/components/schemas/SpawnReason
     WorkerStatus:
       $ref: components/schemas/worker.yaml#/components/schemas/WorkerStatus
+    WorkerState:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerState
+    WorkerStateReason:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerStateReason
+    WorkerResultDisposition:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerResultDisposition
     WorkerMergeStatus:
       $ref: components/schemas/worker.yaml#/components/schemas/WorkerMergeStatus
     WorkerPromotePathOutcome:
@@ -1551,6 +1561,16 @@ components:
       $ref: components/schemas/worker.yaml#/components/schemas/WorkerPromoteJobPathStatus
     WorkerTask:
       $ref: components/schemas/worker.yaml#/components/schemas/WorkerTask
+    WorkerMessageSenderRole:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerMessageSenderRole
+    WorkerInstructionStatus:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerInstructionStatus
+    WorkerHistoryRound:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerHistoryRound
+    WorkerHistoryMessage:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerHistoryMessage
+    WorkerHistoryResponse:
+      $ref: components/schemas/worker.yaml#/components/schemas/WorkerHistoryResponse
     ComposeDecisionPhase:
       $ref: components/schemas/workflow.yaml#/components/schemas/ComposeDecisionPhase
     ComposeEffectiveSummary:

@@ -33,7 +33,7 @@ var finished = time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC)
 func job() *wire.WorkerTask {
 	return &wire.WorkerTask{
 		ID: "job", WorkerName: "fixer", Round: 2, ResultHandle: resultHandle1,
-		ResultDisposition: wire.WorkerResultDispositionOpen,
+		ResultDisposition: wire.WorkerResultOpen,
 		ProjectID:         "p", Status: "complete", Brief: "SUPPLIED_BRIEF", CompletedAt: &finished,
 		Result: &wire.WorkerResult{Summary: "SUPPLIED_CLAIM",
 			ChangeReport: &wire.WorkerChangeReport{ChangedPaths: []string{"auth/token.go"}, DiffStat: []wire.WorkerDiffStat{{Path: "auth/token.go", Insertions: 4}}}},

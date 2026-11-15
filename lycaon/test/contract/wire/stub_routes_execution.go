@@ -117,7 +117,7 @@ func registerStubExecutionRoutes(mux *http.ServeMux, now time.Time, writeJSON st
 			State:     api.WorkerStateWorking,
 			Rounds: []api.WorkerHistoryRound{{
 				Ordinal:   1,
-				JobID:     fixtureWorkerID,
+				WorkerID:  fixtureWorkerID,
 				Status:    api.WorkerStatusRunning,
 				CreatedAt: now.Format("2006-01-02T15:04:05Z07:00"),
 			}},

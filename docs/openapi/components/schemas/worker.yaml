@@ -553,7 +553,7 @@ components:
         parked_reason:
           type: string
           description: Active wait lease reason while this round is parked.
-        parked_until:
+        parked_until_at:
           type: string
           format: date-time
           description: Active wait lease deadline while this round is parked.
@@ -685,6 +685,8 @@ components:
       enum:
       - coordinator
       - worker
+      - person
+      - host
     WorkerInstructionStatus:
       type: string
       enum:
@@ -696,16 +698,17 @@ components:
       type: object
       required:
       - ordinal
-      - job_id
+      - worker_id
       - created_at
       additionalProperties: false
       properties:
         ordinal:
           type: integer
           minimum: 1
-        job_id:
+        worker_id:
           type: string
           format: uuid
+          description: Worker job identity for this round.
         status:
           $ref: worker.yaml#/components/schemas/WorkerStatus
         instruction_first_seq:
@@ -723,12 +726,15 @@ components:
           type: string
         checkpoint_id:
           type: string
+          pattern: '^\S*$'
         review_of:
           type: string
           format: uuid
         result:
+          x-go-pointer: true
           $ref: worker.yaml#/components/schemas/WorkerResult
         failure:
+          x-go-pointer: true
           $ref: worker.yaml#/components/schemas/WorkerFailure
         created_at:
           x-go-type: "string"

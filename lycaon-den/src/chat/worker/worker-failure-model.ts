@@ -17,7 +17,7 @@ const DISPATCH_REJECTED: WorkerFailureDisplay = {
   message: "The coordinator called a worker with arguments the host rejected.",
 };
 
-/** Structured failure for a task()/delegate_dispatch reject that never enqueued a job. */
+/** Structured failure for a worker dispatch reject that never enqueued a job. */
 export function workerFailureFromDispatchReject(
   code: string | undefined,
 ): WorkerFailure {

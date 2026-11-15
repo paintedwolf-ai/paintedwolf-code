@@ -3280,6 +3280,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/workers/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read bounded round and message history for a session worker */
+        get: operations["getWorkerHistory"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/workers/{id}/cancel": {
         parameters: {
             query?: never;
@@ -5845,6 +5862,66 @@ export interface components {
             /** @description True when checkpoint SSE reports a pending human checkpoint for this worker child session */
             blocked_on_approval?: boolean;
         };
+        /** @description One worker as its coordinator sees it, with the state admission reads. */
+        BoardWorker: {
+            /**
+             * Format: uuid
+             * @description Durable worker record identity across rounds.
+             */
+            worker_id?: string;
+            name: string;
+            agent_type: string;
+            /**
+             * Format: uuid
+             * @description Child session reused across rounds once spawned.
+             */
+            child_session_id?: string;
+            /**
+             * Format: uuid
+             * @description Latest round job identity when at least one round exists.
+             */
+            latest_job_id?: string;
+            /** @description Latest 1-based round ordinal when at least one round exists. */
+            round?: number;
+            scope_mode?: string;
+            /** @description Derived workspace state for this worker (shared, retained, preparing, refreshed, reset, recovering). */
+            workspace_state?: string;
+            state: components["schemas"]["WorkerState"];
+            reason?: components["schemas"]["WorkerStateReason"];
+            /** @description Derived display label for state and reason. */
+            state_label?: string;
+            /** @description The worker's latest instruction, else its brief, clipped to one line. */
+            about?: string;
+            /** @description The pending decision an asking worker waits on. */
+            question?: string;
+            /** @description Active wait lease reason when the round is parked. */
+            parked_reason?: string;
+            /**
+             * Format: date-time
+             * @description Active wait lease deadline when the round is parked.
+             */
+            parked_until_at?: string;
+            /** @description Handle of the worker's latest result. */
+            result_handle?: string;
+            result_disposition?: components["schemas"]["WorkerResultDisposition"];
+            /** @description Coordinator reason recorded when the latest result is shelved. */
+            shelve_reason?: string;
+            /** @description Derived display label for result_disposition. */
+            disposition_label?: string;
+            /** @description Derived display label for workspace_state. */
+            workspace_label?: string;
+            /** @description Worker messages not yet delivered to a coordinator turn. */
+            unread_message_count?: number;
+            /**
+             * Format: date-time
+             * @description Most recent activity timestamp for recency ordering.
+             */
+            updated_at?: string;
+            read_paths?: string[];
+            read_omitted?: number;
+            changed_paths?: string[];
+            changed_omitted?: number;
+        };
         /** @description Project orientation summary — languages detected by content via enry, listed in dominant-bytes order. */
         RepoBrief: {
             /** @description The orientation is warming or belongs to an older observed source generation. */
@@ -5922,6 +5999,19 @@ export interface components {
             dependencies?: components["schemas"]["WorkerDependency"][];
             /** Format: uuid */
             worker_id: string;
+            /** Format: uuid */
+            worker_record_id?: string;
+            worker_name?: string;
+            round?: number;
+            /** Format: uuid */
+            result_handle?: string;
+            result_disposition?: components["schemas"]["WorkerResultDisposition"];
+            shelve_reason?: string;
+            /** Format: uuid */
+            review_of?: string;
+            parked_reason?: string;
+            /** Format: date-time */
+            parked_until_at?: string;
             status: components["schemas"]["WorkerStatus"];
             agent_type?: string;
             /** Format: uuid */
@@ -6912,10 +7002,11 @@ export interface components {
             activity_id: string;
         };
         WorkerResultBriefingTarget: {
-            /** Format: uuid */
-            worker_id: string;
-            /** @description The worker's completion time; a rerun is a new revision. */
-            result_revision: string;
+            /**
+             * Format: uuid
+             * @description Settled worker round result handle.
+             */
+            result_handle: string;
         };
         BriefingRequest: {
             /** @enum {string} */
@@ -8567,6 +8658,14 @@ export interface components {
             /** Format: uuid */
             leg_id?: string;
             /** Format: uuid */
+            worker_record_id?: string;
+            worker_name?: string;
+            round?: number;
+            /** Format: uuid */
+            result_handle?: string;
+            /** Format: uuid */
+            review_of?: string;
+            /** Format: uuid */
             worker_id: string;
             /** Format: uuid */
             child_session_id: string;
@@ -9933,6 +10032,21 @@ export interface components {
         /** @enum {string} */
         WorkerStatus: "pending" | "running" | "waiting" | "complete" | "failed" | "canceled" | "held";
         /**
+         * @description A worker's derived state.
+         * @enum {string}
+         */
+        WorkerState: "planned" | "waiting" | "working" | "asking" | "delivered" | "idle" | "failed" | "recovering" | "closed";
+        /**
+         * @description What qualifies a worker's state.
+         * @enum {string}
+         */
+        WorkerStateReason: "queued" | "parked" | "approval_wait" | "prerequisite" | "result_unaccounted" | "changes_unresolved" | "no_report" | "recovery_required" | "withdrawn" | "session_unusable";
+        /**
+         * @description What became of a worker's latest result.
+         * @enum {string}
+         */
+        WorkerResultDisposition: "unaccounted" | "accounted" | "open" | "landed" | "rejected" | "shelved";
+        /**
          * @description Lifecycle of a write overlay. Every transition is an explicit event
          *     the coordinator can observe — there is no silent "skipped" state.
          * @enum {string}
@@ -10086,6 +10200,36 @@ export interface components {
             after_workers?: string[];
             /** Format: uuid */
             id: string;
+            /**
+             * Format: uuid
+             * @description Durable worker record identity across rounds.
+             */
+            worker_record_id?: string;
+            /** @description Canonical worker name on the session roster. */
+            worker_name?: string;
+            /** @description 1-based round ordinal within the worker record. */
+            round?: number;
+            /**
+             * Format: uuid
+             * @description Settled result handle recorded for this round.
+             */
+            result_handle?: string;
+            /** @description Disposition of this round's settled result. */
+            result_disposition?: components["schemas"]["WorkerResultDisposition"];
+            /** @description Coordinator reason recorded when this round's result is shelved. */
+            shelve_reason?: string;
+            /**
+             * Format: uuid
+             * @description Sealed result handle reviewed by this round when it is a reviewer round.
+             */
+            review_of?: string;
+            /** @description Active wait lease reason while this round is parked. */
+            parked_reason?: string;
+            /**
+             * Format: date-time
+             * @description Active wait lease deadline while this round is parked.
+             */
+            parked_until_at?: string;
             /** Format: uuid */
             child_session_id?: string;
             /** Format: uuid */
@@ -10152,6 +10296,62 @@ export interface components {
             started_at?: string;
             /** Format: date-time */
             completed_at?: string;
+        };
+        /** @enum {string} */
+        WorkerMessageSenderRole: "coordinator" | "worker" | "person" | "host";
+        /** @enum {string} */
+        WorkerInstructionStatus: "applied" | "queued" | "not_applied";
+        WorkerHistoryRound: {
+            ordinal: number;
+            /**
+             * Format: uuid
+             * @description Worker job identity for this round.
+             */
+            worker_id: string;
+            status?: components["schemas"]["WorkerStatus"];
+            instruction_first_seq?: number;
+            instruction_last_seq?: number;
+            /** Format: uuid */
+            result_handle?: string;
+            result_disposition?: components["schemas"]["WorkerResultDisposition"];
+            shelve_reason?: string;
+            checkpoint_id?: string;
+            /** Format: uuid */
+            review_of?: string;
+            result?: components["schemas"]["WorkerResult"];
+            failure?: components["schemas"]["WorkerFailure"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            settled_at?: string;
+        };
+        WorkerHistoryMessage: {
+            seq: number;
+            sender_role: components["schemas"]["WorkerMessageSenderRole"];
+            round_ordinal?: number;
+            body: string;
+            artifact_ref?: string;
+            needs_reply?: boolean;
+            reply_to_seq?: number;
+            delivered: boolean;
+            instruction_status?: components["schemas"]["WorkerInstructionStatus"];
+            /** Format: date-time */
+            created_at: string;
+        };
+        WorkerHistoryResponse: {
+            /** Format: uuid */
+            worker_id: string;
+            name: string;
+            agent_type: string;
+            brief?: string;
+            /** Format: uuid */
+            child_session_id?: string;
+            state: components["schemas"]["WorkerState"];
+            reason?: components["schemas"]["WorkerStateReason"];
+            rounds: components["schemas"]["WorkerHistoryRound"][];
+            messages: components["schemas"]["WorkerHistoryMessage"][];
+            before?: number;
+            before_round?: number;
         };
         ComposeDecisionPhase: {
             id: string;
@@ -15119,53 +15319,6 @@ export interface components {
         WorkerListResponse: {
             next_cursor?: string;
             workers: components["schemas"]["WorkerTask"][];
-        };
-        /**
-         * @description A worker's derived state.
-         * @enum {string}
-         */
-        WorkerState: "planned" | "waiting" | "working" | "asking" | "delivered" | "idle" | "failed" | "recovering" | "closed";
-        /**
-         * @description What qualifies a worker's state.
-         * @enum {string}
-         */
-        WorkerStateReason: "queued" | "parked" | "approval_wait" | "prerequisite" | "result_unaccounted" | "changes_unresolved" | "no_report" | "recovery_required" | "withdrawn" | "session_unusable";
-        /**
-         * @description What became of a worker's latest result.
-         * @enum {string}
-         */
-        WorkerResultDisposition: "unaccounted" | "accounted" | "open" | "landed" | "rejected" | "shelved";
-        /** @description One worker as its coordinator sees it, with the state admission reads. */
-        BoardWorker: {
-            name: string;
-            agent_type: string;
-            scope_mode?: string;
-            /** @description Derived workspace state for this worker (shared, retained, preparing, refreshed, reset, recovering). */
-            workspace_state?: string;
-            state: components["schemas"]["WorkerState"];
-            reason?: components["schemas"]["WorkerStateReason"];
-            /** @description Derived display label for state and reason. */
-            state_label?: string;
-            /** @description The worker's latest instruction, else its brief, clipped to one line. */
-            about?: string;
-            /** @description The pending decision an asking worker waits on. */
-            question?: string;
-            /** @description Handle of the worker's latest result. */
-            result_handle?: string;
-            result_disposition?: components["schemas"]["WorkerResultDisposition"];
-            /** @description Derived display label for result_disposition. */
-            disposition_label?: string;
-            /** @description Derived display label for workspace_state. */
-            workspace_label?: string;
-            /**
-             * Format: date-time
-             * @description Most recent activity timestamp for recency ordering.
-             */
-            updated_at?: string;
-            read_paths?: string[];
-            read_omitted?: number;
-            changed_paths?: string[];
-            changed_omitted?: number;
         };
         OverlayMergeSharedPath: {
             path: string;
@@ -25502,6 +25655,43 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    getWorkerHistory: {
+        parameters: {
+            query: {
+                /** @description Canonical project UUID from the project registry */
+                project_id: components["parameters"]["ProjectIDQuery"];
+                /** @description Coordinator session that owns the worker. */
+                session_id: string;
+                /** @description Worker name or round job id on the session roster. */
+                worker: string;
+                /** @description Exclusive message sequence cursor for older messages. */
+                before?: number;
+                /** @description Exclusive 1-based round ordinal cursor for older rounds. */
+                before_round?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded worker collaboration history page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerHistoryResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
     cancelWorker: {
         parameters: {
             query?: never;
@@ -30663,6 +30853,7 @@ export type BoardScanCompareStub = components["schemas"]["BoardScanCompareStub"]
 export type BoardScanSummary = components["schemas"]["BoardScanSummary"];
 export type BoardView = components["schemas"]["BoardView"];
 export type BoardWorkerRosterEntry = components["schemas"]["BoardWorkerRosterEntry"];
+export type BoardWorker = components["schemas"]["BoardWorker"];
 export type RepoBrief = components["schemas"]["RepoBrief"];
 export type RepoLayout = components["schemas"]["RepoLayout"];
 export type ReadOutlineResponse = components["schemas"]["ReadOutlineResponse"];
@@ -31063,6 +31254,9 @@ export type WorkerResult = components["schemas"]["WorkerResult"];
 export type ExecutionTarget = components["schemas"]["ExecutionTarget"];
 export type SpawnReason = components["schemas"]["SpawnReason"];
 export type WorkerStatus = components["schemas"]["WorkerStatus"];
+export type WorkerState = components["schemas"]["WorkerState"];
+export type WorkerStateReason = components["schemas"]["WorkerStateReason"];
+export type WorkerResultDisposition = components["schemas"]["WorkerResultDisposition"];
 export type WorkerMergeStatus = components["schemas"]["WorkerMergeStatus"];
 export type WorkerPromotePathOutcome = components["schemas"]["WorkerPromotePathOutcome"];
 export type WorkerPromoteOrderKind = components["schemas"]["WorkerPromoteOrderKind"];
@@ -31080,6 +31274,11 @@ export type WorkerSourceEvidence = components["schemas"]["WorkerSourceEvidence"]
 export type WorkerPromotePathStatus = components["schemas"]["WorkerPromotePathStatus"];
 export type WorkerPromoteJobPathStatus = components["schemas"]["WorkerPromoteJobPathStatus"];
 export type WorkerTask = components["schemas"]["WorkerTask"];
+export type WorkerMessageSenderRole = components["schemas"]["WorkerMessageSenderRole"];
+export type WorkerInstructionStatus = components["schemas"]["WorkerInstructionStatus"];
+export type WorkerHistoryRound = components["schemas"]["WorkerHistoryRound"];
+export type WorkerHistoryMessage = components["schemas"]["WorkerHistoryMessage"];
+export type WorkerHistoryResponse = components["schemas"]["WorkerHistoryResponse"];
 export type ComposeDecisionPhase = components["schemas"]["ComposeDecisionPhase"];
 export type ComposeEffectiveSummary = components["schemas"]["ComposeEffectiveSummary"];
 export type ComposeFeedbackPhase = components["schemas"]["ComposeFeedbackPhase"];
@@ -31510,10 +31709,6 @@ export type WorkflowTopologyLeg = components["schemas"]["WorkflowTopologyLeg"];
 export type WorkflowRunUi = components["schemas"]["WorkflowRunUi"];
 export type WorkflowRunPage = components["schemas"]["WorkflowRunPage"];
 export type WorkerListResponse = components["schemas"]["WorkerListResponse"];
-export type WorkerState = components["schemas"]["WorkerState"];
-export type WorkerStateReason = components["schemas"]["WorkerStateReason"];
-export type WorkerResultDisposition = components["schemas"]["WorkerResultDisposition"];
-export type BoardWorker = components["schemas"]["BoardWorker"];
 export type OverlayMergeSharedPath = components["schemas"]["OverlayMergeSharedPath"];
 export type OverlayMergePlanEntry = components["schemas"]["OverlayMergePlanEntry"];
 export type OverlayMergePlan = components["schemas"]["OverlayMergePlan"];

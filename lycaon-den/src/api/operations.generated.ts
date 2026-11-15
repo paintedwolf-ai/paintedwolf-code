@@ -168,6 +168,7 @@ export const API_OPERATIONS = {
   getWebResearchProviders: { method: "GET", path: "/v1/web-research/providers" },
   getWebResearchSettings: { method: "GET", path: "/v1/settings/web-research" },
   getWorkerChanges: { method: "GET", path: "/v1/workers/{id}/changes" },
+  getWorkerHistory: { method: "GET", path: "/v1/workers/history" },
   getWorkflowRun: { method: "GET", path: "/v1/workflow-runs/{id}" },
   getWorkflowRunReport: { method: "GET", path: "/v1/workflow-runs/{id}/report" },
   holdProjectManagedSecret: { method: "POST", path: "/v1/projects/{id}/secrets/{secret_id}/hold" },
@@ -519,6 +520,7 @@ export type OperationPathParameters = {
   getWebResearchProviders: Record<string, never>;
   getWebResearchSettings: Record<string, never>;
   getWorkerChanges: { id: string | number; };
+  getWorkerHistory: Record<string, never>;
   getWorkflowRun: { id: string | number; };
   getWorkflowRunReport: { id: string | number; };
   holdProjectManagedSecret: { id: string | number; secret_id: string | number; };

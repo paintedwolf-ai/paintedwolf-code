@@ -4,6 +4,7 @@ import { focusRegion, isRegionEntry, registerFocusRegion, releaseFocusRegion } f
 import { scrollTargetForRun } from "../../chat/workflow/workflow-spans.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { bindPaintInterestLiveStreams } from "../../chat/stream/paint-interest-live.ts";
+import { findSessionWorker } from "../../chat/worker/workers-model.ts";
 import { transcriptDisplayTail, transcriptTailDelivery, isFirstProseDelivery } from "../../chat/transcript/layout/transcript-tail.ts";
 import { transcriptViewportForSession } from "../../chat/stream/transcript-viewport.tsx";
 import { alignRevealTarget } from "../../chat/transcript/presentation/transcript-reveal.ts";
@@ -106,10 +107,14 @@ export function createChatViewTranscript(props: ChatViewProps, viewport: Viewpor
       if (props.workersDrawerOpen !== true) return null;
       const workerId = props.selectedWorkerId?.trim();
       if (!workerId) return null;
-      const row = workers().find((w) => w.id === workerId);
+      const row = findSessionWorker(
+        workers(),
+        workerId,
+        props.appStore.state.workers,
+      );
       const childSessionId = row?.child_session_id?.trim();
-      if (!childSessionId) return null;
-      return { workerId, childSessionId };
+      if (!row || !childSessionId) return null;
+      return { workerId: row.id, childSessionId };
     },
   });
 

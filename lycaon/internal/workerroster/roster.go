@@ -43,7 +43,7 @@ type Row struct {
 	WorkspaceLabel     string
 	UpdatedAt          string
 	ParkedReason       string
-	ParkedUntil        string
+	ParkedUntilAt      string
 	ShelveReason       string
 	UnreadMessageCount int
 	// About is what the worker is on: its latest instruction, else its brief.
@@ -122,7 +122,7 @@ func (s Source) Board(ctx context.Context, sessionID string) ([]api.BoardWorker,
 			State:          api.WorkerState(row.State), Reason: api.WorkerStateReason(row.Reason),
 			StateLabel: row.StateLabel, WorkspaceLabel: row.WorkspaceLabel, UpdatedAt: row.UpdatedAt,
 			About: row.About, Question: row.Question,
-			ParkedReason: row.ParkedReason, ParkedUntil: row.ParkedUntil,
+			ParkedReason: row.ParkedReason, ParkedUntilAt: row.ParkedUntilAt,
 			ShelveReason: row.ShelveReason, UnreadMessageCount: row.UnreadMessageCount,
 			ReadPaths: row.Read.Shown, ReadOmitted: row.Read.Omitted,
 			ChangedPaths: row.Changed.Shown, ChangedOmitted: row.Changed.Omitted,
@@ -228,7 +228,7 @@ func (s Source) row(ctx context.Context, actor workerrecords.Actor, snap workero
 		if s.Reader.Jobs != nil {
 			if job, found := s.Reader.Jobs.Get(latest.JobID); found && job != nil {
 				row.ParkedReason = job.ParkedReason
-				row.ParkedUntil = job.ParkedUntil
+				row.ParkedUntilAt = job.ParkedUntilAt
 			}
 		}
 	}

@@ -99,7 +99,7 @@ func JobEvent(task api.WorkerTask) api.WorkerEvent {
 		ShelveReason:         task.ShelveReason,
 		ReviewOf:             task.ReviewOf,
 		ParkedReason:         task.ParkedReason,
-		ParkedUntil:          task.ParkedUntil,
+		ParkedUntilAt:        task.ParkedUntilAt,
 		ToolLoopsUsed:        task.ToolLoopsUsed,
 		ToolCallsUsed:        task.ToolCallsUsed,
 		ContextUsage:         task.ContextUsage,

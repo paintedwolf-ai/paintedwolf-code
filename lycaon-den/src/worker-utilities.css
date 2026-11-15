@@ -271,6 +271,103 @@ margin-left: 8px;
 }
 
 
+@utility den-worker-round-summary {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border-radius: var(--den-radius-sm);
+  border: 1px solid var(--den-line);
+  background: var(--den-tint-1);
+}
+
+
+@utility den-worker-reviewed-subject {
+  margin: 0 0 8px;
+  font-size: var(--text-den-caption);
+  color: var(--den-text-muted);
+  overflow-wrap: anywhere;
+}
+
+
+@utility den-worker-transcript-history {
+  scroll-margin-bottom: 12px;
+}
+
+
+@utility den-worker-history-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+
+@utility den-worker-history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+
+@utility den-worker-history-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: var(--den-radius-sm);
+  border: 1px solid var(--den-line);
+  transition: background var(--den-duration) var(--den-ease);
+}
+
+
+@utility den-worker-history-item--highlight {
+  background: color-mix(in srgb, var(--den-status-positive) 10%, transparent);
+}
+
+
+@utility den-worker-history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+}
+
+
+@utility den-worker-history-sender {
+  font-size: var(--text-den-caption);
+  font-weight: 600;
+  color: var(--den-text);
+}
+
+
+@utility den-worker-history-body {
+  margin: 0;
+  font-size: var(--text-den-body);
+  line-height: 1.45;
+  color: var(--den-text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+
+@utility den-worker-history-action {
+  align-self: flex-start;
+  min-height: 24px;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--den-radius-sm);
+  border: 1px solid var(--den-line);
+  background: transparent;
+  color: var(--den-accent-text);
+  font-size: var(--text-den-micro);
+  font-weight: 500;
+  cursor: pointer;
+  &:hover {
+    background: var(--den-tint-1);
+  }
+}
+
+
 
 .den-worker-msg--user .den-worker-msg-role { color: var(--den-text); }
 
@@ -296,7 +393,8 @@ margin-left: 8px;
   padding: 0;
 }
 
-.den-worker-transcript-coordination-group + .den-worker-transcript-coordination-group {
+.den-worker-transcript-coordination-group + .den-worker-transcript-coordination-group,
+.den-worker-history-group + .den-worker-history-group {
   margin-top: 12px;
 }
 

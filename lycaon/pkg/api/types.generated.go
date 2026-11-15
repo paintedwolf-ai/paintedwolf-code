@@ -966,8 +966,16 @@ type BoardView struct {
 
 // BoardWorker One worker as its coordinator sees it, with the state admission reads.
 type BoardWorker struct {
+	// Durable worker record identity across rounds.
+	WorkerID  string `json:"worker_id,omitempty"`
 	Name      string `json:"name"`
 	AgentType string `json:"agent_type"`
+	// Child session reused across rounds once spawned.
+	ChildSessionID string `json:"child_session_id,omitempty"`
+	// Latest round job identity when at least one round exists.
+	LatestJobID string `json:"latest_job_id,omitempty"`
+	// Latest 1-based round ordinal when at least one round exists.
+	Round     int    `json:"round,omitempty"`
 	ScopeMode string `json:"scope_mode,omitempty"`
 	// Derived workspace state for this worker (shared, retained, preparing, refreshed, reset, recovering).
 	WorkspaceState string            `json:"workspace_state,omitempty"`
@@ -979,13 +987,21 @@ type BoardWorker struct {
 	About string `json:"about,omitempty"`
 	// The pending decision an asking worker waits on.
 	Question string `json:"question,omitempty"`
+	// Active wait lease reason when the round is parked.
+	ParkedReason string `json:"parked_reason,omitempty"`
+	// Active wait lease deadline when the round is parked.
+	ParkedUntilAt string `json:"parked_until_at,omitempty"`
 	// Handle of the worker's latest result.
 	ResultHandle      string                  `json:"result_handle,omitempty"`
 	ResultDisposition WorkerResultDisposition `json:"result_disposition,omitempty"`
+	// Coordinator reason recorded when the latest result is shelved.
+	ShelveReason string `json:"shelve_reason,omitempty"`
 	// Derived display label for result_disposition.
 	DispositionLabel string `json:"disposition_label,omitempty"`
 	// Derived display label for workspace_state.
 	WorkspaceLabel string `json:"workspace_label,omitempty"`
+	// Worker messages not yet delivered to a coordinator turn.
+	UnreadMessageCount int `json:"unread_message_count,omitempty"`
 	// Most recent activity timestamp for recency ordering.
 	UpdatedAt      string   `json:"updated_at,omitempty"`
 	ReadPaths      []string `json:"read_paths,omitempty"`
@@ -9342,12 +9358,21 @@ type WorkerDispatch struct {
 
 // WorkerEvent
 type WorkerEvent struct {
-	Dependencies    []WorkerDependency `json:"dependencies,omitempty"`
-	WorkerID        string             `json:"worker_id"`
-	Status          WorkerStatus       `json:"status"`
-	AgentType       string             `json:"agent_type,omitempty"`
-	ChildSessionID  string             `json:"child_session_id,omitempty"`
-	ParentSessionID string             `json:"parent_session_id,omitempty"`
+	Dependencies      []WorkerDependency      `json:"dependencies,omitempty"`
+	WorkerID          string                  `json:"worker_id"`
+	WorkerRecordID    string                  `json:"worker_record_id,omitempty"`
+	WorkerName        string                  `json:"worker_name,omitempty"`
+	Round             int                     `json:"round,omitempty"`
+	ResultHandle      string                  `json:"result_handle,omitempty"`
+	ResultDisposition WorkerResultDisposition `json:"result_disposition,omitempty"`
+	ShelveReason      string                  `json:"shelve_reason,omitempty"`
+	ReviewOf          string                  `json:"review_of,omitempty"`
+	ParkedReason      string                  `json:"parked_reason,omitempty"`
+	ParkedUntilAt     string                  `json:"parked_until_at,omitempty"`
+	Status            WorkerStatus            `json:"status"`
+	AgentType         string                  `json:"agent_type,omitempty"`
+	ChildSessionID    string                  `json:"child_session_id,omitempty"`
+	ParentSessionID   string                  `json:"parent_session_id,omitempty"`
 	// Worker assignment goal used for card titles.
 	Brief                string                `json:"brief,omitempty"`
 	MergeStatus          WorkerMergeStatus     `json:"merge_status,omitempty"`
@@ -9383,6 +9408,54 @@ type WorkerFailure struct {
 	Scope NoticeScope `json:"scope,omitempty"`
 	// Which declared resolution produced `tier`/`scope`.
 	Resolution string `json:"resolution,omitempty"`
+}
+
+// WorkerHistoryMessage
+type WorkerHistoryMessage struct {
+	Seq               int                     `json:"seq"`
+	SenderRole        WorkerMessageSenderRole `json:"sender_role"`
+	RoundOrdinal      int                     `json:"round_ordinal,omitempty"`
+	Body              string                  `json:"body"`
+	ArtifactRef       string                  `json:"artifact_ref,omitempty"`
+	NeedsReply        bool                    `json:"needs_reply,omitempty"`
+	ReplyToSeq        int                     `json:"reply_to_seq,omitempty"`
+	Delivered         bool                    `json:"delivered"`
+	InstructionStatus WorkerInstructionStatus `json:"instruction_status,omitempty"`
+	CreatedAt         string                  `json:"created_at"`
+}
+
+// WorkerHistoryResponse
+type WorkerHistoryResponse struct {
+	WorkerID       string                 `json:"worker_id"`
+	Name           string                 `json:"name"`
+	AgentType      string                 `json:"agent_type"`
+	Brief          string                 `json:"brief,omitempty"`
+	ChildSessionID string                 `json:"child_session_id,omitempty"`
+	State          WorkerState            `json:"state"`
+	Reason         WorkerStateReason      `json:"reason,omitempty"`
+	Rounds         []WorkerHistoryRound   `json:"rounds"`
+	Messages       []WorkerHistoryMessage `json:"messages"`
+	Before         int                    `json:"before,omitempty"`
+	BeforeRound    int                    `json:"before_round,omitempty"`
+}
+
+// WorkerHistoryRound
+type WorkerHistoryRound struct {
+	Ordinal int `json:"ordinal"`
+	// Worker job identity for this round.
+	WorkerID            string                  `json:"worker_id"`
+	Status              WorkerStatus            `json:"status,omitempty"`
+	InstructionFirstSeq int                     `json:"instruction_first_seq,omitempty"`
+	InstructionLastSeq  int                     `json:"instruction_last_seq,omitempty"`
+	ResultHandle        string                  `json:"result_handle,omitempty"`
+	ResultDisposition   WorkerResultDisposition `json:"result_disposition,omitempty"`
+	ShelveReason        string                  `json:"shelve_reason,omitempty"`
+	CheckpointID        string                  `json:"checkpoint_id,omitempty"`
+	ReviewOf            string                  `json:"review_of,omitempty"`
+	Result              *WorkerResult           `json:"result,omitempty"`
+	Failure             *WorkerFailure          `json:"failure,omitempty"`
+	CreatedAt           string                  `json:"created_at"`
+	SettledAt           string                  `json:"settled_at,omitempty"`
 }
 
 // WorkerJobChangedFile One overlay-modified file, addressed by root.
@@ -9458,9 +9531,8 @@ type WorkerResult struct {
 
 // WorkerResultBriefingTarget
 type WorkerResultBriefingTarget struct {
-	WorkerID string `json:"worker_id"`
-	// The worker's completion time; a rerun is a new revision.
-	ResultRevision string `json:"result_revision"`
+	// Settled worker round result handle.
+	ResultHandle string `json:"result_handle"`
 }
 
 // WorkerSummaryMeta
@@ -9468,6 +9540,11 @@ type WorkerSummaryMeta struct {
 	SourceContext   *SourceContext         `json:"source_context,omitempty"`
 	DelegationID    string                 `json:"delegation_id,omitempty"`
 	LegID           string                 `json:"leg_id,omitempty"`
+	WorkerRecordID  string                 `json:"worker_record_id,omitempty"`
+	WorkerName      string                 `json:"worker_name,omitempty"`
+	Round           int                    `json:"round,omitempty"`
+	ResultHandle    string                 `json:"result_handle,omitempty"`
+	ReviewOf        string                 `json:"review_of,omitempty"`
 	WorkerID        string                 `json:"worker_id"`
 	ChildSessionID  string                 `json:"child_session_id"`
 	AgentType       string                 `json:"agent_type"`

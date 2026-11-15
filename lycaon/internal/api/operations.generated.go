@@ -178,6 +178,7 @@ var (
 	operationGetWebResearchProviders            = generatedOperation{ID: "getWebResearchProviders", Method: "GET", Path: "/v1/web-research/providers"}
 	operationGetWebResearchSettings             = generatedOperation{ID: "getWebResearchSettings", Method: "GET", Path: "/v1/settings/web-research"}
 	operationGetWorkerChanges                   = generatedOperation{ID: "getWorkerChanges", Method: "GET", Path: "/v1/workers/{id}/changes", Params: []string{"id"}}
+	operationGetWorkerHistory                   = generatedOperation{ID: "getWorkerHistory", Method: "GET", Path: "/v1/workers/history"}
 	operationGetWorkflowRun                     = generatedOperation{ID: "getWorkflowRun", Method: "GET", Path: "/v1/workflow-runs/{id}", Params: []string{"id"}}
 	operationGetWorkflowRunReport               = generatedOperation{ID: "getWorkflowRunReport", Method: "GET", Path: "/v1/workflow-runs/{id}/report", Params: []string{"id"}}
 	operationHoldProjectManagedSecret           = generatedOperation{ID: "holdProjectManagedSecret", Method: "POST", Path: "/v1/projects/{id}/secrets/{secret_id}/hold", Params: []string{"id", "secret_id"}, RecordsPersonAction: true}
@@ -522,6 +523,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetWebResearchProviders,
 	operationGetWebResearchSettings,
 	operationGetWorkerChanges,
+	operationGetWorkerHistory,
 	operationGetWorkflowRun,
 	operationGetWorkflowRunReport,
 	operationHoldProjectManagedSecret,

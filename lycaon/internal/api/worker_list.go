@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/pagecursor"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerrecords"
@@ -76,11 +77,15 @@ func (s *Workers) handleWorkerHistory(w http.ResponseWriter, r *http.Request) {
 	if s.sessionStore != nil {
 		sess, err := s.sessionStore.Get(r.Context(), sessionID)
 		if err != nil {
+			if errors.Is(err, store.ErrSessionNotFound) {
+				s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "session not found")
+				return
+			}
 			s.responses.InternalError(w, r, err)
 			return
 		}
 		if sess == nil || sess.ProjectID != projectID {
-			s.responses.Fail(w, wire.ApiErrorCodeNotFound, "session not found")
+			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "session not found")
 			return
 		}
 	}
@@ -215,10 +220,11 @@ func (s *Workers) projectWorkerHistory(ctx context.Context, actor workerrecords.
 	rounds := make([]wire.WorkerHistoryRound, 0, len(page.Rounds))
 	for _, r := range page.Rounds {
 		roundsByOrd[r.Ordinal] = r
-		rounds = append(rounds, s.projectHistoryRound(ctx, r, dispMap))
+		rounds = append(rounds, s.projectHistoryRound(r, dispMap))
 	}
 	messages := make([]wire.WorkerHistoryMessage, 0, len(page.Messages))
-	for _, m := range page.Messages {
+	for i := len(page.Messages) - 1; i >= 0; i-- {
+		m := page.Messages[i]
 		round, hasRound, rErr := lookupHistoryRound(ctx, records, actor, page.Worker.ID, m.RoundOrdinal, roundsByOrd)
 		if rErr != nil {
 			return wire.WorkerHistoryResponse{}, rErr
@@ -240,10 +246,10 @@ func (s *Workers) projectWorkerHistory(ctx context.Context, actor workerrecords.
 	}, nil
 }
 
-func (s *Workers) projectHistoryRound(ctx context.Context, r workerrecords.Round, dispMap map[string]workerrecords.Disposition) wire.WorkerHistoryRound {
+func (s *Workers) projectHistoryRound(r workerrecords.Round, dispMap map[string]workerrecords.Disposition) wire.WorkerHistoryRound {
 	out := wire.WorkerHistoryRound{
 		Ordinal:             int(r.Ordinal),
-		JobID:               r.JobID,
+		WorkerID:            r.JobID,
 		InstructionFirstSeq: int(r.InstructionFirstSeq),
 		InstructionLastSeq:  int(r.InstructionLastSeq),
 		CheckpointID:        r.CheckpointID,
@@ -261,15 +267,15 @@ func (s *Workers) projectHistoryRound(ctx context.Context, r workerrecords.Round
 		case d.ChangeState != "":
 			out.ResultDisposition = wire.WorkerResultDisposition(d.ChangeState)
 		case r.CheckpointID != "":
-			out.ResultDisposition = wire.WorkerResultDispositionOpen
+			out.ResultDisposition = wire.WorkerResultOpen
 		case d.AccountedAt != "":
-			out.ResultDisposition = wire.WorkerResultDispositionAccounted
+			out.ResultDisposition = wire.WorkerResultAccounted
 		default:
-			out.ResultDisposition = wire.WorkerResultDispositionUnaccounted
+			out.ResultDisposition = wire.WorkerResultUnaccounted
 		}
 	}
 	if s.workers != nil {
-		if task, ok := s.workers.Lookup(ctx, r.JobID); ok && task != nil {
+		if task, ok := s.workers.Get(r.JobID); ok && task != nil {
 			out.Status = task.Status
 			out.Result = task.Result
 			out.Failure = task.Failure

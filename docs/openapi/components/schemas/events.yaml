@@ -210,8 +210,8 @@ components:
           format: uuid
         parked_reason:
           type: string
-        parked_until:
-          x-go-pointer: true
+        parked_until_at:
+          x-go-type: "string"
           type: string
           format: date-time
         status:

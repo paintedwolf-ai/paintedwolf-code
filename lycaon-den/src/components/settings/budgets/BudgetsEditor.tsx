@@ -207,7 +207,7 @@ export function BudgetsEditor(props: Props) {
                   patchBool("coordinator_loop", e.currentTarget.checked)
                 }
               >
-                Host auto-prompt after worker legs
+                Host auto-prompt after workers
               </DenCheckbox>
               <SettingsGovernedGroup
                 label="Coordinator loop cap"

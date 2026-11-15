@@ -9,7 +9,15 @@ import {
   taskDescription,
   type TaskActivityContext,
 } from "../chat/task/task-card-model.ts";
-import type { CitationGrounding, WorkerTask } from "../api/types.ts";
+import type { BoardWorker, CitationGrounding, WorkerTask } from "../api/types.ts";
+import type { PendingWorkerApproval } from "../chat/worker/worker-approval-model.ts";
+import {
+  workerDispositionPresentation,
+  workerStateBadgeLabel,
+  workerUnreadPresentation,
+  type WorkerDispositionBadge,
+  type WorkerUnreadBadge,
+} from "../chat/worker/worker-state-presentation.ts";
 import { resolveCitationGrounding } from "../chat/worker/worker-evidence-model.ts";
 import { citationGroundingPresent } from "../chat/grounding/citation-grounding-model.ts";
 import { CitationGroundingBadge } from "./citation/CitationGroundingBadge.tsx";
@@ -43,6 +51,10 @@ const MAX_WORKER_CARD_PATH_MENU = 5;
 type ShellProps = {
   agent: () => string;
   status: () => string;
+  stateLabel?: () => string | undefined;
+  disposition?: () => WorkerDispositionBadge | undefined;
+  unread?: () => WorkerUnreadBadge | undefined;
+  round?: () => number | undefined;
   body: () => string;
   activity: () => string;
   grounding: () => CitationGrounding | undefined;
@@ -327,8 +339,35 @@ export function TaskCardShell(props: ShellProps) {
               classList={{ "den-task-card-status--live": running() }}
               data-testid="task-card-status"
             >
-              {formatSentenceCase(props.status())}
+              {props.stateLabel?.() ?? formatSentenceCase(props.status())}
             </span>
+            <Show when={(props.round?.() ?? 1) > 1}>
+              <span class="den-worker-fact-badge" data-testid="worker-round-badge">
+                Round {props.round?.()}
+              </span>
+            </Show>
+            <Show when={props.disposition?.()} keyed>
+              {(disp) => (
+                <span
+                  class="den-worker-fact-badge"
+                  data-testid="worker-disposition-badge"
+                  data-disposition={disp.disposition}
+                >
+                  {disp.label}
+                </span>
+              )}
+            </Show>
+            <Show when={props.unread?.()} keyed>
+              {(unread) => (
+                <span
+                  class="den-worker-fact-badge"
+                  data-testid="worker-unread-badge"
+                  data-unread-count={unread.count}
+                >
+                  {unread.label}
+                </span>
+              )}
+            </Show>
             <Show when={props.worker()} keyed>
               {(worker) => (
                 <>
@@ -391,21 +430,60 @@ type TaskProps = {
   projectId?: string;
   rootRefs?: readonly ResolveProjectRoot[];
   worker?: () => WorkerTask | undefined;
+  boardWorker?: () => BoardWorker | undefined;
+  pendingApproval?: () => PendingWorkerApproval | undefined;
   activityContext?: () => TaskActivityContext | undefined;
   onOpenWorker?: () => void;
   onOpenWorkerEvidence?: () => void;
 };
 
-/** Coordinator task/delegate_dispatch — full worker card (no tool chicklet). */
+function hasCollaborationStateFacts(
+  worker?: WorkerTask,
+  boardWorker?: BoardWorker,
+  pendingApproval?: PendingWorkerApproval,
+): boolean {
+  return Boolean(
+    boardWorker ||
+      pendingApproval ||
+      worker?.worker_record_id ||
+      worker?.round ||
+      worker?.result_disposition ||
+      worker?.parked_reason ||
+      worker?.status === "waiting",
+  );
+}
+
+/** Coordinator worker card. */
 export function TaskCard(props: TaskProps) {
   const worker = () => props.worker?.();
-  const activityContext = () => props.activityContext?.();
+  const boardWorker = () => props.boardWorker?.();
+  const pendingApproval = () => props.pendingApproval?.();
+  const activityContext = () => {
+    const base = props.activityContext?.();
+    const bw = boardWorker();
+    const pa = pendingApproval();
+    if (!bw && !pa) return base;
+    return {
+      ...base,
+      worker: base?.worker ?? worker(),
+      boardWorker: base?.boardWorker ?? bw,
+      pendingApproval: base?.pendingApproval ?? pa,
+    };
+  };
 
   return (
     <TaskCardShell
       agent={() => taskAgentType(props.part, worker())}
-      status={() => taskCardStatus(props.part, worker())}
-      body={() => taskDescription(props.part)}
+      status={() => taskCardStatus(props.part, worker(), boardWorker())}
+      stateLabel={() =>
+        hasCollaborationStateFacts(worker(), boardWorker(), pendingApproval())
+          ? workerStateBadgeLabel(worker(), boardWorker(), pendingApproval())
+          : undefined
+      }
+      disposition={() => workerDispositionPresentation(worker(), boardWorker())}
+      unread={() => workerUnreadPresentation(boardWorker())}
+      round={() => boardWorker()?.round ?? worker()?.round ?? props.part.workerSummary?.round}
+      body={() => taskDescription(props.part, worker())}
       activity={() => taskActivityDisplay(props.part, activityContext())}
       grounding={() => resolveCitationGrounding(props.part.workerSummary, worker())}
       worker={worker}

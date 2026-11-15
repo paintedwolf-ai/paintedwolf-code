@@ -6,10 +6,11 @@ package toolpresentation
 import "strings"
 
 var longRunningSet = map[string]struct{}{
-	"command":     {},
-	"summarize":   {},
-	"survey_repo": {},
-	"verify":      {},
+	"command":         {},
+	"instruct_worker": {},
+	"summarize":       {},
+	"survey_repo":     {},
+	"verify":          {},
 }
 
 // IsLongRunning reports whether tool activity is visible before its result.
@@ -170,7 +171,7 @@ var titleFallbacks = map[string]string{
 	"terminal_read":    "Terminal session",
 	"terminal_send":    "Terminal session",
 	"view_image":       "Image artifact",
-	"worker_cancel":    "Worker task",
+	"worker_cancel":    "Worker",
 	"workflow_compose": "Workflow definition",
 }
 
@@ -287,7 +288,7 @@ var titleKeys = map[string][]string{
 	"wait":                           {"reason"},
 	"wc":                             {"paths"},
 	"web_search":                     {"query", "period"},
-	"worker_cancel":                  {"reason"},
+	"worker_cancel":                  {"worker", "reason"},
 	"worker_history":                 {"worker"},
 	"workflow_advance":               {},
 	"workflow_catalog_summaries":     {},

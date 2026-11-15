@@ -139,7 +139,7 @@ func loadWorkerRoundWire(ctx context.Context, database db.DBTX, task *api.Worker
 	switch {
 	case err == nil:
 		task.ParkedReason = lease.Reason
-		task.ParkedUntil = lease.DeadlineAt
+		task.ParkedUntilAt = lease.DeadlineAt
 	case !db.IsNoRows(err):
 		return err
 	}
@@ -151,10 +151,10 @@ func wireDisposition(changeState, checkpointID, accountedAt string) api.WorkerRe
 	case changeState != "":
 		return api.WorkerResultDisposition(changeState)
 	case checkpointID != "":
-		return api.WorkerResultDispositionOpen
+		return api.WorkerResultOpen
 	case accountedAt != "":
-		return api.WorkerResultDispositionAccounted
+		return api.WorkerResultAccounted
 	default:
-		return api.WorkerResultDispositionUnaccounted
+		return api.WorkerResultUnaccounted
 	}
 }

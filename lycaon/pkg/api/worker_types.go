@@ -322,7 +322,7 @@ type WorkerTask struct {
 	ShelveReason      string                  `json:"shelve_reason,omitempty"`
 	ReviewOf          string                  `json:"review_of,omitempty"`
 	ParkedReason      string                  `json:"parked_reason,omitempty"`
-	ParkedUntil       *time.Time              `json:"parked_until,omitempty"`
+	ParkedUntilAt     string                  `json:"parked_until_at,omitempty"`
 	ChildSessionID    string                  `json:"child_session_id,omitempty"`
 	ProjectID         string                  `json:"project_id,omitempty"`
 	WorkspaceRootID   string                  `json:"workspace_root_id,omitempty"`

@@ -8623,6 +8623,68 @@ paths:
           $ref: '#/components/responses/Conflict'
         default:
           $ref: '#/components/responses/Error'
+  /v1/workers/history:
+    get:
+      tags:
+        - workers
+      operationId: getWorkerHistory
+      x-multi-stream-list: true
+      summary: Read bounded round and message history for a session worker
+      parameters:
+        - $ref: '#/components/parameters/ProjectIDQuery'
+        - name: session_id
+          in: query
+          required: true
+          description: Coordinator session that owns the worker.
+          schema:
+            type: string
+            format: uuid
+        - name: worker
+          in: query
+          required: true
+          description: Worker name or round job id on the session roster.
+          schema:
+            type: string
+            minLength: 1
+        - name: before
+          in: query
+          required: false
+          description: Exclusive message sequence cursor for older messages.
+          schema:
+            type: integer
+            minimum: 1
+        - name: before_round
+          in: query
+          required: false
+          description: Exclusive 1-based round ordinal cursor for older rounds.
+          schema:
+            type: integer
+            minimum: 1
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Bounded worker collaboration history page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorkerHistoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
   /v1/workers/{id}/cancel:
     post:
       tags:
@@ -15533,6 +15595,99 @@ components:
         blocked_on_approval:
           type: boolean
           description: True when checkpoint SSE reports a pending human checkpoint for this worker child session
+    BoardWorker:
+      x-go-generate: true
+      type: object
+      description: One worker as its coordinator sees it, with the state admission reads.
+      required:
+        - name
+        - agent_type
+        - state
+      additionalProperties: false
+      properties:
+        worker_id:
+          type: string
+          format: uuid
+          description: Durable worker record identity across rounds.
+        name:
+          type: string
+        agent_type:
+          type: string
+        child_session_id:
+          type: string
+          format: uuid
+          description: Child session reused across rounds once spawned.
+        latest_job_id:
+          type: string
+          format: uuid
+          description: Latest round job identity when at least one round exists.
+        round:
+          type: integer
+          minimum: 1
+          description: Latest 1-based round ordinal when at least one round exists.
+        scope_mode:
+          type: string
+        workspace_state:
+          type: string
+          description: Derived workspace state for this worker (shared, retained, preparing, refreshed, reset, recovering).
+        state:
+          $ref: '#/components/schemas/WorkerState'
+        reason:
+          $ref: '#/components/schemas/WorkerStateReason'
+        state_label:
+          type: string
+          description: Derived display label for state and reason.
+        about:
+          type: string
+          description: The worker's latest instruction, else its brief, clipped to one line.
+        question:
+          type: string
+          description: The pending decision an asking worker waits on.
+        parked_reason:
+          type: string
+          description: Active wait lease reason when the round is parked.
+        parked_until_at:
+          x-go-type: string
+          type: string
+          format: date-time
+          description: Active wait lease deadline when the round is parked.
+        result_handle:
+          type: string
+          description: Handle of the worker's latest result.
+        result_disposition:
+          $ref: '#/components/schemas/WorkerResultDisposition'
+        shelve_reason:
+          type: string
+          description: Coordinator reason recorded when the latest result is shelved.
+        disposition_label:
+          type: string
+          description: Derived display label for result_disposition.
+        workspace_label:
+          type: string
+          description: Derived display label for workspace_state.
+        unread_message_count:
+          type: integer
+          minimum: 0
+          description: Worker messages not yet delivered to a coordinator turn.
+        updated_at:
+          x-go-type: string
+          type: string
+          format: date-time
+          description: Most recent activity timestamp for recency ordering.
+        read_paths:
+          type: array
+          items:
+            type: string
+        read_omitted:
+          type: integer
+          minimum: 0
+        changed_paths:
+          type: array
+          items:
+            type: string
+        changed_omitted:
+          type: integer
+          minimum: 0
     RepoBrief:
       x-go-generate: true
       x-go-field-order:
@@ -15826,6 +15981,30 @@ components:
         worker_id:
           type: string
           format: uuid
+        worker_record_id:
+          type: string
+          format: uuid
+        worker_name:
+          type: string
+        round:
+          type: integer
+          minimum: 1
+        result_handle:
+          type: string
+          format: uuid
+        result_disposition:
+          $ref: '#/components/schemas/WorkerResultDisposition'
+        shelve_reason:
+          type: string
+        review_of:
+          type: string
+          format: uuid
+        parked_reason:
+          type: string
+        parked_until_at:
+          x-go-type: string
+          type: string
+          format: date-time
         status:
           $ref: '#/components/schemas/WorkerStatus'
         agent_type:
@@ -18190,16 +18369,13 @@ components:
       x-go-generate: true
       type: object
       required:
-        - worker_id
-        - result_revision
+        - result_handle
       additionalProperties: false
       properties:
-        worker_id:
+        result_handle:
           type: string
           format: uuid
-        result_revision:
-          type: string
-          description: The worker's completion time; a rerun is a new revision.
+          description: Settled worker round result handle.
     BriefingRequest:
       x-go-generate: true
       type: object
@@ -22321,6 +22497,20 @@ components:
         leg_id:
           type: string
           format: uuid
+        worker_record_id:
+          type: string
+          format: uuid
+        worker_name:
+          type: string
+        round:
+          type: integer
+          minimum: 1
+        result_handle:
+          type: string
+          format: uuid
+        review_of:
+          type: string
+          format: uuid
         worker_id:
           type: string
           format: uuid
@@ -25594,6 +25784,43 @@ components:
         - failed
         - canceled
         - held
+    WorkerState:
+      type: string
+      description: A worker's derived state.
+      enum:
+        - planned
+        - waiting
+        - working
+        - asking
+        - delivered
+        - idle
+        - failed
+        - recovering
+        - closed
+    WorkerStateReason:
+      type: string
+      description: What qualifies a worker's state.
+      enum:
+        - queued
+        - parked
+        - approval_wait
+        - prerequisite
+        - result_unaccounted
+        - changes_unresolved
+        - no_report
+        - recovery_required
+        - withdrawn
+        - session_unusable
+    WorkerResultDisposition:
+      type: string
+      description: What became of a worker's latest result.
+      enum:
+        - unaccounted
+        - accounted
+        - open
+        - landed
+        - rejected
+        - shelved
     WorkerMergeStatus:
       type: string
       description: |
@@ -25971,6 +26198,38 @@ components:
         id:
           type: string
           format: uuid
+        worker_record_id:
+          type: string
+          format: uuid
+          description: Durable worker record identity across rounds.
+        worker_name:
+          type: string
+          description: Canonical worker name on the session roster.
+        round:
+          type: integer
+          minimum: 1
+          description: 1-based round ordinal within the worker record.
+        result_handle:
+          type: string
+          format: uuid
+          description: Settled result handle recorded for this round.
+        result_disposition:
+          $ref: '#/components/schemas/WorkerResultDisposition'
+          description: Disposition of this round's settled result.
+        shelve_reason:
+          type: string
+          description: Coordinator reason recorded when this round's result is shelved.
+        review_of:
+          type: string
+          format: uuid
+          description: Sealed result handle reviewed by this round when it is a reviewer round.
+        parked_reason:
+          type: string
+          description: Active wait lease reason while this round is parked.
+        parked_until_at:
+          type: string
+          format: date-time
+          description: Active wait lease deadline while this round is parked.
         child_session_id:
           type: string
           format: uuid
@@ -26083,6 +26342,148 @@ components:
         completed_at:
           type: string
           format: date-time
+    WorkerMessageSenderRole:
+      type: string
+      enum:
+        - coordinator
+        - worker
+        - person
+        - host
+    WorkerInstructionStatus:
+      type: string
+      enum:
+        - applied
+        - queued
+        - not_applied
+    WorkerHistoryRound:
+      x-go-generate: true
+      type: object
+      required:
+        - ordinal
+        - worker_id
+        - created_at
+      additionalProperties: false
+      properties:
+        ordinal:
+          type: integer
+          minimum: 1
+        worker_id:
+          type: string
+          format: uuid
+          description: Worker job identity for this round.
+        status:
+          $ref: '#/components/schemas/WorkerStatus'
+        instruction_first_seq:
+          type: integer
+          minimum: 1
+        instruction_last_seq:
+          type: integer
+          minimum: 1
+        result_handle:
+          type: string
+          format: uuid
+        result_disposition:
+          $ref: '#/components/schemas/WorkerResultDisposition'
+        shelve_reason:
+          type: string
+        checkpoint_id:
+          type: string
+          pattern: ^\S*$
+        review_of:
+          type: string
+          format: uuid
+        result:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WorkerResult'
+        failure:
+          x-go-pointer: true
+          $ref: '#/components/schemas/WorkerFailure'
+        created_at:
+          x-go-type: string
+          type: string
+          format: date-time
+        settled_at:
+          x-go-type: string
+          type: string
+          format: date-time
+    WorkerHistoryMessage:
+      x-go-generate: true
+      type: object
+      required:
+        - seq
+        - sender_role
+        - body
+        - delivered
+        - created_at
+      additionalProperties: false
+      properties:
+        seq:
+          type: integer
+          minimum: 1
+        sender_role:
+          $ref: '#/components/schemas/WorkerMessageSenderRole'
+        round_ordinal:
+          type: integer
+          minimum: 1
+        body:
+          type: string
+        artifact_ref:
+          type: string
+        needs_reply:
+          type: boolean
+        reply_to_seq:
+          type: integer
+          minimum: 1
+        delivered:
+          type: boolean
+        instruction_status:
+          $ref: '#/components/schemas/WorkerInstructionStatus'
+        created_at:
+          x-go-type: string
+          type: string
+          format: date-time
+    WorkerHistoryResponse:
+      x-go-generate: true
+      type: object
+      required:
+        - worker_id
+        - name
+        - agent_type
+        - state
+        - rounds
+        - messages
+      additionalProperties: false
+      properties:
+        worker_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        agent_type:
+          type: string
+        brief:
+          type: string
+        child_session_id:
+          type: string
+          format: uuid
+        state:
+          $ref: '#/components/schemas/WorkerState'
+        reason:
+          $ref: '#/components/schemas/WorkerStateReason'
+        rounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerHistoryRound'
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkerHistoryMessage'
+        before:
+          type: integer
+          minimum: 0
+        before_round:
+          type: integer
+          minimum: 0
     ComposeDecisionPhase:
       x-go-generate: true
       type: object
@@ -37810,105 +38211,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkerTask'
-    WorkerState:
-      type: string
-      description: A worker's derived state.
-      enum:
-        - planned
-        - waiting
-        - working
-        - asking
-        - delivered
-        - idle
-        - failed
-        - recovering
-        - closed
-    WorkerStateReason:
-      type: string
-      description: What qualifies a worker's state.
-      enum:
-        - queued
-        - parked
-        - approval_wait
-        - prerequisite
-        - result_unaccounted
-        - changes_unresolved
-        - no_report
-        - recovery_required
-        - withdrawn
-        - session_unusable
-    WorkerResultDisposition:
-      type: string
-      description: What became of a worker's latest result.
-      enum:
-        - unaccounted
-        - accounted
-        - open
-        - landed
-        - rejected
-        - shelved
-    BoardWorker:
-      x-go-generate: true
-      type: object
-      description: One worker as its coordinator sees it, with the state admission reads.
-      required:
-        - name
-        - agent_type
-        - state
-      additionalProperties: false
-      properties:
-        name:
-          type: string
-        agent_type:
-          type: string
-        scope_mode:
-          type: string
-        workspace_state:
-          type: string
-          description: Derived workspace state for this worker (shared, retained, preparing, refreshed, reset, recovering).
-        state:
-          $ref: '#/components/schemas/WorkerState'
-        reason:
-          $ref: '#/components/schemas/WorkerStateReason'
-        state_label:
-          type: string
-          description: Derived display label for state and reason.
-        about:
-          type: string
-          description: The worker's latest instruction, else its brief, clipped to one line.
-        question:
-          type: string
-          description: The pending decision an asking worker waits on.
-        result_handle:
-          type: string
-          description: Handle of the worker's latest result.
-        result_disposition:
-          $ref: '#/components/schemas/WorkerResultDisposition'
-        disposition_label:
-          type: string
-          description: Derived display label for result_disposition.
-        workspace_label:
-          type: string
-          description: Derived display label for workspace_state.
-        updated_at:
-          x-go-type: string
-          type: string
-          format: date-time
-          description: Most recent activity timestamp for recency ordering.
-        read_paths:
-          type: array
-          items:
-            type: string
-        read_omitted:
-          type: integer
-          minimum: 0
-        changed_paths:
-          type: array
-          items:
-            type: string
-        changed_omitted:
-          type: integer
-          minimum: 0
     OverlayMergeSharedPath:
       x-go-generate: true
       type: object

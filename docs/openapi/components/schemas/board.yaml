@@ -125,7 +125,7 @@ components:
         parked_reason:
           type: string
           description: Active wait lease reason when the round is parked.
-        parked_until:
+        parked_until_at:
           x-go-type: "string"
           type: string
           format: date-time

@@ -15,6 +15,17 @@ import type { TranscriptItem } from "../transcript/projection/transcript-item-mo
 import { isTaskToolName } from "../tool/tool-part-model.ts";
 import { workerOverlayOpen } from "./worker-branch-model.ts";
 import { workerFailureFromDispatchReject } from "./worker-failure-model.ts";
+import {
+  collapseWorkersByIdentity,
+  findSessionWorker,
+  workerJobIdsForWorker,
+} from "./worker-identity.ts";
+
+export {
+  collapseWorkersByIdentity,
+  findSessionWorker,
+  workerJobIdsForWorker,
+};
 
 /** Prefix for rejected dispatches without job IDs. */
 const FAILED_DISPATCH_WORKER_ID_PREFIX = "dispatch-reject:";
@@ -42,10 +53,15 @@ export type WorkerRowStatus =
 
 /** Optional focus when opening the workers drawer from a transcript card. */
 export type OpenWorkerOptions = {
-  scrollTo?: "evidence";
+  scrollTo?: "evidence" | "history";
+  messageSeq?: number;
+  roundOrdinal?: number;
 };
 
-export type WorkerDrawerFocus = "evidence" | null;
+export type WorkerDrawerFocus =
+  | "evidence"
+  | { section: "history"; messageSeq?: number; roundOrdinal?: number }
+  | null;
 
 function workerResultSummaryStatus(worker: WorkerTask): string | undefined {
   return worker.result?.status?.trim().toLowerCase();
@@ -56,18 +72,29 @@ export function workerRowStatus(worker: WorkerTask): WorkerRowStatus {
   switch (worker.status) {
     case "running":
     case "pending":
+    case "waiting":
     case "held":
       return "running";
     case "complete": {
-      if (worker.merge_status === "merged" || worker.merge_status === "rejected") {
+      if (
+        worker.merge_status === "merged" ||
+        worker.merge_status === "rejected" ||
+        worker.result_disposition === "landed" ||
+        worker.result_disposition === "rejected" ||
+        worker.result_disposition === "shelved"
+      ) {
         return "done";
       }
       if (worker.merge_status === "orphaned") return "partial";
-      if (workerResultSummaryStatus(worker) === "needs_decision") {
+      const summaryStatus = workerResultSummaryStatus(worker);
+      if (
+        summaryStatus === "needs_decision" ||
+        summaryStatus === "needs_input"
+      ) {
         return "needs_decision";
       }
-      if (workerResultSummaryStatus(worker) === "partial") return "partial";
-      if (workerOverlayOpen(worker) || workerResultSummaryStatus(worker) === "open") {
+      if (summaryStatus === "partial") return "partial";
+      if (workerOverlayOpen(worker) || summaryStatus === "open") {
         return "open";
       }
       return "done";
@@ -116,6 +143,15 @@ export function workerStoreFingerprint(worker: WorkerTask): string {
   return [
     worker.id,
     worker.status,
+    worker.worker_record_id ?? "",
+    worker.worker_name ?? "",
+    String(worker.round ?? ""),
+    worker.result_handle ?? "",
+    worker.result_disposition ?? "",
+    worker.shelve_reason ?? "",
+    worker.review_of ?? "",
+    worker.parked_reason ?? "",
+    worker.parked_until_at ?? "",
     worker.agent_type ?? "",
     worker.brief ?? "",
     worker.leg_id ?? "",
@@ -309,22 +345,23 @@ const DISPATCH_PARAM_SKIP = new Set([
   "brief",
   "job_id",
   "child_session_id",
+  "max_tool_loops",
 ]);
 
 const DISPATCH_PARAM_ORDER = [
+  "name",
   "agent_type",
   "subagent_type",
   "scope",
   "files",
-  "max_tool_loops",
 ] as const;
 
 const DISPATCH_PARAM_LABELS: Record<string, string> = {
+  name: "Name",
   agent_type: "Agent",
   subagent_type: "Agent",
   scope: "Scope",
   files: "Files",
-  max_tool_loops: "Max tool loops",
 };
 
 function dispatchBriefFromArgs(args?: Record<string, unknown>): string {
@@ -395,15 +432,27 @@ function forEachStructuredToolResult(
   }
 }
 
-/** Parent transcript task()/delegate_dispatch call that enqueued this worker job. */
+function dispatchWorkerNameFromArgs(args?: Record<string, unknown>): string {
+  if (!args) return "";
+  if (typeof args.name === "string" && args.name.trim()) {
+    return args.name.trim();
+  }
+  return "";
+}
+
+/** Parent transcript call that enqueued this worker. */
 export function taskDispatchCallForWorker(
   messages: readonly Message[],
   workerId: string,
+  worker?: WorkerTask,
 ): WorkerTaskDispatchCall | null {
   const id = workerId.trim();
   if (!id) return null;
   const rejectCallId = toolCallIdFromFailedDispatchWorkerId(id);
+  const childId = worker?.child_session_id?.trim() || "";
+  const workerName = worker?.worker_name?.trim() || "";
   let matched: WorkerTaskDispatchCall | null = null;
+  let fallback: WorkerTaskDispatchCall | null = null;
   forEachStructuredToolResult(messages, ({ call, result }) => {
     if (!call.name?.trim() || !isTaskToolName(call.name)) return;
     if (rejectCallId && call.id?.trim() === rejectCallId) {
@@ -415,8 +464,18 @@ export function taskDispatchCallForWorker(
       matched = { tool: call.name, args: call.args ?? {} };
       return true;
     }
+    if (!fallback) {
+      const dispatchChild = result.tool_result?.dispatch?.child_session_id?.trim();
+      const callName = dispatchWorkerNameFromArgs(call.args);
+      if (
+        (childId && dispatchChild === childId) ||
+        (workerName && callName === workerName)
+      ) {
+        fallback = { tool: call.name, args: call.args ?? {} };
+      }
+    }
   });
-  return matched;
+  return matched ?? fallback;
 }
 
 function taskDispatchCallForToolMessage(
@@ -441,7 +500,7 @@ export function workerDispatchParamRows(
   worker: WorkerTask,
   messages: readonly Message[],
 ): WorkerDispatchParamRow[] {
-  const call = taskDispatchCallForWorker(messages, worker.id);
+  const call = taskDispatchCallForWorker(messages, worker.id, worker);
   if (!call) return [];
   const rows: WorkerDispatchParamRow[] = [];
   const seen = new Set<string>();
@@ -483,8 +542,16 @@ export function workerEventFromTaskToolMessage(
   const call = taskDispatchCallForWorker(messages, jobId);
   const brief = dispatchBriefFromArgs(call?.args);
   const agentFromArgs = dispatchAgentTypeFromArgs(call?.args);
+  const nameFromArgs = dispatchWorkerNameFromArgs(call?.args);
+  const summary = toolMessage.worker_summary;
   return {
     worker_id: jobId,
+    worker_record_id: summary?.worker_record_id?.trim() || undefined,
+    worker_name:
+      summary?.worker_name?.trim() || nameFromArgs || undefined,
+    round: summary?.round,
+    result_handle: summary?.result_handle?.trim() || undefined,
+    review_of: summary?.review_of?.trim() || undefined,
     status: "pending",
     parent_session_id: sessionId,
     child_session_id:
@@ -532,16 +599,32 @@ export function syncWorkerFromTaskToolMessage(
     existing.child_session_id?.trim() || ev.child_session_id;
   const agentType = existing.agent_type?.trim() || ev.agent_type;
   const brief = existing.brief?.trim() || ev.brief?.trim();
+  const workerRecordId =
+    existing.worker_record_id?.trim() || ev.worker_record_id;
+  const workerName = existing.worker_name?.trim() || ev.worker_name;
+  const round = existing.round ?? ev.round;
+  const resultHandle = existing.result_handle?.trim() || ev.result_handle;
+  const reviewOf = existing.review_of?.trim() || ev.review_of;
   if (
     parentSessionId === existing.parent_session_id?.trim() &&
     childSessionId === existing.child_session_id?.trim() &&
     agentType === existing.agent_type?.trim() &&
-    brief === existing.brief?.trim()
+    brief === existing.brief?.trim() &&
+    workerRecordId === existing.worker_record_id?.trim() &&
+    workerName === existing.worker_name?.trim() &&
+    round === existing.round &&
+    resultHandle === existing.result_handle?.trim() &&
+    reviewOf === existing.review_of?.trim()
   ) {
     return;
   }
   appStore.actions.updateWorker({
     worker_id: ev.worker_id,
+    worker_record_id: workerRecordId,
+    worker_name: workerName,
+    round,
+    result_handle: resultHandle,
+    review_of: reviewOf,
     status: existing.status,
     parent_session_id: parentSessionId,
     child_session_id: childSessionId,
@@ -580,12 +663,28 @@ export function matchWorkerForTask(
     const byJob = available.find((w) => w.id === jobId);
     if (byJob) return byJob;
   }
+  const recordId = part.workerSummary?.worker_record_id?.trim();
+  if (recordId) {
+    const byRecord = available.find(
+      (w) => w.worker_record_id?.trim() === recordId,
+    );
+    if (byRecord) return byRecord;
+  }
   const childSessionId = part.childSessionId?.trim();
   if (childSessionId) {
     const byChild = available.find(
       (w) => w.child_session_id?.trim() === childSessionId,
     );
     if (byChild) return byChild;
+  }
+  const workerName =
+    part.workerSummary?.worker_name?.trim() ||
+    dispatchWorkerNameFromArgs(part.args);
+  if (workerName) {
+    const byName = available.find(
+      (w) => w.worker_name?.trim() === workerName,
+    );
+    if (byName) return byName;
   }
   const callId = part.toolCallId?.trim();
   if (callId) {

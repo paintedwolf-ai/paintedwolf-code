@@ -312,6 +312,8 @@ export function TranscriptItemRow(props: {
             <ActivityToolEntry
               part={tool().part}
               matchedWorker={props.taskMatches().get(tool().part.id)}
+              sessionWorkers={props.workers}
+              appStore={props.checkpointAppStore}
               messages={props.messages}
               workerTranscripts={props.workerTranscripts}
               onOpenWorker={props.onOpenWorker}
@@ -334,6 +336,8 @@ export function TranscriptItemRow(props: {
           <WorkerGroupRow
             item={group()}
             taskMatches={props.taskMatches()}
+            sessionWorkers={props.workers}
+            appStore={props.checkpointAppStore}
             messages={props.messages}
             workerTranscripts={props.workerTranscripts}
             onOpenWorker={props.onOpenWorker}
@@ -350,6 +354,8 @@ export function TranscriptItemRow(props: {
           <ActivitySpanRow
             item={span()}
             taskMatches={props.taskMatches()}
+            sessionWorkers={props.workers}
+            appStore={props.checkpointAppStore}
             messages={props.messages}
             workerTranscripts={props.workerTranscripts}
             onOpenWorker={props.onOpenWorker}

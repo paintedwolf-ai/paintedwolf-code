@@ -207,6 +207,30 @@ func (q *Queries) CountSessionWorkersByAgent(ctx context.Context, arg CountSessi
 	return count, err
 }
 
+const countUnreadCoordinatorWorkerMessages = `-- name: CountUnreadCoordinatorWorkerMessages :one
+SELECT COUNT(*)
+FROM worker_messages m
+WHERE m.worker_id = ?1
+  AND m.recipient_role = 'coordinator'
+  AND m.seq > COALESCE((
+      SELECT MAX(md.delivered_through_seq)
+      FROM worker_message_deliveries md
+      WHERE md.worker_id = m.worker_id AND md.recipient_session_id = ?2
+  ), 0)
+`
+
+type CountUnreadCoordinatorWorkerMessagesParams struct {
+	WorkerID           string `json:"worker_id"`
+	RecipientSessionID string `json:"recipient_session_id"`
+}
+
+func (q *Queries) CountUnreadCoordinatorWorkerMessages(ctx context.Context, arg CountUnreadCoordinatorWorkerMessagesParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countUnreadCoordinatorWorkerMessages, arg.WorkerID, arg.RecipientSessionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countWorkerLaterUnsettledRounds = `-- name: CountWorkerLaterUnsettledRounds :one
 SELECT COUNT(*) FROM worker_rounds r
 JOIN worker_rounds later ON later.worker_id = r.worker_id AND later.ordinal > r.ordinal
@@ -302,6 +326,25 @@ func (q *Queries) DisposeWorkerResultsByJob(ctx context.Context, arg DisposeWork
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const getArmedWorkerWaitLease = `-- name: GetArmedWorkerWaitLease :one
+SELECT reason, CAST(COALESCE(deadline_at, '') AS TEXT) AS deadline_at
+FROM wait_leases
+WHERE worker_job_id = ?1 AND status = 'armed'
+ORDER BY created_at DESC, id DESC LIMIT 1
+`
+
+type GetArmedWorkerWaitLeaseRow struct {
+	Reason     string `json:"reason"`
+	DeadlineAt string `json:"deadline_at"`
+}
+
+func (q *Queries) GetArmedWorkerWaitLease(ctx context.Context, workerJobID sql.NullString) (GetArmedWorkerWaitLeaseRow, error) {
+	row := q.db.QueryRowContext(ctx, getArmedWorkerWaitLease, workerJobID)
+	var i GetArmedWorkerWaitLeaseRow
+	err := row.Scan(&i.Reason, &i.DeadlineAt)
+	return i, err
 }
 
 const getLandedChangeJobID = `-- name: GetLandedChangeJobID :one
@@ -885,6 +928,52 @@ func (q *Queries) GetWorkerRoundProvenanceByJob(ctx context.Context, jobID strin
 		&i.Ordinal,
 		&i.WorkflowWorkID,
 		&i.LatestSentSeq,
+	)
+	return i, err
+}
+
+const getWorkerRoundWireByJob = `-- name: GetWorkerRoundWireByJob :one
+SELECT w.id AS worker_record_id, w.name AS worker_name, r.ordinal,
+       CAST(COALESCE(res.id, '') AS TEXT) AS result_id,
+       r.checkpoint_id, r.review_subject_json,
+       CAST(COALESCE(r.settled_at, '') AS TEXT) AS settled_at,
+       CAST(COALESCE(d.accounted_at, '') AS TEXT) AS accounted_at,
+       CAST(COALESCE(d.change_state, '') AS TEXT) AS change_state,
+       CAST(COALESCE(d.shelve_reason, '') AS TEXT) AS shelve_reason
+FROM worker_rounds r
+JOIN workers w ON w.id = r.worker_id
+LEFT JOIN worker_results res ON res.worker_job_id = r.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.job_id = ?
+`
+
+type GetWorkerRoundWireByJobRow struct {
+	WorkerRecordID    string `json:"worker_record_id"`
+	WorkerName        string `json:"worker_name"`
+	Ordinal           int64  `json:"ordinal"`
+	ResultID          string `json:"result_id"`
+	CheckpointID      string `json:"checkpoint_id"`
+	ReviewSubjectJson string `json:"review_subject_json"`
+	SettledAt         string `json:"settled_at"`
+	AccountedAt       string `json:"accounted_at"`
+	ChangeState       string `json:"change_state"`
+	ShelveReason      string `json:"shelve_reason"`
+}
+
+func (q *Queries) GetWorkerRoundWireByJob(ctx context.Context, jobID string) (GetWorkerRoundWireByJobRow, error) {
+	row := q.db.QueryRowContext(ctx, getWorkerRoundWireByJob, jobID)
+	var i GetWorkerRoundWireByJobRow
+	err := row.Scan(
+		&i.WorkerRecordID,
+		&i.WorkerName,
+		&i.Ordinal,
+		&i.ResultID,
+		&i.CheckpointID,
+		&i.ReviewSubjectJson,
+		&i.SettledAt,
+		&i.AccountedAt,
+		&i.ChangeState,
+		&i.ShelveReason,
 	)
 	return i, err
 }

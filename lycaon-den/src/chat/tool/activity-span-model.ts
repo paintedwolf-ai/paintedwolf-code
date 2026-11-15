@@ -350,6 +350,15 @@ export function projectActivitySpans(
       continue;
     }
     flushWorkerRun();
+    if (
+      opts?.layout !== "worker" &&
+      item.kind === "tool" &&
+      item.part.tool === "instruct_worker"
+    ) {
+      flushRun();
+      out.push(item);
+      continue;
+    }
     if (item.kind !== "tool" && item.kind !== "index_warming" && item.kind !== "turn_load") {
       if (item.kind === "progress_update" && !item.initial && run.length > 0) {
         deferredAfterRun.push(item);

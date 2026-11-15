@@ -42,3 +42,22 @@ const (
 	WorkerResultRejected    WorkerResultDisposition = "rejected"
 	WorkerResultShelved     WorkerResultDisposition = "shelved"
 )
+
+// WorkerMessageSenderRole names the authenticated role of a worker message sender.
+type WorkerMessageSenderRole string
+
+const (
+	WorkerMessageSenderCoordinator WorkerMessageSenderRole = "coordinator"
+	WorkerMessageSenderWorker      WorkerMessageSenderRole = "worker"
+	WorkerMessageSenderPerson      WorkerMessageSenderRole = "person"
+	WorkerMessageSenderHost        WorkerMessageSenderRole = "host"
+)
+
+// WorkerInstructionStatus describes whether a coordinator instruction reached a round.
+type WorkerInstructionStatus string
+
+const (
+	WorkerInstructionStatusApplied    WorkerInstructionStatus = "applied"
+	WorkerInstructionStatusQueued     WorkerInstructionStatus = "queued"
+	WorkerInstructionStatusNotApplied WorkerInstructionStatus = "not_applied"
+)

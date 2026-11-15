@@ -7,9 +7,13 @@ import { type DisplayTranscriptItem } from "../../chat/transcript/projection/tra
 import { taskJobIdFromPart } from "../../chat/task/task-result-model.ts";
 import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-layout.ts";
 import { workerTranscriptMarkdownSource } from "../../chat/markdown/markdown-output.ts";
+import { pendingCheckpointsForSession } from "../../chat/actions/chat-actions.ts";
+import { pendingWorkerApprovalByJob } from "../../chat/worker/worker-approval-model.ts";
 import { workerRowStatus, type OpenWorkerOptions } from "../../chat/worker/workers-model.ts";
 import { lastWorkerToolActivity } from "../../chat/worker/worker-activity.ts";
 import { workerTranscriptRows, type WorkerTranscriptCache } from "../../chat/worker/worker-transcript.ts";
+import { boardWorkerForTask } from "../../store/workers-board-sync.ts";
+import type { AppStore } from "../../store/app-state-model.ts";
 import { MarkdownBody } from "./MarkdownBody.tsx";
 import { AssistantProseBody } from "./AssistantProseBody.tsx";
 import { InvocationRenderingSlot } from "./InvocationRenderingSlot.tsx";
@@ -17,6 +21,10 @@ import { ToolPartCard } from "../tool/ToolPartCard.tsx";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import { CommandActivitySpan } from "../tool/CommandActivitySpan.tsx";
 import { WorkerGroupCard } from "../worker/WorkerGroupCard.tsx";
+import {
+  WorkerCollaborationNotice,
+  collaborationNoticeForToolPart,
+} from "../worker/WorkerCollaborationNotice.tsx";
 
 export function WorkerTranscriptMessageRow(props: {
   role: "user" | "assistant";
@@ -96,6 +104,8 @@ export function WorkerTranscriptMessageRow(props: {
 export function ActivityToolEntry(props: {
   part: ToolPartView;
   matchedWorker?: WorkerTask;
+  sessionWorkers?: readonly WorkerTask[];
+  appStore?: AppStore;
   messages: Message[];
   workerTranscripts?: WorkerTranscriptCache;
   onOpenWorker?: (workerId: string, opts?: OpenWorkerOptions) => void;
@@ -106,6 +116,22 @@ export function ActivityToolEntry(props: {
   client?: import("../../api/client.ts").LycaonClient | null;
 }) {
   const matched = () => props.matchedWorker;
+  const boardWorker = () => boardWorkerForTask(props.appStore?.state.board, matched());
+  const pendingApproval = () => {
+    const worker = matched();
+    if (!worker || !props.appStore) return undefined;
+    const checkpoints = pendingCheckpointsForSession(props.appStore, props.sessionId ?? "");
+    return pendingWorkerApprovalByJob(props.sessionWorkers ?? [worker], checkpoints).get(worker.id);
+  };
+  const collaborationNotice = createMemo(() =>
+    props.layout === "chat"
+      ? collaborationNoticeForToolPart(props.part, {
+          matchedWorker: matched(),
+          sessionWorkers: props.sessionWorkers ?? [],
+          board: props.appStore?.state.board,
+        })
+      : null,
+  );
   const workerMessages = () => {
     const worker = matched();
     if (!worker) return undefined;
@@ -116,6 +142,8 @@ export function ActivityToolEntry(props: {
     if (!worker) return undefined;
     return {
       worker,
+      boardWorker: boardWorker(),
+      pendingApproval: pendingApproval(),
       workerStatus: workerRowStatus(worker),
       lastActivity: lastWorkerToolActivity(
         workerMessages() ?? props.messages,
@@ -140,18 +168,35 @@ export function ActivityToolEntry(props: {
     return () => cb(workerId, { scrollTo: "evidence" });
   };
   const toolCard = () => (
-    <ToolPartCard
-      part={props.part}
-      layout={props.layout}
-      sessionId={props.sessionId ?? undefined}
-      projectId={props.projectId}
-      client={props.client}
-      rootRefs={props.rootRefs}
-      taskWorker={matched}
-      taskContext={taskContext}
-      onOpenWorker={openWorker()}
-      onOpenWorkerEvidence={openWorkerEvidence()}
-    />
+    <Show
+      when={collaborationNotice()}
+      keyed
+      fallback={
+        <ToolPartCard
+          part={props.part}
+          layout={props.layout}
+          sessionId={props.sessionId ?? undefined}
+          projectId={props.projectId}
+          client={props.client}
+          rootRefs={props.rootRefs}
+          taskWorker={matched}
+          taskBoardWorker={boardWorker}
+          taskPendingApproval={pendingApproval}
+          taskContext={taskContext}
+          onOpenWorker={openWorker()}
+          onOpenWorkerEvidence={openWorkerEvidence()}
+        />
+      }
+    >
+      {(notice) => (
+        <WorkerCollaborationNotice
+          notice={notice}
+          entryKey={props.part.id}
+          sessionId={props.sessionId ?? undefined}
+          onOpenWorker={props.onOpenWorker}
+        />
+      )}
+    </Show>
   );
   return (
     <>
@@ -171,6 +216,8 @@ export function ActivityToolEntry(props: {
 export function ActivitySpanRow(props: {
   item: Extract<DisplayTranscriptItem, { kind: "activity_span" }>;
   taskMatches: ReadonlyMap<string, WorkerTask>;
+  sessionWorkers?: readonly WorkerTask[];
+  appStore?: AppStore;
   messages: Message[];
   workerTranscripts?: WorkerTranscriptCache;
   onOpenWorker?: (workerId: string, opts?: OpenWorkerOptions) => void;
@@ -191,6 +238,8 @@ export function ActivitySpanRow(props: {
         <ActivityToolEntry
           part={part()}
           matchedWorker={props.taskMatches.get(part().id)}
+          sessionWorkers={props.sessionWorkers}
+          appStore={props.appStore}
           messages={props.messages}
           workerTranscripts={props.workerTranscripts}
           onOpenWorker={props.onOpenWorker}
@@ -216,6 +265,8 @@ export function ActivitySpanRow(props: {
 export function WorkerGroupRow(props: {
   item: Extract<DisplayTranscriptItem, { kind: "worker_group" }>;
   taskMatches: ReadonlyMap<string, WorkerTask>;
+  sessionWorkers?: readonly WorkerTask[];
+  appStore?: AppStore;
   messages: Message[];
   workerTranscripts?: WorkerTranscriptCache;
   onOpenWorker?: (workerId: string, opts?: OpenWorkerOptions) => void;
@@ -234,6 +285,8 @@ export function WorkerGroupRow(props: {
         <ActivityToolEntry
           part={part()}
           matchedWorker={props.taskMatches.get(part().id)}
+          sessionWorkers={props.sessionWorkers}
+          appStore={props.appStore}
           messages={props.messages}
           workerTranscripts={props.workerTranscripts}
           onOpenWorker={props.onOpenWorker}

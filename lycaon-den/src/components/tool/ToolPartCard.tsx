@@ -1,6 +1,7 @@
 import { Show } from "solid-js";
 import { CommandActivityCard } from "./CommandActivityCard.tsx";
-import type { WorkerTask } from "../../api/types.ts";
+import type { BoardWorker, WorkerTask } from "../../api/types.ts";
+import type { PendingWorkerApproval } from "../../chat/worker/worker-approval-model.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import type { ResolveProjectRoot } from "../../api/project-path.ts";
 import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-layout.ts";
@@ -25,6 +26,8 @@ type Props = {
   client?: LycaonClient | null;
   rootRefs?: readonly ResolveProjectRoot[];
   taskWorker?: () => WorkerTask | undefined;
+  taskBoardWorker?: () => BoardWorker | undefined;
+  taskPendingApproval?: () => PendingWorkerApproval | undefined;
   taskContext?: () => TaskActivityContext | undefined;
   onOpenWorker?: () => void;
   onOpenWorkerEvidence?: () => void;
@@ -56,6 +59,8 @@ function NonCommandToolPartCard(props: Props) {
         projectId={props.projectId}
         rootRefs={props.rootRefs}
         worker={props.taskWorker}
+        boardWorker={props.taskBoardWorker}
+        pendingApproval={props.taskPendingApproval}
         activityContext={props.taskContext}
         onOpenWorker={props.onOpenWorker}
         onOpenWorkerEvidence={props.onOpenWorkerEvidence}
