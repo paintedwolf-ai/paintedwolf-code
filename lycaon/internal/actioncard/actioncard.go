@@ -67,11 +67,12 @@ func ForCall(call api.ToolCall) *api.ActionDescriptor {
 	}
 }
 
-// ForResult describes a settled call that is not a command program.
+// ForResult describes a settled call whose card is not one of its program's
+// activities: a call with no program, or a program that recorded none.
 // commandMarks are the redaction marks on its command argument, if any.
 func ForResult(result api.ToolResult, commandMarks []api.RedactedSpan) *api.ActionDescriptor {
 	describe, ok := presenters[result.Tool]
-	if !ok || result.CommandProgram != nil {
+	if !ok || (result.CommandProgram != nil && len(result.CommandProgram.Activities) > 0) {
 		return nil
 	}
 	label := toolpresentation.Label(result.Tool)
@@ -93,7 +94,7 @@ func ForResult(result api.ToolResult, commandMarks []api.RedactedSpan) *api.Acti
 	}
 	return &api.ActionDescriptor{
 		Label:   label,
-		Status:  resultStatus(result),
+		Status:  descriptorStatus(result),
 		Ran:     ranText,
 		Facts:   ordered(parts.Facts),
 		Row:     nonNil(parts.Row),
@@ -109,6 +110,14 @@ const (
 	statusDone    = "done"
 	statusError   = "error"
 )
+
+// descriptorStatus follows a program's own state when the result carries one.
+func descriptorStatus(result api.ToolResult) string {
+	if program := result.CommandProgram; program != nil {
+		return activityStatus(program.State)
+	}
+	return resultStatus(result)
+}
 
 func resultStatus(result api.ToolResult) string {
 	if result.Outcome == api.ToolResultOutcomeRejected || result.Outcome == api.ToolResultOutcomeError {
@@ -156,6 +165,9 @@ func resultLinks(result api.ToolResult) []api.ActionLink {
 		links = append(links, api.ActionLink{Kind: linkOutput, ProcessHandle: result.Process.Handle})
 	case result.ContentRef != nil || strings.TrimSpace(result.Content) != "":
 		links = append(links, api.ActionLink{Kind: linkOutput, ContentRef: result.ContentRef})
+	}
+	if program := result.CommandProgram; program != nil {
+		links = append(links, api.ActionLink{Kind: linkReceipt, Receipts: []api.ActionReceiptScope{{ProgramID: program.ID}}})
 	}
 	return links
 }

@@ -27,6 +27,9 @@ func commandResult(result api.ToolResult) Parts {
 	if command, ok := submittedCommand(result); ok {
 		parts.Ran = command
 	}
+	if program := result.CommandProgram; program != nil {
+		return programParts(parts, *program)
+	}
 	switch resultStatus(result) {
 	case statusError:
 		parts.Facts = append(parts.Facts, resultFact(rejectedOutcome(result)))
@@ -43,6 +46,30 @@ func commandResult(result api.ToolResult) Parts {
 	}
 	if result.Process != nil && result.Process.Handle != "" {
 		parts.Opener = &api.ActionOpener{Kind: "running", ProcessHandle: result.Process.Handle}
+	}
+	return parts
+}
+
+// programParts describes a program that recorded no activities from its own state.
+func programParts(parts Parts, program api.CommandProgramReceipt) Parts {
+	switch program.State {
+	case "completed":
+		parts.Facts = append(parts.Facts, exitFact(exitOutcome(program.StatusCode), program.StatusCode))
+	case "failed":
+		parts.Facts = append(parts.Facts, exitFact("failed", program.StatusCode))
+	case "refused", "rejected":
+		parts.Facts = append(parts.Facts, resultFact("refused"))
+		if program.StopCode != "" {
+			parts.Facts = append(parts.Facts, stoppedByFact("host_stop", program.StopCode))
+		}
+	case "interrupted":
+		parts.Facts = append(parts.Facts, resultFact("interrupted"))
+	}
+	if len(parts.Facts) > 0 {
+		parts.Row = []api.ActionFactKind{api.ActionFactResult}
+	}
+	if took, ok := tookFact(program.StartedAt, program.SettledAt); ok {
+		parts.Facts = append(parts.Facts, took)
 	}
 	return parts
 }

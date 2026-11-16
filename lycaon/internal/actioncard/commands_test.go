@@ -186,8 +186,28 @@ func TestCommandWithoutAProgramStatesItsRefusal(t *testing.T) {
 	if stopped, _ := fact(d.Facts, api.ActionFactStoppedBy); stopped.Code != "COMMAND_DESTRUCTIVE" {
 		t.Fatalf("stopped by %+v", stopped)
 	}
-	result.CommandProgram = &api.CommandProgramReceipt{ID: "prog"}
+	result.CommandProgram = &api.CommandProgramReceipt{ID: "prog", Activities: []api.CommandActivity{{ID: "a"}}}
 	if ForResult(result, nil) != nil {
 		t.Fatal("a program's result was described instead of its activities")
+	}
+}
+
+// A program that recorded no activities is described by the program itself.
+func TestProgramWithoutActivitiesUsesItsOwnState(t *testing.T) {
+	settled := time.Unix(105, 0)
+	result := commandCall("exit 3")
+	result.CommandProgram = &api.CommandProgramReceipt{ID: "prog", State: "completed", StatusCode: intPtr(3), StartedAt: time.Unix(100, 0), SettledAt: &settled}
+	d := ForResult(result, nil)
+	if d == nil || d.Status != statusDone {
+		t.Fatalf("program card %+v", d)
+	}
+	if got, _ := fact(d.Facts, api.ActionFactResult); got.Outcome != "failed" || got.ExitCode == nil || *got.ExitCode != 3 {
+		t.Fatalf("result %+v", got)
+	}
+	if took, _ := fact(d.Facts, api.ActionFactTook); took.DurationMs != 5000 {
+		t.Fatalf("took %+v", took)
+	}
+	if last := d.Links[len(d.Links)-1]; last.Kind != linkReceipt || last.Receipts[0].ProgramID != "prog" {
+		t.Fatalf("links %+v", d.Links)
 	}
 }
