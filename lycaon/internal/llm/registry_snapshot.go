@@ -151,3 +151,9 @@ func (s *providerRegistrySnapshot) cloneProviders() map[string]modelcall.Provide
 	}
 	return out
 }
+
+func newEmptyRegistry() *Registry {
+	r := &Registry{}
+	r.snapshot.Store(newProviderRegistrySnapshot(providerRegistrySnapshotInput{}))
+	return r
+}

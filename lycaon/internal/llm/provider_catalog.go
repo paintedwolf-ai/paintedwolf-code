@@ -108,6 +108,17 @@ type ProviderCatalog struct {
 	capacity   CapacityPolicy
 }
 
+// NewProviderCatalogAt loads a catalog from an explicit local path.
+func NewProviderCatalogAt(localPath string) (*ProviderCatalog, error) {
+	c := &ProviderCatalog{
+		localPath: localPath,
+	}
+	if err := c.Reload(); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
 // NewProviderCatalog loads the ship kind catalog and local instances.
 func NewProviderCatalog() (*ProviderCatalog, error) {
 	localPath, err := userProvidersLocalPath()

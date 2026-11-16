@@ -474,6 +474,12 @@ func (f *refusalFeed) listen(fn func()) {
 	f.mu.Unlock()
 }
 
+// RefusalWatchLive reports whether kernel refusal reports currently reach
+// this host.
+func RefusalWatchLive() bool {
+	return refusalWatch.currentState() == watchLive
+}
+
 func (w *refusalWatchT) currentState() watchState {
 	w.mu.Lock()
 	defer w.mu.Unlock()

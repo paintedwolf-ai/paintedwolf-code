@@ -256,3 +256,26 @@ func (m *MultiRootBrief) OrientationRoots() []api.BoardOrientationRoot {
 	}
 	return out
 }
+
+// RenderedBytes estimates composed repo orientation size for budget tests.
+func (m *MultiRootBrief) RenderedBytes() int {
+	if m == nil {
+		return 0
+	}
+	if len(m.Roots) <= 1 {
+		if len(m.Roots) == 0 {
+			return 0
+		}
+		return len(strings.Join(packboard.RepoOrientationLines(WireBrief(m.Roots[0].Brief)), "\n"))
+	}
+	total := 0
+	for _, r := range m.Roots {
+		header := sectionHeader(r.Label, r.IsPrimary)
+		lines := packboard.RepoOrientationLines(WireBrief(r.Brief))
+		total += len(header) + len(strings.Join(lines, "\n")) + 2
+		if r.Truncated {
+			total += len("(brief trimmed to fit budget)")
+		}
+	}
+	return total
+}

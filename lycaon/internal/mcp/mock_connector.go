@@ -43,6 +43,15 @@ type mockSession struct {
 	onHTTPStatus func(int)
 }
 
+// ListTools reads the connector's current tool map, not a connect-time snapshot, so a
+// tools/list_changed re-list sees updates as a real server would report them.
+func (m *mockSession) ListTools(_ context.Context) ([]*sdkmcp.Tool, error) {
+	if m.parent == nil {
+		return nil, nil
+	}
+	return m.parent.Tools[m.providerID], nil
+}
+
 func (m *mockSession) CallTool(_ context.Context, name string, args map[string]any) (*sdkmcp.CallToolResult, error) {
 	if m.calls != nil {
 		if m.calls[m.providerID] == nil {

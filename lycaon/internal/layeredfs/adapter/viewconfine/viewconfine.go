@@ -209,6 +209,26 @@ func verify(ctx context.Context, view *adapter.PreparedView, boundary confine.Vi
 	return nil
 }
 
+// FirstEntry names something that exists inside dir and leads to none of open, or nothing. A masked
+// directory lists as empty rather than failing, so only an entry known to exist can show that it is
+// hidden, and the way to a reopened root stays visible. The listing is bounded: a directory
+// with no such entry among its first few has only its create refusal to show.
+func FirstEntry(dir string, open ...string) string {
+	file, err := os.Open(dir)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = file.Close() }()
+	names, _ := file.Readdirnames(maxEntriesScanned)
+	for _, name := range names {
+		entry := filepath.Join(dir, name)
+		if !slices.ContainsFunc(open, func(root string) bool { return confine.PathAtOrUnder(root, entry) }) {
+			return entry
+		}
+	}
+	return ""
+}
+
 const maxEntriesScanned = 64
 
 // probeName is what the probe tries to create, and removes when it can.
