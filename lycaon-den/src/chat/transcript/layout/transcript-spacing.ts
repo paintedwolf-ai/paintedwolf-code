@@ -9,9 +9,9 @@ export type TranscriptSeam = "part" | "row" | "section" | "turn";
  *
  * Four rungs carry every vertical seam: `partGap` inside one row and above
  * a row that reports on the one before it, then the three `*Gap` placement
- * rungs between rows. Placement never invalidates interior heights. Lengths that separate or surround text are rem, so they
- * follow the accessibility text scale the root font size carries; content
- * maxima stay px.
+ * rungs between rows. Placement never invalidates interior heights. Lengths
+ * that separate or surround text are rem, so they follow the accessibility
+ * text scale the root font size carries; content maxima stay px.
  */
 export const TRANSCRIPT_SPACING = {
   partGap: { value: 0.5714, unit: "rem", affects: "row" },
