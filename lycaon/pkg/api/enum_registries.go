@@ -70,6 +70,15 @@ func AllMessageVisibilities() []MessageVisibility {
 	}
 }
 
+// AllMessageLiveStatuses returns every declared MessageLiveStatus (runtime-derived
+// wire field — never a persisted messages column).
+func AllMessageLiveStatuses() []MessageLiveStatus {
+	return []MessageLiveStatus{
+		MessageLiveStatusStreaming,
+		MessageLiveStatusComplete,
+	}
+}
+
 // AllWorkerStatuses returns every declared WorkerStatus.
 func AllWorkerStatuses() []WorkerStatus {
 	return []WorkerStatus{

@@ -104,3 +104,8 @@ func AllEventActions() []EventAction {
 		EventActionBlueprintRevoked,
 	}
 }
+
+// AllEventOutcomes lists the outcome enum for contract tests.
+func AllEventOutcomes() []EventOutcome {
+	return []EventOutcome{EventOutcomeAllowed, EventOutcomeDenied}
+}
