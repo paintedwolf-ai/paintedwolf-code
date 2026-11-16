@@ -285,9 +285,13 @@ func (f configFlow) judge(prog *ssa.Program, cfg Config) map[string]archlint.Fin
 }
 
 // yamlKey returns the key a field decodes from, whether its fields are inlined,
-// and whether YAML decodes it at all.
+// and whether to judge it. A field tagged archlint:"unread" is accepted so a
+// strict decoder takes the key, and nothing in the product acts on it.
 func yamlKey(field *types.Var, tag string) (string, bool, bool) {
 	if !field.Exported() {
+		return "", false, false
+	}
+	if reflect.StructTag(tag).Get("archlint") == "unread" {
 		return "", false, false
 	}
 	value, _ := reflect.StructTag(tag).Lookup("yaml")
