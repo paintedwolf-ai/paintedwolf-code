@@ -1,5 +1,5 @@
 // Package xrefs checks references that cross languages: commands and scripts
-// something runs, and Tauri commands Den invokes and capabilities permit.
+// some other file runs, builds or names.
 package xrefs
 
 import (
@@ -27,7 +27,7 @@ type trackedFile struct {
 }
 
 func tracked(root string) ([]trackedFile, error) {
-	out, err := exec.Command("git", "-C", root, "ls-files", "-s", "-z").Output()
+	out, err := exec.Command("git", "-C", root, "ls-files", "-s", "-z").Output() // #nosec G204 -- fixed git argv over the repository root
 	if err != nil {
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}

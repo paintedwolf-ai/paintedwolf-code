@@ -6,6 +6,7 @@ import (
 	"golang.org/x/tools/go/analysis/analysistest"
 
 	"github.com/lycaon/lycaon/internal/archlint/analyzers"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestReexport(t *testing.T) {
@@ -22,7 +23,7 @@ func TestCopyDrop(t *testing.T) {
 
 func TestTestImport(t *testing.T) {
 	if err := analyzers.TestImport.Flags.Set("test-support", `test$`); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "analyzers.TestImport.Flags.Set failed", err)
 	}
 	analysistest.Run(t, analysistest.TestData(), analyzers.TestImport, "prod", "prod/fixturetest")
 }

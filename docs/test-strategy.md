@@ -579,9 +579,8 @@ function is reported only when no GOOS that compiles it reaches it. It also
 reports context keys read but never set, schema tables no reachable query
 reads, forwarders and aliases of another package, struct literals that copy
 several fields of one value but drop one both types share, production
-packages that import test-support packages, commands and executable scripts
-no other file names, and Tauri commands Den never names or no capability
-permits. Findings are keyed by symbol, so the check runs on the working tree
+packages that import test-support packages, and commands and executable scripts
+no other file names. Findings are keyed by symbol, so the check runs on the working tree
 and on the change base and fails on findings the base lacks: deleting a
 function's last caller fails like adding a dead function. Unused parameters
 come from `unparam` on changed lines. `arch-lint:report` lists every finding.

@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import * as ts from "typescript";
 import { describe, expect, it } from "vitest";
@@ -47,6 +47,33 @@ function registeredCommands(): Set<string> {
     commands.add(name);
   }
   return commands;
+}
+
+/** Commands some capability grants, through a permission file or the generated allow-<command> permission. */
+function permittedCommands(): Set<string> {
+  const tauriRoot = join(denRoot, "src-tauri");
+  const granted = new Set<string>();
+  for (const file of readdirSync(join(tauriRoot, "capabilities")).filter((f) => f.endsWith(".json"))) {
+    const capability = JSON.parse(readFileSync(join(tauriRoot, "capabilities", file), "utf8")) as {
+      permissions?: (string | { identifier: string })[];
+    };
+    for (const entry of capability.permissions ?? []) {
+      granted.add(typeof entry === "string" ? entry : entry.identifier);
+    }
+  }
+  const permitted = new Set<string>();
+  for (const file of readdirSync(join(tauriRoot, "permissions")).filter((f) => f.endsWith(".toml"))) {
+    for (const block of readFileSync(join(tauriRoot, "permissions", file), "utf8").split("[[permission]]")) {
+      const id = block.match(/^\s*identifier\s*=\s*"([^"]+)"/m)?.[1];
+      const allow = block.match(/^\s*commands\.allow\s*=\s*\[([^\]]*)\]/m)?.[1];
+      if (!id || !allow || !granted.has(id)) continue;
+      for (const [, name] of allow.matchAll(/"([^"]+)"/g)) permitted.add(name!);
+    }
+  }
+  for (const id of granted) {
+    if (id.startsWith("allow-")) permitted.add(id.slice("allow-".length).replaceAll("-", "_"));
+  }
+  return permitted;
 }
 
 type Forwarder = { name: string; index: number };
@@ -122,6 +149,11 @@ describe("Tauri IPC parity", { timeout: VITEST_REPOSITORY_SCAN_TIMEOUT_MS }, () 
     expect(unresolved).toEqual([]);
     expect(commands.size).toBeGreaterThan(0);
     expect([...commands].sort()).toEqual([...registeredCommands()].sort());
+  });
+
+  it("a capability permits every registered command", () => {
+    const permitted = permittedCommands();
+    expect([...registeredCommands()].filter((name) => !permitted.has(name))).toEqual([]);
   });
 
   it("every coded SidecarStartError variant is a SidecarStartFailure", () => {

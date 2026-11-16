@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/archlint"
 	"github.com/lycaon/lycaon/internal/archlint/xrefs"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func keys(fs []archlint.Finding) []string {
@@ -33,31 +34,16 @@ func equal(t *testing.T, got, want []string) {
 	}
 }
 
-func TestTauriReportsUninvokedUnpermittedAndUnregisteredCommands(t *testing.T) {
-	got, err := xrefs.Tauri("testdata/tauri", xrefs.TauriLayout{
-		Handler: "src-tauri/src/lib.rs", Permissions: "src-tauri/permissions",
-		Capabilities: "src-tauri/capabilities", Source: "src",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	equal(t, keys(got), []string{
-		"uninvoked-tauri-command vault_lock_status",
-		"unpermitted-tauri-command open_menu",
-		"unregistered-tauri-invoke removed_command",
-	})
-}
-
 func TestRefsReportsCommandsAndScriptsNothingNames(t *testing.T) {
 	root := t.TempDir()
 	write := func(p, body string, mode os.FileMode) {
 		t.Helper()
 		full := filepath.Join(root, p)
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "create directory", err)
 		}
 		if err := os.WriteFile(full, []byte(body), mode); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "write file", err)
 		}
 	}
 	write("lycaon/cmd/lycaon/main.go", "package main\n", 0o644)
@@ -77,9 +63,7 @@ func TestRefsReportsCommandsAndScriptsNothingNames(t *testing.T) {
 		}
 	}
 	got, err := xrefs.Refs(root)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "xrefs.Refs failed", err)
 	equal(t, keys(got), []string{
 		"unreferenced-command lycaon/cmd/lycaon-debug",
 		"unreferenced-command lycaon/cmd/orphan",

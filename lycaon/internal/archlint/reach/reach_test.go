@@ -6,13 +6,12 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/archlint/reach"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestRunReportsUnreachableFunctionsKeysAndTables(t *testing.T) {
 	dir, err := filepath.Abs("testdata/fixture")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "filepath.Abs failed", err)
 	got, err := reach.Run(reach.Config{
 		Dir:      dir,
 		Patterns: []string{"./cmd/..."},
@@ -21,9 +20,7 @@ func TestRunReportsUnreachableFunctionsKeysAndTables(t *testing.T) {
 		Skip:     []*regexp.Regexp{regexp.MustCompile(`test$`)},
 		Schema:   filepath.Join(dir, "schema.sql"),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "reach.Run failed", err)
 	keys := map[string]string{}
 	for _, f := range got {
 		keys[f.Kind+" "+f.Key] = f.Pos
@@ -50,9 +47,7 @@ func TestRunReportsUnreachableFunctionsKeysAndTables(t *testing.T) {
 
 func TestRunRefusesAProgramWithoutMains(t *testing.T) {
 	dir, err := filepath.Abs("testdata/fixture")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "filepath.Abs failed", err)
 	if _, err := reach.Run(reach.Config{Dir: dir, Patterns: []string{"./store"}, GOOS: []string{"linux"}}); err == nil {
 		t.Fatal("a load with no main package must fail")
 	}

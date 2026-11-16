@@ -2,9 +2,8 @@
 
 arch-lint (lycaon/cmd/arch-lint) reports code no shipped program reaches,
 context keys nothing sets, tables nothing reads, forwarders, dropped fields,
-test-support imports, unreferenced commands and scripts, and Tauri commands
-without a caller or permission. Each finding is keyed by symbol, never by
-line. This runs arch-lint on the working tree and on the change base and
+test-support imports, and unreferenced commands and scripts. Each finding is
+keyed by symbol, never by line. This runs arch-lint on the working tree and on the change base and
 fails on findings the base does not have, so deleting a function's last caller
 fails as surely as adding a dead function. unparam reports unused parameters
 on changed lines. `--all` lists every finding at the working tree instead.
@@ -54,7 +53,7 @@ def checks(binary, tree, policy, go=True):
          "-skip", support, "-schema", go_dir / reach["schema"], *reach["roots"]],
         [binary, "vet", "-dir", go_dir, "-test-support", support, *policy["vet"]["packages"]],
     ]
-    commands = (go_commands if go else []) + [[binary, "refs", "-root", tree], [binary, "tauri", "-root", tree]]
+    commands = (go_commands if go else []) + [[binary, "refs", "-root", tree]]
     found = {}
     for command in commands:
         for finding in json.loads(run([str(part) for part in command]) or "null") or []:

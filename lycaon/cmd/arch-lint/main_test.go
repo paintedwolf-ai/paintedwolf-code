@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/archlint"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func decode(t *testing.T, out *bytes.Buffer) []archlint.Finding {
@@ -22,7 +23,7 @@ func TestSubcommandsWriteFindingsAsJSON(t *testing.T) {
 	fixtures := filepath.Join("..", "..", "internal", "archlint")
 	var out bytes.Buffer
 	if err := runVet([]string{"-dir", filepath.Join(fixtures, "testdata", "vetmod"), "-test-support", "test$", "./..."}, &out); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "runVet failed", err)
 	}
 	if got := decode(t, &out); len(got) != 1 || got[0].Kind != "reexport" {
 		t.Fatalf("vet = %+v", got)
@@ -39,12 +40,7 @@ func TestSubcommandsWriteFindingsAsJSON(t *testing.T) {
 	}
 	out.Reset()
 	if err := runRefs([]string{"-root", filepath.Join("..", "..", "..")}, &out); err != nil {
-		t.Fatal(err)
-	}
-	decode(t, &out)
-	out.Reset()
-	if err := runTauri([]string{"-root", filepath.Join("..", "..", "..")}, &out); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "runRefs failed", err)
 	}
 	decode(t, &out)
 }
@@ -55,7 +51,6 @@ func TestSubcommandsRefuseBadFlags(t *testing.T) {
 		"reach": func(a []string, o *bytes.Buffer) error { return runReach(a, o) },
 		"vet":   func(a []string, o *bytes.Buffer) error { return runVet(a, o) },
 		"refs":  func(a []string, o *bytes.Buffer) error { return runRefs(a, o) },
-		"tauri": func(a []string, o *bytes.Buffer) error { return runTauri(a, o) },
 	} {
 		if err := run([]string{"-nope"}, &out); err == nil {
 			t.Errorf("%s accepted an unknown flag", name)

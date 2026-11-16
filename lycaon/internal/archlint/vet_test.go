@@ -5,13 +5,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/archlint"
 	"github.com/lycaon/lycaon/internal/archlint/analyzers"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestVetKeysFindingsBySymbolAndAnalyzer(t *testing.T) {
 	got, err := archlint.Vet("testdata/vetmod", []string{"./..."}, analyzers.All)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "archlint.Vet failed", err)
 	if len(got) != 1 {
 		t.Fatalf("findings = %+v, want one forward", got)
 	}

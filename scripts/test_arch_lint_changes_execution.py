@@ -72,7 +72,7 @@ class ArchLintChangesTest(unittest.TestCase):
     def test_fails_only_on_findings_the_base_lacks(self):
         self.write_findings({
             "reach": [finding("dead-func", "x/store.Old"), finding("dead-func", "x/store.New")],
-            "tauri": [finding("uninvoked-tauri-command", "vault_lock_status", "lycaon-den/src-tauri/src/lib.rs")],
+            "refs": [finding("unreferenced-script", "scripts/old.sh", "scripts/old.sh")],
         })
         scope = change_report.Scope(self.base, "test base", ["findings.json", "lycaon/internal/store/store.go"])
         header, findings, failed = arch_lint_changes.changes(
@@ -81,7 +81,7 @@ class ArchLintChangesTest(unittest.TestCase):
         self.assertIn("3 finding(s) at the working tree, 1 at the base", header)
         self.assertEqual([(f.area, f.path, f.line) for f in findings], [
             ("dead-func", "lycaon/internal/store/store.go", 3),
-            ("uninvoked-tauri-command", "lycaon-den/src-tauri/src/lib.rs", None),
+            ("unreferenced-script", "scripts/old.sh", None),
             ("unparam", "lycaon/internal/store/save.go", 7),
         ])
         # The base result is cached by commit and binary.

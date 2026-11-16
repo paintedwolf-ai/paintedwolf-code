@@ -19,16 +19,3 @@ func runRefs(args []string, out io.Writer) error {
 	}
 	return writeJSON(out, findings)
 }
-
-func runTauri(args []string, out io.Writer) error {
-	fs := flag.NewFlagSet("tauri", flag.ContinueOnError)
-	root := fs.String("root", ".", "repository root")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	findings, err := xrefs.Tauri(*root, xrefs.DenTauri)
-	if err != nil {
-		return err
-	}
-	return writeJSON(out, findings)
-}
