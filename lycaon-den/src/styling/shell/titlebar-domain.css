@@ -56,18 +56,6 @@
   padding: var(--den-titlebar-pad-top) var(--den-chat-gutter-x) 0;
 }
 
-/* A title bar under the OS's own window buttons starts past them. A claim
-   held on one side of the narrow band applies only there. */
-.den-custom-chrome
-  :is(
-    .den-shell-header[data-window-edge="left"][data-window-edge-chrome="native"]:not([data-narrow-only], [data-narrow-hidden]),
-    .den-shell-stage-host--split:where([data-host-band~="max-900"]) .den-shell-header[data-window-edge="left"][data-window-edge-chrome="native"][data-narrow-only],
-    .den-shell-stage-host--split:not([data-host-band~="max-900"]) .den-shell-header[data-window-edge="left"][data-window-edge-chrome="native"][data-narrow-hidden]
-  )
-  .den-shell-header-titlebar {
-  padding-left: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
-}
-
 /* Reopen controls for a pane hidden at that window edge. */
 .den-shell-header-titlebar__edge {
   position: relative;

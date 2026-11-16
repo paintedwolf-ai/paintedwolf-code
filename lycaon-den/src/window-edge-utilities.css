@@ -1,0 +1,42 @@
+/* Clears a window edge's controls from the surface that holds the edge.
+   `components/shell/window-edges.ts` marks each surface with its claim. This
+   selector resolves the claim against the narrow band, where the stylesheet
+   drops a split column. */
+.den-custom-chrome
+  :is(
+    [data-window-edge]:not([data-narrow-only], [data-narrow-hidden]),
+    .den-shell-stage-host--split:where([data-host-band~="max-900"])
+      [data-window-edge][data-narrow-only],
+    .den-shell-stage-host--split:not([data-host-band~="max-900"])
+      [data-window-edge][data-narrow-hidden]
+  ) {
+  /* An open drawer starts its header below the title bar strip. */
+  &.den-session-drawer-layer {
+    --den-context-drawer-header-pad-top: calc(
+      var(--den-titlebar-inset) + var(--den-tabs-top-gap)
+    );
+  }
+
+  /* The OS's own buttons take no room in the layout, so a header starts past them. */
+  &[data-window-edge="left"][data-window-edge-chrome="native"] {
+    .den-shell-header-titlebar {
+      padding-left: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
+    }
+
+    &.den-shell-header-chat .tabs__rail-leading {
+      padding-left: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
+    }
+
+    &.den-shell-header-chat .tabs__rail:has(.tabs__rail-leading):not(:has(.tabs__rail-trailing)) {
+      --tabs-rail-side: calc(
+        var(--den-traffic-light-clearance, var(--den-chat-gutter-x)) +
+          var(--den-unified-chrome-row) + 0.25rem
+      );
+    }
+
+    /* Without a leading slot, the chips themselves start past the buttons. */
+    &.den-shell-header-chat .tabs__rail:not(:has(.tabs__rail-leading)) {
+      --tabs-strip-inset-start: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
+    }
+  }
+}
