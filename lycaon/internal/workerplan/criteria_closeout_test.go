@@ -329,8 +329,8 @@ func TestCloseoutDynamicEvaluationAndUngroundedVerdict(t *testing.T) {
 
 	jobs.tasks["job-dyn"] = &api.WorkerTask{
 		ID:     "job-dyn",
-		Status: api.WorkerStatusFailed,
-		Result: &api.WorkerResult{Summary: ""},
+		Status: api.WorkerStatusComplete,
+		Result: &api.WorkerResult{Summary: "   "},
 	}
 	verdict, err := env.svc.CheckSessionCloseout(ctx, env.coord.SessionID, testdbseed.DefaultProjectID, "/repo")
 	testutil.FailErr(t, "dynamic ungrounded closeout", err)
