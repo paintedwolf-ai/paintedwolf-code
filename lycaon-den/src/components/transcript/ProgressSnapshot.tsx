@@ -1,4 +1,4 @@
-import { For, Show, createMemo } from "solid-js";
+import { For, Show, createMemo, createSignal } from "solid-js";
 import type { ProgressChange, ProgressStep, ProgressUpdateSummary } from "../../api/types.ts";
 import {
   PROGRESS_SNAPSHOT_TITLES,
@@ -74,6 +74,8 @@ export function ProgressSnapshot(props: Props) {
     const steps = restSteps().map((step) => step.label).join(", ");
     return standing ? `${steps}, ${standing} done` : steps;
   };
+  // True once the line has been closed here, so its words fade back in.
+  const [returning, setReturning] = createSignal(false);
 
   return (
     <Show when={count() > 0}>
@@ -107,30 +109,50 @@ export function ProgressSnapshot(props: Props) {
               inHeader
               class="progress-strip__opener"
               aria-label={`${title()}: ${restText()}`}
+              onClick={(event) => {
+                setReturning(disclosure.open());
+                disclosure.onToggleClick(event);
+              }}
             />
-            <span class="progress-strip__title">{title()}</span>
-            <div class="progress-strip__rest" data-testid="progress-strip-rest" aria-hidden="true">
-              <For each={restSteps()}>
-                {(step, index) => (
-                  <>
-                    <Show when={index() > 0}>
-                      <span class="progress-strip__rest-sep">·</span>
-                    </Show>
-                    <span class="progress-strip__rest-step" data-state={step.state}>
-                      <span class="progress-strip__glyph">{progressStateGlyph(step.state)}</span>
-                      <ProgressStepLabel label={step.label} />
-                    </span>
-                  </>
-                )}
-              </For>
-            </div>
-            <Show when={progressUpdateStanding(props)}>
-              <span class="progress-strip__standing" data-testid="progress-strip-standing" aria-hidden="true">
-                {progressUpdateStanding(props)}
-              </span>
+            {/* Each state mounts only its own words: a list item may not hold content hidden by CSS. */}
+            <Show
+              when={disclosure.open()}
+              fallback={
+                <>
+                <div
+                  class="progress-strip__rest"
+                  classList={{ "progress-strip__rest--returning": returning() }}
+                  data-testid="progress-strip-rest"
+                  aria-hidden="true"
+                >
+                  <For each={restSteps()}>
+                    {(step, index) => (
+                      <>
+                        <Show when={index() > 0}>
+                          <span class="progress-strip__rest-sep">·</span>
+                        </Show>
+                        <span class="progress-strip__rest-step" data-state={step.state}>
+                          <span class="progress-strip__glyph">{progressStateGlyph(step.state)}</span>
+                          <ProgressStepLabel label={step.label} />
+                        </span>
+                      </>
+                    )}
+                  </For>
+                </div>
+                <Show when={progressUpdateStanding(props)}>
+                  <span class="progress-strip__standing" data-testid="progress-strip-standing" aria-hidden="true">
+                    {progressUpdateStanding(props)}
+                  </span>
+                </Show>
+                </>
+              }
+            >
+              <span class="progress-strip__title">{title()}</span>
             </Show>
             <span class="den-disclosure-chevron" aria-hidden="true" />
-            <span class="progress-strip__count" data-testid="progress-strip-count">{count()}</span>
+            <Show when={disclosure.open()}>
+              <span class="progress-strip__count" data-testid="progress-strip-count">{count()}</span>
+            </Show>
           </div>
           <TranscriptDisclosurePanel disclosure={disclosure} class="progress-strip__body">
             <StepList steps={steps()} />
