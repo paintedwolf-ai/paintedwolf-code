@@ -862,8 +862,10 @@ webE2e.describe("transcript scale den", () => {
       await expect(page.getByTestId("message-stream")).toBeVisible({
         timeout: 60_000,
       });
-      await expect(page.getByText(`scale row ${SESSION_LEN}`).first()).toBeVisible();
-      expect(await page.getByText("scale row 1").count()).toBe(0);
+      // Reload paints the persisted window first, then lands on the bootstrap tail.
+      const stage = liveChatStage(page);
+      await expect(stage.locator(`[data-msg-id="${all[SESSION_LEN - 1]!.id}"]`)).toBeVisible({ timeout: 30_000 });
+      await expect(stage.locator(`[data-msg-id="${all[0]!.id}"]`)).toHaveCount(0);
 
       const initialMounted = await mountedRowCount(page);
       expect(initialMounted).toBeGreaterThan(0);
