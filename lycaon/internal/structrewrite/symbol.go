@@ -66,30 +66,6 @@ func collectNamedDefinitions(spans []repomap.DefinitionSpan, src []byte, name, k
 	return matches
 }
 
-// ListDefinitionNames returns unique tagged definition names in source order,
-// capped so a reject payload stays small.
-func ListDefinitionNames(ctx context.Context, langName, filename string, src []byte) ([]string, error) {
-	const capNames = 24
-	spans, _, ok, err := repomap.DefinitionSpans(ctx, langName, filename, src)
-	if err != nil || !ok {
-		return nil, err
-	}
-	seen := make(map[string]bool, len(spans))
-	out := make([]string, 0, min(len(spans), capNames))
-	for _, sp := range spans {
-		name := strings.TrimSpace(sp.Name)
-		if name == "" || seen[name] {
-			continue
-		}
-		seen[name] = true
-		out = append(out, name)
-		if len(out) == capNames {
-			break
-		}
-	}
-	return out, nil
-}
-
 func definitionSpanToMatch(sp repomap.DefinitionSpan, src []byte) Match {
 	start := sp.StartByte
 	end := sp.EndByte

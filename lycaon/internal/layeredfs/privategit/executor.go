@@ -84,11 +84,6 @@ func (e *GitExecutor) Push(ctx context.Context, remote string, args ...string) (
 	return e.Run(ctx, ".", cmdArgs...)
 }
 
-// Repack runs a local-only private object repack (`git repack -l`) without copying borrowed packs.
-func (e *GitExecutor) Repack(ctx context.Context, args ...string) (string, error) {
-	return e.Run(ctx, ".", append([]string{"repack", "-l"}, args...)...)
-}
-
 func executeViewGitCommand(
 	ctx context.Context,
 	e *GitExecutor,

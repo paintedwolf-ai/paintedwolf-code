@@ -3,8 +3,6 @@ package structrewrite
 import (
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 const goSymbolFixture = `package main
@@ -176,15 +174,6 @@ func TestExtractSymbolQualifiedFallsBackToLastSegment(t *testing.T) {
 	}
 	if !strings.Contains(matches[0].Text, "func FooHandler()") {
 		t.Fatalf("text = %q", matches[0].Text)
-	}
-}
-
-func TestListDefinitionNamesGo(t *testing.T) {
-	names, err := ListDefinitionNames(t.Context(), "go", "main.go", []byte(goSymbolFixture))
-	testutil.FailErr(t, "list definitions", err)
-	joined := strings.Join(names, ",")
-	if !strings.Contains(joined, "FooHandler") || !strings.Contains(joined, "Close") {
-		t.Fatalf("names = %v", names)
 	}
 }
 

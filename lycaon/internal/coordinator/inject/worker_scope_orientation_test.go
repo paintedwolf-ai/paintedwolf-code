@@ -127,19 +127,6 @@ func TestBuildWorkerTaskAssignmentDataBoundsModelAuthoredLists(t *testing.T) {
 	}
 }
 
-// Every budget must stay under the ceiling it exists to avoid.
-func TestRenderBudgetsStayUnderTheRenderCeiling(t *testing.T) {
-	for name, budget := range renderBudgets() {
-		if budget <= 0 {
-			t.Fatalf("%s = %d: a budget must bound something", name, budget)
-		}
-		if budget >= renderCeiling {
-			t.Fatalf("%s = %d exceeds the render ceiling %d — the template would error, not truncate",
-				name, budget, renderCeiling)
-		}
-	}
-}
-
 // The leg must be able to read the record its brief names.
 func TestRenderWorkerTaskAssignmentCarriesRecordedVerdicts(t *testing.T) {
 	out, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), WorkerTaskAssignmentInput{

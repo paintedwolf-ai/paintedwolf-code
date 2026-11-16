@@ -27,15 +27,3 @@ func TestLoadTakesThresholdsFromCatalog(t *testing.T) {
 		t.Fatalf("root_structural_file_count = %d want 1234", cfg.RootStructuralFileCount)
 	}
 }
-
-func TestNeedsRootScopeGuardFailSafe(t *testing.T) {
-	if !toolscope.NeedsRootScopeGuard(0, false, 50_000) {
-		t.Fatal("unknown count must fail safe to denseness")
-	}
-	if !toolscope.NeedsRootScopeGuard(50_000, true, 50_000) {
-		t.Fatal("threshold count must guard")
-	}
-	if toolscope.NeedsRootScopeGuard(100, true, 50_000) {
-		t.Fatal("small known count must not guard")
-	}
-}

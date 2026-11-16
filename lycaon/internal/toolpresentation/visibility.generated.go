@@ -12,12 +12,6 @@ var longRunningSet = map[string]struct{}{
 	"verify":      {},
 }
 
-// IsLongRunning reports whether tool activity is visible before its result.
-func IsLongRunning(name string) bool {
-	_, ok := longRunningSet[strings.ToLower(strings.TrimSpace(name))]
-	return ok
-}
-
 var activityRoles = map[string]string{
 	"answer_decision":                "coordination",
 	"ask_user":                       "coordination",

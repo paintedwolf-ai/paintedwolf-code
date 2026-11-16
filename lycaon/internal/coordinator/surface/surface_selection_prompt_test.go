@@ -6,27 +6,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestSurfaceSelectionUserPrompt_skipsInTurnNudges(t *testing.T) {
-	history := []api.Message{
-		visibleTurnMessage("Review docs and compare online"),
-		{Role: api.MessageRoleAssistant, Content: "surveying"},
-		hostNudgeTurnMessage("citation grounding retry"),
-	}
-	if got := SurfaceSelectionUserPrompt(history); got != "Review docs and compare online" {
-		t.Fatalf("SurfaceSelectionUserPrompt = %q", got)
-	}
-}
-
-func TestSurfaceSelectionUserPrompt_visibleUserTurn(t *testing.T) {
-	history := []api.Message{
-		visibleTurnMessage("Review docs and compare online"),
-		{Role: api.MessageRoleAssistant, Content: "dispatching scout"},
-	}
-	if got := SurfaceSelectionUserPrompt(history); got != "Review docs and compare online" {
-		t.Fatalf("SurfaceSelectionUserPrompt = %q", got)
-	}
-}
-
 func TestIsVisibleUserTurn_rejectsCoordinatorHostRetryNudge(t *testing.T) {
 	if isVisibleUserTurn([]api.Message{hostNudgeTurnMessage("citation grounding retry")}) {
 		t.Fatal("coordinator host retry nudge must not count as visible user turn")

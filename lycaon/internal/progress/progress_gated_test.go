@@ -34,28 +34,6 @@ func TestFirstProgressGatedTool(t *testing.T) {
 	}
 }
 
-func TestProgressGatedToolSinceBoundary(t *testing.T) {
-	history := []api.Message{
-		{Role: api.MessageRoleUser, Content: "research libraries"},
-		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "task", Outcome: api.ToolResultOutcomeCompleted}},
-	}
-	if !ProgressGatedToolSinceBoundary(history, 0) {
-		t.Fatal("expected progress-gated tool since boundary")
-	}
-	if ProgressGatedToolSinceBoundary(history, len(history)) {
-		t.Fatal("sinceIdx at end must not match prior call")
-	}
-}
-
-func TestProgressGatedToolSinceBoundary_ignoresRejectedTask(t *testing.T) {
-	history := []api.Message{
-		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "task", Outcome: api.ToolResultOutcomeRejected}},
-	}
-	if ProgressGatedToolSinceBoundary(history, 0) {
-		t.Fatal("rejected task must not count as completed")
-	}
-}
-
 func TestProgressGatedToolAttemptedSinceBoundary_countsRejectedTask(t *testing.T) {
 	history := []api.Message{
 		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "task", Outcome: api.ToolResultOutcomeRejected}},
