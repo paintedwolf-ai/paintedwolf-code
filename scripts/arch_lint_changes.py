@@ -19,6 +19,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 
 from artifact_paths import artifact_root, bin_dir
 import change_report
@@ -56,7 +57,13 @@ def knip(tree, policy):
         config = ROOT / den["dir"] / "knip.json"
         if config.exists():
             shutil.copyfile(config, den_dir / "knip.json")
-    report = json.loads(run(den["command"], cwd=den_dir) or "{}")
+    # Node can cut piped output short when it exits; a file receives all of it.
+    with tempfile.TemporaryFile(mode="w+") as out:
+        result = subprocess.run(den["command"], cwd=den_dir, stdout=out, stderr=subprocess.PIPE, text=True)
+        if result.returncode != 0:
+            raise RuntimeError(f"knip: {result.stderr.strip()}")
+        out.seek(0)
+        report = json.loads(out.read() or "{}")
     found = {}
     for path in report.get("files") or []:
         found[("unused-file", path)] = {"kind": "unused-file", "key": path, "pos": f"{den['dir']}/{path}",
