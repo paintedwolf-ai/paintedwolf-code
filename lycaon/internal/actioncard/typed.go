@@ -107,7 +107,7 @@ func changedFromPreviews(previews []api.FileEditPreview, omitted int) (api.Actio
 		added += preview.Added
 		removed += preview.Removed
 	}
-	return changedFact(files+omitted, added, removed, 0, created), true
+	return api.ActionFact{Kind: api.ActionFactChanged, Files: files + omitted, Added: added, Removed: removed, Created: created}, true
 }
 
 // fileOpener opens the one file a call changed.
