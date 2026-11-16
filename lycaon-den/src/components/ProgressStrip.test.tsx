@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
-import { render, screen } from "@solidjs/testing-library";
+import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { ProgressStrip } from "./ProgressStrip.tsx";
 import type { ProgressStep } from "../api/types.ts";
 
@@ -160,6 +160,29 @@ describe("ProgressStrip", () => {
     const opener = screen.getByTestId("worklog-open");
     expect(header?.firstElementChild).toBe(opener);
     expect(opener.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("opens the worklog from its opener", () => {
+    let opened = 0;
+    render(() => (
+      <ProgressStrip embedded onOpenWorklog={() => { opened += 1; }} steps={[{ state: "pending", label: "Plan" }]} />
+    ));
+    fireEvent.click(screen.getByTestId("worklog-open"));
+    expect(opened).toBe(1);
+  });
+
+  it("collapses to its header and expands again", () => {
+    render(() => <ProgressStrip steps={[{ state: "pending", label: "Plan" }]} />);
+    const toggle = screen.getByTestId("progress-strip-toggle");
+    expect(screen.getAllByTestId("progress-strip-item")).toHaveLength(1);
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryAllByTestId("progress-strip-item")).toHaveLength(0);
+
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getAllByTestId("progress-strip-item")).toHaveLength(1);
   });
 
   it("renders an n/a step muted and struck-through", () => {
