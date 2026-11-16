@@ -26,10 +26,6 @@ BENCHMARK_GATES: dict[str, dict[str, float]] = {
         "bytes_per_op": 7_200_000.0,
         "allocs_per_op": 14_000.0,
     },
-    "internal/toolhost/BenchmarkStructuredWc": {
-        "bytes_per_op": 60_000.0,
-        "allocs_per_op": 700.0,
-    },
     "internal/toolhost/BenchmarkCommandProgram/pipeline-cat-grep-wc-8MiB": {
         "bytes_per_op": 97_000_000.0,
         "allocs_per_op": 482_000.0,

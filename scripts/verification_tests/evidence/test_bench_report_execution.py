@@ -88,7 +88,7 @@ class BenchReportTests(unittest.TestCase):
         self.assertFalse(report["benchmarks"][target]["gate_passed"])
 
     def test_missing_gated_benchmark_fails_report(self):
-        missing = "internal/toolhost/BenchmarkStructuredWc"
+        missing = "internal/toolhost/BenchmarkCommandProgram/native-child-wc"
         result, _ = self.report(gated_bench_text(omit=(missing,)))
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(f"{missing}: missing gated benchmark", result.stderr)
