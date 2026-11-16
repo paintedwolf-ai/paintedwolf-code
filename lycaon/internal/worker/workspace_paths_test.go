@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -12,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -73,5 +75,56 @@ func TestEveryReaderReportsTheWorkspacePathsThatWereBound(t *testing.T) {
 		if task.WorkspaceBaselinePath != baseline {
 			t.Errorf("%s: baseline path = %q, want %q", name, task.WorkspaceBaselinePath, baseline)
 		}
+	}
+}
+
+func TestWorkspaceOutsideTheInstallationIsNotBound(t *testing.T) {
+	sqlDB := testdbfixture.Open(t, "store.db")
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
+	queue := NewSQLQueue(sqlDB, 1)
+	testutil.FailErr(t, "insert", queue.store.InsertTask(t.Context(), api.WorkerTask{
+		ID: "job-1", ProjectID: testdbseed.DefaultProjectID, AgentType: "implement",
+		Prompt: "fixture", Brief: "fixture", ExecutionTarget: api.ExecutionTargetLocal, Status: api.WorkerStatusPending,
+	}))
+	inside := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", "worker-branch")
+	baseline := testbaseline.Durable(t, sqlDB, "job-1", t.TempDir())
+	elsewhere := t.TempDir()
+	cases := map[string]struct {
+		store          *SQLStore
+		root, baseline string
+		want           error
+	}{
+		"branch elsewhere":   {store: queue.store, root: filepath.Join(elsewhere, "worker-branches", "worker-branch"), baseline: baseline},
+		"baseline elsewhere": {store: queue.store, root: inside, baseline: filepath.Join(elsewhere, "worker-baselines", filepath.Base(baseline))},
+		"no data directory":  {store: NewSQLStoreIn(sqlDB, ""), root: inside, baseline: baseline, want: jobstate.ErrNoDataDir},
+	}
+	for name, tc := range cases {
+		bound, err := tc.store.SetWorkerWorkspace(t.Context(), "job-1", tc.root, tc.baseline)
+		if err == nil || bound {
+			t.Errorf("%s: bound = %v, err = %v, want a refusal", name, bound, err)
+		}
+		if tc.want != nil && !errors.Is(err, tc.want) {
+			t.Errorf("%s: err = %v, want %v", name, err, tc.want)
+		}
+		task, ok := queue.Get("job-1")
+		if !ok || task.WorkspaceRoot != "" || task.WorkspaceBaselinePath != "" {
+			t.Errorf("%s: job holds workspace %q with baseline %q after a refusal", name, task.WorkspaceRoot, task.WorkspaceBaselinePath)
+		}
+	}
+}
+
+func TestBoundWorkspaceIsNotReadWithoutADataDirectory(t *testing.T) {
+	sqlDB := testdbfixture.Open(t, "store.db")
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
+	store := NewSQLStore(sqlDB)
+	testutil.FailErr(t, "insert", store.InsertTask(t.Context(), api.WorkerTask{
+		ID: "job-1", ProjectID: testdbseed.DefaultProjectID, AgentType: "implement",
+		Prompt: "fixture", Brief: "fixture", ExecutionTarget: api.ExecutionTargetLocal, Status: api.WorkerStatusPending,
+	}))
+	root := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches", "worker-branch")
+	_, err := store.SetWorkerWorkspace(t.Context(), "job-1", root, testbaseline.Durable(t, sqlDB, "job-1", t.TempDir()))
+	testutil.FailErr(t, "bind worker workspace", err)
+	if _, err := NewSQLStoreIn(sqlDB, "").List(t.Context(), testdbseed.DefaultProjectID); !errors.Is(err, jobstate.ErrNoDataDir) {
+		t.Fatalf("list without a data directory: err = %v, want %v", err, jobstate.ErrNoDataDir)
 	}
 }
