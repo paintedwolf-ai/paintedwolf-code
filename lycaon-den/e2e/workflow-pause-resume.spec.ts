@@ -59,7 +59,7 @@ webE2e("resume reconciles workers that finished while paused", async ({ page, re
       expect(pending.session_id).not.toBe(sessionId);
       expect(finished.has(pending.session_id)).toBe(false);
       const completing = read.has(pending.session_id);
-      const name = completing ? "complete_leg" : "read";
+      const name = completing ? "complete_leg" : "command";
       expect(pending.tools).toContain(name);
       await apiJson(request, "POST", "/harness/llm/respond", {
         id: pending.id, content: "", tool_calls: [{
@@ -67,7 +67,7 @@ webE2e("resume reconciles workers that finished while paused", async ({ page, re
           args: completing ? {
             leg_status: "complete", brief: "Inspected the README without changes.",
             verification: { method: "inspection", reason: "Read the fixture README." },
-          } : { path: "README.md" },
+          } : { command: "cat README.md" },
         }],
       });
       if (completing) finished.add(pending.session_id);
@@ -128,13 +128,13 @@ webE2e("Keep going preserves completed workflow reviewers through accepted verdi
       expect(child.parent_session_id).toBe(sessionId);
       expect(finished.has(pending.session_id)).toBe(false);
       const completing = read.has(pending.session_id);
-      const name = completing ? "complete_leg" : "read";
+      const name = completing ? "complete_leg" : "command";
       expect(pending.tools).toContain(name);
       await apiJson(request, "POST", "/harness/llm/respond", {
         id: pending.id, tool_calls: [{ id: crypto.randomUUID(), name, args: completing ? {
           leg_status: "complete", brief: "Inspected the README.",
           verification: { method: "inspection", reason: "Read the fixture README." },
-        } : { path: "README.md" } }],
+        } : { command: "cat README.md" } }],
       });
       if (completing) finished.add(pending.session_id);
       else read.add(pending.session_id);

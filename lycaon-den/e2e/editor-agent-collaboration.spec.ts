@@ -44,8 +44,10 @@ webE2e("agent reads unsaved text and edits its pinned snapshot while the person 
     await driver.completed(await driver.invoke("update_progress", {
       content: "## Progress\n- [ ] Update shared.txt while preserving the person's edits\n- [ ] Verify the shared document\n",
     }));
+    // A command reads the saved file; the person's unsaved text stays in their editor.
     const read = await driver.completed(await driver.invoke("command", { command: "cat shared.txt" }));
-    expect(read).toContain("Unsaved person 🐺");
+    expect(read).toContain("Agent target");
+    expect(read).not.toContain("Unsaved person");
     await editor.click();
     await page.keyboard.press("ControlOrMeta+End");
     await page.keyboard.insertText("Typed after agent read 世界\n");
