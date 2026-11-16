@@ -2,7 +2,6 @@ package contract
 
 import (
 	"context"
-	"encoding/json"
 	"sort"
 	"testing"
 
@@ -10,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
-	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -50,15 +48,6 @@ func TestAltitudeInvariantNoCommissionMatchedOnly(t *testing.T) {
 			t.Fatalf("curated selection must be matched verbatim: %#v", sel)
 		}
 	}
-}
-
-func canonicalSurveyJSON(t *testing.T, raw string) string {
-	t.Helper()
-	var v any
-	contractcheck.FailErr(t, "unmarshal tool out", json.Unmarshal([]byte(raw), &v))
-	out, err := surveyjson.Marshal(v)
-	contractcheck.FailErr(t, "marshal canonical", err)
-	return string(out)
 }
 
 func sortedSchemaPropertyKeys(schema map[string]any) []string {

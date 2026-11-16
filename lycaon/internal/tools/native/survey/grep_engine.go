@@ -4,7 +4,6 @@ import (
 	"context"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -16,10 +15,6 @@ import (
 
 // grepReadCap bounds concurrent file reads across every search in the process.
 const grepReadCap = 4
-
-// grepWorkerMax bounds one search's workers. Matching runs outside the read
-// cap, so workers beyond it keep matching while reads wait.
-const grepWorkerMax = 8
 
 // grepEngineStats counts engine decisions.
 type grepEngineStats struct {
@@ -77,27 +72,6 @@ func (t *GrepTool) grepSurveyOptions(
 		PruneNestedVCS: walkExtra.PruneNestedVCS, OnNestedRepoPruned: walkExtra.OnNestedRepoPruned,
 	}
 	return opts, nil
-}
-
-// grepStream searches files on a worker pool while the walk is still
-// producing them, and applies outcomes in walk order so results and match
-// caps stay deterministic. At most window files are in flight or awaiting
-// their turn, which bounds the memory held by finished outcomes.
-type grepStream struct {
-	search  *grepSearch
-	ctx     context.Context
-	cancel  context.CancelFunc
-	jobs    chan grepStreamJob
-	pending chan chan grepFileOutcome
-	workers sync.WaitGroup
-	applied chan struct{}
-	stopped atomic.Bool
-	err     error
-}
-
-type grepStreamJob struct {
-	job grepFileJob
-	out chan grepFileOutcome
 }
 
 func (t *GrepTool) forEachGrepCatalogJob(

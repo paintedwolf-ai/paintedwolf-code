@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -48,14 +47,6 @@ func presenceCtx(t *testing.T, files map[string]string) (tools.ToolContext, *pre
 	tctx.Effects.Presence = recorder
 	tctx.Effects.Out = &tools.ToolInvocationOut{}
 	return tctx, recorder
-}
-
-func numbered(n int) string {
-	var b strings.Builder
-	for i := 1; i <= n; i++ {
-		b.WriteString("line\n")
-	}
-	return b.String()
 }
 
 func TestTextIntentsNameTheLinesAWriteReplaces(t *testing.T) {

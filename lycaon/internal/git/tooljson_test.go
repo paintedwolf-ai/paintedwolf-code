@@ -71,8 +71,6 @@ func TestMarshalDiffToolResponseEmptyPageKeepsFilesList(t *testing.T) {
 	}
 }
 
-const twoFileDiff = "diff --git a/a.go b/a.go\nindex 1..2 100644\n--- a/a.go\n+++ b/a.go\n@@ -1 +1,2 @@\n line\n+added\ndiff --git a/b.go b/b.go\n--- a/b.go\n+++ b/b.go\n@@ -1,2 +1 @@\n-gone\n line\n"
-
 func diffEntries(sizes ...int) []git.DiffToolEntry {
 	out := make([]git.DiffToolEntry, 0, len(sizes))
 	for i, n := range sizes {

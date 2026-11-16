@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -75,10 +74,6 @@ type grepResponse struct {
 	ParseFailuresTruncated bool                  `json:"parse_failures_truncated,omitempty"`
 	FilesUnreadable        int                   `json:"files_unreadable,omitempty"`
 	FilesSearched          int                   `json:"files_searched"`
-	// FilesFromEditor counts searches of unsaved editor text.
-	FilesFromEditor int `json:"files_from_editor,omitempty"`
-	// Inventory is set when the file list came from a generation that predates
-	// the latest repository changes.
 }
 
 type grepDirCount struct {
@@ -117,9 +112,8 @@ type grepSearch struct {
 	unreadable       int
 	// subtreeFiles counts searched files per top-level directory.
 	subtreeFiles map[string]int
-	// Drafts overlay disk content; fromEditor counts affected files.
-	drafts     sourceview.DraftOverlay
-	fromEditor atomic.Int64
+	// drafts overlays unsaved editor text on disk content.
+	drafts sourceview.DraftOverlay
 }
 
 type grepTarget struct {

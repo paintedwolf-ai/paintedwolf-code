@@ -2,7 +2,6 @@ package native
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -191,13 +190,6 @@ func editorCtx(dir string, documents tools.EditorDocuments) tools.ToolContext {
 
 func openDoc(id, text string, dirty bool) *tools.EditorDocumentText {
 	return &tools.EditorDocumentText{ID: id, Revision: 4, Text: text, SHA256: strings.Repeat("d", 64), Dirty: dirty}
-}
-
-func readContent(t *testing.T, out string) surveytools.ReadResponse {
-	t.Helper()
-	var resp surveytools.ReadResponse
-	testutil.FailErr(t, "decode read", json.Unmarshal([]byte(out), &resp))
-	return resp
 }
 
 // An edit to an open file lands in the document, not on disk, and the

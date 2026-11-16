@@ -3,7 +3,6 @@ package native
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -155,17 +154,6 @@ func provenanceCtx(dir string, ledger *fakeSourceLedger) tools.ToolContext {
 	tctx.Source.SourceLedger = ledger
 	tctx.Source.History = tools.SourceHistory{Files: ledger, Comparison: ledger, Git: ledger, Authorship: ledger}
 	return tctx
-}
-
-func receiptSource(t *testing.T, out string) map[string]any {
-	t.Helper()
-	var payload struct {
-		Receipt struct {
-			Source map[string]any `json:"source"`
-		} `json:"receipt"`
-	}
-	testutil.FailErr(t, "decode receipt", json.Unmarshal([]byte(out), &payload))
-	return payload.Receipt.Source
 }
 
 type preparedCapture func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error)

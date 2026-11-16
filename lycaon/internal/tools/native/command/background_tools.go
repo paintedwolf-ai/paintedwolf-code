@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/toolrejection"
 
@@ -160,9 +159,6 @@ func missingCommandHandleReject(reg *bgprocess.Registry, sessionID, handle strin
 	}
 	return &toolrejection.ToolReject{Code: "BACKGROUND_HANDLE_NOT_FOUND", Data: data}
 }
-
-// backgroundLaunchGrace bounds inline exit detection.
-const backgroundLaunchGrace = 400 * time.Millisecond
 
 func commandStartError(err error) error {
 	if err == nil {
