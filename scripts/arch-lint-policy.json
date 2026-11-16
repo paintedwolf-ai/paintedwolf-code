@@ -57,6 +57,9 @@
       "internal/oar/context_facts.go",
       "internal/oar/context.go",
       "internal/oar/env.go"
+    ],
+    "derived": [
+      "paintedwolf.can_"
     ]
   }
 }

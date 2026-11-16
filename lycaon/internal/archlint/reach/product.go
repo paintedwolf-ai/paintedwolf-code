@@ -56,6 +56,7 @@ func scanProduct(prog *ssa.Program, res *rta.Result, cfg Config) productFlow {
 		plumbing[filepath.Join(cfg.Dir, filepath.FromSlash(rel))] = true
 	}
 	for fn := range res.Reachable {
+		providers := map[ssa.Value]*providedEntry{}
 		for _, b := range fn.Blocks {
 			for _, instr := range b.Instrs {
 				// Package initializers gather every file's variables, so the
@@ -64,11 +65,55 @@ func scanProduct(prog *ssa.Program, res *rta.Result, cfg Config) productFlow {
 				if !pos.IsValid() {
 					pos = fn.Pos()
 				}
-				flow.scan(instr, pos.IsValid() && plumbing[prog.Fset.Position(pos).Filename])
+				declaring := pos.IsValid() && plumbing[prog.Fset.Position(pos).Filename]
+				if declaring {
+					recordProvider(providers, instr)
+				}
+				flow.scan(instr, declaring)
+			}
+		}
+		for _, entry := range providers {
+			if entry.provider {
+				for _, name := range entry.names {
+					flow.flows[name] = true
+				}
 			}
 		}
 	}
 	return flow
+}
+
+// providedEntry is one declaration literal: the names it holds and whether it
+// carries a function that produces their value.
+type providedEntry struct {
+	names    []string
+	provider bool
+}
+
+// recordProvider groups the stores into one declaration literal, so a name
+// declared together with its provider function counts as produced.
+func recordProvider(entries map[ssa.Value]*providedEntry, instr ssa.Instruction) {
+	store, ok := instr.(*ssa.Store)
+	if !ok {
+		return
+	}
+	fa, ok := store.Addr.(*ssa.FieldAddr)
+	if !ok {
+		return
+	}
+	entry := entries[fa.X]
+	if entry == nil {
+		entry = &providedEntry{}
+		entries[fa.X] = entry
+	}
+	if name, ok := stringConst(store.Val); ok {
+		entry.names = append(entry.names, name)
+	}
+	if _, isFunc := store.Val.Type().Underlying().(*types.Signature); isFunc {
+		if c, isConst := store.Val.(*ssa.Const); !isConst || !c.IsNil() {
+			entry.provider = true
+		}
+	}
 }
 
 func (f productFlow) scan(instr ssa.Instruction, declaring bool) {
