@@ -1,9 +1,9 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/board"
@@ -116,7 +116,8 @@ func TestWorkersBoardAndCancelHandlers(t *testing.T) {
 		t.Fatalf("status board code = %d body = %s", rec.Code, rec.Body.String())
 	}
 	okBoard := serve(http.MethodGet, "/v1/projects/"+proj.ID+"/board?session_id="+coord.ID+"&detail_level=compact")
-	if okBoard.Code != http.StatusOK || !strings.Contains(okBoard.Body.String(), `"roster":[{`) {
+	var view wire.BoardView
+	if okBoard.Code != http.StatusOK || json.Unmarshal(okBoard.Body.Bytes(), &view) != nil || view.SessionID != coord.ID {
 		t.Fatalf("board status = %d body = %s", okBoard.Code, okBoard.Body.String())
 	}
 

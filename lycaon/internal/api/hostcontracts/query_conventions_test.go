@@ -1,9 +1,9 @@
 package hostcontracts
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
@@ -57,8 +57,10 @@ func TestBoardRequiresProjectID(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), `"roster":[{`) {
-		t.Fatalf("expected non-empty workers roster, body = %s", w.Body.String())
+	var view wire.BoardView
+	testutil.FailErr(t, "decode board", json.Unmarshal(w.Body.Bytes(), &view))
+	if view.SessionID != coord.ID {
+		t.Fatalf("board is for session %q, want %q", view.SessionID, coord.ID)
 	}
 }
 
