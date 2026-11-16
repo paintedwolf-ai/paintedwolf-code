@@ -114,6 +114,17 @@ func AllWorkerSummaryStatuses() []WorkerSummaryStatus {
 	}
 }
 
+// AllCheckpointStatuses returns every declared CheckpointStatus.
+func AllCheckpointStatuses() []CheckpointStatus {
+	return []CheckpointStatus{
+		CheckpointStatusPending,
+		CheckpointStatusApproved,
+		CheckpointStatusRejected,
+		CheckpointStatusExpired,
+		CheckpointStatusCanceled,
+	}
+}
+
 // AllWorkflowRunStatuses returns every declared WorkflowRunStatus.
 func AllWorkflowRunStatuses() []WorkflowRunStatus {
 	return []WorkflowRunStatus{
