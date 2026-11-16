@@ -1,3 +1,4 @@
+import { FilesLocationPreview } from "../../platform/harness/FilesLocationPreview.tsx";
 import {
   For,
   Show,
@@ -96,6 +97,7 @@ export function FilesPathCrumbs(props: Props) {
           </>
         )}
       </For>
+      <FilesLocationPreview rootLabel={props.rootLabel} />
       {props.children}
       <span
         ref={(el) => {

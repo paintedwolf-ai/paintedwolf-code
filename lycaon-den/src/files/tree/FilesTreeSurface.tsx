@@ -1,3 +1,4 @@
+import { FilesLocationPreview } from "../../platform/harness/FilesLocationPreview.tsx";
 import { For, Show } from "solid-js";
 import { ShowLatest } from "../../components/primitives/ShowLatest.tsx";
 import { editorTreeVisibleLevelsPref } from "../../settings/editor/editor-prefs.ts";
@@ -99,6 +100,9 @@ export function FilesTreeSurface(props: FilesTreeSurfaceProps) {
                         }}
                       >
                         <SwitchDisplayRow row={item().row} />
+                        <Show when={item().row.kind === "entry" && (item().row as Extract<DisplayRow, { kind: "entry" }>).entry.isRoot}>
+                          <FilesLocationPreview tree rootLabel={(item().row as Extract<DisplayRow, { kind: "entry" }>).entry.rootLabel} />
+                        </Show>
                       </div>
                     )}
                   </ShowLatest>

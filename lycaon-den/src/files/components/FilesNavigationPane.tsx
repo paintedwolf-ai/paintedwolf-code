@@ -1,3 +1,4 @@
+import { openFilesCapturedPreview } from "../../platform/harness/files-captured-preview.ts";
 import { Show, type ComponentProps } from "solid-js";
 import { editorRevealInTreePref } from "../../settings/editor/editor-prefs.ts";
 import { openFilesBuffer } from "../documents/project-files-buffers.ts";
@@ -104,7 +105,10 @@ export function FilesNavigationPane(props: Props) {
             agentPresenceForPath={props.agentPresenceForPath}
             inScope={(rootId, path) => { void props.scopeMarksVersion; return isInScope(props.projectId, rootId, path); }}
             addedInScope={(rootId, path) => { void props.scopeMarksVersion; return isAddedInScope(props.projectId, rootId, path); }}
-            onOpenFile={props.onOpenFile}
+            onOpenFile={(selection, intent) => {
+              if (!openFilesCapturedPreview(props.projectId, selection)) props.onOpenFile(selection, intent);
+              else props.onSelectEntry({ ...selection, kind: "file" });
+            }}
             onRevertFile={props.onRevertFile}
             createEntry={props.createEntry}
             filterQuery={props.filterQuery}
