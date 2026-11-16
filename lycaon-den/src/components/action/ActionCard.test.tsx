@@ -84,6 +84,15 @@ describe("ActionCard", () => {
     expect(regions.indexOf("action-redaction")).toBe(regions.indexOf("action-links") - 1);
   });
 
+  it("draws every folded member's capture, in order", () => {
+    const capture = (id: string): ToolPartView => ({ ...part(), id, toolCallId: id, tool: "page_snapshot",
+      visual: { id, mime: "image/png", source: "capture", caption: `Capture ${id}`, bytes: "iVBORw0KGgo=" } });
+    const { container } = render(() => <ActionCard part={{ ...capture("one"), foldMembers: [part(), capture("two")] }} action={descriptor} layout="chat" sessionId="s" />);
+    open(container);
+    const shown = [...container.querySelectorAll('[data-testid="action-card-body"] [data-testid="transcript-visual-artifact"]')];
+    expect(shown.map((node) => node.getAttribute("data-artifact-id"))).toEqual(["one", "two"]);
+  });
+
   it("links a command's host decisions between its records and its evidence", () => {
     const decision = { kind: "turn_load", key: "tl", row: { load: { elapsed_ms: 12, tools: [{ tool: "fetch_url" }] } } } as never;
     const command: ToolPartView = { ...part(), tool: "command", commandActivity: {

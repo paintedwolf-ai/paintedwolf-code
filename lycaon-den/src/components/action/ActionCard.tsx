@@ -15,6 +15,9 @@ import type { ToolBriefingSlots } from "../tool/tool-briefing-slots.ts";
 import { ToolPartShell } from "../tool/ToolPartShell.tsx";
 import { ActionLinks } from "./ActionLinks.tsx";
 import { TurnLoadFootLine } from "../tool/TurnLoadFootLine.tsx";
+import { visualFromPart } from "../../chat/visual/visual-artifact-model.ts";
+import { visualProducerEntryKey } from "../../chat/visual/visual-artifact-canonical.ts";
+import { TranscriptVisualSlot } from "../transcript/TranscriptVisualSlot.tsx";
 import { ActionPreview } from "./ActionPreview.tsx";
 
 const RAN_FIELD = "ran.text";
@@ -36,6 +39,10 @@ export function ActionCard(props: Props) {
   const members = () => [props.part, ...(props.part.foldMembers ?? [])];
   const externalAccess = () => members().find((member) => member.externalAccess)?.externalAccess ?? undefined;
   const redaction = () => members().find((member) => member.redaction?.spans?.length)?.redaction ?? undefined;
+  const captures = () => members().flatMap((member) => {
+    const artifact = visualFromPart(member);
+    return artifact ? [{ artifact, output: member.output }] : [];
+  });
   return (
     <ToolPartShell
       part={{ ...props.part, title: props.action.ran.text }}
@@ -58,6 +65,12 @@ export function ActionCard(props: Props) {
         <Show when={props.action.preview} keyed>
           {(preview) => <ActionPreview preview={preview} action={props.action} part={props.part} sessionId={props.sessionId} client={props.client} />}
         </Show>
+        <For each={captures()}>
+          {(capture) => (
+            <TranscriptVisualSlot artifact={capture.artifact} sessionId={props.sessionId} projectId={props.projectId} client={props.client}
+              entryKey={visualProducerEntryKey(capture.artifact.id)} toolOutput={capture.output} />
+          )}
+        </For>
         <Show when={redaction()} keyed>
           {(meta) => <p class="den-action-card__notice" data-testid="action-redaction"><RedactionChicklet message={{ host_secret_redaction: meta }} /></p>}
         </Show>
