@@ -93,3 +93,13 @@ func total(m map[string]int64) int64 {
 	}
 	return n
 }
+
+func TestNewPromoterRefusesAPrimaryRootItDoesNotTarget(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	testutil.FailErr(t, "NewStore", err)
+	for _, primary := range []string{"", "primary", "elsewhere"} {
+		if _, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"root-a": t.TempDir()}, PrimaryRoot: primary}); err == nil {
+			t.Errorf("accepted primary root %q", primary)
+		}
+	}
+}
