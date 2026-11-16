@@ -53,9 +53,9 @@ func Durable(t testing.TB, database db.Handle, jobID, dir string) string {
 }
 
 // DataDir resolves a fixture's installation root from its active database.
-func DataDir(t testing.TB, database db.Handle) string {
+func DataDir(t testing.TB, database db.DBTX) string {
 	t.Helper()
-	root := database.DataDir()
+	root := db.DataDir(database)
 	if root == "" {
 		t.Fatal("fixture store has no data directory")
 	}
