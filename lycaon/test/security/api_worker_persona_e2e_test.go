@@ -38,10 +38,9 @@ func TestDelegateImplementerPromptContainsPersona(t *testing.T) {
 	}
 
 	testutil.WaitFor(t, "the delegation is done", func() bool {
+		wiring.FailOnEndedWorker(t, h, ctx, testdbseed.DefaultProjectID)
 		st, err := delMgr.GetStatus(ctx, r.ID)
-		if err != nil {
-			return false
-		}
+		testutil.FailErr(t, "read delegation status", err)
 		return st.Phase == api.DelegationPhaseDone
 	})
 

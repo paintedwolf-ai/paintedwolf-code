@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -228,4 +229,15 @@ func workerCycleQuiescent(
 		ctx, h.Delegations.Queue, projectID, parentSessionID, "",
 	)
 	return err == nil && idle
+}
+
+// FailOnEndedWorker fails t when a worker job in the project ended without completing, so a
+// wait for an outcome that needs the job stops on the job's own failure.
+func FailOnEndedWorker(t testing.TB, h *Harness, ctx context.Context, projectID string) {
+	t.Helper()
+	ended, err := h.Delegations.Queue.List(ctx, projectID, api.WorkerStatusFailed, api.WorkerStatusCanceled)
+	testutil.FailErr(t, "list ended worker jobs", err)
+	for _, task := range ended {
+		t.Fatalf("worker job %s (%s) ended %s: %s", task.ID, task.AgentType, task.Status, task.Error)
+	}
 }

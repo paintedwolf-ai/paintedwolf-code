@@ -72,12 +72,7 @@ func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
 	testutil.FailErr(t, "move branch", os.WriteFile(filepath.Join(gitDir, "refs", "heads", "main"),
 		[]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"), 0o644))
 
-	for t.Context().Err() == nil && headMoved.Load() == 0 {
-		time.Sleep(20 * time.Millisecond)
-	}
-	if headMoved.Load() == 0 {
-		t.Fatal("expected HeadMoved for a ref-surface write")
-	}
+	testutil.WaitFor(t, "the outside commit is reported as HeadMoved", func() bool { return headMoved.Load() > 0 })
 	repochange.ResetDebouncerForTest(t.Context())
 	mu.Lock()
 	defer mu.Unlock()

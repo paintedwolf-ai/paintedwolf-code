@@ -155,24 +155,81 @@ func (w *refObserver) observe(ctx context.Context, ev fsnotify.Event, register f
 }
 
 func (w *refObserver) seedRefState(repo gitrepo.Repo) {
-	for _, file := range []string{
+	for _, path := range refStateFiles(repo, nil) {
+		w.rememberRefState(path)
+	}
+}
+
+// reconcile compares every ref surface with its last known state. A resync, an
+// overflow or a stream error can drop the events of a head move, so the loop
+// calls this after each and a move made in that gap is still reported.
+func (w *refObserver) reconcile(ctx context.Context, register func(string) addOutcome) {
+	w.mu.Lock()
+	armed := w.states != nil
+	w.mu.Unlock()
+	if !armed {
+		w.arm(register)
+		return
+	}
+	repo, ok := w.discover()
+	if !ok || repo.GitDir == "" || repo.CommonDir == "" {
+		return
+	}
+	index := filepath.Join(repo.GitDir, "index")
+	if w.refChanged(index) {
+		Notify(ctx, Event{ProjectDir: w.root, Kind: IndexChanged, Source: SourceWatcher})
+	}
+	// Branch directories created in the gap are registered as observe would have.
+	newDir := func(dir string) {
+		if register(dir) == addRegistered {
+			w.mu.Lock()
+			w.dirs[dir] = struct{}{}
+			w.mu.Unlock()
+		}
+	}
+	w.mu.Lock()
+	paths := make(map[string]struct{}, len(w.states))
+	for path := range w.states {
+		paths[path] = struct{}{}
+	}
+	w.mu.Unlock()
+	// Known paths are compared too, so a ref deleted in the gap counts as a move.
+	for _, path := range refStateFiles(repo, newDir) {
+		paths[path] = struct{}{}
+	}
+	moved := false
+	for path := range paths {
+		if path != index && w.refChanged(path) {
+			moved = true
+		}
+	}
+	if moved {
+		w.schedule(ctx)
+	}
+}
+
+// refStateFiles lists the files whose content decides HeadMoved and IndexChanged.
+// branchDir, when set, receives each directory below refs/heads.
+func refStateFiles(repo gitrepo.Repo, branchDir func(string)) []string {
+	files := []string{
 		filepath.Join(repo.GitDir, "index"),
 		filepath.Join(repo.GitDir, "HEAD"),
 		filepath.Join(repo.GitDir, "packed-refs"),
-	} {
-		w.rememberRefState(file)
 	}
-	for _, root := range []string{
-		filepath.Join(repo.GitDir, "logs"),
-		filepath.Join(repo.CommonDir, "refs", "heads"),
-	} {
+	heads := filepath.Join(repo.CommonDir, "refs", "heads")
+	for _, root := range []string{filepath.Join(repo.GitDir, "logs"), heads} {
 		_ = filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
-			if err == nil && !entry.IsDir() {
-				w.rememberRefState(path)
+			switch {
+			case err != nil:
+			case !entry.IsDir():
+				files = append(files, path)
+			case branchDir != nil && root == heads && path != heads:
+				branchDir(path)
 			}
 			return nil
 		})
 	}
+	return files
 }
 
 func (w *refObserver) rememberRefState(path string) {
