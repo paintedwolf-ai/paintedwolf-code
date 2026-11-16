@@ -208,20 +208,21 @@ func mustWriteFile(t *testing.T, path string, content []byte) {
 
 func runVerify(t *testing.T, app string, requireSigned bool, runner Runner) Report {
 	t.Helper()
-	if fake, ok := runner.(*fakeRunner); ok {
-		key := filepath.Join(app, sidecarRelPath)
+	return runVerifyOptions(t, Options{AppPath: app, RequireSigned: requireSigned, Runner: runner})
+}
+
+// runVerifyOptions verifies a fixture bundle, answering the scanner probe for
+// a fake runner that has no answer of its own.
+func runVerifyOptions(t *testing.T, options Options) Report {
+	t.Helper()
+	if fake, ok := options.Runner.(*fakeRunner); ok {
+		key := filepath.Join(options.AppPath, sidecarRelPath)
 		if _, exists := fake.stdout[key]; !exists {
-			fake.stdout[key] = []byte(filepath.Join(app, fakeOpenGrepRelPath) + "\n")
+			fake.stdout[key] = []byte(filepath.Join(options.AppPath, fakeOpenGrepRelPath) + "\n")
 		}
 	}
-	report, err := Verify(context.Background(), Options{
-		AppPath:       app,
-		RequireSigned: requireSigned,
-		Runner:        runner,
-	})
-	if err != nil {
-		testutil.FailErr(t, "verify bundle", err)
-	}
+	report, err := Verify(context.Background(), options)
+	testutil.FailErr(t, "verify bundle", err)
 	return report
 }
 
@@ -251,556 +252,498 @@ func requireCodeCount(t *testing.T, r Report, code string, want int) []Finding {
 	return got
 }
 
-func TestVerifyCleanBundle(t *testing.T) {
-	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, signedOK())
+// verifyRun is one Verify call over a fixture bundle.
+type verifyRun struct {
+	app, dmg string
+	runner   *fakeRunner
+	report   Report
+}
 
-	if report.Failed() {
-		t.Fatalf("clean bundle reported failure: %+v", report.Findings)
-	}
-	errs, _ := report.Counts()
-	if errs != 0 {
-		t.Fatalf("clean bundle has %d error findings: %+v", errs, report.Findings)
-	}
-	if report.MachOCount != 7 {
-		t.Fatalf("MachOCount = %d, want 7 (sidecar, logs CLI, document core, decision engine, app binary, browser, scanner)", report.MachOCount)
+// wantCode is the exact number of findings with a code and, when set, the
+// severity each of them has.
+type wantCode struct {
+	code     string
+	count    int
+	severity Severity
+}
+
+type verdict int
+
+const (
+	anyVerdict verdict = iota
+	reportPasses
+	reportFails
+)
+
+type verifyCase struct {
+	name string
+	// bundle varies the fixture bundle before it is built.
+	bundle func(*appOptions)
+	// runner replaces the fully signed tool answers.
+	runner func() *fakeRunner
+	// arrange varies the built bundle and the tool answers.
+	arrange       func(t *testing.T, app string, runner *fakeRunner)
+	requireSigned bool
+	withDMG       bool
+	want          []wantCode
+	verdict       verdict
+	inspect       func(t *testing.T, run verifyRun)
+}
+
+func codesignReporting(description string) func() *fakeRunner {
+	return func() *fakeRunner {
+		runner := newFakeRunner()
+		runner.stderr["codesign"] = []byte(description)
+		return runner
 	}
 }
 
-func TestVerifyMinOSAboveFloor(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.sidecarMinOS = "15.0"
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	got := requireCodeCount(t, report, CodeMinOSAboveFloor, 1)
-	if got[0].Detail["want"] != platformfloor.MacOSMin() || got[0].Detail["got"] != "15.0" {
-		t.Fatalf("detail = %v, want {want:%s got:15.0}", got[0].Detail, platformfloor.MacOSMin())
-	}
-	if !report.Failed() {
-		t.Fatal("MINOS_ABOVE_FLOOR must fail the report")
+// entitlementsOf answers the entitlement query for one binary.
+func entitlementsOf(relPath, plist string) func(*testing.T, string, *fakeRunner) {
+	return func(_ *testing.T, _ string, runner *fakeRunner) {
+		runner.stdout["codesign -d @"+filepath.Base(relPath)] = []byte(plist)
 	}
 }
 
-func TestVerifyMinOSBelowFloorIsNumericCompare(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.sidecarMinOS = "9.0"
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	requireNoCode(t, report, CodeMinOSAboveFloor)
-}
-
-func TestVerifyBrowserWrongArch(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.browserArch = macho.CpuAmd64
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	got := requireCodeCount(t, report, CodeArchUnexpected, 2) // wrong slice + no shipped slice
-	for _, f := range got {
-		if filepath.Base(f.Path) != "chrome-headless-shell" {
-			t.Fatalf("ARCH_UNEXPECTED on %q, want it scoped to the browser binary", f.Path)
-		}
-	}
-}
-
-func TestVerifyNonSystemDylib(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.sidecarDylibs = []string{"/usr/lib/libSystem.B.dylib", "/opt/homebrew/lib/libfoo.dylib"}
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	got := requireCodeCount(t, report, CodeNonSystemDylib, 1)
-	if got[0].Detail["dylib"] != "/opt/homebrew/lib/libfoo.dylib" {
-		t.Fatalf("detail dylib = %q", got[0].Detail["dylib"])
-	}
-}
-
-func TestVerifyRpathDylibIsFine(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.sidecarDylibs = []string{"@rpath/libbar.dylib", "@executable_path/../Frameworks/libbaz.dylib"}
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	requireNoCode(t, report, CodeNonSystemDylib)
-}
-
-func TestVerifyBuildPathLeak(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.sidecarExtra = []byte("\x00/Users/someone/git/lycaon/lycaon/internal/session/manager.go\x00")
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	got := requireCodeCount(t, report, CodeBuildPathLeak, 1)
-	if got[0].Detail["path"] != "/Users/someone/git/lycaon/lycaon/internal/session/manager.go" {
-		t.Fatalf("detail path = %q", got[0].Detail["path"])
-	}
-}
-
-func TestVerifyEmbeddedUsersStringIsNotALeak(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.sidecarExtra = []byte("\x00'''^/Users/(?i)[a-z0-9]+/[\\w .-/]+$'''\x00/Users/me/.config/paintedwolf/sandboxes/deadbeef/job-a\x00")
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	requireNoCode(t, report, CodeBuildPathLeak)
-}
-
-func TestVerifySidecarMissing(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.omitSidecar = true
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	requireCodeCount(t, report, CodeSidecarMissing, 1)
-	if !report.Failed() {
-		t.Fatal("SIDECAR_MISSING must fail the report")
-	}
-}
-
-func TestVerifyDecideEngineMissing(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.omitDecide = true
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	// The binary and its Metal library are each reported.
-	requireCodeCount(t, report, CodeDecideEngineMissing, 2)
-	if !report.Failed() {
-		t.Fatal("DECIDE_ENGINE_MISSING must fail the report")
-	}
-}
-
-func TestVerifyDecideModelMissing(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.omitModel = true
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	// Every pinned file and the completion marker are reported.
-	requireCodeCount(t, report, CodeDecideModelMissing, len(bialy.ShippedModel.Files)+1)
-	if !report.Failed() {
-		t.Fatal("a missing checkpoint must fail the report")
-	}
-}
-
-func TestVerifyDecideModelSizeDiffers(t *testing.T) {
-	app := buildFakeApp(t, defaultAppOptions())
-	pinned := bialy.ShippedModel.Files[0]
-	rel := engineRootRelPath + "/" + bialy.ShippedModel.BundledRel() + "/" + pinned.Path
-	if err := os.Truncate(filepath.Join(app, filepath.FromSlash(rel)), pinned.Size+1); err != nil {
-		testutil.FailErr(t, "resize checkpoint file", err)
-	}
-
-	report := runVerify(t, app, false, signedOK())
-
-	got := requireCodeCount(t, report, CodeDecideModelMissing, 1)
-	if got[0].Path != rel {
-		t.Fatalf("finding names %s, want %s", got[0].Path, rel)
-	}
-}
-
-func TestVerifyDecideMetallibMissing(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.omitMetallib = true
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	requireCodeCount(t, report, CodeDecideEngineMissing, 1)
-	for _, f := range report.Findings {
-		if f.Code == CodeDecideEngineMissing && f.Path != decideMetallibRelPath {
-			t.Fatalf("finding names %s, want the Metal library", f.Path)
-		}
-	}
-	if !report.Failed() {
-		t.Fatal("a missing Metal library must fail the report")
-	}
-}
-
-func TestVerifyLogsCLIMissing(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.omitLogsCLI = true
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	requireCodeCount(t, report, CodeLogsCLIMissing, 1)
-	if !report.Failed() {
-		t.Fatal("LOGS_CLI_MISSING must fail the report")
-	}
-}
-
-func TestVerifyEngineResourceMissing(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.omitBrowser = true
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	got := requireCodeCount(t, report, CodeEngineResourceMissing, 1)
-	if got[0].Path != engineBrowserRelPath {
-		t.Fatalf("path = %q, want %q", got[0].Path, engineBrowserRelPath)
-	}
-}
-
-func TestVerifyNoticesMissing(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.omitNotices = true
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	got := requireCodeCount(t, report, CodeNoticesMissing, 1)
-	if got[0].Path != noticesRelPath {
-		t.Fatalf("path = %q, want %q", got[0].Path, noticesRelPath)
-	}
-	if !report.Failed() {
-		t.Fatal("NOTICES_MISSING must fail the report")
-	}
-}
-
-func TestVerifyNoticesTooSmall(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.omitNotices = true
-	opts.extraFiles = map[string][]byte{
-		noticesRelPath: []byte("too small\n"),
-	}
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	got := requireCodeCount(t, report, CodeNoticesMissing, 1)
-	if got[0].Detail["reason"] != "too small" {
-		t.Fatalf("detail = %+v, want too small", got[0].Detail)
-	}
-}
-
-func TestVerifyAdhocSignatureWarnsWithoutRequireSigned(t *testing.T) {
-	runner := newFakeRunner()
-	runner.stderr["codesign"] = []byte(codesignAdhoc)
-
-	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), false, runner)
-
-	got := requireCodeCount(t, report, CodeSignatureAdhoc, 8) // .app + 7 Mach-Os
-	for _, f := range got {
-		if f.Severity != SeverityWarn {
-			t.Fatalf("SIGNATURE_ADHOC severity = %q, want warn without --require-signed", f.Severity)
-		}
-	}
-	if report.Failed() {
-		t.Fatalf("adhoc build must not fail without --require-signed: %+v", report.Findings)
-	}
-}
-
-func TestVerifyAdhocSignatureFailsWithRequireSigned(t *testing.T) {
-	runner := newFakeRunner()
-	runner.stderr["codesign"] = []byte(codesignAdhoc)
-
-	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, runner)
-
-	for _, f := range findingsWithCode(report, CodeSignatureAdhoc) {
-		if f.Severity != SeverityError {
-			t.Fatalf("SIGNATURE_ADHOC severity = %q, want error with --require-signed", f.Severity)
-		}
-	}
-	if !report.Failed() {
-		t.Fatal("adhoc signature must fail the report under --require-signed")
-	}
-}
-
-func TestVerifyNotStapled(t *testing.T) {
-	runner := signedOK()
-	runner.err["xcrun"] = errors.New("stapler: does not have a ticket")
-
-	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, runner)
-
-	got := requireCodeCount(t, report, CodeNotStapled, 1)
-	if got[0].Severity != SeverityError {
-		t.Fatalf("NOT_STAPLED severity = %q, want error under --require-signed", got[0].Severity)
-	}
-}
-
-func TestVerifyToolMissingWarnsWithoutRequireSigned(t *testing.T) {
-	runner := signedOK()
-	runner.missing["codesign"] = true
-
-	opts := defaultAppOptions()
-	opts.sidecarMinOS = "15.0"
-
-	report := runVerify(t, buildFakeApp(t, opts), false, runner)
-
-	requireCodeCount(t, report, CodeMinOSAboveFloor, 1)
-	requireNoCode(t, report, CodeSignatureAdhoc)
-
-	got := requireCodeCount(t, report, CodeToolUnavailable, 1)
-	if got[0].Severity != SeverityWarn {
-		t.Fatalf("TOOL_UNAVAILABLE severity = %q, want warn without --require-signed", got[0].Severity)
-	}
-}
-
-func TestVerifyToolMissingFailsWithRequireSigned(t *testing.T) {
-	runner := signedOK()
-	runner.missing["codesign"] = true
-
-	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, runner)
-
-	got := requireCodeCount(t, report, CodeToolUnavailable, 1)
-	if got[0].Severity != SeverityError {
-		t.Fatalf("TOOL_UNAVAILABLE severity = %q, want error under --require-signed", got[0].Severity)
-	}
-	if !report.Failed() {
-		t.Fatal("a bundle the host cannot verify must fail under --require-signed")
-	}
-}
-
-func TestVerifySpctlRunsWithoutXcrun(t *testing.T) {
-	runner := signedOK()
-	runner.missing["xcrun"] = true
-	runner.err["spctl"] = errors.New("rejected")
-
-	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, runner)
-
-	requireCodeCount(t, report, CodeGatekeeperRejected, 1)
-	requireCodeCount(t, report, CodeToolUnavailable, 1)
-	if len(runner.callsFor("spctl")) == 0 {
-		t.Fatal("spctl was never invoked despite not depending on xcrun")
-	}
-}
-
-func TestVerifyDeepVerifyBrokenSeal(t *testing.T) {
-	runner := signedOK()
+func brokenSeal(_ *testing.T, _ string, runner *fakeRunner) {
 	runner.err["codesign --verify"] = errors.New("invalid signature")
+}
 
-	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, runner)
+func missingCodesign(_ *testing.T, _ string, runner *fakeRunner) {
+	runner.missing["codesign"] = true
+}
 
-	got := requireCodeCount(t, report, CodeSignatureBroken, 1)
-	if got[0].Severity != SeverityError {
-		t.Fatalf("SIGNATURE_BROKEN severity = %q, want error under --require-signed", got[0].Severity)
-	}
-	if !report.Failed() {
-		t.Fatal("a broken seal must fail the report under --require-signed")
+// firstFinding checks the first finding with code.
+func firstFinding(code string, check func(*testing.T, Finding)) func(*testing.T, verifyRun) {
+	return func(t *testing.T, run verifyRun) {
+		check(t, findingsWithCode(run.report, code)[0])
 	}
 }
 
-func TestVerifyDeepVerifyBrokenSealWarnsWithoutRequireSigned(t *testing.T) {
-	runner := signedOK()
-	runner.err["codesign --verify"] = errors.New("invalid signature")
-
-	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), false, runner)
-
-	got := requireCodeCount(t, report, CodeSignatureBroken, 1)
-	if got[0].Severity != SeverityWarn {
-		t.Fatalf("SIGNATURE_BROKEN severity = %q, want warn without --require-signed", got[0].Severity)
-	}
-}
-
-func TestVerifyDMGAssessesBothAppAndDMG(t *testing.T) {
-	runner := signedOK()
-	app := buildFakeApp(t, defaultAppOptions())
-	runner.stdout[filepath.Join(app, sidecarRelPath)] = []byte(filepath.Join(app, fakeOpenGrepRelPath) + "\n")
-	dmg := filepath.Join(filepath.Dir(app), "Painted Wolf Code.dmg")
-	mustWriteFile(t, dmg, []byte("dmg"))
-
-	report, err := Verify(context.Background(), Options{
-		AppPath:       app,
-		DMGPath:       dmg,
-		RequireSigned: true,
-		Runner:        runner,
+func findingAt(code, path string) func(*testing.T, verifyRun) {
+	return firstFinding(code, func(t *testing.T, f Finding) {
+		if f.Path != path {
+			t.Fatalf("%s names %q, want %q", code, f.Path, path)
+		}
 	})
-	if err != nil {
-		testutil.FailErr(t, "verify bundle with dmg", err)
-	}
-	if report.Failed() {
-		t.Fatalf("clean signed bundle with dmg failed: %+v", report.Findings)
-	}
+}
 
-	assessed := map[string]string{}
-	for _, call := range runner.callsFor("spctl") {
-		target := call[len(call)-1]
-		var assessType string
-		for i, arg := range call {
-			if arg == "--type" && i+1 < len(call) {
-				assessType = call[i+1]
+func findingDetail(code, key, want string) func(*testing.T, verifyRun) {
+	return firstFinding(code, func(t *testing.T, f Finding) {
+		if f.Detail[key] != want {
+			t.Fatalf("%s detail = %v, want %s=%q", code, f.Detail, key, want)
+		}
+	})
+}
+
+// everyFindingOn checks every finding with code names the binary called base.
+func everyFindingOn(code, base string) func(*testing.T, verifyRun) {
+	return func(t *testing.T, run verifyRun) {
+		for _, f := range findingsWithCode(run.report, code) {
+			if filepath.Base(f.Path) != base {
+				t.Fatalf("%s on %q, want it scoped to %s", code, f.Path, base)
 			}
 		}
-		assessed[target] = assessType
-	}
-	if assessed[app] != "exec" {
-		t.Fatalf("spctl did not assess the .app as exec: %v", assessed)
-	}
-	if assessed[dmg] != "open" {
-		t.Fatalf("spctl did not assess the dmg as open: %v", assessed)
-	}
-
-	staple := runner.callsFor("xcrun")
-	if len(staple) != 1 || staple[0][len(staple[0])-1] != dmg {
-		t.Fatalf("stapler must validate the dmg when one is provided: %v", staple)
 	}
 }
 
-func TestVerifyBrowserWithoutItsJITGrantsFails(t *testing.T) {
-	runner := signedOK()
-	runner.stdout["codesign -d @"+browserBinaryName] = []byte(entitlementsEmpty)
-
-	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, runner)
-
-	got := requireCodeCount(t, report, CodeEntitlementMissing, 2)
-	seen := map[string]bool{}
-	for _, f := range got {
-		if f.Severity != SeverityError {
-			t.Fatalf("ENTITLEMENT_MISSING severity = %q, want error under --require-signed", f.Severity)
-		}
-		if filepath.Base(f.Path) != browserBinaryName {
-			t.Fatalf("finding on %q, want it scoped to the browser binary", f.Path)
-		}
-		seen[f.Detail["entitlement"]] = true
-	}
-	if !seen["com.apple.security.cs.allow-jit"] || !seen["com.apple.security.cs.allow-unsigned-executable-memory"] {
-		t.Fatalf("findings do not name both required entitlements: %+v", got)
-	}
-}
-
-func TestVerifyEntitlementFindingsWarnWithoutRequireSigned(t *testing.T) {
-	runner := signedOK()
-	runner.stdout["codesign -d @"+browserBinaryName] = []byte(entitlementsEmpty)
-
-	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), false, runner)
-
-	for _, f := range requireCodeCount(t, report, CodeEntitlementMissing, 2) {
-		if f.Severity != SeverityWarn {
-			t.Fatalf("ENTITLEMENT_MISSING severity = %q, want warn without --require-signed", f.Severity)
+func machOCount(want int) func(*testing.T, verifyRun) {
+	return func(t *testing.T, run verifyRun) {
+		if run.report.MachOCount != want {
+			t.Fatalf("MachOCount = %d, want %d", run.report.MachOCount, want)
 		}
 	}
 }
 
-func TestVerifyRefusesRuntimeCodeGenerationOutsideTheBrowser(t *testing.T) {
-	for _, target := range []string{filepath.Base(sidecarRelPath), filepath.Base(documentCoreRelPath), filepath.Base(decideEngineRelPath)} {
-		t.Run(target, func(t *testing.T) {
-			runner := signedOK()
-			runner.stdout["codesign -d @"+target] = []byte(entitlementsBrowserOK)
+// refusesRuntimeCodeGeneration grants the browser's entitlements to another binary.
+func refusesRuntimeCodeGeneration(relPath string) verifyCase {
+	return verifyCase{
+		name:          "runtime code generation is refused on " + filepath.Base(relPath),
+		arrange:       entitlementsOf(relPath, entitlementsBrowserOK),
+		requireSigned: true,
+		want:          []wantCode{{CodeEntitlementUnexpected, 2, SeverityError}},
+		inspect:       everyFindingOn(CodeEntitlementUnexpected, filepath.Base(relPath)),
+	}
+}
 
-			report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, runner)
+func TestVerify(t *testing.T) {
+	modelFile := bialy.ShippedModel.Files[0]
+	modelFileRel := engineRootRelPath + "/" + bialy.ShippedModel.BundledRel() + "/" + modelFile.Path
+	const leakedSource = "/Users/someone/git/lycaon/lycaon/internal/session/manager.go"
 
-			got := requireCodeCount(t, report, CodeEntitlementUnexpected, 2)
-			for _, f := range got {
-				if filepath.Base(f.Path) != target || f.Severity != SeverityError {
-					t.Fatalf("unexpected-entitlement finding = %+v, want an error on %s", f, target)
+	cases := []verifyCase{
+		{
+			name:          "clean bundle",
+			requireSigned: true,
+			verdict:       reportPasses,
+			inspect: func(t *testing.T, run verifyRun) {
+				if errs, _ := run.report.Counts(); errs != 0 {
+					t.Fatalf("clean bundle has %d error findings: %+v", errs, run.report.Findings)
+				}
+				// Sidecar, logs CLI, document core, decision engine, app binary, browser, scanner.
+				machOCount(7)(t, run)
+			},
+		},
+		{
+			name:    "minimum OS above the floor",
+			bundle:  func(o *appOptions) { o.sidecarMinOS = "15.0" },
+			want:    []wantCode{{code: CodeMinOSAboveFloor, count: 1}},
+			verdict: reportFails,
+			inspect: firstFinding(CodeMinOSAboveFloor, func(t *testing.T, f Finding) {
+				if f.Detail["want"] != platformfloor.MacOSMin() || f.Detail["got"] != "15.0" {
+					t.Fatalf("detail = %v, want {want:%s got:15.0}", f.Detail, platformfloor.MacOSMin())
+				}
+			}),
+		},
+		{
+			name:   "minimum OS below the floor compares numerically",
+			bundle: func(o *appOptions) { o.sidecarMinOS = "9.0" },
+			want:   []wantCode{{code: CodeMinOSAboveFloor}},
+		},
+		{
+			name:   "browser built for the wrong architecture",
+			bundle: func(o *appOptions) { o.browserArch = macho.CpuAmd64 },
+			// The wrong slice and the absent shipped slice are each reported.
+			want:    []wantCode{{code: CodeArchUnexpected, count: 2}},
+			inspect: everyFindingOn(CodeArchUnexpected, browserBinaryName),
+		},
+		{
+			name: "non-system dylib",
+			bundle: func(o *appOptions) {
+				o.sidecarDylibs = []string{"/usr/lib/libSystem.B.dylib", "/opt/homebrew/lib/libfoo.dylib"}
+			},
+			want:    []wantCode{{code: CodeNonSystemDylib, count: 1}},
+			inspect: findingDetail(CodeNonSystemDylib, "dylib", "/opt/homebrew/lib/libfoo.dylib"),
+		},
+		{
+			name: "rpath dylib is accepted",
+			bundle: func(o *appOptions) {
+				o.sidecarDylibs = []string{"@rpath/libbar.dylib", "@executable_path/../Frameworks/libbaz.dylib"}
+			},
+			want: []wantCode{{code: CodeNonSystemDylib}},
+		},
+		{
+			name:    "build path leak",
+			bundle:  func(o *appOptions) { o.sidecarExtra = []byte("\x00" + leakedSource + "\x00") },
+			want:    []wantCode{{code: CodeBuildPathLeak, count: 1}},
+			inspect: findingDetail(CodeBuildPathLeak, "path", leakedSource),
+		},
+		{
+			name: "embedded user path that is not a source file is not a leak",
+			bundle: func(o *appOptions) {
+				o.sidecarExtra = []byte("\x00'''^/Users/(?i)[a-z0-9]+/[\\w .-/]+$'''\x00/Users/me/.config/paintedwolf/sandboxes/deadbeef/job-a\x00")
+			},
+			want: []wantCode{{code: CodeBuildPathLeak}},
+		},
+		{
+			name:    "sidecar missing",
+			bundle:  func(o *appOptions) { o.omitSidecar = true },
+			want:    []wantCode{{code: CodeSidecarMissing, count: 1}},
+			verdict: reportFails,
+		},
+		{
+			name:   "decision engine missing",
+			bundle: func(o *appOptions) { o.omitDecide = true },
+			// The binary and its Metal library are each reported.
+			want:    []wantCode{{code: CodeDecideEngineMissing, count: 2}},
+			verdict: reportFails,
+		},
+		{
+			name:   "decision model missing",
+			bundle: func(o *appOptions) { o.omitModel = true },
+			// Every pinned file and the completion marker are reported.
+			want:    []wantCode{{code: CodeDecideModelMissing, count: len(bialy.ShippedModel.Files) + 1}},
+			verdict: reportFails,
+		},
+		{
+			name: "decision model file size differs",
+			arrange: func(t *testing.T, app string, _ *fakeRunner) {
+				testutil.FailErr(t, "resize checkpoint file", os.Truncate(filepath.Join(app, filepath.FromSlash(modelFileRel)), modelFile.Size+1))
+			},
+			want:    []wantCode{{code: CodeDecideModelMissing, count: 1}},
+			inspect: findingAt(CodeDecideModelMissing, modelFileRel),
+		},
+		{
+			name:    "decision engine Metal library missing",
+			bundle:  func(o *appOptions) { o.omitMetallib = true },
+			want:    []wantCode{{code: CodeDecideEngineMissing, count: 1}},
+			verdict: reportFails,
+			inspect: findingAt(CodeDecideEngineMissing, decideMetallibRelPath),
+		},
+		{
+			name:    "logs CLI missing",
+			bundle:  func(o *appOptions) { o.omitLogsCLI = true },
+			want:    []wantCode{{code: CodeLogsCLIMissing, count: 1}},
+			verdict: reportFails,
+		},
+		{
+			name:    "engine browser missing",
+			bundle:  func(o *appOptions) { o.omitBrowser = true },
+			want:    []wantCode{{code: CodeEngineResourceMissing, count: 1}},
+			inspect: findingAt(CodeEngineResourceMissing, engineBrowserRelPath),
+		},
+		{
+			name:    "notices missing",
+			bundle:  func(o *appOptions) { o.omitNotices = true },
+			want:    []wantCode{{code: CodeNoticesMissing, count: 1}},
+			verdict: reportFails,
+			inspect: findingAt(CodeNoticesMissing, noticesRelPath),
+		},
+		{
+			name: "notices too small",
+			bundle: func(o *appOptions) {
+				o.omitNotices = true
+				o.extraFiles = map[string][]byte{noticesRelPath: []byte("too small\n")}
+			},
+			want:    []wantCode{{code: CodeNoticesMissing, count: 1}},
+			inspect: findingDetail(CodeNoticesMissing, "reason", "too small"),
+		},
+		{
+			name:   "ad hoc signature warns when signing is not required",
+			runner: codesignReporting(codesignAdhoc),
+			// The app and its seven Mach-O files.
+			want:    []wantCode{{CodeSignatureAdhoc, 8, SeverityWarn}},
+			verdict: reportPasses,
+		},
+		{
+			name:          "ad hoc signature fails when signing is required",
+			runner:        codesignReporting(codesignAdhoc),
+			requireSigned: true,
+			verdict:       reportFails,
+			inspect: func(t *testing.T, run verifyRun) {
+				for _, f := range findingsWithCode(run.report, CodeSignatureAdhoc) {
+					if f.Severity != SeverityError {
+						t.Fatalf("%s severity = %q, want error when signing is required", f.Code, f.Severity)
+					}
+				}
+			},
+		},
+		{
+			name: "not stapled",
+			arrange: func(_ *testing.T, _ string, runner *fakeRunner) {
+				runner.err["xcrun"] = errors.New("stapler: does not have a ticket")
+			},
+			requireSigned: true,
+			want:          []wantCode{{CodeNotStapled, 1, SeverityError}},
+		},
+		{
+			name:    "missing tool warns when signing is not required",
+			bundle:  func(o *appOptions) { o.sidecarMinOS = "15.0" },
+			arrange: missingCodesign,
+			want: []wantCode{
+				{code: CodeMinOSAboveFloor, count: 1},
+				{code: CodeSignatureAdhoc},
+				{CodeToolUnavailable, 1, SeverityWarn},
+			},
+		},
+		{
+			name:          "missing tool fails when signing is required",
+			arrange:       missingCodesign,
+			requireSigned: true,
+			want:          []wantCode{{CodeToolUnavailable, 1, SeverityError}},
+			verdict:       reportFails,
+		},
+		{
+			name: "Gatekeeper assessment runs without xcrun",
+			arrange: func(_ *testing.T, _ string, runner *fakeRunner) {
+				runner.missing["xcrun"] = true
+				runner.err["spctl"] = errors.New("rejected")
+			},
+			requireSigned: true,
+			want:          []wantCode{{code: CodeGatekeeperRejected, count: 1}, {code: CodeToolUnavailable, count: 1}},
+			inspect: func(t *testing.T, run verifyRun) {
+				if len(run.runner.callsFor("spctl")) == 0 {
+					t.Fatal("spctl was never invoked despite not depending on xcrun")
+				}
+			},
+		},
+		{
+			name:          "broken seal fails when signing is required",
+			arrange:       brokenSeal,
+			requireSigned: true,
+			want:          []wantCode{{CodeSignatureBroken, 1, SeverityError}},
+			verdict:       reportFails,
+		},
+		{
+			name:    "broken seal warns when signing is not required",
+			arrange: brokenSeal,
+			want:    []wantCode{{CodeSignatureBroken, 1, SeverityWarn}},
+		},
+		{
+			name:          "disk image and app are both assessed",
+			requireSigned: true,
+			withDMG:       true,
+			verdict:       reportPasses,
+			inspect: func(t *testing.T, run verifyRun) {
+				assessed := map[string]string{}
+				for _, call := range run.runner.callsFor("spctl") {
+					target := call[len(call)-1]
+					for i, arg := range call {
+						if arg == "--type" && i+1 < len(call) {
+							assessed[target] = call[i+1]
+						}
+					}
+				}
+				if assessed[run.app] != "exec" || assessed[run.dmg] != "open" {
+					t.Fatalf("spctl assessments = %v, want the app as exec and the disk image as open", assessed)
+				}
+				staple := run.runner.callsFor("xcrun")
+				if len(staple) != 1 || staple[0][len(staple[0])-1] != run.dmg {
+					t.Fatalf("stapler calls = %v, want one validating the disk image", staple)
+				}
+			},
+		},
+		{
+			name:          "browser without its JIT entitlements fails",
+			arrange:       entitlementsOf(browserBinaryName, entitlementsEmpty),
+			requireSigned: true,
+			want:          []wantCode{{CodeEntitlementMissing, 2, SeverityError}},
+			inspect: func(t *testing.T, run verifyRun) {
+				everyFindingOn(CodeEntitlementMissing, browserBinaryName)(t, run)
+				seen := map[string]bool{}
+				for _, f := range findingsWithCode(run.report, CodeEntitlementMissing) {
+					seen[f.Detail["entitlement"]] = true
+				}
+				if !seen["com.apple.security.cs.allow-jit"] || !seen["com.apple.security.cs.allow-unsigned-executable-memory"] {
+					t.Fatalf("findings do not name both required entitlements: %v", seen)
+				}
+			},
+		},
+		{
+			name:    "missing entitlements warn when signing is not required",
+			arrange: entitlementsOf(browserBinaryName, entitlementsEmpty),
+			want:    []wantCode{{CodeEntitlementMissing, 2, SeverityWarn}},
+		},
+		refusesRuntimeCodeGeneration(sidecarRelPath),
+		refusesRuntimeCodeGeneration(documentCoreRelPath),
+		refusesRuntimeCodeGeneration(decideEngineRelPath),
+		{
+			name: "debuggable executable is refused",
+			arrange: entitlementsOf(documentCoreRelPath,
+				`<plist version="1.0"><dict><key>com.apple.security.get-task-allow</key><true/></dict></plist>`),
+			requireSigned: true,
+			want:          []wantCode{{code: CodeEntitlementUnexpected, count: 1}},
+			inspect: func(t *testing.T, run verifyRun) {
+				findingAt(CodeEntitlementUnexpected, documentCoreRelPath)(t, run)
+				findingDetail(CodeEntitlementUnexpected, "entitlement", "com.apple.security.get-task-allow")(t, run)
+			},
+		},
+		{
+			name:          "engine profile entitlements are accepted on the engine",
+			requireSigned: true,
+			want:          []wantCode{{code: CodeEntitlementUnexpected}, {code: CodeEntitlementMissing}},
+		},
+		{
+			name:          "engine profile entitlements are refused on the log viewer",
+			arrange:       entitlementsOf(logsCLIRelPath, entitlementsEngineOK),
+			requireSigned: true,
+			want:          []wantCode{{code: CodeEntitlementUnexpected, count: 3}},
+			inspect:       findingAt(CodeEntitlementUnexpected, logsCLIRelPath),
+		},
+		{
+			name:          "unreadable entitlements fail",
+			arrange:       entitlementsOf(decideEngineRelPath, "<plist><dict><key>truncated"),
+			requireSigned: true,
+			want:          []wantCode{{code: CodeEntitlementUnreadable, count: 1}},
+			inspect:       findingAt(CodeEntitlementUnreadable, decideEngineRelPath),
+		},
+		{
+			name:   "entitlements are not read without the hardened runtime",
+			runner: codesignReporting(codesignDeveloperIDNoRuntime),
+			want:   []wantCode{{code: CodeEntitlementMissing}},
+			inspect: func(t *testing.T, run verifyRun) {
+				if len(findingsWithCode(run.report, CodeHardenedRuntimeMissing)) == 0 {
+					t.Fatal("a bundle without the hardened runtime reported no HARDENED_RUNTIME_MISSING finding")
+				}
+			},
+		},
+		{
+			name:          "no browser needs no browser entitlements",
+			bundle:        func(o *appOptions) { o.omitBrowser = true },
+			requireSigned: true,
+			want:          []wantCode{{code: CodeEntitlementMissing}},
+		},
+		{
+			name:    "document core missing",
+			bundle:  func(o *appOptions) { o.omitCore = true },
+			want:    []wantCode{{code: CodeDocumentCoreMissing, count: 1}},
+			inspect: findingAt(CodeDocumentCoreMissing, documentCoreRelPath),
+		},
+		{
+			name:          "document core is probed through the packaged engine",
+			requireSigned: true,
+			want:          []wantCode{{code: CodeDocumentCoreFailed}},
+			inspect: func(t *testing.T, run verifyRun) {
+				if calls := run.runner.callsFor(filepath.Join(run.app, sidecarRelPath), "diagnostics", "document-core"); len(calls) != 1 {
+					t.Fatalf("document core probe calls = %v, want one", calls)
+				}
+			},
+		},
+		{
+			name: "document core probe failure carries the probe output",
+			arrange: func(_ *testing.T, app string, runner *fakeRunner) {
+				probe := filepath.Join(app, sidecarRelPath) + " diagnostics"
+				runner.err[probe] = errors.New("signal: killed")
+				runner.stderr[probe] = []byte("document core exited (signal: killed)")
+			},
+			requireSigned: true,
+			want:          []wantCode{{CodeDocumentCoreFailed, 1, SeverityError}},
+			inspect: firstFinding(CodeDocumentCoreFailed, func(t *testing.T, f Finding) {
+				if !strings.Contains(f.Detail["output"], "signal: killed") {
+					t.Fatalf("finding = %+v, want the probe's output", f)
+				}
+			}),
+		},
+		{
+			name:   "fat binary with an extra slice warns",
+			bundle: func(o *appOptions) { o.browserFat = true },
+			want:   []wantCode{{code: CodeArchUnexpected}, {CodeArchExtraSlice, 1, SeverityWarn}},
+		},
+		{
+			name: "files that are not Mach-O are not counted",
+			bundle: func(o *appOptions) {
+				o.extraFiles = map[string][]byte{
+					"Contents/Resources/icudtl.dat": []byte("\x00\x01binary payload, not a mach-o"),
+					"Contents/Resources/app.js":     []byte("export const x = 1;"),
+				}
+			},
+			inspect: machOCount(7),
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			opts := defaultAppOptions()
+			if c.bundle != nil {
+				c.bundle(&opts)
+			}
+			run := verifyRun{app: buildFakeApp(t, opts), runner: signedOK()}
+			if c.runner != nil {
+				run.runner = c.runner()
+			}
+			if c.arrange != nil {
+				c.arrange(t, run.app, run.runner)
+			}
+			if c.withDMG {
+				run.dmg = filepath.Join(filepath.Dir(run.app), "Painted Wolf Code.dmg")
+				mustWriteFile(t, run.dmg, []byte("dmg"))
+			}
+			run.report = runVerifyOptions(t, Options{AppPath: run.app, DMGPath: run.dmg, RequireSigned: c.requireSigned, Runner: run.runner})
+
+			for _, want := range c.want {
+				for _, f := range requireCodeCount(t, run.report, want.code, want.count) {
+					if want.severity != "" && f.Severity != want.severity {
+						t.Fatalf("%s severity = %q, want %q", want.code, f.Severity, want.severity)
+					}
 				}
 			}
+			if c.verdict != anyVerdict && run.report.Failed() != (c.verdict == reportFails) {
+				t.Fatalf("report failed = %v: %+v", run.report.Failed(), run.report.Findings)
+			}
+			if c.inspect != nil {
+				c.inspect(t, run)
+			}
 		})
-	}
-}
-
-func TestVerifyRefusesADebuggableExecutable(t *testing.T) {
-	runner := signedOK()
-	runner.stdout["codesign -d @"+filepath.Base(documentCoreRelPath)] = []byte(
-		`<plist version="1.0"><dict><key>com.apple.security.get-task-allow</key><true/></dict></plist>`)
-
-	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, runner)
-
-	got := requireCodeCount(t, report, CodeEntitlementUnexpected, 1)
-	if got[0].Path != documentCoreRelPath || got[0].Detail["entitlement"] != "com.apple.security.get-task-allow" {
-		t.Fatalf("finding = %+v, want get-task-allow on the document core", got[0])
-	}
-}
-
-func TestVerifyEngineProfileEntitlementsAreItsOnly(t *testing.T) {
-	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, signedOK())
-	requireNoCode(t, report, CodeEntitlementUnexpected)
-	requireNoCode(t, report, CodeEntitlementMissing)
-
-	runner := signedOK()
-	runner.stdout["codesign -d @"+filepath.Base(logsCLIRelPath)] = []byte(entitlementsEngineOK)
-	report = runVerify(t, buildFakeApp(t, defaultAppOptions()), true, runner)
-	if got := requireCodeCount(t, report, CodeEntitlementUnexpected, 3); got[0].Path != logsCLIRelPath {
-		t.Fatalf("finding on %q, want the profile entitlements refused on the log viewer", got[0].Path)
-	}
-}
-
-func TestVerifyUnreadableEntitlementsFail(t *testing.T) {
-	runner := signedOK()
-	runner.stdout["codesign -d @"+filepath.Base(decideEngineRelPath)] = []byte("<plist><dict><key>truncated")
-
-	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), true, runner)
-
-	if got := requireCodeCount(t, report, CodeEntitlementUnreadable, 1); got[0].Path != decideEngineRelPath {
-		t.Fatalf("finding on %q, want the decision engine", got[0].Path)
-	}
-}
-
-func TestVerifyEntitlementsSkippedWithoutHardenedRuntime(t *testing.T) {
-	runner := newFakeRunner()
-	runner.stderr["codesign"] = []byte(codesignDeveloperIDNoRuntime)
-
-	report := runVerify(t, buildFakeApp(t, defaultAppOptions()), false, runner)
-
-	requireNoCode(t, report, CodeEntitlementMissing)
-	if len(findingsWithCode(report, CodeHardenedRuntimeMissing)) == 0 {
-		t.Fatal("expected HARDENED_RUNTIME_MISSING findings for a non-hardened bundle")
-	}
-}
-
-func TestVerifyEntitlementsWithoutBrowser(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.omitBrowser = true
-
-	report := runVerify(t, buildFakeApp(t, opts), true, signedOK())
-
-	requireNoCode(t, report, CodeEntitlementMissing)
-}
-
-func TestVerifyMissingDocumentCoreFails(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.omitCore = true
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	if got := requireCodeCount(t, report, CodeDocumentCoreMissing, 1); got[0].Path != documentCoreRelPath {
-		t.Fatalf("finding on %q, want %q", got[0].Path, documentCoreRelPath)
-	}
-}
-
-func TestVerifyRunsTheDocumentCoreThroughThePackagedEngine(t *testing.T) {
-	app := buildFakeApp(t, defaultAppOptions())
-	runner := signedOK()
-	sidecar := filepath.Join(app, sidecarRelPath)
-	runner.stdout[sidecar] = []byte(filepath.Join(app, fakeOpenGrepRelPath) + "\n")
-
-	report := runVerify(t, app, true, runner)
-	requireNoCode(t, report, CodeDocumentCoreFailed)
-	if calls := runner.callsFor(sidecar, "diagnostics", "document-core"); len(calls) != 1 {
-		t.Fatalf("document core probe calls = %v, want one", calls)
-	}
-
-	runner.err[sidecar+" diagnostics"] = errors.New("signal: killed")
-	runner.stderr[sidecar+" diagnostics"] = []byte("document core exited (signal: killed)")
-	report = runVerify(t, app, true, runner)
-	got := requireCodeCount(t, report, CodeDocumentCoreFailed, 1)
-	if got[0].Severity != SeverityError || !strings.Contains(got[0].Detail["output"], "signal: killed") {
-		t.Fatalf("finding = %+v, want an error carrying the probe's output", got[0])
-	}
-}
-
-func TestVerifyFatBinaryExtraSlice(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.browserFat = true
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	requireNoCode(t, report, CodeArchUnexpected)
-	got := requireCodeCount(t, report, CodeArchExtraSlice, 1)
-	if got[0].Severity != SeverityWarn {
-		t.Fatalf("ARCH_EXTRA_SLICE severity = %q, want warn", got[0].Severity)
-	}
-}
-
-func TestVerifySkipsNonMachOFiles(t *testing.T) {
-	opts := defaultAppOptions()
-	opts.extraFiles = map[string][]byte{
-		"Contents/Resources/icudtl.dat": []byte("\x00\x01binary payload, not a mach-o"),
-		"Contents/Resources/app.js":     []byte("export const x = 1;"),
-	}
-
-	report := runVerify(t, buildFakeApp(t, opts), false, signedOK())
-
-	if report.MachOCount != 7 {
-		t.Fatalf("MachOCount = %d, want 7 — non-Mach-O files must not be counted", report.MachOCount)
 	}
 }
 
