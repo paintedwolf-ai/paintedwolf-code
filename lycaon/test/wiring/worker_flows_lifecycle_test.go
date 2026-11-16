@@ -163,28 +163,22 @@ func TestFlow13Flow14AndFlow15ReuseSurveyorSmallEditAndExternalWait(t *testing.T
 	call := coordToolCtx(t, h, ctx, sess, dir)
 
 	// Flow 14: direct two-line edit by the coordinator with zero workers in the session.
-	dir14 := h.ProjectDir(t, "flow14-direct")
-	writeTestProjectApprovalsAllowWrite(t, dir14)
-	testutil.FailErr(t, "seed direct.go", os.WriteFile(filepath.Join(dir14, "direct.go"), []byte("package auth\nvar Direct = 0\n"), 0o600))
-	sess14, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, dir14)
-	testutil.FailErr(t, "create flow14 session", err)
-	AttachDefaultAmbient(t, h, ctx, sess14.ID)
-	h.SeedProgress(t, ctx, sess14.ID)
-	actor14 := workerrecords.Actor{SessionID: sess14.ID, Role: workerrecords.RoleCoordinator, PrincipalID: sess14.ID}
-	scripts.results["coordinator"] = MockCoordinatorCloseoutMarkdown("Updated direct.go directly.", "direct.go") + "\n[verify: inspection - Direct edit verified]"
+	testutil.FailErr(t, "seed direct.go", os.WriteFile(filepath.Join(dir, "direct.go"), []byte("package auth\nvar Direct = 0\n"), 0o600))
+	AttachDefaultAmbient(t, h, ctx, sess.ID)
+	h.SeedProgress(t, ctx, sess.ID)
+	scripts.results["coordinator"] = "Updated direct.go directly. [command#1]\n[verify: inspection - Direct edit verified]"
 	scripts.push("coordinator",
-		api.ToolCall{ID: "c-load", Name: "request_tools", Args: map[string]any{"need": "command"}},
 		api.ToolCall{ID: "c-edit", Name: "command", Args: map[string]any{"command": "printf 'package auth\\nvar Direct = 1\\n' > direct.go"}},
-		api.ToolCall{ID: "c-prog", Name: "update_progress", Args: h.ProgressUpdateArgs(t, ctx, sess14.ID, "## Progress\n- [x] wiring test plan\n")},
+		api.ToolCall{ID: "c-prog", Name: "update_progress", Args: h.ProgressUpdateArgs(t, ctx, sess.ID, "## Progress\n- [x] wiring test plan\n")},
 	)
-	_, err = h.Sessions.Manager.Submissions.Prompt(ctx, sess14.ID, "Set Direct to 1 in direct.go.")
+	_, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, "Set Direct to 1 in direct.go.")
 	testutil.FailErr(t, "direct coordinator edit", err)
-	directBytes, err := os.ReadFile(filepath.Join(dir14, "direct.go"))
+	directBytes, err := os.ReadFile(filepath.Join(dir, "direct.go"))
 	testutil.FailErr(t, "read direct.go", err)
 	if !strings.Contains(string(directBytes), "Direct = 1") {
 		t.Fatalf("direct.go = %q, want Direct = 1", string(directBytes))
 	}
-	ws0, err := h.Delegations.Records.Workers(ctx, actor14)
+	ws0, err := h.Delegations.Records.Workers(ctx, actor)
 	testutil.FailErr(t, "workers after direct edit", err)
 	if len(ws0) != 0 {
 		t.Fatalf("expected 0 workers on small direct task, got %d", len(ws0))
