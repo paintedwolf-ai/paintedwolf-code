@@ -26,7 +26,16 @@ function placedRows(items: readonly (RawTranscriptItem | DisplayTranscriptItem)[
     if (item.kind === "worker_group") {
       return item.parts.map((part) => ({ kind: "tool", key: part.id, part }));
     }
-    return item.kind === "file_edit" ? [] : [item];
+    switch (item.kind) {
+      case "file_edit":
+      case "pending_user":
+      case "time_marker":
+      case "unread_marker":
+      case "turn_tail":
+        return [];
+      default:
+        return [item];
+    }
   });
 }
 
