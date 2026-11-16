@@ -183,6 +183,8 @@ func TestSQLStoreListOpen(t *testing.T) {
 
 func TestSQLStoreListBySessionIDTieBreaksByInsertOrder(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
+	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, sqlDB, "sess-1", testdbseed.DefaultProjectID)
 
 	store := NewSQLStore(sqlDB)
 	ctx := context.Background()

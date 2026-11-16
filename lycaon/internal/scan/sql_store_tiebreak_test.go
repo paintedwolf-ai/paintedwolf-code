@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
@@ -14,6 +15,8 @@ import (
 func newScanStore(t *testing.T) (*SQLStore, context.Context) {
 	t.Helper()
 	sqlDB := testdbfixture.Open(t, "store.db")
+	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, sqlDB, "sess-1", testdbseed.DefaultProjectID)
 	return NewSQLStore(sqlDB), context.Background()
 }
 
