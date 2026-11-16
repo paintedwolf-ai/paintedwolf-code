@@ -10,23 +10,17 @@ export function filesLocationPreviewEnabled(): boolean {
 
 type Capture = { before?: string; after?: string; title: string; detail: string };
 const nginx = 'server {\n    listen 443 ssl;\n    server_name preview.example.test;\n\n    location / {\n        proxy_pass http://127.0.0.1:3000;\n        proxy_read_timeout 60s;\n    }\n}\n';
-const deploy = '# Website deployment\nservice: website\nenvironment: staging\n\nhealthcheck:\n  path: /health\n  interval: 10s\n  timeout: 60s\n\nreplicas: 2\n';
 /** Illustrative capture records; their bytes are never fetched from a remote machine. */
 const captures: Record<string, Capture> = {
-  'ops/deploy.yaml': {
-    before: deploy.replace('timeout: 60s', 'timeout: 30s'), after: deploy,
-    title: 'Captured change · Read only',
-    detail: 'This Mac · /Users/chris/ops/deploy.yaml · Before and after captured · Update deployment, turn 3',
-  },
   'staging-01/etc/nginx/nginx.conf': {
     before: nginx.replace('timeout 60s', 'timeout 30s'), after: nginx,
     title: 'Captured change · Read only',
-    detail: 'staging-01 · /etc/nginx/nginx.conf · Before and after captured · Update deployment, turn 3',
+    detail: 'staging-01 · /etc/nginx/nginx.conf · Before and after captured · Nov 16, 11:00 AM · Update deployment, turn 3',
   },
   'staging-01/etc/nginx/upstream.conf': {
     after: 'upstream website {\n    server 127.0.0.1:3000;\n    keepalive 32;\n}\n',
     title: 'Partial capture · After only · Read only',
-    detail: 'staging-01 · /etc/nginx/upstream.conf · No before version was captured; this is not a creation diff',
+    detail: 'staging-01 · /etc/nginx/upstream.conf · After captured Nov 16, 11:00 AM · Update deployment, turn 3 · Before not captured',
   },
   'staging-01/etc/nginx/mime.types': {
     title: 'Reported change · Contents not captured',

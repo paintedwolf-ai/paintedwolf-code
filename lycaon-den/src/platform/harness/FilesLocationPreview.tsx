@@ -6,10 +6,10 @@ import { ThemeIcon } from "../../components/primitives/ThemeIcon.tsx";
 const locations: Record<string, { label: string; detail: string; remote?: boolean }> = {
   ops: {
     label: "Outside project",
-    detail: "This Mac · Captured versions outside the project sandbox · Read only",
+    detail: "This Mac · Local files outside the project · Editable with granted permissions",
   },
   "staging-01": {
-    label: "Remote",
+    label: "Captured",
     detail: "staging-01 · /etc/nginx · Captured versions only · No live connection",
     remote: true,
   },

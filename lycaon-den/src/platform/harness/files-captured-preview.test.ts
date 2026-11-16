@@ -13,7 +13,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.unstubAllEnvs(); window.history.replaceState(null, "", "/"); });
 
-describe("external capture design fixture", () => {
+describe("remote capture design fixture", () => {
   it("cannot intercept production or an ordinary harness session", () => {
     vi.stubEnv("VITE_LYCAON_PROXY", "0");
     expect(openFilesCapturedPreview("p", target("etc/nginx/nginx.conf"))).toBe(false);
@@ -33,6 +33,10 @@ describe("external capture design fixture", () => {
   it("keeps a report without bytes unavailable rather than showing an empty file", () => {
     openFilesCapturedPreview("p", target("etc/nginx/mime.types"));
     expect(openFilesBuffer).toHaveBeenCalledWith("p", expect.objectContaining({ diffPreview: expect.objectContaining({ notice: expect.objectContaining({ tone: "info" }), version: expect.objectContaining({ source: { kind: "unavailable" }, availability: "not_captured" }) }) }));
+  });
+  it("leaves outside-project local files on the normal editable path", () => {
+    expect(openFilesCapturedPreview("p", { rootId: "local-ops", rootLabel: "ops", path: "deploy.yaml" })).toBe(false);
+    expect(openFilesBuffer).not.toHaveBeenCalled();
   });
   it("leaves ordinary project files on their normal path", () => {
     expect(openFilesCapturedPreview("p", { rootId: "local", rootLabel: "website", path: "src/health.ts" })).toBe(false);
