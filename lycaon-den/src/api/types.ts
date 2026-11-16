@@ -13695,7 +13695,7 @@ export interface components {
             height: number;
         };
         /** @enum {string} */
-        FormatTool: "editorconfig" | "prettier" | "biome" | "dprint" | "ruff" | "black" | "rustfmt" | "clang_format" | "scalafmt" | "swift_format" | "dart" | "rubocop" | "stylua" | "ocamlformat" | "fourmolu" | "julia_formatter" | "sqlfluff" | "foundry" | "taplo";
+        FormatTool: "editorconfig" | "prettier" | "biome" | "dprint" | "ruff" | "black" | "rustfmt" | "clang_format" | "scalafmt" | "swift_format" | "dart" | "rubocop" | "stylua" | "ocamlformat" | "fourmolu" | "julia_formatter" | "sqlfluff" | "foundry" | "taplo" | "golangci" | "mix_format" | "phpcs" | "checkstyle";
         /**
          * @description Settings in effect under a tool's configuration, in one vocabulary
          *     across tools: what the configuration declares, else the tool's fixed

@@ -24,3 +24,7 @@ components:
         - sqlfluff
         - foundry
         - taplo
+        - golangci
+        - mix_format
+        - phpcs
+        - checkstyle

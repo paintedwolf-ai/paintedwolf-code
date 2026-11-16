@@ -60,8 +60,9 @@ type Facts struct {
 	// LastResultID names that result, which a refresh or reset follows.
 	LastChange   ChangeState
 	LastResultID string
-	// PriorCheckpoint is the checkpoint of the result before the rejected
-	// one, when that earlier result is still unlanded in the lane.
+	// PriorCheckpoint is what the lane held before a rejected result: the
+	// nearest earlier unlanded result, else a stacked worker's base. Empty
+	// means current source.
 	PriorCheckpoint string
 	// PromotionUnsettled reports a landing that is applying or failed
 	// without its recovery finishing.

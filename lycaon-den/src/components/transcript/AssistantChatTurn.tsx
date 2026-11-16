@@ -21,7 +21,10 @@ import { DraftRail } from "./DraftRail.tsx";
 import { deriveReportAvailable } from "../../workflow/workflows-drawer-model.ts";
 import { DownloadReportButton } from "../workflow/DownloadReportButton.tsx";
 import type { AppStore } from "../../store/app-state-model.ts";
-import { MessageActions } from "./MessageActions.tsx";
+import {
+  MessageActions,
+  buildAssistantMessageActions,
+} from "./MessageActions.tsx";
 
 function resolveWorkflowRun(
   runId: string,
@@ -101,6 +104,12 @@ export function AssistantChatTurn(props: Props) {
 
   const streaming = () =>
     props.streaming === true || wireRow()?.status === "streaming";
+  const createdAt = createMemo(() => wireRow()?.created_at);
+  const actions = createMemo(() =>
+    buildAssistantMessageActions({
+      onCopy: props.onCopy ? () => props.onCopy?.(content()) : undefined,
+    }),
+  );
 
   return (
     <article
@@ -120,9 +129,6 @@ export function AssistantChatTurn(props: Props) {
         />
       </Show>
       <div class="bubble bubble--assistant">
-        <Show when={props.onCopy}>
-          <MessageActions onCopy={() => props.onCopy?.(content())} />
-        </Show>
         <Show when={(wireRow()?.artifact_ids?.length ?? 0) > 0}>
           <VisualPresentBlock
             artifactIds={wireRow()?.artifact_ids ?? []}
@@ -164,6 +170,14 @@ export function AssistantChatTurn(props: Props) {
           onExplore={props.onExploreInSearch}
           sessionId={props.sessionId}
           rowKey={rowKey()}
+        />
+      </Show>
+      <Show when={actions().length > 0}>
+        {/* The message-times setting governs user prompts; replies keep hover time. */}
+        <MessageActions
+          align="start"
+          ts={createdAt()}
+          actions={actions()}
         />
       </Show>
     </article>

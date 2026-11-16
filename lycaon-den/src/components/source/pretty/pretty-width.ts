@@ -1,7 +1,8 @@
 import { SQL_GROUPS } from "./pretty-clause.ts";
-import type { PrettyLexer } from "./pretty-lexers.ts";
+import { ScriptLexer, type PrettyLexer } from "./pretty-lexers.ts";
 import { PRETTY_TRIGGER_COLUMNS, type PrettyRule } from "./pretty-scan-state.ts";
 import type { TextWindow } from "./pretty-text-window.ts";
+import { TreeLexer } from "./pretty-tokens.ts";
 
 const TAB = 0x09;
 
@@ -24,6 +25,8 @@ export function exceedsTrigger(text: TextWindow, from: number, to: number, tabSi
 function lexerFor(rule: PrettyRule): PrettyLexer | null {
   if (rule.kind === "bracket") return rule.lexer();
   if (rule.kind === "clause") return SQL_GROUPS.lexer();
+  if (rule.kind === "jsx") return new ScriptLexer(true);
+  if (rule.kind === "sexp") return new TreeLexer();
   return null;
 }
 
@@ -41,10 +44,15 @@ export function exceedsLineWidth(
   if (!rawWidthExceeds(text, from, to, tabSize, lineWidth)) return false;
   const lexer = lexerFor(rule);
   if (!lexer) return true;
+  const jsxLexer = lexer instanceof ScriptLexer && lexer.jsx ? lexer : null;
   let width = 0;
   for (let pos = from; pos < to;) {
     const skipped = lexer.skip(text, pos, to, to);
     if (skipped > pos) {
+      if (jsxLexer && jsxLexer.lastTagCodeWidth > 0) {
+        width += jsxLexer.lastTagCodeWidth;
+        if (width > lineWidth) return true;
+      }
       pos = skipped;
       continue;
     }

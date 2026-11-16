@@ -1,4 +1,4 @@
-import { Show, createEffect, createSignal, on, onCleanup, untrack } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js";
 import { EditorView } from "@codemirror/view";
 import { Compartment, StateEffect } from "@codemirror/state";
 import type { LycaonClient } from "../../api/client.ts";
@@ -6,7 +6,6 @@ import { chatContentDocumentKey, type ChatContentDocument } from "../../chat/tra
 import type { ChatContentMatch } from "../../chat/transcript/content/chat-content-reader.ts";
 import { CommandReceiptLimitError } from "../../chat/transcript/content/command-receipt-access.ts";
 import { useChatContentAccess } from "../../chat/transcript/content/use-chat-content-access.ts";
-import { languageLabelForDetectedLanguage, PLAIN_TEXT_LABEL } from "../../components/source/editor/codemirror-lang.ts";
 import { bindChatContentFind } from "../../chat/transcript/content/chat-content-find.ts";
 import { getBackgroundProcessSnapshot, prepareBackgroundProcessOutput, subscribeBackgroundProcessStore } from "../../chat/tool/background-process-store.ts";
 import { bindFindableView } from "../../find/use-findable-view.ts";
@@ -34,7 +33,9 @@ import {
   type ChatRetainedText,
   extractInlineRedactionSpans,
   redactionSpansFit,
+  resolveChatContentLanguage,
   runeOffsetToUtf16,
+  useChatContentLineWidth,
 } from "./chat-content-pretty.ts";
 
 const contentFailure = {
@@ -201,9 +202,8 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
     if (isProcessSnapshot()) refreshProcessSnapshot();
     else void access()?.refresh(copyAbort.signal).catch(reportError);
   };
-  const languageLabel = () => props.document.language || props.document.path
-    ? languageLabelForDetectedLanguage(props.document.language ?? "", props.document.path ?? "")
-    : PLAIN_TEXT_LABEL;
+  const resolvedLanguage = createMemo(() => resolveChatContentLanguage(props.document));
+  const resolvedLineWidth = useChatContentLineWidth(() => props.client, () => props.projectId, () => props.document, () => resolvedLanguage().formatters);
   return <section ref={setHost} class="den-source-reader" data-testid="chat-content-page" aria-label={props.document.title}>
     <ReadonlyFilesDocument title={props.document.title}
       actions={<Show when={isSnapshot()}><button type="button" class="den-files-editor__tool den-inset-icon-btn" data-testid="chat-process-pretty-refresh" aria-label="Refresh snapshot" data-tip="Refresh snapshot" data-tip-pos="below" onClick={refreshSnapshot}>Refresh</button></Show>}
@@ -211,10 +211,10 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
       status={{ identity: resolveEditorIdentity({ historical: false, workerDraft: false, deleted: false, writable: null, preview: false, editable: false, unsupported: true }),
         windows: <DocumentWindows projectId={props.projectId} />,
         dirtyCount: projectFilesState(props.projectId).order.filter(key => projectFilesState(props.projectId).byKey[key]?.dirty).length,
-        cursor: cursor(), language: languageLabel(), indent: { label: indentChipLabel(editorDisplayPrefs().indent) },
+        cursor: cursor(), language: resolvedLanguage().label, indent: { label: indentChipLabel(editorDisplayPrefs().indent) },
         details: <><Show when={isSnapshot()}><span class="den-files-editor__status-detail" data-testid="chat-process-pretty-snapshot">Snapshot</span></Show><span class="den-files-editor__status-detail" data-testid="files-editor-encoding-chip">UTF-8</span></>,
       }}>
-    <Show when={usePagedReader()} fallback={<InlineChatContent document={props.document} client={props.client} prettyEnabled={prettyEnabled()} processSnapshot={processSnapshot()} retainedText={retainedText()} onError={reportError} onEditor={setInlineEditor} />}>
+    <Show when={usePagedReader()} fallback={<InlineChatContent document={props.document} client={props.client} prettyEnabled={prettyEnabled()} languageExtension={resolvedLanguage().extension} lineWidth={resolvedLineWidth()} processSnapshot={processSnapshot()} retainedText={retainedText()} onError={reportError} onEditor={setInlineEditor} />}>
       <div class="den-source-reader__editors"><div class="den-source-reader__editor" ref={setEditorHost} /></div>
     </Show>
     </ReadonlyFilesDocument>
@@ -225,6 +225,8 @@ function InlineChatContent(props: {
   document: ChatContentDocument;
   client: LycaonClient | null;
   prettyEnabled: boolean;
+  languageExtension: ReturnType<typeof resolveChatContentLanguage>["extension"];
+  lineWidth: number | undefined;
   processSnapshot: { text: string; rev: number } | null;
   retainedText: ChatRetainedText | null;
   onError: (cause: unknown) => void;
@@ -256,13 +258,15 @@ function InlineChatContent(props: {
     enabled: props.prettyEnabled,
     ...(props.document.path ? { path: props.document.path } : {}),
     ...(props.document.language ? { languageHint: props.document.language } : {}),
+    ...(props.lineWidth ? { lineWidth: props.lineWidth } : {}),
   });
   let editor: EditorView | undefined;
   const redactions = new Compartment();
   createEffect(() => {
     const host = parent(); if (!host) return;
     const value = untrack(rawText);
-    const view = new EditorView({ parent: host, state: createSourceEditorState({ surface: "diff-viewer", doc: value, ...untrack(editorDisplayPrefs), editable: false, scrollPastEnd: false, commandBridge: true,
+    const language = untrack(() => props.languageExtension) ?? undefined;
+    const view = new EditorView({ parent: host, state: createSourceEditorState({ surface: "diff-viewer", doc: value, language, ...untrack(editorDisplayPrefs), editable: false, scrollPastEnd: false, commandBridge: true,
       extensions: [
         redactions.of(buildRawRedactionExtension(value, untrack(redactionSpans))),
         createPrettyExtension(untrack(prettyConfig)),

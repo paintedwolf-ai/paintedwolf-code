@@ -15,6 +15,7 @@ func (m *Service) AfterTurn(ctx context.Context, sess *api.Session, content stri
 	}
 	gc := oar.NewGuardContext()
 	m.ToolPolicy.FillSessionFacts(ctx, gc, sess, "", nil)
+	m.ToolPolicy.RegisterReproducedSource(ctx, gc, sess, content)
 	gc.Session.LastAssistant = content
 	gc.Workers.WorkersIdle = workersIdle
 	gc.SetContentSegments([]oar.ContentSegment{{Content: content, Role: "assistant", Origin: "model", Authority: "none", TrustTier: "trusted", Source: "agent_turn"}})
