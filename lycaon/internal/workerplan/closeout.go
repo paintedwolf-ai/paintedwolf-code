@@ -37,9 +37,9 @@ const (
 // CloseoutVerdict reports whether a session's planned workers are settled.
 // A verdict that is not OK names one gap and the worker it concerns.
 type CloseoutVerdict struct {
-	OK       bool
-	Code     string
-	Gap      Gap
+	OK     bool
+	Code   string
+	Gap    Gap
 	LegID  string
 	Worker string
 	// WorkID is the worker's plan work identity, empty for a worker with
