@@ -80,7 +80,7 @@ describe("ActionCard", () => {
     const blocked = new Set<string>();
     const [, setTick] = createSignal(0);
     const actions = { isBlocked: (host: string) => blocked.has(host), blockHost: async (host: string) => { blocked.add(host); setTick((n) => n + 1); } };
-    const network: CardAction = { ...descriptor, facts: [{ kind: "network", hosts: ["a.test", "b.test"], egress: "proxy_only" }], row: ["network"] };
+    const network: CardAction = { ...descriptor, facts: [{ kind: "network", hosts: ["a.test", "b.test"], egress: "proxy_only" }], row: ["network"], preview: undefined };
     const { container } = render(() => (
       <NetworkActionContext.Provider value={actions}>
         <ActionCard part={{ ...reached("a.test", "allow"), foldMembers: [reached("b.test", "deny")] }} action={network} layout="chat" />

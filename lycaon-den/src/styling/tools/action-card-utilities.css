@@ -14,6 +14,11 @@
   }
 }
 
+@utility den-action-card__notice {
+  margin: 0;
+  color: var(--den-text-muted);
+}
+
 @utility den-action-card__ran {
   display: flex;
   align-items: flex-start;
