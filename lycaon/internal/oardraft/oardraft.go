@@ -32,22 +32,30 @@ var dropped = map[string]bool{"status": true, "related": true}
 // rewrites in the OAR 1.0 shape. A candidate document that relies on
 // something OAR 1.0 removed is refused with an *Unconvertible error.
 func Upgrade(data []byte) ([]byte, bool, error) {
-	var root yaml.Node
-	if err := yaml.Unmarshal(data, &root); err != nil || root.Kind != yaml.DocumentNode || len(root.Content) != 1 {
+	root, ok := candidate(data)
+	if !ok {
 		return data, false, nil
 	}
 	doc := root.Content[0]
-	if doc.Kind != yaml.MappingNode || index(doc, "oar") < 0 || index(doc, "spec_version") >= 0 {
-		return data, false, nil
-	}
 	if err := upgrade(doc); err != nil {
 		return nil, false, err
 	}
-	out, err := encode(&root, json.Valid(data))
+	out, err := encode(root, json.Valid(data))
 	if err != nil {
 		return nil, false, err
 	}
 	return out, true, nil
+}
+
+// candidate parses data as a single mapping that names its version with "oar"
+// and not "spec_version". Anything else is not a candidate document.
+func candidate(data []byte) (*yaml.Node, bool) {
+	var root yaml.Node
+	if yaml.Unmarshal(data, &root) != nil || root.Kind != yaml.DocumentNode || len(root.Content) != 1 {
+		return nil, false
+	}
+	doc := root.Content[0]
+	return &root, doc.Kind == yaml.MappingNode && index(doc, "oar") >= 0 && index(doc, "spec_version") < 0
 }
 
 func upgrade(doc *yaml.Node) error {

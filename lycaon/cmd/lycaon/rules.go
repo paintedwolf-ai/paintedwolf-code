@@ -43,7 +43,7 @@ func runRulesUpgrade(paths []string, out io.Writer) error {
 	}
 	var refused []string
 	for _, path := range paths {
-		data, err := os.ReadFile(path) // #nosec G304 -- the author names the rule files to upgrade
+		data, err := os.ReadFile(path) // #nosec G304 G703 -- the author names the rule files to upgrade
 		if err != nil {
 			return err
 		}
