@@ -9,7 +9,6 @@ import { isHomePresentation, type ProjectPresentation } from "../../shell/projec
 import { routedReturnOffer, type RoutedOrigin } from "../../shell/routed-return.ts";
 import { type ActiveChat } from "../../shell/stage-scope.ts";
 import { type SplitColumnsOnScreen } from "../../shell/stage-placement.ts";
-import { type ShellSessionDrawer } from "./shell-session-drawer.ts";
 import { createStageTabRail } from "../../shell/stage-tab-rail.ts";
 import { type TabId } from "../chatview/tabs.ts";
 import { stageDefinition, stageLabelFor } from "../stage/stage-registry.tsx";
