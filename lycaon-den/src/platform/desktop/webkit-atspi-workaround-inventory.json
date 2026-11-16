@@ -41,6 +41,12 @@
       "sites": [
         "platform/desktop/webkit-atspi-selection.ts"
       ]
+    },
+    "block-turn-message-actions": {
+      "summary": "Transcript user and assistant turns lay out as block containers instead of flex columns so an in-flow trailing message-actions toolbar does not abort GetAttributeRun.",
+      "sites": [
+        "styling/chrome/transcript.css"
+      ]
     }
   }
 }

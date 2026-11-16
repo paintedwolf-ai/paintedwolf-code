@@ -3,16 +3,16 @@ package workerplan
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/workerrecords"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// RoundAdmissionRequest checks plan, workflow, dependency, and overlap gates before admitting a round.
+// RoundAdmissionRequest is one round about to be admitted for Worker.
 type RoundAdmissionRequest struct {
 	Actor      workerrecords.Actor
 	Tool       string
@@ -23,119 +23,98 @@ type RoundAdmissionRequest struct {
 	AfterNames []string
 }
 
-// CheckRoundAdmission enforces Blueprint approval, workflow runnability, and Blueprint write-path overlap.
+// CheckRoundAdmission enforces Blueprint approval, workflow runnability and
+// write-path overlap between Blueprint workers.
 func (s *Service) CheckRoundAdmission(ctx context.Context, req RoundAdmissionRequest) error {
-	if s == nil {
+	w := req.Worker
+	if w.BlueprintPath != "" {
+		if err := s.checkBlueprintApproval(ctx, req.Actor.SessionID, req.ProjectID, w.BlueprintPath, req.Tool); err != nil {
+			return err
+		}
+	}
+	if w.WorkflowRunID != "" {
+		if err := s.checkRunnable(ctx, w.WorkflowRunID, req.Tool); err != nil {
+			return err
+		}
+	}
+	mode := req.ScopeMode
+	if mode == "" {
+		mode = w.ScopeMode
+	}
+	if w.BlueprintPath == "" || mode != workerrecords.ScopeWrite {
 		return nil
 	}
-	tool := strings.TrimSpace(req.Tool)
-	if tool == "" {
-		tool = "task"
+	paths := req.WritePaths
+	if len(paths) == 0 {
+		paths = w.Files
 	}
-	if bp := strings.TrimSpace(req.Worker.BlueprintPath); bp != "" {
-		if err := s.checkBlueprintApproval(ctx, req.Actor.SessionID, req.ProjectID, bp, tool); err != nil {
-			return err
-		}
+	return s.checkBlueprintWriteOverlap(ctx, req.Actor, req.Tool, w, paths, req.AfterNames)
+}
+
+func planReject(tool, reason string, data map[string]any) *toolrejection.ToolReject {
+	out := map[string]any{"tool": tool, "reason": reason}
+	for k, v := range data {
+		out[k] = v
 	}
-	if runID := strings.TrimSpace(req.Worker.WorkflowRunID); runID != "" && s.Runs != nil {
-		if err := s.Runs.AssertRunnable(ctx, runID); err != nil {
-			if reject := toolrejection.AsToolReject(err); reject != nil {
-				return reject
-			}
-			return &toolrejection.ToolReject{
-				Code: "TOOL_ARGS_INVALID",
-				Data: map[string]any{"tool": tool, "workflow_run_id": runID, "reason": err.Error()},
-			}
-		}
+	return &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: out}
+}
+
+func blueprintReject(tool, reason, blueprintPath string) *toolrejection.ToolReject {
+	data := map[string]any{"field": "blueprint_path"}
+	if blueprintPath != "" {
+		data["blueprint_path"] = blueprintPath
 	}
-	mode := strings.TrimSpace(req.ScopeMode)
-	if mode == "" {
-		mode = req.Worker.ScopeMode
-	}
-	if strings.TrimSpace(req.Worker.BlueprintPath) != "" && mode == workerrecords.ScopeWrite && s.Records != nil {
-		paths := req.WritePaths
-		if len(paths) == 0 {
-			paths = req.Worker.Files
-		}
-		if err := s.checkBlueprintWriteOverlap(ctx, req.Actor, tool, req.Worker, paths, req.AfterNames); err != nil {
-			return err
-		}
-	}
-	return nil
+	return planReject(tool, reason, data)
 }
 
 func (s *Service) checkBlueprintApproval(ctx context.Context, sessionID, projectID, blueprintPath, tool string) error {
-	if s.Approvals != nil {
-		ok, err := s.Approvals.IsApproved(ctx, projectID, blueprintPath)
-		if err != nil {
-			if errors.Is(err, blueprint.ErrNotFound) || errors.Is(err, blueprint.ErrInvalidBlueprintPath) {
-				return &toolrejection.ToolReject{
-					Code: "TOOL_ARGS_INVALID",
-					Data: map[string]any{
-						"tool":           tool,
-						"field":          "blueprint_path",
-						"blueprint_path": blueprintPath,
-						"reason":         "blueprint_not_found",
-					},
-				}
-			}
-			return err
-		}
-		if !ok {
-			return &toolrejection.ToolReject{
-				Code: "TOOL_ARGS_INVALID",
-				Data: map[string]any{
-					"tool":           tool,
-					"field":          "blueprint_path",
-					"blueprint_path": blueprintPath,
-					"reason":         "plan_not_approved",
-				},
-			}
-		}
+	approved, err := s.approvals.IsApproved(ctx, projectID, blueprintPath)
+	if errors.Is(err, blueprint.ErrNotFound) || errors.Is(err, blueprint.ErrInvalidBlueprintPath) {
+		return blueprintReject(tool, "blueprint_not_found", blueprintPath)
 	}
-	if s.WorkflowReady != nil {
-		ready, err := s.WorkflowReady.ImplementWorkflowReady(ctx, sessionID, blueprintPath)
-		if err != nil {
-			return err
-		}
-		if !ready {
-			return &toolrejection.ToolReject{
-				Code: "TOOL_ARGS_INVALID",
-				Data: map[string]any{
-					"tool":           tool,
-					"field":          "blueprint_path",
-					"blueprint_path": blueprintPath,
-					"reason":         "implement_workflow_not_ready",
-				},
-			}
-		}
+	if err != nil {
+		return err
+	}
+	if !approved {
+		return blueprintReject(tool, "plan_not_approved", blueprintPath)
+	}
+	ready, err := s.workflowReady.ImplementWorkflowReady(ctx, sessionID, blueprintPath)
+	if err != nil {
+		return err
+	}
+	if !ready {
+		return blueprintReject(tool, "implement_workflow_not_ready", blueprintPath)
 	}
 	return nil
 }
 
-func (s *Service) checkActiveWorkflowRun(ctx context.Context, sessionID, tool, blueprintPath string) (string, string, error) {
-	if s.ActiveRuns == nil {
-		return "", "", nil
+// checkRunnable refuses a round on a workflow run that is paused or finished.
+func (s *Service) checkRunnable(ctx context.Context, runID, tool string) error {
+	err := s.runs.AssertRunnable(ctx, runID)
+	if err == nil {
+		return nil
 	}
-	run, err := s.ActiveRuns.ActiveBySession(ctx, sessionID)
+	if reject := toolrejection.AsToolReject(err); reject != nil {
+		return reject
+	}
+	var stopped *runstate.NotRunnableError
+	if errors.As(err, &stopped) {
+		return planReject(tool, "workflow_run_not_runnable", map[string]any{
+			"workflow_run_id": runID, "workflow_run_status": string(stopped.Status),
+		})
+	}
+	return err
+}
+
+// activeRun returns the session's active workflow run and phase after
+// checking the run can take work. Both are empty when no run is active.
+func (s *Service) activeRun(ctx context.Context, sessionID, tool string) (runID, phase string, err error) {
+	run, err := s.activeRuns.ActiveBySession(ctx, sessionID)
 	if err != nil || run == nil {
 		return "", "", err
 	}
-	if s.Runs != nil {
-		if runErr := s.Runs.AssertRunnable(ctx, run.ID); runErr != nil {
-			if reject := toolrejection.AsToolReject(runErr); reject != nil {
-				return "", "", reject
-			}
-			return "", "", &toolrejection.ToolReject{
-				Code: "TOOL_ARGS_INVALID",
-				Data: map[string]any{
-					"tool":            tool,
-					"blueprint_path":  blueprintPath,
-					"workflow_run_id": run.ID,
-					"reason":          runErr.Error(),
-				},
-			}
-		}
+	if err := s.checkRunnable(ctx, run.ID, tool); err != nil {
+		return "", "", err
 	}
 	return run.ID, run.CurrentPhase, nil
 }
@@ -148,7 +127,7 @@ func (s *Service) checkBlueprintWriteOverlap(
 	paths []string,
 	afterNames []string,
 ) error {
-	workers, err := s.Records.Workers(ctx, actor)
+	workers, err := s.records.Workers(ctx, actor)
 	if err != nil {
 		return err
 	}
@@ -156,9 +135,9 @@ func (s *Service) checkBlueprintWriteOverlap(
 	depsByWorker := make(map[string][]string, len(workers))
 	for _, w := range workers {
 		byName[w.Name] = w.ID
-		deps, dErr := s.Records.Dependencies(ctx, actor, w.ID)
-		if dErr != nil {
-			return dErr
+		deps, err := s.records.Dependencies(ctx, actor, w.ID)
+		if err != nil {
+			return err
 		}
 		for _, dep := range deps {
 			if dep.ProducerWorkerID != "" {
@@ -167,7 +146,7 @@ func (s *Service) checkBlueprintWriteOverlap(
 		}
 	}
 	for _, name := range afterNames {
-		if id := byName[strings.TrimSpace(name)]; id != "" {
+		if id := byName[name]; id != "" {
 			depsByWorker[target.ID] = append(depsByWorker[target.ID], id)
 		}
 	}
@@ -175,26 +154,21 @@ func (s *Service) checkBlueprintWriteOverlap(
 		if peer.ID == target.ID || peer.ClosedAt != "" || peer.ScopeMode != workerrecords.ScopeWrite {
 			continue
 		}
-		rounds, rErr := s.Records.Rounds(ctx, actor, peer.ID)
-		if rErr != nil {
-			return rErr
+		rounds, err := s.records.Rounds(ctx, actor, peer.ID)
+		if err != nil {
+			return err
 		}
 		if len(rounds) == 0 || rounds[len(rounds)-1].SettledAt != "" {
 			continue
 		}
+		// Ordered workers may share paths; only concurrent ones collide.
 		if workerDependsOn(depsByWorker, target.ID, peer.ID) || workerDependsOn(depsByWorker, peer.ID, target.ID) {
 			continue
 		}
 		if PathsOverlap(paths, peer.Files) {
-			return &toolrejection.ToolReject{
-				Code: "TOOL_ARGS_INVALID",
-				Data: map[string]any{
-					"tool":           tool,
-					"worker":         target.Name,
-					"overlap_worker": peer.Name,
-					"reason":         "blueprint_write_path_overlap",
-				},
-			}
+			return planReject(tool, "blueprint_write_path_overlap", map[string]any{
+				"worker": target.Name, "overlap_worker": peer.Name,
+			})
 		}
 	}
 	return nil
@@ -220,13 +194,10 @@ func workerDependsOn(depsByWorker map[string][]string, fromID, targetID string) 
 
 // HasPlannedWorker reports whether sessionID has an open worker bound to workID.
 func (s *Service) HasPlannedWorker(ctx context.Context, sessionID, workID string) (bool, error) {
-	sessionID = strings.TrimSpace(sessionID)
-	workID = strings.TrimSpace(workID)
-	if s == nil || s.Records == nil || sessionID == "" || workID == "" {
+	if workID == "" {
 		return false, nil
 	}
-	actor := workerrecords.Actor{SessionID: sessionID, Role: workerrecords.RoleCoordinator, PrincipalID: sessionID}
-	workers, err := s.Records.Workers(ctx, actor)
+	workers, err := s.records.Workers(ctx, coordinator(sessionID))
 	if err != nil {
 		return false, err
 	}
@@ -238,36 +209,26 @@ func (s *Service) HasPlannedWorker(ctx context.Context, sessionID, workID string
 	return false, nil
 }
 
-// ResolvePlannedWorkflowWork supplies TaskIdentityResolver defaults from a seeded planned worker.
+// ResolvePlannedWorkflowWork returns the workflow binding, agent, scope and
+// charter of the unstarted planned worker for workID, if the session has one.
 func (s *Service) ResolvePlannedWorkflowWork(ctx context.Context, sessionID, workID string) (spawn.WorkflowWork, bool, error) {
-	if s == nil || s.Records == nil {
-		return spawn.WorkflowWork{}, false, nil
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	workID = strings.TrimSpace(workID)
-	if sessionID == "" || workID == "" {
-		return spawn.WorkflowWork{}, false, nil
-	}
-	actor := workerrecords.Actor{SessionID: sessionID, Role: workerrecords.RoleCoordinator, PrincipalID: sessionID}
-	w, found, err := s.findPlannedWorker(ctx, actor, workID)
+	w, found, err := s.findPlannedWorker(ctx, coordinator(sessionID), workID)
 	if err != nil || !found {
 		return spawn.WorkflowWork{}, false, err
-	}
-	scope := &api.TaskScope{Mode: api.TaskScopeMode(w.ScopeMode), Paths: append([]string(nil), w.Files...)}
-	charter := &api.WorkerTaskCharter{
-		Goal:     w.Brief,
-		DoneWhen: append([]string(nil), w.Criteria...),
 	}
 	return spawn.WorkflowWork{
 		RunID:     w.WorkflowRunID,
 		Phase:     w.WorkflowPhase,
 		AgentType: w.AgentType,
-		Scope:     scope,
-		Charter:   charter,
+		Scope:     &api.TaskScope{Mode: api.TaskScopeMode(w.ScopeMode), Paths: append([]string(nil), w.Files...)},
+		Charter:   &api.WorkerTaskCharter{Goal: w.Brief, DoneWhen: append([]string(nil), w.Criteria...)},
 	}, true, nil
 }
 
-// PreparePlannedTask resolves an unstarted planned worker for workID and returns its prerequisite worker names.
+// PreparePlannedTask admits the first round of the unstarted planned worker
+// for workID. It returns the worker and the workers it must run after: the
+// caller's, then the plan's own prerequisites. found is false when the
+// session has no planned worker for workID.
 func (s *Service) PreparePlannedTask(
 	ctx context.Context,
 	actor workerrecords.Actor,
@@ -276,15 +237,12 @@ func (s *Service) PreparePlannedTask(
 	scopeMode string,
 	writePaths []string,
 	explicitAfter []string,
-) (workerrecords.Worker, []string, bool, error) {
-	if s == nil || s.Records == nil || strings.TrimSpace(workID) == "" {
-		return workerrecords.Worker{}, nil, false, nil
-	}
-	w, found, err := s.findPlannedWorker(ctx, actor, workID)
+) (w workerrecords.Worker, after []string, found bool, err error) {
+	w, found, err = s.findPlannedWorker(ctx, actor, workID)
 	if err != nil || !found {
 		return workerrecords.Worker{}, nil, false, err
 	}
-	workers, err := s.Records.Workers(ctx, actor)
+	workers, err := s.records.Workers(ctx, actor)
 	if err != nil {
 		return workerrecords.Worker{}, nil, false, err
 	}
@@ -292,71 +250,53 @@ func (s *Service) PreparePlannedTask(
 	for _, item := range workers {
 		byID[item.ID] = item
 	}
-	deps, err := s.Records.Dependencies(ctx, actor, w.ID)
+	deps, err := s.records.Dependencies(ctx, actor, w.ID)
 	if err != nil {
 		return workerrecords.Worker{}, nil, false, err
 	}
-	mergedAfter := append([]string(nil), explicitAfter...)
-	seen := make(map[string]bool, len(mergedAfter))
-	for _, name := range mergedAfter {
-		seen[strings.TrimSpace(name)] = true
+	after = append([]string(nil), explicitAfter...)
+	seen := make(map[string]bool, len(after))
+	for _, name := range after {
+		seen[name] = true
 	}
 	for _, dep := range deps {
-		if dep.ProducerWorkerID == "" {
-			continue
-		}
 		producer, ok := byID[dep.ProducerWorkerID]
 		if !ok || producer.ClosedAt != "" {
 			continue
 		}
-		rounds, rErr := s.Records.Rounds(ctx, actor, producer.ID)
-		if rErr != nil {
-			return workerrecords.Worker{}, nil, false, rErr
+		rounds, err := s.records.Rounds(ctx, actor, producer.ID)
+		if err != nil {
+			return workerrecords.Worker{}, nil, false, err
 		}
 		if len(rounds) == 0 {
-			return workerrecords.Worker{}, nil, false, &toolrejection.ToolReject{
-				Code: "TOOL_ARGS_INVALID",
-				Data: map[string]any{
-					"tool":                 "task",
-					"field":                "workflow_work_id",
-					"workflow_work_id":     workID,
-					"prerequisite_worker":  producer.Name,
-					"prerequisite_work_id": producer.WorkflowWorkID,
-					"reason":               "prerequisite_worker_not_started",
-				},
-			}
+			return workerrecords.Worker{}, nil, false, planReject("task", "prerequisite_worker_not_started", map[string]any{
+				"field": "workflow_work_id", "workflow_work_id": workID,
+				"prerequisite_worker": producer.Name, "prerequisite_work_id": producer.WorkflowWorkID,
+			})
 		}
 		if !seen[producer.Name] {
 			seen[producer.Name] = true
-			mergedAfter = append(mergedAfter, producer.Name)
+			after = append(after, producer.Name)
 		}
 	}
 	if err := s.CheckRoundAdmission(ctx, RoundAdmissionRequest{
-		Actor:      actor,
-		Tool:       "task",
-		ProjectID:  projectID,
-		Worker:     w,
-		ScopeMode:  scopeMode,
-		WritePaths: writePaths,
-		AfterNames: mergedAfter,
+		Actor: actor, Tool: "task", ProjectID: projectID, Worker: w,
+		ScopeMode: scopeMode, WritePaths: writePaths, AfterNames: after,
 	}); err != nil {
 		return workerrecords.Worker{}, nil, false, err
 	}
-	return w, mergedAfter, true, nil
+	return w, after, true, nil
 }
 
-// SupersedeSettledWorkflowWorker closes a settled open worker bound to (runID, phase, workID)
-// when the workflow admits a fresh replacement worker attempt.
+// SupersedeSettledWorkflowWorker closes the settled open worker bound to
+// (runID, phase, workID) so the workflow can start a fresh attempt.
 func (s *Service) SupersedeSettledWorkflowWorker(
 	ctx context.Context,
 	actor workerrecords.Actor,
 	op workerrecords.Op,
 	runID, phase, workID string,
 ) error {
-	if s == nil || s.Records == nil || strings.TrimSpace(runID) == "" || strings.TrimSpace(workID) == "" {
-		return nil
-	}
-	workers, err := s.Records.Workers(ctx, actor)
+	workers, err := s.records.Workers(ctx, actor)
 	if err != nil {
 		return err
 	}
@@ -364,66 +304,96 @@ func (s *Service) SupersedeSettledWorkflowWorker(
 		if w.ClosedAt != "" || w.WorkflowRunID != runID || w.WorkflowPhase != phase || w.WorkflowWorkID != workID {
 			continue
 		}
-		rounds, rErr := s.Records.Rounds(ctx, actor, w.ID)
-		if rErr != nil {
-			return rErr
+		rounds, err := s.records.Rounds(ctx, actor, w.ID)
+		if err != nil {
+			return err
 		}
 		if len(rounds) == 0 || rounds[len(rounds)-1].SettledAt == "" {
 			continue
 		}
-		if _, cErr := s.Records.Close(ctx, actor, op, w.ID, "superseded"); cErr != nil {
-			return cErr
+		if _, err := s.records.Close(ctx, actor, op, w.ID, "superseded"); err != nil {
+			return err
 		}
 	}
 	return nil
 }
 
+// findPlannedWorker resolves workID to the session's unstarted planned
+// worker. A worker is planned under the session's active workflow run, or
+// under none when no run is active; the active phase decides between several.
+// Refused, each with its own reason: a Blueprint worker that already ran,
+// whose next round goes through instruct_worker; a Blueprint worker planned
+// under another run, which plan_from_blueprint moves to this one; and a work
+// ID that still names several workers.
 func (s *Service) findPlannedWorker(ctx context.Context, actor workerrecords.Actor, workID string) (workerrecords.Worker, bool, error) {
-	workers, err := s.Records.Workers(ctx, actor)
+	if workID == "" {
+		return workerrecords.Worker{}, false, nil
+	}
+	workers, err := s.records.Workers(ctx, actor)
 	if err != nil {
 		return workerrecords.Worker{}, false, err
 	}
-	var activeRunID, activePhase string
-	if s.ActiveRuns != nil {
-		if run, rErr := s.ActiveRuns.ActiveBySession(ctx, actor.SessionID); rErr == nil && run != nil {
-			activeRunID = run.ID
-			activePhase = run.CurrentPhase
-		}
+	var runID, phase string
+	run, err := s.activeRuns.ActiveBySession(ctx, actor.SessionID)
+	if err != nil {
+		return workerrecords.Worker{}, false, err
 	}
-	var fallback *workerrecords.Worker
+	if run != nil {
+		runID, phase = run.ID, run.CurrentPhase
+	}
+	refuse := func(reason string, names ...string) (workerrecords.Worker, bool, error) {
+		data := map[string]any{"field": "workflow_work_id", "workflow_work_id": workID}
+		if len(names) == 1 {
+			data["worker"] = names[0]
+		} else {
+			data["workers"] = names
+		}
+		return workerrecords.Worker{}, false, planReject("task", reason, data)
+	}
+	var candidates, elsewhere []workerrecords.Worker
 	for _, w := range workers {
 		if w.ClosedAt != "" || w.WorkflowWorkID != workID {
 			continue
 		}
-		rounds, rErr := s.Records.Rounds(ctx, actor, w.ID)
-		if rErr != nil {
-			return workerrecords.Worker{}, false, rErr
+		rounds, err := s.records.Rounds(ctx, actor, w.ID)
+		if err != nil {
+			return workerrecords.Worker{}, false, err
 		}
-		if len(rounds) > 0 {
-			if w.BlueprintPath != "" {
-				return workerrecords.Worker{}, false, &toolrejection.ToolReject{
-					Code: "TOOL_ARGS_INVALID",
-					Data: map[string]any{
-						"tool":             "task",
-						"field":            "workflow_work_id",
-						"workflow_work_id": workID,
-						"worker":           w.Name,
-						"reason":           "planned_worker_already_started",
-					},
-				}
-			}
-			continue
-		}
-		if activeRunID != "" && w.WorkflowRunID == activeRunID && w.WorkflowPhase == activePhase {
-			return w, true, nil
-		}
-		if fallback == nil {
-			candidate := w
-			fallback = &candidate
+		switch {
+		case len(rounds) > 0 && w.BlueprintPath != "":
+			return refuse("planned_worker_already_started", w.Name)
+		case len(rounds) > 0:
+		case w.WorkflowRunID == runID:
+			candidates = append(candidates, w)
+		case w.BlueprintPath != "":
+			elsewhere = append(elsewhere, w)
 		}
 	}
-	if fallback != nil {
-		return *fallback, true, nil
+	if len(candidates) > 1 {
+		var inPhase []workerrecords.Worker
+		for _, w := range candidates {
+			if w.WorkflowPhase == phase {
+				inPhase = append(inPhase, w)
+			}
+		}
+		if len(inPhase) != 1 {
+			return refuse("planned_worker_ambiguous", workerNames(candidates)...)
+		}
+		candidates = inPhase
+	}
+	if len(candidates) == 1 {
+		return candidates[0], true, nil
+	}
+	if len(elsewhere) > 0 {
+		return refuse("planned_worker_other_run", workerNames(elsewhere)...)
 	}
 	return workerrecords.Worker{}, false, nil
+}
+
+func workerNames(workers []workerrecords.Worker) []string {
+	names := make([]string, len(workers))
+	for i, w := range workers {
+		names[i] = w.Name
+	}
+	return names
 }

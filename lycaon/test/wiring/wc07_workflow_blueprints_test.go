@@ -180,7 +180,7 @@ func TestBlueprintFlow11CriteriaReconcileAndBoardPlanFilter(t *testing.T) {
 	testutil.FailErr(t, "start leg-core", err)
 	testutil.FailErr(t, "drain round 1", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	verdictR1, err := h.Delegations.Plan.CheckSessionCloseout(ctx, sess.ID, sess.ProjectID, dir)
+	verdictR1, err := h.Delegations.Plan.CheckSessionCloseout(ctx, sess.ID, dir)
 	testutil.FailErr(t, "closeout after R1", err)
 	if verdictR1.OK || verdictR1.Code != "COORDINATOR_CRITERIA_UNMET" {
 		t.Fatalf("expected unmet criteria after R1, got %+v", verdictR1)

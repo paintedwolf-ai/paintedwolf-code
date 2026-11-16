@@ -218,7 +218,7 @@ type stubPlanCloseout struct {
 	err     error
 }
 
-func (s stubPlanCloseout) CheckSessionCloseout(context.Context, string, string, string) (workerplan.CloseoutVerdict, error) {
+func (s stubPlanCloseout) CheckSessionCloseout(context.Context, string, string) (workerplan.CloseoutVerdict, error) {
 	return s.verdict, s.err
 }
 
@@ -254,14 +254,16 @@ func TestPlanCloseoutBlocksUnmetCriteriaAndAssertCompletion(t *testing.T) {
 	testutil.FailErr(t, "assert completion ok", svc.AssertCompletion(t.Context(), sess))
 
 	svc.SetPlanCloseout(stubPlanCloseout{verdict: workerplan.CloseoutVerdict{
+		Code:     workerplan.CodeCriteriaUnmet,
+		Gap:      workerplan.GapCriteriaUnmet,
 		Worker:   "api-builder",
 		LegID:    "leg-1",
 		ResultID: "res-1",
-		Reason:   "missing test run",
-		Outcomes: []workerrecords.CriterionOutcome{{Criterion: "tests_pass", Passed: false}},
+		Unmet:    []string{"test:pass:go test ./..."},
+		Outcomes: []workerrecords.CriterionOutcome{{Criterion: "test:pass:go test ./...", Detail: "run_missing"}},
 	}})
 	reject, blocked := svc.PlanCloseout(t.Context(), sess, true, false)
-	if !blocked || reject == nil || !errors.Is(reject, guidance.ErrCloseoutStopped) {
+	if !blocked || reject == nil || reject.Code() != workerplan.CodeCriteriaUnmet || !errors.Is(reject, guidance.ErrCloseoutStopped) {
 		t.Fatalf("unmet criteria was not blocked: blocked=%v reject=%v", blocked, reject)
 	}
 	if err := svc.AssertCompletion(t.Context(), sess); err == nil {

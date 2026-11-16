@@ -211,7 +211,8 @@ function WorkerTranscriptPane(props: WorkerTranscriptPaneProps) {
       <WorkerCoordinationSection
         worker={props.worker()}
         findings={props.findingsDigest()}
-        roster={props.appStore.state.board?.roster}
+        board={props.appStore.state.board}
+        workers={props.appStore.state.workers}
         onSelect={() => props.selectSection("coordination")}
       />
       <WorkerEvidenceSection

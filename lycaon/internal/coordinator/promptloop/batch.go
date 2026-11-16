@@ -524,6 +524,7 @@ func (l *toolBatch) executeOneToolCall(
 	projected := l.Tools.truncateToolResultForSession(
 		ctx,
 		tc.Name,
+		run.captures.ownerRef,
 		storageProjection,
 		run.content,
 		maxBytes,

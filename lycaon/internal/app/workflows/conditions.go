@@ -19,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
@@ -30,7 +29,7 @@ import (
 type ConditionDependencies struct {
 	ModuleRoot              string
 	DelegationStore         *delegation.SQLStore
-	Plan                    *workerplan.Service
+	PlanCloseout            func(ctx context.Context, sessionID string) (bool, error)
 	ScanStore               *scan.SQLStore
 	ScanObligation          *scan.WorkflowObligation
 	Snapshots               *sourcesnapshot.Store
@@ -54,9 +53,13 @@ func (r *Runtime) BuildConditions(ctx context.Context, deps ConditionDependencie
 		proactiveCategories = scancfg.DefaultGatesConfig().Gates.ProactiveCategories
 	}
 
-	closeoutComplete := delegation.CloseoutComplete(deps.DelegationStore)
-	if deps.Plan != nil {
-		closeoutComplete = deps.Plan.CloseoutComplete(closeoutComplete)
+	// A session is closed out when its delegation and its planned workers are.
+	delegationCloseout := delegation.CloseoutComplete(deps.DelegationStore)
+	closeoutComplete := func(ctx context.Context, sessionID string) (bool, error) {
+		if ok, err := delegationCloseout(ctx, sessionID); err != nil || !ok {
+			return ok, err
+		}
+		return deps.PlanCloseout(ctx, sessionID)
 	}
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		DelegationStore: deps.DelegationStore,

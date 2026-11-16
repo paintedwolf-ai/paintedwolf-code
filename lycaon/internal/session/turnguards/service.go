@@ -76,7 +76,7 @@ type WorkflowRuns interface {
 	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)
 }
 type PlanCloseoutChecker interface {
-	CheckSessionCloseout(ctx context.Context, sessionID, projectID, workspacePath string) (workerplan.CloseoutVerdict, error)
+	CheckSessionCloseout(ctx context.Context, sessionID, workspacePath string) (workerplan.CloseoutVerdict, error)
 }
 
 type Service struct {

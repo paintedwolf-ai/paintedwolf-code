@@ -409,11 +409,12 @@ describe("WorkerTranscript", () => {
     appStore.actions.setBoard({
       summary: "ok",
       repo: { languages: [], file_count: 0, generated_at: "2026-01-01T00:00:00Z" },
-      roster: [
+      workers: [
         {
-          worker_id: "job-1",
+          name: "implementer",
           agent_type: "implement",
-          status: "complete",
+          state: "delivered",
+          latest_job_id: "job-1",
           reservations: ["pkg/reserved.go"],
         },
       ],

@@ -69,7 +69,7 @@ export const TOPIC_STORE_INVALIDATION: Readonly<
 > = {
   session: ["session"],
   message: [],
-  // Board reconciliation controls merge_status.
+  // The topic handler applies worker events to their rows.
   worker: [],
   checkpoint: ["session"],
   // The coalescer applies board snapshots.

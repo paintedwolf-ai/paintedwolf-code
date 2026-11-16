@@ -780,6 +780,24 @@ host_facts:
    type: string
  - name: paintedwolf.grounding_reason
    type: string
+ - name: paintedwolf.closeout_unstarted
+   type: bool
+ - name: paintedwolf.closeout_round_active
+   type: bool
+ - name: paintedwolf.closeout_criteria_unmet
+   type: bool
+ - name: paintedwolf.closeout_changes_pending
+   type: bool
+ - name: paintedwolf.closeout_changes_shelved
+   type: bool
+ - name: paintedwolf.closeout_changes_rejected
+   type: bool
+ - name: paintedwolf.closeout_scan_pending
+   type: bool
+ - name: paintedwolf.closeout_scan_failed
+   type: bool
+ - name: paintedwolf.unmet_criteria
+   type: list<string>
  - name: paintedwolf.missing_paths
    type: list<string>
  - name: paintedwolf.can_request_tools
@@ -1330,3 +1348,18 @@ host_facts:
    type: bool
  - name: paintedwolf.missing_capability_write_root
    type: bool
+ - name: paintedwolf.reproduced_source_lines
+   type: int
+   observation: Non-blank lines in the longest fence run matching a session-touched file at coordinator.post_turn; 0 when none matches.
+ - name: paintedwolf.reproduced_source_file_lines
+   type: int
+   observation: Non-blank lines in the matched candidate file slice at coordinator.post_turn; 0 when none matches.
+ - name: paintedwolf.reproduced_source_path
+   type: string
+   observation: Session display path of the matched candidate file at coordinator.post_turn; empty when none matches.
+ - name: paintedwolf.reproduced_source_start_line
+   type: int
+   observation: First 1-based line number of the matched run in the candidate file at coordinator.post_turn; 0 when none matches.
+ - name: paintedwolf.reproduced_source_end_line
+   type: int
+   observation: Last 1-based line number of the matched run in the candidate file at coordinator.post_turn; 0 when none matches.

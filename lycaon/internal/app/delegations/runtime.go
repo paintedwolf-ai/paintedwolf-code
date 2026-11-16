@@ -72,7 +72,6 @@ func New(database *db.Store, outbox *eventoutbox.Outbox, workersCfg worker.Worke
 		Store:    store,
 		Queue:    queue,
 		Records:  records,
-		Plan:     &workerplan.Service{Records: records},
 		Topology: workertopology.New(records, queue),
 	}
 }

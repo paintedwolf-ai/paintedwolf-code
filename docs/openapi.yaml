@@ -15483,10 +15483,6 @@ components:
         scans:
           x-go-pointer: true
           $ref: '#/components/schemas/BoardScansSlice'
-        roster:
-          type: array
-          items:
-            $ref: '#/components/schemas/BoardWorkerRosterEntry'
         workers:
           type: array
           description: Open workers in the session, needing the coordinator and most recent first.
@@ -15543,58 +15539,6 @@ components:
           format: date-time
         now_line:
           type: string
-    BoardWorkerRosterEntry:
-      x-go-generate: true
-      type: object
-      required:
-        - worker_id
-        - agent_type
-        - status
-      additionalProperties: false
-      properties:
-        dependencies:
-          type: array
-          items:
-            $ref: '#/components/schemas/WorkerDependency'
-        worker_id:
-          type: string
-          format: uuid
-        agent_type:
-          type: string
-        status:
-          $ref: '#/components/schemas/WorkerStatus'
-        merge_status:
-          $ref: '#/components/schemas/WorkerMergeStatus'
-        overlay_id:
-          type: string
-          pattern: ^[a-zA-Z0-9_.:/-]+$
-        scope_summary:
-          type: string
-        changed_paths:
-          type: array
-          items:
-            type: string
-        touched_paths:
-          type: array
-          items:
-            type: string
-        brief:
-          type: string
-          description: Worker assignment goal included in full board detail.
-        error:
-          type: string
-        tool_loops_used:
-          type: integer
-          minimum: 0
-          description: Completed tool rounds this worker run
-        reservations:
-          type: array
-          items:
-            type: string
-          description: Repo-relative paths held by handoff_reserve for this worker
-        blocked_on_approval:
-          type: boolean
-          description: True when checkpoint SSE reports a pending human checkpoint for this worker child session
     BoardWorker:
       x-go-generate: true
       type: object
@@ -15688,6 +15632,11 @@ components:
         changed_omitted:
           type: integer
           minimum: 0
+        reservations:
+          type: array
+          items:
+            type: string
+          description: Repo-relative paths the worker's live round holds with handoff_reserve.
     RepoBrief:
       x-go-generate: true
       x-go-field-order:
@@ -35086,6 +35035,10 @@ components:
         - sqlfluff
         - foundry
         - taplo
+        - golangci
+        - mix_format
+        - phpcs
+        - checkstyle
     FormatSettings:
       x-go-generate: true
       type: object

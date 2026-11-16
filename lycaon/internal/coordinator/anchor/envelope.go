@@ -17,14 +17,13 @@ type Envelope struct {
 	EvidenceDigest          string
 	CommandCompletionDigest string
 	// CommandRefusalDigest reports what the kernel refused a running job.
-	CommandRefusalDigest      string
-	TopologyOutput            string
-	PendingOverlayPromoteJobs []string
-	PromotedPaths             []string
-	ScanID                    string
-	ScanStatus                string
-	ScanCategories            string
-	ScanFindingsCount         int
+	CommandRefusalDigest string
+	TopologyOutput       string
+	PromotedPaths        []string
+	ScanID               string
+	ScanStatus           string
+	ScanCategories       string
+	ScanFindingsCount    int
 	// WorkerRoundNotice carries a round notice's measurements.
 	WorkerRoundNotice *kick.WorkerRoundNoticeFacts
 	BatchSeq          int
@@ -94,11 +93,6 @@ func (e Envelope) KickOptions() []kick.KickOption {
 		}
 	}
 	return opts
-}
-
-// HasPendingOverlayPromote reports emit-time overlay-promote facts.
-func (e Envelope) HasPendingOverlayPromote() bool {
-	return len(e.PendingOverlayPromoteJobs) > 0
 }
 
 // HasWorkerDecision reports a structured worker decision.

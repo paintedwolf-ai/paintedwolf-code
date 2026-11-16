@@ -56,42 +56,32 @@ func TestPackBoardEnvelopeOmitsHeavyWorkerFields(t *testing.T) {
 	if summary == "" {
 		t.Fatal("summary missing")
 	}
-	roster, ok := env["roster"].([]any)
-	if !ok || len(roster) != 1 {
-		t.Fatalf("roster = %#v", env["roster"])
-	}
-	row, _ := roster[0].(map[string]any)
-	if row["changed_paths"] == nil {
-		t.Fatal("roster row missing changed_paths")
-	}
-	if _, hasPrompt := row["prompt"]; hasPrompt {
-		t.Fatal("compact roster must not include prompt")
-	}
-	if _, hasRoot := row["workspace_root"]; hasRoot {
-		t.Fatal("roster must not include workspace_root")
+	if strings.Contains(body, `"prompt"`) {
+		t.Fatal("compact envelope must not include prompt")
 	}
 	if strings.Contains(body, "workspace_root") {
 		t.Fatal("pack_board envelope must not name workspace_root")
 	}
 }
 
-func TestPackBoardEnvelopeStatusLevelOmitsRoster(t *testing.T) {
+func TestPackBoardEnvelopeStatusLevelOmitsWorkers(t *testing.T) {
 	snap := fixtureSnapshot()
+	snap.Workers = &api.BoardWorkersSlice{"workers": []api.BoardWorker{{Name: "parser", AgentType: "implementer", State: api.WorkerStateWorking}}}
 	snap.PackContentHash = PackContentHash(snap, time.Now().UTC())
 	out := marshalBoardView(t, &snap, api.BoardDetailLevelStatus, time.Now().UTC())
 	var env map[string]any
 	if err := json.Unmarshal(out, &env); err != nil {
 		testutil.FailErr(t, "unmarshal envelope", err)
 	}
-	if _, ok := env["roster"]; ok {
-		t.Fatal("status level must omit roster")
+	if _, ok := env["workers"]; ok {
+		t.Fatal("status level must omit workers")
 	}
 	if env["summary"] == "" {
 		t.Fatal("summary missing")
 	}
 }
 
-func TestPackBoardEnvelopeFullIncludesBriefNotPrompt(t *testing.T) {
+func TestPackBoardEnvelopeFullOmitsPromptAndBaselines(t *testing.T) {
 	baseline := map[string]testbaseline.File{
 		"src/main.go": {Content: "baseline body"},
 	}
@@ -111,9 +101,6 @@ func TestPackBoardEnvelopeFullIncludesBriefNotPrompt(t *testing.T) {
 
 	out := marshalBoardView(t, &snap, api.BoardDetailLevelFull, time.Now().UTC())
 	body := string(out)
-	if !strings.Contains(body, `"brief":"fix the bug"`) {
-		t.Fatalf("full level should include brief: %s", body)
-	}
 	if strings.Contains(body, `"prompt"`) || strings.Contains(body, strings.Repeat("assignment ", 20)) {
 		t.Fatalf("full level must omit prompt: %s", body)
 	}
@@ -156,47 +143,25 @@ func TestBuildBoardViewForensicIncludesNoticeAndTasks(t *testing.T) {
 	}
 }
 
-func TestAttachRosterReservationsMapsPathsByJobID(t *testing.T) {
-	roster := []api.BoardWorkerRosterEntry{
-		{WorkerID: "job-a", AgentType: "implementer", Status: api.WorkerStatusRunning},
-		{WorkerID: "job-b", AgentType: "implementer", Status: api.WorkerStatusRunning},
-	}
-	got := AttachRosterReservations(roster, []api.BoardReservationEntry{
-		{Path: "pkg/foo.go", JobID: "job-a"},
-		{Path: "pkg/bar.go", JobID: "job-a"},
-	})
-	if len(got[0].Reservations) != 2 || got[0].Reservations[0] != "pkg/foo.go" {
-		t.Fatalf("job-a reservations = %#v", got[0].Reservations)
-	}
-	if len(got[1].Reservations) != 0 {
-		t.Fatalf("job-b reservations = %#v", got[1].Reservations)
-	}
-}
-
-func TestBuildBoardViewRosterIncludesReservations(t *testing.T) {
+func TestBoardWorkersCarryTheirLiveRoundReservations(t *testing.T) {
 	snap := fixtureSnapshot()
 	snap.Workers = &api.BoardWorkersSlice{
-		"tasks": []api.WorkerTask{{
-			ID: "job-a", AgentType: "implementer", Status: api.WorkerStatusRunning,
-		}},
-		"active_reservations": []api.BoardReservationEntry{{
-			Path: "shellsim/builtins.py", JobID: "job-a", LegLabel: "timer-leg",
-		}},
+		"workers": []api.BoardWorker{
+			{Name: "timer", AgentType: "implementer", State: api.WorkerStateWorking, LatestJobID: "job-a"},
+			{Name: "parser", AgentType: "implementer", State: api.WorkerStateWorking, LatestJobID: "job-b"},
+		},
+		"active_reservations": []api.BoardReservationEntry{
+			{Path: "shellsim/builtins.py", JobID: "job-a"},
+			{Path: "shellsim/timer.py", JobID: "job-a"},
+			{Path: "orphan.py", JobID: "job-gone"},
+		},
 	}
-	snap.PackContentHash = PackContentHash(snap, time.Now().UTC())
-	out := marshalBoardView(t, &snap, api.BoardDetailLevelCompact, time.Now().UTC())
-	var env map[string]any
-	if err := json.Unmarshal(out, &env); err != nil {
-		testutil.FailErr(t, "unmarshal envelope", err)
+	view := BuildBoardView(&snap, "sess-1", api.BoardDetailLevelCompact, time.Now().UTC())
+	if got := view.Workers[0].Reservations; len(got) != 2 || got[0] != "shellsim/builtins.py" || got[1] != "shellsim/timer.py" {
+		t.Fatalf("timer reservations = %#v", got)
 	}
-	roster, ok := env["roster"].([]any)
-	if !ok || len(roster) != 1 {
-		t.Fatalf("roster = %#v", env["roster"])
-	}
-	row, _ := roster[0].(map[string]any)
-	res, ok := row["reservations"].([]any)
-	if !ok || len(res) != 1 || res[0] != "shellsim/builtins.py" {
-		t.Fatalf("reservations = %#v", row["reservations"])
+	if got := view.Workers[1].Reservations; len(got) != 0 {
+		t.Fatalf("parser reservations = %#v", got)
 	}
 }
 

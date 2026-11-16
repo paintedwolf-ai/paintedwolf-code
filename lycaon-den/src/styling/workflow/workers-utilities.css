@@ -93,7 +93,7 @@ flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  font-size: var(--text-den-micro);
+  font-size: var(--text-den-body);
   font-weight: 500;
   padding: 0.1rem 0.4rem;
   border-radius: var(--den-radius-pill);
@@ -116,7 +116,7 @@ flex-shrink: 0;
   border: 1px solid var(--den-line);
   background: var(--den-surface);
   color: var(--den-text);
-  font-size: var(--text-den-compact);
+  font-size: var(--text-den-body);
   text-align: left;
   cursor: pointer;
   transition: background var(--den-duration) var(--den-ease);
@@ -143,7 +143,7 @@ flex-shrink: 0;
 @utility den-worker-collab-notice-link {
   margin-left: auto;
   flex-shrink: 0;
-  font-size: var(--text-den-micro);
+  font-size: var(--text-den-body);
   font-weight: 500;
   color: var(--den-accent-text);
 }

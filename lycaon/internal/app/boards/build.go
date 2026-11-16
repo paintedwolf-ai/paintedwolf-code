@@ -119,13 +119,9 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 		return r.deps.Settings.Service.SecurityScanners.Effective().Enabled
 	})
 
-	var planWorkers board.PlanWorkersFunc
-	if r.deps.Delegations != nil && r.deps.Delegations.Plan != nil {
-		planWorkers = r.deps.Delegations.Plan.PlanWorkers
-	}
 	if err := board.RegisterBoardTools(r.deps.Execution.Host.Registry, board.ToolDeps{
 		Builder:            r.Snapshot,
-		PlanWorkers:        planWorkers,
+		PlanWorkers:        r.deps.Delegations.Plan.PlanWorkers,
 		Findings:           func() findings.Store { return r.Findings },
 		RootSession:        r.rootSessionKey,
 		PromotePaths:       r.deps.Sessions.Manager.Promotion.PromotePathBoardLines,

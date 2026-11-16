@@ -57,6 +57,20 @@ func TestFactsFollowTheLastResult(t *testing.T) {
 	if sel := workerlane.Select(got); sel.Action != workerlane.ActionReset || sel.FromCheckpoint != "cp-job-1" {
 		t.Fatalf("selection = %+v", sel)
 	}
+
+	// The reset runs, and the round on it is rejected too: the first result
+	// is still pending, so the lane returns to it again.
+	_, err = f.lanes.Admit(t.Context(), workerlane.Request{Actor: f.actor, Op: workerrecords.Op{ID: "reset-2"}, WorkerID: f.workerID, Facts: got})
+	testutil.FailErr(t, "reset", err)
+	if after := f.facts(t, fakeState{}, write); workerlane.Select(after).Action != workerlane.ActionKeep {
+		t.Fatalf("a reset lane was reset again: %+v", after)
+	}
+	f.round(t, "job-3", "result-3", "cp-job-3")
+	_, err = f.records.SetChange(t.Context(), f.actor, workerrecords.Op{ID: "reject-3"}, "result-3", workerrecords.Change{State: workerrecords.ChangeRejected})
+	testutil.FailErr(t, "reject again", err)
+	if sel := workerlane.Select(f.facts(t, fakeState{}, write)); sel.Action != workerlane.ActionReset || sel.FromCheckpoint != "cp-job-1" {
+		t.Fatalf("second rejection = %+v, want a reset to cp-job-1", sel)
+	}
 }
 
 func TestFactsAfterALandingThatRefreshed(t *testing.T) {

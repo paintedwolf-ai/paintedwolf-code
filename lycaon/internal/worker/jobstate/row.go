@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -118,7 +119,7 @@ func loadWorkerRoundWire(ctx context.Context, database db.DBTX, task *api.Worker
 		task.Round = int(round.Ordinal)
 		if round.SettledAt != "" && round.ResultID != "" {
 			task.ResultHandle = round.ResultID
-			task.ResultDisposition = wireDisposition(round.ChangeState, round.CheckpointID, round.AccountedAt)
+			task.ResultDisposition = api.WorkerResultDisposition(workerrecords.ResultDisposition(round.ChangeState, round.CheckpointID, round.AccountedAt))
 			task.ShelveReason = round.ShelveReason
 		}
 		if round.ReviewSubjectJson != "" {
@@ -144,17 +145,4 @@ func loadWorkerRoundWire(ctx context.Context, database db.DBTX, task *api.Worker
 		return err
 	}
 	return nil
-}
-
-func wireDisposition(changeState, checkpointID, accountedAt string) api.WorkerResultDisposition {
-	switch {
-	case changeState != "":
-		return api.WorkerResultDisposition(changeState)
-	case checkpointID != "":
-		return api.WorkerResultOpen
-	case accountedAt != "":
-		return api.WorkerResultAccounted
-	default:
-		return api.WorkerResultUnaccounted
-	}
 }

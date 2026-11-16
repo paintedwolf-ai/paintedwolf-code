@@ -38,20 +38,6 @@ describe("worker approval model", () => {
     ]);
   });
 
-  it("projects blocked_on_approval onto the board roster and clears it", () => {
-    const board = {
-      roster: [{ worker_id: "job-1", agent_type: "implementer", status: "running" }],
-    } as unknown as BoardView;
-    expect(
-      boardWithWorkerApprovalState(board, [worker], [pending])?.roster?.[0]
-        ?.blocked_on_approval,
-    ).toBe(true);
-    expect(
-      boardWithWorkerApprovalState(board, [worker], [])?.roster?.[0]
-        ?.blocked_on_approval,
-    ).toBeUndefined();
-  });
-
   it("projects approval_wait onto working board workers by child session or latest job", () => {
     expect(boardWithWorkerApprovalState(undefined, [worker], [pending])).toBeUndefined();
     const emptyBoard = {} as unknown as BoardView;

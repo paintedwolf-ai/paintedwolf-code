@@ -160,7 +160,7 @@ func (b *serveBuilder) wireWorkflowConditions() error {
 	err := b.workflows.BuildConditions(b.startup.ctx, workflows.ConditionDependencies{
 		ModuleRoot:              b.catalog.ModuleRoot,
 		DelegationStore:         b.delegations.Store,
-		Plan:                    b.delegations.Plan,
+		PlanCloseout:            b.delegations.PlanCloseoutComplete,
 		ScanStore:               b.scanning.Store,
 		ScanObligation:          b.scanning.Obligation,
 		Snapshots:               b.storage.SourceLedger.Snapshots,

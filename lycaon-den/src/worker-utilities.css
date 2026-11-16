@@ -282,7 +282,7 @@ margin-left: 8px;
 
 @utility den-worker-reviewed-subject {
   margin: 0 0 8px;
-  font-size: var(--text-den-caption);
+  font-size: var(--text-den-body);
   color: var(--den-text-muted);
   overflow-wrap: anywhere;
 }
@@ -335,7 +335,7 @@ margin-left: 8px;
 
 
 @utility den-worker-history-sender {
-  font-size: var(--text-den-caption);
+  font-size: var(--text-den-body);
   font-weight: 600;
   color: var(--den-text);
 }
@@ -359,7 +359,7 @@ margin-left: 8px;
   border: 1px solid var(--den-line);
   background: transparent;
   color: var(--den-accent-text);
-  font-size: var(--text-den-micro);
+  font-size: var(--text-den-body);
   font-weight: 500;
   cursor: pointer;
   &:hover {

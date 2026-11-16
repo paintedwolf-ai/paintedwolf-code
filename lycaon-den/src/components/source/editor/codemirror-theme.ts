@@ -573,9 +573,13 @@ function sourceEditorExtensions(args: SourceEditorOptions): Extension[] {
   const handlers: SourceEditorHandlers = args.handlers ?? {};
   const extensions: Extension[] = [
     editorCspNonce(),
-    syntaxHighlighting(denHighlightStyle),
-    syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-    highlightBeforePaint(),
+    ...(simplified
+      ? []
+      : [
+          syntaxHighlighting(denHighlightStyle),
+          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
+          highlightBeforePaint(),
+        ]),
     denCodeMirrorTheme(args.surface),
     // Tooltips outside editor containment remain unclipped.
     tooltips({
@@ -590,7 +594,7 @@ function sourceEditorExtensions(args: SourceEditorOptions): Extension[] {
     symbolPendingField,
     // Search state is separate from command routing.
     search(),
-    bracketMatching(),
+    ...(simplified ? [] : [bracketMatching()]),
     highlightSpecialChars(),
     EditorState.allowMultipleSelections.of(true),
     rectangularSelection(),
@@ -599,7 +603,7 @@ function sourceEditorExtensions(args: SourceEditorOptions): Extension[] {
     args.scrollPastEnd === false ? [] : scrollPastEnd(),
     cursorMargin(),
     // Line numbers expose ranges folded in read-only buffers.
-    denFolding,
+    ...(simplified ? [] : [denFolding]),
     lineGutterExtension,
     // Secret marks do not affect layout.
     secretSpanExtension,
@@ -637,7 +641,7 @@ function sourceEditorExtensions(args: SourceEditorOptions): Extension[] {
     scopeDiffExtension,
   );
   if (!simplified) extensions.push(occurrenceHighlight, overviewSymbolMarks);
-  if (args.language && !simplified) extensions.push(args.language);
+  if (args.language && args.doc.length <= LARGE_DOCUMENT_CHAR_THRESHOLD) extensions.push(args.language);
   if (args.extensions) extensions.push(args.extensions);
   return extensions;
 }

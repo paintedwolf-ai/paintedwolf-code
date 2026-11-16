@@ -274,6 +274,7 @@ export function TranscriptItemRow(props: {
               rowId={wire()?.id ?? user().key}
               client={props.checkpointClient}
               recovery={pending() ? undefined : props.recovery}
+              reserveActions={Boolean(props.recovery)}
               ts={timestamp()}
               viewContext={wire()?.source_context?.view}
             />
