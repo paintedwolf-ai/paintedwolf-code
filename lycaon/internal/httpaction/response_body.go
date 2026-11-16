@@ -1,9 +1,16 @@
 package httpaction
 
 import (
+	"bytes"
 	"context"
+	"mime"
+	"strings"
+	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/blobstore"
+	"github.com/lycaon/lycaon/internal/bytebound"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -40,4 +47,35 @@ func placeResponseBody(ctx context.Context, resp outboundhttp.Response, tctx too
 		return bodyPlacement{omitted: true, encoding: "utf-8", spillFailed: true}
 	}
 	return bodyPlacement{omitted: true, encoding: "utf-8", spillPath: rel}
+}
+
+// landHostData writes an oversized body to the host-data tool-output store,
+// which projectpaths resolves for read and the host reclaims on its own.
+func landHostData(ctx context.Context, tctx tools.ToolContext, body []byte) (string, bool) {
+	root := strings.TrimSpace(tctx.Host.HostDataDir)
+	if root == "" {
+		return "", false
+	}
+	rel := tooloutput.ToolOutputSpillRelPath(string(body))
+	store := blobstore.Store{Root: root}
+	bound := bytebound.Materialization(tooloutput.DefaultMaxSpillFileBytes)
+	if _, err := store.PutAt(ctx, rel, bytes.NewReader(body), bound); err != nil {
+		return "", false
+	}
+	return rel, true
+}
+
+// textual reports whether a body may be shown as text: a text media type, a
+// structured type that is text in practice, or no declared type, and in every
+// case only when the bytes are valid UTF-8.
+func textual(contentType string, body []byte) bool {
+	mediaType, _, _ := mime.ParseMediaType(contentType)
+	if strings.HasPrefix(mediaType, "text/") {
+		return utf8.Valid(body)
+	}
+	switch mediaType {
+	case "application/json", "application/xml", "application/javascript", "application/x-yaml", "image/svg+xml":
+		return utf8.Valid(body)
+	}
+	return mediaType == "" && utf8.Valid(body)
 }

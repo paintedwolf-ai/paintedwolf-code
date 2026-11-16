@@ -165,6 +165,50 @@ func (e *Enforcer) VerifyView(ctx context.Context, view *adapter.PreparedView) e
 	return verify(ctx, view, Boundary(view))
 }
 
+func verify(ctx context.Context, view *adapter.PreparedView, boundary confine.ViewBoundary) error {
+	if view == nil || view.PrimaryWorkPath == "" {
+		return unavailable(errors.New("no prepared view to verify"))
+	}
+	roots := make([]string, 0, len(view.Roots))
+	for _, root := range view.Roots {
+		roots = append(roots, root.WorkspacePath)
+	}
+	box, err := workerBox(roots, boundary)
+	if err != nil {
+		return err
+	}
+	// Only the primary root takes a write: a stat of the others shows they are reached.
+	steps := []denialprobe.Step{{Kind: denialprobe.CreateFile, Path: filepath.Join(view.PrimaryWorkPath, probeName)}}
+	for _, root := range roots {
+		steps = append(steps, denialprobe.Step{Kind: denialprobe.Stat, Path: root})
+	}
+	allowed := len(steps)
+	for _, path := range boundary.DeniedPaths {
+		if entry := FirstEntry(path, slices.Concat(boundary.ReopenedPaths, boundary.ReopenedReadPaths)...); entry != "" {
+			steps = append(steps, denialprobe.Step{Kind: denialprobe.Stat, Path: entry})
+		}
+		steps = append(steps, denialprobe.Step{Kind: denialprobe.CreateFile, Path: filepath.Join(path, probeName)})
+	}
+	for _, port := range view.ListenerPorts {
+		steps = append(steps, denialprobe.Step{Kind: denialprobe.Connect, Port: port})
+	}
+	steps = append(steps, denialprobe.Step{Kind: denialprobe.Unmount, Path: view.PrimaryWorkPath})
+
+	results, err := Launch(ctx, box, view.PrimaryWorkPath, steps)
+	if err != nil {
+		return unavailable(err)
+	}
+	if err := judge(results, allowed); err != nil {
+		return err
+	}
+	for _, root := range roots {
+		if mounted, err := adapter.MountBoundaryPresent(root); err != nil || !mounted {
+			return failed(fmt.Sprintf("root %s left its mount after the probe: %v", root, err))
+		}
+	}
+	return nil
+}
+
 const maxEntriesScanned = 64
 
 // probeName is what the probe tries to create, and removes when it can.

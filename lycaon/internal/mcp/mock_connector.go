@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -40,6 +41,64 @@ type mockSession struct {
 	calls        map[string]map[string]int
 	parent       *MockConnector
 	onHTTPStatus func(int)
+}
+
+func (m *mockSession) CallTool(_ context.Context, name string, args map[string]any) (*sdkmcp.CallToolResult, error) {
+	if m.calls != nil {
+		if m.calls[m.providerID] == nil {
+			m.calls[m.providerID] = map[string]int{}
+		}
+		m.calls[m.providerID][name]++
+	}
+	if m.parent != nil && m.parent.HTTPStatusOnce != nil {
+		if code, pending := m.parent.HTTPStatusOnce[m.providerID]; pending {
+			delete(m.parent.HTTPStatusOnce, m.providerID)
+			if m.onHTTPStatus != nil {
+				m.onHTTPStatus(code)
+			}
+			return nil, fmt.Errorf("mock http status %d", code)
+		}
+	}
+	if m.parent != nil && m.parent.CallArgs != nil {
+		if m.parent.CallArgs[m.providerID] == nil {
+			m.parent.CallArgs[m.providerID] = map[string]map[string]any{}
+		}
+		m.parent.CallArgs[m.providerID][name] = args
+	}
+	if m.parent != nil && m.parent.CallErr != nil {
+		if err := m.parent.CallErr[m.providerID]; err != nil {
+			return nil, err
+		}
+	}
+	if m.parent != nil && m.parent.CallIsError != nil {
+		if text := m.parent.CallIsError[m.providerID]; text != "" {
+			return &sdkmcp.CallToolResult{
+				Content: []sdkmcp.Content{&sdkmcp.TextContent{Text: text}},
+				IsError: true,
+			}, nil
+		}
+	}
+	switch name {
+	case "intel.search":
+		return &sdkmcp.CallToolResult{
+			Content: []sdkmcp.Content{&sdkmcp.TextContent{Text: `{"note":"mock dotted tool"}`}},
+		}, nil
+	case "list_scans", "get_scan_summary", "query_findings":
+		return &sdkmcp.CallToolResult{
+			Content: []sdkmcp.Content{&sdkmcp.TextContent{Text: `{"note":"mock mcp server"}`}},
+		}, nil
+	case "scan":
+		raw := `{"results":[{"check_id":"lycaon.test.rule","path":"a.go","start":{"line":1},"extra":{"message":"test","severity":"ERROR"}}]}`
+		return &sdkmcp.CallToolResult{
+			Content: []sdkmcp.Content{&sdkmcp.TextContent{Text: raw}},
+		}, nil
+	case "query":
+		return &sdkmcp.CallToolResult{
+			Content: []sdkmcp.Content{&sdkmcp.TextContent{Text: `{"results":[]}`}},
+		}, nil
+	default:
+		return nil, fmt.Errorf("unknown tool %q", name)
+	}
 }
 
 func (m *mockSession) Close() error { return nil }

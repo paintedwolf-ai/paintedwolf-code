@@ -408,6 +408,11 @@ func finishBuild(
 	return snap, nil
 }
 
+func inventoryEntryUnderScope(rel, scope string) bool {
+	scope = strings.Trim(strings.TrimSpace(filepath.ToSlash(scope)), "/")
+	return scope == "" || scope == "." || rel == scope || strings.HasPrefix(rel, scope+"/")
+}
+
 func readFileUnderRoot(root *os.Root, absRoot, path string) ([]byte, error) {
 	rel, err := filepath.Rel(absRoot, path)
 	if err != nil {
