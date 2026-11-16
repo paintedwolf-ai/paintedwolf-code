@@ -60,8 +60,8 @@ async function answerSummaryAfter(page: Page, text: { purpose: string; change: s
 /** Offset of the card body below the summary from the card's top. */
 async function bodyOffset(page: Page): Promise<number> {
   return page.evaluate(() => {
-    const card = document.querySelector<HTMLElement>('[data-testid="activity-summary"]')?.closest<HTMLElement>('[data-testid="tool-part-card"]');
-    const below = card?.querySelector<HTMLElement>(".den-tool-part-card-structured");
+    const card = document.querySelector<HTMLElement>('[data-testid="activity-summary"]')?.closest<HTMLElement>('[data-testid="action-card"]');
+    const below = card?.querySelector<HTMLElement>('[data-testid="action-links"]');
     if (!card || !below) return Number.NaN;
     return below.getBoundingClientRect().top - card.getBoundingClientRect().top;
   });
@@ -71,7 +71,7 @@ async function openCard(page: Page, sessionId: string) {
   const stream = liveChatStage(page).locator(`[data-testid="chat-stream"][data-session-id="${sessionId}"]`);
   await stream.getByTestId("activity-span-card").locator(":scope > .den-transcript-disclosure-header").click();
   // The row settles once its result joins the call; opening earlier would open a row that is about to be replaced.
-  const card = stream.locator('[data-testid="tool-part-card"][data-tool-call-id="call_read_1"][data-status="done"]');
+  const card = stream.locator('[data-testid="action-card"][data-tool-call-id="call_read_1"][data-status="done"]');
   await expect(card).toBeVisible({ timeout: 30_000 });
   // A span with a single action opens it along with the span.
   if ((await card.getAttribute("data-expanded")) !== "true") await card.locator(":scope > .den-transcript-disclosure-header").click();
