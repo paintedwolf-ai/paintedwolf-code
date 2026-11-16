@@ -8,7 +8,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/indexwatch"
 	"github.com/lycaon/lycaon/internal/testutil"

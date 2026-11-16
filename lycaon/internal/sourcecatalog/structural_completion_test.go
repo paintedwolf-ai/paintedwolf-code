@@ -1,11 +1,9 @@
 package sourcecatalog
 
 import (
-	"context"
 	"errors"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/testutil"

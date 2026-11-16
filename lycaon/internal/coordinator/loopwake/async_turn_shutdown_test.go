@@ -5,7 +5,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/promptresult"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	"sync"
 	"testing"

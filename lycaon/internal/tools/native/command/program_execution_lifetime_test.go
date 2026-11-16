@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/testutil"

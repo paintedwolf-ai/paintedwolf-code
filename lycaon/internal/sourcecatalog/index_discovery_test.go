@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/pagedview"

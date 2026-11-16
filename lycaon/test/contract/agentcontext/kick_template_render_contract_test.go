@@ -5,10 +5,8 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )

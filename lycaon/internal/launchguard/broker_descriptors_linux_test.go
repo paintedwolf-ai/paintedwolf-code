@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/launchbroker"
 	"github.com/lycaon/lycaon/internal/testutil"

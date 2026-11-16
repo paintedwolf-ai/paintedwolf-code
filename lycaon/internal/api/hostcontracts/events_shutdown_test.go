@@ -2,7 +2,6 @@ package hostcontracts
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"net"
 	"net/http"

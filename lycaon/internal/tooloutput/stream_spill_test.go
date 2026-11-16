@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/testutil"

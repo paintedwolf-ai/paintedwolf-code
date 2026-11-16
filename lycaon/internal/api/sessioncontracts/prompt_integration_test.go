@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/testutil"

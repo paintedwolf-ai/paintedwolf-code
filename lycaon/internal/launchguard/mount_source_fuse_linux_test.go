@@ -14,7 +14,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -47,7 +46,7 @@ func TestInputCancellationClosesBlockedSource(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { _, err := input.Read(make([]byte, 1)); done <- err }()
 	cancel()
-	err := testutil.Receive(t, "the canceled input read returns", done)
+	err = testutil.Receive(t, "the canceled input read returns", done)
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("input cancellation=%v", err)
 	}

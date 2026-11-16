@@ -5,7 +5,6 @@ package integration
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"

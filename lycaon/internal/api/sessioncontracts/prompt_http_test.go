@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"

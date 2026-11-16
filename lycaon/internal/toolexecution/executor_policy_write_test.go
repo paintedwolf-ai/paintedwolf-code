@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"

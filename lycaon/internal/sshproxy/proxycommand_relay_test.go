@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/netip"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/testutil"

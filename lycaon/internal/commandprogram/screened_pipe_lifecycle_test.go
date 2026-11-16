@@ -7,7 +7,6 @@ import (
 	"io"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/secretmatch"

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/bgprocess"

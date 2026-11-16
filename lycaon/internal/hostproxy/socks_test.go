@@ -9,7 +9,6 @@ import (
 	"net/netip"
 	"net/url"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )

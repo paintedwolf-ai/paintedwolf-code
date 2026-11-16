@@ -66,7 +66,7 @@ func TestConnectionCapacityRejectsBeforeVerificationAndReclaimsSlots(t *testing.
 	f.cancel()
 	// Cancellation starts shutdown; wait for Serve to finish closing the listener
 	// and draining callers before asserting that connections are unusable.
-	err := testutil.Receive(t, "the service finishes shutdown", f.done)
+	err = testutil.Receive(t, "the service finishes shutdown", f.done)
 	f.done <- err // The fixture cleanup also observes the Serve result.
 	if err != nil {
 		t.Fatalf("shutdown service: %v", err)

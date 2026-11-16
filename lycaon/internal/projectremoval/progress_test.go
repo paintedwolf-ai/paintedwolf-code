@@ -5,7 +5,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api/taskgroup"

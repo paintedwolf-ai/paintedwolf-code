@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"

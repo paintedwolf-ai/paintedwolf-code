@@ -158,7 +158,7 @@ func TestLogindLeaseTransfersDescriptorAndBlocksAutomaticSuspend(t *testing.T) {
 	}
 	testutil.FailErr(t, "release inhibitor", held.Release())
 	testutil.FailErr(t, "repeat release", held.Release())
-	err := testutil.Receive(t, "the release closes the inhibitor descriptor", ended)
+	err = testutil.Receive(t, "the release closes the inhibitor descriptor", ended)
 	if !errors.Is(err, io.EOF) {
 		t.Fatalf("released inhibitor pipe = %v", err)
 	}

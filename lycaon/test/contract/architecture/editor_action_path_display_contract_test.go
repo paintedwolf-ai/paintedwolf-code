@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"

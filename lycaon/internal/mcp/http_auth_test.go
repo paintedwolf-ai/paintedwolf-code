@@ -1,7 +1,6 @@
 package mcp_test
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/testutil"

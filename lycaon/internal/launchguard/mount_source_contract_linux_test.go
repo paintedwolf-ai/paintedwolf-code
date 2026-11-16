@@ -15,7 +15,6 @@ import (
 	"strings"
 	"syscall"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"

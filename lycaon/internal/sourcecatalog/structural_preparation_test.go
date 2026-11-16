@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/testutil"
