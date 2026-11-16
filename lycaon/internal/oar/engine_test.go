@@ -235,11 +235,11 @@ func TestSyncRegistryFromStockIncludesNonPlatformPack(t *testing.T) {
 	testutil.FailErr(t, "json", json.Unmarshal(raw, &doc))
 	// Non-platform packs must land; a platform-only DefaultDir sync drops these.
 	for _, code := range []string{
-		"ASK_USER_ALREADY_PENDING",      // hitl
-		"BANNER_PROMOTE_HIGH_CONFLICT",  // implement
-		"BROWSER_UNAVAILABLE",           // browser
-		"SECURITY_DISABLED",             // scan-guidance
-		"POLICY_WRITE_REQUIRES_COMMAND", // platform
+		"ASK_USER_ALREADY_PENDING",       // hitl
+		"BANNER_PROMOTE_CONFLICT_DIGEST", // implement
+		"BROWSER_UNAVAILABLE",            // browser
+		"SECURITY_DISABLED",              // scan-guidance
+		"POLICY_WRITE_REQUIRES_COMMAND",  // platform
 	} {
 		if _, ok := doc.HintCodes[code]; !ok {
 			t.Fatalf("stock sync missing %s (got %d codes)", code, len(doc.HintCodes))
