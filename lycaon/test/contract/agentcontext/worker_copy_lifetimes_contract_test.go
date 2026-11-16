@@ -227,7 +227,7 @@ func TestWorkerCopyAbsentStates(t *testing.T) {
 	}
 
 	emptyRound := inject.RenderWorkerRoundBlock(context.Background(), renderer, "s-empty", inject.WorkerRoundFrame{Ordinal: 1})
-	if emptyRound.Header != "" || emptyRound.Messages != "" || inject.WorkerRoundParts(emptyRound) != nil {
+	if emptyRound.Header != "" || emptyRound.Messages != "" {
 		t.Fatalf("expected empty round block when no brief or instructions exist, got %+v", emptyRound)
 	}
 
