@@ -43,7 +43,11 @@ export function ActionCard(props: Props) {
   const members = () => [props.part, ...(props.part.foldMembers ?? [])];
   const externalAccess = () => members().find((member) => member.externalAccess)?.externalAccess ?? undefined;
   const redaction = () => members().find((member) => member.redaction?.spans?.length)?.redaction ?? undefined;
-  const process = () => (props.sessionId ? members().map(liveToolProcess).find((handle) => handle !== null) ?? undefined : undefined);
+  const process = () => {
+    const sessionId = props.sessionId;
+    const handle = sessionId ? members().map(liveToolProcess).find((live) => live !== null) : undefined;
+    return sessionId && handle ? { sessionId, handle } : undefined;
+  };
   // A live process states its own state, so the card drops the recorded one.
   const facts = () => (process() ? props.action.facts.filter((fact) => fact.kind !== "process") : props.action.facts);
   const port = () => props.action.facts.find((fact) => fact.kind === "process")?.port;
@@ -68,7 +72,7 @@ export function ActionCard(props: Props) {
         {props.slots?.summary}
         <ActionFacts facts={facts()} />
         <Show when={process()} keyed>
-          {(live) => <ActionProcess sessionId={props.sessionId!} processId={live.handle} initialRunning={live.running} terminationReason={live.termination_reason} port={port()} />}
+          {(live) => <ActionProcess sessionId={live.sessionId} processId={live.handle.handle} initialRunning={live.handle.running} terminationReason={live.handle.termination_reason} port={port()} />}
         </Show>
         <Show when={externalAccess()} keyed>
           {(access) => <NetworkChicklet externalAccess={access} sessionId={props.sessionId} disclosureKey={transcriptDisclosureKey.toolNetwork(props.part.id)} />}

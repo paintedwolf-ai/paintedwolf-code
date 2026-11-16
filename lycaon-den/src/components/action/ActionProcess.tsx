@@ -48,8 +48,8 @@ export function ActionProcess(props: Props) {
   const status = () => {
     switch (state()) {
       case "running": return props.port !== undefined ? `Running · listening on ${props.port}` : "Running";
-      case "ended": return formatBackgroundTerminationReason(reason() ?? "exited");
-      case "historical": return formatBackgroundTerminationReason(reason()!);
+      case "ended":
+      case "historical": return formatBackgroundTerminationReason(reason() ?? "exited");
       case "unavailable": return "No longer available";
       default: return "Checking…";
     }
