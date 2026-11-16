@@ -8,7 +8,8 @@ import (
 
 // Every root's baseline spelling parses back to that root and path, so no
 // second spelling can resolve to it. Attached roots always carry a label: the
-// project store refuses a root without one.
+// project store refuses a root without one. A path with leading or trailing
+// whitespace is outside the property, because spellings are trimmed.
 func FuzzBaselinePathRoundTrip(f *testing.F) {
 	for _, seed := range []struct {
 		rel   string
@@ -20,7 +21,7 @@ func FuzzBaselinePathRoundTrip(f *testing.F) {
 	f.Fuzz(func(t *testing.T, rel string, which uint8) {
 		root := roots[int(which)%len(roots)]
 		clean := filepath.ToSlash(filepath.Clean(rel))
-		if strings.TrimSpace(rel) != rel || rel == "" || !baselineRelSafe(clean) {
+		if strings.TrimSpace(clean) != clean || rel == "" || !baselineRelSafe(clean) {
 			t.Skip()
 		}
 		display := BaselineDisplayPath(roots, root.ID, clean)
