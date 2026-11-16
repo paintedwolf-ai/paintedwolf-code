@@ -32,21 +32,22 @@ import (
 type conformanceRule string
 
 const (
-	ruleResponsesConform      conformanceRule = "responses_conform"
-	ruleUnknownResources      conformanceRule = "unknown_resources_answer_not_found"
-	ruleRequestBodies         conformanceRule = "request_bodies_are_validated"
-	rulePagination            conformanceRule = "page_inputs_are_validated"
-	ruleReadsHaveNoEffects    conformanceRule = "reads_have_no_side_effects"
-	ruleNoSecretMaterial      conformanceRule = "no_secret_material_escapes"
-	ruleMessageIsNoticeCopy   conformanceRule = "error_message_is_notice_copy"
-	ruleDetailsAreDeclared    conformanceRule = "error_details_are_declared"
-	ruleEventScopesAreHostIDs conformanceRule = "event_scopes_name_host_resources"
+	ruleResponsesConform          conformanceRule = "responses_conform"
+	ruleUnknownResources          conformanceRule = "unknown_resources_answer_not_found"
+	ruleRequestBodies             conformanceRule = "request_bodies_are_validated"
+	rulePagination                conformanceRule = "page_inputs_are_validated"
+	ruleReadsHaveNoEffects        conformanceRule = "reads_have_no_side_effects"
+	ruleNoSecretMaterial          conformanceRule = "no_secret_material_escapes"
+	ruleMessageIsNoticeCopy       conformanceRule = "error_message_is_notice_copy"
+	ruleDetailsAreDeclared        conformanceRule = "error_details_are_declared"
+	ruleEventScopesAreHostIDs     conformanceRule = "event_scopes_name_host_resources"
+	ruleEventPayloadsMatchSchemas conformanceRule = "event_payloads_match_their_schemas"
 )
 
 var conformanceRules = []conformanceRule{
 	ruleResponsesConform, ruleUnknownResources, ruleRequestBodies, rulePagination,
 	ruleReadsHaveNoEffects, ruleNoSecretMaterial, ruleMessageIsNoticeCopy,
-	ruleDetailsAreDeclared, ruleEventScopesAreHostIDs,
+	ruleDetailsAreDeclared, ruleEventScopesAreHostIDs, ruleEventPayloadsMatchSchemas,
 }
 
 // conformanceRequestBudget bounds one request so a handler that never returns
@@ -84,7 +85,10 @@ func TestAPIConformance(t *testing.T) {
 	noticeCfg, err := usernotice.LoadEffectiveUserNotices(extpacks.Active())
 	testutil.FailErr(t, "load the server's notice catalog", err)
 
+	root, err := openapi.RepoRoot()
+	testutil.FailErr(t, "find the repository root", err)
 	sweep := newConformanceSweep(doc, validator, h.Server, usernotice.NewCatalog(noticeCfg))
+	sweep.eventSchemas = newEventSchemas(filepath.Join(root, "docs"))
 	settleSourceWatcher(t, h.Server.WaitForBackground, hub, projectDir)
 	sweep.effects = openConformanceEffects(t, h, hub, projectDir)
 	bindConformanceFixtures(sweep.values, project, sess, "README.md")
@@ -96,6 +100,7 @@ func TestAPIConformance(t *testing.T) {
 	hub.FlushDebounced()
 	events := capture.stop(t)
 	sweep.checkEventScopes(events, conformanceHostLookup(t, h))
+	sweep.checkEventPayloads(events)
 	sweep.secrets.scanEvents(sweep.findings, events)
 	sweep.report(t)
 }
@@ -138,6 +143,7 @@ type conformanceSweep struct {
 	// readObserved names reads whose answered request has already been checked for effects.
 	readObserved map[string]bool
 	secrets      *conformanceSecrets
+	eventSchemas *eventSchemas
 	findings     *conformanceFindings
 	// children maps a collection path to the path parameters addressed below it.
 	children map[string][]string

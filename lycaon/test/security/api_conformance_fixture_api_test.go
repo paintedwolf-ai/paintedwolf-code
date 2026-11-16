@@ -7,6 +7,8 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -283,6 +285,33 @@ func newWidgetSweep(t *testing.T, faults widgetFaults) *conformanceSweep {
 	api := &widgetAPI{faults: faults, responses: httpio.Responder{Logger: slog.New(slog.DiscardHandler), Notices: notices}}
 	sweep := newConformanceSweep(doc, validator, api.routes(), notices)
 	sweep.effects = counterEffects{writes: &api.writes}
+	sweep.eventSchemas = newEventSchemas(widgetEventSchemaDir(t))
 	sweep.values.bind("/v1/widgets/{id}/parts/{part_id}", "part_id", fixturePartID)
 	return sweep
+}
+
+// widgetEventSchemaDir lays out a docs tree whose project topic schema
+// references a YAML component file, as docs/schemas/events does.
+func widgetEventSchemaDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	files := map[string]string{
+		"schemas/events/project.json": `{"$id": "https://paintedwolf.dev/schemas/events/project.json",
+  "$ref": "../../openapi/components/schemas/widgets.yaml#/components/schemas/WidgetEvent"}`,
+		"openapi/components/schemas/widgets.yaml": `components:
+  schemas:
+    WidgetEvent:
+      type: object
+      required: [widget_id]
+      additionalProperties: false
+      properties:
+        widget_id: {type: string, format: uuid}
+`,
+	}
+	for name, body := range files {
+		path := filepath.Join(dir, filepath.FromSlash(name))
+		testutil.FailErr(t, "create "+name, os.MkdirAll(filepath.Dir(path), 0o755))
+		testutil.FailErr(t, "write "+name, os.WriteFile(path, []byte(body), 0o644))
+	}
+	return dir
 }

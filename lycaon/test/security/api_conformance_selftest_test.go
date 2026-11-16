@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"testing"
 
@@ -19,6 +20,9 @@ func TestConformanceSweepPassesAConformingAPI(t *testing.T) {
 		{Topic: wire.EventTopicSession, Scope: wire.EventScope{Kind: wire.EventScopeSession, ProjectID: fixtureWidgetID, SessionID: fixturePartID}},
 		{Topic: wire.EventTopicSession, Scope: wire.EventScope{Kind: wire.EventScopeDevice}},
 	}, widgetHostIDs())
+	sweep.checkEventPayloads([]wire.EventEnvelope{
+		{Topic: wire.EventTopicProject, Data: []byte(`{"widget_id":"` + fixtureWidgetID + `"}`)},
+	})
 	for _, rule := range conformanceRules {
 		for _, v := range sweep.findings.list(rule) {
 			t.Errorf("%s: %s", rule, v)
@@ -99,6 +103,31 @@ func TestConformanceSweepDetectsEventScopeFaults(t *testing.T) {
 	got := sweep.findings.list(ruleEventScopesAreHostIDs)
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Fatalf("event scope findings:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+}
+
+// TestConformanceSweepDetectsEventPayloadFaults requires a field the schema
+// lacks, a wrong type, and a topic with no schema to be reported.
+func TestConformanceSweepDetectsEventPayloadFaults(t *testing.T) {
+	t.Parallel()
+	sweep := newWidgetSweep(t, widgetFaults{})
+	sweep.checkEventPayloads([]wire.EventEnvelope{
+		{Topic: wire.EventTopicProject, Data: []byte(`{"widget_id":"` + fixtureWidgetID + `","label":"extra"}`)},
+		{Topic: wire.EventTopicProject, Data: []byte(`{"widget_id":"not-a-uuid"}`)},
+		{Topic: wire.EventTopicSession, Data: []byte(`{}`)},
+	})
+	got := sweep.findings.list(ruleEventPayloadsMatchSchemas)
+	for _, want := range []string{
+		"project: payload: /: ",
+		"project: payload: /widget_id: ",
+		"session: payload: no payload schema: ",
+	} {
+		if !slices.ContainsFunc(got, func(line string) bool { return strings.HasPrefix(line, want) }) {
+			t.Errorf("event payload findings lack %q:\n%s", want, strings.Join(got, "\n"))
+		}
+	}
+	if len(got) != 3 {
+		t.Fatalf("event payload findings = %d, want 3:\n%s", len(got), strings.Join(got, "\n"))
 	}
 }
 
