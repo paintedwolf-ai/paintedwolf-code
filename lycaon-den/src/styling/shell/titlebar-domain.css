@@ -77,7 +77,7 @@
   flex-shrink: 0;
 }
 
-/* The session's tabs end the bar, before that edge's reopen controls. */
+/* The session's tabs end the bar, after that edge's reopen controls. */
 .den-shell-header-titlebar__tabs {
   position: relative;
   z-index: 1;

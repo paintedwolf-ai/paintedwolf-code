@@ -18,7 +18,7 @@ const conversationAtRight = {
 };
 
 describe("ShellHeaderTitlebar session tabs", () => {
-  it("places the session's tabs ahead of the conversation's reopen control", () => {
+  it("places the session's tabs after the conversation's reopen control", () => {
     render(() => (
       <ShellHeaderTitlebar
         edges={conversationAtRight}
@@ -27,7 +27,7 @@ describe("ShellHeaderTitlebar session tabs", () => {
     ));
     const rail = screen.getByTestId("rail");
     const reopen = screen.getByTestId("conversation-expand-btn");
-    expect(rail.compareDocumentPosition(reopen) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(rail.compareDocumentPosition(reopen) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
   });
 
   it("shows the tabs only while the stage carries them", () => {

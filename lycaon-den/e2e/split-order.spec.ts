@@ -310,11 +310,11 @@ webE2e.describe("session tabs in the stage title bar", () => {
 
     await page.getByTestId("conversation-collapse-btn").click();
     await expect(stageTab(page, "git")).toBeVisible();
-    // The icons sit beside the control that brings the conversation back.
+    // The control that brings the conversation back leads the icons.
     const reopen = await page.getByTestId("conversation-expand-btn").boundingBox();
-    const last = await stageTab(page, "workers").boundingBox();
-    expect(reopen!.x - (last!.x + last!.width)).toBeGreaterThanOrEqual(0);
-    expect(reopen!.x - (last!.x + last!.width)).toBeLessThan(16);
+    const first = await stageTab(page, "progress").boundingBox();
+    expect(first!.x - (reopen!.x + reopen!.width)).toBeGreaterThanOrEqual(0);
+    expect(first!.x - (reopen!.x + reopen!.width)).toBeLessThan(16);
 
     await stageTab(page, "git").click();
     await expect(stagePanel(page)).toBeVisible();

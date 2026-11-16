@@ -52,11 +52,6 @@ export function ShellHeaderTitlebar(props: Props) {
           </div>
         )}
       </ShowLatest>
-      <Show when={props.sessionTabs?.present()}>
-        <div class="den-shell-header-titlebar__tabs">
-          {props.sessionTabs?.children()}
-        </div>
-      </Show>
       <ShowLatest when={panesAtEdge("right")}>
         {(panes) => (
           <div
@@ -72,6 +67,11 @@ export function ShellHeaderTitlebar(props: Props) {
           </div>
         )}
       </ShowLatest>
+      <Show when={props.sessionTabs?.present()}>
+        <div class="den-shell-header-titlebar__tabs">
+          {props.sessionTabs?.children()}
+        </div>
+      </Show>
       <ShowLatest when={windowEdge("right")}>
         {(claim) => <WindowControls {...claim()} />}
       </ShowLatest>
