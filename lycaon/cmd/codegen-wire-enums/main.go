@@ -19,13 +19,34 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	vocabDir := filepath.Join(absRoot, "docs", "openapi", "vocab")
-	enums, err := loadVocabDir(vocabDir)
+	outputs, err := planOutputs(absRoot)
 	if err != nil {
 		fatal(err)
 	}
+	if *check {
+		if err := checkOutputs(outputs); err != nil {
+			fatal(err)
+		}
+		fmt.Fprintln(os.Stdout, "wire enum codegen OK")
+		return
+	}
+	if *stageDir == "" {
+		fatal(fmt.Errorf("--stage-dir is required to generate; scripts/codegen-wire-enums.sh publishes the staged tree"))
+	}
+	if err := stageOutputs(absRoot, *stageDir, outputs); err != nil {
+		fatal(err)
+	}
+}
+
+// planOutputs renders every generated file from the vocabularies under absRoot.
+func planOutputs(absRoot string) ([]outputFile, error) {
+	vocabDir := filepath.Join(absRoot, "docs", "openapi", "vocab")
+	enums, err := loadVocabDir(vocabDir)
+	if err != nil {
+		return nil, err
+	}
 	if len(enums) == 0 {
-		fatal(fmt.Errorf("no enum YAML under %s", vocabDir))
+		return nil, fmt.Errorf("no enum YAML under %s", vocabDir)
 	}
 
 	var outputs []outputFile
@@ -37,7 +58,7 @@ func main() {
 		goPath := filepath.Join(absRoot, "lycaon", "pkg", "api", e.goFileName())
 		goBody, err := renderGo(e)
 		if err != nil {
-			fatal(err)
+			return nil, err
 		}
 		outputs = append(outputs, outputFile{path: goPath, body: goBody, hint: "pkg/api " + e.Name})
 
@@ -45,7 +66,7 @@ func main() {
 			jsonPath := filepath.Join(absRoot, filepath.FromSlash(e.JSONSchema))
 			jsonBody, err := renderJSONSchema(e)
 			if err != nil {
-				fatal(err)
+				return nil, err
 			}
 			outputs = append(outputs, outputFile{path: jsonPath, body: jsonBody, hint: "JSON Schema " + e.Name})
 		}
@@ -54,11 +75,11 @@ func main() {
 			sqlPath := filepath.Join(absRoot, filepath.FromSlash(e.StateMachine.SQLCheck.Path))
 			source, err := os.ReadFile(sqlPath) // #nosec G304 -- repository policy path
 			if err != nil {
-				fatal(err)
+				return nil, err
 			}
 			sqlBody, err := renderSQLCheck(e, source)
 			if err != nil {
-				fatal(err)
+				return nil, err
 			}
 			outputs = append(outputs, outputFile{path: sqlPath, body: sqlBody, hint: "SQL " + e.Name})
 			tsPath := filepath.Join(absRoot, filepath.FromSlash(e.StateMachine.TSFile))
@@ -76,14 +97,14 @@ func main() {
 		tsPath := filepath.Join(absRoot, "lycaon-den", "src", "api", "event-topics.generated.ts")
 		tsBody, err := renderEventTopicsTS(et)
 		if err != nil {
-			fatal(err)
+			return nil, err
 		}
 		outputs = append(outputs, outputFile{path: tsPath, body: tsBody, hint: "Den EventTopic list"})
 
 		payloadsPath := filepath.Join(absRoot, "lycaon-den", "src", "api", "event-payloads.generated.ts")
 		payloadsBody, err := renderEventPayloadsTS(et)
 		if err != nil {
-			fatal(err)
+			return nil, err
 		}
 		outputs = append(outputs, outputFile{path: payloadsPath, body: payloadsBody, hint: "Den event payload map"})
 
@@ -95,50 +116,51 @@ func main() {
 			path := filepath.Join(absRoot, "docs", "schemas", "events", topic.ID+".json")
 			body, err := renderEventPayloadJSONSchema(topic)
 			if err != nil {
-				fatal(err)
+				return nil, err
 			}
 			outputs = append(outputs, outputFile{path: path, body: body, hint: "JSON Schema event payload " + topic.ID})
 		}
 		envelopeJSONPath := filepath.Join(absRoot, "docs", "schemas", "events", "envelope.json")
 		envelopeJSONBody, err := renderEventEnvelopeJSONSchema()
 		if err != nil {
-			fatal(err)
+			return nil, err
 		}
 		outputs = append(outputs, outputFile{path: envelopeJSONPath, body: envelopeJSONBody, hint: "JSON Schema event envelope"})
 	}
 
-	if *check {
-		for _, out := range outputs {
-			existing, err := os.ReadFile(out.path) // #nosec G304 -- path from Taskfile / repo layout
-			if err != nil || string(existing) != string(out.body) {
-				fatal(fmt.Errorf("stale %s (%s) — run ./task codegen:wire-enums", out.path, out.hint))
-			}
-		}
-		fmt.Fprintln(os.Stdout, "wire enum codegen OK")
-		return
-	}
+	return outputs, nil
+}
 
-	if *stageDir == "" {
-		fatal(fmt.Errorf("--stage-dir is required to generate; scripts/codegen-wire-enums.sh publishes the staged tree"))
+// checkOutputs reports the first output whose file differs from its rendering.
+func checkOutputs(outputs []outputFile) error {
+	for _, out := range outputs {
+		existing, err := os.ReadFile(out.path) // #nosec G304 -- path from Taskfile / repo layout
+		if err != nil || string(existing) != string(out.body) {
+			return fmt.Errorf("stale %s (%s) — run ./task codegen:wire-enums", out.path, out.hint)
+		}
 	}
+	return nil
+}
+
+// stageOutputs writes outputs under stageDir at their repository-relative
+// paths, plus a manifest of those paths.
+func stageOutputs(absRoot, stageDir string, outputs []outputFile) error {
 	var manifest strings.Builder
 	for _, out := range outputs {
-		rel, relErr := filepath.Rel(absRoot, out.path)
-		if relErr != nil || strings.HasPrefix(rel, "..") {
-			fatal(fmt.Errorf("generated output outside repository: %s", out.path))
+		rel, err := filepath.Rel(absRoot, out.path)
+		if err != nil || strings.HasPrefix(rel, "..") {
+			return fmt.Errorf("generated output outside repository: %s", out.path)
 		}
-		staged := filepath.Join(*stageDir, rel)
+		staged := filepath.Join(stageDir, rel)
 		if err := os.MkdirAll(filepath.Dir(staged), 0o750); err != nil {
-			fatal(err)
+			return err
 		}
 		if err := os.WriteFile(staged, out.body, 0o600); err != nil { // #nosec G306 -- generated artifact
-			fatal(err)
+			return err
 		}
 		manifest.WriteString(rel + "\n")
 	}
-	if err := os.WriteFile(filepath.Join(*stageDir, "manifest"), []byte(manifest.String()), 0o600); err != nil { // #nosec G306 -- staging metadata
-		fatal(err)
-	}
+	return os.WriteFile(filepath.Join(stageDir, "manifest"), []byte(manifest.String()), 0o600) // #nosec G306 -- staging metadata
 }
 
 type outputFile struct {
