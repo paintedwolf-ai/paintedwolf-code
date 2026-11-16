@@ -79,11 +79,17 @@ def knip(tree, policy):
     return found
 
 
-def emitter_flags(policy, tree):
-    """Reach also judges what the product emits when the policy names the product and its declarations."""
-    if "emitters" not in policy:
+def product_flags(policy, tree):
+    """Reach also judges what the product emits and reads when the policy names the product."""
+    reach = policy["reach"]
+    if "product" not in reach:
         return []
-    return ["-product", ",".join(policy["reach"]["product"]), "-emitters", json.dumps(policy["emitters"]), "-repo", tree]
+    flags = ["-product", ",".join(reach["product"])]
+    if reach.get("config_fields"):
+        flags.append("-config-fields")
+    if "emitters" in policy:
+        flags += ["-emitters", json.dumps(policy["emitters"]), "-repo", tree]
+    return flags
 
 
 def checks(binary, tree, policy, go=True, den=False):
@@ -95,7 +101,7 @@ def checks(binary, tree, policy, go=True, den=False):
     go_commands = [
         [binary, "reach", "-dir", go_dir, "-goos", ",".join(reach["goos"]), "-report", reach["report"],
          "-skip", support, "-schema", go_dir / reach["schema"], "-scope", ",".join(reach.get("scope", [])),
-         *emitter_flags(policy, tree), *reach["roots"]],
+         *product_flags(policy, tree), *reach["roots"]],
         [binary, "vet", "-dir", go_dir, "-test-support", support, *policy["vet"]["packages"]],
     ]
     found = {}

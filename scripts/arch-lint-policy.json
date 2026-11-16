@@ -14,7 +14,8 @@
     ],
     "product": [
       "./cmd/lycaon"
-    ]
+    ],
+    "config_fields": true
   },
   "vet": {
     "packages": [

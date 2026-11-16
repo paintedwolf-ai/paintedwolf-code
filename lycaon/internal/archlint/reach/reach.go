@@ -53,6 +53,8 @@ type Config struct {
 	// Emitters judges declared codes, facts and anchors against what the
 	// product reaches; nil skips them.
 	Emitters *Emitters
+	// ConfigFields reports YAML keys the product decodes but never reads.
+	ConfigFields bool
 }
 
 // pass is one GOOS load: what it compiles and what its roots reach.
@@ -63,6 +65,7 @@ type pass struct {
 	keysSet   map[string]bool
 	keysRead  map[string]archlint.Finding
 	product   productFlow
+	config    configFlow
 }
 
 // Run loads each GOOS and combines the passes.
@@ -85,11 +88,14 @@ func Run(cfg Config) ([]archlint.Finding, error) {
 	}
 	out := deadFuncs(passes)
 	out = append(out, unsetKeys(passes)...)
+	if (cfg.Emitters != nil || cfg.ConfigFields) && len(cfg.Product) == 0 {
+		return nil, fmt.Errorf("reach: product checks need product roots")
+	}
 	if cfg.Emitters != nil {
-		if len(cfg.Product) == 0 {
-			return nil, fmt.Errorf("reach: emitters need product roots")
-		}
 		out = append(out, cfg.Emitters.findings(passes)...)
+	}
+	if cfg.ConfigFields {
+		out = append(out, unreadConfigFields(passes)...)
 	}
 	if cfg.Schema != "" {
 		tables, err := ParseSchema(cfg.Schema)
@@ -191,7 +197,11 @@ func load(cfg Config, goos string) (*pass, error) {
 		if err != nil {
 			return nil, err
 		}
-		p.product = scanProduct(prog, rta.Analyze(productRoots, false), cfg)
+		productRes := rta.Analyze(productRoots, false)
+		p.product = scanProduct(prog, productRes, cfg)
+		if cfg.ConfigFields {
+			p.config = scanConfig(prog, productRes, cfg)
+		}
 	}
 	reachablePos := map[token.Position]bool{}
 	for fn := range res.Reachable {
