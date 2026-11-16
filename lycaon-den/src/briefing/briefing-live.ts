@@ -228,6 +228,15 @@ export function requestBriefing(projectId: string, target: BriefingTarget, opts:
   }, BRIEFING_DEBOUNCE_MS);
 }
 
+function needsAsking(view: BriefingView): boolean {
+  return !view.snapshot || view.stalled || view.snapshot.status === "failed";
+}
+
+/** Asks again at once for a target whose summary did not arrive. */
+export function retryBriefing(projectId: string, target: BriefingTarget): void {
+  requestBriefing(projectId, target, { manual: true });
+}
+
 /**
  * Watches a target while the caller's owner lives; the request outlives it.
  * A changed target, such as a card settling while open, is asked for anew.
@@ -255,9 +264,10 @@ export function useBriefing(projectId: Accessor<string | undefined>, target: Acc
     untrack(() => {
       if (!id || !wanted) return attach(null);
       const entry = ensureEntry(id, wanted);
-      // A held answer stays current through events and reconnect, so only a
-      // target never answered here is asked for.
-      if (attach(entry) && !entry.view().snapshot) requestBriefing(id, wanted, { fresh: true });
+      // A held answer stays current through events and reconnect, so a target
+      // is asked for again only when it has no answer or its attempt ended
+      // without one.
+      if (attach(entry) && needsAsking(entry.view())) requestBriefing(id, wanted, { fresh: true });
     });
   });
   onCleanup(() => attach(null));

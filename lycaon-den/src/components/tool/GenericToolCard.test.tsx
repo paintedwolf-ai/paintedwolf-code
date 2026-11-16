@@ -304,16 +304,16 @@ it("names its target in the spoken label and leads the opened details with it", 
   expect(await findByText(handle)).toBeTruthy();
 });
 
-it("orders an opened card target, briefing, body, then records", () => {
-  const slots = { purpose: <span>supplied purpose</span>, result: <span>supplied result</span>, evidence: <button type="button">supplied evidence</button> };
+it("orders an opened card target, summary, body, then records", () => {
+  const slots = { summary: <div data-testid="supplied-summary">supplied summary</div>, evidence: <button type="button">supplied evidence</button> };
   const { container } = render(() => <GenericToolCard layout="chat" part={readPart()} slots={slots} />);
-  expect(container.querySelector('[data-testid="activity-purpose"]')).toBeNull();
+  expect(container.querySelector('[data-testid="supplied-summary"]')).toBeNull();
   fireEvent.click(disclosureToggle(container.querySelector('[data-testid="tool-part-card"]')));
   const body = container.querySelector('[data-testid="tool-part-body"]')!;
-  const order = [...body.querySelectorAll('[data-testid="activity-target"] code, [data-testid="activity-purpose"], [data-testid="activity-result"], .den-tool-part-card-structured, nav')]
+  const order = [...body.querySelectorAll('[data-testid="activity-target"] code, [data-testid="supplied-summary"], .den-tool-part-card-structured, nav')]
     .map(node => node.matches(".den-tool-part-card-structured") ? "body" : node.textContent)
     .filter((entry, index, all) => entry !== all[index - 1]);
-  expect(order).toEqual(["main.go", "supplied purpose", "supplied result", "body", "supplied evidence"]);
+  expect(order).toEqual(["main.go", "supplied summary", "body", "supplied evidence"]);
 });
 
 describe("a command call without a program", () => {
