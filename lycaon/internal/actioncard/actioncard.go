@@ -5,6 +5,7 @@
 package actioncard
 
 import (
+	"cmp"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolpresentation"
@@ -97,10 +98,7 @@ func ForResult(result api.ToolResult, commandMarks []api.RedactedSpan) *api.Acti
 	if len(row) == 0 {
 		row = defaultRow(facts)
 	}
-	opener := parts.Opener
-	if opener == nil {
-		opener = fileOpener(result.FileEditPreviews)
-	}
+	opener := cmp.Or(parts.Opener, fileOpener(result.FileEditPreviews), pathOpener(result.ToolArgs))
 	ran := firstNonEmpty(parts.Ran, resultTarget(result), result.Tool)
 	noun := firstNonEmpty(parts.Noun, nounFor(result.Tool))
 	ranText := api.ActionRan{Text: ran, Noun: noun}

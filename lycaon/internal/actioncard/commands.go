@@ -114,6 +114,9 @@ func ForActivity(program api.CommandProgramReceipt, activity api.CommandActivity
 	if len(activity.ExecutionIDs) > 0 {
 		descriptor.Preview = &api.ActionPreview{Kind: "output", Receipts: []api.ActionReceiptScope{{ProgramID: program.ID, ActivityID: activity.ID}}}
 	}
+	if descriptor.Opener == nil {
+		descriptor.Opener = pathOpener(result.ToolArgs)
+	}
 	return descriptor
 }
 

@@ -132,3 +132,22 @@ func TestRowNamesOnlyFactsTheCardKeeps(t *testing.T) {
 		}
 	}
 }
+
+func TestPathArgumentOpensInFiles(t *testing.T) {
+	summary := api.ToolResult{Tool: "summarize", ToolArgs: map[string]any{"path": " @other/src ", "task": "purpose"}}
+	if d := ForResult(summary, nil); d.Opener == nil || d.Opener.Kind != "file" || d.Opener.Path != "@other/src" {
+		t.Fatalf("summary opener %+v", d.Opener)
+	}
+	activity := api.CommandActivity{ID: "a", State: "completed"}
+	survey := api.ToolResult{Tool: "survey_repo", ToolArgs: map[string]any{"path": "."}}
+	if d := ForActivity(api.CommandProgramReceipt{ID: "p", Activities: []api.CommandActivity{activity}}, activity, survey, nil); d.Opener == nil || d.Opener.Path != "." {
+		t.Fatalf("survey activity opener %+v", d.Opener)
+	}
+	edited := api.ToolResult{Tool: "restore_version", ToolArgs: map[string]any{"path": "old.go"}, FileEditPreviews: []api.FileEditPreview{{Path: "new.go", Added: 1}}}
+	if d := ForResult(edited, nil); d.Opener.Path != "new.go" {
+		t.Fatalf("the changed file should win over the argument: %+v", d.Opener)
+	}
+	if d := ForResult(api.ToolResult{Tool: "web_search", ToolArgs: map[string]any{"query": "x"}}, nil); d.Opener != nil {
+		t.Fatalf("a call naming no path opened one: %+v", d.Opener)
+	}
+}
