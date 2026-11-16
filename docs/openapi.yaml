@@ -22129,7 +22129,7 @@ components:
             - fail
             - captured
             - loaded
-            - cancelled
+            - canceled
         exit_code:
           type: integer
           x-go-pointer: true
@@ -22232,7 +22232,7 @@ components:
           enum:
             - person
             - policy
-        at:
+        decided_at:
           type: string
           format: date-time
           x-go-pointer: true
@@ -22273,6 +22273,7 @@ components:
           description: 'captured: the artifact''s caption.'
         artifact_id:
           type: string
+          format: uuid
           description: 'captured: the artifact.'
         mode:
           type: string
@@ -22297,7 +22298,7 @@ components:
           maxItems: 4
           items:
             $ref: '#/components/schemas/ActionPreviewLine'
-        more:
+        lines_omitted:
           type: integer
           description: Further lines not shown.
         tail:
@@ -22310,6 +22311,7 @@ components:
             $ref: '#/components/schemas/ActionReceiptScope'
         artifact_id:
           type: string
+          format: uuid
           description: 'image: the artifact to show.'
         caption:
           type: string
@@ -22374,8 +22376,10 @@ components:
       properties:
         program_id:
           type: string
+          format: uuid
         activity_id:
           type: string
+          format: uuid
     ActionOpener:
       x-go-generate: true
       type: object
