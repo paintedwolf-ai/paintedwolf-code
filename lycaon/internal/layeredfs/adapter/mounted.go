@@ -162,6 +162,32 @@ func (a *MountedAdapter) Probe(ctx context.Context, probeCfg ProbeConfig) (Probe
 	return res, nil
 }
 
+func (a *MountedAdapter) runMountProbe(ctx context.Context, mountDir, backingDir string) (ReasonCode, string, error) {
+	if a.cfg.MountProbeFn != nil {
+		return a.cfg.MountProbeFn(ctx, mountDir, backingDir)
+	}
+	if a.cfg.AdapterID == AdapterFUSELinux {
+		if _, err := os.Stat("/dev/fuse"); err != nil {
+			return ReasonUnsupportedKernel, "/dev/fuse unavailable", err
+		}
+	}
+	if a.cfg.MountViewFn == nil {
+		return ReasonMountHelperUnavailable, "mounted backend not registered", errors.New("mounted backend not registered")
+	}
+	return ReasonNone, "", nil
+}
+
+func (a *MountedAdapter) verifyBackingDenial(ctx context.Context, backingDir string) (bool, error) {
+	if a.cfg.VerifyBackingDenialFn != nil {
+		return a.cfg.VerifyBackingDenialFn(ctx, backingDir)
+	}
+	st, err := os.Stat(backingDir)
+	if err != nil {
+		return false, err
+	}
+	return st.Mode().Perm() == 0o700, nil
+}
+
 // Prepare allocates one mounted worker view without recursively scanning lower repositories.
 func (a *MountedAdapter) Prepare(ctx context.Context, req PrepareRequest) (*PreparedView, error) {
 	narrowed, err := ValidateWorkspaceSelection(req.Grants, req.Selection)

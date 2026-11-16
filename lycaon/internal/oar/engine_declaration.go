@@ -236,6 +236,16 @@ func InstallEngineDeclaration(d *EngineDeclaration) {
 	installedDeclaration.Store(d)
 }
 
+// InstallEngineDeclarationFile loads path and installs it.
+func InstallEngineDeclarationFile(path string) error {
+	d, err := LoadEngineDeclaration(path)
+	if err != nil {
+		return err
+	}
+	InstallEngineDeclaration(d)
+	return nil
+}
+
 // InstalledEngineDeclaration returns the installed or bundled declaration.
 func InstalledEngineDeclaration() *EngineDeclaration {
 	if d := installedDeclaration.Load(); d != nil {
@@ -262,6 +272,18 @@ var shippedOnce sync.Once
 // is refused ([OAR-PROF-3]).
 func ResolveRuleAnchor(ruleID, on string) (string, error) {
 	return resolveRuleAnchorWith(InstalledEngineDeclaration(), ruleID, on)
+}
+
+func resolveRuleAnchorWith(d *EngineDeclaration, ruleID, on string) (string, error) {
+	on = strings.TrimSpace(on)
+	if !IsCoreAnchor(on) {
+		return on, nil
+	}
+	local, err := d.ResolveAnchor(on)
+	if err != nil {
+		return "", fmt.Errorf("[OAR-PROF-3] rule %q targets core anchor %q, which this host does not support", ruleID, on)
+	}
+	return local, nil
 }
 
 // ValidateProfileMap checks the declaration's anchor profile map against the
