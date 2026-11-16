@@ -53,14 +53,6 @@ func (r *Runtime) BuildConditions(ctx context.Context, deps ConditionDependencie
 		proactiveCategories = scancfg.DefaultGatesConfig().Gates.ProactiveCategories
 	}
 
-	// A session is closed out when its delegation and its planned workers are.
-	delegationCloseout := delegation.CloseoutComplete(deps.DelegationStore)
-	closeoutComplete := func(ctx context.Context, sessionID string) (bool, error) {
-		if ok, err := delegationCloseout(ctx, sessionID); err != nil || !ok {
-			return ok, err
-		}
-		return deps.PlanCloseout(ctx, sessionID)
-	}
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		DelegationStore: deps.DelegationStore,
 		Evidence:        conditions.StoreEvidenceReader{Store: r.Evidence},
@@ -70,7 +62,7 @@ func (r *Runtime) BuildConditions(ctx context.Context, deps ConditionDependencie
 		BlueprintContent: func(_ context.Context, projectDir, relPath string) (string, error) {
 			return workflowblueprintfiles.ReadBlueprintFile(projectDir, relPath)
 		},
-		DelegationCloseout:      closeoutComplete,
+		DelegationCloseout:      deps.PlanCloseout,
 		SourceVerifyPassed:      deps.SourceVerifyPassed,
 		DeliveryReported:        deps.DeliveryReported,
 		ScanLedger:              deps.ScanStore,

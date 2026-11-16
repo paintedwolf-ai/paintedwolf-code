@@ -3,6 +3,7 @@ package workerops_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"slices"
 	"strconv"
 	"testing"
@@ -331,7 +332,7 @@ func TestOperationConflictAndLostReceiptReplayAcrossTransitions(t *testing.T) {
 	testutil.FailErr(t, "shelve", err)
 	replayShelve, err := f.svc.Shelve(t.Context(), f.coord, op("op-shelve"), "result-job-1", "wait on schema")
 	testutil.FailErr(t, "replay shelve", err)
-	if replayShelve != firstShelve {
+	if !reflect.DeepEqual(replayShelve, firstShelve) {
 		t.Fatalf("shelve replay = %+v, want %+v", replayShelve, firstShelve)
 	}
 	_, err = f.svc.Instruct(t.Context(), f.coord, op("op-shelve"), workerops.Instruction{
