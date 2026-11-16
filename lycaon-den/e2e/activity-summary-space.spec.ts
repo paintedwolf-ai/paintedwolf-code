@@ -15,7 +15,9 @@ const SHORT = { purpose: "Reads the middleware to find the auth check.", change:
 const LONG = {
   purpose: "Reads the middleware to find where requests are authenticated before the router sees them.",
   change: "Found the token check in middleware.go, which reads the Authorization header, verifies the signature against the cached key set, " +
-    "refreshes that set when a key id is unknown, and rejects expired tokens with a 401 before any handler runs, so every route inherits it.",
+    "refreshes that set when a key id is unknown, and rejects expired tokens with a 401 before any handler runs, so every route inherits it. " +
+    "The same middleware also records the caller's subject on the request context, which the audit logger and the rate limiter both read, " +
+    "and it exempts only the health and metrics endpoints, which are registered before the middleware is installed on the router.",
 };
 
 async function seedReadCard(page: Page, request: Parameters<typeof bootstrapChatSession>[1]) {
