@@ -21,6 +21,17 @@ import { ProjectArtifactsView } from "./ProjectArtifactsView.tsx";
 
 const SESSION_ID = "sess-aaaa-bbbb-cccc-dddddddddddd";
 
+let liveClient: LycaonClient | null = null;
+
+vi.mock("../../platform/connection/app-connection.ts", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../../platform/connection/app-connection.ts")>();
+  return {
+    ...actual,
+    getLycaonClient: () => liveClient,
+  };
+});
+
 function pngBlob(tag = 0): Blob {
   const bytes = Uint8Array.from([
     0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49,
@@ -80,6 +91,7 @@ describe("ProjectArtifactsView live updates", () => {
   let revokeObjectURLSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    liveClient = mockClient;
     vi.useRealTimers();
     vi.clearAllMocks();
     clearArtifactDeletionMemory();
@@ -121,7 +133,7 @@ describe("ProjectArtifactsView live updates", () => {
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
     render(() => (
-      <ProjectArtifactsView projectId="proj-1" appStore={appStore} client={mockClient} />
+      <ProjectArtifactsView projectId="proj-1" appStore={appStore} />
     ));
 
     const { thumb: thumb2, img: img2 } = await readyThumb("Enlarge Second upload");
@@ -200,7 +212,7 @@ describe("ProjectArtifactsView live updates", () => {
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
     render(() => (
-      <ProjectArtifactsView projectId="proj-1" appStore={appStore} client={mockClient} />
+      <ProjectArtifactsView projectId="proj-1" appStore={appStore} />
     ));
 
     const { thumb: thumb2, img: img2 } = await readyThumb("Enlarge Second upload");
@@ -260,7 +272,7 @@ describe("ProjectArtifactsView live updates", () => {
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
     render(() => (
-      <ProjectArtifactsView projectId="proj-1" appStore={appStore} client={mockClient} />
+      <ProjectArtifactsView projectId="proj-1" appStore={appStore} />
     ));
 
     await readyThumb("Enlarge Second upload");
@@ -294,7 +306,7 @@ describe("ProjectArtifactsView live updates", () => {
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
     render(() => (
-      <ProjectArtifactsView projectId="proj-1" appStore={appStore} client={mockClient} />
+      <ProjectArtifactsView projectId="proj-1" appStore={appStore} />
     ));
     await readyThumb("Enlarge First upload");
     expect(listProjectArtifacts).toHaveBeenCalledTimes(1);
@@ -322,7 +334,7 @@ describe("ProjectArtifactsView live updates", () => {
     appStore.actions.setSidecarStatus("connected");
     render(() => (
       <ResidentPresenceProvider presence={presence()}>
-        <ProjectArtifactsView projectId="proj-1" appStore={appStore} client={mockClient} />
+        <ProjectArtifactsView projectId="proj-1" appStore={appStore} />
       </ResidentPresenceProvider>
     ));
 
