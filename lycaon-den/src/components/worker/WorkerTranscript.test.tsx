@@ -8,13 +8,9 @@ import { WorkerTranscript } from "./WorkerTranscript.tsx";
 import { assertNamedControl } from "../../test/controls.ts";
 
 import { openFilesSurface } from "../../platform/navigation/open-files-surface.ts";
-import { addToChat } from "../../chat/composer/add-to-chat.ts";
+import { CHAT_ATTACHMENT_DRAG_TYPE } from "../../chat/composer/chat-attachment-drag.ts";
 
 vi.mock("../../platform/navigation/open-files-surface.ts", () => ({ openFilesSurface: vi.fn() }));
-vi.mock("../../chat/composer/add-to-chat.ts", async (importOriginal) => ({
-  ...await importOriginal<typeof import("../../chat/composer/add-to-chat.ts")>(),
-  addToChat: vi.fn(async () => ({ ok: false, reason: "test" })),
-}));
 
 function runningWorker(id = "job-1"): WorkerTask {
   return {
@@ -36,7 +32,7 @@ function completeWorker(id = "job-1"): WorkerTask {
   };
 }
 
-function addWorkerToolOutputToChat(worker: WorkerTask) {
+function dragWorkerToolOutput(worker: WorkerTask): unknown {
   const appStore = createAppStore();
   appStore.actions.applyWorkerTranscriptRows(worker.id, [{
     id: "worker-result-chat", ord: 2, role: "tool", origin: "tool",
@@ -51,29 +47,17 @@ function addWorkerToolOutputToChat(worker: WorkerTask) {
   if (activity && !isDisclosureOpen(activity)) fireEvent.click(disclosureToggle(activity));
   const card = view.container.querySelector<HTMLElement>('[data-tool-call-id="worker-command-chat"]')!;
   if (!isDisclosureOpen(card)) fireEvent.click(disclosureToggle(card));
-  fireEvent.click(within(card).getByTestId("tool-raw-add-to-chat"));
+  const data = new Map<string, string>();
+  fireEvent.dragStart(within(card).getByTestId("action-links"),
+    { dataTransfer: { setData: (type: string, value: string) => data.set(type, value), effectAllowed: "" } });
+  return JSON.parse(data.get(CHAT_ATTACHMENT_DRAG_TYPE) ?? "null");
 }
 
 describe("WorkerTranscript", () => {
-  it("adds worker tool output to the dispatching chat, citing the worker session", () => {
-    vi.mocked(addToChat).mockClear();
-    addWorkerToolOutputToChat({ ...completeWorker("job-chat"), project_id: "project-chat",
+  it("drags worker tool output to chat, citing the worker session", () => {
+    const ref = dragWorkerToolOutput({ ...completeWorker("job-chat"), project_id: "project-chat",
       child_session_id: "child-chat", parent_session_id: "parent-chat" });
-    expect(addToChat).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "search-hit", projectId: "project-chat",
-        sessionId: "child-chat", sourceRef: "worker-command-chat" }),
-      { destination: { projectId: "project-chat", sessionId: "parent-chat" } },
-    );
-  });
-
-  it("asks for a chat when the worker has no dispatching chat", () => {
-    vi.mocked(addToChat).mockClear();
-    addWorkerToolOutputToChat({ ...completeWorker("job-orphan"), project_id: "project-chat",
-      child_session_id: "child-chat" });
-    expect(addToChat).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: "search-hit", sessionId: "child-chat" }),
-      { destination: undefined },
-    );
+    expect(ref).toMatchObject({ kind: "search-hit", projectId: "project-chat", sessionId: "child-chat", sourceRef: "worker-command-chat" });
   });
 
   it("opens worker tool output in Files with the child session identity", () => {
