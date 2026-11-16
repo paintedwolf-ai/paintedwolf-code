@@ -46,7 +46,8 @@ def check(url, call=call):
         if case["tools"]:
             body["tools"] = case["tools"]
         prompt = call(url, "/apply-template", body)["prompt"]
-        if "<bos>" + prompt != case["expected"]:
+        # The template prints BOS only for a tokenizer that does not add it itself.
+        if prompt not in {case["expected"].replace("<bos>", opening, 1) for opening in ("", properties["bos_token"])}:
             raise ValueError("server renders a conversation differently from training: " + case["name"])
         tokens = call(url, "/tokenize", {"content": prompt, "add_special": True, "parse_special": True})["tokens"]
         if tokens[:1] != [bos] or bos in tokens[1:]:
