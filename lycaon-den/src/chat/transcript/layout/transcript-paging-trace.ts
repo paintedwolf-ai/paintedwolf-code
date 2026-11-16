@@ -4,7 +4,6 @@ import {
   isStreamScrollDebugEnabled,
 } from "../../stream/den-scroll-debug.ts";
 import type {
-  TranscriptRunwayDensityCause,
   TranscriptRunwayDensityChange,
   TranscriptUnloadedOrds,
 } from "../history/transcript-runway.ts";

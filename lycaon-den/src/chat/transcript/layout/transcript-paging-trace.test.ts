@@ -49,14 +49,8 @@ describe("transcript paging decision trace", () => {
     const budget = createTranscriptRunwayBudget(traceTranscriptRunwayDensity);
     budget.observe({
       unloaded: { before: 200, after: 0 },
-      residentRowCount: 50,
-      residentOrdSpan: 50,
-      residentHeightPx: 1_500,
       measuredHeightPx: 1_500,
       measuredOrdSpan: 50,
-      scrollOffsetPx: 6_000,
-      viewportHeightPx: 500,
-      following: true,
     });
 
     const appStore = createAppStore();
@@ -101,36 +95,18 @@ describe("transcript paging decision trace", () => {
     const budget = createTranscriptRunwayBudget(traceTranscriptRunwayDensity);
     budget.observe({
       unloaded: { before: 200, after: 0 },
-      residentRowCount: 50,
-      residentOrdSpan: 50,
-      residentHeightPx: 1_250,
       measuredHeightPx: 1_250,
       measuredOrdSpan: 50,
-      scrollOffsetPx: 5_000,
-      viewportHeightPx: 500,
-      following: true,
     });
     budget.observe({
       unloaded: { before: 100, after: 0 },
-      residentRowCount: 100,
-      residentOrdSpan: 100,
-      residentHeightPx: 2_000,
       measuredHeightPx: 2_000,
       measuredOrdSpan: 100,
-      scrollOffsetPx: 2_500,
-      viewportHeightPx: 500,
-      following: false,
     });
     budget.observe({
       unloaded: { before: 0, after: 0 },
-      residentRowCount: 200,
-      residentOrdSpan: 200,
-      residentHeightPx: 6_000,
       measuredHeightPx: 6_000,
       measuredOrdSpan: 200,
-      scrollOffsetPx: 200,
-      viewportHeightPx: 500,
-      following: false,
     });
 
     const densityLines = lines.filter((line) =>
