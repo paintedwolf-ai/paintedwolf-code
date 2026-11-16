@@ -92,7 +92,7 @@ describe("WorkerTranscript", () => {
     if (activity && !isDisclosureOpen(activity)) fireEvent.click(disclosureToggle(activity));
     const card = view.container.querySelector<HTMLElement>('[data-tool-call-id="worker-command-output"]')!;
     if (!isDisclosureOpen(card)) fireEvent.click(disclosureToggle(card));
-    fireEvent.click(assertNamedControl(view.getByTestId("tool-content-link"), "button"));
+    fireEvent.click(assertNamedControl(view.getByTestId("action-link-output"), "button"));
     expect(openFilesSurface).toHaveBeenCalledWith(expect.objectContaining({
       kind: "chat-content", projectId: "project-output", document: expect.objectContaining({
         sessionId: "child-output", messageId: "worker-result-output", toolCallId: "worker-command-output",
