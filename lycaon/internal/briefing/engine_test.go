@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -342,5 +343,48 @@ func TestJobProfileReadsOnlyEngineJobs(t *testing.T) {
 	}
 	if got := JobProfile(Job{Key: "file\x00p\x00tool_activity\x00x"}); got != "" {
 		t.Fatalf("another kind's job read as %q", got)
+	}
+}
+
+func TestResultQualityFollowsTheReasoningInput(t *testing.T) {
+	excerpt := func(truncated, shared bool) ReasoningInput {
+		return ReasoningInput{Excerpt: &Reasoning{Text: "Tag after the push.", Ref: "message:out", Truncated: truncated, Shared: shared}}
+	}
+	unavailable := []string{QualityReasoningUnavailable}
+	cases := []struct {
+		name  string
+		input ReasoningInput
+		want  []string
+	}{
+		{"whole", excerpt(false, false), []string{QualityReasoningIncluded}},
+		{"suffix", excerpt(true, false), []string{QualityReasoningIncluded, QualityReasoningTruncated}},
+		{"shared", excerpt(false, true), []string{QualityReasoningIncluded, QualityReasoningShared}},
+		{"absent", ReasoningInput{}, nil},
+		{"details only", ReasoningInput{Gap: string(ReasoningDetailsOnly)}, unavailable},
+		{"oversized", ReasoningInput{Gap: string(ReasoningOversized)}, unavailable},
+		{"malformed", ReasoningInput{Gap: string(ReasoningMalformed)}, unavailable},
+		{"output not found", ReasoningInput{Gap: "the action's model output was not found"}, unavailable},
+	}
+	for _, tc := range cases {
+		for _, fallback := range []bool{false, true} {
+			ev := liveEvidence()
+			ev.Reasoning = tc.input
+			section, err := PurposeSection(t.Context(), ev)
+			testutil.FailErr(t, "build "+tc.name, err)
+			var generator Generator = &countingGenerator{text: "Pushes the release before tagging it."}
+			if fallback {
+				generator, section.Fallback = nil, "Ran a command."
+			}
+			engine, _, log := newTestEngine(t, generator)
+			_, err = engine.Request(t.Context(), request(tc.name, false, section))
+			testutil.FailErr(t, "request "+tc.name, err)
+			done := receive(t, log.seen)
+			if done.Status != StatusComplete || done.Sections[0].Result == nil {
+				t.Fatalf("%s (fallback %v): %+v", tc.name, fallback, done)
+			}
+			if got := done.Sections[0].Result.Quality; !slices.Equal(got, tc.want) {
+				t.Fatalf("%s (fallback %v): quality %v, want %v", tc.name, fallback, got, tc.want)
+			}
+		}
 	}
 }
