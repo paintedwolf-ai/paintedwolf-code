@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workerplan/plantest"
 	"github.com/lycaon/lycaon/internal/workerrecords"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // With nothing approved against it, no run active, no diff and no receipts,
@@ -16,7 +17,9 @@ import (
 // need evidence, and closeout says so.
 func TestPlanBoundWorkWithNoEvidenceFailsOnlyItsEvidenceCriteria(t *testing.T) {
 	env := newPlanEnv(t)
-	env.svc = plantest.New(t, plantest.Deps(env.records))
+	deps := plantest.Deps(env.records)
+	deps.Jobs = env.jobs
+	env.svc = plantest.New(t, deps)
 
 	_, err := env.plan(t, "missing", ".lycaon/plans/absent.md")
 	wantReject(t, err, "blueprint_not_found")
@@ -30,6 +33,7 @@ func TestPlanBoundWorkWithNoEvidenceFailsOnlyItsEvidenceCriteria(t *testing.T) {
 	}))
 	env.startRound(t, settled.ID, "job-a")
 	env.settleRound(t, "job-a")
+	env.jobs["job-a"] = &api.WorkerTask{ID: "job-a", Status: api.WorkerStatusComplete}
 	verdict, err := env.svc.CheckSessionCloseout(t.Context(), env.coord.SessionID, "/repo")
 	testutil.FailErr(t, "closeout", err)
 	if !verdict.OK {
