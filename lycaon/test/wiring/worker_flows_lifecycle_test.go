@@ -162,11 +162,9 @@ func TestFlow13Flow14AndFlow15ReuseSurveyorSmallEditAndExternalWait(t *testing.T
 	testutil.FailErr(t, "seed token.go", os.WriteFile(filepath.Join(dir, "token.go"), []byte("package auth\nvar Race = true\n"), 0o600))
 	call := coordToolCtx(t, h, ctx, sess, dir)
 
-	// Flow 14: direct two-line edit by the coordinator with zero workers in the session.
-	testutil.FailErr(t, "seed direct.go", os.WriteFile(filepath.Join(dir, "direct.go"), []byte("package auth\nvar Direct = 0\n"), 0o600))
+	// Flow 14: direct two-line file creation by the coordinator with zero workers in the session.
 	AttachDefaultAmbient(t, h, ctx, sess.ID)
-	h.SeedProgress(t, ctx, sess.ID)
-	scripts.results["coordinator"] = "Updated direct.go directly. [command#1]\n[verify: inspection - Direct edit verified]"
+	scripts.results["coordinator"] = "Created direct.go directly. [command#1]\n[verify: inspection - Direct edit verified]"
 	scripts.push("coordinator",
 		api.ToolCall{ID: "c-edit", Name: "command", Args: map[string]any{"command": "printf 'package auth\\nvar Direct = 1\\n' > direct.go"}},
 		api.ToolCall{ID: "c-prog", Name: "update_progress", Args: h.ProgressUpdateArgs(t, ctx, sess.ID, "## Progress\n- [x] wiring test plan\n")},
