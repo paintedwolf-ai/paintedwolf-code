@@ -148,11 +148,12 @@ class ArchLintChangesTest(unittest.TestCase):
         self.assertEqual(arch_lint_changes.base_checks(self.repo, later, self.binary, POLICY, self.cache), {})
 
     def test_reach_receives_the_emitter_spec_the_policy_names(self):
-        policy = {**POLICY, "emitters": {"product": ["./cmd/app"]}}
+        policy = {**POLICY, "reach": {**POLICY["reach"], "product": ["./cmd/app"]}, "emitters": {"registry": "r.json"}}
         arch_lint_changes.checks(self.binary, self.repo, policy)
         args = json.loads((self.repo / "args-reach.json").read_text())
         spec = args[args.index("-emitters") + 1]
-        self.assertEqual(json.loads(spec), {"product": ["./cmd/app"]})
+        self.assertEqual(json.loads(spec), {"registry": "r.json"})
+        self.assertEqual(args[args.index("-product") + 1], "./cmd/app")
         self.assertEqual(args[args.index("-repo") + 1], str(self.repo))
         arch_lint_changes.checks(self.binary, self.repo, POLICY)
         self.assertNotIn("-emitters", json.loads((self.repo / "args-reach.json").read_text()))

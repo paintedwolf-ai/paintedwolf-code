@@ -47,6 +47,9 @@ type Config struct {
 	Skip   []*regexp.Regexp
 	// Schema is the complete fresh schema; empty skips table liveness.
 	Schema string
+	// Product names the main packages that ship to users; what only other
+	// roots reach does not count as the product emitting or reading anything.
+	Product []string
 	// Emitters judges declared codes, facts and anchors against what the
 	// product reaches; nil skips them.
 	Emitters *Emitters
@@ -83,6 +86,9 @@ func Run(cfg Config) ([]archlint.Finding, error) {
 	out := deadFuncs(passes)
 	out = append(out, unsetKeys(passes)...)
 	if cfg.Emitters != nil {
+		if len(cfg.Product) == 0 {
+			return nil, fmt.Errorf("reach: emitters need product roots")
+		}
 		out = append(out, cfg.Emitters.findings(passes)...)
 	}
 	if cfg.Schema != "" {
@@ -180,8 +186,8 @@ func load(cfg Config, goos string) (*pass, error) {
 		keysSet:   map[string]bool{},
 		keysRead:  map[string]archlint.Finding{},
 	}
-	if cfg.Emitters != nil {
-		productRoots, err := productMains(lc, pkgs, cfg.Emitters.Product)
+	if len(cfg.Product) > 0 {
+		productRoots, err := productMains(lc, pkgs, cfg.Product)
 		if err != nil {
 			return nil, err
 		}

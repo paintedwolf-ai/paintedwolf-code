@@ -11,6 +11,9 @@
     "schema": "internal/db/schema.sql",
     "scope": [
       "./..."
+    ],
+    "product": [
+      "./cmd/lycaon"
     ]
   },
   "vet": {
@@ -37,9 +40,6 @@
     ]
   },
   "emitters": {
-    "product": [
-      "./cmd/lycaon"
-    ],
     "registry": "schemas/guidance_registry.json",
     "policies": "lycaon/config/packs",
     "data": [

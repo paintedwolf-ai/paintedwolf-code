@@ -20,6 +20,7 @@ func runReach(args []string, out io.Writer) error {
 	skip := fs.String("skip", "", "comma-separated patterns for test-support package paths")
 	schema := fs.String("schema", "", "schema file whose tables need a reader")
 	scope := fs.String("scope", "", "comma-separated package patterns judged even when no root imports them")
+	product := fs.String("product", "", "comma-separated main packages that ship to users")
 	emitters := fs.String("emitters", "", "JSON emitter spec judging declared codes, facts and anchors")
 	repo := fs.String("repo", "..", "repository root the emitter spec is relative to")
 	if err := fs.Parse(args); err != nil {
@@ -27,6 +28,7 @@ func runReach(args []string, out io.Writer) error {
 	}
 	cfg := reach.Config{
 		Dir: *dir, Patterns: fs.Args(), Scope: splitList(*scope), GOOS: splitList(*goos), Tags: splitList(*tags), Schema: *schema,
+		Product: splitList(*product),
 	}
 	if *report != "" {
 		re, err := regexp.Compile(*report)

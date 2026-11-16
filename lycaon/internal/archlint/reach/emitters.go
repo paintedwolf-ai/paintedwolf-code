@@ -29,7 +29,6 @@ const factNamespace = "paintedwolf."
 // EmitterSpec names, relative to the repository root, where codes, facts and
 // anchors are declared and which files only declare or consume them.
 type EmitterSpec struct {
-	Product  []string `json:"product"`
 	Registry string   `json:"registry"`
 	Policies string   `json:"policies"`
 	Data     []string `json:"data"`
@@ -42,7 +41,6 @@ type EmitterSpec struct {
 
 // Emitters is a loaded EmitterSpec.
 type Emitters struct {
-	Product  []string
 	Plumbing []string
 	codes    map[string]declaredCode
 	facts    map[string]string
@@ -61,10 +59,7 @@ type declaredCode struct {
 
 // LoadEmitters reads the declarations a spec names under repoRoot.
 func LoadEmitters(repoRoot string, spec EmitterSpec) (*Emitters, error) {
-	if len(spec.Product) == 0 {
-		return nil, fmt.Errorf("emitters: no product roots")
-	}
-	e := &Emitters{Product: spec.Product, Plumbing: spec.Plumbing, codes: map[string]declaredCode{}, facts: map[string]string{}, anchors: map[string]string{}}
+	e := &Emitters{Plumbing: spec.Plumbing, codes: map[string]declaredCode{}, facts: map[string]string{}, anchors: map[string]string{}}
 	if err := e.loadRegistry(repoRoot, spec.Registry); err != nil {
 		return nil, err
 	}

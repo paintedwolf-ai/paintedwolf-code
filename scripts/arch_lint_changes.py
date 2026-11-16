@@ -80,10 +80,10 @@ def knip(tree, policy):
 
 
 def emitter_flags(policy, tree):
-    """Reach also judges declared codes, facts and anchors when the policy names them."""
+    """Reach also judges what the product emits when the policy names the product and its declarations."""
     if "emitters" not in policy:
         return []
-    return ["-emitters", json.dumps(policy["emitters"]), "-repo", tree]
+    return ["-product", ",".join(policy["reach"]["product"]), "-emitters", json.dumps(policy["emitters"]), "-repo", tree]
 
 
 def checks(binary, tree, policy, go=True, den=False):

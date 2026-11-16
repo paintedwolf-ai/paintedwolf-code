@@ -12,7 +12,6 @@ import (
 
 func emitterSpec() reach.EmitterSpec {
 	return reach.EmitterSpec{
-		Product:  []string{"./cmd/app"},
 		Registry: "registry.json",
 		Policies: "packs",
 		Data:     []string{"rules"},
@@ -32,6 +31,7 @@ func TestRunReportsWhatTheProductNeverEmits(t *testing.T) {
 		Patterns: []string{"./cmd/..."},
 		GOOS:     []string{"linux", "darwin"},
 		Report:   regexp.MustCompile(`^example\.com/emitters/`),
+		Product:  []string{"./cmd/app"},
 		Emitters: emitters,
 	})
 	testutil.FailErr(t, "reach.Run failed", err)
@@ -63,11 +63,21 @@ func TestRunReportsWhatTheProductNeverEmits(t *testing.T) {
 	}
 }
 
+func TestRunRefusesEmittersWithoutProduct(t *testing.T) {
+	root, err := filepath.Abs("testdata/emitters")
+	testutil.FailErr(t, "filepath.Abs failed", err)
+	emitters, err := reach.LoadEmitters(root, emitterSpec())
+	testutil.FailErr(t, "load emitters", err)
+	_, err = reach.Run(reach.Config{Dir: filepath.Join(root, "mod"), Patterns: []string{"./cmd/..."}, GOOS: []string{"linux"}, Emitters: emitters})
+	if err == nil {
+		t.Fatal("judged emitters without product roots")
+	}
+}
+
 func TestLoadEmittersRefusesIncompleteDeclarations(t *testing.T) {
 	root, err := filepath.Abs("testdata/emitters")
 	testutil.FailErr(t, "filepath.Abs failed", err)
 	for name, edit := range map[string]func(*reach.EmitterSpec){
-		"no product":       func(s *reach.EmitterSpec) { s.Product = nil },
 		"missing registry": func(s *reach.EmitterSpec) { s.Registry = "absent.json" },
 		"no policies":      func(s *reach.EmitterSpec) { s.Policies = "rules" },
 		"no facts":         func(s *reach.EmitterSpec) { s.Facts = "anchors.yaml" },

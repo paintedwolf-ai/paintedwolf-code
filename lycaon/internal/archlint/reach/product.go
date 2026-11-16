@@ -48,7 +48,11 @@ func productMains(lc *packages.Config, pkgs []*ssa.Package, patterns []string) (
 func scanProduct(prog *ssa.Program, res *rta.Result, cfg Config) productFlow {
 	flow := productFlow{flows: map[string]bool{}, prefixes: map[string]bool{}, fieldWrites: map[string]bool{}, keyFields: map[string]map[string]bool{}}
 	plumbing := map[string]bool{}
-	for _, rel := range cfg.Emitters.Plumbing {
+	var declarations []string
+	if cfg.Emitters != nil {
+		declarations = cfg.Emitters.Plumbing
+	}
+	for _, rel := range declarations {
 		plumbing[filepath.Join(cfg.Dir, filepath.FromSlash(rel))] = true
 	}
 	for fn := range res.Reachable {
