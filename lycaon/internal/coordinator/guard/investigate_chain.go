@@ -18,6 +18,19 @@ func LastInvestigateChainBoundary(history []api.Message) int {
 	return boundary
 }
 
+// CoordinatorToolMessagesSinceInvestigateChain returns parent transcript messages
+// since the last investigate chain boundary for coordinator grounding evidence.
+func CoordinatorToolMessagesSinceInvestigateChain(history []api.Message) []api.Message {
+	since := LastInvestigateChainBoundary(history)
+	if since < 0 {
+		since = 0
+	}
+	if since >= len(history) {
+		return nil
+	}
+	return append([]api.Message(nil), history[since:]...)
+}
+
 func breaksInvestigateChain(msg api.Message) bool {
 	if msg.WorkerSummary != nil {
 		return true

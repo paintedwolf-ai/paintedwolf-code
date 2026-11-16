@@ -74,3 +74,33 @@ const (
 	GrantScopeSession    GrantScope = authzledger.GrantScopeSession
 	GrantScopePersistent GrantScope = authzledger.GrantScopePersistent
 )
+
+// AllEventActions lists the action enum for contract tests.
+func AllEventActions() []EventAction {
+	return []EventAction{
+		EventActionApprovalDecision,
+		EventActionToolDenied,
+		EventActionCapabilityRequested,
+		EventActionCapabilityGranted,
+		EventActionCapabilityDenied,
+		EventActionCapabilityRevoked,
+		EventActionCapabilityApplied,
+		EventActionDirectIPLeaseReused,
+		EventActionDirectIPStarted,
+		EventActionDirectIPCompleted,
+		EventActionDirectIPReconstructed,
+		EventActionMediatedEndpoint,
+		EventActionDetectionResolved,
+		EventActionAskSuppressed,
+		EventActionSecretPermissionUsed,
+		EventActionSecretReceipt,
+		EventActionSecretContest,
+		EventActionSecretDestinationTrusted,
+		EventActionSecretHostComposedRedacted,
+		EventActionSecretChatLocalRelease,
+		EventActionContentApplyResolved,
+		EventActionBlueprintApproved,
+		EventActionBlueprintSuperseded,
+		EventActionBlueprintRevoked,
+	}
+}

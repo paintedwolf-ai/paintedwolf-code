@@ -62,6 +62,14 @@ func AllDraftStatuses() []DraftStatus {
 	}
 }
 
+// AllMessageVisibilities returns every declared MessageVisibility.
+func AllMessageVisibilities() []MessageVisibility {
+	return []MessageVisibility{
+		MessageVisibilityTranscript,
+		MessageVisibilityInternal,
+	}
+}
+
 // AllWorkerStatuses returns every declared WorkerStatus.
 func AllWorkerStatuses() []WorkerStatus {
 	return []WorkerStatus{
