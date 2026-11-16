@@ -84,7 +84,7 @@ def execution_environment(environment, declaration=None):
 def catalog():
     value = json.loads(CATALOG.read_text())
     if set(value) != {"groups", "go", "tasks", "private", "selection", "resources", "environment", "ci",
-                      "capacity"}:
+                      "capacity", "fuzz"}:
         raise ValueError("invalid verification catalog")
     names = set()
     for section in ("groups", "go", "tasks"):
@@ -125,6 +125,8 @@ def catalog():
             or not all(isinstance(items, list) and all(isinstance(item, str) and item for item in items)
                        for items in environment.values())):
         raise ValueError("the verification environment declares names and prefixes")
+    if not valid_fuzz(value["fuzz"]):
+        raise ValueError("the fuzz section declares tags, smoke_seconds and seconds per ./package target")
     for name, spec in value["resources"].items():
         # Catalog stages and invocations outside the catalog declare resources by Task name.
         if name in value["groups"] or name in value["go"]:
@@ -156,6 +158,19 @@ def flag_value(arguments, index, target):
 def unknown_flag(target, flag, allowed):
     raise ValueError(f"{target}: unsupported flag {flag!r}; supported flags: {', '.join(sorted(allowed))}. "
                      "No verification was queued")
+
+
+def valid_fuzz(fuzz):
+    """Exploration seconds are positive integers; packages are ./relative and targets go test names."""
+    def seconds(value):
+        return type(value) is int and value > 0
+    return (isinstance(fuzz, dict) and set(fuzz) == {"tags", "smoke_seconds", "targets"}
+            and isinstance(fuzz["tags"], list) and all(isinstance(tag, str) and tag for tag in fuzz["tags"])
+            and seconds(fuzz["smoke_seconds"]) and isinstance(fuzz["targets"], dict) and fuzz["targets"]
+            and all(isinstance(package, str) and package.startswith("./") and isinstance(targets, dict) and targets
+                    and all(FUZZ_TARGET.fullmatch(target) and seconds(time)
+                            for target, time in targets.items())
+                    for package, targets in fuzz["targets"].items()))
 
 
 def go_selection(arguments, target):
@@ -230,6 +245,8 @@ def missing_go_paths(requested):
 VITEST_FLAGS = {"-t", "--testNamePattern"}
 PLAYWRIGHT_FLAGS = {"-g", "--grep", "--grep-invert", "--retries", "--timeout", "--global-timeout", "--repeat-each"}
 LINE_SUFFIX = re.compile(r"(:\d+){1,2}$")
+# go test runs a function as a fuzz target when its name is Fuzz or Fuzz then a non-lowercase rune.
+FUZZ_TARGET = re.compile(r"Fuzz(?![a-z])\w*")
 
 
 def selection_filters(arguments, allowed, target):

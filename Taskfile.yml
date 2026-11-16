@@ -410,10 +410,14 @@ tasks:
       - go run ./test/commandconformance/cmd/conformance capture {{.CLI_ARGS}}
 
   test:fuzz:
-    desc: 'Run Go native fuzz targets briefly (FUZZTIME=20s default; e.g. task test:fuzz -- ./internal/parse/...)'
-    dir: '{{.GO_DIR}}'
+    desc: 'Explore each fuzz target for the seconds scripts/verification-plan.json declares (e.g. task test:fuzz -- ./internal/parse)'
     cmds:
-      - bash {{.SCRIPTS_DIR}}/fuzz-short.sh {{.CLI_ARGS | default "./..."}}
+      - bash {{.SCRIPTS_DIR}}/fuzz-short.sh run {{.CLI_ARGS}}
+
+  test:fuzz:smoke:
+    desc: Replay seeds and corpus, then explore briefly, for every fuzz target in a package the change touches
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/fuzz-short.sh smoke
 
   test:failed:
     desc: Replay the latest failed Go run with its source, flags, and test environment

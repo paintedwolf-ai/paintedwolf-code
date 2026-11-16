@@ -13,6 +13,7 @@
       "den:test:fast",
       "test:short",
       "test:contract",
+      "test:fuzz:smoke",
       "licenses:notices",
       "comments:check",
       "test:fail-messages:check",
@@ -482,6 +483,9 @@
     ],
     "decide:prepare": [
       "decide:prepare"
+    ],
+    "test:fuzz:smoke": [
+      "test:fuzz:smoke"
     ]
   },
   "private": [
@@ -1008,6 +1012,15 @@
         "rust"
       ],
       "workers": 1
+    },
+    "test:fuzz:smoke": {
+      "locks": [
+        "go"
+      ],
+      "workers": "shared",
+      "shared_locks": [
+        "go"
+      ]
     }
   },
   "environment": {
@@ -1029,7 +1042,6 @@
       "MACOSX_DEPLOYMENT_TARGET",
       "CI",
       "BENCHMARK",
-      "FUZZTIME",
       "RUSTFLAGS",
       "RUSTDOCFLAGS",
       "NODE_OPTIONS",
@@ -1083,7 +1095,8 @@
         "coverage:changes",
         "den:typecheck",
         "den:lint",
-        "den:test:fast"
+        "den:test:fast",
+        "test:fuzz:smoke"
       ],
       "minutes": 120,
       "profiles": [
@@ -1465,6 +1478,71 @@
       "check": 3,
       "nightly": 2,
       "release": 1
+    }
+  },
+  "fuzz": {
+    "tags": [
+      "integration"
+    ],
+    "smoke_seconds": 10,
+    "targets": {
+      "./internal/api/httpio": {
+        "FuzzDecodeStrictJSON": 300
+      },
+      "./internal/argv": {
+        "FuzzJoinCommandLineRoundTrips": 300
+      },
+      "./internal/commandsurface": {
+        "FuzzParseProgramNeverExecutes": 300
+      },
+      "./internal/detectionpack": {
+        "FuzzParseRuleNeverPanics": 30
+      },
+      "./internal/egressproxy": {
+        "FuzzParseHTTPEndpoint": 300,
+        "FuzzParseSocksAddress": 300
+      },
+      "./internal/gitargv": {
+        "FuzzGitArgvWordsStayOperands": 300
+      },
+      "./internal/jsonfence": {
+        "FuzzTrailing": 30
+      },
+      "./internal/parse": {
+        "FuzzExtractJSON": 30,
+        "FuzzValidate": 30
+      },
+      "./internal/projectroot": {
+        "FuzzRootResolutionMatchesKernel": 300
+      },
+      "./internal/repomap": {
+        "FuzzMarkdownDefinitionRanges": 30
+      },
+      "./internal/scan/output": {
+        "FuzzOpengrepJSONParser": 300
+      },
+      "./internal/secretmatch": {
+        "FuzzScreenBytesRedactsAcrossChunkSplits": 300
+      },
+      "./internal/sourcecatalog": {
+        "FuzzRangePageEncoding": 300
+      },
+      "./internal/sourceledger": {
+        "FuzzAttributionOnlyCarriesMatchingLines": 300
+      },
+      "./internal/textfile": {
+        "FuzzEncodeDecodeRoundTrip": 300,
+        "FuzzOpenEncodePreservesAcceptedRepresentation": 300,
+        "FuzzOpenNeverPanics": 30
+      },
+      "./internal/tools/native/mutation": {
+        "FuzzArchiveExtractionStaysInDestination": 300
+      },
+      "./test/wiring/conformance": {
+        "FuzzCatalogBinderSafetyAndTypedRefusals": 30,
+        "FuzzParseProgramSafetyAndCeilings": 30,
+        "FuzzWordExpanderSafetyAndCeilings": 30
+      }
     }
   }
 }
