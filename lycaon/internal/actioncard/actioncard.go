@@ -93,7 +93,7 @@ func ForResult(result api.ToolResult, commandMarks []api.RedactedSpan) *api.Acti
 		facts = append(facts, took)
 	}
 	facts = ordered(facts)
-	row := parts.Row
+	row := shownRow(parts.Row, facts)
 	if len(row) == 0 {
 		row = defaultRow(facts)
 	}

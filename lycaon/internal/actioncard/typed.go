@@ -72,6 +72,17 @@ func stopCode(result api.ToolResult) string {
 	return ""
 }
 
+// shownRow keeps the row kinds whose facts survived the four-fact bound.
+func shownRow(row []api.ActionFactKind, facts []api.ActionFact) []api.ActionFactKind {
+	out := []api.ActionFactKind{}
+	for _, kind := range row {
+		if _, ok := factOf(facts, kind); ok {
+			out = append(out, kind)
+		}
+	}
+	return out
+}
+
 // defaultRow is the row a family leaves unset: how the call ended, then what
 // it changed, found or captured.
 func defaultRow(facts []api.ActionFact) []api.ActionFactKind {

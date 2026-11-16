@@ -116,3 +116,19 @@ func TestStatedFactsJoinTheCardAndFamilyFactsWin(t *testing.T) {
 		t.Fatalf("a stated fact replaced the family's: %+v", got)
 	}
 }
+
+func TestRowNamesOnlyFactsTheCardKeeps(t *testing.T) {
+	result := api.ToolResult{Tool: "terminal_send", ToolArgs: map[string]any{"id": "t"}, Outcome: api.ToolResultOutcomeRejected, Codes: []string{"X"},
+		FileEditPreviews: []api.FileEditPreview{{Path: "a", Added: 1}},
+		CardFacts:        []api.ActionFact{{Kind: api.ActionFactFound, Count: 1, Noun: "results"}},
+		Invocation:       &api.InvocationReceipt{StartedAt: time.Unix(1, 0), SettledAt: &[]time.Time{time.Unix(3, 0)}[0]}}
+	d := ForResult(result, nil)
+	if _, ok := fact(d.Facts, api.ActionFactSteps); ok {
+		t.Fatalf("steps survived a full card: %v", kinds(d.Facts))
+	}
+	for _, kind := range d.Row {
+		if _, ok := fact(d.Facts, kind); !ok {
+			t.Fatalf("row %v names %q, which the card dropped", d.Row, kind)
+		}
+	}
+}
