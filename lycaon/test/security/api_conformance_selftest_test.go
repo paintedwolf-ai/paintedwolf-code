@@ -28,6 +28,9 @@ func TestConformanceSweepPassesAConformingAPI(t *testing.T) {
 			t.Errorf("%s: %s", rule, v)
 		}
 	}
+	if sweep.paged != 1 || sweep.replayed != 1 {
+		t.Fatalf("lists walked = %d, keyed operations replayed = %d; want listWidgets and renameWidget", sweep.paged, sweep.replayed)
+	}
 	if len(sweep.secrets.seeded) != 1 {
 		t.Fatalf("seeded secrets = %v, want createPart", sweep.secrets.seeded)
 	}
@@ -73,6 +76,8 @@ func TestConformanceSweepDetectsEachBrokenInvariant(t *testing.T) {
 			"renameWidget: replay: replays changed the rows naming the key: map[renames:1], then map[renames:11]"},
 		{"reused key applies a different body", widgetFaults{acceptsReuse: true}, ruleKeyedOperationsAreIdempotent,
 			"renameWidget: changed body: answered 200, want 409 idempotency_conflict"},
+		{"limit ignored", widgetFaults{ignoresLimit: true}, rulePagination,
+			"listWidgets: walk: limit 1 answered 2 rows"},
 		{"mutation never succeeds", widgetFaults{refusesCreate: true}, ruleOperationsSucceed,
 			"createPart: success: never answered a success; last answer success answered 400 invalid_request"},
 	} {

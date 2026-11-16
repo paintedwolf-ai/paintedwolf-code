@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -37,7 +38,14 @@ type successInputs struct {
 
 // successRecipes holds the operations whose success needs more than fixture
 // ids and a schema-valid body.
-var successRecipes = map[string]successRecipe{}
+var successRecipes = map[string]successRecipe{
+	// Each of these ends the host's ordinary service, so they run last.
+	"lockVault":               {stage: stageHostWide},
+	"clearLocalData":          {stage: stageHostWide},
+	"resetStore":              {stage: stageHostWide},
+	"restoreRecoverySnapshot": {stage: stageHostWide},
+	"restoreBackup":           {stage: stageHostWide},
+}
 
 // stageOf places op in the mutating phase.
 func stageOf(op *conformanceOp) successStage {
@@ -60,10 +68,10 @@ func endsWithParam(path string) bool {
 // probeSuccessPaths sends one request per mutating operation that should
 // succeed. Its answer is validated like every other; ids it returns are bound
 // so later operations address the resources it made.
-func (s *conformanceSweep) probeSuccessPaths(ctx context.Context) {
+func (s *conformanceSweep) probeSuccessPaths(ctx context.Context, stages ...successStage) {
 	var mutating []*conformanceOp
 	for _, op := range s.ops {
-		if op.Method != http.MethodGet {
+		if op.Method != http.MethodGet && slices.Contains(stages, stageOf(op)) {
 			mutating = append(mutating, op)
 		}
 	}
@@ -169,4 +177,5 @@ func (s *conformanceSweep) checkCoverage() {
 	}
 	s.findings.note("success path: %d of %d operations answered a validated success", covered, len(s.ops))
 	s.findings.note("idempotency: %d of %d keyed operations replayed", s.replayed, keyed)
+	s.findings.note("pagination: %d lists walked one row at a time", s.paged)
 }

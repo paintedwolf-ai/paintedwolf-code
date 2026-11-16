@@ -126,6 +126,11 @@ components:
 const (
 	fixtureWidgetID = "7f1c2a4e-0000-4000-8000-000000000001"
 	fixturePartID   = "7f1c2a4e-0000-4000-8000-000000000002"
+	// fixtureSecondWidgetID is listed after fixtureWidgetID; the widget API
+	// serves only the first by id.
+	fixtureSecondWidgetID = "7f1c2a4e-0000-4000-8000-000000000003"
+	// widgetSecondPage is the one cursor listWidgets issues.
+	widgetSecondPage = "widgets-page-2"
 )
 
 // widgetFaults breaks one invariant each.
@@ -142,6 +147,7 @@ type widgetFaults struct {
 	refusesCreate    bool // createPart refuses every valid body
 	rowPerReplay     bool // renameWidget stores a row for every replay of a key
 	acceptsReuse     bool // renameWidget applies a different body under a used key
+	ignoresLimit     bool // listWidgets answers every row whatever the limit
 }
 
 // widgetAPI serves widgetSpec through the production responder.
@@ -170,18 +176,28 @@ func (a *widgetAPI) routes() http.Handler {
 var widgetPageLimit = httpio.MustPageLimit(20, 1, 50)
 
 func (a *widgetAPI) listWidgets(w http.ResponseWriter, r *http.Request) {
+	rows := []any{map[string]any{"id": fixtureWidgetID}, map[string]any{"id": fixtureSecondWidgetID}}
+	page := httpio.PageQuery{Limit: len(rows)}
 	if !a.faults.clampsLimit {
-		page, err := httpio.ReadPageQuery(r, widgetPageLimit)
-		if err != nil {
+		var err error
+		if page, err = httpio.ReadPageQuery(r, widgetPageLimit); err != nil {
 			a.responses.InvalidQuery(w, err)
 			return
 		}
-		if page.Cursor != "" {
+		if page.Cursor != "" && page.Cursor != widgetSecondPage {
 			a.responses.PageCursorError(w, r, "cursor", pagecursor.ErrInvalid)
 			return
 		}
 	}
-	httpio.WriteJSON(w, http.StatusOK, map[string]any{"widgets": []any{map[string]any{"id": fixtureWidgetID}}})
+	if page.Cursor == widgetSecondPage {
+		rows = rows[1:]
+	}
+	answer := map[string]any{"widgets": rows}
+	if page.Limit < len(rows) && !a.faults.ignoresLimit {
+		answer["widgets"] = rows[:page.Limit]
+		answer["next_cursor"] = widgetSecondPage
+	}
+	httpio.WriteJSON(w, http.StatusOK, answer)
 }
 
 func (a *widgetAPI) getWidget(w http.ResponseWriter, r *http.Request) {

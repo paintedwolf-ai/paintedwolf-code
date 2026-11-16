@@ -157,7 +157,9 @@ type conformanceSweep struct {
 	outcomesMu sync.Mutex
 	succeeded  map[string]bool
 	// replayed counts keyed operations whose success was replayed.
-	replayed   int
+	replayed int
+	// paged counts lists walked one row at a time.
+	paged      int
 	lastAnswer map[string]string
 }
 
@@ -191,8 +193,10 @@ func (s *conformanceSweep) runAll(ctx context.Context) {
 	s.probePagination(ctx)
 	s.probeUnknownResources(ctx)
 	s.probeRequestBodies(ctx)
-	s.probeSuccessPaths(ctx)
+	s.probeSuccessPaths(ctx, stageCreate, stageChange)
 	s.sweepReads(ctx)
+	s.walkPages(ctx)
+	s.probeSuccessPaths(ctx, stageDelete, stageHostWide)
 	s.checkCoverage()
 }
 
