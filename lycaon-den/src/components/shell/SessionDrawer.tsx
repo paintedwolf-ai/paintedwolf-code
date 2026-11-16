@@ -51,7 +51,6 @@ export function SessionDrawer(props: SessionDrawerProps) {
   bindPaintInterestLiveStreams({
     appStore: props.appStore,
     client: () => getLycaonClient(),
-    sessionId: () => undefined,
     hydrationLock: () => props.appStore.state.chatHydrationLock,
     paintedWorker: () => {
       if (!workerOpen()) return null;
@@ -63,29 +62,29 @@ export function SessionDrawer(props: SessionDrawerProps) {
   });
 
   return (
-      <ContextDrawerHost>
-        <WorklogPanel
-          open={props.content === "worklog"}
-          findings={props.appStore.state.findings}
-          board={board()}
-          workers={workers()}
-          messages={props.appStore.state.messages}
-          pendingCheckpoints={props.appStore.state.pendingCheckpoints}
-          onOpenWorkerCheckpoint={(workerId) => props.onOpenWorker(workerId)}
-          onClose={() => props.onClose()}
-        />
-        <SessionWorkersDrawer
-          appStore={props.appStore}
-          projects={props.projects}
-          projectDir={props.projectDir}
-          sessionId={props.sessionId}
-          open={workerOpen()}
-          selectedId={props.selectedWorkerId}
-          scrollToFocus={props.workerFocus}
-          onScrollToFocusHandled={props.onWorkerFocusHandled}
-          backgroundHydrate={props.backgroundHydrate}
-          onClose={() => props.onClose()}
-        />
-      </ContextDrawerHost>
+    <ContextDrawerHost>
+      <WorklogPanel
+        open={props.content === "worklog"}
+        findings={props.appStore.state.findings}
+        board={board()}
+        workers={workers()}
+        messages={props.appStore.state.messages}
+        pendingCheckpoints={props.appStore.state.pendingCheckpoints}
+        onOpenWorkerCheckpoint={(workerId) => props.onOpenWorker(workerId)}
+        onClose={() => props.onClose()}
+      />
+      <SessionWorkersDrawer
+        appStore={props.appStore}
+        projects={props.projects}
+        projectDir={props.projectDir}
+        sessionId={props.sessionId}
+        open={workerOpen()}
+        selectedId={props.selectedWorkerId}
+        scrollToFocus={props.workerFocus}
+        onScrollToFocusHandled={props.onWorkerFocusHandled}
+        backgroundHydrate={props.backgroundHydrate}
+        onClose={() => props.onClose()}
+      />
+    </ContextDrawerHost>
   );
 }
