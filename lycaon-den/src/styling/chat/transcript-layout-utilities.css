@@ -77,12 +77,16 @@ position: relative;
   }
 }
 
-@utility den-transcript-disclosure-card {
+/* Every card in a transcript row takes this width; outside a chat stream it fills the row. */
+@utility den-transcript-card {
   align-self: flex-start;
   width: var(--den-transcript-card-width, 100%);
   max-width: 100%;
   min-width: 0;
+}
 
+/* A transcript card that opens to the full row. */
+@utility den-transcript-disclosure-card {
   & > .den-transcript-disclosure-header {
     box-sizing: border-box;
     width: 100%;

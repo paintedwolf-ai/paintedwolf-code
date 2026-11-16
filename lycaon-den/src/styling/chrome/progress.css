@@ -1,5 +1,4 @@
 .progress-strip {
-  align-self: stretch;
   font-size: var(--text-den-compact);
   border: 1px solid var(--den-border);
   border-radius: var(--den-radius-shell);
@@ -7,24 +6,15 @@
   overflow: hidden;
 }
 
+/* The live strip fills its panel; a snapshot is a transcript card. */
+.progress-strip:not(.progress-strip--snapshot) {
+  align-self: stretch;
+}
+
 .progress-strip--snapshot {
   background: var(--den-surface);
   border-color: color-mix(in srgb, var(--den-border) 70%, transparent);
   color: var(--den-text-muted);
-}
-
-/* Chat snapshots match activity-card width; split views shrink-wrap them. */
-.den-chat-transcript-visual .progress-strip--snapshot {
-  align-self: flex-start;
-  width: var(--den-transcript-card-width);
-  max-width: 100%;
-}
-
-.den-shell-stage-host--split:where([data-host-band~="min-901"])
-  .den-split-col--chat
-  .den-chat-transcript-visual
-  .progress-strip--snapshot {
-  width: fit-content;
 }
 
 .progress-strip--snapshot .progress-strip__title {

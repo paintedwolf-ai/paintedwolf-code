@@ -200,7 +200,7 @@ export function ToolPartShell(props: Props) {
         bindTranscriptEntry(el);
         setHostEl(el);
       }}
-      class="den-tool-part-card den-transcript-disclosure-card den-tool-part"
+      class="den-tool-part-card den-transcript-card den-transcript-disclosure-card den-tool-part"
       data-testid={props.testId ?? "tool-part-card"}
       data-tool={props.part.tool}
       data-command-activity={props.part.commandActivity ? "" : undefined}

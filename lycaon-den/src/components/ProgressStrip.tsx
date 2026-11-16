@@ -265,6 +265,7 @@ export function ProgressStrip(props: ProgressStripProps) {
         classList={{
           "progress-strip--collapsed": !readOnly() && collapsed(),
           "progress-strip--snapshot": readOnly(),
+          "den-transcript-card": readOnly(),
           "progress-strip--embedded": props.embedded === true,
         }}
         data-testid={

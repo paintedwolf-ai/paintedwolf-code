@@ -49,7 +49,7 @@ export function NetworkChicklet(props: {
         <Show when={v.mustShow}>
           <TranscriptDisclosureShell
             disclosure={disclosure}
-            class="den-network-chicklet den-transcript-disclosure-card"
+            class="den-network-chicklet den-transcript-card den-transcript-disclosure-card"
             data-testid="network-chicklet"
             data-visibility={v.visibilitySummary}
           >

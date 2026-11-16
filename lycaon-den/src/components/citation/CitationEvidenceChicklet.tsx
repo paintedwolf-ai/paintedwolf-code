@@ -53,7 +53,7 @@ export function CitationEvidenceChicklet(props: Props) {
         <TranscriptDisclosureShell
           disclosure={disclosure}
           ref={bindTranscriptEntry}
-          class="den-citation-evidence-chicklet den-transcript-disclosure-card"
+          class="den-citation-evidence-chicklet den-transcript-card den-transcript-disclosure-card"
           data-testid="citation-evidence-chicklet"
           data-evidence-outcome={detail.outcome}
         >
