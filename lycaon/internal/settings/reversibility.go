@@ -205,6 +205,12 @@ func ToolTierDeclared(tool string) bool {
 	return ingestion.IsMCPToolName(tool)
 }
 
+// OperationTierDeclared reports whether a native operation has a defined tier.
+func OperationTierDeclared(operation string) bool {
+	_, ok := operationSet[strings.TrimSpace(operation)]
+	return ok
+}
+
 // ApprovalIrreversibleIDs returns irreversible-tier tool and operation names.
 func ApprovalIrreversibleIDs() []string {
 	return append(slices.Clone(irreversibleTools), irreversibleOperations...)

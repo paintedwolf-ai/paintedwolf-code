@@ -103,6 +103,11 @@ func SurfaceSnapshotHandleFields() []string {
 	}
 }
 
+// SurfaceSnapshotSurfaces returns observed surface discriminators.
+func SurfaceSnapshotSurfaces() []string {
+	return []string{SurfaceDOM, SurfaceTUI, SurfaceHTTP}
+}
+
 // EvidenceVerbatimShapeIDs are classification-free verbatim-substring shapes.
 func EvidenceVerbatimShapeIDs() []string {
 	return []string{ShapeCommand, ShapeOpaque, ShapeStructuredEvent}

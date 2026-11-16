@@ -52,6 +52,16 @@ func AllCompletionReportAskEfforts() []CompletionReportAskEffort {
 	}
 }
 
+// AllDraftStatuses returns every declared DraftStatus.
+func AllDraftStatuses() []DraftStatus {
+	return []DraftStatus{
+		DraftStatusLive,
+		DraftStatusCommitted,
+		DraftStatusWithdrawn,
+		DraftStatusRejected,
+	}
+}
+
 // AllWorkerStatuses returns every declared WorkerStatus.
 func AllWorkerStatuses() []WorkerStatus {
 	return []WorkerStatus{
