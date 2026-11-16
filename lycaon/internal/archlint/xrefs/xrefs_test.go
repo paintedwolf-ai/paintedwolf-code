@@ -2,9 +2,9 @@ package xrefs_test
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/archlint"
@@ -36,8 +36,14 @@ func equal(t *testing.T, got, want []string) {
 
 func TestRefsReportsCommandsAndScriptsNothingNames(t *testing.T) {
 	root := t.TempDir()
+	type indexed struct {
+		path string
+		mode os.FileMode
+	}
+	var files []indexed
 	write := func(p, body string, mode os.FileMode) {
 		t.Helper()
+		files = append(files, indexed{p, mode})
 		full := filepath.Join(root, p)
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			testutil.FailErr(t, "create directory", err)
@@ -57,19 +63,22 @@ func TestRefsReportsCommandsAndScriptsNothingNames(t *testing.T) {
 	write("scripts/helper.py", "#!/usr/bin/env python3\n", 0o755)
 	write("scripts/caller.py", "import helper\n", 0o644)
 	write("scripts/library.py", "", 0o644)
-	for _, args := range [][]string{{"init", "-q"}, {"add", "-A"}} {
-		if out, err := exec.Command("git", append([]string{"-C", root}, args...)...).CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v %s", args, err, out)
+	var index strings.Builder
+	for _, f := range files {
+		mode := "100644"
+		if f.mode&0o111 != 0 {
+			mode = "100755"
 		}
+		index.WriteString(mode + " 0000000000000000000000000000000000000000 0\t" + f.path + "\x00")
 	}
-	got, err := xrefs.Refs(root)
+	got, err := xrefs.Refs(root, []byte(index.String()))
 	testutil.FailErr(t, "xrefs.Refs failed", err)
 	equal(t, keys(got), []string{
 		"unreferenced-command lycaon/cmd/lycaon-debug",
 		"unreferenced-command lycaon/cmd/orphan",
 		"unreferenced-script scripts/unused.sh",
 	})
-	if _, err := xrefs.Refs(filepath.Join(root, "missing")); err == nil {
-		t.Fatal("a directory outside git must fail")
+	if _, err := xrefs.Refs(root, []byte("not an index entry\x00")); err == nil {
+		t.Fatal("an index that is not ls-files output must fail")
 	}
 }

@@ -25,7 +25,7 @@ func main() {
 	case "vet":
 		err = runVet(args, os.Stdout)
 	case "refs":
-		err = runRefs(args, os.Stdout)
+		err = runRefs(args, os.Stdin, os.Stdout)
 	default:
 		err = fmt.Errorf("unknown subcommand %q", cmd)
 	}

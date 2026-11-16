@@ -91,11 +91,14 @@ def checks(binary, tree, policy, go=True, den=False):
          *reach["roots"]],
         [binary, "vet", "-dir", go_dir, "-test-support", support, *policy["vet"]["packages"]],
     ]
-    commands = (go_commands if go else []) + [[binary, "refs", "-root", tree]]
     found = {}
-    for command in commands:
-        for finding in json.loads(run([str(part) for part in command]) or "null") or []:
-            found[(finding["kind"], finding["key"])] = finding
+    with tempfile.NamedTemporaryFile("w", suffix=".index") as index:
+        index.write(run(["git", "-C", str(tree), "ls-files", "-s", "-z"]))
+        index.flush()
+        commands = (go_commands if go else []) + [[binary, "refs", "-root", tree, "-index", index.name]]
+        for command in commands:
+            for finding in json.loads(run([str(part) for part in command]) or "null") or []:
+                found[(finding["kind"], finding["key"])] = finding
     if den:
         found.update(knip(tree, policy))
     return found

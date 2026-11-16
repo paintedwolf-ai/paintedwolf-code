@@ -247,5 +247,7 @@ func matchesAny(patterns []*regexp.Regexp, s string) bool {
 	return false
 }
 
-// All is every per-package analyzer.
-var All = []*analysis.Analyzer{Reexport, SelfEmbed, CopyDrop, TestImport}
+// All returns every per-package analyzer.
+func All() []*analysis.Analyzer {
+	return []*analysis.Analyzer{Reexport, SelfEmbed, CopyDrop, TestImport}
+}

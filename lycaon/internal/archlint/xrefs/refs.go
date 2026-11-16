@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 	"regexp"
 	"strings"
@@ -26,16 +25,16 @@ type trackedFile struct {
 	executable bool
 }
 
-func tracked(root string) ([]trackedFile, error) {
-	out, err := exec.Command("git", "-C", root, "ls-files", "-s", "-z").Output() // #nosec G204 -- fixed git argv over the repository root
-	if err != nil {
-		return nil, fmt.Errorf("git ls-files: %w", err)
-	}
+// parseIndex reads `git ls-files -s -z` output.
+func parseIndex(index []byte) ([]trackedFile, error) {
 	var files []trackedFile
-	for _, entry := range strings.Split(string(out), "\x00") {
+	for _, entry := range strings.Split(string(index), "\x00") {
+		if entry == "" {
+			continue
+		}
 		meta, p, ok := strings.Cut(entry, "\t")
 		if !ok {
-			continue
+			return nil, fmt.Errorf("index entry %q is not `git ls-files -s -z` output", entry)
 		}
 		files = append(files, trackedFile{path: p, executable: strings.HasPrefix(meta, "100755")})
 	}
@@ -57,9 +56,9 @@ type subject struct {
 }
 
 // Refs reports every lycaon/cmd binary and every executable under scripts/
-// that no other tracked file names.
-func Refs(root string) ([]archlint.Finding, error) {
-	files, err := tracked(root)
+// that no other tracked file names. index is `git ls-files -s -z` output for root.
+func Refs(root string, index []byte) ([]archlint.Finding, error) {
+	files, err := parseIndex(index)
 	if err != nil {
 		return nil, err
 	}

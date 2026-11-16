@@ -18,7 +18,7 @@ func runVet(args []string, out io.Writer) error {
 	if err := analyzers.TestImport.Flags.Set("test-support", *testSupport); err != nil {
 		return err
 	}
-	findings, err := archlint.Vet(*dir, fs.Args(), analyzers.All)
+	findings, err := archlint.Vet(*dir, fs.Args(), analyzers.All())
 	if err != nil {
 		return err
 	}

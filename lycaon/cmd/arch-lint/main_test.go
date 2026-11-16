@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/archlint"
@@ -39,10 +40,13 @@ func TestSubcommandsWriteFindingsAsJSON(t *testing.T) {
 		t.Fatal("reach found nothing in a fixture with dead code")
 	}
 	out.Reset()
-	if err := runRefs([]string{"-root", filepath.Join("..", "..", "..")}, &out); err != nil {
+	index := strings.NewReader("100755 0000000000000000000000000000000000000000 0\tscripts/orphan.sh\x00")
+	if err := runRefs([]string{"-root", t.TempDir(), "-index", "-"}, index, &out); err != nil {
 		testutil.FailErr(t, "runRefs failed", err)
 	}
-	decode(t, &out)
+	if got := decode(t, &out); len(got) != 1 || got[0].Key != "scripts/orphan.sh" {
+		t.Fatalf("refs = %+v", got)
+	}
 }
 
 func TestSubcommandsRefuseBadFlags(t *testing.T) {
@@ -50,7 +54,7 @@ func TestSubcommandsRefuseBadFlags(t *testing.T) {
 	for name, run := range map[string]func([]string, *bytes.Buffer) error{
 		"reach": func(a []string, o *bytes.Buffer) error { return runReach(a, o) },
 		"vet":   func(a []string, o *bytes.Buffer) error { return runVet(a, o) },
-		"refs":  func(a []string, o *bytes.Buffer) error { return runRefs(a, o) },
+		"refs":  func(a []string, o *bytes.Buffer) error { return runRefs(a, strings.NewReader(""), o) },
 	} {
 		if err := run([]string{"-nope"}, &out); err == nil {
 			t.Errorf("%s accepted an unknown flag", name)
@@ -61,6 +65,9 @@ func TestSubcommandsRefuseBadFlags(t *testing.T) {
 	}
 	if err := runReach([]string{"-skip", "(", "./..."}, &out); err == nil {
 		t.Error("reach accepted an invalid skip pattern")
+	}
+	if err := runRefs(nil, strings.NewReader(""), &out); err == nil {
+		t.Error("refs ran without an index")
 	}
 	if got := splitList(" a, ,b "); len(got) != 2 || got[0] != "a" || got[1] != "b" {
 		t.Errorf("splitList = %q", got)
