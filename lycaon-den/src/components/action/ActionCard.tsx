@@ -14,6 +14,7 @@ import { RedactionChicklet } from "../tool/RedactionChicklet.tsx";
 import type { ToolBriefingSlots } from "../tool/tool-briefing-slots.ts";
 import { ToolPartShell } from "../tool/ToolPartShell.tsx";
 import { ActionLinks } from "./ActionLinks.tsx";
+import { TurnLoadFootLine } from "../tool/TurnLoadFootLine.tsx";
 import { ActionPreview } from "./ActionPreview.tsx";
 
 const RAN_FIELD = "ran.text";
@@ -28,7 +29,7 @@ type Props = {
   slots?: ToolBriefingSlots;
 };
 
-/** Every action's card: what ran, its summary, facts, preview and records, in that order. */
+/** Every action's card: what ran, its summary, facts, preview and records, then how the local AI bore on the call. */
 export function ActionCard(props: Props) {
   const status = () => (props.action.status === "done" ? "completed" : props.action.status);
   // A fold's members share one card, so it shows the first member that has each notice.
@@ -61,6 +62,7 @@ export function ActionCard(props: Props) {
           {(meta) => <p class="den-action-card__notice" data-testid="action-redaction"><RedactionChicklet message={{ host_secret_redaction: meta }} /></p>}
         </Show>
         <ActionLinks action={props.action} part={props.part} projectId={props.projectId} evidence={props.slots?.evidence} />
+        <TurnLoadFootLine part={props.part} />
       </div>
     </ToolPartShell>
   );

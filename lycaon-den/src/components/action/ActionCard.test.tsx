@@ -84,6 +84,20 @@ describe("ActionCard", () => {
     expect(regions.indexOf("action-redaction")).toBe(regions.indexOf("action-links") - 1);
   });
 
+  it("links a command's host decisions between its records and its evidence", () => {
+    const decision = { kind: "turn_load", key: "tl", row: { load: { elapsed_ms: 12, tools: [{ tool: "fetch_url" }] } } } as never;
+    const command: ToolPartView = { ...part(), tool: "command", commandActivity: {
+      fact: { id: "f", group: "g", label: "Run command", subject: "curl", outcome: "", state: "completed", execution_ids: [], spans: [] },
+      calls: [], members: [], receiptScopes: [], decisions: [decision],
+    } };
+    const evidence = <button type="button" data-testid="supplied-evidence">supplied evidence</button>;
+    const { container } = render(() => <ActionCard part={command} action={descriptor} layout="chat" slots={{ evidence }} />);
+    open(container);
+    const links = [...container.querySelectorAll('[data-testid="action-links"] [data-testid]')].map((node) => node.getAttribute("data-testid"));
+    expect(links.indexOf("action-link-decisions")).toBe(links.indexOf("supplied-evidence") - 1);
+    expect(links.indexOf("action-link-decisions")).toBeGreaterThan(links.indexOf("action-link-output"));
+  });
+
   it("names a fold's further targets beside what ran", () => {
     const { container } = render(() => <ActionCard part={part()} action={{ ...descriptor, more: 2 }} layout="chat" />);
     open(container);

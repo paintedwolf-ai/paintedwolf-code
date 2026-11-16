@@ -8,6 +8,7 @@ import { openSourceLocation } from "../../platform/navigation/open-source.ts";
 import { openInSearch } from "../../search/search-nav.ts";
 import { useToolContent } from "../../chat/tool/tool-content.tsx";
 import { ToolContentLink } from "../tool/ToolContentLink.tsx";
+import { turnLoadRowSummary } from "../../chat/turnload/turn-load-rows.ts";
 
 const LINK_LABELS: Readonly<Record<ActionLink["kind"], string>> = { input: "Input", output: "Output", receipt: "Receipt" };
 
@@ -22,7 +23,7 @@ type Props = {
   evidence?: JSX.Element;
 };
 
-/** Input, Output, Receipt and Evidence in that order, then the opener. */
+/** Input, Output, Receipt, host decisions and Evidence in that order, then the opener. */
 export function ActionLinks(props: Props) {
   const content = useToolContent();
   // A Find match inside this call's input or output opens its document at the match.
@@ -47,6 +48,12 @@ export function ActionLinks(props: Props) {
           );
         }}
       </For>
+      <Show when={props.part.commandActivity?.decisions?.length ? props.part.commandActivity.decisions : undefined} keyed>
+        {(decisions) => (
+          <ToolContentLink short label="Host decisions" testId="action-link-decisions" projectId={props.projectId} pane={`action:${props.part.id}:decisions`}
+            content={{ kind: "inline", text: decisions.map((decision) => { const row = turnLoadRowSummary(decision.row); return `${row.title} · ${row.operation} · ${row.state}`; }).join("\n") }} />
+        )}
+      </Show>
       {props.evidence}
       <Show when={props.action.opener} keyed>
         {(opener) => <Opener opener={opener} part={props.part} projectId={props.projectId} />}

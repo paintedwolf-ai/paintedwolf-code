@@ -13,8 +13,8 @@
     font-size: var(--text-den-body);
   }
   /* Notices shared with other surfaces take the card's face and size too. */
-  & :is(.den-network-chicklet, .den-redaction-chicklet),
-  & :is(.den-network-chicklet, .den-redaction-chicklet) * {
+  & :is(.den-network-chicklet, .den-redaction-chicklet, .den-tool-part-load),
+  & :is(.den-network-chicklet, .den-redaction-chicklet, .den-tool-part-load) * {
     font-family: var(--den-font-ui);
     font-size: var(--text-den-body);
   }
