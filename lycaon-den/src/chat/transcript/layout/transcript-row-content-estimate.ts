@@ -7,7 +7,7 @@ import {
   estimateLineEmWidth,
   markdownHeightEstimate,
 } from "./markdown-height-estimate.ts";
-import { progressUpdateSummaryLabel } from "../../progress/progress-model.ts";
+import { progressAggregateSummary, progressUpdateSummaryLabel } from "../../progress/progress-model.ts";
 
 export type TranscriptRowMetrics = {
   widthPx: number;
@@ -124,8 +124,9 @@ export function transcriptRowContentEstimate(
       const header = remPx * 0.8929 * 1.5 + 8 + 2;
       // Only the plan lists its steps while closed; later rows rest as their header line.
       if (item.kind === "progress_complete" || !item.initial) return Math.round(header);
-      const labels = item.summary
-        ? [progressUpdateSummaryLabel(item.summary, true)]
+      const aggregate = progressAggregateSummary(item);
+      const labels = aggregate
+        ? [progressUpdateSummaryLabel(aggregate, true)]
         : item.steps.map((step) => step.label);
       const font = bodyPx * 0.9;
       const cardWidth = Math.min(widthPx, remPx * 32);

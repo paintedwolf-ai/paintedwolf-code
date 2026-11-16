@@ -128,4 +128,44 @@ describe("ProgressSnapshot", () => {
     const { container } = render(() => <ProgressSnapshot kind="updated" changes={[]} />);
     expect(container.textContent).toBe("");
   });
+
+  it("shows how far the plan stands after an update that states it", async () => {
+    render(() => (
+      <ProgressSnapshot
+        kind="updated"
+        changes={[{ kind: "done", label: "Ship auth", state: "done" }]}
+        summary={{ change_count: 1, total_steps: 5, pending: 3, done: 2, na: 0 }}
+      />
+    ));
+    expect(restLine()).toBe("✓Ship auth");
+    expect(screen.getByTestId("progress-strip-standing").textContent).toBe("2 of 5");
+    const opener = screen.getByRole("button", { name: "Updated: Ship auth, 2 of 5 done" });
+
+    fireEvent.click(opener);
+    await Promise.resolve();
+    expect(visibleRows().map((row) => row.textContent)).toEqual(["✓Ship auth"]);
+    expect(screen.getByTestId("progress-strip-count").textContent).toBe("1");
+  });
+
+  it("lists a plan's steps when its counts arrive with them", () => {
+    render(() => (
+      <ProgressSnapshot
+        kind="created"
+        steps={[
+          { state: "pending", label: "Build the lexer" },
+          { state: "pending", label: "Sketch the grammar" },
+        ]}
+        summary={{ change_count: 2, total_steps: 2, pending: 2, done: 0, na: 0 }}
+      />
+    ));
+    expect(visibleRows().map((row) => row.textContent)).toEqual(["○Build the lexer", "○Sketch the grammar"]);
+    expect(screen.queryByTestId("progress-strip-standing")).toBeNull();
+  });
+
+  it("leaves the standing off an update that carries no counts", () => {
+    render(() => (
+      <ProgressSnapshot kind="updated" changes={[{ kind: "done", label: "Ship auth", state: "done" }]} />
+    ));
+    expect(screen.queryByTestId("progress-strip-standing")).toBeNull();
+  });
 });

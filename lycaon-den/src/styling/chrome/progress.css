@@ -113,6 +113,14 @@
   line-height: 1.5;
 }
 
+/* The plan's standing follows the line and never gives way to it. */
+.progress-strip__standing {
+  flex: 0 0 auto;
+  margin-inline-start: 0.6em;
+  font-size: var(--text-den-label);
+  font-variant-numeric: tabular-nums;
+}
+
 .progress-strip__rest-sep {
   margin-inline: 0.45em;
 }
@@ -149,13 +157,13 @@
 /* One set of header words per state. */
 .progress-strip--update[data-expanded="false"] > .progress-strip__summary :is(.progress-strip__title, .progress-strip__count),
 .progress-strip--update[data-closing] > .progress-strip__summary :is(.progress-strip__title, .progress-strip__count),
-.progress-strip--update[data-expanded="true"]:not([data-closing]) > .progress-strip__summary > .progress-strip__rest {
+.progress-strip--update[data-expanded="true"]:not([data-closing]) > .progress-strip__summary > :is(.progress-strip__rest, .progress-strip__standing) {
   display: none;
 }
 
 /* The incoming words fade in while the box opens or closes. */
 .progress-strip--update[data-animating]:not([data-closing]) > .progress-strip__summary :is(.progress-strip__title, .progress-strip__count),
-.progress-strip--update[data-closing] > .progress-strip__summary > .progress-strip__rest {
+.progress-strip--update[data-closing] > .progress-strip__summary > :is(.progress-strip__rest, .progress-strip__standing) {
   animation: den-enter-reveal var(--den-duration-drawer) var(--den-ease) both;
 }
 

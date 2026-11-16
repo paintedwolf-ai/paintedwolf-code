@@ -69,6 +69,7 @@ webE2e(
               { kind: "done", label: "Read the app package", state: "done" },
               { kind: "done", label: "Add a greeting helper", state: "done" },
             ],
+            summary: { change_count: 2, total_steps: 3, pending: 1, done: 2, na: 0 },
           },
           seq: 3,
           ord: 3,
@@ -96,6 +97,7 @@ webE2e(
     await expect(plan).toBeVisible();
     await expect(update.getByTestId("progress-strip-rest")).toHaveText("✓Read the app package·✓Add a greeting helper");
     await expect(finished.getByTestId("progress-strip-rest")).toHaveText("✓All 3 steps done");
+    await expect(update.getByTestId("progress-strip-standing")).toHaveText("2 of 3");
 
     // At rest: one line each, no box drawn, and the plan lists every step.
     const planBox = await box(plan);
@@ -118,6 +120,7 @@ webE2e(
     await expect(update.getByTestId("progress-strip-item")).toHaveCount(2);
     await expect(update.getByTestId("progress-strip-item").first()).toBeVisible();
     await expect(update.getByTestId("progress-strip-rest")).toBeHidden();
+    await expect(update.getByTestId("progress-strip-standing")).toBeHidden();
     await expect(update.locator(".progress-strip__title")).toHaveText("Updated");
     expect(openUpdate.left).toBeCloseTo(planBox.left, 0);
     expect(openUpdate.width).toBeCloseTo(planBox.width, 0);

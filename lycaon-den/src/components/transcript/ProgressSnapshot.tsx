@@ -5,6 +5,7 @@ import {
   progressCompletedLabel,
   progressSnapshotCount,
   progressSnapshotSteps,
+  progressUpdateStanding,
   type ProgressSnapshotKind,
 } from "../../chat/progress/progress-model.ts";
 import {
@@ -68,7 +69,11 @@ export function ProgressSnapshot(props: Props) {
     props.kind === "completed"
       ? [{ label: progressCompletedLabel(steps()), state: "done" }]
       : steps();
-  const restText = () => restSteps().map((step) => step.label).join(", ");
+  const restText = () => {
+    const standing = progressUpdateStanding(props);
+    const steps = restSteps().map((step) => step.label).join(", ");
+    return standing ? `${steps}, ${standing} done` : steps;
+  };
 
   return (
     <Show when={count() > 0}>
@@ -119,6 +124,11 @@ export function ProgressSnapshot(props: Props) {
                 )}
               </For>
             </div>
+            <Show when={progressUpdateStanding(props)}>
+              <span class="progress-strip__standing" data-testid="progress-strip-standing" aria-hidden="true">
+                {progressUpdateStanding(props)}
+              </span>
+            </Show>
             <span class="den-disclosure-chevron" aria-hidden="true" />
             <span class="progress-strip__count" data-testid="progress-strip-count">{count()}</span>
           </div>
