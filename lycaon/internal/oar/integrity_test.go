@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/oarcore"
 )
 
 // IntegrityReport summarizes load-time integrity checks.
@@ -166,4 +167,19 @@ func referencesForRegistry(refs map[string]any) map[string]any {
 		return nil
 	}
 	return out
+}
+
+// checkWhenAgainstSpec compiles a condition against the installed declaration.
+func checkWhenAgainstSpec(when string, cap *EngineDeclaration) error {
+	if cap == nil {
+		cap = InstalledEngineDeclaration()
+	}
+	if strings.TrimSpace(when) == "" {
+		return nil
+	}
+	env, err := capabilityEnvironment(cap)
+	if err != nil {
+		return err
+	}
+	return oarcore.CheckCondition(when, env)
 }

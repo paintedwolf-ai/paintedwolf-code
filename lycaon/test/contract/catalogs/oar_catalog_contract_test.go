@@ -84,7 +84,7 @@ func TestOARHintCoverageUsesCatalogAnchors(t *testing.T) {
 		if _, ok := rs.Get(code); !ok {
 			noRule = append(noRule, code)
 		}
-		resolved, err := oar.ResolveRuleAnchor(code, anchor)
+		resolved, err := oar.InstalledEngineDeclaration().ResolveAnchor(anchor)
 		if err != nil {
 			unknownAnchors = append(unknownAnchors, code+"="+anchor)
 			continue

@@ -1,9 +1,10 @@
 package oar
 
 import (
-	"github.com/lycaon/lycaon/internal/oarcore"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/oarcore"
 )
 
 // CurrentOARVersion is the revision this engine implements.

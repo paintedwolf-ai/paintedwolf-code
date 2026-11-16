@@ -1,9 +1,10 @@
 package oar
 
 import (
-	"github.com/lycaon/lycaon/internal/oarcore"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/oarcore"
 )
 
 // catalogueFacts is the closed set of fact names a rule may reference, keyed by

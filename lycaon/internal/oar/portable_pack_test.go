@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/configlayout"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"gopkg.in/yaml.v3"
