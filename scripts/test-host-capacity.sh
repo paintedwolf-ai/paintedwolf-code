@@ -44,20 +44,3 @@ test_host_timeout_scale() {
     print scale
   }'
 }
-
-test_scale_integer() {
-  local value="$1"
-  local scale="$2"
-  printf '%s\n' "$(( value * scale ))"
-}
-
-test_scale_go_duration() {
-  local value="$1"
-  local scale="$2"
-  if [[ "${value}" =~ ^([0-9]+)(ns|us|µs|ms|s|m|h)$ ]]; then
-    printf '%s%s\n' "$(( BASH_REMATCH[1] * scale ))" "${BASH_REMATCH[2]}"
-    return
-  fi
-  # Composite durations pass through unchanged.
-  printf '%s\n' "${value}"
-}
