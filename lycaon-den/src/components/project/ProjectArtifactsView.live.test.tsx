@@ -3,6 +3,7 @@ import { createSignal } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LycaonClient } from "../../api/client.ts";
 import type { ArtifactListItem } from "../../api/types.ts";
+import { stubClient } from "../../test/client-fixture.ts";
 import {
   ARTIFACT_REFRESH_DEBOUNCE_MS,
   clearArtifactDeletionMemory,
@@ -80,11 +81,7 @@ describe("ProjectArtifactsView live updates", () => {
   const listProjectArtifacts = vi.fn();
   const getSessionArtifact = vi.fn();
   const deleteProjectArtifact = vi.fn();
-  const mockClient = {
-    listProjectArtifacts,
-    getSessionArtifact,
-    deleteProjectArtifact,
-  } as unknown as LycaonClient;
+  const mockClient = stubClient({ listProjectArtifacts, getSessionArtifact, deleteProjectArtifact });
 
   let nextUrlId = 0;
   let createObjectURLSpy: ReturnType<typeof vi.spyOn>;
