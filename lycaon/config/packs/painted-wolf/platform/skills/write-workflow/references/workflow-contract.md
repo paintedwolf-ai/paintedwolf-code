@@ -29,7 +29,7 @@ Static leaves: `gates_satisfied`, `orchestration_complete`, `child_run_complete`
 
 Parameterized prefixes (non-empty suffix required): `var_equals:`, `var_truthy:`, `user_decision_received:`, `user_feedback_received:`, `user_decision:`, `hitl_consulted:`, `evidence_passed:`, `phase_is:`, `phase_skipped:`, `gate_passed:`, `obligation_settled:`.
 
-`PublicGateKit` in `internal/workflow/gate_kit.go` is the enforcing source; `schemas/workflow_vocabulary.json` carries the generated per-identifier layer and domain.
+`IsGenericGateKitLeaf` in `internal/workflow/gate_kit.go` is the enforcing source; `schemas/workflow_vocabulary.json` carries the generated per-identifier layer and domain.
 
 `complete_when` accepts `gates_satisfied` (which requires a non-empty `gates: […]` — the one form the validator refuses when the list is empty), `gate_satisfied:<leaf>`, a bare leaf from the kit above, or a boolean expression over those identifiers. A terminal phase must use `complete_when: orchestration_complete`. Terminal entry is an atomic host completion sink: do not bind coordinator work, feedback, obligations, or invocation to it.
 
