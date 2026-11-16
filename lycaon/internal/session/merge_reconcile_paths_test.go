@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/grounding"
@@ -128,24 +129,37 @@ func TestCatalogReadCapacityDoesNotMeanWorkersIdle(t *testing.T) {
 }
 
 func TestCatalogGroundingVerdictsDoNotOverlap(t *testing.T) {
+	// closeoutCause renders a closeout refusal for a worker of that name.
+	closeoutCause := func(t *testing.T, code, gapFact, worker string) string {
+		t.Helper()
+		gc := oar.NewGuardContext()
+		grounding.ObserveVerdict(gc, grounding.GroundingVerdict{Code: code, LegID: "fixture-leg"})
+		gc.PutRejectData(code, map[string]any{"grounding_verdict": code, "leg_id": "fixture-leg", "worker": worker, gapFact: true})
+		result, err := sessionTestOARPipeline(t).EvaluateBlock(t.Context(), oar.AnchorCoordinatorCloseoutCheck, gc)
+		testutil.FailErr(t, "evaluate grounding refusal", err)
+		if result.Decision == nil || result.Decision.Code != code || result.Decision.Effect != oar.EffectBlock || result.Decision.Copy == nil {
+			t.Fatalf("closeout decision = %+v", result.Decision)
+		}
+		return result.Decision.Copy["cause"]
+	}
+	gapFacts := map[string]string{"COORDINATOR_UNGROUNDED_CLAIM": "closeout_round_incomplete", "COORDINATOR_CRITERIA_UNMET": "closeout_unstarted"}
 	for _, code := range []string{"COORDINATOR_UNGROUNDED_CLAIM", "COORDINATOR_CRITERIA_UNMET", "COORDINATOR_GROUNDING_ESCALATED"} {
 		t.Run(code, func(t *testing.T) {
-			gc := oar.NewGuardContext()
-			grounding.ObserveVerdict(gc, grounding.GroundingVerdict{Code: code, Reason: "Missing {{ receipt }} — résumé", LegID: "fixture-leg"})
 			if code == "COORDINATOR_GROUNDING_ESCALATED" {
+				gc := oar.NewGuardContext()
+				grounding.ObserveVerdict(gc, grounding.GroundingVerdict{Code: code, LegID: "fixture-leg"})
 				result, err := sessionTestOARPipeline(t).EvaluateBlock(t.Context(), oar.AnchorCoordinatorPostTurn, gc)
 				testutil.FailErr(t, "evaluate escalation notice", err)
 				if result.Decision == nil || result.Decision.Effect != oar.EffectNudge || result.Decision.Code != code {
 					t.Fatalf("post-turn advisory = %+v", result.Decision)
 				}
 			} else {
-				result, err := sessionTestOARPipeline(t).EvaluateBlock(t.Context(), oar.AnchorCoordinatorCloseoutCheck, gc)
-				testutil.FailErr(t, "evaluate grounding refusal", err)
-				if result.Decision == nil || result.Decision.Code != code || result.Decision.Effect != oar.EffectBlock {
-					t.Fatalf("closeout decision = %+v", result.Decision)
-				}
-				if result.Decision.Copy == nil || result.Decision.Copy["cause"] != "Missing {{ receipt }} — résumé" {
-					t.Fatalf("grounding reason was lost or interpreted: %+v", result.Decision.Copy)
+				// A worker name is data: one that looks like a template
+				// renders as written.
+				const plain, templated = "fixture-worker", "{{ receipt }} — résumé"
+				want := strings.ReplaceAll(closeoutCause(t, code, gapFacts[code], plain), plain, templated)
+				if got := closeoutCause(t, code, gapFacts[code], templated); got == "" || got != want {
+					t.Fatalf("cause = %q, want the worker name as written: %q", got, want)
 				}
 			}
 		})

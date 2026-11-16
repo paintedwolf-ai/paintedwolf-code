@@ -14,7 +14,7 @@ import (
 
 // modeTransitionPushSiteRegistry lists production paths that must push ModeTransitionCause.
 var modeTransitionPushSiteRegistry = []string{
-	"lycaon/internal/app/delegations/hooks.go",
+	"lycaon/internal/app/workerruntime/hooks.go",
 }
 
 func TestModeTransitionPushSiteRegistry(t *testing.T) {
@@ -31,8 +31,8 @@ func TestModeTransitionPushSiteRegistry(t *testing.T) {
 		}
 	}
 	for path, needles := range map[string][]string{
-		"lycaon/internal/app/delegations/build.go":   {"r.configureWorkflow"},
-		"lycaon/internal/app/delegations/context.go": {"Phases.PhaseEnterHook = r.OnWorkflowPhaseEnter", "Phases.PhaseReenterHook = r.OnWorkflowPhaseReenter"},
+		"lycaon/internal/app/workerruntime/build.go":   {"r.configureWorkflow"},
+		"lycaon/internal/app/workerruntime/context.go": {"Phases.PhaseEnterHook = r.OnWorkflowPhaseEnter", "Phases.PhaseReenterHook = r.OnWorkflowPhaseReenter"},
 	} {
 		source := contractcheck.ReadRepoFile(t, root, filepath.FromSlash(path))
 		for _, needle := range needles {
