@@ -100,13 +100,9 @@ func TestProbeDoesNotLeakInheritedDescriptorsToDetachedChildren(t *testing.T) {
 		_, err := readEnd.Read(buf[:])
 		eofDone <- err
 	}()
-	select {
-	case err := <-eofDone:
-		if !errors.Is(err, io.EOF) {
-			t.Fatalf("pipe read after closing parent descriptor = %v, want EOF", err)
-		}
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatalf("pipe writer remained open in a descendant after parent closed descriptor %d", inheritedFD)
+	err := testutil.Receive(t, fmt.Sprintf("the pipe reaches EOF once the parent closes descriptor %d", inheritedFD), eofDone)
+	if !errors.Is(err, io.EOF) {
+		t.Fatalf("pipe read after closing parent descriptor = %v, want EOF", err)
 	}
 }
 

@@ -112,8 +112,7 @@ func DrainPendingWorkerJobs(ctx context.Context, h *Harness, projectID, parentSe
 	if h == nil || h.Delegations.Queue == nil || h.Sessions.Manager == nil {
 		return errors.New("harness worker queue or session manager missing")
 	}
-	drainCtx, cancel := context.WithTimeout(ctx, testutil.Timeout(workerDrainQuiescenceTimeout))
-	defer cancel()
+	drainCtx := ctx
 	exec := wiringWorkerExecutor(h)
 	bridge := &worker.SessionOutcomeBridge{Workers: h.Sessions.Manager.Coordinator.Workers, Loop: h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges, Results: h.Sessions.Manager.Workers.Results, State: h.Sessions.Manager.Workers.State, Closure: h.Sessions.Manager.Coordinator.ProgressClosure}
 	if h.Delegations.Manager != nil {

@@ -203,8 +203,7 @@ func TestExecutorCoalesceIdenticalPendingSharesCheckpoint(t *testing.T) {
 	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: rt})
 	exec.Approvals.SetAIRationaleAttacher(rationale)
 
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 
 	args := map[string]any{"path": "a.txt", "content": "x"}
 	tcBase := tools.ToolContext{
@@ -280,8 +279,7 @@ func TestExecutorCoalesceDifferentArgsMintTwo(t *testing.T) {
 	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
 	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: rt})
 
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	tcBase := tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
 			ActiveRootID: "r1"},
@@ -358,8 +356,7 @@ func TestExecutorCoalesceAbortMintAllowsRetry(t *testing.T) {
 		t.Fatal("expected mint failure")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	done := make(chan error, 1)
 	go func() {
 		tc2 := tc
@@ -386,8 +383,7 @@ func TestExecutorNetworkCoalesceCrossWorkerRootSession(t *testing.T) {
 	exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
 	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: rt})
 
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 
 	type out struct{ ok bool }
 	ch := make(chan out, 2)

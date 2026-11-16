@@ -143,8 +143,7 @@ func TestConcurrencyCapEnforced(t *testing.T) {
 		})
 	}
 
-	pollCtx, cancel := context.WithTimeout(ctx, testutil.Timeout(time.Minute))
-	defer cancel()
+	pollCtx := ctx
 	go poller.Run(pollCtx)
 
 	testutil.WaitFor(t, "two tasks run at once", func() bool {

@@ -74,7 +74,7 @@ func TestExecutionReviewHonorsReviewedReasonAndLaterDeny(t *testing.T) {
 			executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), approvals), registry, "implement")
 			manager := &separateReviewHITL{asyncHITL: asyncHITL{requested: make(chan struct{}, 4)}}
 			executor.Approvals.SetCheckpointManager(t.Context(), manager, approvals)
-			ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
+			ctx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			done := make(chan error, 1)
 			args := map[string]any{"command": "printf fixture"}

@@ -85,8 +85,7 @@ func TestIngesterInspectorIntegrationCheckGatesReadsLatestClean(t *testing.T) {
 	}))
 	testutil.FailErr(t, "ing.Ingest failed", err)
 
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	result, err := ins.CheckGates(ctx, "dep-2", []string{"task-2"}, nil)
 	testutil.FailErr(t, "ins.CheckGates failed", err)
 	if !result.OK {

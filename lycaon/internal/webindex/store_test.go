@@ -224,8 +224,7 @@ func TestDroppedWritesCountedAndHighWaterRecorded(t *testing.T) {
 		t.Fatalf("queue high water = %d want %d", hw, opQueueSize)
 	}
 	unblock()
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(5*time.Second))
-	defer cancel()
+	ctx := t.Context()
 	// A required barrier cannot be dropped by the saturated lossy queue.
 	testutil.FailErr(t, "drain queued writes", s.syncWrite(ctx, func(*sql.DB) error { return nil }))
 	st, err := s.Stats(ctx)
@@ -275,8 +274,7 @@ func TestSearchUsesReadPoolWhileWriterHoldsWriteTxn(t *testing.T) {
 	<-started
 	defer close(release)
 
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	docs, err := s.Search(ctx, "steam machine concurrency", 5)
 	testutil.FailErr(t, "search while writer busy", err)
 	if len(docs) != 1 {

@@ -54,8 +54,7 @@ func TestShutdownReleasesOpenEventStream(t *testing.T) {
 
 	srv.StopBackground(t.Context())
 
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	shutdownCtx := t.Context()
 	started := time.Now()
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		t.Fatalf("Shutdown after StopBackground: %v (waited %s) — the open SSE stream held the drain", err, time.Since(started))

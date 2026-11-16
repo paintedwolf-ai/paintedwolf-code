@@ -88,14 +88,11 @@ func exerciseBootstrapNotice(image *os.File, caller Identity, blocked bool) erro
 		}
 	}()
 	if blocked {
-		deadline := time.Now().Add(testutil.Timeout(time.Minute))
+		// This runs in the fixture child, outside any test; the parent's wait reports a hang here.
 		for {
 			raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
 			if err == nil && guardianThreadProfile(raw, caller) == nil {
 				break
-			}
-			if !time.Now().Before(deadline) {
-				return errors.New("blocked diagnostic did not drop to the full caller profile")
 			}
 			time.Sleep(time.Millisecond)
 		}

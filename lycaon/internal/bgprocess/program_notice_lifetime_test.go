@@ -57,11 +57,7 @@ func TestProgramCompletionRetainsNoticeAdmissionUntilConsumption(t *testing.T) {
 			switch mode {
 			case "consumer", "discard after transfer":
 				var completion Completion
-				select {
-				case completion = <-completed:
-				case <-time.After(testutil.Timeout(time.Minute)):
-					t.Fatal("completion missing")
-				}
+				completion = testutil.Receive(t, "the completion is delivered", completed)
 				if memory.InUse().State != 128 || completion.ReleaseNotices == nil || len(completion.UnsavedDocumentPaths) != 1 {
 					t.Fatalf("unadmitted completion: %+v memory=%+v", completion, memory.InUse())
 				}
@@ -81,11 +77,7 @@ func TestProgramCompletionRetainsNoticeAdmissionUntilConsumption(t *testing.T) {
 			case "dispose session":
 				testutil.FailErr(t, "dispose", registry.Lifecycle.DisposeSession(t.Context(), "session", TerminationChatDeleted))
 			}
-			select {
-			case <-released:
-			case <-time.After(testutil.Timeout(time.Minute)):
-				t.Fatal("notice admission not released")
-			}
+			testutil.AwaitClosed(t, "the notice admission is released", released)
 			if memory.InUse().State != 0 || releases.Load() != 1 || snapshot.Active() {
 				t.Fatalf("notice lifetime: memory=%+v releases=%d", memory.InUse(), releases.Load())
 			}

@@ -108,7 +108,7 @@ func TestServerEndToEnd(t *testing.T) {
 	resp.Body.Close()
 
 	contractfixture.AcceptPrompt(t, baseURL, sess.ID, "hello")
-	_, streamURL := contractfixture.WaitForAssistantStream(t, baseURL, sess.ID, 10*time.Second)
+	_, streamURL := contractfixture.WaitForAssistantStream(t, baseURL, sess.ID)
 
 	content, sawDone := contractfixture.ReadSSEStreamFromPath(t, baseURL, streamURL)
 	if !sawDone {

@@ -202,8 +202,7 @@ func TestStreamSpillMemoryWaitAllowsReaderClose(t *testing.T) {
 			return nil, ctx.Err()
 		}
 	})
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	opened := make(chan error, 1)
 	go func() {
 		reader, err := out.Open(ctx)

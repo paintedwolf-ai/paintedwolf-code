@@ -80,8 +80,7 @@ func TestProgressiveBriefReturnsBeforeSlowAnalyze(t *testing.T) {
 		t.Fatalf("analyze starts while blocked = %d want 1", starts)
 	}
 	close(release)
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	got, err := AwaitBrief(ctx, p, dir)
 	testutil.FailErr(t, "AwaitBrief", err)
 	if !got.Materialized {
@@ -122,8 +121,7 @@ func TestProgressiveBriefSingleflightConcurrent(t *testing.T) {
 	wg.Wait()
 	close(block)
 
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	_, err := AwaitBrief(ctx, p, dir)
 	testutil.FailErr(t, "AwaitBrief", err)
 	if calls.Load() != 1 {
@@ -151,8 +149,7 @@ func TestProgressiveBriefServesMaterializedResultDuringRefresh(t *testing.T) {
 	})
 	defer func() { _ = p.Close() }()
 
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	first, err := AwaitBrief(ctx, p, dir)
 	testutil.FailErr(t, "materialize first brief", err)
 	if first.FileCount != 1 {
@@ -220,8 +217,7 @@ func TestProgressiveBriefPublishesConcurrentObservationAsStale(t *testing.T) {
 	repochange.Advance(dir)
 	close(release)
 
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	var observed *Brief
 	for observed == nil || !observed.Materialized {
 		observed, err = p.Brief(ctx, dir)

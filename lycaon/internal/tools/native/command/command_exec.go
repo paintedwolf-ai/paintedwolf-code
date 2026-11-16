@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/indexwatch"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/runnerbudget"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -128,7 +127,7 @@ func commandWaitBudget(args map[string]any) time.Duration {
 			budget = d
 		}
 	}
-	return budget * time.Duration(runnerbudget.TimeoutScale())
+	return budget
 }
 
 func commandTimeout(args map[string]any, toolName string) time.Duration {

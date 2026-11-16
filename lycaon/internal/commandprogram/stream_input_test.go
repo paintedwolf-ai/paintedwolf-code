@@ -47,13 +47,9 @@ func TestInputCancellationClosesBlockedSource(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { _, err := input.Read(make([]byte, 1)); done <- err }()
 	cancel()
-	select {
-	case err := <-done:
-		if !errors.Is(err, context.Canceled) {
-			t.Fatalf("input cancellation=%v", err)
-		}
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("input cancellation leaked blocked read")
+	err := testutil.Receive(t, "the canceled input read returns", done)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("input cancellation=%v", err)
 	}
 	if input.Termination() != StreamCanceled {
 		t.Fatalf("input terminal=%s", input.Termination())

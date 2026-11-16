@@ -177,8 +177,7 @@ func TestSpawnAsyncTurnPanicDoesNotLeakRegistryOrWaitGroup(t *testing.T) {
 		t.Fatal("async turn never started")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	engine.Turns.WaitForAsyncTurns(ctx)
 	if ctx.Err() != nil {
 		t.Fatal("WaitForAsyncTurns timed out — a panicking turn leaked its WaitGroup slot")

@@ -10,7 +10,6 @@ import (
 	"slices"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -103,7 +102,12 @@ func TestCookieJarSavesCookiesReceivedBeforeBodyCancellation(t *testing.T) {
 	secrets, _ := testSecrets(t)
 	received := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.SetCookie(w, &http.Cookie{Name: "sid", Value: "private-session-value", Path: "/"})
+		if r.URL.Path != "/body" {
+			// The request for the next hop shows this hop's headers, and its cookie, were taken.
+			http.SetCookie(w, &http.Cookie{Name: "sid", Value: "private-session-value", Path: "/"})
+			http.Redirect(w, r, "/body", http.StatusFound)
+			return
+		}
 		w.Header().Set("Content-Length", "100")
 		w.WriteHeader(http.StatusOK)
 		w.(http.Flusher).Flush()
@@ -115,13 +119,13 @@ func TestCookieJarSavesCookiesReceivedBeforeBodyCancellation(t *testing.T) {
 	testutil.FailErr(t, "register", Register(reg, Deps{Boundary: testBoundary(), Secrets: secrets}))
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	// The client exposes no event for headers arriving, so allow their delivery after the server flushes.
 	go func() {
 		<-received
-		time.AfterFunc(testutil.Timeout(2*time.Second), cancel)
+		cancel()
 	}()
 	_, err := reg.Run(ctx, "http_request", map[string]any{
-		"url": server.URL, "cookie_jar": "session", "capability_request": loopbackCapability(t, server.URL),
+		"url": server.URL, "redirects": "safe", "cookie_jar": "session",
+		"capability_request": loopbackCapability(t, server.URL),
 	}, sessionContext(t.TempDir(), "canceled-body"))
 	if err == nil {
 		t.Fatal("unfinished body unexpectedly succeeded")
@@ -129,7 +133,7 @@ func TestCookieJarSavesCookiesReceivedBeforeBodyCancellation(t *testing.T) {
 	select {
 	case <-received:
 	default:
-		t.Fatal("request never received response headers")
+		t.Fatal("request never reached the stalled body")
 	}
 	jar, err := secrets.OpenCookieJar(t.Context(), secretcap.CookieJarRequest{
 		ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1", OperationID: "read", Name: "session",

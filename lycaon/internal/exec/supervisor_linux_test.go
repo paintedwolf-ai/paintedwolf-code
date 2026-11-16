@@ -98,13 +98,7 @@ func TestSupervisorEngineLifetimeEOFRemovesDetachedDaemon(t *testing.T) {
 	cleanup()
 	done := make(chan struct{})
 	go func() { _ = cmd.Wait(); close(done) }()
-	select {
-	case <-done:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		_ = cmd.Process.Kill()
-		<-done
-		t.Fatal("engine lifetime EOF did not settle the supervisor before fixture expiry")
-	}
+	testutil.AwaitClosed(t, "the engine lifetime EOF ends the supervisor", done)
 	testutil.FailErr(t, "daemon survived engine lifetime EOF", waitForProcessGone(t.Context(), pid))
 }
 

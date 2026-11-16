@@ -45,8 +45,7 @@ func TestSharedSnapshotSurvivesItsFirstConsumersCancellation(t *testing.T) {
 	case <-t.Context().Done():
 		t.Fatal("initial capture did not begin surveying")
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	joiner := &joiningContext{Context: ctx, joined: make(chan struct{})}
 	otherDone := make(chan error, 1)
 	go func() {

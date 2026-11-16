@@ -16,7 +16,6 @@ DEN_DIR="${ROOT}/lycaon-den"
 DIGEST="${ROOT}/scripts/vitest-digest.py"
 LOCK_SH="${ROOT}/scripts/digest-run-lock.sh"
 ISOLATION_SH="${ROOT}/scripts/test-run-isolation.sh"
-CAPACITY_SH="${ROOT}/scripts/test-host-capacity.sh"
 # shellcheck source=artifact-paths.sh
 source "${ROOT}/scripts/artifact-paths.sh"
 ARTIFACT_ROOT="${PW_ARTIFACT_ROOT}"
@@ -26,8 +25,6 @@ mkdir -p "${LOGDIR}"
 source "${LOCK_SH}"
 # shellcheck source=test-run-isolation.sh
 source "${ISOLATION_SH}"
-# shellcheck source=test-host-capacity.sh
-source "${CAPACITY_SH}"
 
 NAME="den:test"
 RAW="${LOGDIR}/den-test.json"
@@ -118,19 +115,11 @@ TMP_OUTCOME="${TMP_RAW%.json}.outcome.json"
 OUTCOME_LOG="${RAW%.json}.outcome.json"
 
 cd "${DEN_DIR}"
-NCPU="$(test_host_cpu_count)"
-HOST_LOAD="$(test_host_load_one)"
-TEST_TIMEOUT_SCALE="$(test_host_timeout_scale "${NCPU}" "${HOST_LOAD}")"
-export PW_TEST_TIMEOUT_SCALE="${TEST_TIMEOUT_SCALE}"
 : "${PW_VITEST_MAX_WORKERS:?verification admission must set PW_VITEST_MAX_WORKERS}"
 if [[ -z "${VITEST_TIMEOUT_SECONDS}" ]]; then
   VITEST_TIMEOUT_SECONDS="$(python3 "${ROOT}/scripts/test-execution.py" backstop --name "${NAME}")"
 fi
 python3 "$ROOT/scripts/process-group-watchdog.py" --validate "${VITEST_TIMEOUT_SECONDS}"
-if ((TEST_TIMEOUT_SCALE > 1)); then
-  printf 'vitest-digest: host load %s on %s CPUs; workers=%s, timeout scale=%sx\n' \
-    "${HOST_LOAD}" "${NCPU}" "${PW_VITEST_MAX_WORKERS}" "${TEST_TIMEOUT_SCALE}" >&2
-fi
 REPORTERS=(
   --reporter=json --outputFile="${TMP_RAW}"
   --reporter=./vitest-run-outcome-reporter.ts

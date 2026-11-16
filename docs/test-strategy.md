@@ -723,8 +723,7 @@ that reservation and assigns unused package slots to `GOMAXPROCS` for small
 scopes; race runs default to two runtime workers per package. Parallel tests per
 package obey the same per-process share; Vitest uses at most four workers.
 Fuzzing and Rust builds share the same budget. Runners use the worker limits
-assigned at admission; host load only adjusts in-test waits, and race runs scale
-them at least 3×. Hosted CI sets
+assigned at admission. Hosted CI sets
 `PW_TEST_HOST=dedicated`: one lane owns the runner, so the budget is every CPU
 (still at most eight) and a shared operation reserves all of it.
 
@@ -761,11 +760,8 @@ minutes once across its phases. When the limit passes, the watchdog signals the
 run's Go test binaries with `SIGUSR1`, which prints each pending wait as
 `pending wait: <test>: <step>`, then with `SIGQUIT`, which prints every
 goroutine stack, and then ends the run. Digests and CI annotations name the
-pending waits.
-
-Scheduler-dependent waits inside tests scale 1×–4× with host load.
-`PW_TEST_TIMEOUT_SCALE` selects an explicit scale; production deadlines and
-polling intervals remain unchanged.
+pending waits. Nothing scales with host load: a test bounds its waits by the
+test, and a timeout handed to product code is the literal the test is about.
 
 Compilation artifacts use the persistent Go cache across snapshots, tests,
 fuzzing, and lint. Snapshot worktrees reuse leased directory slots, preserving

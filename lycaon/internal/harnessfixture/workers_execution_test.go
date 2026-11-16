@@ -134,8 +134,7 @@ func TestIndependentScriptedLegsVerifyConcurrently(t *testing.T) {
 			return nil, ctx.Err()
 		}
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	results := make(chan error, 2)
 	for _, path := range []string{"app.py", "lib.py"} {
 		job := h.dispatch("", api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{path}}, nil)

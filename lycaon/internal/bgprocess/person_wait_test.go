@@ -43,11 +43,7 @@ func TestProgramJobReportsItsWaitOnAPerson(t *testing.T) {
 	registry.BeginPersonWait("session", "unknown")()
 	close(finish)
 	var completion Completion
-	select {
-	case completion = <-completed:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("completion missing")
-	}
+	completion = testutil.Receive(t, "the completion is delivered", completed)
 	if completion.PersonWait < 0 || completion.PersonWait > completion.Elapsed() || completion.RunTime() != completion.Elapsed()-completion.PersonWait {
 		t.Fatalf("person wait %v not part of elapsed %v (run %v)", completion.PersonWait, completion.Elapsed(), completion.RunTime())
 	}

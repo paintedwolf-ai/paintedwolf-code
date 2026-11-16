@@ -17,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/messageview"
-	"github.com/lycaon/lycaon/internal/runnerbudget"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -232,12 +231,6 @@ func (r *conformanceRunner) promptAnsweringApprovals(t *testing.T, projectID, se
 	}
 }
 
-// runningProgramPolls bounds joinRunningProgram in reads, so a program that never ends
-// fails its case and names itself instead of taking the package timeout. Race
-// instrumentation slows every read, so the read budget scales with the runner's
-// timeout allowance.
-var runningProgramPolls = (1 << 15) * runnerbudget.TimeoutScale()
-
 // joinRunningProgram follows a program past the foreground budget to its end: how long
 // a case takes on a given host decides nothing about what it prints. The program's
 // final outcome is the last line of its stderr stream.
@@ -259,14 +252,9 @@ func (r *conformanceRunner) joinRunningProgram(t *testing.T, projectID, sessionI
 		testutil.FailErr(t, "decode running program output", json.Unmarshal([]byte(raw), &page))
 		return page, raw
 	}
-	polls := 0
 	var page outputPage
-	testutil.WaitFor(t, "the running program settles", func() bool {
-		var raw string
-		page, raw = read()
-		if polls++; polls > runningProgramPolls {
-			t.Fatalf("program %s still running after %d reads: %s", running.ProgramID, polls, raw)
-		}
+	testutil.WaitFor(t, "program "+running.ProgramID+" settles", func() bool {
+		page, _ = read()
 		return !page.Running
 	})
 	if page.Truncated {

@@ -212,8 +212,7 @@ func TestPollerRecoversExecutorPanic(t *testing.T) {
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
 
-	pollCtx, cancel := context.WithTimeout(ctx, testutil.Timeout(time.Minute))
-	defer cancel()
+	pollCtx := ctx
 	go poller.Run(pollCtx)
 
 	testutil.WaitFor(t, "the task fails", func() bool {
@@ -323,8 +322,7 @@ func TestPollerDeliversTerminalOutcomeBeforeParentBecomesIdle(t *testing.T) {
 		t.Fatal("terminal outcome delivery did not start")
 	}
 
-	waitCtx, cancelWait := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancelWait()
+	waitCtx := t.Context()
 	waitDone := make(chan error, 1)
 	go func() {
 		waitDone <- AwaitParentSessionWorkers(waitCtx, queue, waiter, testdbseed.DefaultProjectID, parent, settings.DefaultSessionLimits())

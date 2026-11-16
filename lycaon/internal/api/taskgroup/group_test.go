@@ -79,8 +79,7 @@ func TestServicesDrainOnlyAfterStop(t *testing.T) {
 		<-ctx.Done()
 		close(closed)
 	})
-	idle, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	idle := t.Context()
 	s.Wait(idle)
 	if idle.Err() != nil {
 		t.Fatal("an idle wait blocked on a running service")

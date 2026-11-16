@@ -236,16 +236,12 @@ func TestRunPipelineTimeoutKillsDescendants(t *testing.T) {
 	go func() {
 		defer close(done)
 		_, _ = RunPipeline(context.Background(), []Stage{{Name: "sh", Args: []string{"-c", script}}},
-			ExecOpts{Launch: HostLaunch("exec test"), Dir: dir, Timeout: testutil.Timeout(500 * time.Millisecond)})
+			ExecOpts{Launch: HostLaunch("exec test"), Dir: dir, Timeout: 500 * time.Millisecond})
 	}()
 
 	grandchild := waitForPIDFile(t, pidFile)
-	select {
-	case <-done:
-	case <-t.Context().Done():
-		_ = syscall.Kill(grandchild, syscall.SIGKILL)
-		t.Fatal("RunPipeline did not return after its timeout")
-	}
+	t.Cleanup(func() { _ = syscall.Kill(grandchild, syscall.SIGKILL) })
+	testutil.AwaitClosed(t, "the pipeline returns at its timeout", done)
 	if err := waitForProcessGone(t.Context(), grandchild); err != nil {
 		_ = syscall.Kill(grandchild, syscall.SIGKILL)
 		testutil.FailErr(t, "descendant outlived pipeline timeout", err)

@@ -111,8 +111,7 @@ func TestDelegationSingleLegDispatchAndCloseout(t *testing.T) {
 	exec.SetPromptInjects(promptstest.InjectRenderer(t))
 	poller := worker.NewLocalWorkerPoller(queue, exec, worker.DefaultWorkersConfig(), &worker.SessionOutcomeBridge{Inner: delegationMgr})
 	queue.SetRunningCancel(poller.Abort)
-	pollCtx, cancel := context.WithTimeout(ctx, testutil.Timeout(time.Minute))
-	defer cancel()
+	pollCtx := ctx
 	go poller.Run(pollCtx)
 
 	testutil.WaitFor(t, "the delegation is done", func() bool {

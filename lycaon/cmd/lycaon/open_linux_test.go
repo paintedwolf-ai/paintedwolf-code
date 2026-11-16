@@ -138,14 +138,9 @@ func (f *fakeDesktop) start(ctx context.Context, timeout time.Duration) (net.Con
 
 func groupGone(t *testing.T, pid int) {
 	t.Helper()
-	deadline := time.Now().Add(testutil.Timeout(time.Minute))
-	for time.Now().Before(deadline) {
-		if err := syscall.Kill(-pid, 0); errors.Is(err, syscall.ESRCH) {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("process group %d is still alive", pid)
+	testutil.WaitFor(t, fmt.Sprintf("process group %d exits", pid), func() bool {
+		return errors.Is(syscall.Kill(-pid, 0), syscall.ESRCH)
+	})
 }
 
 func TestColdStartReachesTheStartedDesktopInItsOwnSession(t *testing.T) {
@@ -299,16 +294,10 @@ func TestStoppingKeepsTheExitedLeaderUntilItsStubbornChildIsKilled(t *testing.T)
 	testutil.FailErr(t, "start failed", err)
 	started := owned.(*desktopStart)
 	t.Cleanup(started.Stop)
-	deadline := time.Now().Add(testutil.Timeout(time.Minute))
-	for {
-		if _, err := os.Stat(filepath.Join(fake.base, "child.ready")); err == nil {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatal("stubborn descendant did not become ready")
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	testutil.WaitFor(t, "the stubborn descendant is ready", func() bool {
+		_, err := os.Stat(filepath.Join(fake.base, "child.ready"))
+		return err == nil
+	})
 	var signals []syscall.Signal
 	started.signalGroup = func(leader osprocess.Incarnation, sig syscall.Signal) error {
 		if _, err := os.Stat("/proc/" + strconv.Itoa(started.cmd.Process.Pid)); err != nil {

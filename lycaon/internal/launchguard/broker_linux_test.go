@@ -122,11 +122,7 @@ func TestBrokerOrdersStartedBeforeExitedForImmediateExitChild(t *testing.T) {
 		_ = channel.Close()
 	}
 	testutil.FailErr(t, "close client", client.Close())
-	select {
-	case <-done:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("broker agent did not exit after client closed")
-	}
+	testutil.AwaitClosed(t, "the broker agent exits after its client closes", done)
 }
 
 func TestBrokerBoundsConcurrentActiveCalls(t *testing.T) {
@@ -201,11 +197,7 @@ func TestBrokerDetachedCallDoesNotBlockShutdown(t *testing.T) {
 	_ = direct.Close()
 	testutil.FailErr(t, "close client", client.Close())
 
-	select {
-	case <-done:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("broker agent stayed alive waiting on detached process")
-	}
+	testutil.AwaitClosed(t, "the broker agent exits without waiting on the detached process", done)
 	if _, err := os.Stat("/proc/" + strconv.Itoa(bgPID)); err != nil {
 		t.Fatalf("detached background process %d died when channel/broker closed: %v", bgPID, err)
 	}

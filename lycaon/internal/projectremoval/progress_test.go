@@ -41,13 +41,9 @@ func TestRunningRemovalDoesNotBlockStatusOrReplayEffects(t *testing.T) {
 	cancel()
 	status := make(chan wire.ProjectRemovalResult, 1)
 	go func() { result, _ := o.Result(t.Context(), projectID, req.OperationID); status <- result }()
-	select {
-	case result = <-status:
-		if result.Progress == nil || result.Progress.Completed != 2 || result.Progress.Total != 5 || result.FailureCode != "" {
-			t.Fatalf("running status = %+v", result)
-		}
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("status waited for deletion")
+	result = testutil.Receive(t, "the running status is read during deletion", status)
+	if result.Progress == nil || result.Progress.Completed != 2 || result.Progress.Total != 5 || result.FailureCode != "" {
+		t.Fatalf("running status = %+v", result)
 	}
 	retry, err := o.Remove(t.Context(), projectID, req)
 	testutil.FailErr(t, "retry running operation", err)

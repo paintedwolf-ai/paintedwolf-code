@@ -45,8 +45,7 @@ func TestProxyCommandRelaysThroughSocks(t *testing.T) {
 	testutil.FailErr(t, "split upstream", err)
 
 	var out bytes.Buffer
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	if err := runProxyCommand(ctx, host, port, bytes.NewReader(nil), &out); err != nil && !errors.Is(err, io.EOF) && !errors.Is(err, context.DeadlineExceeded) {
 		// Relay ends when upstream closes; connect/auth failures are fatal.
 		if out.Len() == 0 {

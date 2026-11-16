@@ -9,9 +9,6 @@ SOURCE_SNAPSHOT_SH="${ROOT}/scripts/test-source-snapshot.sh"
 if ! bash "$SOURCE_SNAPSHOT_SH" holding; then
   exec bash "$SOURCE_SNAPSHOT_SH" run -- bash scripts/fuzz-short.sh "$@"
 fi
-CAPACITY_SH="${ROOT}/scripts/test-host-capacity.sh"
-# shellcheck source=test-host-capacity.sh
-source "${CAPACITY_SH}"
 # shellcheck source=document-core-env.sh
 source "${ROOT}/scripts/document-core-env.sh"
 
@@ -22,12 +19,8 @@ fi
 FUZZTIME="${FUZZTIME:-20s}"
 export GOCACHE="${GOCACHE:-$(go env GOCACHE)}"
 
-HOST_CPUS="$(test_host_cpu_count)"
-HOST_LOAD="$(test_host_load_one)"
-TIMEOUT_SCALE="$(test_host_timeout_scale "${HOST_CPUS}" "${HOST_LOAD}")"
-export PW_TEST_TIMEOUT_SCALE="${TIMEOUT_SCALE}"
 FUZZ_WORKERS="${PW_FUZZ_WORKERS:?verification admission must set PW_FUZZ_WORKERS}"
-echo "fuzz: host load ${HOST_LOAD} on ${HOST_CPUS} CPUs; workers=${FUZZ_WORKERS}, timeout scale=${TIMEOUT_SCALE}x" >&2
+echo "fuzz: workers=${FUZZ_WORKERS}" >&2
 cd "${ROOT}/lycaon"
 
 TARGETS=()

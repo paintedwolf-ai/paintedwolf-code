@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/runnerbudget"
 	"github.com/lycaon/lycaon/internal/scan/opengrep"
 	"github.com/lycaon/lycaon/internal/scan/rules"
 )
@@ -22,7 +21,7 @@ func main() {
 	projects := flag.String("projects", "", "Adjudicated project corpus for differential evaluation")
 	candidateRules := flag.String("rules", "", "Candidate rule YAML for project evaluation (empty uses shipping selection)")
 	repeats := flag.Int("repeats", 2, "Independent runs per project and analysis mode")
-	projectTimeout := flag.Duration("project-timeout", defaultProjectTimeout, "Per-project base timeout before the contention scale is applied")
+	projectTimeout := flag.Duration("project-timeout", defaultProjectTimeout, "Per-project scan timeout")
 	mode := flag.String("mode", "", "Analysis mode (empty uses shipping policy for rule cases and both modes for projects)")
 	admit := flag.String("admit", "", "Require held-out admission of this analysis mode")
 	flag.Parse()
@@ -84,7 +83,7 @@ func run(binary, language, corpus string, mode opengrep.Mode) (err error) {
 	if err != nil {
 		return err
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute*time.Duration(runnerbudget.TimeoutScale()))
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	report, err := scan(ctx, binary, dir, bundle, cfg.Analysis)
 	if err != nil {

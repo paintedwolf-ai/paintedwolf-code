@@ -56,7 +56,7 @@ func TestInstructionWriteUsesOrdinaryApprovalWithExactDiff(t *testing.T) {
 	for _, after := range []string{"First approved instructions\n", "Second approved instructions\n"} {
 		manager := &asyncHITL{requested: make(chan struct{}, 1)}
 		executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
-		ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
+		ctx, cancel := context.WithCancel(t.Context())
 		t.Cleanup(cancel)
 		done := make(chan error, 1)
 		go func() {
@@ -179,8 +179,7 @@ func TestFileChangeApprovalDeduplicatesPathsAndRetainsIndexPreviews(t *testing.T
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), approvalGate), registry, "implement")
 	manager := &asyncHITL{requested: make(chan struct{}, 1)}
 	executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	done := make(chan error, 1)
 	go func() {
 		_, err := executor.Invoke(ctx, "write", map[string]any{"path": "AGENTS.md", "content": "after"}, tools.ToolContext{
@@ -229,8 +228,7 @@ func TestCommandInstructionGrantUsesOneOrdinaryApproval(t *testing.T) {
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), approvalGate), reg, "implement")
 	manager := &separateReviewHITL{asyncHITL: asyncHITL{requested: make(chan struct{}, 2)}}
 	executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	done := make(chan error, 1)
 	go func() {
 		_, err := executor.Invoke(ctx, "command", map[string]any{"command": "touch AGENTS.md", "capability_request": map[string]any{"write_root": path}}, tools.ToolContext{
@@ -307,7 +305,7 @@ func TestCoordinatorInvestigateOverlayWriteReachesAgentPolicyApproval(t *testing
 
 	manager := &asyncHITL{requested: make(chan struct{}, 1)}
 	executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
+	ctx, cancel := context.WithCancel(t.Context())
 	t.Cleanup(cancel)
 	done := make(chan error, 1)
 	go func() {

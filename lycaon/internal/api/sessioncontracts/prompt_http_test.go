@@ -186,7 +186,7 @@ func TestUnavailableToolFixtureDoesNotExecuteHTTP(t *testing.T) {
 
 	sess := contractfixture.CreateTestSession(t, baseURL, dir)
 	contractfixture.AcceptPrompt(t, baseURL, sess.ID, "read the readme")
-	_, streamURL := contractfixture.WaitForAssistantStream(t, baseURL, sess.ID, 10*time.Second)
+	_, streamURL := contractfixture.WaitForAssistantStream(t, baseURL, sess.ID)
 
 	content, sawDone := contractfixture.ReadSSEStream(t, baseURL+streamURL)
 	if !sawDone {
@@ -236,7 +236,7 @@ func TestPromptMaxIterationHTTP(t *testing.T) {
 	sess := contractfixture.CreateTestSession(t, baseURL, dir)
 
 	contractfixture.AcceptPrompt(t, baseURL, sess.ID, "infinite loop")
-	contractfixture.WaitForSessionIdle(t, baseURL, sess.ID, 10*time.Second)
+	contractfixture.WaitForSessionIdle(t, baseURL, sess.ID)
 	msgs := contractfixture.ListMessagesAtURL(t, baseURL, sess.ID)
 	var lastAssistant *wire.Message
 	for i := len(msgs) - 1; i >= 0; i-- {
@@ -268,7 +268,7 @@ func TestPromptSessionStatusLifecycle(t *testing.T) {
 	}
 
 	contractfixture.AcceptPrompt(t, baseURL, sess.ID, "hello")
-	after := contractfixture.WaitForSessionIdle(t, baseURL, sess.ID, 10*time.Second)
+	after := contractfixture.WaitForSessionIdle(t, baseURL, sess.ID)
 	if after.Status != wire.SessionStatusIdle {
 		t.Fatalf("after status = %q", after.Status)
 	}

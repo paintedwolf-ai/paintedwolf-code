@@ -131,8 +131,7 @@ func TestCaptureLockRefusesCanceledContext(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled acquisition returned %v, want context.Canceled", err)
 	}
-	ctx, cancel = context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	release, err = Acquire(ctx, root)
 	testutil.FailErr(t, "acquire after canceled request", err)
 	release()

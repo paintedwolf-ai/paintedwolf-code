@@ -201,8 +201,7 @@ func TestTerminalSettlementDoesNotPublishTheNextGeneration(t *testing.T) {
 	testutil.FailErr(t, "read completion", err)
 	coord := &blockingCoordinator{CoordinatorImpl: cadence.Coordinator.(*scanbase.CoordinatorImpl), release: make(chan struct{})}
 	cadence.Coordinator = coord
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	cadence.OnTerminal(ctx, *completed)
 	if ctx.Err() != nil || coord.waited != 0 {
 		t.Fatalf("terminal settlement started source preparation: error=%v calls=%d", ctx.Err(), coord.waited)

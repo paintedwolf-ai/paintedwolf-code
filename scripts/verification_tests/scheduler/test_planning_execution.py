@@ -352,7 +352,7 @@ class PlanningTests(unittest.TestCase):
 
         def key(environment, checkout=root):
             return planning.compatibility(checkout, SCRIPT, planning.execution_environment(environment))
-        base = {"PATH": "one", "PW_TEST_TIMEOUT_SCALE": "2"}
+        base = {"PATH": "one", "PW_FIXTURE_INPUT": "2"}
         self.assertEqual(key(base), key({**base, "SHLVL": "2", "CLAUDE_CODE_SESSION_ID": "a", "TERM": "x"}))
         # The engine's own namespace is this run's state, so it never splits requests.
         self.assertEqual(key(base), key({**base, "LYCAON_DEBUG_SESSION_DIR": "/c/debug/boot-a"}))
