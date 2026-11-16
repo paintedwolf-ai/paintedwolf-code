@@ -142,6 +142,7 @@ func verifyStackedPromotionOrders(t *testing.T, fx *recoveryFixture) {
 	promoterDirect, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{
 		Store:       fx.cpStore,
 		TargetRoots: map[string]string{"primary": trunkDirect},
+		PrimaryRoot: "primary",
 	})
 	testutil.FailErr(t, "checkpoint.NewPromoter failed", err)
 	planDirect, err := fx.coord.ResolveStackedPromotionPlan(ctx, recovery.StackedPromotionRequest{
@@ -171,6 +172,7 @@ func verifyStackedPromotionOrders(t *testing.T, fx *recoveryFixture) {
 	promoterSeq, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{
 		Store:       fx.cpStore,
 		TargetRoots: map[string]string{"primary": trunkSeq},
+		PrimaryRoot: "primary",
 	})
 	testutil.FailErr(t, "checkpoint.NewPromoter failed", err)
 	prevParent, err := promoterSeq.Preview(ctx, checkpoint.PreviewRequest{CheckpointID: "cp-parent-A"})

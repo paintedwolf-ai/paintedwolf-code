@@ -156,7 +156,7 @@ func TestPublicationFailsTypedWhenTheBoundaryIsDamaged(t *testing.T) {
 	testutil.FailErr(t, "remove boundary commit", os.Remove(filepath.Join(f.dest, ".git", "objects", base[:2], base[2:])))
 
 	_, err := ImportAndValidateCheckpointGitRefs(t.Context(), GitObjectSources{StoreDir: f.storeDir}, "chk", "w",
-		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/main": tip}}, map[string]string{"primary": f.dest})
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/main": tip}}, map[string]string{"primary": f.dest}, "primary")
 	if !errors.Is(err, ErrCheckpointGitBoundary) {
 		t.Fatalf("damaged boundary: %v", err)
 	}
@@ -190,7 +190,7 @@ func TestPublicationIntoAnEmptyDestinationIsComplete(t *testing.T) {
 	runGitTestCmd(t, dest, "init", "-q")
 
 	imported, err := ImportAndValidateCheckpointGitRefs(t.Context(), GitObjectSources{StoreDir: storeDir}, "chk", "w",
-		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/main": tip}}, map[string]string{"primary": dest})
+		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/main": tip}}, map[string]string{"primary": dest}, "primary")
 	testutil.FailErr(t, "publish into empty destination", err)
 	if imported["refs/lycaon/workers/w/heads/main"] != tip {
 		t.Fatalf("imported = %v", imported)
