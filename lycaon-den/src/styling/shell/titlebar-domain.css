@@ -90,8 +90,9 @@
   app-region: no-drag;
 }
 
+/* Draws the reopen control in to 8px from the tabs, inside the bar's 12px gap. */
 .den-shell-header-titlebar__tabs ~ .den-shell-header-titlebar__edge--trailing {
-  margin-left: 4px;
+  margin-left: -4px;
 }
 
 /* Reopen controls align with the window buttons above the stage. */
