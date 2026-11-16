@@ -154,7 +154,7 @@ func (r *conformanceRunner) runCaseWithRecommendedApprovals(t *testing.T, c comm
 			var parked command.ParkedProgramResult
 			testutil.FailErr(t, "decode parked program", json.NewDecoder(strings.NewReader(body)).Decode(&parked))
 			var winner awaitstore.Condition
-			testutil.WaitFor(t, func() bool {
+			testutil.WaitFor(t, "the program settles, answering its approvals", func() bool {
 				var raw string
 				testutil.FailErr(t, "read program settlement", r.h.DB.QueryRowContext(t.Context(), `SELECT coalesce(winner_json,'') FROM wait_leases WHERE id=?`, parked.LeaseID).Scan(&raw))
 				if raw == "" {
@@ -261,7 +261,7 @@ func (r *conformanceRunner) joinRunningProgram(t *testing.T, projectID, sessionI
 	}
 	polls := 0
 	var page outputPage
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the running program settles", func() bool {
 		var raw string
 		page, raw = read()
 		if polls++; polls > runningProgramPolls {

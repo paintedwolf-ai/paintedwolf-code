@@ -28,7 +28,6 @@ TIMEOUT_SCALE="$(test_host_timeout_scale "${HOST_CPUS}" "${HOST_LOAD}")"
 export PW_TEST_TIMEOUT_SCALE="${TIMEOUT_SCALE}"
 FUZZ_WORKERS="${PW_FUZZ_WORKERS:?verification admission must set PW_FUZZ_WORKERS}"
 echo "fuzz: host load ${HOST_LOAD} on ${HOST_CPUS} CPUs; workers=${FUZZ_WORKERS}, timeout scale=${TIMEOUT_SCALE}x" >&2
-PACKAGE_TIMEOUT="$(test_scale_go_duration 10m "${TIMEOUT_SCALE}")"
 cd "${ROOT}/lycaon"
 
 TARGETS=()
@@ -56,7 +55,7 @@ if [[ ${#TARGETS[@]} -eq 0 ]]; then
 fi
 
 fuzz_target() {
-  go test -p="${FUZZ_WORKERS}" -parallel="${FUZZ_WORKERS}" -timeout="${PACKAGE_TIMEOUT}" \
+  go test -p="${FUZZ_WORKERS}" -parallel="${FUZZ_WORKERS}" -timeout=0 \
     -run='^$' -fuzz="^$2$" -fuzztime="${FUZZTIME}" "$1"
 }
 

@@ -355,7 +355,7 @@ func taskMessageEnqueued(message wire.Message) bool {
 
 func waitToolFeedbackHTTP(t *testing.T, srv *api.Server, sessionID, code string) {
 	t.Helper()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the tool feedback is stored", func() bool {
 		for _, message := range listMessagesHTTP(t, srv, sessionID) {
 			if message.ToolResult == nil {
 				continue

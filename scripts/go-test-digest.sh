@@ -43,7 +43,6 @@ BUILD_TAGS=""
 EXCLUDE_PKG=""
 RAW="${LOGDIR}/go-test.json"
 GO_TEST_TIMEOUT_SECONDS="${PW_GO_TEST_TIMEOUT_SECONDS:-}"
-PACKAGE_TIMEOUT="30m"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -67,11 +66,6 @@ while [[ $# -gt 0 ]]; do
     --race)
       RACE_FLAG=(-race)
       shift
-      ;;
-    --timeout)
-      # Per-package wall-clock budget.
-      PACKAGE_TIMEOUT="$2"
-      shift 2
       ;;
     --raw)
       RAW="$2"
@@ -200,11 +194,11 @@ else
   if ((${#RACE_FLAG[@]})); then export PW_TEST_RACE=1; else unset PW_TEST_RACE; fi
   P_PKGS="${GO_TEST_P:?verification admission must set GO_TEST_P}"
   P_INTRA="${GO_TEST_PARALLEL:?verification admission must set GO_TEST_PARALLEL}"
-  PACKAGE_TIMEOUT="$(test_scale_go_duration "${PACKAGE_TIMEOUT}" "${TEST_TIMEOUT_SCALE}")"
   if [[ -z "${GO_TEST_TIMEOUT_SECONDS}" ]]; then
-    GO_TEST_TIMEOUT_SECONDS="$(test_scale_integer 2700 "${TEST_TIMEOUT_SCALE}")"
+    GO_TEST_TIMEOUT_SECONDS="$(python3 "${ROOT}/scripts/test-execution.py" backstop --name "${NAME}")"
   fi
-  TEST_ARGS=(-json -p "${P_PKGS}" -parallel "${P_INTRA}" -timeout "${PACKAGE_TIMEOUT}")
+  # No package fails on elapsed time; the watchdog below is the run's one limit.
+  TEST_ARGS=(-json -p "${P_PKGS}" -parallel "${P_INTRA}" -timeout 0)
   if ((${#SHORT_FLAG[@]})); then
     TEST_ARGS+=("${SHORT_FLAG[@]}")
   else

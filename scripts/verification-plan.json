@@ -131,9 +131,7 @@
       "options": [
         "--full",
         "--tags",
-        "stress",
-        "--timeout",
-        "90m"
+        "stress"
       ],
       "packages": [
         "./internal/db",
@@ -158,9 +156,7 @@
       "options": [
         "--full",
         "--tags",
-        "integration",
-        "--timeout",
-        "40m"
+        "integration"
       ],
       "packages": [
         "./..."
@@ -168,10 +164,7 @@
       "bundled": true
     },
     "test:contract": {
-      "options": [
-        "--timeout",
-        "30m"
-      ],
+      "options": [],
       "packages": [
         "./test/contract/..."
       ],
@@ -181,9 +174,7 @@
       "options": [
         "--full",
         "--tags",
-        "integration",
-        "--timeout",
-        "40m"
+        "integration"
       ],
       "packages": [
         "./test/security/..."
@@ -194,9 +185,7 @@
         "--full",
         "--race",
         "--tags",
-        "integration",
-        "--timeout",
-        "40m"
+        "integration"
       ],
       "packages": [
         "./..."

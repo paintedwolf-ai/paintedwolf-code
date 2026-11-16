@@ -66,7 +66,7 @@ func completeActiveChildRun(t *testing.T, h *orchestrationPipelineHarness) {
 
 func waitTopologyStageComplete(t *testing.T, mgr *workflow.RunManager, runID, stage string) {
 	t.Helper()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the topology stage completes", func() bool {
 		vars, err := mgr.Store.Runs.GetScaffoldVars(context.Background(), runID)
 		if err != nil {
 			return false
@@ -80,7 +80,7 @@ func waitTopologyStageComplete(t *testing.T, mgr *workflow.RunManager, runID, st
 
 func waitWorkflowPhase(t *testing.T, mgr *workflow.RunManager, runID, phase string) {
 	t.Helper()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the workflow reaches the phase", func() bool {
 		run, err := mgr.Store.Runs.Get(context.Background(), runID)
 		if err != nil || run == nil {
 			return false

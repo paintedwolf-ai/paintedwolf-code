@@ -92,7 +92,7 @@ func TestBriefRevokesEmptyClaimWhenItsIndexRefreshFails(t *testing.T) {
 	}
 	testutil.FailErr(t, "remove fixture root", os.Remove(root))
 	catalog.InvalidateRoot(root)
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the index refresh fails", func() bool {
 		status, statusErr := catalog.Trees.IndexStatus(ctx, "p", sourcecatalog.Root{ID: "r", Path: root})
 		return statusErr != nil || status.Error != ""
 	})

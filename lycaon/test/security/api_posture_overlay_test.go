@@ -104,7 +104,7 @@ postures:
 	if err := json.Unmarshal(w.Body.Bytes(), &sess); err != nil {
 		testutil.FailErr(t, "decode accepted session", err)
 	}
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the session is in error", func() bool {
 		stored, err := h.Store.Get(t.Context(), sess.ID)
 		return err == nil && stored.Status == wire.SessionStatusError
 	})

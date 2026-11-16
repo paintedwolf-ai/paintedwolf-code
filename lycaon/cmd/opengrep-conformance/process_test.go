@@ -102,7 +102,7 @@ func TestEvaluationMeasuresWorkersAndCancelsOwnedGroup(t *testing.T) {
 		t.Fatal("cancellation did not terminate the scanner process")
 	}
 	for _, pid := range workers {
-		testutil.WaitFor(t, func() bool {
+		testutil.WaitFor(t, "the evaluation worker exits", func() bool {
 			alive, err := evaluationWorkerAlive(pid)
 			testutil.FailErr(t, "check owned worker", err)
 			return !alive

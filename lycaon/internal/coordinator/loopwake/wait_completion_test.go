@@ -80,7 +80,7 @@ func TestCompletionWaitTimerBackstopSettlesHungProcess(t *testing.T) {
 	})
 	testutil.FailErr(t, "arm completion wait with short deadline", err)
 	testutil.FailErr(t, "recover completion wait", RecoverWaitLeases(t.Context(), loop.Subscriptions, store))
-	testutil.WaitFor(t, func() bool { return timedOut.Load() == 1 })
+	testutil.WaitFor(t, "the wait timer settles the process", func() bool { return timedOut.Load() == 1 })
 	loop.Turns.WaitForAsyncTurns(t.Context())
 	if loop.Waits.IsSleeping("s1") {
 		t.Fatal("timer backstop left hung completion wait sleeping")
@@ -316,7 +316,7 @@ func TestCompletionWaitDeliversTerminalOrLostProcessOnce(t *testing.T) {
 				loop.SetDeps(deps)
 				testutil.FailErr(t, "recover lost process wait", RecoverWaitLeases(t.Context(), loop.Subscriptions, store))
 			}
-			testutil.WaitFor(t, func() bool { return deliveries.Load() == 1 })
+			testutil.WaitFor(t, "the wait is delivered once", func() bool { return deliveries.Load() == 1 })
 			loop.Turns.WaitForAsyncTurns(t.Context())
 			if loop.Waits.IsSleeping("s1") {
 				t.Fatal("terminal process left agent sleeping")

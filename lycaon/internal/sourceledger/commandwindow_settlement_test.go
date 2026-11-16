@@ -209,7 +209,7 @@ func TestOpenWaitsForWatcherEventsStillArriving(t *testing.T) {
 			}
 		}
 	}()
-	testutil.WaitFor(t, func() bool { return arrivals.Load() > 0 })
+	testutil.WaitFor(t, "a watcher event arrives", func() bool { return arrivals.Load() > 0 })
 	recorder := arrivalsAtPass{store.Commands.inventory, &arrivals, make(chan int64, 1)}
 	store.Commands.inventory = recorder
 	before := arrivals.Load()

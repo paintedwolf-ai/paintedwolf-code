@@ -1,5 +1,6 @@
 """Hosted lane execution, resource evidence, and queue cleanup."""
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -67,8 +68,10 @@ def combined_exit(current, result):
     return 1 if 1 in (current, result) else current or result
 
 
-def run_lane(name, shard="", merge_group=False):
+def run_lane(name, shard="", merge_group=False, clock=time.monotonic):
     lane = hosted_plan.lanes()[name]
+    # The lane's minutes are its one time limit, counted from here across every phase.
+    deadline = clock() + lane["minutes"] * 60
     count = lane.get("shards", 1)
     if (shard == "") != (count == 1) or shard and shard not in {f"{k}/{count}" for k in range(1, count + 1)}:
         raise ValueError(f"CI lane {name} has {count} shard(s); got {shard!r}")
@@ -90,9 +93,7 @@ def run_lane(name, shard="", merge_group=False):
         record['job_started_at'] = None
     record["oom_before"] = oom_events()
     path.write_text(json.dumps(record, indent=2) + "\n")
-    # The hosted lane budget bounds Go and frontend runs.
-    budget = str(lane["minutes"] * 60)
-    environment = {"PW_GO_TEST_TIMEOUT_SECONDS": budget, "PW_VITEST_TIMEOUT_SECONDS": budget, **os.environ}
+    environment = dict(os.environ)
     if scope and scope["base"]:
         environment["PW_CHANGE_BASE"] = scope["base"]
     # Memory-heavy lanes cap process parallelism.
@@ -143,7 +144,10 @@ def run_lane(name, shard="", merge_group=False):
             phase = {"command": command, "started_at": time.time()}
             record["phases"].append(phase)
             path.write_text(json.dumps(record, indent=2) + "\n")
-            result = subprocess.call(command, cwd=ROOT, env=environment)
+            # Each phase's watchdog gets what is left, so it reports a hang before the job limit does.
+            left = str(max(1, math.ceil(deadline - clock())))
+            result = subprocess.call(command, cwd=ROOT, env={"PW_GO_TEST_TIMEOUT_SECONDS": left,
+                                                             "PW_VITEST_TIMEOUT_SECONDS": left, **environment})
             phase.update(exit_code=result, finished_at=time.time())
             code = combined_exit(code, result)
             if result < 0:

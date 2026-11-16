@@ -49,7 +49,7 @@ tasks:
     internal: true
     dir: scripts/commentlint
     cmds:
-      - go test ./...
+      - go test -timeout 0 ./...
 
   comments:check:
     desc: Test the source comment scanner and scan the repository

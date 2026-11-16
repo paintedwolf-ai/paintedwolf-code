@@ -37,7 +37,7 @@ func TestDelegateImplementerPromptContainsPersona(t *testing.T) {
 		testutil.FailErr(t, "delMgr.DispatchLeg failed", err)
 	}
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the delegation is done", func() bool {
 		st, err := delMgr.GetStatus(ctx, r.ID)
 		if err != nil {
 			return false
@@ -89,7 +89,7 @@ func TestDelegatePlanReviewerDistinctFromImplementer(t *testing.T) {
 		testutil.FailErr(t, "delMgr.DispatchLeg failed", err)
 	}
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the delegation is done", func() bool {
 		st, _ := delMgr.GetStatus(ctx, r.ID)
 		return st.Phase == api.DelegationPhaseDone
 	})

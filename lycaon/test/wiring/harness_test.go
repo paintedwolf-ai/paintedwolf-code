@@ -55,7 +55,7 @@ func TestBuildForTestBackgroundWorkersCompleteJob(t *testing.T) {
 		testutil.FailErr(t, "h.Delegations.Manager.DispatchLeg failed", err)
 	}
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the delegation is done", func() bool {
 		st, err := h.Delegations.Manager.GetStatus(ctx, r.ID)
 		return err == nil && st.Phase == wire.DelegationPhaseDone
 	})

@@ -723,8 +723,8 @@ that reservation and assigns unused package slots to `GOMAXPROCS` for small
 scopes; race runs default to two runtime workers per package. Parallel tests per
 package obey the same per-process share; Vitest uses at most four workers.
 Fuzzing and Rust builds share the same budget. Runners use the worker limits
-assigned at admission; host load only adjusts timeouts, and race runs scale
-scheduler-dependent waits at least 3×. Hosted CI sets
+assigned at admission; host load only adjusts in-test waits, and race runs scale
+them at least 3×. Hosted CI sets
 `PW_TEST_HOST=dedicated`: one lane owns the runner, so the budget is every CPU
 (still at most eight) and a shared operation reserves all of it.
 
@@ -750,9 +750,22 @@ Locks and worker reservations are inherited by child processes and remain held
 after a parent crash until its surviving children exit. Pause stops new batch
 and invocation admission; already admitted batches finish their stages.
 
-Scheduler-dependent waits and watchdogs scale 1×–4× with host
-load. `PW_TEST_TIMEOUT_SCALE` selects an explicit scale; production deadlines
-and polling intervals remain unchanged.
+No test, package or lane fails because time passed. `go test` runs with
+`-timeout 0` in every recipe, and tests wait on events through
+`testutil.WaitFor`, `Receive` and `AwaitClosed`, which list the test and step
+they wait on for as long as they wait. Each run has one time limit, which exists
+to end a hang and never judges a slow run: the minutes of the CI lane that
+declares the target in `scripts/verification-plan.json`, or of the longest lane
+for a target no lane names, with no host-load scale. A hosted lane counts those
+minutes once across its phases. When the limit passes, the watchdog signals the
+run's Go test binaries with `SIGUSR1`, which prints each pending wait as
+`pending wait: <test>: <step>`, then with `SIGQUIT`, which prints every
+goroutine stack, and then ends the run. Digests and CI annotations name the
+pending waits.
+
+Scheduler-dependent waits inside tests scale 1×–4× with host load.
+`PW_TEST_TIMEOUT_SCALE` selects an explicit scale; production deadlines and
+polling intervals remain unchanged.
 
 Compilation artifacts use the persistent Go cache across snapshots, tests,
 fuzzing, and lint. Snapshot worktrees reuse leased directory slots, preserving
@@ -1288,7 +1301,7 @@ Each Linux Go test process has a 3.5 GiB RSS ceiling, declared in
 16 GiB and run four packages at once, so the ceiling keeps one package from
 exhausting the runner while leaving room for the toolchain. A package that needs
 more declares its own ceiling with a tracking issue. A race build gets
-`race_scale` times its ceiling, the way its timeouts are scaled: the detector's
+`race_scale` times its ceiling: the detector's
 shadow memory and instrumented heap are overhead the ordinary ceiling does not
 describe, and the largest contract packages reach 1.1 times it under the detector.
 Unless a run sets `GOMEMLIMIT`, the test binary gets a soft limit at 80% of its

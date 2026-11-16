@@ -165,7 +165,7 @@ func TestReapedSessionReuseNeverSignalsStandInProcess(t *testing.T) {
 
 		<-stage0Reaped
 		// Wait until stage 0 has marked itself reaped under g0.mu.
-		testutil.WaitFor(t, func() bool {
+		testutil.WaitFor(t, "the guard reaps the session", func() bool {
 			g0.mu.Lock()
 			defer g0.mu.Unlock()
 			return g0.reaped

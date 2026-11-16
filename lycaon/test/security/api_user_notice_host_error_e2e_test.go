@@ -63,7 +63,7 @@ func waitForSessionHostError(t *testing.T, hub *projectHub) wire.EventEnvelope {
 
 func waitPromptIdleHTTP(t *testing.T, base, sessionID string) {
 	t.Helper()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the session is idle", func() bool {
 		sess := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}",
 			map[string]string{"id": sessionID}, http.StatusOK)
 		return sess.Status == wire.SessionStatusIdle

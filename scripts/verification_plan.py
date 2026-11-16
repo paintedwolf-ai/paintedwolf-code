@@ -26,17 +26,15 @@ SELECTION_GRAMMARS = {"go", "vitest", "playwright", "unittest"}
 PASSTHROUGH = "passthrough"
 INFO_ARGUMENTS = {"--help", "-h", "-help", "--version", "--usage"}
 SELECTOR_FLAGS = {"-run", "-skip"}
-VALUE_FLAGS = SELECTOR_FLAGS | {"-timeout", "-tags", "-parallel", "-p", "-cpu"}
+VALUE_FLAGS = SELECTOR_FLAGS | {"-tags", "-parallel", "-p", "-cpu"}
 BOOL_FLAGS = {"-short", "-race", "-v"}
 EXCLUSIVE_GO_FLAGS = {"-count", "-shuffle", "-failfast", "-bench", "-fuzz", "-coverprofile", "-cpuprofile",
                       "-memprofile", "-trace", "-outputdir", "-blockprofile", "-mutexprofile", "-o", "-exec"}
 # The value grammars go test and the worker bound enforce only once a run starts.
-GO_DURATION = re.compile(r"[-+]?(0|((\d+\.?\d*|\.\d+)(ns|us|µs|μs|ms|s|m|h))+)")
 GO_VALUES = {"-p": (re.compile(r"[1-9]\d*"), "a positive integer"),
              "-parallel": (re.compile(r"[1-9]\d*"), "a positive integer"),
              "-count": (re.compile(r"\d+"), "a non-negative integer"),
              "-cpu": (re.compile(r"[1-9]\d*(,[1-9]\d*)*"), "a comma-separated list of positive integers"),
-             "-timeout": (GO_DURATION, "a Go duration such as 90s or 20m"),
              "-shuffle": (re.compile(r"off|on|-?\d+"), "off, on, or an integer seed")}
 
 
@@ -79,6 +77,14 @@ def execution_environment(environment, declaration=None):
     return {key: value for key, value in environment.items()
             if key not in SCHEDULER_ENV and key not in NETWORK_ENV
             and declared_variable(key, declaration)}
+
+
+def backstop_seconds(name):
+    """A run's one time limit: the minutes of the CI lane that declares the target, or of the
+    longest lane when none does. It ends a hung run; it never judges a slow one."""
+    lanes = [lane for lane in catalog()["ci"].values() if isinstance(lane, dict) and "minutes" in lane]
+    declared = [lane["minutes"] for lane in lanes if name in lane["targets"]]
+    return 60 * max(declared or [lane["minutes"] for lane in lanes])
 
 
 def catalog():

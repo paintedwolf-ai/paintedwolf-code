@@ -40,7 +40,7 @@ func TestDelegationSpawnWorkerPromptHygiene(t *testing.T) {
 		testutil.FailErr(t, "h.Delegations.Manager.DispatchLeg failed", err)
 	}
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the worker sends a request", func() bool {
 		return len(rec.AllRequests()) > 0
 	})
 

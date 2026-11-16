@@ -61,7 +61,7 @@ class PlanningTests(unittest.TestCase):
         self.assertIsNotNone(planning.request(["test:stress"], {}))
         stage = planning.expand(["test:stress"])[0]
         self.assertEqual(stage["flags"], ["-p=1", "-parallel=1", "-run=^TestStress"])
-        self.assertEqual(stage["options"], ["--full", "--tags", "stress", "--timeout", "90m"])
+        self.assertEqual(stage["options"], ["--full", "--tags", "stress"])
         command = planning.digest_command(stage, stage["packages"])
         self.assertIn("./internal/db", command)
         self.assertIn("-run=^TestStress", command)
@@ -316,12 +316,11 @@ class PlanningTests(unittest.TestCase):
                     planning.request([target, "--", *flags], {})
 
     def test_go_flag_values_are_checked_before_admission(self):
-        for flags in (["-p", "0"], ["-parallel=-1"], ["-count=x"], ["-cpu", "1,,2"], ["-timeout", "5"],
-                      ["-timeout=20 m"], ["-shuffle=sometimes"]):
+        for flags in (["-p", "0"], ["-parallel=-1"], ["-count=x"], ["-cpu", "1,,2"], ["-shuffle=sometimes"],
+                      ["-timeout", "5m"], ["-timeout=0"]):
             with self.subTest(flags=flags), self.assertRaisesRegex(ValueError, "No verification was queued"):
                 planning.request(["test:digest", "--", "./internal/api", *flags], {})
-        for flags in (["-p=2"], ["-parallel", "4"], ["-count=0"], ["-cpu=1,2,4"], ["-timeout=1h30m"],
-                      ["-timeout", "0"], ["-timeout=1.5s"], ["-shuffle=on"], ["-shuffle=-7"]):
+        for flags in (["-p=2"], ["-parallel", "4"], ["-count=0"], ["-cpu=1,2,4"], ["-shuffle=on"], ["-shuffle=-7"]):
             with self.subTest(flags=flags):
                 planning.validate_selection(["test:digest"], ["./internal/api", *flags])
 

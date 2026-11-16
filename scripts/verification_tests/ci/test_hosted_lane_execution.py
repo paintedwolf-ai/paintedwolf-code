@@ -212,8 +212,22 @@ class HostedExecutionTests(unittest.TestCase):
                         patch.object(ci.subprocess, "call", return_value=0) as run:
                     if not inherited:
                         ci.os.environ.pop("PW_GO_TEST_TIMEOUT_SECONDS", None)
-                    ci.run_lane("behavior", "1/2")
+                    ci.run_lane("behavior", "1/2", clock=lambda: 0)
                     self.assertEqual(run.call_args.kwargs["env"]["PW_GO_TEST_TIMEOUT_SECONDS"], expected)
+
+    def test_each_phase_watchdog_gets_what_is_left_of_the_lane_budget(self):
+        seconds = hosted_plan.lanes()["ready-tests"]["minutes"] * 60
+        # The lane starts at 0; its phases start 100 seconds in and 40 seconds past the budget.
+        readings = iter([0, 100, seconds + 40])
+        phases = [["./task", "test:contract"], ["./task", "test:short"]]
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.object(ci.ready_scope, "test_phases", return_value=(phases, [])), \
+                patch.object(ci.subprocess, "call", return_value=0) as run:
+            ci.os.environ.pop("PW_GO_TEST_TIMEOUT_SECONDS", None)
+            ci.run_lane("ready-tests", "1/2", clock=lambda: next(readings))
+        budgets = [call.kwargs["env"]["PW_GO_TEST_TIMEOUT_SECONDS"] for call in run.call_args_list]
+        self.assertEqual(budgets, [str(seconds - 100), "1"])
 
     def test_interrupted_invocation_leaves_an_unfinished_record(self):
         with tempfile.TemporaryDirectory() as directory:

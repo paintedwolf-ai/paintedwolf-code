@@ -124,7 +124,7 @@ TEST_TIMEOUT_SCALE="$(test_host_timeout_scale "${NCPU}" "${HOST_LOAD}")"
 export PW_TEST_TIMEOUT_SCALE="${TEST_TIMEOUT_SCALE}"
 : "${PW_VITEST_MAX_WORKERS:?verification admission must set PW_VITEST_MAX_WORKERS}"
 if [[ -z "${VITEST_TIMEOUT_SECONDS}" ]]; then
-  VITEST_TIMEOUT_SECONDS="$(test_scale_integer 2700 "${TEST_TIMEOUT_SCALE}")"
+  VITEST_TIMEOUT_SECONDS="$(python3 "${ROOT}/scripts/test-execution.py" backstop --name "${NAME}")"
 fi
 python3 "$ROOT/scripts/process-group-watchdog.py" --validate "${VITEST_TIMEOUT_SECONDS}"
 if ((TEST_TIMEOUT_SCALE > 1)); then

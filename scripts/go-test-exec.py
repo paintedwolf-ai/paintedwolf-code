@@ -25,7 +25,8 @@ CONTROL_ENV = ("PW_TEST_STAGE_EVENTS", "PW_TEST_REUSE_STORE", "PW_TEST_ENVIRONME
                "PW_TEST_BATCH_DIRECTORY")
 # A test that leaks a process holding its output open cannot delay the package's outcome for long.
 OUTPUT_GRACE_SECONDS = 5
-FAILED_TEST = re.compile(r"^\s*--- FAIL: (\S+)")
+# A test the watchdog found waiting is as much the failure as one that reported it.
+FAILED_TEST = re.compile(r"^\s*--- FAIL: (\S+)|^pending wait: (\S+): ")
 MAX_FAILED_TESTS = 20
 
 
@@ -66,7 +67,7 @@ def execute(binary, arguments, env, observe_forks, resource_limit=None):
         if running:
             os.kill(pid, number)
 
-    for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT, signal.SIGHUP):
+    for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGQUIT, signal.SIGHUP, signal.SIGUSR1):
         signal.signal(signum, forward)
     os.write(ready_write, b"x")
     os.close(ready_write)
@@ -119,8 +120,8 @@ def failure_report(events, package, output):
     tests = []
     for line in text.splitlines():
         match = FAILED_TEST.match(line)
-        if match and match.group(1) not in tests:
-            tests.append(match.group(1))
+        if match and (match.group(1) or match.group(2)) not in tests:
+            tests.append(match.group(1) or match.group(2))
     return {"output": str(path), "tests": tests[:MAX_FAILED_TESTS]}
 
 

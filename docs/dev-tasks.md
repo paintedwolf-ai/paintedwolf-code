@@ -858,7 +858,7 @@ was queued`.
 
 Declared Go targets take the same package and flag grammar as `test:digest`,
 narrowed to packages inside their own declared scope — `./task test:integration
--- ./internal/api/...` keeps the integration recipe's tags and timeout and runs
+-- ./internal/api/...` keeps the integration recipe's tags and runs
 one subtree, sharing package outcomes with any other request for the same
 recipe. A selection outside the target's scope names what that target covers;
 use `test:digest` for packages no declared target owns. `den:test:digest` takes
@@ -872,7 +872,9 @@ request's failures.
 
 Declared grammars are checked against the tree before admission: Go package
 directories and `.go` files must exist under `lycaon/`; `-p`, `-parallel`,
-`-count`, `-cpu`, `-timeout`, and `-shuffle` must hold values `go test` accepts;
+`-count`, `-cpu`, and `-shuffle` must hold values `go test` accepts; `-timeout`
+is refused, because every recipe runs with `-timeout 0` and the run's one limit
+is its lane's declared minutes;
 each Vitest filter must match a test file under `lycaon-den/src`, and each
 Playwright filter a web-project spec under `lycaon-den/e2e`, by the same rules
 those tools apply. Arguments that passthrough targets and non-catalog targets
@@ -1044,7 +1046,7 @@ shared batch, holding the Go resource for their whole run. They never replay a
 recorded result and do not emit a shared batch snapshot receipt; retain their
 digest and raw results separately when recording verification evidence.
 
-Go failures retain a directory under the artifact root's `last-run/failures/` containing the raw report, failed package list, and a JSON replay manifest. The manifest records the exact digest arguments, effective `go test` arguments, contention settings, and source commit. Replay (`./task test:failed`) preserves the selection and timeouts while clamping workers to the current admission budget. `last-run/latest-go-failure` changes only on failure, so later passing or scoped runs cannot erase the replay target. The newest ten failures and their source refs are retained.
+Go failures retain a directory under the artifact root's `last-run/failures/` containing the raw report, failed package list, and a JSON replay manifest. The manifest records the exact digest arguments, effective `go test` arguments, contention settings, and source commit. Replay (`./task test:failed`) preserves the selection and the run limit while clamping workers to the current admission budget. `last-run/latest-go-failure` changes only on failure, so later passing or scoped runs cannot erase the replay target. The newest ten failures and their source refs are retained.
 
 Vitest failures retain the JSON, console, and runner-outcome reports. The outcome report includes runner errors and complete assertion values, so collection audits show their paths and entries instead of collapsed array placeholders.
 

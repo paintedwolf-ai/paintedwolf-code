@@ -101,7 +101,7 @@ func TestCostSummaryWorkerSplitAfterDelegation(t *testing.T) {
 		testutil.FailErr(t, "h.Delegations.Manager.DispatchLeg failed", err)
 	}
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the delegation is done", func() bool {
 		st, err := h.Delegations.Manager.GetStatus(ctx, r.ID)
 		if err != nil || st == nil {
 			return false
@@ -141,7 +141,7 @@ func TestCostSSEIncludesBreakdown(t *testing.T) {
 	}
 
 	var got wire.CostEvent
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the cost event carries the breakdown", func() bool {
 		select {
 		case envelope, ok := <-ch:
 			if !ok || envelope.Topic != wire.EventTopicCost {

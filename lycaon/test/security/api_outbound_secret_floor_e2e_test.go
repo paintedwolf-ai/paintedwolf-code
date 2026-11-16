@@ -302,7 +302,7 @@ func TestOutboundSecretFloorJ6InertMatcherParity(t *testing.T) {
 	testutil.FailErr(t, "SetAgentType", h.Sessions.Manager.Chats.SetAgentType(context.Background(), sess.ID, "implementer"))
 
 	done := startPromptAsync(t, h, sess.ID, "[[scn:j6_inert]] inert matcher")
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the prompt ends or an approval is pending", func() bool {
 		select {
 		case err := <-done:
 			testutil.FailErr(t, "prompt", err)

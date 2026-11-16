@@ -545,7 +545,7 @@ raise SystemExit(7)
 	defer unix.Close(pidfd)
 	defer func() { _ = unix.PidfdSendSignal(pidfd, unix.SIGKILL, nil, 0) }()
 	testutil.FailErr(t, "stop performer", unix.PidfdSendSignal(pidfd, unix.SIGSTOP, nil, 0))
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the performer stops", func() bool {
 		if ctx.Err() != nil {
 			t.Fatalf("performer never stopped: %s", out.text())
 		}
@@ -560,7 +560,7 @@ raise SystemExit(7)
 	_, err = input.Write([]byte("exit\n"))
 	testutil.FailErr(t, "start interpreter exit", err)
 	out.await(t, "exit-create-started")
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the interpreter enters its exit-time create", func() bool {
 		if ctx.Err() != nil {
 			t.Fatalf("interpreter never entered exit create: %s", out.text())
 		}
@@ -582,7 +582,7 @@ raise SystemExit(7)
 func confinedDescendant(t *testing.T, parent int, argument string) int {
 	t.Helper()
 	found := 0
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the confined descendant appears", func() bool {
 		queue := []int{parent}
 		for len(queue) > 0 {
 			pid := queue[0]

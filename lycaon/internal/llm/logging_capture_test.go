@@ -117,7 +117,7 @@ func TestCaptureLLMStreamWritesTimingAfterCollect(t *testing.T) {
 	_, _, _ = modelcall.CollectStream(ch)
 
 	var data []byte
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the capture log is written", func() bool {
 		var err error
 		data, err = os.ReadFile(logPath)
 		return err == nil && len(data) > 0
@@ -182,7 +182,7 @@ func TestCaptureLLMStreamRecordsMidStreamError(t *testing.T) {
 	for range ch {
 	}
 	var got string
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the capture records the stream error", func() bool {
 		got = captureErrorField(t, logPath)
 		return got != ""
 	})
@@ -241,7 +241,7 @@ func TestRegistrySummarizerPurposeLabelsStreamCapture(t *testing.T) {
 	// The stream capture row is written asynchronously after the provider
 	// channel drains.
 	var got string
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the capture records the call purpose", func() bool {
 		got = captureCallField(t, logPath)
 		return got != ""
 	})
@@ -346,7 +346,7 @@ func TestCaptureLLMStreamPostDrainCancelDoesNotMarkPromptCacheFailed(t *testing.
 	}
 
 	var data []byte
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the prompt cache record is written", func() bool {
 		var readErr error
 		data, readErr = os.ReadFile(cachePath)
 		return readErr == nil && len(data) > 0
@@ -400,7 +400,7 @@ func TestCaptureLLMStreamAbandonedMidStreamMarksPromptCacheFailed(t *testing.T) 
 	cancel()
 
 	var data []byte
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the prompt cache record is written", func() bool {
 		var readErr error
 		data, readErr = os.ReadFile(cachePath)
 		return readErr == nil && len(data) > 0

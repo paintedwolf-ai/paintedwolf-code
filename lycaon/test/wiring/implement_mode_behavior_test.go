@@ -54,7 +54,7 @@ func TestImplementModeTaskEnqueue(t *testing.T) {
 		t.Fatalf("expected no delegation, got %q", dep)
 	}
 	foundTask := false
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the task enqueue message is stored", func() bool {
 		msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)
 		testutil.FailErr(t, "h.Sessions.Manager.GetMessages failed", err)
 		for _, msg := range msgs {

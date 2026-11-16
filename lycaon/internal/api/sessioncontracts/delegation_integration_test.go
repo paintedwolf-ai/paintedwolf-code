@@ -180,7 +180,7 @@ func TestDelegationEndToEndComplete(t *testing.T) {
 		}
 		return st
 	}
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the delegation is done", func() bool {
 		return readDelegation().Phase == wire.DelegationPhaseDone
 	})
 

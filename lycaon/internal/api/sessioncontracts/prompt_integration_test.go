@@ -88,7 +88,7 @@ func TestCreateSessionByProjectIDPromptContext(t *testing.T) {
 	if sess.WorkspacePath != contractfixture.ResolveTestPath(t, dir) {
 		t.Fatalf("project_dir = %q", sess.WorkspacePath)
 	}
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the session leaves preparing", func() bool {
 		return contractfixture.GetSessionAtURL(t, baseURL, sess.ID).Status != wire.SessionStatusPreparing
 	})
 

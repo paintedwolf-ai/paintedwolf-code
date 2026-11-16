@@ -59,7 +59,7 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 	if !ok {
 		t.Fatalf("checkpoint manager = %T, want approval option resolver", h.Sessions.Checkpoints)
 	}
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the worker summary is appended", func() bool {
 		if task, ok := h.Delegations.Queue.Get(dispatched.WorkerID); ok {
 			childSessionID = task.ChildSessionID
 		}

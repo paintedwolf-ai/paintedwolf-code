@@ -221,7 +221,7 @@ func enqueueSingleScanner(t *testing.T, srv *api.Server, projectID string, categ
 func waitFullPassMemberScan(t *testing.T, srv *api.Server, projectID string, pass wire.SecurityFullPass) wire.CodeScan {
 	t.Helper()
 	member := pass.Members[0]
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the pass member's scan starts", func() bool {
 		switch member.Phase {
 		case wire.FullPassMemberStarted:
 			if member.Scan == nil {
@@ -252,7 +252,7 @@ func waitFullPassMemberScan(t *testing.T, srv *api.Server, projectID string, pas
 func waitScanComplete(t *testing.T, srv *api.Server, projectID, scanID string) wire.CodeScan {
 	t.Helper()
 	var got wire.CodeScan
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the scan completes", func() bool {
 		getReq := authedRequest(t, http.MethodGet, scanURL(projectID, scanID)+"?view=full", nil)
 		getW := httptest.NewRecorder()
 		srv.ServeHTTP(getW, getReq)
