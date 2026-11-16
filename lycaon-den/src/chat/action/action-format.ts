@@ -22,7 +22,7 @@ const OUTCOMES: Readonly<Record<string, string>> = {
   created: "Created", updated: "Updated", deleted: "Deleted", moved: "Moved", copied: "Copied",
   committed: "Committed", merged: "Merged", checked_out: "Checked out", answered: "Answered",
   approved: "Approved", declined: "Declined", pass: "Pass", fail: "Fail", captured: "Captured",
-  loaded: "Loaded", cancelled: "Cancelled",
+  loaded: "Loaded", canceled: "Canceled",
 };
 
 const SINGULAR: Readonly<Record<string, string>> = {
@@ -91,7 +91,7 @@ function steps(fact: ActionFact): string {
 function stoppedBy(fact: ActionFact): string {
   if (fact.by === "approval") {
     const who = fact.decided_by === "policy" ? "policy" : "you";
-    const at = fact.at ? ` · ${new Date(fact.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "";
+    const at = fact.decided_at ? ` · ${new Date(fact.decided_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "";
     return `Approved by ${who}${at}`;
   }
   if (fact.by === "budget") return "Budget limit";
