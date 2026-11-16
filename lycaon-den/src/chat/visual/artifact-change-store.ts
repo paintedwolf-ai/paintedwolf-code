@@ -4,12 +4,8 @@ import { LycaonApiError } from "../../api/http.ts";
 import { invalidateVisualArtifactSrc } from "./visual-artifact-src.ts";
 import { invalidateFrameArchive } from "./frame-archive-cache.ts";
 
-export type ArtifactChangeEvent = ArtifactEvent & {
-  readonly content_hash?: string;
-};
-
 export type ArtifactChangeDetail =
-  | { readonly kind: "event"; readonly event: ArtifactChangeEvent }
+  | { readonly kind: "event"; readonly event: ArtifactEvent }
   | { readonly kind: "resync" };
 
 type Listener = (projectId: string, detail: ArtifactChangeDetail) => void;
@@ -56,7 +52,7 @@ export function useArtifactDeletion(artifactId: () => string, error: () => unkno
   });
 }
 
-export function notifyArtifactChanged(event: ArtifactChangeEvent): void {
+export function notifyArtifactChanged(event: ArtifactEvent): void {
   const id = event.project_id.trim();
   if (!id) return;
   const artifactId = event.artifact_id.trim();

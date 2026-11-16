@@ -11,7 +11,6 @@ import {
   onMount,
 } from "solid-js";
 import { ResidentPortal } from "../primitives/ResidentPortal.tsx";
-import type { LycaonClient } from "../../api/client.ts";
 import type { ArtifactListItem, ArtifactListResponse } from "../../api/types.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
@@ -50,7 +49,6 @@ import { createResidentActivity } from "../../ui/resident-activity.ts";
 type Props = {
   projectId: string;
   appStore: AppStore;
-  client?: LycaonClient | null;
   back?: import("../shell/StageBackChip.tsx").StageBack | null;
   onRevealInTranscript?: (target: TranscriptRevealTarget) => void;
 };
@@ -69,7 +67,7 @@ const ARTIFACTS_PAGE_SIZE = 12;
 export function ProjectArtifactsView(props: Props) {
   onMount(() => requestFirstTimeTip("project-artifacts"));
 
-  const client = () => props.client ?? getLycaonClient() ?? null;
+  const client = () => getLycaonClient() ?? null;
   const [sourceFilter, setSourceFilter] =
     createSignal<ArtifactSourceFilter>("all");
   const [chatFilter, setChatFilter] = createSignal<ArtifactChatFilter>("all");
@@ -318,7 +316,6 @@ export function ProjectArtifactsView(props: Props) {
       <BrowseStagePanel
         appStore={props.appStore}
         back={props.back}
-        requireClient={props.client == null}
         scrollHost="content"
         contentReady={artifacts.ready}
         title="Artifacts"
