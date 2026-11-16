@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -112,13 +113,17 @@ func (e *Emitters) loadRegistry(root, rel string) error {
 // loadPolicies records the anchor of each policy that fires without echoing a
 // host rejection.
 func (e *Emitters) loadPolicies(root, rel string) error {
-	dir := filepath.Join(root, filepath.FromSlash(rel))
+	packs, err := os.OpenRoot(filepath.Join(root, filepath.FromSlash(rel)))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = packs.Close() }()
 	found := 0
-	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() || filepath.Base(filepath.Dir(path)) != "policy" || filepath.Ext(path) != ".yaml" {
+	err = fs.WalkDir(packs.FS(), ".", func(name string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() || path.Base(path.Dir(name)) != "policy" || path.Ext(name) != ".yaml" {
 			return err
 		}
-		raw, err := os.ReadFile(path)
+		raw, err := packs.ReadFile(name)
 		if err != nil {
 			return err
 		}
@@ -128,7 +133,7 @@ func (e *Emitters) loadPolicies(root, rel string) error {
 			Requires []string `yaml:"requires_facts"`
 		}
 		if err := yaml.Unmarshal(raw, &policy); err != nil {
-			return fmt.Errorf("%s: %w", path, err)
+			return fmt.Errorf("%s: %w", name, err)
 		}
 		found++
 		code, ok := e.codes[policy.ID]
@@ -136,9 +141,7 @@ func (e *Emitters) loadPolicies(root, rel string) error {
 			return nil
 		}
 		code.anchor = policy.On
-		if pos, err := filepath.Rel(root, path); err == nil {
-			code.pos = filepath.ToSlash(pos)
-		}
+		code.pos = path.Join(filepath.ToSlash(rel), name)
 		e.codes[policy.ID] = code
 		return nil
 	})
