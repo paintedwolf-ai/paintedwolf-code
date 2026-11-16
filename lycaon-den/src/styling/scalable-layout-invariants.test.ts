@@ -20,7 +20,7 @@ describe("scalable layout chrome", () => {
     expect(row).toMatch(/gap:\s*var\(--transcript-part-gap\)/);
     expect(row).not.toMatch(/margin/);
     expect(chat).toMatch(/\.den-seam\s*\{[^}]*box-sizing:\s*border-box/);
-    for (const rung of ["row", "section", "turn"]) {
+    for (const rung of ["part", "row", "section", "turn"]) {
       expect(chat, rung).toMatch(
         new RegExp(`\\.den-seam\\[data-seam="${rung}"\\]\\s*\\{\\s*padding-top:\\s*var\\(--transcript-${rung}-gap\\)`),
       );
