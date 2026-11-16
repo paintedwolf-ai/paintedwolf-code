@@ -2,6 +2,7 @@ package search_test
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/search"
@@ -35,7 +36,9 @@ func TestProjectScanFindingsKeysOnFingerprint(t *testing.T) {
 	}
 }
 
-func TestProjectScanCompleteResolvesSessionAndDelegationScopes(t *testing.T) {
+// A finished scan's findings are indexed under the project its scope
+// belongs to; a scan whose scope names nothing known indexes nothing.
+func TestFinishedScanIndexesFindingsUnderItsScopesProject(t *testing.T) {
 	ctx := t.Context()
 	sqlDB := testdbfixture.Open(t, "scan-project.db")
 	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
@@ -63,9 +66,10 @@ func TestProjectScanCompleteResolvesSessionAndDelegationScopes(t *testing.T) {
 	for _, tc := range []struct {
 		scanID  string
 		scopeID string
+		project string
 	}{
-		{scanID: "scan-by-session", scopeID: "sess-scan-proj"},
-		{scanID: "scan-by-delegation", scopeID: "del-legacy-1"},
+		{scanID: "scan-by-session", scopeID: "sess-scan-proj", project: testdbseed.DefaultProjectID},
+		{scanID: "scan-by-delegation", scopeID: "del-legacy-1", project: testdbseed.DefaultProjectID},
 		{scanID: "scan-unmatched", scopeID: "unknown-scope"},
 	} {
 		_, err = sqlDB.ExecContext(ctx, `INSERT INTO code_scans (
@@ -75,5 +79,22 @@ func TestProjectScanCompleteResolvesSessionAndDelegationScopes(t *testing.T) {
 			tc.scanID, tc.scopeID, "rk-"+tc.scanID, string(ingestBytes))
 		testutil.FailErr(t, "insert code_scan", err)
 		testutil.FailErr(t, "ProjectScanComplete", search.ProjectScanComplete(ctx, sqlDB, tc.scanID))
+
+		rows, err := sqlDB.QueryContext(ctx, `SELECT project_id, handle FROM evidence_index WHERE source_ref = ?`, tc.scanID)
+		testutil.FailErr(t, "read index", err)
+		var indexed [][2]string
+		for rows.Next() {
+			var row [2]string
+			testutil.FailErr(t, "scan index row", rows.Scan(&row[0], &row[1]))
+			indexed = append(indexed, row)
+		}
+		testutil.FailErr(t, "index rows", rows.Close())
+		var want [][2]string
+		if tc.project != "" {
+			want = [][2]string{{tc.project, "fp-session-1"}}
+		}
+		if !slices.Equal(indexed, want) {
+			t.Fatalf("scan %s indexed %v, want %v", tc.scanID, indexed, want)
+		}
 	}
 }

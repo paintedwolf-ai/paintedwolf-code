@@ -25,51 +25,58 @@ func TestCircuitBreakerEscalatesInBlockMode(t *testing.T) {
 	}
 }
 
-func TestConfigModesAndObserveVerdict(t *testing.T) {
+// The write and ambient modes fall back to the post-turn mode until set.
+func TestGroundingModesFallBackToThePostTurnMode(t *testing.T) {
 	var cfg grounding.GroundingConfig
 	cfg.PostTurn.Mode = "warn"
-	if got := cfg.WriteGroundingMode(); got != "warn" {
-		t.Fatalf("WriteGroundingMode fallback = %q, want warn", got)
+	if write, ambient := cfg.WriteGroundingMode(), cfg.AmbientPostTurnMode(); write != "warn" || ambient != "warn" {
+		t.Fatalf("modes = %q, %q, want the post-turn mode for both", write, ambient)
 	}
-	if got := cfg.AmbientPostTurnMode(); got != "warn" {
-		t.Fatalf("AmbientPostTurnMode fallback = %q, want warn", got)
+	cfg.Write.Mode, cfg.Ambient.PostTurn.Mode = "block", "audit"
+	if write, ambient := cfg.WriteGroundingMode(), cfg.AmbientPostTurnMode(); write != "block" || ambient != "audit" {
+		t.Fatalf("modes = %q, %q, want block and audit", write, ambient)
 	}
-	cfg.Write.Mode = "block"
-	cfg.Ambient.PostTurn.Mode = "audit"
-	if got := cfg.WriteGroundingMode(); got != "block" {
-		t.Fatalf("WriteGroundingMode = %q, want block", got)
-	}
-	if got := cfg.AmbientPostTurnMode(); got != "audit" {
-		t.Fatalf("AmbientPostTurnMode = %q, want audit", got)
-	}
+}
 
-	grounding.ObserveVerdict(nil, grounding.GroundingVerdict{Code: grounding.CoordinatorEscalatedCode})
-	gc := &oar.GuardContext{}
-	grounding.ObserveVerdict(gc, grounding.GroundingVerdict{OK: true, Code: grounding.CoordinatorEscalatedCode})
-	grounding.ObserveVerdict(gc, grounding.GroundingVerdict{})
-
+// Each verdict code sets the grounding facts its rule decides on.
+func TestObservedVerdictSetsTheFactsItsRuleReads(t *testing.T) {
+	type facts struct {
+		escalated, claims, ledgerJob, auditUngrounded bool
+		surface                                       string
+	}
 	for _, tc := range []struct {
-		code    string
-		surface string
+		code string
+		want facts
 	}{
-		{code: grounding.CoordinatorEscalatedCode},
-		{code: grounding.AmbientGroundingEscalatedCode},
-		{code: grounding.CoordinatorUngroundedClaimCode},
-		{code: grounding.CoordinatorCriteriaUnmetCode},
-		{code: grounding.AmbientUngroundedCompletionCode},
-		{code: guidance.InvestHandleNotObservedCode, surface: "implement_investigate"},
-		{code: guidance.SynthHandleNotInLegsCode, surface: "implement_dispatch"},
+		{grounding.CoordinatorEscalatedCode, facts{escalated: true, claims: true, ledgerJob: true}},
+		{grounding.AmbientGroundingEscalatedCode, facts{escalated: true, ledgerJob: true}},
+		{grounding.CoordinatorUngroundedClaimCode, facts{claims: true}},
+		{grounding.CoordinatorCriteriaUnmetCode, facts{claims: true, ledgerJob: true}},
+		{grounding.AmbientUngroundedCompletionCode, facts{auditUngrounded: true}},
+		{guidance.InvestHandleNotObservedCode, facts{auditUngrounded: true, ledgerJob: true, surface: "implement_investigate"}},
+		{guidance.SynthHandleNotInLegsCode, facts{auditUngrounded: true, ledgerJob: true, surface: "implement_dispatch"}},
 	} {
-		ctx := &oar.GuardContext{}
-		grounding.ObserveVerdict(ctx, grounding.GroundingVerdict{
-			OK:     false,
-			Code:   tc.code,
-			Reason: "test reason",
-			LegID:  "leg-1",
-		})
-		if tc.surface != "" && ctx.Session.Surface != tc.surface {
-			t.Fatalf("code %s surface = %q, want %q", tc.code, ctx.Session.Surface, tc.surface)
+		gc := &oar.GuardContext{}
+		// The ledger fact starts set so a verdict that clears it is seen.
+		gc.Grounding.HasMatchingLedgerJob = true
+		grounding.ObserveVerdict(gc, grounding.GroundingVerdict{Code: tc.code, LegID: "leg-1"})
+		got := facts{
+			escalated: gc.Grounding.GroundingEscalated, claims: gc.Grounding.ClaimsCompletion,
+			ledgerJob: gc.Grounding.HasMatchingLedgerJob, auditUngrounded: gc.Grounding.LastAuditUngrounded,
+			surface: gc.Session.Surface,
 		}
+		if got != tc.want {
+			t.Fatalf("%s set %+v, want %+v", tc.code, got, tc.want)
+		}
+		if data := gc.RejectData[tc.code]; data["grounding_verdict"] != tc.code || data["leg_id"] != "leg-1" {
+			t.Fatalf("%s reject data = %v", tc.code, data)
+		}
+	}
+
+	settled := &oar.GuardContext{}
+	grounding.ObserveVerdict(settled, grounding.GroundingVerdict{OK: true, Code: grounding.CoordinatorEscalatedCode})
+	if settled.Grounding.GroundingEscalated || len(settled.RejectData) != 0 {
+		t.Fatalf("a passing verdict set facts: %+v", settled.Grounding)
 	}
 }
 
