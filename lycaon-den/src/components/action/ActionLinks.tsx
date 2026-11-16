@@ -11,6 +11,11 @@ import type { ResolveProjectRoot } from "../../api/project-path.ts";
 import { SourcePathLink } from "../source/SourcePathLink.tsx";
 import { TOOL_PATH_ENTRY_KINDS } from "../../chat/tool/tool-presentation.generated.ts";
 import { turnLoadRowSummary } from "../../chat/turnload/turn-load-rows.ts";
+import { addToChat } from "../../chat/composer/add-to-chat.ts";
+import { chatRefForToolRaw } from "../../chat/composer/search-add-to-chat.ts";
+import { startChatAttachmentDrag } from "../../chat/composer/chat-attachment-drag.ts";
+import { useChatDestinationScope } from "../../chat/composer/chat-destination-scope.tsx";
+import { exploreRelatedToolCallsQuery } from "../../search/search-query-model.ts";
 
 const LINK_LABELS: Readonly<Record<ActionLink["kind"], string>> = { input: "Input", output: "Output", receipt: "Receipt" };
 
@@ -22,11 +27,12 @@ type Props = {
   action: CardAction;
   part: ToolPartView;
   projectId?: string;
+  sessionId?: string;
   rootRefs?: readonly ResolveProjectRoot[];
   evidence?: JSX.Element;
 };
 
-/** Input, Output, Receipt, host decisions and Evidence in that order, then the opener. */
+/** Input, Output, Receipt, host decisions and Evidence, the call's chat and search actions, then the opener. */
 export function ActionLinks(props: Props) {
   const content = useToolContent();
   // A Find match inside this call's input or output opens its document at the match.
@@ -39,20 +45,35 @@ export function ActionLinks(props: Props) {
     return decisions.length ? decisions.map((decision) => { const row = turnLoadRowSummary(decision.row); return `${row.title} · ${row.operation} · ${row.state}`; }).join("\n") : undefined;
   });
   const opener = createMemo(() => props.action.opener, undefined, { equals: sameShape });
+  const chatDestination = useChatDestinationScope();
+  // The call's output as a chat attachment, citing its session and call.
+  const outputRef = createMemo(() => chatRefForToolRaw({
+    projectId: props.projectId?.trim() ?? "", sessionId: props.sessionId?.trim() ?? "",
+    toolCallId: props.part.toolCallId?.trim() ?? "", name: props.part.tool.trim() || props.part.toolCallId,
+  }));
+  const relatedQuery = createMemo(() => {
+    const sessionId = props.sessionId?.trim(), projectId = props.projectId?.trim(), toolCallId = props.part.toolCallId?.trim();
+    return sessionId && projectId && toolCallId ? exploreRelatedToolCallsQuery({ toolCallId, sessionId, tool: props.part.tool }) : undefined;
+  });
   return (
-    <nav class="den-action-card__links" aria-label="Activity records" data-testid="action-links">
+    <nav class="den-action-card__links" aria-label="Activity records" data-testid="action-links"
+      draggable={outputRef() ? true : undefined} onDragStart={(event) => startChatAttachmentDrag(event, outputRef())}>
       <Index each={props.action.links}>
         {(link) => {
           // Descriptors arrive as new objects on every update; a link stays mounted while it opens the same record.
           const document = createMemo(() => linkContent(link(), props.part), undefined, { equals: sameShape });
           return (
             <Show when={document()} keyed>
-              {(shown) => (
-                <ToolContentLink short label={LINK_LABELS[link().kind]} testId={`action-link-${link().kind}`} projectId={props.projectId}
-                  pane={`action:${props.part.id}:${link().kind}`} content={shown} language={link().kind === "receipt" ? "jsonl" : undefined}
-                  messageId={link().kind === "input" ? props.part.argsMessageId ?? props.part.assistantMessageId : props.part.messageId}
-                  toolCallId={props.part.toolCallId} revealOffset={revealOffset(link().kind)} />
-              )}
+              {(shown) => {
+                const kind = link().kind;
+                const messageId = kind === "input" ? props.part.argsMessageId ?? props.part.assistantMessageId : props.part.messageId;
+                const language = kind === "receipt" ? "jsonl" : undefined;
+                return (
+                  <ToolContentLink short label={LINK_LABELS[kind]} testId={`action-link-${kind}`} projectId={props.projectId}
+                    pane={`action:${props.part.id}:${kind}`} content={shown} language={language}
+                    messageId={messageId} toolCallId={props.part.toolCallId} revealOffset={revealOffset(kind)} />
+                );
+              }}
             </Show>
           );
         }}
@@ -64,6 +85,20 @@ export function ActionLinks(props: Props) {
         )}
       </Show>
       {props.evidence}
+      <Show when={outputRef()} keyed>
+        {(ref) => (
+          <button type="button" class="den-chat-content-link" data-testid="tool-raw-add-to-chat" onClick={() => void addToChat(ref, { destination: chatDestination() })}>
+            Add to chat
+          </button>
+        )}
+      </Show>
+      <Show when={relatedQuery()} keyed>
+        {(query) => (
+          <button type="button" class="den-chat-content-link" data-testid="tool-related-search-link" onClick={() => props.projectId && openInSearch(props.projectId, query)}>
+            Find related
+          </button>
+        )}
+      </Show>
       <Show when={opener()} keyed>
         {(opener) => <Opener opener={opener} part={props.part} projectId={props.projectId} rootRefs={props.rootRefs} />}
       </Show>
