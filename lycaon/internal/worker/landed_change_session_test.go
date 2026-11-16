@@ -29,7 +29,10 @@ func TestInsertLandedChangeAccumulatesSessionPathDeltas(t *testing.T) {
 	}
 
 	manifest := api.ScanExecutionManifest{DefinitionFingerprint: "def-fp-1"}
-	q := db.New(sqlDB)
+	tx, err := sqlDB.BeginTx(ctx, nil)
+	testutil.FailErr(t, "begin tx", err)
+	defer func() { _ = tx.Rollback() }()
+	q := db.New(tx)
 	testutil.FailErr(t, "insert first session landed change", insertLandedChangeTx(ctx, q, obligation.Plan{
 		ID:                   "lc-1",
 		WorkerJobID:          "job-land-1",
@@ -61,6 +64,7 @@ func TestInsertLandedChangeAccumulatesSessionPathDeltas(t *testing.T) {
 		ExecutionFingerprint: "exec-fp-2",
 		FingerprintScheme:    "v1",
 	}))
+	testutil.FailErr(t, "commit tx", tx.Commit())
 
 	var bound int
 	testutil.FailErr(t, "count session scan bindings", sqlDB.QueryRowContext(ctx,

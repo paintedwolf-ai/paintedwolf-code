@@ -48,14 +48,16 @@ func TestProjectScanCompleteResolvesSessionAndDelegationScopes(t *testing.T) {
 		testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "insert worker with delegation_id", err)
 
-	ingestBytes, err := json.Marshal([]api.SecurityFinding{{
-		RuleID:       "rule-1",
-		Level:        api.FindingLevelMedium,
-		Message:      "issue",
-		Locations:    []api.SecurityFindingLocation{{URI: "main.go", StartLine: 3}},
-		Fingerprints: api.SecurityFindingFingerprints{Primary: "fp-session-1"},
-		Tool:         api.ToolDescriptor{DriverID: "semgrep", Name: "Semgrep"},
-	}})
+	ingestBytes, err := json.Marshal(map[string]any{
+		"findings": []api.SecurityFinding{{
+			RuleID:       "rule-1",
+			Level:        api.FindingLevelMedium,
+			Message:      "issue",
+			Locations:    []api.SecurityFindingLocation{{URI: "main.go", StartLine: 3}},
+			Fingerprints: api.SecurityFindingFingerprints{Primary: "fp-session-1"},
+			Tool:         api.ToolDescriptor{DriverID: "semgrep", Name: "Semgrep"},
+		}},
+	})
 	testutil.FailErr(t, "marshal ingest findings", err)
 
 	for _, tc := range []struct {
