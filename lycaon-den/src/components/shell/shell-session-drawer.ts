@@ -14,15 +14,21 @@ import type { ShellPaneVisibility } from "./shell-pane-visibility.ts";
 import type { ShellScope } from "./shell-scope.ts";
 import type { ShellSearchNavigation } from "./shell-search-navigation.ts";
 
-type WorkerDrawerDependencies = Pick<ShellScope, "appStore" | "recents" | "activeChat">
+type SessionDrawerDependencies = Pick<ShellScope, "appStore" | "recents" | "activeChat">
   & Pick<ShellPaneVisibility, "revealConversation"> & Pick<SessionNavigation, "resumeSession">
   & Pick<ShellSearchNavigation, "navigateFromSearch" | "revealFromSearch">;
 
-export type ShellWorkerDrawer = ReturnType<typeof createShellWorkerDrawer>;
+/** What the session drawer shows. */
+export type SessionDrawerContent = "worklog" | "worker";
 
-export function createShellWorkerDrawer({ appStore, recents, activeChat,
-  revealConversation, resumeSession, navigateFromSearch, revealFromSearch }: WorkerDrawerDependencies) {
-  const [workersOpen, setWorkersOpen] = createSignal(false);
+export type ShellSessionDrawer = ReturnType<typeof createShellSessionDrawer>;
+
+/** The active session's drawer: its worklog or one worker, beside whichever column is on screen. */
+export function createShellSessionDrawer({ appStore, recents, activeChat,
+  revealConversation, resumeSession, navigateFromSearch, revealFromSearch }: SessionDrawerDependencies) {
+  const [drawerContent, setDrawerContent] = createSignal<SessionDrawerContent | null>(null);
+  const workersOpen = () => drawerContent() === "worker";
+  const worklogOpen = () => drawerContent() === "worklog";
   const [selectedWorkerId, setSelectedWorkerId] = createSignal<string | null>(
     null,
   );
@@ -31,7 +37,7 @@ export function createShellWorkerDrawer({ appStore, recents, activeChat,
   const observeActiveChat = () => createEffect(() => {
     activeChat()?.sessionId;
     flushWorkerTranscriptCoalesce(appStore);
-    setWorkersOpen(false);
+    setDrawerContent(null);
     setSelectedWorkerId(null);
     setWorkerDrawerFocus(null);
   });
@@ -39,7 +45,7 @@ export function createShellWorkerDrawer({ appStore, recents, activeChat,
   const openWorkers = (workerId?: string, opts?: OpenWorkerOptions) => {
     const chat = activeChat();
     if (!chat) return;
-    setWorkersOpen(true);
+    setDrawerContent("worker");
     setWorkerDrawerFocus(opts?.scrollTo === "evidence" ? "evidence" : null);
     if (workerId) {
       setSelectedWorkerId(workerId);
@@ -89,8 +95,12 @@ export function createShellWorkerDrawer({ appStore, recents, activeChat,
     });
   };
 
-  const closeWorkers = () => {
-    setWorkersOpen(false);
+  const openWorklog = () => {
+    if (activeChat()) setDrawerContent("worklog");
+  };
+
+  const closeDrawer = () => {
+    setDrawerContent(null);
   };
 
   const revealInTranscript = (projectId: string | null, target: TranscriptRevealTarget) => {
@@ -124,8 +134,8 @@ export function createShellWorkerDrawer({ appStore, recents, activeChat,
   };
 
   return {
-    workersOpen, selectedWorkerId, workerDrawerFocus, observeActiveChat,
-    openWorkers, closeWorkers, openNotificationSession, revealInTranscript,
+    drawerContent, workersOpen, worklogOpen, selectedWorkerId, workerDrawerFocus, observeActiveChat,
+    openWorkers, openWorklog, closeDrawer, openNotificationSession, revealInTranscript,
     acknowledgeDrawerFocus: () => setWorkerDrawerFocus(null)
   };
 }

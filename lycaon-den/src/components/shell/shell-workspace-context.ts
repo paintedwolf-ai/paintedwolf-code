@@ -16,7 +16,6 @@ import { type StageBack } from "./StageBackChip.tsx";
 import { type Nav, type ShellNav, type ShellNavigation } from "./shell-navigation-state.ts";
 import { type ShellPaneVisibility } from "./shell-pane-visibility.ts";
 import { type ShellScope } from "./shell-scope.ts";
-import { type ShellWorkerDrawer } from "./shell-worker-drawer.ts";
 
 /** Full-stage panels outside the stage registry, as workspace contexts. */
 const SHELL_PANEL_CONTEXTS: Record<
@@ -38,7 +37,7 @@ const SHELL_PANEL_CONTEXTS: Record<
 
 type WorkspaceContextDependencies = Pick<ShellScope, "activeProjectId" | "activeChat" | "nav" | "setNav" | "splitLive">
   & Pick<ShellNavigation, "routedReturn"> & Pick<ShellPaneVisibility, "showConversation">
-  & Pick<ShellWorkerDrawer, "closeWorkers"> & {
+  & {
   presentedChat: () => ActiveChat | null;
   projectPresentation: () => ProjectPresentation;
   conversationShown: () => boolean;
@@ -57,7 +56,7 @@ type WorkspaceContextDependencies = Pick<ShellScope, "activeProjectId" | "active
 export function createShellWorkspaceContext({ activeProjectId, presentedChat,
   activeChat, projectPresentation, conversationShown, splitColumns,
   stageColumnStageId, stageSurfaceShown, nav, setNav, routedReturn, splitLive,
-  showConversation, splitFitClaim, stageHandoff, closeWorkers, reopenFiles }: WorkspaceContextDependencies) {
+  showConversation, splitFitClaim, stageHandoff, reopenFiles }: WorkspaceContextDependencies) {
   const stageWorkspaceContext = (stageId: ContextNavItemId): WorkspaceContext => {
     const projectId = activeProjectId();
     return { kind: "stage", ...(projectId ? { projectId } : {}), stageId };
@@ -173,7 +172,6 @@ export function createShellWorkspaceContext({ activeProjectId, presentedChat,
     const entry = sourceReturn();
     if (!entry || entry.projectId !== activeProjectId()) return null;
     return { label: `Back to ${entry.path}:${entry.line}`, onBack: () => {
-      closeWorkers();
       void returnToSource().then(opened => { if (opened) reopenFiles(); });
     }, testId: "line-facts-back" };
   };

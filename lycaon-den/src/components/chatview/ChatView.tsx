@@ -6,9 +6,7 @@ import { getLycaonClient, noticeReporterFor } from "../../platform/connection/ap
 import { sessionScope } from "../../notices/notice-scope.ts";
 import { NoticeReporterProvider } from "../../notices/notice-reporter.tsx";
 import { ensureSessionChrome } from "../../chat/session/session-chrome.ts";
-import { WorklogPanel } from "../worklog/WorklogPanel.tsx";
 import { BlueprintReviewModal } from "../blueprint/BlueprintReviewModal.tsx";
-import { SessionWorkersDrawer } from "../worker/SessionWorkersDrawer.tsx";
 import { useChatTabChrome } from "../../chat/composer/chat-tab-chrome.tsx";
 import { isPendingSessionId } from "../../chat/session/session-scope.ts";
 import { setChatTabRailBindings } from "../../chat/composer/chat-tab-rail-bindings.ts";
@@ -16,8 +14,6 @@ import { createChatBlueprintState } from "../blueprint/chat-blueprint-state.ts";
 import { createChatTabsState } from "./chat-tabs.ts";
 import { createChatWorkflowState } from "./chat-workflow-state.ts";
 import { createQueueController } from "./queue-controller.ts";
-import { consumeOpenWorklog } from "../../search/search-nav.ts";
-import { createWorklogPanelState } from "../worklog/worklog-panel-state.ts";
 import { SessionRecoverDialog } from "../transcript/SessionRecoverDialog.tsx";
 import { createInvocationLiveToolRecording } from "../../chat/visual/invocation-live-tool-recording.ts";
 import type { ChatViewProps } from "./chat-view-props.ts";
@@ -44,7 +40,7 @@ export function ChatView(props: ChatViewProps) {
     noticeReporterFor(sessionScope(props.projectId, props.sessionId));
 
   const activity = createChatViewActivity(props);
-  const { offline, workers, chatLive, board, catalogRun, currentProject } = activity;
+  const { offline, chatLive, catalogRun, currentProject } = activity;
 
   const tabs = createChatTabsState({
     chrome,
@@ -55,24 +51,12 @@ export function ChatView(props: ChatViewProps) {
     offline,
   });
 
-  const worklog = createWorklogPanelState({
-    appStore: props.appStore,
-    sessionId: () => props.sessionId,
-    offline,
-  });
-
   createInvocationLiveToolRecording({
     sessionId: () => props.sessionId?.trim() ?? "",
     getClient: () => getLycaonClient(),
     isActive: () =>
       Boolean(props.sessionId?.trim()) &&
       !isPendingSessionId(props.sessionId?.trim() ?? ""),
-  });
-
-  createEffect(() => {
-    if (consumeOpenWorklog()) {
-      worklog.open();
-    }
   });
 
   createEffect(() => {
@@ -202,9 +186,6 @@ export function ChatView(props: ChatViewProps) {
           onJumpToRun: (run) => workflow.bindJumpToRun(run),
         },
         git: gitBinding(),
-        onOpenWorklog: () => worklog.open(),
-        onCloseWorklog: () => worklog.close(),
-        worklogOpen: worklog.isOpen,
         onCancelWorker: cancelWorker,
         cancellingWorkerId,
       },
@@ -220,10 +201,6 @@ export function ChatView(props: ChatViewProps) {
       <section
         class="den-chat"
         aria-label="Chat"
-        classList={{
-          "den-chat--context-drawer-open":
-            worklog.isOpen() || props.workersDrawerOpen === true,
-        }}
         data-testid="chat-view"
         ref={setChatRootEl}
       >
@@ -239,31 +216,6 @@ export function ChatView(props: ChatViewProps) {
             </p>
           </div>
         </Show>
-        <WorklogPanel
-          open={worklog.isOpen()}
-          findings={props.appStore.state.findings}
-          board={board()}
-          workers={workers()}
-          messages={props.appStore.state.messages}
-          pendingCheckpoints={props.appStore.state.pendingCheckpoints}
-          onOpenWorkerCheckpoint={(workerId) => {
-            worklog.close();
-            props.onOpenWorker(workerId);
-          }}
-          onClose={() => worklog.close()}
-        />
-        <SessionWorkersDrawer
-          appStore={props.appStore}
-          projects={props.projects.state.projects}
-          projectDir={props.projectDir}
-          sessionId={props.sessionId}
-          open={props.workersDrawerOpen === true}
-          selectedId={props.selectedWorkerId ?? null}
-          scrollToFocus={props.workerDrawerFocus}
-          onScrollToFocusHandled={props.onWorkerDrawerFocusHandled}
-          backgroundHydrate={props.workersBackgroundHydrate}
-          onClose={() => props.onWorkersClose?.()}
-        />
         <div class="den-chat-conversation">
           <ChatViewTranscript chat={props} activity={activity} viewport={viewport}
             runtime={transcript} workflow={workflow} blueprint={blueprint}

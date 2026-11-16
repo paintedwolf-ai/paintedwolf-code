@@ -14,21 +14,6 @@
   --chat-fade-right-inset: calc(var(--chat-scrollbar-size) / 2);
 }
 
-/* An open drawer keeps transcript fades below tab chrome. */
-.den-shell-stage--chat
-  .den-shell-main
-  > .den-chat.den-chat--context-drawer-open {
-  position: static;
-  overflow: visible;
-  z-index: auto;
-}
-
-.den-shell-main:has(.den-chat--context-drawer-open) {
-  position: static;
-  overflow: visible;
-}
-
-
 @utility den-chat-composer-dock {
 position: relative;
   display: flex;

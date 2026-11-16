@@ -19,6 +19,7 @@ import type { StageEdgePanes } from "../nav/StageEdgeControls.tsx";
 import { StageTabRail } from "../nav/StageTabRail.tsx";
 import { ShowLatest } from "../primitives/ShowLatest.tsx";
 import { ResidentSurface } from "./ResidentSurface.tsx";
+import { SessionDrawer, type SessionDrawerProps } from "./SessionDrawer.tsx";
 import { ShellHeaderTitlebar } from "./ShellHeaderTitlebar.tsx";
 import { StageBackChip, type StageBack } from "./StageBackChip.tsx";
 import { StageErrorBoundary } from "./StageErrorBoundary.tsx";
@@ -48,6 +49,8 @@ export function ShellStageColumn(props: {
   workers: {
     selectedWorkerId: () => string | null;
     openWorkers: (workerId?: string, opts?: OpenWorkerOptions) => void;
+    worklogOpen: () => boolean;
+    openWorklog: () => void;
   };
   notifications: JSX.Element | null;
   waitingVisible: boolean;
@@ -67,6 +70,8 @@ export function ShellStageColumn(props: {
             sessionId={sessionId()}
             selectedWorkerId={props.workers.selectedWorkerId()}
             onOpenWorker={props.workers.openWorkers}
+            worklogOpen={props.workers.worklogOpen()}
+            onOpenWorklog={props.workers.openWorklog}
             openTab={props.sessionTabs.openTab()}
             onSelectTab={props.sessionTabs.selectTab}
             onShowConversation={props.sessionTabs.showConversation}
@@ -178,5 +183,19 @@ export function ShellChatColumn(props: {
         </For>
       </div>
     </>
+  );
+}
+
+type DrawerColumnProps = Omit<SessionDrawerProps, "sessionId"> & {
+  /** The session the drawer belongs to; none leaves the column empty. */
+  sessionId: string | undefined;
+};
+
+/** The session drawer's column, at the window edge the sidebar leaves free. */
+export function ShellDrawerColumn(props: DrawerColumnProps) {
+  return (
+    <ShowLatest when={props.sessionId} by={(sessionId) => sessionId}>
+      {(sessionId) => <SessionDrawer {...props} sessionId={sessionId()} />}
+    </ShowLatest>
   );
 }

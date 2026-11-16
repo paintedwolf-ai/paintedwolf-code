@@ -16,6 +16,38 @@
   animation: den-drawer-in var(--den-duration-drawer) var(--den-ease) both;
 }
 
+/* The session drawer's column: its own width when docked, over the columns otherwise. */
+.den-session-drawer {
+  position: relative;
+  flex: none;
+  width: 0;
+  min-height: 0;
+}
+
+.den-session-drawer[data-open][data-docked] {
+  width: 420px;
+}
+
+.den-session-drawer[data-open]:not([data-docked]) {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 100%);
+  z-index: var(--den-z-context-drawer);
+}
+
+.den-shell--orientation-mirrored .den-session-drawer[data-open]:not([data-docked]) {
+  right: auto;
+  left: 0;
+}
+
+/* A docked drawer is a column, so it neither slides in nor casts a shadow. */
+.den-session-drawer[data-docked] .den-context-drawer {
+  box-shadow: none;
+  animation: none;
+}
+
 .den-shell--orientation-mirrored .den-context-drawer {
   left: 0;
   right: auto;

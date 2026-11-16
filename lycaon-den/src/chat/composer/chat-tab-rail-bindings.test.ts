@@ -58,9 +58,6 @@ function makeBindings(sessionId = "s1"): ChatTabRailBindings {
       }),
       onUnbindWorktree: async () => {},
     },
-    onOpenWorklog: () => {},
-    onCloseWorklog: () => {},
-    worklogOpen: () => false,
     onCancelWorker: () => {},
     cancellingWorkerId: () => null,
   };

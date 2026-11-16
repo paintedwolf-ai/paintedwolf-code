@@ -1,6 +1,5 @@
-import { type Nav } from "./shell-navigation-state.ts";
 import { createShellOnboarding } from "./shell-onboarding.tsx";
-import { createShellWorkerDrawer } from "./shell-worker-drawer.ts";
+import { createShellSessionDrawer } from "./shell-session-drawer.ts";
 import { createShellPaneVisibility } from "./shell-pane-visibility.ts";
 import { type ShellScope } from "./shell-scope.ts";
 import { type LycaonClient } from "../../api/client.ts";
@@ -36,7 +35,6 @@ import {
 import { VerifyTestNudge } from "../VerifyTestNudge.tsx";
 import { ChromeDragSurface } from "./ChromeDragSurface.tsx";
 import { WindowControls } from "./WindowControls.tsx";
-import { ContextDrawerHost } from "./ContextDrawer.tsx";
 import {
   SessionProtectionBanners,
   sessionProtectionPresent,
@@ -54,13 +52,11 @@ type Props = Pick<ShellScope, "shell" | "appStore" | "recents" | "projects"> & {
   settingsStore: SettingsStore;
   costStore: CostStore;
   notices: NoticeStore;
-  workerDrawer: Pick<
-    ReturnType<typeof createShellWorkerDrawer>,
+  sessionDrawer: Pick<
+    ReturnType<typeof createShellSessionDrawer>,
     | "selectedWorkerId"
-    | "workersOpen"
-    | "workerDrawerFocus"
-    | "closeWorkers"
-    | "acknowledgeDrawerFocus"
+    | "worklogOpen"
+    | "openWorklog"
     | "openWorkers"
   >;
   panes: Pick<
@@ -78,7 +74,6 @@ type Props = Pick<ShellScope, "shell" | "appStore" | "recents" | "projects"> & {
   actions: ShellChatActions;
   onboarding: Pick<ReturnType<typeof createShellOnboarding>, "showNoProviderBanner" | "providerGap">;
   projectDirForChat: () => string;
-  nav: () => Nav;
   splitLive: () => boolean;
   notificationStack: () => JSX.Element;
   showPromoteNudge: () => boolean;
@@ -97,7 +92,6 @@ export function ChatWorkspace(props: Props) {
   const layer = props;
   const {
     projectDirForChat,
-    nav,
     splitLive,
     notificationStack,
     showPromoteNudge,
@@ -108,12 +102,10 @@ export function ChatWorkspace(props: Props) {
   } = props;
   const {
     selectedWorkerId,
-    workersOpen,
-    workerDrawerFocus,
-    closeWorkers,
-    acknowledgeDrawerFocus,
+    worklogOpen,
+    openWorklog,
     openWorkers,
-  } = props.workerDrawer;
+  } = props.sessionDrawer;
   const {
     chatHeaderLeadsWindow,
     windowNavCollapsed,
@@ -313,11 +305,6 @@ export function ChatWorkspace(props: Props) {
         surfaceActive={body.surfaceActive()}
         servesSessionTabs={props.sessionPresented()}
         selectedWorkerId={selectedWorkerId()}
-        workersDrawerOpen={body.surfaceActive() && workersOpen()}
-        workerDrawerFocus={workerDrawerFocus()}
-        workersBackgroundHydrate={nav() === "projects"}
-        onWorkersClose={closeWorkers}
-        onWorkerDrawerFocusHandled={acknowledgeDrawerFocus}
         onOpenWorker={openWorkers}
         onOpenFiles={props.onOpenFiles}
         onSend={sendPrompt}
@@ -335,7 +322,6 @@ export function ChatWorkspace(props: Props) {
     const dock = chatTopDock(layer.chat);
     return (
     <ChatTabChromeProvider sessionKey={layer.chat.sessionId}>
-      <ContextDrawerHost>
         <div
           class="den-shell-stage--chat den-shell-stage"
           classList={{
@@ -358,6 +344,8 @@ export function ChatWorkspace(props: Props) {
               sessionId={layer.chat.sessionId}
               selectedWorkerId={selectedWorkerId()}
               onOpenWorker={openWorkers}
+              worklogOpen={worklogOpen()}
+              onOpenWorklog={openWorklog}
               navCollapsed={
                 windowNavCollapsed() && (navTouchesChat() || splitLive())
               }
@@ -380,7 +368,6 @@ export function ChatWorkspace(props: Props) {
             </StageErrorBoundary>
           </main>
         </div>
-      </ContextDrawerHost>
     </ChatTabChromeProvider>
     );
   }

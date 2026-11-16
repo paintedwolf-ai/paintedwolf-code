@@ -11,12 +11,11 @@ import { StageTabRail } from "./StageTabRail.tsx";
 const claim = {};
 
 function mountRail(openTab: TabId | null) {
-  const order: string[] = [];
-  const onOpenWorklog = vi.fn(() => order.push("worklog"));
-  const onShowConversation = vi.fn(() => order.push("conversation"));
+  const onOpenWorklog = vi.fn();
+  const onShowConversation = vi.fn();
   const onSelectTab = vi.fn();
   setChatTabRailBindings(
-    { sessionId: "s1", onOpenWorklog, worklogOpen: () => false } as unknown as ChatTabRailBindings,
+    { sessionId: "s1" } as unknown as ChatTabRailBindings,
     claim,
   );
   render(() => (
@@ -25,12 +24,14 @@ function mountRail(openTab: TabId | null) {
       sessionId="s1"
       selectedWorkerId={null}
       onOpenWorker={() => {}}
+      worklogOpen={false}
+      onOpenWorklog={onOpenWorklog}
       openTab={openTab}
       onSelectTab={onSelectTab}
       onShowConversation={onShowConversation}
     />
   ));
-  return { order, onSelectTab, onShowConversation };
+  return { onSelectTab, onShowConversation, onOpenWorklog };
 }
 
 describe("StageTabRail", () => {
@@ -45,10 +46,11 @@ describe("StageTabRail", () => {
     expect(onSelectTab).toHaveBeenCalledWith("git");
   });
 
-  it("puts the conversation on screen before opening the worklog in it", () => {
-    const { order } = mountRail("progress");
+  it("opens the worklog drawer and leaves the conversation off screen", () => {
+    const { onOpenWorklog, onShowConversation } = mountRail("progress");
     fireEvent.click(screen.getByTestId("worklog-open"));
-    expect(order).toEqual(["conversation", "worklog"]);
+    expect(onOpenWorklog).toHaveBeenCalledOnce();
+    expect(onShowConversation).not.toHaveBeenCalled();
   });
 
   it("leaves the conversation off screen for the stage's own panel", () => {

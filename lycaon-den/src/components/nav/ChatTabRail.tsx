@@ -23,6 +23,8 @@ export type ChatTabRailProps = {
   sessionId: string;
   selectedWorkerId?: string | null;
   onOpenWorker: (workerId?: string, opts?: OpenWorkerOptions) => void;
+  worklogOpen: boolean;
+  onOpenWorklog: () => void;
   navCollapsed?: boolean;
   navAutomaticallyCollapsed?: boolean;
   /** Rendered in split chat, but CSS reveals it only when the stage yields. */
@@ -56,6 +58,8 @@ export function ChatTabRail(props: ChatTabRailProps) {
     sessionId: () => props.sessionId,
     selectedWorkerId: () => props.selectedWorkerId ?? null,
     onOpenWorker: (workerId, opts) => props.onOpenWorker(workerId, opts),
+    worklogOpen: () => props.worklogOpen,
+    onOpenWorklog: () => props.onOpenWorklog(),
   });
   // Holds only across a read in flight; an unstarted read cannot hold the surface.
   usePresentationParticipant(

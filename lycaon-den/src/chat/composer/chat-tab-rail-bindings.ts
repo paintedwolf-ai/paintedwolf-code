@@ -57,10 +57,6 @@ export type ChatTabRailBindings = {
   sessionId: string;
   workflows: ChatTabWorkflowsBinding;
   git: ChatTabGitBinding;
-  onOpenWorklog: () => void;
-  /** Called by the shell's Escape handler. */
-  onCloseWorklog: () => void;
-  worklogOpen: Accessor<boolean>;
   onCancelWorker: (workerId: string) => void;
   /** Worker awaiting cancellation acknowledgement. */
   cancellingWorkerId: Accessor<string | null>;

@@ -19,7 +19,7 @@ afterEach(() => resetLayoutForTests());
 
 function panes(orientation: WorkspaceOrientation, splitOrder: SplitOrder, hidden: boolean, opts?: {
   navCollapsed?: boolean; splitLive?: boolean; stageOccupied?: boolean; hiddenPane?: "stage" | "conversation";
-  viewportWidth?: number; fileWindow?: boolean;
+  viewportWidth?: number; fileWindow?: boolean; drawerOpen?: boolean;
 }) {
   resetAppStateSnapshotForTests({ ...EMPTY_APP_STATE_V1,
     layout: { workspaceOrientation: orientation, splitOrder, navCollapsed: opts?.navCollapsed ?? true,
@@ -32,7 +32,8 @@ function panes(orientation: WorkspaceOrientation, splitOrder: SplitOrder, hidden
     return createShellPaneVisibility({ windowSubject: opts?.fileWindow
       ? { kind: "file", projectId: "project", rootId: "root", path: "file.txt", viewId: "view" } : null, splitLive: () => opts?.splitLive ?? true,
       presentedSplitLive: () => opts?.splitLive ?? true, presentedStageId: () => "files",
-      stageColumnOccupied: () => opts?.stageOccupied ?? true });
+      stageColumnOccupied: () => opts?.stageOccupied ?? true,
+      sessionDrawerOpen: () => opts?.drawerOpen ?? false });
   });
   return { value, dispose };
 }
@@ -91,7 +92,8 @@ describe("window edge hosts", () => {
     syncLayoutFromSnapshot();
     setLayoutViewportWidth(2400);
     const value = createRoot(() => createShellPaneVisibility({ windowSubject: null, splitLive: () => true,
-      presentedSplitLive: () => true, presentedStageId: () => "files", stageColumnOccupied: () => true }));
+      presentedSplitLive: () => true, presentedStageId: () => "files", stageColumnOccupied: () => true,
+      sessionDrawerOpen: () => false }));
     expect(hosts(value)).toEqual([{ owner: "stage", narrow: "stage" }, { owner: "chat", narrow: "stage" }]);
     expect(value.windowEdgeClaims("chat")).toEqual([
       { side: "left", owner: false, narrow: false }, { side: "right", owner: true, narrow: false },
@@ -99,6 +101,26 @@ describe("window edge hosts", () => {
     expect(value.windowEdgeClaims("stage")).toEqual([
       { side: "left", owner: true, narrow: true }, { side: "right", owner: false, narrow: true },
     ]);
+  });
+
+  it("gives the open drawer the window edge the sidebar leaves free", () => {
+    const standard = panes("standard", "context-first", true, { drawerOpen: true });
+    expect(hosts(standard.value)).toEqual([{ owner: "stage", narrow: "stage" }, { owner: "drawer", narrow: "drawer" }]);
+    expect(standard.value.stageHeaderLeadsWindow()).toBe(true);
+    standard.dispose();
+    const mirrored = panes("mirrored", "context-first", true, { drawerOpen: true });
+    expect(hosts(mirrored.value)[0]).toEqual({ owner: "drawer", narrow: "drawer" });
+    expect(mirrored.value.stageHeaderLeadsWindow()).toBe(false);
+    mirrored.dispose();
+  });
+
+  it("docks the drawer only while the columns beside it keep their floors", () => {
+    const wide = panes("standard", "context-first", true, { viewportWidth: 2400 });
+    expect(wide.value.sessionDrawerDocked()).toBe(true);
+    wide.dispose();
+    const narrow = panes("standard", "context-first", true, { viewportWidth: 700 });
+    expect(narrow.value.sessionDrawerDocked()).toBe(false);
+    narrow.dispose();
   });
 
   it("gives the surviving column both edges when a split pane is hidden", () => {

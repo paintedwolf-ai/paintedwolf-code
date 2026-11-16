@@ -5,7 +5,7 @@ import { createShellResidency } from "./shell-residency.ts";
 import { createShellNavigationState, type Nav } from "./shell-navigation-state.ts";
 import { createShellOnboarding, ShellOnboardingGate } from "./shell-onboarding.tsx";
 import { createShellProjectNudges } from "./shell-project-nudges.ts";
-import { createShellWorkerDrawer } from "./shell-worker-drawer.ts";
+import { createShellSessionDrawer } from "./shell-session-drawer.ts";
 import { installShellNavigationSinks } from "./shell-navigation-sinks.ts";
 import { createShellSearchNavigation } from "./shell-search-navigation.ts";
 import { createShellSearchState } from "./shell-search-state.ts";
@@ -61,7 +61,7 @@ import { createProjectOpening } from "./project-opening.ts";
 import { ProjectLoadingStage } from "./ProjectLoadingStage.tsx";
 import { SplitDivider } from "./SplitDivider.tsx";
 import { StageSplitHost } from "./StageSplitHost.tsx";
-import { ShellChatColumn, ShellStageColumn } from "./ShellColumns.tsx";
+import { ShellChatColumn, ShellDrawerColumn, ShellStageColumn } from "./ShellColumns.tsx";
 import { WorkspaceOpeningVeil } from "./WorkspaceOpeningVeil.tsx";
 import { ChatWorkspace } from "./ChatWorkspace.tsx";
 import { WorkspaceStage } from "./WorkspaceStage.tsx";
@@ -119,6 +119,7 @@ export function Shell(props: ShellProps) {
     presentedSplitLive: () => presentedSplitLive(),
     stageColumnOccupied: () => showStageColumn(),
     presentedStageId: () => presentedStageColumn().stageId,
+    sessionDrawerOpen: () => sessionDrawer.drawerContent() != null,
   });
   const { windowNavUserCollapsed, windowNavCollapsed, navAutomaticallyCollapsed, navSlotWidthCss, showConversation, hideConversation, contextHidden, revealConversation, splitFitClaim, conversationHidden, stageIsLeading, stageHeaderLeadsWindow, stageEdges} = panes;
 
@@ -138,13 +139,13 @@ export function Shell(props: ShellProps) {
     observePresentation: observeProjectNudges } = createShellProjectNudges({
     ...scope, identityReady: () => identityReady(), windowNavCollapsed,
   });
-  const workerDrawer = createShellWorkerDrawer({
+  const sessionDrawer = createShellSessionDrawer({
     ...scope, revealConversation, resumeSession: (row, options) => resumeSession(row, options),
     navigateFromSearch: (target) => navigateFromSearch(target),
     revealFromSearch: (reveal, projectId, sessionId) => revealFromSearch(reveal, projectId, sessionId),
   });
   const { observeActiveChat,
-    openWorkers, closeWorkers, openNotificationSession, revealInTranscript} = workerDrawer;
+    openWorkers, closeDrawer, openNotificationSession, revealInTranscript} = sessionDrawer;
   const { modelsChecked, showOnboardingGate, suppressShellForFirstRun,
     providerGap, showNoProviderBanner, observeProviders, observeBootFallback } =
     createShellOnboarding(props.appStore, props.projects, props.settingsStore);
@@ -185,7 +186,7 @@ export function Shell(props: ShellProps) {
   const { navigateFromSearch, revealFromSearch, crossbarGotoTargets, navigateFromCrossbarGoto } = createShellSearchNavigation({
     ...scope, closeSearch, closeLauncher: () => setLauncherOpen(false),
     openProject: (id) => openProject(id), resumeSession: (row, options) => resumeSession(row, options),
-    openWorkers, attentionIndex, securityScannersFeatureOn, routeToStage, selectSettingsSection, openSettings,
+    openWorkers, openWorklog: () => sessionDrawer.openWorklog(), attentionIndex, securityScannersFeatureOn, routeToStage, selectSettingsSection, openSettings,
     openStageWithPlacement: (stage, arrival) => openStageWithPlacement(stage, arrival),
     openConfiguration: () => openConfiguration(), goHome: () => goHome(),
   });
@@ -240,7 +241,7 @@ export function Shell(props: ShellProps) {
 
   onMount(() => {
     onCleanup(registerShellDismissCommand({
-      ...scope, ...search, ...navigation, ...workerDrawer, stageTabs, layoutTrigger: () => layoutTriggerEl,
+      ...scope, ...search, ...navigation, ...sessionDrawer, stageTabs, layoutTrigger: () => layoutTriggerEl,
     }));
     registerShellCommands({
       ...scope, ...search, ...panes, ...sessionNavigation, openSettings, stopChat, applyStagePlacement, stageColumnStageId,
@@ -420,7 +421,7 @@ export function Shell(props: ShellProps) {
     undefined;
 
   const { backFor, sourceBack, titlebarBack, stageBack, stageTabs } = createShellWorkspaceContext({
-    ...scope, routedReturn, showConversation, splitFitClaim, closeWorkers, presentedChat,
+    ...scope, routedReturn, showConversation, splitFitClaim, presentedChat,
     projectPresentation, conversationShown, splitColumns, stageColumnStageId, stageHandoff,
     stageSurfaceShown: () => showStageColumn() && !stageOpeningOverChat(),
     reopenFiles: () => openStageWithPlacement("files", "routed"),
@@ -585,7 +586,7 @@ export function Shell(props: ShellProps) {
             back={titlebarBack()}
             edges={stageEdges(conversationAttention())}
             windowEdges={panes.windowEdgeClaims("stage")}
-            appStore={props.appStore} sessionTabs={stageTabs} workers={workerDrawer}
+            appStore={props.appStore} sessionTabs={stageTabs} workers={sessionDrawer}
             notifications={showHome() ? notificationStack() : null}
             waitingVisible={!stageOpeningOverChat()}
             preparation={props.shell.state.activeProjectId ? workspacePreparation(props.shell.state.activeProjectId) : undefined}
@@ -621,10 +622,10 @@ export function Shell(props: ShellProps) {
               <ChatWorkspace
                 shell={props.shell} appStore={props.appStore} recents={props.recents} projects={props.projects}
                 settingsStore={props.settingsStore} costStore={props.costStore} notices={props.notices}
-                workerDrawer={workerDrawer} panes={panes}
+                sessionDrawer={sessionDrawer} panes={panes}
                 actions={{ sendPrompt, stopChat, resumeSpendLimitedChat }}
                 onboarding={{ showNoProviderBanner, providerGap }}
-                projectDirForChat={projectDirForChat} nav={nav} splitLive={splitLive}
+                projectDirForChat={projectDirForChat} splitLive={splitLive}
                 notificationStack={notificationStack} showPromoteNudge={showPromoteNudge}
                 showNoFolderBanner={showNoFolderBanner} onPromote={openMoveDialog}
                 dismissDraftPromoteBanner={dismissDraftPromoteBanner}
@@ -640,6 +641,14 @@ export function Shell(props: ShellProps) {
             )}
           </ShellChatColumn>
         }
+      />
+      <ShellDrawerColumn
+        appStore={props.appStore} projects={props.projects.state.projects} projectDir={projectDirForChat()}
+        sessionId={activeChat()?.sessionId} content={sessionDrawer.drawerContent()}
+        docked={panes.sessionDrawerDocked()} selectedWorkerId={sessionDrawer.selectedWorkerId()}
+        workerFocus={sessionDrawer.workerDrawerFocus()} onWorkerFocusHandled={sessionDrawer.acknowledgeDrawerFocus}
+        backgroundHydrate={nav() === "projects"} windowEdges={panes.windowEdgeClaims("drawer")}
+        onOpenWorker={openWorkers} onClose={closeDrawer}
       />
       <Show when={workspaceVeilKey()} keyed>
         <WorkspaceOpeningVeil visible={!workspaceRevealed()}>

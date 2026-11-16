@@ -48,10 +48,6 @@ describe("den-shell drawer layout contract", () => {
     expect(shellStyles).toMatch(
       /\.den-shell-stage--chat\s+\.den-shell-main\s+>\s+\.den-chat\s*\{[\s\S]*?z-index:\s*var\(--den-z-composer-dock\)[\s\S]*?overflow:\s*visible/,
     );
-    // Drawer-open chat stays below tab chrome.
-    expect(chatStyles).toMatch(
-      /\.den-shell-stage--chat[\s\S]*?>\s*\.den-chat\.den-chat--context-drawer-open\s*\{[\s\S]*?position:\s*static[\s\S]*?overflow:\s*visible[\s\S]*?z-index:\s*auto/,
-    );
     expect(shellStyles).toMatch(
       /\.den-shell-stage-host \.den-shell-main > \*\s*\{[\s\S]*?z-index:\s*var\(--den-z-content\)/,
     );
@@ -78,9 +74,6 @@ describe("den-shell drawer layout contract", () => {
     );
     expect(shellStyles).toMatch(
       /\.den-resident-surface--idle\s*\{[^}]*visibility:\s*hidden/,
-    );
-    expect(chatStyles).toMatch(
-      /\.den-shell-main:has\(\.den-chat--context-drawer-open\)\s*\{[\s\S]*?position:\s*static[\s\S]*?overflow:\s*visible/,
     );
     expect(drawerCss).toMatch(
       /\.den-shell--orientation-mirrored \.den-context-drawer\s*\{[\s\S]*?left:\s*0[\s\S]*?border-right:\s*1px solid var\(--den-line\)[\s\S]*?animation-name:\s*den-drawer-in-mirrored/,
@@ -462,21 +455,6 @@ describe("den-shell drawer layout contract", () => {
       /<BrowseOverflowMenu[\s\S]*?disabled=\{!canExportConversation\(\)\}/,
     );
     expect(runtime).toMatch(/usesCustomWindowChrome/);
-  });
-
-  it("session workers drawer lives in its conversation's ChatView", () => {
-    const shell = ["Shell.tsx", "WorkspaceSidebar.tsx", "ChatWorkspace.tsx"].map((file) => readSourceText(join(root, "components/shell", file), "utf8")).join("\n");
-    expect(shell).not.toMatch(/SessionWorkersDrawer/);
-    const chat = readSourceText(join(root, "components/chatview/ChatView.tsx"), "utf8");
-    expect(chat).toMatch(/SessionWorkersDrawer/);
-  });
-
-  it("Shell controls the workers drawer state while ChatView controls its placement", () => {
-    const shell = ["Shell.tsx", "WorkspaceSidebar.tsx", "ChatWorkspace.tsx"].map((file) => readSourceText(join(root, "components/shell", file), "utf8")).join("\n");
-    expect(shell).toMatch(/closeWorkers/);
-    expect(shell).toMatch(
-      /workersDrawerOpen=\{body\.surfaceActive\(\) && workersOpen\(\)\}/,
-    );
   });
 
   it("workers drawer renders WorkerTranscript", () => {

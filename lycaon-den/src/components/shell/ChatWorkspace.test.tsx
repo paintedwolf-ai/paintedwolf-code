@@ -53,8 +53,7 @@ function mountChat() {
   const [pending, setPending] = createSignal(false);
   const [presented, setPresented] = createSignal(true);
   const actions = { sendPrompt: vi.fn(async () => undefined), stopChat: vi.fn(async () => undefined), resumeSpendLimitedChat: vi.fn(async () => undefined) };
-  const workerDrawer = { selectedWorkerId: () => "worker", workersOpen: () => true, workerDrawerFocus: () => null,
-    closeWorkers: vi.fn(), acknowledgeDrawerFocus: vi.fn(() => null), openWorkers: vi.fn() };
+  const sessionDrawer = { selectedWorkerId: () => "worker", worklogOpen: () => true, openWorklog: vi.fn(), openWorkers: vi.fn() };
   const callbacks = { onPromote: vi.fn(), dismissDraftPromoteBanner: vi.fn(), dismissNoFolderBanner: vi.fn(),
     addFolderToActiveProject: vi.fn(async () => undefined), onOpenBudgets: vi.fn(), onOpenProviders: vi.fn(), onOpenTests: vi.fn(), onOpenFiles: vi.fn() };
   const notices = { index: () => new Map(), dismiss: vi.fn(), dismissScope: vi.fn() };
@@ -62,26 +61,26 @@ function mountChat() {
   render(() => <ChatWorkspace shell={shell} appStore={appStore} recents={{} as never} projects={{} as never}
     chat={{ projectId: "project", sessionId: "session" }} pending={pending} surfaceActive={active} sessionPresented={presented}
     settingsStore={settingsStore} costStore={{ state: { session: { estimated_nano_usd: 3e9 } } } as never} notices={notices as never}
-    actions={actions as never} workerDrawer={workerDrawer} panes={{ chatHeaderLeadsWindow: () => true, windowNavCollapsed: () => true,
+    actions={actions as never} sessionDrawer={sessionDrawer} panes={{ chatHeaderLeadsWindow: () => true, windowNavCollapsed: () => true,
       navTouchesChat: () => false, navAutomaticallyCollapsed: () => false, contextHidden: () => false, navSide: () => "left",
       showWindowNav, conversationSeam: () => false,
       windowEdgeClaims: () => [{ side: "right", owner: true, narrow: true }] } as never}
     onboarding={{ showNoProviderBanner: () => true, providerGap: () => "missing-provider" as never }}
-    projectDirForChat={() => "/garden"} nav={() => "projects"} splitLive={() => true} notificationStack={() => <div>Shared notice</div>}
+    projectDirForChat={() => "/garden"} splitLive={() => true} notificationStack={() => <div>Shared notice</div>}
     showPromoteNudge={() => true} showNoFolderBanner={() => true} {...callbacks} />);
-  return { appStore, settingsStore, actions, workerDrawer, callbacks, notices, setActive, setPending, setPresented, showWindowNav };
+  return { appStore, settingsStore, actions, sessionDrawer, callbacks, notices, setActive, setPending, setPresented, showWindowNav };
 }
 
 beforeEach(() => vi.clearAllMocks());
 describe("chat workspace composition", () => {
   it("preserves the chat and worker binding while visibility changes", () => {
-    const { setActive, setPending, workerDrawer, actions, showWindowNav } = mountChat();
+    const { setActive, setPending, sessionDrawer, actions, showWindowNav } = mountChat();
     expect(seams.chat.sessionId).toBe("session"); expect(seams.chat.projectId).toBe("project");
     expect(seams.chat.projectDir).toBe("/garden"); expect(seams.chat.hasInitialPrompt).toBe(true);
-    expect(seams.chat.workersDrawerOpen).toBe(true); expect(seams.chat.workersBackgroundHydrate).toBe(true);
     expect(seams.chat.onSend).toBe(actions.sendPrompt); expect(seams.chat.onStop).toBe(actions.stopChat);
-    expect(seams.chat.onOpenWorker).toBe(workerDrawer.openWorkers); expect(seams.chat.onWorkersClose).toBe(workerDrawer.closeWorkers);
-    setActive(false); expect(seams.chat.workersDrawerOpen).toBe(false); expect(seams.chat.surfaceActive).toBe(false);
+    expect(seams.chat.onOpenWorker).toBe(sessionDrawer.openWorkers);
+    expect(seams.rail.worklogOpen).toBe(true); expect(seams.rail.onOpenWorklog).toBe(sessionDrawer.openWorklog);
+    setActive(false); expect(seams.chat.surfaceActive).toBe(false);
     setPending(true); expect(document.querySelector('.den-shell-stage--chat')?.getAttribute("data-boot")).toBe("ready");
     expect(seams.rail.navCollapsed).toBe(true); expect(seams.rail.navSplitFallback).toBe(true);
     seams.rail.onNavExpand?.(); expect(showWindowNav).toHaveBeenCalledOnce();

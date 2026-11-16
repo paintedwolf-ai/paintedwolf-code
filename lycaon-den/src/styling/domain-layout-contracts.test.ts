@@ -178,9 +178,6 @@ describe("domain layout CSS contracts", () => {
       expect(shellCss).toMatch(
         /\.den-shell-header-chat\s*\{[\s\S]*?z-index:\s*var\(--den-z-chat-chrome\)/,
       );
-      expect(chatCss).not.toMatch(
-        /\.den-chat:not\(\.den-chat--context-drawer-open\)/,
-      );
     });
 
     it("ContextDrawer mounts in its host", () => {

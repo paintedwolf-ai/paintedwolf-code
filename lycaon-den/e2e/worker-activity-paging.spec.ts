@@ -192,7 +192,7 @@ webE2e.describe("worker activity paging", () => {
     await expectReadingRowHeldAcross(page, gates, "before", -2);
   });
 
-  webE2e("opens a worker from the stage title bar in the conversation it belongs to", async ({ page }) => {
+  webE2e("opens a worker drawer from the stage title bar with the conversation closed", async ({ page }) => {
     await installWorkerRoutes(page);
     await bootstrapChatSession(page);
     await page
@@ -204,8 +204,10 @@ webE2e.describe("worker activity paging", () => {
     await page.getByTestId("stage-tab-workers").click();
     const panel = page.getByTestId("stage-tabs-panel");
     await panel.getByTestId("workers-tab-row").first().getByRole("button").first().click();
-    await expect(page.getByTestId("chat-view")).toBeVisible();
     await expect(page.getByTestId("worker-activity")).toBeVisible();
-    await expect(page.getByTestId("stage-tabs")).toHaveCount(0);
+    await expect(page.getByTestId("worker-activity").locator("[data-worker-item-key]").first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId("chat-view")).toBeHidden();
+    await expect(page.getByTestId("files-tree")).toBeVisible();
+    await expect(page.getByTestId("stage-tab-workers")).toBeVisible();
   });
 });

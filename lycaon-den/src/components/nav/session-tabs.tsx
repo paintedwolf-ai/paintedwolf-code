@@ -28,6 +28,8 @@ export type SessionTabsOptions = {
   sessionId: Accessor<string>;
   selectedWorkerId: Accessor<string | null>;
   onOpenWorker: (workerId?: string, opts?: OpenWorkerOptions) => void;
+  worklogOpen: Accessor<boolean>;
+  onOpenWorklog: () => void;
   /** Runs before an action whose result appears in the conversation. */
   showConversation?: () => void;
 };
@@ -90,8 +92,8 @@ export function createSessionTabs(options: SessionTabsOptions): SessionTabs {
       contextPrompt={appStore.state.contextUsage?.prompt}
       contextWindow={appStore.state.contextUsage?.window}
       compactionThreshold={appStore.state.contextUsage?.compactionThreshold}
-      onOpenWorklog={inConversation(() => bindings()?.onOpenWorklog())}
-      worklogOpen={bindings()?.worklogOpen() === true}
+      onOpenWorklog={() => options.onOpenWorklog()}
+      worklogOpen={options.worklogOpen()}
     />
   );
 
@@ -163,7 +165,7 @@ export function createSessionTabs(options: SessionTabsOptions): SessionTabs {
       workers={workers()}
       pendingCheckpoints={appStore.state.pendingCheckpoints}
       selectedId={options.selectedWorkerId()}
-      onSelect={inConversation((id) => options.onOpenWorker(id))}
+      onSelect={(id) => options.onOpenWorker(id)}
       onCancel={(id) => bindings()?.onCancelWorker(id)}
       busyWorkerId={() => bindings()?.cancellingWorkerId() ?? null}
       verboseMode={verboseModePref()}

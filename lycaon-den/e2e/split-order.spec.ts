@@ -288,16 +288,42 @@ webE2e.describe("session tabs in the stage title bar", () => {
     await expect(stageTab(page, "progress")).toHaveAttribute("aria-expanded", "false");
   });
 
-  webE2e("the worklog opens in the conversation it belongs to", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+  webE2e("the worklog drawer opens beside the stage with the conversation closed", async ({ page }) => {
+    await page.setViewportSize({ width: 1500, height: 900 });
     await bootstrapChatSession(page);
     await openFiles(page);
 
     await stageTab(page, "progress").click();
     await stagePanel(page).getByTestId("worklog-open").click();
-    await expect(page.getByTestId("chat-view")).toBeVisible();
-    await expect(page.getByTestId("worklog-panel")).toBeVisible();
-    await expect(stageTabs(page)).toHaveCount(0);
+    const drawer = page.getByTestId("worklog-panel");
+    await expect(drawer).toBeVisible();
+    await expect(page.getByTestId("chat-view")).toBeHidden();
+    await expect(page.getByTestId("files-tree")).toBeVisible();
+    await expect(stageTab(page, "progress")).toBeVisible();
+
+    // The drawer has its own column: the stage ends where it begins.
+    const stage = await page.getByTestId("split-col-stage").boundingBox();
+    const box = await drawer.boundingBox();
+    expect(Math.abs(stage!.x + stage!.width - box!.x)).toBeLessThanOrEqual(1);
+
+    await page.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
+    await expect(page.getByTestId("files-tree")).toBeVisible();
+  });
+
+  webE2e("the drawer lies over the stage when the window has no room for its column", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await bootstrapChatSession(page);
+    await openFiles(page);
+    await page.setViewportSize({ width: 820, height: 800 });
+
+    await stageTab(page, "progress").click();
+    await stagePanel(page).getByTestId("worklog-open").click();
+    const drawer = page.getByTestId("worklog-panel");
+    await expect(drawer).toBeVisible();
+    const stage = await page.getByTestId("split-col-stage").boundingBox();
+    const box = await drawer.boundingBox();
+    expect(stage!.x + stage!.width - box!.x).toBeGreaterThan(100);
   });
 
   webE2e("arming a workflow shows it on the composer it arms", async ({ page }) => {

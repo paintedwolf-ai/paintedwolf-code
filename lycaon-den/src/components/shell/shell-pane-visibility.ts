@@ -39,10 +39,15 @@ type PaneVisibilityDependencies = {
   presentedStageId: () => ContextNavItemId | null;
   /** The stage column holds content; otherwise a lone column is the chat. */
   stageColumnOccupied: () => boolean;
+  /** The session drawer shows its worklog or a worker. */
+  sessionDrawerOpen: () => boolean;
 };
 
 /** A column whose title bar can draw one window edge's controls. */
-export type WindowEdgeHost = "nav" | "stage" | "chat";
+export type WindowEdgeHost = "nav" | "stage" | "chat" | "drawer";
+
+/** Width of the session drawer's column. */
+export const SESSION_DRAWER_WIDTH_PX = 420;
 
 /** Which column draws one window edge's controls now, and once the narrow band drops a split column. */
 export type WindowEdgeHosts = { owner: WindowEdgeHost; narrow: WindowEdgeHost };
@@ -51,7 +56,7 @@ export type ShellPaneVisibility = ReturnType<typeof createShellPaneVisibility>;
 
 /** Pane visibility shares width claims with the controls that reopen each pane. */
 export function createShellPaneVisibility({ windowSubject, splitLive, presentedSplitLive,
-  presentedStageId, stageColumnOccupied }: PaneVisibilityDependencies) {
+  presentedStageId, stageColumnOccupied, sessionDrawerOpen }: PaneVisibilityDependencies) {
   const [fileWindowNavCollapsed, setFileWindowNavCollapsed] = createSignal(
     windowSubject?.kind === "file",
   );
@@ -206,17 +211,31 @@ export function createShellPaneVisibility({ windowSubject, splitLive, presentedS
   const navTouchesChat = () => !presentedSplitLive() || contextHidden() || order().chatBesideNav;
   const navSide = () => order().navSide;
   const conversationSide = () => order().conversationSide;
+  /** The drawer sits at the window edge the sidebar leaves free. */
+  const sessionDrawerSide = () => (navSide() === "left" ? "right" : "left");
+  /** The drawer takes its own column while the columns beside it keep their floors; otherwise it lies over them. */
+  const sessionDrawerDocked = () => {
+    const columns = presentedSplitLive() && hiddenSplitPanePref() === null;
+    return layoutViewportWidthPx() >=
+      SESSION_DRAWER_WIDTH_PX +
+        (windowNavCollapsed() ? 0 : effectiveNavWidthPx()) +
+        responsiveStageFloorPx() +
+        (columns ? requestedChatWidthPx() : 0);
+  };
   /** Which column header sits under the overlay window controls. */
   const navLeadsWindow = () => navSide() === "left" && !windowNavCollapsed();
+  const drawerLeadsWindow = () => sessionDrawerOpen() && sessionDrawerSide() === "left";
   const stageHeaderLeadsWindow = () =>
-    !navLeadsWindow() &&
+    !navLeadsWindow() && !drawerLeadsWindow() &&
     (stageIsLeading() || conversationHidden() === "hidden");
   const chatHeaderLeadsWindow = () =>
-    !navLeadsWindow() && (!presentedSplitLive() || !stageIsLeading() || contextHidden());
+    !navLeadsWindow() && !drawerLeadsWindow() &&
+    (!presentedSplitLive() || !stageIsLeading() || contextHidden());
 
   /** The column against a window edge draws that edge's window controls. */
   const windowEdgeHosts = (edge: "left" | "right"): WindowEdgeHosts => {
     if (navSide() === edge && !windowNavCollapsed()) return { owner: "nav", narrow: "nav" };
+    if (sessionDrawerOpen() && sessionDrawerSide() === edge) return { owner: "drawer", narrow: "drawer" };
     if (!presentedSplitLive()) {
       const host = stageColumnOccupied() ? "stage" : "chat";
       return { owner: host, narrow: host };
@@ -282,6 +301,6 @@ export function createShellPaneVisibility({ windowSubject, splitLive, presentedS
     showContext, hideContext, toggleContext, contextHidden,
     conversationHidden, stageIsLeading, navTouchesChat, navSide, conversationSide,
     stageHeaderLeadsWindow, chatHeaderLeadsWindow, stageEdges, conversationSeam,
-    windowEdgeHosts, windowEdgeClaims,
+    windowEdgeHosts, windowEdgeClaims, sessionDrawerDocked,
   };
 }

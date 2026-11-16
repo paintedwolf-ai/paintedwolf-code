@@ -9,6 +9,8 @@ export type StageTabRailProps = {
   sessionId: string;
   selectedWorkerId: string | null;
   onOpenWorker: (workerId?: string, opts?: OpenWorkerOptions) => void;
+  worklogOpen: boolean;
+  onOpenWorklog: () => void;
   openTab: TabId | null;
   onSelectTab: (next: TabId | null) => void;
   /** Puts the conversation on screen for an action that continues there. */
@@ -22,6 +24,8 @@ export function StageTabRail(props: StageTabRailProps) {
     sessionId: () => props.sessionId,
     selectedWorkerId: () => props.selectedWorkerId,
     onOpenWorker: (workerId, opts) => props.onOpenWorker(workerId, opts),
+    worklogOpen: () => props.worklogOpen,
+    onOpenWorklog: () => props.onOpenWorklog(),
     showConversation: () => props.onShowConversation(),
   });
   return (

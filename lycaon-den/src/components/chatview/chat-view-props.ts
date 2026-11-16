@@ -3,7 +3,7 @@ import type { ProviderKindTemplate, ProviderMeta } from "../../api/types.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import type { createProjectsStore } from "../../store/projects-store.ts";
 import type { RecentsStore } from "../../store/recents-store.ts";
-import { type OpenWorkerOptions, type WorkerDrawerFocus } from "../../chat/worker/workers-model.ts";
+import { type OpenWorkerOptions } from "../../chat/worker/workers-model.ts";
 
 type ProjectsStore = ReturnType<typeof createProjectsStore>;
 
@@ -20,11 +20,6 @@ export type ChatViewProps = {
   /** This hidden chat still serves its session's tabs, shown in the stage title bar. */
   servesSessionTabs?: boolean;
   selectedWorkerId?: string | null;
-  workersDrawerOpen?: boolean;
-  workerDrawerFocus?: WorkerDrawerFocus;
-  workersBackgroundHydrate?: boolean;
-  onWorkersClose?: () => void;
-  onWorkerDrawerFocusHandled?: () => void;
   onOpenWorker: (workerId?: string, opts?: OpenWorkerOptions) => void;
   onOpenFiles: () => void;
   onSend: (
