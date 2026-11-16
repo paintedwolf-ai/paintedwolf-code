@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -72,7 +73,7 @@ exit "${PREFLIGHT_COMPATIBILITY_EXIT:-0}"
 func (f preflightFixture) run(t *testing.T, env []string, args ...string) ([]byte, error) {
 	t.Helper()
 	cmd := exec.CommandContext(t.Context(), "bash", append([]string{filepath.Join(f.root, "scripts", "release-preflight.sh")}, args...)...)
-	cmd.Env = append(f.env, env...)
+	cmd.Env = slices.Concat(f.env, env)
 	return cmd.CombinedOutput()
 }
 
@@ -85,7 +86,7 @@ func (f preflightFixture) recorded(t *testing.T, path string) string {
 	return string(raw)
 }
 
-// Static preflight judges source metadata alone: a defect in any one input fails it, and no mode but the corpus check builds.
+// Static preflight reads source alone: one bad input fails it, and only the corpus mode builds.
 func TestReleasePreflightStaticChecksSourceWithoutBuilding(t *testing.T) {
 	t.Parallel()
 	repo := contractcheck.RepoRoot(t)
