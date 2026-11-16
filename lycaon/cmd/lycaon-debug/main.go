@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-
 )
 
 const usage = `usage: lycaon-debug {eval|bundle-verify|authz|decide} …
