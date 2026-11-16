@@ -1,5 +1,5 @@
 import { createChatGitBinding } from "./chat-git-binding.ts";
-import { Show, createEffect, createSignal, onCleanup } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import { isBackendReachable } from "../../platform/connection/sidecar-status.ts";
 import { createTranscriptViewportController, registerTranscriptViewport, TranscriptViewportProvider } from "../../chat/stream/transcript-viewport.tsx";
 import { getLycaonClient, noticeReporterFor } from "../../platform/connection/app-connection.ts";
@@ -176,9 +176,11 @@ export function ChatView(props: ChatViewProps) {
 
   // Bindings belong to the resident layer that serves the session's tabs.
   const railBindingsClaim = {};
+  // One answer per change, so a showing chat does not re-claim over its successor.
+  const servesTabs = createMemo(() => surfaceActive() || props.servesSessionTabs === true);
 
   createEffect(() => {
-    if (!surfaceActive() && props.servesSessionTabs !== true) {
+    if (!servesTabs()) {
       setChatTabRailBindings(null, railBindingsClaim);
       return;
     }
