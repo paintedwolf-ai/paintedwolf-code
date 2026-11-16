@@ -87,7 +87,7 @@ Redaction metadata describes the current message copy. It does not accumulate ac
 
 ## Activity spans
 
-Assistant responses containing tool calls contribute tool cards, not assistant prose. The host projects their text and content parts out of transcript pages, message events, and stream replay while retaining the recorded response for model continuity and diagnostics. A mid-turn update is a separate `agent_note` row, which the host commits with its [published carrier](grounding.md#mid-turn-notes) before that batch's tools run, so it sits above their cards, running or settled; answers have no tool calls. Exempt speech (`evidence_optional`) shows as a note or answer with no evidence state. A stored `surface_note` call in an older session renders with the default tool card, beside its note row. User-visible tool arguments, including `wait.reason`, describe the requested work or dependency rather than execution modes or recovery mechanics.
+Assistant responses containing tool calls contribute tool cards, not assistant prose. The host projects their text and content parts out of transcript pages, message events, and stream replay while retaining the recorded response for model continuity and diagnostics. A mid-turn update is a separate `agent_note` row, which the host commits with its [published carrier](grounding.md#mid-turn-notes) before that batch's tools run, so it sits above their cards, running or settled; answers have no tool calls. Exempt speech (`evidence_optional`) shows as a note or answer with no evidence state. A stored `surface_note` call in an older session renders as an action card beside its note row. User-visible tool arguments, including `wait.reason`, describe the requested work or dependency rather than execution modes or recovery mechanics.
 
 Span membership ([`activity-span-model.ts`](../lycaon-den/src/chat/tool/activity-span-model.ts)): every visible non-worker tool call projects into an activity span, including a span of one call. Consecutive calls share a span when a persisted workflow run proves the relation. Outside a workflow, sibling calls from the same durable assistant row form one span in parent chat. In a worker transcript, consecutive tool-only turns share a span because the drawer already supplies the durable child-session boundary. Visible prose, user input, and any other transcript row end the span, and unrelated adjacent calls never merge merely because their headlines match.
 
@@ -97,7 +97,7 @@ A diff row names a whole-file change in words, **New file** or **Deleted file** 
 
 Worker dispatches stay outside activity spans. Adjacent dispatches, including a single one, render one always-open compact worker group. Each compact row retains its task identity, status, progress tracks, and independent worker-drawer action.
 
-**Decision rows.** The decision engine's receipts (`SessionTranscriptPage.turn_loads` and the `turn_load` event, keyed by the user message that opened the turn) draw inside the span of the assistant row that first called a tool in that turn, ahead of its tool rows ([`turn-load-rows.ts`](../lycaon-den/src/chat/turnload/turn-load-rows.ts)). For command activities, turn decisions appear through a Files link in the activity details. Other tool spans draw one turn-decision row naming the tools offered beyond the floor. Each row is a tool card whose tool is the engine's name, so it takes the same chrome, disclosure, and accordion as the call it stands in for, and it joins the span with the bookkeeping role and zero weight, so it never names the span's work. A row draws only beside work: an abstained receipt, a turn whose model never called a tool, and a turn with no receipt all draw nothing, and the transcript never says whether an engine was present; its availability is the `decision_engine` preflight probe ([Dependencies](dependencies.md#decision-model)). Request and lookup receipts draw no row of their own; the `request_tools` and `skills_read` cards state at their foot how the text was matched, and every card for a tool the decision offered, or a request loaded, states that at its foot ([`turn-load-facts.ts`](../lycaon-den/src/chat/turnload/turn-load-facts.ts)).
+**Decision rows.** The decision engine's receipts (`SessionTranscriptPage.turn_loads` and the `turn_load` event, keyed by the user message that opened the turn) draw inside the span of the assistant row that first called a tool in that turn, ahead of its tool rows ([`turn-load-rows.ts`](../lycaon-den/src/chat/turnload/turn-load-rows.ts)). For command activities, turn decisions appear through a Files link on the card. Other tool spans draw one turn-decision row naming the tools offered beyond the floor. Each row is a tool card whose tool is the engine's name, so it takes the same chrome, disclosure, and accordion as the call it stands in for, and it joins the span with the bookkeeping role and zero weight, so it never names the span's work. A row draws only beside work: an abstained receipt, a turn whose model never called a tool, and a turn with no receipt all draw nothing, and the transcript never says whether an engine was present; its availability is the `decision_engine` preflight probe ([Dependencies](dependencies.md#decision-model)). Request and lookup receipts draw no row of their own; the `request_tools` and `skills_read` cards state at their foot how the text was matched, and every card for a tool the decision offered, or a request loaded, states that at its foot ([`turn-load-facts.ts`](../lycaon-den/src/chat/turnload/turn-load-facts.ts)).
 
 **Phase notes.** A `workflow_explain` row is the host's note for a phase it holds ([Workflows § Explain notes](workflows.md#explain-notes)). It renders as its own chicklet with the tool chicklet's shell: status dot, the name "About this step", the note's summary as title, and a keyed disclosure that starts closed. Like any row that is not a tool call, it ends the span before it, which is where a phase begins. Its dot follows the run it names: running while the run holds the note's phase, an error when the run fails there, done otherwise. When the note names a full scan pass, the collapsed row counts the pass's finished scanners and the open body draws `ScanProgressList` from the folder's security overview, the same record the Security page reads. The note reads that overview only while its phase is held or its body is open, and polls it on the Security page's cadence while the pass can still move; once a newer full pass replaces its pass, it stops drawing bars rather than showing another pass's progress. When the note names topology stages, it reads their legs from the run's `ui.topology_legs`, which a `delegation` event refreshes, and draws one row per leg with what it waits on; no extra read is needed. Both kinds of progress render through `ProgressRows`, the primitive the Security page's rows use. Progress updates change widths and text, never the row's height. A newly written note is announced to assistive technology by its summary; notes loaded from history are not.
 
@@ -114,7 +114,24 @@ Activity-span principles:
 
 A large set of file folds may receive a manifest group. That is presentation over the same rows, not a new source of change history.
 
-**Tool rows.** Every row in a span shows a status dot, the action, the outcome on the right, and the disclosure mark; what the call targeted is spoken in the row's accessible name and shown when it opens. A tool card whose call submitted a command, or whose summary names a path, URL, or query, opens with that target in monospace with a copy action, ahead of any briefing; a command shown there is left out of the card's input facts and keeps its replacement marks. Skill, verdict, and turn-decision cards state their subject in their own bodies and open without a separate target. An index warming row reads Finished or Skipped, opens with its host and page counts, and opens and closes with the span's other rows.
+**Tool rows.** Every call except a worker dispatch draws one action card ([`ActionCard.tsx`](../lycaon-den/src/components/action/ActionCard.tsx)). The host composes its `ActionDescriptor` on read, and Den only lays it out and words its facts, so every family's card has the same shape:
+
+- **Row**: status dot, verb-first label, then the outcome built from the descriptor's row facts. What the call addressed is in the row's accessible name.
+- **Body**, in fixed order:
+  1. What ran, with copy and replacement marks, clamped to three lines (the Input record has all of it).
+  2. The summary box.
+  3. Up to four facts, in a fixed order: result, changed, found, took, steps, stopped by, network, worker, budget, process, captured, containment, loaded by.
+  4. A background process's live state, with Stop while it runs; it takes the place of the recorded process fact.
+  5. The network notice for exceptional egress.
+  6. A preview of up to four lines.
+  7. Any captured visual, one per folded call.
+  8. The redaction notice.
+  9. One records row: Input, Output, Receipt, Host decisions and Evidence, then the opener (file, terminal, Running or Search).
+  10. A foot line saying how the local AI bore on the call, when it did.
+
+The card uses the app font at the chat reading size; hierarchy comes from weight and colour, and literal text sits on an inset rather than in a code face.
+
+Calls that share a host fold key, such as one terminal or one open page, become one card on the first call's row with the step sequence as a fact. A command row merges its member activities. Until the host's descriptor arrives, for example for a command before its first activity, the card shows the catalog label and the call's title with no facts. An index warming row reads Finished or Skipped, opens with its host and page counts, and opens and closes with the span's other rows.
 
 ## Command activities
 
@@ -155,17 +172,7 @@ every offset after it, so either case shows the activity's subject instead, as
 does a call whose arguments were not kept inline. The command wraps to at most
 four lines; copying it copies all of it.
 
-An expanded activity uses one fixed order, omitting any part with nothing to
-show: the command; a purpose sentence when a briefing supplies one; a result
-line carrying only facts the row does not (exit status, lines of output, a host
-stop, an interruption); up to six lines of output, the tail for failures and
-refusals and the head otherwise; steps only when their settled states differ;
-one row per call for coalesced activities; facts that differ from a clean
-success; and one line of links to input, output, process output, receipts and
-host decisions in Files. The result line and output come from typed receipt
-facts, never from command text or output prose. Details use two text styles:
-interface text for sentences and labels, monospace for commands and output.
-Records load on demand in Files; details contain no record paging controls.
+An expanded activity is an action card: its descriptor comes from the activity's typed receipt facts (exit status, executions, failures, host stop, interruption, background job), never from command text or output prose. The preview reads up to four lines of output from the activity's execution receipts when the card opens: the end of a failure, refusal or running action, and the start otherwise. Records load on demand in Files; cards contain no record paging controls.
 
 The projection records each row's receipt scopes as it folds calls: a program
 and the host activity that produced the row, or the whole program when the
@@ -278,7 +285,7 @@ Reduced motion changes animation, not ordering or presence. A fullscreen or sour
 
 ### Chat detail documents in Files
 
-Tool cards keep their status, compact facts, and immediate actions in chat. Text panes that would otherwise scroll inside a card (output, oversized arguments, live process output, skill instructions and resource lists) open a read-only CodeMirror tab in Files ([`ChatContentPage.tsx`](../lycaon-den/src/files/components/ChatContentPage.tsx)). Links use ordinary interface typography and human-readable labels, and tool tabs use the standard Files chrome without an additional document header. The worker drawer renders the same tool cards with the same links; worker status, task context, coordination, evidence, and approval controls remain in the drawer, and their containing lists still require bounded rendering.
+Action cards keep their status, facts, and immediate actions in chat. Text that would otherwise scroll inside a card (output, oversized arguments, live process output, receipts) opens a read-only CodeMirror tab in Files ([`ChatContentPage.tsx`](../lycaon-den/src/files/components/ChatContentPage.tsx)). Links use ordinary interface typography and human-readable labels, and tool tabs use the standard Files chrome without an additional document header. The worker drawer renders the same tool cards with the same links; worker status, task context, coordination, evidence, and approval controls remain in the drawer, and their containing lists still require bounded rendering.
 
 The drawer's Activity rows scroll with the drawer, never in a box of their own, and page without controls. A worker transcript uses the chat's window: a live tail plus up to five older pages (`TRANSCRIPT_PAGE_BUDGET`), with the same two viewports of lookahead (`LOAD_MORE_VIEWPORTS`) starting each load. A reader who meets Activity from above reads it from its first row; the drawer hides rows until that page arrives rather than swapping them in under the reader. Reading down extends toward the tail and evicts the oldest pages; reading up reloads them. When evicted pages leave a gap before the live tail, Activity ends at the last contiguous row, and live rows arriving into the gap never evict the history being read. Rows loaded or evicted above the reader keep the row they are reading in place (`VirtualCardList` `keepReadingPosition`). Each section header sticks under the ones above it, and the last section fills the reading area below the header stack.
 

@@ -110,7 +110,7 @@ At the maximum text-size category (or the harness inject) and the Tauri minimum 
 - Text-bearing rows use `min-height` in `em`/`rem`, never a fixed `px` height.
 - A glyph sized from the type ladder sits in a `rem` box; a `px` box clips it.
 - Interactive controls have a hit target of at least 24×24 CSS px (WCAG 2.2 SC 2.5.8), growing with text via `em` when larger.
-- Tab chips, nav sessions, and tool card headers may grow vertically; prefer wrap or ellipsis over clip.
+- Tab chips, nav sessions, and action card headers may grow vertically; prefer wrap or ellipsis over clip. What ran clamps to three lines on the card; the Input record holds the full text.
 - The composer aligns `flex-end` with a textarea `min-height` in `em`.
 - Sticky shell and composer chrome must not obscure focused controls (WCAG 2.2 SC 2.4.11).
 - Forbidden fix: `overflow: hidden` on a row to hide clipped text instead of raising its min-height.

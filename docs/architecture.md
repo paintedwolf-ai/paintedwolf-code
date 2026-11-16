@@ -191,7 +191,7 @@ The host keeps authoritative facts separate from consumer views:
 |-------|------|----------|
 | **Facts** | What happened and what authority exists | Human/host utterance payloads, turn attempts, settled model outputs, tool receipts, worker attempts/results, workflow runs, evidence, approvals, findings |
 | **Ordered references** | Stable session narrative order without copying every resource | Typed `session_entries` pointing at transcript slots, model outputs, tool receipts, worker jobs, workflow facts, and host facts |
-| **Projections** | A bounded view for one consumer | Execution-backed message fields, model history, Den DTOs, worker cards, board state, search results |
+| **Projections** | A bounded view for one consumer | Execution-backed message fields, model history, Den DTOs, action card descriptors, worker cards, board state, search results |
 | **Caches** | Rebuildable acceleration | Source catalogs and structural analysis, web index, model and pricing feeds |
 
 The admitted turn head gives each session an explicit current execution identity. After post-turn hooks, the session owner seals its host-resolved closeout and finalizing recovery checkpoint in one transaction, so startup completes a sealed turn without another model request. The closeout is bound to its generating output, with host replacement recorded separately from model authorship; it survives host-only continuations and clears on new user admission. Offline consumers follow those identities rather than selecting a final answer by searching transcript rows.

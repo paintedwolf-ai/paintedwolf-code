@@ -36,6 +36,8 @@ Exact DTOs and routes belong to OpenAPI. Markdown explains how to use them:
 
 Den may keep bounded render caches. They are disposable projections and never the only copy of a host fact.
 
+Every tool call's action card is a UX projection of this kind. The host attaches an `ActionDescriptor` to calls, results and command activities when it projects them, and never stores it. The descriptor holds the label, status, what ran, typed facts, preview, records, opener and fold key. Den lays it out and words the facts; it does not derive them from output.
+
 ---
 
 ## 2. Prompt loop sequence
