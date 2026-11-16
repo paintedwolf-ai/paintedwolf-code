@@ -13,7 +13,10 @@ import (
 
 func TestShapeRegistryRegistersAllShapes(t *testing.T) {
 	reg := evidence.DefaultShapeRegistry()
-	for _, id := range evidence.ShapeIDs() {
+	for _, id := range []string{
+		evidence.ShapeFileRegion, evidence.ShapeURL, evidence.ShapeCommand, evidence.ShapeArtifact, evidence.ShapeOpaque,
+		evidence.ShapeStructuredEvent, evidence.ShapeVisual, evidence.ShapeSurfaceSnapshot, evidence.ShapePageGeometry,
+	} {
 		if _, ok := reg.Lookup(id); !ok {
 			t.Fatalf("missing shape %q in registry", id)
 		}

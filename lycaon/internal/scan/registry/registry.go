@@ -104,6 +104,14 @@ func New(ctx context.Context, opts Options) (*Impl, error) {
 	return newFromScannerConfig(ctx, cfg, opts, false)
 }
 
+// NewFromScannerConfig registers scanners from an already-loaded catalog.
+func NewFromScannerConfig(ctx context.Context, cfg *scancatalog.ScannerConfig, opts Options) (*Impl, error) {
+	if err := scancatalog.ValidateScannerConfig(cfg); err != nil {
+		return nil, err
+	}
+	return newFromScannerConfig(ctx, cfg, opts, true)
+}
+
 func newFromScannerConfig(ctx context.Context, cfg *scancatalog.ScannerConfig, opts Options, static bool) (*Impl, error) {
 	if strings.TrimSpace(opts.ModuleRoot) == "" {
 		return nil, fmt.Errorf("module root required")

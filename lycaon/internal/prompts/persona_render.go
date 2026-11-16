@@ -69,6 +69,9 @@ func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string
 	if !ok {
 		return nil, "", "", nil, fmt.Errorf("%w: persona contract: agent %q not in contract", ErrUnknownAgent, id)
 	}
+	if err := requireArchetypePartials(engine.Layers(), def.Archetype, cfg.Archetypes[def.Archetype]); err != nil {
+		return nil, "", "", nil, err
+	}
 	ref, err := TemplateRefForAgent(id)
 	if err != nil {
 		return nil, "", "", nil, err

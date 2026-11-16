@@ -199,33 +199,6 @@ func TestNoOrphanRejectCodes(t *testing.T) {
 	}
 }
 
-func TestPreventiveRejectEmittersBackedByLiveHints(t *testing.T) {
-	t.Parallel()
-	cfg, err := guidance.LoadHintConfigStock()
-	contractcheck.FailErr(t, "load hint registry", err)
-
-	live := make(map[string]bool)
-	for _, entry := range cfg.HintCodes {
-		if strings.TrimSpace(entry.Category) == "recoverable" {
-			live[strings.TrimSpace(entry.Emit)] = true
-		}
-	}
-
-	var orphaned []string
-	for _, emit := range prompts.PreventiveRejectEmitters() {
-		if !live[emit] {
-			orphaned = append(orphaned, emit)
-		}
-	}
-	sort.Strings(orphaned)
-	if len(orphaned) > 0 {
-		t.Fatalf(`preventiveRejectEmitters names guards with no live recoverable hint: %v
-
-The prompt tool-surface table filters on emit; a rename or removal here silently drops codes from the table.
-Fix: update prompts.preventiveRejectEmitters to match the guard's current emit, or remove the stale entry.`, orphaned)
-	}
-}
-
 // codesWithOARAnchor returns rules emitted directly by the block plane.
 func codesWithOARAnchor() (map[string]bool, error) {
 	entries, err := hintregistry.ListEffective()

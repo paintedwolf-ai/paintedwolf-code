@@ -60,7 +60,7 @@ func TestForcedFinalTurnKicksReadWhatCloseoutSends(t *testing.T) {
 	s.Closeout(t.Context(), &api.Session{ID: "parent"}, "coordinator", promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutLLMTimeout})
 	reference := regexp.MustCompile(`(?:\{\{\s*|\{%\s*if\s+)(\w+)`)
 	for _, stem := range []string{"coordinator-closeout", "coordinator-turn-closeout"} {
-		raw, _, err := prompts.DefaultBundledLayout().ReadBundled("guidance/" + stem + ".md")
+		raw, _, err := (prompts.BundledLayout{}).ReadBundled("guidance/" + stem + ".md")
 		testutil.FailErr(t, "prompts.DefaultBundledLayout failed", err)
 		reads := map[string]bool{}
 		for _, match := range reference.FindAllStringSubmatch(string(raw), -1) {

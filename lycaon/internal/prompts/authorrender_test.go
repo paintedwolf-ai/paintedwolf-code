@@ -3,13 +3,14 @@ package prompts
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/skills"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/skills"
 )
 
 func TestAuthorRender_BundledPartial(t *testing.T) {

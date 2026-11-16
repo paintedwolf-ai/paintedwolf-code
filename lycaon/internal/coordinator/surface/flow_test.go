@@ -290,7 +290,7 @@ func TestCoordinatorSurfaceModeRef_catalogSurfaces(t *testing.T) {
 func TestEveryCoordinatorSurfaceDeclaresResolvableMode(t *testing.T) {
 	catalog, err := surfacecatalog.Load()
 	testutil.FailErr(t, "load coordinator surfaces", err)
-	layout := prompts.DefaultBundledLayout()
+	layout := prompts.BundledLayout{}
 	for _, id := range catalog.SurfaceIDs() {
 		ref, err := CoordinatorSurfaceModeRef(id)
 		testutil.FailErr(t, "mode_ref for "+id, err)
@@ -305,7 +305,7 @@ func TestReviewAdjudicateUsesVerdictModeContract(t *testing.T) {
 	if len(profile.ModeRefs) != 1 || profile.ModeRefs[0] != "review-adjudicate" {
 		t.Fatalf("review profile mode_refs = %v", profile.ModeRefs)
 	}
-	body, _, err := prompts.DefaultBundledLayout().ReadBundled(ModeTemplateRef(profile.ModeRefs[0]))
+	body, _, err := (prompts.BundledLayout{}).ReadBundled(ModeTemplateRef(profile.ModeRefs[0]))
 	testutil.FailErr(t, "read review adjudicate mode", err)
 	text := string(body)
 	// Field and citation shapes come from the offered schema; the mode names the

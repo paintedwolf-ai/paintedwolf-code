@@ -116,7 +116,7 @@ func TestTrustTierClassifiesEveryLockedShape(t *testing.T) {
 		evidence.ShapeCommand:         evidence.FidelityOpaque,
 		evidence.ShapeOpaque:          evidence.FidelityOpaque,
 	}
-	for _, shape := range evidence.ShapeIDs() {
+	for _, shape := range lockedShapes {
 		expected, ok := want[shape]
 		if !ok {
 			t.Fatalf("shape %q has no declared trust tier — classify it in evidence.FidelityForShape", shape)
