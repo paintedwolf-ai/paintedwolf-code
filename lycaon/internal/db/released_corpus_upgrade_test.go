@@ -203,6 +203,7 @@ func sqliteShadowTable(table string) bool {
 // source_checkpoint_entries without a successor; checkpoints keep their
 // snapshot identity in source_checkpoints.
 var retiredByRegisteredSteps = map[string]string{
+	"live_model_outputs":        "",
 	"source_branch_heads":       "source_head_entries",
 	"source_checkpoint_entries": "",
 	"source_snapshot_chunks":    "source_manifest_layout",

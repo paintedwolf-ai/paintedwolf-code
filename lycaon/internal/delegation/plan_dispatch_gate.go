@@ -18,36 +18,6 @@ type WorkflowReadyChecker interface {
 	ImplementWorkflowReady(ctx context.Context, sessionID, blueprintPath string) (bool, error)
 }
 
-// PlanApprovalDispatchGate blocks dispatch until the linked plan is approved.
-type PlanApprovalDispatchGate struct {
-	Inner DispatchGate
-	Store Store
-	Plans PlanApprovalChecker
-}
-
-// Check allows dispatch when plan is approved or no plan is linked.
-func (g PlanApprovalDispatchGate) Check(ctx context.Context, delegationID, legID string) (bool, string, error) {
-	if g.Plans != nil && g.Store != nil {
-		delegation, err := g.Store.Get(ctx, delegationID)
-		if err != nil {
-			return false, "", err
-		}
-		if delegation != nil && strings.TrimSpace(delegation.BlueprintPath) != "" {
-			ok, err := g.Plans.IsApproved(ctx, delegation.ProjectID, delegation.BlueprintPath)
-			if err != nil {
-				return false, "", err
-			}
-			if !ok {
-				return false, "plan not approved", nil
-			}
-		}
-	}
-	if g.Inner == nil {
-		return true, "", nil
-	}
-	return g.Inner.Check(ctx, delegationID, legID)
-}
-
 // ImplementWorkflowDispatchGate blocks dispatch until plan approval and implement handoff are ready.
 type ImplementWorkflowDispatchGate struct {
 	Inner         DispatchGate

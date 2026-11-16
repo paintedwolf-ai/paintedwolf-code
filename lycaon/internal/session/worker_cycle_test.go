@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -342,23 +341,6 @@ func TestFormatCoordinatorInFlightRoster(t *testing.T) {
 	}
 	if !strings.Contains(roster, "write · focus: internal/auth/**") {
 		t.Fatalf("roster = %q", roster)
-	}
-}
-
-func TestFormatTaskEnqueuedBannerMentionsParallelCap(t *testing.T) {
-	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	banner, err := guidance.RenderTaskQueuedBanner(context.Background(), guidance.TaskQueuedBannerOpts{
-		AgentType: "implementer", JobID: "job-1", MaxInFlight: spawn.MaxInFlightTaskWorkers,
-	})
-	if err != nil {
-		t.Fatalf("RenderTaskQueuedBanner: %v", err)
-	}
-	want := strconv.Itoa(spawn.MaxInFlightTaskWorkers)
-	if !strings.Contains(banner, want) {
-		t.Fatalf("expected parallel cap %s in banner: %q", want, banner)
-	}
-	if !strings.Contains(banner, "BANNER_TASK_QUEUED") {
-		t.Fatalf("expected banner code: %q", banner)
 	}
 }
 

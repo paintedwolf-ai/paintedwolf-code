@@ -2,8 +2,9 @@ package delegation
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testdbseed"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -23,17 +24,18 @@ func (p planStub) IsApproved(_ context.Context, _, _ string) (bool, error) {
 	return p.approved, nil
 }
 
-func TestPlanApprovalDispatchGate(t *testing.T) {
+func TestImplementWorkflowDispatchGateRequiresApprovedPlan(t *testing.T) {
 	store := NewMemoryStore()
 	ctx := context.Background()
 	delegation := api.Delegation{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: t.TempDir(), Task: "t", BlueprintPath: "plan-1"}
 	leg := api.Leg{ID: "leg-1", Title: "t", Prompt: "t"}
 	created, err := store.Create(ctx, delegation, "sess", []api.Leg{leg})
 	testutil.FailErr(t, "create session in store", err)
-	gate := PlanApprovalDispatchGate{
-		Inner: AllowGate{},
-		Store: store,
-		Plans: planStub{approved: false},
+	gate := ImplementWorkflowDispatchGate{
+		Inner:         AllowGate{},
+		Store:         store,
+		Plans:         planStub{approved: false},
+		WorkflowReady: &workflowReadyStub{ready: true},
 	}
 	ok, reason, err := gate.Check(ctx, created.ID, leg.ID)
 	if err != nil || ok || reason != "plan not approved" {

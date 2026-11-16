@@ -26,13 +26,6 @@ type ResolvedAgentsMD struct {
 	Content string // empty when loaded index-only
 }
 
-// ResolveChain returns applicable AGENTS.md files for relPath under absRoot.
-// Order is root-first, nearest-last. Missing ancestor files are skipped.
-// When absRoot/<overlay>/AGENTS.md exists it is appended last (project overlay).
-func ResolveChain(absRoot string, relPath string) ([]ResolvedAgentsMD, error) {
-	return ResolveChainLimited(absRoot, relPath, DefaultAgentsMDInjectMaxBodyBytes)
-}
-
 // ResolveChainMetadata returns the runtime chain paths without reading bodies.
 func ResolveChainMetadata(absRoot string, relPath string) ([]ResolvedAgentsMD, error) {
 	chain, err := resolveChainWithinRoot(absRoot, relPath, false, DefaultAgentsMDInjectMaxBodyBytes)
@@ -41,24 +34,6 @@ func ResolveChainMetadata(absRoot string, relPath string) ([]ResolvedAgentsMD, e
 	}
 	overlayRel := settingsoverlay.Rel(protectedpath.AgentsMDFileName)
 	overlay, err := loadAgentsMDIfPresent(absRoot, overlayRel, false, DefaultAgentsMDInjectMaxBodyBytes)
-	if err != nil {
-		return nil, err
-	}
-	if overlay != nil && !chainHasPath(chain, overlay.Path) {
-		chain = append(chain, *overlay)
-	}
-	return chain, nil
-}
-
-// ResolveChainLimited returns the chain with bounded body reads.
-func ResolveChainLimited(absRoot string, relPath string, maxBodyBytes int) ([]ResolvedAgentsMD, error) {
-	maxBodyBytes = normalizeAgentsMDMaxBodyBytes(maxBodyBytes)
-	chain, err := resolveChainWithinRoot(absRoot, relPath, true, maxBodyBytes)
-	if err != nil {
-		return nil, err
-	}
-	overlayRel := settingsoverlay.Rel(protectedpath.AgentsMDFileName)
-	overlay, err := loadAgentsMDIfPresent(absRoot, overlayRel, true, maxBodyBytes)
 	if err != nil {
 		return nil, err
 	}
