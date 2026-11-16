@@ -291,9 +291,6 @@ func collectPreparedRootPaths(roots []adapter.PreparedRoot) []string {
 	return out
 }
 
-// ClassifyFailureReason returns the typed reason a claim or preparation error carries.
-func ClassifyFailureReason(err error) adapter.ReasonCode { return classifyClaimReason(err) }
-
 func classifyClaimReason(err error) adapter.ReasonCode {
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return adapter.ReasonContextCanceled
