@@ -91,7 +91,7 @@ func (q *sqlQueuePromotion) ListSessionPage(ctx context.Context, query SessionPa
 	}
 	tasks := make([]api.WorkerTask, 0, len(rows))
 	for _, row := range rows {
-		task, err := jobstate.FromRow(ctx, q.store.db, row)
+		task, err := q.store.jobs.FromRow(ctx, q.store.db, row)
 		if err != nil {
 			return SessionPage{}, err
 		}

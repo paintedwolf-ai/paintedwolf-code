@@ -156,7 +156,7 @@ func (s *Commands) CommitCommand(ctx context.Context, run *api.WorkflowRun, muta
 	}
 	if mutation.Workers != (runstate.WorkerMutation{}) {
 		// Publish worker events in the workflow transaction.
-		if err := jobstate.EnqueueRunJobEventsTx(ctx, tx, s.transactions.outbox, run.ID); err != nil {
+		if err := s.transactions.jobs.EnqueueRunJobEventsTx(ctx, tx, s.transactions.outbox, run.ID); err != nil {
 			return err
 		}
 	}

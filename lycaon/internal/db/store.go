@@ -21,6 +21,8 @@ const StoreShutdownFloor = 3 * time.Second
 // Handle is the durable-store interface used by repositories.
 type Handle interface {
 	DBTX
+	// DataDir is the configured directory of an on-disk store, and empty otherwise.
+	DataDir() string
 	BeginTx(context.Context, *sql.TxOptions) (*sql.Tx, error)
 	Close() error
 }
@@ -246,3 +248,5 @@ func (s *Store) Stats() StoreStats {
 	}
 	return out
 }
+
+func (s *Store) DataDir() string { return s.dataDir }

@@ -320,7 +320,7 @@ func (r *SQLDecisionResolver) resolve(ctx context.Context, expected api.WorkerDe
 		if err := queries.ClearWorkerOutcomeDelivery(ctx, jobID); err != nil {
 			return err
 		}
-		if err := jobstate.EnqueueJobEventTx(ctx, tx, r.queue.store.outbox, jobID); err != nil {
+		if err := r.queue.store.jobs.EnqueueJobEventTx(ctx, tx, r.queue.store.outbox, jobID); err != nil {
 			return err
 		}
 		return queries.DeleteWorkerDecision(ctx, childSessionID)

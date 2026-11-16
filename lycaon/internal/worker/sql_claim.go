@@ -93,7 +93,7 @@ func (s *SQLStore) claimJob(ctx context.Context, id string, req ClaimRequest, ma
 		if err != nil {
 			return err
 		}
-		task, err = jobstate.FromRow(ctx, tx, row)
+		task, err = s.jobs.FromRow(ctx, tx, row)
 		return err
 	})
 	if db.IsNoRows(claimErr) {

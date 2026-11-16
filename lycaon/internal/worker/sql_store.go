@@ -12,12 +12,13 @@ import (
 type SQLStore struct {
 	db      db.Handle
 	queries *db.Queries
+	jobs    jobstate.Reader
 	outbox  jobstate.JobEventOutbox
 }
 
 // NewSQLStore creates a worker job store.
 func NewSQLStore(database db.Handle) *SQLStore {
-	return &SQLStore{db: database, queries: db.New(database)}
+	return &SQLStore{db: database, queries: db.New(database), jobs: jobstate.NewReader(database)}
 }
 
 // SetEventOutbox makes a job transition and its wire event one commit.
@@ -31,7 +32,7 @@ func (s *SQLStore) emitJobTx(ctx context.Context, tx *sql.Tx, jobID string) erro
 	if s == nil {
 		return nil
 	}
-	return jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, jobID)
+	return s.jobs.EnqueueJobEventTx(ctx, tx, s.outbox, jobID)
 }
 
 func (s *SQLStore) notify() {

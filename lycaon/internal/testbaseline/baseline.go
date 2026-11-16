@@ -45,8 +45,7 @@ func FromFiles(t testing.TB, files map[string]File) string {
 
 func Durable(t testing.TB, database db.Handle, jobID, dir string) string {
 	t.Helper()
-	root, err := db.Directory(t.Context(), database)
-	testutil.FailErr(t, "resolve durable data directory", err)
+	root := DataDir(t, database)
 	store := workspacebaseline.New(database, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "worker-baselines"))
 	path, err := store.Capture(t.Context(), jobID, workspacebaseline.Branch(nil, dir))
 	testutil.FailErr(t, "capture durable baseline", err)
@@ -54,9 +53,11 @@ func Durable(t testing.TB, database db.Handle, jobID, dir string) string {
 }
 
 // DataDir resolves a fixture's installation root from its active database.
-func DataDir(t testing.TB, database db.DBTX) string {
+func DataDir(t testing.TB, database db.Handle) string {
 	t.Helper()
-	root, err := db.Directory(t.Context(), database)
-	testutil.FailErr(t, "resolve fixture installation", err)
+	root := database.DataDir()
+	if root == "" {
+		t.Fatal("fixture store has no data directory")
+	}
 	return root
 }
