@@ -110,8 +110,9 @@ Before allocating training resources, run `prepare.py --model MODEL --train TRAI
 with the same local tokenizer and token limit as training. It checks receipt and
 quality admission and split separation, then encodes every complete request and
 target. Its manifest records input and output hashes, token lengths, and whole
-rows excluded for exceeding the limit or failing exact template-prefix, content,
-or token-boundary preservation. No request or target is truncated or rewritten.
+rows excluded for exceeding the limit, for a conversation the template refuses
+(`template_rejected`), or for failing exact template-prefix, content, or
+token-boundary preservation. No request or target is truncated or rewritten.
 Unsupported controls and other invalid inputs remain errors. Every split must
 retain at least one row. Train from the three JSONL files in that output directory.
 
@@ -122,14 +123,28 @@ uv run --project scripts/bialy/custom_model --locked python scripts/bialy/custom
   --mode sft --model /scratch/models/student \
   --train /scratch/data/train.jsonl --validation /scratch/data/val.jsonl \
   --holdout /scratch/data/holdout.jsonl --out /scratch/runs/student-sft \
-  --device cuda:0 --targets q_proj,v_proj --max-length 8192 \
-  --max-updates 20 --max-seconds 3600 --checkpoint-every 10
+  --device cuda:0 --max-length 8192 \
+  --targets 're:model\.language_model\.layers\.\d+\.self_attn\.(q_proj|k_proj|v_proj|o_proj)' \
+  --adapted-modules 168 --rank 16 --lora-alpha 32 --lora-dropout 0.05 \
+  --epochs 3 --seed 7 --learning-rate 1e-4 --warmup-ratio 0.05 \
+  --final-learning-rate-ratio 0.1 --accumulation 8 --weight-decay 0.01 \
+  --max-grad-norm 1.0 --max-updates 20 --max-seconds 3600 --checkpoint-every 10
 ```
 
+The recipe has no defaults here: its owner passes every value, and each is
+recorded in `inputs.json`. One update is the mean gradient of `--accumulation`
+rows; the last group of an epoch may be shorter. The rate warms up linearly over
+`--warmup-ratio` of all updates, then follows a cosine to
+`--final-learning-rate-ratio` of the peak. It is a function of the update index,
+so a resumed run continues the same schedule. A run pauses only between updates.
+
 `--targets` takes module names or `re:<regex>` over full module paths. Gemma 4
-checkpoints load as the multimodal `Gemma4ForConditionalGeneration`, so anchor
-the pattern to the language model, for example
-`re:.*language_model.*\.(q_proj|k_proj|v_proj|o_proj)`. Logits are computed
+checkpoints load as a multimodal model whose vision and audio towers have
+projections of the same names, so anchor the pattern to the language model as
+above. Training refuses to start unless the targets adapt exactly
+`--adapted-modules` modules, all inside the language model. On CUDA it also
+refuses the attention kernel that materializes a full attention matrix, which
+cannot fit at these sequence lengths. Logits are computed
 only at positions that predict a completion token (`logits_to_keep`); a
 full-vocabulary log-softmax over 8,192 positions of a 262,144-token vocabulary
 would need about 21 GB by itself. Do not shorten an accepted request to fit.
@@ -169,25 +184,51 @@ VRAM, and Q4 inference fit does not establish training-memory fit.
 ## Export
 
 `export.py --model BASE --run TRAINING_RUN --out NEW_DIRECTORY` checks all source
-hashes, safely merges the adapter, verifies logits before/after the merge, saves a
-new safetensors checkpoint, and reloads it for parity. It frees the merged model
+hashes, safely merges the adapter, verifies logits before/after the merge on a
+rendered conversation, saves a new safetensors checkpoint, and reloads it for
+parity. It refuses an adapter whose tokenizer does not carry the template the
+rows were rendered with, and records that template and rendering profile in its
+manifest. It also writes `behavior.json`, the merged checkpoint's greedy
+continuation of every served conversation fixture with the logit margin of each
+step; every later artifact is held to it. It frees the merged model
 before loading the saved copy. Use `--resume` to verify and reuse the saved
 merge after an interrupted reload or publication. Existing stock weights remain
 untouched.
 
 `gguf_export.py --merge MERGED_DIRECTORY --llama-cpp PINNED_CHECKOUT --revision
-FULL_COMMIT --quantizer ABSOLUTE_BINARY --loader ABSOLUTE_LLAMA_COMPLETION --out
+FULL_COMMIT --quantizer ABSOLUTE_BINARY --server ABSOLUTE_LLAMA_SERVER --out
 NEW_DIRECTORY` converts to F16 and then Q4_K_M. Both artifacts are inventoried by
 tensor name, shape, type, range and content hash. Tokenizer/template metadata and
-unquantized tensor bytes must survive quantization. Build `llama-quantize` and the raw `llama-completion` executable at that
-pinned revision. The load-only probe uses `llama-completion` to generate zero
-tokens with conversation mode disabled. Use `--resume` to reuse verified conversion/quantization stages
-following an interruption. Completed exports are immutable; corruption requires
-a new output directory. Build/binary identities are recorded; endpoint readiness
-or a binary filename alone does not prove build provenance.
+unquantized tensor bytes must survive quantization, and the embedded template
+must be the one the rows were rendered with. Build `llama-quantize` and
+`llama-server` at that pinned revision. Each artifact is then served on a
+loopback port and checked twice:
 
-These parity checks do not establish production behavior. Qualify the actual
-quantized artifact on held-out tasks and target hardware before promotion.
+- `serving_check.py` requires the server to serve the training template and to
+  render every served conversation fixture, sent as the host's chat-completions
+  wire carries it, into exactly the prompt training rendered, opened by one BOS.
+- Against `behavior.json`, each rendered prompt must tokenize identically, and
+  the artifact's greedy tokens may leave the merged checkpoint's only at a step
+  the checkpoint decided by less than the artifact's tolerance: a top-two logit
+  margin of 0.5 for F16 and 2.0 for Q4_K_M. Most prompts must agree on their
+  first token. The manifest records the agreement and every departure.
+
+Use `--resume` to reuse verified conversion/quantization stages following an
+interruption. Completed exports are immutable; corruption requires a new output
+directory. Build/binary identities are recorded; a binary filename alone does
+not prove build provenance.
+
+`base_checkpoint.py --model BASE --out NEW_DIRECTORY` stages the untrained
+checkpoint with the training tokenizer and template, linking its weights. It
+converts through `gguf_export.py` like a merge, without a behaviour reference,
+so a base arm is served exactly as a trained student is.
+
+`serving_check.py --url SERVER --out RECEIPT` runs the rendering check against
+any running llama.cpp server; an evaluation runs it before its first request.
+
+These checks establish that an artifact renders and decodes like the checkpoint
+it came from. They do not establish quality: qualify the quantized artifact on
+held-out tasks and target hardware before promotion.
 
 ## Signed application bundles
 
@@ -241,6 +282,19 @@ must reverify the copied payloads with that authority. A signature establishes
 artifact identity and release authority; the trained model and precision recipe
 still require separate behavioral and hardware qualification.
 
+`scripts/generation/load_probe.py` loads a signed bundle in the native runtime
+on the device at hand and writes a `pw-load-probe/1` receipt. It authenticates
+the bundle with `model-bundle`, requires its primary artifact to be the export's,
+renders one served conversation fixture with the bundle's own renderer (which
+must give the tokens training rendered), generates greedily, and holds the
+tokens to the export's `behavior.json` at a margin of 2.0. The receipt binds the
+bundle manifest digest, the artifact and export receipt digests, this checkout's
+commit, both binaries and the device the runtime reported. A bundle the runtime
+cannot load yields a failed receipt naming the step (`render_failed`,
+`rendering_mismatch`, `load_failed`, `generation_failed`, `behavior_mismatch`).
+The native runtime loads only the E4B tier, so probes of the other tiers fail
+at `load_failed` until it loads them.
+
 `scripts/generation/publish_bundle.py` verifies a signed bundle against the
 authority, then uploads its payloads under `models/<model>/<device>/<revision>/`
 with `manifest.json` last. The bucket accepts identical bytes and refuses
@@ -258,9 +312,13 @@ rewriting installed artifacts; it changes no database or device configuration.
 
 This profile keeps tool results in transcript order, including results separated
 from their calls by user events and results whose calls were compacted away.
-Training resolves omitted tool names by exact call ID without moving messages
-or changing the captured evidence. A result without either a supplied name or
-an identifiable call is rejected. Python/Jinja and Rust/MiniJinja consume the
+The template itself names a tool result: by the `name` the native runtime
+supplies, or, on the chat-completions wire that carries none, by the result's
+call ID among the calls of the latest assistant message. A result with neither
+is rejected, as is a name that disagrees with its call. Training, the native
+runtime and llama.cpp therefore render one request from the same input, and no
+renderer rewrites messages first. The template carries the marker llama.cpp
+reads to pass tool messages through unchanged, and takes no thinking switch. Python/Jinja and Rust/MiniJinja consume the
 same conversation fixtures; saved-tokenizer tests also check the completion
 prefix used by the loss mask.
 
@@ -279,7 +337,8 @@ The fixtures use SQLite, a tiny randomly initialized local model, and fake expor
 commands. They never download pretrained weights or contact a provider. They cover
 receipt binding, masks, reference gradients, split separation, pause/resume,
 corrupt-checkpoint fallback, cache recovery, SFT/DPO, merge/reload and export-stage
-recovery. Production-model memory, speed and GGUF conversion remain live gates.
+recovery, and the served checks against a stand-in server. Production-model
+memory, speed and GGUF conversion remain live gates.
 
 The existing prompt loop retains request/settlement authority. Its 559-line
 baseline exceeded the warning threshold but was below the 900-line hard limit;

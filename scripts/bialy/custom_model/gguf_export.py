@@ -3,14 +3,19 @@ import argparse
 import hashlib
 import json
 import os
+import socket
+import time
 import uuid
 from pathlib import Path
 import re
 import subprocess
 import sys
 
+import serving_check
+from behavior import compare
 from common import file_digest, inventory
 from checkpoint import atomic_json, exclusive_run
+from rendering import template_sha256
 
 
 def checkout_identity(root, revision):
@@ -43,6 +48,60 @@ def inspect_gguf(path):
     return {"sha256":file_digest(path),"tensors":tensors,"metadata":fields}
 
 
+class Server:
+    """One llama.cpp server on a loopback port, alive for the checks of one artifact."""
+
+    def __init__(self, binary, model, log, timeout=1800):
+        self.binary, self.model, self.log, self.timeout = binary, model, log, timeout
+
+    def __enter__(self):
+        with socket.socket() as probe:
+            probe.bind(("127.0.0.1", 0))
+            port = probe.getsockname()[1]
+        self.stream = self.log.open("a")
+        self.process = subprocess.Popen(
+            [str(self.binary), "--model", str(self.model), "--host", "127.0.0.1", "--port", str(port), "--ctx-size", "4096",
+             "--parallel", "1", "--jinja", "--reasoning", "off", "--no-context-shift", "--no-warmup"],
+            stdout=self.stream, stderr=subprocess.STDOUT)
+        url, deadline = "http://127.0.0.1:%d" % port, time.monotonic() + self.timeout
+        while True:
+            if self.process.poll() is not None or time.monotonic() > deadline:
+                self.__exit__(None, None, None)
+                raise ValueError("llama.cpp server did not load the artifact; see " + self.log.name)
+            try:
+                if serving_check.call(url, "/health").get("status") == "ok":
+                    return url
+            except (ValueError, OSError):
+                pass
+            time.sleep(0.2)
+
+    def __exit__(self, *_):
+        self.process.terminate()
+        self.process.wait()
+        self.stream.close()
+
+
+def observe(url, expected, call=serving_check.call):
+    """The artifact's tokenization and greedy continuation of every reference prompt."""
+    observed = []
+    for prompt in expected["prompts"]:
+        tokens = call(url, "/tokenize", {"content": prompt["prompt"], "add_special": False, "parse_special": True})["tokens"]
+        result = call(url, "/completion", {"prompt": prompt["prompt_tokens"], "n_predict": len(prompt["tokens"]),
+                                           "temperature": 0, "seed": 0, "cache_prompt": False, "return_tokens": True})
+        observed.append({"prompt_tokens": tokens, "tokens": result["tokens"]})
+    return observed
+
+
+def qualify(server, artifact, precision, template, expected, log):
+    """Serve one artifact and check what it renders and, given a reference, what it generates."""
+    with Server(server, artifact, log) as url:
+        rendering = serving_check.check(url)
+        if rendering["template_sha256"] != template:
+            raise ValueError("artifact does not serve the template its rows were rendered with")
+        return {"rendering": rendering,
+                "behavior": compare(expected, observe(url, expected), precision) if expected else None}
+
+
 def convert(args):
     with exclusive_run(args.out, args.resume):
         return convert_owned(args)
@@ -53,7 +112,12 @@ def convert_owned(args):
     if inventory(args.merge / "model") != manifest["files"]:
         raise ValueError("merged checkpoint changed")
     checkout_identity(args.llama_cpp, args.revision)
-    binaries = {str(p):file_digest(p) for p in (args.quantizer, args.loader)}
+    binaries = {str(p):file_digest(p) for p in (args.quantizer, args.server)}
+    expected = None
+    if manifest.get("behavior_sha256"):
+        if file_digest(args.merge / "behavior.json") != manifest["behavior_sha256"]:
+            raise ValueError("behaviour reference changed")
+        expected = json.loads((args.merge / "behavior.json").read_text())
     inputs = {"merged_manifest_sha256":file_digest(args.merge / "manifest.json"),
               "revision":args.revision,"binaries":binaries,"quantization":args.quantization}
     if (args.out / "inputs.json").exists():
@@ -91,21 +155,23 @@ def convert_owned(args):
         other = after["tensors"][name]
         if tensor["type"] == other["type"] and tensor["sha256"] != other["sha256"]:
             raise ValueError("quantizer changed an unquantized tensor")
-    # Load-only probe: no completion is generated and no service is installed.
-    with (args.out / ("load-" + uuid.uuid4().hex + ".log")).open("x") as log:
-        subprocess.run([str(args.loader), "-m", str(quantized), "-n", "0", "-p", "", "--no-conversation"],
-                       stdout=log, stderr=subprocess.STDOUT, check=True)
+    template = manifest["template_sha256"]
+    if template_sha256(after["metadata"]["tokenizer.chat_template"]) != template:
+        raise ValueError("GGUF does not embed the template its rows were rendered with")
+    served = {name: qualify(args.server, path, precision, template, expected, args.out / "server.log")
+              for name, path, precision in (("unquantized", raw, "F16"), ("quantized", quantized, args.quantization))}
     checkout_identity(args.llama_cpp, args.revision)
-    if binaries != {str(p):file_digest(p) for p in (args.quantizer, args.loader)} or inventory(args.merge / "model") != manifest["files"]:
+    if binaries != {str(p):file_digest(p) for p in (args.quantizer, args.server)} or inventory(args.merge / "model") != manifest["files"]:
         raise ValueError("export inputs changed")
-    atomic_json(args.out / "manifest.json", {"schema":"pw-custom-gguf/1", "llama_cpp_revision":args.revision,
+    atomic_json(args.out / "manifest.json", {"schema":"pw-custom-gguf/2", "llama_cpp_revision":args.revision,
                "binaries":binaries,"merged_manifest_sha256":file_digest(args.merge / "manifest.json"),
-               "unquantized":before,"quantized":after,"load_probe":"passed","behavior_qualified":False})
+               "template_sha256":template,"behavior_sha256":manifest.get("behavior_sha256"),
+               "unquantized":before,"quantized":after,"served":served})
 
 
 if __name__ == "__main__":
     p = argparse.ArgumentParser(description=__doc__)
-    for name in ("merge","llama-cpp","quantizer","loader","out"):
+    for name in ("merge","llama-cpp","quantizer","server","out"):
         p.add_argument("--"+name, type=Path, required=True)
     p.add_argument("--resume", action="store_true")
     p.add_argument("--revision", required=True)
