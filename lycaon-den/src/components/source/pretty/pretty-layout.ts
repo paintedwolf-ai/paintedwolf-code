@@ -11,11 +11,14 @@ import {
   type PrettyConfig,
   type PrettyLayoutState,
   type PrettyOutcome,
+  prettyPlanHasLayout,
   type PrettyWork,
   updateLayout,
 } from "./pretty-rescan.ts";
 import { prettyTabMarks } from "./pretty-tab-marks.ts";
 import { prettyLayoutActive, prettyLayoutDecorations, prettyPresentation } from "./pretty-view.ts";
+
+export { prettyPlanHasLayout };
 
 const setPrettyConfig = StateEffect.define<PrettyConfig>();
 
@@ -32,7 +35,10 @@ export const prettyLayoutField = StateField.define<PrettyLayoutState>({
     if (!sameConfig(config, prev.config) || getIndentUnit(state) !== prev.indentUnit || state.tabSize !== prev.tabSize) {
       return buildLayout(state, config);
     }
-    if (prev.outcome.kind === "off" || prev.outcome.kind === "unavailable") return prev;
+    if (prev.outcome.kind === "off") return prev;
+    if (prev.outcome.kind === "unavailable") {
+      return tr.docChanged && prev.plan !== null ? buildLayout(state, config) : prev;
+    }
     if (tr.docChanged) return updateLayout(prev, tr);
     // The parser reached further without an edit.
     if (syntaxTree(state) !== syntaxTree(tr.startState) && awaitsParser(prev, state)) return extendLayout(prev, state);
