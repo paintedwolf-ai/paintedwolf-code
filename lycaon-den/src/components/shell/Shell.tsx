@@ -61,7 +61,7 @@ import { createProjectOpening } from "./project-opening.ts";
 import { ProjectLoadingStage } from "./ProjectLoadingStage.tsx";
 import { SplitDivider } from "./SplitDivider.tsx";
 import { StageSplitHost } from "./StageSplitHost.tsx";
-import { ShellChatColumn, ShellDrawerColumn, ShellStageColumn } from "./ShellColumns.tsx";
+import { ShellChatColumn, ShellSessionDrawerHost, ShellStageColumn } from "./ShellColumns.tsx";
 import { WorkspaceOpeningVeil } from "./WorkspaceOpeningVeil.tsx";
 import { ChatWorkspace } from "./ChatWorkspace.tsx";
 import { WorkspaceStage } from "./WorkspaceStage.tsx";
@@ -119,7 +119,6 @@ export function Shell(props: ShellProps) {
     presentedSplitLive: () => presentedSplitLive(),
     stageColumnOccupied: () => showStageColumn(),
     presentedStageId: () => presentedStageColumn().stageId,
-    sessionDrawerOpen: () => sessionDrawer.drawerContent() != null,
   });
   const { windowNavUserCollapsed, windowNavCollapsed, navAutomaticallyCollapsed, navSlotWidthCss, showConversation, hideConversation, contextHidden, revealConversation, splitFitClaim, conversationHidden, stageIsLeading, stageHeaderLeadsWindow, stageEdges} = panes;
 
@@ -421,7 +420,7 @@ export function Shell(props: ShellProps) {
     undefined;
 
   const { backFor, sourceBack, titlebarBack, stageBack, stageTabs } = createShellWorkspaceContext({
-    ...scope, routedReturn, showConversation, splitFitClaim, presentedChat,
+    ...scope, routedReturn, showConversation, splitFitClaim, closeDrawer, presentedChat,
     projectPresentation, conversationShown, splitColumns, stageColumnStageId, stageHandoff,
     stageSurfaceShown: () => showStageColumn() && !stageOpeningOverChat(),
     reopenFiles: () => openStageWithPlacement("files", "routed"),
@@ -611,6 +610,17 @@ export function Shell(props: ShellProps) {
             />}
           </ShellStageColumn>
         }
+        drawerOver={conversationShown() ? "chat" : "stage"}
+        drawer={
+          <ShellSessionDrawerHost
+        appStore={props.appStore} projects={props.projects.state.projects} projectDir={projectDirForChat()}
+        sessionId={activeChat()?.sessionId} content={sessionDrawer.drawerContent()}
+        selectedWorkerId={sessionDrawer.selectedWorkerId()}
+        workerFocus={sessionDrawer.workerDrawerFocus()} onWorkerFocusHandled={sessionDrawer.acknowledgeDrawerFocus}
+        backgroundHydrate={nav() === "projects"}
+        onOpenWorker={openWorkers} onClose={closeDrawer}
+      />
+        }
         chatColumn={
           <ShellChatColumn
             stack={chatStack}
@@ -641,14 +651,6 @@ export function Shell(props: ShellProps) {
             )}
           </ShellChatColumn>
         }
-      />
-      <ShellDrawerColumn
-        appStore={props.appStore} projects={props.projects.state.projects} projectDir={projectDirForChat()}
-        sessionId={activeChat()?.sessionId} content={sessionDrawer.drawerContent()}
-        docked={panes.sessionDrawerDocked()} selectedWorkerId={sessionDrawer.selectedWorkerId()}
-        workerFocus={sessionDrawer.workerDrawerFocus()} onWorkerFocusHandled={sessionDrawer.acknowledgeDrawerFocus}
-        backgroundHydrate={nav() === "projects"} windowEdges={panes.windowEdgeClaims("drawer")}
-        onOpenWorker={openWorkers} onClose={closeDrawer}
       />
       <Show when={workspaceVeilKey()} keyed>
         <WorkspaceOpeningVeil visible={!workspaceRevealed()}>

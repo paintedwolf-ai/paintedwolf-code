@@ -12,7 +12,6 @@ import { WorklogPanel } from "../worklog/WorklogPanel.tsx";
 import { bindWorklogRefresh } from "../worklog/worklog-panel-state.ts";
 import { ContextDrawerHost } from "./ContextDrawer.tsx";
 import type { SessionDrawerContent } from "./shell-session-drawer.ts";
-import type { WindowEdgeClaim } from "./WindowControls.tsx";
 
 export type SessionDrawerProps = {
   appStore: AppStore;
@@ -20,20 +19,16 @@ export type SessionDrawerProps = {
   projectDir: string;
   sessionId: string;
   content: SessionDrawerContent | null;
-  /** The drawer has its own column; otherwise it lies over the columns. */
-  docked: boolean;
   selectedWorkerId: string | null;
   workerFocus: WorkerDrawerFocus;
   onWorkerFocusHandled: () => void;
   /** Worker transcripts hydrate while the drawer is closed. */
   backgroundHydrate: boolean;
-  /** Window edges whose drawn controls the open drawer carries. */
-  windowEdges: readonly WindowEdgeClaim[];
   onOpenWorker: (workerId?: string, opts?: OpenWorkerOptions) => void;
   onClose: () => void;
 };
 
-/** The session's worklog or one worker, in a drawer beside the shell's columns. */
+/** The session's worklog or one worker, in a drawer over the column on screen. */
 export function SessionDrawer(props: SessionDrawerProps) {
   const offline = () => !isBackendReachable(props.appStore.state.sidecarStatus);
   const workers = createMemo(() => sessionWorkers(props.appStore, props.sessionId));
@@ -68,13 +63,7 @@ export function SessionDrawer(props: SessionDrawerProps) {
   });
 
   return (
-    <div
-      class="den-session-drawer"
-      data-open={props.content != null ? "" : undefined}
-      data-docked={props.docked ? "" : undefined}
-      data-testid="session-drawer"
-    >
-      <ContextDrawerHost windowEdges={props.windowEdges}>
+      <ContextDrawerHost>
         <WorklogPanel
           open={props.content === "worklog"}
           findings={props.appStore.state.findings}
@@ -98,6 +87,5 @@ export function SessionDrawer(props: SessionDrawerProps) {
           onClose={() => props.onClose()}
         />
       </ContextDrawerHost>
-    </div>
   );
 }

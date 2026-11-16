@@ -186,13 +186,13 @@ export function ShellChatColumn(props: {
   );
 }
 
-type DrawerColumnProps = Omit<SessionDrawerProps, "sessionId"> & {
-  /** The session the drawer belongs to; none leaves the column empty. */
+type SessionDrawerHostProps = Omit<SessionDrawerProps, "sessionId"> & {
+  /** The session the drawer belongs to; none mounts nothing. */
   sessionId: string | undefined;
 };
 
-/** The session drawer's column, at the window edge the sidebar leaves free. */
-export function ShellDrawerColumn(props: DrawerColumnProps) {
+/** The session's drawer, kept mounted so worker transcripts stay warm while it is closed. */
+export function ShellSessionDrawerHost(props: SessionDrawerHostProps) {
   return (
     <ShowLatest when={props.sessionId} by={(sessionId) => sessionId}>
       {(sessionId) => <SessionDrawer {...props} sessionId={sessionId()} />}

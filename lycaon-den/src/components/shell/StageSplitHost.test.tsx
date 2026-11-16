@@ -9,6 +9,7 @@ function Host(props: {
   mirrored?: boolean;
   narrowSurvivor?: "conversation" | "stage";
   onWidth?: (width: number) => void;
+  drawerOver?: "stage" | "chat";
 }) {
   return (
     <StageSplitHost
@@ -28,6 +29,8 @@ function Host(props: {
       stageColumn={<input data-testid="stage-body" />}
       chatColumn={<input data-testid="chat-body" />}
       divider={<div data-testid="split-divider" />}
+      drawer={<div data-testid="drawer" />}
+      drawerOver={props.drawerOver ?? "chat"}
     />
   );
 }
@@ -162,6 +165,8 @@ describe("StageSplitHost", () => {
         stageColumn={<p data-testid="stage-prose">stage</p>}
         chatColumn={<p data-testid="chat-prose">chat</p>}
         divider={<div data-testid="split-divider" />}
+        drawer={null}
+        drawerOver="chat"
       />
     ));
 
@@ -201,6 +206,8 @@ describe("StageSplitHost", () => {
           </button>
         }
         divider={<div data-testid="split-divider" />}
+        drawer={null}
+        drawerOver="chat"
       />
     ));
 
@@ -225,6 +232,8 @@ describe("StageSplitHost", () => {
         stageColumn={null}
         chatColumn={<div>chat</div>}
         divider={<div data-testid="split-divider" />}
+        drawer={null}
+        drawerOver="chat"
       />
     ));
     const host = screen.getByTestId("shell-stage-host");
@@ -259,6 +268,8 @@ describe("StageSplitHost", () => {
         stageColumn={<div>stage</div>}
         chatColumn={<StatefulChat />}
         divider={<div data-testid="split-divider" />}
+        drawer={null}
+        drawerOver="chat"
       />
     ));
 
@@ -308,6 +319,8 @@ describe("StageSplitHost", () => {
         stageColumn={<div>stage</div>}
         chatColumn={<StatefulChat />}
         divider={<div data-testid="split-divider" />}
+        drawer={null}
+        drawerOver="chat"
       />
     ));
 
@@ -365,6 +378,8 @@ describe("StageSplitHost", () => {
         stageColumn={<div>stage</div>}
         chatColumn={<StatefulChat />}
         divider={<div data-testid="split-divider" />}
+        drawer={null}
+        drawerOver="chat"
       />
     ));
     const host = screen.getByTestId("shell-stage-host");
@@ -429,11 +444,23 @@ describe("StageSplitHost", () => {
         stageColumn={<div>stage</div>}
         chatColumn={<div>chat</div>}
         divider={<div data-testid="split-divider" />}
+        drawer={null}
+        drawerOver="chat"
       />
     ));
     expect(
       screen.getByTestId("shell-stage-host").hasAttribute("data-conversation-hidden"),
     ).toBe(false);
     expect(screen.getByTestId("split-col-chat").inert).toBeFalsy();
+  });
+
+  it("lays the drawer over the column that is on screen, keeping it mounted across the move", () => {
+    const [over, setOver] = createSignal<"stage" | "chat">("chat");
+    render(() => <Host drawerOver={over()} />);
+    const drawer = screen.getByTestId("drawer");
+    expect(screen.getByTestId("split-col-chat").contains(drawer)).toBe(true);
+    setOver("stage");
+    expect(screen.getByTestId("split-col-stage").contains(screen.getByTestId("drawer"))).toBe(true);
+    expect(screen.getByTestId("drawer")).toBe(drawer);
   });
 });

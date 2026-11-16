@@ -36,6 +36,7 @@ function fixture() {
   const showConversation = vi.fn(async () => true);
   const claim = vi.fn();
   const readProject = vi.fn(() => "project");
+  const closeDrawer = vi.fn();
   const reopenFiles = vi.fn();
   const controller = createRoot(() => createShellWorkspaceContext({
     activeProjectId: readProject,
@@ -53,10 +54,11 @@ function fixture() {
     showConversation,
     splitFitClaim: { claim },
     stageHandoff: () => "files",
+    closeDrawer,
     reopenFiles,
   }));
   return {
-    controller, readProject, showConversation, claim, reopenFiles,
+    controller, readProject, showConversation, claim, closeDrawer, reopenFiles,
     setPresented: (value: ActiveChat | null) => { chat = value; },
     hideConversation: () => { setConversation(false); },
     singleView: () => { setSplit(false); },
@@ -126,6 +128,7 @@ describe("shell workspace context", () => {
     registry.placement = "stage";
     expect(f.controller.stageBack("files")).toBeNull();
     back!.onBack();
+    expect(f.closeDrawer).toHaveBeenCalledOnce();
     await vi.waitFor(() => expect(f.reopenFiles).toHaveBeenCalledOnce());
   });
 

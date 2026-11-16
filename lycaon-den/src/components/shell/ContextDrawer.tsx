@@ -1,23 +1,14 @@
-import { createContext, For, Show, useContext, type JSX } from "solid-js";
+import { createContext, Show, useContext, type JSX } from "solid-js";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 import { Scrollport } from "../primitives/Scrollport.tsx";
 import { ChromeCloseButton } from "./ChromeCloseButton.tsx";
 import { ChromeDragSurface } from "./ChromeDragSurface.tsx";
-import { WindowControls, type WindowEdgeClaim } from "./WindowControls.tsx";
 
-type DrawerHost = {
-  /** Window edges whose drawn controls an open drawer carries in its header. */
-  windowEdges: () => readonly WindowEdgeClaim[];
-};
+const ContextDrawerHostContext = createContext(false);
 
-const ContextDrawerHostContext = createContext<DrawerHost | null>(null);
-
-export function ContextDrawerHost(props: {
-  windowEdges?: readonly WindowEdgeClaim[];
-  children: JSX.Element;
-}) {
+export function ContextDrawerHost(props: { children: JSX.Element }) {
   return (
-    <ContextDrawerHostContext.Provider value={{ windowEdges: () => props.windowEdges ?? [] }}>
+    <ContextDrawerHostContext.Provider value>
       {props.children}
     </ContextDrawerHostContext.Provider>
   );
@@ -36,12 +27,7 @@ type Props = {
 };
 
 export function ContextDrawer(props: Props) {
-  const host = useContext(ContextDrawerHostContext);
-  const windowControls = (side: "left" | "right") => (
-    <For each={host?.windowEdges().filter((claim) => claim.side === side)}>
-      {(claim) => <WindowControls {...claim} />}
-    </For>
-  );
+  const hosted = useContext(ContextDrawerHostContext);
   const drawer = () => (
     <aside
       class="den-context-drawer"
@@ -56,7 +42,6 @@ export function ContextDrawer(props: Props) {
       <header class="den-context-drawer-header" {...chromeProps()}>
         {/* The drawer covers the stage titlebar drag surface. */}
         <ChromeDragSurface class="den-context-drawer__chrome-drag" />
-        {windowControls("left")}
         <h2 id={props.titleId}>{props.title}</h2>
         <ChromeCloseButton
           class="den-context-drawer-close den-inset-icon-btn"
@@ -64,7 +49,6 @@ export function ContextDrawer(props: Props) {
           testId={props.closeTestId}
           onClick={() => props.onClose()}
         />
-        {windowControls("right")}
       </header>
       <Scrollport
         class="den-context-drawer-scroll"
@@ -77,5 +61,5 @@ export function ContextDrawer(props: Props) {
     </aside>
   );
 
-  return <Show when={host != null && props.open}>{drawer()}</Show>;
+  return <Show when={hosted && props.open}>{drawer()}</Show>;
 }
