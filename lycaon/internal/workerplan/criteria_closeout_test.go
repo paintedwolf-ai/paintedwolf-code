@@ -280,4 +280,66 @@ func TestCheckSessionCloseoutAndCloseoutComplete(t *testing.T) {
 	if ok, err := cond(ctx, env.coord.SessionID); err != nil || !ok {
 		t.Fatalf("CloseoutComplete = (%v, %v), want (true, nil)", ok, err)
 	}
+
+	workIDs, err := env.svc.SessionWorkIDs(ctx, "")
+	testutil.FailErr(t, "empty SessionWorkIDs", err)
+	if len(workIDs) != 0 {
+		t.Fatalf("empty SessionWorkIDs = %v, want empty", workIDs)
+	}
+	workIDs, err = env.svc.SessionWorkIDs(ctx, env.coord.SessionID)
+	testutil.FailErr(t, "SessionWorkIDs", err)
+	if len(workIDs) != 1 || workIDs[0] != "leg-close" {
+		t.Fatalf("SessionWorkIDs = %v, want [leg-close]", workIDs)
+	}
+}
+
+func TestCloseoutDynamicEvaluationAndUngroundedVerdict(t *testing.T) {
+	env := newPlanTestEnv(t)
+	ctx := t.Context()
+	jobs := &stubJobs{tasks: map[string]*api.WorkerTask{}}
+	env.svc.Jobs = jobs
+
+	unstarted, err := env.records.CreateWorker(ctx, env.coord, workerrecords.Op{ID: "dyn-unstarted"}, workerrecords.WorkerSpec{
+		Name:          "impl-unstarted",
+		AgentType:     "implementer",
+		ScopeMode:     workerrecords.ScopeRead,
+		BlueprintPath: ".lycaon/plans/dyn.md",
+	})
+	testutil.FailErr(t, "create unstarted planned worker", err)
+	_, err = env.records.CreateWorker(ctx, env.coord, workerrecords.Op{ID: "dyn-plain"}, workerrecords.WorkerSpec{
+		Name:      "surveyor-plain",
+		AgentType: "surveyor",
+		ScopeMode: workerrecords.ScopeRead,
+	})
+	testutil.FailErr(t, "create plain worker", err)
+	if ids, err := env.svc.SessionWorkIDs(ctx, env.coord.SessionID); err != nil || len(ids) != 0 {
+		t.Fatalf("SessionWorkIDs before start = (%v, %v), want empty", ids, err)
+	}
+	_, err = env.records.CloseWorker(ctx, env.coord, workerrecords.Op{ID: "dyn-close-unstarted"}, unstarted.WorkerID, "withdrawn")
+	testutil.FailErr(t, "close unstarted worker", err)
+
+	active, err := env.records.CreateWorker(ctx, env.coord, workerrecords.Op{ID: "dyn-active"}, workerrecords.WorkerSpec{
+		Name:      "impl-dyn",
+		AgentType: "implementer",
+		ScopeMode: workerrecords.ScopeRead,
+		Criteria:  []string{"job:complete", "summary:present"},
+	})
+	testutil.FailErr(t, "create dynamic criteria worker", err)
+	env.insertJobAndRound(t, active.WorkerID, "job-dyn", true)
+
+	jobs.tasks["job-dyn"] = &api.WorkerTask{
+		ID:     "job-dyn",
+		Status: api.WorkerStatusFailed,
+		Result: &api.WorkerResult{Summary: ""},
+	}
+	verdict, err := env.svc.CheckSessionCloseout(ctx, env.coord.SessionID, testdbseed.DefaultProjectID, "/repo")
+	testutil.FailErr(t, "dynamic ungrounded closeout", err)
+	if verdict.OK || verdict.Code != "COORDINATOR_UNGROUNDED_CLAIM" {
+		t.Fatalf("dynamic closeout verdict = %+v, want COORDINATOR_UNGROUNDED_CLAIM", verdict)
+	}
+	ids, err := env.svc.SessionWorkIDs(ctx, env.coord.SessionID)
+	testutil.FailErr(t, "SessionWorkIDs after start", err)
+	if len(ids) != 1 || ids[0] != "impl-dyn" {
+		t.Fatalf("SessionWorkIDs = %v, want [impl-dyn]", ids)
+	}
 }

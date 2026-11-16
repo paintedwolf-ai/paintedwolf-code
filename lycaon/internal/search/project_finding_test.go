@@ -1,9 +1,13 @@
 package search_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/search"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -28,5 +32,46 @@ func TestProjectScanFindingsKeysOnFingerprint(t *testing.T) {
 	}
 	if rows[0].Handle != f.Fingerprints.Primary {
 		t.Fatalf("handle = %q want %q", rows[0].Handle, f.Fingerprints.Primary)
+	}
+}
+
+func TestProjectScanCompleteResolvesSessionAndDelegationScopes(t *testing.T) {
+	ctx := t.Context()
+	sqlDB := testdbfixture.Open(t, "scan-project.db")
+	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, sqlDB, "sess-scan-proj", testdbseed.DefaultProjectID)
+
+	_, err := sqlDB.ExecContext(ctx, `INSERT INTO workers (
+		id, project_id, session_id, name, agent_type, scope_mode, delegation_id,
+		operation_id, created_at, updated_at
+	) VALUES ('w-del-1', ?, 'sess-scan-proj', 'impl-1', 'implementer', 'read', 'del-legacy-1', 'op-w1', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')`,
+		testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "insert worker with delegation_id", err)
+
+	ingestBytes, err := json.Marshal([]api.SecurityFinding{{
+		RuleID:       "rule-1",
+		Level:        api.FindingLevelMedium,
+		Message:      "issue",
+		Locations:    []api.SecurityFindingLocation{{URI: "main.go", StartLine: 3}},
+		Fingerprints: api.SecurityFindingFingerprints{Primary: "fp-session-1"},
+		Tool:         api.ToolDescriptor{DriverID: "semgrep", Name: "Semgrep"},
+	}})
+	testutil.FailErr(t, "marshal ingest findings", err)
+
+	for _, tc := range []struct {
+		scanID  string
+		scopeID string
+	}{
+		{scanID: "scan-by-session", scopeID: "sess-scan-proj"},
+		{scanID: "scan-by-delegation", scopeID: "del-legacy-1"},
+		{scanID: "scan-unmatched", scopeID: "unknown-scope"},
+	} {
+		_, err = sqlDB.ExecContext(ctx, `INSERT INTO code_scans (
+			id, canonical_path, categories_json, status, delegation_id,
+			ingest_json, created_at, completed_at
+		) VALUES (?, '', '["sast"]', 'complete', ?, ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:01Z')`,
+			tc.scanID, tc.scopeID, string(ingestBytes))
+		testutil.FailErr(t, "insert code_scan", err)
+		testutil.FailErr(t, "ProjectScanComplete", search.ProjectScanComplete(ctx, sqlDB, tc.scanID))
 	}
 }

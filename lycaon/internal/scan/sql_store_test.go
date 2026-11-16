@@ -219,3 +219,62 @@ func TestSQLStoreListBySessionIDTieBreaksByInsertOrder(t *testing.T) {
 		t.Fatalf("latest = %+v want first %s (same created_at must tie-break by insert order)", got, newer.ID)
 	}
 }
+
+func TestSQLStoreSessionSnapshotQueries(t *testing.T) {
+	sqlDB := testdbfixture.Open(t, "store.db")
+	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, sqlDB, "sess-snap", testdbseed.DefaultProjectID)
+
+	store := NewSQLStore(sqlDB)
+	ctx := t.Context()
+	cats := []api.ScanCategory{api.ScanCategorySAST}
+
+	if _, err := store.LatestCompleteForSessionSnapshot(ctx, "", "snap-1", cats); err == nil {
+		t.Fatal("expected error on empty session_id")
+	}
+	none, err := store.LatestCompleteForSessionSnapshot(ctx, "sess-snap", "snap-1", cats)
+	testutil.FailErr(t, "missing LatestCompleteForSessionSnapshot", err)
+	if none != nil {
+		t.Fatalf("missing complete scan = %+v, want nil", none)
+	}
+
+	inFlightEmpty, err := store.FindInFlightForSessionSnapshot(ctx, "", "snap-1", cats, nil)
+	testutil.FailErr(t, "empty FindInFlightForSessionSnapshot", err)
+	if inFlightEmpty != nil {
+		t.Fatalf("empty session in-flight = %+v, want nil", inFlightEmpty)
+	}
+	inFlightMiss, err := store.FindInFlightForSessionSnapshot(ctx, "sess-snap", "snap-1", cats, []string{"pkg/a.go"})
+	testutil.FailErr(t, "missing FindInFlightForSessionSnapshot", err)
+	if inFlightMiss != nil {
+		t.Fatalf("missing in-flight = %+v, want nil", inFlightMiss)
+	}
+
+	testutil.FailErr(t, "insert pending session scan", store.Insert(ctx, api.CodeScan{
+		ID:               "scan-inflight",
+		CanonicalPath:    "/tmp/p",
+		Categories:       cats,
+		Paths:            []string{"pkg/a.go"},
+		Status:           api.CodeScanStatusPending,
+		SessionID:        "sess-snap",
+		SourceSnapshotID: "snap-1",
+	}, nil, ""))
+	inFlightHit, err := store.FindInFlightForSessionSnapshot(ctx, "sess-snap", "snap-1", cats, []string{"pkg/a.go"})
+	testutil.FailErr(t, "hit FindInFlightForSessionSnapshot", err)
+	if inFlightHit == nil || inFlightHit.ID != "scan-inflight" || inFlightHit.SessionID != "sess-snap" {
+		t.Fatalf("inFlightHit = %+v", inFlightHit)
+	}
+
+	testutil.FailErr(t, "insert complete session scan", store.Insert(ctx, api.CodeScan{
+		ID:               "scan-complete",
+		CanonicalPath:    "/tmp/p",
+		Categories:       cats,
+		Status:           api.CodeScanStatusComplete,
+		SessionID:        "sess-snap",
+		SourceSnapshotID: "snap-1",
+	}, nil, ""))
+	completeHit, err := store.LatestCompleteForSessionSnapshot(ctx, "sess-snap", "snap-1", cats)
+	testutil.FailErr(t, "hit LatestCompleteForSessionSnapshot", err)
+	if completeHit == nil || completeHit.ID != "scan-complete" || completeHit.SessionID != "sess-snap" {
+		t.Fatalf("completeHit = %+v", completeHit)
+	}
+}
