@@ -11,7 +11,7 @@ import {
 } from "@codemirror/state";
 import { Decoration, type DecorationSet } from "@codemirror/view";
 import { planHasLayout } from "./pretty-fenced.ts";
-import { prettyPlanFor, type PrettyTarget, prettyTargetFor } from "./pretty-recognition.ts";
+import { prettyPlanFor, prettyTargetFor } from "./pretty-recognition.ts";
 import { PrettyScanner } from "./pretty-scan.ts";
 import { type PrettySnapshot, snapshotsEqual } from "./pretty-snapshot.ts";
 import {
@@ -178,11 +178,6 @@ function tokensFor(state: EditorState, plan: PrettyPlan): TreeTokens | null {
     state.tabSize,
     getIndentUnit(state),
   );
-}
-
-/** Whether `target` can produce any layout on `doc`. */
-export function prettyPlanHasLayout(doc: Text, target: PrettyTarget | null): boolean {
-  return target !== null && planHasLayout(doc, prettyPlanFor(doc, target));
 }
 
 function collect(added: Range<Decoration>[]): PrettySink {

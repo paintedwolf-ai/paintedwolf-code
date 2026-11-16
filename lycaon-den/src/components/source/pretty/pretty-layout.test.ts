@@ -1,10 +1,8 @@
 import { indentUnit } from "@codemirror/language";
-import { EditorState, type Extension, Text } from "@codemirror/state";
+import { EditorState, type Extension } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { languageExtensionForPath } from "../editor/codemirror-lang.ts";
 import { createPrettyExtension, prettyOutcomeOf, prettyWorkOf } from "./pretty-layout.ts";
-import { prettyPlanHasLayout } from "./pretty-rescan.ts";
-import { prettyTargetFor } from "./pretty-recognition.ts";
 import { PRETTY_MAX_INPUT, type PrettyConfig } from "./pretty-rescan.ts";
 import { PRETTY_CHECKPOINT_INTERVAL } from "./pretty-scan-state.ts";
 import { PrettyBreakWidget, prettyLayoutDecorations } from "./pretty-view.ts";
@@ -285,8 +283,6 @@ describe("recognition", () => {
       { label: "fenced unlabelled prose", config: { path: "notes.md" }, doc: "```\nplain words\n```\n", expected: false },
     ];
     for (const { label, config, doc, expected } of cases) {
-      const target = prettyTargetFor(config.path, config.languageHint);
-      expect(prettyPlanHasLayout(Text.of(doc.split("\n")), target), `${label}: planHasLayout`).toBe(expected);
       expect(prettyOutcomeOf(open(doc, config)).kind === "active", `${label}: outcome`).toBe(expected);
     }
 
