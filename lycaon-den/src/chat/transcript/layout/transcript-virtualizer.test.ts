@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
-import { fileEditPreviewFixture } from "../../../test/file-edit-fixture.ts";
+
 import { createRoot, createSignal } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TranscriptItem } from "../projection/transcript-item-model.ts";
-import { singleFileEditFold } from "../../file-edit/file-edit-fold.ts";
+
 import { bufferedVirtualRange } from "../../../layout/virtual-runway.ts";
 import { flushScrollportFrameForTests, scheduleScrollportFrame } from "../../../platform/scrolling/scrollport-frame.ts";
 import { bindScrollportMotion, unbindScrollportMotion } from "../../../platform/scrolling/scrollport-motion.ts";
@@ -22,6 +22,7 @@ import {
   transcriptUnmountedSpace,
   transcriptViewportRect,
 } from "./transcript-virtualizer.ts";
+import { fileEditPreviewFixture, singleFileEditFold } from "../../../test/file-edit-fixture.ts";
 
 type TestVirtualizerOptions = Omit<
   CreateTranscriptVirtualizerOptions,
@@ -1113,7 +1114,6 @@ it("resolves the captured reading offset before deferred virtual rendering catch
   });
 });
 
-
 it("keeps one reading anchor while a batch contracts rows above it", () => {
   const element = mockScrollEl(300);
   createRoot((dispose) => {
@@ -1192,7 +1192,6 @@ it("uses the transcript origin for row positions without duplicating outer chrom
   } finally { dispose(); }
 });
 
-
 it("delivers the latest application correction instead of an older captured scroll event", () => {
   const element = mockScrollEl(300);
   const motion = bindScrollportMotion(element, element, element);
@@ -1211,7 +1210,6 @@ it("delivers the latest application correction instead of an older captured scro
     } finally { dispose(); unbindScrollportMotion(element); element.remove(); }
   });
 });
-
 
 it("measures around a restored position before its deferred scroll delivery", () => {
   const element = mockScrollEl(300);
@@ -1233,7 +1231,6 @@ it("measures around a restored position before its deferred scroll delivery", ()
     } finally { dispose(); unbindScrollportMotion(element); element.remove(); }
   });
 });
-
 
 it("carries the captured row through successive layouts before native scroll delivery", async () => {
   const element = mockScrollEl(300);
@@ -1260,7 +1257,6 @@ it("carries the captured row through successive layouts before native scroll del
     expect(transcriptReadingPosition(virtualizer)).toEqual({ rowKey: "captured-gap-2", rowOffsetPx: 22 });
   } finally { dispose(); unbindScrollportMotion(element); element.remove(); }
 });
-
 
 it("combines relayout and measurements against the offset before native contraction", async () => {
   const element = mockScrollEl(300);

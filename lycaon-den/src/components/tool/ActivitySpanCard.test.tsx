@@ -1,12 +1,12 @@
 import { disclosureToggle, isDisclosureOpen, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
-import { fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
+
 import { createSignal, type ComponentProps } from "solid-js";
 import { afterEach, describe, expect, it } from "vitest";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { ActivitySpanCard as ActivitySpanCardView } from "./ActivitySpanCard.tsx";
 import { ToolPartCard } from "./ToolPartCard.tsx";
 import { TranscriptDiffGroup } from "../transcript/TranscriptDiffGroup.tsx";
-import { fileEditStepsFromParts, foldFileEdits } from "../../chat/file-edit/file-edit-fold.ts";
+import { foldFileEdits  } from "../../chat/file-edit/file-edit-fold.ts";
 import {
   createTranscriptDisclosureStore,
   TranscriptDisclosureProvider,
@@ -20,6 +20,7 @@ import {
   rememberTranscriptEntry,
   activitySpanEnterFadeKey,
 } from "../../chat/transcript/presentation/transcript-entry.ts";
+import { fileEditPreviewFixture, fileEditStepsFromParts } from "../../test/file-edit-fixture.ts";
 
 function ActivitySpanCard(
   props: Omit<ComponentProps<typeof ActivitySpanCardView>, "renderToolEntry">,
