@@ -20,8 +20,6 @@ import {
   type TranscriptWindow,
 } from "./transcript-window.ts";
 
-export type { TranscriptRunwayDensityCause, TranscriptRunwayDensityChange };
-
 export type TranscriptPagingTraceLayout = {
   residentStartPx: number;
   residentEndPx: number;
