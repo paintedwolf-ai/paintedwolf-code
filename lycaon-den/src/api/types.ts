@@ -8593,19 +8593,18 @@ export interface components {
             program_id: string;
             activity_id: string;
         };
+        /** @description Where the action's subject opens, beyond its records. */
         ActionOpener: {
             /** @enum {string} */
-            kind: "file" | "diff" | "terminal" | "image" | "worker" | "commit" | "search" | "git" | "security" | "running" | "workflow" | "skill";
+            kind: "file" | "terminal" | "running" | "search";
+            /** @description file: the path, as the action named it. */
             path?: string;
+            /** @description file: the line to open at. */
             line?: number;
-            /** @description commit: the commit. git: the ref to show. */
-            ref?: string;
             /** @description search: what to search for. */
             query?: string;
-            artifact_id?: string;
+            /** @description terminal: the session whose output opens. */
             process_handle?: string;
-            worker_id?: string;
-            workflow_run_id?: string;
         };
         ExternalAccess: {
             modes: components["schemas"]["ExternalAccessMode"][];
