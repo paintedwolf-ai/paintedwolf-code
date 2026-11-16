@@ -20,5 +20,5 @@ func TestMain(m *testing.M) {
 			os.Exit(0)
 		}
 	}
-	os.Exit(wiring.RunReleasingHosts(m))
+	os.Exit(wiring.RunHostTests(m))
 }

@@ -145,14 +145,16 @@ type hostEffects struct {
 	settle func(context.Context)
 	// projectDir is the watched fixture tree whose change pipeline must drain.
 	projectDir string
+	// quietGrace is how long the tree's changes must stay idle before the host
+	// counts as settled.
+	quietGrace time.Duration
 	// barrierStep makes every barrier write change the file's content.
 	barrierStep int
 }
 
-// watcherQuietGrace is how long the fixture tree's change debouncer must stay
-// idle before the host counts as settled: two coalesce windows, so a write
-// that reached the platform stream late still lands in the same measurement.
-const watcherQuietGrace = 2 * repochange.DefaultDebounce
+// conformanceDebounce is the change coalesce window the sweep's host runs
+// with; every read waits on it twice.
+const conformanceDebounce = time.Millisecond
 
 // watcherQuietBound caps one quiet wait so a continuously changing tree fails
 // the read it interferes with instead of hanging the sweep.
@@ -164,7 +166,10 @@ const watcherBarrierFile = "conformance-barrier.txt"
 // settlePasses bounds the convergence loop against continuous producers.
 const settlePasses = 64
 
-func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryHub, projectDir string) *hostEffects {
+// openConformanceEffects observes a host running with the given change
+// debounce. The quiet grace is two windows, so a write that reached the
+// platform stream late still lands in the same measurement.
+func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryHub, projectDir string, debounce time.Duration) *hostEffects {
 	t.Helper()
 	ctx := t.Context()
 	database, err := db.OpenReadOnly(ctx, h.DatabasePath())
@@ -178,7 +183,7 @@ func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryH
 		_ = conn.Close()
 		_ = database.Close()
 	})
-	return &hostEffects{conn: conn, hub: hub, events: ch, settle: h.Server.WaitForBackground, projectDir: projectDir}
+	return &hostEffects{conn: conn, hub: hub, events: ch, settle: h.Server.WaitForBackground, projectDir: projectDir, quietGrace: 2 * debounce}
 }
 
 func (e *hostEffects) mark(ctx context.Context) (int64, error) {
@@ -263,16 +268,18 @@ func (e *hostEffects) since(ctx context.Context, mark int64) ([]string, error) {
 	return changes, nil
 }
 
-// quiesce waits until the host is still: the fixture tree's change debouncer
-// is idle, detached work has drained, the outbox is empty, and a whole pass
-// committed nothing. A filesystem change travels platform stream → debounce
-// timer → watcher batch → ledger and outbox commits, and only the last legs
-// are joined by WaitForBackground, so one pass can finish while a flush is
-// still due; a second pass that moves nothing proves the pipeline is empty.
+// quiesce waits until the host is still: pending change bursts are delivered,
+// the fixture tree stays idle, detached work has drained, the outbox is empty,
+// and a whole pass committed nothing. A filesystem change travels platform
+// stream → debounce timer → watcher batch → ledger and outbox commits, and
+// only the last legs are joined by WaitForBackground, so one pass can finish
+// while a change is still in flight; a second pass that moves nothing proves
+// the pipeline is empty.
 func (e *hostEffects) quiesce(ctx context.Context) {
 	version, _ := e.dataVersion(ctx)
 	for pass := 0; pass < settlePasses; pass++ {
-		repochange.WaitQuiet(ctx, e.projectDir, watcherQuietGrace, watcherQuietBound)
+		repochange.ResetDebouncerForTest(ctx)
+		repochange.WaitQuiet(ctx, e.projectDir, e.quietGrace, watcherQuietBound)
 		e.settle(ctx)
 		var pending int64
 		if err := e.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM event_outbox").Scan(&pending); err == nil && pending > 0 {
@@ -373,7 +380,7 @@ func TestConformanceEffectsSettleLandedWritesBeforeMark(t *testing.T) {
 	published, unsubscribe, err := hub.Subscribe(ctx, events.Subscription{Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe to source changes", err)
 	defer unsubscribe()
-	effects := openConformanceEffects(t, h, hub, projectDir)
+	effects := openConformanceEffects(t, h, hub, projectDir, repochange.DefaultDebounce)
 
 	const landed = "landed.txt"
 	for step := range 3 {

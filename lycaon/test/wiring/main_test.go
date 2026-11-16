@@ -25,7 +25,7 @@ func TestMain(m *testing.M) {
 		os.Exit(probeSSHAgent())
 	}
 	gittestsetup.Enable()
-	os.Exit(RunReleasingHosts(m))
+	os.Exit(RunHostTests(m))
 }
 
 // sshAgentProbeVerb runs this binary as the ssh Git starts: it asks the agent
