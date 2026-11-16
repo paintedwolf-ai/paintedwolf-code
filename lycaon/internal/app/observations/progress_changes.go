@@ -13,7 +13,7 @@ import (
 )
 
 // newProgressChangeEmitter persists coalesced nonterminal changes.
-// ChangedAt keeps transcript order tied to the write.
+// ChangedAt dates the row at the write, not the flush.
 func newProgressChangeEmitter(
 	store *store.SQL,
 	eventPub *events.Publisher,
