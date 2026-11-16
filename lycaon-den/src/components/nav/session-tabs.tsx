@@ -112,7 +112,7 @@ export function createSessionTabs(options: SessionTabsOptions): SessionTabs {
           onReviewInChat={inConversation(() => api.onReviewInChat())}
           onOpenPicker={() => api.onOpenPicker()}
           onClosePicker={() => api.onClosePicker()}
-          onArmWorkflow={(workflow) => api.onArmWorkflow(workflow)}
+          onArmWorkflow={inConversation((workflow) => api.onArmWorkflow(workflow))}
           onJumpToRun={inConversation((run) => api.onJumpToRun(run))}
           downloadReport={async (runId) => {
             const client = getLycaonClient();

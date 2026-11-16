@@ -191,4 +191,21 @@ webE2e.describe("worker activity paging", () => {
     // Returning upward reloads evicted history above the reader without moving them.
     await expectReadingRowHeldAcross(page, gates, "before", -2);
   });
+
+  webE2e("opens a worker from the stage title bar in the conversation it belongs to", async ({ page }) => {
+    await installWorkerRoutes(page);
+    await bootstrapChatSession(page);
+    await page
+      .getByTestId("focused-project-nav")
+      .getByRole("button", { name: "Files", exact: true })
+      .click();
+    await expect(page.getByTestId("files-tree")).toBeVisible();
+
+    await page.getByTestId("stage-tab-workers").click();
+    const panel = page.getByTestId("stage-tabs-panel");
+    await panel.getByTestId("workers-tab-row").first().getByRole("button").first().click();
+    await expect(page.getByTestId("chat-view")).toBeVisible();
+    await expect(page.getByTestId("worker-activity")).toBeVisible();
+    await expect(page.getByTestId("stage-tabs")).toHaveCount(0);
+  });
 });

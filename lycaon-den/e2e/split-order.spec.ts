@@ -300,6 +300,18 @@ webE2e.describe("session tabs in the stage title bar", () => {
     await expect(stageTabs(page)).toHaveCount(0);
   });
 
+  webE2e("arming a workflow shows it on the composer it arms", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await bootstrapChatSession(page);
+    await openFiles(page);
+
+    await stageTab(page, "workflows").click();
+    await stagePanel(page).getByTestId("pick-workflow-button").click();
+    await stagePanel(page).locator('[data-testid^="workflow-picker-row-"]').first().click();
+    await expect(liveChatStage(page).getByTestId("workflow-arm-chip")).toBeVisible();
+    await expect(stageTabs(page)).toHaveCount(0);
+  });
+
   webE2e("split view carries the tabs while the conversation is closed", async ({ page }) => {
     await page.setViewportSize({ width: 1500, height: 900 });
     await bootstrapChatSession(page);
