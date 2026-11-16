@@ -452,8 +452,6 @@ export type CreateTranscriptVirtualizerOptions<
   originPx?: () => number;
   /** Unloaded message ordinals on each side of the resident window. */
   unloadedOrds?: () => TranscriptUnloadedOrds;
-  /** Message-backed resident row count and ordinal span, for sizing unloaded runways. */
-  residentRowSpan?: () => { count: number; ordSpan: number };
   minimumBufferRows?: number;
   bufferViewports?: number;
   observeElementRect?: VirtualizerOptions<
@@ -493,7 +491,6 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
   const residentMetrics = () =>
     measureTranscriptResidentRows({
       items: opts.items(),
-      span: opts.residentRowSpan?.(),
       cachedSize: (key) => virtualizerRef.current?.itemSizeCache.get(key),
       persistedSize: (item) => opts.restoredRowEstimate?.(item),
       estimatedSize: (_, index) => estimatedSize(index),
@@ -503,22 +500,8 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
   const runway = createMemo<TranscriptRunwayState>(() => {
     measurementEpoch();
     const unloaded = opts.unloadedOrds?.() ?? { before: 0, after: 0 };
-    const viewport = opts.scrollElement();
-    const viewportHeightPx =
-      virtualizerRef.current?.scrollRect?.height ||
-      viewport?.clientHeight ||
-      TRANSCRIPT_VIRTUAL_INITIAL_VIEWPORT_HEIGHT_PX;
-    const scrollOffsetPx =
-      virtualizerRef.current?.scrollOffset ??
-      viewport?.scrollTop ??
-      0;
-    return runwayBudget.observe({
-      unloaded,
-      ...residentMetrics(),
-      scrollOffsetPx,
-      viewportHeightPx,
-      following: unloaded.after === 0,
-    });
+    const { measuredHeightPx, measuredOrdSpan } = residentMetrics();
+    return runwayBudget.observe({ unloaded, measuredHeightPx, measuredOrdSpan });
   });
   const initialEndOffset = (): number => {
     const count = opts.items().length;
