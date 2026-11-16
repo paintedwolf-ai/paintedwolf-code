@@ -108,9 +108,10 @@ func TestCoordinatorEntryPointsAgreeOnReaderFacts(t *testing.T) {
 	}
 }
 
-// Every worker render entry point receives identical values for every
-// reader-fact key on a given (profile, posture, root count) leg.
-func TestWorkerEntryPointsAgreeOnReaderFacts(t *testing.T) {
+// Worker skill templates receive the reader's value for every reader-fact
+// key on each (profile, posture, root count) leg; persona renders are held to
+// the same in internal/prompts.
+func TestWorkerSkillVarsCarryReaderFacts(t *testing.T) {
 	eff := contractcheck.StockCatalog(t)
 	agents, err := agentdef.LoadEffectiveWithCatalog(eff)
 	contractcheck.FailErr(t, "load agents", err)
@@ -118,8 +119,6 @@ func TestWorkerEntryPointsAgreeOnReaderFacts(t *testing.T) {
 	contractcheck.FailErr(t, "load tool profiles", err)
 	postures, err := sessionprofiles.LoadPostureRegistry()
 	contractcheck.FailErr(t, "load postures", err)
-	engine := contractPersonaEngine(t)
-
 	for _, posture := range postures.List() {
 		profiles := postureProfiles(shipped, posture.CommandEffects)
 		for _, rootCount := range []int{0, 1, 2} {
@@ -138,13 +137,8 @@ func TestWorkerEntryPointsAgreeOnReaderFacts(t *testing.T) {
 					contractcheck.FailErr(t, "new worker reader", err)
 					want := reader.Facts()
 
-					personaVars, err := prompts.PersonaVars(t.Context(), engine, agent.ID, reader, nil)
-					contractcheck.FailErr(t, "persona vars", err)
-					skillVars := prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
-
 					entryPoints := map[string]map[string]any{
-						"persona": personaVars,
-						"skill":   skillVars,
+						"skill": prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget()),
 					}
 					for key, wantVal := range want {
 						for epName, epVars := range entryPoints {

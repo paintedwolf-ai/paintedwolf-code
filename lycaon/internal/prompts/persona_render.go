@@ -38,12 +38,6 @@ func RenderPersona(ctx context.Context, engine *FileTemplateEngine, agentID stri
 	return body, nil
 }
 
-// PersonaVars builds the variable map RenderPersona hands the template engine.
-func PersonaVars(ctx context.Context, engine *FileTemplateEngine, agentID string, reader Reader, occurrence map[string]any) (map[string]any, error) {
-	_, _, _, data, err := personaVars(ctx, engine, agentID, reader, occurrence)
-	return data, err
-}
-
 func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string, reader Reader, occurrence map[string]any) (*FileTemplateEngine, string, string, map[string]any, error) {
 	if engine == nil {
 		return nil, "", "", nil, fmt.Errorf("prompt engine not configured")
