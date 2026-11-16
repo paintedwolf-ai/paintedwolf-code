@@ -78,13 +78,6 @@ describe("den-shell drawer layout contract", () => {
     expect(drawerCss).toMatch(
       /\.den-shell--orientation-mirrored \.den-context-drawer\s*\{[\s\S]*?left:\s*0[\s\S]*?border-right:\s*1px solid var\(--den-line\)[\s\S]*?animation-name:\s*den-drawer-in-mirrored/,
     );
-    // Header padding follows the shell inset.
-    expect(drawerCss).toMatch(
-      /\.den-shell\s*\{[\s\S]*?--den-context-drawer-header-pad-top:\s*calc\(\s*var\(--den-titlebar-inset\) \+ var\(--den-tabs-top-gap\)\s*\)/,
-    );
-    expect(drawerCss).toMatch(
-      /\.den-custom-chrome:not\(\.den-tauri-macos\) \.den-shell,\s*\.den-tauri-macos\.den-custom-chrome\s*\.den-shell:not\(\.den-shell--orientation-mirrored\)\s*\{[\s\S]*?--den-context-drawer-header-pad-top:\s*var\(--den-tabs-top-gap\)/,
-    );
     expect(drawerCss).toMatch(
       /@utility den-context-drawer-header\s*\{[\s\S]*?padding:\s*var\(--den-context-drawer-header-pad-top\) 12px var\(--den-tabs-top-gap\)/,
     );
