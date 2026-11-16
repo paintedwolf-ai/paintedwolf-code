@@ -92,8 +92,7 @@ class HostedPlanTests(unittest.TestCase):
     def test_nightly_selection_includes_only_requested_and_unconditional_jobs(self):
         lanes = ci.lanes()
         nightly = {target for row in ci.matrix("nightly")["include"] for target in lanes[row["lane"]]["targets"]}
-        self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "check:coverage",
-                                   "den:coverage-check", "den:test:transcript-scale", "lint:vuln:fresh",
+        self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "lint:vuln:fresh",
                                    "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll",
                                    "den:webkit:atspi", "test:confine:linux", "nix:check", "test:userlands", "test:conformance:live",
                                    "budgets", "coverage:changes", "den:coverage:changes", "scripts:coverage:changes",
@@ -113,7 +112,7 @@ class HostedPlanTests(unittest.TestCase):
                 ci.matrix(profile, suite)
 
     def test_full_nightly_covers_checks_without_widening_partial_suites(self):
-        common_checks = {"limits", "build", "lint", "vulnerabilities", "runner", "frontend", "native"}
+        common_checks = {"build", "lint", "vulnerabilities", "runner", "frontend", "native"}
         full = {row["lane"] for row in ci.matrix("nightly", "all")["include"]}
         self.assertLessEqual(common_checks | {"behavior"}, full)
         for suite in ("performance", "e2e"):
@@ -230,14 +229,14 @@ class HostedPlanTests(unittest.TestCase):
 
     def test_lanes_that_reach_the_protected_launch_leg_provision_its_display(self):
         # Catalog recipes over the whole tree reach internal/launchguard; scripted runs declare it.
-        for target in ("test:full", "test:race", "check:coverage", "coverage:changes", "test:confine:linux"):
+        for target in ("test:full", "test:race", "coverage:changes", "test:confine:linux"):
             with self.subTest(target=target):
                 self.assertTrue(ci.runs_protected_launch(target))
         for target in ("test:stress", "test:fuzz", "perf:bench", "build", "lint:full"):
             with self.subTest(target=target):
                 self.assertFalse(ci.runs_protected_launch(target))
         nightly = {row["lane"] for row in ci.matrix("nightly")["include"] if row["linux_launch"]}
-        self.assertTrue({"go-coverage", "race"} <= nightly, nightly)
+        self.assertTrue({"build", "race"} <= nightly, nightly)
         data = copy.deepcopy(planning.catalog())
         data["go"]["test:race"]["packages"] = ["./internal/db/...", "./test/wiring"]
         with patch.object(ci, "catalog", return_value=data):
@@ -322,7 +321,7 @@ class HostedPlanTests(unittest.TestCase):
     def test_capped_matrix_starts_cheap_frequent_failures_then_its_longest_lanes(self):
         lanes = ci.lanes()
         rows = ci.matrix("integration")["include"]
-        self.assertEqual({row["lane"] for row in rows[:2]}, {"limits", "lint"})
+        self.assertEqual({row["lane"] for row in rows[:2]}, {"build", "lint"})
         self.assertEqual(rows[2]["lane"], "runner")
         self.assertEqual([row["lane"] for row in rows[3:5]], ["behavior", "behavior"])
         for profile in ci.PROFILES:
@@ -330,7 +329,7 @@ class HostedPlanTests(unittest.TestCase):
             ordinary = [row for row in rows if row['priority'] != 'compile']
             order = [(ci.PRIORITIES[row['priority']], -row['minutes']) for row in ordinary]
             self.assertEqual(order, sorted(order))
-        with self.catalog_patch(lambda d: d["ci"]["limits"].update(priority="invalid")), self.assertRaises(ValueError):
+        with self.catalog_patch(lambda d: d["ci"]["build"].update(priority="invalid")), self.assertRaises(ValueError):
             ci.matrix("integration")
 
     def test_combined_analysis_targets_restore_both_tool_sets(self):

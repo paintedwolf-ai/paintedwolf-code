@@ -346,7 +346,8 @@ def run_python(scope):
             return [], False, "no changed scripts Python"
         failed = python_coverage.run(ROOT, selected)
         findings = [Finding("error", "python", f"{name} failed; inspect the unittest output") for name in failed]
-        return findings, bool(failed), f"{len(selected)} complete script suite(s); no changed source to measure"
+        measured = "the runner suite" if scope.paths else "every declared script suite"
+        return findings, bool(failed), f"{measured}; no changed source to measure"
     measured = f"{len(changed)} changed file(s)"
     measurements = python_coverage.measure(ROOT, changed, coverage_policy.python_suites(),
                                            artifact_root(ROOT) / "coverage" / "changes-python")
