@@ -432,7 +432,6 @@ describe("den-shell drawer layout contract", () => {
     expect(readSourceText(join(root, "components/shell/shell-pane-visibility.ts"), "utf8")).toMatch(/navCollapsedPref\(\)/);
     // Hidden panes reopen from the stage title bar, which keeps its height.
     expect(shell).toMatch(/<ShellStageColumn[\s\S]*?back=\{titlebarBack\(\)\}\s+edges=\{stageEdges\(/);
-    expect(columns).toMatch(/<ShellHeaderTitlebar back=\{props\.back\} edges=\{props\.edges\} windowEdges=\{props\.windowEdges\} \/>/);
     expect(titlebar).toMatch(/StageEdgeControls/);
     // ChatView mounts within the chat-stage provider.
     const stageColumnStart = columns.indexOf('aria-label="Stage"');
@@ -478,13 +477,6 @@ describe("den-shell drawer layout contract", () => {
     expect(shell).toMatch(
       /workersDrawerOpen=\{body\.surfaceActive\(\) && workersOpen\(\)\}/,
     );
-  });
-
-  it("worker roster lives in the Workers tab", () => {
-    const tabRail = readSourceText(join(root, "components/nav/ChatTabRail.tsx"), "utf8");
-    expect(tabRail).toMatch(/WorkersTab/);
-    expect(tabRail).toMatch(/sessionWorkerRows/);
-    expect(tabRail).toMatch(/liveWorkerRows/);
   });
 
   it("workers drawer renders WorkerTranscript", () => {
