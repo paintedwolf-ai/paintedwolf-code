@@ -137,9 +137,6 @@ func (r *Runtime) wireWorkerContext(deps Dependencies) error {
 		},
 	}
 	records := r.Records
-	if records == nil {
-		records = workerrecords.New(deps.Storage.Database)
-	}
 	deps.Sessions.Manager.SetWorkerContextBuilder(&delegation.CompositeWorkerContext{
 		Delegation: r.ContextLoader,
 		Records:    records,
@@ -147,9 +144,6 @@ func (r *Runtime) wireWorkerContext(deps Dependencies) error {
 		AgentsFor:  agentsForSession,
 		MatcherFor: playbooksForSession,
 		WorkflowIDForRun: func(ctx context.Context, runID string) string {
-			if deps.Workflows == nil || deps.Workflows.Store == nil || deps.Workflows.Store.Runs == nil {
-				return ""
-			}
 			run, getErr := deps.Workflows.Store.Runs.Get(ctx, runID)
 			if getErr != nil || run == nil {
 				return ""
