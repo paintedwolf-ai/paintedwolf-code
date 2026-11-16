@@ -28,8 +28,3 @@ func Always(f *os.File) error {
 func Relaxed() bool {
 	return relaxed.Load()
 }
-
-// Relax skips every later flush. Only test support calls it.
-func Relax() {
-	relaxed.Store(true)
-}

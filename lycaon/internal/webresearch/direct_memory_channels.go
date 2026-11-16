@@ -3,6 +3,10 @@ package webresearch
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -10,9 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/webindex"
-	"strings"
-	"sync"
-	"time"
 )
 
 const (
@@ -110,14 +111,6 @@ func recordSeen(scope string, hits []WebHit) {
 		}
 		entry.urls[canonicalURL(h.URL)] = entry.touched
 	}
-}
-
-func resetDirectMemory() {
-	seedPlanCache.reset()
-	searchResultCache.reset()
-	searchMemory.Lock()
-	searchMemory.scopes = make(map[string]*seenScope)
-	searchMemory.Unlock()
 }
 
 // memoryWireProviderID labels hits served from the persistent web index.

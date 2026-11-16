@@ -35,30 +35,6 @@ func rejectDuplicateAppendIDs(msgs []api.Message) error {
 	return nil
 }
 
-func rejectExistingMessageIDs(existing []api.Message, msgs []api.Message) error {
-	if len(existing) == 0 {
-		return nil
-	}
-	have := make(map[string]struct{}, len(existing))
-	for _, msg := range existing {
-		id := strings.TrimSpace(msg.ID)
-		if id == "" {
-			continue
-		}
-		have[id] = struct{}{}
-	}
-	for _, msg := range msgs {
-		id := strings.TrimSpace(msg.ID)
-		if id == "" {
-			continue
-		}
-		if _, ok := have[id]; ok {
-			return duplicateMessageID(id)
-		}
-	}
-	return nil
-}
-
 // appendsActivity reports whether an append shows in the chat's transcript,
 // which is what advances activity_at. Hidden host rows and span bookkeeping,
 // including a phase's explain note, change only the record.

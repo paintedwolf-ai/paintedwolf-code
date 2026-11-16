@@ -35,11 +35,6 @@ type Sources struct {
 	ApprovalRules ApprovalRuleCatalogSource
 }
 
-// NoSources reports successful empty fact producers.
-func NoSources() Sources {
-	return Sources{Detections: func() DetectionSource { return inertDetections{} }, Pins: inertPins{}, ApprovalRules: inertApprovalRules{}}
-}
-
 // A nil Detections source remains an unreported producer.
 func (s Sources) normalized() Sources {
 	if s.Pins == nil {
@@ -52,10 +47,6 @@ func (s Sources) normalized() Sources {
 }
 
 type inertDetections struct{}
-
-func (inertDetections) MatchAction(hitl.ProposedAction, gate.Posture) (hitl.DetectionMatch, bool) {
-	return hitl.DetectionMatch{}, false
-}
 
 type inertPins struct{}
 

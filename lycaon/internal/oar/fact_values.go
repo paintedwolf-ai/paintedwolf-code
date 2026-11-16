@@ -1,11 +1,7 @@
 package oar
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
-	"github.com/lycaon/lycaon/internal/oarcore"
 )
 
 // factValues closes the literal vocabulary of string facts; facts absent here
@@ -42,28 +38,4 @@ func setOf(vals ...string) map[string]struct{} {
 		m[v] = struct{}{}
 	}
 	return m
-}
-
-// ValidateConditionFactValues checks == and in literals in a when clause
-// against the declared fact vocabularies. A non-empty rejectionCodes closes
-// the rejection_code vocabulary.
-func ValidateConditionFactValues(source string, rejectionCodes map[string]struct{}) error {
-	cmps, err := oarcore.ConditionFactComparisons(source)
-	if err != nil {
-		return err
-	}
-	for _, c := range cmps {
-		name := strings.TrimPrefix(strings.TrimSpace(c.Fact), "paintedwolf.")
-		allowed, ok := factValues[name]
-		if name == rejectionCodeFact && len(rejectionCodes) > 0 {
-			allowed, ok = rejectionCodes, true
-		}
-		if !ok {
-			continue
-		}
-		if _, valid := allowed[c.Value]; !valid {
-			return fmt.Errorf("fact %q %s %q: value is outside the declared vocabulary", c.Fact, c.Op, c.Value)
-		}
-	}
-	return nil
 }

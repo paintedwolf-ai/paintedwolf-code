@@ -18,8 +18,6 @@ type journalRecord struct {
 	Signed  SignedManifest `json:"signed"`
 }
 
-func (s *Store) journalPath() string { return filepath.Join(s.root, "journal.jsonl") }
-
 type journalLock struct{ f *os.File }
 
 func (s *Store) lockJournal() (*journalLock, error) {

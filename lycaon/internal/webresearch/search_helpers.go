@@ -3,14 +3,15 @@ package webresearch
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/runeclamp"
-	"github.com/lycaon/lycaon/internal/textrank"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/url"
 	"sort"
 	"strings"
 	"sync"
 	"unicode"
+
+	"github.com/lycaon/lycaon/internal/runeclamp"
+	"github.com/lycaon/lycaon/internal/textrank"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // truncateText caps provider-supplied text at maxRunes, marking the cut. Runes,
@@ -182,12 +183,6 @@ func releaseSeedCallSlot(providerID string, sharedWithCoordinator bool) {
 	default:
 		wrlog.Warn("unbalanced seed-call slot release")
 	}
-}
-
-func resetSeedCallSems() {
-	seedSemMu.Lock()
-	seedSems = map[string]chan struct{}{}
-	seedSemMu.Unlock()
 }
 
 // rrfK is the standard Reciprocal Rank Fusion damping constant; higher

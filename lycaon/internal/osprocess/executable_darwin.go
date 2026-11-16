@@ -101,25 +101,3 @@ static int pw_stopped_image(int pid, int fd, int *matched) {
 }
 */
 import "C"
-
-import (
-	"fmt"
-	"os"
-	"syscall"
-)
-
-func matchStoppedExecutable(pid int, expected *os.File) (bool, error) {
-	var matched C.int
-	conn, err := expected.SyscallConn()
-	if err != nil {
-		return false, err
-	}
-	var code C.int
-	if err := conn.Control(func(fd uintptr) { code = C.pw_stopped_image(C.int(pid), C.int(fd), &matched) }); err != nil {
-		return false, err
-	}
-	if code != 0 {
-		return false, fmt.Errorf("%w: %w", ErrExecutableObservationUnavailable, syscall.Errno(code))
-	}
-	return matched != 0, nil
-}

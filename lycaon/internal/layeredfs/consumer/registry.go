@@ -21,15 +21,6 @@ func RegisterBranchEngine(branchRoot string, eng *Engine) {
 	branchEngineRegistry.Store(cleaned, eng)
 }
 
-// UnregisterBranchEngine removes a branch root association from the active Engine registry.
-func UnregisterBranchEngine(branchRoot string) {
-	cleaned := filepath.Clean(strings.TrimSpace(branchRoot))
-	if cleaned == "" || cleaned == "." {
-		return
-	}
-	branchEngineRegistry.Delete(cleaned)
-}
-
 // UnregisterEngine removes every association of eng, so nothing can reach a settled view.
 func UnregisterEngine(eng *Engine) {
 	if eng == nil {

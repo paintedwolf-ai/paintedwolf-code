@@ -5,7 +5,6 @@
 package editorturn
 
 import (
-	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/contribution"
@@ -63,26 +62,6 @@ var presetBoundaries = map[contribution.PresetID]PresetBoundary{
 func PresetBoundaryFor(preset contribution.PresetID) (PresetBoundary, bool) {
 	boundary, ok := presetBoundaries[preset]
 	return boundary, ok
-}
-
-// ToolProfileIDs returns every tool profile a preset can select, sorted. An
-// editor turn runs on the session the user addressed, never a spawned child.
-func ToolProfileIDs() []string {
-	seen := make(map[string]struct{}, len(presetBoundaries))
-	out := make([]string, 0, len(presetBoundaries))
-	for _, boundary := range presetBoundaries {
-		id := strings.TrimSpace(boundary.ToolProfile)
-		if id == "" {
-			continue
-		}
-		if _, dup := seen[id]; dup {
-			continue
-		}
-		seen[id] = struct{}{}
-		out = append(out, id)
-	}
-	sort.Strings(out)
-	return out
 }
 
 // WritePins returns the maximal write pin for a target path under this

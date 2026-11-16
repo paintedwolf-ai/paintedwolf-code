@@ -23,16 +23,6 @@ func NewPresence(hub EventHub, window time.Duration) *Presence {
 	return &Presence{hub: hub, window: window, now: time.Now}
 }
 
-// setClock overrides the stamp clock so tests can move time without sleeping.
-func (p *Presence) setClock(now func() time.Time) {
-	if p == nil || now == nil {
-		return
-	}
-	p.mu.Lock()
-	p.now = now
-	p.mu.Unlock()
-}
-
 // wallNow includes time spent asleep by discarding the monotonic reading.
 // The caller holds mu.
 func (p *Presence) wallNow() time.Time {

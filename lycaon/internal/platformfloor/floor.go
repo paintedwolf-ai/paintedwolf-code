@@ -44,23 +44,6 @@ var machOArchForGoArch = map[string]string{
 // DarwinArches returns an independent copy of the supported architectures.
 func DarwinArches() []string { return slices.Clone(darwinArches) }
 
-// MachOArchForGoArch translates a compiler architecture to its artifact name.
-func MachOArchForGoArch(goArch string) (string, bool) {
-	machO, ok := machOArchForGoArch[goArch]
-	return machO, ok
-}
-
-// MachOArches preserves the configured architecture order.
-func MachOArches() []string {
-	out := make([]string, 0, len(darwinArches))
-	for _, goArch := range darwinArches {
-		if machO, ok := machOArchForGoArch[goArch]; ok {
-			out = append(out, machO)
-		}
-	}
-	return out
-}
-
 //go:embed linux_floor.txt
 var linuxFloorRaw string
 
@@ -83,12 +66,6 @@ func LinuxKernelMin() string { return linuxFloor["kernel"] }
 // LinuxGlibcMin is the oldest C library the host links against.
 func LinuxGlibcMin() string { return linuxFloor["glibc"] }
 
-// LinuxWebKitGTKMin is the oldest WebKitGTK the desktop shell renders in.
-func LinuxWebKitGTKMin() string { return linuxFloor["webkitgtk"] }
-
-// LinuxGTK3Min is the oldest GTK 3 with Wayland activation (xdg_activation_v1).
-func LinuxGTK3Min() string { return linuxFloor["gtk3"] }
-
 // linuxArches lists the shipped Linux executables.
 var linuxArches = []string{"amd64", "arm64"}
 
@@ -96,15 +73,6 @@ var linuxArches = []string{"amd64", "arm64"}
 var elfArchForGoArch = map[string]string{
 	"amd64": "x86_64",
 	"arm64": "aarch64",
-}
-
-// LinuxArches returns an independent copy of the supported architectures.
-func LinuxArches() []string { return slices.Clone(linuxArches) }
-
-// ELFArchForGoArch translates a compiler architecture to its package name.
-func ELFArchForGoArch(goArch string) (string, bool) {
-	elf, ok := elfArchForGoArch[goArch]
-	return elf, ok
 }
 
 // LinuxELFArches preserves the configured architecture order.

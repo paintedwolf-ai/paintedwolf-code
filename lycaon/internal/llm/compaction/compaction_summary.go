@@ -5,9 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/messageview"
 	"io"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/messageview"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/jsonfence"
@@ -160,23 +161,6 @@ func renderContinuationRecord(ctx context.Context, summary compactionSummary, so
 		return "", fmt.Errorf("continuation record %q rendered empty", guidance.CompactionContinuationRecordRef)
 	}
 	return out, nil
-}
-
-func mockCompactionSummary(text string) (string, error) {
-	if strings.TrimSpace(text) == "" {
-		text = "Continue coordinator work from compacted context."
-	}
-	raw, err := json.Marshal(compactionSummary{
-		Facts:       []string{text},
-		Completed:   []string{},
-		Pending:     []string{},
-		Reacquire:   []string{},
-		Constraints: []string{},
-	})
-	if err != nil {
-		return "", fmt.Errorf("marshal mock compaction summary: %w", err)
-	}
-	return string(raw), nil
 }
 
 var (

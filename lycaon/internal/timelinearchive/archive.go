@@ -143,34 +143,6 @@ func Poster(archive []byte) ([]byte, error) {
 	return readEntry(zr, posterEntry)
 }
 
-// Unpack reads the manifest and every entry of an archive.
-func Unpack(archive []byte) (Manifest, map[string][]byte, error) {
-	zr, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
-	if err != nil {
-		return Manifest{}, nil, fmt.Errorf("open timeline archive: %w", err)
-	}
-	raw, err := readEntry(zr, manifestEntry)
-	if err != nil {
-		return Manifest{}, nil, err
-	}
-	var m Manifest
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return Manifest{}, nil, fmt.Errorf("decode timeline manifest: %w", err)
-	}
-	if m.Version != FormatVersion {
-		return Manifest{}, nil, fmt.Errorf("timeline manifest version %d is not %d", m.Version, FormatVersion)
-	}
-	entries := map[string][]byte{}
-	for _, f := range zr.File {
-		body, err := readFile(f)
-		if err != nil {
-			return Manifest{}, nil, err
-		}
-		entries[f.Name] = body
-	}
-	return m, entries, nil
-}
-
 func readEntry(zr *zip.Reader, name string) ([]byte, error) {
 	for _, f := range zr.File {
 		if f.Name == name {

@@ -63,13 +63,6 @@ func NewOAuthTokenStore() (*OAuthTokenStore, error) {
 	return &OAuthTokenStore{store: inner}, nil
 }
 
-// NewOAuthTokenStoreAt opens an empty store at path with a development identity file.
-func NewOAuthTokenStoreAt(path string) *OAuthTokenStore {
-	return &OAuthTokenStore{store: credentialstore.NewEmpty(credentialstore.Slot{
-		Path: path, Namespace: credentialstore.NamespaceMCPOAuth, Context: oauthRecordContext,
-	}, nil)}
-}
-
 // Get returns a stored token record.
 func (s *OAuthTokenStore) Get(providerID string) (OAuthTokenRecord, bool) {
 	raw, ok := s.store.Get(providerID)

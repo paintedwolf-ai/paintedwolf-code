@@ -63,16 +63,6 @@ func countSecretExposureRecords(ctx context.Context, s *sqlCore, sessionID strin
 	return n, nil
 }
 
-func bumpSecretExposureLocked(s *memoryCore, sessionID string, rec evidence.Record) {
-	if !evidence.RecordMarksSecretExposure(rec) {
-		return
-	}
-	if s.secretExposureRecords == nil {
-		s.secretExposureRecords = make(map[string]int)
-	}
-	s.secretExposureRecords[sessionID]++
-}
-
 func bumpSecretExposure(s *sqlCore, sessionID string, rec evidence.Record) {
 	if !evidence.RecordMarksSecretExposure(rec) {
 		return

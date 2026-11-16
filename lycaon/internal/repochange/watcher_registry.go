@@ -314,42 +314,8 @@ func (r *WatcherRegistry) CloseRoot(root string) {
 	}
 }
 
-// ResetWatchersForTest closes the process-global registry.
-func ResetWatchersForTest() {
-	globalWatchers.CloseAll()
-	globalWatchers = NewWatcherRegistry()
-}
-
-// DisableWatchersForTest closes the process-global registry and keeps it from
-// starting platform watchers, so only events a test publishes reach observers.
-func DisableWatchersForTest() {
-	globalWatchers.CloseAll()
-	globalWatchers = NewWatcherRegistry()
-	globalWatchers.disabled = true
-}
-
 // CloseWatchers releases every process-wide filesystem descriptor at shutdown.
 func CloseWatchers() { globalWatchers.CloseAll() }
 
 // CloseRoot releases one process-wide root watcher.
 func CloseRoot(root string) { globalWatchers.CloseRoot(root) }
-
-// MarkCoverageCompleteForTest registers root as recursively watched with
-// complete coverage and no platform stream, so a test can exercise the
-// paths that trust the watcher by delivering events through Notify itself.
-func MarkCoverageCompleteForTest(root string) {
-	key := canonicalDir(root)
-	if key == "" {
-		return
-	}
-	w := &worktreeWatcher{
-		root: key, recursive: true, done: make(chan struct{}),
-		watched: map[string]int{key: 1},
-	}
-	globalWatchers.mu.Lock()
-	if previous := globalWatchers.byDir[key]; previous != nil {
-		previous.close()
-	}
-	globalWatchers.byDir[key] = w
-	globalWatchers.mu.Unlock()
-}

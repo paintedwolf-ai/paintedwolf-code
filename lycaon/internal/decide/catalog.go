@@ -2,7 +2,6 @@ package decide
 
 import (
 	"fmt"
-	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -40,11 +39,6 @@ var sites = []Site{
 	SiteRepomapTags,
 	SiteProjectSearch,
 	SiteWebPages,
-}
-
-// Sites returns every reranking site in catalog order.
-func Sites() []Site {
-	return slices.Clone(sites)
 }
 
 // KnownSite reports whether name is a declared site.

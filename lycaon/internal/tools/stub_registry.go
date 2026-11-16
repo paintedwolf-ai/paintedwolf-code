@@ -49,25 +49,10 @@ func (r *StubRegistry) Register(name string, handler ToolHandler) error {
 	})
 }
 
-// RegisterDefinition publishes a stub definition.
-func (r *StubRegistry) RegisterDefinition(def Definition) error {
-	def, err := validateDefinition(def)
-	if err != nil {
-		return err
-	}
-	r.definitions[def.Meta.Name] = def
-	return nil
-}
-
 // Definition returns one stub definition.
 func (r *StubRegistry) Definition(name string) (Definition, bool) {
 	def, ok := r.definitions[name]
 	return def, ok
-}
-
-// SetFail configures a tool to return a fixed error (tests).
-func (r *StubRegistry) SetFail(name string, err error) {
-	r.fail[name] = err
 }
 
 // Run executes a registered tool.

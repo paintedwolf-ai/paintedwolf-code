@@ -166,9 +166,6 @@ func (b *Broker) SetRefusalReporter(fn RefusalReporter) {
 	}
 }
 
-// SetDialEndpointForTest overrides upstream dialing in tests.
-func (b *Broker) SetDialEndpointForTest(d DialEndpoint) { b.dialEndpoint = d }
-
 // Start binds both front doors and serves them until Close, preferring the
 // recorded ports so an already-running descendant keeps reaching them.
 func (b *Broker) Start(opts ...Options) (Addrs, error) {
@@ -227,22 +224,6 @@ func listenPreferred(listen ListenFunc, port uint16) (net.Listener, error) {
 		}
 	}
 	return listen("tcp", "127.0.0.1:0")
-}
-
-// Addr returns the loopback host:port commands point HTTP(S)_PROXY at.
-func (b *Broker) Addr() string {
-	if b == nil || b.httpLn == nil {
-		return ""
-	}
-	return b.httpLn.Addr().String()
-}
-
-// SocksAddr returns the SOCKS5 listener address.
-func (b *Broker) SocksAddr() string {
-	if b == nil || b.socksLn == nil {
-		return ""
-	}
-	return b.socksLn.Addr().String()
 }
 
 // Close stops both listeners and waits for active connections and serve loops.

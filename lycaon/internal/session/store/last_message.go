@@ -44,20 +44,3 @@ func (s *memoryTranscript) LastAssistantMessageContent(ctx context.Context, sess
 func (s *memoryTranscript) LastTurnMessageContent(ctx context.Context, sessionID string) (string, error) {
 	return lastContentByRole(ctx, s.core, sessionID, api.MessageRoleUser, api.MessageRoleAssistant)
 }
-
-func lastContentByRole(ctx context.Context, s *memoryCore, sessionID string, roles ...api.MessageRole) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	msgs := s.messages[sessionID]
-	for i := len(msgs) - 1; i >= 0; i-- {
-		for _, role := range roles {
-			if msgs[i].Role == role {
-				return msgs[i].Content, nil
-			}
-		}
-	}
-	return "", nil
-}

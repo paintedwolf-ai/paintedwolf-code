@@ -4,13 +4,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/configdir"
-	"github.com/lycaon/lycaon/internal/credentialstore"
 	"os"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/credentialstore"
 )
 
 // CredentialStore validates stored identifiers against its catalog.
@@ -42,15 +43,6 @@ func NewCredentialStore(cat *Catalog) (*CredentialStore, error) {
 		return nil, err
 	}
 	return openCredentialStore(slot, cat)
-}
-
-// NewCredentialStoreAt opens an empty store at path with a development identity file.
-func NewCredentialStoreAt(path string, cat *Catalog) *CredentialStore {
-	wrapper := &CredentialStore{catalog: cat}
-	wrapper.store = credentialstore.NewEmpty(credentialstore.Slot{
-		Path: path, Namespace: credentialstore.NamespaceWebResearch, Context: credentialContext,
-	}, wrapper.ValidID)
-	return wrapper
 }
 
 func openCredentialStore(slot credentialstore.Slot, cat *Catalog) (*CredentialStore, error) {

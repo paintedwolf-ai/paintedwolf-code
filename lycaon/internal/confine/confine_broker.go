@@ -94,37 +94,6 @@ func brokerAddrs() (egressproxy.Addrs, error) {
 	return broker.addrs, nil
 }
 
-// SetBrokerForTest installs a front door without binding real listeners.
-func SetBrokerForTest(b *egressproxy.Broker, addrs egressproxy.Addrs) func() {
-	return setBrokerState(b, addrs, true, nil)
-}
-
-// SetBrokerUnavailableForTest makes mediation fail to start, so a caller can
-// check that an action refuses rather than launching unmediated.
-func SetBrokerUnavailableForTest(cause error) func() {
-	restore := setBrokerState(nil, egressproxy.Addrs{}, false, cause)
-	recordEgressDegraded("broker_start_failed", cause)
-	return restore
-}
-
-func setBrokerState(b *egressproxy.Broker, addrs egressproxy.Addrs, bound bool, failed error) func() {
-	broker.mu.Lock()
-	prevLive, prevAddrs, prevFailed, prevBound := broker.live, broker.addrs, broker.failed, broker.bound
-	broker.live, broker.addrs, broker.failed, broker.bound = b, addrs, failed, bound
-	broker.mu.Unlock()
-	egressDegradedMu.Lock()
-	egressDegraded = nil
-	egressDegradedMu.Unlock()
-	return func() {
-		broker.mu.Lock()
-		broker.live, broker.addrs, broker.failed, broker.bound = prevLive, prevAddrs, prevFailed, prevBound
-		broker.mu.Unlock()
-		egressDegradedMu.Lock()
-		egressDegraded = nil
-		egressDegradedMu.Unlock()
-	}
-}
-
 func brokerPortsPath(stateRoot string) string {
 	stateRoot = strings.TrimSpace(stateRoot)
 	if stateRoot == "" {

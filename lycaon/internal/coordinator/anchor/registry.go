@@ -61,29 +61,6 @@ func RegistryFor(ctx context.Context, sessionID string) *Registry {
 	return DefaultRegistry()
 }
 
-// LoadRegistry loads inform bindings from bindingsDir.
-func LoadRegistry(bindingsDir extpacks.Source, schemaDir string) (*Registry, error) {
-	if !anchorcatalog.Loaded() {
-		if err := anchorcatalog.InstallBundled(); err != nil {
-			return nil, fmt.Errorf("anchor catalog required before LoadRegistry: %w", err)
-		}
-	}
-	loader, err := oar.NewLoader(schemaDir)
-	if err != nil {
-		return nil, fmt.Errorf("oar loader: %w", err)
-	}
-	r := &Registry{
-		byAnchor:       make(map[ID][]*Binding),
-		informPrimary:  make(map[ID]*Binding),
-		renderToAnchor: make(map[string]ID),
-		loader:         loader,
-	}
-	if err := r.loadInformDir(bindingsDir); err != nil {
-		return nil, err
-	}
-	return r, nil
-}
-
 // LoadRegistryFromConfigRoot loads effective anchor bindings.
 func LoadRegistryFromConfigRoot() (*Registry, error) {
 	catalog, err := extpacks.CatalogForConsumers()
@@ -155,37 +132,6 @@ type bindingDoc struct {
 	Render     string            `yaml:"render"`
 	Tier       string            `yaml:"tier"`
 	Invariants BindingInvariants `yaml:"invariants"`
-}
-
-// loadInformDir loads a bare bindings directory — a test fixture or overlay,
-// not pack content, so no catalog gate applies.
-func (r *Registry) loadInformDir(dir extpacks.Source) error {
-	if dir.Empty() {
-		return fmt.Errorf("anchor: empty bindings dir")
-	}
-	entries, err := dir.List()
-	if err != nil {
-		return fmt.Errorf("read bindings dir: %w", err)
-	}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
-			continue
-		}
-		raw, err := dir.Join(e.Name()).Read()
-		if err != nil {
-			return err
-		}
-		var doc bindingDoc
-		if err := yaml.Unmarshal(raw, &doc); err != nil {
-			return fmt.Errorf("%s: %w", e.Name(), err)
-		}
-		b, err := r.parseBindingDoc(doc)
-		if err != nil {
-			return fmt.Errorf("%s: %w", e.Name(), err)
-		}
-		r.add(b)
-	}
-	return nil
 }
 
 func (r *Registry) parseBindingDoc(doc bindingDoc) (*Binding, error) {

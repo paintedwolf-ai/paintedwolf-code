@@ -6,20 +6,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/netip"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/egressclass"
 	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/httpclient"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
-	"io"
-	"net/http"
-	"net/netip"
-	"net/url"
-	"os"
-	"strconv"
-	"strings"
-	"time"
 )
 
 const (
@@ -65,14 +65,6 @@ const providerSearchUserAgent = "painted-wolf-code-search/1.0"
 
 // providerHTTPClient overrides the egress-pinned client in tests.
 var providerHTTPClient *http.Client
-
-// SetProviderHTTPClientForTest sets the REST client for boundary tests.
-func SetProviderHTTPClientForTest(c *http.Client) {
-	if os.Getenv("LYCAON_TEST") != "1" {
-		panic("webresearch.SetProviderHTTPClientForTest requires LYCAON_TEST=1")
-	}
-	providerHTTPClient = c
-}
 
 func providerHTTPTimeout(timeoutSec int) time.Duration {
 	timeout := time.Duration(timeoutSec) * time.Second

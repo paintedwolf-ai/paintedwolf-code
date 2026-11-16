@@ -7,7 +7,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"golang.org/x/sys/unix"
 )
@@ -66,18 +65,4 @@ func readMountInfo(fd int, buf []byte) ([]byte, error) {
 			return buf, err
 		}
 	}
-}
-
-func hasMountOption(options, want string) bool {
-	for len(options) > 0 {
-		token, rest, found := strings.Cut(options, ",")
-		if token == want {
-			return true
-		}
-		if !found {
-			break
-		}
-		options = rest
-	}
-	return false
 }

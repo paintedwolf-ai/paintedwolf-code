@@ -98,30 +98,6 @@ func LoadCached(eff *extpacks.EffectiveCatalog) (Catalog, error) {
 	return cached.catalog, cached.err
 }
 
-// FromUnits builds a catalog from already-validated units (tests and tools).
-func FromUnits(units []Unit) Catalog {
-	cat := Catalog{byID: make(map[string]Unit, len(units))}
-	for _, u := range units {
-		if u.UnitID == "" {
-			u.UnitID = UnitIDPrefix + u.ID
-		}
-		if u.Ref == "" {
-			u.Ref = RefPrefix + u.ID
-		}
-		if len(u.Hosts) == 0 {
-			u.Hosts = []Host{HostCoordinator}
-		}
-		if u.Order == 0 {
-			u.Order = DefaultOrder
-		}
-		cat.units = append(cat.units, u)
-		cat.byID[u.ID] = u
-	}
-	sortUnits(cat.units)
-	cat.revision = revisionOf(cat.units)
-	return cat
-}
-
 func revisionOf(units []Unit) string {
 	h := sha256.New()
 	for _, u := range units {
@@ -223,16 +199,4 @@ func (c Catalog) Rendered(sel Selection) map[Slot][]Unit {
 		out[u.Slot] = append(out[u.Slot], u)
 	}
 	return out
-}
-
-// Fingerprint identifies a rendered selection for prompt-cache keys.
-func Fingerprint(rendered map[Slot][]Unit) string {
-	var ids []string
-	for _, units := range rendered {
-		for _, u := range units {
-			ids = append(ids, u.ID)
-		}
-	}
-	sort.Strings(ids)
-	return strings.Join(ids, ",")
 }

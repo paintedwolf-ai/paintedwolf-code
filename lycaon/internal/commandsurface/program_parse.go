@@ -62,13 +62,6 @@ func (p *ParsedProgram) Snapshot() ProgramSnapshot {
 	return cloneProgram(p.plan)
 }
 
-// Source returns the original unit bytes for exact span inspection, not replay.
-func (p *ParsedProgram) Source() []byte {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return bytes.Clone(p.source)
-}
-
 var programLanguage = sync.OnceValues(toolcontract.LanguageV1)
 
 // SyntaxUnitByteLimit reports the compiled pre-allocation input ceiling.
@@ -82,14 +75,6 @@ func SyntaxUnitByteLimit(sourced bool) int64 {
 		id = "source_bytes"
 	}
 	return languageLimit(catalog, id)
-}
-
-// ParseProgram validates the complete syntax unit before exposing any plan.
-// This pure entry applies local bounds; execution uses ParseAdmitted to charge
-// scratch against its enclosing program while parsing.
-// It only uses the upstream syntax package, never its interpreter or executor.
-func ParseProgram(source []byte, options ParseOptions) (*ParsedProgram, error) {
-	return parseProgram(context.Background(), source, options, nil, nil)
 }
 
 func parseProgram(ctx context.Context, source []byte, options ParseOptions, memory ProgramMemoryAdmission, pool *syntax.AllocationBudget) (program *ParsedProgram, resultErr error) {

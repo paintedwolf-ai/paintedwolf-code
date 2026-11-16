@@ -3,13 +3,10 @@
 package osprocess
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 )
 
 func matchStoppedExecutable(pid int, expected *os.File) (bool, error) {
@@ -29,28 +26,4 @@ func matchStoppedExecutable(pid int, expected *os.File) (bool, error) {
 		return false, err
 	}
 	return os.SameFile(observed, held), nil
-}
-
-func requireStopped(root string) error {
-	status, err := os.Open(filepath.Join(root, "status"))
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrExecutableObservationUnavailable, err)
-	}
-	defer func() { _ = status.Close() }()
-	scanner := bufio.NewScanner(io.LimitReader(status, 64<<10))
-	stopped := false
-	for scanner.Scan() {
-		if strings.HasPrefix(scanner.Text(), "State:") {
-			fields := strings.Fields(strings.TrimPrefix(scanner.Text(), "State:"))
-			stopped = len(fields) > 0 && (fields[0] == "T" || fields[0] == "t")
-			break
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return fmt.Errorf("%w: %w", ErrExecutableObservationUnavailable, err)
-	}
-	if !stopped {
-		return ErrExecutableObservationUnavailable
-	}
-	return nil
 }

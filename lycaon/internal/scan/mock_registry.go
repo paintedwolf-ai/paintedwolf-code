@@ -30,13 +30,6 @@ func (m *MockScanner) ID() string {
 	return "mock-scanner"
 }
 
-func (m *MockScanner) Categories() []api.ScanCategory {
-	if len(m.CategoryList) > 0 {
-		return m.CategoryList
-	}
-	return []api.ScanCategory{api.ScanCategorySecurity}
-}
-
 func (m *MockScanner) Run(ctx context.Context, req ScanRequest) (*scanoutput.Result, error) {
 	m.mu.Lock()
 	m.RunCalls++
@@ -69,10 +62,6 @@ func (m *SlowMockScanner) ID() string {
 		return m.IDVal
 	}
 	return "slow-mock"
-}
-
-func (m *SlowMockScanner) Categories() []api.ScanCategory {
-	return []api.ScanCategory{api.ScanCategorySecurity}
 }
 
 func (m *SlowMockScanner) Run(ctx context.Context, req ScanRequest) (*scanoutput.Result, error) {
@@ -137,33 +126,4 @@ func (r *MockRegistry) List(categories ...api.ScanCategory) []ScannerMeta {
 		out = append(out, ScannerMeta{ID: scanner.ID(), Categories: scanner.Categories(), Contract: contract})
 	}
 	return out
-}
-
-func (r *MockRegistry) RunBest(ctx context.Context, categories []api.ScanCategory, req ScanRequest) (*scanoutput.Result, error) {
-	scanners := r.allScanners()
-	if len(scanners) == 0 {
-		return &scanoutput.Result{}, nil
-	}
-	return scanners[0].Run(ctx, req)
-}
-
-func (r *MockRegistry) allScanners() []CodeScanner {
-	if len(r.Scanners) > 0 {
-		return r.Scanners
-	}
-	if r.Scanner != nil {
-		return []CodeScanner{r.Scanner}
-	}
-	return nil
-}
-
-func mockCategoryOverlap(have, want []api.ScanCategory) bool {
-	for _, left := range have {
-		for _, right := range want {
-			if left == right {
-				return true
-			}
-		}
-	}
-	return false
 }

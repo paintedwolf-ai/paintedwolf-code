@@ -67,16 +67,6 @@ func countUntrustedRecords(ctx context.Context, s *sqlCore, sessionID string) (i
 	return 1, nil
 }
 
-func bumpUntrustedLocked(s *memoryCore, sessionID string, rec evidence.Record) {
-	if !evidence.RecordMarksUntrustedContent(rec) {
-		return
-	}
-	if s.untrustedRecords == nil {
-		s.untrustedRecords = make(map[string]int)
-	}
-	s.untrustedRecords[sessionID]++
-}
-
 func bumpUntrusted(s *sqlCore, sessionID string, rec evidence.Record) {
 	if !evidence.RecordMarksUntrustedContent(rec) {
 		return

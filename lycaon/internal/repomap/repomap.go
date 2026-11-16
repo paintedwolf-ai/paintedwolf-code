@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/decide"
-	"github.com/lycaon/lycaon/internal/filekind"
 	"github.com/lycaon/lycaon/internal/tsparse"
 	"github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
@@ -288,74 +287,6 @@ func Build(ctx context.Context, opts Options) (*Snapshot, error) {
 	return finishBuild(ctx, snap, opts, state.candidates, state.scanned, langFilter)
 }
 
-// BuildFromInventory builds an adaptive repo map from catalog metadata.
-func BuildFromInventory(ctx context.Context, opts Options, entries []InventoryEntry) (*Snapshot, error) {
-	root := strings.TrimSpace(opts.Root)
-	if root == "" {
-		return nil, errors.New("repomap: root required")
-	}
-	absRoot, err := filepath.Abs(root)
-	if err != nil {
-		return nil, fmt.Errorf("repomap: abs root: %w", err)
-	}
-	scopeRel := "."
-	if sub := strings.TrimSpace(opts.Subpath); sub != "" {
-		scopeRel = filepath.ToSlash(sub)
-	}
-	maxBytes := opts.MaxBytes
-	if maxBytes <= 0 {
-		maxBytes = defaultMaxBytes
-	}
-	langFilter := map[string]bool{}
-	for _, name := range opts.Languages {
-		name = strings.TrimSpace(strings.ToLower(name))
-		if name != "" {
-			langFilter[name] = true
-		}
-	}
-	snap := &Snapshot{Root: absRoot, Path: scopeRel, MaxBytes: maxBytes, Languages: []string{}}
-	if opts.ShallowRootMap {
-		return buildShallowInventoryMap(ctx, snap, scopeRel, opts, entries)
-	}
-	candidates := make([]candidate, 0, min(len(entries), DefaultWalkMaxFiles))
-	scanned := 0
-	for _, item := range entries {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		rel := filepath.ToSlash(strings.TrimPrefix(filepath.Clean(item.Path), "./"))
-		if rel == "" || rel == "." || !inventoryEntryUnderScope(rel, scopeRel) {
-			continue
-		}
-		if opts.PathIncluded != nil && !opts.PathIncluded(rel, item.IsDir) {
-			continue
-		}
-		if item.IsDir {
-			continue
-		}
-		scanned++
-		name := item.Name
-		if name == "" {
-			name = filepath.Base(rel)
-		}
-		entry := filekind.Detect(ctx, filekind.DetectReq{
-			Filename: name,
-			Mode:     filekind.DepthShallow,
-		}).Grammar
-		if entry == nil {
-			if len(langFilter) == 0 {
-				candidates = append(candidates, candidate{rel: rel, size: item.Size})
-			}
-			continue
-		}
-		if len(langFilter) > 0 && !langFilter[strings.ToLower(entry.Name)] {
-			continue
-		}
-		candidates = append(candidates, candidate{rel: rel, lang: entry.Name, size: item.Size})
-	}
-	return finishBuild(ctx, snap, opts, candidates, scanned, langFilter)
-}
-
 func finishBuild(
 	ctx context.Context,
 	snap *Snapshot,
@@ -406,11 +337,6 @@ func finishBuild(
 	assembleMapView(snap, candidates, snap.Path, opts.Depth, snap.MaxBytes)
 	snap.Diagnostics = mapDiagnostics(snap, SkipStats{})
 	return snap, nil
-}
-
-func inventoryEntryUnderScope(rel, scope string) bool {
-	scope = strings.Trim(strings.TrimSpace(filepath.ToSlash(scope)), "/")
-	return scope == "" || scope == "." || rel == scope || strings.HasPrefix(rel, scope+"/")
 }
 
 func readFileUnderRoot(root *os.Root, absRoot, path string) ([]byte, error) {

@@ -57,11 +57,6 @@ func HumanApproval() ApprovalResolver { return ApprovalResolver{} }
 // presence, which a plan releasing held values requires.
 func AttestedApproval(proof presence.Proof) ApprovalResolver { return ApprovalResolver{proof: &proof} }
 
-// PolicyApproval resolves under the named standing policy rule, with no person.
-func PolicyApproval(policy authzledger.PolicyIdentity) ApprovalResolver {
-	return ApprovalResolver{policy: &policy}
-}
-
 func (r ApprovalResolver) validate() error {
 	if r.policy != nil && !r.policy.Complete() {
 		return fmt.Errorf("%w: a policy resolution names its pack, unit, and rule", ErrApprovalResolverInvalid)

@@ -25,13 +25,3 @@ func validateWorkspaceMode(mode WorkspaceMode) error {
 		return fmt.Errorf("unknown workspace_mode %q", mode)
 	}
 }
-
-// TopologyRequiresIsolation reports whether each leg gets an isolated copy.
-func TopologyRequiresIsolation(spec TopologySpec) bool {
-	switch spec.Pattern {
-	case TopologyPack, TopologyFanOut:
-		return effectiveWorkspaceMode(spec.WorkspaceMode) == WorkspaceIsolated
-	default:
-		return false
-	}
-}

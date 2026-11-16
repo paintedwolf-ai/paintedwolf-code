@@ -2,14 +2,11 @@ package rules
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/scan/opengrep"
-	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -101,67 +98,6 @@ type LycaonProvenanceBlock struct {
 // LycaonProvenanceOriginBundledInRepo marks first-party gap-fill rules shipped in-repo (CC-BY-4.0).
 const LycaonProvenanceOriginBundledInRepo = "bundled-in-repo"
 
-// LoadRuleFile reads and parses a lycaon rule YAML file.
-func LoadRuleFile(path string) (*RuleFile, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var rf RuleFile
-	// Decode only the fields used by rule execution.
-	if err := yaml.Unmarshal(data, &rf); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", path, err)
-	}
-	return &rf, nil
-}
-
-// ValidateRule checks one rule entry against lycaon gate policy.
-func ValidateRule(r Rule) error {
-	if strings.TrimSpace(r.ID) == "" {
-		return fmt.Errorf("rule missing id")
-	}
-	if !idPrefixPattern.MatchString(r.ID) {
-		return fmt.Errorf("rule id %q must match lycaon.{lang}.{slug}", r.ID)
-	}
-	if len(r.Languages) == 0 {
-		return fmt.Errorf("rule %q missing languages", r.ID)
-	}
-	if r.Metadata != nil && r.Metadata.Purpose == "coverage" {
-		if r.Severity != "INFO" || r.Paths == nil || len(r.Paths.Include) == 0 {
-			return fmt.Errorf("coverage observation %q must be INFO and path scoped", r.ID)
-		}
-		return nil
-	}
-	switch strings.ToUpper(strings.TrimSpace(r.Severity)) {
-	case SeverityError, SeverityWarning:
-	default:
-		return fmt.Errorf("rule %q severity must be ERROR or WARNING, got %q", r.ID, r.Severity)
-	}
-	return nil
-}
-
-// ValidateRuleFile validates all rules in a lycaon gate rule file.
-func ValidateRuleFile(path string) error {
-	rf, err := LoadRuleFile(path)
-	if err != nil {
-		return err
-	}
-	if len(rf.Rules) == 0 {
-		return fmt.Errorf("%s: no rules", path)
-	}
-	seen := make(map[string]struct{}, len(rf.Rules))
-	for _, r := range rf.Rules {
-		if err := ValidateRule(r); err != nil {
-			return fmt.Errorf("%s: %w", path, err)
-		}
-		if _, dup := seen[r.ID]; dup {
-			return fmt.Errorf("%s: duplicate rule id %q", path, r.ID)
-		}
-		seen[r.ID] = struct{}{}
-	}
-	return nil
-}
-
 func LoadOpengrepGates() (*OpengrepGatesConfig, error) {
 	data, err := config.Read(config.OpengrepGates)
 	if err != nil {
@@ -175,52 +111,6 @@ func LoadOpengrepGates() (*OpengrepGatesConfig, error) {
 		return nil, fmt.Errorf("opengrep-gates analysis: %w", err)
 	}
 	return &cfg, nil
-}
-
-// LoadRulesProvenance returns the bundled provenance ledger for the shipped rules.
-func LoadRulesProvenance() (*RulesProvenanceConfig, error) {
-	data, err := config.Read(rulesProvenance)
-	if err != nil {
-		return nil, err
-	}
-	var cfg RulesProvenanceConfig
-	if err := config.DecodeYAML(data, &cfg); err != nil {
-		return nil, fmt.Errorf("parse rules-provenance: %w", err)
-	}
-	return &cfg, nil
-}
-
-// ResolveModulePath joins the module root with a repository-relative path.
-func ResolveModulePath(lycaonRoot, rel string) string {
-	return filepath.Join(lycaonRoot, filepath.FromSlash(rel))
-}
-
-// CollectRuleIDsFromDir returns rule IDs from YAML gate files.
-func CollectRuleIDsFromDir(dir string) (map[string]string, error) {
-	ids := make(map[string]string)
-	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		if !isGateRuleYAML(path) {
-			return nil
-		}
-		rf, err := LoadRuleFile(path)
-		if err != nil {
-			return err
-		}
-		for _, r := range rf.Rules {
-			if prev, dup := ids[r.ID]; dup {
-				return fmt.Errorf("duplicate rule id %q in %s and %s", r.ID, prev, path)
-			}
-			ids[r.ID] = path
-		}
-		return nil
-	})
-	return ids, err
 }
 
 // ActiveLycaonGatePaths returns configured first-party rule paths.

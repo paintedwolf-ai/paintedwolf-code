@@ -66,16 +66,3 @@ func (b *BurstEnd) Ended() {
 func (b *BurstEnd) Stop() {
 	b.timer.Stop()
 }
-
-// SetHeartbeatIntervalForTests overrides the SSE ping interval; returns a restore func.
-func SetHeartbeatIntervalForTests(d time.Duration) func() {
-	heartbeatIntervalMu.Lock()
-	prev := heartbeatInterval
-	heartbeatInterval = d
-	heartbeatIntervalMu.Unlock()
-	return func() {
-		heartbeatIntervalMu.Lock()
-		heartbeatInterval = prev
-		heartbeatIntervalMu.Unlock()
-	}
-}

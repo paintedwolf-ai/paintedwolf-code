@@ -2,6 +2,10 @@ package llm
 
 import (
 	"fmt"
+	"net/url"
+	"runtime"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	anthropicprovider "github.com/lycaon/lycaon/internal/llm/providers/anthropic"
@@ -9,10 +13,6 @@ import (
 	ollamaprovider "github.com/lycaon/lycaon/internal/llm/providers/ollama"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	vertexexpressprovider "github.com/lycaon/lycaon/internal/llm/providers/vertexexpress"
-	"net/url"
-	"os"
-	"runtime"
-	"strings"
 )
 
 // EndpointStyle describes the provider-specific meaning of base_url.
@@ -139,16 +139,6 @@ func defaultHostProductPlatform() string {
 	default:
 		return runtime.GOOS
 	}
-}
-
-// SetHostProductPlatformForTest overrides the resolver during tests.
-func SetHostProductPlatformForTest(platform string) (restore func()) {
-	if os.Getenv("LYCAON_TEST") != "1" {
-		panic("llm.SetHostProductPlatformForTest requires LYCAON_TEST=1")
-	}
-	prev := hostProductPlatform
-	hostProductPlatform = func() string { return platform }
-	return func() { hostProductPlatform = prev }
 }
 
 // HostProductPlatform returns the sidecar host's product platform token.

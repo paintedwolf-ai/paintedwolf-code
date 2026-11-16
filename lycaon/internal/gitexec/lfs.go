@@ -37,13 +37,6 @@ func lfsForceAbsentArmed() bool {
 		configdir.EnvTruthy(os.Getenv(EnvLFSForceAbsent))
 }
 
-// TestingUseLFSPath sets the helper path for tests.
-func TestingUseLFSPath(path string) (restore func()) {
-	prev := lfsPathFn
-	lfsPathFn = func() (string, error) { return path, nil }
-	return func() { lfsPathFn = prev }
-}
-
 // lfsFilterArgs returns transient filter settings when the helper is available.
 func lfsFilterArgs() []string {
 	path, err := lfsPathFn()

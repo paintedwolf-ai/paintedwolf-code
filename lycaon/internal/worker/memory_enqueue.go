@@ -4,35 +4,11 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-// refreshBoard runs outside q.mu because board reads can re-enter the queue.
-func (q *memoryQueueCore) refreshBoard(ctx context.Context, task api.WorkerTask, projectID string) {
-	refreshWorkerTaskBoard(q.events, ctx, task, projectID)
-}
-
-func refreshWorkerTaskBoard(ev *events.Publisher, ctx context.Context, task api.WorkerTask, projectID string) {
-	if ev == nil {
-		return
-	}
-	key := strings.TrimSpace(task.ProjectID)
-	if key == "" {
-		key = strings.TrimSpace(projectID)
-	}
-	if ev.Hub != nil {
-		publishKey := events.PublishKeyFor(ctx, ev.Lookup, key, strings.TrimSpace(task.ParentSessionID))
-		publishKey.Facet = task.ID
-		_ = ev.Hub.Publish(ctx, api.EventTopicWorker, publishKey, jobstate.JobEvent(task))
-	}
-	ev.PublishBoard(ctx, key, strings.TrimSpace(task.ParentSessionID))
-}
 
 func enqueueScope(projectID string, task *api.WorkerTask) project.ProjectScope {
 	if task == nil {
@@ -65,14 +41,6 @@ func (q *memoryQueueClaims) EnqueueWithProjectID(ctx context.Context, projectID 
 		return enqueueErr
 	})
 	return jobID, err
-}
-
-func (q *memoryQueueClaims) enqueueAdmitted(ctx context.Context, projectID string, task api.WorkerTask) (string, error) {
-	if err := q.PrepareEnqueue(ctx, projectID, &task); err != nil {
-		return "", err
-	}
-	q.PublishEnqueued(ctx, task.ID)
-	return task.ID, nil
 }
 
 func (q *memoryQueueClaims) PrepareEnqueue(ctx context.Context, projectID string, task *api.WorkerTask) error {
@@ -129,55 +97,5 @@ func (q *memoryQueueClaims) PrepareEnqueue(ctx context.Context, projectID string
 	task.AfterWorkers = append([]string(nil), task.AfterWorkers...)
 	q.jobs[task.ID] = &queuedJob{task: *task, projectID: task.ProjectID}
 	q.pending = append(q.pending, task.ID)
-	return nil
-}
-
-func assignMemoryTaskDefaults(task *api.WorkerTask, defaultTarget api.ExecutionTarget) {
-	if task.EffectiveScope().IsWrite() && strings.TrimSpace(task.OverlayID) == "" {
-		task.OverlayID = task.ID
-	}
-	if task.Status == "" {
-		task.Status = api.WorkerStatusPending
-	}
-	if task.CreatedAt.IsZero() {
-		task.CreatedAt = time.Now().UTC()
-	}
-	if task.ExecutionTarget == "" {
-		task.ExecutionTarget = defaultTarget
-	}
-}
-
-func (q *memoryQueueClaims) PublishEnqueued(ctx context.Context, jobID string) {
-	q.mu.Lock()
-	job, ok := q.jobs[jobID]
-	_, published := q.published[jobID]
-	if ok && !published {
-		q.published[jobID] = struct{}{}
-	}
-	q.mu.Unlock()
-	if ok && !published && job != nil {
-		q.refreshBoard(ctx, job.task, job.projectID)
-	}
-	q.NotifyRunnable()
-}
-
-func assertWorkflowTaskAdmissible(ctx context.Context, workflowRuns *WorkflowDomains, task *api.WorkerTask) error {
-	if task == nil || task.WorkflowRunID == "" {
-		return nil
-	}
-	if workflowRuns == nil || workflowRuns.Runs == nil {
-		return fmt.Errorf("worker queue: workflow run checker required for workflow-bound task %s", task.WorkflowRunID)
-	}
-	if err := workflowRuns.Runs.AssertRunnable(ctx, task.WorkflowRunID); err != nil {
-		return err
-	}
-	if task.WorkflowPhase != "" {
-		if workflowRuns.Tasks == nil {
-			return fmt.Errorf("worker queue: workflow task admission required for phase-bound task %s", task.WorkflowPhase)
-		}
-		if err := workflowRuns.Tasks.AssertWorkerTask(ctx, task); err != nil {
-			return err
-		}
-	}
 	return nil
 }

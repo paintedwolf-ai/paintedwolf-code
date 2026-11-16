@@ -363,20 +363,3 @@ func (f *cProxyFields) free() {
 		}
 	}
 }
-
-func lookupPACScript(script string, target *url.URL) (*url.URL, error) {
-	return lookupWith(func(fields *cProxyFields) C.int {
-		cScript := C.CString(script)
-		cTarget := C.CString(target.String())
-		defer C.free(unsafe.Pointer(cScript))
-		defer C.free(unsafe.Pointer(cTarget))
-		scheme := &fields.scheme
-		host := &fields.host
-		port := &fields.port
-		username := &fields.username
-		password := &fields.password
-		message := &fields.message
-		return C.pw_pac_script_proxy(cScript, cTarget,
-			scheme, host, port, username, password, message)
-	})
-}

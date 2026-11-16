@@ -1,10 +1,7 @@
 package secretmint
 
 import (
-	"fmt"
 	"strings"
-
-	"github.com/lycaon/lycaon/config"
 )
 
 // VendorPin records the source and integrity of a bundled password list.
@@ -20,19 +17,6 @@ type VendorPin struct {
 
 type provenanceFile struct {
 	Vendors []VendorPin `yaml:"vendors"`
-}
-
-// LoadProvenance reads the bundled password lists' source pins.
-func LoadProvenance() ([]VendorPin, error) {
-	raw, err := config.Read(config.SecretMintProvenance)
-	if err != nil {
-		return nil, fmt.Errorf("zxcvbn provenance: %w", err)
-	}
-	var file provenanceFile
-	if err := config.DecodeYAML(raw, &file); err != nil {
-		return nil, fmt.Errorf("zxcvbn provenance: %w", err)
-	}
-	return file.Vendors, nil
 }
 
 func compileSet(vendored, defaults []string) map[string]struct{} {

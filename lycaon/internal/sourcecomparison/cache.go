@@ -32,7 +32,6 @@ type Cache struct {
 	measurements pagedview.Preparation[string, Measurement]
 }
 
-func NewCache(budget *pagedview.Budget) *Cache { return &Cache{budget: budget} }
 func (c *Cache) initialize() {
 	c.once.Do(func() {
 		if c.budget == nil {
