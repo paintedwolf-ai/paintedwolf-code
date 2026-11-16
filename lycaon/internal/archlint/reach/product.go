@@ -3,6 +3,7 @@ package reach
 import (
 	"fmt"
 	"go/constant"
+	"go/token"
 	"go/types"
 	"path/filepath"
 	"strings"
@@ -16,7 +17,10 @@ import (
 // string constants it sends somewhere, struct fields it writes, and map keys
 // it fills from a field.
 type productFlow struct {
-	flows       map[string]bool
+	flows map[string]bool
+	// prefixes start names the product builds at run time, such as a fact
+	// family completed by a field name.
+	prefixes    map[string]bool
 	fieldWrites map[string]bool
 	keyFields   map[string]map[string]bool
 }
@@ -42,16 +46,21 @@ func productMains(lc *packages.Config, pkgs []*ssa.Package, patterns []string) (
 }
 
 func scanProduct(prog *ssa.Program, res *rta.Result, cfg Config) productFlow {
-	flow := productFlow{flows: map[string]bool{}, fieldWrites: map[string]bool{}, keyFields: map[string]map[string]bool{}}
+	flow := productFlow{flows: map[string]bool{}, prefixes: map[string]bool{}, fieldWrites: map[string]bool{}, keyFields: map[string]map[string]bool{}}
 	plumbing := map[string]bool{}
 	for _, rel := range cfg.Emitters.Plumbing {
 		plumbing[filepath.Join(cfg.Dir, filepath.FromSlash(rel))] = true
 	}
 	for fn := range res.Reachable {
-		declaring := fn.Pos().IsValid() && plumbing[prog.Fset.Position(fn.Pos()).Filename]
 		for _, b := range fn.Blocks {
 			for _, instr := range b.Instrs {
-				flow.scan(instr, declaring)
+				// Package initializers gather every file's variables, so the
+				// instruction's own position decides.
+				pos := instr.Pos()
+				if !pos.IsValid() {
+					pos = fn.Pos()
+				}
+				flow.scan(instr, pos.IsValid() && plumbing[prog.Fset.Position(pos).Filename])
 			}
 		}
 	}
@@ -83,8 +92,15 @@ func (f productFlow) scan(instr ssa.Instruction, declaring bool) {
 		f.writes(in.Addr, in.Val.Type())
 	case *ssa.Call:
 		f.decodes(in.Common())
-	case *ssa.BinOp, *ssa.Lookup, *ssa.If:
-		// Comparing or looking up an identifier consumes it.
+	case *ssa.BinOp:
+		if in.Op == token.ADD && !declaring {
+			if prefix, ok := stringConst(in.X); ok {
+				f.prefixes[prefix] = true
+			}
+		}
+		// Comparing an identifier consumes it.
+		return
+	case *ssa.Lookup, *ssa.If:
 		return
 	}
 	if declaring {

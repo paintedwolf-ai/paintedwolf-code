@@ -24,6 +24,8 @@ const (
 // rejection the host code raised.
 const rejectionCodeFact = "paintedwolf.rejection_code"
 
+const factNamespace = "paintedwolf."
+
 // EmitterSpec names, relative to the repository root, where codes, facts and
 // anchors are declared and which files only declare or consume them.
 type EmitterSpec struct {
@@ -235,9 +237,16 @@ func (e *Emitters) loadAnchors(root, rel string) error {
 func (e *Emitters) findings(passes []*pass) []archlint.Finding {
 	flows := map[string]bool{}
 	produced := map[string]bool{}
+	var families []string
 	for _, p := range passes {
 		for s := range p.product.flows {
 			flows[s] = true
+		}
+		for prefix := range p.product.prefixes {
+			// A family is built inside the namespace; the namespace alone names none.
+			if strings.HasPrefix(prefix, factNamespace) && len(prefix) > len(factNamespace) {
+				families = append(families, prefix)
+			}
 		}
 		for key, fields := range p.product.keyFields {
 			for field := range fields {
@@ -255,8 +264,8 @@ func (e *Emitters) findings(passes []*pass) []archlint.Finding {
 		}
 	}
 	for _, name := range sortedKeys(e.facts) {
-		bare := strings.TrimPrefix(name, "paintedwolf.")
-		if !flows[name] && !flows[bare] && !produced[name] && !produced[bare] {
+		bare := strings.TrimPrefix(name, factNamespace)
+		if !flows[name] && !flows[bare] && !produced[name] && !produced[bare] && !inFamily(name, families) {
 			out = append(out, archlint.Finding{Kind: KindUnproducedFact, Key: name, Pos: e.facts[name],
 				Message: "host fact " + name + " is declared but the product never produces it"})
 		}
@@ -270,6 +279,15 @@ func (e *Emitters) findings(passes []*pass) []archlint.Finding {
 			Message: "code " + code + " is registered but the product never emits it"})
 	}
 	return out
+}
+
+func inFamily(name string, families []string) bool {
+	for _, prefix := range families {
+		if strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func sortedKeys[V any](m map[string]V) []string {
