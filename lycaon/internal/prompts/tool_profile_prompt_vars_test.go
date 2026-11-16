@@ -219,20 +219,6 @@ func TestToolProfileMutationCapableMatchesAgentCharacteristic(t *testing.T) {
 	}
 }
 
-func TestToolNamesMutationCapableUsesExecutionContract(t *testing.T) {
-	t.Parallel()
-	for _, tool := range []string{"write", "git_restore", "verify", "terminal_open"} {
-		if !prompts.ToolNamesMutationCapable([]string{tool}) {
-			t.Errorf("execution-contract mutation tool %q was classified read-only", tool)
-		}
-	}
-	for _, tool := range []string{"read", "git_diff", "terminal_read", "secret_generate"} {
-		if prompts.ToolNamesMutationCapable([]string{tool}) {
-			t.Errorf("read/control tool %q was classified mutation-capable", tool)
-		}
-	}
-}
-
 func TestAgentSurveysProjectTreeByCharacteristic(t *testing.T) {
 	surveys, ok := prompts.AgentSurveysProjectTree("path-explorer")
 	if !ok || !surveys {
@@ -312,32 +298,6 @@ func TestPreferNativeAndHostRunnerDerivedFromSurface(t *testing.T) {
 	vars := factsFromOffered(t, []string{"write", "command", "terminal_open"}, true)
 	if vars["command_output_files"] != true {
 		t.Fatalf("command_output_files = %v, want true", vars["command_output_files"])
-	}
-}
-
-func TestHostRunnerToolOrderIncludesNativeTerminalThenArgv(t *testing.T) {
-	order := prompts.HostRunnerToolOrder()
-	prefer := prompts.PreferNativeFileToolOrder()
-	if len(prefer) == 0 {
-		t.Fatal("PreferNativeFileToolOrder empty — native.filesystem failed to load")
-	}
-	if slices.Contains(prefer, "command") {
-		t.Fatalf("command must not be in native.filesystem prefer order: %v", prefer)
-	}
-	if !slices.Contains(order, "command") || !slices.Contains(order, "verify") {
-		t.Fatalf("HostRunnerToolOrder missing command/verify: %v", order)
-	}
-	commandIdx := slices.Index(order, "command")
-	verifyIdx := slices.Index(order, "verify")
-	termIdx := slices.Index(order, "terminal_open")
-	if commandIdx < 0 || verifyIdx < 0 || termIdx < 0 {
-		t.Fatalf("expected command/verify/terminal_open in %v", order)
-	}
-	if commandIdx > verifyIdx || verifyIdx > termIdx {
-		t.Fatalf("want command, verify, then terminal tools; got %v", order)
-	}
-	if slices.Contains(order, "write") {
-		t.Fatalf("write must not be in host runner order: %v", order)
 	}
 }
 

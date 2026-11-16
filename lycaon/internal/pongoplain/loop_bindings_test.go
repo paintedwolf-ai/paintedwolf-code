@@ -1,23 +1,24 @@
-package contract
+package pongoplain_test
 
 import (
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/pongoplain"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // Pongo silently resolves unknown struct fields to nil. Discover its actual
 // loop ABI from the pinned dependency instead of copying the member list.
 func TestCatalogLoopBindingsExistInPongo(t *testing.T) {
 	file, err := parser.ParseFile(token.NewFileSet(), filepath.Join(pongoModuleDir(t), "tags_for.go"), nil, 0)
-	contractcheck.FailErr(t, "parse Pongo loop implementation", err)
+	testutil.FailErr(t, "parse Pongo loop implementation", err)
 	fields := map[string]bool{}
 	ast.Inspect(file, func(n ast.Node) bool {
 		spec, ok := n.(*ast.TypeSpec)
@@ -41,7 +42,7 @@ func TestCatalogLoopBindingsExistInPongo(t *testing.T) {
 		t.Fatal("Pongo loop ABI not found")
 	}
 	checked := 0
-	err = filepath.WalkDir(filepath.Join(contractcheck.RepoRoot(t), "lycaon/config/packs"), func(path string, entry os.DirEntry, walkErr error) error {
+	err = filepath.WalkDir(filepath.Join("..", "..", "config", "packs"), func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
@@ -65,7 +66,7 @@ func TestCatalogLoopBindingsExistInPongo(t *testing.T) {
 		}
 		return nil
 	})
-	contractcheck.FailErr(t, "scan catalog template bindings", err)
+	testutil.FailErr(t, "scan catalog template bindings", err)
 	if checked == 0 {
 		t.Fatal("no loop bindings exercised")
 	}
@@ -102,4 +103,15 @@ func TestLoopBindingRuleRejectsUnknownAndScalarTraversal(t *testing.T) {
 			t.Errorf("binding %s valid=%v", binding, got)
 		}
 	}
+}
+
+func pongoModuleDir(t *testing.T) string {
+	t.Helper()
+	out, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", "github.com/flosch/pongo2/v6").Output()
+	testutil.FailErr(t, "resolve the pongo2 module", err)
+	dir := strings.TrimSpace(string(out))
+	if dir == "" {
+		t.Fatal("pongo2 module has no local directory")
+	}
+	return dir
 }

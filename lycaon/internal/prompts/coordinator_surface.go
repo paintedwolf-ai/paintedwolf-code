@@ -100,17 +100,6 @@ func loadCoordinatorSurfaceRow(surfaceID string) (surfacecatalog.Surface, error)
 	return catalog.Surface(surfaceID)
 }
 
-// LoadCoordinatorSurfaceFloor returns the tools a surface offers on every call.
-func LoadCoordinatorSurfaceFloor(surfaceID string) ([]string, error) {
-	row, err := loadCoordinatorSurfaceRow(surfaceID)
-	if err != nil {
-		return nil, err
-	}
-	out := row.FloorTools()
-	sort.Strings(out)
-	return out, nil
-}
-
 // LoadCoordinatorSurfaceLoadable returns the tools a surface can load or request.
 func LoadCoordinatorSurfaceLoadable(surfaceID string) ([]string, error) {
 	row, err := loadCoordinatorSurfaceRow(surfaceID)

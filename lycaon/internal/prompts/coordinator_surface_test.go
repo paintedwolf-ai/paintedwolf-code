@@ -30,16 +30,6 @@ func coordinatorSurfaceInput(t *testing.T, surfaceID string) prompts.ReaderInput
 	}
 }
 
-func TestLoadCoordinatorSurfaceFloor_implementInvestigate(t *testing.T) {
-	got, err := prompts.LoadCoordinatorSurfaceFloor(toolcontract.SurfaceImplementInvestigate)
-	if err != nil {
-		t.Fatalf("LoadCoordinatorSurfaceFloor: %v", err)
-	}
-	if len(got) == 0 {
-		t.Fatal("expected tools for implement_investigate")
-	}
-}
-
 func TestCoordinatorSurfaceFactsHasCommandOnInvestigate(t *testing.T) {
 	reader, err := prompts.DeclaredReader(nil, toolcontract.SurfaceImplementInvestigate)
 	if err != nil {

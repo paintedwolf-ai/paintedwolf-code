@@ -81,7 +81,11 @@ func AuthorRender(ctx context.Context, req AuthorRenderRequest) (AuthorRenderRes
 		if err != nil {
 			return AuthorRenderResult{}, err
 		}
-		body, err := renderPersona(ctx, engine, agentID, reader, vars, false)
+		personaEngine, _, ref, data, err := personaVars(ctx, engine, agentID, reader, vars)
+		if err != nil {
+			return AuthorRenderResult{}, err
+		}
+		body, err := personaEngine.Render(ctx, ref, data)
 		if err != nil {
 			return AuthorRenderResult{}, err
 		}

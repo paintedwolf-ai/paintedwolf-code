@@ -47,27 +47,6 @@ var pongoKeywords = map[string]bool{
 	"off":           true,
 }
 
-// LoopBindings returns all forloop.* selector references in source, ignoring
-// comments, verbatim blocks, and string literals.
-func LoopBindings(source string) []string {
-	var out []string
-	for _, region := range templateRegion.FindAllString(source, -1) {
-		if isOpaqueRegion(region) {
-			continue
-		}
-		for _, tok := range expressionToken.FindAllString(region, -1) {
-			if isQuotedLiteral(tok) {
-				continue
-			}
-			selector := strings.Join(strings.Fields(tok), "")
-			if strings.HasPrefix(selector, "forloop.") {
-				out = append(out, selector)
-			}
-		}
-	}
-	return out
-}
-
 // VariableReferences returns all variable references in source, excluding
 // comments, verbatim blocks, string literals, filter names, forloop, and
 // active loop, with, or set bindings. References are returned in source order

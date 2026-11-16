@@ -58,16 +58,6 @@ func agentSkillMembershipKey(name string) string {
 	return stockSkillMembershipKeys()[name]
 }
 
-// DeclaredReaderFactScalarNames returns a copy of the declared scalar reader fact names in sorted order.
-func DeclaredReaderFactScalarNames() []string {
-	return slices.Clone(declaredReaderFactScalarNames)
-}
-
-// ReaderFactFamilies returns a copy of the declared reader-fact family specs.
-func ReaderFactFamilies() []ReaderFactFamilySpec {
-	return slices.Clone(readerFactFamilies)
-}
-
 // HasReservedReaderFactPrefix reports whether ref begins with a reserved reader-fact prefix.
 func HasReservedReaderFactPrefix(ref string) bool {
 	ref = strings.TrimSpace(ref)
@@ -335,16 +325,6 @@ func CheckTemplateVocabulary(eff *extpacks.EffectiveCatalog) ([]string, error) {
 	}
 	sort.Strings(notes)
 	return notes, nil
-}
-
-// CheckOverlayTemplates scans a project or site prompt override directory and
-// returns diagnostic notes for any undeclared reader-fact references.
-func CheckOverlayTemplates(eff *extpacks.EffectiveCatalog, overlayDir string) ([]string, error) {
-	captured := map[string][]byte{}
-	if err := capturePromptRoot(overlayDir, captured); err != nil {
-		return nil, err
-	}
-	return checkCapturedOverlayTemplates(eff, captured)
 }
 
 func checkCapturedOverlayTemplates(eff *extpacks.EffectiveCatalog, captured map[string][]byte) ([]string, error) {

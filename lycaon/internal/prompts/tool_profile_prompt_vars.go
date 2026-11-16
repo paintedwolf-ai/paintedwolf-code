@@ -66,20 +66,6 @@ func loadNativeToolFamilies() {
 	})
 }
 
-// HostRunnerToolOrder returns host runners in prompt order.
-func HostRunnerToolOrder() []string {
-	loadNativeToolFamilies()
-	out := append([]string(nil), nativemanifest.ArgvHostRunnerTools()...)
-	out = append(out, nativeTerminalTools...)
-	return out
-}
-
-// PreferNativeFileToolOrder returns native.filesystem in manifest order.
-func PreferNativeFileToolOrder() []string {
-	loadNativeToolFamilies()
-	return append([]string(nil), nativeFilesystemTools...)
-}
-
 func orderedEnabledTools(order []string, enabled map[string]bool) []string {
 	var out []string
 	for _, name := range order {
@@ -154,11 +140,6 @@ func ProfileMutationCapable(data AgentToolSurfaceData) bool {
 		delete(enabled, "command")
 	}
 	return toolSetMutationCapable(enabled)
-}
-
-// ToolNamesMutationCapable reports whether a tool set can change the project tree.
-func ToolNamesMutationCapable(names []string) bool {
-	return toolSetMutationCapable(toolNameSet(names))
 }
 
 // IsCoordinatorSurfaceID reports whether id is a declared coordinator turn surface.

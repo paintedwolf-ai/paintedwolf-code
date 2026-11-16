@@ -4,26 +4,12 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestResearchPromptInventoryFollowsSettingAndFamilyFloor(t *testing.T) {
-	catalog, err := surfacecatalog.Load()
-	testutil.FailErr(t, "load surfaces", err)
-	for _, id := range catalog.SurfaceIDs() {
-		row, err := catalog.Surface(id)
-		testutil.FailErr(t, "surface", err)
-		floor, err := prompts.LoadCoordinatorSurfaceFloor(id)
-		testutil.FailErr(t, "prompt floor", err)
-		for _, name := range []string{"web_search", "fetch_url"} {
-			if slices.Contains(floor, name) != slices.Contains(row.FloorTools(), name) {
-				t.Fatalf("%s prompt floor differs from runtime: %v", id, floor)
-			}
-		}
-	}
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "load profiles", err)
 	for _, surface := range []string{"implement_investigate", "observe_plan"} {

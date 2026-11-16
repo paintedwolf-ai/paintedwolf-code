@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
@@ -175,8 +176,11 @@ func mergeWidestUnitBlocks(t *testing.T, engine prompts.PromptTemplateEngine, su
 	t.Helper()
 	catalog, err := prompts.UnitCatalogForEngine(engine)
 	contractcheck.FailErr(t, "unit catalog", err)
-	floor, err := prompts.LoadCoordinatorSurfaceFloor(surfaceID)
-	contractcheck.FailErr(t, "surface floor", err)
+	surfaces, err := surfacecatalog.Load()
+	contractcheck.FailErr(t, "surface catalog", err)
+	row, err := surfaces.Surface(surfaceID)
+	contractcheck.FailErr(t, "surface row", err)
+	floor := row.FloorTools()
 	loadable, err := prompts.LoadCoordinatorSurfaceLoadable(surfaceID)
 	contractcheck.FailErr(t, "surface loadable", err)
 	if rootCount, ok := vars["root_count"].(int); ok {

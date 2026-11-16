@@ -13,7 +13,9 @@ func TestRuntimePersonaValidationDoesNotEnforceAuthoringByteCap(t *testing.T) {
 	engine := NewFileTemplateEngineLayers(PromptLayers{})
 	reader, err := DeclaredReader(nil, "repo-researcher")
 	testutil.FailErr(t, "DeclaredReader repo-researcher", err)
-	body, err := renderPersona(context.Background(), engine, "repo-researcher", reader, nil, false)
+	personaEngine, _, ref, data, err := personaVars(context.Background(), engine, "repo-researcher", reader, nil)
+	testutil.FailErr(t, "repo-researcher persona vars", err)
+	body, err := personaEngine.Render(context.Background(), ref, data)
 	testutil.FailErr(t, "render repo-researcher persona", err)
 
 	budgets, err := LoadPromptBudgets()

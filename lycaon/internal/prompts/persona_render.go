@@ -16,7 +16,23 @@ import (
 
 // RenderPersona renders a runtime worker persona and enforces its final contract.
 func RenderPersona(ctx context.Context, engine *FileTemplateEngine, agentID string, reader Reader, occurrence map[string]any) (string, error) {
-	return renderPersona(ctx, engine, agentID, reader, occurrence, true)
+	engine, id, ref, data, err := personaVars(ctx, engine, agentID, reader, occurrence)
+	if err != nil {
+		return "", err
+	}
+	body, err := engine.Render(ctx, ref, data)
+	if err != nil {
+		return "", err
+	}
+	// Artifact budgets catch authoring regressions before runtime expansion.
+	violations, err := validatePersonaContractRender(id, body)
+	if err != nil {
+		return "", err
+	}
+	if len(violations) > 0 {
+		return "", fmt.Errorf("persona %q final render invalid: %s", id, strings.Join(violations, ", "))
+	}
+	return body, nil
 }
 
 // PersonaVars builds the variable map RenderPersona hands the template engine.
@@ -75,29 +91,6 @@ func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string
 	}
 	MergeUnitVars(data, blocks)
 	return engine, id, ref, data, nil
-}
-
-// renderPersona composes a persona with optional validation.
-func renderPersona(ctx context.Context, engine *FileTemplateEngine, agentID string, reader Reader, occurrence map[string]any, validate bool) (string, error) {
-	engine, id, ref, data, err := personaVars(ctx, engine, agentID, reader, occurrence)
-	if err != nil {
-		return "", err
-	}
-	body, err := engine.Render(ctx, ref, data)
-	if err != nil {
-		return "", err
-	}
-	if validate {
-		// Artifact budgets catch authoring regressions before runtime expansion.
-		violations, err := validatePersonaContractRender(id, body)
-		if err != nil {
-			return "", err
-		}
-		if len(violations) > 0 {
-			return "", fmt.Errorf("persona %q final render invalid: %s", id, strings.Join(violations, ", "))
-		}
-	}
-	return body, nil
 }
 
 // pathCache memoizes one load per active path.
