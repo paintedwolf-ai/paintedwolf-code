@@ -256,7 +256,11 @@ func TestBlueprintFlow11CriteriaReconcileAndBoardPlanFilter(t *testing.T) {
 	testutil.FailErr(t, "create unrelated worker", err)
 
 	call.Identity.ToolCallID = uuid.NewString()
+<<<<<<< HEAD:lycaon/test/wiring/workflow_blueprints_test.go
 	boardRaw, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"plan": "blueprint-flow11.md"}, call)
+=======
+	boardRaw, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"plan": bpPath}, call)
+>>>>>>> origin/feat/wc10-copy-sweep:lycaon/test/wiring/wc07_workflow_blueprints_test.go
 	testutil.FailErr(t, "pack_board plan filter", err)
 	var view api.BoardView
 	testutil.FailErr(t, "decode board view", json.Unmarshal([]byte(boardRaw), &view))
