@@ -1,5 +1,6 @@
 import { expect } from "@playwright/test";
 import { bootstrapChatSession, openNewChatSession, webE2e } from "./helpers.ts";
+import { animationsFinished, boxSettled } from "./fixtures/settle.ts";
 
 webE2e.describe("presentation stability", () => {
   webE2e("keeps the Files overview painted when returning to the stage", async ({ page }) => {
@@ -128,6 +129,9 @@ webE2e.describe("presentation stability", () => {
           await expect(page.getByTestId("split-divider")).toBeVisible();
           await page.getByTestId("layout-dock-btn").click();
         }
+        // The layout's own motion ends before the stage under test is sampled.
+        await animationsFinished(page.getByTestId("shell"));
+        await boxSettled(nav.getByTestId("new-chat-btn"));
         const workspaceReadsBefore = workspaceReads;
         await nav.getByRole("button", { name: "Security scanners", exact: true }).click();
         await expect.poll(() => scannerReads).toBe(1);

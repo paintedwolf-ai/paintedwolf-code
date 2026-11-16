@@ -18,9 +18,9 @@ webE2e("a tool-only forced final response shows an error and permits recovery", 
     const pending = await apiJson<{ pending: boolean; id: string; session_id: string; tools: string[] }>(request, "GET", `/harness/llm/pending?wait=30000&session_id=${sessionId}`);
     expect(pending.pending).toBe(true);
     expect(pending.session_id).toBe(sessionId);
-    expect(pending.tools).toContain("read");
+    expect(pending.tools).toContain("command");
     await apiJson(request, "POST", "/harness/llm/respond", {
-      id: pending.id, content: "", tool_calls: [{ id: crypto.randomUUID(), name: "read", args: { path: "README.md" } }],
+      id: pending.id, content: "", tool_calls: [{ id: crypto.randomUUID(), name: "command", args: { command: "cat README.md" } }],
     });
     await expect(page.getByRole("status", { name: "Status messages", exact: true })).toContainText("Model skipped its closing summary", { timeout: 30_000 });
     // The failed closeout ends the turn without a blank answer or another model request.

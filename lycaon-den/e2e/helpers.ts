@@ -554,10 +554,10 @@ export async function waitForProjectList(page: Page) {
 
 /** Navigate to shell and wait until the project list has loaded from the sidecar. */
 export async function gotoShell(page: Page) {
-  const listPromise = waitForProjectList(page);
   await page.goto("/");
   await expectShellReady(page);
-  await listPromise;
+  // The app marks the sidecar connected once its project list has synchronized.
+  await expect(page.getByTestId("shell")).toHaveAttribute("data-sidecar-status", "connected", { timeout: 60_000 });
 }
 
 /** Sequential key events update controlled field signals. */

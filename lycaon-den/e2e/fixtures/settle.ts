@@ -39,6 +39,26 @@ export async function scrollSettled(scroller: Locator): Promise<void> {
   );
 }
 
+/** Resolves when the element's painted box holds across four frames. */
+export async function boxSettled(target: Locator): Promise<void> {
+  await target.evaluate(
+    (element) =>
+      new Promise<void>((resolve) => {
+        let previous = "";
+        let stable = 0;
+        const tick = () => {
+          const box = element.getBoundingClientRect();
+          const next = `${box.left}:${box.top}:${box.width}:${box.height}`;
+          stable = next === previous ? stable + 1 : 0;
+          previous = next;
+          if (stable >= 4) resolve();
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+}
+
 /** Resolves when the live transcript's rows and scroll geometry hold across four frames with no animation running. */
 export async function settleTranscriptLayout(page: Page): Promise<void> {
   await page.evaluate(async () => {

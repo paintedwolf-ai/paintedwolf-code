@@ -79,6 +79,17 @@ modelIndependentWebE2e("filmstrip thumbnails pass vertical scrolling through to 
   const before = await thumbnailTop();
   await page.mouse.wheel(0, -200);
   await expect.poll(thumbnailTop).toBeGreaterThan(before + 180);
+  // Row measurement can move the tail under one wheel; the jump shows past the near-tail threshold.
+  await expect.poll(async () => {
+    const pastThreshold = await stream.evaluate(async (el) => {
+      const moduleUrl = "/src/chat/stream/stream-scroll.ts";
+      const { streamTailOffset, STREAM_SCROLL_BOTTOM_THRESHOLD_PX } = await import(/* @vite-ignore */ moduleUrl) as
+        typeof import("../src/chat/stream/stream-scroll.ts");
+      return streamTailOffset(el) - el.scrollTop > STREAM_SCROLL_BOTTOM_THRESHOLD_PX;
+    });
+    if (!pastThreshold) await page.mouse.wheel(0, -200);
+    return pastThreshold;
+  }).toBe(true);
   await expect(chat.getByTestId("stream-scroll-jump")).toHaveAttribute("aria-hidden", "false");
 
   await hoverVisibleThumbnail();
