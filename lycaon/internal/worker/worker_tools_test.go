@@ -724,6 +724,7 @@ func TestInstructWorkerComposesAssignmentPrompt(t *testing.T) {
 	testutil.FailErr(t, "register", RegisterWorkerTools(reg, WorkerToolDeps{
 		Ops:   f.ops,
 		Queue: f.queue,
+		Plan:  plantest.New(t, plantest.Deps(f.records)),
 		ComposePrompt: func(_ context.Context, _ tools.ToolContext, agent string, charter api.WorkerTaskCharter, task *api.WorkerTask) (string, error) {
 			if failNext {
 				return "", errors.New("prompt renderer unavailable")
