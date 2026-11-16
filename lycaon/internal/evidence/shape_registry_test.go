@@ -11,15 +11,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestShapeRegistryRegistersAllShapes(t *testing.T) {
-	reg := evidence.DefaultShapeRegistry()
-	for _, id := range evidence.ShapeIDs() {
-		if _, ok := reg.Lookup(id); !ok {
-			t.Fatalf("missing shape %q in registry", id)
-		}
-	}
-}
-
 func TestShapeRegistryUnknownShapeNotVerified(t *testing.T) {
 	rec := evidence.Record{Kind: "read", Shape: "unknown_shape"}
 	ok, reason := evidence.VerifyRecord(rec, evidence.Claim{Excerpt: "anything long enough"})

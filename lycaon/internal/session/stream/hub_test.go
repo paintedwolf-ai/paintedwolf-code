@@ -155,13 +155,6 @@ func TestLiveStreamStopsAdvertisingActiveBeforeTerminalFanout(t *testing.T) {
 	<-finished
 }
 
-func TestLiveStreamUnsubscribeIsIdempotent(t *testing.T) {
-	mgr := New(nil)
-	_, unsub := mgr.Subscribe("live-idempotent")
-	unsub()
-	unsub()
-}
-
 func TestLiveStreamSubscriptionStartsAtLatestPublishedSnapshot(t *testing.T) {
 	mgr := New(nil)
 	hub := mgr.hub

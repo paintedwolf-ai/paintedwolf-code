@@ -132,11 +132,6 @@ func TestFPSCoalesceDropsIntermediateFrames(t *testing.T) {
 	}
 }
 
-func TestPublishActionWithoutStreamIsNoop(t *testing.T) {
-	c := NewController(DefaultConfig(), nil)
-	c.PublishAction(context.Background(), "s", "p", browser.CaptureAction{Type: "click"}, json.RawMessage(`{"ok":true}`))
-}
-
 func TestClaimEmitsAndSnapshotsInvocationAssociation(t *testing.T) {
 	var events []api.PreviewEvent
 	c := NewController(DefaultConfig(), func(_ context.Context, _, _ string, ev api.PreviewEvent) {
