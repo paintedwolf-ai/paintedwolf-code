@@ -5229,6 +5229,14 @@ type ProjectRoot struct {
 	AdmissionCode *string `json:"admission_code"`
 }
 
+// ProjectSettingsRejectedRow
+type ProjectSettingsRejectedRow struct {
+	// Why the project's file was not applied. project_unreadable means the file could not be read or holds a key or value the host does not accept, so none of it applied. Clients branch on this rather than on detail.
+	Code string `json:"code"`
+	// What was wrong, naming the file.
+	Detail string `json:"detail"`
+}
+
 // ProjectSourceEntryCreatedResponse Completed in-app creation. Only the normalized path comes back — a new
 // file is read through GET /source like any other, which is where the
 // editor gets the sha256 its first save must echo.
@@ -5808,6 +5816,8 @@ type ReviewSettingsResponse struct {
 	Scope       SettingsScope       `json:"scope"`
 	ReviewPaths []ContentReviewRule `json:"review_paths"`
 	MergedFrom  []string            `json:"merged_from"`
+	// Present on project scope when the project's review.yaml could not be applied. Every edit asks for review until it is fixed, and the project's review settings cannot be saved until then.
+	Rejected []ProjectSettingsRejectedRow `json:"rejected,omitempty"`
 }
 
 // ReviewedComparisonSource
@@ -6887,6 +6897,8 @@ type SettingsLimitsResponse struct {
 	// When true, a coordinator that crosses the ceiling while already running receives one final tool-capable wind-down round. A response without tool calls is final; after tool calls, the host requests one prose-only closeout. New prompts and worker sessions remain blocked at the ceiling.
 	SpendSoftStop bool     `json:"spend_soft_stop"`
 	MergedFrom    []string `json:"merged_from"`
+	// Present on project scope when the project's limits.yaml could not be applied. The limits shown are the device's, and the project's limits cannot be saved until the file is fixed.
+	Rejected []ProjectSettingsRejectedRow `json:"rejected,omitempty"`
 }
 
 // SettingsPricing
@@ -9013,6 +9025,8 @@ type VerifySettingsResponse struct {
 	BackendConfigured bool                  `json:"backend_configured"`
 	SuggestionState   VerifySuggestionState `json:"suggestion_state,omitempty"`
 	Dismissed         bool                  `json:"dismissed,omitempty"`
+	// Present on project scope when the project's verify.yaml could not be applied. No test command is declared while it stands, and the project's verify settings cannot be saved until the file is fixed.
+	Rejected []ProjectSettingsRejectedRow `json:"rejected,omitempty"`
 }
 
 // VersionComparisonSource

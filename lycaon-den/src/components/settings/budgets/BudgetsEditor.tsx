@@ -19,6 +19,8 @@ import { DenNumberInput } from "../../primitives/DenNumberInput.tsx";
 import { SettingsEditorTitle, BudgetsIcon } from "../SettingsEditorTitle.tsx";
 import { SettingsGovernedGroup } from "../SettingsGovernedGroup.tsx";
 import { chromeProps } from "../../../styling/ui-chrome.ts";
+import { ProjectSettingsRejected } from "../ProjectSettingsRejected.tsx";
+import { PROJECT_SETTINGS_REJECTED_COPY } from "../../../settings/project-settings-rejected-copy.ts";
 
 type NumericLimitKey = { [K in keyof SettingsLimitsPatch]-?: NonNullable<SettingsLimitsPatch[K]> extends number ? K : never }[keyof SettingsLimitsPatch];
 
@@ -32,9 +34,10 @@ type Props = {
 export function BudgetsEditor(props: Props) {
   const draftState = createLimitsDraft(() => props.settingsStore.state.limits);
   const draft = draftState.value;
+  const rejected = () => props.settingsStore.state.limits?.rejected ?? [];
 
   const autoSave = createSettingsAutoSave({
-    isReady: () => draft() != null,
+    isReady: () => draft() != null && rejected().length === 0,
     isDirty: draftState.dirty,
     save: async () => {
       const body = draftState.beginSave();
@@ -96,9 +99,14 @@ export function BudgetsEditor(props: Props) {
       <Show when={!props.embedded}>
         <SettingsEditorTitle icon={<BudgetsIcon />}>Budgets</SettingsEditorTitle>
       </Show>
+      <ProjectSettingsRejected
+        rows={rejected()}
+        consequence={PROJECT_SETTINGS_REJECTED_COPY.limits}
+        testId="budgets-rejected"
+      />
       <ShowLatest when={draft()}>
         {(limitsSnap) => (
-          <>
+          <SettingsGovernedGroup label="Budgets" active={rejected().length === 0} inset={false}>
             <section
               class="den-settings-section"
               data-testid="spend-ceiling-section"
@@ -305,7 +313,7 @@ export function BudgetsEditor(props: Props) {
                 />
               </DenField>
             </section>
-          </>
+          </SettingsGovernedGroup>
         )}
       </ShowLatest>
       <Show when={autoSave.saving()}>

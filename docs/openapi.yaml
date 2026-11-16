@@ -24836,6 +24836,12 @@ components:
           type: array
           items:
             type: string
+        rejected:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectSettingsRejectedRow'
+          description: |
+            Present on project scope when the project's limits.yaml could not be applied. The limits shown are the device's, and the project's limits cannot be saved until the file is fixed.
     ContentReviewRule:
       x-go-generate: true
       type: object
@@ -24873,6 +24879,12 @@ components:
           type: array
           items:
             type: string
+        rejected:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectSettingsRejectedRow'
+          description: |
+            Present on project scope when the project's review.yaml could not be applied. Every edit asks for review until it is fixed, and the project's review settings cannot be saved until then.
     UpdateReviewSettingsRequest:
       x-go-generate: true
       type: object
@@ -24908,6 +24920,12 @@ components:
           $ref: '#/components/schemas/VerifySuggestionState'
         dismissed:
           type: boolean
+        rejected:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectSettingsRejectedRow'
+          description: |
+            Present on project scope when the project's verify.yaml could not be applied. No test command is declared while it stands, and the project's verify settings cannot be saved until the file is fixed.
     UpdateVerifySettingsRequest:
       x-go-generate: true
       type: object
@@ -27074,6 +27092,7 @@ components:
         - extension_suggestion_invalid
         - overlay_format_unsupported
         - overlay_format_invalid
+        - project_settings_need_repair
         - project_approvals_need_repair
         - root_not_found
         - root_busy
@@ -39080,6 +39099,23 @@ components:
         detail:
           type: string
           description: What was wrong, for display beside the row.
+    ProjectSettingsRejectedRow:
+      x-go-generate: true
+      type: object
+      required:
+        - code
+        - detail
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum:
+            - project_unreadable
+          description: |
+            Why the project's file was not applied. project_unreadable means the file could not be read or holds a key or value the host does not accept, so none of it applied. Clients branch on this rather than on detail.
+        detail:
+          type: string
+          description: What was wrong, naming the file.
     FileSummariesSettingsResponse:
       x-go-generate: true
       type: object

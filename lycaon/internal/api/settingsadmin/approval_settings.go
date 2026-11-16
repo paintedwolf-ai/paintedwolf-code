@@ -89,6 +89,17 @@ func ProjectApprovalsWriteError(responses *httpio.Responder, w http.ResponseWrit
 	return true
 }
 
+// ProjectSettingsWriteError answers a refused write over a project limits,
+// verify, or review file the host could not read. Reports whether it handled err.
+func ProjectSettingsWriteError(responses *httpio.Responder, w http.ResponseWriter, err error) bool {
+	if !errors.Is(err, settings.ErrProjectSettingsNeedRepair) {
+		return false
+	}
+	responses.Fail(w, wire.ApiErrorCodeProjectSettingsNeedRepair,
+		"this project's settings file could not be read; fix the file before saving")
+	return true
+}
+
 // requestedPosture parses a present, non-null approval_posture.
 func requestedPosture(token *string) (gate.Posture, bool) {
 	if token == nil {

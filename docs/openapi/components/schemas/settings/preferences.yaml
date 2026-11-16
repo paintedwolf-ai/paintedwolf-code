@@ -173,11 +173,36 @@ components:
           type: array
           items:
             type: string
+        rejected:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectSettingsRejectedRow"
+          description: >
+            Present on project scope when the project's limits.yaml could not be
+            applied. The limits shown are the device's, and the project's
+            limits cannot be saved until the file is fixed.
     SettingsScope:
       type: string
       enum:
       - global
       - project
+    ProjectSettingsRejectedRow:
+      x-go-generate: true
+      type: object
+      required: [code, detail]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum: [project_unreadable]
+          description: >
+            Why the project's file was not applied. project_unreadable means the
+            file could not be read or holds a key or value the host does not
+            accept, so none of it applied. Clients branch on this rather than
+            on detail.
+        detail:
+          type: string
+          description: What was wrong, naming the file.
     FileSummariesSettingsResponse:
       x-go-generate: true
       type: object
