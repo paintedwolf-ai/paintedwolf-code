@@ -196,6 +196,8 @@ func resolveObservationLayer(m *Service, tr *observation.Tracker, jobID string, 
 	switch layer := layeredfs.LayerSource(strings.TrimSpace(rawLayer)); layer {
 	case layeredfs.LayerPrivate, layeredfs.LayerParent, layeredfs.LayerTrunk:
 		return layer
+	case layeredfs.LayerGit:
+		// Git objects are not a file's source layer; the path's own state decides.
 	}
 	if isTouchedForJob(m, jobID, qpath.Rel) {
 		return layeredfs.LayerPrivate
