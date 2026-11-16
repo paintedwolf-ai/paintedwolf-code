@@ -2,7 +2,8 @@
 
 The server must serve the training chat template and turn every served conversation
 fixture, sent in the wire form the host dispatches, into the prompt the fixture expects,
-with one leading BOS token. Uses only the standard library.
+with one leading BOS token. Given a revision, the server's reported build must be of
+that llama.cpp commit, so converter and server are one pin. Uses only the standard library.
 """
 import argparse
 import hashlib
@@ -33,7 +34,13 @@ def wire(messages):
             if message.get("tool_calls") else message for message in messages]
 
 
-def check(url, call=call):
+def built_from(build, revision):
+    """Whether a server's reported build (`b<number>-<short commit>`) is of the given full commit."""
+    commit = str(build or "").rpartition("-")[2]
+    return len(commit) >= 7 and revision.startswith(commit)
+
+
+def check(url, call=call, revision=None):
     template = TEMPLATE.read_text()
     properties = call(url, "/props")
     # The server keeps the template without its final newline.
@@ -52,6 +59,8 @@ def check(url, call=call):
         tokens = call(url, "/tokenize", {"content": prompt, "add_special": True, "parse_special": True})["tokens"]
         if tokens[:1] != [bos] or bos in tokens[1:]:
             raise ValueError("server does not open the prompt with exactly one BOS token: " + case["name"])
+    if revision is not None and not built_from(properties.get("build_info"), revision):
+        raise ValueError("server was not built from the pinned llama.cpp revision")
     return {"schema": SCHEMA, "template_sha256": hashlib.sha256(template.encode()).hexdigest(),
             "cases_sha256": hashlib.sha256(CASES.read_bytes()).hexdigest(), "cases": [case["name"] for case in cases],
             "build": properties.get("build_info")}
@@ -60,6 +69,7 @@ def check(url, call=call):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--url", required=True, help="server root, without /v1")
+    parser.add_argument("--revision", required=True, help="full llama.cpp commit the server must be built from")
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
-    args.out.write_text(json.dumps(check(args.url), sort_keys=True) + "\n")
+    args.out.write_text(json.dumps(check(args.url, revision=args.revision), sort_keys=True) + "\n")

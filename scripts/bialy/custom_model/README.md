@@ -223,8 +223,12 @@ checkpoint with the training tokenizer and template, linking its weights. It
 converts through `gguf_export.py` like a merge, without a behaviour reference,
 so a base arm is served exactly as a trained student is.
 
-`serving_check.py --url SERVER --out RECEIPT` runs the rendering check against
-any running llama.cpp server; an evaluation runs it before its first request.
+`serving_check.py --url SERVER --revision FULL_COMMIT --out RECEIPT` runs the
+rendering check against any running llama.cpp server and requires the build the
+server reports to be of that commit; an evaluation runs it before its first
+request. The export holds its own `llama-server` to the converter revision the
+same way, so the converter, the export checks and the evaluation server are one
+llama.cpp commit.
 
 These checks establish that an artifact renders and decodes like the checkpoint
 it came from. They do not establish quality: qualify the quantized artifact on
@@ -292,8 +296,9 @@ bundle manifest digest, the artifact and export receipt digests, this checkout's
 commit, both binaries and the device the runtime reported. A bundle the runtime
 cannot load yields a failed receipt naming the step (`render_failed`,
 `rendering_mismatch`, `load_failed`, `generation_failed`, `behavior_mismatch`).
-The native runtime loads only the E4B tier, so probes of the other tiers fail
-at `load_failed` until it loads them.
+`scripts/generation/native_tiers.json` states which tiers each backend of the
+native runtime loads: today only E4B. A probe of another tier fails as
+`native_runtime_unsupported` without starting the runtime.
 
 `scripts/generation/publish_bundle.py` verifies a signed bundle against the
 authority, then uploads its payloads under `models/<model>/<device>/<revision>/`

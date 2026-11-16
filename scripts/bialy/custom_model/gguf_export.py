@@ -92,12 +92,14 @@ def observe(url, expected, call=serving_check.call):
     return observed
 
 
-def qualify(server, artifact, precision, template, expected, log):
+def qualify(server, artifact, precision, template, expected, log, revision):
     """Serve one artifact and check what it renders and, given a reference, what it generates."""
     with Server(server, artifact, log) as url:
         rendering = serving_check.check(url)
         if rendering["template_sha256"] != template:
             raise ValueError("artifact does not serve the template its rows were rendered with")
+        if not serving_check.built_from(rendering["build"], revision):
+            raise ValueError("llama.cpp server was not built from the converter revision")
         return {"rendering": rendering,
                 "behavior": compare(expected, observe(url, expected), precision) if expected else None}
 
@@ -158,7 +160,7 @@ def convert_owned(args):
     template = manifest["template_sha256"]
     if template_sha256(after["metadata"]["tokenizer.chat_template"]) != template:
         raise ValueError("GGUF does not embed the template its rows were rendered with")
-    served = {name: qualify(args.server, path, precision, template, expected, args.out / "server.log")
+    served = {name: qualify(args.server, path, precision, template, expected, args.out / "server.log", args.revision)
               for name, path, precision in (("unquantized", raw, "F16"), ("quantized", quantized, args.quantization))}
     checkout_identity(args.llama_cpp, args.revision)
     if binaries != {str(p):file_digest(p) for p in (args.quantizer, args.server)} or inventory(args.merge / "model") != manifest["files"]:

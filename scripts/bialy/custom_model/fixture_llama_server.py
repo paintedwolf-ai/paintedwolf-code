@@ -40,7 +40,8 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         template = Path(os.environ["FIXTURE_TEMPLATE"]).read_text()
         self.reply({"status": "ok"} if self.path == "/health" else
-                   {"chat_template": template.rstrip("\n"), "bos_token": "<bos>", "build_info": "fixture"})
+                   {"chat_template": template.rstrip("\n"), "bos_token": "<bos>",
+                    "build_info": os.environ.get("FIXTURE_BUILD", "b1-aaaaaaa")})
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))

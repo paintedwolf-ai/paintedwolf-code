@@ -118,6 +118,18 @@ class LoadProbe(unittest.TestCase):
             self.rendered = rendered
             self.assertEqual(self.probe()[1]["failure"]["code"], code)
 
+    def test_a_tier_the_runtime_does_not_load_fails_before_the_runtime_starts(self):
+        self.export["student"] = "12b"
+        (self.root / "export_receipt.json").write_text(json.dumps(self.export))
+        Runtime.script = {"rejects": ("hello",)}
+        status, receipt = self.probe(student="12b")
+        self.assertEqual((status, receipt["failure"]["code"]), (2, "native_runtime_unsupported"))
+        self.assertIsNone(receipt["device"])
+        declared = json.loads(load_probe.TIERS.read_text())
+        self.assertEqual(declared["schema"], "pw-native-tiers/1")
+        self.assertEqual(set(declared) - {"schema"}, set(load_probe.PRECISION))
+        self.assertTrue(all(set(declared[device]) <= set(load_probe.MODELS) for device in load_probe.PRECISION))
+
     def test_a_bundle_that_is_not_the_export_yields_no_receipt(self):
         for change, reason in (({"signed": None}, "does not verify"), ({"signed": "f" * 64}, "does not package this export"),
                                ({"dirty": " M file\n"}, "clean checkout")):

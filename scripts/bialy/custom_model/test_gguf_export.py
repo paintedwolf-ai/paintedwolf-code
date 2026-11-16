@@ -143,6 +143,18 @@ class Export(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "server refused /missing"):
                 serving_check.call(url, "/missing", {})
 
+    def test_a_server_built_from_another_commit_than_the_converter_is_refused(self):
+        self.merged()
+        with patch.dict(os.environ, {"FIXTURE_BUILD": "b11749-1d88cb05f"}):
+            with self.assertRaisesRegex(ValueError, "not built from the converter revision"):
+                self.convert()
+            with Server(self.args.server, "model", self.root/"server.log") as url:
+                with self.assertRaisesRegex(ValueError, "not built from the pinned llama.cpp revision"):
+                    serving_check.check(url, revision="a"*40)
+                self.assertEqual(serving_check.check(url, revision="1d88cb05f1a257f90741538ca3aca6c1b015c6d3")["build"], "b11749-1d88cb05f")
+        self.assertFalse(serving_check.built_from("fixture", "a"*40))
+        self.assertFalse(serving_check.built_from(None, "a"*40))
+
     def test_a_server_that_exits_is_reported_with_its_log(self):
         with patch.dict(os.environ, {"FIXTURE_REFUSES_TO_LOAD": "1"}):
             with self.assertRaisesRegex(ValueError, "did not load the artifact"):

@@ -6,6 +6,10 @@ conversation fixture with the bundle's own renderer, which must produce the toke
 training rendered, then generates greedily and holds the result to the export's
 behaviour reference. A bundle the runtime cannot load yields a failed receipt that says
 at which step; a bundle that is not the named export yields no receipt.
+
+`native_tiers.json` states which student tiers each backend of the native runtime
+loads. A probe of any other tier fails as `native_runtime_unsupported` without
+starting the runtime, and the factory reads the same file when it plans a campaign.
 """
 import argparse
 import hashlib
@@ -25,6 +29,7 @@ SCHEMA = "pw-load-probe/1"
 MODELS = {"e4b": "gemma4-e4b-paintedwolf", "12b": "gemma4-12b-paintedwolf", "26b-a4b": "gemma4-26b-paintedwolf"}
 # The precision each backend's payload was exported at, as the behaviour tolerance names it.
 PRECISION = {"vulkan": "Q4_K_M", "mlx": "affine-group64-f16"}
+TIERS = Path(__file__).with_name("native_tiers.json")
 PROMPT = "later calls replace earlier ones"
 PREFILL_CHUNK = 256
 
@@ -110,6 +115,8 @@ def probe(args, run=subprocess.run, popen=subprocess.Popen):
                "binaries": {"runner": sha256(args.runner), "renderer": sha256(args.renderer)},
                "prompt": PROMPT, "device": None, "generated_tokens": [], "stop_reason": None, "behavior": None}
     try:
+        if args.student not in json.loads(TIERS.read_text())[args.device]:
+            raise Failed("native_runtime_unsupported", "the %s runtime does not load the %s tier" % (args.device, args.student))
         case = next(case for case in served_cases() if case["name"] == PROMPT)
         prompt = render(args.renderer, args.bundle, case, run)
         if prompt != wanted["prompt_tokens"]:
