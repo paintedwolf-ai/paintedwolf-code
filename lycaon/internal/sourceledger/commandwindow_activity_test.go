@@ -711,6 +711,7 @@ func TestFailedWindowRecoveryReportsAndRetriesBeforeAnyWindowOpens(t *testing.T)
 
 	fresh := New(ledger.sqlDB, ledger.contentDir)
 	fresh.Commands.SetWindowSettleForTest(0)
+	fresh.Commands.SetWindowStartQuietForTest(0, 0)
 	_, err := ledger.sqlDB.ExecContext(ctx, `CREATE TRIGGER refuse_recovery BEFORE UPDATE ON source_command_windows BEGIN SELECT RAISE(ABORT, 'recovery refused'); END`)
 	testutil.FailErr(t, "create trigger", err)
 	if err := fresh.Commands.RecoverInterruptedWindows(ctx); err == nil {
