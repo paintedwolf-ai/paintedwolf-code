@@ -24,8 +24,10 @@ const (
 	GapCriteriaUnmet Gap = "criteria_unmet"
 	// GapChangesPending: the latest result's changes are neither landed nor shelved.
 	GapChangesPending Gap = "changes_pending"
-	// GapChangesDiscarded: the plan requires file changes that were rejected or shelved.
-	GapChangesDiscarded Gap = "changes_discarded"
+	// GapChangesShelved: the plan requires file changes that were shelved.
+	GapChangesShelved Gap = "changes_shelved"
+	// GapChangesRejected: the plan requires file changes that were rejected.
+	GapChangesRejected Gap = "changes_rejected"
 	// GapScanPending: the landed change's scan obligation is still running.
 	GapScanPending Gap = "scan_pending"
 	// GapScanFailed: the landed change's scan obligation did not clear.
@@ -38,8 +40,11 @@ type CloseoutVerdict struct {
 	OK       bool
 	Code     string
 	Gap      Gap
-	LegID    string
-	Worker   string
+	LegID  string
+	Worker string
+	// WorkID is the worker's plan work identity, empty for a worker with
+	// criteria but no plan.
+	WorkID   string
 	ResultID string
 	// Unmet lists the criteria that did not pass, in plan order.
 	Unmet    []string
@@ -51,7 +56,7 @@ type CloseoutVerdict struct {
 func settled() CloseoutVerdict { return CloseoutVerdict{OK: true} }
 
 func unsettled(w workerrecords.Worker, gap Gap) CloseoutVerdict {
-	return CloseoutVerdict{Code: CodeCriteriaUnmet, Gap: gap, LegID: legIdentifier(w), Worker: w.Name}
+	return CloseoutVerdict{Code: CodeCriteriaUnmet, Gap: gap, LegID: legIdentifier(w), Worker: w.Name, WorkID: w.WorkflowWorkID}
 }
 
 // CheckSessionCloseout reports the first gap among the session's open planned
@@ -149,9 +154,15 @@ func (s *Service) checkWorkerCloseout(ctx context.Context, actor workerrecords.A
 		verdict.Gap = GapChangesPending
 		return verdict, nil
 	}
-	if requiresFileChanges(w.Criteria) && (disp.ChangeState == workerrecords.ChangeRejected || disp.ChangeState == workerrecords.ChangeShelved) {
-		verdict.Gap = GapChangesDiscarded
-		return verdict, nil
+	if requiresFileChanges(w.Criteria) {
+		switch disp.ChangeState {
+		case workerrecords.ChangeShelved:
+			verdict.Gap = GapChangesShelved
+			return verdict, nil
+		case workerrecords.ChangeRejected:
+			verdict.Gap = GapChangesRejected
+			return verdict, nil
+		}
 	}
 	return settled(), nil
 }

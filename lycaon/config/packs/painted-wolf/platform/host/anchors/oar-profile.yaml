@@ -788,7 +788,9 @@ host_facts:
    type: bool
  - name: paintedwolf.closeout_changes_pending
    type: bool
- - name: paintedwolf.closeout_changes_discarded
+ - name: paintedwolf.closeout_changes_shelved
+   type: bool
+ - name: paintedwolf.closeout_changes_rejected
    type: bool
  - name: paintedwolf.closeout_scan_pending
    type: bool

@@ -82,7 +82,7 @@ func TestCloseoutNamesWhatAPlannedWorkerStillOwes(t *testing.T) {
 		State: workerrecords.ChangeShelved, ShelveReason: "defer",
 	})
 	testutil.FailErr(t, "shelve", err)
-	wantGap(t, env.closeout(t), workerplan.GapChangesDiscarded, second)
+	wantGap(t, env.closeout(t), workerplan.GapChangesShelved, second)
 	if runID := settledRun(); runID != "" {
 		t.Fatalf("settled run = %q before the plan settled", runID)
 	}

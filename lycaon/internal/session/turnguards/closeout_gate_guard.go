@@ -76,13 +76,14 @@ func (m *Service) OpenGates(ctx context.Context, sess *api.Session, workersIdle,
 
 // closeoutGapFacts names the fact each closeout gap sets for the refusal copy.
 var closeoutGapFacts = map[workerplan.Gap]string{
-	workerplan.GapUnstarted:        "closeout_unstarted",
-	workerplan.GapRoundActive:      "closeout_round_active",
-	workerplan.GapCriteriaUnmet:    "closeout_criteria_unmet",
-	workerplan.GapChangesPending:   "closeout_changes_pending",
-	workerplan.GapChangesDiscarded: "closeout_changes_discarded",
-	workerplan.GapScanPending:      "closeout_scan_pending",
-	workerplan.GapScanFailed:       "closeout_scan_failed",
+	workerplan.GapUnstarted:       "closeout_unstarted",
+	workerplan.GapRoundActive:     "closeout_round_active",
+	workerplan.GapCriteriaUnmet:   "closeout_criteria_unmet",
+	workerplan.GapChangesPending:  "closeout_changes_pending",
+	workerplan.GapChangesShelved:  "closeout_changes_shelved",
+	workerplan.GapChangesRejected: "closeout_changes_rejected",
+	workerplan.GapScanPending:     "closeout_scan_pending",
+	workerplan.GapScanFailed:      "closeout_scan_failed",
 }
 
 // PlanCloseout blocks batch closeout while a planned worker is unsettled.
@@ -113,6 +114,9 @@ func (m *Service) PlanCloseout(ctx context.Context, sess *api.Session, workersId
 			"leg_id":                      verdict.LegID,
 			"worker":                      verdict.Worker,
 			closeoutGapFacts[verdict.Gap]: true,
+		}
+		if verdict.WorkID != "" {
+			data["workflow_work_id"] = verdict.WorkID
 		}
 		if verdict.ResultID != "" {
 			data["overlay_id"] = verdict.ResultID

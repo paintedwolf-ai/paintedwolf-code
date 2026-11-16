@@ -3,22 +3,23 @@ id: COORDINATOR_CRITERIA_UNMET
 kind: invariant
 on: coordinator.closeout_check
 selector: {}
-requires_facts: [paintedwolf.closeout_changes_discarded, paintedwolf.closeout_changes_pending, paintedwolf.closeout_criteria_unmet, paintedwolf.closeout_round_active, paintedwolf.closeout_scan_failed, paintedwolf.closeout_scan_pending, paintedwolf.closeout_unstarted, paintedwolf.grounding_reason, paintedwolf.grounding_verdict, paintedwolf.leg_id, paintedwolf.overlay_id, paintedwolf.unmet_criteria, paintedwolf.worker]
+requires_facts: [paintedwolf.closeout_changes_pending, paintedwolf.closeout_changes_rejected, paintedwolf.closeout_changes_shelved, paintedwolf.closeout_criteria_unmet, paintedwolf.closeout_round_active, paintedwolf.closeout_scan_failed, paintedwolf.closeout_scan_pending, paintedwolf.closeout_unstarted, paintedwolf.grounding_reason, paintedwolf.grounding_verdict, paintedwolf.leg_id, paintedwolf.next_steps, paintedwolf.overlay_id, paintedwolf.unmet_criteria, paintedwolf.worker]
 when: paintedwolf.grounding_verdict == "COORDINATOR_CRITERIA_UNMET"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:grounding
 message: Completion claimed while planned work is not settled
 what: 'Planned work {{ paintedwolf.leg_id }} is not settled.'
-cause: '{% if paintedwolf.closeout_unstarted %}Worker {{ paintedwolf.worker }} has not run.{% endif %}{% if paintedwolf.closeout_round_active %}Worker {{ paintedwolf.worker }} has not delivered its current round.{% endif %}{% if paintedwolf.closeout_criteria_unmet %}Result {{ paintedwolf.overlay_id }} from worker {{ paintedwolf.worker }} does not meet: {{ paintedwolf.unmet_criteria }}.{% endif %}{% if paintedwolf.closeout_changes_pending %}The changes in result {{ paintedwolf.overlay_id }} from worker {{ paintedwolf.worker }} are neither landed nor shelved.{% endif %}{% if paintedwolf.closeout_changes_discarded %}The plan requires file changes, and the changes in result {{ paintedwolf.overlay_id }} from worker {{ paintedwolf.worker }} were rejected or shelved.{% endif %}{% if paintedwolf.closeout_scan_pending %}The security scan of the landed changes is still running.{% endif %}{% if paintedwolf.closeout_scan_failed %}The security scan of the landed changes did not clear.{% endif %}{% if paintedwolf.grounding_reason %}{{ paintedwolf.grounding_reason }}{% endif %}'
+cause: '{% if paintedwolf.closeout_unstarted %}Worker {{ paintedwolf.worker }} has not run.{% endif %}{% if paintedwolf.closeout_round_active %}Worker {{ paintedwolf.worker }} has not delivered its current round.{% endif %}{% if paintedwolf.closeout_criteria_unmet %}Result {{ paintedwolf.overlay_id }} from worker {{ paintedwolf.worker }} does not meet: {{ paintedwolf.unmet_criteria }}.{% endif %}{% if paintedwolf.closeout_changes_pending %}The changes in result {{ paintedwolf.overlay_id }} from worker {{ paintedwolf.worker }} are neither landed nor shelved.{% endif %}{% if paintedwolf.closeout_changes_shelved %}The plan requires file changes, and the changes in result {{ paintedwolf.overlay_id }} from worker {{ paintedwolf.worker }} are shelved.{% endif %}{% if paintedwolf.closeout_changes_rejected %}The plan requires file changes, and the changes in result {{ paintedwolf.overlay_id }} from worker {{ paintedwolf.worker }} were rejected.{% endif %}{% if paintedwolf.closeout_scan_pending %}The security scan of the landed changes is still running.{% endif %}{% if paintedwolf.closeout_scan_failed %}The security scan of the landed changes did not clear.{% endif %}{% if paintedwolf.grounding_reason %}{{ paintedwolf.grounding_reason }}{% endif %}'
 why: A delivered result does not settle planned work until its typed criteria pass and its changes have landed.
-fix: '{% if paintedwolf.closeout_unstarted %}Start worker {{ paintedwolf.worker }} with task.{% endif %}{% if paintedwolf.closeout_round_active %}Wait for worker {{ paintedwolf.worker }} to deliver.{% endif %}{% if paintedwolf.closeout_criteria_unmet %}Send worker {{ paintedwolf.worker }} back with instruct_worker to meet them.{% endif %}{% if paintedwolf.closeout_changes_pending %}Land result {{ paintedwolf.overlay_id }} with promote_overlay, or set it aside with shelve_overlay.{% endif %}{% if paintedwolf.closeout_changes_discarded %}Land a result from worker {{ paintedwolf.worker }} that makes them: promote a shelved result with promote_overlay, or send the worker back with instruct_worker.{% endif %}{% if paintedwolf.closeout_scan_pending %}Wait for the scan to finish.{% endif %}{% if paintedwolf.closeout_scan_failed %}Resolve the scan findings before closing out.{% endif %}{% if paintedwolf.grounding_reason %}Complete the delegation leg before closing out.{% endif %}'
+fix: '{% if paintedwolf.closeout_round_active %}Let the worker deliver before closing out. {% endif %}{% if paintedwolf.closeout_scan_pending %}Close out once the scan finishes. {% endif %}{% if paintedwolf.closeout_scan_failed %}Resolve the scan findings before closing out. {% endif %}{% if paintedwolf.grounding_reason %}Complete the leg before closing out. {% endif %}{{ paintedwolf.next_steps }}'
 instead: Settle the planned work, then close out.
 x-paintedwolf-scenarios:
   - id: unstarted
     vars:
       closeout_unstarted: true
       leg_id: leg-1
+      workflow_work_id: leg-1
       worker: parser-fix
       session_role: coordinator
   - id: round-active
@@ -42,9 +43,16 @@ x-paintedwolf-scenarios:
       worker: parser-fix
       overlay_id: res-1
       session_role: coordinator
-  - id: changes-discarded
+  - id: changes-shelved
     vars:
-      closeout_changes_discarded: true
+      closeout_changes_shelved: true
+      leg_id: leg-1
+      worker: parser-fix
+      overlay_id: res-1
+      session_role: coordinator
+  - id: changes-rejected
+    vars:
+      closeout_changes_rejected: true
       leg_id: leg-1
       worker: parser-fix
       overlay_id: res-1
