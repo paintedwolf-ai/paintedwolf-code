@@ -219,6 +219,18 @@ func interceptViewAccess(m *Manager, view *managedView, qpath layeredfs.Qualifie
 	return layeredfs.GitInterceptOutcome{Intercepted: true}, nil
 }
 
+// SetAccessOrigin sets the active confinement origin for a view (filesystem vs native_tool).
+func SetAccessOrigin(m *Manager, viewID string, origin AccessOrigin) error {
+	view, err := getManagedView(m, viewID)
+	if err != nil {
+		return err
+	}
+	view.mu.Lock()
+	view.accessOrigin = origin
+	view.mu.Unlock()
+	return nil
+}
+
 // CheckNativeToolPath enforces the native file-tool restriction on direct .git mutations.
 func CheckNativeToolPath(relPath string, writeIntent bool) error {
 	if _, _, isGit := splitGitRelPath(relPath); isGit && writeIntent {

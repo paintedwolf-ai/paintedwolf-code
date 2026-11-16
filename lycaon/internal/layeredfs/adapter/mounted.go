@@ -194,6 +194,51 @@ func buildMountedRoots(runtimeViewDir string, targetDirs map[string]string, narr
 	return specs, prepared, denyPaths, primaryID, primaryPath, nil
 }
 
+// CommandAccess supplies mounted paths and confinement facts without remounting per command.
+func (a *MountedAdapter) CommandAccess(viewID string) (CommandAccessSpec, error) {
+	a.mu.RLock()
+	st, ok := a.views[viewID]
+	a.mu.RUnlock()
+	if !ok {
+		return CommandAccessSpec{}, &AdapterError{AdapterID: a.cfg.AdapterID, Op: "command_access", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
+	}
+	count := st.accessCount.Add(1)
+	rootPaths := make(map[string]string, len(st.view.Roots))
+	for _, r := range st.view.Roots {
+		rootPaths[r.RootID] = r.WorkspacePath
+	}
+	return CommandAccessSpec{
+		ViewID:           viewID,
+		AdapterID:        a.cfg.AdapterID,
+		PrimaryRootID:    st.view.PrimaryRootID,
+		WorkDir:          st.view.PrimaryWorkPath,
+		RootPaths:        rootPaths,
+		HiddenBackingDir: st.view.BackingDir,
+		DenyDirectSource: append([]string(nil), st.denySourcePaths...),
+		Facts:            a.facts,
+		AccessCount:      count,
+	}, nil
+}
+
+// CheckpointBarrier stops new mutations, quiesces writers, drains operations, and flushes client dirty data.
+func (a *MountedAdapter) CheckpointBarrier(ctx context.Context, viewID string) (BarrierReceipt, func() error, error) {
+	a.mu.RLock()
+	st, ok := a.views[viewID]
+	a.mu.RUnlock()
+	if !ok {
+		return BarrierReceipt{}, nil, &AdapterError{AdapterID: a.cfg.AdapterID, Op: "checkpoint_barrier", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
+	}
+	return executeCheckpointBarrier(ctx, a.cfg.AdapterID, st.view.Core, st.quiesceHook, combineFlushHooks(a.cfg.FlushClientFn, st.flushHook))
+}
+
+// IsViewActive reports whether the fixture still holds viewID.
+func (a *MountedAdapter) IsViewActive(viewID string) bool {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	_, live := a.views[viewID]
+	return live
+}
+
 // BindPrivateGit binds the fixture's primary directory to mgr. Its mount identity names a fixture.
 func (a *MountedAdapter) BindPrivateGit(viewID, workerID string, mgr *privategit.Manager, authorizedGitDirs ...string) error {
 	if mgr == nil {

@@ -98,6 +98,9 @@ var elfArchForGoArch = map[string]string{
 	"arm64": "aarch64",
 }
 
+// LinuxArches returns an independent copy of the supported architectures.
+func LinuxArches() []string { return slices.Clone(linuxArches) }
+
 // ELFArchForGoArch translates a compiler architecture to its package name.
 func ELFArchForGoArch(goArch string) (string, bool) {
 	elf, ok := elfArchForGoArch[goArch]

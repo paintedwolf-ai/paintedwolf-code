@@ -196,6 +196,14 @@ const (
 	EmitInjectPrefix = "inject:"
 )
 
+// CopyOnlyEmit reports whether a unit's emit channel carries informational
+// copy rather than a rejection card, so it needs no rejection fields or
+// rehearsal scenarios.
+func CopyOnlyEmit(emit string) bool {
+	emit = strings.TrimSpace(emit)
+	return emit == EmitBanner || strings.HasPrefix(emit, EmitUIPrefix) || strings.HasPrefix(emit, EmitInjectPrefix)
+}
+
 func validateHintEntry(code string, entry HintEntry) error {
 	copyOnly := CopyOnlyEmit(entry.Emit)
 	view := NormalizeRejectCodeView(code, entry)
@@ -210,6 +218,30 @@ func validateHintEntry(code string, entry HintEntry) error {
 	}
 	if err := validateCopyFields(code, view); err != nil {
 		return err
+	}
+	return nil
+}
+
+func validateCopyFields(code string, view RejectCodeView) error {
+	for _, field := range []struct {
+		name, val string
+	}{
+		{"what", view.What},
+		{"cause", view.Cause},
+		{"why", view.Why},
+		{"fix", view.Fix},
+		{"instead", view.Instead},
+	} {
+		val := strings.TrimSpace(field.val)
+		if val == "" {
+			continue
+		}
+		if !strings.Contains(val, "{{") && !strings.Contains(val, "{%") {
+			continue
+		}
+		if _, err := oarcore.ParseCopy(val); err != nil {
+			return fmt.Errorf("%s: %s copy binding: %w", code, field.name, err)
+		}
 	}
 	return nil
 }

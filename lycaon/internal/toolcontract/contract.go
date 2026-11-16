@@ -151,6 +151,20 @@ func (r Reversibility) String() string {
 	}
 }
 
+// ParseReversibility parses a catalog reversibility value.
+func ParseReversibility(value string) (Reversibility, bool) {
+	switch value {
+	case nativemanifest.TierReversible:
+		return ReversibilityReversible, true
+	case nativemanifest.TierRecoverable:
+		return ReversibilityRecoverable, true
+	case nativemanifest.TierIrreversible:
+		return ReversibilityIrreversible, true
+	default:
+		return ReversibilityReversible, false
+	}
+}
+
 // EvidencePolicy names the proof retained by a settled invocation.
 type EvidencePolicy string
 
