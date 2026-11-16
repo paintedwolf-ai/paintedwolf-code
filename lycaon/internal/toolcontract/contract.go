@@ -194,6 +194,42 @@ const (
 	CapabilityHostExecution
 )
 
+// NamedCapability maps a catalog execution_capabilities token to its bit.
+func NamedCapability(name string) (Capability, bool) {
+	switch name {
+	case "host_resource":
+		return CapabilityHostResource, true
+	case "socket":
+		return CapabilitySocket, true
+	case "process_control":
+		return CapabilityProcessControl, true
+	case "credential_store":
+		return CapabilityCredentialStore, true
+	case "host_execution":
+		return CapabilityHostExecution, true
+	case "direct_ip":
+		return CapabilityDirectIP, true
+	case "local_listen":
+		return CapabilityLocalListen, true
+	case "loopback_connect":
+		return CapabilityLoopbackConnect, true
+	case "terminal_capture":
+		return CapabilityTerminalCapture, true
+	case "write_root":
+		return CapabilityWriteRoot, true
+	case "read_path":
+		return CapabilityReadPath, true
+	case "package_execution":
+		return CapabilityPackageExecution, true
+	case "file_change":
+		return CapabilityFileChange, true
+	case "held_terminal_input":
+		return CapabilityHeldTerminalInput, true
+	default:
+		return 0, false
+	}
+}
+
 // capabilityRequestFields is the closed capability_request object key set.
 var capabilityRequestFields = []string{
 	"host_resources", "socket_paths", "process_control", "credential_store", "host_execution", "direct_ip", "local_listen", "loopback_connect", "write_root", "read_path",

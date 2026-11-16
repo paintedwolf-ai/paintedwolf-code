@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
 
 // MountedAdapterConfig configures MountedAdapter, a test fixture with no kernel mount.
@@ -41,6 +43,46 @@ type MountedAdapter struct {
 	facts AdapterFacts
 	mu    sync.RWMutex
 	views map[string]*mountedViewState
+}
+
+// NewMountedAdapter constructs the fixture MountedAdapter from explicit configuration.
+func NewMountedAdapter(cfg MountedAdapterConfig) *MountedAdapter {
+	completeness := strings.TrimSpace(cfg.AttributionCompleteness)
+	if completeness == "" {
+		completeness = "kernel_cached_partial"
+	}
+	return &MountedAdapter{
+		cfg: cfg,
+		facts: AdapterFacts{
+			AdapterID:                 cfg.AdapterID,
+			PreparationKind:           PreparationMounted,
+			UntouchedSourceVisibility: VisibilityLive,
+			CacheRevalidation: CacheRevalidation{
+				Mode:                       "strict_generation_revalidation",
+				ExplicitInvalidation:       true,
+				InvalidationVerified:       cfg.InvalidationVerified,
+				NegativeLookupInvalidation: cfg.NegativeLookupInvalidation,
+				DirCookieInvalidation:      cfg.DirCookieInvalidation,
+				AttributeTTL:               0,
+			},
+			AttributionCompleteness: completeness,
+			MetadataCapabilities: MetadataCapabilities{
+				SupportsSymlinks:   true,
+				SupportsHardLinks:  true,
+				SupportsXattrs:     true,
+				SupportsChmod:      true,
+				SupportsTimestamps: true,
+				SupportsPOSIXLocks: true,
+				SupportsFlock:      true,
+				SupportsFIFOOpen:   true,
+			},
+			SupportsPrivateGit:        true,
+			SupportsCheckpointBarrier: true,
+			BarrierHoldBound:          layeredfs.DefaultBarrierHoldBound,
+			OtherUserAccess:           OtherUserAccessNone,
+		},
+		views: make(map[string]*mountedViewState),
+	}
 }
 
 func (a *MountedAdapter) ID() AdapterID       { return a.cfg.AdapterID }
@@ -150,6 +192,44 @@ func buildMountedRoots(runtimeViewDir string, targetDirs map[string]string, narr
 		}
 	}
 	return specs, prepared, denyPaths, primaryID, primaryPath, nil
+}
+
+// BindPrivateGit binds the fixture's primary directory to mgr. Its mount identity names a fixture.
+func (a *MountedAdapter) BindPrivateGit(viewID, workerID string, mgr *privategit.Manager, authorizedGitDirs ...string) error {
+	if mgr == nil {
+		return errors.New("adapter: nil privategit.Manager")
+	}
+	a.mu.RLock()
+	st, ok := a.views[viewID]
+	a.mu.RUnlock()
+	if !ok {
+		return &AdapterError{AdapterID: a.cfg.AdapterID, Op: "bind_privategit", ReasonCode: ReasonViewNotFound, Diagnostic: viewID}
+	}
+	bindingFor := func(r PreparedRoot) privategit.MountedViewBinding {
+		return privategit.MountedViewBinding{
+			ViewID: viewID, WorkerID: workerID, RootID: r.RootID,
+			TrunkDir: r.SourcePath, MountPath: r.WorkspacePath, AdapterID: string(a.cfg.AdapterID),
+			Core: st.view.Core, MountID: "fixture:" + viewID, Active: true,
+			IsActive: func() bool { return a.IsViewActive(viewID) },
+		}
+	}
+	for _, r := range st.view.Roots {
+		if r.RootID != st.view.PrimaryRootID {
+			continue
+		}
+		if err := mgr.MountedClaimWithBinding(bindingFor(r), authorizedGitDirs...); err != nil {
+			return err
+		}
+	}
+	for _, r := range st.view.Roots {
+		if r.RootID == st.view.PrimaryRootID {
+			continue
+		}
+		if err := mgr.BindSecondaryRoot(bindingFor(r), authorizedGitDirs...); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Release retires handles, settles the filesystem connection, and cleans up runtime directories.

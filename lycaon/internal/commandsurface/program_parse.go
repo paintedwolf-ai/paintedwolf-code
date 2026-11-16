@@ -62,6 +62,13 @@ func (p *ParsedProgram) Snapshot() ProgramSnapshot {
 	return cloneProgram(p.plan)
 }
 
+// Source returns the original unit bytes for exact span inspection, not replay.
+func (p *ParsedProgram) Source() []byte {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return bytes.Clone(p.source)
+}
+
 var programLanguage = sync.OnceValues(toolcontract.LanguageV1)
 
 // SyntaxUnitByteLimit reports the compiled pre-allocation input ceiling.

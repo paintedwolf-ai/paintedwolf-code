@@ -224,3 +224,15 @@ func (c Catalog) Rendered(sel Selection) map[Slot][]Unit {
 	}
 	return out
 }
+
+// Fingerprint identifies a rendered selection for prompt-cache keys.
+func Fingerprint(rendered map[Slot][]Unit) string {
+	var ids []string
+	for _, units := range rendered {
+		for _, u := range units {
+			ids = append(ids, u.ID)
+		}
+	}
+	sort.Strings(ids)
+	return strings.Join(ids, ",")
+}

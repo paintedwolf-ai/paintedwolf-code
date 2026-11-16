@@ -6,6 +6,8 @@ package viewconfine
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 	"time"
@@ -115,6 +117,43 @@ func (e *Enforcer) Available(ctx context.Context, probeCfg adapter.ProbeConfig) 
 	return nil
 }
 
+func proveInScratch(ctx context.Context, runtimeDir string) error {
+	if runtimeDir != "" {
+		if err := os.MkdirAll(runtimeDir, 0o700); err != nil {
+			return unavailable(err)
+		}
+	}
+	base, err := os.MkdirTemp(runtimeDir, "confinement-proof-*")
+	if err != nil {
+		return unavailable(err)
+	}
+	defer func() { _ = os.RemoveAll(base) }()
+	reach, denied := filepath.Join(base, "reach"), filepath.Join(base, "denied")
+	for _, dir := range []string{reach, denied} {
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			return unavailable(err)
+		}
+	}
+	canary := filepath.Join(denied, "canary")
+	if err := os.WriteFile(canary, []byte{0}, 0o600); err != nil {
+		return unavailable(err)
+	}
+	box, err := workerBox([]string{reach}, confine.ViewBoundary{DeniedPaths: []string{denied}})
+	if err != nil {
+		return err
+	}
+	results, err := Launch(ctx, box, reach, []denialprobe.Step{
+		{Kind: denialprobe.CreateFile, Path: filepath.Join(reach, probeName)},
+		{Kind: denialprobe.ReadFile, Path: canary},
+		{Kind: denialprobe.CreateFile, Path: filepath.Join(denied, probeName)},
+		{Kind: denialprobe.Mount, Path: reach},
+	})
+	if err != nil {
+		return unavailable(err)
+	}
+	return judge(results, 1)
+}
+
 const maxEntriesScanned = 64
 
 // probeName is what the probe tries to create, and removes when it can.
@@ -138,4 +177,12 @@ func target(result denialprobe.Result) string {
 		return result.Path
 	}
 	return fmt.Sprintf("port %d", result.Port)
+}
+
+func unavailable(err error) error {
+	return &adapter.AdapterError{Op: "verify_confinement", ReasonCode: adapter.ReasonConfinementUnavailable, Diagnostic: err.Error(), Cause: err}
+}
+
+func failed(diagnostic string) error {
+	return &adapter.AdapterError{Op: "verify_confinement", ReasonCode: adapter.ReasonBackingConfinementFailed, Diagnostic: diagnostic}
 }

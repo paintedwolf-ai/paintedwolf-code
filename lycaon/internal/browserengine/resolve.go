@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 )
 
 // EnvBrowserBin selects an executable with the required sibling resources.
@@ -80,6 +81,41 @@ func TestingEnableBundledBinary() {
 		return
 	}
 	_ = os.Setenv(EnvBrowserBin, bin)
+}
+
+// hostProvisionedHeadlessShell is the pinned, hash-verified browser `browser:ensure`
+// installed under the developer's home, when isolation reports that home.
+func hostProvisionedHeadlessShell() string {
+	home := strings.TrimSpace(os.Getenv(EnvTestHostHome))
+	if home == "" {
+		return ""
+	}
+	bin := managedBinaryPath(enginepaths.BrowserCacheRootUnder(configdir.ChannelConfigRoot(home)))
+	if bin == "" || !installReady(bin) {
+		return ""
+	}
+	return bin
+}
+
+func findStagedHeadlessShell() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	for {
+		candidate := filepath.Join(dir, "lycaon-den", "src-tauri", "engine-root", "browser", headlessShellName())
+		if installReady(candidate) {
+			return candidate
+		}
+		if _, err := os.Stat(filepath.Join(dir, "Taskfile.yml")); err == nil {
+			return ""
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
 }
 
 func bundleCandidates() []string {

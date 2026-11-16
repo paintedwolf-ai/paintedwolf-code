@@ -80,6 +80,14 @@ type SourceIndexProvider interface {
 // SourceIndexFunc adapts a function to SourceIndexProvider.
 type SourceIndexFunc func(ctx context.Context, q SourceIndexQuery) (SourceIndexResult, error)
 
+// QueryIndex calls fn(ctx, q).
+func (fn SourceIndexFunc) QueryIndex(ctx context.Context, q SourceIndexQuery) (SourceIndexResult, error) {
+	if fn == nil {
+		return SourceIndexResult{Coverage: CoverageAbsent}, nil
+	}
+	return fn(ctx, q)
+}
+
 // AccessSource identifies whether a consumer result came from the live mounted view,
 // an immutable checkpoint blob store, live trunk fallback, or the index+journal overlay.
 type AccessSource string

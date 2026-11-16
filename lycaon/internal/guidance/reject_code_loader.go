@@ -169,6 +169,24 @@ func ValidateHintConfig(cfg *HintConfig) error {
 
 var hintCodeRE = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 
+func validateHintSuccessors(code string, entry HintEntry, codes map[string]HintEntry) error {
+	successor := strings.TrimSpace(entry.Successor)
+	// A successor names either the replacing code or the boundary that now
+	// owns the behaviour; a code must be one this registry knows.
+	if hintCodeRE.MatchString(successor) {
+		if successor == code {
+			return fmt.Errorf("%s: successor must not reference itself", code)
+		}
+		if _, ok := codes[successor]; !ok {
+			return fmt.Errorf("%s: successor %q is not a known hint code", code, successor)
+		}
+	}
+	if strings.TrimSpace(entry.Status) == "deprecated" && successor == "" {
+		return fmt.Errorf("%s: deprecated hint requires x-paintedwolf-successor naming the replacement", code)
+	}
+	return nil
+}
+
 // Copy-only emit channels. A banner rides on a tool result, a ui: target is
 // drawn by Den, and an inject: target renders inside the prompt block of the
 // inform anchor it names (inject:active_workflow is inject.active_workflow).
@@ -177,6 +195,24 @@ const (
 	EmitUIPrefix     = "ui:"
 	EmitInjectPrefix = "inject:"
 )
+
+func validateHintEntry(code string, entry HintEntry) error {
+	copyOnly := CopyOnlyEmit(entry.Emit)
+	view := NormalizeRejectCodeView(code, entry)
+	// A hint is never evaluated, so it has no scenarios to rehearse.
+	if len(scenarioRows(entry)) == 0 && !copyOnly && entry.Kind != "hint" && entry.Severity != "warning" {
+		return fmt.Errorf("%s: scenarios required (>=1)", code)
+	}
+	for _, sc := range scenarioRows(entry) {
+		if strings.TrimSpace(sc.ID) == "" {
+			return fmt.Errorf("%s: scenario id required", code)
+		}
+	}
+	if err := validateCopyFields(code, view); err != nil {
+		return err
+	}
+	return nil
+}
 
 // NormalizeRejectCodeView preserves omitted explanations and remedies.
 func NormalizeRejectCodeView(code string, entry HintEntry) RejectCodeView {
