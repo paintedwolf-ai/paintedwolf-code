@@ -57,6 +57,7 @@ const (
 	PathScopes          = PlatformHost + "/path-scopes.yaml"
 	UserPath            = PlatformHost + "/user-path.yaml"
 	PromptBudgets       = PlatformHost + "/prompt-budgets.yaml"
+	ReaderFacts         = PlatformHost + "/reader-facts.yaml"
 	RenderBudgets       = PlatformHost + "/render-budgets.yaml"
 	SourceParsing       = PlatformHost + "/source-parsing.yaml"
 	SessionLimits       = PlatformHost + "/session.yaml"
@@ -189,6 +190,7 @@ var consumedPackYAMLFiles = map[Rel]struct{}{
 	PathScopes:               {},
 	UserPath:                 {},
 	PromptBudgets:            {},
+	ReaderFacts:              {},
 	RenderBudgets:            {},
 	SourceParsing:            {},
 	SessionLimits:            {},

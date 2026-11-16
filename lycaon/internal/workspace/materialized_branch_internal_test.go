@@ -331,7 +331,7 @@ func TestCanceledWorkKeepsOnlyWhatChanged(t *testing.T) {
 	testutil.FailErr(t, "create", err)
 	testutil.FailErr(t, "edit", os.WriteFile(filepath.Join(binding.Root, "main.go"), []byte("package edited\n"), 0o644))
 	testutil.FailErr(t, "delete", os.Remove(filepath.Join(binding.Root, "gone.go")))
-	testutil.FailErr(t, "retain", mgr.RetainCanceledWork(t.Context(), "job-cancel", binding.Root, ""))
+	testutil.FailErr(t, "retain", mgr.RetainCanceledWork(t.Context(), "job-cancel", binding.Root, "", projectroot.RootRef{ID: projectroot.SingleRootID}))
 	records, err := mgr.recovery.ListInterruptedRecords("job-cancel")
 	testutil.FailErr(t, "list", err)
 	if len(records) != 1 || records[0].UnknownScope || len(records[0].AffectedPaths) != 2 {

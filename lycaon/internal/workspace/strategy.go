@@ -132,9 +132,6 @@ func grantsForSources(sources []projectroot.RootRef) []adapter.RootGrant {
 	grants := make([]adapter.RootGrant, 0, len(sources))
 	for _, s := range sources {
 		id := s.ID
-		if id == "" {
-			id = "primary"
-		}
 		label := s.Label
 		if label == "" {
 			label = id

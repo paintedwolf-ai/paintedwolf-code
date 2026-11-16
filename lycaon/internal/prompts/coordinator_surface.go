@@ -2,7 +2,6 @@ package prompts
 
 import (
 	"fmt"
-	"slices"
 	"sort"
 	"strings"
 
@@ -52,15 +51,6 @@ func LoadInvestigatePathScopes() (CoordinatorPathScopeData, error) {
 	}, nil
 }
 
-// LoadCoordinatorPathScopes loads the bundled coordinator profile path scopes.
-func LoadCoordinatorPathScopes() (CoordinatorPathScopeData, error) {
-	profiles, err := sandbox.LoadToolProfiles()
-	if err != nil {
-		return CoordinatorPathScopeData{}, err
-	}
-	return CoordinatorPathScopesFromProfiles(profiles)
-}
-
 // CoordinatorPathScopesFromProfiles finds the coordinator profile in profiles.
 func CoordinatorPathScopesFromProfiles(profiles []sandbox.ToolProfile) (CoordinatorPathScopeData, error) {
 	for _, p := range profiles {
@@ -82,43 +72,6 @@ func coordinatorPathScopesFromProfile(p sandbox.ToolProfile) CoordinatorPathScop
 		ReadGlobs:     readGlobs,
 		WriteGlobs:    writeGlobs,
 	}
-}
-
-// CoordinatorPathScopeTemplateVars builds path-scope template data.
-func CoordinatorPathScopeTemplateVars(data CoordinatorPathScopeData) map[string]any {
-	return map[string]any{
-		"read_scope_name":  data.ReadScopeName,
-		"read_globs":       data.ReadGlobs,
-		"write_globs":      data.WriteGlobs,
-		"write_deny_globs": data.WriteDenyGlobs,
-	}
-}
-
-// CoordinatorProfileVisibleTools returns sorted coordinator tools.
-func CoordinatorProfileVisibleTools() ([]string, error) {
-	profiles, err := sandbox.LoadToolProfiles()
-	if err != nil {
-		return nil, err
-	}
-	return CoordinatorProfileVisibleToolsFromProfiles(profiles)
-}
-
-// CoordinatorProfileVisibleToolsFromProfiles finds enabled tools on the coordinator profile.
-func CoordinatorProfileVisibleToolsFromProfiles(profiles []sandbox.ToolProfile) ([]string, error) {
-	for _, p := range profiles {
-		if p.ID != CoordinatorProfileID {
-			continue
-		}
-		var out []string
-		for name, enabled := range p.Tools {
-			if enabled {
-				out = append(out, name)
-			}
-		}
-		sort.Strings(out)
-		return out, nil
-	}
-	return nil, fmt.Errorf("tool profile %q not found", CoordinatorProfileID)
 }
 
 // LoadCoordinatorSurfaceCard returns the surface banner copy and whether the
@@ -147,17 +100,6 @@ func loadCoordinatorSurfaceRow(surfaceID string) (surfacecatalog.Surface, error)
 	return catalog.Surface(surfaceID)
 }
 
-// LoadCoordinatorSurfaceFloor returns the tools a surface offers on every call.
-func LoadCoordinatorSurfaceFloor(surfaceID string) ([]string, error) {
-	row, err := loadCoordinatorSurfaceRow(surfaceID)
-	if err != nil {
-		return nil, err
-	}
-	out := row.FloorTools()
-	sort.Strings(out)
-	return out, nil
-}
-
 // LoadCoordinatorSurfaceLoadable returns the tools a surface can load or request.
 func LoadCoordinatorSurfaceLoadable(surfaceID string) ([]string, error) {
 	row, err := loadCoordinatorSurfaceRow(surfaceID)
@@ -169,87 +111,28 @@ func LoadCoordinatorSurfaceLoadable(surfaceID string) ([]string, error) {
 	return out, nil
 }
 
-// MergeCoordinatorKickPolicyVars adds coordinator kick policy variables.
-func MergeCoordinatorKickPolicyVars(into map[string]any) error {
-	visible, err := CoordinatorProfileVisibleTools()
-	if err != nil {
-		return err
-	}
-	return MergeCoordinatorKickVarsForTools(into, visible)
-}
-
 // MergeCoordinatorKickVarsForTools answers tool facts from the tools the next
 // model call can reach.
-func MergeCoordinatorKickVarsForTools(into map[string]any, reachable []string) error {
+func MergeCoordinatorKickVarsForTools(into map[string]any, reader Reader) error {
 	if into == nil {
 		return fmt.Errorf("nil template vars map")
 	}
-	for k, v := range CoordinatorPolicyTemplateVars(reachable, nil) {
-		if _, exists := into[k]; !exists {
+	occurrence := make(map[string]any, len(into))
+	for k, v := range into {
+		if !IsDeclaredOrReservedReaderFact(k) {
+			occurrence[k] = v
+		}
+	}
+	merged, err := Vars(reader, occurrence)
+	if err != nil {
+		return err
+	}
+	for k, v := range merged {
+		if _, exists := into[k]; !exists || !IsDeclaredOrReservedReaderFact(k) {
 			into[k] = v
 		}
 	}
 	spawn.RefreshSizingHintVars(into)
-	return nil
-}
-
-// MergeCoordinatorSurfacePathVars adds path and policy variables. The floor
-// plus the tools turn.Loaded names are offered on this call and teach their
-// copy; the rest of the loadable set lists as requestable, each with the
-// description turn.Schemas holds for it, and loads through request_tools.
-func MergeCoordinatorSurfacePathVars(surfaceID string, profiles []sandbox.ToolProfile, into map[string]any, turn SurfaceTurn) error {
-	if into == nil {
-		return fmt.Errorf("nil template vars map")
-	}
-	var data CoordinatorPathScopeData
-	var err error
-	if strings.TrimSpace(surfaceID) == "implement_investigate" {
-		// Product path scopes are host YAML, not catalog units.
-		data, err = LoadInvestigatePathScopes()
-	} else if len(profiles) == 0 {
-		data, err = LoadCoordinatorPathScopes()
-	} else {
-		data, err = CoordinatorPathScopesFromProfiles(profiles)
-	}
-	if err != nil {
-		return err
-	}
-	for k, v := range CoordinatorPathScopeTemplateVars(data) {
-		into[k] = v
-	}
-	floor, err := LoadCoordinatorSurfaceFloor(surfaceID)
-	if err != nil {
-		return err
-	}
-	loadable, err := LoadCoordinatorSurfaceLoadable(surfaceID)
-	if err != nil {
-		return err
-	}
-	floor = turn.available(floor)
-	loadable = turn.available(loadable)
-	offered, requestable := OfferedTools(floor, loadable, turn.Loaded)
-	if enabled, ok := into["web_search_enabled"].(bool); ok && !enabled {
-		offered = withoutResearchTools(offered)
-		requestable = withoutResearchTools(requestable)
-	}
-	for k, v := range CoordinatorPolicyTemplateVars(offered, requestable) {
-		if isPreservedEnvironmentFact(k, into) {
-			continue
-		}
-		into[k] = v
-	}
-	into["is_coordinator"] = true
-	into["command_on_floor"] = slices.Contains(floor, "command")
-	RestrictCommandEffects(coordinatorSurfaceCommandEffects(surfaceID, profiles), offered, requestable, into)
-	syncCommandExternalFacts(into)
-	roster, err := RequestableTools(requestable, turn.Schemas)
-	if err != nil {
-		return err
-	}
-	into["surface_offered"] = offered
-	into["requestable_tools"] = requestableToolVars(roster)
-	into["requestable_capabilities"] = RequestableCapabilities(roster)
-	clearSkillRosterWithoutSkillsRead(into)
 	return nil
 }
 

@@ -34,7 +34,7 @@ func promotionOps(t *testing.T, changed, others int) (preview, apply map[string]
 	testutil.FailErr(t, "publisher", err)
 	_, err = publisher.Publish(t.Context(), PublishRequest{CheckpointID: "cp-ops", Trigger: TriggerWorkerCompletion})
 	testutil.FailErr(t, "publish", err)
-	promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}})
+	promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}, PrimaryRoot: "primary"})
 	testutil.FailErr(t, "promoter", err)
 	reviewed, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "cp-ops"})
 	testutil.FailErr(t, "preview", err)

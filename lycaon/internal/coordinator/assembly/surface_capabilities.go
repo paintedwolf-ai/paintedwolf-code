@@ -8,8 +8,10 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -92,14 +94,11 @@ func (e *promptSurface) mergeEffectivePromptSurface(ctx context.Context, sess *a
 		}
 	}
 }
-func (e *promptSurface) mergeVisibleToolCapabilityVars(vars map[string]any) {
+func (e *promptSurface) mergeVisibleToolCapabilityVars(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch, vars map[string]any) {
 	if vars == nil {
 		return
 	}
-	rootCount := 0
-	if v, ok := vars["root_count"].(int); ok {
-		rootCount = v
-	}
+	_, rootCount, _, _, _ := e.workspaceRootsForTurn(ctx, sess, turn)
 	var visible []string
 	switch v := vars["visible_tools"].(type) {
 	case []string:
@@ -154,8 +153,7 @@ func (e *promptSurface) workspaceRootsForTurn(ctx context.Context, sess *api.Ses
 
 // mergeWorkspaceRootTurnVars applies the turn's workspace root snapshot to
 // prompt vars for workspace-roots.md and the root-aware surfaces.
-func mergeWorkspaceRootTurnVars(vars map[string]any, roots []map[string]any, rootCount int, activePath string, omittedCount int) {
-	vars["root_count"] = rootCount
+func mergeWorkspaceRootTurnVars(vars map[string]any, roots []map[string]any, activePath string, omittedCount int) {
 	vars["workspace_roots"] = roots
 	vars["workspace_roots_omitted_count"] = omittedCount
 	if activePath != "" {
@@ -209,4 +207,77 @@ func (e *promptSurface) taskOffered(sess *api.Session, surfaceID string, rootCou
 		return true
 	}
 	return plan.Deferred("task") && e.loadedTools(sess)["task"]
+}
+
+func (e *promptSurface) turnReader(
+	ctx context.Context,
+	sess *api.Session,
+	frame inject.CoordinatorTurnFrame,
+	history []api.Message,
+	turn *TurnAssemblyScratch,
+	fallbackRootCount int,
+) (prompts.Reader, error) {
+	if turn != nil && turn.Reader.Valid() {
+		return turn.Reader, nil
+	}
+	profile, _ := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
+	if frame.Roster != nil && strings.TrimSpace(frame.Roster.Facts.SurfaceID) != "" {
+		profile = surface.TurnProfile{SurfaceID: strings.TrimSpace(frame.Roster.Facts.SurfaceID)}
+	}
+	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
+	if !ok {
+		switch {
+		case fallbackRootCount > 0:
+			rootCount = fallbackRootCount
+		case frame.Roster != nil && frame.Roster.Facts.RootCount > 0:
+			rootCount = frame.Roster.Facts.RootCount
+		case sess != nil && strings.TrimSpace(sess.WorkspacePath) != "":
+			rootCount = 1
+		}
+	}
+	plan, err := surface.CompileToolPlan(profile, rootCount)
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	webSearchEnabled := true
+	if frame.Roster != nil {
+		webSearchEnabled = frame.Roster.Facts.WebSearchEnabled
+	} else if fn := e.deps.WebSearchEnabled; fn != nil {
+		webSearchEnabled = fn()
+	}
+	var (
+		profiles []sandbox.ToolProfile
+		schemas  *toolschema.Config
+	)
+	if view := e.sessionCatalogView(ctx, sess); view != nil {
+		profiles = view.ToolProfiles
+		schemas = view.ToolSchemas
+	}
+	if len(profiles) == 0 {
+		loaded, err := sandbox.LoadToolProfiles()
+		if err != nil {
+			return prompts.Reader{}, err
+		}
+		profiles = loaded
+	}
+	visionEnabled := e.deps.ModelVision != nil && e.deps.ModelVision(ctx, sess)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: profile.SurfaceID,
+		Mode:      surface.ExecutionModeFamily(profile.SurfaceID),
+		Profiles:  profiles,
+		Plan:      plan,
+		Loaded:    e.loadedTools(sess),
+		Schemas:   schemas,
+		RootCount: rootCount,
+		WebSearch: webSearchEnabled,
+	})
+	if err != nil {
+		return prompts.Reader{}, err
+	}
+	reader = reader.WithVision(visionEnabled)
+	if turn != nil {
+		turn.Reader = reader
+	}
+	return reader, nil
 }

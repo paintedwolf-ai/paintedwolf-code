@@ -277,22 +277,18 @@ describe("line gutter — diff and provenance", () => {
     expect(bars(view)).toHaveLength(0);
   });
 
-  it("shows provenance on focus with the line under the bar, and opens on click", () => {
+  it("activates provenance on click without opening the facts card on focus", () => {
     view = mount("a\nx\nc\n", "a\nb\nc\n");
-    const onShow = vi.fn();
+    const onOpen = vi.fn();
     const onActivate = vi.fn();
     setLineGutterProvenanceHandlers(view, {
       onActivate,
     });
     setLineGutterAttribution(view, [attribution({ startLine: 2, endLine: 2 })]);
     const link = links(view)[0]!;
-    setLineFactsHandlers(view, { show: onShow, leave: vi.fn(), dismiss: vi.fn(), refresh: vi.fn() });
+    setLineFactsHandlers(view, { open: onOpen, dismiss: vi.fn(), refresh: vi.fn() });
     link.dispatchEvent(new FocusEvent("focusin", { bubbles: true }));
-    expect(onShow).toHaveBeenCalledWith(
-      2,
-      link.closest(".cm-gutterElement"),
-      "focus",
-    );
+    expect(onOpen).not.toHaveBeenCalled();
     link.dispatchEvent(new MouseEvent("click", { bubbles: true }));
     expect(onActivate).toHaveBeenCalledWith(expect.objectContaining({ contributors: [expect.objectContaining({ turn: 2 })] }), link, 2);
   });
@@ -701,5 +697,165 @@ describe("line gutter — numbers off", () => {
     // WebKitGTK aborts a screen reader's text query over an editor holding unrendered text.
     expect(hidden.map((cell) => cell.textContent)).toEqual(hidden.map(() => ""));
     expect(view.dom.querySelector(".files-line-gutter__number--spacer")?.getAttribute("aria-hidden")).toBe("true");
+  });
+});
+
+describe("line gutter — line facts activation", () => {
+  let view: EditorView | undefined;
+  afterEach(() => {
+    view?.destroy();
+    view = undefined;
+    document.body.replaceChildren();
+  });
+
+  function mountRichGutter() {
+    const current = "function f() {\n  const changed = 1\n  return changed\n}\nconst plain = 2\n";
+    const original = "function f() {\n  const before = 0\n  const removed = 9\n  return before\n}\nconst plain = 2\n";
+    const v = mountEditor(current);
+    applyEditorScopeDiff(v, { original });
+    setScopeDeletedLines(v, "folded");
+    setLineGutterAttribution(v, [attribution({ startLine: 2, endLine: 2 })]);
+    setLineGutterFindings(v, [mark(1, "high", "foldable line"), mark(3, "low", "body line")]);
+    setLineGutterRestoreHandler(v, { onReject: vi.fn() });
+    setLineGutterProvenanceHandlers(v, { onActivate: vi.fn() });
+    setLineGutterFindingHandlers(v, { onActivate: vi.fn() });
+    setLineGutterCutHandlers(v, { onShow: vi.fn(), onHide: vi.fn(), onOpen: vi.fn() });
+    v.contentDOM.querySelectorAll(".cm-line")[1]!.dispatchEvent(new MouseEvent("mousemove", { bubbles: true }));
+    const onOpen = vi.fn();
+    const onDismiss = vi.fn();
+    setLineFactsHandlers(v, { open: onOpen, dismiss: onDismiss, refresh: vi.fn() });
+    return { view: v, onOpen, onDismiss };
+  }
+
+  it("never opens, swaps, or closes the card across 500 pointer and focus sequences", () => {
+    const { view: v, onOpen, onDismiss } = mountRichGutter();
+    view = v;
+    const card = document.createElement("div");
+    card.className = "files-line-facts";
+    const cardRow = card.appendChild(document.createElement("button"));
+    cardRow.className = "files-line-facts__row";
+
+    expect([
+      v.dom.querySelector('.files-line-gutter__facts[data-line="1"]'),
+      v.dom.querySelector('.files-line-gutter__facts[data-line="3"]'),
+      folds(v)[0],
+      v.dom.querySelector('.files-line-gutter__number[data-line="5"]'),
+      glyphs(v)[0],
+      links(v)[0],
+      restores(v)[0],
+      v.dom.querySelector("[data-testid='files-line-gutter-cut']"),
+    ].every(Boolean)).toBe(true);
+
+    const liveTargets = (cardOpen: boolean): HTMLElement[] => {
+      const nodes = [
+        ...v.dom.querySelectorAll<HTMLElement>("[data-line-gutter-control], .files-line-gutter__number, .cm-line"),
+      ];
+      if (cardOpen) nodes.push(cardRow);
+      return nodes;
+    };
+
+    const events = ["mouseover", "mouseout", "mousemove", "mouseenter", "mouseleave", "focusin", "focusout"] as const;
+    let seed = 0x5eed1234;
+    const nextInt = (max: number) => {
+      seed = (Math.imul(seed ^ (seed >>> 15), 0x2c1b3c6d) + 0x297a2d39) >>> 0;
+      return seed % max;
+    };
+
+    for (let seq = 0; seq < 500; seq++) {
+      const cardOpen = seq >= 250;
+      if (cardOpen && !card.isConnected) document.body.appendChild(card);
+      if (!cardOpen && card.isConnected) card.remove();
+      onDismiss.mockClear();
+      const length = 6 + nextInt(7);
+      for (let step = 0; step < length; step++) {
+        const pool = liveTargets(cardOpen);
+        const kind = events[nextInt(events.length)]!;
+        const target = pool[nextInt(pool.length)]!;
+        const related = pool[nextInt(pool.length)]!;
+        const bubbles = kind !== "mouseenter" && kind !== "mouseleave";
+        const event = kind === "focusin" || kind === "focusout"
+          ? new FocusEvent(kind, { bubbles, relatedTarget: related })
+          : new MouseEvent(kind, { bubbles, relatedTarget: related });
+        target.dispatchEvent(event);
+      }
+      expect(onOpen).not.toHaveBeenCalled();
+      if (cardOpen) expect(onDismiss).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([
+    ["facts handle", "click", ["pointer"]],
+    ["facts handle", "Enter", ["keyboard"]],
+    ["facts handle", " ", ["keyboard"]],
+    ["facts handle", "ArrowRight", ["keyboard"]],
+    ["fold number", "click", []],
+    ["fold number", "Enter", []],
+    ["fold number", " ", []],
+    ["fold number", "ArrowRight", []],
+    ["finding glyph", "click", []],
+    ["finding glyph", "Enter", []],
+    ["finding glyph", " ", []],
+    ["finding glyph", "ArrowRight", []],
+    ["provenance bar", "click", []],
+    ["provenance bar", "Enter", []],
+    ["provenance bar", " ", []],
+    ["provenance bar", "ArrowRight", []],
+    ["restore chip", "click", []],
+    ["restore chip", "Enter", []],
+    ["restore chip", " ", []],
+    ["restore chip", "ArrowRight", []],
+    ["delete cut", "click", []],
+    ["delete cut", "Enter", []],
+    ["delete cut", " ", []],
+    ["delete cut", "ArrowRight", []],
+  ] as const)("control %s with %s calls open %j", (controlKind, input, expectedVia) => {
+    const { view: v, onOpen } = mountRichGutter();
+    view = v;
+    const targetByKind: Record<string, HTMLElement> = {
+      "facts handle": v.dom.querySelector<HTMLElement>('.files-line-gutter__facts[data-line="1"]')!,
+      "fold number": folds(v)[0]!,
+      "finding glyph": glyphs(v)[0]!,
+      "provenance bar": links(v)[0]!,
+      "restore chip": restores(v)[0]!,
+      "delete cut": v.dom.querySelector<HTMLElement>("[data-testid='files-line-gutter-cut']")!,
+    };
+    const target = targetByKind[controlKind]!;
+    expect(target).toBeTruthy();
+    if (input === "click") {
+      target.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    } else {
+      target.focus();
+      target.dispatchEvent(new KeyboardEvent("keydown", { key: input, bubbles: true }));
+    }
+    if (expectedVia.length === 0) {
+      expect(onOpen).not.toHaveBeenCalled();
+    } else {
+      expect(onOpen).toHaveBeenCalledTimes(1);
+      expect(onOpen).toHaveBeenCalledWith(1, target.closest(".cm-gutterElement"), expectedVia[0]);
+    }
+  });
+
+  it("folds from a fact line with an open card, dismisses the card, and never reopens it", () => {
+    const { view: v, onOpen, onDismiss } = mountRichGutter();
+    view = v;
+    const handle = v.dom.querySelector<HTMLElement>('.files-line-gutter__facts[data-line="1"]')!;
+    const foldBtn = v.dom.querySelector<HTMLElement>('[data-testid="files-line-gutter-fold"][data-line="1"]')!;
+    handle.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    onOpen.mockClear();
+    onDismiss.mockClear();
+
+    const countFolded = () => {
+      let n = 0;
+      foldedRanges(v.state).between(0, v.state.doc.length, () => { n += 1; });
+      return n;
+    };
+    expect(countFolded()).toBe(0);
+
+    foldBtn.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }));
+    foldBtn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(countFolded()).toBe(1);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+    expect(onOpen).not.toHaveBeenCalled();
   });
 });

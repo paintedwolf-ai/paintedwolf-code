@@ -8,40 +8,57 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func mergeCoordinatorSurfaceVars(t *testing.T, surfaceID string) map[string]any {
+func coordinatorTestReader(t *testing.T, surfaceID string, rootCount int) prompts.Reader {
 	t.Helper()
-	vars := map[string]any{
-		"has_file_tools":         true,
-		"can_orient":             true,
-		"can_spawn_implementer":  true,
-		"can_spawn_web_research": true,
-		"can_spawn_workers":      true,
-		"root_count":             1,
-	}
-	// The surface merge filters unavailable skills.
+	profiles, err := sandbox.LoadToolProfiles()
+	contractcheck.FailErr(t, "load tool profiles", err)
+	plan, err := prompts.CompileSurfacePlan(surfaceID, rootCount)
+	contractcheck.FailErr(t, "compile surface plan", err)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: surfaceID,
+		Plan:      plan,
+		Profiles:  profiles,
+		RootCount: rootCount,
+		WebSearch: true,
+	})
+	contractcheck.FailErr(t, "new reader", err)
+	return reader
+}
+
+func mergeCoordinatorSurfaceVars(t *testing.T, _ string) map[string]any {
+	t.Helper()
+	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+	vars["has_file_tools"] = true
+	vars["can_orient"] = true
+	vars["can_spawn_implementer"] = true
+	vars["can_spawn_web_research"] = true
+	vars["can_spawn_workers"] = true
 	mergePromptBudgetSkillRoster(t, vars)
-	if err := prompts.MergeCoordinatorSurfacePathVars(surfaceID, nil, vars, prompts.SurfaceTurn{}); err != nil {
-		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
-	}
 	return vars
 }
 
 func mergeCoordinatorTemplateVars(t *testing.T) map[string]any {
 	t.Helper()
 	vars := mergeCoordinatorSurfaceVars(t, "implement_synthesis")
-	if err := prompts.MergeCoordinatorKickPolicyVars(vars); err != nil {
-		t.Fatalf("MergeCoordinatorKickPolicyVars: %v", err)
-	}
 	mergeFixtureWorkspaceRoot(t, vars, "")
-	return vars
+	reader := coordinatorTestReader(t, "implement_synthesis", 1)
+	merged, err := prompts.Vars(reader, vars)
+	contractcheck.FailErr(t, "prompts.Vars", err)
+	// Standalone agent templates are measured before mode shell assembly.
+	delete(merged, "execution_mode")
+	return merged
 }
 
 // mergeFixtureWorkspaceRoot attaches one real folder so the render matches a
@@ -83,13 +100,12 @@ func mergeCoordinatorPromptVarsForTripartite(
 		vars,
 	)
 	contractcheck.FailErr(t, "merge coordinator prompt vars", err)
-	rootCount := 1
-	if c, ok := vars["root_count"].(int); ok {
-		rootCount = c
-	}
-	if err := capability.MergeForTurn(vars, profile, rootCount, spawn.AmbientAllowedAgents(), true); err != nil {
+	reader := coordinatorTestReader(t, profile.SurfaceID, 1)
+	if err := capability.MergeForTurn(vars, reader, spawn.AmbientAllowedAgents()); err != nil {
 		t.Fatalf("MergeForTurn: %v", err)
 	}
+	vars, err = prompts.Vars(reader, vars)
+	contractcheck.FailErr(t, "prompts.Vars", err)
 	return vars
 }
 
@@ -160,15 +176,35 @@ func mergeWidestUnitBlocks(t *testing.T, engine prompts.PromptTemplateEngine, su
 	t.Helper()
 	catalog, err := prompts.UnitCatalogForEngine(engine)
 	contractcheck.FailErr(t, "unit catalog", err)
-	floor, _ := vars["surface_offered"].([]string)
+	surfaces, err := surfacecatalog.Load()
+	contractcheck.FailErr(t, "surface catalog", err)
+	row, err := surfaces.Surface(surfaceID)
+	contractcheck.FailErr(t, "surface row", err)
+	floor := row.FloorTools()
 	loadable, err := prompts.LoadCoordinatorSurfaceLoadable(surfaceID)
 	contractcheck.FailErr(t, "surface loadable", err)
 	if rootCount, ok := vars["root_count"].(int); ok {
+		floor, err = surface.FilterSurfaceToolsForRootCount(floor, rootCount)
+		contractcheck.FailErr(t, "filter floor for root count", err)
 		loadable, err = surface.FilterSurfaceToolsForRootCount(loadable, rootCount)
 		contractcheck.FailErr(t, "filter loadable for root count", err)
 	}
 	offered := append(append([]string(nil), floor...), loadable...)
-	sel := prompts.UnitSelectionVars(promptunit.HostCoordinator, surface.ExecutionModeFamily(surfaceID), offered)
+	held := make(map[string]bool, len(offered)+4)
+	for _, name := range offered {
+		held[name] = true
+	}
+	if vars["profile_command_mutation"] == true {
+		held[toolcontract.ReachCommandMutation] = true
+	}
+	if vars["profile_command_external_exec"] == true {
+		held[toolcontract.ReachCommandExternalExec] = true
+		held[toolcontract.ReachCommandExternalExecSelector] = true
+	}
+	if vars["profile_command_network_egress"] == true {
+		held[toolcontract.ReachCommandNetworkEgress] = true
+	}
+	sel := promptunit.Selection{Host: promptunit.HostCoordinator, Mode: surface.ExecutionModeFamily(surfaceID), Held: held}
 	blocks, err := prompts.RenderUnitSlots(context.Background(), prompts.UnitRendererFor(engine), catalog, sel, vars)
 	contractcheck.FailErr(t, "render unit slots", err)
 	prompts.MergeUnitVars(vars, blocks)

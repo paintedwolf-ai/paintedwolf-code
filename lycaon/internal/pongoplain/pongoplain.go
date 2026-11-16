@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/flosch/pongo2/v6"
+	"github.com/lycaon/lycaon/internal/scopedstore"
 )
 
 // Resource ceilings support bundled prompts.
@@ -100,8 +101,13 @@ func (denyLoader) Get(path string) (io.Reader, error) {
 	return nil, fmt.Errorf("pongoplain: isolated template requested file %q", path)
 }
 
+var compiledIsolated = scopedstore.New[*pongo2.Template](scopedstore.DefaultEntries)
+
 // Compile validates and parses one isolated body.
 func Compile(source string) (*pongo2.Template, error) {
+	if tpl, ok := compiledIsolated.Load(source); ok {
+		return tpl, nil
+	}
 	if _, err := Inspect(source, Isolated); err != nil {
 		return nil, err
 	}
@@ -114,5 +120,6 @@ func Compile(source string) (*pongo2.Template, error) {
 	if err != nil {
 		return nil, fmt.Errorf("pongoplain: compile: %w", err)
 	}
+	compiledIsolated.Store(source, tpl)
 	return tpl, nil
 }

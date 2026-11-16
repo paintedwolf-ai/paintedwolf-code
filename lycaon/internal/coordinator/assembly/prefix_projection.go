@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/orchestration"
-	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -18,22 +17,22 @@ func (p *promptSurface) renderSystemPrefix(ctx context.Context, sess *api.Sessio
 	if err != nil {
 		return "", err
 	}
+	if vision != nil && p.deps.ModelVision == nil {
+		p.deps.ModelVision = vision
+	}
 	vars := map[string]any{"project_dir": sess.WorkspacePath}
-	if roots, count, activePath, omitted, ok := p.workspaceRootsForTurn(ctx, sess, turn); ok {
-		mergeWorkspaceRootTurnVars(vars, roots, count, activePath, omitted)
+	if roots, _, activePath, omitted, ok := p.workspaceRootsForTurn(ctx, sess, turn); ok {
+		mergeWorkspaceRootTurnVars(vars, roots, activePath, omitted)
 	}
 	coordinator := surface.IsCoordinatorSession(sess)
 	if coordinator {
 		vars["skills_heading"] = "##"
 	}
 	p.applyToolBudgetVars(ctx, sess, coordinator, vars)
-	if vision != nil {
-		prompts.MergeModelCapabilityVars(vision(ctx, sess), vars)
-	}
 	coordinatorSurface := coordinator && (!frame.Machine.Compiled() || frame.Machine.ProfileID == orchestration.ProfileCoordinator)
 	if !coordinatorSurface {
 		p.mergeVisibleTools(ctx, sess, frame, vars)
-		p.mergeVisibleToolCapabilityVars(vars)
+		p.mergeVisibleToolCapabilityVars(ctx, sess, turn, vars)
 	}
 	p.mergeEffectivePromptSurface(ctx, sess, frame, vars)
 	pe, revision, err := p.projectPromptsSnapshot(ctx, sess)

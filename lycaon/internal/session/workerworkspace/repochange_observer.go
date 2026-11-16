@@ -102,12 +102,12 @@ func matchStateRoot(st *WorkspaceObservationState, eventDir string) (string, str
 		return "", "", false
 	}
 	for _, r := range st.Roots {
-		if r.Path != "" && sameCanonicalPath(r.Path, eventDir) {
-			return firstNonEmpty(r.ID, "primary"), r.Path, true
+		if r.ID != "" && r.Path != "" && sameCanonicalPath(r.Path, eventDir) {
+			return r.ID, r.Path, true
 		}
 	}
-	if st.WorkspacePath != "" && sameCanonicalPath(st.WorkspacePath, eventDir) {
-		return "primary", st.WorkspacePath, true
+	if primary, ok := primaryRoot(st.Roots); ok && st.WorkspacePath != "" && sameCanonicalPath(st.WorkspacePath, eventDir) {
+		return primary.ID, st.WorkspacePath, true
 	}
 	return "", "", false
 }
@@ -133,7 +133,7 @@ func canonicalPath(p string) string {
 
 func buildTrunkChangeFromRepoEvent(rootID, rootPath, rel string, kind repochange.WorktreeChangeKind) observation.TrunkChangeEvent {
 	ev := observation.TrunkChangeEvent{
-		Path: layeredfs.QualifiedPath{RootID: firstNonEmpty(rootID, "primary"), Rel: rel},
+		Path: layeredfs.QualifiedPath{RootID: rootID, Rel: rel},
 		Kind: observation.TrunkWriteInPlace,
 	}
 	if kind == repochange.WorktreeChangeStructural {
@@ -193,13 +193,9 @@ func collectTargetTrackers(r *WorkspaceTrackerRegistry, key string) []*observati
 }
 
 func resolveObservationLayer(m *Service, tr *observation.Tracker, jobID string, qpath layeredfs.QualifiedPath, rawLayer string) layeredfs.LayerSource {
-	switch strings.TrimSpace(rawLayer) {
-	case "private":
-		return layeredfs.LayerPrivate
-	case "parent_checkpoint", "checkpoint", "parent":
-		return layeredfs.LayerParent
-	case "trunk":
-		return layeredfs.LayerTrunk
+	switch layer := layeredfs.LayerSource(strings.TrimSpace(rawLayer)); layer {
+	case layeredfs.LayerPrivate, layeredfs.LayerParent, layeredfs.LayerTrunk:
+		return layer
 	}
 	if isTouchedForJob(m, jobID, qpath.Rel) {
 		return layeredfs.LayerPrivate
@@ -255,16 +251,6 @@ func resolveQualifiedAndDiskPath(
 	rawPath string,
 ) (layeredfs.QualifiedPath, string) {
 	rawPath = strings.TrimSpace(rawPath)
-	if colon := strings.IndexByte(rawPath, ':'); colon > 0 && !filepath.IsAbs(rawPath) {
-		rootID := strings.TrimSpace(rawPath[:colon])
-		rel := filepath.ToSlash(filepath.Clean(strings.TrimPrefix(strings.TrimSpace(rawPath[colon+1:]), "/")))
-		for _, r := range roots {
-			if r.ID == rootID || r.Label == rootID {
-				return layeredfs.QualifiedPath{RootID: r.ID, Rel: rel}, filepath.Join(r.Path, filepath.FromSlash(rel))
-			}
-		}
-		return layeredfs.QualifiedPath{RootID: rootID, Rel: rel}, ""
-	}
 	if strings.HasPrefix(rawPath, "@") {
 		slash := strings.IndexByte(rawPath, '/')
 		if slash > 1 {
@@ -290,5 +276,16 @@ func resolveQualifiedAndDiskPath(
 	} else if baseDir != "" {
 		disk = filepath.Join(baseDir, filepath.FromSlash(rel))
 	}
-	return layeredfs.QualifiedPath{RootID: "primary", Rel: rel}, disk
+	primary, _ := primaryRoot(roots)
+	return layeredfs.QualifiedPath{RootID: primary.ID, Rel: rel}, disk
+}
+
+// primaryRoot is the root a path without a root label belongs to.
+func primaryRoot(roots []projectroot.RootRef) (projectroot.RootRef, bool) {
+	for _, r := range roots {
+		if r.IsPrimary && r.ID != "" {
+			return r, true
+		}
+	}
+	return projectroot.RootRef{}, false
 }

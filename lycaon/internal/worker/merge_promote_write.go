@@ -386,7 +386,7 @@ func (s *MergeService) stackedPromotionRequest(task *api.WorkerTask, roots []pro
 	if err != nil {
 		return nil, recovery.StackedPromotionRequest{}, err
 	}
-	targetRoots, err := session.TargetRootsForTaskCheckpoint(task, roots, manifest)
+	targetRoots, _, err := session.TargetRootsForTaskCheckpoint(task, roots, manifest)
 	if err != nil {
 		return nil, recovery.StackedPromotionRequest{}, err
 	}

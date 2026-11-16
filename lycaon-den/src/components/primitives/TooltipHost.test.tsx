@@ -203,4 +203,45 @@ describe("TooltipHost", () => {
     });
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
+
+  it("dismisses on press and stays suppressed while a popup trigger is expanded", async () => {
+    const [expanded, setExpanded] = createSignal(false);
+    render(() => (
+      <>
+        <button
+          type="button"
+          data-testid="facts"
+          data-tip="Read lines 16–17"
+          data-tip-pos="end"
+          aria-haspopup="dialog"
+          aria-expanded={expanded()}
+          onClick={() => setExpanded((prev) => !prev)}
+        >
+          16
+        </button>
+        <TooltipHost />
+      </>
+    ));
+
+    const button = assertNamedControl(screen.getByTestId("facts"), "button");
+    fireEvent.mouseOver(button);
+    await vi.advanceTimersByTimeAsync(350);
+    expect(screen.queryByRole("tooltip")).not.toBeNull();
+
+    fireEvent.pointerDown(button);
+    fireEvent.click(button);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    fireEvent.mouseOut(button);
+    fireEvent.mouseOver(button);
+    await vi.advanceTimersByTimeAsync(350);
+    expect(screen.queryByRole("tooltip")).toBeNull();
+
+    fireEvent.pointerDown(button);
+    fireEvent.click(button);
+    fireEvent.mouseOut(button);
+    fireEvent.mouseOver(button);
+    await vi.advanceTimersByTimeAsync(350);
+    expect(screen.queryByRole("tooltip")).not.toBeNull();
+  });
 });

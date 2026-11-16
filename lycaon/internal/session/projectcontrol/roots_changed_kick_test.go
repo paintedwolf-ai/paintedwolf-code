@@ -246,6 +246,7 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 	renderPrompt := func(surface prompts.AgentPromptSurface) string {
 		vars := prompts.AgentPromptSurfaceTemplateVars(surface)
 		vars["tool_profile"] = "implement"
+		vars["root_count"] = len(roots)
 		prompts.MergeWorkspaceRootsVars(vars, roots, created.Roots[0].ID)
 		out, err := engine.Render(ctx, "partials/command-surface.md", vars)
 		testutil.FailErr(t, "render command-surface", err)

@@ -56,7 +56,7 @@ type Store interface {
 	Put(ctx context.Context, rootSessionID string, entry Entry) (api.VisualArtifact, error)
 	// Resolve returns Present or a typed absence.
 	Resolve(ctx context.Context, rootSessionID, artifactID string) Resolution
-	// ListProject returns one project-scoped metadata page (no bytes), oldest-first.
+	// ListProject returns one project-scoped metadata page (no bytes), newest-first.
 	ListProject(ctx context.Context, projectID string, query ArtifactPageQuery) (ArtifactPage, error)
 	// ListTree returns tree-scoped artifact metadata for the root session (no bytes).
 	ListTree(ctx context.Context, rootSessionID string) ([]api.ArtifactListItem, error)
@@ -79,11 +79,13 @@ const (
 	MaxArtifactPageLimit     = 500
 )
 
-// ArtifactPageQuery is an exclusive stable cursor over artifact creation order.
+// ArtifactPageQuery defines filters and an exclusive cursor over descending artifact creation order.
 type ArtifactPageQuery struct {
-	AfterCreatedAt string
-	AfterID        string
-	Limit          int
+	BeforeCreatedAt string
+	BeforeID        string
+	Source          api.VisualArtifactSource
+	SessionID       string
+	Limit           int
 }
 
 func (q ArtifactPageQuery) effectiveLimit() int {
@@ -96,9 +98,10 @@ func (q ArtifactPageQuery) effectiveLimit() int {
 	return q.Limit
 }
 
-// ArtifactPage is one bounded project listing and its next internal cursor.
+// ArtifactPage is one bounded project listing, its producer sessions, and its next internal cursor.
 type ArtifactPage struct {
 	Items         []api.ArtifactListItem
+	SessionIDs    []string
 	NextCreatedAt string
 	NextID        string
 }

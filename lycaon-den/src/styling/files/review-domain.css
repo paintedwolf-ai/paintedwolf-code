@@ -371,7 +371,7 @@
   outline: none;
 }
 
-/* One interactive surface for everything known about the hovered line. */
+/* Line facts card anchored to the gutter cell. */
 .files-line-facts { container-type: inline-size; container-name: files-line-facts; width: 24.286rem; padding: 0; color: var(--den-text); font-family: var(--den-font-ui); }
 .files-line-facts__head { display: flex; align-items: baseline; gap: 8px; padding: 7px 11px; border-bottom: 1px solid var(--den-line); }
 .files-line-facts__title { font-size: var(--text-den-label); font-weight: 550; white-space: nowrap; }
@@ -390,7 +390,7 @@
   .files-line-facts__row { grid-template-columns: 8px minmax(0, 1fr); }
   .files-line-facts__go { grid-column: 2; justify-self: start; }
 }
-.files-line-gutter__facts { position: absolute; inset: 0; width: 100%; border: 0; margin: 0; padding: 0; background-color: transparent; cursor: default; }
+.files-line-gutter__facts { position: absolute; inset: 0; width: 100%; border: 0; margin: 0; padding: 0; background-color: transparent; cursor: pointer; }
 .files-line-gutter__facts:focus-visible { outline: 1px solid var(--den-accent-signal); outline-offset: -1px; }
 /* The open handle matches the shared popup-trigger bevel in ui-chrome.css and follows it, so it stays flat. */
 .cm-editor:not(.cm-agent-file) .cm-scroller:not([data-den-scrolling]) .files-line-gutter__cell--facts:not(.files-line-gutter__cell--read):hover .files-line-gutter__facts,

@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -238,11 +239,28 @@ func TestWorkflowInjectNeverAdvertisesExcludedAgents(t *testing.T) {
 	}
 }
 
+func testSynthesisSpawnReader(t *testing.T) prompts.Reader {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	plan, err := prompts.CompileSurfacePlan(spawn.SurfaceImplementSynthesis, 1)
+	testutil.FailErr(t, "CompileSurfacePlan", err)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: spawn.SurfaceImplementSynthesis,
+		Profiles:  profiles,
+		Plan:      plan,
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader", err)
+	return reader
+}
+
 func renderTestImplementSpawn(t *testing.T, allowedAgents []string) string {
 	t.Helper()
 	renderer := testInjectRenderer(t)
-	block, err := RenderImplementSpawnInject(context.Background(), renderer, "sess-inject-test", allowedAgents, spawn.MaxInFlightTaskWorkers, spawn.SurfaceImplementSynthesis, 1, false, true,
-		nil, nil)
+	block, err := RenderImplementSpawnInject(context.Background(), renderer, "sess-inject-test", allowedAgents, spawn.MaxInFlightTaskWorkers, testSynthesisSpawnReader(t), false)
 	testutil.FailErr(t, "RenderImplementSpawnInject failed", err)
 	return block
 }
@@ -257,8 +275,7 @@ func TestImplementSpawnInjectIncludesSpawnMatrix(t *testing.T) {
 }
 
 func TestRenderImplementSpawnInject_NilRenderer(t *testing.T) {
-	_, err := RenderImplementSpawnInject(context.Background(), nil, "sess-inject-test", nil, 0, "", 0, false, true,
-		nil, nil)
+	_, err := RenderImplementSpawnInject(context.Background(), nil, "sess-inject-test", nil, 0, prompts.Reader{}, false)
 	if err == nil || !strings.Contains(err.Error(), "not configured") {
 		t.Fatalf("err = %v", err)
 	}
@@ -270,8 +287,7 @@ func TestRenderImplementSpawnInject_MissingSentinel(t *testing.T) {
 		testutil.FailErr(t, "engine.Register failed", err)
 	}
 	renderer := prompts.NewInjectRenderer(engine)
-	_, err := RenderImplementSpawnInject(context.Background(), renderer, "sess-inject-test", spawn.AmbientAllowedAgents(), spawn.MaxInFlightTaskWorkers, spawn.SurfaceImplementSynthesis, 1, false, true,
-		nil, nil)
+	_, err := RenderImplementSpawnInject(context.Background(), renderer, "sess-inject-test", spawn.AmbientAllowedAgents(), spawn.MaxInFlightTaskWorkers, testSynthesisSpawnReader(t), false)
 	if err == nil || !strings.Contains(err.Error(), ImplementSpawnInjectSentinel) {
 		t.Fatalf("err = %v", err)
 	}

@@ -284,8 +284,6 @@ describe("files editor context menu a11y", () => {
                   findings: [],
                 },
               }),
-              cancelHidePopover: () => calls.push("cancelHide"),
-              scheduleHidePopover: () => calls.push("scheduleHide"),
               hideLineFacts: () => calls.push("hideFacts"),
               returnLineFactsFocus: () => calls.push("returnFocus"),
               activateLineFact: () => calls.push("activateFact"),

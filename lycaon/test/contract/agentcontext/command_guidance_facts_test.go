@@ -11,6 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -91,13 +93,26 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 				activeRootID = tc.roots[0].ID
 			}
 			prompts.MergeWorkspaceRootsVars(vars, tc.roots, activeRootID)
-			if tc.isCoordinator {
-				vars["tool_profile"] = prompts.CoordinatorProfileID
-				contractcheck.FailErr(t, "merge coordinator surface", prompts.MergeCoordinatorSurfacePathVars(tc.scopeID, profiles, vars, prompts.SurfaceTurn{}))
-			} else {
-				contractcheck.FailErr(t, "merge agent surface", prompts.MergeAgentToolSurfaceVars(tc.scopeID, nil, nil, prompts.SurfaceTurn{}, vars, profiles))
+			in := prompts.ReaderInput{
+				Profiles:  profiles,
+				RootCount: len(tc.roots),
+				HasGit:    len(tc.roots) > 0,
+				WebSearch: true,
 			}
+			if tc.isCoordinator {
+				plan, err := prompts.CompileSurfacePlan(tc.scopeID, len(tc.roots))
+				contractcheck.FailErr(t, "compile surface plan", err)
+				in.ProfileID = prompts.CoordinatorProfileID
+				in.SurfaceID = tc.scopeID
+				in.Plan = plan
+			} else {
+				in.ProfileID = tc.scopeID
+			}
+			reader, err := prompts.NewReader(in)
+			contractcheck.FailErr(t, "new reader", err)
 			vars["platform_os"] = tc.platformOS
+			vars, err = prompts.Vars(reader, vars)
+			contractcheck.FailErr(t, "merge reader vars", err)
 			vars["command_on_floor"] = tc.commandOnFloor
 
 			cmdSurface, err := engine.Render(context.Background(), "partials/command-surface.md", vars)
@@ -194,8 +209,24 @@ func TestCommandVisualGuidanceUsesOfferedCaptureRoutes(t *testing.T) {
 		{name: "all routes", tools: []string{"command", "capture_page", "terminal_open", "terminal_read", "terminal_send", "terminal_snapshot"}, page: true, terminal: true, open: true, read: true, send: true, snapshot: true, capture: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			vars := prompts.VisibleToolsNativePartialVars(tc.tools)
-			prompts.MergeVisualShowVars(tc.tools, nil, vars)
+			tools := make(map[string]bool, len(tc.tools))
+			for _, name := range tc.tools {
+				tools[name] = true
+			}
+			reader, err := prompts.NewReader(prompts.ReaderInput{
+				ProfileID: "worker",
+				Plan:      toolsurface.Compile(tc.tools, nil),
+				Visible:   tc.tools,
+				Profiles: []sandbox.ToolProfile{{
+					ID:             "worker",
+					Tools:          tools,
+					CommandEffects: toolcontract.AllCommandEffects(),
+				}},
+				RootCount: 1,
+				WebSearch: true,
+			})
+			contractcheck.FailErr(t, "NewReader", err)
+			vars := reader.Facts()
 			for key, want := range map[string]bool{
 				"visual_show_available": tc.page || tc.terminal,
 				"visual_show_page":      tc.page, "visual_show_terminal": tc.terminal,

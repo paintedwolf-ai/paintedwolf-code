@@ -236,6 +236,7 @@ func verifyRecoveredMountAndStackedChild(
 	promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{
 		Store:       cpStore,
 		TargetRoots: map[string]string{"primary": trunkDir},
+		PrimaryRoot: "primary",
 	})
 	testutil.FailErr(t, "checkpoint.NewPromoter failed", err)
 	if err := promoteStackedAndCommit(t, coord, recovery.StackedPromotionRequest{

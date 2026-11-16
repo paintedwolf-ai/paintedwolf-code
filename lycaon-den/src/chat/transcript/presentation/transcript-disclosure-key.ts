@@ -22,6 +22,7 @@ const SURFACES = [
   "workflow-explain",
   "blueprint",
   "draft",
+  "code-fence",
 ] as const;
 
 type TranscriptDisclosureSurface = (typeof SURFACES)[number];
@@ -50,6 +51,7 @@ export const transcriptDisclosureKey = {
   workflowExplain: (entryKey: string) => disclosureKey("workflow-explain", entryKey),
   blueprint: (entryKey: string) => disclosureKey("blueprint", entryKey),
   draft: (slotId: string) => disclosureKey("draft", slotId),
+  codeFence: (fenceKey: string) => disclosureKey("code-fence", fenceKey),
 } as const;
 
 /** Reads a key back from markup or saved state; anything no surface wrote is dropped. */

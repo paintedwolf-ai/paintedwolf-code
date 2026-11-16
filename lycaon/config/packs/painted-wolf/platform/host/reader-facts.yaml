@@ -1,0 +1,204 @@
+facts:
+  - name: agent_tools
+    type: "[]map[string]any"
+    states: Offered worker tools with required argument summaries.
+  - name: caps.vision
+    type: bool
+    states: The active model accepts image inputs.
+  - name: card_edit_deferred
+    type: bool
+    states: The surface card holds edit tools as loadable rather than on the floor.
+  - name: card_may_dispatch
+    type: bool
+    states: The surface card can dispatch worker tasks.
+  - name: card_may_edit
+    type: bool
+    states: The surface card can reach edit tools.
+  - name: card_may_run
+    type: bool
+    states: The surface card can reach command mutation or terminal execution.
+  - name: card_only_tools
+    type: "[]string"
+    states: Surface card tool list when the surface offers a fixed read-only floor.
+  - name: command_on_floor
+    type: bool
+    states: Command is immediately offered on the floor without request_tools.
+  - name: command_output_files
+    type: bool
+    states: Command is offered and can write files under @output.
+  - name: execution_mode
+    type: string
+    states: Active coordinator execution mode family.
+  - name: has_git
+    type: bool
+    states: The primary workspace root is a Git repository.
+  - name: is_coordinator
+    type: bool
+    states: The reader is a coordinator surface rather than a worker.
+  - name: lane_s_sync_tools
+    type: "[]string"
+    states: Offered tools that synchronize on the serial lane.
+  - name: more_tools_loadable
+    type: bool
+    states: Deferred tools remain loadable via request_tools on this turn.
+  - name: native_edit_limit_mib
+    type: int
+    states: Maximum file size in MiB accepted by native file edit tools.
+  - name: on_worker_branch
+    type: bool
+    states: The workspace is on an isolated worker branch.
+  - name: profile_command_external_exec
+    type: bool
+    states: The executor admits command programs that run external executables.
+  - name: profile_command_mutation
+    type: bool
+    states: The executor admits command programs that change the workspace.
+  - name: profile_command_network_egress
+    type: bool
+    states: The executor admits command programs that make outbound network requests.
+  - name: profile_has_code_rewrite
+    type: bool
+    states: Structural code rewrite is offered directly or through command.
+  - name: profile_has_managed_secrets
+    type: bool
+    states: Every managed secret tool is offered on this turn.
+  - name: profile_has_page_controls
+    type: bool
+    states: At least one browser page tool is offered on this turn.
+  - name: profile_has_retrieval
+    type: bool
+    states: At least one external retrieval tool is offered on this turn.
+  - name: profile_has_scan_drilldown
+    type: bool
+    states: At least one scan drill-down tool is offered on this turn.
+  - name: profile_has_summarize
+    type: bool
+    states: Summarize is offered directly or through command.
+  - name: profile_has_survey_repo
+    type: bool
+    states: Repository survey is offered directly or through command.
+  - name: profile_has_terminal_capture
+    type: bool
+    states: Command admits external execution for one-shot terminal capture.
+  - name: profile_has_write_tools
+    type: bool
+    states: At least one workspace-mutating tool or mutating command is offered.
+  - name: profile_mutation_capable
+    type: bool
+    states: At least one workspace-mutating tool or mutating command is reachable.
+  - name: progress_gated_tools
+    type: "[]string"
+    states: Offered tools gated on an active progress checklist item.
+  - name: read_globs
+    type: "[]string"
+    states: Readable path globs for this coordinator surface.
+  - name: recall_may_widen
+    type: bool
+    states: Recall supports widening beyond the current leg.
+  - name: reject_codes
+    type: "[]map[string]any"
+    states: Recoverable rejection codes reachable by this reader's tools.
+  - name: requestable_capabilities
+    type: "[]string"
+    states: Capability group labels for tools loadable via request_tools.
+  - name: root_count
+    type: int
+    states: Workspace roots attached to the session.
+  - name: runner_direct_ip_tools
+    type: "[]string"
+    states: Offered host-runner tools that can dial direct IP literals.
+  - name: runner_local_listen_tools
+    type: "[]string"
+    states: Offered host-runner tools that can bind a local listener.
+  - name: runner_loopback_connect_tools
+    type: "[]string"
+    states: Offered host-runner tools that can connect to loopback ports.
+  - name: runner_socket_tools
+    type: "[]string"
+    states: Offered host-runner tools that can connect to Unix sockets.
+  - name: runner_write_root_tools
+    type: "[]string"
+    states: Offered host-runner tools that can write inside workspace roots.
+  - name: surface_card_label
+    type: string
+    states: Human-readable label for the active coordinator surface card.
+  - name: surface_card_rule
+    type: string
+    states: Operating rule summary for the active coordinator surface card.
+  - name: surface_id
+    type: string
+    states: Active coordinator surface identifier.
+  - name: surface_publishes_text
+    type: bool
+    states: The active coordinator surface publishes direct assistant text.
+  - name: tool_check_scan_drilldown_tools
+    type: "[]string"
+    states: Offered scan drill-down tools.
+  - name: tool_check_survey_tools
+    type: "[]string"
+    states: Offered repository survey tools.
+  - name: tool_check_verify_tools
+    type: "[]string"
+    states: Offered verification tools.
+  - name: tool_check_write_tools
+    type: "[]string"
+    states: Offered workspace write tools.
+  - name: tool_profile
+    type: string
+    states: Active tool profile identifier.
+  - name: visual_review_cadence
+    type: string
+    states: Visual review cadence for this reader's offered capture and edit tools.
+  - name: visual_show_available
+    type: bool
+    states: Page or terminal visual capture is offered on this turn.
+  - name: visual_show_needs_request
+    type: bool
+    states: Page capture is loadable via request_tools alongside write reach.
+  - name: visual_show_page
+    type: bool
+    states: Page capture is offered on this turn.
+  - name: visual_show_terminal
+    type: bool
+    states: Terminal session capture or command is offered on this turn.
+  - name: visual_show_terminal_needs_request
+    type: bool
+    states: Held terminal capture is loadable via request_tools alongside write reach.
+  - name: web_search_enabled
+    type: bool
+    states: Web search and fetch are enabled for this session.
+  - name: write_globs
+    type: "[]string"
+    states: Writable path globs for this reader scope.
+
+families:
+  - pattern: profile_has_{tool}
+    over: tools
+    type: bool
+    states: Tool is offered on this turn.
+  - pattern: profile_can_request.{tool}
+    over: tools
+    type: bool
+    states: Tool is loadable via request_tools on this turn.
+  - pattern: mints.{kind}
+    over: evidence_kinds
+    type: bool
+    states: Reader can mint the named evidence kind.
+  - pattern: receipt_kind.{tool}
+    over: tools
+    type: string
+    states: Evidence kind minted by tool when called on this reader.
+  - pattern: agent_has_skill_{skill}
+    over: skills
+    type: bool
+    states: Active skill roster includes the named stock skill.
+
+reserved_prefixes:
+  - profile_
+  - mints
+  - receipt_kind
+  - tool_check_
+  - runner_
+  - agent_has_skill_
+  - visual_show_
+  - caps

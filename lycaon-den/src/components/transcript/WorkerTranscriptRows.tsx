@@ -65,6 +65,7 @@ export function WorkerTranscriptMessageRow(props: {
               <MarkdownBody
                 source={workerTranscriptMarkdownSource(props.content)}
                 literalHtml
+                disclosureScope={props.messageId}
                 projectId={props.projectId}
                 citations={citations()}
                 navigation={navigation()}

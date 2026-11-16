@@ -2,6 +2,7 @@ package capability
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
@@ -63,25 +64,27 @@ func MergeVars(into map[string]any, caps CoordinatorCapabilities) {
 	into["can_spawn_implementer"] = caps.CanSpawnImplementer
 	into["can_spawn_web_research"] = caps.CanSpawnWebResearch
 	into["can_spawn_workers"] = caps.CanSpawnWorkers
-	if _, ok := into["root_count"]; !ok {
-		into["root_count"] = caps.RootCount
-	}
 }
 
 // MergeForTurn derives capability flags from the resolved per-turn capability surface.
 func MergeForTurn(
 	into map[string]any,
-	profile surface.TurnProfile,
-	rootCount int,
+	reader prompts.Reader,
 	spawnAllowlist []string,
-	webSearchEnabled bool,
 ) error {
 	if into == nil {
 		return fmt.Errorf("nil template vars map")
 	}
+	if !slices.Contains(reader.Offered(), "skills_read") {
+		delete(into, "skills_roster")
+		into["skills_count"] = 0
+		into["has_skills"] = false
+		delete(into, "skills_auto_loaded")
+	}
+	webSearchEnabled := reader.WebSearch()
 	surf, err := Resolve(ResolveInput{
-		Profile:          profile,
-		RootCount:        rootCount,
+		Profile:          surface.TurnProfile{SurfaceID: reader.SurfaceID()},
+		RootCount:        reader.RootCount(),
 		SpawnAllowlist:   spawnAllowlist,
 		WebSearchEnabled: &webSearchEnabled,
 	})
@@ -89,29 +92,8 @@ func MergeForTurn(
 		return err
 	}
 	MergeVars(into, surf.Flags)
-	for k, v := range prompts.CoordinatorPolicyTemplateVars(surf.ResolvedTools, surf.DeferredTools) {
-		into[k] = v
-	}
-	prompts.RestrictCommandEffects(prompts.ScopeCommandEffects(surf.SurfaceID), surf.ResolvedTools, surf.DeferredTools, into)
-	if len(surf.DeferredTools) == 0 || !toolNameSet(surf.ResolvedTools)["request_tools"] {
-		into["requestable_tools"] = nil
-		into["requestable_capabilities"] = nil
-	}
-	card, err := prompts.LoadCoordinatorSurfaceCard(surf.SurfaceID)
-	if err != nil {
-		return err
-	}
-	for k, v := range prompts.CoordinatorSurfaceCardVars(card, surf.ResolvedTools, surf.DeferredTools, prompts.CoordinatorSurfaceAllowsCommandMutation(surf.SurfaceID)).TemplateVars() {
-		into[k] = v
-	}
-	prompts.MergeVisualShowVars(surf.ResolvedTools, surf.DeferredTools, into)
-	into["surface_offered"] = append([]string(nil), surf.ResolvedTools...)
 	for k, v := range prompts.SpawnRosterRoleVars(surf.Roster) {
 		into[k] = v
-	}
-	into["web_search_enabled"] = webSearchEnabled
-	if !webSearchEnabled {
-		prompts.MergeWebResearchUnavailable(into)
 	}
 	return nil
 }
