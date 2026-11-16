@@ -141,24 +141,20 @@ var TestImport = &analysis.Analyzer{
 	Run:  runTestImport,
 }
 
-var testSupport stringList
+var testSupport patternList
 
 func init() {
 	TestImport.Flags.Var(&testSupport, "test-support", "comma-separated patterns for test-support package paths")
 }
 
 func runTestImport(pass *analysis.Pass) (any, error) {
-	patterns, err := testSupport.compile()
-	if err != nil {
-		return nil, err
-	}
-	if matchesAny(patterns, pass.Pkg.Path()) {
+	if matchesAny(testSupport, pass.Pkg.Path()) {
 		return nil, nil
 	}
 	for _, file := range productionFiles(pass) {
 		for _, spec := range file.Imports {
 			path := strings.Trim(spec.Path.Value, `"`)
-			if matchesAny(patterns, path) {
+			if matchesAny(testSupport, path) {
 				pass.Reportf(spec.Pos(), "production package %s imports test-support package %s", pass.Pkg.Path(), path)
 			}
 		}
@@ -212,30 +208,31 @@ func productionFiles(pass *analysis.Pass) []*ast.File {
 	return out
 }
 
-type stringList []string
+// patternList is a comma-separated flag of regular expressions, compiled when set.
+type patternList []*regexp.Regexp
 
-func (l *stringList) String() string { return strings.Join(*l, ",") }
-
-func (l *stringList) Set(s string) error {
-	*l = nil
-	for _, part := range strings.Split(s, ",") {
-		if part = strings.TrimSpace(part); part != "" {
-			*l = append(*l, part)
-		}
+func (l *patternList) String() string {
+	parts := make([]string, len(*l))
+	for i, re := range *l {
+		parts[i] = re.String()
 	}
-	return nil
+	return strings.Join(parts, ",")
 }
 
-func (l stringList) compile() ([]*regexp.Regexp, error) {
-	var out []*regexp.Regexp
-	for _, p := range l {
-		re, err := regexp.Compile(p)
+func (l *patternList) Set(s string) error {
+	var out patternList
+	for _, part := range strings.Split(s, ",") {
+		if part = strings.TrimSpace(part); part == "" {
+			continue
+		}
+		re, err := regexp.Compile(part)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		out = append(out, re)
 	}
-	return out, nil
+	*l = out
+	return nil
 }
 
 func matchesAny(patterns []*regexp.Regexp, s string) bool {
