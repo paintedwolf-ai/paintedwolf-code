@@ -687,10 +687,10 @@
       "summary": "That tool is not available in the active mode"
     },
     "COORDINATOR_UNGROUNDED_CLAIM": {
-      "branch_instruction": "Resolve the reported evidence gap before claiming the delegation is complete",
+      "branch_instruction": "Claim the work complete only after a round completes and reports.",
       "category": "recoverable",
       "emit": "guard:grounding",
-      "summary": "Completed leg {{ paintedwolf.leg_id }} lacks required completion evidence."
+      "summary": "Planned work {{ paintedwolf.leg_id }} has no completed, reported round behind it."
     },
     "COORDINATOR_WORKER_IN_FLIGHT": {
       "branch_instruction": "Wait for an active slot in the requested scope and total concurrency limit, then instruct a waiting worker or start only the remaining work.",
