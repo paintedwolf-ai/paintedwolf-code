@@ -88,26 +88,19 @@
   background: var(--den-tint-3);
 }
 
-.progress-strip__summary:has(> .progress-strip__opener:focus-visible) {
-  outline: 2px solid var(--den-accent-signal);
-  outline-offset: -2px;
-}
-
+/* The opener is the whole row; the words sit beneath it. */
 .progress-strip__opener {
-  flex: 0 0 auto;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  outline: none;
-}
-
-/* The opener covers its whole row. */
-.progress-strip__opener::after {
-  content: "";
   position: absolute;
   inset: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+}
+
+.progress-strip__opener:focus-visible {
+  outline: 2px solid var(--den-accent-signal);
+  outline-offset: -2px;
 }
 
 .progress-strip__rest {
@@ -144,7 +137,7 @@
   margin: 0;
 }
 
-/* The opener holds no words at rest, so spacing sits on the chevron, not in a gap. */
+/* The title is absent at rest, so spacing sits on the chevron, not in a gap. */
 .progress-strip__summary > .den-disclosure-chevron {
   margin-inline-start: 7px;
 }

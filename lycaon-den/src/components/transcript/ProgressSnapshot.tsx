@@ -102,9 +102,8 @@ export function ProgressSnapshot(props: Props) {
               inHeader
               class="progress-strip__opener"
               aria-label={`${title()}: ${restText()}`}
-            >
-              <span class="progress-strip__title">{title()}</span>
-            </TranscriptDisclosureToggle>
+            />
+            <span class="progress-strip__title">{title()}</span>
             <div class="progress-strip__rest" data-testid="progress-strip-rest" aria-hidden="true">
               <For each={restSteps()}>
                 {(step, index) => (
