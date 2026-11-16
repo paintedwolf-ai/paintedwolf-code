@@ -25,9 +25,6 @@ const (
 	KindDelegate   = "delegate"
 )
 
-// Version is the decisions.yaml format this package reads.
-const Version = decide.CatalogVersion
-
 // StateSpec bounds the state every decision reads.
 type StateSpec struct {
 	UserTextChars int `yaml:"user_text_chars" json:"user_text_chars"`
@@ -215,8 +212,8 @@ func ParseCatalog(data []byte) (Catalog, error) {
 func (c Catalog) validate() error {
 	var faults []string
 	fault := func(format string, args ...any) { faults = append(faults, fmt.Sprintf(format, args...)) }
-	if c.Version != Version {
-		fault("version %d is not %d", c.Version, Version)
+	if c.Version != decide.CatalogVersion {
+		fault("version %d is not %d", c.Version, decide.CatalogVersion)
 	}
 	if c.State.UserTextChars <= 0 {
 		fault("state.user_text_chars must be positive")

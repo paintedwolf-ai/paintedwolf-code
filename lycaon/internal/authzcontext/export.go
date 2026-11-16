@@ -74,7 +74,6 @@ type exportContext struct {
 	Posture         string `json:"posture,omitempty"`
 	ApprovalPosture string `json:"approval_posture,omitempty"`
 	ConfigHash      string `json:"config_hash"`
-	MaxToolLoops    int    `json:"max_tool_loops,omitempty"`
 }
 
 type exportEvent struct {
@@ -132,7 +131,6 @@ func ExportSessionAuthz(ctx context.Context, w io.Writer, reader SessionReader, 
 			Posture:         c.Posture,
 			ApprovalPosture: string(c.ApprovalPosture),
 			ConfigHash:      c.ConfigHash,
-			MaxToolLoops:    c.MaxToolLoops,
 		}
 		if err := enc.Encode(row); err != nil {
 			return err

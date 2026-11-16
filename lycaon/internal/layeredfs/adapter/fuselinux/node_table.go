@@ -54,7 +54,7 @@ func newNodeTable() *nodeTable {
 		nextDirFH:       1 << 50,
 		adoptedInos:     make(map[layeredfs.NodeID]uint64),
 		budget:          DefaultNodeBudget,
-		lru:             newNodeLRU(),
+		lru:             list.New(),
 	}
 }
 

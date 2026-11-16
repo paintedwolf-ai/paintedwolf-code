@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
@@ -142,14 +143,14 @@ func (e *Approvals) raiseAndWaitToolApproval(ctx context.Context, in toolApprova
 		for attempt := 0; attempt < 2; attempt++ {
 			begin, existingID := e.approvalCoalesce.Begin(chat, grantKey)
 			switch begin {
-			case toolapproval.ToolApprovalCoalesceJoin:
+			case approvalstate.ToolApprovalCoalesceJoin:
 				final, err := e.joinOpenCard(ctx, in, chat, grantKey, toolCallID, existingID)
 				if !errors.Is(err, hitl.ErrCheckpointNotPending) {
 					return final, err
 				}
 				e.approvalCoalesce.ClearPending(chat, grantKey)
 				continue
-			case toolapproval.ToolApprovalCoalesceMint:
+			case approvalstate.ToolApprovalCoalesceMint:
 			}
 			break
 		}

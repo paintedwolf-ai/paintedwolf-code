@@ -342,7 +342,7 @@ func TestSkillsReadRendersPackBody(t *testing.T) {
 		Skills: func(context.Context, tools.ToolContext) []skills.Skill {
 			return []skills.Skill{{
 				Name:   "orchestrate-a-large-task",
-				Body:   "Worker loops: {{ worker_tool_budget_default }}. Hunt: {{ hunt_wave_workers }}.\n",
+				Body:   "In flight: {{ max_in_flight }}. Hunt: {{ hunt_wave_workers }}.\n",
 				Dir:    "/pack/skills/orchestrate-a-large-task",
 				PackID: "painted-wolf/platform",
 			}}
@@ -358,9 +358,9 @@ func TestSkillsReadRendersPackBody(t *testing.T) {
 	)
 	testutil.FailErr(t, "tool.Run failed", err)
 	wantBody := fmt.Sprintf(
-		"Worker loops: %d. Hunt: %d.\n",
-		spawn.DefaultWorkerMaxToolLoops,
-		spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())["hunt_wave_workers"],
+		"In flight: %d. Hunt: %d.\n",
+		spawn.MaxInFlightTaskWorkers,
+		spawn.PolicyTemplateVars()["hunt_wave_workers"],
 	)
 	if !strings.Contains(got, wantBody) {
 		t.Fatalf("envelope missing rendered body %q:\n%s", wantBody, got)
@@ -504,7 +504,7 @@ func TestSkillsReadUsesCallerAgentProfile(t *testing.T) {
 				TemplateVars: func(_ context.Context, _ tools.ToolContext) map[string]any {
 					reader, err := prompts.NewReader(tc.input)
 					testutil.FailErr(t, "new reader", err)
-					return prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
+					return prompts.SkillVars(reader)
 				},
 				PackConfiguration: func(context.Context, tools.ToolContext, string) map[string]any {
 					return nil

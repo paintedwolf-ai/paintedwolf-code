@@ -25,7 +25,9 @@ func TestCounterDisplayColumnsAreIndependentOfScalarLengthAndChunking(t *testing
 				if got := counter.DisplayWidth(); got != tc.columns {
 					t.Fatalf("step %d: columns = %d, want %d", step, got, tc.columns)
 				}
-				if got, want := counter.Counts(), CountBytes([]byte(tc.input)); got != want {
+				whole := NewCounter(allCountMetrics)
+				_, _ = whole.Write([]byte(tc.input))
+				if got, want := counter.Counts(), whole.Counts(); got != want {
 					t.Fatalf("step %d: scalar counts = %+v, want %+v", step, got, want)
 				}
 			}

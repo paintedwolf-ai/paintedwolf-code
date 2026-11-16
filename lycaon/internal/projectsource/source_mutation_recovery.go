@@ -76,7 +76,7 @@ func (s *SourceMutationService) recoverOne(ctx context.Context, row *sourceMutat
 			identity, statErr := fspath.EntryIdentity(current.Plan.AbsPath)
 			applied = current.Plan.DeleteStarted && (os.IsNotExist(statErr) || (statErr == nil && !fspath.SameEntryAcrossRestart(current.Plan.DeleteIdentity, identity)))
 			if applied && current.Plan.NativeTrash != nil && current.Plan.Disposal == sourceDisposalDiscard && !nativeTrashReceiptRecorded(&current.Plan) {
-				slotPath := filepath.Join(current.Plan.RootPath, settingsoverlay.RecoveryDirRelPath, recoverySlotName(current.ID))
+				slotPath := filepath.Join(current.Plan.RootPath, settingsoverlay.RecoveryRelPath, recoverySlotName(current.ID))
 				if requireSourceIdentity(slotPath, current.Plan.DeleteIdentity) == nil {
 					current.Plan.NativeTrash.Receipt = desktoptrash.Receipt{
 						Path:     slotPath,

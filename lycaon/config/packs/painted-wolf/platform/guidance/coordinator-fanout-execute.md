@@ -9,4 +9,4 @@ Execute the stamped fan-out wave — dispatch all legs in one batch, then wait f
 2. Call `wait(timeout_ms=1800000, conditions=[{"kind":"all_workers_idle"}])` — do not synthesize until every completion envelope lands.
 3. Do **not** add unstamped legs while this wave is running; the next phase adapts.
 
-When every planned leg is complete or has exhausted its declared attempt allowance, the host advances automatically. An incomplete leg remains a coverage gap. If another attempt is allowed, keep its `workflow_work_id` and recover only that leg. Do not call the phase-advance tool from coordinator prose.
+When every planned leg is complete or has exhausted its declared attempt allowance, the host advances automatically. An incomplete leg remains a coverage gap. If another attempt is allowed,{% if profile_has_instruct_worker %} instruct that same worker with `instruct_worker` to recover only what remains{% else %} keep its `workflow_work_id` and recover only that leg{% endif %}. Do not call the phase-advance tool from coordinator prose.

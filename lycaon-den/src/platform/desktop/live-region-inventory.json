@@ -1,5 +1,6 @@
 {
   "briefing/BriefingEvidencePage.tsx": 2,
+  "components/action/ActionCard.tsx": 1,
   "components/blueprint/BlueprintCard.tsx": 2,
   "components/blueprint/BlueprintReviewModal.tsx": 3,
   "components/chatview/chat-view-composer.tsx": 1,
@@ -91,7 +92,6 @@
   "components/source/secrets/MarkSecretDialog.tsx": 2,
   "components/SpendCeilingApproachingNudge.tsx": 1,
   "components/SpendCeilingReachedNudge.tsx": 1,
-  "components/tool/ActivityTarget.tsx": 1,
   "components/transcript/ChatSpanBlocks.tsx": 3,
   "components/transcript/LiveToolRecordingPlayer.tsx": 2,
   "components/transcript/NavigationChooser.tsx": 1,
@@ -103,6 +103,7 @@
   "components/trust/ProjectTrustPanel.tsx": 1,
   "components/trust/TrustReviewPage.tsx": 1,
   "components/update/UpdatePanel.tsx": 3,
+  "components/worker/WorkerCollaborationNotice.tsx": 1,
   "components/worker/WorkersTab.tsx": 1,
   "components/worker/WorkerWorkingIndicator.tsx": 2,
   "components/workflow/DownloadReportButton.tsx": 1,

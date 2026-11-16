@@ -4,14 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
-	"github.com/lycaon/lycaon/internal/spawn"
 )
 
 type SessionLimits struct {
@@ -30,9 +28,6 @@ type SessionLimits struct {
 	CoordinatorHostTurnTimeoutSec int     `yaml:"coordinator_host_turn_timeout_sec" json:"coordinator_host_turn_timeout_sec"`
 	CoordinatorMaxSleepSec        int     `yaml:"coordinator_max_sleep_sec" json:"coordinator_max_sleep_sec"`
 	AwaitParentWorkersTimeoutSec  int     `yaml:"await_parent_workers_timeout_sec" json:"await_parent_workers_timeout_sec"`
-	WorkerToolBudgetDefault       int     `yaml:"worker_tool_budget_default" json:"worker_tool_budget_default"`
-	WorkerToolBudgetMin           int     `yaml:"worker_tool_budget_min" json:"worker_tool_budget_min"`
-	WorkerToolBudgetMax           int     `yaml:"worker_tool_budget_max" json:"worker_tool_budget_max"`
 }
 
 var (
@@ -65,36 +60,7 @@ func loadBundledSessionLimits() (SessionLimits, error) {
 		on := true
 		cfg.CoordinatorLoop = &on
 	}
-	// Zero continuous budgets are derived from the live model window.
-	budget := spawn.DefaultWorkerToolBudget()
-	if cfg.WorkerToolBudgetDefault <= 0 {
-		cfg.WorkerToolBudgetDefault = budget.Default
-	}
-	if cfg.WorkerToolBudgetMin <= 0 {
-		cfg.WorkerToolBudgetMin = budget.Min
-	}
-	if cfg.WorkerToolBudgetMax <= 0 {
-		cfg.WorkerToolBudgetMax = budget.Max
-	}
-	return normalizeWorkerToolBudget(cfg, cfg), nil
-}
-
-// LoadSessionLimits reads session settings from path and merges onto bundled defaults.
-func LoadSessionLimits(path string) (SessionLimits, error) {
-	cfg := DefaultSessionLimits()
-	// Missing user settings retain bundled defaults.
-	data, err := os.ReadFile(path) // #nosec G304 -- caller-provided settings path
-	if err != nil {
-		if os.IsNotExist(err) {
-			return cfg, nil
-		}
-		return cfg, err
-	}
-	var file SessionLimits
-	if err := config.DecodeYAML(data, &file); err != nil {
-		return cfg, err
-	}
-	return MergeSessionLimits(cfg, file), nil
+	return cfg, nil
 }
 
 // MergeSessionLimits overlays non-zero/non-nil fields from overlay onto base.
@@ -148,15 +114,6 @@ func MergeSessionLimits(base, overlay SessionLimits) SessionLimits {
 	}
 	if overlay.AwaitParentWorkersTimeoutSec > 0 {
 		out.AwaitParentWorkersTimeoutSec = overlay.AwaitParentWorkersTimeoutSec
-	}
-	if overlay.WorkerToolBudgetDefault > 0 {
-		out.WorkerToolBudgetDefault = overlay.WorkerToolBudgetDefault
-	}
-	if overlay.WorkerToolBudgetMin > 0 {
-		out.WorkerToolBudgetMin = overlay.WorkerToolBudgetMin
-	}
-	if overlay.WorkerToolBudgetMax > 0 {
-		out.WorkerToolBudgetMax = overlay.WorkerToolBudgetMax
 	}
 	return NormalizeSessionLimits(out)
 }
@@ -220,50 +177,7 @@ func NormalizeSessionLimits(lim SessionLimits) SessionLimits {
 	if lim.OverlayPromoteMaxIterations <= 0 {
 		lim.OverlayPromoteMaxIterations = def.OverlayPromoteMaxIterations
 	}
-	lim = normalizeWorkerToolBudget(lim, def)
 	return lim
-}
-
-// normalizeWorkerToolBudget fills zero fields from defaults, then clamps so the
-// floor ≤ min ≤ default ≤ max invariant always holds.
-func normalizeWorkerToolBudget(lim, def SessionLimits) SessionLimits {
-	if lim.WorkerToolBudgetDefault <= 0 {
-		lim.WorkerToolBudgetDefault = def.WorkerToolBudgetDefault
-	}
-	if lim.WorkerToolBudgetMin <= 0 {
-		lim.WorkerToolBudgetMin = def.WorkerToolBudgetMin
-	}
-	if lim.WorkerToolBudgetMax <= 0 {
-		lim.WorkerToolBudgetMax = def.WorkerToolBudgetMax
-	}
-	if lim.WorkerToolBudgetMin < spawn.WorkerToolBudgetFloor {
-		lim.WorkerToolBudgetMin = spawn.WorkerToolBudgetFloor
-	}
-	if lim.WorkerToolBudgetMin > spawn.DefaultWorkerToolBudgetMax {
-		lim.WorkerToolBudgetMin = spawn.DefaultWorkerToolBudgetMax
-	}
-	if lim.WorkerToolBudgetMax > spawn.DefaultWorkerToolBudgetMax {
-		lim.WorkerToolBudgetMax = spawn.DefaultWorkerToolBudgetMax
-	}
-	if lim.WorkerToolBudgetMax < lim.WorkerToolBudgetMin {
-		lim.WorkerToolBudgetMax = lim.WorkerToolBudgetMin
-	}
-	if lim.WorkerToolBudgetDefault < lim.WorkerToolBudgetMin {
-		lim.WorkerToolBudgetDefault = lim.WorkerToolBudgetMin
-	}
-	if lim.WorkerToolBudgetDefault > lim.WorkerToolBudgetMax {
-		lim.WorkerToolBudgetDefault = lim.WorkerToolBudgetMax
-	}
-	return lim
-}
-
-// WorkerToolBudget returns the effective worker ceiling bounds.
-func (l SessionLimits) WorkerToolBudget() spawn.WorkerToolBudget {
-	return spawn.WorkerToolBudget{
-		Default: l.WorkerToolBudgetDefault,
-		Min:     l.WorkerToolBudgetMin,
-		Max:     l.WorkerToolBudgetMax,
-	}
 }
 
 // CoordinatorLoopEnabled returns whether host auto-Prompt is allowed.
@@ -338,7 +252,7 @@ func (l SessionLimits) EffectiveMaxCoordinatorLoopCycles() int {
 // SettingsFingerprint hashes session limit fields that invalidate compiled prompt cache.
 func (l SessionLimits) SettingsFingerprint() string {
 	sum := sha256.Sum256([]byte(fmt.Sprintf(
-		"iter=%d|tool=%d|timeout=%d|stall=%d|host=%d|sleep=%d|workers=%d|budget=%d/%d/%d",
+		"iter=%d|tool=%d|timeout=%d|stall=%d|host=%d|sleep=%d|workers=%d",
 		l.MaxIterations,
 		l.MaxToolResultBytes,
 		l.LLMTurnTimeoutSec,
@@ -346,9 +260,6 @@ func (l SessionLimits) SettingsFingerprint() string {
 		l.CoordinatorHostTurnTimeoutSec,
 		l.CoordinatorMaxSleepSec,
 		l.AwaitParentWorkersTimeoutSec,
-		l.WorkerToolBudgetDefault,
-		l.WorkerToolBudgetMin,
-		l.WorkerToolBudgetMax,
 	)))
 	return hex.EncodeToString(sum[:8])
 }

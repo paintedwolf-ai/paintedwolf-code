@@ -10,8 +10,8 @@ INSERT INTO worker_jobs (
     execution_target, runner_id, claimed_by, claim_token, attempt, heartbeat_at, lease_expires_at,
     agent_type, status, spawn_reason,
     prompt, brief, files_json, scope_json, result_json, error, failure_json, created_at, started_at, completed_at,
-    overlay_id, max_tool_loops, tool_loops_used, tool_calls_used
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    overlay_id, tool_loops_used, tool_calls_used
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetWorkerJob :one
 SELECT id, project_id, workspace_root_id, workspace_path, workspace_key, delegation_id, leg_id, parent_session_id, source_tool_call_id, source_args_digest, child_session_id, workflow_run_id, workflow_phase, workflow_work_id,
@@ -51,7 +51,10 @@ SELECT id, parent_session_id FROM worker_jobs
 WHERE status = 'pending' AND cancel_requested_at IS NULL
   AND NOT EXISTS (
     SELECT 1 FROM worker_prerequisites dependency
-    JOIN worker_jobs upstream ON upstream.id = dependency.prerequisite_id
+    -- A long-lived producer is ready on its latest round, not the one named.
+    JOIN worker_jobs upstream ON upstream.id = COALESCE((SELECT latest.job_id FROM worker_rounds origin
+        JOIN worker_rounds latest ON latest.worker_id = origin.worker_id
+        WHERE origin.job_id = dependency.prerequisite_id ORDER BY latest.ordinal DESC LIMIT 1), dependency.prerequisite_id)
     WHERE dependency.worker_job_id = worker_jobs.id
       AND (upstream.status != 'complete'
         OR COALESCE(json_extract(upstream.result_json, '$.status'), '') NOT IN ('complete', 'open')
@@ -64,13 +67,16 @@ ORDER BY created_at, id LIMIT 1;
 -- Admission holds the session gate before the claim transaction starts.
 -- name: ClaimWorkerJob :one
 UPDATE worker_jobs
-SET status = 'running', started_at = sqlc.arg(started_at), claimed_by = sqlc.arg(claimed_by),
+SET status = 'running', started_at = COALESCE(started_at, sqlc.arg(started_at)), claimed_by = sqlc.arg(claimed_by),
     claim_token = sqlc.arg(claim_token), attempt = attempt + 1,
     heartbeat_at = sqlc.arg(heartbeat_at), lease_expires_at = sqlc.arg(lease_expires_at)
 WHERE worker_jobs.id = sqlc.arg(id) AND status = 'pending' AND cancel_requested_at IS NULL
   AND NOT EXISTS (
     SELECT 1 FROM worker_prerequisites dependency
-    JOIN worker_jobs upstream ON upstream.id = dependency.prerequisite_id
+    -- A long-lived producer is ready on its latest round, not the one named.
+    JOIN worker_jobs upstream ON upstream.id = COALESCE((SELECT latest.job_id FROM worker_rounds origin
+        JOIN worker_rounds latest ON latest.worker_id = origin.worker_id
+        WHERE origin.job_id = dependency.prerequisite_id ORDER BY latest.ordinal DESC LIMIT 1), dependency.prerequisite_id)
     WHERE dependency.worker_job_id = worker_jobs.id
       AND (upstream.status != 'complete'
         OR COALESCE(json_extract(upstream.result_json, '$.status'), '') NOT IN ('complete', 'open')
@@ -144,12 +150,14 @@ SET status = 'held', result_json = sqlc.arg(result_json), error = NULL, failure_
 WHERE id = sqlc.arg(id) AND status = 'running'
   AND claim_token = sqlc.arg(claim_token) AND cancel_requested_at IS NULL;
 
+-- A failed write round with changes keeps them pending on its branch.
 -- name: FailWorkerJob :execrows
 UPDATE worker_jobs
 SET status = 'failed', error = sqlc.arg(error), failure_json = sqlc.arg(failure_json),
     completed_at = COALESCE(completed_at, sqlc.arg(completed_at)),
     claim_token = NULL, heartbeat_at = NULL, lease_expires_at = NULL,
-    merge_status = 'aborted', workspace_relpath = NULL,
+    merge_status = CASE WHEN CAST(sqlc.arg(kept_checkpoint) AS TEXT) != '' THEN 'pending' ELSE 'aborted' END,
+    workspace_relpath = CASE WHEN CAST(sqlc.arg(kept_checkpoint) AS TEXT) != '' THEN workspace_relpath ELSE NULL END,
     merge_claim_token = NULL, merge_heartbeat_at = NULL, merge_lease_expires_at = NULL
 WHERE id = sqlc.arg(id) AND status = 'running'
   AND claim_token = sqlc.arg(claim_token) AND cancel_requested_at IS NULL;
@@ -162,17 +170,24 @@ SET status = 'pending', error = sqlc.arg(error), failure_json = sqlc.arg(failure
 WHERE id = sqlc.arg(id) AND status = 'running'
   AND claim_token = sqlc.arg(claim_token) AND cancel_requested_at IS NULL;
 
+-- A stopped write round with changes keeps them pending on its branch.
 -- name: CancelWorkerJob :execrows
 UPDATE worker_jobs
 SET status = 'canceled', result_json = sqlc.arg(result_json), error = NULL, failure_json = NULL,
     completed_at = COALESCE(completed_at, sqlc.arg(completed_at)),
     claim_token = NULL, heartbeat_at = NULL, lease_expires_at = NULL,
-    merge_status = 'aborted', workspace_relpath = NULL,
+    merge_status = CASE WHEN CAST(sqlc.arg(kept_checkpoint) AS TEXT) != '' THEN 'pending' ELSE 'aborted' END,
+    workspace_relpath = CASE WHEN CAST(sqlc.arg(kept_checkpoint) AS TEXT) != '' THEN workspace_relpath ELSE NULL END,
     merge_claim_token = NULL, merge_heartbeat_at = NULL, merge_lease_expires_at = NULL
 WHERE id = sqlc.arg(id) AND status IN ('pending', 'running', 'waiting', 'held');
 
 -- name: HoldWorkerJob :execrows
 UPDATE worker_jobs SET status = 'held' WHERE id = ? AND status = 'pending' AND cancel_requested_at IS NULL;
+
+-- ReleaseAdmittedWorkerJob makes a job claimable once its worker round is
+-- recorded; until then it is held so no executor runs it without one.
+-- name: ReleaseAdmittedWorkerJob :execrows
+UPDATE worker_jobs SET status = 'pending' WHERE id = ? AND status = 'held' AND cancel_requested_at IS NULL;
 
 -- ResumeWorkerJobDecision requeues a worker with its lifetime state intact.
 -- name: ResumeWorkerJobDecision :execrows
@@ -318,25 +333,9 @@ SELECT id, parent_session_id FROM worker_jobs
 WHERE status = 'complete' AND merge_status = 'pending'
 ORDER BY created_at, id;
 
--- SetWorkerJobProgress stores counters at a round boundary. The ceiling is
--- written only at creation and by a grant, so a round never overwrites one.
+-- SetWorkerJobProgress stores usage counters at a model-turn boundary.
 -- name: SetWorkerJobProgress :exec
 UPDATE worker_jobs SET tool_loops_used = ?, tool_calls_used = ? WHERE id = ?;
-
--- A grant raises the ceiling and answers any open request.
--- name: GrantWorkerJobBudget :execrows
-UPDATE worker_jobs SET max_tool_loops = ?, budget_request_json = ''
-WHERE id = ? AND status IN ('pending', 'running');
-
--- A decline closes a live job's open request and leaves its ceiling.
--- name: DeclineWorkerJobBudget :execrows
-UPDATE worker_jobs SET budget_request_json = ''
-WHERE id = ? AND status IN ('pending', 'running') AND budget_request_json != '';
-
--- A live job holds at most one open request.
--- name: RequestWorkerJobBudget :execrows
-UPDATE worker_jobs SET budget_request_json = sqlc.arg(budget_request_json)
-WHERE id = sqlc.arg(id) AND status IN ('pending', 'running') AND budget_request_json = '';
 
 -- name: CountRunningWorkerJobs :one
 SELECT COUNT(*) FROM worker_jobs WHERE status = 'running' AND execution_target = ?;
@@ -450,6 +449,13 @@ FROM landed_changes
 WHERE delegation_id = sqlc.arg(delegation_id) AND canonical_path = sqlc.arg(canonical_path)
 ORDER BY rowid;
 
+-- name: ListLandedPathDeltasForSession :many
+SELECT lc.changed_paths_json, lc.deleted_paths_json
+FROM landed_changes AS lc
+JOIN worker_jobs AS wj ON wj.id = lc.worker_job_id
+WHERE wj.parent_session_id = sqlc.arg(parent_session_id) AND lc.canonical_path = sqlc.arg(canonical_path)
+ORDER BY lc.rowid;
+
 -- SetWorkerJobOverlay attaches the sealed overlay manifest to a completing
 -- claim. It is written once, under the claim that produced the branch.
 -- name: SetWorkerJobOverlay :execrows
@@ -459,7 +465,7 @@ WHERE id = sqlc.arg(id) AND claim_token = sqlc.arg(claim_token) AND workspace_ov
 
 -- Jobs own provisioning before their branch path and baseline are published.
 -- name: ListWorkerJobsForBranchRetention :many
-SELECT id, project_id, status, merge_status, workspace_overlay_id
+SELECT id, project_id, status, merge_status, workspace_overlay_id, workspace_relpath
 FROM worker_jobs
 ORDER BY created_at, id;
 
@@ -484,20 +490,44 @@ WHERE dependency.prerequisite_id = ? AND consumer.status = 'pending'
 ORDER BY dependency.worker_job_id;
 
 -- name: ListBlockedWorkerPrerequisites :many
-SELECT DISTINCT consumer.id FROM worker_prerequisites dependency
+-- A job-only producer that failed, or whose changes are gone, can never be
+-- met. A long-lived producer can be instructed again, so only closing it, or
+-- a rejection of its latest round's changes with no round after, ends it.
+SELECT DISTINCT consumer.id AS consumer_id, dependency.prerequisite_id AS producer_job_id,
+    CAST(CASE
+        WHEN origin.job_id IS NOT NULL AND producer.closed_at IS NOT NULL THEN 'closed'
+        WHEN origin.job_id IS NULL AND upstream.status IN ('failed', 'canceled') THEN 'failed'
+        ELSE 'rejected'
+    END AS TEXT) AS reason
+FROM worker_prerequisites dependency
 JOIN worker_jobs consumer ON consumer.id = dependency.worker_job_id
 JOIN worker_jobs upstream ON upstream.id = dependency.prerequisite_id
+LEFT JOIN worker_rounds origin ON origin.job_id = dependency.prerequisite_id
+LEFT JOIN workers producer ON producer.id = origin.worker_id
 WHERE consumer.status = 'pending' AND (
-  upstream.status IN ('failed', 'canceled') OR
-  (upstream.status = 'complete' AND (
-    COALESCE(json_extract(upstream.result_json, '$.status'), '') NOT IN ('complete', 'open') OR
-    (json_extract(upstream.scope_json, '$.mode') = 'write' AND upstream.merge_status IN ('rejected', 'aborted', 'orphaned'))
+  (origin.job_id IS NULL AND (
+    upstream.status IN ('failed', 'canceled') OR
+    (upstream.status = 'complete' AND (
+      COALESCE(json_extract(upstream.result_json, '$.status'), '') NOT IN ('complete', 'open') OR
+      (json_extract(upstream.scope_json, '$.mode') = 'write' AND upstream.merge_status IN ('rejected', 'aborted', 'orphaned'))
+    ))
+  )) OR
+  (origin.job_id IS NOT NULL AND (
+    producer.closed_at IS NOT NULL OR
+    EXISTS (
+      SELECT 1 FROM worker_rounds latest JOIN worker_jobs latest_job ON latest_job.id = latest.job_id
+      WHERE latest.worker_id = origin.worker_id AND latest.settled_at IS NOT NULL
+        AND latest.ordinal = (SELECT MAX(ordinal) FROM worker_rounds WHERE worker_id = origin.worker_id)
+        AND latest_job.merge_status IN ('rejected', 'orphaned')
+    )
   ))
 )
 ORDER BY consumer.id;
 
 -- name: WorkerPrerequisiteStates :many
-SELECT upstream.id, upstream.status, upstream.scope_json, upstream.result_json, upstream.merge_status
+SELECT dependency.prerequisite_id AS id, upstream.status, upstream.scope_json, upstream.result_json, upstream.merge_status
 FROM worker_prerequisites dependency
-JOIN worker_jobs upstream ON upstream.id = dependency.prerequisite_id
-WHERE dependency.worker_job_id = ? ORDER BY upstream.id;
+JOIN worker_jobs upstream ON upstream.id = COALESCE((SELECT latest.job_id FROM worker_rounds origin
+    JOIN worker_rounds latest ON latest.worker_id = origin.worker_id
+    WHERE origin.job_id = dependency.prerequisite_id ORDER BY latest.ordinal DESC LIMIT 1), dependency.prerequisite_id)
+WHERE dependency.worker_job_id = ? ORDER BY dependency.prerequisite_id;

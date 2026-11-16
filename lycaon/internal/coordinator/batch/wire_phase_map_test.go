@@ -26,39 +26,3 @@ func TestToWirePhase(t *testing.T) {
 		}
 	}
 }
-
-func TestHostPhasesCoverMachineConsts(t *testing.T) {
-	want := map[string]struct{}{
-		batch.PhasePreDispatch: {},
-		batch.PhaseDispatch:    {},
-		batch.PhaseIntegrate:   {},
-		batch.PhaseSynthesize:  {},
-		batch.PhaseClosed:      {},
-	}
-	for _, p := range batch.HostPhases() {
-		if _, ok := want[p]; !ok {
-			t.Fatalf("unexpected host phase %q in map", p)
-		}
-		delete(want, p)
-	}
-	if len(want) > 0 {
-		t.Fatalf("host phases missing from map: %v", want)
-	}
-}
-
-// Every wire phase must map from a host phase.
-func TestWirePhasesMatchAPIConsts(t *testing.T) {
-	want := map[string]struct{}{}
-	for _, v := range api.AllCoordinatorBatchPhaseValues() {
-		want[string(v)] = struct{}{}
-	}
-	for _, w := range batch.WirePhases() {
-		if _, ok := want[w]; !ok {
-			t.Fatalf("unexpected wire phase %q", w)
-		}
-		delete(want, w)
-	}
-	if len(want) > 0 {
-		t.Fatalf("wire phases missing: %v", want)
-	}
-}

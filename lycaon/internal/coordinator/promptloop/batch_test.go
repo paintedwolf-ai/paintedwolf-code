@@ -180,11 +180,3 @@ func batchTestRegistry(t *testing.T, names ...string) *tools.DefaultRegistry {
 	}
 	return reg
 }
-
-func toolCallNames(calls []api.ToolCall) []string {
-	out := make([]string, len(calls))
-	for i := range calls {
-		out[i] = calls[i].Name
-	}
-	return out
-}

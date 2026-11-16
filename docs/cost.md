@@ -59,13 +59,13 @@ flowchart TD
 | Unit / scope | USD only; per session |
 | Wire | `session_spend_ceiling_nano_usd`, `spend_warning_ratio`, `spend_ceiling_enabled`, `spend_soft_stop` on settings limits |
 | Gate | A new prompt or worker at `EstimatedUSD ≥` ceiling does not start. A coordinator that crosses the ceiling while running gets one tool-capable wind-down round when soft landing is on; its response is final when it uses no tools, and after tool calls the prose-only closeout follows |
-| Landing shape | The agent finishes only work already in flight when close, or returns the best usable result and names the remainder. `task` is removed from the wind-down round, so new delegation is unavailable |
+| Landing shape | The agent finishes only work already in flight when close, or returns the best usable result and names the remainder. The wind-down round withholds `task`, `instruct_worker`, and `answer_decision`, while allowing preview, promotion, rejection, or shelving of changes that fenced workers kept |
 | Stop shape | Session goes **idle** with notice `session_spend_ceiling_reached`; files, tool results, and the closeout are preserved |
 | Resume | Raise the ceiling (or disable it) and re-prompt; the next turn's gate passes |
 
 Configure a device default under Settings → Advanced → Budgets, or the active project under Context → Cost. A project guardrail applies the same per-session warning and stop to every session in that project; it is not an aggregate project budget. Den shows a live readout (`spent $X of $Y` when priced) and a **Raise ceiling & resume** card when the notice fires.
 
-Soft landing is finite: only the already-running root coordinator receives the one additional round; worker children receive no separate allowance; turning soft landing off keeps the immediate prose closeout. A session already above its ceiling cannot obtain a fresh allowance by sending another prompt.
+Soft landing is finite: only the already-running root coordinator receives the one additional round; workers at the ceiling are fenced with no model call under failure reason `limit`, keeping their workspace changes under a result handle; turning soft landing off keeps the immediate prose closeout. A session already above its ceiling cannot obtain a fresh allowance by sending another prompt.
 
 ### Approaching the ceiling
 

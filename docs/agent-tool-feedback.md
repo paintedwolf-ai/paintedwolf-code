@@ -482,8 +482,8 @@ prerequisite. `PROGRESS_ITEM_NOT_CLOSED` remains deprecated with its original
 checklist-change predicate and names the successor. The new rule overrides the
 legacy rule for matching occurrences; stored historical codes are unchanged.
 
-Successful worker finishes publish a reconciliation token and exact job IDs in
-the current snapshot. Submit `reconciliation_token` with `expected_revision`
+Successful worker finishes publish a reconciliation token and unaccounted result
+handles in the current snapshot. Submit `reconciliation_token` with `expected_revision`
 to acknowledge those finishes without closing unfinished rows or rewriting labels.
 Document transitions never consume worker-finish obligations; only the exact
 current token does. A stale token returns `PROGRESS_RECONCILIATION_CHANGED` and the current snapshot before a write.

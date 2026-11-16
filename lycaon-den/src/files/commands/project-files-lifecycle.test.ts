@@ -1,7 +1,8 @@
-import { filesBufferText } from "../documents/project-files-buffers.ts";
+import { filesBufferText } from "../documents/files-buffer-state.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LycaonApiError } from "../../api/http.ts";
-import { applyFilesBufferDraft, applyFilesBufferLoad, openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferDraft, applyFilesBufferLoad } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { scheduleFilesDraftSync } from "../documents/files-draft-sync.ts";
 import {

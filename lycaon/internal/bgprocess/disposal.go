@@ -3,6 +3,7 @@ package bgprocess
 import (
 	"context"
 	"errors"
+	"strings"
 )
 
 // sessionDrain retains the physical jobs after their public handles disappear.
@@ -85,7 +86,7 @@ func (r *ProcessLifecycle) DisposeSession(ctx context.Context, sessionID string,
 		return nil
 	}
 	r.jobs.mu.Lock()
-	drain := r.jobs.beginDrainLocked(trim(sessionID))
+	drain := r.jobs.beginDrainLocked(strings.TrimSpace(sessionID))
 	r.jobs.mu.Unlock()
 	if drain == nil {
 		return nil

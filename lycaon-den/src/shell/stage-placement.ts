@@ -2,9 +2,8 @@ import {
   CONTEXT_NAV_CATALOG,
   type ContextNavItemId,
   type DenLayoutPrefs,
-  type NarrowSplitSurvivor,
-  type StagePlacement,
   type SplitPane,
+  type StagePlacement,
   type WorkspaceOrientation,
 } from "../../shared/app-state-types.ts";
 
@@ -56,7 +55,7 @@ export function resolveStartupCompanion(
 /** Below the split-width floor, an unset survivor follows the launch layout. */
 export function resolveNarrowSurvivor(
   prefs: DenLayoutPrefs | undefined,
-): NarrowSplitSurvivor {
+): SplitPane {
   const pinned = prefs?.narrowSurvivor;
   if (pinned === "conversation" || pinned === "stage") return pinned;
   return resolveStartupCompanion(prefs) ? "stage" : "conversation";
@@ -81,7 +80,7 @@ export function splitColumnsOnScreen(input: {
   splitLive: boolean;
   hidden: SplitPane | null;
   hostWidthPx: number;
-  narrowSurvivor: NarrowSplitSurvivor;
+  narrowSurvivor: SplitPane;
 }): SplitColumnsOnScreen {
   if (!input.splitLive) return { conversation: true, stage: true };
   if (input.hidden) return { conversation: input.hidden !== "conversation", stage: input.hidden !== "stage" };
@@ -96,7 +95,7 @@ export function splitColumnsOnScreen(input: {
 
 export function withNarrowSurvivor(
   prefs: DenLayoutPrefs | undefined,
-  survivor: NarrowSplitSurvivor | null,
+  survivor: SplitPane | null,
 ): DenLayoutPrefs {
   const next = { ...(prefs ?? {}) };
   if (survivor) next.narrowSurvivor = survivor;

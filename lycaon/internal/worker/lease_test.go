@@ -1,11 +1,11 @@
 package worker
 
 import (
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -41,7 +41,7 @@ func TestExpiredWorkerClaimRetriesAvailableAttempt(t *testing.T) {
 	if ok {
 		t.Fatal("wrong token renewed claim")
 	}
-	_, err = sqlDB.ExecContext(t.Context(), `UPDATE worker_jobs SET lease_expires_at = ? WHERE id = ?`, db.FormatTime(time.Now().Add(-time.Minute)), claimed.ID)
+	_, err = sqlDB.ExecContext(t.Context(), `UPDATE worker_jobs SET lease_expires_at = ? WHERE id = ?`, timelayout.Format(time.Now().Add(-time.Minute)), claimed.ID)
 	testutil.FailErr(t, "expire", err)
 	recovered, err := queue.RecoverExpiredClaims(t.Context())
 	testutil.FailErr(t, "recover", err)
@@ -77,7 +77,7 @@ func TestExpiredWorkerClaimFailsAfterAttemptBudget(t *testing.T) {
 		if claimed.Attempt != attempt {
 			t.Fatalf("attempt = %d want %d", claimed.Attempt, attempt)
 		}
-		_, err := sqlDB.ExecContext(t.Context(), `UPDATE worker_jobs SET lease_expires_at = ? WHERE id = ?`, db.FormatTime(time.Now().Add(-time.Minute)), claimed.ID)
+		_, err := sqlDB.ExecContext(t.Context(), `UPDATE worker_jobs SET lease_expires_at = ? WHERE id = ?`, timelayout.Format(time.Now().Add(-time.Minute)), claimed.ID)
 		testutil.FailErr(t, "expire", err)
 		recovered, recoverErr := queue.RecoverExpiredClaims(t.Context())
 		testutil.FailErr(t, "recover", recoverErr)
@@ -109,7 +109,7 @@ func TestLivePollerRescuesItsClaimBeforeExpirySweep(t *testing.T) {
 	}))
 	claimed, err := queue.ClaimNext(t.Context(), ClaimRequest{ClaimedBy: "poller"})
 	testutil.FailErr(t, "claim", err)
-	_, err = sqlDB.ExecContext(t.Context(), `UPDATE worker_jobs SET lease_expires_at = ? WHERE id = ?`, db.FormatTime(time.Now().Add(-time.Minute)), claimed.ID)
+	_, err = sqlDB.ExecContext(t.Context(), `UPDATE worker_jobs SET lease_expires_at = ? WHERE id = ?`, timelayout.Format(time.Now().Add(-time.Minute)), claimed.ID)
 	testutil.FailErr(t, "expire", err)
 
 	poller := NewLocalWorkerPoller(queue, nil, WorkersConfig{}, discardOutcomeRecorder{})

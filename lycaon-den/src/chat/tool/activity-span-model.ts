@@ -1,7 +1,3 @@
-import {
-  SKILL_CHICKLET_NAME,
-  isSkillToolPart,
-} from "../skill/skill-card-model.ts";
 import { partHasFileEdits } from "../file-edit/file-edit-model.ts";
 import { collectSegmentFolds } from "../file-edit/file-edit-fold.ts";
 import { indexWarmingChickletTitle } from "../transcript/projection/index-warming-copy.ts";
@@ -59,7 +55,7 @@ export function omitIndexWarmingFromTranscript(
 function entryCommandLabel(entry: ActivitySpanEntry): string {
   if (entry.kind === "index_warming") return "index warming";
   if (entry.kind === "turn_load") return LOCAL_AI_LABEL;
-  if (isSkillToolPart(entry.part)) return SKILL_CHICKLET_NAME;
+  if (entry.part.tool === "skills_read") return "skill";
   return entry.part.commandActivity?.fact.label ?? (entry.part.tool.trim().toLowerCase() || "tool activity");
 }
 
@@ -350,6 +346,15 @@ export function projectActivitySpans(
       continue;
     }
     flushWorkerRun();
+    if (
+      opts?.layout !== "worker" &&
+      item.kind === "tool" &&
+      item.part.tool === "instruct_worker"
+    ) {
+      flushRun();
+      out.push(item);
+      continue;
+    }
     if (item.kind !== "tool" && item.kind !== "index_warming" && item.kind !== "turn_load") {
       if (item.kind === "progress_update" && !item.initial && run.length > 0) {
         deferredAfterRun.push(item);

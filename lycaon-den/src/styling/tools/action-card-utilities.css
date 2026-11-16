@@ -1,0 +1,138 @@
+/* Action cards follow the person's type settings: the app font at the chat
+   reading size, one face and one size. Hierarchy is weight and colour;
+   literal text sits on an inset rather than switching to a code face. */
+@utility den-action-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  font-family: var(--den-font-ui);
+  font-size: var(--text-den-body);
+  line-height: 1.5;
+  & :where(code, pre, dt, dd, button, span, p, div) {
+    font-family: var(--den-font-ui);
+    font-size: var(--text-den-body);
+  }
+}
+
+@utility den-action-card__notice {
+  margin: 0;
+  color: var(--den-text-muted);
+}
+
+@utility den-action-card__ran {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+@utility den-action-card__ran-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--den-text) 5%, transparent);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+}
+
+@utility den-action-card__more {
+  flex: none;
+  color: var(--den-text-muted);
+  white-space: nowrap;
+}
+
+@utility den-action-card__copy {
+  flex: none;
+  color: var(--den-text-muted);
+}
+
+@utility den-action-card__facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 2px 12px;
+  margin: 0;
+  & > div {
+    display: contents;
+  }
+  & dt {
+    color: var(--den-text-muted);
+  }
+  & dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+  & > div[data-tone="danger"] dd {
+    color: var(--den-danger-text);
+  }
+}
+
+@utility den-action-card__block {
+  margin-left: 12px;
+}
+
+@utility den-action-card__blocked {
+  margin-left: 12px;
+  color: var(--den-text-muted);
+}
+
+@utility den-action-card__preview {
+  display: grid;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--den-text) 5%, transparent);
+  color: var(--den-text-muted);
+}
+
+@utility den-action-card__preview-line {
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  &[data-sign="added"] {
+    color: var(--den-status-positive-text);
+  }
+  &[data-sign="removed"],
+  &[data-state="failed"] {
+    color: var(--den-danger-text);
+  }
+}
+
+@utility den-action-card__preview-location {
+  flex: none;
+  color: var(--den-text-muted);
+}
+
+@utility den-action-card__preview-note {
+  margin: 4px 0 0;
+  color: var(--den-text-muted);
+}
+
+@utility den-action-card__links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
+}
+
+@utility den-action-card__opener {
+  margin-left: auto;
+  font-weight: 500;
+}
+
+@utility den-action-card__process {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  min-width: 0;
+}

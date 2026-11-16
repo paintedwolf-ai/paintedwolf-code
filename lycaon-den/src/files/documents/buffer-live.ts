@@ -3,7 +3,7 @@ import { refreshFileDocumentMetadata } from "./files-document-metadata.ts";
 /** Apply source changes to open buffers. */
 
 import type { SourceChange, SourceWorkspaceKind } from "../../api/types.ts";
-import { closeFilesBuffer } from "./project-files-buffers.ts";
+import { closeFilesBuffer } from "./project-files-buffer-lifecycle.ts";
 import { filesBufferNeedsBody, projectFilesState, type FileBuffer } from "./files-buffer-state.ts";
 import { retargetOpenFilesUnderPath } from "../commands/project-files-retarget.ts";
 

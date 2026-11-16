@@ -1,6 +1,7 @@
 package survey
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -16,6 +17,21 @@ const (
 	oldToken = "TOKEN=old-value\n"
 	newToken = "TOKEN=new-value\n"
 )
+
+// Text a file held under a credential name stays credential text after a move.
+func TestSourceHistoryACDF19MovedCredentialFileRecordsWhereItsTextCameFrom(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.record(effectSeed{path: ".env", content: oldToken, session: "s0", op: api.SourceChangeOpCreate})
+	h.beginSession(historySession)
+	h.record(effectSeed{path: "settings.txt", fromPath: ".env", op: api.SourceChangeOpRename})
+	h.record(effectSeed{path: "settings.txt", content: newToken})
+	recorder := &deliveredRecorder{}
+	h.tctx.Effects.CredentialFiles = recorder
+	result := h.sessionDiff("settings.txt")
+	if result.Diff == "" || len(recorder.reads) != 1 || recorder.reads[0].Path != ".env" || recorder.reads[0].Content != oldToken {
+		t.Fatalf("delivered %+v for diff %q, want the old name's text", recorder.reads, result.Diff)
+	}
+}
 
 // Every source_history path that returns a credential file's text records its
 // delivery first, and withholds the text when it cannot.
@@ -101,21 +117,6 @@ func TestSourceHistoryACDF19CredentialTextRecordsItsDeliveryOnEveryPath(t *testi
 	}
 }
 
-// Text a file held under a credential name stays credential text after a move.
-func TestSourceHistoryACDF19MovedCredentialFileRecordsWhereItsTextCameFrom(t *testing.T) {
-	h := newHistoryHarness(t)
-	h.record(effectSeed{path: ".env", content: oldToken, session: "s0", op: api.SourceChangeOpCreate})
-	h.beginSession(historySession)
-	h.record(effectSeed{path: "settings.txt", fromPath: ".env", op: api.SourceChangeOpRename})
-	h.record(effectSeed{path: "settings.txt", content: newToken})
-	recorder := &deliveredRecorder{}
-	h.tctx.Effects.CredentialFiles = recorder
-	result := h.sessionDiff("settings.txt")
-	if result.Diff == "" || len(recorder.reads) != 1 || recorder.reads[0].Path != ".env" || recorder.reads[0].Content != oldToken {
-		t.Fatalf("delivered %+v for diff %q, want the old name's text", recorder.reads, result.Diff)
-	}
-}
-
 // Without text in the answer there is nothing to record.
 func TestSourceHistoryACDF19AnswerWithNoTextRecordsNothing(t *testing.T) {
 	large := func(prefix string) string {
@@ -145,3 +146,21 @@ func TestSourceHistoryACDF19AnswerWithNoTextRecordsNothing(t *testing.T) {
 		})
 	}
 }
+
+type deliveredRecorder struct {
+	reads []tools.CredentialFileRead
+	err   error
+}
+
+func (*deliveredRecorder) EnsureProject(context.Context, string) error { return nil }
+
+func (r *deliveredRecorder) Delivered(_ context.Context, read tools.CredentialFileRead) error {
+	r.reads = append(r.reads, read)
+	return r.err
+}
+
+func (r *deliveredRecorder) Authored(context.Context, tools.AuthoredCredentialValues) error {
+	return nil
+}
+
+func (*deliveredRecorder) ForgetProject(context.Context, string) error { return nil }

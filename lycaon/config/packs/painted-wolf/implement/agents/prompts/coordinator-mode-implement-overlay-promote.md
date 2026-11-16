@@ -1,6 +1,6 @@
 ## Overlay promote turn
 
-Review pending overlays against the requested outcome.
+Review delivered worker results against the requested outcome{% if profile_has_preview_overlay %}: preview{% endif %}{% if profile_has_promote_overlay %}, promote{% endif %}{% if profile_has_reject_overlay %}, reject{% endif %}{% if profile_has_shelve_overlay %}, shelve{% endif %}{% if profile_has_instruct_worker %}, instruct the worker for follow-up{% endif %}{% if profile_has_task %}, or start a reviewer with `task` and `review_of`{% endif %}.
 
 {% if profile_has_verify or profile_has_command or profile_can_request.verify or profile_can_request.command %}{% include "partials/coordinator-verify-before-close.md" %}{% endif %}
 
@@ -9,4 +9,4 @@ Review pending overlays against the requested outcome.
 
 ### This turn
 
-Stacked overlays (`OVERLAY_REBASE_CONFLICT`, `OVERLAY_PARENT_REJECTED`) first, then the ladder through every pending overlay.
+Stacked results (`OVERLAY_REBASE_CONFLICT`, `OVERLAY_PARENT_REJECTED`) first, then resolve each unresolved result handle in order.

@@ -28,20 +28,3 @@ func TestTrimPackPreservesSourceBeforeUnbackedNames(t *testing.T) {
 		t.Fatalf("source-backed anchor lost before optional name: %+v", pack)
 	}
 }
-
-func TestTrimWirePackPreservesSourceBeforeUnbackedNames(t *testing.T) {
-	pack := map[string]any{
-		"skeleton": []any{
-			map[string]any{"path": "route.go", "kind": "func", "name": "Route", "line": float64(10)},
-			map[string]any{"path": "route.go", "kind": "func", "name": "UnusedRouteName", "line": float64(90)},
-		},
-		"substance": []any{map[string]any{"path": "route.go", "start_line": float64(10), "end_line": float64(12), "symbol": "Route", "body": "10: func Route() int {\n11: return 1\n12: }"}},
-	}
-	if !TrimWirePackMapOneStep("route", pack) {
-		t.Fatal("expected stored-pack trim step")
-	}
-	skeleton := pack["skeleton"].([]any)
-	if len(pack["substance"].([]any)) != 1 || len(skeleton) != 1 || skeleton[0].(map[string]any)["name"] != "Route" {
-		t.Fatalf("stored pack dropped source before optional name: %+v", pack)
-	}
-}

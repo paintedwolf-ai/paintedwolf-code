@@ -16,8 +16,10 @@ func TestCatalogAllowlistIncludesPackBoard(t *testing.T) {
 	for _, name := range cfg.Tools {
 		allowed[name] = true
 	}
-	if !allowed["pack_board"] {
-		t.Fatal("\"pack_board\" missing from lycaon-tools.yaml")
+	for _, toolName := range []string{"pack_board", "read_findings"} {
+		if !allowed[toolName] {
+			t.Fatalf("%q missing from lycaon-tools.yaml", toolName)
+		}
 	}
 
 	builder := &board.SnapshotBuilder{Repo: repotest.NewProvider(t)}
@@ -25,11 +27,13 @@ func TestCatalogAllowlistIncludesPackBoard(t *testing.T) {
 	if err := board.RegisterBoardTools(reg, board.ToolDeps{Builder: builder}); err != nil {
 		contractcheck.FailErr(t, "board.RegisterBoardTools failed", err)
 	}
-	meta, ok := reg.Meta("pack_board")
-	if !ok {
-		t.Fatal("tool \"pack_board\" not registered")
-	}
-	if meta.ArgsSchema == nil {
-		t.Fatal("tool \"pack_board\" missing args schema")
+	for _, toolName := range []string{"pack_board", "read_findings"} {
+		meta, ok := reg.Meta(toolName)
+		if !ok {
+			t.Fatalf("tool %q not registered", toolName)
+		}
+		if meta.ArgsSchema == nil {
+			t.Fatalf("tool %q missing args schema", toolName)
+		}
 	}
 }

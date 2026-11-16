@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
@@ -10,7 +11,7 @@ import (
 
 func TestFormatParseTimeRoundTrip(t *testing.T) {
 	now := time.Date(2026, 5, 30, 12, 0, 0, 123456789, time.UTC)
-	formatted := FormatTime(now)
+	formatted := timelayout.Format(now)
 	parsed, err := ParseTime(formatted)
 	testutil.FailErr(t, "ParseTime failed", err)
 	if !parsed.Equal(now) {

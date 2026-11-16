@@ -50,7 +50,7 @@ func TestReleasedCorpusUpgradesWithoutChangingRetainedRows(t *testing.T) {
 	testutil.FailErr(t, "read released corpus", err)
 	path := filepath.Join(t.TempDir(), "store.db")
 	testutil.FailErr(t, "copy released corpus", os.WriteFile(path, original, 0600))
-	reader, err := openReader(t.Context(), path)
+	reader, err := OpenReadOnly(t.Context(), path)
 	testutil.FailErr(t, "inspect copied corpus", err)
 	tables := []string{"sessions", "messages", "worker_jobs", "worker_results", "workflow_runs"}
 	before := map[string][]string{}
@@ -71,7 +71,7 @@ func TestReleasedCorpusUpgradesWithoutChangingRetainedRows(t *testing.T) {
 	testutil.FailErr(t, "close inspection", reader.Close())
 	testutil.FailErr(t, "upgrade copied corpus", UpgradeStaged(t.Context(), path))
 	testutil.FailErr(t, "reopen already upgraded corpus", UpgradeStaged(t.Context(), path))
-	reader, err = openReader(t.Context(), path)
+	reader, err = OpenReadOnly(t.Context(), path)
 	testutil.FailErr(t, "inspect upgraded corpus", err)
 	defer reader.Close()
 	for _, table := range tables {

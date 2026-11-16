@@ -1,0 +1,8 @@
+steps:
+  - tool: "instruct_worker"
+    args:
+      worker: "{{ paintedwolf.worker }}"
+    say: "Send the instruction with {{ call }} and no agent_type."
+    otherwise: "Its agent stays as assigned."
+  - tool: "task"
+    say: "For a different agent, start a new worker with {{ call }}."

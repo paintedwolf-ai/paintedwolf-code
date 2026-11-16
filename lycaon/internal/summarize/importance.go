@@ -148,11 +148,6 @@ func ContentionBandChildren(node *SubtreeNode) []*SubtreeNode {
 	return out
 }
 
-// rankChildren orders children by observed material.
-func rankChildren(node *SubtreeNode) []*SubtreeNode {
-	return rankChildrenImportance(node, nil, "")
-}
-
 // rankChildrenImportance adds reference and task tie-breaks.
 func rankChildrenImportance(node *SubtreeNode, imp SubtreeImportance, task string) []*SubtreeNode {
 	if node == nil || len(node.Children) == 0 {

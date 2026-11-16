@@ -4,7 +4,7 @@ import { convertIndentationCommand } from "../../components/source/editor/indent
 import { indentChipLabel, type IndentInfo } from "../../components/source/editor/indent-detect.ts";
 import { effectiveIndent } from "./files-editor-display.ts";
 import { settleFilesEditorView } from "./files-editor-host.ts";
-import { applyFilesBufferDraft, setFilesBufferIndentOverride } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferDraft, setFilesBufferIndentOverride } from "../documents/project-files-buffer-io.ts";
 import { type FileBuffer } from "../documents/files-buffer-state.ts";
 import type { FilesEditorScope } from "../components/files-scope.ts";
 import { editorConfigIsActive } from "../../components/source/editor/editorconfig.ts";

@@ -13,12 +13,6 @@ class HostedPlanTests(unittest.TestCase):
             mutate(data)
         return patch.object(ci, 'catalog', return_value=data)
 
-    def test_native_admission_cannot_omit_targets_or_accept_unsafe_roots(self):
-        for declaration in (None, [], {'unknown:test': ['lycaon-den/src-tauri/']},
-                {'den:test:rust': [], 'decide:test': ['lycaon/internal/decide/native/']},
-                {'den:test:rust': ['../outside/'], 'decide:test': ['lycaon/internal/decide/native/']}):
-            with self.catalog_patch(lambda d: d['ci']['ready'].update(compile_targets=declaration)), self.assertRaises(ValueError):
-                ci.matrix('fast')
 
     def test_tier_partitions_cover_every_local_gate_stage_once(self):
         lanes = ci.lanes()
@@ -96,7 +90,7 @@ class HostedPlanTests(unittest.TestCase):
                                    "den:coverage-check", "den:test:transcript-scale", "lint:vuln:fresh",
                                    "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll",
                                    "den:webkit:atspi", "test:confine:linux", "nix:check", "test:userlands", "test:conformance:live",
-                                   "budgets", "coverage:changes", "den:coverage:changes", "scripts:coverage:changes",
+                                   "budgets", "coverage:changes", "arch-lint:changes", "den:knip:changes", "den:coverage:changes", "scripts:coverage:changes",
                                    "build", "build:cross", "licenses:notices", "check:drift", "openapi:lint",
                                    "validate:workflows", "oar:verify", "lint:full", "test:fail-messages:check",
                                    "comments:check", "lint:vuln", "den:typecheck", "den:lint",
@@ -335,6 +329,8 @@ class HostedPlanTests(unittest.TestCase):
 
     def test_combined_analysis_targets_restore_both_tool_sets(self):
         self.assertEqual(ci.analysis_set(["lint:full", "lint:vuln"]), "all")
+        # The structural ratchet runs unparam through golangci-lint.
+        self.assertEqual(ci.analysis_set(["arch-lint:changes"]), "lint")
 
     def test_lane_setup_restores_only_the_required_tool_sets(self):
         for profile in ci.PROFILES:

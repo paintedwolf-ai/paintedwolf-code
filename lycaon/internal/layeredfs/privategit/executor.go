@@ -66,29 +66,6 @@ func (e *GitExecutor) Stash(ctx context.Context, args ...string) (string, error)
 	return e.Run(ctx, ".", append([]string{"stash"}, args...)...)
 }
 
-// Fetch runs `git fetch <remote>` subject to RemotePolicy egress and approval controls.
-func (e *GitExecutor) Fetch(ctx context.Context, remote string, args ...string) (string, error) {
-	if strings.TrimSpace(remote) == "" {
-		remote = "origin"
-	}
-	cmdArgs := append([]string{"fetch", remote}, args...)
-	return e.Run(ctx, ".", cmdArgs...)
-}
-
-// Push runs `git push <remote>` subject to RemotePolicy egress and approval controls.
-func (e *GitExecutor) Push(ctx context.Context, remote string, args ...string) (string, error) {
-	if strings.TrimSpace(remote) == "" {
-		remote = "origin"
-	}
-	cmdArgs := append([]string{"push", remote}, args...)
-	return e.Run(ctx, ".", cmdArgs...)
-}
-
-// Repack runs a local-only private object repack (`git repack -l`) without copying borrowed packs.
-func (e *GitExecutor) Repack(ctx context.Context, args ...string) (string, error) {
-	return e.Run(ctx, ".", append([]string{"repack", "-l"}, args...)...)
-}
-
 func executeViewGitCommand(
 	ctx context.Context,
 	e *GitExecutor,

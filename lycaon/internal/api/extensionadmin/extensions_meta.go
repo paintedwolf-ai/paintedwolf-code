@@ -138,7 +138,7 @@ func (s *Catalog) buildExtensionsCatalogViewFresh(r *http.Request) (wire.Extensi
 	if err != nil {
 		return wire.ExtensionsCatalogView{}, err
 	}
-	revision, err := s.Mutations.currentExtensionRevision(projectDir)
+	revision, err := s.Mutations.Owner.CurrentRevision(projectDir)
 	if err != nil {
 		return wire.ExtensionsCatalogView{}, err
 	}

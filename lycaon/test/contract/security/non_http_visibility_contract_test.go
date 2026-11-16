@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/actioncard"
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -126,19 +127,55 @@ func TestNonHTTPContractNoDockerDaemonInnerEffectSynthesis(t *testing.T) {
 func TestNonHTTPContractTranscriptExternalAccessCannotDisappear(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	pres := contractcheck.ReadRepoFile(t, root, "lycaon-den/src/chat/tool/external-access-presentation.ts")
-	if !strings.Contains(pres, "mustShow") {
-		t.Fatal("Den presentation must compute mustShow for exceptional access")
+	cases := []struct {
+		name       string
+		access     *api.ExternalAccess
+		wantEgress string
+	}{
+		{
+			name:       "socket_only",
+			access:     authzcontext.BuildExternalAccess(authzcontext.ExternalAccessInput{Sockets: []authzcontext.ExternalAccessSocketInput{{ApprovedPath: "/tmp/s.sock", ResolvedPath: "/tmp/s.sock", Scope: "chat"}}}),
+			wantEgress: "local_only",
+		},
+		{
+			name:       "direct_ip",
+			access:     authzcontext.BuildExternalAccess(authzcontext.ExternalAccessInput{Direct: true}),
+			wantEgress: "direct",
+		},
+		{
+			name:       "full_bypass",
+			access:     authzcontext.BuildExternalAccess(authzcontext.ExternalAccessInput{FullBypass: true}),
+			wantEgress: "direct",
+		},
+		{
+			name:       "unobserved_without_endpoints",
+			access:     &api.ExternalAccess{VisibilitySummary: api.ExternalAccessVisibilitySummaryUnobserved},
+			wantEgress: "direct",
+		},
 	}
-	if !strings.Contains(pres, "direct_ip") || !strings.Contains(pres, "full_bypass") || !strings.Contains(pres, "unobserved") {
-		t.Fatal("Den presentation must keep socket/direct/bypass/unobserved visible")
-	}
-	chicklet := contractcheck.ReadRepoFile(t, root, "lycaon-den/src/components/tool/NetworkChicklet.tsx")
-	if !strings.Contains(chicklet, "buildExternalAccessView") && !strings.Contains(chicklet, "EXTERNAL_ACCESS_LABEL") {
-		// NetworkChicklet may import the presentation helper under a different local name.
-		if !strings.Contains(chicklet, "external-access-presentation") && !strings.Contains(chicklet, "External access") {
-			t.Fatal("transcript External access chicklet must remain wired")
+	for _, tc := range cases {
+		desc := actioncard.ForResult(api.ToolResult{Tool: "command", ExternalAccess: tc.access}, nil)
+		var found *api.ActionFact
+		for i := range desc.Facts {
+			if desc.Facts[i].Kind == api.ActionFactNetwork {
+				found = &desc.Facts[i]
+				break
+			}
 		}
+		if found == nil || found.Egress != tc.wantEgress {
+			t.Fatalf("%s: expected network fact with egress %q, got %+v", tc.name, tc.wantEgress, desc.Facts)
+		}
+	}
+
+	formatSrc := contractcheck.ReadRepoFile(t, root, "lycaon-den/src/chat/action/action-format.ts")
+	for _, want := range []string{`"proxy_only"`, `"local_only"`, `"direct"`} {
+		if !strings.Contains(formatSrc, want) {
+			t.Fatalf("Den action-format.ts must render non-empty text for network egress %s", want)
+		}
+	}
+	cardSrc := contractcheck.ReadRepoFile(t, root, "lycaon-den/src/components/action/ActionCard.tsx")
+	if !strings.Contains(cardSrc, "ActionFacts") || !strings.Contains(cardSrc, `data-testid="action-facts"`) {
+		t.Fatal("transcript ActionCard must render ActionFacts so non-HTTP external access remains visible")
 	}
 }
 

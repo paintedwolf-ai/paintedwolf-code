@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"strings"
 	"time"
@@ -84,13 +85,13 @@ func (s *Commands) CommitCommand(ctx context.Context, run *api.WorkflowRun, muta
 		}
 		changed, err = queries.CommitWorkflowRunState(ctx, db.CommitWorkflowRunStateParams{
 			Status: string(run.Status), CurrentPhase: run.CurrentPhase, ProjectDir: mutation.ProjectDir,
-			VarsJson: string(raw), PauseReason: db.NullString(run.PauseReason), FailureJson: failureJSON, UpdatedAt: db.FormatTime(run.UpdatedAt),
+			VarsJson: string(raw), PauseReason: db.NullString(run.PauseReason), FailureJson: failureJSON, UpdatedAt: timelayout.Format(run.UpdatedAt),
 			PausedAt: db.NullTimePtr(run.PausedAt), CompletedAt: db.NullTimePtr(run.CompletedAt), ID: run.ID, Revision: sourceRevision,
 		})
 	} else {
 		changed, err = queries.UpdateWorkflowRun(ctx, db.UpdateWorkflowRunParams{
 			Status: string(run.Status), CurrentPhase: run.CurrentPhase, PauseReason: db.NullString(run.PauseReason),
-			FailureJson: failureJSON, UpdatedAt: db.FormatTime(run.UpdatedAt), PausedAt: db.NullTimePtr(run.PausedAt),
+			FailureJson: failureJSON, UpdatedAt: timelayout.Format(run.UpdatedAt), PausedAt: db.NullTimePtr(run.PausedAt),
 			CompletedAt: db.NullTimePtr(run.CompletedAt), ID: run.ID, Revision: sourceRevision,
 		})
 	}
@@ -140,12 +141,12 @@ func (s *Commands) CommitCommand(ctx context.Context, run *api.WorkflowRun, muta
 	}
 	if err == nil && mutation.Workers.CancelRunning {
 		err = queries.RequestRunningWorkflowWorkerCancellation(ctx, db.RequestRunningWorkflowWorkerCancellationParams{
-			RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())), WorkflowRunID: db.NullString(run.ID),
+			RequestedAt: db.NullString(timelayout.Format(time.Now().UTC())), WorkflowRunID: db.NullString(run.ID),
 		})
 	}
 	if err == nil && mutation.Workers.CancelAll {
 		err = queries.RequestWorkflowWorkerCancellation(ctx, db.RequestWorkflowWorkerCancellationParams{
-			RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())), WorkflowRunID: db.NullString(run.ID),
+			RequestedAt: db.NullString(timelayout.Format(time.Now().UTC())), WorkflowRunID: db.NullString(run.ID),
 		})
 	}
 	if err == nil && mutation.Workers.ReleaseHeld {
@@ -181,7 +182,7 @@ func (s *Commands) CommitCommand(ctx context.Context, run *api.WorkflowRun, muta
 	if err := queries.InsertWorkflowCommand(ctx, db.InsertWorkflowCommandParams{
 		OperationID: mutation.OperationID, RunID: run.ID, SourceRevision: sourceRevision,
 		Kind: mutation.Kind, InputDigest: mutation.InputDigest, ResultRevision: run.Revision,
-		ResponseJson: string(response), RejectionJson: rejectionJSON, CommittedAt: db.FormatTime(time.Now().UTC()),
+		ResponseJson: string(response), RejectionJson: rejectionJSON, CommittedAt: timelayout.Format(time.Now().UTC()),
 	}); err != nil {
 		return err
 	}
@@ -218,7 +219,7 @@ func (s *Commands) CancelActiveTree(ctx context.Context, target *api.WorkflowRun
 	now := time.Now().UTC()
 	queries := db.New(tx)
 	changed, err := queries.CancelActiveRootWorkflowLineage(ctx, db.CancelActiveRootWorkflowLineageParams{
-		Reason: db.NullString(reason), CompletedAt: db.NullString(db.FormatTime(now)), UpdatedAt: db.FormatTime(now),
+		Reason: db.NullString(reason), CompletedAt: db.NullString(timelayout.Format(now)), UpdatedAt: timelayout.Format(now),
 		TargetSessionID: target.SessionID, ExpectedID: target.ID, ExpectedRevision: target.Revision,
 	})
 	if err != nil {

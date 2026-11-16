@@ -703,6 +703,21 @@ export function createAppStore(
             const next: WorkerTask = {
               ...row,
               status: event.status,
+              worker_record_id:
+                event.worker_record_id?.trim() || row.worker_record_id,
+              worker_name: event.worker_name?.trim() || row.worker_name,
+              round: event.round ?? row.round,
+              result_handle: event.result_handle?.trim() || row.result_handle,
+              result_disposition:
+                event.result_disposition ?? row.result_disposition,
+              shelve_reason: event.shelve_reason?.trim() || row.shelve_reason,
+              review_of: event.review_of?.trim() || row.review_of,
+              parked_reason:
+                event.parked_reason?.trim() ||
+                (event.status === "waiting" ? row.parked_reason : undefined),
+              parked_until_at:
+                event.parked_until_at?.trim() ||
+                (event.status === "waiting" ? row.parked_until_at : undefined),
               agent_type: event.agent_type?.trim() || row.agent_type,
               child_session_id: nextChild || undefined,
               parent_session_id:
@@ -714,8 +729,6 @@ export function createAppStore(
               failure: event.failure ?? row.failure,
               error: event.error ?? row.error,
               ...mergedWorkerProgressFromEvent(row, event),
-              // Job events project the whole row, so absence means answered.
-              budget_request: event.budget_request,
               context_usage: event.context_usage ?? row.context_usage,
               workspace_preparation:
                 event.workspace_preparation ??
@@ -733,6 +746,15 @@ export function createAppStore(
           if (child) boundChildSessionId = child;
           draft.workers.push({
             id: taskId,
+            worker_record_id: event.worker_record_id?.trim() || undefined,
+            worker_name: event.worker_name?.trim() || undefined,
+            round: event.round,
+            result_handle: event.result_handle?.trim() || undefined,
+            result_disposition: event.result_disposition,
+            shelve_reason: event.shelve_reason?.trim() || undefined,
+            review_of: event.review_of?.trim() || undefined,
+            parked_reason: event.parked_reason?.trim() || undefined,
+            parked_until_at: event.parked_until_at?.trim() || undefined,
             agent_type: event.agent_type?.trim() || "worker",
             status: event.status,
             child_session_id: child || undefined,
@@ -743,8 +765,6 @@ export function createAppStore(
             result: event.result,
             failure: event.failure,
             error: event.error,
-            max_tool_loops: event.max_tool_loops,
-            budget_request: event.budget_request,
             tool_loops_used: event.tool_loops_used,
             tool_calls_used: event.tool_calls_used,
             turn_tool_calls: event.turn_tool_calls,

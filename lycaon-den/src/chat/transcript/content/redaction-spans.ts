@@ -22,11 +22,6 @@ export type ToolArgsRedaction = {
   fieldPrefix: string;
 };
 
-/** Full field path for one argument key under a prefix. */
-export function argRedactionField(fieldPrefix: string, key: string): string {
-  return `${fieldPrefix}.${key}`;
-}
-
 /** One run of a redacted string: either literal text, or a mark. */
 export type RedactionSegment =
   | { kind: "text"; text: string }
@@ -106,28 +101,4 @@ export function redactionMarkTitle(span: RedactedSpan): string {
     return "Protected secret shown as its reference — the source still holds the value";
   }
   return [span.rule_title?.trim(), "removed by this host"].filter(Boolean).join(" — ");
-}
-
-/** Summary a card header shows: how many replacements, and what named them. */
-export interface RedactionSummary {
-  secrets: number;
-  references: number;
-  masked: number;
-  titles: string[];
-}
-
-export function redactionSummary(
-  message: Pick<Message, "host_secret_redaction"> | undefined,
-): RedactionSummary | undefined {
-  const spans = allSpans(message);
-  if (!spans.length) return undefined;
-  let secrets = 0;
-  let references = 0;
-  let masked = 0;
-  for (const span of spans) {
-    if (span.kind === "observer_mask") masked += 1;
-    else if (span.kind === "managed_reference") references += 1;
-    else secrets += 1;
-  }
-  return { secrets, references, masked, titles: redactionRuleTitles(message) };
 }

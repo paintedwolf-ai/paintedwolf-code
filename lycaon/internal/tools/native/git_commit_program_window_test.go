@@ -69,8 +69,7 @@ func TestGitCommitStagesWhatTheSessionsProgramGeneratedACCW10(t *testing.T) {
 	tc.Source.SourceLedger = ledger
 	tc.Source.History = tools.SourceHistory{Files: ledger.History, Comparison: ledger.Comparisons, Git: ledger.Git, Authorship: ledger.Walk}
 	tc.Source.Commands, tc.Source.Observations, tc.Source.GitMutations = ledger.Commands, ledger.Inventory, ledger.Git
-	tool := &GitCommitTool{Git: manager, Boundary: nativefixture.Boundary(t)}
-	_, err = tool.Run(t.Context(), map[string]any{"message": "Generate"}, tc)
+	_, _, err = commitSession(t, manager, tc, GitCommitRequest{Message: "Generate"})
 	testutil.FailErr(t, "commit session work", err)
 	committed := strings.Fields(gittest.Run(t, f.Dir, "show", "--name-only", "--format=", "HEAD"))
 	if !slices.Contains(committed, "gen.txt") || slices.Contains(committed, "peer.txt") {
@@ -112,7 +111,7 @@ func TestBulkCommitLeavesAnOutsideEditMadeBetweenProcessesOfAProgram(t *testing.
 	testutil.FailErr(t, "end the program", os.WriteFile(filepath.Join(f.Dir, "done.flag"), nil, 0o644))
 	testutil.FailErr(t, "run program", testutil.Receive(t, "program result", done))
 
-	_, err := commitTool(manager, t).Run(t.Context(), map[string]any{"message": "Generate"}, commitContext(f, ledger, f.Session))
+	_, _, err := commitSession(t, manager, commitContext(f, ledger, f.Session), GitCommitRequest{Message: "Generate"})
 	testutil.FailErr(t, "commit session work", err)
 	committed := strings.Fields(gittest.Run(t, f.Dir, "show", "--name-only", "--format=", "HEAD"))
 	if !slices.Contains(committed, "gen.txt") || slices.Contains(committed, "notes.md") {
@@ -145,17 +144,17 @@ func TestBulkCommitLeavesDriftObservedWhileTwoSessionsWereActive(t *testing.T) {
 	testutil.FailErr(t, "close my window", mine.Close(t.Context()))
 	testutil.FailErr(t, "close peer window", peer.Close(t.Context()))
 
-	_, err = commitTool(manager, t).Run(t.Context(), map[string]any{"message": "Generate"}, commitContext(f, ledger, f.Session))
+	_, _, err = commitSession(t, manager, commitContext(f, ledger, f.Session), GitCommitRequest{Message: "Generate"})
 	testutil.FailErr(t, "commit session work", err)
 	committed := strings.Fields(gittest.Run(t, f.Dir, "show", "--name-only", "--format=", "HEAD"))
 	if !slices.Contains(committed, "gen.txt") || slices.Contains(committed, "Cargo.lock") {
 		t.Fatalf("committed paths = %v, want gen.txt without Cargo.lock", committed)
 	}
-	_, err = commitTool(manager, t).Run(t.Context(), map[string]any{"message": "Peer"}, commitContext(f, ledger, "peer-session"))
+	_, _, err = commitSession(t, manager, commitContext(f, ledger, "peer-session"), GitCommitRequest{Message: "Peer"})
 	if rejection := toolrejection.AsToolReject(err); rejection == nil || rejection.Code != "GIT_COMMIT_NO_SESSION_AUTHORSHIP" {
 		t.Fatalf("peer bulk commit = %v, want no authorship", err)
 	}
-	_, err = commitTool(manager, t).Run(t.Context(), map[string]any{"message": "Lockfile", "paths": []any{"Cargo.lock"}}, commitContext(f, ledger, f.Session))
+	_, _, err = commitSession(t, manager, commitContext(f, ledger, f.Session), GitCommitRequest{Message: "Lockfile", Paths: []string{"Cargo.lock"}})
 	testutil.FailErr(t, "commit the lockfile by explicit path", err)
 	if committed := gittest.Run(t, f.Dir, "show", "--name-only", "--format=", "HEAD"); !strings.Contains(committed, "Cargo.lock") {
 		t.Fatalf("explicit commit = %q", committed)
@@ -180,18 +179,14 @@ func TestBulkCommitLeavesAPersonsEditToAFileAWindowClaimed(t *testing.T) {
 		ProjectID: testdbseed.DefaultProjectID, Roots: []sourceledger.RootSpec{{ID: "r1", Path: f.Dir}}, Force: true, Wait: true,
 	}))
 
-	raw, err := commitTool(manager, t).Run(t.Context(), map[string]any{"message": "Generate"}, commitContext(f, ledger, f.Session))
+	_, staging, err := commitSession(t, manager, commitContext(f, ledger, f.Session), GitCommitRequest{Message: "Generate"})
 	testutil.FailErr(t, "commit session work", err)
 	committed := strings.Fields(gittest.Run(t, f.Dir, "show", "--name-only", "--format=", "HEAD"))
 	if !slices.Contains(committed, "kept.txt") || slices.Contains(committed, "gen.txt") {
 		t.Fatalf("committed paths = %v, want kept.txt without gen.txt", committed)
 	}
-	var receipt struct {
-		UncommittedPaths []string `json:"uncommitted_paths"`
-	}
-	testutil.FailErr(t, "decode receipt", json.Unmarshal([]byte(raw), &receipt))
-	if !slices.Contains(receipt.UncommittedPaths, "gen.txt") {
-		t.Fatalf("uncommitted paths = %v, want gen.txt", receipt.UncommittedPaths)
+	if !slices.Contains(staging.Excluded, "gen.txt") {
+		t.Fatalf("uncommitted paths = %v, want gen.txt", staging.Excluded)
 	}
 }
 
@@ -234,7 +229,7 @@ func TestBulkCommitWaitsForItsSessionsClosingWindow(t *testing.T) {
 
 	tc := commitContext(f, ledger, f.Session)
 	tc.Source.History.Windows = &windowsThenGate{SourceWindowReader: ledger.Commands, gate: gate}
-	_, err := commitTool(manager, t).Run(t.Context(), map[string]any{"message": "Generate"}, tc)
+	_, _, err := commitSession(t, manager, tc, GitCommitRequest{Message: "Generate"})
 	testutil.FailErr(t, "commit session work", err)
 	if committed := strings.Fields(gittest.Run(t, f.Dir, "show", "--name-only", "--format=", "HEAD")); !slices.Contains(committed, "gen.txt") {
 		t.Fatalf("committed paths = %v, want gen.txt", committed)
@@ -264,18 +259,14 @@ func TestBulkCommitReportsWhatAWindowStillSettlingLeftOut(t *testing.T) {
 	t.Cleanup(func() { close(held) })
 	ledger.Commands.SetWindowSettleGateForTest(held)
 	runTrustedGenerator(t, f, "gen.txt")
-	raw, err := commitTool(manager, t).Run(t.Context(), map[string]any{"message": "Generate"}, commitContext(f, ledger, f.Session))
+	_, staging, err := commitSession(t, manager, commitContext(f, ledger, f.Session), GitCommitRequest{Message: "Generate"})
 	testutil.FailErr(t, "commit session work", err)
 	committed := strings.Fields(gittest.Run(t, f.Dir, "show", "--name-only", "--format=", "HEAD"))
 	if !slices.Contains(committed, "first.txt") || slices.Contains(committed, "gen.txt") {
 		t.Fatalf("committed paths = %v, want first.txt without gen.txt", committed)
 	}
-	var receipt struct {
-		UncommittedPaths []string `json:"uncommitted_paths"`
-	}
-	testutil.FailErr(t, "decode receipt", json.Unmarshal([]byte(raw), &receipt))
-	if !slices.Contains(receipt.UncommittedPaths, "gen.txt") {
-		t.Fatalf("uncommitted paths = %v, want gen.txt", receipt.UncommittedPaths)
+	if !slices.Contains(staging.Excluded, "gen.txt") {
+		t.Fatalf("uncommitted paths = %v, want gen.txt", staging.Excluded)
 	}
 }
 
@@ -286,9 +277,9 @@ func seedRepository(t *testing.T, dir string) {
 	gittest.CommitAll(t, dir, "Initial")
 }
 
-func commitTool(manager *git.Manager, t *testing.T) *GitCommitTool {
+func commitSession(t *testing.T, manager git.GitManager, tc tools.ToolContext, request GitCommitRequest) (string, git.CommitStaging, error) {
 	t.Helper()
-	return &GitCommitTool{Git: manager, Boundary: nativefixture.Boundary(t)}
+	return GitMutations{Git: manager, Boundary: nativefixture.Boundary(t)}.Commit(t.Context(), tc, request)
 }
 
 func commitContext(f *programtest.Fixture, ledger *sourceledger.Store, session string) tools.ToolContext {

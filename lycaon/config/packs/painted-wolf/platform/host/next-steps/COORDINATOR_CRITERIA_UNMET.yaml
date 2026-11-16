@@ -1,0 +1,34 @@
+steps:
+  - when: "paintedwolf.closeout_unstarted && paintedwolf.workflow_work_id != ''"
+    tool: "task"
+    args:
+      workflow_work_id: "{{ paintedwolf.workflow_work_id }}"
+    complete: true
+    say: "Start the planned work with {{ call }}."
+    otherwise: "The planned work has to start before closeout."
+  - when: "paintedwolf.closeout_criteria_unmet"
+    tool: "instruct_worker"
+    args:
+      worker: "{{ paintedwolf.worker }}"
+    say: "Send the worker back with {{ call }} to meet them."
+    otherwise: "The worker has to be sent back to meet them."
+  - when: "paintedwolf.closeout_changes_pending"
+    tool: "promote_overlay"
+    args:
+      overlay_id: "{{ paintedwolf.overlay_id }}"
+    complete: true
+    say: "Call {{ call }} to land them."
+    otherwise: "The changes have to land before closeout."
+  - when: "paintedwolf.closeout_changes_shelved"
+    tool: "promote_overlay"
+    args:
+      overlay_id: "{{ paintedwolf.overlay_id }}"
+    complete: true
+    say: "Call {{ call }} to land the shelved changes."
+    otherwise: "The shelved changes have to land before closeout."
+  - when: "paintedwolf.closeout_changes_rejected"
+    tool: "instruct_worker"
+    args:
+      worker: "{{ paintedwolf.worker }}"
+    say: "Send the worker back with {{ call }} for changes that can land."
+    otherwise: "The worker has to be sent back for changes that can land."

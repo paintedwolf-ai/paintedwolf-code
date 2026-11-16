@@ -154,7 +154,7 @@ func TestPromoteTransactionRecoversUnstartedAndPartialRetentionPreparation(t *te
 	}
 
 	// Crash with one of two originals retained, before any primary mutation.
-	tx2, err := beginPromoteTransactionWith(dataDir, task.ID, plans, promoteTransactionEffects{Reached: func(step checkpoint.TransactionStep, _ string) error {
+	tx2, err := beginPromoteTransactionWith(dataDir, task.ID, plans, checkpoint.TransactionConfig{Reached: func(step checkpoint.TransactionStep, _ string) error {
 		if step == checkpoint.StepOriginalRetained {
 			panic(errPromoteCrash)
 		}

@@ -6,7 +6,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -39,13 +38,6 @@ func TestWorkflowVocabularyBundledManifestsOnlyRegisteredLeaves(t *testing.T) {
 				t.Fatalf("%s gate %q not registered in condition registry", name, leaf)
 			}
 		}
-	}
-}
-
-func TestWorkflowVocabularyImplementWorkLegKey(t *testing.T) {
-	t.Parallel()
-	if runstate.ImplementWorkLegKey("s1") != "implement-work:s1" {
-		t.Fatal("ImplementWorkLegKey format drift")
 	}
 }
 

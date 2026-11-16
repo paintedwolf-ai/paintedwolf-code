@@ -1,8 +1,6 @@
 package sessionadmin
 
 import (
-	"context"
-
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/api/promptadmin"
@@ -27,23 +25,21 @@ type Deps struct {
 	Checkpoints    hitl.CheckpointManager
 	EventPublisher *events.Publisher
 	Events         events.ReplayHub
-	// FileAgeWarmer primes file-age facts for a project a new session opens.
-	FileAgeWarmer func(ctx context.Context, projectDir string)
-	Invocations   invocation.Recorder
-	LLMService    *llm.Service
-	Preview       *preview.Controller
-	ProgressStore progress.Store
-	Projects      project.Registry
-	ProjectRules  *rules.ProjectRulesOverlay
-	Store         session.Store
-	Sessions      *session.Host
-	Workers       worker.WorkerQueue
-	Workflows     *workflow.RunManager
-	Settings      *settings.Service
-	Sources       *sourceapi.Handler
-	SessionView   *sessionview.Projector
-	Git           *gitadmin.Handler
-	Prompt        *promptadmin.Handler
+	Invocations    invocation.Recorder
+	LLMService     *llm.Service
+	Preview        *preview.Controller
+	ProgressStore  progress.Store
+	Projects       project.Registry
+	ProjectRules   *rules.ProjectRulesOverlay
+	Store          session.Store
+	Sessions       *session.Host
+	Workers        worker.WorkerQueue
+	Workflows      *workflow.RunManager
+	Settings       *settings.Service
+	Sources        *sourceapi.Handler
+	SessionView    *sessionview.Projector
+	Git            *gitadmin.Handler
+	Prompt         *promptadmin.Handler
 }
 
 type Handler struct {
@@ -70,7 +66,6 @@ type Bootstrap struct {
 
 type Lifecycle struct {
 	Events          events.ReplayHub
-	FileAgeWarmer   func(ctx context.Context, projectDir string)
 	Git             *gitadmin.Handler
 	LLMService      *llm.Service
 	ProjectRules    *rules.ProjectRulesOverlay
@@ -124,7 +119,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 	)
 	h := Handler{}
 	h.Bootstrap = &Bootstrap{Checkpoints: deps.Checkpoints, EventPublisher: deps.EventPublisher, Events: deps.Events, Preview: deps.Preview, ProgressStore: deps.ProgressStore, SessionView: deps.SessionView, Sessions: deps.Sessions, Store: deps.Store, Workers: deps.Workers, responses: responses}
-	h.Lifecycle = &Lifecycle{Events: deps.Events, FileAgeWarmer: deps.FileAgeWarmer, Git: deps.Git, LLMService: deps.LLMService, ProjectRules: deps.ProjectRules, Projects: deps.Projects, Prompt: deps.Prompt.Queue, SessionView: deps.SessionView, Sessions: deps.Sessions, Settings: deps.Settings, Store: deps.Store, Workflows: deps.Workflows, background: background, responses: responses, sourceWatch: deps.Sources.Watch, sourceWorkspace: deps.Sources.Workspace}
+	h.Lifecycle = &Lifecycle{Events: deps.Events, Git: deps.Git, LLMService: deps.LLMService, ProjectRules: deps.ProjectRules, Projects: deps.Projects, Prompt: deps.Prompt.Queue, SessionView: deps.SessionView, Sessions: deps.Sessions, Settings: deps.Settings, Store: deps.Store, Workflows: deps.Workflows, background: background, responses: responses, sourceWatch: deps.Sources.Watch, sourceWorkspace: deps.Sources.Workspace}
 	h.Navigation = &Navigation{Sessions: deps.Sessions, Store: deps.Store, Workers: deps.Workers, responses: responses, sourceWorkspace: deps.Sources.Workspace}
 	h.Recovery = &Recovery{Sessions: deps.Sessions, responses: responses}
 	h.Rewind = &Rewind{Sessions: deps.Sessions, responses: responses}

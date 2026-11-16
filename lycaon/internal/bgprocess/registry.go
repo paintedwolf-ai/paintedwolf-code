@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -185,8 +186,8 @@ func (r *processTable) lookup(sessionID, handle string) (*Process, error) {
 	if r == nil {
 		return nil, fmt.Errorf("background registry not configured")
 	}
-	sessionID = trim(sessionID)
-	handle = trim(handle)
+	sessionID = strings.TrimSpace(sessionID)
+	handle = strings.TrimSpace(handle)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	procs := r.sessions[sessionID]
@@ -290,8 +291,8 @@ func (r *Registry) ProcessesUnderRoot(projectID string, sessionIDs map[string]st
 	if r == nil || r.jobs == nil {
 		return nil
 	}
-	projectID = trim(projectID)
-	rootPath = trim(rootPath)
+	projectID = strings.TrimSpace(projectID)
+	rootPath = strings.TrimSpace(rootPath)
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
 	var out []RootProcess

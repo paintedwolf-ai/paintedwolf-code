@@ -1,6 +1,5 @@
 id: default-pipeline
 pattern: pipeline
-iteration_cap: 8
 pipeline:
   stages:
     - name: research

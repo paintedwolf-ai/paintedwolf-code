@@ -94,7 +94,6 @@ type CommandStore interface {
 	PatchMessageViewContext(ctx context.Context, sessionID, messageID string, view api.ViewContext) (api.Message, error)
 	StampMessageScreenGeneration(ctx context.Context, sessionID, messageID string, generation uint64) error
 	PatchLiveProjection(ctx context.Context, sessionID, messageID, content string, toolCalls []api.ToolCall) error
-	TruncateMessagesFrom(ctx context.Context, sessionID, anchorMessageID string) (int, error)
 	PutCompactionView(ctx context.Context, sessionID string, view store.CompactionView) error
 	AppendDraftVersion(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error)
 	UpdateSession(ctx context.Context, id string, fn func(*api.Session)) error
@@ -122,7 +121,7 @@ type CommandStore interface {
 	BeginTurn(ctx context.Context, in store.TurnStart) (store.TurnExecution, error)
 	LatestTurnStatus(ctx context.Context, sessionID string) (store.TurnStatus, error)
 	CheckpointTurn(ctx context.Context, turnID, attemptID string, phase store.TurnPhase, checkpointJSON string) error
-	ProjectLiveModelOutput(ctx context.Context, out store.LiveModelOutput) error
+	TouchTurnProgress(ctx context.Context, turnID string) error
 	ConfigureModelLimit(ctx context.Context, sessionID string, limit int) error
 	AdmitModelResponse(ctx context.Context, sessionID, attemptID string) error
 	SealTurnCloseout(ctx context.Context, commit store.TurnCloseoutCommit) error

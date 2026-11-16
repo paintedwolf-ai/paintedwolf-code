@@ -180,23 +180,6 @@ func normalizeLoadedJobMeta(meta *JobMeta) error {
 	return nil
 }
 
-// UpgradeJobMetaToV2 upgrades a Format-v1 branch metadata file to Format-v2 while preserving
-// retained materialized eagercopy semantics (VisibilityFixed) without relabeling it as live.
-func UpgradeJobMetaToV2(metaDir string) (JobMeta, bool, error) {
-	meta, err := LoadJobMeta(metaDir)
-	if err != nil || meta.FormatVersion == JobMetaFormatV2 {
-		return meta, false, err
-	}
-	meta.FormatVersion = JobMetaFormatV2
-	meta.AdapterID = adapter.AdapterEagerCopy
-	meta.PreparationKind = adapter.PreparationMaterialized
-	meta.VisibilityMode = adapter.VisibilityFixed
-	if err := WriteJobMeta(metaDir, meta); err != nil {
-		return JobMeta{}, false, err
-	}
-	return meta, true, nil
-}
-
 func markSnapshotComplete(metaDir string) error {
 	meta, err := LoadJobMeta(metaDir)
 	if err != nil {

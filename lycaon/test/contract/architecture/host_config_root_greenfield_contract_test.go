@@ -63,8 +63,8 @@ func TestHostConfigRootLeafSSOT(t *testing.T) {
 	if configdir.DirNameDev != "paintedwolf-dev" {
 		t.Fatalf("DirNameDev = %q", configdir.DirNameDev)
 	}
-	if configdir.LabelProd() != "~/.config/paintedwolf" {
-		t.Fatalf("LabelProd = %q", configdir.LabelProd())
+	if configdir.DirNameProd != "paintedwolf" {
+		t.Fatalf("DirNameProd = %q", configdir.DirNameProd)
 	}
 }
 

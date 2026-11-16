@@ -9,7 +9,4 @@ cd "$ROOT"
 source "$(dirname "$0")/redocly-cli.sh"
 
 ENTRY="${OPENAPI_LINT_ENTRY:-docs/openapi/root.yaml}"
-if [[ ! -f "$ENTRY" ]]; then
-  ENTRY="docs/openapi.yaml"
-fi
 redocly lint "$ENTRY" --config docs/redocly.yaml

@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/contactsheet"
+
 	"github.com/lycaon/lycaon/internal/browser"
 	"github.com/lycaon/lycaon/internal/browser/renderhandle"
 	attachmentformat "github.com/lycaon/lycaon/internal/promptattach/format"
@@ -106,7 +108,7 @@ func handleViewImageByHandle(ctx context.Context, deps ViewImageDeps, tctx tools
 	raw := res.Bytes()
 	mime := meta.Mime
 	switch {
-	case strings.EqualFold(strings.TrimSpace(mime), browser.FilmstripMime):
+	case strings.EqualFold(strings.TrimSpace(mime), contactsheet.FilmstripMime):
 		poster, err := browser.FilmstripPoster(raw)
 		if err != nil {
 			return "", &toolrejection.ToolReject{Code: "IMAGE_CORRUPTED", Data: map[string]any{"path": in.Handle, "handle": in.Handle, "format": "png", "rejection_reason": err.Error()}}

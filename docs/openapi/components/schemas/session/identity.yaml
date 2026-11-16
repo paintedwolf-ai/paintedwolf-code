@@ -69,7 +69,7 @@ components:
             pinned chats are renumbered 1…n.
     Session:
       x-go-generate: true
-      x-go-field-order: ["id", "title", "project_id", "owner_person_id", "workspace_root_id", "workspace_path", "posture", "agent_type", "provider_id", "model", "status", "parent_session_id", "max_tool_loops", "compaction_generation", "untrusted_content", "current_turn", "prompt_pending", "ui", "archived_at", "pin_rank", "seen_at", "created_at", "activity_at", "updated_at"]
+      x-go-field-order: ["id", "title", "project_id", "owner_person_id", "workspace_root_id", "workspace_path", "posture", "agent_type", "provider_id", "model", "status", "parent_session_id", "compaction_generation", "untrusted_content", "current_turn", "prompt_pending", "ui", "archived_at", "pin_rank", "seen_at", "created_at", "activity_at", "updated_at"]
       type: object
       required:
       - id
@@ -132,14 +132,6 @@ components:
         parent_session_id:
           type: string
           format: uuid
-        max_tool_loops:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: >-
-            Effective worker tool-loop cap. Omitted task budgets default to 12
-            for read scope and 20 for write scope; maximum 120. The final
-            iteration is prose-only.
         compaction_generation:
           type: integer
           minimum: 0
