@@ -8,7 +8,6 @@ import {
   subscribeStreamScroll,
 } from "../../stream/stream-scroll.ts";
 import type { TranscriptRevealAnchor } from "../presentation/transcript-reveal-target.ts";
-import { isTranscriptTimeItem } from "../presentation/transcript-time-rows.ts";
 import type { DisplayTranscriptItem } from "../projection/transcript-item-model.ts";
 import { transcriptItemOrd } from "../projection/transcript-item-order.ts";
 import { publishTranscriptReaderReach } from "../history/transcript-reader-reach.ts";
@@ -62,7 +61,6 @@ export function createTranscriptHistoryView(opts: {
   appStore: () => AppStore | undefined;
 }): {
   unloadedOrds: () => TranscriptUnloadedOrds;
-  residentRowSpan: () => { count: number; ordSpan: number };
   geometry: (virtualizer: MeasuredTranscriptVirtualizer) => TranscriptHistoryGeometry | null;
 } {
   const ordById = createMemo(() => {
@@ -84,14 +82,6 @@ export function createTranscriptHistoryView(opts: {
       if (ord > lastOrd) lastOrd = ord;
     }
     return firstOrd <= lastOrd ? { firstOrd, lastOrd } : undefined;
-  });
-  const residentRowSpan = createMemo(() => {
-    const span = residentOrdSpan();
-    const messageBacked = opts
-      .items()
-      .filter((item) => !isTranscriptTimeItem(item) && item.kind !== "pending_user").length;
-    const ordSpan = span ? Math.max(1, span.lastOrd - span.firstOrd + 1) : messageBacked;
-    return { count: messageBacked, ordSpan };
   });
   const unloadedOrds = createMemo<TranscriptUnloadedOrds>(() => {
     if (!opts.enabled()) return { before: 0, after: 0 };
@@ -116,7 +106,7 @@ export function createTranscriptHistoryView(opts: {
       prepareLanding: (targetPx) => virtualizer.prepareLanding(targetPx),
     };
   };
-  return { unloadedOrds, residentRowSpan, geometry };
+  return { unloadedOrds, geometry };
 }
 
 async function fetchTranscriptRequest(

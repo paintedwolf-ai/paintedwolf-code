@@ -801,7 +801,6 @@ describe("createTranscriptPaging", () => {
         appStore: () => appStore,
       });
       expect(withStore.unloadedOrds()).toEqual({ before: 10, after: 0 });
-      expect(withStore.residentRowSpan()).toEqual({ count: 2, ordSpan: 10 });
       const geo = withStore.geometry(fakeVirtualizer);
       expect(geo).toMatchObject({
         residentStartPx: 1_000,
@@ -819,7 +818,6 @@ describe("createTranscriptPaging", () => {
         appStore: () => undefined,
       });
       expect(withoutStore.unloadedOrds()).toEqual({ before: 0, after: 0 });
-      expect(withoutStore.residentRowSpan()).toEqual({ count: 2, ordSpan: 10 });
       expect(withoutStore.geometry(fakeVirtualizer)).toBeNull();
       dispose();
     });
