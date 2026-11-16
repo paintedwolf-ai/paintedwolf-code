@@ -258,7 +258,7 @@ func TestTaskToolResumeRejectsPendingDecision(t *testing.T) {
 			return "", false, nil
 		},
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	_, err := exec.Invoke(context.Background(), "task", map[string]any{
@@ -292,7 +292,7 @@ func TestTaskToolResumeRejectsDiscardedOverlay(t *testing.T) {
 				Agents:  orchestration.NewMemoryAgentRegistryForTest(),
 				Workers: worker.DefaultWorkersConfig(),
 			}); err != nil {
-				t.Fatal(err)
+				testutil.FailErr(t, "worker.RegisterTaskTool failed", err)
 			}
 			exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 			_, err := exec.Invoke(context.Background(), "task", map[string]any{
@@ -325,7 +325,7 @@ func TestTaskToolResumePendingOverlayAllowed(t *testing.T) {
 		Agents:  orchestration.NewMemoryAgentRegistryForTest(),
 		Workers: worker.DefaultWorkersConfig(),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	_, err := exec.Invoke(context.Background(), "task", map[string]any{
@@ -365,7 +365,7 @@ func TestTaskToolDraftScratchSpawnsImplementerWithWorkspacePath(t *testing.T) {
 		Agents:  orchestration.NewMemoryAgentRegistryForTest(),
 		Workers: worker.DefaultWorkersConfig(),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
 	ctx := context.Background()
 	projReg := project.NewMemoryRegistry()
@@ -420,7 +420,7 @@ func TestTaskToolCapsAggregateBriefText(t *testing.T) {
 		Queue:  worker.NewInMemoryQueue(1),
 		Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	_, err := exec.Invoke(context.Background(), "task", map[string]any{

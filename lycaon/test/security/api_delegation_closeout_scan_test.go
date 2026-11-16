@@ -3,6 +3,7 @@ package security
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/delegation"
@@ -33,7 +34,7 @@ func TestDelegationCloseoutWithoutSecurityEvidenceGatePending(t *testing.T) {
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: projectDir,
 		Phase: api.DelegationPhaseWorker,
 	}, "sess-closeout", []api.Leg{{ID: "leg-1", Status: api.LegStatusComplete}}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "depStore.Create failed", err)
 	}
 
 	gate := &delegation.InspectorCloseoutGate{

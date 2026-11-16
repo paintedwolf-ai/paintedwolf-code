@@ -12,6 +12,7 @@ import (
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -26,7 +27,7 @@ func TestInspectorCloseoutGateWaitsForLandedScanThenPasses(t *testing.T) {
 		ID: "dep-close", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: projectDir,
 		Phase: api.DelegationPhaseWorker,
 	}, "sess-close", []api.Leg{{ID: "leg-1"}}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "depStore.Create failed", err)
 	}
 
 	sqlDB := testdbfixture.Open(t, "store.db")

@@ -38,9 +38,7 @@ func TestExecutionStreamProvesBytesAcrossRestoredMetadataAndTailSeek(t *testing.
 	testutil.FailErr(t, "os.OpenFile failed", err)
 	_, err = file.WriteAt([]byte("changed"), sourceBlockBytes+3)
 	_ = file.Close()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "change a source block", err)
 	if err = os.Chtimes(path, info.ModTime(), info.ModTime()); err != nil {
 		testutil.FailErr(t, "os.Chtimes failed", err)
 	}
@@ -87,9 +85,7 @@ func TestExecutionStreamRefusesTruncationGrowthAndPartialLastBlockChange(t *test
 				body[len(body)-1] = 'z'
 				err = os.WriteFile(path, body, 0600)
 			}
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "apply "+kind+" to the source", err)
 			_, err = stream.Reader.(io.Seeker).Seek(-7, io.SeekEnd)
 			testutil.FailErr(t, "stream.Reader. failed", err)
 			actual, err := io.ReadAll(stream.Reader)
@@ -133,7 +129,7 @@ func TestExecutionStreamBlockAdmissionCancellationAndRelease(t *testing.T) {
 		t.Fatalf("close leak %+v", memory.InUse())
 	}
 	if _, err = stream.Reader.Read(make([]byte, 4)); !errors.Is(err, io.ErrClosedPipe) {
-		t.Fatal(err)
+		testutil.FailErr(t, "stream.Reader.Read failed", err)
 	}
 }
 

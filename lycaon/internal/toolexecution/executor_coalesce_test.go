@@ -191,7 +191,7 @@ func TestExecutorCoalesceIdenticalPendingSharesCheckpoint(t *testing.T) {
 		}
 		return "ok", nil
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "reg.Register failed", err)
 	}
 
 	mgr := &coalesceHITL{req: make(chan struct{}, 2)}
@@ -270,7 +270,7 @@ func TestExecutorCoalesceDifferentArgsMintTwo(t *testing.T) {
 		}
 		return "ok", nil
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "reg.Register failed", err)
 	}
 
 	mgr := &coalesceHITL{req: make(chan struct{}, 4)}
@@ -335,7 +335,7 @@ func TestExecutorCoalesceAbortMintAllowsRetry(t *testing.T) {
 		}
 		return "ok", nil
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "reg.Register failed", err)
 	}
 
 	mgr := &failOnceHITL{}

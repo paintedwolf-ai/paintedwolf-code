@@ -215,7 +215,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 		Agents:  agents,
 		Workers: worker.DefaultWorkersConfig(),
 	}); err != nil {
-		t.Fatal(err)
+		contractcheck.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
 	if err := loopwake.RegisterWaitTool(rt.Registry, loopwake.NewLoopEngine().Subscriptions, loopwake.WaitToolDeps{}); err != nil {
 		contractcheck.FailErr(t, "loopwake.RegisterWaitTool failed", err)

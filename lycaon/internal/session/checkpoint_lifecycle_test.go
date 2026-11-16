@@ -145,7 +145,7 @@ func TestSessionContextUsesCorrectedEstimate(t *testing.T) {
 	if err := store.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "u1", Role: api.MessageRoleUser, Content: block},
 	); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 	transcript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI([]api.Message{{Content: block}}))
 	mgr.Runner.History.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, transcript+15000, transcript)
@@ -180,7 +180,7 @@ func TestCompactionFitThenReplace(t *testing.T) {
 		api.Message{ID: "log", Role: api.MessageRoleUser, Content: log},
 		api.Message{ID: "ack", Role: api.MessageRoleAssistant, Content: "seen"},
 	); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 	transcript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI([]api.Message{{Content: log}, {Content: "seen"}}))
 	mgr.Runner.History.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, transcript+25000, transcript)

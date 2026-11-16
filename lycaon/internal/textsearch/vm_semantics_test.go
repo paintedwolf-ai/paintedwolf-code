@@ -79,7 +79,7 @@ func TestRecordDecodeAdmissionPrecedesAllocation(t *testing.T) {
 	vm := matcher.engine.(vmEngine)
 	vm.limits.MemoryBytes = 1024
 	_, _, err = vm.first(t.Context(), make([]byte, 1024))
-	if budgetResource(t, err) != "evaluation_memory_bytes" {
-		t.Fatal(err)
+	if resource := budgetResource(t, err); resource != "evaluation_memory_bytes" {
+		t.Fatalf("exhausted %s, want evaluation_memory_bytes: %v", resource, err)
 	}
 }

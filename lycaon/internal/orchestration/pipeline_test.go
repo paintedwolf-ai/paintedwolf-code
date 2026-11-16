@@ -209,7 +209,7 @@ func TestPipelineReviewTestUnlockAfterImplement(t *testing.T) {
 		Topology:  *spec,
 		Input:     map[string]any{"project_dir": projectDir, "project_id": testdbseed.DefaultProjectID},
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "orch.Run failed", err)
 	}
 
 	implementIdx := indexOf(rec.order, "implement")

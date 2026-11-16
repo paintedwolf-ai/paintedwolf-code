@@ -48,7 +48,7 @@ postures:
   spec:
     label: Audit
 `), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 
 	sess := createAPISessionForProject(t, srv, projectDir, "spec")
@@ -77,7 +77,7 @@ postures:
   plan:
     label: Plan
 `), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 
 	createBody := `{"roots":[{"path":"` + projectDir + `"}]}`
@@ -125,7 +125,7 @@ postures:
   spec:
     label: Audit
 `), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 
 	createBody := `{"roots":[{"path":"` + projectDir + `"}]}`

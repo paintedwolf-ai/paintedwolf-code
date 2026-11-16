@@ -207,7 +207,7 @@ func registerContextualToolsCoordinatorExtras(
 		Agents:  agents,
 		Workers: worker.DefaultWorkersConfig(),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)
@@ -231,7 +231,7 @@ func registerContextualToolsCoordinatorExtras(
 	if err := workflow.RegisterCatalogSummariesTool(reg, workflowcatalog.Resolver{
 		SessionStore: sessionWF,
 	}, sessionWF, composer.Templates); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "workflow.RegisterCatalogSummariesTool failed", err)
 	}
 	persister := &workflowcomposition.Persister{SessionStore: sessionWF}
 	if err := workflow.RegisterPersistTool(reg, persister); err != nil {

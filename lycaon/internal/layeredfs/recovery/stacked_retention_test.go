@@ -328,7 +328,7 @@ func copyDirForTest(t *testing.T, src, dst string) {
 		}
 		return os.WriteFile(target, raw, 0o644)
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "filepath.WalkDir failed", err)
 	}
 }
 

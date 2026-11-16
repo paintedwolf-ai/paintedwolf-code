@@ -193,7 +193,7 @@ func TestEvidenceLedgerCompactionIndependence(t *testing.T) {
 		api.Message{ID: "t-big", Role: api.MessageRoleTool, Content: huge},
 		api.Message{ID: "a1", Role: api.MessageRoleAssistant, Content: "seen"},
 	); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.AppendMessages failed", err)
 	}
 
 	if err := mgr.Runner.History.ScheduleChunks(ctx, sess); err != nil {

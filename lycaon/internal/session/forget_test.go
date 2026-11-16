@@ -366,7 +366,7 @@ agent_pool:
   selection: first
   models: []
 `), 0o600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	policy, err := llm.NewPolicyStoreAt(globalPolicy)
 	testutil.FailErr(t, "NewPolicyStoreAt", err)

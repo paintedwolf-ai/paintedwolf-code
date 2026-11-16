@@ -274,7 +274,7 @@ func verifyRecoveredMountAndStackedChild(
 		t.Fatalf("expected 0 active views after CancelAndRelease")
 	}
 	if _, err := os.Stat(filepath.Join(trunkDir, ".git")); err != nil && !errors.Is(err, os.ErrNotExist) {
-		t.Fatal(err)
+		testutil.FailErr(t, "stat path", err)
 	}
 	return childConnections
 }
