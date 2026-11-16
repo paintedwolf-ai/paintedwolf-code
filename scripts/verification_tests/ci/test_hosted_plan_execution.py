@@ -96,7 +96,7 @@ class HostedPlanTests(unittest.TestCase):
                                    "den:coverage-check", "den:test:transcript-scale", "lint:vuln:fresh",
                                    "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll",
                                    "den:webkit:atspi", "test:confine:linux", "nix:check", "test:userlands", "test:conformance:live",
-                                   "budgets", "coverage:changes", "arch-lint:changes", "den:coverage:changes", "scripts:coverage:changes",
+                                   "budgets", "coverage:changes", "arch-lint:changes", "den:knip:changes", "den:coverage:changes", "scripts:coverage:changes",
                                    "build", "build:cross", "licenses:notices", "check:drift", "openapi:lint",
                                    "validate:workflows", "oar:verify", "lint:full", "test:fail-messages:check",
                                    "comments:check", "lint:vuln", "den:typecheck", "den:lint",

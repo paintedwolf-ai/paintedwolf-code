@@ -107,7 +107,7 @@ class ArchLintChangesTest(unittest.TestCase):
         _, findings, failed = arch_lint_changes.changes(self.repo, scope, POLICY, self.cache, self.binary, self.linter)
         self.assertTrue(failed)
         self.assertEqual([f.area for f in findings], ["unreferenced-script"])
-        self.assertTrue(list(self.cache.glob("base-*-xrefs.json")))
+        self.assertTrue(list(self.cache.glob("base-*-nogo.json")))
 
     def test_changed_go_packages_skip_tests_testdata_and_removed_packages(self):
         self.assertEqual(arch_lint_changes.changed_go_packages(self.repo, [
