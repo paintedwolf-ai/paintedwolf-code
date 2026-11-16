@@ -68,7 +68,7 @@ func TestInsertLandedChangeAccumulatesSessionPathDeltas(t *testing.T) {
 
 	var bound int
 	testutil.FailErr(t, "count session scan bindings", sqlDB.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM code_scan_sessions WHERE session_id = 'sess-landed'`).Scan(&bound))
+		`SELECT COUNT(*) FROM session_scan_bindings WHERE session_id = 'sess-landed'`).Scan(&bound))
 	if bound != 2 {
 		t.Fatalf("session scan bindings = %d, want 2", bound)
 	}
