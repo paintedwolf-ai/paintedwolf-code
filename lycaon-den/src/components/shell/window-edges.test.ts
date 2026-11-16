@@ -107,6 +107,47 @@ describe("window edge claims", () => {
   });
 });
 
+describe("every layout", () => {
+  const sides = ["left", "right"] as const;
+  const flags = [false, true];
+  const layouts: WindowEdgeLayout[] = [];
+  for (const navSide of [null, ...sides])
+    for (const isSplit of flags) for (const stageOccupied of flags)
+      for (const contextHidden of flags) for (const conversationHidden of flags)
+        for (const stageSide of sides) for (const narrowSurvivor of ["stage", "chat"] as const)
+          for (const drawerSide of [null, ...sides]) {
+            if (contextHidden && conversationHidden) continue;
+            layouts.push({ navSide, split: isSplit, stageOccupied, contextHidden, conversationHidden, stageSide, narrowSurvivor, drawerSide });
+          }
+
+  it("gives each edge's controls to exactly one surface on each side of the narrow band", () => {
+    chrome.left = "native";
+    chrome.right = "drawn";
+    const surfaces = ["nav", "stage", "chat", "drawer"] as const;
+    for (const layout of layouts) {
+      const claims = surfaces.flatMap((host) => windowEdgeClaims(host, layout));
+      for (const side of sides) {
+        const held = claims.filter((claim) => claim.side === side);
+        expect(held.filter((claim) => claim.owner), JSON.stringify(layout)).toHaveLength(1);
+        expect(held.filter((claim) => claim.narrow), JSON.stringify(layout)).toHaveLength(1);
+      }
+    }
+  });
+
+  it("keeps a showing sidebar's edge with the sidebar and gives a closed drawer none", () => {
+    chrome.left = "drawn";
+    chrome.right = "drawn";
+    for (const layout of layouts) {
+      if (layout.navSide) {
+        expect(windowEdgeClaims("nav", layout), JSON.stringify(layout))
+          .toEqual([{ side: layout.navSide, chrome: "drawn", owner: true, narrow: true }]);
+      }
+      const drawer = windowEdgeClaims("drawer", layout);
+      expect(drawer.every((claim) => claim.side === layout.drawerSide), JSON.stringify(layout)).toBe(true);
+    }
+  });
+});
+
 describe("window edge attributes", () => {
   it("marks the edge, its chrome, and the side of the narrow band a partial claim holds on", () => {
     expect(windowEdgeAttributes({ side: "right", chrome: "drawn", owner: true, narrow: true })).toEqual({
