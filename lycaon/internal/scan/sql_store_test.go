@@ -253,11 +253,10 @@ func TestSQLStoreSessionSnapshotQueries(t *testing.T) {
 		ID:               "scan-inflight",
 		CanonicalPath:    "/tmp/p",
 		Categories:       cats,
-		Paths:            []string{"pkg/a.go"},
 		Status:           api.CodeScanStatusPending,
 		SessionID:        "sess-snap",
 		SourceSnapshotID: "snap-1",
-	}, nil, ""))
+	}, []string{"pkg/a.go"}, ""))
 	inFlightHit, err := store.FindInFlightForSessionSnapshot(ctx, "sess-snap", "snap-1", cats, []string{"pkg/a.go"})
 	testutil.FailErr(t, "hit FindInFlightForSessionSnapshot", err)
 	if inFlightHit == nil || inFlightHit.ID != "scan-inflight" || inFlightHit.SessionID != "sess-snap" {
