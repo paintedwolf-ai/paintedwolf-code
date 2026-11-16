@@ -34,15 +34,48 @@ var (
 	branchClaimStates = make(map[string]branchClaimRecord)
 )
 
+// branchRootKey canonicalizes the parent directory of branchRoot without
+// traversing branchRoot itself, which may be a mount point.
+func branchRootKey(branchRoot string) string {
+	clean := filepath.Clean(branchRoot)
+	if parent, err := filepath.EvalSymlinks(filepath.Dir(clean)); err == nil {
+		return filepath.Join(parent, filepath.Base(clean))
+	}
+	return clean
+}
+
+func lookupBranchClaimRecord(branchRoot string) (branchClaimRecord, bool) {
+	key := branchRootKey(branchRoot)
+	if rec, ok := branchClaimStates[key]; ok {
+		return rec, true
+	}
+	clean := filepath.Clean(branchRoot)
+	if clean != key {
+		rec, ok := branchClaimStates[clean]
+		return rec, ok
+	}
+	return branchClaimRecord{}, false
+}
+
 func recordBranchClaimState(branchRoot string, cv *claim.ClaimedView, snap claim.WorkspaceStateSnapshot, layered *branchLayeredView) {
+	key := branchRootKey(branchRoot)
+	clean := filepath.Clean(branchRoot)
 	branchClaimsMu.Lock()
-	branchClaimStates[filepath.Clean(branchRoot)] = branchClaimRecord{claimed: cv, state: snap, layered: layered}
+	if clean != key {
+		delete(branchClaimStates, clean)
+	}
+	branchClaimStates[key] = branchClaimRecord{claimed: cv, state: snap, layered: layered}
 	branchClaimsMu.Unlock()
 }
 
 func releaseBranchClaimState(branchRoot string) {
+	key := branchRootKey(branchRoot)
+	clean := filepath.Clean(branchRoot)
 	branchClaimsMu.Lock()
-	delete(branchClaimStates, filepath.Clean(branchRoot))
+	delete(branchClaimStates, key)
+	if clean != key {
+		delete(branchClaimStates, clean)
+	}
 	branchClaimsMu.Unlock()
 }
 
@@ -50,7 +83,7 @@ func releaseBranchClaimState(branchRoot string) {
 func LookupBranchClaimedView(branchRoot string) (*claim.ClaimedView, bool) {
 	branchClaimsMu.RLock()
 	defer branchClaimsMu.RUnlock()
-	rec, ok := branchClaimStates[filepath.Clean(branchRoot)]
+	rec, ok := lookupBranchClaimRecord(branchRoot)
 	if !ok || rec.claimed == nil {
 		return nil, false
 	}
@@ -62,6 +95,7 @@ func LookupBranchClaimedView(branchRoot string) (*claim.ClaimedView, bool) {
 func BranchViewBoundary(branchRoot string) func() confine.ViewBoundary {
 	clean := filepath.Clean(branchRoot)
 	return func() confine.ViewBoundary {
+		target := branchRootKey(clean)
 		branchClaimsMu.RLock()
 		defer branchClaimsMu.RUnlock()
 		var ports []uint16
@@ -72,7 +106,7 @@ func BranchViewBoundary(branchRoot string) func() confine.ViewBoundary {
 			}
 			view := viewconfine.Boundary(rec.claimed.Prepared)
 			ports = append(ports, view.DeniedLoopbackPorts...)
-			if root == clean {
+			if root == target || root == clean {
 				boundary = view
 				if len(view.ReopenedPaths) > 0 {
 					// A multi-root branch holds its mounts below this directory.
@@ -89,7 +123,7 @@ func BranchViewBoundary(branchRoot string) func() confine.ViewBoundary {
 func BranchWorkspaceState(branchRoot string) (claim.WorkspaceStateSnapshot, claim.DispatchWorkspaceReceipt, bool) {
 	clean := filepath.Clean(branchRoot)
 	branchClaimsMu.RLock()
-	rec, ok := branchClaimStates[clean]
+	rec, ok := lookupBranchClaimRecord(clean)
 	branchClaimsMu.RUnlock()
 	if ok {
 		return rec.state, claim.BuildReceipt(rec.state), true
@@ -271,7 +305,7 @@ func (m *Manager) refuseLiveBranchView(branchRoot, jobID string) error {
 		return fmt.Errorf("%w: view %q", claim.ErrSettlementUnresolved, jobID)
 	}
 	branchClaimsMu.RLock()
-	rec := branchClaimStates[filepath.Clean(branchRoot)]
+	rec, _ := lookupBranchClaimRecord(branchRoot)
 	branchClaimsMu.RUnlock()
 	if rec.layered == nil {
 		return nil
@@ -294,7 +328,7 @@ func (m *Manager) refuseLiveBranchView(branchRoot, jobID string) error {
 // forgetSettledBranchClaim drops the live records of a view another path settled through its adapter.
 func forgetSettledBranchClaim(branchRoot string) {
 	branchClaimsMu.RLock()
-	rec := branchClaimStates[filepath.Clean(branchRoot)]
+	rec, _ := lookupBranchClaimRecord(branchRoot)
 	branchClaimsMu.RUnlock()
 	if rec.layered != nil {
 		if rec.layered.engine != nil {

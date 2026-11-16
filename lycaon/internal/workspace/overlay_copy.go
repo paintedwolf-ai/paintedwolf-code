@@ -91,7 +91,7 @@ func (m *Manager) releaseBranchRetention(jobID string) error {
 // keep the branch and its metadata: the view is still in custody, and the directory may still be a mount.
 func (m *Manager) settleMountedBranch(branchRoot, jobID string) (bool, error) {
 	branchClaimsMu.RLock()
-	rec, ok := branchClaimStates[filepath.Clean(branchRoot)]
+	rec, ok := lookupBranchClaimRecord(branchRoot)
 	branchClaimsMu.RUnlock()
 	if ok && rec.layered != nil {
 		return true, settleBranchLayeredView(context.Background(), branchRoot, rec.layered)

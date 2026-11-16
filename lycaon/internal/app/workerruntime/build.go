@@ -2,9 +2,7 @@ package workerruntime
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/app/execution"
@@ -56,13 +54,7 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 	r.Queue.SetSessionAdmission(deps.Sessions.Manager.Chats.Gate.WithSessionTreeAdmission)
 	r.Executor.SetPromptInjects(r.InjectRenderer)
 	r.Executor.SetPhaseTouchPaths(deps.Workflows.Manager.Ambient)
-	// Branch state is keyed by path, and processes and mounts report resolved
-	// paths, so the branch root is resolved once here.
-	stateDir, err := filepath.EvalSymlinks(deps.Storage.Directory)
-	if err != nil {
-		return fmt.Errorf("resolve state directory: %w", err)
-	}
-	r.BranchRoot = enginepaths.WorkerBranchesRootUnder(stateDir)
+	r.BranchRoot = enginepaths.WorkerBranchesRootUnder(deps.Storage.Directory)
 	if r.Records == nil {
 		r.Records = workerrecords.New(deps.Storage.Database)
 	}

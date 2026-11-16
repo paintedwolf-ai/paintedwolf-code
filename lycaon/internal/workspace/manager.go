@@ -211,6 +211,7 @@ func (m *Manager) recordBranchViews(branchRoot string, sel WorkspaceStrategySele
 	if m.views == nil {
 		m.views = make(map[string]branchViewState)
 	}
+	key := branchRootKey(branchRoot)
 	clean := filepath.Clean(branchRoot)
 	st := branchViewState{
 		selection: sel,
@@ -222,14 +223,23 @@ func (m *Manager) recordBranchViews(branchRoot string, sel WorkspaceStrategySele
 			st.writers = m.services.recovery
 		}
 	}
-	m.views[clean] = st
-	sharedBranchViews.Store(clean, st)
+	if clean != key {
+		delete(m.views, clean)
+		sharedBranchViews.Delete(clean)
+	}
+	m.views[key] = st
+	sharedBranchViews.Store(key, st)
 }
 
 func (m *Manager) lookupBranchViews(branchRoot string) (WorkspaceStrategySelection, *adapter.PreparedView, bool) {
+	key := branchRootKey(branchRoot)
+	clean := filepath.Clean(branchRoot)
 	m.viewsMu.Lock()
 	defer m.viewsMu.Unlock()
-	st, ok := m.views[filepath.Clean(branchRoot)]
+	st, ok := m.views[key]
+	if !ok && clean != key {
+		st, ok = m.views[clean]
+	}
 	if !ok || len(st.views) == 0 {
 		return WorkspaceStrategySelection{}, nil, false
 	}
@@ -238,19 +248,30 @@ func (m *Manager) lookupBranchViews(branchRoot string) (WorkspaceStrategySelecti
 
 // forgetBranchViews drops the record of views a claim settlement already released.
 func (m *Manager) forgetBranchViews(branchRoot string) {
-	key := filepath.Clean(branchRoot)
+	key := branchRootKey(branchRoot)
+	clean := filepath.Clean(branchRoot)
 	m.viewsMu.Lock()
 	delete(m.views, key)
+	if clean != key {
+		delete(m.views, clean)
+	}
 	m.viewsMu.Unlock()
 	sharedBranchViews.Delete(key)
+	if clean != key {
+		sharedBranchViews.Delete(clean)
+	}
 }
 
 // releaseBranchViews releases the adapter views recorded for a branch and names the ones it settled.
 // A view that fails stays recorded with its data in custody, and the caller keeps the branch.
 func (m *Manager) releaseBranchViews(branchRoot string) (map[string]bool, error) {
-	key := filepath.Clean(branchRoot)
+	key := branchRootKey(branchRoot)
+	clean := filepath.Clean(branchRoot)
 	m.viewsMu.Lock()
 	st, ok := m.views[key]
+	if !ok && clean != key {
+		st, ok = m.views[clean]
+	}
 	m.viewsMu.Unlock()
 	settled := make(map[string]bool, len(st.views))
 	if !ok || st.selection.Adapter == nil {
