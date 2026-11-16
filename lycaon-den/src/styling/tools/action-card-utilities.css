@@ -12,17 +12,6 @@
     font-family: var(--den-font-ui);
     font-size: var(--text-den-body);
   }
-  /* Notices shared with other surfaces take the card's face and size too. */
-  & :is(.den-network-chicklet, .den-redaction-chicklet, .den-tool-part-load),
-  & :is(.den-network-chicklet, .den-redaction-chicklet, .den-tool-part-load) * {
-    font-family: var(--den-font-ui);
-    font-size: var(--text-den-body);
-  }
-}
-
-@utility den-action-card__notice {
-  margin: 0;
-  color: var(--den-text-muted);
 }
 
 @utility den-action-card__ran {
@@ -76,6 +65,15 @@
   & > div[data-tone="danger"] dd {
     color: var(--den-danger-text);
   }
+}
+
+@utility den-action-card__block {
+  margin-left: 12px;
+}
+
+@utility den-action-card__blocked {
+  margin-left: 12px;
+  color: var(--den-text-muted);
 }
 
 @utility den-action-card__preview {
