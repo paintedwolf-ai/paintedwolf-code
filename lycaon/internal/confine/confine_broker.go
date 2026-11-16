@@ -99,6 +99,24 @@ func SetBrokerForTest(b *egressproxy.Broker, addrs egressproxy.Addrs) func() {
 	return setBrokerState(b, addrs, true, nil)
 }
 
+func setBrokerState(b *egressproxy.Broker, addrs egressproxy.Addrs, bound bool, failed error) func() {
+	broker.mu.Lock()
+	prevLive, prevAddrs, prevFailed, prevBound := broker.live, broker.addrs, broker.failed, broker.bound
+	broker.live, broker.addrs, broker.failed, broker.bound = b, addrs, failed, bound
+	broker.mu.Unlock()
+	egressDegradedMu.Lock()
+	egressDegraded = nil
+	egressDegradedMu.Unlock()
+	return func() {
+		broker.mu.Lock()
+		broker.live, broker.addrs, broker.failed, broker.bound = prevLive, prevAddrs, prevFailed, prevBound
+		broker.mu.Unlock()
+		egressDegradedMu.Lock()
+		egressDegraded = nil
+		egressDegradedMu.Unlock()
+	}
+}
+
 func brokerPortsPath(stateRoot string) string {
 	stateRoot = strings.TrimSpace(stateRoot)
 	if stateRoot == "" {

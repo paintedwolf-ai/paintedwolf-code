@@ -43,6 +43,20 @@ func AllCompletionReportAskEfforts() []CompletionReportAskEffort {
 	}
 }
 
+// AllWorkerSummaryStatuses returns every declared WorkerSummaryStatus (canonical
+// task-row patch tag on parent messages).
+func AllWorkerSummaryStatuses() []WorkerSummaryStatus {
+	return []WorkerSummaryStatus{
+		WorkerSummaryStatusComplete,
+		WorkerSummaryStatusPartial,
+		WorkerSummaryStatusFailed,
+		WorkerSummaryStatusCanceled,
+		WorkerSummaryStatusHeld,
+		WorkerSummaryStatusOpen,
+		WorkerSummaryStatusNeedsDecision,
+	}
+}
+
 // AllWorkflowRunStatuses returns every declared WorkflowRunStatus.
 func AllWorkflowRunStatuses() []WorkflowRunStatus {
 	return []WorkflowRunStatus{

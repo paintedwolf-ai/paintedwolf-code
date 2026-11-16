@@ -142,6 +142,24 @@ func (s *structure) shift(body Span) {
 	}
 }
 
+// TextRanges returns the complement of LiteralZones: the only ranges in which
+// custom nodes may begin.
+func TextRanges(source string) []Span {
+	doc := Parse(source, Options{})
+	var out []Span
+	at := doc.Body.Start
+	for _, zone := range doc.Zones {
+		if zone.Span.Start > at {
+			out = append(out, Span{at, zone.Span.Start})
+		}
+		at = max(at, zone.Span.End)
+	}
+	if at < doc.Body.End {
+		out = append(out, Span{at, doc.Body.End})
+	}
+	return out
+}
+
 func parseStructure(source string) structure {
 	data := []byte(source)
 	log := &parseLog{extents: map[ast.Node]inlineExtent{}}

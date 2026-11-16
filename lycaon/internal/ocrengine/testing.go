@@ -2,6 +2,7 @@ package ocrengine
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -17,4 +18,25 @@ func TestingEnableBundledRoot() {
 	}
 	_ = os.Setenv(EnvRoot, root)
 	resetForTest()
+}
+
+func findStagedRoot() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	for {
+		candidate := filepath.Join(dir, "lycaon-den", "src-tauri", "engine-root", DirName)
+		if st, err := os.Stat(filepath.Join(candidate, filepath.FromSlash(binaryRel))); err == nil && !st.IsDir() {
+			return candidate
+		}
+		if _, err := os.Stat(filepath.Join(dir, "Taskfile.yml")); err == nil {
+			return ""
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
 }

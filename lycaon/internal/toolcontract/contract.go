@@ -66,6 +66,20 @@ func (o TurnOrder) String() string {
 	}
 }
 
+// ParseTurnOrder parses a catalog order value.
+func ParseTurnOrder(value string) (TurnOrder, bool) {
+	switch value {
+	case nativemanifest.TurnOrderNormal, "":
+		return TurnOrderNormal, true
+	case nativemanifest.TurnOrderLate:
+		return TurnOrderLate, true
+	case nativemanifest.TurnOrderTerminal:
+		return TurnOrderTerminal, true
+	default:
+		return TurnOrderNormal, false
+	}
+}
+
 // Lifecycle describes the invoked subsystem's durability boundary.
 type Lifecycle uint8
 

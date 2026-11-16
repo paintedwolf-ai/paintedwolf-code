@@ -229,6 +229,14 @@ func listenPreferred(listen ListenFunc, port uint16) (net.Listener, error) {
 	return listen("tcp", "127.0.0.1:0")
 }
 
+// Addr returns the loopback host:port commands point HTTP(S)_PROXY at.
+func (b *Broker) Addr() string {
+	if b == nil || b.httpLn == nil {
+		return ""
+	}
+	return b.httpLn.Addr().String()
+}
+
 // Close stops both listeners and waits for active connections and serve loops.
 func (b *Broker) Close() error {
 	if b.cancel != nil {

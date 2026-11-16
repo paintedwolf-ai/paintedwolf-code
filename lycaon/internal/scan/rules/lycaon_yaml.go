@@ -2,11 +2,13 @@ package rules
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/scan/opengrep"
+	"gopkg.in/yaml.v3"
 )
 
 const (
@@ -97,6 +99,45 @@ type LycaonProvenanceBlock struct {
 
 // LycaonProvenanceOriginBundledInRepo marks first-party gap-fill rules shipped in-repo (CC-BY-4.0).
 const LycaonProvenanceOriginBundledInRepo = "bundled-in-repo"
+
+// LoadRuleFile reads and parses a lycaon rule YAML file.
+func LoadRuleFile(path string) (*RuleFile, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var rf RuleFile
+	// Decode only the fields used by rule execution.
+	if err := yaml.Unmarshal(data, &rf); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return &rf, nil
+}
+
+// ValidateRule checks one rule entry against lycaon gate policy.
+func ValidateRule(r Rule) error {
+	if strings.TrimSpace(r.ID) == "" {
+		return fmt.Errorf("rule missing id")
+	}
+	if !idPrefixPattern.MatchString(r.ID) {
+		return fmt.Errorf("rule id %q must match lycaon.{lang}.{slug}", r.ID)
+	}
+	if len(r.Languages) == 0 {
+		return fmt.Errorf("rule %q missing languages", r.ID)
+	}
+	if r.Metadata != nil && r.Metadata.Purpose == "coverage" {
+		if r.Severity != "INFO" || r.Paths == nil || len(r.Paths.Include) == 0 {
+			return fmt.Errorf("coverage observation %q must be INFO and path scoped", r.ID)
+		}
+		return nil
+	}
+	switch strings.ToUpper(strings.TrimSpace(r.Severity)) {
+	case SeverityError, SeverityWarning:
+	default:
+		return fmt.Errorf("rule %q severity must be ERROR or WARNING, got %q", r.ID, r.Severity)
+	}
+	return nil
+}
 
 // ValidateRuleFile validates all rules in a lycaon gate rule file.
 func ValidateRuleFile(path string) error {

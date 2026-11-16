@@ -8,6 +8,7 @@ package credentialstore
 import "C"
 
 import (
+	"errors"
 	"fmt"
 	"unsafe"
 )
@@ -27,6 +28,16 @@ const (
 // errSecMissingEntitlement) returned when the data protection Keychain refuses
 // an unsigned or unentitled process.
 const KeychainMissingEntitlementStatus int32 = int32(keychainMissingEntitlement)
+
+// KeychainOSStatus extracts the Security framework OSStatus from err's chain
+// when err wraps a Keychain status failure.
+func KeychainOSStatus(err error) (int32, bool) {
+	var status keychainStatus
+	if errors.As(err, &status) {
+		return int32(status), true
+	}
+	return 0, false
+}
 
 // Is maps the Keychain's missing and duplicate statuses to the custodian
 // sentinels the identity provider acts on.
