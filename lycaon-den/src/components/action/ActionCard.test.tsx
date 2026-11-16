@@ -123,6 +123,13 @@ describe("ActionCard", () => {
     expect(links.indexOf("action-link-decisions")).toBeGreaterThan(links.indexOf("action-link-output"));
   });
 
+  it("opens a file destination through the project's paths", () => {
+    const { container } = render(() => <ActionCard part={part()} action={{ ...descriptor, opener: { kind: "file", path: "@other/src" } }} layout="chat" projectId="p" />);
+    open(container);
+    const opener = container.querySelector('[data-testid="action-opener"]')!;
+    expect(opener.querySelector('[data-testid="source-path-link"]')?.textContent).toBe("Open in Files");
+  });
+
   it("names a fold's further targets beside what ran", () => {
     const { container } = render(() => <ActionCard part={part()} action={{ ...descriptor, more: 2 }} layout="chat" />);
     open(container);

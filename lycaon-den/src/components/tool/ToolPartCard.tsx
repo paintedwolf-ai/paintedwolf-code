@@ -43,7 +43,7 @@ export function ToolPartCard(props: Props) {
     <Show when={action()} keyed fallback={<UndescribedToolPartCard {...props} slots={slots} />}>
       {(described) => (
         <ActionCard part={part()} action={described} layout={props.layout} sessionId={props.sessionId}
-          projectId={props.projectId} client={props.client} slots={slots} />
+          projectId={props.projectId} client={props.client} rootRefs={props.rootRefs} slots={slots} />
       )}
     </Show>
   );

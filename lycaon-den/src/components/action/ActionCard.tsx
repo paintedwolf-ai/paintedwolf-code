@@ -1,5 +1,6 @@
 import { For, Show, createSignal } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
+import type { ResolveProjectRoot } from "../../api/project-path.ts";
 import type { ActionFact, ActionRan } from "../../api/types.ts";
 import { ACTION_FACT_LABELS, formatActionRow, formatFact } from "../../chat/action/action-format.ts";
 import type { CardAction } from "../../chat/action/action-merge.ts";
@@ -31,6 +32,7 @@ type Props = {
   sessionId?: string;
   projectId?: string;
   client?: LycaonClient | null;
+  rootRefs?: readonly ResolveProjectRoot[];
   slots?: ToolBriefingSlots;
 };
 
@@ -83,7 +85,7 @@ export function ActionCard(props: Props) {
         <Show when={redaction()} keyed>
           {(meta) => <p class="den-action-card__notice" data-testid="action-redaction"><RedactionChicklet message={{ host_secret_redaction: meta }} /></p>}
         </Show>
-        <ActionLinks action={props.action} part={props.part} projectId={props.projectId} evidence={props.slots?.evidence} />
+        <ActionLinks action={props.action} part={props.part} projectId={props.projectId} rootRefs={props.rootRefs} evidence={props.slots?.evidence} />
         <TurnLoadFootLine part={props.part} />
       </div>
     </ToolPartShell>
