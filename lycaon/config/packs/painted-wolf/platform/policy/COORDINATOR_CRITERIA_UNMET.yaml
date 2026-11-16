@@ -3,7 +3,7 @@ id: COORDINATOR_CRITERIA_UNMET
 kind: invariant
 on: coordinator.closeout_check
 selector: {}
-requires_facts: [paintedwolf.closeout_changes_pending, paintedwolf.closeout_changes_rejected, paintedwolf.closeout_changes_shelved, paintedwolf.closeout_criteria_unmet, paintedwolf.closeout_round_active, paintedwolf.closeout_scan_failed, paintedwolf.closeout_scan_pending, paintedwolf.closeout_unstarted, paintedwolf.grounding_reason, paintedwolf.grounding_verdict, paintedwolf.leg_id, paintedwolf.next_steps, paintedwolf.overlay_id, paintedwolf.unmet_criteria, paintedwolf.worker]
+requires_facts: [paintedwolf.closeout_changes_pending, paintedwolf.closeout_changes_rejected, paintedwolf.closeout_changes_shelved, paintedwolf.closeout_criteria_unmet, paintedwolf.closeout_round_active, paintedwolf.closeout_scan_failed, paintedwolf.closeout_scan_pending, paintedwolf.closeout_unstarted, paintedwolf.grounding_reason, paintedwolf.grounding_verdict, paintedwolf.leg_id, paintedwolf.next_steps, paintedwolf.overlay_id, paintedwolf.unmet_criteria, paintedwolf.worker, paintedwolf.workflow_work_id]
 when: paintedwolf.grounding_verdict == "COORDINATOR_CRITERIA_UNMET"
 effect: block
 x-paintedwolf-category: recoverable
