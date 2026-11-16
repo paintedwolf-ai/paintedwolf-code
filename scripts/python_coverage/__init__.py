@@ -117,13 +117,14 @@ def suite_command(python, root, name, suite):
 
 
 def run(root, suites):
-    """Run every suite with its pinned requirements and return the names that failed."""
+    """Run every suite with only its own pinned requirements, unmeasured, and return the names that failed."""
     root = Path(root)
-    tools = [python_tools.provision(requirements) for requirements in requirement_files(root, suites)]
-    paths = [*(str(tool) for tool in tools), *filter(None, [os.environ.get("PYTHONPATH")])]
-    env = {**os.environ, "PYTHONPATH": os.pathsep.join(paths)}
     failed = []
     for name, suite in sorted(suites.items()):
+        # Coverage tools stay off the path: suites assert what happens when coverage.py is absent.
+        paths = [str(python_tools.provision(root / suite["requirements"]))] if suite.get("requirements") else []
+        paths += filter(None, [os.environ.get("PYTHONPATH")])
+        env = {**os.environ, "PYTHONPATH": os.pathsep.join(paths)}
         print(f"Script tests: {name}: unittest discover -s {suite['start']} -p '{suite['pattern']}'", flush=True)
         if subprocess.call(suite_command(sys.executable, root, name, suite), cwd=root, env=env) != 0:
             failed.append(name)

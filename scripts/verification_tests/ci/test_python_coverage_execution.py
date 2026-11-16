@@ -224,6 +224,7 @@ class DeclaredSuiteTests(unittest.TestCase):
     def test_every_suite_runs_with_its_requirements_and_failures_are_named(self):
         suites = {"test:runner": {"start": "scripts", "pattern": "test_*execution.py", "requirements": "runner.txt"},
                   "harness": {"start": "scripts/harness/", "pattern": "test_*.py"}}
+
         verdicts = {"-m": 1, str(ROOT / "scripts/ci_policy/runner_tests.py"): 0}
         with patch.object(python_tools, "provision", side_effect=lambda requirements: Path("/tools") / requirements.name), \
                 patch.dict(os.environ, {"PYTHONPATH": "scripts"}), patch("builtins.print"), \
@@ -233,9 +234,10 @@ class DeclaredSuiteTests(unittest.TestCase):
         self.assertEqual([c.args[0][1:] for c in call.call_args_list],
                          [["-m", "unittest", "discover", "-s", "scripts/harness", "-p", "test_*.py"],
                           [str(ROOT / "scripts/ci_policy/runner_tests.py")]])
-        self.assertEqual(call.call_args.kwargs["env"]["PYTHONPATH"],
-                         os.pathsep.join(["/tools/requirements.txt", "/tools/runner.txt", "scripts"]))
-        self.assertEqual(call.call_args.kwargs["cwd"], ROOT)
+        # Each suite sees its own requirements and never the coverage tools.
+        self.assertEqual([c.kwargs["env"]["PYTHONPATH"] for c in call.call_args_list],
+                         ["scripts", os.pathsep.join(["/tools/runner.txt", "scripts"])])
+        self.assertEqual({c.kwargs["cwd"] for c in call.call_args_list}, {ROOT})
 
     def test_suites_need_a_start_and_pattern(self):
         with tempfile.TemporaryDirectory() as directory:
