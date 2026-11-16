@@ -323,7 +323,6 @@
   border-top: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
 }
 
-
 /* Opened activities use two text styles: interface hint text and monospace. */
 .den-activity-detail {
   display: grid;
@@ -366,7 +365,6 @@
   white-space: nowrap;
 }
 .den-activity-target__more,
-.den-activity-purpose,
 .den-activity-note,
 .den-activity-output__note,
 .den-activity-row span {
@@ -381,7 +379,6 @@
   flex: none;
   color: var(--den-text-muted);
 }
-.den-activity-purpose,
 .den-activity-result,
 .den-activity-note {
   margin: 0;
