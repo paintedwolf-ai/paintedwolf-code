@@ -68,6 +68,11 @@ const (
 	VirtualOutputLabel  = "output"
 )
 
+// SingleRootID identifies the only root of a view that holds one root and
+// never maps onto project roots: a sandbox copy, a private Git seed or a mount
+// probe.
+const SingleRootID = "primary"
+
 var (
 	ErrNoProjectRoots   = errors.New("project has no folder roots")
 	ErrInvalidRootSet   = errors.New("project root set is invalid")

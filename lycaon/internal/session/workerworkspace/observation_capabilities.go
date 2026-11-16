@@ -116,7 +116,7 @@ func (r *WorkspaceTrackerRegistry) BindViewCapabilities(
 		tr, err := observation.NewTracker(observation.TrackerConfig{
 			ViewID: viewID,
 			Facts:  facts,
-			Roots:  buildRootSpecs(st.WorkspacePath, st.Roots),
+			Roots:  buildRootSpecs(st.Roots),
 		})
 		if err != nil {
 			return nil, err
