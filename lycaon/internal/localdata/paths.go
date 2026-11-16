@@ -38,6 +38,15 @@ func sourceObservationPaths(base string) []string {
 	return append(out, enginepaths.RepoOrientationRootUnder(base))
 }
 
+// DurableAbsPaths resolves protected files under base.
+func DurableAbsPaths(base string) []string {
+	out := make([]string, 0, len(durableRelPaths))
+	for _, rel := range durableRelPaths {
+		out = append(out, filepath.Join(base, rel))
+	}
+	return out
+}
+
 // BackupRelDirs returns directories archived per file.
 func BackupRelDirs() []string {
 	return append([]string(nil), backupRelDirs...)

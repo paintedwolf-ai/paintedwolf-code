@@ -53,6 +53,11 @@ type ScanResultIngester interface {
 // NoopIngester exercises scan execution without persisting findings.
 type NoopIngester struct{}
 
+// Ingest implements ScanResultIngester.
+func (NoopIngester) Ingest(_ context.Context, _ ScanSource, _ *scanoutput.Result, _ IngestMeta) (evidence.Record, error) {
+	return evidence.Record{}, nil
+}
+
 // BuildEngineProof records scanner completion evidence.
 func BuildEngineProof(meta IngestMeta, source ScanSource, module scancfg.ModuleConfig) EngineProof {
 	contract := meta.Scanner

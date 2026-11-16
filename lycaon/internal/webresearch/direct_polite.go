@@ -238,3 +238,15 @@ func politeGuardedGet(ctx context.Context, u *url.URL, accept string, limit int6
 	}
 	return guardedGetWithHopPolicy(ctx, u, accept, limit, beforeHop, recordHop)
 }
+
+// resetPoliteness clears gates and robots caches; tests shrink the pacing
+// interval so httptest crawls stay fast.
+func resetPoliteness(interval time.Duration) {
+	if interval > 0 {
+		politeHostInterval = interval
+	}
+	politeGates.Lock()
+	politeGates.m = make(map[string]*hostGate)
+	politeGates.Unlock()
+	robotsBodies.reset()
+}
