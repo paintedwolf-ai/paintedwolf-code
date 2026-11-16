@@ -118,6 +118,7 @@ type widgetFaults struct {
 	echoesSecret     bool // a read reveals the stored token, base64-encoded
 	rawMessage       bool // a 404 carries Go error text as its message
 	undeclaredDetail bool // a 404 carries a details key its notice does not declare
+	refusesCreate    bool // createPart refuses every valid body
 }
 
 // widgetAPI serves widgetSpec through the production responder.
@@ -204,7 +205,7 @@ func (a *widgetAPI) createPart(w http.ResponseWriter, r *http.Request) {
 		a.responses.DecodeError(w, r, err)
 		return
 	}
-	if in.Name == "" {
+	if in.Name == "" || a.faults.refusesCreate {
 		a.responses.FailDetails(w, wire.ApiErrorCodeInvalidRequest, map[string]any{"field": "name"}, "")
 		return
 	}

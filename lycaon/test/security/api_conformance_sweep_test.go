@@ -42,12 +42,14 @@ const (
 	ruleDetailsAreDeclared        conformanceRule = "error_details_are_declared"
 	ruleEventScopesAreHostIDs     conformanceRule = "event_scopes_name_host_resources"
 	ruleEventPayloadsMatchSchemas conformanceRule = "event_payloads_match_their_schemas"
+	ruleOperationsSucceed         conformanceRule = "every_operation_succeeds"
 )
 
 var conformanceRules = []conformanceRule{
 	ruleResponsesConform, ruleUnknownResources, ruleRequestBodies, rulePagination,
 	ruleReadsHaveNoEffects, ruleNoSecretMaterial, ruleMessageIsNoticeCopy,
 	ruleDetailsAreDeclared, ruleEventScopesAreHostIDs, ruleEventPayloadsMatchSchemas,
+	ruleOperationsSucceed,
 }
 
 // conformanceRequestBudget bounds one request so a handler that never returns
@@ -147,6 +149,11 @@ type conformanceSweep struct {
 	findings     *conformanceFindings
 	// children maps a collection path to the path parameters addressed below it.
 	children map[string][]string
+	// outcomes records, per operation, whether a validated success was seen
+	// and the last answer otherwise.
+	outcomesMu sync.Mutex
+	succeeded  map[string]bool
+	lastAnswer map[string]string
 }
 
 func newConformanceSweep(doc *openapi3.T, validator *openapi.Validator, handler http.Handler, notices *usernotice.Catalog) *conformanceSweep {
@@ -154,6 +161,7 @@ func newConformanceSweep(doc *openapi3.T, validator *openapi.Validator, handler 
 		ops: conformanceOperations(doc), validator: validator, handler: handler, notices: notices,
 		values: newConformanceValues(), secrets: &conformanceSecrets{}, findings: newConformanceFindings(),
 		children: map[string][]string{}, readObserved: map[string]bool{},
+		succeeded: map[string]bool{}, lastAnswer: map[string]string{},
 	}
 	seen := map[string]bool{}
 	for _, op := range s.ops {
@@ -178,6 +186,9 @@ func (s *conformanceSweep) runAll(ctx context.Context) {
 	s.probePagination(ctx)
 	s.probeUnknownResources(ctx)
 	s.probeRequestBodies(ctx)
+	s.probeSuccessPaths(ctx)
+	s.sweepReads(ctx)
+	s.checkCoverage()
 }
 
 // report prints each rule's violations, sorted, as its own subtest.
@@ -315,7 +326,8 @@ func (s *conformanceSweep) observe(ctx context.Context, ex *conformanceExchange)
 			ex.apiErr = &apiErr
 		}
 	}
-	s.checkResponse(ctx, *ex)
+	valid := s.checkResponse(ctx, *ex)
+	s.recordOutcome(*ex, valid)
 	s.checkErrorCopy(*ex)
 	s.secrets.scanExchange(s.findings, *ex)
 }
@@ -377,4 +389,15 @@ func (f *conformanceFindings) notes() []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]string(nil), f.info...)
+}
+
+func (s *conformanceSweep) recordOutcome(ex conformanceExchange, valid bool) {
+	s.outcomesMu.Lock()
+	defer s.outcomesMu.Unlock()
+	id := ex.req.op.ID
+	if valid && ex.status/100 == 2 {
+		s.succeeded[id] = true
+		return
+	}
+	s.lastAnswer[id] = ex.req.probe + " answered " + ex.outcome()
 }

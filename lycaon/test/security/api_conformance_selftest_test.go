@@ -69,6 +69,8 @@ func TestConformanceSweepDetectsEachBrokenInvariant(t *testing.T) {
 			`getWidget: unknown {id}: session_not_found message is "sql: no rows in result set", not the notice copy "Widget not found."`},
 		{"undeclared detail", widgetFaults{undeclaredDetail: true}, ruleDetailsAreDeclared,
 			"getWidget: unknown {id}: session_not_found details.path is not declared by its notice context_schema"},
+		{"mutation never succeeds", widgetFaults{refusesCreate: true}, ruleOperationsSucceed,
+			"createPart: success: never answered a success; last answer success answered 400 invalid_request"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
