@@ -147,7 +147,7 @@ func TestFlowToolLessRoundFailsAndAnInstructionRecoversIt(t *testing.T) {
 		t.Fatalf("rounds = %+v, want one settled round", failed.Rounds)
 	}
 
-	f.scripts.push("path-explorer", delivers("complete", "Read rec.go."))
+	f.scripts.push("path-explorer", reads("rec.go"), delivers("complete", "Read rec.go."))
 	f.run("instruct_worker", map[string]any{"worker": "silent", "instructions": "Deliver your report."})
 	f.drain()
 	recovered := f.wantState("silent", workerstate.Delivered, workerstate.ReasonUnaccounted)

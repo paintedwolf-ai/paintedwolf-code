@@ -185,10 +185,17 @@ func (f *workerFlow) lane(name string) workerrecords.PreparationRecord {
 	return prep
 }
 
-// account records the checklist, which accounts for every delivered result.
+// account updates the checklist with the host's reconciliation token, which
+// accounts for every worker finish the coordinator has been shown.
 func (f *workerFlow) account(item string) {
 	f.t.Helper()
-	f.run("update_progress", f.h.ProgressUpdateArgs(f.t, f.ctx, f.sess.ID, "## Progress\n- [x] "+item+"\n"))
+	pending := f.h.Sessions.Manager.Coordinator.ProgressClosure.Reconciliation(f.sess.ID)
+	if pending == nil {
+		f.t.Fatal("no worker finish awaits acknowledgement")
+	}
+	args := f.h.ProgressUpdateArgs(f.t, f.ctx, f.sess.ID, "## Progress\n- [x] "+item+"\n")
+	args["reconciliation_token"] = pending.Token
+	f.run("update_progress", args)
 }
 
 // writes is a worker command that replaces a file's content. The content may

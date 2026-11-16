@@ -168,7 +168,7 @@ func TestFlowBlockingQuestionSuspendsUntilAnswered(t *testing.T) {
 	if stopped.View.State != workerstate.Failed || stopped.Rounds[0].SettledAt == "" {
 		t.Fatalf("a stopped asking worker is %s with rounds %+v, want a failed, settled round", stopped.View.State, stopped.Rounds)
 	}
-	f.refused("answer_decision", map[string]any{"worker": "fixture-v6", "answer": "Yes.", "resolved_by": "user"}, "DECISION_NOT_SUSPENDED")
+	f.refused("answer_decision", map[string]any{"worker": "fixture-v6", "answer": "Yes.", "resolved_by": "user"}, "DECISION_NOT_FOUND")
 }
 
 // Flow 5, begin again. Rejecting the only result accounts for it and the
@@ -256,29 +256,38 @@ func TestFlowRejectedSecondRoundReturnsToTheFirst(t *testing.T) {
 }
 
 // Flow 6. A round that is no longer wanted is stopped and the worker is sent
-// in a new direction: two calls, and the worker's conversation survives.
+// in a new direction: two calls, and the worker's conversation and landed
+// work survive. Interrupting a tool call mid-run and the report-only turn are
+// covered where a round can be held open, in the cancellation tests.
 func TestFlowStoppedWorkerIsRedirected(t *testing.T) {
 	f := newWorkerFlow(t, "flow-redirect")
 	f.seed("a.go", "package a\n")
+	const first, fast = "package a\n\nvar Step = 1\n", "package a\n\nvar Step = 1\nvar Fast = true\n"
 
-	f.start("runner", "implementer", "Run the long migration.", "a.go")
-	queued := f.wantState("runner", workerstate.Working, workerstate.ReasonQueued)
+	f.scripts.push("implementer", writes("a.go", first), delivers("complete", "Finished step one."))
+	f.start("runner", "implementer", "Run the migration.", "a.go")
+	f.drain()
+	started := f.worker("runner")
+
+	f.run("instruct_worker", map[string]any{"worker": "runner", "instructions": "Run the slow path for step two."})
+	f.wantState("runner", workerstate.Working, workerstate.ReasonQueued)
 	f.run("worker_cancel", map[string]any{"worker": "runner", "reason": "Wrong approach."})
 	f.drain()
 	stopped := f.worker("runner")
-	if stopped.View.State != workerstate.Failed || len(stopped.Rounds) != 1 || stopped.Rounds[0].SettledAt == "" {
-		t.Fatalf("a stopped worker is %s with rounds %+v, want one failed, settled round", stopped.View.State, stopped.Rounds)
+	if stopped.View.State != workerstate.Failed || len(stopped.Rounds) != 2 || stopped.Rounds[1].SettledAt == "" {
+		t.Fatalf("a stopped worker is %s with rounds %+v, want a failed, settled second round", stopped.View.State, stopped.Rounds)
 	}
 
-	const fast = "package a\n\nvar Fast = true\n"
 	f.scripts.push("implementer", writes("a.go", fast), delivers("complete", "Took the fast path."))
 	f.run("instruct_worker", map[string]any{"worker": "runner", "instructions": "Take the fast path instead."})
 	f.drain()
-	redirected := f.wantState("runner", workerstate.Delivered, workerstate.ReasonUnaccounted)
-	if len(redirected.Rounds) != 2 || redirected.Worker.ID != queued.Worker.ID {
-		t.Fatalf("redirected worker = %+v with %d rounds, want the same worker on its second round", redirected.Worker, len(redirected.Rounds))
+	redirected := f.worker("runner")
+	if len(redirected.Rounds) != 3 || redirected.Worker.ChildSessionID != started.Worker.ChildSessionID {
+		t.Fatalf("redirected worker ran %d rounds in session %s, want a third round in %s",
+			len(redirected.Rounds), redirected.Worker.ChildSessionID, started.Worker.ChildSessionID)
 	}
-	f.run("promote_overlay", map[string]any{"overlay_id": f.result("runner", 2).ResultID})
+	f.run("promote_overlay", map[string]any{"overlay_id": f.result("runner", 3).ResultID})
+	// The redirected round built on step one.
 	f.wantPrimary("a.go", fast)
 }
 
