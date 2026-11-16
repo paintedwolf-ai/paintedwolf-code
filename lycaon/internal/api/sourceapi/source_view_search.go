@@ -77,10 +77,14 @@ func (s *Presentation) HandleSearchSourceView(w http.ResponseWriter, r *http.Req
 		s.responses.InvalidQuery(w, err)
 		return
 	}
-	identity, _ := json.Marshal(struct {
+	identity, err := json.Marshal(struct {
 		View, Person, Query string
 		Sensitive           bool
 	}{view.id, view.scope.Person, query.query, query.sensitive})
+	if err != nil {
+		s.Views.writeSourceViewError(w, r, err)
+		return
+	}
 	scope := string(identity)
 	cursor, err := decodeSourceViewSearchCursor(query.page.Cursor, scope, view.navigation.tree != nil)
 	if err != nil {

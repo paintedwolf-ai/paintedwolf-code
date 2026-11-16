@@ -8,9 +8,8 @@ import (
 	"syscall"
 	"testing"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 // TestVolumeOfReportsTheHoldingFileSystem reads a real directory's volume

@@ -3,11 +3,10 @@
 package fseffect
 
 import (
+	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"golang.org/x/sys/unix"
 )
 
 // Canonical returns an existing descriptor-resolved native identity.

@@ -7,11 +7,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/contactsheet"
-
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
-
 	"github.com/lycaon/lycaon/internal/browserengine"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
@@ -134,7 +131,7 @@ func captureFilmstrip(
 	}
 	out := CaptureResult{
 		State: last.State, Snapshot: last.Snapshot, PageEvidence: held.Evidence.since(evidenceMark{}),
-		Mime: contactsheet.FilmstripMime, Bytes: zipBytes, Width: width, Height: height,
+		Mime: FilmstripMime, Bytes: zipBytes, Width: width, Height: height,
 		Caption: strings.TrimSpace(req.Caption), FinalURL: finalURL,
 		ActionLog: actionResults, Frames: textFrames, Coverage: coverage,
 	}

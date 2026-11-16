@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -38,7 +37,7 @@ func TestExchangeReportsSyncFailureWithoutLosingEitherFile(t *testing.T) {
 				if calls == failAt {
 					return syscall.EIO
 				}
-				return fssync.FD(fd)
+				return fsyncFD(fd)
 			})
 			if !errors.Is(err, syscall.EIO) || calls != 2 {
 				t.Fatalf("sync error=%v calls=%d", err, calls)

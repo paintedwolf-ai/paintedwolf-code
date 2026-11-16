@@ -11,10 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/fssync"
+	"golang.org/x/sys/unix"
 )
 
 func openGuardedDirectory(loc Location, expected string) (*os.File, error) {
@@ -84,7 +82,7 @@ func MkdirAll(loc Location, mode os.FileMode) (createdCount int, err error) {
 		}
 		if created {
 			anyCreated = true
-			if err := fssync.FD(currentFD); err != nil {
+			if err := fsyncFD(currentFD); err != nil {
 				_ = unix.Close(next)
 				return createdCount, err
 			}
@@ -98,10 +96,10 @@ func MkdirAll(loc Location, mode os.FileMode) (createdCount int, err error) {
 	if !anyCreated {
 		return createdCount, nil
 	}
-	return createdCount, fssync.FD(currentFD)
+	return createdCount, fsyncFD(currentFD)
 }
 
-func platformHardLink(req HardLinkRequest) error { return hardLinkWithSync(req, fssync.FD) }
+func platformHardLink(req HardLinkRequest) error { return hardLinkWithSync(req, fsyncFD) }
 
 func hardLinkWithSync(req HardLinkRequest, sync func(int) error) error {
 	src, err := cleanLocation(req.Source)

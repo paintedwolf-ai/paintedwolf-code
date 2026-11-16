@@ -2,11 +2,10 @@ package designkit
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
 // KitOrigin is the synthetic origin for hermetic kit assets (CDP Fetch only).
@@ -78,7 +77,7 @@ func DocumentHTML(opts Options) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	shellCSS, err := embedded.ReadFile("shell.css")
+	shellCSS, err := readEmbedded("shell.css")
 	if err != nil {
 		return "", fmt.Errorf("designkit shell: %w", err)
 	}

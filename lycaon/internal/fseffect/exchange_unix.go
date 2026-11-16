@@ -6,7 +6,6 @@ import (
 	"errors"
 
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/fssync"
 )
 
 // ExchangeGuarded swaps two identified entries without an absent-name window.
@@ -40,7 +39,7 @@ func ExchangeGuarded(root, first, second, firstIdentity, secondIdentity string) 
 			return err
 		}
 	}
-	return exchangeParents(from, to, fssync.FD)
+	return exchangeParents(from, to, fsyncFD)
 }
 
 // Keep both directory flushes observable even if the first one fails.

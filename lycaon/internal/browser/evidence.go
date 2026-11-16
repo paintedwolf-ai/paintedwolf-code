@@ -13,7 +13,6 @@ import (
 
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/proto"
-
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
@@ -30,6 +29,7 @@ const (
 	maxEvidenceURLBytes    = 512
 	maxErrorMessageBytes   = 1024
 	maxErrorStackFrames    = 6
+	evidenceProjectTimeout = ActionTimeout
 	captureUnavailableLine = "[Capture screening unavailable]"
 	networkServedByRoute   = "route"
 	networkServedByProject = "project_file"
@@ -136,7 +136,7 @@ func attachPageEvidence(
 	page = page.Context(listenCtx)
 	if projector != nil {
 		ev.screen = func(line string) (string, error) {
-			projectionCtx, cancel := context.WithTimeout(listenCtx, ActionTimeout)
+			projectionCtx, cancel := context.WithTimeout(listenCtx, evidenceProjectTimeout)
 			defer cancel()
 			projected, err := projector.Text(projectionCtx, scope, "capture.browser.log", line)
 			return projected.Value, err

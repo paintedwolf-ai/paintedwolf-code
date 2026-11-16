@@ -74,7 +74,7 @@ func ValidateFonts(names []string) error {
 
 // FontFile returns the raw WOFF2 for a catalog basename.
 func FontFile(name string) ([]byte, error) {
-	data, err := embedded.ReadFile("fonts/" + name)
+	data, err := readEmbedded("fonts/" + name)
 	if err != nil {
 		return nil, fmt.Errorf("read font %s: %w", name, err)
 	}
@@ -86,7 +86,7 @@ func LicenseFile(path string) ([]byte, error) {
 	if !strings.HasPrefix(path, "licenses/") {
 		return nil, fmt.Errorf("licence path %q is outside licenses/", path)
 	}
-	data, err := embedded.ReadFile(path)
+	data, err := readEmbedded(path)
 	if err != nil {
 		return nil, fmt.Errorf("read licence %s: %w", path, err)
 	}
@@ -114,7 +114,7 @@ func FontFaceRule(f Font, src FontSrc, display string) string {
 	case FontSrcKitOrigin:
 		srcURL = fmt.Sprintf("%sfonts/%s", KitOrigin, f.File)
 	default:
-		data, err := embedded.ReadFile("fonts/" + f.File)
+		data, err := readEmbedded("fonts/" + f.File)
 		if err != nil {
 			panic(fmt.Sprintf("designkit font %s: %v", f.File, err))
 		}

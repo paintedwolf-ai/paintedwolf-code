@@ -46,7 +46,11 @@ func (s *Presentation) HandleCreateSourcePresentation(w http.ResponseWriter, r *
 	service := s.Views.sourceViewRegistry()
 	view.presentationMu.Lock()
 	defer view.presentationMu.Unlock()
-	canonical, _ := json.Marshal(request)
+	canonical, err := json.Marshal(request)
+	if err != nil {
+		s.Views.writeSourceViewError(w, r, err)
+		return
+	}
 	digest := sha256.Sum256(canonical)
 	namespace := "presentation:" + view.id
 	saved, found, err := service.receipts.Lookup(r.Context(), namespace, request.OperationID)
@@ -112,7 +116,11 @@ func (s *Presentation) HandleCreateSourcePresentation(w http.ResponseWriter, r *
 		s.Views.writeSourceViewError(w, r, err)
 		return
 	}
-	encoded, _ := json.Marshal(summary)
+	encoded, err := json.Marshal(summary)
+	if err != nil {
+		s.Views.writeSourceViewError(w, r, err)
+		return
+	}
 	charge := sourceViewDescriptorBytes + int64(2*len(encoded))
 	if read.presentation != nil {
 		charge += read.presentation.Bytes()

@@ -73,7 +73,7 @@ func kitFontFile(name string) FontResponse {
 	if name == "." || name == "/" || name == ".." {
 		return notFound
 	}
-	data, err := embedded.ReadFile("fonts/" + name)
+	data, err := readEmbedded("fonts/" + name)
 	if err != nil {
 		return notFound
 	}

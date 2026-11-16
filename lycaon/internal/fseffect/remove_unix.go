@@ -9,10 +9,8 @@ import (
 	"errors"
 	"fmt"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/fssync"
+	"golang.org/x/sys/unix"
 )
 
 // Remove unlinks a file or empty directory without following symlinks.
@@ -42,7 +40,7 @@ func Remove(req RemoveRequest) error {
 	if err := unix.Unlinkat(parent.fd, parent.name, flags); err != nil {
 		return err
 	}
-	return fssync.FD(parent.fd)
+	return fsyncFD(parent.fd)
 }
 
 func removeRegularConditionally(parent *openedParent, req RemoveRequest) error {
@@ -71,7 +69,7 @@ func removeRegularConditionally(parent *openedParent, req RemoveRequest) error {
 		if unlinkErr := unix.Unlinkat(parentFD, quarantine, 0); unlinkErr != nil {
 			return errors.Join(err, fmt.Errorf("finish refused removal restore: %w", unlinkErr))
 		}
-		if syncErr := fssync.FD(parentFD); syncErr != nil {
+		if syncErr := fsyncFD(parentFD); syncErr != nil {
 			return errors.Join(err, syncErr)
 		}
 		return err
@@ -79,7 +77,7 @@ func removeRegularConditionally(parent *openedParent, req RemoveRequest) error {
 	if err := unix.Unlinkat(parentFD, quarantine, 0); err != nil {
 		return fmt.Errorf("commit removal: %w", err)
 	}
-	return fssync.FD(parentFD)
+	return fsyncFD(parentFD)
 }
 
 func unusedRemoveName(parent *openedParent) (string, error) {
@@ -127,5 +125,5 @@ func removeLinkAt(parent *openedParent, req RemoveRequest) (bool, error) {
 	if err := unix.Unlinkat(parent.fd, parent.name, 0); err != nil {
 		return true, err
 	}
-	return true, fssync.FD(parent.fd)
+	return true, fsyncFD(parent.fd)
 }

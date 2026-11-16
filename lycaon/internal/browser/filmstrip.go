@@ -11,11 +11,10 @@ import (
 	_ "image/png"
 	"strings"
 
-	_ "golang.org/x/image/webp"
-
 	"github.com/lycaon/lycaon/internal/browserengine"
 	"github.com/lycaon/lycaon/internal/contactsheet"
 	"github.com/lycaon/lycaon/internal/llm/providerwire"
+	_ "golang.org/x/image/webp"
 )
 
 const (
@@ -25,6 +24,8 @@ const (
 	CaptureModeFilmstrip = "filmstrip"
 	// CaptureModeTimeline records the flow as it paints, with its events on one clock.
 	CaptureModeTimeline = "timeline"
+	// FilmstripMime is the store/wire mime for an ordered capture filmstrip container.
+	FilmstripMime = contactsheet.FilmstripMime
 )
 
 // CaptureFrame is one settled shot inside a filmstrip (assert on State/Snapshot, not pixels).

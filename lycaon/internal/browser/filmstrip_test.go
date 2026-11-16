@@ -14,8 +14,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/contactsheet"
-
 	"github.com/lycaon/lycaon/internal/browserengine"
 	"github.com/lycaon/lycaon/internal/browserengine/browsertest"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -117,7 +115,7 @@ func TestCaptureFilmstripMultiStepForm(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Capture: %v", err)
 	}
-	if out.Mime != contactsheet.FilmstripMime {
+	if out.Mime != FilmstripMime {
 		t.Fatalf("mime %q", out.Mime)
 	}
 	// 1 initial + 6 actions = 7 frames

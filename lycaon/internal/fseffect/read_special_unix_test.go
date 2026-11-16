@@ -7,10 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"golang.org/x/sys/unix"
 )
 
 func TestOpenReadDoesNotWaitForFIFOWriter(t *testing.T) {

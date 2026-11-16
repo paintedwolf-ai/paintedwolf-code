@@ -13,8 +13,6 @@ import (
 	"sync/atomic"
 
 	"golang.org/x/sys/unix"
-
-	"github.com/lycaon/lycaon/internal/fssync"
 )
 
 // Held descriptors: an opened root and the parent directory of one target,
@@ -241,7 +239,7 @@ func openParent(loc Location, create bool, mode os.FileMode) (*openedParent, err
 			return nil, &fs.PathError{Op: "open effect directory", Path: component, Err: openErr}
 		}
 		if created {
-			if syncErr := fssync.FD(currentFD); syncErr != nil {
+			if syncErr := fsyncFD(currentFD); syncErr != nil {
 				_ = unix.Close(nextFD)
 				closeCurrent()
 				root.close()

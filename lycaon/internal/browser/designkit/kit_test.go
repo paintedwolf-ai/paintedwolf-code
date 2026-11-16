@@ -10,7 +10,7 @@ import (
 
 func TestFontCatalogComplete(t *testing.T) {
 	for _, f := range Fonts() {
-		data, err := embedded.ReadFile("fonts/" + f.File)
+		data, err := readEmbedded("fonts/" + f.File)
 		if err != nil {
 			t.Fatalf("font %s: %v", f.Family, err)
 		}
@@ -138,7 +138,7 @@ func TestIconsReferencedInMarkup(t *testing.T) {
 }
 
 func TestProvenanceEmbedded(t *testing.T) {
-	data, err := embedded.ReadFile("provenance.yaml")
+	data, err := readEmbedded("provenance.yaml")
 	testutil.FailErr(t, "readEmbedded failed", err)
 	text := string(data)
 	for _, want := range []string{"OFL-1.1", "ISC", "Inter", "Lucide"} {

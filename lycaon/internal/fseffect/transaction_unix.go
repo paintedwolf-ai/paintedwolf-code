@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/fssync"
 
 	"golang.org/x/sys/unix"
 )
@@ -159,7 +158,7 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 		if err := injectAt(inject, stageModeSet); err != nil {
 			return result, err
 		}
-		if err := fssync.FD(tmpFD); err != nil {
+		if err := fsyncFD(tmpFD); err != nil {
 			return result, fmt.Errorf("sync replacement: %w", err)
 		}
 		if err := injectAt(inject, stageFileSynced); err != nil {
@@ -206,7 +205,7 @@ func stageReplace(req ReplaceRequest, inject func(stage) error) (*Replacement, R
 		if err := injectAt(inject, stageRenamed); err != nil {
 			return result, err
 		}
-		if err := fssync.FD(parent.fd); err != nil {
+		if err := fsyncFD(parent.fd); err != nil {
 			return result, fmt.Errorf("sync replacement directory: %w", err)
 		}
 		result.Publication = PublicationDurable
@@ -464,11 +463,11 @@ func relocateEntry(source, destination Location, replace bool, expected string) 
 	if err := rename(from.fd, from.name, to.fd, to.name); err != nil {
 		return err
 	}
-	if err := fssync.FD(from.fd); err != nil {
+	if err := fsyncFD(from.fd); err != nil {
 		return err
 	}
 	if from.fd != to.fd {
-		return fssync.FD(to.fd)
+		return fsyncFD(to.fd)
 	}
 	return nil
 }
