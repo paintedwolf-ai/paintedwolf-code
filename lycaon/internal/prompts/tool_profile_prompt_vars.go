@@ -162,7 +162,7 @@ func orchestrationPromptTool(name string) bool {
 		return false
 	}
 	switch contract.Owner {
-	case "delegation", "handoff", "workflow_state", "workflows", "workers", "worker_merge", "board", "loop_wake":
+	case "handoff", "workflow_state", "workflows", "workers", "worker_merge", "board", "loop_wake":
 		return true
 	default:
 		return false
