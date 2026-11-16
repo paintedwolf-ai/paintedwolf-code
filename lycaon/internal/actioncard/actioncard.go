@@ -22,8 +22,8 @@ type Parts struct {
 	FoldKey string
 }
 
-// presenter describes one family's settled results. A family that has no
-// presenter for a tool leaves the tool on its existing card.
+// presenter adds one family's facts, preview, opener and fold to the facts
+// every result carries in its typed fields.
 type presenter func(result api.ToolResult) Parts
 
 var presenters = map[string]presenter{}
@@ -34,7 +34,7 @@ func register(p presenter, tools ...string) {
 	}
 }
 
-// Tools lists the tools that have a presenter.
+// Tools lists the tools that have a family presenter.
 func Tools() []string {
 	out := make([]string, 0, len(presenters))
 	for tool := range presenters {
@@ -43,20 +43,28 @@ func Tools() []string {
 	return out
 }
 
+// mcpToolPrefix starts every MCP provider tool's qualified name.
+const mcpToolPrefix = "mcp_"
+
+// labelFor is the card's name. Worker tools have none and keep their own card.
+func labelFor(tool string) string {
+	if label := toolpresentation.Label(tool); label != "" {
+		return label
+	}
+	if strings.HasPrefix(tool, mcpToolPrefix) {
+		return "Use MCP tool"
+	}
+	return ""
+}
+
 // ForCall describes a call before its result arrives. Command calls are
 // described by their activities instead.
 func ForCall(call api.ToolCall) *api.ActionDescriptor {
-	if _, ok := presenters[call.Name]; !ok || isCommandTool(call.Name) {
+	label := labelFor(call.Name)
+	if label == "" || isCommandTool(call.Name) {
 		return nil
 	}
-	label := toolpresentation.Label(call.Name)
-	if label == "" {
-		return nil
-	}
-	ran := strings.TrimSpace(call.DisplayTitle)
-	if ran == "" {
-		ran = toolpresentation.Title(call.Name, call.Args)
-	}
+	ran := firstNonEmpty(strings.TrimSpace(call.DisplayTitle), toolpresentation.Title(call.Name, call.Args), call.Name)
 	return &api.ActionDescriptor{
 		Label:  label,
 		Status: statusRunning,
@@ -71,23 +79,30 @@ func ForCall(call api.ToolCall) *api.ActionDescriptor {
 // activities: a call with no program, or a program that recorded none.
 // commandMarks are the redaction marks on its command argument, if any.
 func ForResult(result api.ToolResult, commandMarks []api.RedactedSpan) *api.ActionDescriptor {
-	describe, ok := presenters[result.Tool]
-	if !ok || (result.CommandProgram != nil && len(result.CommandProgram.Activities) > 0) {
+	label := labelFor(result.Tool)
+	if label == "" || (result.CommandProgram != nil && len(result.CommandProgram.Activities) > 0) {
 		return nil
 	}
-	label := toolpresentation.Label(result.Tool)
-	if label == "" {
-		return nil
+	var parts Parts
+	if describe, ok := presenters[result.Tool]; ok {
+		parts = describe(result)
 	}
-	parts := describe(result)
-	ran := parts.Ran
-	if ran == "" {
-		ran = resultTarget(result)
+	facts := append(parts.Facts, typedFacts(result)...)
+	facts = append(facts, statusFacts(result, facts)...)
+	if took, ok := invocationTook(result.Invocation); ok {
+		facts = append(facts, took)
 	}
-	noun := parts.Noun
-	if noun == "" {
-		noun = nounFor(result.Tool)
+	facts = ordered(facts)
+	row := parts.Row
+	if len(row) == 0 {
+		row = defaultRow(facts)
 	}
+	opener := parts.Opener
+	if opener == nil {
+		opener = fileOpener(result.FileEditPreviews)
+	}
+	ran := firstNonEmpty(parts.Ran, resultTarget(result), result.Tool)
+	noun := firstNonEmpty(parts.Noun, nounFor(result.Tool))
 	ranText := api.ActionRan{Text: ran, Noun: noun}
 	if full, ok := submittedCommand(result); ok && full == ran && len(commandMarks) > 0 {
 		ranText.Redaction = &api.HostSecretRedactionMeta{Spans: retarget(commandMarks, RanTextField)}
@@ -96,11 +111,11 @@ func ForResult(result api.ToolResult, commandMarks []api.RedactedSpan) *api.Acti
 		Label:   label,
 		Status:  descriptorStatus(result),
 		Ran:     ranText,
-		Facts:   ordered(parts.Facts),
-		Row:     nonNil(parts.Row),
+		Facts:   facts,
+		Row:     row,
 		Preview: parts.Preview,
 		Links:   resultLinks(result),
-		Opener:  parts.Opener,
+		Opener:  opener,
 		FoldKey: parts.FoldKey,
 	}
 }
@@ -170,11 +185,4 @@ func resultLinks(result api.ToolResult) []api.ActionLink {
 		links = append(links, api.ActionLink{Kind: linkReceipt, Receipts: []api.ActionReceiptScope{{ProgramID: program.ID}}})
 	}
 	return links
-}
-
-func nonNil[T any](items []T) []T {
-	if items == nil {
-		return []T{}
-	}
-	return items
 }

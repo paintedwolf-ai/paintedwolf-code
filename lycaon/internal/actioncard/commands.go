@@ -17,7 +17,7 @@ var commandTools = map[string]bool{"command": true, "verify": true, "summarize":
 func isCommandTool(tool string) bool { return commandTools[tool] }
 
 func init() {
-	register(commandResult, "command", "verify", "command_output", "command_stop")
+	register(commandResult, "command", "verify", "command_output", "command_stop", "summarize", "survey_repo", "code_rewrite")
 }
 
 // commandResult describes a command call with no program, such as one the
@@ -29,20 +29,6 @@ func commandResult(result api.ToolResult) Parts {
 	}
 	if program := result.CommandProgram; program != nil {
 		return programParts(parts, *program)
-	}
-	switch resultStatus(result) {
-	case statusError:
-		parts.Facts = append(parts.Facts, resultFact(rejectedOutcome(result)))
-		if code := firstCode(result); code != "" {
-			parts.Facts = append(parts.Facts, stoppedByFact("host_stop", code))
-		}
-		parts.Row = []api.ActionFactKind{api.ActionFactResult}
-	case statusDone:
-		parts.Facts = append(parts.Facts, resultFact("completed"))
-		parts.Row = []api.ActionFactKind{api.ActionFactResult}
-	}
-	if took, ok := invocationTook(result.Invocation); ok {
-		parts.Facts = append(parts.Facts, took)
 	}
 	if result.Process != nil && result.Process.Handle != "" {
 		parts.Opener = &api.ActionOpener{Kind: "running", ProcessHandle: result.Process.Handle}

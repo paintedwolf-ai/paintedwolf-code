@@ -46,7 +46,34 @@ func randomResult(r *rand.Rand, tool string) api.ToolResult {
 	if r.IntN(4) == 0 {
 		result.Process = &api.ToolProcessHandle{Handle: "term-1", Running: r.IntN(2) == 0}
 	}
+	if r.IntN(4) == 0 {
+		result.FileEditPreviews = []api.FileEditPreview{{Path: "a.go", Added: r.IntN(9), Removed: r.IntN(9), Created: r.IntN(2) == 0}}
+	}
+	if r.IntN(5) == 0 {
+		result.Visual = &api.VisualArtifact{ID: "art", Caption: "page"}
+	}
+	if r.IntN(5) == 0 {
+		result.ExternalAccess = &api.ExternalAccess{Modes: []api.ExternalAccessMode{api.ExternalAccessModeMediatedHTTP}, Endpoints: []api.ExternalAccessEndpoint{{Host: "example.test"}}}
+	}
+	if r.IntN(6) == 0 {
+		result.Listener = &api.LoopbackListenerFact{Address: "127.0.0.1:5173"}
+	}
+	if r.IntN(6) == 0 {
+		result.Dispatch = &api.WorkerDispatch{WorkerID: "w", AgentType: "reviewer"}
+	}
+	if r.IntN(6) == 0 {
+		result.Verdict = &api.VerdictOutcome{Verdict: "approve", Terminal: r.IntN(2) == 0}
+	}
+	if r.IntN(6) == 0 {
+		result.Skill = &api.SkillActivation{Name: "release"}
+	}
 	return result
+}
+
+// describedTools is every tool that gets an action card: the catalog's
+// labeled tools and an MCP provider's tool.
+func describedTools() []string {
+	return append(toolpresentation.LabeledTools(), "mcp_github_create_issue")
 }
 
 // checkBounded is the shape every card relies on, whatever the input.
@@ -102,10 +129,12 @@ func TestEveryDescriptorIsBounded(t *testing.T) {
 			marks = []api.RedactedSpan{{Field: "tool_result.tool_args.command", Start: 0, Length: 3}}
 		}
 		checkBounded(t, ForActivity(p, a, randomResult(r, "command"), marks))
-		for _, tool := range Tools() {
-			if d := ForResult(randomResult(r, tool), nil); d != nil {
-				checkBounded(t, *d)
+		for _, tool := range describedTools() {
+			d := ForResult(randomResult(r, tool), nil)
+			if d == nil {
+				t.Fatalf("%s: no card", tool)
 			}
+			checkBounded(t, *d)
 		}
 	}
 }
@@ -115,7 +144,7 @@ func TestEveryDescriptorIsBounded(t *testing.T) {
 func TestOutputTextNeverChangesACard(t *testing.T) {
 	r := rand.New(rand.NewPCG(3, 4))
 	for range 200 {
-		for _, tool := range Tools() {
+		for _, tool := range describedTools() {
 			result := randomResult(r, tool)
 			result.Content = "first output"
 			other := result
@@ -127,20 +156,38 @@ func TestOutputTextNeverChangesACard(t *testing.T) {
 	}
 }
 
-// Every tool with a presenter takes its catalog label and, when its family
-// names no target of its own, the host's screened target.
-func TestPresentedToolsUseTheirCatalogLabel(t *testing.T) {
-	for _, tool := range Tools() {
+// Every labeled tool takes its catalog label and, unless it runs a program
+// of its own, the host's screened target.
+func TestEveryLabeledToolIsDescribed(t *testing.T) {
+	for _, tool := range toolpresentation.LabeledTools() {
 		result := api.ToolResult{Tool: tool, DisplaySubject: "screened target", Content: "x"}
 		d := ForResult(result, nil)
 		if d == nil {
 			t.Fatalf("%s: no card", tool)
 		}
-		if d.Label != toolpresentation.Label(tool) || d.Label == "" {
+		if d.Label != toolpresentation.Label(tool) {
 			t.Fatalf("%s: label %q", tool, d.Label)
 		}
-		if d.Ran.Text != "screened target" {
+		if _, runsProgram := submittedCommand(result); !runsProgram && d.Ran.Text != "screened target" {
 			t.Fatalf("%s: ran %q", tool, d.Ran.Text)
 		}
+		if call := ForCall(api.ToolCall{Name: tool, DisplayTitle: "screened target"}); !isCommandTool(tool) && (call == nil || call.Status != statusRunning) {
+			t.Fatalf("%s: running call card %+v", tool, call)
+		}
+	}
+}
+
+func TestWorkerToolsKeepTheirOwnCard(t *testing.T) {
+	for _, tool := range []string{"task", "delegate_dispatch"} {
+		if ForCall(api.ToolCall{Name: tool}) != nil || ForResult(api.ToolResult{Tool: tool, Content: "x"}, nil) != nil {
+			t.Fatalf("%s was described", tool)
+		}
+	}
+}
+
+func TestMCPToolNamesItselfWhenItHasNoTarget(t *testing.T) {
+	d := ForResult(api.ToolResult{Tool: "mcp_github_create_issue", Content: "x"}, nil)
+	if d == nil || d.Label != "Use MCP tool" || d.Ran.Text != "mcp_github_create_issue" {
+		t.Fatalf("mcp card %+v", d)
 	}
 }

@@ -24,7 +24,11 @@ func TestTranscriptSeparatesToolStepsFromUserProse(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			msg := api.Message{ID: "message-1", Role: tc.role, Content: "recorded prose", ToolCalls: tc.calls}
 			view := TranscriptMessage(msg)
-			if view.Content != tc.want || view.ID != msg.ID || !reflect.DeepEqual(view.ToolCalls, msg.ToolCalls) {
+			calls := append([]api.ToolCall(nil), view.ToolCalls...)
+			for i := range calls {
+				calls[i].Action = nil
+			}
+			if view.Content != tc.want || view.ID != msg.ID || len(calls) != len(msg.ToolCalls) || (len(calls) > 0 && !reflect.DeepEqual(calls, msg.ToolCalls)) {
 				t.Fatalf("transcript = %+v", view)
 			}
 			if msg.Content != "recorded prose" || RedactMessage(msg).Content != msg.Content {
