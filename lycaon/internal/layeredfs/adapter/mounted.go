@@ -3,8 +3,10 @@ package adapter
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -87,6 +89,78 @@ func NewMountedAdapter(cfg MountedAdapterConfig) *MountedAdapter {
 
 func (a *MountedAdapter) ID() AdapterID       { return a.cfg.AdapterID }
 func (a *MountedAdapter) Facts() AdapterFacts { return a.facts }
+
+// Probe exercises a real private view in the confinement context: mount, read, write, backing denial, and cleanup.
+func (a *MountedAdapter) Probe(ctx context.Context, probeCfg ProbeConfig) (ProbeResult, error) {
+	res := ProbeResult{AdapterID: a.cfg.AdapterID, Attempts: 1}
+	if a.cfg.TargetOS != "" && a.cfg.MountProbeFn == nil && runtime.GOOS != a.cfg.TargetOS {
+		res.ReasonCode = ReasonUnsupportedPlatform
+		res.Diagnostic = fmt.Sprintf("adapter %s requires %s (running on %s)", a.cfg.AdapterID, a.cfg.TargetOS, runtime.GOOS)
+		return res, &AdapterError{AdapterID: a.cfg.AdapterID, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic}
+	}
+
+	if strings.TrimSpace(probeCfg.RuntimeDir) != "" {
+		if err := os.MkdirAll(probeCfg.RuntimeDir, 0o700); err != nil {
+			res.ReasonCode = ReasonMountDenied
+			res.Diagnostic = fmt.Sprintf("create probe runtime dir: %v", err)
+			return res, &AdapterError{AdapterID: a.cfg.AdapterID, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: err}
+		}
+	}
+	probeRoot, err := os.MkdirTemp(probeCfg.RuntimeDir, "lycaon-probe-*")
+	if err != nil {
+		res.ReasonCode = ReasonMountDenied
+		res.Diagnostic = fmt.Sprintf("create probe dir: %v", err)
+		return res, &AdapterError{AdapterID: a.cfg.AdapterID, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: err}
+	}
+	defer func() {
+		if rmErr := os.RemoveAll(probeRoot); rmErr == nil {
+			res.CleanedUp = true
+		}
+	}()
+
+	srcDir := filepath.Join(probeRoot, "src")
+	backingDir := filepath.Join(probeRoot, "backing")
+	mountDir := filepath.Join(probeRoot, "mnt")
+	for _, d := range []string{srcDir, backingDir, mountDir} {
+		if err := os.MkdirAll(d, 0o700); err != nil {
+			res.ReasonCode = ReasonMountDenied
+			res.Diagnostic = err.Error()
+			return res, &AdapterError{AdapterID: a.cfg.AdapterID, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: err}
+		}
+	}
+
+	if reason, diag, mErr := a.runMountProbe(ctx, mountDir, backingDir); mErr != nil || reason != ReasonNone {
+		if reason == ReasonNone {
+			reason = ReasonMountDenied
+		}
+		res.ReasonCode = reason
+		res.Diagnostic = diag
+		return res, &AdapterError{AdapterID: a.cfg.AdapterID, Op: "probe", ReasonCode: reason, Diagnostic: diag, Cause: mErr}
+	}
+	res.MountExercised = true
+
+	if err := exerciseProbeReadWrite(srcDir, backingDir, &res); err != nil {
+		return res, &AdapterError{AdapterID: a.cfg.AdapterID, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: err}
+	}
+
+	denied, bErr := a.verifyBackingDenial(ctx, backingDir)
+	if bErr != nil || !denied {
+		res.ReasonCode = ReasonBackingConfinementFailed
+		res.Diagnostic = "direct backing access was not denied in confinement context"
+		return res, &AdapterError{AdapterID: a.cfg.AdapterID, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: bErr}
+	}
+	res.BackingDenialVerified = true
+
+	if rmErr := os.RemoveAll(probeRoot); rmErr != nil {
+		res.CleanedUp = false
+		res.ReasonCode = ReasonCleanupFailed
+		res.Diagnostic = rmErr.Error()
+		return res, &AdapterError{AdapterID: a.cfg.AdapterID, Op: "probe", ReasonCode: res.ReasonCode, Diagnostic: res.Diagnostic, Cause: rmErr}
+	}
+	res.CleanedUp = true
+	res.Supported = true
+	return res, nil
+}
 
 // Prepare allocates one mounted worker view without recursively scanning lower repositories.
 func (a *MountedAdapter) Prepare(ctx context.Context, req PrepareRequest) (*PreparedView, error) {

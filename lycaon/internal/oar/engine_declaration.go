@@ -43,6 +43,11 @@ var coreAnchors = []string{
 	CoreAnchorModelToolResult,
 }
 
+// CoreAnchors returns the frozen normative anchor set in spec order.
+func CoreAnchors() []string {
+	return append([]string(nil), coreAnchors...)
+}
+
 // IsCoreAnchor reports whether id is one of the eight core anchor ids.
 func IsCoreAnchor(id string) bool {
 	for _, a := range coreAnchors {
@@ -251,6 +256,13 @@ func InstalledEngineDeclaration() *EngineDeclaration {
 }
 
 var shippedOnce sync.Once
+
+// ResolveRuleAnchor resolves a rule's anchor through the installed profile
+// map. Host-native ids pass through; a core anchor the host does not support
+// is refused ([OAR-PROF-3]).
+func ResolveRuleAnchor(ruleID, on string) (string, error) {
+	return resolveRuleAnchorWith(InstalledEngineDeclaration(), ruleID, on)
+}
 
 // ValidateProfileMap checks the declaration's anchor profile map against the
 // vendored oar-profile.schema.json. An empty schemaDir skips validation.

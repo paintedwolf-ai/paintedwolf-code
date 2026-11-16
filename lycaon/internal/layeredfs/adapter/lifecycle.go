@@ -84,6 +84,20 @@ func exerciseProbeReadWrite(srcDir, backingDir string, res *ProbeResult) error {
 	return nil
 }
 
+func combineFlushHooks(h1, h2 func(ctx context.Context, viewID string) error) func(ctx context.Context, viewID string) error {
+	return func(ctx context.Context, viewID string) error {
+		if h1 != nil {
+			if err := h1(ctx, viewID); err != nil {
+				return err
+			}
+		}
+		if h2 != nil {
+			return h2(ctx, viewID)
+		}
+		return nil
+	}
+}
+
 func executeCheckpointBarrier(
 	ctx context.Context,
 	adapterID AdapterID,

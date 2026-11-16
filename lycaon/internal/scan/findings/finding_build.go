@@ -102,6 +102,21 @@ func SetHintCode(f api.SecurityFinding, code string) api.SecurityFinding {
 	return f
 }
 
+// FixtureFinding builds a SecurityFinding for tests.
+func FixtureFinding(ruleID string, level api.FindingLevel, message, uri string, line int) api.SecurityFinding {
+	return BuildSecurityFinding(FindingBuildOpts{
+		DriverID: "fixture",
+		RuleID:   ruleID,
+		Level:    level,
+		Message:  message,
+		Kind:     api.FindingKindSAST,
+		Locations: []api.SecurityFindingLocation{{
+			URI:       uri,
+			StartLine: line,
+		}},
+	})
+}
+
 // NormalizeSARIFLevel maps SARIF result.level to FindingLevel.
 func NormalizeSARIFLevel(level string) api.FindingLevel {
 	switch strings.ToLower(strings.TrimSpace(level)) {

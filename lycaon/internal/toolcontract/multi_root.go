@@ -1,6 +1,7 @@
 package toolcontract
 
 import (
+	"sort"
 	"strings"
 )
 
@@ -53,4 +54,15 @@ func MultiRootOf(name string) (MultiRootCapability, bool) {
 		return MultiRootNone, true
 	}
 	return MultiRootNone, false
+}
+
+// MultiRootDeclaredNames returns every explicitly classified tool, sorted, so a
+// contract test can fail on an entry left behind by a rename or a deletion.
+func MultiRootDeclaredNames() []string {
+	out := make([]string, 0, len(compiledMultiRoot))
+	for name := range compiledMultiRoot {
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
 }

@@ -166,6 +166,10 @@ type gcTestHooks struct {
 	syncDir                   func(dirPath string) error
 }
 
+func withGCTestHooks(ctx context.Context, hooks gcTestHooks) context.Context {
+	return context.WithValue(ctx, gcTestHooksKey{}, hooks)
+}
+
 func gcBeforeRollbackMarkerWrite(ctx context.Context, dir, base string) error {
 	if err := ctx.Err(); err != nil {
 		return err
