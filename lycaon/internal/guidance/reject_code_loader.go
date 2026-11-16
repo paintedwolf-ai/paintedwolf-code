@@ -196,6 +196,15 @@ const (
 	EmitInjectPrefix = "inject:"
 )
 
+// InjectAnchor returns the inform anchor an inject: emit target names.
+func InjectAnchor(emit string) (string, bool) {
+	target, ok := strings.CutPrefix(strings.TrimSpace(emit), EmitInjectPrefix)
+	if !ok || strings.TrimSpace(target) == "" {
+		return "", false
+	}
+	return "inject." + strings.TrimSpace(target), true
+}
+
 // CopyOnlyEmit reports whether a unit's emit channel carries informational
 // copy rather than a rejection card, so it needs no rejection fields or
 // rehearsal scenarios.

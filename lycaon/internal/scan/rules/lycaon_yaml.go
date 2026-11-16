@@ -3,6 +3,7 @@ package rules
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -187,6 +188,11 @@ func LoadRulesProvenance() (*RulesProvenanceConfig, error) {
 		return nil, fmt.Errorf("parse rules-provenance: %w", err)
 	}
 	return &cfg, nil
+}
+
+// ResolveModulePath joins the module root with a repository-relative path.
+func ResolveModulePath(lycaonRoot, rel string) string {
+	return filepath.Join(lycaonRoot, filepath.FromSlash(rel))
 }
 
 // ActiveLycaonGatePaths returns configured first-party rule paths.

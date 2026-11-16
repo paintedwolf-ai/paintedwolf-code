@@ -143,3 +143,8 @@ var allowedConfigRootEntries = []string{
 	"rel.go",
 	"runtime",
 }
+
+// AllowedConfigRootEntries returns the permitted top-level names.
+func AllowedConfigRootEntries() []string {
+	return append([]string(nil), allowedConfigRootEntries...)
+}

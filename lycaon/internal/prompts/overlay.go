@@ -273,3 +273,22 @@ func validatePromptsPath(promptsRoot, ref string) (string, error) {
 	}
 	return path, nil
 }
+
+// ValidateArchetypePartials checks required overlay partials.
+func ValidateArchetypePartials(layers PromptLayers, contract *PersonaContract) error {
+	if contract == nil {
+		return fmt.Errorf("persona contract required")
+	}
+	for archName, arch := range contract.Archetypes {
+		for _, partial := range arch.RequiredPartials {
+			data, err := layers.ReadFile(partial)
+			if err != nil {
+				return fmt.Errorf("archetype %q partial %q after overlay: %w", archName, partial, err)
+			}
+			if len(strings.TrimSpace(string(data))) == 0 {
+				return fmt.Errorf("archetype %q partial %q is empty after overlay", archName, partial)
+			}
+		}
+	}
+	return nil
+}

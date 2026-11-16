@@ -289,6 +289,11 @@ func HTTPCodes(cfg *Config) []string {
 	return surfaceCodes(cfg, "http")
 }
 
+// PreflightCodes returns sorted codes registered for GET /v1/preflight results.
+func PreflightCodes(cfg *Config) []string {
+	return surfaceCodes(cfg, "preflight")
+}
+
 func surfaceCodes(cfg *Config, surface string) []string {
 	if cfg == nil {
 		return nil

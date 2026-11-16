@@ -23,6 +23,16 @@ var preventiveRejectEmitters = map[string]bool{
 	"guard:command_surface": true,
 }
 
+// PreventiveRejectEmitters returns preflight rejection guards.
+func PreventiveRejectEmitters() []string {
+	out := make([]string, 0, len(preventiveRejectEmitters))
+	for emit := range preventiveRejectEmitters {
+		out = append(out, emit)
+	}
+	sort.Strings(out)
+	return out
+}
+
 type AgentToolArgView struct {
 	Name         string
 	RequiredArgs []string

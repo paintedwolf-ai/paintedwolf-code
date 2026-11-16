@@ -94,6 +94,11 @@ func ShapeIDs() []string {
 	}
 }
 
+// EvidenceVerbatimShapeIDs are classification-free verbatim-substring shapes.
+func EvidenceVerbatimShapeIDs() []string {
+	return []string{ShapeCommand, ShapeOpaque, ShapeStructuredEvent}
+}
+
 // EvidenceTrustTierIDs returns the locked trust-tier set.
 func EvidenceTrustTierIDs() []string {
 	return []string{

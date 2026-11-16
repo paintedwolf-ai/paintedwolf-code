@@ -99,6 +99,14 @@ func SetBrokerForTest(b *egressproxy.Broker, addrs egressproxy.Addrs) func() {
 	return setBrokerState(b, addrs, true, nil)
 }
 
+// SetBrokerUnavailableForTest makes mediation fail to start, so a caller can
+// check that an action refuses rather than launching unmediated.
+func SetBrokerUnavailableForTest(cause error) func() {
+	restore := setBrokerState(nil, egressproxy.Addrs{}, false, cause)
+	recordEgressDegraded("broker_start_failed", cause)
+	return restore
+}
+
 func setBrokerState(b *egressproxy.Broker, addrs egressproxy.Addrs, bound bool, failed error) func() {
 	broker.mu.Lock()
 	prevLive, prevAddrs, prevFailed, prevBound := broker.live, broker.addrs, broker.failed, broker.bound

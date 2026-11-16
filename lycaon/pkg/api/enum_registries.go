@@ -43,6 +43,19 @@ func AllCompletionReportAskEfforts() []CompletionReportAskEffort {
 	}
 }
 
+// AllWorkerStatuses returns every declared WorkerStatus.
+func AllWorkerStatuses() []WorkerStatus {
+	return []WorkerStatus{
+		WorkerStatusPending,
+		WorkerStatusRunning,
+		WorkerStatusWaiting,
+		WorkerStatusComplete,
+		WorkerStatusFailed,
+		WorkerStatusCanceled,
+		WorkerStatusHeld,
+	}
+}
+
 // AllWorkerSummaryStatuses returns every declared WorkerSummaryStatus (canonical
 // task-row patch tag on parent messages).
 func AllWorkerSummaryStatuses() []WorkerSummaryStatus {
@@ -67,5 +80,20 @@ func AllWorkflowRunStatuses() []WorkflowRunStatus {
 		WorkflowRunStatusFailed,
 		WorkflowRunStatusCanceled,
 		WorkflowRunStatusInterrupted,
+	}
+}
+
+// AllWorkflowBoundaryKinds returns every workflow_boundary message event kind.
+func AllWorkflowBoundaryKinds() []WorkflowBoundaryKind {
+	return []WorkflowBoundaryKind{
+		WorkflowBoundaryKindStarted,
+		WorkflowBoundaryKindExited,
+		WorkflowBoundaryKindCanceled,
+		WorkflowBoundaryKindCompleted,
+		WorkflowBoundaryKindFailed,
+		WorkflowBoundaryKindPaused,
+		WorkflowBoundaryKindResumed,
+		WorkflowBoundaryKindPausedOnChild,
+		WorkflowBoundaryKindInterrupted,
 	}
 }

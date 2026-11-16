@@ -191,6 +191,16 @@ var presetIDs = map[PresetID]bool{
 	PresetInspectFile: true, PresetEditFile: true, PresetEditSibling: true, PresetFixFinding: true,
 }
 
+// PresetIDs returns the closed preset vocabulary, sorted.
+func PresetIDs() []PresetID {
+	out := make([]PresetID, 0, len(presetIDs))
+	for id := range presetIDs {
+		out = append(out, id)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
 // PropertyType is the closed configuration value universe.
 type PropertyType string
 

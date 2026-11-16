@@ -195,6 +195,12 @@ func backgroundRunnerBackoff(attempt int) time.Duration {
 	return delay
 }
 
+func (a *ServeApp) stopRunners() {
+	ctx, cancel := context.WithTimeout(context.Background(), serveRunnerDrainTimeout)
+	defer cancel()
+	a.stopRunnersWithin(ctx)
+}
+
 // stopRunnersWithin cancels the runners and waits for them, giving up at the
 // earlier of the caller's deadline and the runner drain timeout.
 func (a *ServeApp) stopRunnersWithin(ctx context.Context) {

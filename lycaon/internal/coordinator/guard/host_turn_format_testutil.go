@@ -6,8 +6,11 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/citationmd"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 var (
@@ -46,6 +49,31 @@ func hostFinishOARPipeline() *oar.GuardPipeline {
 		hostFinishPipeline = p
 	})
 	return hostFinishPipeline
+}
+
+// FormatHostNoToolTurnReject runs ObserveCoordinatorHostNoToolTurn then EvaluateBlock
+// (post_turn then pre_invoke) and formats the first Decision. Used by unit tests that
+// pin observation parity without a session Manager.
+func FormatHostNoToolTurnReject(
+	sess *api.Session,
+	history []api.Message,
+	lastAssistant string,
+	turnTools []string,
+	surfaceID string,
+	workersIdle bool,
+	implState surface.ImplementSessionState,
+	rejectFmt *guidance.StaticRejectFormatter,
+	batchTurn BatchTurnGuard,
+) (string, bool) {
+	gc := oar.NewGuardContext()
+	var draft guidance.CloseoutDraft
+	if surface.SurfaceDeliversReport(surfaceID) {
+		draft = guidance.ParseCloseoutDraft(lastAssistant, citationmd.Options{})
+	}
+	ObserveCoordinatorHostNoToolTurn(
+		sess, history, lastAssistant, draft, turnTools, surfaceID, workersIdle, implState, batchTurn, gc,
+	)
+	return formatFirstOARBlock(gc, rejectFmt, oar.AnchorCoordinatorCloseoutCheck, oar.AnchorCoordinatorPreInvoke)
 }
 
 func formatFirstOARBlock(gc *oar.GuardContext, rejectFmt *guidance.StaticRejectFormatter, anchors ...string) (string, bool) {
