@@ -12,7 +12,8 @@ import {
 import { Decoration, type DecorationSet } from "@codemirror/view";
 import { planHasLayout } from "./pretty-fenced.ts";
 import { prettyPlanFor, type PrettyTarget, prettyTargetFor } from "./pretty-recognition.ts";
-import { PrettyScanner, type PrettySnapshot, snapshotsEqual } from "./pretty-scan.ts";
+import { PrettyScanner } from "./pretty-scan.ts";
+import { type PrettySnapshot, snapshotsEqual } from "./pretty-snapshot.ts";
 import {
   PRETTY_CHECKPOINT_INTERVAL,
   type PrettyBlockFacts,
