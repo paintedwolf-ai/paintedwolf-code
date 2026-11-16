@@ -54,3 +54,36 @@ func TestPlanCloseoutWaitsForPlannedWorkers(t *testing.T) {
 	}
 	runtime.NotifySettledPlanCloseout(t.Context(), "parent")
 }
+
+// A delivering round is judged against its worker's typed criteria, and the
+// outcomes are what its result records.
+func TestDeliveringRoundRecordsItsCriteriaOutcomes(t *testing.T) {
+	database := testdbfixture.Open(t, "round-criteria.db")
+	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
+	runtime := New(database, nil, worker.WorkersConfig{})
+	runtime.Plan = plantest.New(t, plantest.Deps(runtime.Records))
+	actor := workerrecords.Actor{SessionID: "parent", Role: workerrecords.RoleCoordinator, PrincipalID: "parent"}
+	created, err := runtime.Records.CreateWorker(t.Context(), actor, workerrecords.Op{ID: "create"}, workerrecords.WorkerSpec{
+		Name: "leg", AgentType: "implementer", ScopeMode: workerrecords.ScopeRead, Criteria: []string{"job:complete", "summary:present"},
+	})
+	testutil.FailErr(t, "create worker", err)
+	jobID, err := runtime.Queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
+		ParentSessionID: "parent", AgentType: "implementer", Prompt: "p", Brief: "b", ExecutionTarget: api.ExecutionTargetLocal,
+	})
+	testutil.FailErr(t, "enqueue", err)
+	_, err = runtime.Records.AdmitRound(t.Context(), actor, workerrecords.Op{ID: "round"}, created.WorkerID, workerrecords.RoundSpec{JobID: jobID, ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit round", err)
+
+	task := &api.WorkerTask{ID: jobID, ParentSessionID: "parent"}
+	got := runtime.roundCriteriaOutcomes(t.Context(), task, "", true, "", nil, nil)
+	want := workerrecords.EncodeCriteriaOutcomes([]workerrecords.CriterionOutcome{
+		{Criterion: "job:complete", Passed: true},
+		{Criterion: "summary:present", Detail: "summary_empty"},
+	})
+	if got != want {
+		t.Fatalf("outcomes = %s, want %s", got, want)
+	}
+	if none := runtime.roundCriteriaOutcomes(t.Context(), &api.WorkerTask{ID: "no-such-job", ParentSessionID: "parent"}, "", true, "", nil, nil); none != workerrecords.EncodeCriteriaOutcomes(nil) {
+		t.Fatalf("a job of no worker produced outcomes %s", none)
+	}
+}
