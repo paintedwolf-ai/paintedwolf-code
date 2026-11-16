@@ -7,7 +7,7 @@ import (
 )
 
 func New(database db.Handle) *runstate.Repository {
-	tx := &Transactions{db: database, queries: db.New(database), jobs: jobstate.NewReader(database)}
+	tx := &Transactions{db: database, queries: db.New(database), jobs: jobstate.NewReader(db.DataDir(database))}
 	runs := &Runs{transactions: tx}
 	state := &State{transactions: tx}
 	starts := &Starts{transactions: tx}

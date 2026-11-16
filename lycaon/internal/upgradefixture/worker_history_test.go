@@ -45,9 +45,9 @@ func TestWorkerFixtureReconstructsAfterOriginalWorkspaceRemoval(t *testing.T) {
 	readOnly, err := db.OpenReadOnly(t.Context(), filepath.Join(dataDir, "store.db"))
 	testutil.FailErr(t, "open read-only verification database", err)
 	defer func() { _ = readOnly.Close() }()
-	testutil.FailErr(t, "reconstruct retained worker", VerifyWorkerHistory(t.Context(), readOnly, attached.ID, evidence))
+	testutil.FailErr(t, "reconstruct retained worker", VerifyWorkerHistory(t.Context(), readOnly, dataDir, attached.ID, evidence))
 	evidence.Overlay["new.txt"] = digest([]byte("wrong\n"))
-	if err := VerifyWorkerHistory(t.Context(), readOnly, attached.ID, evidence); err == nil {
+	if err := VerifyWorkerHistory(t.Context(), readOnly, dataDir, attached.ID, evidence); err == nil {
 		t.Fatal("changed semantic expectation passed")
 	}
 }

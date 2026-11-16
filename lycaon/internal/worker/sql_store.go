@@ -18,7 +18,12 @@ type SQLStore struct {
 
 // NewSQLStore creates a worker job store.
 func NewSQLStore(database db.Handle) *SQLStore {
-	return &SQLStore{db: database, queries: db.New(database), jobs: jobstate.NewReader(database)}
+	return NewSQLStoreIn(database, db.DataDir(database))
+}
+
+// NewSQLStoreIn creates a job store over a handle that does not name its directory, such as a read-only copy.
+func NewSQLStoreIn(database db.Handle, dataDir string) *SQLStore {
+	return &SQLStore{db: database, queries: db.New(database), jobs: jobstate.NewReader(dataDir)}
 }
 
 // SetEventOutbox makes a job transition and its wire event one commit.
