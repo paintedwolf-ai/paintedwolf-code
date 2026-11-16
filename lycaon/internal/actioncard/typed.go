@@ -118,6 +118,16 @@ func fileOpener(previews []api.FileEditPreview) *api.ActionOpener {
 	return &api.ActionOpener{Kind: "file", Path: previews[0].Path}
 }
 
+// pathOpener opens the path a call's schema names in its path argument, such
+// as the folder a summary covered.
+func pathOpener(args map[string]any) *api.ActionOpener {
+	path, _ := args["path"].(string)
+	if strings.TrimSpace(path) == "" {
+		return nil
+	}
+	return &api.ActionOpener{Kind: "file", Path: strings.TrimSpace(path)}
+}
+
 const maxHosts = 3
 
 func networkFact(access *api.ExternalAccess) (api.ActionFact, bool) {
