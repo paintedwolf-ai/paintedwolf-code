@@ -125,7 +125,7 @@ uv run --project scripts/bialy/custom_model --locked python scripts/bialy/custom
   --holdout /scratch/data/holdout.jsonl --out /scratch/runs/student-sft \
   --device cuda:0 --max-length 8192 \
   --targets 're:model\.language_model\.layers\.\d+\.self_attn\.(q_proj|k_proj|v_proj|o_proj)' \
-  --adapted-modules 168 --rank 16 --lora-alpha 32 --lora-dropout 0.05 \
+  --adapted-modules 132 --rank 16 --lora-alpha 32 --lora-dropout 0.05 \
   --epochs 3 --seed 7 --learning-rate 1e-4 --warmup-ratio 0.05 \
   --final-learning-rate-ratio 0.1 --accumulation 8 --weight-decay 0.01 \
   --max-grad-norm 1.0 --max-updates 20 --max-seconds 3600 --checkpoint-every 10
