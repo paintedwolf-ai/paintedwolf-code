@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/gate"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
 // CommandGuidanceFactKeys lists every structured fact branched on by the
@@ -35,11 +37,8 @@ func CommandGuidanceFactKeys() []string {
 		"reviews_confined_writes",
 		"root_count",
 		"runner_direct_ip_tools",
-		"runner_host_execution_tools",
-		"runner_host_resource_tools",
 		"runner_local_listen_tools",
 		"runner_loopback_connect_tools",
-		"runner_read_path_tools",
 		"runner_socket_tools",
 		"runner_write_root_tools",
 		"session_scratch_dir",
@@ -88,24 +87,41 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	if strings.TrimSpace(in.SurfaceID) != "" {
 		scopeID = strings.TrimSpace(in.SurfaceID)
 	}
-	vars := VisibleToolsNativePartialVars(offered)
-	vars["tool_profile"] = strings.TrimSpace(in.ProfileID)
-	vars["is_coordinator"] = in.IsCoordinator
-	vars["platform_os"] = runtime.GOOS
-	vars["root_count"] = in.RootCount
-	vars["project_dir"] = strings.TrimSpace(in.ProjectDir)
-	vars["session_scratch_dir"] = strings.TrimSpace(in.SessionScratchDir)
-	vars["reviews_confined_writes"] = in.Posture.ReviewsConfinedWrites()
-	vars["command_external_hidden"] = in.CommandExternalHidden
-
-	if in.IsCoordinator && strings.TrimSpace(in.SurfaceID) != "" {
-		floor, _ := LoadCoordinatorSurfaceFloor(in.SurfaceID)
-		vars["command_on_floor"] = slices.Contains(floor, "command")
-	} else {
-		vars["command_on_floor"] = slices.Contains(offered, "command")
+	base, _ := DeclaredReader(nil, scopeID)
+	profiles, _ := declaredToolProfiles(nil)
+	profileID := strings.TrimSpace(in.ProfileID)
+	if profileID == "" || in.IsCoordinator || strings.TrimSpace(in.SurfaceID) != "" {
+		profileID = CoordinatorProfileID
 	}
-	RestrictCommandEffects(ScopeCommandEffects(scopeID), offered, deferred, vars)
-	syncCommandExternalFacts(vars)
+	if !hasProfileID(profiles, profileID) {
+		profiles = append(profiles, sandbox.ToolProfile{
+			ID:             profileID,
+			CommandEffects: base.Effects(),
+		})
+	}
+	reader, err := NewReader(ReaderInput{
+		ProfileID: profileID,
+		SurfaceID: strings.TrimSpace(in.SurfaceID),
+		Profiles:  profiles,
+		Plan:      toolsurface.Compile(offered, deferred),
+		Loaded:    toolNameSet(offered),
+		Visible:   append(slices.Clone(offered), deferred...),
+		RootCount: in.RootCount,
+		WebSearch: true,
+	})
+	vars := map[string]any{}
+	if err == nil {
+		vars = reader.Facts()
+	}
+	for k, v := range AgentPromptSurfaceTemplateVars(AgentPromptSurface{
+		SessionScratchDir:     strings.TrimSpace(in.SessionScratchDir),
+		Posture:               in.Posture,
+		CommandExternalHidden: in.CommandExternalHidden,
+	}) {
+		vars[k] = v
+	}
+	vars["platform_os"] = runtime.GOOS
+	vars["project_dir"] = strings.TrimSpace(in.ProjectDir)
 
 	hasCommandOffered := slices.Contains(offered, "command")
 	hasCommandAny := hasCommandOffered || slices.Contains(deferred, "command")

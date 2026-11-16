@@ -877,6 +877,16 @@ const (
 	VisualArtifactSourceWorkspace VisualArtifactSource = "workspace"
 )
 
+// Valid reports whether s is a defined VisualArtifactSource wire value.
+func (s VisualArtifactSource) Valid() bool {
+	switch s {
+	case VisualArtifactSourceRender, VisualArtifactSourceCapture, VisualArtifactSourceFetch, VisualArtifactSourceUser, VisualArtifactSourceWorkspace:
+		return true
+	default:
+		return false
+	}
+}
+
 // PresentableStillVisualMime reports whether closeout may present the artifact.
 func PresentableStillVisualMime(mime string) bool {
 	mime = strings.TrimSpace(mime)

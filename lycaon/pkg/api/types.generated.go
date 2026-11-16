@@ -503,7 +503,7 @@ type ApprovalTarget struct {
 	Details map[string]any `json:"details,omitempty"`
 }
 
-// ArtifactEvent A durable visual artifact was written or deleted. Identity only: clients re-read the artifact list so one tile's metadata, reference counts, and bytes all render from one place.
+// ArtifactEvent A durable visual artifact was written or deleted. Clients re-read the artifact list for metadata and reference counts; written events carry content_hash so byte caches only invalidate when stored bytes change.
 type ArtifactEvent struct {
 	ArtifactID string `json:"artifact_id"`
 	ProjectID  string `json:"project_id"`
@@ -512,15 +512,25 @@ type ArtifactEvent struct {
 	// Session tree that resolves the event, when one is known.
 	RootSessionID string           `json:"root_session_id,omitempty"`
 	Op            ArtifactChangeOp `json:"op"`
+	// SHA-256 hex digest of stored bytes when op is written.
+	ContentHash string `json:"content_hash,omitempty"`
+}
+
+// ArtifactListFacets Filter facets across live artifacts in the project, returned on the first page.
+type ArtifactListFacets struct {
+	// Producer session IDs for live artifacts in the project, newest first.
+	SessionIDs []string `json:"session_ids"`
 }
 
 // ArtifactListItem Metadata-only durable artifact row (no bytes, no host paths)
 type ArtifactListItem struct {
-	ID             string               `json:"id"`
-	Mime           string               `json:"mime"`
-	Source         VisualArtifactSource `json:"source"`
-	Caption        string               `json:"caption,omitempty"`
-	EvidenceHandle string               `json:"evidence_handle,omitempty"`
+	ID     string               `json:"id"`
+	Mime   string               `json:"mime"`
+	Source VisualArtifactSource `json:"source"`
+	// Lowercase hex SHA-256 digest of the unencoded artifact body.
+	ContentHash    string `json:"content_hash,omitempty"`
+	Caption        string `json:"caption,omitempty"`
+	EvidenceHandle string `json:"evidence_handle,omitempty"`
 	// Held browser page that produced live-tool media.
 	PageID        string     `json:"page_id,omitempty"`
 	SessionID     string     `json:"session_id"`
@@ -539,7 +549,8 @@ type ArtifactListItem struct {
 type ArtifactListResponse struct {
 	Artifacts []ArtifactListItem `json:"artifacts"`
 	// Opaque cursor for the next project artifact page; empty at the end.
-	NextCursor string `json:"next_cursor,omitempty"`
+	NextCursor string              `json:"next_cursor,omitempty"`
+	Facets     *ArtifactListFacets `json:"facets,omitempty"`
 }
 
 // ArtifactReferenceCount

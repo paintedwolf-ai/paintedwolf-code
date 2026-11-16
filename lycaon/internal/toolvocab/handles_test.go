@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 )
@@ -29,8 +30,12 @@ func TestUnreachableNamesReportsHandlesNoReachableToolMints(t *testing.T) {
 		t.Fatalf("terminal_snapshot alone: %v; want only %q unmintable", got, sealed+"#")
 	}
 	got = toolvocab.UnreachableNames(catalog, corpus, map[string]bool{"terminal_snapshot": true, "command": true})
+	if !slices.Contains(got, sealed+"#") || slices.Contains(got, held+"#") {
+		t.Fatalf("command without external exec: %v; want only %q unmintable", got, sealed+"#")
+	}
+	got = toolvocab.UnreachableNames(catalog, corpus, map[string]bool{"terminal_snapshot": true, "command": true, toolcontract.ReachCommandExternalExec: true})
 	if slices.Contains(got, sealed+"#") || slices.Contains(got, held+"#") {
-		t.Fatalf("with command: %v; want both kinds mintable", got)
+		t.Fatalf("with command and external exec: %v; want both kinds mintable", got)
 	}
 }
 

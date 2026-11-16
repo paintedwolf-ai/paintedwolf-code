@@ -71,10 +71,22 @@ export class ScrollportPressAnchor {
       };
       this.anchor = anchor;
     }
-    // The toggled shell outlives re-rendered controls inside it.
-    if (shell !== anchor.subject && shell.contains(press) && (anchor.subject === press || anchor.subject.contains(shell))) {
+    // Keep the pressed control as anchor when the shell top is scrolled above the viewport.
+    const shellTop = shell.getBoundingClientRect().top;
+    const viewportTop = this.viewport.getBoundingClientRect().top;
+    const pressTop = press.getBoundingClientRect().top;
+    const bottomControlInView =
+      shellTop < viewportTop - DRIFT_EPSILON_PX &&
+      pressTop > shellTop + DRIFT_EPSILON_PX &&
+      pressTop >= viewportTop - DRIFT_EPSILON_PX;
+    if (
+      shell !== anchor.subject &&
+      shell.contains(press) &&
+      (anchor.subject === press || anchor.subject.contains(shell)) &&
+      !bottomControlInView
+    ) {
       anchor.subject = shell;
-      anchor.top = shell.getBoundingClientRect().top;
+      anchor.top = shellTop;
     }
     const declaredOn = anchor;
     const change = {};

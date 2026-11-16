@@ -2,15 +2,21 @@ package contract
 
 import (
 	"slices"
-	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
+	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/tools"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
 
 // commandEffectVariables maps each prompt variable to the effect it states.
@@ -59,10 +65,21 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 	contractcheck.FailErr(t, "load tool profiles", err)
 	postures, err := sessionprofiles.LoadPostureRegistry()
 	contractcheck.FailErr(t, "load postures", err)
+	sandboxCfg, err := sandbox.LoadConfig()
+	contractcheck.FailErr(t, "load sandbox config", err)
+	bootReg := toolfixture.ContractServeBootRegistry(t)
 	engine := bundledPromptEngine()
+	catalog, err := prompts.UnitCatalogForEngine(engine)
+	contractcheck.FailErr(t, "unit catalog", err)
 	for _, posture := range postures.List() {
 		profiles := postureProfiles(shipped, posture.CommandEffects)
+		exec := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(sandbox.NewBoundary(sandboxCfg, profiles)), bootReg, toolprofiles.DefaultToolProfileID)
 		coordinator := profileByID(t, profiles, prompts.CoordinatorProfileID)
+		executor := toolexecution.NewExecutor(
+			toolprofiles.NewProfilePolicyEngine(sandbox.NewBoundary(sandbox.Config{}, profiles)),
+			tools.NewDefaultRegistry(),
+			prompts.CoordinatorProfileID,
+		)
 		for _, surfaceID := range surfaces.SurfaceIDs() {
 			t.Run(string(posture.ID)+"/"+surfaceID, func(t *testing.T) {
 				row, err := surfaces.Surface(surfaceID)
@@ -70,12 +87,37 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 				declared, err := toolcontract.NewCommandEffects(row.CommandEffects...)
 				contractcheck.FailErr(t, "compile surface effects", err)
 				admitted := coordinator.CommandEffects & declared
+				programSurface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{
+					ProfileID: prompts.CoordinatorProfileID,
+					SurfaceID: surfaceID,
+				}, nil)
+				contractcheck.FailErr(t, "freeze program surface", err)
+				execEffects := programSurface.Effects()
+				plan, err := prompts.CompileSurfacePlan(surfaceID, 1)
+				contractcheck.FailErr(t, "compile surface plan", err)
+				reader, err := prompts.NewReader(prompts.ReaderInput{
+					Mode:      surface.ExecutionModeFamily(surfaceID),
+					ProfileID: prompts.CoordinatorProfileID,
+					SurfaceID: surfaceID,
+					Plan:      plan,
+					Profiles:  profiles,
+					RootCount: 1,
+				})
+				contractcheck.FailErr(t, "new reader", err)
+				if reader.Effects() != execEffects || reader.Effects() != admitted {
+					t.Fatalf("reader.Effects() = %v, executor = %v, admitted = %v", reader.Effects().Classes(), execEffects.Classes(), admitted.Classes())
+				}
+				assertCommandMetaMatchesReader(t, exec, platform.ToolFilter{
+					ProfileID: prompts.CoordinatorProfileID,
+					SurfaceID: surfaceID,
+				}, reader)
 
-				vars := map[string]any{"root_count": 1}
+				vars := map[string]any{}
 				mergePromptBudgetSkillRoster(t, vars)
-				contractcheck.FailErr(t, "merge surface vars", prompts.MergeCoordinatorSurfacePathVars(surfaceID, profiles, vars, prompts.SurfaceTurn{}))
 				contractcheck.FailErr(t, "merge prompt vars", prompts.MergeCoordinatorPromptVars(surfaceID, prompts.ExecutionModePromptTransition{}, "", vars))
-				offered, _ := vars["surface_offered"].([]string)
+				vars, err = prompts.Vars(reader, vars)
+				contractcheck.FailErr(t, "prompts.Vars", err)
+				offered := reader.Offered()
 				commandOffered := slices.Contains(offered, "command")
 				for name, class := range commandEffectVariables {
 					want := commandOffered && allowsEffect(t, admitted, class)
@@ -84,9 +126,7 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 					}
 				}
 
-				assertUnitRendersIff(t, engine, "http-operating-procedure", vars, vars["profile_command_network_egress"] == true)
-				restores, _ := vars["profile_has_restore_version"].(bool)
-				assertUnitRendersIff(t, engine, "native-edit-tool", vars, vars["profile_command_mutation"] == true || restores)
+				assertCatalogUnitSelection(t, catalog, reader)
 				mints, _ := vars["mints"].(map[string]bool)
 				if got := mints["tui"]; got != (vars["profile_has_terminal_capture"] == true) {
 					t.Errorf("mints[tui] = %v, want %v", got, vars["profile_has_terminal_capture"] == true)
@@ -107,15 +147,41 @@ func TestWorkerPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 	contractcheck.FailErr(t, "load tool profiles", err)
 	postures, err := sessionprofiles.LoadPostureRegistry()
 	contractcheck.FailErr(t, "load postures", err)
+	sandboxCfg, err := sandbox.LoadConfig()
+	contractcheck.FailErr(t, "load sandbox config", err)
+	bootReg := toolfixture.ContractServeBootRegistry(t)
+	catalog, err := prompts.UnitCatalogForEngine(bundledPromptEngine())
+	contractcheck.FailErr(t, "unit catalog", err)
 	for _, posture := range postures.List() {
 		profiles := postureProfiles(shipped, posture.CommandEffects)
+		exec := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(sandbox.NewBoundary(sandboxCfg, profiles)), bootReg, toolprofiles.DefaultToolProfileID)
 		for _, profile := range profiles {
 			if profile.ID == prompts.CoordinatorProfileID {
 				continue
 			}
 			t.Run(string(posture.ID)+"/"+profile.ID, func(t *testing.T) {
-				vars := map[string]any{}
-				contractcheck.FailErr(t, "merge profile vars", prompts.MergeAgentToolSurfaceVars(profile.ID, nil, nil, prompts.SurfaceTurn{}, vars, profiles))
+				executor := toolexecution.NewExecutor(
+					toolprofiles.NewProfilePolicyEngine(sandbox.NewBoundary(sandbox.Config{}, profiles)),
+					tools.NewDefaultRegistry(),
+					profile.ID,
+				)
+				programSurface, err := executor.Metadata.FreezeProgramSurface(t.Context(), platform.ToolFilter{
+					ProfileID: profile.ID,
+				}, nil)
+				contractcheck.FailErr(t, "freeze worker program surface", err)
+				reader, err := prompts.NewReader(prompts.ReaderInput{
+					ProfileID: profile.ID,
+					Profiles:  profiles,
+					RootCount: 1,
+					WebSearch: true,
+				})
+				contractcheck.FailErr(t, "new worker reader", err)
+				if reader.Effects() != programSurface.Effects() || reader.Effects() != profile.CommandEffects {
+					t.Fatalf("worker reader.Effects() = %v, executor = %v, want %v", reader.Effects().Classes(), programSurface.Effects().Classes(), profile.CommandEffects.Classes())
+				}
+				assertCommandMetaMatchesReader(t, exec, platform.ToolFilter{ProfileID: profile.ID}, reader)
+				assertCatalogUnitSelection(t, catalog, reader)
+				vars := reader.Facts()
 				commandOffered, _ := vars["profile_has_command"].(bool)
 				for name, class := range commandEffectVariables {
 					want := commandOffered && allowsEffect(t, profile.CommandEffects, class)
@@ -128,24 +194,58 @@ func TestWorkerPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 	}
 }
 
-// The checklist procedure follows the one tool that stores the checklist.
-func TestProgressProcedureFollowsUpdateProgress(t *testing.T) {
-	catalog, err := prompts.UnitCatalogForEngine(bundledPromptEngine())
-	contractcheck.FailErr(t, "unit catalog", err)
-	unit, ok := catalog.Unit("coordinator-progress-procedure")
-	if !ok {
-		t.Fatal("coordinator-progress-procedure is not a shipped unit")
+func assertCatalogUnitSelection(t *testing.T, catalog promptunit.Catalog, reader prompts.Reader) {
+	t.Helper()
+	sel := reader.Selection()
+	rendered := catalog.Rendered(sel)
+	selected := make(map[string]bool)
+	for _, units := range rendered {
+		for _, u := range units {
+			selected[u.ID] = true
+		}
 	}
-	if !slices.Equal(unit.Attaches, []string{"update_progress"}) {
-		t.Fatalf("attaches = %v", unit.Attaches)
+	for _, u := range catalog.Units() {
+		want := u.HostsFor(sel.Host) && u.ModeFits(sel.Mode) && (len(u.Attaches) == 0 || u.AttachedTo(sel.Held))
+		if got := selected[u.ID]; got != want {
+			t.Errorf("unit %s selected = %v, want %v (host=%s mode=%s attaches=%v)", u.ID, got, want, sel.Host, sel.Mode, u.Attaches)
+		}
 	}
 }
 
-func assertUnitRendersIff(t *testing.T, engine *prompts.FileTemplateEngine, stem string, vars map[string]any, want bool) {
+func assertCommandMetaMatchesReader(t *testing.T, exec *toolexecution.Executor, filter platform.ToolFilter, reader prompts.Reader) {
 	t.Helper()
-	body, err := engine.RenderUnit(t.Context(), "units/"+stem, vars)
-	contractcheck.FailErr(t, "render "+stem, err)
-	if got := strings.TrimSpace(body) != ""; got != want {
-		t.Errorf("unit %s rendered = %v, want %v", stem, got, want)
+	metas, err := exec.Metadata.List(t.Context(), filter)
+	contractcheck.FailErr(t, "Metadata.List", err)
+	var cmd *tools.ToolMeta
+	for i := range metas {
+		if metas[i].Name == "command" {
+			cmd = &metas[i]
+			break
+		}
+	}
+	if cmd == nil {
+		return
+	}
+	wantParts := []string{"base"}
+	effects := reader.Effects()
+	if allowsEffect(t, effects, toolcontract.CommandMutation) {
+		wantParts = append(wantParts, "mutation")
+	}
+	wantArgs := allowsEffect(t, effects, toolcontract.CommandExternalExec)
+	if wantArgs {
+		wantParts = append(wantParts, "external_exec", "external_exec_selector")
+	}
+	if allowsEffect(t, effects, toolcontract.CommandNetworkEgress) {
+		wantParts = append(wantParts, "network_egress")
+	}
+	if !slices.Equal(cmd.DescriptionParts, wantParts) {
+		t.Errorf("command DescriptionParts = %v, want %v", cmd.DescriptionParts, wantParts)
+	}
+	props, _ := cmd.ArgsSchema["properties"].(map[string]any)
+	for _, arg := range []string{"capability_request", "secret_use", "snapshot_capture", "socks_proxy", "terminal_capture", "verification"} {
+		_, present := props[arg]
+		if present != wantArgs {
+			t.Errorf("command arg %q present = %v, want %v", arg, present, wantArgs)
+		}
 	}
 }

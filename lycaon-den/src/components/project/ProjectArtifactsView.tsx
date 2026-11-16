@@ -1,4 +1,3 @@
-import { contextAction } from "../context-actions.ts";
 import { createSurfaceQuery } from "../../ui/surface-query.ts";
 import {
   Match,
@@ -6,17 +5,14 @@ import {
   Switch,
   createEffect,
   createMemo,
-  createResource,
   createSignal,
   on,
   onCleanup,
   onMount,
 } from "solid-js";
 import { ResidentPortal } from "../primitives/ResidentPortal.tsx";
-import type { LycaonClient } from "../../api/client.ts";
 import type { ArtifactListItem, ArtifactListResponse } from "../../api/types.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
-import { formatRelativeTime } from "../../time/time-copy.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { KeyedIndex } from "../keyed-index.tsx";
 import { BrowseSegmented } from "../browse/BrowseSegmented.tsx";
@@ -28,12 +24,8 @@ import { Scrollport } from "../primitives/Scrollport.tsx";
 import { DenOverlay } from "../overlay/DenOverlay.tsx";
 import { ChromeCloseButton } from "../shell/ChromeCloseButton.tsx";
 import { chromeProps } from "../../styling/ui-chrome.ts";
-import { ContextMenu } from "../ContextMenu.tsx";
-import { addToChat } from "../../chat/composer/add-to-chat.ts";
-import { startChatAttachmentDrag } from "../../chat/composer/chat-attachment-drag.ts";
 import { isVisualVideoMime } from "../../chat/visual/visual-artifact-model.ts";
 import { isFilmstripMime } from "../../chat/visual/filmstrip-zip.ts";
-import { artifactPreview } from "../../chat/visual/frame-archive-preview.ts";
 import { isTimelineMime } from "../../chat/visual/timeline-archive.ts";
 import { TranscriptVisualFilmstrip } from "../transcript/TranscriptVisualFilmstrip.tsx";
 import { TranscriptVisualTimeline } from "../transcript/TranscriptVisualTimeline.tsx";
@@ -43,22 +35,20 @@ import {
   type ArtifactChatFilter,
   type ArtifactSourceFilter,
   artifactSourceLabel,
-  filterProjectArtifacts,
   shortChatLabel,
-  uniqueArtifactChatIds,
 } from "./project-artifacts-filter.ts";
+import { ArtifactGalleryTile } from "./ArtifactGalleryTile.tsx";
 import { requestFirstTimeTip } from "../../first-time-tips/first-time-tips-service.ts";
-import { notifyArtifactChanged, subscribeArtifactChanges } from "../../chat/visual/artifact-change-store.ts";
 import {
-  deleteConfirmBody,
-  referenceImpactSentence,
-} from "../../files/components/artifact-reference-impact.ts";
+  createArtifactRefreshSubscription,
+  notifyArtifactChanged,
+} from "../../chat/visual/artifact-change-store.ts";
+import { deleteConfirmBody } from "../../files/components/artifact-reference-impact.ts";
 import { createResidentActivity } from "../../ui/resident-activity.ts";
 
 type Props = {
   projectId: string;
   appStore: AppStore;
-  client?: LycaonClient | null;
   back?: import("../shell/StageBackChip.tsx").StageBack | null;
   onRevealInTranscript?: (target: TranscriptRevealTarget) => void;
 };
@@ -74,301 +64,152 @@ const ARTIFACT_SOURCE_OPTIONS = [
 
 const ARTIFACTS_PAGE_SIZE = 12;
 
-type TileProps = {
-  item: ArtifactListItem;
-  index: number;
-  total: number;
-  projectId: string;
-  client: LycaonClient;
-  onOpen: (index: number) => void;
-  onSrc: (artifactId: string, src: string | null) => void;
-  onRequestDelete: (item: ArtifactListItem) => void;
-};
-
-function ArtifactGalleryTile(props: TileProps) {
-  const caption = () => props.item.caption?.trim() || "";
-  const artifactId = () => props.item.id.trim();
-  const isVideo = () => isVisualVideoMime(props.item.mime);
-  let disposed = false;
-  let mediaRequest = 0;
-  onCleanup(() => { disposed = true; mediaRequest++; });
-  const [revealed, setRevealed] = createSignal(false);
-  const [menu, setMenu] = createSignal<
-    import("../ContextMenu.tsx").ContextMenuAnchor | null
-  >(null);
-  const [blob] = createResource(
-    () => {
-      const id = artifactId();
-      const sid = props.item.session_id.trim();
-      return sid && id ? `${sid}\0${id}` : null;
-    },
-    async (key) => {
-      const request = ++mediaRequest;
-      const [sid, id] = key.split("\0");
-      if (!sid || !id) throw new Error("artifact fetch missing session or id");
-      const body = await props.client.getSessionArtifact(sid, id);
-      const preview = await artifactPreview(body);
-      if (disposed || request !== mediaRequest) {
-        preview.release();
-        return null;
-      }
-      return preview;
-    },
-  );
-  const [src, setSrc] = createSignal<string | null>(null);
-  const [decodeFailed, setDecodeFailed] = createSignal(false);
-  createEffect(() => {
-    const b = blob.error === undefined ? blob() : undefined;
-    setDecodeFailed(false);
-    setRevealed(false);
-    if (!b) {
-      setSrc(null);
-      setRevealed(false);
-      props.onSrc(props.item.id, null);
-      return;
-    }
-    setSrc(b.src);
-    props.onSrc(props.item.id, b.src);
-    onCleanup(() => b.release());
-  });
-  const markReady = () => setRevealed(true);
-  const createdLabel = () => {
-    const ms = Date.parse(props.item.created_at);
-    return Number.isFinite(ms) ? formatRelativeTime(ms) : "";
-  };
-
-  const onAddToChat = () => {
-    const ref = chatRef();
-    if (ref) void addToChat(ref);
-  };
-  const chatRef = () => {
-    const projectId = props.projectId.trim();
-    const id = artifactId();
-    if (!projectId || !id || isVideo()) return null;
-    return {
-      kind: "artifact" as const,
-      projectId,
-      artifactId: id,
-      name: caption() || id,
-      previewUrl: src() ?? undefined,
-    };
-  };
-
-  return (
-    <figure
-      class="den-transcript-visual project-artifacts-tile"
-      classList={{ "den-transcript-visual--ready": revealed() }}
-      data-testid="project-artifact-tile"
-      data-artifact-id={artifactId()}
-      data-artifact-source={props.item.source}
-      draggable={chatRef() ? true : undefined}
-      onDragStart={(event) => startChatAttachmentDrag(event, chatRef())}
-      onContextMenu={(e) => {
-        const projectId = props.projectId.trim();
-        if (!projectId || !artifactId()) return;
-        e.preventDefault();
-        e.stopPropagation();
-        setMenu({ x: e.clientX, y: e.clientY });
-      }}
-    >
-      <button
-        type="button"
-        class="den-transcript-visual__frame"
-        aria-label={
-          caption()
-            ? `Enlarge ${caption()}`
-            : `Enlarge visual ${props.index + 1} of ${props.total}`
-        }
-        aria-haspopup="dialog"
-        aria-busy={!revealed() && !blob.error && !decodeFailed()}
-        disabled={!src() || !revealed()}
-        onClick={() => props.onOpen(props.index)}
-      >
-        <Show when={src()}>
-          {(url) => (
-            <Show
-              when={isVideo()}
-              fallback={
-                <img
-                  src={url()}
-                  alt={caption() || `Visual ${props.index + 1}`}
-                  class="den-transcript-visual__img"
-                  ref={(el) => {
-                    if (el?.complete && el.naturalWidth > 0) markReady();
-                  }}
-                  onLoad={() => markReady()}
-                  onError={() => setDecodeFailed(true)}
-                />
-              }
-            >
-              <video
-                src={url()}
-                class="den-transcript-visual__img"
-                muted
-                preload="metadata"
-                onLoadedData={markReady}
-                onError={() => setDecodeFailed(true)}
-              />
-            </Show>
-          )}
-        </Show>
-      </button>
-      <Show when={blob.error || decodeFailed()}>
-        <p role="status" data-testid="project-artifact-load-error">This artifact could not be loaded.</p>
-      </Show>
-      <figcaption class="project-artifacts-tile__meta">
-        <Show when={caption()}>
-          {(text) => (
-            <span class="project-artifacts-tile__caption">{text()}</span>
-          )}
-        </Show>
-        <span
-          class="project-artifacts-tile__source"
-          data-testid="project-artifact-source-badge"
-        >
-          {artifactSourceLabel(props.item.source)}
-        </span>
-        <span class="project-artifacts-tile__chat">
-          {shortChatLabel(props.item.session_id)}
-        </span>
-        <Show when={createdLabel()}>
-          {(label) => (
-            <span class="project-artifacts-tile__when">{label()}</span>
-          )}
-        </Show>
-      </figcaption>
-      <Show when={menu()} keyed>
-        {(anchor) => (
-          <ContextMenu
-            anchor={anchor}
-            items={[
-              {
-                label: caption() || "Artifact",
-                header: true,
-                description:
-                  referenceImpactSentence(props.item) || "Nothing refers to it.",
-                testId: "menu-artifact-header",
-              },
-              contextAction("addToChat", {
-                testId: "menu-add-to-chat",
-                disabled: isVideo(),
-                onSelect: onAddToChat,
-              }),
-              { separator: true },
-              contextAction("deleteArtifact", {
-                testId: "menu-delete-artifact",
-
-                onSelect: () => props.onRequestDelete(props.item),
-              }),
-            ]}
-            onDismiss={() => setMenu(null)}
-          />
-        )}
-      </Show>
-    </figure>
-  );
-}
-
 export function ProjectArtifactsView(props: Props) {
   onMount(() => requestFirstTimeTip("project-artifacts"));
 
-  const client = () => props.client ?? getLycaonClient() ?? null;
+  const client = () => getLycaonClient() ?? null;
   const [sourceFilter, setSourceFilter] =
     createSignal<ArtifactSourceFilter>("all");
   const [chatFilter, setChatFilter] = createSignal<ArtifactChatFilter>("all");
   const [lightboxIndex, setLightboxIndex] = createSignal<number | null>(null);
-  // Tiles keep identity across reorders, so sources are keyed by artifact.
+  // Tiles report and clear their own URLs on mount, replacement, and unmount.
   const [srcById, setSrcById] = createSignal<Record<string, string>>({});
 
   const [pendingDelete, setPendingDelete] =
     createSignal<ArtifactListItem | null>(null);
   const [deleting, setDeleting] = createSignal(false);
   const [deleteError, setDeleteError] = createSignal("");
-  const [pages, setPages] = createSignal<ArtifactListResponse[]>([]);
+  const [pageCursors, setPageCursors] = createSignal<string[]>([""]);
   const [pageIndex, setPageIndex] = createSignal(0);
-  const [loadingPage, setLoadingPage] = createSignal(false);
-  const [pageError, setPageError] = createSignal("");
-  const artifacts = createSurfaceQuery({
-    name: "project-artifacts",
-    source: () => { const c = client(); return c ? { client: c, key: props.projectId } : null; },
-    load: ({ client, key }) => client.listProjectArtifacts(key, { limit: ARTIFACTS_PAGE_SIZE }),
-    required: false,
-  });
-  const refetchList = artifacts.refresh;
-  let pageGeneration = 0;
-  onCleanup(() => { pageGeneration++; });
-  createEffect(() => {
-    const response = artifacts.value();
-    if (!response) return;
-    pageGeneration++;
-    setLoadingPage(false);
-    setPages([{ ...response, artifacts: response.artifacts ?? [] }]);
-    setPageIndex(0);
-    setPageError("");
-  });
-
-  createResidentActivity(() => {
-    return subscribeArtifactChanges((projectId) => {
-      if (projectId === props.projectId.trim()) void refetchList();
-    });
-  });
-
-  const page = createMemo(() => pages()[pageIndex()] ?? null);
-  const items = createMemo(() => page()?.artifacts ?? []);
-  const filtered = createMemo(() =>
-    filterProjectArtifacts(items(), sourceFilter(), chatFilter()),
-  );
-  const chatOptions = createMemo(() =>
-    uniqueArtifactChatIds(pages().flatMap((entry) => entry.artifacts ?? [])),
-  );
 
   let galleryEl: HTMLDivElement | undefined;
+  createEffect(
+    on(
+      [sourceFilter, chatFilter, () => props.projectId],
+      () => {
+        setPageCursors([""]);
+        setPageIndex(0);
+        setLightboxIndex(null);
+        if (galleryEl) galleryEl.scrollTop = 0;
+      },
+      { defer: true },
+    ),
+  );
+
+  const fetchArgs = () => ({
+    projectId: props.projectId.trim(),
+    source: sourceFilter(),
+    chat: chatFilter(),
+    cursor: pageCursors()[pageIndex()] ?? "",
+    page: pageIndex(),
+  });
+
+  const artifacts = createSurfaceQuery({
+    name: "project-artifacts",
+    source: () => {
+      props.appStore.state.sidecarStatus;
+      const c = client();
+      const args = fetchArgs();
+      return c && args.projectId
+        ? { client: c, key: JSON.stringify(args), args }
+        : null;
+    },
+    scope: ({ args }) => args.projectId,
+    load: ({ client: c, args }): Promise<ArtifactListResponse> => {
+      const query: {
+        limit: number;
+        cursor?: string;
+        source?: Exclude<ArtifactSourceFilter, "all">;
+        session_id?: string;
+      } = { limit: ARTIFACTS_PAGE_SIZE };
+      if (args.cursor) query.cursor = args.cursor;
+      if (args.source !== "all") query.source = args.source;
+      if (args.chat !== "all") query.session_id = args.chat;
+      return c.listProjectArtifacts(args.projectId, query);
+    },
+  });
+  const refetchList = artifacts.refresh;
+  const displayedPage = () => artifacts.displayed()?.source.args.page ?? 0;
+
+  createResidentActivity(() =>
+    createArtifactRefreshSubscription(
+      () => props.projectId,
+      () => {
+        void refetchList();
+      },
+    ),
+  );
+
+  const items = createMemo(() => artifacts.value()?.artifacts ?? []);
+  const hasActiveFilter = () =>
+    sourceFilter() !== "all" || chatFilter() !== "all";
+  // Cursor follow-up pages omit facets, so keep the last session list for this project.
+  const retainedSessions = createMemo<readonly string[]>((previous) => {
+    const displayed = artifacts.displayed();
+    const pid = props.projectId.trim();
+    if (!displayed || displayed.source.args.projectId !== pid) return [];
+    return displayed.value.facets?.session_ids ?? previous;
+  }, []);
+  const chatOptions = createMemo(() => {
+    const sessions = retainedSessions();
+    const active = chatFilter();
+    if (active !== "all" && !sessions.includes(active)) {
+      return [active, ...sessions];
+    }
+    return sessions;
+  });
+
   const showPage = (index: number) => {
     setPageIndex(index);
     setLightboxIndex(null);
-    setSrcById({});
     if (galleryEl) galleryEl.scrollTop = 0;
   };
-
-  const goNextPage = async () => {
-    const c = client();
-    const projectId = props.projectId.trim();
-    const index = pageIndex();
-    if (index + 1 < pages().length) {
-      showPage(index + 1);
-      return;
-    }
-    const cursor = page()?.next_cursor?.trim() ?? "";
-    if (!c || !projectId || !cursor || loadingPage()) return;
-    const generation = ++pageGeneration;
-    const current = () => generation === pageGeneration && client() === c && props.projectId.trim() === projectId;
-    setLoadingPage(true);
-    setPageError("");
-    try {
-      const response = await c.listProjectArtifacts(projectId, {
-        limit: ARTIFACTS_PAGE_SIZE,
-        cursor,
-      });
-      if (!current()) return;
-      setPages((current) => [
-        ...current,
-        { ...response, artifacts: response.artifacts ?? [] },
-      ]);
-      showPage(index + 1);
-    } catch (error) {
-      if (current()) setPageError(error instanceof Error ? error.message : "Could not load the next artifact page.");
-    } finally {
-      if (current()) setLoadingPage(false);
-    }
-  };
+  const hasNextPage = () =>
+    displayedPage() === pageIndex() &&
+    Boolean(artifacts.value()?.next_cursor?.trim());
 
   const changePage = (next: number) => {
-    if (next < pageIndex()) {
-      showPage(next);
+    const target = Math.max(0, Math.floor(next));
+    if (target < pageIndex()) {
+      showPage(target);
       return;
     }
-    if (next === pageIndex() + 1) void goNextPage();
+    if (target === pageIndex() + 1 && hasNextPage()) {
+      const cursor = artifacts.value()?.next_cursor?.trim();
+      if (!cursor) return;
+      setPageCursors((held) => {
+        const cursors = held.slice(0, pageIndex() + 1);
+        cursors[target] = cursor;
+        return cursors;
+      });
+      showPage(target);
+    }
   };
+
+  createEffect(() => {
+    const response = artifacts.value();
+    const shown = displayedPage();
+    if (
+      !response ||
+      artifacts.loading() ||
+      shown <= 0 ||
+      shown !== pageIndex() ||
+      (response.artifacts?.length ?? 0) > 0
+    ) {
+      return;
+    }
+    const previous = shown - 1;
+    setPageCursors((held) => held.slice(0, previous + 1));
+    showPage(previous);
+  });
+
+  createEffect(() => {
+    const idx = lightboxIndex();
+    if (idx == null || artifacts.value() === undefined) return;
+    const len = items().length;
+    if (len === 0) setLightboxIndex(null);
+    else if (idx >= len) setLightboxIndex(len - 1);
+  });
 
   const setTileSrc = (artifactId: string, src: string | null) => {
     setSrcById((prev) => {
@@ -382,7 +223,7 @@ export function ProjectArtifactsView(props: Props) {
   const activeItem = () => {
     const idx = lightboxIndex();
     if (idx == null) return null;
-    return filtered()[idx] ?? null;
+    return items()[idx] ?? null;
   };
   const activeSrc = () => {
     const item = activeItem();
@@ -394,7 +235,7 @@ export function ProjectArtifactsView(props: Props) {
   };
   const canNext = () => {
     const idx = lightboxIndex();
-    return idx != null && idx < filtered().length - 1;
+    return idx != null && idx < items().length - 1;
   };
   const goPrev = () => {
     const idx = lightboxIndex();
@@ -403,18 +244,9 @@ export function ProjectArtifactsView(props: Props) {
   };
   const goNext = () => {
     const idx = lightboxIndex();
-    if (idx == null || idx >= filtered().length - 1) return;
+    if (idx == null || idx >= items().length - 1) return;
     setLightboxIndex(idx + 1);
   };
-
-  createEffect(
-    on([sourceFilter, chatFilter], () => {
-      setPageIndex(0);
-      setLightboxIndex(null);
-      setSrcById({});
-      if (galleryEl) galleryEl.scrollTop = 0;
-    }, { defer: true }),
-  );
 
   createEffect(() => {
     if (lightboxIndex() == null) return;
@@ -448,10 +280,13 @@ export function ProjectArtifactsView(props: Props) {
     setDeleteError("");
     try {
       await c.deleteProjectArtifact(projectId, target.id);
-      notifyArtifactChanged({ project_id: projectId, artifact_id: target.id, op: "deleted" });
+      notifyArtifactChanged({
+        project_id: projectId,
+        artifact_id: target.id,
+        op: "deleted",
+      });
       setPendingDelete(null);
       setLightboxIndex(null);
-      setSrcById({});
       await refetchList();
     } catch (err) {
       setDeleteError(
@@ -476,11 +311,7 @@ export function ProjectArtifactsView(props: Props) {
     <div
       class="project-artifacts-view"
       data-testid="project-artifacts-view"
-      aria-busy={
-        artifacts.coldPending() ||
-        artifacts.refreshing() ||
-        loadingPage()
-      }
+      aria-busy={artifacts.coldPending() || artifacts.refreshing()}
     >
       <BrowseStagePanel
         appStore={props.appStore}
@@ -488,11 +319,7 @@ export function ProjectArtifactsView(props: Props) {
         scrollHost="content"
         contentReady={artifacts.ready}
         title="Artifacts"
-        error={
-          artifacts.error() !== undefined
-            ? artifacts.error()
-            : undefined
-        }
+        error={artifacts.error()}
         errorTestId="project-artifacts-error"
         chips={
           <div
@@ -528,9 +355,9 @@ export function ProjectArtifactsView(props: Props) {
           </div>
         }
         meta={
-          <Show when={(artifacts.value() !== undefined) && items().length > 0}>
+          <Show when={artifacts.value() !== undefined && items().length > 0}>
             <span data-testid="project-artifacts-count">
-              {filtered().length} shown
+              {items().length} shown
             </span>
           </Show>
         }
@@ -541,16 +368,22 @@ export function ProjectArtifactsView(props: Props) {
               Loading artifacts…
             </p>
           </Show>
-          <Show when={(artifacts.value() !== undefined) && items().length === 0}>
+          <Show
+            when={
+              artifacts.value() !== undefined &&
+              items().length === 0 &&
+              !hasActiveFilter()
+            }
+          >
             <p class="den-artifacts-empty" data-testid="project-artifacts-empty">
               No artifacts for this project yet.
             </p>
           </Show>
           <Show
             when={
-              (artifacts.value() !== undefined) &&
-              items().length > 0 &&
-              filtered().length === 0
+              artifacts.value() !== undefined &&
+              items().length === 0 &&
+              hasActiveFilter()
             }
           >
             <p
@@ -562,7 +395,7 @@ export function ProjectArtifactsView(props: Props) {
           </Show>
           <Show
             when={
-              (artifacts.value() !== undefined) && filtered().length > 0
+              artifacts.value() !== undefined && items().length > 0
                 ? client()
                 : null
             }
@@ -572,16 +405,18 @@ export function ProjectArtifactsView(props: Props) {
               <Scrollport
                 class="den-artifacts-grid"
                 contentClass="den-artifacts-grid__content"
-                viewportRef={(el) => { galleryEl = el; }}
+                viewportRef={(el) => {
+                  galleryEl = el;
+                }}
                 data-testid="project-artifacts-gallery"
-                data-count={filtered().length}
+                data-count={items().length}
               >
-                <KeyedIndex each={filtered()} keyOf={(a) => a.id}>
+                <KeyedIndex each={items()} keyOf={(a) => a.id}>
                   {(item, index) => (
                     <ArtifactGalleryTile
                       item={item()}
                       index={index()}
-                      total={filtered().length}
+                      total={items().length}
                       projectId={props.projectId}
                       client={c}
                       onOpen={setLightboxIndex}
@@ -596,26 +431,17 @@ export function ProjectArtifactsView(props: Props) {
               </Scrollport>
             )}
           </Show>
-          <Show when={(artifacts.value() !== undefined)}>
+          <Show when={artifacts.value() !== undefined}>
             <TablePager
               page={pageIndex()}
-              itemCount={filtered().length}
-              hasNext={Boolean(page()?.next_cursor?.trim())}
-              loading={loadingPage()}
+              shownPage={displayedPage()}
+              itemCount={items().length}
+              hasNext={hasNextPage()}
+              loading={artifacts.loading()}
               onPageChange={changePage}
               testId="project-artifacts-pager"
               ariaLabel="Artifact pagination"
             />
-          </Show>
-          <Show when={pageError()}>
-            {(message) => (
-              <p
-                class="den-artifacts-page-error"
-                data-testid="project-artifacts-page-error"
-              >
-                {message()}
-              </p>
-            )}
           </Show>
         </div>
       </BrowseStagePanel>
@@ -636,11 +462,11 @@ export function ProjectArtifactsView(props: Props) {
               <header class="den-overlay__header" {...chromeProps()}>
                 <span class="den-overlay__title">
                   {activeItem()?.caption?.trim() ||
-                    `Visual ${(lightboxIndex() ?? 0) + 1} of ${filtered().length}`}
+                    `Visual ${(lightboxIndex() ?? 0) + 1} of ${items().length}`}
                 </span>
                 <div class="den-overlay__header-actions">
                   <span data-testid="project-artifacts-lightbox-counter">
-                    {(lightboxIndex() ?? 0) + 1} / {filtered().length}
+                    {(lightboxIndex() ?? 0) + 1} / {items().length}
                   </span>
                   <ChromeCloseButton
                     class="den-overlay__close den-inset-icon-btn"

@@ -3,8 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 import { connectionServicesFixture } from "../../test/connection-services-fixture.ts";
 import { noteBackendReachable, noteBackendUnreachable } from "./request-connectivity.ts";
 import {
-  installConnectionFixtureCleanup, loadModule, createLycaonClient, discoverBackend, emitEngineState, readSidecarInfo,
+  installConnectionFixtureCleanup, loadModule, createLycaonClient, discoverBackend, emitEngineState, readSidecarInfo, lastSubscribeOptions,
 } from "./app-connection-test-fixture.ts";
+import { subscribeArtifactChanges, type ArtifactChangeDetail } from "../../chat/visual/artifact-change-store.ts";
 
 installConnectionFixtureCleanup();
 
@@ -173,5 +174,29 @@ describe("connection service lifetime", () => {
       expect(await second).toBe(client);
       expect(listProjects).toHaveBeenCalledTimes(initial + 1);
     } finally { stop(); }
+  });
+
+  it("resyncs project artifacts on initial and reconnect opens, skipping visibility resume", async () => {
+    const mod = await loadModule();
+    const services = connectionServicesFixture();
+    const stop = mod.bindAppConnection(services).dispose;
+    const events: Array<{ projectId: string; detail: ArtifactChangeDetail }> = [];
+    const unsubscribe = subscribeArtifactChanges((projectId, detail) => {
+      events.push({ projectId, detail });
+    });
+    try {
+      await mod.connectAppBackend(services.app);
+      mod.subscribeProjectEvents(services.app, "proj-42");
+      lastSubscribeOptions?.onOpen?.("initial");
+      lastSubscribeOptions?.onOpen?.("resume");
+      lastSubscribeOptions?.onOpen?.("reconnect");
+      expect(events).toEqual([
+        { projectId: "proj-42", detail: { kind: "resync" } },
+        { projectId: "proj-42", detail: { kind: "resync" } },
+      ]);
+    } finally {
+      unsubscribe();
+      stop();
+    }
   });
 });

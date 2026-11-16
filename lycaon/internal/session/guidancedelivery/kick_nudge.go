@@ -211,6 +211,8 @@ func (m *Service) renderContext(ctx context.Context, sessionID string) kick.Coor
 	}
 	if !sess.IsWorkerChild() && msgErr == nil {
 		profile := surface.ResolveTurnProfile(frame.RunContext, sess, msgs, state)
+		rc.SurfaceID = profile.SurfaceID
+		rc.RootCount = frame.ProjectRootCount
 		if plan, err := surface.CompileToolPlan(profile, frame.ProjectRootCount); err == nil {
 			rc.ToolPlan = plan
 		}

@@ -251,11 +251,22 @@ function surfaceContainsTarget(surface: HTMLElement, target: EventTarget | null)
   return false;
 }
 
+// Passive tooltips never block Escape for interactive popovers.
 function isTopmostSurface(surface: HTMLElement): boolean {
-  const surfaces = document.querySelectorAll<HTMLElement>(
-    "[data-den-anchored-surface]",
-  );
+  const selector = surface.getAttribute("role") === "tooltip"
+    ? "[data-den-anchored-surface]"
+    : '[data-den-anchored-surface]:not([role="tooltip"])';
+  const surfaces = document.querySelectorAll<HTMLElement>(selector);
   return surfaces.item(surfaces.length - 1) === surface;
+}
+
+function yieldsEscapeToFocusedOverlay(
+  surface: HTMLElement,
+  anchor: AnchoredTarget | null | undefined,
+  target: EventTarget | null,
+): boolean {
+  const front = target instanceof Element ? target.closest("[aria-modal='true'], .den-find-bar") : null;
+  return Boolean(front && !surfaceContainsTarget(surface, target) && !(anchor instanceof Element && front.contains(anchor)));
 }
 
 export function AnchoredSurface(props: Props) {
@@ -386,6 +397,7 @@ export function AnchoredSurface(props: Props) {
         props.dismissOnEscape === false ||
         event.key !== "Escape" ||
         event.defaultPrevented ||
+        yieldsEscapeToFocusedOverlay(element, props.anchor(), event.target) ||
         !isTopmostSurface(element)
       )
         return;

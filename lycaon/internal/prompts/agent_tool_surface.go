@@ -139,11 +139,11 @@ func groupHostResources(resources []AgentHostResourceView) []map[string]any {
 	return groups
 }
 
-// LoadAgentToolSurface builds one profile's prompt surface. turn.Loaded names
+// LoadAgentToolSurface builds one profile's prompt surface. in.Loaded names
 // the profile's deferred tools the session ledger has loaded; they are offered
 // on this call like sticky ones, and the rest list as requestable with the
-// description turn.Schemas holds for them.
-func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes map[string]hintCodeRow, turn SurfaceTurn, profiles []sandbox.ToolProfile) (AgentToolSurfaceData, error) {
+// description in.Schemas holds for them.
+func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes map[string]hintCodeRow, in ReaderInput, profiles []sandbox.ToolProfile) (AgentToolSurfaceData, error) {
 	profileID := strings.TrimSpace(toolProfileID)
 	if profileID == "" {
 		return AgentToolSurfaceData{}, fmt.Errorf("tool profile id required")
@@ -162,23 +162,23 @@ func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes
 		return AgentToolSurfaceData{}, fmt.Errorf("tool profile %q not found", profileID)
 	}
 
-	toolNames := turn.available(visibleToolNames(profile, visibleTools))
+	toolNames := availableToolsInPlan(visibleToolNames(profile, visibleTools), in.Plan)
 	toolViews := make([]AgentToolArgView, 0, len(toolNames))
 	var requestable []string
 	for _, name := range toolNames {
-		if (profile.ToolDeferred(name) && !turn.Loaded[name]) || !profile.ToolAllowed(name) {
+		if (profile.ToolDeferred(name) && !in.Loaded[name]) || !profile.ToolAllowed(name) {
 			requestable = append(requestable, name)
 			continue
 		}
 		view := AgentToolArgView{Name: name}
-		if turn.Schemas != nil {
-			if meta, ok := turn.Schemas.ToolMeta(name); ok {
+		if in.Schemas != nil {
+			if meta, ok := in.Schemas.ToolMeta(name); ok {
 				view.RequiredArgs, _ = toolschema.ArgFieldSummary(meta.ArgsSchema)
 			}
 		}
 		toolViews = append(toolViews, view)
 	}
-	roster, err := RequestableTools(requestable, turn.Schemas)
+	roster, err := RequestableTools(requestable, in.Schemas)
 	if err != nil {
 		return AgentToolSurfaceData{}, err
 	}
@@ -196,7 +196,7 @@ func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes
 }
 
 func visibleToolNames(profile sandbox.ToolProfile, visible []string) []string {
-	if len(visible) > 0 {
+	if visible != nil {
 		out := append([]string(nil), visible...)
 		sort.Strings(out)
 		return out
@@ -269,105 +269,6 @@ func hintAppliesToTools(toolsList []string, allowed map[string]bool) bool {
 	return false
 }
 
-// AgentToolSurfaceTemplateVars builds tool-surface template data.
-func AgentToolSurfaceTemplateVars(data AgentToolSurfaceData) map[string]any {
-	toolsCtx := make([]map[string]any, len(data.Tools))
-	for i, t := range data.Tools {
-		toolsCtx[i] = map[string]any{
-			"name":          t.Name,
-			"required_args": t.RequiredArgs,
-		}
-	}
-	codesCtx := make([]map[string]any, len(data.RejectCodes))
-	for i, c := range data.RejectCodes {
-		codesCtx[i] = map[string]any{
-			"code":               c.Code,
-			"branch_instruction": c.BranchInstruction,
-		}
-	}
-	skillsCtx := make([]map[string]any, len(data.Skills))
-	for i, s := range data.Skills {
-		skillsCtx[i] = map[string]any{
-			"name":        s.Name,
-			"description": s.Description,
-		}
-	}
-	out := map[string]any{
-		"tool_profile":             data.ToolProfile,
-		"agent_tools":              toolsCtx,
-		"agent_tool_names":         toolViewNames(data.Tools),
-		"requestable_tools":        requestableToolVars(data.Requestable),
-		"requestable_capabilities": RequestableCapabilities(data.Requestable),
-		"agent_skills":             skillsCtx,
-		"reject_codes":             codesCtx,
-		"write_globs":              append([]string(nil), data.WriteGlobs...),
-	}
-	for k, v := range toolProfileCapabilityTemplateVars(data) {
-		out[k] = v
-	}
-	return out
-}
-
-// MergeAgentToolSurfaceVars adds profile data to a render map.
-func MergeAgentToolSurfaceVars(toolProfileID string, visibleTools []string, hintCodes map[string]hintCodeRow, turn SurfaceTurn, into map[string]any, profiles []sandbox.ToolProfile) error {
-	if into == nil {
-		return fmt.Errorf("nil template vars map")
-	}
-	skills := agentSkillViewsFromVars(into)
-	visible := visibleTools
-	if len(skills) == 0 {
-		visible = filterToolName(visible, "skills_read")
-	}
-	data, err := LoadAgentToolSurface(toolProfileID, visible, hintCodes, turn, profiles)
-	if err != nil {
-		return err
-	}
-	if !surfaceGrantsSkillsRead(data) || len(skills) == 0 {
-		data.Tools = filterAgentTool(data.Tools, "skills_read")
-		data.Skills = nil
-	} else {
-		data.Skills = skills
-	}
-	for k, v := range AgentToolSurfaceTemplateVars(data) {
-		if isPreservedEnvironmentFact(k, into) {
-			continue
-		}
-		into[k] = v
-	}
-	syncCommandExternalFacts(into)
-	mergeVisualShowVarsFromSurface(data, into)
-	return nil
-}
-
-func isPreservedEnvironmentFact(key string, into map[string]any) bool {
-	switch key {
-	case "reviews_confined_writes", "command_external_hidden", "command_external_shown":
-		_, ok := into[key].(bool)
-		return ok
-	case "platform_os", "session_scratch_dir":
-		s, ok := into[key].(string)
-		return ok && strings.TrimSpace(s) != ""
-	default:
-		return false
-	}
-}
-
-func syncCommandExternalFacts(into map[string]any) {
-	if into == nil {
-		return
-	}
-	if hidden, ok := into["command_external_hidden"].(bool); ok {
-		into["command_external_shown"] = !hidden
-		return
-	}
-	if shown, ok := into["command_external_shown"].(bool); ok {
-		into["command_external_hidden"] = !shown
-		return
-	}
-	into["command_external_hidden"] = false
-	into["command_external_shown"] = true
-}
-
 func agentSkillViewsFromVars(into map[string]any) []AgentSkillView {
 	if into == nil {
 		return nil
@@ -399,16 +300,6 @@ func agentSkillViewsFromVars(into map[string]any) []AgentSkillView {
 	}
 }
 
-// surfaceGrantsSkillsRead reports whether skills_read is on the sticky schema.
-func surfaceGrantsSkillsRead(data AgentToolSurfaceData) bool {
-	for _, t := range data.Tools {
-		if t.Name == "skills_read" {
-			return true
-		}
-	}
-	return false
-}
-
 func filterToolName(names []string, drop string) []string {
 	if len(names) == 0 {
 		return names
@@ -419,20 +310,6 @@ func filterToolName(names []string, drop string) []string {
 			continue
 		}
 		out = append(out, n)
-	}
-	return out
-}
-
-func filterAgentTool(views []AgentToolArgView, drop string) []AgentToolArgView {
-	out := make([]AgentToolArgView, 0, len(views))
-	for _, v := range views {
-		if v.Name == drop {
-			continue
-		}
-		out = append(out, v)
-	}
-	if len(out) == 0 {
-		return nil
 	}
 	return out
 }

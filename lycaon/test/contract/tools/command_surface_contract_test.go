@@ -41,10 +41,20 @@ func TestCommandEnabledToolProfilesRenderCommandSurface(t *testing.T) {
 	for _, profile := range commandEnabledToolProfiles(t) {
 		t.Run(profile.ID, func(t *testing.T) {
 			t.Parallel()
-			data, err := prompts.LoadAgentToolSurface(profile.ID, nil, hints, prompts.SurfaceTurn{Schemas: schemas}, []sandbox.ToolProfile{profile})
+			data, err := prompts.LoadAgentToolSurface(profile.ID, nil, hints, prompts.ReaderInput{Schemas: schemas}, []sandbox.ToolProfile{profile})
 			contractcheck.FailErr(t, "LoadAgentToolSurface", err)
-			vars := prompts.AgentToolSurfaceTemplateVars(data)
-			vars["session_scratch_dir"] = filepath.Join(t.TempDir(), "session-scratch")
+			reader, err := prompts.NewReader(prompts.ReaderInput{
+				ProfileID: profile.ID,
+				Profiles:  []sandbox.ToolProfile{profile},
+				Schemas:   schemas,
+				RootCount: 1,
+				WebSearch: true,
+			})
+			contractcheck.FailErr(t, "NewReader", err)
+			vars, err := prompts.Vars(reader, map[string]any{
+				"session_scratch_dir": filepath.Join(t.TempDir(), "session-scratch"),
+			})
+			contractcheck.FailErr(t, "prompts.Vars", err)
 			out, err := engine.Render(context.Background(), prompts.AgentToolSurfacePartialRef, vars)
 			contractcheck.FailErr(t, "Render agent-tool-surface", err)
 			if strings.TrimSpace(out) == "" {
@@ -74,8 +84,6 @@ func TestCommandFreeToolProfilesExcludeCommandSurface(t *testing.T) {
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(configRoot, "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir", err)
-	hints, err := prompts.LoadHintCodeRows()
-	contractcheck.FailErr(t, "LoadHintCodeRows", err)
 
 	profiles, err := sandbox.LoadToolProfiles()
 	contractcheck.FailErr(t, "LoadToolProfiles", err)
@@ -85,9 +93,15 @@ func TestCommandFreeToolProfilesExcludeCommandSurface(t *testing.T) {
 		}
 		t.Run(profile.ID, func(t *testing.T) {
 			t.Parallel()
-			data, err := prompts.LoadAgentToolSurface(profile.ID, nil, hints, prompts.SurfaceTurn{Schemas: schemas}, []sandbox.ToolProfile{profile})
-			contractcheck.FailErr(t, "LoadAgentToolSurface", err)
-			vars := prompts.AgentToolSurfaceTemplateVars(data)
+			reader, err := prompts.NewReader(prompts.ReaderInput{
+				ProfileID: profile.ID,
+				Profiles:  []sandbox.ToolProfile{profile},
+				Schemas:   schemas,
+				RootCount: 1,
+				WebSearch: true,
+			})
+			contractcheck.FailErr(t, "NewReader", err)
+			vars := reader.Facts()
 			if offered, _ := vars["profile_has_command"].(bool); offered {
 				t.Fatalf("profile %q offers command without granting it", profile.ID)
 			}

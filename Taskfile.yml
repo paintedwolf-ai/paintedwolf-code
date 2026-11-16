@@ -1174,6 +1174,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     generates:
       - ../schemas/guidance_registry.json
+      - internal/prompts/reader_facts.generated.go
     cmds:
       - go run ./cmd/codegen-guidance-registry --root .
 

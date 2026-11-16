@@ -1,10 +1,19 @@
 tags: [process, terminal]
 description: >-
-  Run noninteractive Bash programs: file inspection and creation, search, Git,
-  HTTP and installed programs. Supports substitutions, pipes, redirects and jobs; `CMD --help` lists native forms. Stdin is empty unless the program supplies it.
-  Installed programs cannot open host output paths like `tool-output/...`; pipe
-  `cat PATH | program`. `"$(native_path -- PATH)"`
-  prints a host path and grants nothing.
+  Noninteractive Bash programs for file inspection, search and Git reads;
+  substitutions and pipes; `CMD --help` lists native forms; stdin is empty
+  unless supplied.
+description_effects:
+  mutation: >-
+    File creation, edits, and redirects.
+  external_exec: >-
+    Installed programs and `&` jobs cannot open host output paths
+    (`tool-output/...`); pipe `cat PATH | program`. `"$(native_path -- PATH)"`
+    prints a host path and grants nothing.
+  external_exec_selector: >-
+    `external -- NAME` runs the installed binary that shares a native name.
+  network_egress: >-
+    HTTP requests with `curl`.
 schema:
   type: object
   properties:

@@ -4,10 +4,10 @@ description: >-
   sandbox, and declaring the resources each run needs.
 slot: execution
 order: 30
-attaches: [command, terminal_open, verify]
+attaches: [command_mutation, verify, terminal_open]
 modes: [investigate, orchestrate]
 hosts: [coordinator]
 ---
-{% if profile_command_mutation or profile_has_verify or profile_has_terminal_open %}### Sandbox and worker checks
+### Sandbox and worker checks
 
-Finish shared setup before dispatching dependent workers; workers run source checks in isolated branches. {% if profile_has_task %}Use `task` for independent work;{% else %}Independent work belongs to workers;{% endif %} review results{% if profile_has_wait %}, resolve decisions or `wait` for a result{% else %} and resolve decisions{% endif %}. Workers cannot expand the access available to this chat.{% endif %}
+Finish shared setup before dispatching dependent workers; workers run source checks in isolated branches. {% if profile_has_task %}Use `task` for independent work;{% else %}Independent work belongs to workers;{% endif %} review results{% if profile_has_wait %}, resolve decisions or `wait` for a result{% else %} and resolve decisions{% endif %}. Workers cannot expand the access available to this chat.

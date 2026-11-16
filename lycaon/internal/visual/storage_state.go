@@ -247,6 +247,7 @@ func listItems(records []ArtifactRecord, origins map[string]ArtifactOrigin, refs
 			ID:              rec.ID,
 			Mime:            rec.Mime,
 			Source:          api.VisualArtifactSource(rec.Source),
+			ContentHash:     rec.ContentHash,
 			Caption:         rec.Caption,
 			EvidenceHandle:  rec.EvidenceHandle,
 			PageID:          rec.PageID,

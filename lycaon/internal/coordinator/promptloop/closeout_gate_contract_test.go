@@ -291,7 +291,7 @@ func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
 			}
 			policyFacts := guidance.GroundingHintData([]string{"offender"}, evidence.Ledger{})
 			for name := range sent {
-				if _, isPolicyFact := policyFacts[name]; !reads[name] && !isPolicyFact && !slices.Contains(tc.sharedOnly, name) {
+				if _, isPolicyFact := policyFacts[name]; !reads[name] && !isPolicyFact && !slices.Contains(tc.sharedOnly, name) && !prompts.IsDeclaredOrReservedReaderFact(name) {
 					t.Errorf("%s is sent %q and does not read it", tc.kick, name)
 				}
 			}

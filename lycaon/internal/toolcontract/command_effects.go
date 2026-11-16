@@ -47,6 +47,14 @@ func NewCommandEffects(classes ...CommandEffectClass) (CommandEffects, error) {
 	return effects, nil
 }
 
+// AllCommandEffects returns the full four-axis command effect set.
+func AllCommandEffects() CommandEffects {
+	return commandEffectBit(CommandReadOnly) |
+		commandEffectBit(CommandMutation) |
+		commandEffectBit(CommandExternalExec) |
+		commandEffectBit(CommandNetworkEgress)
+}
+
 // Allows requires every selected effect, not any matching class.
 func (allowed CommandEffects) Allows(required CommandEffects) bool {
 	return required != 0 && required & ^CommandEffects(15) == 0 && required & ^allowed == 0

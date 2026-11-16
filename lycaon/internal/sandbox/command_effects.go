@@ -7,6 +7,19 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
+// ProfileCommandEffects returns the command effects declared for profileID in profiles.
+func ProfileCommandEffects(profiles []ToolProfile, profileID string) (toolcontract.CommandEffects, error) {
+	if profileID == "" {
+		return 0, fmt.Errorf("explicit command profile required")
+	}
+	for _, p := range profiles {
+		if p.ID == profileID {
+			return p.CommandEffects, nil
+		}
+	}
+	return 0, fmt.Errorf("unknown tool profile %q", profileID)
+}
+
 // CommandEffects reads the same effective profile snapshot as tool and path
 // checks. An absent declaration admits no program operation.
 func (b *Boundary) CommandEffects(ctx context.Context, profileID string) (toolcontract.CommandEffects, error) {
@@ -17,7 +30,7 @@ func (b *Boundary) CommandEffects(ctx context.Context, profileID string) (toolco
 	if !ok {
 		return 0, fmt.Errorf("unknown tool profile %q", profileID)
 	}
-	return profile.CommandEffects, nil
+	return ProfileCommandEffects([]ToolProfile{profile}, profileID)
 }
 
 // CommandOperationAllowed preserves explicit profile denies across both retained

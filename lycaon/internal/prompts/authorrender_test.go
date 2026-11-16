@@ -344,8 +344,12 @@ func TestCheckSkillRender_UnreachableTool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("skillPreviewProfile: %v", err)
 	}
+	reader, err := skillPreviewReader(profileID, surfaceID)
+	if err != nil {
+		t.Fatalf("skillPreviewReader: %v", err)
+	}
 	calls := skills.Skill{Name: "calls-task", Body: "Start a leg with `task` and read `skills_read`.\n"}
-	violations, err := checkSkillRender(calls, "", calls.Body, calls.Body, true, profileID, surfaceID)
+	violations, err := checkSkillRender(calls, "", calls.Body, calls.Body, true, reader.Held())
 	if err != nil {
 		t.Fatalf("checkSkillRender: %v", err)
 	}
@@ -353,7 +357,7 @@ func TestCheckSkillRender_UnreachableTool(t *testing.T) {
 		t.Fatalf("violations = %v, want [unreachable_tool:task]", violations)
 	}
 	held := skills.Skill{Name: "calls-command", Body: "Inspect with `command`, `grep`, and `replace-lines`.\n"}
-	violations, err = checkSkillRender(held, "", held.Body, held.Body, true, profileID, surfaceID)
+	violations, err = checkSkillRender(held, "", held.Body, held.Body, true, reader.Held())
 	if err != nil {
 		t.Fatalf("checkSkillRender: %v", err)
 	}
@@ -364,8 +368,12 @@ func TestCheckSkillRender_UnreachableTool(t *testing.T) {
 	if err != nil {
 		t.Fatalf("skillPreviewProfile(path-explorer): %v", err)
 	}
+	readOnlyReader, err := skillPreviewReader(readOnlyProfile, readOnlySurface)
+	if err != nil {
+		t.Fatalf("skillPreviewReader(path-explorer): %v", err)
+	}
 	mutatingOnScout := skills.Skill{Name: "calls-replace-lines", Body: "Edit with `replace-lines`.\n"}
-	violations, err = checkSkillRender(mutatingOnScout, "", mutatingOnScout.Body, mutatingOnScout.Body, true, readOnlyProfile, readOnlySurface)
+	violations, err = checkSkillRender(mutatingOnScout, "", mutatingOnScout.Body, mutatingOnScout.Body, true, readOnlyReader.Held())
 	if err != nil {
 		t.Fatalf("checkSkillRender(path-explorer): %v", err)
 	}
@@ -373,7 +381,7 @@ func TestCheckSkillRender_UnreachableTool(t *testing.T) {
 		t.Fatalf("path-explorer violations = %v, want [unreachable_tool:replace-lines]", violations)
 	}
 	user := skills.Skill{Name: "user-calls", Body: "Start a leg with `task`.\n", UserProvided: true}
-	violations, err = checkSkillRender(user, "", user.Body, user.Body, true, profileID, surfaceID)
+	violations, err = checkSkillRender(user, "", user.Body, user.Body, true, reader.Held())
 	if err != nil {
 		t.Fatalf("checkSkillRender: %v", err)
 	}

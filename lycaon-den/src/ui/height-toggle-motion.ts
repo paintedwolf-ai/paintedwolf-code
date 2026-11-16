@@ -110,7 +110,7 @@ export function animateHeightToggle(
   const opening = ctrl.direction === "open";
   if (previous && previous.opening === opening) return;
 
-  const scrollport = scrollportMotionContaining(shell);
+  const scrollport = shell.parentElement ? scrollportMotionContaining(shell.parentElement) : undefined;
   if (typeof shell.animate !== "function" || prefersReducedMotion(shell.ownerDocument.defaultView)) {
     // A collapse states its contraction before it lands, so its scrollport can keep the range.
     const change = scrollport?.declareHeightChange(shell, {

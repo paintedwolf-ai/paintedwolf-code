@@ -201,6 +201,3 @@ type ToolContractRow struct {
 	// SecretReferenceArgs names the value slots resolved when SecretReferenceSurface is SecretSurfaceFile.
 	SecretReferenceArgs []string
 }
-
-// argvHostRunnerTools lists catalog argv runners for host prompts.
-var argvHostRunnerTools = []string{"command", "verify"}

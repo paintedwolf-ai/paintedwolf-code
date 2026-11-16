@@ -463,6 +463,40 @@ func (q *Queries) ListProjectArtifactRefCountsFor(ctx context.Context, arg ListP
 	return items, nil
 }
 
+const listProjectArtifactSessions = `-- name: ListProjectArtifactSessions :many
+SELECT CAST(session_id AS TEXT) AS session_id
+FROM artifacts
+WHERE project_id = ?1
+  AND deleted_at IS NULL
+  AND session_id IS NOT NULL
+  AND TRIM(session_id) != ''
+GROUP BY session_id
+ORDER BY MAX(created_at) DESC, session_id DESC
+`
+
+func (q *Queries) ListProjectArtifactSessions(ctx context.Context, projectID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectArtifactSessions, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var session_id string
+		if err := rows.Scan(&session_id); err != nil {
+			return nil, err
+		}
+		items = append(items, session_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listTreeArtifactOrigins = `-- name: ListTreeArtifactOrigins :many
 SELECT r.artifact_id, r.message_id, r.tool_call_id FROM artifact_refs r
 JOIN artifacts a ON a.id = r.artifact_id
@@ -572,26 +606,30 @@ SELECT id, project_id, root_session_id, session_id, workflow_run_id, tool_call_i
     created_at, updated_at, deleted_at, deleted_reason, width, height
 FROM artifacts
 WHERE project_id = ?1 AND deleted_at IS NULL
-  AND (
-    created_at > ?2
-    OR (created_at = ?2 AND id > ?3)
-  )
-ORDER BY created_at ASC, id ASC
-LIMIT ?4
+  AND (CAST(?2 AS TEXT) = '' OR source = CAST(?2 AS TEXT))
+  AND (CAST(?3 AS TEXT) = '' OR session_id = CAST(?3 AS TEXT))
+  AND created_at <= CAST(?4 AS TEXT)
+  AND (created_at < CAST(?4 AS TEXT) OR id < CAST(?5 AS TEXT))
+ORDER BY created_at DESC, id DESC
+LIMIT ?6
 `
 
 type PageProjectArtifactsParams struct {
-	ProjectID      string `json:"project_id"`
-	AfterCreatedAt string `json:"after_created_at"`
-	AfterID        string `json:"after_id"`
-	PageLimit      int64  `json:"page_limit"`
+	ProjectID       string `json:"project_id"`
+	SourceFilter    string `json:"source_filter"`
+	SessionFilter   string `json:"session_filter"`
+	BeforeCreatedAt string `json:"before_created_at"`
+	BeforeID        string `json:"before_id"`
+	PageLimit       int64  `json:"page_limit"`
 }
 
 func (q *Queries) PageProjectArtifacts(ctx context.Context, arg PageProjectArtifactsParams) ([]Artifacts, error) {
 	rows, err := q.db.QueryContext(ctx, pageProjectArtifacts,
 		arg.ProjectID,
-		arg.AfterCreatedAt,
-		arg.AfterID,
+		arg.SourceFilter,
+		arg.SessionFilter,
+		arg.BeforeCreatedAt,
+		arg.BeforeID,
 		arg.PageLimit,
 	)
 	if err != nil {

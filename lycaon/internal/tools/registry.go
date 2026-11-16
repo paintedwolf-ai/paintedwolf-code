@@ -467,10 +467,12 @@ const ToolSourceMCP = "mcp"
 
 // ToolMeta describes a tool for listing and JSON Schema args.
 type ToolMeta struct {
-	Name        string
-	Description string
-	Tags        []string
-	ArgsSchema  map[string]any
+	Name               string
+	Description        string
+	DescriptionEffects map[string]string `json:"-"`
+	DescriptionParts   []string          `json:"-"`
+	Tags               []string
+	ArgsSchema         map[string]any
 	// ApprovalCategory and ApprovalSubject identify structured grants.
 	ApprovalCategory string
 	ApprovalSubject  string

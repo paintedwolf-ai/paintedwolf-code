@@ -40,6 +40,7 @@ function bindAxis(
 
   let pointerId: number | undefined;
   let pointerStart = 0;
+  let lastAppliedPointer = 0;
   let scrollStart = 0;
   let scrollRange = 0;
   let handleRange = 0;
@@ -52,14 +53,22 @@ function bindAxis(
   const readGeometry = () => model?.read() ?? (axis === "y"
     ? { offset: viewport.scrollTop, viewport: viewport.clientHeight, extent: viewport.scrollHeight }
     : { offset: viewport.scrollLeft, viewport: viewport.clientWidth, extent: viewport.scrollWidth });
+  const readHandleRange = () => {
+    const trackSize = axis === "y" ? track.clientHeight : track.clientWidth;
+    const handleSize = axis === "y" ? handle.clientHeight : handle.clientWidth;
+    return Math.max(0, trackSize - handleSize);
+  };
   const commit = (offset: number, source: "thumb_drag" | "track_click", range: number) => {
     if (model) model.scrollTo(offset, source);
     else motion.commit(offset, source, { axis, measuredMaxOffset: range });
   };
 
   const applyPosition = () => {
+    const currentHandleRange = readHandleRange();
+    if (currentHandleRange > 0) handleRange = currentHandleRange;
     if (pointerId === undefined || handleRange <= 0 || scrollRange <= 0) return;
     const pointerDelta = pendingPointer - pointerStart;
+    lastAppliedPointer = pendingPointer;
     const geometry = readGeometry();
     appliedRange = Math.max(0, geometry.extent - geometry.viewport);
     const fraction = Math.max(0, Math.min(1, scrollStart / scrollRange + pointerDelta / handleRange));
@@ -96,18 +105,16 @@ function bindAxis(
   const onPointerDown = (event: PointerEvent) => {
     if (!event.isPrimary || event.button !== 0 || pointerId !== undefined) return;
     const geometry = readGeometry();
-    const trackSize = axis === "y" ? track.clientHeight : track.clientWidth;
-    const handleSize = axis === "y" ? handle.clientHeight : handle.clientWidth;
     scrollRange = Math.max(0, geometry.extent - geometry.viewport);
     appliedRange = scrollRange;
-    handleRange = Math.max(0, trackSize - handleSize);
+    handleRange = readHandleRange();
     if (scrollRange <= 0 || handleRange <= 0) return;
 
     event.preventDefault();
     event.stopPropagation();
     motion.input.beginThumbGesture();
     pointerId = event.pointerId;
-    pointerStart = pendingPointer = readPointer(event);
+    pointerStart = pendingPointer = lastAppliedPointer = readPointer(event);
     scrollStart = geometry.offset;
     elements.host.setAttribute(DEN_SCROLLBAR_DRAGGING_ATTR, axis);
     handle.setPointerCapture?.(pointerId);
@@ -161,8 +168,13 @@ function bindAxis(
     refreshGeometry() {
       if (pointerId === undefined) return false;
       const geometry = readGeometry();
-      if (Math.max(0, geometry.extent - geometry.viewport) === appliedRange) return false;
-      applyPosition();
+      const range = Math.max(0, geometry.extent - geometry.viewport);
+      if (range === appliedRange) return false;
+      // Rebase the drag on the current content offset so extent changes move the thumb, not the content.
+      scrollStart = geometry.offset;
+      scrollRange = appliedRange = range;
+      pointerStart = lastAppliedPointer;
+      handleRange = readHandleRange();
       return true;
     },
     dispose() {

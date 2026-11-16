@@ -22,7 +22,7 @@ import {
 
 export type ReaderFactsHandlers = {
   show: (editor: ReaderEditor, line: number, anchor: HTMLElement, enter: boolean) => void;
-  leave: () => void;
+  hide: () => void;
 };
 
 /** Codes indicating the underlying baseline shifted and requires a fresh presentation. */
@@ -370,7 +370,7 @@ export function createDiffsReader(args: DiffsReaderArgs) {
   }
 
   return {
-    /** Active section key under the fact cursor. */
+    /** Section key of the open line facts card. */
     get factsSection(): string { return factsSection; },
     mount(parent: HTMLElement, facts: ReaderFactsHandlers): ReaderEditor {
       editor = new ReaderEditor({
@@ -392,7 +392,7 @@ export function createDiffsReader(args: DiffsReaderArgs) {
           factsSection = target.document.at(target.view.state.doc.line(line).from)?.section ?? MAIN_SECTION;
           facts.show(target, line, anchor, enter);
         },
-        hideFacts: facts.leave,
+        hideFacts: facts.hide,
       });
       unwatchScroll = subscribeScrollActivity(editor.view.scrollDOM, (phase) => { if (phase === "settle") flush(); });
       publishNow(true);
