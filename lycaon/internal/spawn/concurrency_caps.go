@@ -159,7 +159,6 @@ func PolicyTemplateVars(budget WorkerToolBudget) map[string]any {
 		"max_write_workers":          DefaultMaxWriteTaskWorkers,
 		"max_concurrent_tool_calls":  MaxConcurrentToolCalls,
 		"worker_read_line_limit":     readcaps.LineLimit,
-		"recall_may_widen":           false,
 		"worker_summary_max_chars":   limits.DefaultWorkerSummaryMaxChars,
 		"worker_tool_budget_default": budget.Default,
 		"worker_tool_budget_min":     budget.Min,

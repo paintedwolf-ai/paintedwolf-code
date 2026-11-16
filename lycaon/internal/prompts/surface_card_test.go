@@ -9,12 +9,25 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+func surfaceCardVarsMap(card prompts.SurfaceCardVars, mode string) map[string]any {
+	return map[string]any{
+		"surface_card_label":     card.Label,
+		"surface_card_rule":      card.Rule,
+		"surface_publishes_text": card.PublishesText,
+		"card_may_edit":          card.MayEdit,
+		"card_may_run":           card.MayRun,
+		"card_may_dispatch":      card.MayDispatch,
+		"card_edit_deferred":     card.EditDeferred,
+		"card_only_tools":        card.OnlyTools,
+		"execution_mode":         mode,
+	}
+}
+
 // renderSurfaceCard runs the bundled partial over the derived facts, so these
 // tests cover the whole chain the model sees.
 func renderSurfaceCard(t *testing.T, label, rule, mode string, sticky, deferred []string) string {
 	t.Helper()
-	vars := prompts.CoordinatorSurfaceCardVars(prompts.SurfaceCard{Label: label, Rule: rule}, sticky, deferred, true).TemplateVars()
-	vars["execution_mode"] = mode
+	vars := surfaceCardVarsMap(prompts.CoordinatorSurfaceCardVars(prompts.SurfaceCard{Label: label, Rule: rule}, sticky, deferred, true), mode)
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	out, err := engine.Render(context.Background(), "partials/coordinator-surface-card.md", vars)
 	testutil.FailErr(t, "render surface card partial", err)
@@ -77,8 +90,7 @@ func TestSurfaceCardFallsBackToFamily(t *testing.T) {
 
 	// The investigate family states what happens to text only where it is published.
 	for _, publishes := range []bool{true, false} {
-		vars := prompts.CoordinatorSurfaceCardVars(prompts.SurfaceCard{PublishesText: publishes}, []string{"recall"}, nil, true).TemplateVars()
-		vars["execution_mode"] = "investigate"
+		vars := surfaceCardVarsMap(prompts.CoordinatorSurfaceCardVars(prompts.SurfaceCard{PublishesText: publishes}, []string{"recall"}, nil, true), "investigate")
 		out, err := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}).Render(context.Background(), "partials/coordinator-surface-card.md", vars)
 		testutil.FailErr(t, "render investigate family", err)
 		if got := strings.Contains(out, "Text alongside tool calls reaches the user"); got != publishes {

@@ -2,6 +2,7 @@ package capability
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/agentdef"
@@ -63,9 +64,6 @@ func MergeVars(into map[string]any, caps CoordinatorCapabilities) {
 	into["can_spawn_implementer"] = caps.CanSpawnImplementer
 	into["can_spawn_web_research"] = caps.CanSpawnWebResearch
 	into["can_spawn_workers"] = caps.CanSpawnWorkers
-	if _, ok := into["root_count"]; !ok {
-		into["root_count"] = caps.RootCount
-	}
 }
 
 // MergeForTurn derives capability flags from the resolved per-turn capability surface.
@@ -77,13 +75,7 @@ func MergeForTurn(
 	if into == nil {
 		return fmt.Errorf("nil template vars map")
 	}
-	for k, v := range reader.Facts() {
-		if (k == "has_git" || k == "on_worker_branch") && into[k] != nil {
-			continue
-		}
-		into[k] = v
-	}
-	if has, _ := into["profile_has_skills_read"].(bool); !has {
+	if !slices.Contains(reader.Offered(), "skills_read") {
 		delete(into, "skills_roster")
 		into["skills_count"] = 0
 		into["has_skills"] = false

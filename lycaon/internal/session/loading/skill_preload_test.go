@@ -11,8 +11,10 @@ import (
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	skilltools "github.com/lycaon/lycaon/internal/tools/native/skills"
@@ -146,12 +148,22 @@ func preloadRenderService(t *testing.T) *Service {
 	t.Helper()
 	read := &skilltools.SkillsReadTool{
 		TemplateVars: func(_ context.Context, tctx tools.ToolContext) map[string]any {
-			vars, err := prompts.SkillSurfaceTemplateVars(prompts.SkillSurfaceVarsInput{
+			profiles, err := sandbox.LoadToolProfiles()
+			testutil.FailErr(t, "load tool profiles", err)
+			surfaceID := strings.TrimSpace(tctx.Turn.TurnSurfaceID)
+			plan, err := prompts.CompileSurfacePlan(surfaceID, 1)
+			testutil.FailErr(t, "compile surface plan", err)
+			reader, err := prompts.NewReader(prompts.ReaderInput{
 				ProfileID: prompts.CoordinatorProfileID,
-				SurfaceID: strings.TrimSpace(tctx.Turn.TurnSurfaceID),
+				SurfaceID: surfaceID,
+				Profiles:  profiles,
+				Plan:      plan,
+				RootCount: 1,
+				HasGit:    true,
+				WebSearch: true,
 			})
-			testutil.FailErr(t, "skill surface vars", err)
-			return vars
+			testutil.FailErr(t, "new reader", err)
+			return prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
 		},
 		PackConfiguration: func(context.Context, tools.ToolContext, string) map[string]any {
 			return map[string]any{"mode": "bounded"}

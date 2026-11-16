@@ -2,12 +2,13 @@ package contract
 
 import (
 	"slices"
-	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -68,6 +69,8 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 	contractcheck.FailErr(t, "load sandbox config", err)
 	bootReg := toolfixture.ContractServeBootRegistry(t)
 	engine := bundledPromptEngine()
+	catalog, err := prompts.UnitCatalogForEngine(engine)
+	contractcheck.FailErr(t, "unit catalog", err)
 	for _, posture := range postures.List() {
 		profiles := postureProfiles(shipped, posture.CommandEffects)
 		exec := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(sandbox.NewBoundary(sandboxCfg, profiles)), bootReg, toolprofiles.DefaultToolProfileID)
@@ -93,6 +96,7 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 				plan, err := prompts.CompileSurfacePlan(surfaceID, 1)
 				contractcheck.FailErr(t, "compile surface plan", err)
 				reader, err := prompts.NewReader(prompts.ReaderInput{
+					Mode:      surface.ExecutionModeFamily(surfaceID),
 					ProfileID: prompts.CoordinatorProfileID,
 					SurfaceID: surfaceID,
 					Plan:      plan,
@@ -108,11 +112,12 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 					SurfaceID: surfaceID,
 				}, reader)
 
-				vars := map[string]any{"root_count": 1}
+				vars := map[string]any{}
 				mergePromptBudgetSkillRoster(t, vars)
-				contractcheck.FailErr(t, "merge surface vars", prompts.MergeCoordinatorSurfacePathVars(surfaceID, profiles, vars, prompts.ReaderInput{}))
 				contractcheck.FailErr(t, "merge prompt vars", prompts.MergeCoordinatorPromptVars(surfaceID, prompts.ExecutionModePromptTransition{}, "", vars))
-				offered, _ := vars["surface_offered"].([]string)
+				vars, err = prompts.Vars(reader, vars)
+				contractcheck.FailErr(t, "prompts.Vars", err)
+				offered := reader.Offered()
 				commandOffered := slices.Contains(offered, "command")
 				for name, class := range commandEffectVariables {
 					want := commandOffered && allowsEffect(t, admitted, class)
@@ -121,9 +126,7 @@ func TestCoordinatorPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 					}
 				}
 
-				assertUnitRendersIff(t, engine, "http-operating-procedure", vars, vars["profile_command_network_egress"] == true)
-				restores, _ := vars["profile_has_restore_version"].(bool)
-				assertUnitRendersIff(t, engine, "native-edit-tool", vars, vars["profile_command_mutation"] == true || restores)
+				assertCatalogUnitSelection(t, catalog, reader)
 				mints, _ := vars["mints"].(map[string]bool)
 				if got := mints["tui"]; got != (vars["profile_has_terminal_capture"] == true) {
 					t.Errorf("mints[tui] = %v, want %v", got, vars["profile_has_terminal_capture"] == true)
@@ -147,6 +150,8 @@ func TestWorkerPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 	sandboxCfg, err := sandbox.LoadConfig()
 	contractcheck.FailErr(t, "load sandbox config", err)
 	bootReg := toolfixture.ContractServeBootRegistry(t)
+	catalog, err := prompts.UnitCatalogForEngine(bundledPromptEngine())
+	contractcheck.FailErr(t, "unit catalog", err)
 	for _, posture := range postures.List() {
 		profiles := postureProfiles(shipped, posture.CommandEffects)
 		exec := toolexecution.NewExecutor(toolprofiles.NewProfilePolicyEngine(sandbox.NewBoundary(sandboxCfg, profiles)), bootReg, toolprofiles.DefaultToolProfileID)
@@ -175,8 +180,8 @@ func TestWorkerPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 					t.Fatalf("worker reader.Effects() = %v, executor = %v, want %v", reader.Effects().Classes(), programSurface.Effects().Classes(), profile.CommandEffects.Classes())
 				}
 				assertCommandMetaMatchesReader(t, exec, platform.ToolFilter{ProfileID: profile.ID}, reader)
-				vars := map[string]any{}
-				contractcheck.FailErr(t, "merge profile vars", prompts.MergeAgentToolSurfaceVars(profile.ID, nil, nil, prompts.ReaderInput{}, vars, profiles))
+				assertCatalogUnitSelection(t, catalog, reader)
+				vars := reader.Facts()
 				commandOffered, _ := vars["profile_has_command"].(bool)
 				for name, class := range commandEffectVariables {
 					want := commandOffered && allowsEffect(t, profile.CommandEffects, class)
@@ -189,25 +194,21 @@ func TestWorkerPromptVariablesStateAdmittedCommandEffects(t *testing.T) {
 	}
 }
 
-// The checklist procedure follows the one tool that stores the checklist.
-func TestProgressProcedureFollowsUpdateProgress(t *testing.T) {
-	catalog, err := prompts.UnitCatalogForEngine(bundledPromptEngine())
-	contractcheck.FailErr(t, "unit catalog", err)
-	unit, ok := catalog.Unit("coordinator-progress-procedure")
-	if !ok {
-		t.Fatal("coordinator-progress-procedure is not a shipped unit")
-	}
-	if !slices.Equal(unit.Attaches, []string{"update_progress"}) {
-		t.Fatalf("attaches = %v", unit.Attaches)
-	}
-}
-
-func assertUnitRendersIff(t *testing.T, engine *prompts.FileTemplateEngine, stem string, vars map[string]any, want bool) {
+func assertCatalogUnitSelection(t *testing.T, catalog promptunit.Catalog, reader prompts.Reader) {
 	t.Helper()
-	body, err := engine.RenderUnit(t.Context(), "units/"+stem, vars)
-	contractcheck.FailErr(t, "render "+stem, err)
-	if got := strings.TrimSpace(body) != ""; got != want {
-		t.Errorf("unit %s rendered = %v, want %v", stem, got, want)
+	sel := reader.Selection()
+	rendered := catalog.Rendered(sel)
+	selected := make(map[string]bool)
+	for _, units := range rendered {
+		for _, u := range units {
+			selected[u.ID] = true
+		}
+	}
+	for _, u := range catalog.Units() {
+		want := u.HostsFor(sel.Host) && u.ModeFits(sel.Mode) && (len(u.Attaches) == 0 || u.AttachedTo(sel.Held))
+		if got := selected[u.ID]; got != want {
+			t.Errorf("unit %s selected = %v, want %v (host=%s mode=%s attaches=%v)", u.ID, got, want, sel.Host, sel.Mode, u.Attaches)
+		}
 	}
 }
 

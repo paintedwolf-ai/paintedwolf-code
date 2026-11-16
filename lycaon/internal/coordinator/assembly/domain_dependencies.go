@@ -21,6 +21,7 @@ type promptSurfaceDeps struct {
 	EffectivePromptSurface  func(ctx context.Context, sess *api.Session) prompts.AgentPromptSurface
 	ImplementSessionState   func(ctx context.Context, sess *api.Session) surface.ImplementSessionState
 	Limits                  func(context.Context, *api.Session) settings.SessionLimits
+	ModelVision             func(context.Context, *api.Session) bool
 	ExecutionModes          *surface.ExecutionModeStateStore
 	Selection               SelectionSource
 	ProjectOverlayRootPaths ProjectOverlayRootPaths
@@ -75,6 +76,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 		EffectivePromptSurface:  snapshot.EffectivePromptSurface,
 		ImplementSessionState:   snapshot.ImplementSessionState,
 		Limits:                  snapshot.Limits,
+		ModelVision:             snapshot.ModelVision,
 		ExecutionModes:          snapshot.ExecutionModes,
 		Selection:               snapshot.Selection,
 		ProjectOverlayRootPaths: snapshot.ProjectOverlayRootPaths,

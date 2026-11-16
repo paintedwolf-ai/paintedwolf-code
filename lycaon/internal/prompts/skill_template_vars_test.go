@@ -4,28 +4,54 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestSkillSurfaceTemplateVarsCoordinatorSurface(t *testing.T) {
-	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{
-		ProfileID:        CoordinatorProfileID,
-		SurfaceID:        "implement_routing",
-		Offered:          []string{"command", "task", "ask_user"},
-		RootCount:        2,
-		DelegationBudget: spawn.DefaultWorkerToolBudget(),
+func skillTestReader(t *testing.T, in ReaderInput) Reader {
+	t.Helper()
+	if len(in.Profiles) == 0 {
+		profiles, err := sandbox.LoadToolProfiles()
+		testutil.FailErr(t, "load tool profiles", err)
+		in.Profiles = profiles
+	}
+	if in.SurfaceID != "" {
+		if !in.Plan.Compiled() {
+			plan, err := CompileSurfacePlan(in.SurfaceID, max(in.RootCount, 1))
+			testutil.FailErr(t, "compile surface plan", err)
+			in.Plan = plan
+		}
+		if in.Loaded == nil {
+			in.Loaded = map[string]bool{}
+		}
+		for _, name := range in.Plan.AddressableNames() {
+			in.Loaded[name] = true
+		}
+	}
+	in.WebSearch = true
+	reader, err := NewReader(in)
+	testutil.FailErr(t, "new reader", err)
+	return reader
+}
+
+func TestSkillVarsCoordinatorSurface(t *testing.T) {
+	reader := skillTestReader(t, ReaderInput{
+		ProfileID: CoordinatorProfileID,
+		SurfaceID: "implement_routing",
+		Loaded:    toolNameSet([]string{"command", "task", "ask_user"}),
+		RootCount: 2,
 	})
-	testutil.FailErr(t, "coordinator vars", err)
+	vars := SkillVars(reader, spawn.DefaultWorkerToolBudget())
 	if vars["is_coordinator"] != true {
 		t.Fatalf("is_coordinator = %v", vars["is_coordinator"])
 	}
 	if vars["root_count"] != 2 {
 		t.Fatalf("root_count = %v", vars["root_count"])
 	}
-	offered, _ := vars["surface_offered"].([]string)
+	offered := reader.Offered()
 	if !sort.StringsAreSorted(offered) || len(offered) == 0 {
-		t.Fatalf("surface_offered = %v", offered)
+		t.Fatalf("reader.Offered() = %v", offered)
 	}
 	if vars["profile_has_command"] != true {
 		t.Fatalf("profile_has_command = %v", vars["profile_has_command"])
@@ -41,16 +67,17 @@ func TestSkillSurfaceTemplateVarsCoordinatorSurface(t *testing.T) {
 	}
 }
 
-func TestSkillSurfaceTemplateVarsWorkerProfile(t *testing.T) {
-	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{
-		ProfileID:        "worker_readonly",
-		Offered:          []string{"command", "summarize", "recall"},
-		OnWorkerBranch:   true,
-		HasGit:           true,
-		RootCount:        1,
-		DelegationBudget: spawn.DefaultWorkerToolBudget(),
+func TestSkillVarsWorkerProfile(t *testing.T) {
+	offered := []string{"command", "summarize", "recall"}
+	reader := skillTestReader(t, ReaderInput{
+		ProfileID:      "worker_readonly",
+		Visible:        offered,
+		Loaded:         toolNameSet(offered),
+		OnWorkerBranch: true,
+		HasGit:         true,
+		RootCount:      1,
 	})
-	testutil.FailErr(t, "worker vars", err)
+	vars := SkillVars(reader, spawn.DefaultWorkerToolBudget())
 	if vars["is_coordinator"] != false {
 		t.Fatalf("is_coordinator = %v", vars["is_coordinator"])
 	}
@@ -69,31 +96,30 @@ func TestSkillSurfaceTemplateVarsWorkerProfile(t *testing.T) {
 	if vars["profile_has_task"] != false {
 		t.Fatalf("worker must not hold task: %v", vars["profile_has_task"])
 	}
-	if _, ok := vars["surface_offered"]; ok {
-		t.Fatal("worker vars must not carry coordinator surface rosters")
+	if vars["surface_id"] != "" {
+		t.Fatalf("worker vars must not carry coordinator surface_id: %v", vars["surface_id"])
 	}
 }
 
-func TestSkillSurfaceTemplateVarsCallerShapeSurvivesMerges(t *testing.T) {
+func TestSkillVarsCallerShapeSurvivesMerges(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
-		input SkillSurfaceVarsInput
+		input ReaderInput
 		shape map[string]any
 	}{
 		{
 			name:  "coordinator",
-			input: SkillSurfaceVarsInput{ProfileID: CoordinatorProfileID, SurfaceID: "implement_routing", OnWorkerBranch: false, HasGit: true, RootCount: 3},
+			input: ReaderInput{ProfileID: CoordinatorProfileID, SurfaceID: "implement_routing", OnWorkerBranch: false, HasGit: true, RootCount: 3},
 			shape: map[string]any{"is_coordinator": true, "on_worker_branch": false, "has_git": true, "root_count": 3},
 		},
 		{
 			name:  "worker",
-			input: SkillSurfaceVarsInput{ProfileID: "worker_readonly", OnWorkerBranch: true, HasGit: false, RootCount: 1},
+			input: ReaderInput{ProfileID: "worker_readonly", OnWorkerBranch: true, HasGit: false, RootCount: 1},
 			shape: map[string]any{"is_coordinator": false, "on_worker_branch": true, "has_git": false, "root_count": 1},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			vars, err := SkillSurfaceTemplateVars(tc.input)
-			testutil.FailErr(t, "vars", err)
+			vars := SkillVars(skillTestReader(t, tc.input), spawn.DefaultWorkerToolBudget())
 			for k, want := range tc.shape {
 				if vars[k] != want {
 					t.Fatalf("%s = %v, want %v", k, vars[k], want)
@@ -103,14 +129,16 @@ func TestSkillSurfaceTemplateVarsCallerShapeSurvivesMerges(t *testing.T) {
 	}
 }
 
-func TestSkillSurfaceTemplateVarsDefaultsZeroBudget(t *testing.T) {
-	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{
+func TestSkillVarsDefaultsZeroBudget(t *testing.T) {
+	offered := []string{"command", "summarize"}
+	reader := skillTestReader(t, ReaderInput{
 		ProfileID: "worker_readonly",
-		Offered:   []string{"command", "summarize"},
+		Visible:   offered,
+		Loaded:    toolNameSet(offered),
 		HasGit:    true,
 		RootCount: 1,
 	})
-	testutil.FailErr(t, "worker vars", err)
+	vars := SkillVars(reader, spawn.WorkerToolBudget{})
 	def := spawn.DefaultWorkerToolBudget()
 	for k, want := range map[string]int{
 		"worker_tool_budget_default": def.Default,
@@ -124,16 +152,16 @@ func TestSkillSurfaceTemplateVarsDefaultsZeroBudget(t *testing.T) {
 	}
 }
 
-func TestSkillSurfaceTemplateVarsWorkerOfferedMarksDeferredLoaded(t *testing.T) {
-	// worker_readonly defers held_result/held_stop in its profile, so Offered
-	// marks loaded deferred tools as held rather than requestable.
-	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{
+func TestSkillVarsWorkerOfferedMarksDeferredLoaded(t *testing.T) {
+	offered := []string{"command", "held_result"}
+	reader := skillTestReader(t, ReaderInput{
 		ProfileID: "worker_readonly",
-		Offered:   []string{"command", "held_result"},
+		Visible:   offered,
+		Loaded:    toolNameSet(offered),
 		HasGit:    true,
 		RootCount: 1,
 	})
-	testutil.FailErr(t, "worker vars", err)
+	vars := SkillVars(reader, spawn.DefaultWorkerToolBudget())
 	if vars["profile_has_held_result"] != true {
 		t.Fatalf("offered deferred tool must render as held: %v", vars["profile_has_held_result"])
 	}
@@ -145,17 +173,14 @@ func TestSkillSurfaceTemplateVarsWorkerOfferedMarksDeferredLoaded(t *testing.T) 
 	}
 }
 
-func TestSkillSurfaceTemplateVarsCoordinatorAddressableTools(t *testing.T) {
-	// implement_routing floors scan_* and loadable command_output/command_stop
-	// via request_tools; skill copy renders against the whole addressable set
-	// so deferred tools do not blank instructions before request_tools runs.
-	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{
+func TestSkillVarsCoordinatorAddressableTools(t *testing.T) {
+	reader := skillTestReader(t, ReaderInput{
 		ProfileID: CoordinatorProfileID,
 		SurfaceID: "implement_routing",
-		Offered:   []string{"command", "task", "ask_user"},
+		Loaded:    toolNameSet([]string{"command", "task", "ask_user"}),
 		RootCount: 1,
 	})
-	testutil.FailErr(t, "coordinator vars", err)
+	vars := SkillVars(reader, spawn.DefaultWorkerToolBudget())
 	if vars["profile_has_scan_query"] != true {
 		t.Fatalf("floor tool outside Offered must render as addressable: %v", vars["profile_has_scan_query"])
 	}

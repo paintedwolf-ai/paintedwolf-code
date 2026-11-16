@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -73,13 +72,14 @@ func RenderPromptDump(
 	current := surface.ExecutionModeFamily(profile.SurfaceID)
 	transition := surface.ComputeModeTransition(previous, current, opts.Causes)
 
-	base := map[string]any{"project_dir": sess.WorkspacePath}
+	occ := map[string]any{"project_dir": sess.WorkspacePath}
 	var roots []projectroot.RootRef
 	if sess.WorkspacePath != "" {
 		roots = []projectroot.RootRef{{ID: promptDumpFixtureRootID, Path: sess.WorkspacePath, Label: "Fixture", IsPrimary: true}}
 	}
-	prompts.MergeWorkspaceRootsVars(base, roots, promptDumpFixtureRootID)
-	rootCount, _ := base["root_count"].(int)
+	prompts.MergeWorkspaceRootsVars(occ, roots, promptDumpFixtureRootID)
+	delete(occ, "root_count")
+	rootCount := len(roots)
 	roster := inject.ResolveAgentRoster(profile.SurfaceID, spawn.AmbientAllowedAgents(), rootCount, false, true)
 	profiles, err := sandbox.LoadToolProfiles()
 	if err != nil {
@@ -101,14 +101,11 @@ func RenderPromptDump(
 	if err != nil {
 		return "", err
 	}
-	for k, v := range reader.Facts() {
-		base[k] = v
-	}
-	if err := capability.MergeForTurn(base, reader, roster.Effective); err != nil {
+	if err := capability.MergeForTurn(occ, reader, roster.Effective); err != nil {
 		return "", fmt.Errorf("merge fixture capabilities: %w", err)
 	}
 	for key, value := range spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget()) {
-		base[key] = value
+		occ[key] = value
 	}
 	if err := prompts.MergeCoordinatorPromptVars(
 		profile.SurfaceID,
@@ -119,25 +116,20 @@ func RenderPromptDump(
 			ExecutionModeLeft:     transition.ExecutionModeLeft,
 		},
 		implState.VerifyCommand,
-		base,
+		occ,
 	); err != nil {
 		return "", fmt.Errorf("merge coordinator prompt vars: %w", err)
 	}
-
-	// The fixture is the widest prompt the surface can render: every loadable
-	// tool counts as offered, so every unit that could join the turn does.
-	floor, _ := base["surface_offered"].([]string)
-	loadable, err := prompts.LoadCoordinatorSurfaceLoadable(profile.SurfaceID)
+	base, err := prompts.Vars(reader, occ)
 	if err != nil {
-		return "", fmt.Errorf("surface loadable: %w", err)
+		return "", fmt.Errorf("prompt dump vars: %w", err)
 	}
-	offered := append(append([]string(nil), floor...), loadable...)
+
 	unitCatalog, err := prompts.UnitCatalogForEngine(engine)
 	if err != nil {
 		return "", fmt.Errorf("unit catalog: %w", err)
 	}
-	sel := prompts.UnitSelectionVars(promptunit.HostCoordinator, current, offered)
-	blocks, err := prompts.RenderUnitSlots(ctx, prompts.UnitRendererFor(engine), unitCatalog, sel, base)
+	blocks, err := prompts.RenderUnitSlots(ctx, prompts.UnitRendererFor(engine), unitCatalog, reader.Selection(), base)
 	if err != nil {
 		return "", fmt.Errorf("render units: %w", err)
 	}

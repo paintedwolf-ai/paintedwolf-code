@@ -14,14 +14,17 @@ func RenderToolProceduresBlock(
 	ctx context.Context, renderer *prompts.InjectRenderer,
 	sessionID string, reader prompts.Reader,
 ) (string, error) {
-	vars := reader.Facts()
-	vars["offered_tools"] = reader.Offered()
+	vars, err := prompts.Vars(reader, map[string]any{"offered_tools": reader.Offered()})
+	if err != nil {
+		return "", err
+	}
 	surface, profile := procedureTarget(reader)
 	catalog, err := renderer.UnitCatalog()
 	if err != nil {
 		return "", err
 	}
-	sel := prompts.UnitSelectionVars(reader.Host(), "", reader.Offered())
+	sel := reader.Selection()
+	sel.Mode = ""
 	blocks, err := prompts.RenderUnitSlots(ctx, renderer, catalog, sel, vars)
 	if err != nil {
 		return "", err
@@ -33,7 +36,7 @@ func RenderToolProceduresBlock(
 }
 
 func procedureTarget(reader prompts.Reader) (string, string) {
-	if reader.Host() == promptunit.HostCoordinator {
+	if reader.Selection().Host == promptunit.HostCoordinator {
 		if reader.SurfaceID() != "" {
 			return "coordinator", reader.SurfaceID()
 		}
@@ -49,7 +52,8 @@ func ToolProcedureUnits(renderer *prompts.InjectRenderer, reader prompts.Reader)
 	if err != nil {
 		return nil, err
 	}
-	sel := prompts.UnitSelectionVars(reader.Host(), "", reader.Offered())
+	sel := reader.Selection()
+	sel.Mode = ""
 	rendered := catalog.Rendered(sel)
 	var out []promptunit.Unit
 	for _, slot := range promptunit.Slots() {

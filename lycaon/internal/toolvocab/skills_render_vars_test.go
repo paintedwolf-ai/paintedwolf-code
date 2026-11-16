@@ -1,12 +1,21 @@
 package toolvocab
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/spawn"
+)
 
 // Wildcard manifest selectors (mcp_*) are not tool names and must never become
 // profile_has_<name> template facts; real held tools still do.
 func TestSkillRenderVarsSkipsInvalidToolNames(t *testing.T) {
 	t.Parallel()
-	vars := StockCatalog().skillRenderVars(map[string]bool{"command": true, "edit": true, "mcp_*": true, ReachCommandMutation: true}, false)
+	reader, err := offeredReader(map[string]bool{"command": true, "edit": true, "mcp_*": true, ReachCommandMutation: true})
+	if err != nil {
+		t.Fatalf("offeredReader: %v", err)
+	}
+	vars := prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
 	if _, ok := vars["profile_has_mcp_*"]; ok {
 		t.Fatalf("wildcard family leaked into template facts: %#v", vars)
 	}

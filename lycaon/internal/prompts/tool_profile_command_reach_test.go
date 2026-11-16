@@ -12,14 +12,14 @@ func TestToolProfileCapabilityVarsFollowCommandReach(t *testing.T) {
 			t.Errorf("explore_readonly %s = %v, want true", key, readonly[key])
 		}
 	}
-	for _, key := range []string{"profile_has_code_rewrite", "profile_has_jq_edit"} {
+	for _, key := range []string{"profile_has_code_rewrite", "profile_command_mutation"} {
 		if readonly[key] != false {
 			t.Errorf("explore_readonly %s = %v, want false", key, readonly[key])
 		}
 	}
 	// Mutating command leg with the form tools held: code-rewrite reachable.
 	implement := loadProfileCapabilityVars(t, "implement")
-	for _, key := range []string{"profile_has_code_rewrite", "profile_has_jq_edit"} {
+	for _, key := range []string{"profile_has_code_rewrite", "profile_command_mutation"} {
 		if implement[key] != true {
 			t.Errorf("implement %s = %v, want true", key, implement[key])
 		}

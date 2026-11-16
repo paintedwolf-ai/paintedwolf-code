@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -221,4 +222,48 @@ func TestNewSetProfiles(t *testing.T) {
 			t.Fatal("nil loader built a set")
 		}
 	})
+}
+
+func TestVariableReferencesWalker(t *testing.T) {
+	cases := []struct {
+		name   string
+		source string
+		want   []string
+	}{
+		{
+			name:   "plain references",
+			source: `{% if profile_command_mutation and not command_on_floor %}{{ root_count|default:fallback_count }}{% endif %}`,
+			want:   []string{"profile_command_mutation", "command_on_floor", "root_count", "fallback_count"},
+		},
+		{
+			name:   "dotted references",
+			source: `{% if mints.tui or profile_can_request.verify %}{{ receipt_kind.command }}{% endif %}`,
+			want:   []string{"mints.tui", "profile_can_request.verify", "receipt_kind.command"},
+		},
+		{
+			name: "loop and with bindings excluded",
+			source: `{% for k, row in agent_tools %}{{ k }} {{ row.name }} {{ forloop.Counter }}{% endfor %}` +
+				`{% with alias=profile_has_command other = surface_id %}{{ alias }} {{ other.len }} {{ has_git }}{% endwith %}` +
+				`{% with requestable_tools as reqs %}{{ reqs.name }}{% endwith %}`,
+			want: []string{"agent_tools", "profile_has_command", "surface_id", "has_git", "requestable_tools"},
+		},
+		{
+			name: "references inside literals and comments ignored",
+			source: `prose profile_has_fake {# {{ profile_in_comment }} #} ` +
+				`{% comment %}{{ profile_in_block_comment }}{% endcomment %} ` +
+				`{% verbatim %}{{ profile_in_verbatim }}{% endverbatim %} ` +
+				`{{ "profile_in_double_quotes" }} '{{ 'profile_in_single_quotes' }}' ` +
+				`{% if mode == "profile_literal" %}{{ real_var }}{% endif %}`,
+			want: []string{"mode", "real_var"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := VariableReferences(tc.source)
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("VariableReferences() = %v, want %v", got, tc.want)
+			}
+		})
+	}
 }

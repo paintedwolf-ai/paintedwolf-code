@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path"
 	"path/filepath"
@@ -51,6 +52,13 @@ func (l PromptLayers) Snapshot() (PromptLayers, error) {
 	for _, root := range l.roots() {
 		if err := capturePromptRoot(root, captured); err != nil {
 			return PromptLayers{}, err
+		}
+	}
+	if len(captured) > 0 {
+		if notes, err := checkCapturedOverlayTemplates(l.Catalog, captured); err == nil {
+			for _, note := range notes {
+				slog.Default().Warn("prompt overlay vocabulary note", "note", note)
+			}
 		}
 	}
 	l.overlaySnapshot = captured

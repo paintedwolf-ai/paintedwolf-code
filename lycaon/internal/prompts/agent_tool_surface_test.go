@@ -191,26 +191,26 @@ func keysNotIn(want, have map[string]bool) []string {
 }
 
 func TestRenderAgentToolSurfacePartial(t *testing.T) {
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	vars := prompts.AgentToolSurfaceTemplateVars(prompts.AgentToolSurfaceData{
-		ToolProfile: "explore_readonly",
-		Tools: []prompts.AgentToolArgView{{
-			Name:         "read",
-			RequiredArgs: []string{"path"},
-		}},
-		RejectCodes: []prompts.AgentRejectCodeView{{
-			Code:              "TOOL_ARGS_INVALID",
-			BranchInstruction: "Fix args",
-		}},
+	root := configlayout.FindModuleRoot()
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	testutil.FailErr(t, "LoadSchemaDir", err)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "implement",
+		Profiles:  toolProfiles(t),
+		Schemas:   schemas,
+		RootCount: 1,
+		WebSearch: true,
 	})
-	out, err := engine.Render(context.Background(), prompts.AgentToolSurfacePartialRef, vars)
+	testutil.FailErr(t, "NewReader", err)
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
+	out, err := engine.Render(context.Background(), prompts.AgentToolSurfacePartialRef, reader.Facts())
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-	if !strings.Contains(out, "`read`") || !strings.Contains(out, "`path`") {
+	if !strings.Contains(out, "`command`") {
 		t.Fatalf("out = %q", out)
 	}
-	if !strings.Contains(out, "TOOL_ARGS_INVALID") {
+	if !strings.Contains(out, "WRITE_SCOPE_DENIED") {
 		t.Fatalf("out missing code: %q", out)
 	}
 }
@@ -298,10 +298,17 @@ func TestRequestableToolsCarryTheEngineOptionText(t *testing.T) {
 			t.Fatalf("%s summary = %q want the engine's option text %q", row.Name, row.Summary, want)
 		}
 	}
-	vars := prompts.AgentToolSurfaceTemplateVars(data)
-	rows, _ := vars["requestable_tools"].([]map[string]any)
-	if len(rows) != len(data.Requestable) || rows[0]["name"] != data.Requestable[0].Name || rows[0]["summary"] != data.Requestable[0].Summary {
-		t.Fatalf("requestable_tools = %+v", vars["requestable_tools"])
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "implement",
+		Profiles:  toolProfiles(t),
+		Schemas:   schemas,
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader", err)
+	vars := reader.Facts()
+	if vars["more_tools_loadable"] != true {
+		t.Fatalf("more_tools_loadable = %+v", vars["more_tools_loadable"])
 	}
 	bare, err := prompts.LoadAgentToolSurface("implement", nil, nil, prompts.ReaderInput{}, toolProfiles(t))
 	testutil.FailErr(t, "LoadAgentToolSurface without schemas", err)

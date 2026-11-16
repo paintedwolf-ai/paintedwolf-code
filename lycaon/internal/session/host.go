@@ -195,6 +195,7 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	m.Coordinator.Feedback = policyfeedback.New()
 	workerState := workeroutcomes.NewState(workeroutcomes.StatePorts{Sessions: store, Verification: m.Verification, Workspace: m.Workspace, OverlayChanges: OverlayWorkspaceChangedPaths})
 	m.Coordinator.Loading = loading.New(store, m.Workspace, router, models, tracker, nil, m.Profiles.EffectiveSkillsForProfile, workerState.ForSession)
+	m.Coordinator.Loading.SetProfiles(m.Profiles.ForSession)
 	m.ToolPolicy.SetSources(store, m.Workspace, m.Coordinator.Feedback, m.Coordinator.Loading.Ledger)
 	turnHistory := history.New(store, gate, m.Workspace, m.Limits, router, m.Profiles.RecallAvailable)
 	m.Admission = turnadmission.New(store, gate, m.Workspace, turnTurns, queueStore)

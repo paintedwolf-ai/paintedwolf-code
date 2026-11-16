@@ -105,14 +105,6 @@ func RequestableTools(names []string, schemas *toolschema.Config) ([]Requestable
 	return out, nil
 }
 
-func requestableToolVars(rows []RequestableToolView) []map[string]any {
-	out := make([]map[string]any, 0, len(rows))
-	for _, row := range rows {
-		out = append(out, map[string]any{"name": row.Name, "summary": row.Summary})
-	}
-	return out
-}
-
 // requestableToolSet returns deferred tools when request_tools is offered.
 func requestableToolSet(offered, requestable []string) map[string]bool {
 	plan := toolsurface.Compile(offered, requestable)

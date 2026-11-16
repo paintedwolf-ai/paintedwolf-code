@@ -16,10 +16,7 @@ func TestCoordinatorPromptOmitsWebToolsWhenSearchDisabled(t *testing.T) {
 	t.Parallel()
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	disabled := false
-	vars := map[string]any{
-		"execution_mode": "orchestrate",
-		"root_count":     0,
-	}
+	vars := map[string]any{}
 	profiles, err := sandbox.LoadToolProfiles()
 	contractcheck.FailErr(t, "LoadToolProfiles", err)
 	plan, err := prompts.CompileSurfacePlan(spawn.SurfaceImplementRouting, 0)
@@ -37,6 +34,8 @@ func TestCoordinatorPromptOmitsWebToolsWhenSearchDisabled(t *testing.T) {
 		reader,
 		inject.ResolveAgentRoster(spawn.SurfaceImplementRouting, spawn.AmbientAllowedAgents(), 0, false, disabled).Effective,
 	))
+	vars, err = prompts.Vars(reader, vars)
+	contractcheck.FailErr(t, "prompts.Vars", err)
 	_, err = engine.Render(context.Background(), "agents/coordinator-core.md", vars)
 	contractcheck.FailErr(t, "render coordinator-core", err)
 	if vars["web_search_enabled"].(bool) {

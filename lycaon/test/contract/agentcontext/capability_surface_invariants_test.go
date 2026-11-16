@@ -40,6 +40,7 @@ func TestI14ExcludedDisclosuresMatchPolicyProjection(t *testing.T) {
 					RootCount:      rootCount,
 					SpawnAllowlist: allowed,
 					MaxInFlight:    spawn.MaxInFlightTaskWorkers,
+					ToolProfiles:   profiles,
 				})
 				contractcheck.FailErr(t, "Resolve", err)
 				plan, err := prompts.CompileSurfacePlan(surfaceID, rootCount)

@@ -56,14 +56,10 @@ func renderStandingPrompt(ctx context.Context, pe prompts.PromptTemplateEngine, 
 	if pe == nil {
 		return "", errPromptEngineNotConfigured
 	}
-	surfaceVars := in.reader.Facts()
-	copyPromptVarsSorted(surfaceVars, in.Vars)
-	surfaceVars["root_count"] = in.reader.RootCount()
-	if readable, _ := surfaceVars["profile_has_skills_read"].(bool); !readable {
-		delete(surfaceVars, "agent_skills")
-	}
+	occ := map[string]any{}
+	copyPromptVarsSorted(occ, in.Vars)
 
-	if err := capability.MergeForTurn(surfaceVars, in.reader, in.EffectiveAgents); err != nil {
+	if err := capability.MergeForTurn(occ, in.reader, in.EffectiveAgents); err != nil {
 		return "", fmt.Errorf("capability vars: %w", err)
 	}
 
@@ -71,9 +67,29 @@ func renderStandingPrompt(ctx context.Context, pe prompts.PromptTemplateEngine, 
 		in.Profile.SurfaceID,
 		prompts.ExecutionModePromptTransition{ExecutionMode: in.ExecutionMode},
 		in.VerifyCommand,
-		surfaceVars,
+		occ,
 	); err != nil {
 		return "", fmt.Errorf("surface prompt vars: %w", err)
+	}
+
+	policyVars := spawn.PolicyTemplateVars(in.WorkerToolBudget)
+	keys := make([]string, 0, len(policyVars))
+	for k := range policyVars {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if _, exists := occ[k]; !exists {
+			occ[k] = policyVars[k]
+		}
+	}
+
+	surfaceVars, err := prompts.Vars(in.reader, occ)
+	if err != nil {
+		return "", fmt.Errorf("standing prompt vars: %w", err)
+	}
+	if readable, _ := surfaceVars["profile_has_skills_read"].(bool); !readable {
+		delete(surfaceVars, "agent_skills")
 	}
 
 	catalog, err := prompts.UnitCatalogForEngine(pe)
@@ -85,18 +101,6 @@ func renderStandingPrompt(ctx context.Context, pe prompts.PromptTemplateEngine, 
 		return "", fmt.Errorf("unit blocks: %w", err)
 	}
 	prompts.MergeUnitVars(surfaceVars, blocks)
-
-	policyVars := spawn.PolicyTemplateVars(in.WorkerToolBudget)
-	keys := make([]string, 0, len(policyVars))
-	for k := range policyVars {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		if _, exists := surfaceVars[k]; !exists {
-			surfaceVars[k] = policyVars[k]
-		}
-	}
 
 	var parts []string
 	for _, ref := range []string{surface.CoordinatorCoreTemplate} {

@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
@@ -45,20 +46,21 @@ func TestCoordinatorEntryPointsAgreeOnReaderFacts(t *testing.T) {
 					contractcheck.FailErr(t, "new reader", err)
 					want := reader.Facts()
 
-					// 1. Standing prompt entry point (MergeCoordinatorSurfacePathVars + capability.MergeForTurn).
-					standingVars := map[string]any{}
-					contractcheck.FailErr(t, "standing surface vars", prompts.MergeCoordinatorSurfacePathVars(surfaceID, profiles, standingVars, in))
+					// 1. Standing prompt entry point (capability.MergeForTurn + prompts.Vars).
+					standingOcc := map[string]any{}
 					contractcheck.FailErr(t, "standing capability merge", capability.MergeForTurn(
-						standingVars,
+						standingOcc,
 						reader,
 						spawn.AmbientAllowedAgents(),
 					))
+					standingVars, err := prompts.Vars(reader, standingOcc)
+					contractcheck.FailErr(t, "standing vars", err)
 
-					// 2. Transition inject entry point (MergeCoordinatorSurfacePathVars).
-					transitionVars := map[string]any{}
-					contractcheck.FailErr(t, "transition surface vars", prompts.MergeCoordinatorSurfacePathVars(surfaceID, profiles, transitionVars, in))
+					// 2. Transition inject entry point (prompts.Vars).
+					transitionVars, err := prompts.Vars(reader, nil)
+					contractcheck.FailErr(t, "transition vars", err)
 
-					// 3. Spawn inject entry point (reader.Facts() + surf.MergeSpawnInjectVars()).
+					// 3. Spawn inject entry point (prompts.Vars(reader, surf.MergeSpawnInjectVars())).
 					webSearchEnabled := reader.WebSearch()
 					surf, err := capability.Resolve(capability.ResolveInput{
 						Profile:          surface.TurnProfile{SurfaceID: surfaceID},
@@ -69,15 +71,16 @@ func TestCoordinatorEntryPointsAgreeOnReaderFacts(t *testing.T) {
 						ToolProfiles:     profiles,
 					})
 					contractcheck.FailErr(t, "resolve capability surface", err)
-					spawnVars := reader.Facts()
-					maps.Copy(spawnVars, surf.MergeSpawnInjectVars())
+					spawnVars, err := prompts.Vars(reader, surf.MergeSpawnInjectVars())
+					contractcheck.FailErr(t, "spawn vars", err)
 
-					// 4. Tool-procedures inject entry point (reader.Facts()).
-					procedureVars := reader.Facts()
+					// 4. Tool-procedures inject entry point (prompts.Vars).
+					procedureVars, err := prompts.Vars(reader, nil)
+					contractcheck.FailErr(t, "procedure vars", err)
 
-					// 5. Kick render entry point (MergeCoordinatorKickVarsForTools).
-					kickVars := map[string]any{}
-					prompts.MergeCoordinatorKickVarsForTools(kickVars, reader)
+					// 5. Kick render entry point (prompts.Vars).
+					kickVars, err := prompts.Vars(reader, nil)
+					contractcheck.FailErr(t, "kick vars", err)
 
 					entryPoints := map[string]map[string]any{
 						"standing":        standingVars,
@@ -99,6 +102,62 @@ func TestCoordinatorEntryPointsAgreeOnReaderFacts(t *testing.T) {
 						}
 					}
 					_ = maps.Clone(want)
+				})
+			}
+		}
+	}
+}
+
+// Every worker render entry point receives identical values for every
+// reader-fact key on a given (profile, posture, root count) leg.
+func TestWorkerEntryPointsAgreeOnReaderFacts(t *testing.T) {
+	eff := contractcheck.StockCatalog(t)
+	agents, err := agentdef.LoadEffectiveWithCatalog(eff)
+	contractcheck.FailErr(t, "load agents", err)
+	shipped, err := sandbox.LoadToolProfilesWithCatalog(eff)
+	contractcheck.FailErr(t, "load tool profiles", err)
+	postures, err := sessionprofiles.LoadPostureRegistry()
+	contractcheck.FailErr(t, "load postures", err)
+	engine := contractPersonaEngine(t)
+
+	for _, posture := range postures.List() {
+		profiles := postureProfiles(shipped, posture.CommandEffects)
+		for _, rootCount := range []int{0, 1, 2} {
+			for _, agent := range agents {
+				if agent.ID == "coordinator" {
+					continue
+				}
+				t.Run(fmt.Sprintf("%s/roots=%d/%s", posture.ID, rootCount, agent.ID), func(t *testing.T) {
+					reader, err := prompts.NewReader(prompts.ReaderInput{
+						ProfileID: agent.ToolProfile,
+						Profiles:  profiles,
+						RootCount: rootCount,
+						HasGit:    rootCount > 0,
+						WebSearch: true,
+					})
+					contractcheck.FailErr(t, "new worker reader", err)
+					want := reader.Facts()
+
+					personaVars, err := prompts.PersonaVars(t.Context(), engine, agent.ID, reader, nil)
+					contractcheck.FailErr(t, "persona vars", err)
+					skillVars := prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
+
+					entryPoints := map[string]map[string]any{
+						"persona": personaVars,
+						"skill":   skillVars,
+					}
+					for key, wantVal := range want {
+						for epName, epVars := range entryPoints {
+							gotVal, ok := epVars[key]
+							if !ok {
+								t.Errorf("%s missing reader fact %q", epName, key)
+								continue
+							}
+							if !reflect.DeepEqual(gotVal, wantVal) {
+								t.Errorf("%s[%q] = %#v, want %#v", epName, key, gotVal, wantVal)
+							}
+						}
+					}
 				})
 			}
 		}

@@ -74,16 +74,6 @@ func coordinatorPathScopesFromProfile(p sandbox.ToolProfile) CoordinatorPathScop
 	}
 }
 
-// CoordinatorPathScopeTemplateVars builds path-scope template data.
-func CoordinatorPathScopeTemplateVars(data CoordinatorPathScopeData) map[string]any {
-	return map[string]any{
-		"read_scope_name":  data.ReadScopeName,
-		"read_globs":       data.ReadGlobs,
-		"write_globs":      data.WriteGlobs,
-		"write_deny_globs": data.WriteDenyGlobs,
-	}
-}
-
 // LoadCoordinatorSurfaceCard returns the surface banner copy and whether the
 // surface publishes text accompanying tool calls.
 func LoadCoordinatorSurfaceCard(surfaceID string) (SurfaceCard, error) {
@@ -138,75 +128,22 @@ func MergeCoordinatorKickVarsForTools(into map[string]any, reader Reader) error 
 	if into == nil {
 		return fmt.Errorf("nil template vars map")
 	}
-	for k, v := range reader.Facts() {
-		if _, exists := into[k]; !exists {
+	occurrence := make(map[string]any, len(into))
+	for k, v := range into {
+		if !IsDeclaredOrReservedReaderFact(k) {
+			occurrence[k] = v
+		}
+	}
+	merged, err := Vars(reader, occurrence)
+	if err != nil {
+		return err
+	}
+	for k, v := range merged {
+		if _, exists := into[k]; !exists || !IsDeclaredOrReservedReaderFact(k) {
 			into[k] = v
 		}
 	}
 	spawn.RefreshSizingHintVars(into)
-	return nil
-}
-
-// MergeCoordinatorSurfacePathVars adds path and policy variables from a Reader
-// constructed for surfaceID and profiles.
-func MergeCoordinatorSurfacePathVars(surfaceID string, profiles []sandbox.ToolProfile, into map[string]any, in ReaderInput) error {
-	if into == nil {
-		return fmt.Errorf("nil template vars map")
-	}
-	if len(profiles) == 0 {
-		loaded, err := sandbox.LoadToolProfiles()
-		if err != nil {
-			return err
-		}
-		profiles = loaded
-	}
-	hasRootCount := false
-	if in.RootCount == 0 {
-		if rc, ok := into["root_count"].(int); ok {
-			in.RootCount = rc
-			hasRootCount = true
-		}
-	}
-	if !in.HasGit {
-		if hg, ok := into["has_git"].(bool); ok {
-			in.HasGit = hg
-		}
-	}
-	if !in.OnWorkerBranch {
-		if wb, ok := into["on_worker_branch"].(bool); ok {
-			in.OnWorkerBranch = wb
-		}
-	}
-	if enabled, ok := into["web_search_enabled"].(bool); ok {
-		in.WebSearch = enabled
-	} else {
-		in.WebSearch = true
-	}
-	if !in.Plan.Compiled() {
-		rc := in.RootCount
-		if !hasRootCount && rc == 0 {
-			rc = 1
-		}
-		plan, err := CompileSurfacePlan(surfaceID, rc)
-		if err != nil {
-			return err
-		}
-		in.Plan = plan
-	}
-	in.ProfileID = CoordinatorProfileID
-	in.SurfaceID = surfaceID
-	in.Profiles = profiles
-	reader, err := NewReader(in)
-	if err != nil {
-		return err
-	}
-	for k, v := range reader.Facts() {
-		if isPreservedEnvironmentFact(k, into) {
-			continue
-		}
-		into[k] = v
-	}
-	clearSkillRosterWithoutSkillsRead(into)
 	return nil
 }
 

@@ -37,11 +37,8 @@ func CommandGuidanceFactKeys() []string {
 		"reviews_confined_writes",
 		"root_count",
 		"runner_direct_ip_tools",
-		"runner_host_execution_tools",
-		"runner_host_resource_tools",
 		"runner_local_listen_tools",
 		"runner_loopback_connect_tools",
-		"runner_read_path_tools",
 		"runner_socket_tools",
 		"runner_write_root_tools",
 		"session_scratch_dir",
@@ -90,22 +87,16 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	if strings.TrimSpace(in.SurfaceID) != "" {
 		scopeID = strings.TrimSpace(in.SurfaceID)
 	}
-	profiles, _ := sandbox.LoadToolProfiles()
+	base, _ := DeclaredReader(nil, scopeID)
+	profiles, _ := declaredToolProfiles(nil)
 	profileID := strings.TrimSpace(in.ProfileID)
 	if profileID == "" || in.IsCoordinator || strings.TrimSpace(in.SurfaceID) != "" {
 		profileID = CoordinatorProfileID
 	}
-	var found bool
-	for _, p := range profiles {
-		if p.ID == profileID {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if !hasProfileID(profiles, profileID) {
 		profiles = append(profiles, sandbox.ToolProfile{
 			ID:             profileID,
-			CommandEffects: ScopeCommandEffects(scopeID),
+			CommandEffects: base.Effects(),
 		})
 	}
 	reader, err := NewReader(ReaderInput{
@@ -122,15 +113,15 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	if err == nil {
 		vars = reader.Facts()
 	}
-	vars["tool_profile"] = strings.TrimSpace(in.ProfileID)
-	vars["is_coordinator"] = in.IsCoordinator
+	for k, v := range AgentPromptSurfaceTemplateVars(AgentPromptSurface{
+		SessionScratchDir:     strings.TrimSpace(in.SessionScratchDir),
+		Posture:               in.Posture,
+		CommandExternalHidden: in.CommandExternalHidden,
+	}) {
+		vars[k] = v
+	}
 	vars["platform_os"] = runtime.GOOS
-	vars["root_count"] = in.RootCount
 	vars["project_dir"] = strings.TrimSpace(in.ProjectDir)
-	vars["session_scratch_dir"] = strings.TrimSpace(in.SessionScratchDir)
-	vars["reviews_confined_writes"] = in.Posture.ReviewsConfinedWrites()
-	vars["command_external_hidden"] = in.CommandExternalHidden
-	syncCommandExternalFacts(vars)
 
 	hasCommandOffered := slices.Contains(offered, "command")
 	hasCommandAny := hasCommandOffered || slices.Contains(deferred, "command")

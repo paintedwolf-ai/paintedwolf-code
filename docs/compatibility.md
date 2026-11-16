@@ -371,6 +371,22 @@ matching variable. `profile_has_terminal_capture` follows external execution,
 and `shared/units/coordinator-progress-procedure.md` renders only while
 `update_progress` is offered.
 
+Unit front-matter `attaches` accepts the reach marks `command_mutation`,
+`command_external_exec`, and `command_network_egress` in addition to registered
+tool names, and selection evaluates against the reader's held reach set. The
+shipped `native-edit-tool`, `http-operating-procedure`,
+`coordinator-host-runner`, `secure-by-default-run`, and
+`visual-show-the-design` units express their eligibility in `attaches` rather
+than a whole-body conditional; a project or site override of a unit replaces its
+front matter along with its body.
+
+Reader-fact template variables are declared in
+`config/packs/painted-wolf/platform/host/reader-facts.yaml`. Pack, site, and
+project prompt overrides that reference an undeclared name in the reserved
+reader-fact prefixes (`profile_`, `mints`, `receipt_kind`, `tool_check_`,
+`runner_`, `agent_has_skill_`, `visual_show_`, `caps`) emit a load note naming
+the template and variable.
+
 ## Agent-public vocabulary
 
 Structured tool names, `Code:` meanings, rule effects, theme tokens, and other model- or extension-authored ids are contracts because external text or content can name them.

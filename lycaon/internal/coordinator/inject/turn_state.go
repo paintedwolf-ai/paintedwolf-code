@@ -7,16 +7,17 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
 // TurnStateInjectInput carries variables for inject.turn_state.
 type TurnStateInjectInput struct {
-	ProgressSnapshot         string
-	ProgressMissing          bool
-	ProfileHasUpdateProgress bool
-	VerifyRequired           bool
-	PendingOverlayJobs       []string
-	PartialWorkerJobs        []string
+	Reader             prompts.Reader
+	ProgressSnapshot   string
+	ProgressMissing    bool
+	VerifyRequired     bool
+	PendingOverlayJobs []string
+	PartialWorkerJobs  []string
 }
 
 // RenderTurnStateBlock renders dynamic turn-state guidance.
@@ -24,13 +25,32 @@ func RenderTurnStateBlock(ctx context.Context, renderer *prompts.InjectRenderer,
 	if renderer == nil {
 		return "", fmt.Errorf("inject renderer not configured")
 	}
-	vars := map[string]any{
-		"progress_snapshot":           in.ProgressSnapshot,
-		"progress_missing":            in.ProgressMissing,
-		"profile_has_update_progress": in.ProfileHasUpdateProgress,
-		"verify_required":             in.VerifyRequired,
-		"pending_overlay_jobs":        in.PendingOverlayJobs,
-		"partial_worker_jobs":         in.PartialWorkerJobs,
+	reader := in.Reader
+	if !reader.Valid() {
+		profiles, err := sandbox.LoadToolProfiles()
+		if err != nil {
+			return "", err
+		}
+		reader, err = prompts.NewReader(prompts.ReaderInput{
+			ProfileID: prompts.CoordinatorProfileID,
+			Profiles:  profiles,
+			RootCount: 1,
+			WebSearch: true,
+		})
+		if err != nil {
+			return "", err
+		}
+	}
+	occ := map[string]any{
+		"progress_snapshot":    in.ProgressSnapshot,
+		"progress_missing":     in.ProgressMissing,
+		"verify_required":      in.VerifyRequired,
+		"pending_overlay_jobs": in.PendingOverlayJobs,
+		"partial_worker_jobs":  in.PartialWorkerJobs,
+	}
+	vars, err := prompts.Vars(reader, occ)
+	if err != nil {
+		return "", err
 	}
 	block, err := anchor.RenderInform(ctx, anchor.InjectTurnState, anchor.MatchContext{
 		Surface:   "coordinator",

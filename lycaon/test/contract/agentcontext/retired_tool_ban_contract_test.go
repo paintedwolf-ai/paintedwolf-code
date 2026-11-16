@@ -13,7 +13,9 @@ import (
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
@@ -99,7 +101,9 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 			continue
 		}
 		t.Run("persona/"+agent.ID, func(t *testing.T) {
-			corpus, err := prompts.RenderPersona(context.Background(), personaEngine, agent.ID, nil)
+			reader, err := prompts.DeclaredReader(eff, agent.ID)
+			contractcheck.FailErr(t, "DeclaredReader "+agent.ID, err)
+			corpus, err := prompts.RenderPersona(context.Background(), personaEngine, agent.ID, reader, nil)
 			contractcheck.FailErr(t, "render persona", err)
 			checkBannedMention(t, retiredToolMention, "persona "+agent.ID, corpus)
 		})
@@ -125,10 +129,17 @@ func TestRenderedStockCopyNeverNamesFullyRetiredTools(t *testing.T) {
 							reachable = append(reachable, name)
 						}
 					}
-					data := kickRenderFixture()
-					for key, value := range prompts.VisibleToolsNativePartialVars(reachable) {
-						data[key] = value
-					}
+					reader, err := prompts.NewReader(prompts.ReaderInput{
+						ProfileID: profile.ID,
+						Plan:      toolsurface.Compile(reachable, nil),
+						Visible:   reachable,
+						Profiles:  []sandbox.ToolProfile{profile},
+						RootCount: 1,
+						WebSearch: true,
+					})
+					contractcheck.FailErr(t, "new reader", err)
+					data, err := prompts.Vars(reader, kickRenderFixture())
+					contractcheck.FailErr(t, "prompts.Vars", err)
 					corpus, err := kickEngine.RenderKick(context.Background(), binding.Render, data)
 					contractcheck.FailErr(t, "render kick", err)
 					checkBannedMention(t, retiredToolMention, fmt.Sprintf("kick %s for %s", binding.Render, profile.ID), corpus)
@@ -183,7 +194,9 @@ func TestReadOnlyCommandProfilesNeverNameMutationSubcommands(t *testing.T) {
 		}
 		checked++
 		t.Run("persona/"+agent.ID, func(t *testing.T) {
-			corpus, err := prompts.RenderPersona(context.Background(), personaEngine, agent.ID, nil)
+			reader, err := prompts.DeclaredReader(eff, agent.ID)
+			contractcheck.FailErr(t, "DeclaredReader "+agent.ID, err)
+			corpus, err := prompts.RenderPersona(context.Background(), personaEngine, agent.ID, reader, nil)
 			contractcheck.FailErr(t, "render persona", err)
 			checkBannedMention(t, mutationSubcommandMention,
 				fmt.Sprintf("read-only profile %s (agent %s)", agent.ToolProfile, agent.ID), corpus)
@@ -209,10 +222,17 @@ func TestReadOnlyCommandProfilesNeverNameMutationSubcommands(t *testing.T) {
 						reachable = append(reachable, name)
 					}
 				}
-				data := kickRenderFixture()
-				for key, value := range prompts.VisibleToolsNativePartialVars(reachable) {
-					data[key] = value
-				}
+				reader, err := prompts.NewReader(prompts.ReaderInput{
+					ProfileID: profile.ID,
+					Plan:      toolsurface.Compile(reachable, nil),
+					Visible:   reachable,
+					Profiles:  []sandbox.ToolProfile{profile},
+					RootCount: 1,
+					WebSearch: true,
+				})
+				contractcheck.FailErr(t, "new reader", err)
+				data, err := prompts.Vars(reader, kickRenderFixture())
+				contractcheck.FailErr(t, "prompts.Vars", err)
 				corpus, err := kickEngine.RenderKick(context.Background(), binding.Render, data)
 				contractcheck.FailErr(t, "render kick", err)
 				checkBannedMention(t, mutationSubcommandMention,

@@ -100,7 +100,9 @@ func buildAgentPromptCorpus(t *testing.T, root string) string {
 	personaCfg, err := prompts.LoadPersonaContract()
 	contractcheck.FailErr(t, "load persona contract", err)
 	for _, agentID := range personaCfg.WorkerAgentIDs() {
-		rendered, err := prompts.RenderPersona(context.Background(), engine, agentID, nil)
+		reader, err := prompts.DeclaredReader(nil, agentID)
+		contractcheck.FailErr(t, "DeclaredReader "+agentID, err)
+		rendered, err := prompts.RenderPersona(context.Background(), engine, agentID, reader, nil)
 		contractcheck.FailErr(t, "render persona "+agentID, err)
 		parts = append(parts, rendered)
 	}

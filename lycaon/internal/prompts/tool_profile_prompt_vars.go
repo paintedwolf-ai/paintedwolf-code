@@ -1,10 +1,6 @@
 package prompts
 
 import (
-	"github.com/lycaon/lycaon/internal/evidence"
-	"runtime"
-	"slices"
-	"sort"
 	"strings"
 	"sync"
 
@@ -13,23 +9,21 @@ import (
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tools/readcaps"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 var (
-	surveyToolDisplayOrder      = []string{"command"}
-	readContentToolDisplayOrder = []string{"command"}
-	nativeToolFamiliesOnce      sync.Once
-	nativeFilesystemTools       []string
-	nativeTerminalTools         []string
-	nativeMutationTools         []string
-	nativeWriteTools            []string
-	nativeSecretTools           []string
-	nativeWebResearchTools      []string
-	nativeProgressGatedTools    []string
-	nativeOperationSet          map[string]bool
-	commandGatedByOperations    bool
+	surveyToolDisplayOrder   = []string{"command"}
+	nativeToolFamiliesOnce   sync.Once
+	nativeFilesystemTools    []string
+	nativeTerminalTools      []string
+	nativeMutationTools      []string
+	nativeWriteTools         []string
+	nativeSecretTools        []string
+	nativeWebResearchTools   []string
+	nativeProgressGatedTools []string
+	nativeOperationSet       map[string]bool
+	commandGatedByOperations bool
 )
 
 func loadNativeToolFamilies() {
@@ -86,17 +80,6 @@ func PreferNativeFileToolOrder() []string {
 	return append([]string(nil), nativeFilesystemTools...)
 }
 
-func enabledToolSet(toolViews []AgentToolArgView) map[string]bool {
-	out := make(map[string]bool, len(toolViews))
-	for _, t := range toolViews {
-		name := strings.TrimSpace(t.Name)
-		if name != "" {
-			out[name] = true
-		}
-	}
-	return out
-}
-
 func orderedEnabledTools(order []string, enabled map[string]bool) []string {
 	var out []string
 	for _, name := range order {
@@ -107,266 +90,53 @@ func orderedEnabledTools(order []string, enabled map[string]bool) []string {
 	return out
 }
 
-func enabledGitTools(enabled map[string]bool) []string {
-	var out []string
-	for name := range enabled {
-		if strings.HasPrefix(name, "git_") {
-			out = append(out, name)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-func profileConcurrentTools(toolViews []AgentToolArgView) []string {
-	var out []string
-	for _, t := range toolViews {
-		if contract, ok := toolcontract.Lookup(t.Name); ok && contract.Concurrent() {
-			out = append(out, t.Name)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-func profileSerialTools(toolViews []AgentToolArgView) []string {
-	loadNativeToolFamilies()
-	enabled := enabledToolSet(toolViews)
-	mutationOrder := append(append([]string(nil), nativeWriteTools...), "command")
-	out := orderedEnabledTools(mutationOrder, enabled)
-	for _, name := range enabledGitTools(enabled) {
-		if name == "git_commit" || name == "git_restore" {
-			continue
-		}
-		contract, declared := toolcontract.Lookup(name)
-		if !slices.Contains(out, name) && (!declared || !contract.Concurrent()) {
-			out = append(out, name)
-		}
-	}
-	for _, t := range toolViews {
-		contract, declared := toolcontract.Lookup(t.Name)
-		if (declared && contract.Concurrent()) || orchestrationPromptTool(t.Name) {
-			continue
-		}
-		if !slices.Contains(out, t.Name) {
-			out = append(out, t.Name)
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-func orchestrationPromptTool(name string) bool {
-	contract, ok := toolcontract.Lookup(strings.TrimSpace(strings.ToLower(name)))
-	if !ok {
-		return false
-	}
-	switch contract.Owner {
-	case "delegation", "handoff", "workflow_state", "workflows", "workers", "worker_merge", "board", "loop_wake":
-		return true
-	default:
-		return false
-	}
-}
-
 func profileHasScanDrilldownTools(enabled map[string]bool) bool {
 	return len(scanDrilldownToolsForCheck(enabled)) > 0
 }
 
-// VisibleToolsNativePartialVars returns surface capability flags.
-func VisibleToolsNativePartialVars(visibleTools []string) map[string]any {
-	views := make([]AgentToolArgView, 0, len(visibleTools))
-	for _, name := range visibleTools {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			continue
-		}
-		views = append(views, AgentToolArgView{Name: name})
-	}
-	// Names carry no restriction; the caller narrows by scope.
-	return toolProfileCapabilityTemplateVars(AgentToolSurfaceData{Tools: views, CommandEffects: toolcontract.AllCommandEffects()})
-}
-
-// MergeProfileRequestableVars sets profile_can_request for the tools profileID
-// can still load when request_tools is offered.
-func MergeProfileRequestableVars(profileID string, offered []string, into map[string]any) {
-	if into == nil {
-		return
-	}
-	into["profile_can_request"] = requestableToolSet(offered, profileAllowedToolNames(profileID))
-}
-
-func profileAllowedToolNames(profileID string) []string {
-	profileID = strings.TrimSpace(profileID)
-	if profileID == "" {
-		return nil
-	}
-	if profiles, err := sandbox.LoadToolProfiles(); err == nil {
-		resolvedID := profileID
-		if mapped, err := ToolProfileForAgent(profileID); err == nil {
-			resolvedID = mapped
-		}
-		for _, p := range profiles {
-			if p.ID != profileID && p.ID != resolvedID {
-				continue
-			}
-			var out []string
-			for _, name := range visibleToolNames(p, nil) {
-				if p.ToolAllowed(name) {
-					out = append(out, name)
-				}
-			}
-			return out
-		}
-	}
-	if IsCoordinatorSurfaceID(profileID) {
-		if loadable, err := LoadCoordinatorSurfaceLoadable(profileID); err == nil {
-			return loadable
-		}
-	}
-	return nil
-}
-
-func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any {
-	loadNativeToolFamilies()
-	enabled := enabledToolSet(data.Tools)
-	surveyTools := orderedEnabledTools(surveyToolDisplayOrder, enabled)
-	writeTools := orderedEnabledTools(nativeWriteTools, enabled)
-	readTools := orderedEnabledTools(readContentToolDisplayOrder, enabled)
-	concurrentTools := profileConcurrentTools(data.Tools)
-	serialTools := profileSerialTools(data.Tools)
-	preferNative := orderedEnabledTools(PreferNativeFileToolOrder(), enabled)
-	hostRunner := orderedEnabledTools(HostRunnerToolOrder(), enabled)
-	mutationCapable := ProfileMutationCapable(data)
-	command := commandEffectFlags(enabled["command"], data.CommandEffects)
-	commandMutates := command.mutation
-	if commandMutates {
-		writeTools = append([]string{"command"}, writeTools...)
-	}
-	// Dual-state capability vars follow the command-reach contract rather
-	// than raw enablement: a form tool plus a reachable command leg admits
-	// the operation, and mutating forms additionally require command
-	// mutation. Today every dual-state form also requires its form tool, so
-	// the reach leg matches enablement; deriving through the reach tables
-	// keeps these vars tied to the SSOT if dispositions change.
-	reachHeld := make(map[string]bool, len(enabled)+3)
-	for name, ok := range enabled {
-		reachHeld[name] = ok
-	}
-	for mark, ok := range toolcontract.ReachMarks(enabled["command"], data.CommandEffects) {
-		if ok {
-			reachHeld[mark] = true
-		}
-	}
-	out := map[string]any{
-		"mints":                           evidenceMintsForCommand(enabled, commandMutates, command.externalExec),
-		"receipt_kind":                    evidence.ActiveBinding().ReceiptKinds(),
-		"profile_has_write_tools":         len(writeTools) > 0 || commandMutates,
-		"profile_has_read_tools":          len(readTools) > 0,
-		"profile_mutation_capable":        mutationCapable,
-		"profile_command_mutation":        commandMutates,
-		"profile_command_external_exec":   command.externalExec,
-		"profile_command_network_egress":  command.networkEgress,
-		"command_output_files":            enabled["command"],
-		"profile_can_request":             requestableToolSet(toolViewNames(data.Tools), requestableToolNames(data.Requestable)),
-		"has_find_tool":                   enabled["find"],
-		"native_edit_limit_mib":           readcaps.MaxMutationBytes >> 20,
-		"profile_has_jq_edit":             commandMutates,
-		"profile_has_summarize":           enabled["summarize"] || toolcontract.CommandLanguageReachable("summarize", reachHeld),
-		"profile_has_survey_repo":         enabled["survey_repo"] || toolcontract.CommandLanguageReachable("repo-map", reachHeld),
-		"profile_has_code_rewrite":        enabled["code_rewrite"] || (commandMutates && toolcontract.CommandLanguageReachable("code-rewrite", reachHeld)),
-		"profile_has_retrieval":           profileHasRetrievalTool(enabled),
-		"profile_has_terminal_capture":    command.externalExec,
-		"command_on_floor":                enabled["command"] && !data.CommandDeferred,
-		"is_coordinator":                  data.ToolProfile == CoordinatorProfileID,
-		"platform_os":                     runtime.GOOS,
-		"reviews_confined_writes":         true,
-		"command_external_hidden":         false,
-		"command_external_shown":          true,
-		"tool_check_write_tools":          writeTools,
-		"tool_check_survey_tools":         surveyTools,
-		"tool_check_verify_tools":         verifyToolsForCheck(enabled, command.externalExec),
-		"tool_check_scan_drilldown_tools": scanDrilldownToolsForCheck(enabled),
-		"profile_concurrent_tools":        concurrentTools,
-		"profile_serial_tools":            serialTools,
-		"profile_git_tools":               enabledGitTools(enabled),
-		"prefer_native_file_tools":        preferNative,
-		"host_runner_tools":               hostRunner,
-	}
-	for _, name := range currentToolNames() {
-		key := "profile_has_" + name
-		if _, derived := out[key]; !derived {
-			out[key] = enabled[name]
-		}
-	}
-	offeredNames := toolViewNames(data.Tools)
-	MergeRunnerCapabilityVars(offeredNames, out)
-	MergeHTTPActionVars(offeredNames, out)
-	mergeOfferedToolGuidance(offeredNames, out)
-	out["more_tools_loadable"] = len(data.Requestable) > 0
-	return out
-}
+var (
+	currentToolNamesOnce sync.Once
+	currentToolNamesList []string
+)
 
 // currentToolNames lists every tool declared by a stock profile or the manifest.
-// Operations are excluded: agents cannot call them as tools, and the guidance
-// facts that name operations are answered in mergeOfferedToolGuidance.
-var currentToolNames = sync.OnceValue(func() []string {
-	var names []string
-	if cfg, err := nativemanifest.Load(); err == nil {
-		names = append(names, cfg.AllTools()...)
-		names = append(names, cfg.HostProducedTools...)
-	}
-	if profiles, err := sandbox.LoadToolProfiles(); err == nil {
-		for _, profile := range profiles {
-			for name := range profile.Tools {
-				if toolschema.ValidToolName(name) {
-					names = append(names, name)
+// Operations are excluded: agents cannot call them as tools.
+func currentToolNames() []string {
+	currentToolNamesOnce.Do(func() {
+		var names []string
+		if cfg, err := nativemanifest.Load(); err == nil {
+			names = append(names, cfg.AllTools()...)
+			names = append(names, cfg.HostProducedTools...)
+		}
+		if profiles, err := declaredToolProfiles(nil); err == nil {
+			for _, profile := range profiles {
+				for name := range profile.Tools {
+					if toolschema.ValidToolName(name) {
+						names = append(names, name)
+					}
 				}
 			}
 		}
-	}
-	return names
-})
+		currentToolNamesList = names
+	})
+	return currentToolNamesList
+}
 
-// MergeRunnerCapabilityVars populates runner_<capability>_tools for offered
-// tools. command is listed for a capability only while the surface lets it
-// change the tree and perform the effect that capability serves.
-func MergeRunnerCapabilityVars(offered []string, vars map[string]any) {
-	if vars == nil {
-		return
-	}
-	command := currentCommandEffectFlags(vars, slices.Contains(offered, "command"))
-	runs := command.mutation && command.externalExec
-	connects := command.mutation && (command.externalExec || command.networkEgress)
-	capabilities := map[string]struct {
-		capability toolcontract.Capability
-		command    bool
-	}{
-		"host_execution":   {toolcontract.CapabilityHostExecution, runs},
-		"host_resource":    {toolcontract.CapabilityHostResource, runs},
-		"socket":           {toolcontract.CapabilitySocket, connects},
-		"direct_ip":        {toolcontract.CapabilityDirectIP, connects},
-		"local_listen":     {toolcontract.CapabilityLocalListen, connects},
-		"loopback_connect": {toolcontract.CapabilityLoopbackConnect, connects},
-		"write_root":       {toolcontract.CapabilityWriteRoot, command.mutation},
-		"read_path":        {toolcontract.CapabilityReadPath, command.mutation},
-	}
-	for name, entry := range capabilities {
-		var tools []string
-		for _, offeredTool := range offered {
-			if offeredTool == "command" && !entry.command {
-				continue
-			}
-			if multiRoot, ok := toolcontract.MultiRootOf(offeredTool); !ok || multiRoot != toolcontract.MultiRootCommand {
-				continue
-			}
-			contract, ok := toolcontract.Lookup(offeredTool)
-			if ok && contract.Supports(entry.capability) {
-				tools = append(tools, offeredTool)
-			}
+func runnerCapabilityTools(offered []string, cap toolcontract.Capability, commandAllowed bool) []string {
+	var tools []string
+	for _, offeredTool := range offered {
+		if offeredTool == "command" && !commandAllowed {
+			continue
 		}
-		vars["runner_"+name+"_tools"] = tools
+		if multiRoot, ok := toolcontract.MultiRootOf(offeredTool); !ok || multiRoot != toolcontract.MultiRootCommand {
+			continue
+		}
+		contract, ok := toolcontract.Lookup(offeredTool)
+		if ok && contract.Supports(cap) {
+			tools = append(tools, offeredTool)
+		}
 	}
+	return tools
 }
 
 func toolViewNames(views []AgentToolArgView) []string {
@@ -389,25 +159,6 @@ func ProfileMutationCapable(data AgentToolSurfaceData) bool {
 // ToolNamesMutationCapable reports whether a tool set can change the project tree.
 func ToolNamesMutationCapable(names []string) bool {
 	return toolSetMutationCapable(toolNameSet(names))
-}
-
-// CoordinatorSurfaceMutationCapable reports whether a coordinator surface can mutate the tree.
-func CoordinatorSurfaceMutationCapable(surfaceID string) bool {
-	row, err := loadCoordinatorSurfaceRow(surfaceID)
-	if err != nil {
-		return false
-	}
-	enabled := toolNameSet(append(append([]string(nil), row.Floor...), row.LoadableTools()...))
-	if !CoordinatorSurfaceAllowsCommandMutation(surfaceID) {
-		delete(enabled, "command")
-	}
-	return toolSetMutationCapable(enabled)
-}
-
-// CoordinatorSurfaceAllowsCommandMutation reports whether a coordinator surface
-// lets command change the tree.
-func CoordinatorSurfaceAllowsCommandMutation(surfaceID string) bool {
-	return IsCoordinatorSurfaceID(surfaceID) && commandEffectFlags(true, ScopeCommandEffects(surfaceID)).mutation
 }
 
 // IsCoordinatorSurfaceID reports whether id is a declared coordinator turn surface.
@@ -435,9 +186,9 @@ func loadAgentSurfaceForCheck(agentType string) (AgentToolSurfaceData, []sandbox
 	if err != nil {
 		return AgentToolSurfaceData{}, nil, "", false
 	}
-	profiles, err := sandbox.LoadToolProfiles()
+	profiles, err := declaredToolProfiles(nil)
 	if err != nil {
-		return AgentToolSurfaceData{}, nil, "", false
+		return AgentToolSurfaceData{}, nil, profileID, false
 	}
 	surface, err := LoadAgentToolSurface(profileID, nil, nil, ReaderInput{}, profiles)
 	if err != nil {
@@ -563,31 +314,4 @@ func hasToolFamily(enabled map[string]bool, family string) bool {
 		}
 	}
 	return false
-}
-
-func mergeOfferedToolGuidance(offered []string, into map[string]any) {
-	loadNativeToolFamilies()
-	set := toolNameSet(offered)
-	commandMutates, ok := into["profile_command_mutation"].(bool)
-	if !ok {
-		commandMutates = set["command"]
-	}
-	into["progress_gated_tools"] = progressGatedOfferedTools(set, commandMutates)
-	into["profile_has_page_controls"] = hasToolFamily(set, "page")
-	into["profile_has_scan_drilldown"] = profileHasScanDrilldownTools(set)
-	into["profile_has_managed_secrets"] = len(nativeSecretTools) > 0 && allPresent(nativeSecretTools, set)
-	into["command_output_files"] = set["command"]
-	// Guidance facts must all be present in captured vars. Operations are not
-	// tools, so answer the fact keys that name manifest operations unless an
-	// explicit capability var already answered them.
-	for _, key := range CommandGuidanceFactKeys() {
-		name, ok := strings.CutPrefix(key, "profile_has_")
-		if !ok || !nativeOperationSet[name] {
-			continue
-		}
-		if _, answered := into[key]; answered {
-			continue
-		}
-		into[key] = set[name]
-	}
 }

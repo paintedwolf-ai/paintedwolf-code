@@ -67,12 +67,27 @@ func Resolve(input ResolveInput) (CapabilitySurface, error) {
 	spawnAllowlist := append([]string(nil), input.SpawnAllowlist...)
 	flags := Derive(input.RootCount, resolvedTools, spawnAllowlist)
 
-	surfaceToolOverride := coordinatorSurfaceToolOverride(spawnAllowlist, resolvedTools, surfaceCommandMutates(surfaceID, input.ToolProfiles))
+	profiles := input.ToolProfiles
+	if len(profiles) == 0 {
+		var loaded []sandbox.ToolProfile
+		var err error
+		if input.Catalog != nil {
+			loaded, err = sandbox.LoadToolProfilesWithCatalog(input.Catalog)
+		} else {
+			loaded, err = sandbox.LoadToolProfiles()
+		}
+		if err != nil {
+			return CapabilitySurface{}, err
+		}
+		profiles = loaded
+	}
+
+	surfaceToolOverride := coordinatorSurfaceToolOverride(spawnAllowlist, resolvedTools, surfaceCommandMutates(surfaceID, profiles))
 	maxInFlight := input.MaxInFlight
 	if maxInFlight <= 0 {
 		maxInFlight = spawn.MaxInFlightTaskWorkers
 	}
-	roster, err := prompts.LoadSpawnRosterSurface(spawnAllowlist, maxInFlight, surfaceToolOverride, input.Catalog, input.ToolProfiles)
+	roster, err := prompts.LoadSpawnRosterSurface(spawnAllowlist, maxInFlight, surfaceToolOverride, input.Catalog, profiles)
 	if err != nil {
 		return CapabilitySurface{}, err
 	}
@@ -101,8 +116,6 @@ func Resolve(input ResolveInput) (CapabilitySurface, error) {
 // MergeSpawnInjectVars returns pongo vars for inject/implement-spawn.md from the surface.
 func (s CapabilitySurface) MergeSpawnInjectVars() map[string]any {
 	vars := prompts.SpawnRosterTemplateVars(s.Roster, s.ExcludedDisclosures)
-	vars["surface_id"] = s.SurfaceID
-	vars["execution_mode"] = surface.ExecutionModeFamily(s.SurfaceID)
 	vars["repo_known_empty"] = s.RepoKnownEmpty
 	MergeVars(vars, s.Flags)
 	allowed := append([]string(nil), s.SpawnAllowlist...)
@@ -112,15 +125,9 @@ func (s CapabilitySurface) MergeSpawnInjectVars() map[string]any {
 }
 
 func surfaceCommandMutates(surfaceID string, profiles []sandbox.ToolProfile) bool {
-	effects, err := surfacecatalog.CommandEffects(surfaceID)
+	effects, err := surfacecatalog.AdmittedCommandEffects(profiles, coordinatorAgentID, surfaceID)
 	if err != nil {
 		return false
-	}
-	for _, p := range profiles {
-		if p.ID == coordinatorAgentID {
-			effects &= p.CommandEffects
-			break
-		}
 	}
 	mutation, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
 	return err == nil && effects.Allows(mutation)

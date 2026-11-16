@@ -27,12 +27,5 @@ func evidenceMintsForCommand(enabled map[string]bool, commandMutates, commandExt
 		classes = append(classes, toolcontract.CommandExternalExec)
 	}
 	effects, _ := toolcontract.NewCommandEffects(classes...)
-	reachHeld := make(map[string]bool, len(enabled)+3)
-	for name, ok := range enabled {
-		reachHeld[name] = ok
-	}
-	for mark, ok := range toolcontract.ReachMarks(reachHeld["command"], effects) {
-		reachHeld[mark] = ok
-	}
-	return evidenceMints(reachHeld)
+	return evidenceMints(readerHeldSet(enabled, effects))
 }

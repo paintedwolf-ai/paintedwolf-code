@@ -31,7 +31,10 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 	if fn := e.deps.WebSearchEnabled; fn != nil {
 		webSearchEnabled = fn()
 	}
-	rootCount := rootCountFromVars(vars)
+	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
+	if !ok && sess != nil && strings.TrimSpace(sess.WorkspacePath) != "" {
+		rootCount = 1
+	}
 	roster := frame.Roster
 	if roster == nil {
 		declared := frame.RunContext.AllowedAgents
@@ -116,7 +119,10 @@ func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 	if fn := e.deps.WebSearchEnabled; fn != nil {
 		webSearchEnabled = fn()
 	}
-	rootCount := rootCountFromVars(vars)
+	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
+	if !ok && sess != nil && strings.TrimSpace(sess.WorkspacePath) != "" {
+		rootCount = 1
+	}
 	roster := frame.Roster
 	if roster == nil {
 		declared := frame.RunContext.AllowedAgents
@@ -179,16 +185,6 @@ func (e *promptSurface) implementSessionState(ctx context.Context, sess *api.Ses
 		return surface.ImplementSessionState{}
 	}
 	return e.deps.ImplementSessionState(ctx, sess)
-}
-
-func rootCountFromVars(vars map[string]any) int {
-	if vars == nil {
-		return 0
-	}
-	if v, ok := vars["root_count"].(int); ok {
-		return v
-	}
-	return 0
 }
 
 // loadedTools returns the turn ledger's loaded set for the session.

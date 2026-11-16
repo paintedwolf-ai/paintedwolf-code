@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
@@ -55,6 +56,7 @@ type Service struct {
 	workflows   Workflow
 	workerQueue Workers
 	skillBody   SkillBodyRenderer
+	profiles    func(context.Context, *api.Session) []sandbox.ToolProfile
 	events      *events.Publisher
 }
 
@@ -64,5 +66,8 @@ func New(store Store, workspace *sessionscope.Service, router *llm.StaticModelRo
 func (m *Service) SetWorkflow(workflow Workflow)         { m.workflows = workflow }
 func (m *Service) SetWorkers(workers Workers)            { m.workerQueue = workers }
 func (m *Service) SetPublisher(events *events.Publisher) { m.events = events }
+func (m *Service) SetProfiles(profiles func(context.Context, *api.Session) []sandbox.ToolProfile) {
+	m.profiles = profiles
+}
 
 func (m *Service) SetPolicy(policy func() toolpolicy.Engine) { m.policy = policy }

@@ -193,12 +193,17 @@ func (m *Context) procedureReader(ctx context.Context, sess *api.Session, profil
 		offeredSet[name] = true
 	}
 	var remaining []string
-	for _, name := range deferred {
-		if !offeredSet[name] {
-			remaining = append(remaining, name)
+	if offeredSet["request_tools"] {
+		for _, name := range deferred {
+			if !offeredSet[name] {
+				remaining = append(remaining, name)
+			}
 		}
 	}
 	visible := slices.Clone(offered)
+	if visible == nil {
+		visible = []string{}
+	}
 	if surfaceID == "" {
 		visible = append(visible, remaining...)
 	}
