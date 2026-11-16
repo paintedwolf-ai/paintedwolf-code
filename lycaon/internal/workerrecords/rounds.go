@@ -358,7 +358,10 @@ func latestSettledResult(ctx context.Context, q *db.Queries, workerID string) (R
 		OperationID: r.OperationID, CreatedAt: r.CreatedAt, SettledAt: r.SettledAt, CheckpointID: r.CheckpointID,
 	})
 	round.ResultID = r.ResultID
-	disp := Disposition{ResultID: r.ResultID, WorkerID: r.WorkerID, ChangeState: r.ChangeState, AccountedAt: r.AccountedAt}
+	disp := Disposition{
+		ResultID: r.ResultID, WorkerID: r.WorkerID,
+		ChangeState: r.ChangeState, ShelveReason: r.ShelveReason, AccountedAt: r.AccountedAt,
+	}
 	return round, disp, true, nil
 }
 

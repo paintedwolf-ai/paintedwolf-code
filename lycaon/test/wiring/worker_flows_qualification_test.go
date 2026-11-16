@@ -205,6 +205,8 @@ func TestFlow04SandboxQuestionRelayAndCancelWithdraw(t *testing.T) {
 	scripts.push("implementer",
 		api.ToolCall{ID: "sq-done", Name: "complete_leg", Args: map[string]any{"leg_status": "complete", "brief": "Used project-local fixture.", "objectives_met": []any{"Done"}}},
 	)
+	_, _, err = h.Sessions.Manager.Coordinator.Assembly.WorkerRoster(ctx, sess.ID)
+	testutil.FailErr(t, "render roster before answer", err)
 	call.Identity.ToolCallID = uuid.NewString()
 	_, err = h.ToolRegistry.Run(ctx, "answer_decision", map[string]any{
 		"worker": "sandbox-asker", "answer": "Use a project-local hosts file instead.", "resolved_by": "user",

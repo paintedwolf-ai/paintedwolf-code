@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -27,14 +26,6 @@ func (s *SQLStore) InsertTask(ctx context.Context, task api.WorkerTask) error {
 	return s.mutateInTx(ctx, task.ID, func(q *db.Queries) error {
 		return insertTask(ctx, q, task)
 	})
-}
-
-// InsertTaskTx inserts a job in the caller's transaction.
-func InsertTaskTx(ctx context.Context, tx *sql.Tx, task api.WorkerTask) error {
-	if tx == nil {
-		return fmt.Errorf("worker insert transaction required")
-	}
-	return insertTask(ctx, db.New(tx), task)
 }
 
 func insertTask(ctx context.Context, queries *db.Queries, task api.WorkerTask) error {

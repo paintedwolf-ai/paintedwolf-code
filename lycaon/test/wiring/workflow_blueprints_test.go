@@ -94,6 +94,8 @@ func coordToolCtx(t *testing.T, h *Harness, ctx context.Context, sess *api.Sessi
 		sess.ProjectID,
 	).Scan(&call.Source.ActiveRootID))
 	call.Source.Roots[0].ID = call.Source.ActiveRootID
+	call.Host.SessionOutputDir = t.TempDir()
+	call.Host.SessionScratchDir = t.TempDir()
 	return call
 }
 

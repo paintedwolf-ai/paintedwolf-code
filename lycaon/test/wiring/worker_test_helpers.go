@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -205,9 +206,25 @@ func executeWorkerWithinDrain(
 	}
 }
 
-func workerQueueQuiescent(ctx context.Context, q worker.WorkerQueue, projectID string) bool {
-	jobs, err := q.List(ctx, projectID, api.WorkerStatusPending, api.WorkerStatusRunning)
-	return err == nil && len(jobs) == 0
+func workerQueueQuiescent(ctx context.Context, h *Harness, projectID string) bool {
+	running, err := h.Delegations.Queue.List(ctx, projectID, api.WorkerStatusRunning)
+	if err != nil || len(running) > 0 {
+		return false
+	}
+	pending, err := h.Delegations.Queue.List(ctx, projectID, api.WorkerStatusPending)
+	if err != nil {
+		return false
+	}
+	for _, job := range pending {
+		if len(job.AfterWorkers) == 0 || h.Delegations.Records == nil {
+			return false
+		}
+		waiting, wErr := workerops.PrerequisitePending(ctx, h.Delegations.Records.LatestRoundJob, h.Delegations.Queue, job)
+		if wErr != nil || !waiting {
+			return false
+		}
+	}
+	return true
 }
 
 func workerCycleQuiescent(
@@ -215,7 +232,7 @@ func workerCycleQuiescent(
 	h *Harness,
 	projectID, parentSessionID string,
 ) bool {
-	if !workerQueueQuiescent(ctx, h.Delegations.Queue, projectID) {
+	if !workerQueueQuiescent(ctx, h, projectID) {
 		return false
 	}
 	if parentSessionID == "" {

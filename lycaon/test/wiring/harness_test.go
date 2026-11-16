@@ -6,7 +6,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -52,7 +51,7 @@ func TestBuildForTestBackgroundWorkersCompleteJob(t *testing.T) {
 		ctx,
 		"task",
 		TaskToolArgs(orchestration.ProfileRepoResearcher, "inspect feature"),
-		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}},
+		wiringToolContext(sess.ID, dir),
 	)
 	testutil.FailErr(t, "task tool failed", err)
 
