@@ -52,26 +52,6 @@ export type MarkdownCodeFoldController = {
   dispose: () => void;
 };
 
-function isViewportController(
-  value: TranscriptViewportController | MarkdownCodeFoldOptions,
-): value is TranscriptViewportController {
-  return "beginDisclosureMotion" in value;
-}
-
-function normalizeOptions(
-  input?: TranscriptViewportController | MarkdownCodeFoldOptions | null,
-): MarkdownCodeFoldOptions {
-  if (!input) return {};
-  if (isViewportController(input)) {
-    return { viewport: input, disclosures: input.disclosures };
-  }
-  return {
-    viewport: input.viewport,
-    disclosures: input.disclosures ?? input.viewport?.disclosures,
-    scope: input.scope,
-  };
-}
-
 function notifyFenceLayout(frame: HTMLElement): void {
   frame.dispatchEvent(new Event(TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT, { bubbles: true }));
 }
@@ -135,9 +115,13 @@ export function syncMarkdownFenceChrome(
 }
 
 export function createMarkdownCodeFoldController(
-  options?: TranscriptViewportController | MarkdownCodeFoldOptions | null,
+  options: MarkdownCodeFoldOptions = {},
 ): MarkdownCodeFoldController {
-  const resolved = normalizeOptions(options);
+  const resolved: MarkdownCodeFoldOptions = {
+    viewport: options.viewport,
+    disclosures: options.disclosures ?? options.viewport?.disclosures,
+    scope: options.scope,
+  };
   const instanceId = `markdown-code-fold:${++nextControllerSeq}`;
   const userExpandedByIndex = new Map<number, boolean>();
   const leasesByIndex = new Map<number, Set<symbol>>();
