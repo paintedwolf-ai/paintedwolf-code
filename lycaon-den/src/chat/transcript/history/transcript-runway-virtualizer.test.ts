@@ -56,7 +56,6 @@ describe("createTranscriptVirtualizer session-scale runway", () => {
       Array.from({ length: 100 }, (_, i) => row(401 + i)),
     );
     const [unloaded, setUnloaded] = createSignal({ before: 400, after: 0 });
-    const [span, setSpan] = createSignal({ count: 100, ordSpan: 100 });
 
     const dispose = createRoot((d) => {
       const virtualizer = createTranscriptVirtualizer({
@@ -73,7 +72,6 @@ describe("createTranscriptVirtualizer session-scale runway", () => {
         rowSizeHint: () => 100,
         restoredRowEstimate: () => 100,
         unloadedOrds: unloaded,
-        residentRowSpan: span,
       });
 
       // 100 resident rows at 100px = 10_000px; 400 unloaded before at 100px/ord = 40_000px.
@@ -92,7 +90,6 @@ describe("createTranscriptVirtualizer session-scale runway", () => {
       // `beforePx` shrinks by 10_000px while 10_000px of resident rows are prepended above the anchor,
       // so the anchored row's session coordinate (`start`) stays at 44_000px with zero net jump!
       setUnloaded({ before: 300, after: 0 });
-      setSpan({ count: 200, ordSpan: 200 });
       setItems(Array.from({ length: 200 }, (_, i) => row(301 + i)));
 
       expect(virtualizer.runway().beforePx).toBe(30_000);
@@ -120,7 +117,6 @@ describe("createTranscriptVirtualizer session-scale runway", () => {
     ];
     const [items, setItems] = createSignal<TranscriptItem[]>(initialRows);
     const [unloaded, setUnloaded] = createSignal({ before: 254, after: 0 });
-    const [span, setSpan] = createSignal({ count: 13, ordSpan: 23 });
     const persisted = new Map<string, number>();
 
     const dispose = createRoot((d) => {
@@ -132,7 +128,6 @@ describe("createTranscriptVirtualizer session-scale runway", () => {
         shiftContent: (deltaY) => deltaY,
         rowSizeHint: () => 200,
         unloadedOrds: unloaded,
-        residentRowSpan: span,
       });
       expect(estimateOnly.runway().densityPxPerOrd).toBe(DEFAULT_TRANSCRIPT_ORD_DENSITY_PX);
 
@@ -147,7 +142,6 @@ describe("createTranscriptVirtualizer session-scale runway", () => {
         rowSizeHint: (item) => persisted.get(item.key) ?? 200,
         restoredRowEstimate: (item) => persisted.get(item.key),
         unloadedOrds: unloaded,
-        residentRowSpan: span,
       });
 
       // 5 persisted activity spans * 60px = 300px across 5 * 3 = 15 ordinals -> 20px/ord.
@@ -160,7 +154,6 @@ describe("createTranscriptVirtualizer session-scale runway", () => {
       virtualizer.itemSizeCache.set("msg-242", 90);
       batch(() => {
         setUnloaded({ before: 240, after: 0 });
-        setSpan({ count: 18, ordSpan: 37 });
         setItems([
           row(241),
           row(242),

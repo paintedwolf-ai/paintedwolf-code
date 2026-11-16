@@ -19,17 +19,11 @@ export type TranscriptRunwayState = {
   densityPxPerOrd: number;
 };
 
-/** Facts the virtualizer knows about the resident window and the scrollport. */
+/** Unloaded history and the measured geometry of the resident window. */
 export type TranscriptRunwayObservation = {
   unloaded: TranscriptUnloadedOrds;
-  residentRowCount: number;
-  residentOrdSpan: number;
-  residentHeightPx: number;
   measuredHeightPx: number;
   measuredOrdSpan: number;
-  scrollOffsetPx: number;
-  viewportHeightPx: number;
-  following: boolean;
 };
 
 /** A target scroll offset inside an unloaded runway, frozen until the landed page mounts. */
@@ -134,24 +128,17 @@ export function transcriptRowOrdSpan(
 /** Sums total resident height alongside the height and ordinal span of measured or persisted rows. */
 export function measureTranscriptResidentRows<T extends MeasurableRow>(opts: {
   items: readonly T[];
-  span?: { count: number; ordSpan: number };
   cachedSize: (key: string | number) => number | undefined;
   persistedSize?: (item: T) => number | undefined;
   estimatedSize: (item: T, index: number) => number;
 }): {
-  residentRowCount: number;
-  residentOrdSpan: number;
   residentHeightPx: number;
   measuredHeightPx: number;
   measuredOrdSpan: number;
 } {
   const count = opts.items.length;
-  const residentRowCount = opts.span?.count ?? count;
-  const residentOrdSpan = opts.span?.ordSpan ?? count;
   if (count === 0) {
     return {
-      residentRowCount,
-      residentOrdSpan,
       residentHeightPx: 0,
       measuredHeightPx: 0,
       measuredOrdSpan: 0,
@@ -182,8 +169,6 @@ export function measureTranscriptResidentRows<T extends MeasurableRow>(opts: {
     }
   }
   return {
-    residentRowCount,
-    residentOrdSpan,
     residentHeightPx,
     measuredHeightPx,
     measuredOrdSpan,

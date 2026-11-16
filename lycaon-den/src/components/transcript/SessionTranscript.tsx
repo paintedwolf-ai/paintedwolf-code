@@ -248,7 +248,6 @@ export function SessionTranscript(props: Props) {
     resolveLostAnchor,
     originPx: geometry.origin,
     unloadedOrds: historyView.unloadedOrds,
-    residentRowSpan: historyView.residentRowSpan,
     onRowMeasured: ({ element, index, size, width }) => {
       if (!(element instanceof HTMLElement)) return;
       if (document.fonts?.status === "loading") return;
