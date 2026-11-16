@@ -785,10 +785,8 @@ history and three recovery captures. Its catalog recipe keeps packages and tests
 serial and allows 90 minutes per package before host-load scaling. The nightly
 workflow includes this tier. Active fuzz exploration runs through
 `./task test:fuzz` in nightly verification, separately from
-`check`; ordinary Go tests still execute saved fuzz seed cases. Transcript
-scale tests use the `.perf.test.ts` suffix and run through
-`./task den:test:transcript-scale` in nightly verification. Den suites assert
-memory, DOM and row bounds, never elapsed time. SQL query and OpenAPI bundle generation drift are
+`check`; ordinary Go tests still execute saved fuzz seed cases. Den suites,
+transcript scale included, assert memory, DOM and row bounds, never elapsed time. SQL query and OpenAPI bundle generation drift are
 checked once through `db:sqlc:check` and `openapi:bundle:check` in
 `check:drift`; Go contracts inspect the generated surfaces without launching the
 generators again.
@@ -1142,7 +1140,7 @@ retry. The one-retry limit remains in force.
 #### Automatic queue batching
 
 Use the merge queue normally. The hosted `Automatic queue batching` controller
-runs after CI, source changes, no-combine label changes, and every five minutes. It
+runs after CI, source changes, and no-combine label changes. It
 reserves the first two queue positions for existing cumulative groups, then
 combines up to four consecutive waiting entries in their existing priority
 order. Campaign exclusions live in `.github/queue-batching.json`; Linux and

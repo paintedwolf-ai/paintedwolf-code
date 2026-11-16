@@ -17,7 +17,6 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import verification_reuse as reuse  # noqa: E402
 from ci_policy.resources import Monitor, budget, runtime_environment  # noqa: E402
-from ci_policy.quarantine import arguments as quarantine_arguments  # noqa: E402
 
 CONTROL_ENV = ("PW_TEST_STAGE_EVENTS", "PW_TEST_REUSE_STORE", "PW_TEST_ENVIRONMENT_IDENTITY", "PW_TEST_PACKAGE_IDENTITIES",
                "PW_TEST_RACE",
@@ -133,7 +132,6 @@ def main():
         os.execve(binary, [binary, *arguments], child_environment)
     context = reuse.Context.from_environment(environment)
     package = context.package(os.getcwd())
-    arguments = quarantine_arguments(package, arguments, environment.get("PW_QUARANTINE_OBSERVE") == "1")
     store = Path(environment["PW_TEST_REUSE_STORE"]) if environment.get("PW_TEST_REUSE_STORE") else None
     race = environment.get("PW_TEST_RACE") == "1"
     environment["PW_PACKAGE_RESOURCE_IDENTITY"] = str(budget(package, race))

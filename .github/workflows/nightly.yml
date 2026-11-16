@@ -1,18 +1,20 @@
 name: nightly
+run-name: Nightly ${{ inputs.source-sha || github.sha }}
 
 on:
   schedule:
-    # One nightly run owns backend and browser verification. Merges arrive at
-    # every hour, so its two-runner footprint, not the hour, keeps it out of the
-    # merge queue's way; 05:00 UTC is among the quietest hours.
-    - cron: "0 5 * * *"
+    - cron: "0 21 * * *"
   workflow_dispatch:
     inputs:
       suite:
         description: Which legs to run
         type: choice
         default: all
-        options: [all, behavior, race, coverage, performance, fuzz, e2e]
+        options: [all, behavior, race, performance, fuzz, e2e]
+      source-sha:
+        description: Exact source commit; blank uses the dispatched commit
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -28,10 +30,29 @@ env:
   # MLX 0.32 Metal kernels need the Xcode 26 toolchain; Linux runners ignore it.
   DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
 
-# The stages run in turn, so one run holds at most two runners, and each stage
-# runs whatever an earlier one concluded.
+# Every stage starts once the source is bound. The catalog caps the matrix at six
+# runners; the platform jobs, browser shards, desktop journey and upgrade
+# rehearsal add six more, four of the twelve on macOS.
 jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      sha: ${{ steps.source.outputs.sha }}
+      tree: ${{ steps.source.outputs.tree }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Bind the verified source
+        id: source
+        env:
+          NIGHTLY_SOURCE: ${{ inputs.source-sha }}
+          PYTHONPATH: scripts
+        run: python3 -m ci_policy.nightly_source
+
   verification:
+    needs: source
     uses: ./.github/workflows/verification.yml
     # Reads the measured durations that plan the matrix.
     permissions:
@@ -39,29 +60,34 @@ jobs:
       actions: read
     with:
       profile: nightly
-      suite: ${{ github.event_name == 'schedule' && 'all' || inputs.suite }}
+      suite: ${{ inputs.suite || 'all' }}
+      source-sha: ${{ needs.source.outputs.sha }}
 
   platform:
-    needs: verification
-    if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.suite == 'all') }}
+    needs: source
+    if: ${{ (inputs.suite || 'all') == 'all' }}
     uses: ./.github/workflows/platform-verification.yml
+    with:
+      source-sha: ${{ needs.source.outputs.sha }}
 
   e2e:
-    needs: platform
-    if: ${{ !cancelled() && (github.event_name == 'schedule' || inputs.suite == 'all' || inputs.suite == 'e2e') }}
+    needs: source
+    if: ${{ contains(fromJSON('["all", "e2e"]'), inputs.suite || 'all') }}
     uses: ./.github/workflows/e2e-verification.yml
     with:
-      web-parallel: 1
+      web-parallel: 2
+      source-sha: ${{ needs.source.outputs.sha }}
 
-  # Prior release binary opens the corpus, then HEAD migrates the same store.
+  # Prior release binary opens the corpus, then the source migrates the same store.
   upgrade-path:
-    needs: e2e
-    if: ${{ !cancelled() }}
+    needs: source
+    if: ${{ (inputs.suite || 'all') == 'all' }}
     runs-on: macos-15
     timeout-minutes: 150
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.source.outputs.sha }}
           fetch-depth: 0
 
       - uses: ./.github/actions/setup-verification
@@ -88,36 +114,47 @@ jobs:
           name: nightly-upgrade-${{ github.run_attempt }}
           status: ${{ job.status }}
 
-  quarantine:
-    needs: e2e
-    if: ${{ !cancelled() }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: ./.github/actions/setup-verification
-      - name: Observe quarantined tests
-        env:
-          PYTHONPATH: scripts
-          LYCAON_LLM_MOCK: '1'
-        run: python3 -m ci_policy.quarantine
-      - uses: ./.github/actions/verification-evidence
-        if: always()
-        with:
-          name: quarantine-${{ github.run_attempt }}
-          status: ${{ job.status }}
-
   nightly:
     # Judges failed and timed-out jobs, but a cancelled run must not wait for a runner to do so.
     if: ${{ !cancelled() }}
-    needs: [verification, platform, upgrade-path, e2e]
+    needs: [source, verification, platform, e2e, upgrade-path]
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Later plans in every tier order lanes and balance shards from this one file.
+      - name: Collect lane timings
+        id: receipts
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: receipt-verification-nightly-*
+          path: ${{ runner.temp }}/receipts
+
+      - name: Merge lane timings
+        id: timings
+        if: steps.receipts.outcome == 'success'
+        continue-on-error: true
+        env:
+          SOURCE_SHA: ${{ needs.source.outputs.sha }}
+          SOURCE_TREE: ${{ needs.source.outputs.tree }}
+          PYTHONPATH: scripts
+        run: python3 -m ci_policy.timings "$RUNNER_TEMP/receipts" "$RUNNER_TEMP/timings.json"
+
+      - name: Publish timings
+        if: steps.timings.outcome == 'success'
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: nightly-timings
+          path: ${{ runner.temp }}/timings.json
+          if-no-files-found: error
+          overwrite: true
+          retention-days: 30
+
       - name: Require all selected nightly verification
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          SKIPPED: ${{ github.event_name != 'schedule' && inputs.suite != 'all' && (inputs.suite == 'e2e' && 'platform' || 'platform,e2e') || '' }}
+          SKIPPED: ${{ inputs.suite == 'e2e' && 'platform,upgrade-path' || (inputs.suite || 'all') != 'all' && 'platform,e2e,upgrade-path' || '' }}
         run: python3 scripts/ci_verification.py gate --skipped "$SKIPPED"

@@ -412,8 +412,6 @@ def request(arguments, environment):
         return None
     if any(flag.partition("=")[0] in EXCLUSIVE_GO_FLAGS for flag in shlex.split(environment.get("GOFLAGS", ""))):
         return None
-    if environment.get("LYCAON_VITEST_PERF", "0") != "0":
-        return None
     try:
         stages = expand(names, cli)
     except ValueError:
