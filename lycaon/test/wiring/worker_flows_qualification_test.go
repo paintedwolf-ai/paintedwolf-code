@@ -188,6 +188,7 @@ func TestFlow04SandboxQuestionRelayAndCancelWithdraw(t *testing.T) {
 		api.ToolCall{ID: "sq-1", Name: "request_decision", Args: map[string]any{
 			"question": "Need write access to /etc/hosts fixture.", "blocker_class": "sandbox",
 		}},
+		api.ToolCall{ID: "sq-done", Name: "complete_leg", Args: map[string]any{"leg_status": "complete", "brief": "Used project-local fixture.", "objectives_met": []any{"Done"}}},
 	)
 	args := TaskToolArgs("implementer", "Configure host fixture.", "main.go")
 	args["name"] = "sandbox-asker"
@@ -202,9 +203,6 @@ func TestFlow04SandboxQuestionRelayAndCancelWithdraw(t *testing.T) {
 		t.Fatalf("expected INSTRUCT_WORKER_ASKING while asking, got %v", err)
 	}
 
-	scripts.push("implementer",
-		api.ToolCall{ID: "sq-done", Name: "complete_leg", Args: map[string]any{"leg_status": "complete", "brief": "Used project-local fixture.", "objectives_met": []any{"Done"}}},
-	)
 	_, _, err = h.Sessions.Manager.Coordinator.Assembly.WorkerRoster(ctx, sess.ID)
 	testutil.FailErr(t, "render roster before answer", err)
 	call.Identity.ToolCallID = uuid.NewString()

@@ -164,7 +164,12 @@ func TestFlow13Flow14AndFlow15ReuseSurveyorSmallEditAndExternalWait(t *testing.T
 
 	// Flow 14: direct two-line edit by the coordinator with zero workers in the session.
 	call.Identity.ToolCallID = uuid.NewString()
-	_, err := h.ToolRegistry.Run(ctx, "command", map[string]any{"command": "printf 'package auth\\nvar Direct = 1\\n' > direct.go"}, call)
+	_, err := h.ToolRegistry.Run(ctx, "replace_lines", map[string]any{
+		"path":        "token.go",
+		"start_line":  float64(2),
+		"end_line":    float64(2),
+		"new_content": "var Race = false",
+	}, call)
 	testutil.FailErr(t, "direct coordinator edit", err)
 	ws0, err := h.Delegations.Records.Workers(ctx, actor)
 	testutil.FailErr(t, "workers after direct edit", err)

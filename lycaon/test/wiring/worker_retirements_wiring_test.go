@@ -131,6 +131,8 @@ func TestRetirementsReplacementRoutesAndKeptTools(t *testing.T) {
 			"question":      "How should empty input be handled?",
 			"blocker_class": "decision",
 		}},
+		api.ToolCall{ID: "w1", Name: "command", Args: map[string]any{"command": "printf 'package mod\\nvar V = 1\\n' > mod.go"}},
+		api.ToolCall{ID: "d1", Name: "complete_leg", Args: map[string]any{"leg_status": "complete", "brief": "Round 1 edit.", "objectives_met": []any{"Edited V=1"}}},
 	)
 	args := TaskToolArgs("implementer", "Fix mod.go.", "mod.go")
 	args["name"] = "mod-fixer"
@@ -139,10 +141,6 @@ func TestRetirementsReplacementRoutesAndKeptTools(t *testing.T) {
 	testutil.FailErr(t, "start mod-fixer", err)
 	testutil.FailErr(t, "drain to open question", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	scripts.push("implementer",
-		api.ToolCall{ID: "w1", Name: "command", Args: map[string]any{"command": "printf 'package mod\\nvar V = 1\\n' > mod.go"}},
-		api.ToolCall{ID: "d1", Name: "complete_leg", Args: map[string]any{"leg_status": "complete", "brief": "Round 1 edit.", "objectives_met": []any{"Edited V=1"}}},
-	)
 	_, _, err = h.Sessions.Manager.Coordinator.Assembly.WorkerRoster(ctx, sess.ID)
 	testutil.FailErr(t, "render roster before answer", err)
 	call.Identity.ToolCallID = uuid.NewString()
