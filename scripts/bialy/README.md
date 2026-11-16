@@ -378,11 +378,10 @@ differ from the policy.
 ## Factory contract
 
 The factory runs `train.py`, `rerank/train_rerank.py`, `calibrate.py`,
-`replay_eval.py`, `parity_probe.py`, `retention_eval.py` and `preload.py` from a
-pinned checkout. [`factory-contract.json`](factory-contract.json) lists every
-flag each of them accepts, and a test holds it to the argument parsers. The
-factory refuses a checkout whose contract lacks a flag it passes, so removing or
-renaming a flag is a change to that file.
+`replay_eval.py`, `parity_probe.py` and `preload.py` from a pinned checkout and
+records the flags it passes them. Before a run it reads each script's
+`add_argument` declarations from that checkout and refuses one that no longer
+declares a recorded flag, so keep flag names as string literals in those calls.
 
 ## Tuning the shipped policy
 
