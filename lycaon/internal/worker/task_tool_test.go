@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerplan/plantest"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"os"
 	"path/filepath"
@@ -86,6 +87,9 @@ func taskTool(t *testing.T, sqlDB *db.Store, wrap func(worker.WorkerQueue) worke
 		deps.Agents = orchestration.NewMemoryAgentRegistryForTest()
 	}
 	deps.Workers = worker.DefaultWorkersConfig()
+	if deps.Plan == nil {
+		deps.Plan = plantest.New(t, plantest.Deps(deps.WorkerRecords))
+	}
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, deps))
 	return reg

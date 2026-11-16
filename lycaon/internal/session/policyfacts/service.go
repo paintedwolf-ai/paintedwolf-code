@@ -6,9 +6,11 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/people"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/secretmint"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
+	"github.com/lycaon/lycaon/internal/session/touchedpaths"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -34,6 +36,8 @@ type Service struct {
 	credentialSlots            func(context.Context, *api.Session) *secretmint.Inspector
 	socketResources            func(ctx context.Context, projectID string, paths []string) []string
 	credentialDecisions        credentialDecisions
+	authorship                 touchedpaths.AuthoredSource
+	candidateReader            candidateReader
 }
 
 // observeSocketResources names the host resources whose local service each
@@ -86,9 +90,11 @@ func (m *Service) FillSessionFacts(ctx context.Context, gc *oar.GuardContext, se
 
 type Sessions interface {
 	Get(context.Context, string) (*api.Session, error)
+	touchedpaths.LedgerSource
 }
 type Workspace interface {
 	SettingsPath(context.Context, *api.Session) string
+	Roots(context.Context, *api.Session) ([]projectroot.RootRef, error)
 }
 type Feedback interface {
 	RenderResult(context.Context, string, *oar.PipelineResult) (*guidance.Refusal, bool, error)

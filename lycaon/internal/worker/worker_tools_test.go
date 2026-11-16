@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerplan/plantest"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -65,7 +66,7 @@ func newWorkerToolsFixture(t *testing.T) *workerToolsFixture {
 		WakeParked: func(context.Context, string) error { return nil },
 		Release:    f.queue.ReleaseAdmitted,
 	}
-	testutil.FailErr(t, "register", RegisterWorkerTools(f.reg, WorkerToolDeps{Ops: f.ops, Queue: f.queue}))
+	testutil.FailErr(t, "register", RegisterWorkerTools(f.reg, WorkerToolDeps{Ops: f.ops, Queue: f.queue, Plan: plantest.New(t, plantest.Deps(f.records))}))
 	return f
 }
 
@@ -380,6 +381,7 @@ func TestTaskStartsANamedWorker(t *testing.T) {
 	f := newWorkerToolsFixture(t)
 	testutil.FailErr(t, "register task", RegisterTaskTool(f.reg, TaskToolDeps{
 		Queue: f.queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: DefaultWorkersConfig(), WorkerRecords: f.records, Reviews: f.ops,
+		Plan: plantest.New(t, plantest.Deps(f.records)),
 	}))
 	args := map[string]any{"agent_type": "repo-researcher", "name": "scout", "scope": map[string]any{"mode": "read"},
 		"brief": map[string]any{"goal": "Map the parser", "done_when": []any{"Entry points listed"}}}
@@ -562,7 +564,7 @@ func TestTaskStartsAReviewerOnASealedResult(t *testing.T) {
 	f.ops.Accounted = func(_ string, jobs []string) { accounted = append(accounted, jobs...) }
 	testutil.FailErr(t, "register task", RegisterTaskTool(f.reg, TaskToolDeps{
 		Queue: f.queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: DefaultWorkersConfig(),
-		WorkerRecords: f.records, Reviews: f.ops,
+		WorkerRecords: f.records, Reviews: f.ops, Plan: plantest.New(t, plantest.Deps(f.records)),
 	}))
 	review := func(call, handle string, extra map[string]any) error {
 		args := map[string]any{"agent_type": "repo-researcher", "name": "checker-" + call, "scope": map[string]any{"mode": "read"},

@@ -14,6 +14,7 @@ func (m *Host) SetSourceLedger(recorder sourceledger.Recorder, history tools.Sou
 		m.Verification.SetSourceObservations(observations)
 		m.Runner.Instructions.SetReviewCheckpointer(checkpoints)
 		m.SourceBriefs.SetSources(history, checkpoints)
+		m.ToolPolicy.SetSourceAuthorship(history.Authorship)
 	}
 }
 

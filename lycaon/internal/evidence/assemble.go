@@ -23,6 +23,7 @@ func MergeLedger(dst *Ledger, src Ledger) {
 		dst.Handles[handle] = rec
 	}
 	dst.handleOrder = append(dst.handleOrder, src.handleOrder...)
+	dst.observationOrder = append(dst.observationOrder, src.observationOrder...)
 	for path, handles := range src.ByPath {
 		dst.ByPath[path] = append(dst.ByPath[path], handles...)
 	}
@@ -45,7 +46,11 @@ func AssembleLedger(records []Record) Ledger {
 		return chronological[i].CustodySeq() < chronological[j].CustodySeq()
 	})
 	for _, rec := range chronological {
-		if rec.Handle == "" || rec.SupersededBy != "" {
+		if rec.Handle == "" {
+			continue
+		}
+		ev.observationOrder = append(ev.observationOrder, rec.Handle)
+		if rec.SupersededBy != "" {
 			continue
 		}
 		for _, path := range IndexedPathsForRecord(rec) {

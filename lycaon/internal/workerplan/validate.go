@@ -38,10 +38,20 @@ type LegSpec struct {
 	Criteria  []string
 }
 
+// GraphError reports why a Blueprint's task block cannot be planned. Task and
+// Other name the task ids involved, when the reason concerns any.
+type GraphError struct {
+	Reason string
+	Task   string
+	Other  string
+}
+
+func (e *GraphError) Error() string { return "blueprint tasks: " + e.Reason }
+
 // ParseBlueprintLegs extracts and validates the task graph embedded in plan.
-// A Blueprint with no task block produces one default implementation leg; a
-// malformed task block, cycle, unknown dependency, or unordered write-file
-// overlap returns an error.
+// A Blueprint with no task block produces one default implementation leg. A
+// malformed block, a cycle, an unknown dependency or unordered tasks that
+// write the same paths return a GraphError.
 func ParseBlueprintLegs(plan *api.Blueprint) ([]LegSpec, error) {
 	var content, title string
 	if plan != nil {
@@ -72,7 +82,7 @@ func ParseBlueprintLegs(plan *api.Blueprint) ([]LegSpec, error) {
 		id := task.ID
 		trimmedID := strings.TrimSpace(id)
 		if trimmedID == "" || trimmedID != id || utf8.RuneCountInString(id) > maxWorkIDLen {
-			return nil, fmt.Errorf("invalid blueprint task id %q", id)
+			return nil, &GraphError{Reason: "task_id_invalid", Task: id}
 		}
 		legTitle := strings.TrimSpace(guidance.StripHostBlocks(task.Title))
 		if legTitle == "" {
@@ -108,7 +118,7 @@ func extractStrictTasks(content string) ([]blueprint.Task, bool, error) {
 	rest := content[start+len(tasksMarkerStart):]
 	end := strings.Index(rest, tasksMarkerEnd)
 	if end < 0 {
-		return nil, true, fmt.Errorf("unclosed blueprint tasks block")
+		return nil, true, &GraphError{Reason: "tasks_block_unclosed"}
 	}
 	raw := strings.TrimSpace(rest[:end])
 	if raw == "" {
@@ -116,7 +126,7 @@ func extractStrictTasks(content string) ([]blueprint.Task, bool, error) {
 	}
 	var tasks []blueprint.Task
 	if err := json.Unmarshal([]byte(raw), &tasks); err != nil {
-		return nil, true, fmt.Errorf("invalid blueprint tasks json: %w", err)
+		return nil, true, &GraphError{Reason: "tasks_json_invalid"}
 	}
 	return tasks, true, nil
 }
@@ -125,7 +135,7 @@ func validateLegGraph(legs []LegSpec) error {
 	byID := make(map[string]LegSpec, len(legs))
 	for _, leg := range legs {
 		if _, exists := byID[leg.WorkID]; exists {
-			return fmt.Errorf("duplicate blueprint task id %q", leg.WorkID)
+			return &GraphError{Reason: "task_id_duplicate", Task: leg.WorkID}
 		}
 		byID[leg.WorkID] = leg
 	}
@@ -135,13 +145,13 @@ func validateLegGraph(legs []LegSpec) error {
 			dep := strings.TrimSpace(raw)
 			switch {
 			case dep == "" || dep != raw:
-				return fmt.Errorf("blueprint task %q has invalid dependency %q", leg.WorkID, raw)
+				return &GraphError{Reason: "dependency_invalid", Task: leg.WorkID, Other: raw}
 			case dep == leg.WorkID:
-				return fmt.Errorf("blueprint task %q depends on itself", leg.WorkID)
+				return &GraphError{Reason: "dependency_self", Task: leg.WorkID}
 			case seen[dep]:
-				return fmt.Errorf("blueprint task %q repeats dependency %q", leg.WorkID, dep)
+				return &GraphError{Reason: "dependency_repeated", Task: leg.WorkID, Other: dep}
 			case byID[dep].WorkID == "":
-				return fmt.Errorf("blueprint task %q depends on unknown task %q", leg.WorkID, dep)
+				return &GraphError{Reason: "dependency_unknown", Task: leg.WorkID, Other: dep}
 			}
 			seen[dep] = true
 		}
@@ -157,7 +167,7 @@ func validateLegGraph(legs []LegSpec) error {
 				continue
 			}
 			if a.ScopeMode == workerrecords.ScopeWrite && b.ScopeMode == workerrecords.ScopeWrite && PathsOverlap(a.Files, b.Files) {
-				return fmt.Errorf("unordered blueprint tasks %q and %q overlap on write paths", a.WorkID, b.WorkID)
+				return &GraphError{Reason: "write_paths_overlap", Task: a.WorkID, Other: b.WorkID}
 			}
 		}
 	}
@@ -170,7 +180,7 @@ func computeAncestors(legs []LegSpec, byID map[string]LegSpec) (map[string]map[s
 	var visit func(string) (map[string]bool, error)
 	visit = func(id string) (map[string]bool, error) {
 		if visiting[id] {
-			return nil, fmt.Errorf("blueprint task dependency cycle includes %q", id)
+			return nil, &GraphError{Reason: "dependency_cycle", Task: id}
 		}
 		if got, ok := memo[id]; ok {
 			return got, nil

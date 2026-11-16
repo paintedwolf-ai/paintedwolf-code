@@ -41,7 +41,7 @@ function toSet(words: string[] | undefined, caseInsensitive: boolean): Set<strin
   );
 }
 
-export function wordLanguage(spec: WordLangSpec): StreamLanguage<unknown> {
+export function wordStreamParser(spec: WordLangSpec): StreamParser<WordLangState> {
   const ci = spec.caseInsensitive === true;
   const keywords = toSet(spec.keywords, ci);
   const types = toSet(spec.types, ci);
@@ -152,5 +152,9 @@ export function wordLanguage(spec: WordLangSpec): StreamLanguage<unknown> {
     },
   };
 
-  return StreamLanguage.define(parser);
+  return parser;
+}
+
+export function wordLanguage(spec: WordLangSpec) {
+  return StreamLanguage.define(wordStreamParser(spec));
 }
