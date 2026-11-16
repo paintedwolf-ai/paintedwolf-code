@@ -153,7 +153,6 @@ function createSweepHarness(sessionLength: number, sessionId: string) {
       rowSizeHint: (item) => fixture.measuredRowHeight(item),
       restoredRowEstimate: (item) => fixture.measuredRowHeight(item),
       unloadedOrds: historyView.unloadedOrds,
-      residentRowSpan: historyView.residentRowSpan,
     });
     virtualizerRef.current = virtualizer;
 
