@@ -386,7 +386,7 @@ describe("SessionTranscript workers and synthesis", () => {
     ) as HTMLElement;
     expect(chicklet).toBeTruthy();
     expect(isDisclosureOpen(chicklet)).toBe(false);
-    expect(chicklet.querySelector(".den-citation-grounding-chicklet--traced")).toBeTruthy();
+    expect(chicklet.dataset.evidenceOutcome).toBe("traced");
     expect(
       container.querySelector('[data-testid="synthesis-evidence-section"]'),
     ).toBeNull();
