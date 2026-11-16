@@ -4,6 +4,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  createUniqueId,
   on,
   onCleanup,
   untrack,
@@ -48,8 +49,16 @@ function keepEditorFocus(e: MouseEvent) {
   e.preventDefault();
 }
 
+/**
+ * Where the bar sits. In the conversation header the panel hangs from the chip
+ * row over the transcript; in a stage title bar the chips are icons and the
+ * panel is a popover over the stage.
+ */
+export type TabBarPlacement = "conversation" | "stage";
+
 type TabBarProps = {
   tabs: TabSpec[];
+  placement?: TabBarPlacement;
   /** Controlled open tab. */
   open?: TabId | null;
   onOpenChange?: (next: TabId | null) => void;
@@ -96,6 +105,10 @@ export function TabBar(props: TabBarProps) {
   const showContent = () => mounted() != null;
 
   const railCompact = () => open() == null && mounted() == null;
+
+  const inStage = () => props.placement === "stage";
+  const testId = (name: string) => (inStage() ? `stage-${name}` : name);
+  const panelId = `tabs-panel-${createUniqueId()}`;
 
   // A window drag consumes its trailing chip click.
   let draggedDuringPress = false;
@@ -422,7 +435,11 @@ export function TabBar(props: TabBarProps) {
 
   return (
     <Show when={tabIds().length > 0 || props.leading != null || props.trailing != null}>
-      <div class="tabs" data-testid="tabs">
+      <div
+        class="tabs"
+        classList={{ "tabs--stage": inStage() }}
+        data-testid={testId("tabs")}
+      >
         <div
           class="tabs__rail"
           classList={{
@@ -439,21 +456,24 @@ export function TabBar(props: TabBarProps) {
               {props.leading}
             </div>
           </Show>
-          <div
-            class="tabs__panel-wash"
-            ref={(el) => {
-              panelWashEl = el;
-              el.style.height = "0px";
-            }}
-            aria-hidden="true"
-          >
-            <Show when={mounted() != null}>
-              <div
-                class="tabs__panel-fade"
-                classList={{ "tabs__panel-fade--hidden": props.retracted === true }}
-              />
-            </Show>
-          </div>
+          {/* The wash and fade cover the transcript beside and below the panel. */}
+          <Show when={!inStage()}>
+            <div
+              class="tabs__panel-wash"
+              ref={(el) => {
+                panelWashEl = el;
+                el.style.height = "0px";
+              }}
+              aria-hidden="true"
+            >
+              <Show when={mounted() != null}>
+                <div
+                  class="tabs__panel-fade"
+                  classList={{ "tabs__panel-fade--hidden": props.retracted === true }}
+                />
+              </Show>
+            </div>
+          </Show>
           <div class="tabs__strip">
             {/* The panel anchors to the chips. */}
             <div class="tabs__row">
@@ -464,8 +484,11 @@ export function TabBar(props: TabBarProps) {
                 <For each={tabIds()}>
                   {(id) => {
                     const tab = createMemo(() => specFor(id));
+                    // Guidance anchors to the conversation's chip.
+                    const firstTimeTip = () =>
+                      inStage() ? undefined : tab()?.firstTimeTip;
                     createEffect(() => {
-                      const tip = tab()?.firstTimeTip;
+                      const tip = firstTimeTip();
                       if (tip) requestFirstTimeTip(tip);
                     });
                     const chipShown = () =>
@@ -482,14 +505,14 @@ export function TabBar(props: TabBarProps) {
                           "tabs__chip--with-icon": tab()?.icon != null,
                         }}
                         aria-expanded={open() === id}
-                        aria-controls="tabs-panel"
+                        aria-controls={panelId}
                         aria-label={tab()?.label}
                         data-tip={tab()?.icon ? tab()?.label : undefined}
                         data-tip-when-clipped={
-                          tab()?.icon ? ".tabs__chip-label" : undefined
+                          tab()?.icon && !inStage() ? ".tabs__chip-label" : undefined
                         }
-                        data-testid={`tab-${id}`}
-                        data-first-time-tip-anchor={tab()?.firstTimeTip}
+                        data-testid={testId(`tab-${id}`)}
+                        data-first-time-tip-anchor={firstTimeTip()}
                         onMouseDown={keepEditorFocus}
                         onClick={() => {
                           const spec = tab();
@@ -519,7 +542,7 @@ export function TabBar(props: TabBarProps) {
                     eager
                     class="tabs__panel-clip"
                     viewportRef={(el) => { clipViewport = el; el.style.overflowY = "hidden"; }}
-                    data-testid="tabs-clip"
+                    data-testid={testId("tabs-clip")}
                     ref={(el) => {
                       clipEl = el;
                       el.style.height = "0px";
@@ -532,14 +555,14 @@ export function TabBar(props: TabBarProps) {
                         return (
                           <div
                             ref={(el) => bindLayoutBand(el, LAYOUT_BAND_SCALES.tabsPanel)}
-                            id="tabs-panel"
+                            id={panelId}
                             class="tabs__panel"
                             classList={{
                               "tabs__panel--hidden": !contentVisible(),
                             }}
                             role="region"
                             aria-label={specFor(id)?.label ?? "Panel"}
-                            data-testid="tabs-panel"
+                            data-testid={testId("tabs-panel")}
                             data-tab={id}
                           >
                             <Dynamic component={Panel} />
@@ -563,14 +586,16 @@ export function TabBar(props: TabBarProps) {
           {props.windowControlsEnd}
         </div>
         {/* The dock spans the rail beneath the side slots, not just the chip strip. */}
-        <div
-          class="tabs__dock"
-          ref={(el) => {
-            dockEl = el;
-          }}
-        >
-          {props.dock}
-        </div>
+        <Show when={!inStage()}>
+          <div
+            class="tabs__dock"
+            ref={(el) => {
+              dockEl = el;
+            }}
+          >
+            {props.dock}
+          </div>
+        </Show>
       </div>
     </Show>
   );

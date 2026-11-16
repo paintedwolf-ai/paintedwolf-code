@@ -77,7 +77,25 @@
   flex-shrink: 0;
 }
 
+/* The session's tabs end the bar, before that edge's reopen controls. */
+.den-shell-header-titlebar__tabs {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-left: auto;
+  pointer-events: auto;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
+}
+
+.den-shell-header-titlebar__tabs ~ .den-shell-header-titlebar__edge--trailing {
+  margin-left: 4px;
+}
+
 /* Reopen controls align with the window buttons above the stage. */
+.den-custom-chrome .den-shell-header-titlebar__tabs,
 .den-custom-chrome .den-shell-header-titlebar__edge {
   align-self: flex-start;
   margin-top: calc(
@@ -89,6 +107,15 @@
 .den-custom-chrome .den-shell-header:has(.den-shell-header-titlebar) {
   min-height: calc(
     var(--den-titlebar-inset) + var(--den-tabs-top-gap) + var(--den-unified-chrome-row)
+  );
+}
+
+/* The Files tab strip's rule runs just below the title bar controls. */
+.den-custom-chrome .den-shell-stage--pane[data-stage="files"] {
+  --den-stage-tabs-rule-drop: calc(
+    var(--den-titlebar-inset) - min(var(--den-files-tab-drag-band), var(--den-titlebar-inset)) +
+      var(--den-files-tab-strip-inset) + var(--den-files-tab-drag-band) -
+      var(--den-pane-control-center) - var(--den-titlebar-edge-control) / 2
   );
 }
 
@@ -130,6 +157,7 @@
 }
 
 /* A trailing reopen control already claims the free space. */
+.den-shell-header-titlebar__tabs ~ .den-shell-window-controls[data-side="right"],
 .den-shell-header-titlebar__edge--trailing ~ .den-shell-window-controls[data-side="right"] {
   margin-left: 0;
 }

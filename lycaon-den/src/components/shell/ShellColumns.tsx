@@ -1,6 +1,8 @@
 import { For, Show, onCleanup, type JSX } from "solid-js";
 import type { ContextNavItemId } from "../../../shared/app-state-types.ts";
+import type { OpenWorkerOptions } from "../../chat/worker/workers-model.ts";
 import { tauriDragRegionProps } from "../../platform/runtime.ts";
+import type { StageTabRail as StageTabRailState } from "../../shell/stage-tab-rail.ts";
 import type { ActiveChat } from "../../shell/stage-scope.ts";
 import {
   isRegionEntry,
@@ -8,10 +10,13 @@ import {
   registerFocusRegion,
   releaseFocusRegion,
 } from "../../shortcuts/focus-region.ts";
+import type { AppStore } from "../../store/app-state-model.ts";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 import type { Preparation } from "../../ui/presentation.ts";
 import { parseChatSessionKey, type ResidentPresence, type ResidentStack } from "../../ui/resident-surfaces.ts";
+import type { TabId } from "../chatview/tabs.ts";
 import type { StageEdgePanes } from "../nav/StageEdgeControls.tsx";
+import { StageTabRail } from "../nav/StageTabRail.tsx";
 import { ShowLatest } from "../primitives/ShowLatest.tsx";
 import { ResidentSurface } from "./ResidentSurface.tsx";
 import { ShellHeaderTitlebar } from "./ShellHeaderTitlebar.tsx";
@@ -38,6 +43,12 @@ export function ShellStageColumn(props: {
   back: StageBack | null;
   edges: StageEdgePanes;
   windowEdges: readonly WindowEdgeClaim[];
+  appStore: AppStore;
+  sessionTabs: StageTabRailState<TabId> & { showConversation: () => void };
+  workers: {
+    selectedWorkerId: () => string | null;
+    openWorkers: (workerId?: string, opts?: OpenWorkerOptions) => void;
+  };
   notifications: JSX.Element | null;
   waitingVisible: boolean;
   preparation: Preparation | undefined;
@@ -46,6 +57,24 @@ export function ShellStageColumn(props: {
 }) {
   const focusClaim = {};
   onCleanup(() => releaseFocusRegion("context", focusClaim));
+  const sessionTabs = {
+    present: () => props.sessionTabs.sessionId() != null,
+    children: () => (
+      <ShowLatest when={props.sessionTabs.sessionId()} by={(sessionId) => sessionId}>
+        {(sessionId) => (
+          <StageTabRail
+            appStore={props.appStore}
+            sessionId={sessionId()}
+            selectedWorkerId={props.workers.selectedWorkerId()}
+            onOpenWorker={props.workers.openWorkers}
+            openTab={props.sessionTabs.openTab()}
+            onSelectTab={props.sessionTabs.selectTab}
+            onShowConversation={props.sessionTabs.showConversation}
+          />
+        )}
+      </ShowLatest>
+    ),
+  };
   return (
     <Show when={props.occupied || props.stack.keys().length > 0}>
       <div
@@ -77,7 +106,12 @@ export function ShellStageColumn(props: {
           {...tauriDragRegionProps()}
         >
           {/* Title-bar restore controls preserve the stage position. */}
-          <ShellHeaderTitlebar back={props.back} edges={props.edges} windowEdges={props.windowEdges} />
+          <ShellHeaderTitlebar
+            back={props.back}
+            edges={props.edges}
+            windowEdges={props.windowEdges}
+            sessionTabs={sessionTabs}
+          />
         </header>
         <main class="den-shell-main" aria-label="Stage">
           {props.notifications}

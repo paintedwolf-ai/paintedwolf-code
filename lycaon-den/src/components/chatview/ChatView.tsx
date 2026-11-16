@@ -174,16 +174,17 @@ export function ChatView(props: ChatViewProps) {
       .finally(() => setCancellingWorkerId(null));
   };
 
-  // Bindings belong to the visible resident layer.
+  // Bindings belong to the resident layer that serves the session's tabs.
   const railBindingsClaim = {};
 
   createEffect(() => {
-    if (!surfaceActive()) {
+    if (!surfaceActive() && props.servesSessionTabs !== true) {
       setChatTabRailBindings(null, railBindingsClaim);
       return;
     }
     setChatTabRailBindings(
       {
+        sessionId: props.sessionId,
         workflows: {
           workflowPickerOpen: workflow.pickerOpen,
           workflowError: workflow.error,

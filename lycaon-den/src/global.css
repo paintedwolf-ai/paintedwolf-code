@@ -196,6 +196,7 @@
   --den-tabs-top-gap: 8px;
   /* Drag space above file tabs shares the custom titlebar. */
   --den-files-tab-drag-band: 1.7143rem;
+  --den-files-tab-strip-inset: 5px;
   /* Header targets meet WCAG 2.5.8 and grow with text size. */
   --den-unified-chrome-row: max(28px, 2em);
   --den-tabs-rail-radius: 14px;

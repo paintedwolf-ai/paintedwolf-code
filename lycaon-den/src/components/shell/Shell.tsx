@@ -240,7 +240,7 @@ export function Shell(props: ShellProps) {
 
   onMount(() => {
     onCleanup(registerShellDismissCommand({
-      ...scope, ...search, ...navigation, ...workerDrawer, layoutTrigger: () => layoutTriggerEl,
+      ...scope, ...search, ...navigation, ...workerDrawer, stageTabs, layoutTrigger: () => layoutTriggerEl,
     }));
     registerShellCommands({
       ...scope, ...search, ...panes, ...sessionNavigation, openSettings, stopChat, applyStagePlacement, stageColumnStageId,
@@ -419,9 +419,10 @@ export function Shell(props: ShellProps) {
     activeProject()?.roots[0]?.path ||
     undefined;
 
-  const { backFor, sourceBack, titlebarBack, stageBack } = createShellWorkspaceContext({
+  const { backFor, sourceBack, titlebarBack, stageBack, stageTabs } = createShellWorkspaceContext({
     ...scope, routedReturn, showConversation, splitFitClaim, closeWorkers, presentedChat,
     projectPresentation, conversationShown, splitColumns, stageColumnStageId, stageHandoff,
+    stageSurfaceShown: () => showStageColumn() && !stageOpeningOverChat(),
     reopenFiles: () => openStageWithPlacement("files", "routed"),
   });
 
@@ -584,6 +585,7 @@ export function Shell(props: ShellProps) {
             back={titlebarBack()}
             edges={stageEdges(conversationAttention())}
             windowEdges={panes.windowEdgeClaims("stage")}
+            appStore={props.appStore} sessionTabs={stageTabs} workers={workerDrawer}
             notifications={showHome() ? notificationStack() : null}
             waitingVisible={!stageOpeningOverChat()}
             preparation={props.shell.state.activeProjectId ? workspacePreparation(props.shell.state.activeProjectId) : undefined}
@@ -633,6 +635,7 @@ export function Shell(props: ShellProps) {
                 chat={chat}
                 pending={() => presence() === "pending"}
                 surfaceActive={() => presence() !== "idle"}
+                sessionPresented={() => presentedChat()?.sessionId === chat.sessionId}
               />
             )}
           </ShellChatColumn>

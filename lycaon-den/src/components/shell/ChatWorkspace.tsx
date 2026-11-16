@@ -49,6 +49,8 @@ type Props = Pick<ShellScope, "shell" | "appStore" | "recents" | "projects"> & {
   chat: ActiveChat;
   pending: () => boolean;
   surfaceActive: () => boolean;
+  /** The store holds this chat's session. */
+  sessionPresented: () => boolean;
   settingsStore: SettingsStore;
   costStore: CostStore;
   notices: NoticeStore;
@@ -309,6 +311,7 @@ export function ChatWorkspace(props: Props) {
           props.shell.state.foreground.initialPrompt === true
         }
         surfaceActive={body.surfaceActive()}
+        servesSessionTabs={props.sessionPresented()}
         selectedWorkerId={selectedWorkerId()}
         workersDrawerOpen={body.surfaceActive() && workersOpen()}
         workerDrawerFocus={workerDrawerFocus()}

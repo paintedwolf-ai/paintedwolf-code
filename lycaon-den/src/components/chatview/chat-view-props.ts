@@ -17,6 +17,8 @@ export type ChatViewProps = {
   hasInitialPrompt: boolean;
   /** False while this chat is a hidden resident surface. */
   surfaceActive?: boolean;
+  /** This hidden chat still serves its session's tabs, shown in the stage title bar. */
+  servesSessionTabs?: boolean;
   selectedWorkerId?: string | null;
   workersDrawerOpen?: boolean;
   workerDrawerFocus?: WorkerDrawerFocus;

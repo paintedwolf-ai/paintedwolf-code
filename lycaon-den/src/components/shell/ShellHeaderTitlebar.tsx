@@ -1,3 +1,5 @@
+import { Show } from "solid-js";
+import type { SlotContent } from "../../ui/slot-content.ts";
 import { ShowLatest } from "../primitives/ShowLatest.tsx";
 import {
   StageEdgeControls,
@@ -14,9 +16,11 @@ type Props = {
   edges?: StageEdgePanes;
   /** Window edges whose drawn controls this title bar carries. */
   windowEdges?: readonly WindowEdgeClaim[];
+  /** The session's tabs, carried here while its conversation is off screen. */
+  sessionTabs?: SlotContent;
 };
 
-/** Stage title bar for routes without chat tabs. */
+/** Stage title bar: back chip, pane reopen controls, and the session's tabs. */
 export function ShellHeaderTitlebar(props: Props) {
   const panesAtEdge = (edge: "left" | "right") => {
     const panes = props.edges;
@@ -48,6 +52,11 @@ export function ShellHeaderTitlebar(props: Props) {
           </div>
         )}
       </ShowLatest>
+      <Show when={props.sessionTabs?.present()}>
+        <div class="den-shell-header-titlebar__tabs">
+          {props.sessionTabs?.children()}
+        </div>
+      </Show>
       <ShowLatest when={panesAtEdge("right")}>
         {(panes) => (
           <div
