@@ -382,7 +382,7 @@ describe("SessionTranscript tools and progress", () => {
       />
     ));
     expect(container.querySelectorAll('[data-testid="task-card"]').length).toBe(1);
-    expect(container.querySelectorAll('[data-testid="tool-part-card"]').length).toBe(1);
+    expect(container.querySelectorAll('[data-testid="action-card"]').length).toBe(1);
     expect(container.textContent).toContain("Worker · web-researcher");
     expect(container.textContent).toContain(
       "Research the latest cutting-edge AI trends",

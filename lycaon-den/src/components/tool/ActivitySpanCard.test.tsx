@@ -84,10 +84,10 @@ describe("ActivitySpanCard live layout", () => {
     ));
     fireEvent.click(container.querySelector(".den-activity-span > .den-transcript-disclosure-header")!);
     fireEvent.click(container.querySelector(".den-tool-part > .den-transcript-disclosure-header")!);
-    const output = container.querySelector('[data-testid="tool-content-link"]');
+    const output = container.querySelector('[data-testid="action-link-output"]');
     expect(output).not.toBeNull();
     setCurrent(parts.map((part) => ({ kind: "tool", part: { ...part } })));
-    expect(container.querySelector('[data-testid="tool-content-link"]')).toBe(output);
+    expect(container.querySelector('[data-testid="action-link-output"]')).toBe(output);
   });
 });
 

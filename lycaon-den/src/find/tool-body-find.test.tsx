@@ -157,7 +157,7 @@ describe("tool body find + collapsed reveal", () => {
     const span = (await screen.findByTestId(
       "activity-span-card",
     )) as HTMLElement;
-    const cards = () => screen.queryAllByTestId("tool-part-card");
+    const cards = () => screen.queryAllByTestId("action-card");
     expect(isDisclosureOpen(span)).toBe(false);
     // The workaround mounts a closed span's cards only once it opens.
     expect(cards()).toHaveLength(workaround ? 0 : 2);

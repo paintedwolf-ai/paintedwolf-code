@@ -301,19 +301,6 @@
   text-align: left;
 }
 
-.den-tool-part-card-log-digest-clusters li {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  font-size: var(--text-den-label);
-  line-height: 1.4;
-}
-
-.den-tool-part-card-log-digest-span,
-.den-tool-part-card-log-digest-records {
-  font-size: var(--text-den-hint);
-}
-
 .den-chat-content-link:hover {
   text-decoration: underline;
 }
@@ -321,38 +308,6 @@
 .den-tool-part-card-section + .den-tool-part-card-section {
   padding-top: 10px;
   border-top: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
-}
-
-.den-activity-target {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  min-width: 0;
-  font-size: var(--text-den-hint);
-}
-.den-activity-target__text {
-  min-width: 0;
-  flex: 1 1 auto;
-  font-family: var(--den-font-mono);
-  font-size: var(--text-den-hint);
-  line-height: 1.45;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
-  overflow: hidden;
-}
-.den-activity-target__more {
-  color: var(--den-text-muted);
-  flex: none;
-  white-space: nowrap;
-  line-height: 1.45;
-}
-.den-activity-target__copy {
-  flex: none;
-  color: var(--den-text-muted);
 }
 .den-activity-footer {
   display: flex;
