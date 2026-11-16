@@ -13,7 +13,7 @@ import (
 func TestDeliveryGatesDoNotRequireTests(t *testing.T) {
 	for _, delivered := range []bool{false, true} {
 		registry, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-			DelegationCloseout: func(context.Context, string) (bool, error) { return delivered, nil },
+			PlanCloseout:       func(context.Context, string) (bool, error) { return delivered, nil },
 			DeliveryReported:   func(context.Context, string, string, string) (bool, error) { return delivered, nil },
 			SourceVerifyPassed: func(context.Context, string) (bool, error) { return false, nil },
 		})

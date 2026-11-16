@@ -36,11 +36,11 @@ func TestDelegateImplementerPromptContainsPersona(t *testing.T) {
 	testutil.FailErr(t, "task tool failed", err)
 
 	testutil.WaitFor(t, func() bool {
-		jobs, err := h.Delegations.Queue.ListBySession(ctx, parent.ProjectID, parent.ID, api.WorkerStatusComplete)
+		jobs, err := h.Workers.Queue.ListBySession(ctx, parent.ProjectID, parent.ID, api.WorkerStatusComplete)
 		if err != nil || len(jobs) != 1 {
 			return false
 		}
-		pending, err := h.Delegations.Queue.ListPendingOutcomes(ctx)
+		pending, err := h.Workers.Queue.ListPendingOutcomes(ctx)
 		return err == nil && len(pending) == 0
 	})
 
@@ -84,11 +84,11 @@ func TestDelegatePlanReviewerDistinctFromImplementer(t *testing.T) {
 	testutil.FailErr(t, "task tool failed", err)
 
 	testutil.WaitFor(t, func() bool {
-		jobs, err := h.Delegations.Queue.ListBySession(ctx, parent.ProjectID, parent.ID, api.WorkerStatusComplete)
+		jobs, err := h.Workers.Queue.ListBySession(ctx, parent.ProjectID, parent.ID, api.WorkerStatusComplete)
 		if err != nil || len(jobs) != 1 {
 			return false
 		}
-		pending, err := h.Delegations.Queue.ListPendingOutcomes(ctx)
+		pending, err := h.Workers.Queue.ListPendingOutcomes(ctx)
 		return err == nil && len(pending) == 0
 	})
 

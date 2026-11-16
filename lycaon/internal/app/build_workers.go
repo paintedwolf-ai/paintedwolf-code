@@ -3,14 +3,14 @@ package app
 import (
 	"context"
 
-	"github.com/lycaon/lycaon/internal/app/delegations"
+	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/progress"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (b *serveBuilder) wireDelegationWorkers() error {
-	return b.delegations.BuildWorkers(b.startup.ctx, delegations.Dependencies{
+func (b *serveBuilder) wireWorkers() error {
+	return b.workerRuntime.BuildWorkers(b.startup.ctx, workerruntime.Dependencies{
 		Git:       b.git.mgr,
 		Workflows: b.workflows,
 		Sessions:  b.sessions,

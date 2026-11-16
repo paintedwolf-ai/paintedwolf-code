@@ -32,7 +32,7 @@ func TestCoordinatorTaskScopeDispatchReadFanOutParallelWriteAllowed(t *testing.T
 	}, dir)
 	testutil.FailErr(t, "create session", err)
 
-	q := h.Delegations.Queue
+	q := h.Workers.Queue
 	capDeps := workeradmission.WorkerCycleGuardDeps{
 		Workers:         q,
 		MaxWorkers:      func(context.Context, string) int { return 3 },
@@ -174,7 +174,7 @@ func TestTaskAdmissionUsesTheExecutedIdentity(t *testing.T) {
 			call.Identity.ToolCallID = uuid.NewString()
 			_, err = h.ToolRegistry.Run(ctx, "task", args, call)
 			testutil.FailErr(t, "execute admitted task", err)
-			task, err := h.Delegations.Queue.TaskReceipt(ctx, sess.ID, call.Identity.ToolCallID)
+			task, err := h.Workers.Queue.TaskReceipt(ctx, sess.ID, call.Identity.ToolCallID)
 			testutil.FailErr(t, "read task receipt", err)
 			if task == nil || task.AgentType != tc.agent || !reflect.DeepEqual(task.EffectiveScope(), scope) {
 				t.Fatalf("executed identity = %+v, want %s %+v", task, tc.agent, scope)

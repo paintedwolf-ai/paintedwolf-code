@@ -142,9 +142,9 @@ func runWorkerScriptOnHarness(t *testing.T, agentType string, scope *api.TaskSco
 	testutil.FailErr(t, "worker defaults", worker.ApplyEnqueueDefaults(
 		&task, project.ProjectScope{ProjectID: parent.ProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig(),
 	))
-	jobID, err := h.Delegations.Queue.Enqueue(ctx, task)
+	jobID, err := h.Workers.Queue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue worker", err)
-	claimed, err := h.Delegations.Queue.ClaimNext(ctx, worker.ClaimRequest{
+	claimed, err := h.Workers.Queue.ClaimNext(ctx, worker.ClaimRequest{
 		ProjectID: parent.ProjectID, ExecutionTarget: api.ExecutionTargetLocal, ClaimedBy: "source-history-test",
 	})
 	testutil.FailErr(t, "claim worker", err)
@@ -373,7 +373,7 @@ func TestSourceHistoryACDF19CredentialDiffMarksTheWorkersSession(t *testing.T) {
 	if !strings.Contains(diff.Diff, "TOKEN") {
 		t.Fatalf("diff = %+v, want the file's text", diff)
 	}
-	job, ok := h.Delegations.Queue.Get(jobID)
+	job, ok := h.Workers.Queue.Get(jobID)
 	if !ok || job.ChildSessionID == "" {
 		t.Fatalf("job = %+v, want its child session", job)
 	}

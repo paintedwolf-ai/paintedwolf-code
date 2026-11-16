@@ -1,4 +1,4 @@
-package delegations
+package workerruntime
 
 import (
 	"context"
@@ -266,8 +266,8 @@ func (r *Runtime) OnWorkflowReviewLoopHeld(ctx context.Context, sessionID string
 	r.deps.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sessionID, anchor.PhaseAdvanced, id, "", anchor.Envelope{})
 }
 
-// OnDelegationCloseout advances workflow phases when delegations close out.
-func (r *Runtime) OnDelegationCloseout(ctx context.Context, sessionID, workflowRunID string) {
+// OnPlanCloseout advances the workflow run once its planned workers settle.
+func (r *Runtime) OnPlanCloseout(ctx context.Context, sessionID, workflowRunID string) {
 	if strings.TrimSpace(workflowRunID) == "" {
 		return
 	}
@@ -282,7 +282,7 @@ func (r *Runtime) NotifySettledPlanCloseout(ctx context.Context, sessionID strin
 		return
 	}
 	if runID != "" {
-		r.OnDelegationCloseout(ctx, sessionID, runID)
+		r.OnPlanCloseout(ctx, sessionID, runID)
 	}
 }
 

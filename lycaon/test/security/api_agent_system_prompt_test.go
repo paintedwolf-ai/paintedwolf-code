@@ -26,7 +26,7 @@ func TestWorkerSpawnUsesAgentSystemPrompt(t *testing.T) {
 	dir := t.TempDir()
 	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, dir)
 	testutil.FailErr(t, "create session in store", err)
-	jobID, err := h.Delegations.Queue.Enqueue(ctx, api.WorkerTask{
+	jobID, err := h.Workers.Queue.Enqueue(ctx, api.WorkerTask{
 		ProjectID:       testdbseed.DefaultProjectID,
 		WorkspacePath:   dir,
 		ParentSessionID: parent.ID,
@@ -42,7 +42,7 @@ func TestWorkerSpawnUsesAgentSystemPrompt(t *testing.T) {
 		WorkerJobID: jobID,
 	})
 	testutil.FailErr(t, "mgr.Workers.SpawnChild failed", err)
-	testutil.FailErr(t, "bind worker child", h.Delegations.Queue.SetChildSessionID(ctx, jobID, child.ID))
+	testutil.FailErr(t, "bind worker child", h.Workers.Queue.SetChildSessionID(ctx, jobID, child.ID))
 	// A worker child's turn resolves its queued task from the bound job.
 	if _, err := mgr.Submissions.Prompt(workercontext.WithJob(ctx, jobID), child.ID, "add handler"); err != nil {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)

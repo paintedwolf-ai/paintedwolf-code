@@ -9,7 +9,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/app/decisions"
-	"github.com/lycaon/lycaon/internal/app/delegations"
 	"github.com/lycaon/lycaon/internal/app/eventing"
 	"github.com/lycaon/lycaon/internal/app/execution"
 	"github.com/lycaon/lycaon/internal/app/persistence"
@@ -17,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/scanning"
 	"github.com/lycaon/lycaon/internal/app/security"
 	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/browser"
@@ -43,7 +43,7 @@ import (
 type Dependencies struct {
 	Storage                  persistence.Runtime
 	Sessions                 *sessions.Runtime
-	Delegations              *delegations.Runtime
+	Workers                  *workerruntime.Runtime
 	Workflows                *workflows.Runtime
 	Scanning                 *scanning.Runtime
 	Security                 *security.Runtime
@@ -76,7 +76,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	r.deps.Resources.Track("repo-provider", 70, func(context.Context) error { return provider.Close() })
 	r.deps.Resources.Track("source-catalog", 86, sourcecatalog.Process().Drain)
 	r.deps.Sessions.Manager.SetRepoProvider(r.RepoProvider)
-	r.deps.Delegations.SetRepoProvider(r.RepoProvider)
+	r.deps.Workers.SetRepoProvider(r.RepoProvider)
 
 	r.RepoProvider.SetOnSettled(func(projectDir string) {
 		if r.deps.Events.Publisher != nil {
@@ -91,7 +91,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	r.deps.Execution.Host.Survey.SetScopeGuards(scopeCfg)
 
 	r.Snapshot = &board.SnapshotBuilder{
-		Workers:                r.deps.Delegations.Queue,
+		Workers:                r.deps.Workers.Queue,
 		Workflow:               &board.WorkflowRunSource{Runs: r.deps.Workflows.Manager.Store.Runs, Presentation: r.deps.Workflows.Manager.Presentation},
 		Repo:                   r.RepoProvider,
 		Git:                    r.deps.GitMgr,
@@ -120,7 +120,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 
 	if err := board.RegisterBoardTools(r.deps.Execution.Host.Registry, board.ToolDeps{
 		Builder:            r.Snapshot,
-		PlanWorkers:        r.deps.Delegations.Plan.PlanWorkers,
+		PlanWorkers:        r.deps.Workers.Plan.PlanWorkers,
 		Findings:           func() findings.Store { return r.Findings },
 		RootSession:        r.rootSessionKey,
 		PromotePaths:       r.deps.Sessions.Manager.Promotion.PromotePathBoardLines,

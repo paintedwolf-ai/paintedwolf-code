@@ -119,7 +119,7 @@ func TestCoordinatorBatchThreeTasksAndFollowUpE2E(t *testing.T) {
 		t.Fatalf("coordinator LLM requests = %d want 2 (batch and follow-up)", len(rec.AllRequests()))
 	}
 
-	inFlight, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending, api.WorkerStatusRunning)
+	inFlight, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending, api.WorkerStatusRunning)
 	testutil.FailErr(t, "ListBySession", err)
 	if len(inFlight) != 3 {
 		t.Fatalf("in-flight worker jobs = %d want 3", len(inFlight))
@@ -205,7 +205,7 @@ func TestCoordinatorBatchOverCapRejectedInSameTurnE2E(t *testing.T) {
 		t.Fatalf("expected %s on over-cap task() in batch, msgs=%+v", workeradmission.CoordinatorWorkerInFlightCode, msgs)
 	}
 
-	inFlight, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending, api.WorkerStatusRunning)
+	inFlight, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending, api.WorkerStatusRunning)
 	testutil.FailErr(t, "ListBySession", err)
 	if len(inFlight) != spawn.MaxInFlightTaskWorkers {
 		t.Fatalf("queue in-flight = %d want cap %d", len(inFlight), spawn.MaxInFlightTaskWorkers)
@@ -306,7 +306,7 @@ func TestCoordinatorBatchEnqueuesBeforeTurnEndsNotSerialFirstOnlyE2E(t *testing.
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	inFlight, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending)
+	inFlight, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending)
 	testutil.FailErr(t, "ListBySession", err)
 	if len(inFlight) != 3 {
 		t.Fatalf("pending jobs = %d want 3 (serial-first bug would leave 1)", len(inFlight))

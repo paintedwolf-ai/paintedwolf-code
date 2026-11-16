@@ -72,7 +72,7 @@ func scanDomainDeps(ledger stubScanLedger, ev stubEvidence) conditions.RegistryD
 		ScanLedger:              ledger,
 		SourceSnapshots:         staticSourceSnapshot{id: "head-1"},
 		ScanProactiveCategories: cats,
-		DelegationCloseout: func(context.Context, string) (bool, error) {
+		PlanCloseout: func(context.Context, string) (bool, error) {
 			return true, nil
 		},
 	}

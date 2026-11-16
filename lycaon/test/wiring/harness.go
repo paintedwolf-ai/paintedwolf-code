@@ -129,7 +129,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	if !o.productionCostPricer {
 		cfg.TestCostPricer = testCostPricer{}
 	}
-	if o.autoCompleteDelegation {
+	if o.autoCompleteLegs {
 		cfg.TestOrchestrator = autoCompleteOrchestrator
 	}
 	var recording *llm.RecordingClient

@@ -30,9 +30,9 @@ func TestFlow09ShelvePersistAndLaterPromote(t *testing.T) {
 	testutil.FailErr(t, "start parser-shelved", err)
 	testutil.FailErr(t, "drain parser-shelved", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	ws, err := h.Delegations.Records.Workers(ctx, actor)
+	ws, err := h.Workers.Records.Workers(ctx, actor)
 	testutil.FailErr(t, "workers", err)
-	rounds, err := h.Delegations.Records.Rounds(ctx, actor, ws[0].ID)
+	rounds, err := h.Workers.Records.Rounds(ctx, actor, ws[0].ID)
 	testutil.FailErr(t, "rounds", err)
 	r1 := rounds[0].ResultID
 
@@ -56,7 +56,7 @@ func TestFlow09ShelvePersistAndLaterPromote(t *testing.T) {
 	call.Identity.ToolCallID = uuid.NewString()
 	_, err = h.ToolRegistry.Run(ctx, "promote_overlay", map[string]any{"overlay_id": r1}, call)
 	testutil.FailErr(t, "promote shelved result", err)
-	roundsAfter, err := h.Delegations.Records.Rounds(ctx, actor, ws[0].ID)
+	roundsAfter, err := h.Workers.Records.Rounds(ctx, actor, ws[0].ID)
 	testutil.FailErr(t, "rounds after promote", err)
 	if len(roundsAfter) != 1 {
 		t.Fatalf("expected 1 round after promoting shelved result, got %d", len(roundsAfter))
@@ -80,9 +80,9 @@ func TestFlow10SealedReviewBeforeLanding(t *testing.T) {
 	testutil.FailErr(t, "start impl", err)
 	testutil.FailErr(t, "drain impl R1", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	ws, err := h.Delegations.Records.Workers(ctx, actor)
+	ws, err := h.Workers.Records.Workers(ctx, actor)
 	testutil.FailErr(t, "workers", err)
-	rounds, err := h.Delegations.Records.Rounds(ctx, actor, ws[0].ID)
+	rounds, err := h.Workers.Records.Rounds(ctx, actor, ws[0].ID)
 	testutil.FailErr(t, "rounds R1", err)
 	r1 := rounds[0].ResultID
 
@@ -116,7 +116,7 @@ func TestFlow10SealedReviewBeforeLanding(t *testing.T) {
 	testutil.FailErr(t, "instruct impl R2", err)
 	testutil.FailErr(t, "drain impl R2", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	rounds, err = h.Delegations.Records.Rounds(ctx, actor, ws[0].ID)
+	rounds, err = h.Workers.Records.Rounds(ctx, actor, ws[0].ID)
 	testutil.FailErr(t, "rounds R2", err)
 	call.Identity.ToolCallID = uuid.NewString()
 	_, err = h.ToolRegistry.Run(ctx, "promote_overlay", map[string]any{"overlay_id": rounds[1].ResultID}, call)
@@ -147,9 +147,9 @@ func TestFlow12ToolLessRepairBoundAndOutcomeRedelivery(t *testing.T) {
 	testutil.FailErr(t, "instruct silent-reader", err)
 	testutil.FailErr(t, "drain silent-reader recovery", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	ws, err := h.Delegations.Records.Workers(ctx, actor)
+	ws, err := h.Workers.Records.Workers(ctx, actor)
 	testutil.FailErr(t, "workers", err)
-	rounds, err := h.Delegations.Records.Rounds(ctx, actor, ws[0].ID)
+	rounds, err := h.Workers.Records.Rounds(ctx, actor, ws[0].ID)
 	testutil.FailErr(t, "rounds", err)
 	if len(rounds) != 2 {
 		t.Fatalf("expected 2 rounds after report_missing + instruct, got %d", len(rounds))
@@ -176,7 +176,7 @@ func TestFlow13Flow14AndFlow15ReuseSurveyorSmallEditAndExternalWait(t *testing.T
 	if !strings.Contains(string(directBytes), "Direct = 1") {
 		t.Fatalf("direct.go = %q, want Direct = 1", string(directBytes))
 	}
-	ws0, err := h.Delegations.Records.Workers(ctx, actor)
+	ws0, err := h.Workers.Records.Workers(ctx, actor)
 	testutil.FailErr(t, "workers after direct edit", err)
 	if len(ws0) != 0 {
 		t.Fatalf("expected 0 workers on small direct task, got %d", len(ws0))
@@ -195,7 +195,7 @@ func TestFlow13Flow14AndFlow15ReuseSurveyorSmallEditAndExternalWait(t *testing.T
 	testutil.FailErr(t, "start surveyor", err)
 	testutil.FailErr(t, "drain surveyor", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	ws, err := h.Delegations.Records.Workers(ctx, actor)
+	ws, err := h.Workers.Records.Workers(ctx, actor)
 	testutil.FailErr(t, "workers", err)
 	surveyChild := ws[0].ChildSessionID
 	call.Identity.ToolCallID = uuid.NewString()
@@ -216,14 +216,14 @@ func TestFlow13Flow14AndFlow15ReuseSurveyorSmallEditAndExternalWait(t *testing.T
 	testutil.FailErr(t, "upgrade surveyor to implementer", err)
 	testutil.FailErr(t, "drain upgraded implementer", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	reloaded, err := h.Delegations.Records.Worker(ctx, actor, ws[0].ID)
+	reloaded, err := h.Workers.Records.Worker(ctx, actor, ws[0].ID)
 	testutil.FailErr(t, "reload upgraded worker", err)
 	if reloaded.ChildSessionID != surveyChild || reloaded.AgentType != "implementer" || reloaded.ScopeMode != workerrecords.ScopeWrite {
 		t.Fatalf("upgraded worker mismatch: %+v (want child=%s)", reloaded, surveyChild)
 	}
 
 	// Flow 15 (long wait): shelve while waiting on external check, park on timer wait, then instruct_worker.
-	rounds, err := h.Delegations.Records.Rounds(ctx, actor, ws[0].ID)
+	rounds, err := h.Workers.Records.Rounds(ctx, actor, ws[0].ID)
 	testutil.FailErr(t, "rounds after R2", err)
 	call.Identity.ToolCallID = uuid.NewString()
 	_, err = h.ToolRegistry.Run(ctx, "shelve_overlay", map[string]any{"overlay_id": rounds[1].ResultID, "reason": "Waiting on external staging check"}, call)
@@ -232,7 +232,7 @@ func TestFlow13Flow14AndFlow15ReuseSurveyorSmallEditAndExternalWait(t *testing.T
 	call.Identity.ToolCallID = uuid.NewString()
 	_, err = h.ToolRegistry.Run(ctx, "wait", map[string]any{"timeout_ms": float64(1000), "reason": "External staging check"}, call)
 	testutil.FailErr(t, "timer wait", err)
-	roundsDuringWait, err := h.Delegations.Records.Rounds(ctx, actor, ws[0].ID)
+	roundsDuringWait, err := h.Workers.Records.Rounds(ctx, actor, ws[0].ID)
 	testutil.FailErr(t, "rounds during timer wait", err)
 	if len(roundsDuringWait) != 2 {
 		t.Fatalf("timer wait started unexpected round: %d", len(roundsDuringWait))
@@ -246,7 +246,7 @@ func TestFlow13Flow14AndFlow15ReuseSurveyorSmallEditAndExternalWait(t *testing.T
 	testutil.FailErr(t, "instruct after external wait", err)
 	testutil.FailErr(t, "drain R3", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	roundsFinal, err := h.Delegations.Records.Rounds(ctx, actor, ws[0].ID)
+	roundsFinal, err := h.Workers.Records.Rounds(ctx, actor, ws[0].ID)
 	testutil.FailErr(t, "rounds final", err)
 	call.Identity.ToolCallID = uuid.NewString()
 	_, err = h.ToolRegistry.Run(ctx, "promote_overlay", map[string]any{"overlay_id": roundsFinal[2].ResultID}, call)

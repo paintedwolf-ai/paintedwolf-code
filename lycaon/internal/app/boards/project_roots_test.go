@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/app/delegations"
 	"github.com/lycaon/lycaon/internal/app/persistence"
 	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -79,8 +79,8 @@ func TestWorkerReaderChecksLatestSettledResultReadiness(t *testing.T) {
 	rt := &Runtime{
 		WorkerRecords: records,
 		deps: Dependencies{
-			Delegations: &delegations.Runtime{Queue: queue},
-			Sessions:    &sessions.Runtime{},
+			Workers:  &workerruntime.Runtime{Queue: queue},
+			Sessions: &sessions.Runtime{},
 		},
 	}
 	reader := rt.WorkerReader()

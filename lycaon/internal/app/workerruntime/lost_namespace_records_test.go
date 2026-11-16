@@ -1,4 +1,4 @@
-package delegations
+package workerruntime
 
 import (
 	"os"

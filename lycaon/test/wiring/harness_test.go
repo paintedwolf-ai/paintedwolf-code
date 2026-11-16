@@ -56,11 +56,11 @@ func TestBuildForTestBackgroundWorkersCompleteJob(t *testing.T) {
 	testutil.FailErr(t, "task tool failed", err)
 
 	testutil.WaitFor(t, func() bool {
-		jobs, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusComplete)
+		jobs, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusComplete)
 		if err != nil || len(jobs) != 1 {
 			return false
 		}
-		pending, err := h.Delegations.Queue.ListPendingOutcomes(ctx)
+		pending, err := h.Workers.Queue.ListPendingOutcomes(ctx)
 		return err == nil && len(pending) == 0
 	})
 }

@@ -63,7 +63,7 @@ func TestFlow01ReadFanOutSixWorkers(t *testing.T) {
 	}
 
 	testutil.FailErr(t, "drain 6 read workers", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, sess.ID))
-	ws, err := h.Delegations.Records.Workers(ctx, actor)
+	ws, err := h.Workers.Records.Workers(ctx, actor)
 	testutil.FailErr(t, "list workers", err)
 	if len(ws) != 6 {
 		t.Fatalf("workers = %d, want 6", len(ws))
@@ -90,7 +90,7 @@ func TestFlow02OneWriteWorkerCorrectedOnce(t *testing.T) {
 	testutil.FailErr(t, "start parser-fix", err)
 	testutil.FailErr(t, "drain R1", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	ws, err := h.Delegations.Records.Workers(ctx, actor)
+	ws, err := h.Workers.Records.Workers(ctx, actor)
 	testutil.FailErr(t, "workers", err)
 	r1Child := ws[0].ChildSessionID
 
@@ -103,12 +103,12 @@ func TestFlow02OneWriteWorkerCorrectedOnce(t *testing.T) {
 	testutil.FailErr(t, "instruct parser-fix", err)
 	testutil.FailErr(t, "drain R2", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	reloaded, err := h.Delegations.Records.Worker(ctx, actor, ws[0].ID)
+	reloaded, err := h.Workers.Records.Worker(ctx, actor, ws[0].ID)
 	testutil.FailErr(t, "reload parser-fix", err)
 	if reloaded.ChildSessionID != r1Child {
 		t.Fatalf("child session changed: %q != %q", reloaded.ChildSessionID, r1Child)
 	}
-	rounds, err := h.Delegations.Records.Rounds(ctx, actor, ws[0].ID)
+	rounds, err := h.Workers.Records.Rounds(ctx, actor, ws[0].ID)
 	testutil.FailErr(t, "rounds", err)
 	call.Identity.ToolCallID = uuid.NewString()
 	_, err = h.ToolRegistry.Run(ctx, "promote_overlay", map[string]any{"overlay_id": rounds[1].ResultID}, call)
@@ -147,10 +147,10 @@ func TestFlow03ThreeWriteWorkersLandingOneConflict(t *testing.T) {
 	testutil.FailErr(t, "drain all three", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
 	byName := map[string]string{}
-	ws, err := h.Delegations.Records.Workers(ctx, actor)
+	ws, err := h.Workers.Records.Workers(ctx, actor)
 	testutil.FailErr(t, "workers", err)
 	for _, w := range ws {
-		rds, rErr := h.Delegations.Records.Rounds(ctx, actor, w.ID)
+		rds, rErr := h.Workers.Records.Rounds(ctx, actor, w.ID)
 		testutil.FailErr(t, "rounds "+w.Name, rErr)
 		byName[w.Name] = rds[0].ResultID
 	}
@@ -253,7 +253,7 @@ func TestFlow05Flow06AndFlow08WrongDirectionCancelAndPrerequisites(t *testing.T)
 	testutil.FailErr(t, "start waiting caller", err)
 
 	testutil.FailErr(t, "drain schema R1", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
-	ws, err := h.Delegations.Records.Workers(ctx, actor)
+	ws, err := h.Workers.Records.Workers(ctx, actor)
 	testutil.FailErr(t, "workers", err)
 	var schemaW, callerW workerrecords.Worker
 	for _, w := range ws {
@@ -264,14 +264,14 @@ func TestFlow05Flow06AndFlow08WrongDirectionCancelAndPrerequisites(t *testing.T)
 			callerW = w
 		}
 	}
-	callerRounds, err := h.Delegations.Records.Rounds(ctx, actor, callerW.ID)
+	callerRounds, err := h.Workers.Records.Rounds(ctx, actor, callerW.ID)
 	testutil.FailErr(t, "caller rounds before promote", err)
 	if len(callerRounds) != 1 || callerRounds[0].ResultID != "" {
 		t.Fatalf("caller should still wait before schema lands: %+v", callerRounds)
 	}
 
 	// Flow 5 Begin again: reject R1, then instruct schema from clean source; promote with drop.
-	schemaRounds, err := h.Delegations.Records.Rounds(ctx, actor, schemaW.ID)
+	schemaRounds, err := h.Workers.Records.Rounds(ctx, actor, schemaW.ID)
 	testutil.FailErr(t, "schema rounds R1", err)
 	call.Identity.ToolCallID = uuid.NewString()
 	_, err = h.ToolRegistry.Run(ctx, "reject_overlay", map[string]any{"overlay_id": schemaRounds[0].ResultID, "reason": "Too broad"}, call)
@@ -290,7 +290,7 @@ func TestFlow05Flow06AndFlow08WrongDirectionCancelAndPrerequisites(t *testing.T)
 	testutil.FailErr(t, "instruct schema R2", err)
 	testutil.FailErr(t, "drain schema R2", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	schemaRounds, err = h.Delegations.Records.Rounds(ctx, actor, schemaW.ID)
+	schemaRounds, err = h.Workers.Records.Rounds(ctx, actor, schemaW.ID)
 	testutil.FailErr(t, "schema rounds R2", err)
 	call.Identity.ToolCallID = uuid.NewString()
 	_, err = h.ToolRegistry.Run(ctx, "promote_overlay", map[string]any{
@@ -304,7 +304,7 @@ func TestFlow05Flow06AndFlow08WrongDirectionCancelAndPrerequisites(t *testing.T)
 
 	// Promoting schema releases caller's prerequisite so caller now runs and delivers.
 	testutil.FailErr(t, "drain released caller", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
-	callerRounds, err = h.Delegations.Records.Rounds(ctx, actor, callerW.ID)
+	callerRounds, err = h.Workers.Records.Rounds(ctx, actor, callerW.ID)
 	testutil.FailErr(t, "caller rounds after promote", err)
 	if len(callerRounds) != 1 || callerRounds[0].ResultID == "" {
 		t.Fatalf("caller did not settle after schema landed: %+v", callerRounds)
@@ -357,9 +357,9 @@ func TestFlow07WorkerHistoryAndKeptWorkOnFailedRound(t *testing.T) {
 		t.Fatalf("worker_history missing long-runner: %s", histRaw)
 	}
 
-	ws, err := h.Delegations.Records.Workers(ctx, actor)
+	ws, err := h.Workers.Records.Workers(ctx, actor)
 	testutil.FailErr(t, "workers", err)
-	rounds, err := h.Delegations.Records.Rounds(ctx, actor, ws[0].ID)
+	rounds, err := h.Workers.Records.Rounds(ctx, actor, ws[0].ID)
 	testutil.FailErr(t, "rounds", err)
 	if len(rounds) != 1 || rounds[0].ResultID == "" {
 		t.Fatalf("expected failed round to retain result handle, got %+v", rounds)

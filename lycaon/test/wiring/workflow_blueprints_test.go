@@ -73,7 +73,7 @@ func (q *queuedWorkerScripts) mock(h **Harness) *llm.KickDrivenMock {
 				}
 				return modelcall.Completion{Content: "All obligations are complete."}
 			}
-			task, ok := (*h).Delegations.Queue.Get(jobID)
+			task, ok := (*h).Workers.Queue.Get(jobID)
 			if !ok || task == nil {
 				return modelcall.Completion{Content: "Done."}
 			}
@@ -186,13 +186,13 @@ func TestBlueprintFlow11CriteriaReconcileAndBoardPlanFilter(t *testing.T) {
 	testutil.FailErr(t, "start leg-core", err)
 	testutil.FailErr(t, "drain round 1", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	verdictR1, err := h.Delegations.Plan.CheckSessionCloseout(ctx, sess.ID, dir)
+	verdictR1, err := h.Workers.Plan.CheckSessionCloseout(ctx, sess.ID, dir)
 	testutil.FailErr(t, "closeout after R1", err)
 	if verdictR1.OK || verdictR1.Code != "COORDINATOR_CRITERIA_UNMET" {
 		t.Fatalf("expected unmet criteria after R1, got %+v", verdictR1)
 	}
 
-	workers, err := h.Delegations.Records.ByBlueprint(ctx, actor, bpPath)
+	workers, err := h.Workers.Records.ByBlueprint(ctx, actor, bpPath)
 	testutil.FailErr(t, "by blueprint", err)
 	var coreWorker workerrecords.Worker
 	for _, w := range workers {
@@ -220,12 +220,12 @@ func TestBlueprintFlow11CriteriaReconcileAndBoardPlanFilter(t *testing.T) {
 	testutil.FailErr(t, "instruct leg-core R2", err)
 	testutil.FailErr(t, "drain round 2", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	reloadedCore, err := h.Delegations.Records.Worker(ctx, actor, coreWorker.ID)
+	reloadedCore, err := h.Workers.Records.Worker(ctx, actor, coreWorker.ID)
 	testutil.FailErr(t, "reload core worker", err)
 	if reloadedCore.ChildSessionID != r1Child {
 		t.Fatalf("child session changed across instruct_worker: %q != %q", reloadedCore.ChildSessionID, r1Child)
 	}
-	rounds, err := h.Delegations.Records.Rounds(ctx, actor, coreWorker.ID)
+	rounds, err := h.Workers.Records.Rounds(ctx, actor, coreWorker.ID)
 	testutil.FailErr(t, "core rounds", err)
 	if len(rounds) != 2 || rounds[1].ResultID == "" {
 		t.Fatalf("expected 2 settled rounds, got %+v", rounds)
@@ -250,7 +250,7 @@ func TestBlueprintFlow11CriteriaReconcileAndBoardPlanFilter(t *testing.T) {
 		t.Fatalf("reconciled v2 = %+v", seededV2)
 	}
 
-	_, err = h.Delegations.Records.CreateWorker(ctx, actor, workerrecords.Op{ID: "unrelated-op"}, workerrecords.WorkerSpec{
+	_, err = h.Workers.Records.CreateWorker(ctx, actor, workerrecords.Op{ID: "unrelated-op"}, workerrecords.WorkerSpec{
 		Name: "side-note", AgentType: "path-explorer", ScopeMode: workerrecords.ScopeRead, Brief: "Unrelated read",
 	})
 	testutil.FailErr(t, "create unrelated worker", err)
@@ -339,10 +339,10 @@ func TestSameRuntimeAmbientAndGatedWorkflowReviewVerifyDecision(t *testing.T) {
 		testutil.FailErr(t, "dispatch ambient implementer", err)
 		testutil.FailErr(t, "drain R1", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-		ws, err := h.Delegations.Records.Workers(ctx, actor)
+		ws, err := h.Workers.Records.Workers(ctx, actor)
 		testutil.FailErr(t, "workers", err)
 		implW := ws[0]
-		rounds, err := h.Delegations.Records.Rounds(ctx, actor, implW.ID)
+		rounds, err := h.Workers.Records.Rounds(ctx, actor, implW.ID)
 		testutil.FailErr(t, "rounds R1", err)
 		r1ID := rounds[0].ResultID
 
@@ -369,7 +369,7 @@ func TestSameRuntimeAmbientAndGatedWorkflowReviewVerifyDecision(t *testing.T) {
 		testutil.FailErr(t, "instruct R2", err)
 		testutil.FailErr(t, "drain R2", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-		rounds, err = h.Delegations.Records.Rounds(ctx, actor, implW.ID)
+		rounds, err = h.Workers.Records.Rounds(ctx, actor, implW.ID)
 		testutil.FailErr(t, "rounds R2", err)
 		call.Identity.ToolCallID = uuid.NewString()
 		_, err = h.ToolRegistry.Run(ctx, "promote_overlay", map[string]any{"overlay_id": rounds[1].ResultID}, call)
@@ -420,9 +420,9 @@ func runGatedWorkflowSubtest(t *testing.T) {
 	testutil.FailErr(t, "dispatch implementer", err)
 	testutil.FailErr(t, "drain implementer", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	ws, err := h.Delegations.Records.Workers(ctx, actor)
+	ws, err := h.Workers.Records.Workers(ctx, actor)
 	testutil.FailErr(t, "workers", err)
-	rounds, err := h.Delegations.Records.Rounds(ctx, actor, ws[0].ID)
+	rounds, err := h.Workers.Records.Rounds(ctx, actor, ws[0].ID)
 	testutil.FailErr(t, "rounds", err)
 	r1ID := rounds[0].ResultID
 
@@ -530,7 +530,7 @@ func runGatedWorkflowSubtest(t *testing.T) {
 		t.Fatalf("read_review assignments = %s", assignRaw)
 	}
 
-	runTasks, err := h.Delegations.Queue.ListByWorkflowRunID(ctx, run.ID)
+	runTasks, err := h.Workers.Queue.ListByWorkflowRunID(ctx, run.ID)
 	testutil.FailErr(t, "list workflow tasks", err)
 	var revChildID string
 	for _, rt := range runTasks {
@@ -573,11 +573,11 @@ func runGatedWorkflowSubtest(t *testing.T) {
 		WorkflowRunID: run.ID, WorkflowPhase: "work", WorkflowWorkID: "review/code-reviewer",
 		AgentType: "code-reviewer", Prompt: "stale", Brief: "stale", SourceToolCallID: uuid.NewString(),
 	}
-	prepErr := h.Delegations.Queue.PrepareEnqueue(ctx, sess.ProjectID, &stale)
+	prepErr := h.Workers.Queue.PrepareEnqueue(ctx, sess.ProjectID, &stale)
 	if rej := toolrejection.AsToolReject(prepErr); rej == nil || rej.Data["reason"] != "workflow_phase_changed" {
 		t.Fatalf("expected workflow_phase_changed on stale phase, got %v (rej=%v)", prepErr, rej)
 	}
-	priorTasks, err := h.Delegations.Queue.ListByWorkflowRunID(ctx, run.ID)
+	priorTasks, err := h.Workers.Queue.ListByWorkflowRunID(ctx, run.ID)
 	testutil.FailErr(t, "list prior tasks after stale attempt", err)
 	if len(priorTasks) != 3 {
 		t.Fatalf("prior tasks count = %d, want 3 intact", len(priorTasks))

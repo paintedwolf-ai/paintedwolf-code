@@ -10,9 +10,9 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/app/delegations"
 	"github.com/lycaon/lycaon/internal/app/persistence"
 	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/coordinatorcontrol"
@@ -108,8 +108,8 @@ func TestQuietRoundsWiring(t *testing.T) {
 	store := testdbfixture.Open(t, "quiet-rounds.db")
 	cfg := worker.DefaultWorkersConfig()
 	b := &serveBuilder{
-		storage:     persistence.Runtime{Database: store},
-		delegations: delegations.New(store, nil, cfg),
+		storage:       persistence.Runtime{Database: store},
+		workerRuntime: workerruntime.New(store, nil, cfg),
 		sessions: &sessions.Runtime{
 			Manager:     &session.Host{Coordinator: &coordinatorcontrol.Service{Workers: &coordinatorcontrol.Workers{}}},
 			Checkpoints: &hitl.Checkpoints{Store: hitl.NewSQLStore(store)},

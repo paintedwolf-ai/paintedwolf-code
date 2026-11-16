@@ -42,9 +42,9 @@ func TestCloseoutGatesPassedRequiresWorkerCloseoutAndVerify(t *testing.T) {
 	}
 	closeout := func(_ context.Context, _ string) (bool, error) { return true, nil }
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		SessionWorkIDs:     workIDs,
-		Evidence:           ev,
-		DelegationCloseout: closeout,
+		SessionWorkIDs: workIDs,
+		Evidence:       ev,
+		PlanCloseout:   closeout,
 	})
 	testutil.FailErr(t, "build conditions registry", err)
 	ec := conditions.EvalContext{Ctx: context.Background(), SessionID: "sess-1"}
@@ -55,9 +55,9 @@ func TestCloseoutGatesPassedRequiresWorkerCloseoutAndVerify(t *testing.T) {
 	}
 
 	regNoVerify, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		SessionWorkIDs:     workIDs,
-		Evidence:           stubEvidence{},
-		DelegationCloseout: closeout,
+		SessionWorkIDs: workIDs,
+		Evidence:       stubEvidence{},
+		PlanCloseout:   closeout,
 	})
 	testutil.FailErr(t, "build conditions registry", err)
 	ok, err = regNoVerify.Evaluate("closeout_gates_passed", ec)
@@ -67,9 +67,9 @@ func TestCloseoutGatesPassedRequiresWorkerCloseoutAndVerify(t *testing.T) {
 
 	pendingCloseout := func(_ context.Context, _ string) (bool, error) { return false, nil }
 	regPending, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		SessionWorkIDs:     workIDs,
-		Evidence:           ev,
-		DelegationCloseout: pendingCloseout,
+		SessionWorkIDs: workIDs,
+		Evidence:       ev,
+		PlanCloseout:   pendingCloseout,
 	})
 	testutil.FailErr(t, "build conditions registry", err)
 	ok, err = regPending.Evaluate("closeout_gates_passed", ec)
@@ -80,9 +80,9 @@ func TestCloseoutGatesPassedRequiresWorkerCloseoutAndVerify(t *testing.T) {
 
 func TestCloseoutGatesPassedAcceptsCurrentSourceValidation(t *testing.T) {
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		SessionWorkIDs:     func(context.Context, string) ([]string, error) { return []string{"leg-1"}, nil },
-		Evidence:           stubEvidence{},
-		DelegationCloseout: func(context.Context, string) (bool, error) { return true, nil },
+		SessionWorkIDs: func(context.Context, string) ([]string, error) { return []string{"leg-1"}, nil },
+		Evidence:       stubEvidence{},
+		PlanCloseout:   func(context.Context, string) (bool, error) { return true, nil },
 		SourceVerifyPassed: func(_ context.Context, sessionID string) (bool, error) {
 			return sessionID == "sess-1", nil
 		},
@@ -115,7 +115,7 @@ func TestCloseoutGatesPassedRequiresSecurityEvidence(t *testing.T) {
 	baseDeps := conditions.RegistryDeps{
 		SessionWorkIDs:          workIDs,
 		Evidence:                verifyEv,
-		DelegationCloseout:      closeout,
+		PlanCloseout:            closeout,
 		ScanLedger:              ledger,
 		SourceSnapshots:         staticSourceSnapshot{id: "head-1"},
 		ScanProactiveCategories: proactive,
@@ -139,7 +139,7 @@ func TestCloseoutGatesPassedRequiresSecurityEvidence(t *testing.T) {
 	regPass, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		SessionWorkIDs:          workIDs,
 		Evidence:                secEv,
-		DelegationCloseout:      closeout,
+		PlanCloseout:            closeout,
 		ScanLedger:              ledger,
 		SourceSnapshots:         staticSourceSnapshot{id: "head-1"},
 		ScanProactiveCategories: proactive,
@@ -172,8 +172,8 @@ func TestCloseoutGatesPassedUsesCumulativeLandingObligation(t *testing.T) {
 	}}
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		SessionWorkIDs: workIDs, Evidence: evidenceRows, ScanLedger: ledger,
-		DelegationCloseout: func(context.Context, string) (bool, error) { return true, nil },
-		SourceSnapshots:    staticSourceSnapshot{id: "unrelated-snapshot"},
+		PlanCloseout:    func(context.Context, string) (bool, error) { return true, nil },
+		SourceSnapshots: staticSourceSnapshot{id: "unrelated-snapshot"},
 	})
 	testutil.FailErr(t, "build conditions registry", err)
 	ok, err := reg.Evaluate("closeout_gates_passed", conditions.EvalContext{
@@ -194,7 +194,7 @@ func TestCloseoutGatesPassedHonorsScannerMasterOff(t *testing.T) {
 	}
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		SessionWorkIDs: workIDs, Evidence: verify, ScanLedger: stubScanLedger{},
-		DelegationCloseout:      func(context.Context, string) (bool, error) { return true, nil },
+		PlanCloseout:            func(context.Context, string) (bool, error) { return true, nil },
 		SecurityScannersEnabled: func() bool { return false },
 	})
 	testutil.FailErr(t, "build conditions registry", err)

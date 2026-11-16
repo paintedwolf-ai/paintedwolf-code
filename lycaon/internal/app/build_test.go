@@ -136,16 +136,16 @@ func TestBuildWithSeparateStoreDirectorySupportsWorkers(t *testing.T) {
 	}
 	projectDir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, app.DB, testdbseed.DefaultProjectID, projectDir)
-	jobID, err := app.Delegations.Queue.Enqueue(t.Context(), wire.WorkerTask{
+	jobID, err := app.Workers.Queue.Enqueue(t.Context(), wire.WorkerTask{
 		Prompt: "fixture", Brief: "fixture", ProjectID: testdbseed.DefaultProjectID,
 		WorkspacePath: projectDir, Scope: &wire.TaskScope{Mode: wire.TaskScopeModeWrite, Paths: []string{"."}},
 	})
 	testutil.FailErr(t, "enqueue worker", err)
-	_, err = app.Delegations.Queue.ClaimNext(t.Context(), worker.ClaimRequest{
+	_, err = app.Workers.Queue.ClaimNext(t.Context(), worker.ClaimRequest{
 		ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "store-root-test", ExecutionTarget: wire.ExecutionTargetLocal,
 	})
 	testutil.FailErr(t, "claim worker", err)
-	job, err := app.Delegations.Queue.ClaimWorkerBranch(t.Context(), jobID)
+	job, err := app.Workers.Queue.ClaimWorkerBranch(t.Context(), jobID)
 	testutil.FailErr(t, "claim worker branch under active store", err)
 	rel, err := filepath.Rel(filepath.Dir(cfg.DBPath), job.WorkspaceRoot)
 	testutil.FailErr(t, "resolve branch against active store", err)
@@ -319,17 +319,17 @@ func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
 	}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create child session", err)
 
-	jobID, err := app.Delegations.Queue.Enqueue(t.Context(), wire.WorkerTask{
+	jobID, err := app.Workers.Queue.Enqueue(t.Context(), wire.WorkerTask{
 		Prompt: "fixture", Brief: "fixture", ProjectID: testdbseed.DefaultProjectID,
 		ChildSessionID: child.ID, WorkspacePath: projectDir,
 	})
 	testutil.FailErr(t, "enqueue worker", err)
 
 	quietBuilder := &serveBuilder{
-		storage:     persistence.Runtime{Database: store},
-		delegations: app.Delegations,
-		sessions:    app.Sessions,
-		worker:      workerCoordination{cfg: worker.DefaultWorkersConfig()},
+		storage:       persistence.Runtime{Database: store},
+		workerRuntime: app.Workers,
+		sessions:      app.Sessions,
+		worker:        workerCoordination{cfg: worker.DefaultWorkersConfig()},
 	}
 	quiet := quietBuilder.quietRounds()
 	blocked := quietBuilder.blockedPrerequisites()
@@ -392,7 +392,7 @@ func TestQuietRoundsReadsQueueProgressAndPendingApprovals(t *testing.T) {
 		app.Workflows,
 		nil,
 		app.Boards,
-		app.Delegations,
+		app.Workers,
 		tools.ToolContext{
 			Identity: tools.InvocationIdentity{SessionID: parentSess.ID, ProjectID: testdbseed.DefaultProjectID},
 			Source:   tools.InvocationSource{ActiveRootID: "r1", Roots: []projectroot.RootRef{{ID: "r1", Path: projectDir, IsPrimary: true}}},

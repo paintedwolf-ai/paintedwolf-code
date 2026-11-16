@@ -47,7 +47,7 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, subscriptions, loopwake.WaitToolDeps{
 		Store: waitStore, ProfileConditions: waitConditions,
 		SecretMatcher: b.security.Matcher, RuntimeContext: b.startup.ctx,
-		WorkerKnown: waitWorkerKnown(b.boards.WorkerRecords, b.delegations.Queue),
+		WorkerKnown: waitWorkerKnown(b.boards.WorkerRecords, b.workerRuntime.Queue),
 	}); err != nil {
 		return fmt.Errorf("wait tool: %w", err)
 	}
@@ -78,7 +78,7 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 }
 
 func (b *serveBuilder) registerCoordinatorTools() error {
-	if err := b.delegations.RegisterPlanTools(b.execution.Host.Registry); err != nil {
+	if err := b.workerRuntime.RegisterPlanTools(b.execution.Host.Registry); err != nil {
 		return fmt.Errorf("blueprint worker plan tools: %w", err)
 	}
 	parseSvc := parse.NewDefaultService()
@@ -96,13 +96,13 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	waits := &awaitstore.Store{DB: b.storage.Database}
 	workerOps := &workerops.Service{
 		Reader: b.boards.WorkerReader(), Agents: prompts.AgentMutationCapable,
-		Accounted: b.boards.ReleaseAccounted, Release: b.delegations.Queue.ReleaseAdmitted,
+		Accounted: b.boards.ReleaseAccounted, Release: b.workerRuntime.Queue.ReleaseAdmitted,
 		WakeParked: func(ctx context.Context, jobID string) error {
 			settled, err := waits.SettleWorkerWait(ctx, jobID, awaitstore.Condition{Kind: "instruction", Outcome: "received"})
 			if err != nil || !settled {
 				return err
 			}
-			_, err = b.delegations.Queue.ResumeReadyWaits(ctx)
+			_, err = b.workerRuntime.Queue.ResumeReadyWaits(ctx)
 			return err
 		},
 	}
@@ -118,26 +118,26 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		return fmt.Errorf("answer_decision tool: %w", err)
 	}
 	if err := worker.RegisterWorkerTools(b.execution.Host.Registry, worker.WorkerToolDeps{
-		Ops: workerOps, Queue: b.delegations.Queue, Workers: b.worker.cfg, Plan: b.delegations.Plan, BindWorkflowTask: b.workflows.Manager.Fanout.BindWorkflowTask, ComposePrompt: b.composeWorkerAssignment,
+		Ops: workerOps, Queue: b.workerRuntime.Queue, Workers: b.worker.cfg, Plan: b.workerRuntime.Plan, BindWorkflowTask: b.workflows.Manager.Fanout.BindWorkflowTask, ComposePrompt: b.composeWorkerAssignment,
 	}); err != nil {
 		return fmt.Errorf("worker tools: %w", err)
 	}
 	b.execution.Host.Boundary.SetMergeReconcileAllowlister(b.sessions.Manager.Promotion)
 	lanes := &worker.WorkerLanes{
-		Lanes:   workerlane.New(b.delegations.Workspace, b.boards.WorkerRecords),
+		Lanes:   workerlane.New(b.workerRuntime.Workspace, b.boards.WorkerRecords),
 		Records: b.boards.WorkerRecords,
-		State:   workerlane.NewM14State(b.delegations.Queue),
+		State:   workerlane.NewM14State(b.workerRuntime.Queue),
 	}
-	if b.delegations.Recovery != nil {
-		lanes.Checkpoints = b.delegations.Recovery
+	if b.workerRuntime.Recovery != nil {
+		lanes.Checkpoints = b.workerRuntime.Recovery
 	}
-	b.delegations.Queue.SetWorkerLanes(lanes)
+	b.workerRuntime.Queue.SetWorkerLanes(lanes)
 	workerMergeSvc := &worker.MergeService{
-		Lanes: lanes, Queue: b.delegations.Queue, Store: b.delegations.Queue, Workspace: b.delegations.Workspace,
-		Reject: b.execution.Rejections, Names: b.boards.WorkerRecords, Sessions: b.delegations.Queue,
+		Lanes: lanes, Queue: b.workerRuntime.Queue, Store: b.workerRuntime.Queue, Workspace: b.workerRuntime.Workspace,
+		Reject: b.execution.Rejections, Names: b.boards.WorkerRecords, Sessions: b.workerRuntime.Queue,
 		Reconcile: b.sessions.Manager.Promotion, Captures: b.sessions.Manager.Chats.Captures,
 		Coord:      b.sessions.Manager.Workers.Workspaces,
-		OnPromoted: b.delegations.NotifyPromotedTask, Projects: b.storage.Projects, Scans: b.scanning.Triggers,
+		OnPromoted: b.workerRuntime.NotifyPromotedTask, Projects: b.storage.Projects, Scans: b.scanning.Triggers,
 		SourceLedger: b.storage.SourceLedger, SourceHistory: b.storage.SourceLedger.Walk,
 		DataDir: b.storage.Directory, Accounted: b.boards.ReleaseAccounted,
 		Reports: worker.ChangeReportDeps{
@@ -165,7 +165,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		return err
 	}
 	if err := worker.RegisterWorkerCancelTool(b.execution.Host.Registry, worker.CancelToolDeps{
-		Cancel:  b.delegations.Cancel,
+		Cancel:  b.workerRuntime.Cancel,
 		Workers: workerOps,
 	}); err != nil {
 		return fmt.Errorf("worker_cancel tool: %w", err)
@@ -194,14 +194,14 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 // and the worker assignment prompt.
 func taskToolDeps(b *serveBuilder) worker.TaskToolDeps {
 	return worker.TaskToolDeps{
-		Queue:            b.delegations.Queue,
+		Queue:            b.workerRuntime.Queue,
 		Agents:           b.agents.Registry,
 		Workers:          b.worker.cfg,
 		BindWorkflowTask: b.workflows.Manager.Fanout.BindWorkflowTask,
 		WorkflowWork:     b.workflows.Manager.Fanout.WorkflowWork,
-		TaskReceipt:      b.delegations.Queue.TaskReceipt,
+		TaskReceipt:      b.workerRuntime.Queue.TaskReceipt,
 		WorkerRecords:    b.boards.WorkerRecords,
-		Plan:             b.delegations.Plan,
+		Plan:             b.workerRuntime.Plan,
 		ComposePrompt:    b.composeWorkerAssignment,
 		WebSearchEnabled: func() bool {
 			if b.boards == nil || b.boards.WebRuntime.Config == nil {

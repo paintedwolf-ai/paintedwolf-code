@@ -203,9 +203,9 @@ func verifyOverlayHandlesAndWithdraw(
 	scripts *queuedWorkerScripts,
 ) {
 	t.Helper()
-	ws, err := h.Delegations.Records.Workers(ctx, actor)
+	ws, err := h.Workers.Records.Workers(ctx, actor)
 	testutil.FailErr(t, "list workers", err)
-	rounds, err := h.Delegations.Records.Rounds(ctx, actor, ws[0].ID)
+	rounds, err := h.Workers.Records.Rounds(ctx, actor, ws[0].ID)
 	testutil.FailErr(t, "list rounds R1", err)
 	r1 := rounds[0].ResultID
 
@@ -226,7 +226,7 @@ func verifyOverlayHandlesAndWithdraw(
 	testutil.FailErr(t, "instruct_worker R2", err)
 	testutil.FailErr(t, "drain R2", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 
-	rounds, err = h.Delegations.Records.Rounds(ctx, actor, ws[0].ID)
+	rounds, err = h.Workers.Records.Rounds(ctx, actor, ws[0].ID)
 	testutil.FailErr(t, "list rounds R2", err)
 	r2 := rounds[1].ResultID
 
@@ -256,13 +256,13 @@ func verifyOverlayHandlesAndWithdraw(
 		"run-stop-check", sess.ID, sess.ProjectID, now, now,
 	)
 	testutil.FailErr(t, "seed workflow run for stop check", err)
-	planned, err := h.Delegations.Records.CreateWorker(ctx, actor, workerrecords.Op{ID: "seed-run-stop"}, workerrecords.WorkerSpec{
+	planned, err := h.Workers.Records.CreateWorker(ctx, actor, workerrecords.Op{ID: "seed-run-stop"}, workerrecords.WorkerSpec{
 		Name: "planned-stop-leg", AgentType: "implementer", ScopeMode: workerrecords.ScopeWrite,
 		WorkflowRunID: "run-stop-check", WorkflowPhase: "work", WorkflowWorkID: "leg-stop",
 	})
 	testutil.FailErr(t, "seed planned leg", err)
 	testutil.FailErr(t, "withdraw planned workers on run stop", h.Workflows.Manager.Controls.Cleanup.Workers.WithdrawPlannedWorkersByRunID(ctx, "run-stop-check"))
-	reloaded, err := h.Delegations.Records.Worker(ctx, actor, planned.WorkerID)
+	reloaded, err := h.Workers.Records.Worker(ctx, actor, planned.WorkerID)
 	testutil.FailErr(t, "reload withdrawn planned leg", err)
 	if reloaded.ClosedAt == "" || workerstate.Derive(workerstate.Facts{Closed: reloaded.ClosedAt != "", Planned: true}).State != workerstate.Closed {
 		t.Fatalf("expected planned leg withdrawn and closed on run stop, got %+v", reloaded)

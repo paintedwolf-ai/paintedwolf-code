@@ -1,6 +1,6 @@
 //go:build darwin || linux
 
-package delegations
+package workerruntime
 
 import (
 	"bufio"

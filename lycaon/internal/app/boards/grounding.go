@@ -66,7 +66,7 @@ func (r *Runtime) wireGroundingCoordinators() error {
 	}
 	ambientGate := coordgrounding.NewSimpleAmbientGroundingGate(groundingCfg)
 	ambientState := grounding.NewStateStore()
-	ambientCoord := coordgrounding.NewAmbientGroundingCoordinator(r.deps.Delegations.Queue, ambientGate, groundingCfg, ambientState, r.deps.Sessions.Manager)
+	ambientCoord := coordgrounding.NewAmbientGroundingCoordinator(r.deps.Workers.Queue, ambientGate, groundingCfg, ambientState, r.deps.Sessions.Manager)
 	ambientCoord.Events = r.deps.Events.Publisher
 	ambientCoord.Pipeline = r.deps.Sessions.Manager.ToolPolicy.Pipeline
 	ambientCoord.Names = r.WorkerRecords.NameByJob
@@ -85,8 +85,8 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	r.Findings = findings.NewSQLStore(r.deps.Storage.Database)
 	r.deps.Sessions.Manager.Workers.Notes.SetFindings(r.Findings)
 	r.deps.Sessions.Manager.SetPeerRejectionFeed(workeroutcomes.NewPeerRejectionFeed())
-	if r.deps.Delegations.Cancel != nil {
-		r.deps.Delegations.Cancel.Names = r.WorkerRecords
+	if r.deps.Workers.Cancel != nil {
+		r.deps.Workers.Cancel.Names = r.WorkerRecords
 	}
 	r.deps.Sessions.Manager.SetWorkerMessages(&workermessaging.Delivery{Records: r.WorkerRecords})
 	r.deps.Sessions.Manager.Coordinator.ProgressClosure.SetAccounts(r.WorkerRecords)
@@ -231,9 +231,9 @@ func (r *Runtime) wireDecisionAndCallTools(ctx context.Context) error {
 	r.deps.Sessions.Manager.SetDecisionStore(r.deps.Sessions.Decisions)
 	shown := workerroster.NewShownQuestions()
 	r.AnswerDecision = &worker.AnswerDecisionService{
-		Queue:     r.deps.Delegations.Queue,
+		Queue:     r.deps.Workers.Queue,
 		Decisions: r.deps.Sessions.Decisions,
-		Resolver:  worker.NewSQLDecisionResolver(r.deps.Storage.Sessions, r.deps.Delegations.Queue),
+		Resolver:  worker.NewSQLDecisionResolver(r.deps.Storage.Sessions, r.deps.Workers.Queue),
 		Reject:    r.deps.Execution.Rejections,
 		Shown:     shown,
 	}
@@ -260,9 +260,9 @@ func (r *Runtime) wireDecisionAndCallTools(ctx context.Context) error {
 	r.Snapshot.Touches = r.deps.Sessions.Manager.Workers.Workspaces.Touches
 	r.Snapshot.ActiveReservations = r.deps.Sessions.Manager.Workers.Workspaces.ReservationEntries
 
-	r.deps.Sessions.Manager.SetWorkerQueue(r.deps.Delegations.Queue)
+	r.deps.Sessions.Manager.SetWorkerQueue(r.deps.Workers.Queue)
 	r.deps.Sessions.Manager.SetWorkerRounds(r.deps.WorkersCfg.RoundPolicy())
-	r.deps.Sessions.Manager.SetSessionWorkerAbort(r.deps.Delegations.Cancel)
+	r.deps.Sessions.Manager.SetSessionWorkerAbort(r.deps.Workers.Cancel)
 	roster := workerroster.Source{
 		Reader:  r.WorkerReader(),
 		Touches: r.deps.Sessions.Manager.Workers.Workspaces.Touches,
@@ -322,7 +322,7 @@ func (r *Runtime) wireApprovalRationaleAttacher() {
 	}
 	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
 		Cause:       briefingstore.NewCausal(r.deps.Storage.Database),
-		Workers:     r.deps.Delegations.Queue,
+		Workers:     r.deps.Workers.Queue,
 		Progress:    r.Progress,
 		Root:        sessionRootResolver{store: r.deps.Storage.Sessions},
 		Engine:      briefings.Engine,

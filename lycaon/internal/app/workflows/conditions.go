@@ -61,7 +61,7 @@ func (r *Runtime) BuildConditions(ctx context.Context, deps ConditionDependencie
 		BlueprintContent: func(_ context.Context, projectDir, relPath string) (string, error) {
 			return workflowblueprintfiles.ReadBlueprintFile(projectDir, relPath)
 		},
-		DelegationCloseout:      deps.PlanCloseout,
+		PlanCloseout:            deps.PlanCloseout,
 		SourceVerifyPassed:      deps.SourceVerifyPassed,
 		DeliveryReported:        deps.DeliveryReported,
 		ScanLedger:              deps.ScanStore,

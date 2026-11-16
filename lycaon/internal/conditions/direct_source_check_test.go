@@ -18,7 +18,7 @@ func TestExplicitCheckGateUsesCurrentSource(t *testing.T) {
 			deps := conditions.RegistryDeps{
 				SessionWorkIDs:     func(context.Context, string) ([]string, error) { return []string{"leg"}, nil },
 				Evidence:           stubEvidence{"session/leg/verify": &evidence.Record{GateType: "verify", GateVerdict: "passed", Artifacts: map[string]any{"exit_code": 0, "command": "old-check"}}},
-				DelegationCloseout: func(context.Context, string) (bool, error) { return true, nil },
+				PlanCloseout:       func(context.Context, string) (bool, error) { return true, nil },
 				SourceVerifyPassed: func(context.Context, string) (bool, error) { return passed, failure },
 			}
 			reg, err := conditions.NewDefaultRegistry(deps)

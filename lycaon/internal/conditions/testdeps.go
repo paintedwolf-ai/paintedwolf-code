@@ -30,8 +30,8 @@ func TestRegistryDepsWithEvidence() RegistryDeps {
 		BlueprintGet: func(_ context.Context, blueprintPath string) (*api.Blueprint, error) {
 			return &api.Blueprint{Path: blueprintPath, Content: TestPlanContentWithTasks}, nil
 		},
-		DelegationCloseout: func(context.Context, string) (bool, error) { return true, nil },
-		SessionWorkIDs:     func(context.Context, string) ([]string, error) { return []string{"leg-1"}, nil },
-		Evidence:           AlwaysPassEvidence{},
+		PlanCloseout:   func(context.Context, string) (bool, error) { return true, nil },
+		SessionWorkIDs: func(context.Context, string) ([]string, error) { return []string{"leg-1"}, nil },
+		Evidence:       AlwaysPassEvidence{},
 	}
 }

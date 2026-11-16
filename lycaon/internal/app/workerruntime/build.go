@@ -1,4 +1,4 @@
-package delegations
+package workerruntime
 
 import (
 	"context"
@@ -151,7 +151,7 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 		r.NotifySettledPlanCloseout,
 	)
 
-	if err := r.configureDelegationWorkflow(deps); err != nil {
+	if err := r.configureWorkflow(deps); err != nil {
 		return err
 	}
 	return r.wireWorkerContext(deps)

@@ -104,7 +104,7 @@ func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		SessionWorkIDs:          planSvc.SessionWorkIDs,
 		Evidence:                conditions.StoreEvidenceReader{Store: evidenceStore},
-		DelegationCloseout:      planSvc.CloseoutComplete,
+		PlanCloseout:            planSvc.CloseoutComplete,
 		ScanLedger:              store,
 		SourceSnapshots:         coord.SnapshotStore(),
 		ScanProactiveCategories: proactive,

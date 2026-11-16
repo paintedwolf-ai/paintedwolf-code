@@ -14,7 +14,7 @@ import (
 )
 
 func TestOptionsSlashRequestStartsFanOut(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "options-slash")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureOrchestrate}, dir)
@@ -38,7 +38,7 @@ func TestOptionsSlashRequestStartsFanOut(t *testing.T) {
 }
 
 func TestOptionsWorkflowEndToEnd(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := h.OwnerCtx(t, context.Background())
 	dir := h.ProjectDir(t, "options")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureOrchestrate}, dir)
@@ -61,7 +61,7 @@ func TestOptionsWorkflowEndToEnd(t *testing.T) {
 		t.Fatalf("pending topology background work did not settle: %v", err)
 	}
 
-	preWorkers, err := h.Delegations.Records.ByWorkflowRun(ctx, run.ID)
+	preWorkers, err := h.Workers.Records.ByWorkflowRun(ctx, run.ID)
 	testutil.FailErr(t, "ByWorkflowRun before request", err)
 	if len(preWorkers) != 0 {
 		t.Fatal("research fan-out started before the request was answered")

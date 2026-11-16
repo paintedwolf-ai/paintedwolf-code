@@ -24,7 +24,7 @@ type SourceSnapshotReader interface {
 type CoreDeps struct {
 	SessionWorkIDs          func(ctx context.Context, sessionID string) ([]string, error)
 	Evidence                EvidenceReader
-	DelegationCloseout      func(ctx context.Context, sessionID string) (bool, error)
+	PlanCloseout            func(ctx context.Context, sessionID string) (bool, error)
 	SourceVerifyPassed      func(ctx context.Context, sessionID string) (bool, error)
 	DeliveryReported        func(ctx context.Context, sessionID, runID, phase string) (bool, error)
 	ScanLedger              ScanLedger
@@ -360,10 +360,10 @@ func registerCoreCompleteWhen(reg *ConditionRegistry, deps CoreDeps) error {
 			return parallelStagesComplete(ec.Vars, ec.BindParallelGroup), nil
 		}},
 		{"delegation_closeout_complete", func(ec EvalContext) (bool, error) {
-			if deps.DelegationCloseout == nil {
+			if deps.PlanCloseout == nil {
 				return false, nil
 			}
-			return deps.DelegationCloseout(ec.Ctx, ec.SessionID)
+			return deps.PlanCloseout(ec.Ctx, ec.SessionID)
 		}},
 		{"delivery_gates_passed", func(ec EvalContext) (bool, error) {
 			if deps.DeliveryReported == nil {
@@ -399,10 +399,10 @@ func closeoutGatesPassed(deps CoreDeps, ec EvalContext) (bool, error) {
 }
 
 func deliveryGatesPassed(deps CoreDeps, ec EvalContext) (bool, error) {
-	if deps.DelegationCloseout == nil {
+	if deps.PlanCloseout == nil {
 		return false, nil
 	}
-	ok, err := deps.DelegationCloseout(ec.Ctx, ec.SessionID)
+	ok, err := deps.PlanCloseout(ec.Ctx, ec.SessionID)
 	if err != nil || !ok {
 		return false, err
 	}

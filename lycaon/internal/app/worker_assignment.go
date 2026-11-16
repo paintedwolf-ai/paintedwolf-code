@@ -6,9 +6,9 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/app/boards"
-	"github.com/lycaon/lycaon/internal/app/delegations"
 	"github.com/lycaon/lycaon/internal/app/persistence"
 	"github.com/lycaon/lycaon/internal/app/scanning"
+	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -21,7 +21,7 @@ import (
 )
 
 func (b *serveBuilder) composeWorkerAssignment(ctx context.Context, tctx tools.ToolContext, agentType string, brief wire.WorkerTaskCharter, task *wire.WorkerTask) (string, error) {
-	return composeWorkerTaskAssignment(ctx, b.storage, b.workflows, b.scanning, b.boards, b.delegations, tctx, agentType, brief, task)
+	return composeWorkerTaskAssignment(ctx, b.storage, b.workflows, b.scanning, b.boards, b.workerRuntime, tctx, agentType, brief, task)
 }
 
 func composeWorkerTaskAssignment(
@@ -30,7 +30,7 @@ func composeWorkerTaskAssignment(
 	wf *workflows.Runtime,
 	scanningRT *scanning.Runtime,
 	boardsRT *boards.Runtime,
-	delegationsRT *delegations.Runtime,
+	workersRt *workerruntime.Runtime,
 	tctx tools.ToolContext,
 	agentType string,
 	brief wire.WorkerTaskCharter,
@@ -57,8 +57,8 @@ func composeWorkerTaskAssignment(
 		if boardsRT != nil && boardsRT.WorkerRecords != nil {
 			if w, wErr := boardsRT.WorkerRecords.Self(ctx, workerrecords.Actor{SessionID: child, Role: workerrecords.RoleWorker, PrincipalID: child}); wErr == nil {
 				in.WorkerName = w.Name
-				if delegationsRT != nil && delegationsRT.Workspace != nil && delegationsRT.Workspace.BranchBase() != "" {
-					in.ViewKind = workspace.BranchViewKind(filepath.Join(delegationsRT.Workspace.BranchBase(), w.ID))
+				if workersRt != nil && workersRt.Workspace != nil && workersRt.Workspace.BranchBase() != "" {
+					in.ViewKind = workspace.BranchViewKind(filepath.Join(workersRt.Workspace.BranchBase(), w.ID))
 				}
 			}
 		}
@@ -84,7 +84,7 @@ func composeWorkerTaskAssignment(
 			in.ScanInventory = inventory
 		}
 	}
-	return inject.RenderWorkerTaskAssignment(ctx, delegationsRT.InjectRenderer, in)
+	return inject.RenderWorkerTaskAssignment(ctx, workersRt.InjectRenderer, in)
 }
 
 // recordedVerdictsForLeg projects stamped verdicts onto the assignment DTO.

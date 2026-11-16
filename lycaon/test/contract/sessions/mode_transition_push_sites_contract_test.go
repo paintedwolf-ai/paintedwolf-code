@@ -31,7 +31,7 @@ func TestModeTransitionPushSiteRegistry(t *testing.T) {
 		}
 	}
 	for path, needles := range map[string][]string{
-		"lycaon/internal/app/delegations/build.go":   {"r.configureDelegationWorkflow"},
+		"lycaon/internal/app/delegations/build.go":   {"r.configureWorkflow"},
 		"lycaon/internal/app/delegations/context.go": {"Phases.PhaseEnterHook = r.OnWorkflowPhaseEnter", "Phases.PhaseReenterHook = r.OnWorkflowPhaseReenter"},
 	} {
 		source := contractcheck.ReadRepoFile(t, root, filepath.FromSlash(path))
@@ -42,7 +42,7 @@ func TestModeTransitionPushSiteRegistry(t *testing.T) {
 		}
 	}
 	wireText := contractcheck.ServeWireSource(t)
-	if !strings.Contains(wireText, "b.delegations.BuildWorkers") {
+	if !strings.Contains(wireText, "b.workerRuntime.BuildWorkers") {
 		t.Fatal("serve build graph must construct the delegation runtime carrying mode-transition hooks")
 	}
 }

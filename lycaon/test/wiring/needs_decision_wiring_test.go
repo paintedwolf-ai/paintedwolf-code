@@ -34,11 +34,11 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 		SpawnReason:     wire.SpawnReasonHumanRequest,
 	}
 	testutil.FailErr(t, "enqueue defaults", worker.ApplyEnqueueDefaults(&task, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
-	jobID, err := h.Delegations.Queue.Enqueue(ctx, task)
+	jobID, err := h.Workers.Queue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue", err)
 	child, err := h.Store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "Wire the parser"})
 	testutil.FailErr(t, "create child", err)
-	testutil.FailErr(t, "set child", h.Delegations.Queue.SetChildSessionID(ctx, jobID, child.ID))
+	testutil.FailErr(t, "set child", h.Workers.Queue.SetChildSessionID(ctx, jobID, child.ID))
 	records := workerrecords.New(h.DB)
 	coord := workerrecords.Actor{SessionID: sess.ID, Role: workerrecords.RoleCoordinator, PrincipalID: sess.ID}
 	w, err := records.CreateWorker(ctx, coord, workerrecords.Op{ID: "create-parser"}, workerrecords.WorkerSpec{
@@ -47,7 +47,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 	testutil.FailErr(t, "create worker", err)
 	_, err = records.AdmitRound(ctx, coord, workerrecords.Op{ID: "admit-parser"}, w.WorkerID, workerrecords.RoundSpec{JobID: jobID, ExecutionTarget: "local"})
 	testutil.FailErr(t, "admit round", err)
-	claimed, err := h.Delegations.Queue.ClaimNext(ctx, worker.ClaimRequest{
+	claimed, err := h.Workers.Queue.ClaimNext(ctx, worker.ClaimRequest{
 		ProjectID:       sess.ProjectID,
 		ExecutionTarget: wire.ExecutionTargetLocal,
 		ClaimedBy:       "needs-decision-test",
@@ -71,7 +71,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 	if status != "needs_decision" {
 		t.Fatalf("status = %q want needs_decision", status)
 	}
-	completed, err := h.Delegations.Queue.Complete(ctx, claimed, wire.WorkerResult{Status: status})
+	completed, err := h.Workers.Queue.Complete(ctx, claimed, wire.WorkerResult{Status: status})
 	testutil.FailErr(t, "complete worker", err)
 	if !completed {
 		t.Fatal("worker completion claim lost")
@@ -122,7 +122,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 		t.Fatal("decision stash not cleared after answer")
 	}
 
-	pending, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
+	pending, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 	testutil.FailErr(t, "list pending", err)
 	resume := false
 	for _, p := range pending {

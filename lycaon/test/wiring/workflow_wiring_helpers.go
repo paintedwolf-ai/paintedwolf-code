@@ -70,15 +70,15 @@ func startTopologyWorkflowRun(t *testing.T, h *Harness, ctx context.Context, ses
 
 func fanOutWorkersForRun(t *testing.T, h *Harness, runID string) []api.WorkerTask {
 	t.Helper()
-	if h == nil || h.Delegations.Records == nil || h.Delegations.Queue == nil {
+	if h == nil || h.Workers.Records == nil || h.Workers.Queue == nil {
 		t.Fatal("worker records and queue required")
 	}
-	records, err := h.Delegations.Records.ByWorkflowRun(context.Background(), runID)
+	records, err := h.Workers.Records.ByWorkflowRun(context.Background(), runID)
 	testutil.FailErr(t, "ByWorkflowRun", err)
 	if len(records) == 0 {
 		t.Fatal("expected topology workers for workflow run")
 	}
-	tasks, err := h.Delegations.Queue.ListByWorkflowRunID(context.Background(), runID)
+	tasks, err := h.Workers.Queue.ListByWorkflowRunID(context.Background(), runID)
 	testutil.FailErr(t, "ListByWorkflowRunID", err)
 	out := make([]api.WorkerTask, 0, len(tasks))
 	for _, task := range tasks {
@@ -254,11 +254,11 @@ func appendSucceededReviewAgent(t *testing.T, h *Harness, ctx context.Context, s
 	testutil.FailErr(t, "bind reviewer "+agent, h.Workflows.Manager.Fanout.BindWorkflowTask(ctx, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}, workID, &task))
 	testutil.FailErr(t, "enqueue defaults "+agent, worker.ApplyEnqueueDefaults(&task,
 		project.ProjectScope{ProjectID: sess.ProjectID, WorkspacePath: sess.WorkspacePath}, worker.DefaultWorkersConfig()))
-	workerID, err := h.Delegations.Queue.Enqueue(ctx, task)
+	workerID, err := h.Workers.Queue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue "+agent, err)
 	child, err := h.Store.CreateChild(ctx, sess, api.SpawnChildRequest{AgentType: agent, Prompt: "review " + agent})
 	testutil.FailErr(t, "CreateChild "+agent, err)
-	testutil.FailErr(t, "link "+agent, h.Delegations.Queue.SetChildSessionID(ctx, workerID, child.ID))
+	testutil.FailErr(t, "link "+agent, h.Workers.Queue.SetChildSessionID(ctx, workerID, child.ID))
 	completeQueuedFixtureWork(t, h, ctx, sess.ProjectID, workerID)
 	testutil.FailErr(t, "AppendMessages "+agent, h.Store.AppendMessages(ctx, sess.ID, api.Message{
 		Role: api.MessageRoleTool,
@@ -316,7 +316,7 @@ func satisfyWorkerCycleAndAdvance(t *testing.T, h *Harness, ctx context.Context,
 func completeQueuedFixtureWork(t *testing.T, h *Harness, ctx context.Context, projectID, target string) {
 	t.Helper()
 	for {
-		claimed, err := h.Delegations.Queue.ClaimNext(ctx, worker.ClaimRequest{ProjectID: projectID, ClaimedBy: "review-fixture", ExecutionTarget: api.ExecutionTargetLocal})
+		claimed, err := h.Workers.Queue.ClaimNext(ctx, worker.ClaimRequest{ProjectID: projectID, ClaimedBy: "review-fixture", ExecutionTarget: api.ExecutionTargetLocal})
 		testutil.FailErr(t, "claim fixture work", err)
 		if claimed == nil {
 			t.Fatalf("fixture task %s is not claimable", target)
@@ -329,12 +329,12 @@ func completeQueuedFixtureWork(t *testing.T, h *Harness, ctx context.Context, pr
 				report.CoverageReview = coverageReviewFixture(assignment.Subject.Facts)
 			}
 		}
-		won, err := h.Delegations.Queue.Complete(ctx, claimed, api.WorkerResult{Status: "complete", CompletionReport: report})
+		won, err := h.Workers.Queue.Complete(ctx, claimed, api.WorkerResult{Status: "complete", CompletionReport: report})
 		testutil.FailErr(t, "complete fixture work", err)
 		if !won {
 			t.Fatal("fixture claim lost")
 		}
-		testutil.FailErr(t, "deliver fixture outcome", h.Delegations.Queue.MarkOutcomeDelivered(ctx, claimed.ID))
+		testutil.FailErr(t, "deliver fixture outcome", h.Workers.Queue.MarkOutcomeDelivered(ctx, claimed.ID))
 		if claimed.ID == target {
 			return
 		}

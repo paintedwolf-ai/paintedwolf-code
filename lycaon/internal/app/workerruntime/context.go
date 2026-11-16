@@ -1,4 +1,4 @@
-package delegations
+package workerruntime
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (r *Runtime) configureDelegationWorkflow(deps Dependencies) error {
+func (r *Runtime) configureWorkflow(deps Dependencies) error {
 	deps.Sessions.Manager.SetWorkflowDomains(&session.WorkflowDomains{
 		Runs: deps.Workflows.Store.Runs, Policy: deps.Workflows.Manager.Policy,
 		Ambient: deps.Workflows.Manager.Ambient, Blueprints: deps.Workflows.Manager.Blueprints,

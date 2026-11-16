@@ -41,7 +41,7 @@ func TestEvidencePassedRequiresAnchors(t *testing.T) {
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		SessionWorkIDs: workIDs,
 		Evidence:       ev,
-		DelegationCloseout: func(context.Context, string) (bool, error) {
+		PlanCloseout: func(context.Context, string) (bool, error) {
 			return true, nil
 		},
 	})

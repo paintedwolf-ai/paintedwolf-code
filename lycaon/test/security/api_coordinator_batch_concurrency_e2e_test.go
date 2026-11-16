@@ -56,7 +56,7 @@ func TestHTTPCoordinatorBatchThreeTasksAndFollowUpE2E(t *testing.T) {
 		t.Fatalf("coordinator requests = %d want 2 (batch and follow-up)", len(recording.AllRequests()))
 	}
 
-	inFlight, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending, api.WorkerStatusRunning)
+	inFlight, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, api.WorkerStatusPending, api.WorkerStatusRunning)
 	testutil.FailErr(t, "ListBySession", err)
 	if len(inFlight) != 3 {
 		t.Fatalf("in-flight jobs = %d want 3", len(inFlight))
