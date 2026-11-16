@@ -14,10 +14,8 @@ import type { SlotContent } from "../../ui/slot-content.ts";
 import type { Message, TurnClock, TurnLoad, WorkerTask } from "../../api/types.ts";
 import { SourceContextProvider } from "../source/annotations/source-context.ts";
 import type { RawTranscriptItem } from "../../chat/transcript/projection/transcript-item-model.ts";
-import {
-  recordTranscriptRowHeight,
-  transcriptRowContentRevision,
-} from "../../chat/transcript/layout/transcript-row-heights-persist.ts";
+import { recordTranscriptRowHeight } from "../../chat/transcript/layout/transcript-row-heights-persist.ts";
+import { transcriptRowContentRevision } from "../../chat/transcript/layout/transcript-row-revision.ts";
 import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-layout.ts";
 import type { OpenWorkerOptions } from "../../chat/worker/workers-model.ts";
 import { ArtifactDedupProvider } from "../../chat/visual/artifact-dedup-context.tsx";
@@ -33,7 +31,7 @@ import {
   transcriptOffsetForPosition,
   transcriptReadingPosition,
   transcriptRowEstimatedHeight,
-  transcriptVirtualRunway,
+  transcriptUnmountedSpace,
 } from "../../chat/transcript/layout/transcript-virtualizer.ts";
 import { isTranscriptTimeItem } from "../../chat/transcript/presentation/transcript-time-rows.ts";
 import type { VirtualItem } from "@tanstack/solid-virtual";
@@ -398,7 +396,7 @@ export function SessionTranscript(props: Props) {
     () => {
       scrollEpoch();
       virtualizer.scrollOffset;
-      return transcriptVirtualRunway(
+      return transcriptUnmountedSpace(
         [...virtualRowByKey().values()],
         virtualizer.getTotalSize(),
         geometry.origin(),

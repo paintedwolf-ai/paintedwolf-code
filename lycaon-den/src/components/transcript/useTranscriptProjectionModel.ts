@@ -8,11 +8,8 @@ import {
   type PresentedVisual,
   type TranscriptRowMetrics,
 } from "../../chat/transcript/layout/transcript-row-content-estimate.ts";
-import {
-  transcriptRowContentRevision,
-  transcriptRowHeightForScope,
-  type TranscriptRowHeightKey,
-} from "../../chat/transcript/layout/transcript-row-heights-persist.ts";
+import { transcriptRowHeightForScope, type TranscriptRowHeightKey } from "../../chat/transcript/layout/transcript-row-heights-persist.ts";
+import { transcriptRowContentRevision } from "../../chat/transcript/layout/transcript-row-revision.ts";
 import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-layout.ts";
 import { transcriptRowSeams } from "../../chat/transcript/layout/transcript-row-seams.ts";
 import {

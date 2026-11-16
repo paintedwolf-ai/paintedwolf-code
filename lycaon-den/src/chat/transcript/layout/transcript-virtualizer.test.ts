@@ -19,7 +19,7 @@ import {
   transcriptReadingPosition,
   transcriptOffsetForPosition,
   transcriptRowEstimatedHeight,
-  transcriptVirtualRunway,
+  transcriptUnmountedSpace,
   transcriptViewportRect,
 } from "./transcript-virtualizer.ts";
 
@@ -164,7 +164,7 @@ function uniformWindowRowBound(viewportHeight: number, rowHeight: number) {
 describe("transcript virtual runway", () => {
   it("projects unmounted space around a normal-flow window", () => {
     expect(
-      transcriptVirtualRunway(
+      transcriptUnmountedSpace(
         [
           { start: 240, end: 320 },
           { start: 334, end: 434 },
@@ -176,12 +176,12 @@ describe("transcript virtual runway", () => {
 
   it("clamps transient runway geometry", () => {
     expect(
-      transcriptVirtualRunway(
+      transcriptUnmountedSpace(
         [{ start: Number.NaN, end: Number.POSITIVE_INFINITY }],
         Number.NaN,
       ),
     ).toEqual({ beforePx: 0, afterPx: 0 });
-    expect(transcriptVirtualRunway([], 400)).toEqual({
+    expect(transcriptUnmountedSpace([], 400)).toEqual({
       beforePx: 0,
       afterPx: 400,
     });
@@ -1183,7 +1183,7 @@ it("uses the transcript origin for row positions without duplicating outer chrom
     expect(transcriptReadingPosition(virtualizer)).toEqual({ rowKey: "origin-1", rowOffsetPx: 6 });
     expect(transcriptOffsetForPosition(virtualizer, { rowKey: "origin-1", rowOffsetPx: 10 })).toBe(134);
     const rows = [...virtualizer.getVirtualItems()];
-    expect(transcriptVirtualRunway(rows, virtualizer.getTotalSize(), origin()).beforePx).toBe(rows[0]!.start - 24);
+    expect(transcriptUnmountedSpace(rows, virtualizer.getTotalSize(), origin()).beforePx).toBe(rows[0]!.start - 24);
     setOrigin(80);
     await Promise.resolve();
     expect(shifts).toEqual([]);
