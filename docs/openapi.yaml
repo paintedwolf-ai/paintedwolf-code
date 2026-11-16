@@ -35035,6 +35035,10 @@ components:
         - sqlfluff
         - foundry
         - taplo
+        - golangci
+        - mix_format
+        - phpcs
+        - checkstyle
     FormatSettings:
       x-go-generate: true
       type: object

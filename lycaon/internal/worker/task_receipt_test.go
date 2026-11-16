@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerplan"
+	"github.com/lycaon/lycaon/internal/workerplan/plantest"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -100,12 +101,9 @@ func TestTaskToolPlannedWorkerDispatchNameValidationAndReplay(t *testing.T) {
 	plans := readyBlueprintApproval{doc: &api.Blueprint{Path: "plan.md", Content: bpContent}}
 
 	records := workerrecords.New(sqlDB)
-	planSvc := &workerplan.Service{
-		Records:       records,
-		Plans:         plans,
-		Approvals:     plans,
-		WorkflowReady: plans,
-	}
+	planDeps := plantest.Deps(records)
+	planDeps.Plans, planDeps.Approvals, planDeps.WorkflowReady = plans, plans, plans
+	planSvc := plantest.New(t, planDeps)
 	actor := workerrecords.Actor{SessionID: "parent-1", Role: workerrecords.RoleCoordinator, PrincipalID: "parent-1"}
 	seeded, err := planSvc.PlanFromBlueprint(t.Context(), workerplan.SeedRequest{
 		Actor:         actor,

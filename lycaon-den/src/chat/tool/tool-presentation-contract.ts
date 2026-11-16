@@ -58,6 +58,10 @@ export type StructuredToolPresentation = {
   evidenceHandle: string | null;
   /** Full output remains searchable without retaining its body here. */
   rawOutputAvailable: boolean;
+  /** Source path when raw output is the file read by the tool. */
+  rawOutputPath?: string;
+  /** Language when raw output has a known wire syntax such as JSON. */
+  rawOutputLanguage?: string;
   /** Hides raw output for protected tool results. */
   rawOutputProtected?: boolean;
   /** Guidance comes from host outcome, codes, or feedback. */

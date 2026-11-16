@@ -310,6 +310,8 @@ function BackgroundProcessSection(props: {
 
 function RawOutputChrome(props: {
   part: ToolPartView;
+  rawPath?: string;
+  rawLanguage?: string;
   sessionId?: string;
   projectId?: string;
 }) {
@@ -364,6 +366,8 @@ function RawOutputChrome(props: {
               label="Raw output"
               testId="tool-raw-output-link"
               projectId={props.projectId}
+              path={props.rawPath}
+              language={props.rawLanguage}
               revealOffset={toolContent?.outputOffset()}
               content={rawContent()}
             />
@@ -477,6 +481,8 @@ export function StructuredToolBody(props: Props) {
       <Show when={view().rawOutputAvailable}>
         <RawOutputChrome
           part={props.part}
+          rawPath={view().rawOutputPath}
+          rawLanguage={view().rawOutputLanguage}
           sessionId={props.sessionId}
           projectId={props.projectId}
         />

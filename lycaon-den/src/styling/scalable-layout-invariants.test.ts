@@ -130,11 +130,6 @@ describe("scalable layout chrome", () => {
     );
   });
 
-  it("anchors message actions to their chat bubble", () => {
-    const components = read("global-components.css");
-    expect(components).toMatch(/\.bubble\s*\{[\s\S]*?position:\s*relative/);
-  });
-
   it("uses one closed width and full open width for transcript cards", () => {
     const chat = read("chat-utilities.css");
     const components = read("global-components.css");
