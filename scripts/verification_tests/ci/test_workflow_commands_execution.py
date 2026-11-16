@@ -72,7 +72,7 @@ class WorkflowCommandTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             summary = Path(directory) / "summary.md"
             measured = Path(directory) / "timings.json"
-            measured.write_text(json.dumps({"runs": [42], "lanes": {"ready": 250, "ready-lint": 200, "ready-tests 1/2": 240, "ready-tests 2/2": 240}}))
+            measured.write_text(json.dumps({"run": 42, "lanes": {"ready": 250, "ready-lint": 200, "ready-tests 1/2": 240, "ready-tests 2/2": 240}}))
             result = self.command('matrix', 'fast', '--timings', str(measured),
                                   GITHUB_STEP_SUMMARY=str(summary))
             self.assertEqual(result.returncode, 0, result.stderr)
@@ -80,4 +80,4 @@ class WorkflowCommandTests(unittest.TestCase):
             self.assertEqual(rows[0]['timing_basis'], 'measured')
             self.assertEqual(rows[0]['expected_seconds'], 250)
             self.assertIn('Estimate basis: `measured`', summary.read_text())
-            self.assertIn('Nightly timing sources: 42', summary.read_text())
+            self.assertIn('Nightly timing source: run 42.', summary.read_text())

@@ -43,7 +43,7 @@ class MergePreflightTests(unittest.TestCase):
         with patch.object(coverage.python_coverage, 'run', return_value=['harness', 'test:runner']):
             findings, failed, _ = coverage.run_python(SimpleNamespace(paths=[]))
         self.assertTrue(failed)
-        self.assertEqual([finding.message for finding in findings],
+        self.assertEqual([finding.text for finding in findings],
                          ['harness failed; inspect the unittest output', 'test:runner failed; inspect the unittest output'])
 
     def history_state(self, failed=()):
