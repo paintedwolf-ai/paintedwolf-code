@@ -76,6 +76,7 @@ func (t *SkillsReadTool) Run(ctx context.Context, args map[string]any, tctx tool
 		return skillDiscovery(ctx, tctx, need, "", "ranking_unavailable", outcome.Failure, catalog)
 	}
 	name := names[0]
+	stateSkillResolution(tctx, name == exact)
 	for _, sk := range catalog {
 		if sk.Name != name {
 			continue
@@ -163,6 +164,16 @@ func (t *SkillsReadTool) policyVars(ctx context.Context, tctx tools.ToolContext)
 		}
 	}
 	return spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+}
+
+// stateSkillResolution tells the action card whether the skill was named
+// exactly or chosen by the local ranking engine.
+func stateSkillResolution(tctx tools.ToolContext, exact bool) {
+	by := "engine"
+	if exact {
+		by = "name"
+	}
+	tctx.Effects.Out.StateCardFact(api.ActionFact{Kind: api.ActionFactLoadedBy, By: by})
 }
 
 // stampSkillActivation copies catalog fields onto the tool result for the skill card.

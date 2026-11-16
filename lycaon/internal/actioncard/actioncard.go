@@ -23,7 +23,7 @@ type Parts struct {
 }
 
 // presenter adds one family's facts, preview, opener and fold to the facts
-// every result carries in its typed fields.
+// its handler stated and the facts every result carries in typed fields.
 type presenter func(result api.ToolResult) Parts
 
 var presenters = map[string]presenter{}
@@ -87,7 +87,7 @@ func ForResult(result api.ToolResult, commandMarks []api.RedactedSpan) *api.Acti
 	if describe, ok := presenters[result.Tool]; ok {
 		parts = describe(result)
 	}
-	facts := append(parts.Facts, typedFacts(result)...)
+	facts := append(append(parts.Facts, result.CardFacts...), typedFacts(result)...)
 	facts = append(facts, statusFacts(result, facts)...)
 	if took, ok := invocationTook(result.Invocation); ok {
 		facts = append(facts, took)

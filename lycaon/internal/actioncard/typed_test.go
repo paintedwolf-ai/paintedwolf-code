@@ -80,12 +80,8 @@ func TestVerdictPassesOnlyWhenTerminal(t *testing.T) {
 }
 
 func TestTypedFactsNameTheirSource(t *testing.T) {
-	result := api.ToolResult{Tool: "skills_read", Skill: &api.SkillActivation{Name: "release"},
-		Dispatch: &api.WorkerDispatch{WorkerID: "w", AgentType: "reviewer"}}
+	result := api.ToolResult{Tool: "delegate_status", Dispatch: &api.WorkerDispatch{WorkerID: "w", AgentType: "reviewer"}}
 	facts := ForResult(result, nil).Facts
-	if loaded, _ := fact(facts, api.ActionFactLoadedBy); loaded.By != "name" {
-		t.Fatalf("loaded by %+v", facts)
-	}
 	if worker, _ := fact(facts, api.ActionFactWorker); worker.Role != "reviewer" {
 		t.Fatalf("worker %+v", facts)
 	}
@@ -97,5 +93,26 @@ func TestTypedFactsNameTheirSource(t *testing.T) {
 	}
 	if captured, _ := fact(facts, api.ActionFactCaptured); captured.ArtifactID != "art" || captured.Caption != "Home page" {
 		t.Fatalf("captured %+v", facts)
+	}
+}
+
+func TestStatedFactsJoinTheCardAndFamilyFactsWin(t *testing.T) {
+	status := 404
+	fetched := api.ToolResult{Tool: "fetch_url", CardFacts: []api.ActionFact{{Kind: api.ActionFactResult, Outcome: "completed", HTTPStatus: &status}}}
+	d := ForResult(fetched, nil)
+	if got, _ := fact(d.Facts, api.ActionFactResult); got.HTTPStatus == nil || *got.HTTPStatus != 404 {
+		t.Fatalf("stated result %+v", d.Facts)
+	}
+	loaded := api.ToolResult{Tool: "request_tools", CardFacts: []api.ActionFact{
+		{Kind: api.ActionFactFound, Count: 2, Noun: "tools", Items: []string{"Fetch page", "Search web"}},
+		{Kind: api.ActionFactLoadedBy, By: "engine"},
+	}}
+	d = ForResult(loaded, nil)
+	if !reflect.DeepEqual(kinds(d.Facts), []api.ActionFactKind{api.ActionFactResult, api.ActionFactFound, api.ActionFactLoadedBy}) || !reflect.DeepEqual(d.Row, []api.ActionFactKind{api.ActionFactResult, api.ActionFactFound}) {
+		t.Fatalf("loaded tools card %+v", d)
+	}
+	session := api.ToolResult{Tool: "terminal_close", ToolArgs: map[string]any{"id": "t"}, CardFacts: []api.ActionFact{{Kind: api.ActionFactResult, Outcome: "failed"}}}
+	if got, _ := fact(ForResult(session, nil).Facts, api.ActionFactResult); got.Outcome != "completed" {
+		t.Fatalf("a stated fact replaced the family's: %+v", got)
 	}
 }

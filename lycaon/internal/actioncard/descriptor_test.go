@@ -64,8 +64,8 @@ func randomResult(r *rand.Rand, tool string) api.ToolResult {
 	if r.IntN(6) == 0 {
 		result.Verdict = &api.VerdictOutcome{Verdict: "approve", Terminal: r.IntN(2) == 0}
 	}
-	if r.IntN(6) == 0 {
-		result.Skill = &api.SkillActivation{Name: "release"}
+	if r.IntN(5) == 0 {
+		result.CardFacts = []api.ActionFact{{Kind: api.ActionFactFound, Count: r.IntN(40), Noun: "results"}, {Kind: api.ActionFactLoadedBy, By: "engine"}}
 	}
 	return result
 }

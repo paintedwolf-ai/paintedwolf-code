@@ -21920,6 +21920,12 @@ components:
           x-go-pointer: true
           $ref: '#/components/schemas/ActionDescriptor'
           description: Card for a settled call that is not a command program; projected on read, never stored.
+        card_facts:
+          type: array
+          maxItems: 4
+          items:
+            $ref: '#/components/schemas/ActionFact'
+          description: Facts the tool's handler stated for its action card, such as what it found or the HTTP status it got. Stored with the result; never part of the model's tool result.
         ui_visibility:
           x-go-name: UiVisibility
           $ref: '#/components/schemas/ToolResultUiVisibility'

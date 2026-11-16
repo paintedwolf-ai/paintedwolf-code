@@ -35,9 +35,6 @@ func typedFacts(result api.ToolResult) []api.ActionFact {
 	if decision := result.CheckpointDecision; decision != nil && decision.Status == api.CheckpointStatusApproved {
 		facts = append(facts, api.ActionFact{Kind: api.ActionFactStoppedBy, By: "approval", DecidedBy: "person"})
 	}
-	if result.Skill != nil {
-		facts = append(facts, api.ActionFact{Kind: api.ActionFactLoadedBy, By: "name"})
-	}
 	return facts
 }
 
