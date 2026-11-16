@@ -41,9 +41,8 @@ func describeActions(msg api.Message) api.Message {
 			described.Activities[i].Action = &action
 		}
 		result.CommandProgram = &described
-	} else {
-		result.Action = actioncard.ForResult(result, marks)
 	}
+	result.Action = actioncard.ForResult(result, marks)
 	msg.ToolResult = &result
 	return msg
 }

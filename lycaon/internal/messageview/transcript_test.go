@@ -67,8 +67,15 @@ func TestTranscriptDescribesEveryAction(t *testing.T) {
 	terminal := api.Message{ID: "t", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
 		Tool: "terminal_close", ToolCallID: "r2", ToolArgs: map[string]any{"id": "term-1"}, Content: "{}",
 	}}
+	stopped := api.Message{ID: "s", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
+		Tool: "command", ToolCallID: "c2", ToolArgs: map[string]any{"command": "curl -X POST https://example.test"}, Outcome: api.ToolResultOutcomeRejected,
+		CommandProgram: &api.CommandProgramReceipt{ID: "prog-2", State: "failed", StopCode: "HTTP_REQUEST_FAILED", StartedAt: settled},
+	}}
 
-	out := TranscriptMessages([]api.Message{call, program, terminal})
+	out := TranscriptMessages([]api.Message{call, program, terminal, stopped})
+	if action := out[3].ToolResult.Action; action == nil || action.Status != "error" || action.Ran.Text != "curl -X POST https://example.test" {
+		t.Fatalf("a program without activities has no card: %+v", action)
+	}
 
 	if action := out[0].ToolCalls[0].Action; action == nil || action.Status != "running" || action.Label != "Terminal session" {
 		t.Fatalf("running call card %+v", action)
