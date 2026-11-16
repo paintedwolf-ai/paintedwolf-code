@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -19,6 +20,8 @@ func runReach(args []string, out io.Writer) error {
 	skip := fs.String("skip", "", "comma-separated patterns for test-support package paths")
 	schema := fs.String("schema", "", "schema file whose tables need a reader")
 	scope := fs.String("scope", "", "comma-separated package patterns judged even when no root imports them")
+	emitters := fs.String("emitters", "", "JSON emitter spec judging declared codes, facts and anchors")
+	repo := fs.String("repo", "..", "repository root the emitter spec is relative to")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -38,6 +41,17 @@ func runReach(args []string, out io.Writer) error {
 			return err
 		}
 		cfg.Skip = append(cfg.Skip, re)
+	}
+	if *emitters != "" {
+		var spec reach.EmitterSpec
+		if err := json.Unmarshal([]byte(*emitters), &spec); err != nil {
+			return fmt.Errorf("emitters: %w", err)
+		}
+		loaded, err := reach.LoadEmitters(*repo, spec)
+		if err != nil {
+			return err
+		}
+		cfg.Emitters = loaded
 	}
 	findings, err := reach.Run(cfg)
 	if err != nil {

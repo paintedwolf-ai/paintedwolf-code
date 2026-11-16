@@ -47,6 +47,9 @@ type Config struct {
 	Skip   []*regexp.Regexp
 	// Schema is the complete fresh schema; empty skips table liveness.
 	Schema string
+	// Emitters judges declared codes, facts and anchors against what the
+	// product reaches; nil skips them.
+	Emitters *Emitters
 }
 
 // pass is one GOOS load: what it compiles and what its roots reach.
@@ -56,6 +59,7 @@ type pass struct {
 	reads     map[string]bool // tables a reachable function names in a read
 	keysSet   map[string]bool
 	keysRead  map[string]archlint.Finding
+	product   productFlow
 }
 
 // Run loads each GOOS and combines the passes.
@@ -78,6 +82,9 @@ func Run(cfg Config) ([]archlint.Finding, error) {
 	}
 	out := deadFuncs(passes)
 	out = append(out, unsetKeys(passes)...)
+	if cfg.Emitters != nil {
+		out = append(out, cfg.Emitters.findings(passes)...)
+	}
 	if cfg.Schema != "" {
 		tables, err := ParseSchema(cfg.Schema)
 		if err != nil {
@@ -172,6 +179,13 @@ func load(cfg Config, goos string) (*pass, error) {
 		reads:     map[string]bool{},
 		keysSet:   map[string]bool{},
 		keysRead:  map[string]archlint.Finding{},
+	}
+	if cfg.Emitters != nil {
+		productRoots, err := productMains(lc, pkgs, cfg.Emitters.Product)
+		if err != nil {
+			return nil, err
+		}
+		p.product = scanProduct(prog, rta.Analyze(productRoots, false), cfg)
 	}
 	reachablePos := map[token.Position]bool{}
 	for fn := range res.Reachable {

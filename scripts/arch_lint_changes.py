@@ -88,7 +88,7 @@ def checks(binary, tree, policy, go=True, den=False):
     go_commands = [
         [binary, "reach", "-dir", go_dir, "-goos", ",".join(reach["goos"]), "-report", reach["report"],
          "-skip", support, "-schema", go_dir / reach["schema"], "-scope", ",".join(reach.get("scope", [])),
-         *reach["roots"]],
+         "-emitters", json.dumps(policy["emitters"]), "-repo", tree, *reach["roots"]],
         [binary, "vet", "-dir", go_dir, "-test-support", support, *policy["vet"]["packages"]],
     ]
     found = {}
