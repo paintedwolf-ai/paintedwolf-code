@@ -5,7 +5,7 @@ import { createNoticeStore, registerNoticePublisher } from "../../notices/notice
 import { selectProjectNoticeGroups } from "../../notices/notice-select.ts";
 import { FileVersionDocument } from "./FileVersionDocument.tsx";
 import { fileVersionFromSnapshot, type FileVersionView } from "./file-version.ts";
-import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffers.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { sourceReaderFixture } from "../../test/source-reader-fixture.ts";
 import type { ContentNotice } from "../source/source-content-availability.ts";

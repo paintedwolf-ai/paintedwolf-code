@@ -5,7 +5,7 @@ import { configureEditorDocuments, evictEditorDocument, subscribeEditorDocuments
 import { dropFilesEditorHandlers } from "./files-editor-host.ts";
 import { createFilesDocumentOpening } from "../documents/files-document-opening.ts";
 import { setFilesEditorSecretScreen } from "./files-editor-secret-screen.ts";
-import { applyFilesBufferEditorDocument, markFilesBufferLoading } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferEditorDocument, markFilesBufferLoading } from "../documents/project-files-buffer-io.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { fileBufferKey } from "../components/project-files-model.ts";
 

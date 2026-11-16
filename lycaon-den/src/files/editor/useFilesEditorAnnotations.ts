@@ -18,7 +18,7 @@ import { useResidentPresence } from "../../ui/resident-presence-context.tsx";
 import type { FilesEditorScope } from "../components/files-scope.ts";
 import { editorDocumentScreenStatus } from "../documents/editor-document.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
-import { filesBufferText } from "../documents/project-files-buffers.ts";
+import { filesBufferText } from "../documents/files-buffer-state.ts";
 import { fileVersionIsReadable, type FileVersionView } from "../history/file-version.ts";
 import type { DiffLineHunk } from "../review/line-diff.ts";
 import { createEditorLineFacts } from "./editor-line-facts.ts";

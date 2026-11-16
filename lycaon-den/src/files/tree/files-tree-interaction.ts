@@ -17,7 +17,7 @@ import { recordInventoryOpen } from "../tree/file-inventory.ts";
 import { createFilesWorkspace } from "../source/files-workspace.ts";
 import type { FilesScope } from "../components/files-scope.ts";
 import { type FilesTreeHandle, type FilesTreeSelection } from "../tree/files-tree-context.ts";
-import { dirtyFilesBuffersUnderPath, openFilesBuffer } from "../documents/project-files-buffers.ts";
+import { dirtyFilesBuffersUnderPath, openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import { type BufferOpenIntent } from "../documents/files-buffer-state.ts";
 import { filesContextMenuItems, type FilesContextTarget } from "../commands/project-files-context-menu.ts";
 import type { NewEntryKind } from "../commands/project-files-create.ts";

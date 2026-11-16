@@ -3,27 +3,13 @@ import { clampDragIndexWithinGroup, orderWithPinnedGroup } from "../tabs/files-t
 import { type FileBufferKey } from "../components/project-files-model.ts";
 import {
   type AimOrigin,
-  bufferKeyAtAddress,
   ensureProject,
-  filesBufferBase,
-  filesBufferKeyAtAddress,
-  filesBufferText,
   focusBuffer,
   projectFilesState,
   setFilesStore,
   settleBufferPresentation,
 } from "./files-buffer-state.ts";
 
-export {
-  bufferKeyAtAddress,
-  filesBufferBase,
-  filesBufferKeyAtAddress,
-  filesBufferText,
-  focusBuffer,
-  settleBufferPresentation,
-};
-export * from "./project-files-buffer-io.ts";
-export * from "./project-files-buffer-lifecycle.ts";
 
 /** Present an aimed buffer whose content is a past version, not a source read. */
 export function presentFilesBufferVersion(projectId: string, key: FileBufferKey): void {

@@ -15,7 +15,7 @@ import { formatSentenceCase } from "../../format/format-sentence-case.ts";
 import type { FilesEditorScope } from "../components/files-scope.ts";
 import type { FileBuffer } from "../documents/files-buffer-state.ts";
 import { encodingChipLabel } from "../documents/project-files-buffer-kind.ts";
-import { openFilesBuffer } from "../documents/project-files-buffers.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import { setSelectedVersionComparison, versionComparesBefore } from "../history/files-version-selection.ts";
 import { walkPageTitle } from "../walk/WalkStepPage.tsx";
 import {
