@@ -7,6 +7,7 @@ vi.mock("../platform/connection/client-identity.ts", () => ({
 }));
 import {
   SSE_DISCONNECTED_AFTER_ATTEMPTS,
+  TOPIC_STORE_INVALIDATION,
   isHeartbeatComment,
   reconnectDelayMs,
   reconnectStatus,
@@ -19,6 +20,7 @@ import {
   parseSSEBuffer,
 } from "./events-sse.ts";
 import { createAppStore } from "../store/app-state.ts";
+import { createNoticeStore, registerNoticePublisher } from "../notices/notice-store.ts";
 import { stubClient } from "../test/client-fixture.ts";
 import { invalidateApprovalGrantsCache, isApprovalGrantsCacheLoaded, loadApprovalGrantsCache } from "../settings/security/approval-grants-cache.ts";
 import type { EventEnvelope } from "./types.ts";
@@ -957,6 +959,31 @@ describe("subscribeEvents topic dispatch", () => {
     void sub.close();
     expect(areas).toEqual(["extensions"]);
     expect(invalidations[0]).toEqual([]);
+  });
+
+  it("message events invalidate nothing (the stream patches the transcript)", () => {
+    expect(TOPIC_STORE_INVALIDATION.message).toEqual([]);
+  });
+
+  it("retires a session's host errors only when its turn completes cleanly", async () => {
+    const notices = createNoticeStore();
+    registerNoticePublisher(notices);
+    try {
+      const held = () => [...notices.index().values()].flat()
+        .filter((notice) => notice.scope.kind === "session" && notice.scope.sessionId === "s1");
+      const session = { id: "s1", project_id: "proj-1", action: "updated", status: "idle" };
+      const hostError = { code: "TURN_FAILED", title: "t", message: "m" };
+
+      await driveTopic("session", { ...session, idle_disposition: "turn_error", host_error: hostError });
+      expect(held()).toHaveLength(1);
+      await driveTopic("session", { ...session, idle_disposition: "turn_error", host_error: hostError });
+      expect(held().length).toBeGreaterThan(0);
+
+      await driveTopic("session", { ...session, idle_disposition: "completed" });
+      expect(held()).toEqual([]);
+    } finally {
+      registerNoticePublisher(null);
+    }
   });
 
   it("worker event fires no invalidation (cache gate)", async () => {

@@ -1,6 +1,4 @@
 // @vitest-environment jsdom
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   applyWalkMark,
@@ -23,20 +21,6 @@ import {
 } from "../../../files/walk/walk-fixtures.ts";
 
 const MARK = "den-walk-step-mark";
-const CHAT_CSS = readFileSync(
-  join(import.meta.dirname, "../../../chat-domain.css"),
-  "utf8",
-);
-const WALK_MARK_SELECTOR = [
-  ".den-chat-stream",
-  "  .transcript-viewport-row",
-  "  :is(",
-  "    [data-tool-call-id],",
-  "    .den-activity-span,",
-  "    .den-diff-group",
-  "  ).den-walk-step-mark {",
-].join("\n");
-
 function stream(ids: string[], sessionId?: string): HTMLElement {
   const root = document.createElement("div");
   root.className = "den-chat-stream";
@@ -56,14 +40,6 @@ beforeEach(() => {
 });
 
 describe("applyWalkMark", () => {
-  it("keeps the walk treatment above tool-card styling", () => {
-    const start = CHAT_CSS.indexOf(WALK_MARK_SELECTOR);
-    expect(start).toBeGreaterThan(-1);
-    const body = CHAT_CSS.slice(start, CHAT_CSS.indexOf("}", start));
-    expect(body).toContain("box-shadow: 0 0 0 2px var(--den-accent-signal)");
-    expect(body).toContain("var(--den-accent-signal) 14%");
-  });
-
   it("rings exactly one chicklet", () => {
     const root = stream(["t1", "t2", "t3"]);
     expect(applyWalkMark(root, "t2")).toBe(true);

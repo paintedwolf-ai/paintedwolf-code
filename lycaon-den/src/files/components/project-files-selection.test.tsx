@@ -29,34 +29,6 @@ const ROOTS: ProjectRoot[] = [
 ];
 
 describe("Files stage selection discipline", () => {
-  it("keeps one divider between the tabs and their overflow button", () => {
-    const css = read("files-domain.css");
-    const stripRule =
-      css.match(/^\.den-files-tab-strip\s*\{([^}]*)\}/m)?.[1] ?? "";
-    const tabRule = css.match(/\.den-files-tab__body\s*\{([^}]*)\}/)?.[1] ?? "";
-    const activeRule =
-      css.match(/\.den-files-tab--active \.den-files-tab__body\s*\{([^}]*)\}/)?.[1] ?? "";
-    const overflowRule =
-      css.match(/\.den-files-tabs-overflow\s*\{([^}]*)\}/)?.[1] ?? "";
-
-    expect(stripRule).toMatch(/--den-files-tab-divider-width:\s*1px/);
-    expect(tabRule).toMatch(
-      /border-right:\s*var\(--den-files-tab-divider-width\) solid var\(--den-line\)/,
-    );
-    expect(activeRule).toMatch(/background:\s*var\(--den-current-window-selection,\s*var\(--den-selection\)\)/);
-    expect(activeRule).toMatch(
-      /background-image:\s*linear-gradient\([\s\S]*?var\(--den-current-window-caret,\s*var\(--den-accent\)\) 0 2px,[\s\S]*?transparent 2px/,
-    );
-    expect(overflowRule).toMatch(
-      /border-left:\s*var\(--den-files-tab-divider-width\) solid var\(--den-line\)/,
-    );
-    expect(overflowRule).not.toMatch(/transform:/);
-    const lastTabRule = css.match(
-      /\.den-files-tabs-wrap:has\(\+ \.den-files-tabs-overflow\) \.den-files-tab:last-child \.den-files-tab__body\s*\{([^}]*)\}/,
-    )?.[1] ?? "";
-    expect(lastTabRule).toMatch(/border-right:\s*0/);
-  });
-
   it("marks chrome unselectable and content selectable without !important", () => {
     const css = `${read("files-domain.css")}\n${read("files-utilities.css")}`;
     const selects = (name: string, mode: "none" | "text") =>

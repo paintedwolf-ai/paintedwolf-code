@@ -24,8 +24,9 @@ const seams = vi.hoisted(() => ({
   protection: null as unknown as ComponentProps<typeof SessionProtectionBanners>, promote: null as unknown as ComponentProps<typeof DraftPromoteBanner>,
   folder: null as unknown as ComponentProps<typeof NoFolderBanner>, provider: null as unknown as ComponentProps<typeof NoProviderCard>,
   verify: null as unknown as ComponentProps<typeof VerifyTestNudge>, limits: vi.fn(async () => ({ project: "host" })),
+  chatThrows: false,
 }));
-vi.mock("../chatview/ChatView.tsx", () => ({ ChatView: (p: typeof seams.chat) => { createEffect(() => { seams.chat = { ...p }; }); return <div data-testid="chat-boundary">{p.sessionId}</div>; } }));
+vi.mock("../chatview/ChatView.tsx", () => ({ ChatView: (p: typeof seams.chat) => { if (seams.chatThrows) throw new Error("render failed"); createEffect(() => { seams.chat = { ...p }; }); return <div data-testid="chat-boundary">{p.sessionId}</div>; } }));
 vi.mock("../nav/ChatTabRail.tsx", () => ({ ChatTabRail: (p: typeof seams.rail) => { createEffect(() => { seams.rail = { ...p }; }); return <>{p.dock}</>; } }));
 vi.mock("../nav/ChatTopChromeStack.tsx", () => ({ ChatTopChromeStack: (p: typeof seams.stack) => {
   createEffect(() => { seams.stack = { ...p }; });
@@ -106,5 +107,19 @@ describe("chat workspace composition", () => {
     expect(callbacks.onOpenProviders).toHaveBeenCalledOnce(); expect(callbacks.onOpenTests).toHaveBeenCalledOnce();
     expect(seams.stack.provider?.present()).toBe(false);
     seams.protection.onDismiss?.("isolation_degraded" as never);
+  });
+
+  it("scopes a failed chat render to its stage and keeps the tab rail", () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    seams.chatThrows = true;
+    try {
+      seams.rail = null as never;
+      mountChat();
+      expect(document.querySelector('[data-testid="critical-stop"]')?.getAttribute("data-code")).toBe("VIEW_RENDER_FAILED");
+      expect(seams.rail).not.toBeNull();
+    } finally {
+      seams.chatThrows = false;
+      logged.mockRestore();
+    }
   });
 });

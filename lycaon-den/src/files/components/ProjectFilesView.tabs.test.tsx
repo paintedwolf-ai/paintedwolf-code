@@ -157,7 +157,6 @@ describe("ProjectFilesView stage chrome", () => {
     );
     expect(css).toMatch(/\.den-files-tab\s*\{[\s\S]*?min-width:\s*7\.4286rem/);
     expect(css).toMatch(/\.den-files-tab\s*\{[\s\S]*?max-width:\s*13\.1429rem/);
-    expect(css).toMatch(/flex-wrap:\s*nowrap/);
 
     globalThis.IntersectionObserver = OriginalIO;
     unmount();

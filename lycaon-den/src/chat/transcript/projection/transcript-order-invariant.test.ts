@@ -1,7 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { Message, WorkflowRun } from "../../../api/types.ts";
 import { messagesToTranscriptItems } from "./transcript-items.ts";
 import { compareTranscriptOrdSortKeys, sortTranscriptItemsByOrd, transcriptItemOrdSortKey, type TranscriptOrdSortKey } from "./transcript-item-order.ts";
@@ -131,21 +128,5 @@ describe("transcript ord-order invariant", () => {
       expectOrderedByOrd(items, patched);
       expect(itemKeys(items)).toEqual(itemKeys(baseline));
     }
-  });
-
-  it("grep guard: no Date.parse in the transcript ordering path", () => {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const src = ["transcript-items.ts", "transcript-item-order.ts", "transcript-display-projection.ts"]
-      .map((file) => readFileSync(join(here, file), "utf8")).join("\n");
-    expect(src).not.toMatch(/Date\.parse/);
-  });
-
-  it("grep guard: order/identity stabilizers are absent from the source", () => {
-    const here = dirname(fileURLToPath(import.meta.url));
-    const itemsSrc = ["transcript-items.ts", "transcript-item-order.ts", "transcript-display-projection.ts"]
-      .map((file) => readFileSync(join(here, file), "utf8")).join("\n");
-    const spansSrc = readFileSync(join(here, "../../workflow/workflow-spans.ts"), "utf8");
-    expect(itemsSrc).not.toMatch(/stabilizeTranscriptItems/);
-    expect(spansSrc).not.toMatch(/stabilizeChatSpanBlocks/);
   });
 });

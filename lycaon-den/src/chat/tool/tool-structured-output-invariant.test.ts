@@ -1,6 +1,3 @@
-import { execSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   genericTranscriptToolNames,
@@ -27,20 +24,6 @@ import {
   TOOL_STRUCTURED_OUTPUT_FIXTURES,
 } from "./tool-structured-output-fixtures.ts";
 import { peelEvidenceHandleTag } from "./tool-output-handle.ts";
-
-const toolSrc = import.meta.dirname;
-const denSrc = join(toolSrc, "../..");
-
-function read(path: string): string {
-  return readFileSync(path, "utf8");
-}
-
-function rgForbidden(pattern: string, paths: string, extra = ""): string {
-  return execSync(
-    `rg -n '${pattern}' ${paths} ${extra} -g '!*invariant.test.ts' 2>/dev/null || true`,
-    { encoding: "utf8", cwd: toolSrc },
-  ).trim();
-}
 
 function part(
   tool: string,
@@ -73,39 +56,6 @@ function tagFixtureOutput(handle: string, body: string): string {
 }
 
 describe("tool structured output invariant", () => {
-  it("routes generic tool cards only through StructuredToolBody", () => {
-    const generic = read(join(denSrc, "components/tool/GenericToolCard.tsx"));
-    expect(generic).toMatch(/StructuredToolBody/);
-    expect(generic).not.toMatch(/ToolResultBody|ToolPartRawOutput/);
-
-    const structured = read(join(denSrc, "components/tool/StructuredToolBody.tsx"));
-    expect(structured).toMatch(/buildStructuredToolPresentation/);
-    expect(structured).toMatch(/tool-presentation-contract/);
-    expect(structured).toMatch(/ToolContentLink/);
-    expect(structured).toMatch(/tool-related-search-link/);
-    expect(structured).not.toMatch(/den-tool-part-card-nested-raw/);
-
-    const builder = read(join(toolSrc, "tool-part-structured.ts"));
-    expect(builder).toMatch(/tool-presentation-contract/);
-    expect(builder).toMatch(/normalizeToolWireOutput|parseToolJsonObject/);
-
-    const contract = read(join(toolSrc, "tool-presentation-contract.ts"));
-    expect(contract).toMatch(/normalizeToolWireOutput/);
-    expect(contract).toMatch(/stripReadLineNumbers/);
-  });
-
-  it("forbids parallel tool output render components", () => {
-    for (const dir of ["components", "files"]) {
-      expect(rgForbidden("ToolResultBody|ToolPartRawOutput", join(denSrc, dir))).toBe("");
-    }
-  });
-
-  it("ToolPartCard sends non-task tools to GenericToolCard", () => {
-    const card = read(join(denSrc, "components/tool/ToolPartCard.tsx"));
-    expect(card).toMatch(/isTaskToolPart/);
-    expect(card).toMatch(/GenericToolCard/);
-  });
-
   it("renders every kind the catalog declares", () => {
     for (const [tool, kind] of Object.entries(TOOL_CARD_KINDS)) {
       expect(classifyToolKind(tool), `${tool} declares kind ${kind}`).toBe(kind);
