@@ -1,5 +1,6 @@
 import { For, Show, createSignal } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
+import type { ResolveProjectRoot } from "../../api/project-path.ts";
 import type { ActionFact, ActionRan } from "../../api/types.ts";
 import { ACTION_FACT_LABELS, formatActionRow, formatFact } from "../../chat/action/action-format.ts";
 import type { CardAction } from "../../chat/action/action-merge.ts";
@@ -14,6 +15,12 @@ import { RedactionChicklet } from "../tool/RedactionChicklet.tsx";
 import type { ToolBriefingSlots } from "../tool/tool-briefing-slots.ts";
 import { ToolPartShell } from "../tool/ToolPartShell.tsx";
 import { ActionLinks } from "./ActionLinks.tsx";
+import { TurnLoadFootLine } from "../tool/TurnLoadFootLine.tsx";
+import { liveToolProcess } from "../../chat/tool/tool-part-model.ts";
+import { ActionProcess } from "./ActionProcess.tsx";
+import { visualFromPart } from "../../chat/visual/visual-artifact-model.ts";
+import { visualProducerEntryKey } from "../../chat/visual/visual-artifact-canonical.ts";
+import { TranscriptVisualSlot } from "../transcript/TranscriptVisualSlot.tsx";
 import { ActionPreview } from "./ActionPreview.tsx";
 
 const RAN_FIELD = "ran.text";
@@ -25,16 +32,25 @@ type Props = {
   sessionId?: string;
   projectId?: string;
   client?: LycaonClient | null;
+  rootRefs?: readonly ResolveProjectRoot[];
   slots?: ToolBriefingSlots;
 };
 
-/** Every action's card: what ran, its summary, facts, preview and records, in that order. */
+/** Every action's card: what ran, its summary, facts, preview and records, then how the local AI bore on the call. */
 export function ActionCard(props: Props) {
   const status = () => (props.action.status === "done" ? "completed" : props.action.status);
   // A fold's members share one card, so it shows the first member that has each notice.
   const members = () => [props.part, ...(props.part.foldMembers ?? [])];
   const externalAccess = () => members().find((member) => member.externalAccess)?.externalAccess ?? undefined;
   const redaction = () => members().find((member) => member.redaction?.spans?.length)?.redaction ?? undefined;
+  const process = () => (props.sessionId ? members().map(liveToolProcess).find((handle) => handle !== null) ?? undefined : undefined);
+  // A live process states its own state, so the card drops the recorded one.
+  const facts = () => (process() ? props.action.facts.filter((fact) => fact.kind !== "process") : props.action.facts);
+  const port = () => props.action.facts.find((fact) => fact.kind === "process")?.port;
+  const captures = () => members().flatMap((member) => {
+    const artifact = visualFromPart(member);
+    return artifact ? [{ artifact, output: member.output }] : [];
+  });
   return (
     <ToolPartShell
       part={{ ...props.part, title: props.action.ran.text }}
@@ -50,17 +66,27 @@ export function ActionCard(props: Props) {
       <div class="den-action-card" data-testid="action-card-body">
         <ActionRanRegion ran={props.action.ran} more={props.action.more} />
         {props.slots?.summary}
-        <ActionFacts facts={props.action.facts} />
+        <ActionFacts facts={facts()} />
+        <Show when={process()} keyed>
+          {(live) => <ActionProcess sessionId={props.sessionId!} processId={live.handle} initialRunning={live.running} terminationReason={live.termination_reason} port={port()} />}
+        </Show>
         <Show when={externalAccess()} keyed>
           {(access) => <NetworkChicklet externalAccess={access} sessionId={props.sessionId} disclosureKey={transcriptDisclosureKey.toolNetwork(props.part.id)} />}
         </Show>
         <Show when={props.action.preview} keyed>
           {(preview) => <ActionPreview preview={preview} action={props.action} part={props.part} sessionId={props.sessionId} client={props.client} />}
         </Show>
+        <For each={captures()}>
+          {(capture) => (
+            <TranscriptVisualSlot artifact={capture.artifact} sessionId={props.sessionId} projectId={props.projectId} client={props.client}
+              entryKey={visualProducerEntryKey(capture.artifact.id)} toolOutput={capture.output} />
+          )}
+        </For>
         <Show when={redaction()} keyed>
           {(meta) => <p class="den-action-card__notice" data-testid="action-redaction"><RedactionChicklet message={{ host_secret_redaction: meta }} /></p>}
         </Show>
-        <ActionLinks action={props.action} part={props.part} projectId={props.projectId} evidence={props.slots?.evidence} />
+        <ActionLinks action={props.action} part={props.part} projectId={props.projectId} rootRefs={props.rootRefs} evidence={props.slots?.evidence} />
+        <TurnLoadFootLine part={props.part} />
       </div>
     </ToolPartShell>
   );

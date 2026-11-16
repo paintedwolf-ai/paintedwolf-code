@@ -45,6 +45,6 @@ function DescribedToolPartCard(props: Props) {
   const action = createMemo(() => partAction(part()) ?? pendingAction(part()));
   return (
     <ActionCard part={part()} action={action()} layout={props.layout} sessionId={props.sessionId}
-      projectId={props.projectId} client={props.client} slots={slots} />
+      projectId={props.projectId} client={props.client} rootRefs={props.rootRefs} slots={slots} />
   );
 }
