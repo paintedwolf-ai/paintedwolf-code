@@ -375,6 +375,8 @@ func TestCoordinatorEnqueueDoesNotAdoptFailedUnboundScan(t *testing.T) {
 
 func TestCoordinatorListBySessionIDOrdersNewestFirst(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
+	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, sqlDB, "sess-1", testdbseed.DefaultProjectID)
 
 	store := scan.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, store, nil)

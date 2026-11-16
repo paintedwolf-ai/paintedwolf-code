@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -47,6 +48,8 @@ func TestScanGuidancePrependDoesNotPersistMessages(t *testing.T) {
 	ctx := context.Background()
 	sess, err := mgr.Chats.CreateForProject(ctx, projectDir, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create failed", err)
+	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, sqlDB, sess.ID, testdbseed.DefaultProjectID)
 	_ = seedScanWithGuidance(t, scanStore, sess.ID, []api.ScanGuidanceSummary{
 		{Code: "SCAN_SQL_INJECTION", Message: "fix sql", RuleID: "lycaon.ruby.sql-string-concat", Severity: "ERROR"},
 	})

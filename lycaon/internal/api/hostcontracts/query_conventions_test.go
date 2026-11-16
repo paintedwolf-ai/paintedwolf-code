@@ -57,7 +57,7 @@ func TestBoardRequiresProjectID(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), `"workers":[{`) {
+	if !strings.Contains(w.Body.String(), `"roster":[{`) {
 		t.Fatalf("expected non-empty workers roster, body = %s", w.Body.String())
 	}
 }
