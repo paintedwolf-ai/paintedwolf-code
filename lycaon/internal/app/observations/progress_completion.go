@@ -12,6 +12,20 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
+func emitProgressCompletion(
+	ctx context.Context,
+	store *store.SQL,
+	eventPub *events.Publisher,
+	progressStore progress.RunScopedStore,
+	activeRun ActiveRunID,
+	sessionID string,
+) {
+	if store == nil || eventPub == nil || progressStore == nil || activeRun == nil {
+		return
+	}
+	emitProgressCompletionFromContent(ctx, store, eventPub, progressStore, activeRun, sessionID, progressStore.Get(ctx, sessionID))
+}
+
 func emitProgressCompletionFromContent(
 	ctx context.Context,
 	store *store.SQL,

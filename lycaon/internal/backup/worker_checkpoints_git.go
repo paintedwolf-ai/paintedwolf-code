@@ -79,6 +79,12 @@ func ensureGitClosureSession(ctx context.Context) (context.Context, func()) {
 	return context.WithValue(ctx, gitClosureSessionKey{}, s), s.close
 }
 
+func withGitClosureStats(ctx context.Context) (context.Context, *gitClosureStats, func()) {
+	stats := &gitClosureStats{}
+	s := newGitClosureSession(stats)
+	return context.WithValue(ctx, gitClosureSessionKey{}, s), stats, s.close
+}
+
 func (s *gitClosureSession) close() {
 	s.mu.Lock()
 	defer s.mu.Unlock()

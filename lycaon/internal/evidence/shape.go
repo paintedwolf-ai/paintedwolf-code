@@ -93,3 +93,12 @@ func ShapeIDs() []string {
 		ShapePageGeometry,
 	}
 }
+
+// EvidenceTrustTierIDs returns the locked trust-tier set.
+func EvidenceTrustTierIDs() []string {
+	return []string{
+		FidelityStructured,
+		FidelityScraped,
+		FidelityOpaque,
+	}
+}

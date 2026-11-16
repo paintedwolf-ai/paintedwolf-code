@@ -8,6 +8,11 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+func (e *turnContextAssembler) skillProcedureInject(ctx context.Context, sess *api.Session, profileID string) (api.Message, bool) {
+	msg, _, ok := e.skillProcedureWithTool(ctx, sess, profileID)
+	return msg, ok
+}
+
 func (e *turnContextAssembler) skillProcedureWithTool(ctx context.Context, sess *api.Session, profileID string) (api.Message, string, bool) {
 	deps := e.deps
 	if deps.SkillPreload == nil || deps.Injects == nil || sess == nil {

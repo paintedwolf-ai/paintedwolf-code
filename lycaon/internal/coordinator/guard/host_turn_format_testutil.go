@@ -3,6 +3,7 @@ package guard
 import (
 	"context"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -13,6 +14,14 @@ var (
 	hostFinishPipelineOnce sync.Once
 	hostFinishPipeline     *oar.GuardPipeline
 )
+
+func moduleConfigRoot() string {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		return ""
+	}
+	return filepath.Clean(filepath.Join(filepath.Dir(file), "..", "..", ".."))
+}
 
 func hostFinishOARPipeline() *oar.GuardPipeline {
 	hostFinishPipelineOnce.Do(func() {

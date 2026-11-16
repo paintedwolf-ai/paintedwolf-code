@@ -126,6 +126,18 @@ func AgentDisclosurePolicy(registry DisclosureRegistry, agentID string) Disclosu
 	return registry.DefaultAgents
 }
 
+// ToolDisclosurePolicy resolves the policy for a gateable coordinator tool.
+func ToolDisclosurePolicy(registry DisclosureRegistry, toolName string) DisclosurePolicy {
+	toolName = strings.TrimSpace(toolName)
+	if _, ok := registry.ToolExempt[toolName]; ok {
+		return ""
+	}
+	if p, ok := registry.ToolOverrides[toolName]; ok {
+		return p
+	}
+	return registry.DefaultTools
+}
+
 // FilterAgentsForDisclosure keeps disallowed agents marked for disclosure.
 func FilterAgentsForDisclosure(agents []prompts.SpawnAgentView, registry DisclosureRegistry) []prompts.SpawnAgentView {
 	if len(agents) == 0 {

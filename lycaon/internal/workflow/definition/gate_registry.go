@@ -44,6 +44,23 @@ func CollectManifestGatePredicates() ([]GatePredicateRef, error) {
 	return out, nil
 }
 
+// UniqueGateLeafIDs returns sorted unique leaf ids from manifest gate predicates.
+func UniqueGateLeafIDs(refs []GatePredicateRef) []string {
+	seen := map[string]struct{}{}
+	for _, ref := range refs {
+		id := strings.TrimSpace(ref.LeafID)
+		if id != "" {
+			seen[id] = struct{}{}
+		}
+	}
+	out := make([]string, 0, len(seen))
+	for id := range seen {
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func gatePredicatesFromManifest(m Manifest) []GatePredicateRef {
 	var out []GatePredicateRef
 	for _, p := range m.PhaseDefs {
