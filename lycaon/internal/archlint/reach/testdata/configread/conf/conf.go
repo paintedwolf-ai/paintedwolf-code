@@ -24,7 +24,10 @@ type Nested struct {
 }
 
 // Custom decodes itself, so its fields are its own business.
-type Custom struct{ Raw string }
+type Custom struct {
+	Raw   string
+	Extra string
+}
 
 func (c *Custom) UnmarshalYAML(n *yaml.Node) error { return n.Decode(&c.Raw) }
 
@@ -46,5 +49,5 @@ func Load(data []byte) (Config, error) {
 // Describe uses what the product acts on.
 func Describe(c Config) string {
 	out, _ := json.Marshal(c.Shown)
-	return c.Used + string(out) + string(rune(c.Nested.Depth)) + c.hidden
+	return c.Used + c.Self.Raw + string(out) + string(rune(c.Nested.Depth)) + c.hidden
 }
