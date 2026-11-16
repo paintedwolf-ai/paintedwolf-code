@@ -79,6 +79,14 @@ func AllMessageLiveStatuses() []MessageLiveStatus {
 	}
 }
 
+// AllNavigationEntryKinds returns every durable project-path target kind.
+func AllNavigationEntryKinds() []NavigationEntryKind {
+	return []NavigationEntryKind{
+		NavigationEntryKindFile,
+		NavigationEntryKindFolder,
+	}
+}
+
 // AllWorkerStatuses returns every declared WorkerStatus.
 func AllWorkerStatuses() []WorkerStatus {
 	return []WorkerStatus{

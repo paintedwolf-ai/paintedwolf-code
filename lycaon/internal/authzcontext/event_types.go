@@ -109,3 +109,8 @@ func AllEventActions() []EventAction {
 func AllEventOutcomes() []EventOutcome {
 	return []EventOutcome{EventOutcomeAllowed, EventOutcomeDenied}
 }
+
+// AllResolvedBy lists the resolved_by enum for contract tests.
+func AllResolvedBy() []ResolvedBy {
+	return []ResolvedBy{ResolvedByHuman, ResolvedByExpiry, ResolvedBySystemDeny, ResolvedByUserStop, ResolvedByHostStop, ResolvedByPolicy}
+}
