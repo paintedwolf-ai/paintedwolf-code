@@ -129,6 +129,7 @@ func resultStatus(result api.ToolResult) string {
 			return statusRunning
 		case api.InvocationStatusRejected, api.InvocationStatusError, api.InvocationStatusInterrupted:
 			return statusError
+		case api.InvocationStatusCompleted:
 		}
 	}
 	if result.Process != nil && result.Process.Running {

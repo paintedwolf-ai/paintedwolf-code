@@ -42,14 +42,6 @@ func exitFact(outcome string, code *int) api.ActionFact {
 	return fact
 }
 
-func changedFact(files, added, removed, hunks, created int) api.ActionFact {
-	return api.ActionFact{Kind: api.ActionFactChanged, Files: files, Added: added, Removed: removed, Hunks: hunks, Created: created}
-}
-
-func foundFact(count int, noun string) api.ActionFact {
-	return api.ActionFact{Kind: api.ActionFactFound, Count: count, Noun: noun}
-}
-
 func stepsFact(count, failed int, unit string) api.ActionFact {
 	return api.ActionFact{Kind: api.ActionFactSteps, Count: count, Failed: failed, Unit: unit}
 }

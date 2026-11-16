@@ -81,7 +81,7 @@ type ActionFact struct {
 	// stopped_by: who decided an approval.
 	DecidedBy string `json:"decided_by,omitempty"`
 	// stopped_by: when an approval was decided.
-	At *time.Time `json:"at,omitempty"`
+	DecidedAt *time.Time `json:"decided_at,omitempty"`
 	// network: hosts reached.
 	Hosts []string `json:"hosts,omitempty"`
 	// network: how traffic left the host.
@@ -132,7 +132,7 @@ type ActionPreview struct {
 	Kind  string              `json:"kind"`
 	Lines []ActionPreviewLine `json:"lines,omitempty"`
 	// Further lines not shown.
-	More int `json:"more,omitempty"`
+	LinesOmitted int `json:"lines_omitted,omitempty"`
 	// output: the lines are the end of the stream.
 	Tail bool `json:"tail,omitempty"`
 	// output: the lines are in these activities' execution receipts, which Den reads when the card opens; head for a success, tail for a failure or a running activity.
