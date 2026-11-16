@@ -1,15 +1,17 @@
 import { indentUnit } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
+import { languageExtensionForPath } from "../editor/codemirror-lang.ts";
 import { createPrettyExtension } from "./pretty-layout.ts";
 import type { PrettyConfig } from "./pretty-rescan.ts";
 import { PrettyBreakWidget, prettyLayoutDecorations } from "./pretty-view.ts";
 
 function open(doc: string, lineWidth?: number, path = "a.ts"): EditorState {
   const config: PrettyConfig = { enabled: true, path, ...(lineWidth ? { lineWidth } : {}) };
+  const lang = languageExtensionForPath(path);
   return EditorState.create({
     doc,
-    extensions: [indentUnit.of("  "), EditorState.tabSize.of(4), createPrettyExtension(config)],
+    extensions: [...(lang ? [lang] : []), indentUnit.of("  "), EditorState.tabSize.of(4), createPrettyExtension(config)],
   });
 }
 
@@ -88,5 +90,17 @@ describe("declared line width", () => {
     expect(layout(state).breaks.every((pos) => pos > call.length + 1)).toBe(true);
     state = state.update({ changes: { from: 4, to: 5 } }).state;
     expect(layout(state)).toEqual(fresh(state));
+  });
+
+  it("counts JSX tag code and S-expression code rather than strings and comments", () => {
+    const jsxStringHeavy = `const view = <Card title="${"a long title ".repeat(12)}" />;`;
+    const jsxCodeHeavy = "const view = <Component alpha={one} beta={two} gamma={three} delta={four} epsilon={five} />;";
+    expect(layout(open(jsxStringHeavy, 80, "a.tsx")).breaks).toEqual([]);
+    expect(layout(open(jsxCodeHeavy, 60, "a.tsx")).breaks.length).toBeGreaterThan(0);
+
+    const sexpStringHeavy = `(display "${"a long message ".repeat(12)}") ; ${"note ".repeat(8)}`;
+    const sexpCodeHeavy = "(define (compute alpha beta gamma delta) (list (step alpha beta) (step gamma delta)))";
+    expect(layout(open(sexpStringHeavy, 80, "a.scm")).breaks).toEqual([]);
+    expect(layout(open(sexpCodeHeavy, 60, "a.scm")).breaks.length).toBeGreaterThan(0);
   });
 });

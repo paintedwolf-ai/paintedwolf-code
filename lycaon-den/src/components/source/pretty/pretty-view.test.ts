@@ -64,7 +64,7 @@ describe("Pretty presentation", () => {
   });
 
   it("is inactive for a language without a layout rule", () => {
-    const view = open("echo {a,b} | tr , ' '\n", true, "run.sh");
+    const view = open("key=value\n", true, "app.ini");
     expect(view.state.facet(prettyLayoutActive)).toBe(false);
   });
 
