@@ -188,17 +188,7 @@ func TestAnchorRowsCappedPerURL(t *testing.T) {
 
 func TestEvictOverByteBudgetShrinksToBudget(t *testing.T) {
 	s := openTest(t)
-	big := strings.Repeat("steam machine coverage text ", 40)
-	for i := 0; i < 400; i++ {
-		s.QueuePage(t.Context(), Page{URL: fmt.Sprintf("https://a.example/p%d", i), Title: big})
-	}
-	s.Flush()
-	before, err := fileBytes(t.Context(), s.db)
-	testutil.FailErr(t, "file bytes before", err)
-	if before < 64<<10 {
-		t.Fatalf("test corpus too small to evict: %d bytes", before)
-	}
-	budget := before / 4
+	budget := fillOverBudget(t, s)
 	testutil.FailErr(t, "evict over byte budget", s.evictOverByteBudget(t.Context(), s.db, budget))
 	after, err := fileBytes(t.Context(), s.db)
 	testutil.FailErr(t, "file bytes after", err)

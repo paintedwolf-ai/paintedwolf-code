@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -131,18 +132,37 @@ func TestProgramPythonReceivesEOFWithoutControllingTerminal(t *testing.T) {
 	}
 }
 
-func TestProgramNpmInitSettlesOnEOF(t *testing.T) {
-	t.Setenv("HOME", t.TempDir())
+// TestProgramPromptingChildFixture is the prompting child: it asks for a
+// package name the way an interactive initializer does, reads stdin to EOF,
+// writes package.json only when it got an answer, and exits 1 on EOF.
+func TestProgramPromptingChildFixture(t *testing.T) {
+	if os.Getenv("PW_PROMPTING_CHILD_FIXTURE") != "1" {
+		return
+	}
+	fmt.Print("package name: ")
+	answer, err := io.ReadAll(os.Stdin)
+	if err != nil || len(bytes.TrimSpace(answer)) == 0 {
+		fmt.Fprintln(os.Stderr, "canceled")
+		os.Exit(1)
+	}
+	testutil.FailErr(t, "write package.json", os.WriteFile("package.json", []byte("{}\n"), 0o600))
+}
+
+// A child that prompts and waits on stdin settles when stdin reaches EOF, and
+// nothing the abandoned prompt would have published appears.
+func TestProgramPromptingChildSettlesOnEOF(t *testing.T) {
 	f := newProgramFixture(t)
 	f.Runtime.Clock = programtest.NewManualClock()
-	binary := requiredExternal(t, "npm")
-	out, err := f.call(t, t.Context(), externalProgram(binary, "init"))
-	testutil.FailErr(t, "run npm init", err)
+	self, err := os.Executable()
+	testutil.FailErr(t, "locate the prompting child", err)
+	program := "PW_PROMPTING_CHILD_FIXTURE=1 " + externalProgram(self, "-test.run=^TestProgramPromptingChildFixture$")
+	out, err := f.call(t, t.Context(), program)
+	testutil.FailErr(t, "run the prompting child", err)
 	got := decodeOutcome(t, out)
-	if got.Status != 1 {
-		t.Fatalf("npm did not settle on EOF: %+v", got)
+	if got.Status != 1 || got.Stdout != "package name: " || !strings.Contains(got.Stderr, "canceled") {
+		t.Fatalf("the prompting child did not settle on EOF: %+v", got)
 	}
 	if _, err := os.Stat(filepath.Join(f.Dir, "package.json")); !os.IsNotExist(err) {
-		t.Fatalf("abandoned init published a package: %v", err)
+		t.Fatalf("abandoned prompt published a package: %v", err)
 	}
 }
