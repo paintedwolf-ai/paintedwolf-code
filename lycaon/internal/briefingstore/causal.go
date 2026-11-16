@@ -39,7 +39,7 @@ func (c *Causal) ReadActionCause(ctx context.Context, ref briefing.ActionRef) (b
 		return briefing.CausalRead{}, err
 	}
 	output, err := q.BriefingActionOutput(ctx, db.BriefingActionOutputParams{ArgsBytes: briefing.ArgsReadChars,
-		ProseBytes: briefing.ProseReadChars, ReasoningCap: briefing.ReasoningReadBytes,
+		ProseBytes: briefing.ProseReadChars, ReasoningCeiling: briefing.ReasoningCeilingBytes, ReasoningTailChars: briefing.ReasoningTailChars,
 		SessionID: ref.SessionID, BeforeOrd: before, WorkerJobID: ref.WorkerJobID, ToolCallID: ref.ToolCallID,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
@@ -48,7 +48,9 @@ func (c *Causal) ReadActionCause(ctx context.Context, ref briefing.ActionRef) (b
 	if err != nil {
 		return briefing.CausalRead{}, err
 	}
-	read := briefing.CausalRead{Found: true, OutputID: output.ID, Prose: output.Prose, ReasoningJSON: output.ReasoningPayload, ReasoningBytes: output.ReasoningBytes, CallsInOutput: int(output.CallCount),
+	read := briefing.CausalRead{Found: true, OutputID: output.ID, Prose: output.Prose, CallsInOutput: int(output.CallCount),
+		Reasoning: briefing.ReasoningRead{Present: output.ReasoningPresent != 0, OverCeiling: output.ReasoningOverCeiling != 0,
+			TextChars: output.ReasoningTextChars, Details: output.ReasoningDetails, Tail: output.ReasoningTail},
 		Call: briefing.CallExcerpt{Name: output.CallName, Args: output.CallArgs}}
 	result, err := q.BriefingCallResult(ctx, db.BriefingCallResultParams{ContentBytes: briefing.ResultReadChars, SessionID: ref.SessionID, ToolCallID: db.NullString(ref.ToolCallID)})
 	switch {
