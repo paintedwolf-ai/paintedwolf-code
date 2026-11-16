@@ -210,7 +210,7 @@ func TestLiveStreamDoneAndUnsubscribeAreSynchronized(t *testing.T) {
 		mgr := New(nil)
 		sessionID := fmt.Sprintf("session-%d", i)
 		messageID := fmt.Sprintf("message-%d", i)
-		_, unsub := mgr.Subscribe(messageID)
+		frames, unsub := mgr.Subscribe(messageID)
 		mgr.SetActive(sessionID, messageID, 1)
 
 		start := make(chan struct{})
@@ -228,5 +228,27 @@ func TestLiveStreamDoneAndUnsubscribeAreSynchronized(t *testing.T) {
 		}()
 		close(start)
 		wg.Wait()
+
+		// Whichever side won, the subscription is closed and holds at most the terminal frame.
+		var delivered []Frame
+		for open := true; open; {
+			select {
+			case frame, ok := <-frames:
+				if open = ok; ok {
+					delivered = append(delivered, frame)
+				}
+			default:
+				t.Fatalf("attempt %d: subscription still open after unsubscribe", i)
+			}
+		}
+		if len(delivered) > 1 || (len(delivered) == 1 && !delivered[0].Done) {
+			t.Fatalf("attempt %d: frames = %+v, want none or one terminal frame", i, delivered)
+		}
+		mgr.hub.mu.Lock()
+		subscribers, latest := len(mgr.hub.subs), len(mgr.hub.latest)
+		mgr.hub.mu.Unlock()
+		if subscribers != 0 || latest != 0 {
+			t.Fatalf("attempt %d: hub kept %d subscriptions and %d snapshots", i, subscribers, latest)
+		}
 	}
 }
