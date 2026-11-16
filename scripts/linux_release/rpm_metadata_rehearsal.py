@@ -15,7 +15,7 @@ def rehearse(work):
     if lint_version != "2.5.0":
         raise ValueError("this regression requires actual rpmlint 2.5.0")
     assembler = metadata_fixture.assembler()
-    tree = metadata_fixture.payload(work / "payload")
+    tree = metadata_fixture.payload(work / "payload", assembler.BOOTSTRAP["path"])
     version = linux_package_version(parse((ROOT / "VERSION").read_text().strip()))
     outcomes = {}
     for name in ("current", "spelling-regression"):

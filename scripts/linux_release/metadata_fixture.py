@@ -47,16 +47,16 @@ def assembler():
     return module
 
 
-def payload(tree):
-    """Entry points and one resource: enough for the package tools, with none of the application."""
+def payload(tree, bootstrap):
+    """Entry points, the setuid launch bootstrap and one resource: enough for the package tools, with none of the application."""
     resource = tree / "opt/painted-wolf-code/metadata-fixture.txt"
     resource.parent.mkdir(parents=True)
     resource.write_text("Explicit nonapplication metadata qualification fixture.\n")
-    binaries = tree / "usr/bin"
-    binaries.mkdir(parents=True)
-    for name in ("pw", "pw-logs"):
-        shutil.copyfile("/usr/bin/true", binaries / name)
-        (binaries / name).chmod(0o755)
+    programs = {tree / "usr/bin/pw": 0o755, tree / "usr/bin/pw-logs": 0o755, tree / bootstrap.lstrip("/"): 0o4755}
+    for program, mode in programs.items():
+        program.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile("/usr/bin/true", program)
+        program.chmod(mode)
     return tree
 
 

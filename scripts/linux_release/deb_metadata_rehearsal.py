@@ -18,13 +18,14 @@ def rehearse(work):
     lint_version = subprocess.check_output(["lintian", "--version"], text=True).strip()
     assembler = metadata_fixture.assembler()
     staged = work / "staged"
-    data = metadata_fixture.payload(staged / "data")
+    data = metadata_fixture.payload(staged / "data", assembler.BOOTSTRAP["path"])
     # The fragments only this family ships include its /etc files and its lintian overrides.
     for installed, source in assembler.load_package_config(ROOT).optional_files(ROOT, "deb").items():
         destination = data / installed.lstrip("/")
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
     assembler.normalise_modes(data)
+    (data / assembler.BOOTSTRAP["path"].lstrip("/")).chmod(0o4755)
     if not any((data / "etc").rglob("*")):
         raise ValueError("the fixture needs a packaged /etc file to qualify conffile marking")
     version = linux_package_version(parse((ROOT / "VERSION").read_text().strip()))
