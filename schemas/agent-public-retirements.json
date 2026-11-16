@@ -200,6 +200,10 @@
     "paintedwolf.tool_turn_has_text": {
       "version": 1,
       "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.coordinator_promotion_banners": {
+      "version": 1,
+      "summary": "Coordinator banners about overlay promotion order, conflicts, hunk picking and branch overlap; OAR post-tool rules on the promotion and board results carry this guidance."
     }
   },
   "vocabularies": {
@@ -470,6 +474,42 @@
       ]
     },
     "rejection_codes": {
+      "BANNER_OVERLAY_MERGE_PLAN": {
+        "content_contract": "paintedwolf.coordinator_promotion_banners",
+        "version": 1
+      },
+      "BANNER_PROMOTE_HIGH_CONFLICT": {
+        "content_contract": "paintedwolf.coordinator_promotion_banners",
+        "version": 1
+      },
+      "BANNER_PROMOTE_HUNK_PICK": {
+        "content_contract": "paintedwolf.coordinator_promotion_banners",
+        "version": 1
+      },
+      "BANNER_PROMOTE_ORDER": {
+        "content_contract": "paintedwolf.coordinator_promotion_banners",
+        "version": 1
+      },
+      "BANNER_PROMOTE_OVERLAY_BODY": {
+        "content_contract": "paintedwolf.coordinator_promotion_banners",
+        "version": 1
+      },
+      "BANNER_PROMOTE_PARTIAL_PATH": {
+        "content_contract": "paintedwolf.coordinator_promotion_banners",
+        "version": 1
+      },
+      "BANNER_PROMOTE_SCOPED_HUNKS": {
+        "content_contract": "paintedwolf.coordinator_promotion_banners",
+        "version": 1
+      },
+      "BANNER_PROMOTE_SPILL_FIRST": {
+        "content_contract": "paintedwolf.coordinator_promotion_banners",
+        "version": 1
+      },
+      "BANNER_TAKE_BRANCH_OVERLAP": {
+        "content_contract": "paintedwolf.coordinator_promotion_banners",
+        "version": 1
+      },
       "COORDINATOR_CLOSEOUT_ENVELOPE_ONLY": [
         "COORDINATOR_CLOSEOUT_NO_ANSWER"
       ],
