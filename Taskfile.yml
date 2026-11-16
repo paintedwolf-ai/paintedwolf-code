@@ -567,10 +567,13 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bun run typecheck
 
   den:lint:
-    desc: 'Frontend ESLint (errors only): typescript-eslint + eslint-plugin-solid'
+    desc: 'Frontend ESLint (errors only) and its canary: typescript-eslint, eslint-plugin-solid, Den source laws'
     dir: lycaon-den
     sources:
       - 'src/**/*.{ts,tsx}'
+      - 'shared/**/*.ts'
+      - 'e2e/**/*.ts'
+      - 'eslint/**/*.js'
       - eslint.config.js
       - package.json
     env:
@@ -581,6 +584,7 @@ tasks:
         msg: bun required — install from https://bun.sh
     cmds:
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bun run lint
+      - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bun run lint:canary
 
   den:lint:full:
     desc: Frontend ESLint with warnings visible (full report)
