@@ -276,3 +276,39 @@ retired:
     kind: tool_name
     summary: Retired as a callable tool; the work runs through native forms in command.
     date: 2026-11-04
+  - id: BANNER_OVERLAY_MERGE_PLAN
+    kind: hint_code
+    summary: Coordinator banner about the overlay merge plan; its renderer had no caller after OAR post-tool rules replaced the imperative banners, and it was retired with them.
+    date: 2026-11-15
+  - id: BANNER_PROMOTE_HIGH_CONFLICT
+    kind: hint_code
+    summary: Coordinator banner about high-conflict promotions; its renderer had no caller after OAR post-tool rules replaced the imperative banners, and it was retired with them.
+    date: 2026-11-15
+  - id: BANNER_PROMOTE_HUNK_PICK
+    kind: hint_code
+    summary: Coordinator banner about promote hunk picking; its renderer had no caller after OAR post-tool rules replaced the imperative banners, and it was retired with them.
+    date: 2026-11-15
+  - id: BANNER_PROMOTE_ORDER
+    kind: hint_code
+    summary: Coordinator banner about promote order; its renderer had no caller after OAR post-tool rules replaced the imperative banners, and it was retired with them.
+    date: 2026-11-15
+  - id: BANNER_PROMOTE_OVERLAY_BODY
+    kind: hint_code
+    summary: Coordinator banner about overlay bodies in promote previews; its renderer had no caller after OAR post-tool rules replaced the imperative banners, and it was retired with them.
+    date: 2026-11-15
+  - id: BANNER_PROMOTE_PARTIAL_PATH
+    kind: hint_code
+    summary: Coordinator banner about partial-path promotions; its renderer had no caller after OAR post-tool rules replaced the imperative banners, and it was retired with them.
+    date: 2026-11-15
+  - id: BANNER_PROMOTE_SCOPED_HUNKS
+    kind: hint_code
+    summary: Coordinator banner about scoped promote hunks; its renderer had no caller after OAR post-tool rules replaced the imperative banners, and it was retired with them.
+    date: 2026-11-15
+  - id: BANNER_PROMOTE_SPILL_FIRST
+    kind: hint_code
+    summary: Coordinator banner about spilled promote results; its renderer had no caller after OAR post-tool rules replaced the imperative banners, and it was retired with them.
+    date: 2026-11-15
+  - id: BANNER_TAKE_BRANCH_OVERLAP
+    kind: hint_code
+    summary: Coordinator banner about take-branch overlap; its renderer had no caller after OAR post-tool rules replaced the imperative banners, and it was retired with them.
+    date: 2026-11-15
