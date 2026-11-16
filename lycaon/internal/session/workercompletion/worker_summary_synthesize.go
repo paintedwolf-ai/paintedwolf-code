@@ -7,12 +7,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-const maxSynthesizedSurveyChars = 3500
 const maxToolExcerptChars = 900
-
-// synthesizedSurveyHeading opens the section. The body under it comes from the
-// worker-survey-preamble partial.
-const synthesizedSurveyHeading = "## Synthesized survey"
 
 func collectToolExcerpts(msgs []api.Message, maxTotal int) string {
 	if len(msgs) == 0 || maxTotal <= 0 {

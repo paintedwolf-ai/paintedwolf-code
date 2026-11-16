@@ -1240,8 +1240,6 @@ host_facts:
    type: string
  - name: paintedwolf.supplied
    type: string
- - name: paintedwolf.threshold
-   type: string
  - name: paintedwolf.timeout_ms
    type: string
  - name: paintedwolf.tool_loops_used

@@ -204,6 +204,10 @@
     "paintedwolf.coordinator_promotion_banners": {
       "version": 1,
       "summary": "Coordinator banners about overlay promotion order, conflicts, hunk picking and branch overlap; OAR post-tool rules on the promotion and board results carry this guidance."
+    },
+    "paintedwolf.threshold": {
+      "version": 1,
+      "summary": "Host fact of type string; the hunk-picking threshold the retired promotion banners quoted."
     }
   },
   "vocabularies": {
@@ -471,7 +475,11 @@
       ],
       "paintedwolf.progress_reconciled_since_arm": [
         "paintedwolf.progress_closure_armed"
-      ]
+      ],
+      "paintedwolf.threshold": {
+        "content_contract": "paintedwolf.threshold",
+        "version": 1
+      }
     },
     "rejection_codes": {
       "BANNER_OVERLAY_MERGE_PLAN": {

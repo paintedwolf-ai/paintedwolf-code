@@ -427,7 +427,6 @@ var staticOccurrenceFactDecls = []factDecl{
 	{"step_fields", oarcore.TypeString, FactTierHost, ""},
 	{"suggested_resume_max", oarcore.TypeString, FactTierHost, ""},
 	{"supplied", oarcore.TypeString, FactTierHost, ""},
-	{"threshold", oarcore.TypeString, FactTierHost, ""},
 	{"timeout_ms", oarcore.TypeString, FactTierHost, ""},
 	{"tool_loops_used", oarcore.TypeString, FactTierHost, ""},
 	{"total_lines", oarcore.TypeString, FactTierHost, ""},

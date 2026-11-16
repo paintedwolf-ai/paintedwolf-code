@@ -12,7 +12,6 @@ import (
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -58,12 +57,12 @@ func TestStreamReplayRequiresTranscriptMembership(t *testing.T) {
 func rewindFrom(t *testing.T, st interface {
 	PrepareRewind(context.Context, store.RewindOperation) error
 	SetRewindPhase(context.Context, string, string, string) error
-	CommitRewind(context.Context, string, string, string, api.RewindSessionResponse) (int, error)
+	CommitRewind(context.Context, string, string, string, wire.RewindSessionResponse) (int, error)
 }, sessionID, anchor string) {
 	t.Helper()
 	id := uuid.NewString()
 	testutil.FailErr(t, "prepare rewind", st.PrepareRewind(t.Context(), store.RewindOperation{ID: id, SessionID: sessionID, AnchorMessageID: anchor, InputDigest: "test"}))
 	testutil.FailErr(t, "apply rewind files", st.SetRewindPhase(t.Context(), id, "files_applied", ""))
-	_, err := st.CommitRewind(t.Context(), id, sessionID, anchor, api.RewindSessionResponse{})
+	_, err := st.CommitRewind(t.Context(), id, sessionID, anchor, wire.RewindSessionResponse{})
 	testutil.FailErr(t, "commit rewind", err)
 }

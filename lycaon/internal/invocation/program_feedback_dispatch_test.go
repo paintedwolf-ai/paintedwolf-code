@@ -46,12 +46,6 @@ func (p dispatchProgress) ProgramProgressState(_ context.Context, id string) (pr
 	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.content}, nil
 }
 
-type validatedEnvelope struct{ catalog string }
-
-func (v validatedEnvelope) ValidatedProgramIdentity(context.Context) (string, string, error) {
-	return strings.Repeat("a", 64), v.catalog, nil
-}
-
 type feedbackForbiddenStart struct{ called bool }
 
 func (s *feedbackForbiddenStart) BeforeNativeOwner(context.Context, toolcontract.BoundOperation, string, toolcontract.ReviewedOperationInputs) error {
