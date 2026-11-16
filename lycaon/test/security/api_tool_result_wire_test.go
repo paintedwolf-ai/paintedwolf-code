@@ -47,7 +47,7 @@ func TestImplementDefaultTaskEnqueueWiresToolResultJobID(t *testing.T) {
 		if msg.Role != api.MessageRoleTool {
 			continue
 		}
-		if !strings.Contains(msg.Content, "job_id") {
+		if !strings.Contains(msg.Content, `"worker"`) {
 			continue
 		}
 		if msg.ToolResult == nil {

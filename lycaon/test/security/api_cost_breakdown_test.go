@@ -15,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -97,7 +96,7 @@ func TestCostSummaryWorkerSplitAfterDelegation(t *testing.T) {
 		ctx,
 		"task",
 		wiring.TaskToolArgs(orchestration.ProfileRepoResearcher, "inspect feature"),
-		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: parent.ID}},
+		h.CoordinatorToolContext(t, ctx, &parent, dir),
 	)
 	testutil.FailErr(t, "task tool failed", err)
 

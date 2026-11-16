@@ -98,6 +98,12 @@ func (q *queuedWorkerScripts) mock(h **Harness) *llm.KickDrivenMock {
 	})
 }
 
+// CoordinatorToolContext builds a coordinator ToolContext bound to sess and dir.
+func (h *Harness) CoordinatorToolContext(t *testing.T, ctx context.Context, sess *api.Session, dir string) tools.ToolContext {
+	t.Helper()
+	return coordToolCtx(t, h, ctx, sess, dir)
+}
+
 func coordToolCtx(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, dir string) tools.ToolContext {
 	t.Helper()
 	call := wiringToolContext(sess.ID, dir)

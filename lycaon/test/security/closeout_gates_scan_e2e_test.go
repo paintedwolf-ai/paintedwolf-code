@@ -41,6 +41,8 @@ func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
 	_ = testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
 	testdbseed.InsertWorkflowRun(t, sqlDB, "run-closeout", "sess-closeout", testdbseed.DefaultProjectID)
 	testdbseed.InsertSession(t, sqlDB, "child-closeout", testdbseed.DefaultProjectID)
+	_, err := sqlDB.ExecContext(context.Background(), `UPDATE sessions SET parent_session_id = 'sess-closeout' WHERE id = 'child-closeout'`)
+	testutil.FailErr(t, "bind child-closeout parent", err)
 
 	store := scan.NewSQLStore(sqlDB)
 	coord := scantest.Coordinator(t, store, staticHeadSHA{sha: "closeout-head"})

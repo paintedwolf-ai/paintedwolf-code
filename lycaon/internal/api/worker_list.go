@@ -144,7 +144,7 @@ func (s *Workers) readWorkerHistoryQuery(w http.ResponseWriter, r *http.Request)
 		s.responses.InvalidQueryParam(w, "worker", "is required")
 		return "", "", workerops.HistoryQuery{}, false
 	}
-	before, ok := s.readPositiveIntQuery(w, r, "before", 0, 0)
+	before, ok := s.readCursorSeqQuery(w, r, "before")
 	if !ok {
 		return "", "", workerops.HistoryQuery{}, false
 	}
@@ -157,6 +157,24 @@ func (s *Workers) readWorkerHistoryQuery(w http.ResponseWriter, r *http.Request)
 		return "", "", workerops.HistoryQuery{}, false
 	}
 	return sessionID, target, workerops.HistoryQuery{BeforeSeq: before, BeforeRound: beforeRound, Limit: int(limit)}, true
+}
+
+func (s *Workers) readCursorSeqQuery(w http.ResponseWriter, r *http.Request, key string) (int64, bool) {
+	raw, present, err := httpio.SingleQueryValue(r, key)
+	if err != nil {
+		s.responses.InvalidQuery(w, err)
+		return 0, false
+	}
+	raw = strings.TrimSpace(raw)
+	if !present || raw == "" {
+		return 0, true
+	}
+	v, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || v < 1 {
+		s.responses.PageCursorError(w, r, key, pagecursor.ErrInvalid)
+		return 0, false
+	}
+	return v, true
 }
 
 func (s *Workers) readPositiveIntQuery(w http.ResponseWriter, r *http.Request, key string, fallback, maximum int64) (int64, bool) {

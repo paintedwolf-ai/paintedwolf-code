@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -23,7 +22,8 @@ func TestDelegateImplementerPromptContainsPersona(t *testing.T) {
 	cancel := h.StartBackgroundWorkers(t, context.Background())
 	t.Cleanup(cancel)
 	ctx := context.Background()
-	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, t.TempDir())
+	dir := t.TempDir()
+	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, dir)
 	testutil.FailErr(t, "CreateHarnessSession failed", err)
 	h.SeedProgress(t, ctx, parent.ID)
 
@@ -31,7 +31,7 @@ func TestDelegateImplementerPromptContainsPersona(t *testing.T) {
 		ctx,
 		"task",
 		wiring.TaskToolArgs(orchestration.ProfileImplementer, "implement feature"),
-		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: parent.ID}},
+		h.CoordinatorToolContext(t, ctx, parent, dir),
 	)
 	testutil.FailErr(t, "task tool failed", err)
 
@@ -70,7 +70,8 @@ func TestDelegatePlanReviewerDistinctFromImplementer(t *testing.T) {
 	cancel := h.StartBackgroundWorkers(t, context.Background())
 	t.Cleanup(cancel)
 	ctx := context.Background()
-	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, t.TempDir())
+	dir := t.TempDir()
+	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, dir)
 	testutil.FailErr(t, "CreateHarnessSession failed", err)
 	h.SeedProgress(t, ctx, parent.ID)
 
@@ -78,7 +79,7 @@ func TestDelegatePlanReviewerDistinctFromImplementer(t *testing.T) {
 		ctx,
 		"task",
 		wiring.TaskToolArgs("plan-reviewer", "review plan"),
-		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: parent.ID}},
+		h.CoordinatorToolContext(t, ctx, parent, dir),
 	)
 	testutil.FailErr(t, "task tool failed", err)
 

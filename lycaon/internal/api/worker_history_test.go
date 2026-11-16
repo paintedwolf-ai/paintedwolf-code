@@ -135,6 +135,11 @@ func TestGetWorkerHistoryValidatesQueryAndScope(t *testing.T) {
 			code: http.StatusBadRequest,
 		},
 		{
+			name: "foreign before cursor",
+			q:    url.Values{"project_id": {env.projectID}, "session_id": {env.sessionID}, "worker": {"scout"}, "before": {"not-a-cursor"}},
+			code: http.StatusBadRequest,
+		},
+		{
 			name: "limit above max",
 			q:    url.Values{"project_id": {env.projectID}, "session_id": {env.sessionID}, "worker": {"scout"}, "limit": {"101"}},
 			code: http.StatusBadRequest,

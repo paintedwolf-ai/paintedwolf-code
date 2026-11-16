@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -45,7 +44,7 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 		ctx,
 		"task",
 		wiring.TaskToolArgs(orchestration.ProfileImplementer, "implement feature", "feature.go"),
-		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: parentID}},
+		h.CoordinatorToolContext(t, ctx, parent, projectDir),
 	)
 	testutil.FailErr(t, "task tool failed", err)
 

@@ -8,7 +8,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -29,14 +28,15 @@ func TestDelegationSpawnWorkerPromptHygiene(t *testing.T) {
 		"Code: SPEC_SCOPE_MISSING",
 	}, "\n")
 
-	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, t.TempDir())
+	dir := t.TempDir()
+	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, dir)
 	testutil.FailErr(t, "CreateHarnessSession failed", err)
 	h.SeedProgress(t, ctx, parent.ID)
 	_, err = h.ToolRegistry.Run(
 		ctx,
 		"task",
 		wiring.TaskToolArgs(orchestration.ProfileRepoResearcher, dirtyTask),
-		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: parent.ID}},
+		h.CoordinatorToolContext(t, ctx, parent, dir),
 	)
 	testutil.FailErr(t, "task tool failed", err)
 
