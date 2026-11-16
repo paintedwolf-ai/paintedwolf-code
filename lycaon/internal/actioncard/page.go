@@ -19,6 +19,5 @@ func pageResult(result api.ToolResult) Parts {
 	if id, _ := result.ToolArgs["id"].(string); strings.TrimSpace(id) != "" {
 		parts.FoldKey = "page:" + strings.TrimSpace(id)
 	}
-	parts.Row = []api.ActionFactKind{api.ActionFactResult, api.ActionFactSteps}
 	return parts
 }
