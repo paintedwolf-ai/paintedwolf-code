@@ -74,6 +74,8 @@ INIT_IF_RE = re.compile(r"^(\s*)if (?:[\w.*]+\s*,\s*)*err :?= (.+); err != nil \
 FATAL_RE = re.compile(r"^(\s*)t\.Fatal\(err\)\s*$")
 # A bare failure on any testing receiver: t, b, tb, f, h.t.
 BARE_FATAL_RE = re.compile(r"(?<![\w.])((?:\w+\.)*\w+)\.Fatal\(\s*err\s*\)")
+# The first line of an init-if, whose call may span lines.
+INIT_IF_HEAD_RE = re.compile(r"^\s*if (?:[\w.*]+\s*,\s*)*err :?= (.+)$")
 BARE_FATAL_LINE_RE = re.compile(r"^(\s*)((?:\w+\.)*\w+)\.Fatal\(err\)\s*$")
 CLOSE_RE = re.compile(r"^(\s*)\}\s*$")
 
@@ -131,16 +133,24 @@ def bare_failures(content: str) -> list[int]:
 
 def enclosing_step(lines: list[str], fatal_idx: int) -> str:
     """Infer the step of a bare failure from the err check that encloses it."""
-    for j in range(fatal_idx - 1, max(fatal_idx - 8, -1), -1):
-        line = lines[j]
-        if BLOCK_IF_RE.match(line):
-            return infer_step(lines, j)
-        m = INIT_IF_RE.match(line)
-        if m:
-            return step_for_call(m.group(2))
-        if line.rstrip().endswith("{") or CLOSE_RE.match(line):
+    # Climb to the line that opens the block holding the failure; a check
+    # whose call spans lines opens it on the call's first line.
+    j, depth = fatal_idx - 1, 0
+    while j >= 0:
+        depth += _nesting(lines[j])
+        if depth < 0:
             break
-    return UNKNOWN_STEP
+        j -= 1
+    if j < 0:
+        return UNKNOWN_STEP
+    if BLOCK_IF_RE.match(lines[j]):
+        return infer_step(lines, j)
+    m = INIT_IF_HEAD_RE.match(lines[j])
+    return step_for_call(m.group(1)) if m else UNKNOWN_STEP
+
+
+def _nesting(line: str) -> int:
+    return sum(line.count(c) for c in ")}]") - sum(line.count(c) for c in "({[")
 
 
 def transform(content: str, call: str) -> tuple[str, int]:

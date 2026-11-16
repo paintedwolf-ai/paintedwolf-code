@@ -91,12 +91,29 @@ func fixture(t *testing.T) {
             fixture.write_text("package corpus\n\nfunc fixture() {\n\tt.Fatal(err)\n}\n")
             self.assertEqual(self.check(root), 0)
 
-    def test_rewrite_labels_a_bare_failure_on_a_fixture_receiver(self):
-        source = "\terr := os.WriteFile(path, nil, 0o600)\n\tif err != nil {\n\t\tcleanup()\n\t\tfx.t.Fatal(err)\n\t}\n"
+    def test_rewrite_labels_bare_failures_from_the_enclosing_check(self):
+        sources = {
+            "multi-statement body on a fixture receiver": (
+                "\terr := os.WriteFile(path, nil, 0o600)\n\tif err != nil {\n\t\tcleanup()\n\t\tfx.t.Fatal(err)\n\t}\n",
+                '\t\ttestutil.FailErr(fx.t, "write file", err)\n',
+            ),
+            "condition spanning lines": (
+                "\tif _, err := queue.Enqueue(ctx, Job{\n\t\tID: id,\n\t}); err != nil {\n\t\tb.Fatal(err)\n\t}\n",
+                '\t\ttestutil.FailErr(b, "queue.Enqueue failed", err)\n',
+            ),
+        }
+        for name, (source, labeled) in sources.items():
+            with self.subTest(form=name):
+                result, count = rewrite.transform(source, "testutil.FailErr")
+                self.assertEqual(count, 1)
+                self.assertIn(labeled, result)
+                self.assertEqual(rewrite.bare_failures(result), [])
+
+    def test_rewrite_leaves_a_failure_it_cannot_label(self):
+        source = "\tswitch {\n\tcase failed:\n\t\tt.Fatal(err)\n\t}\n"
         result, count = rewrite.transform(source, "testutil.FailErr")
-        self.assertEqual(count, 1)
-        self.assertIn('\t\ttestutil.FailErr(fx.t, "write file", err)\n', result)
-        self.assertEqual(rewrite.bare_failures(result), [])
+        self.assertEqual((result, count), (source, 0))
+        self.assertEqual(rewrite.bare_failures(result), [3])
 
     @staticmethod
     def check(root):
