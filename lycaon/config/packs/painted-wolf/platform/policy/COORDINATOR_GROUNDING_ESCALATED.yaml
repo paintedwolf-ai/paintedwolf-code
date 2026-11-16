@@ -10,10 +10,10 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:grounding
 message: Repeated ungrounded completion claims — delegation required before continuing
 what: Repeated ungrounded completion claims — delegation required before continuing
-cause: Repeated ungrounded completion claims — delegation required before continuing
-why: Report the unresolved completion evidence and ask the user how to proceed; the session is paused by the grounding circuit breaker.
-fix: Report the unresolved completion evidence and ask the user how to proceed; the session is paused by the grounding circuit breaker.
-instead: Stop asserting completion and wait for user guidance
+cause: Prior completion claims lacked grounded worker evidence, tripping the delegation grounding circuit breaker after the last turn.
+why: Closing another delegation turn without dispatching work trips the circuit breaker again.
+fix: Follow the user's direction and dispatch worker delegation to gather the missing evidence before asserting completion, or report what remains unresolved.
+instead: Do not assert completion without grounded worker evidence.
 x-paintedwolf-scenarios:
   - id: default
     vars:

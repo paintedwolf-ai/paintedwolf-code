@@ -180,6 +180,7 @@ export function SessionTranscript(props: Props) {
     hasMoreBefore: () => props.hasMoreBefore,
     checkpointAppStore: () => props.checkpointAppStore,
     exploreContext: () => props.exploreContext,
+    hasMessageActions: () => Boolean(props.recovery),
     disclosureOpen,
     rowMetrics,
     rowGeometry,

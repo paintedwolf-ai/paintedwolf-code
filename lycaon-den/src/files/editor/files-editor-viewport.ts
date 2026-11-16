@@ -13,7 +13,10 @@ import { EditorView } from "@codemirror/view";
 import { createEffect, createMemo, on, onCleanup, untrack } from "solid-js";
 import { shortcutOverrides } from "../../settings/system/shortcut-prefs.ts";
 import { modPressed } from "../../shortcuts/platform.ts";
-import { languageExtensionForPath } from "../../components/source/editor/codemirror-lang.ts";
+import {
+  formattersForBuffer,
+  languageExtensionForBuffer,
+} from "../../components/source/editor/codemirror-lang.ts";
 import {
   applySourceEditorEditable,
   createSourceEditorState,
@@ -25,7 +28,6 @@ import {
   createPrettyExtension,
 } from "../../components/source/pretty/pretty-layout.ts";
 import { editorPrettyPref } from "../../settings/editor/editor-prefs.ts";
-import { formattersForPath } from "../../components/source/editor/codemirror-lang.ts";
 import { declaredLineWidth } from "../../components/source/editor/format-settings.ts";
 import type { PrettyConfig } from "../../components/source/pretty/pretty-rescan.ts";
 import { applyBufferReveal, hasPendingReveal } from "./files-editor-reveal.ts";
@@ -75,8 +77,14 @@ type ViewportDependencies = Pick<FilesEditorScope, "projectId" | "buffer" | "liv
 
 /** Pretty's settings for a buffer: its path and the line width its formatter keeps to. */
 function prettyConfigFor(buffer: FileBuffer, enabled: boolean): PrettyConfig {
-  const lineWidth = declaredLineWidth(buffer.formatSources, formattersForPath(buffer.path));
-  return { enabled, path: buffer.path, ...(lineWidth ? { lineWidth } : {}) };
+  const detected = buffer.language?.name;
+  const lineWidth = declaredLineWidth(buffer.formatSources, formattersForBuffer(buffer.path, detected));
+  return {
+    enabled,
+    path: buffer.path,
+    ...(detected ? { languageHint: detected } : {}),
+    ...(lineWidth ? { lineWidth } : {}),
+  };
 }
 
 export function createFilesEditorViewport({ projectId: currentProjectId, buffer, editable, live, hostElement,
@@ -213,7 +221,7 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
             surface: "files",
             label: `Contents of ${path}`,
             doc: draft,
-            language: languageExtensionForPath(path),
+            language: languageExtensionForBuffer(path, untrack(() => buffer().language?.name)),
             wordWrap: prefs.wordWrap,
             lineNumbers: prefs.lineNumbers,
             fontSize: prefs.fontSize,

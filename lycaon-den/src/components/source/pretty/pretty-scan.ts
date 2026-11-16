@@ -1,53 +1,25 @@
-import { closeBracketLine, type Container, containersEqual, type Frame, framesEqual, stepBracket } from "./pretty-bracket.ts";
-import { SQL_GROUPS, stepClause } from "./pretty-clause.ts";
-import type { PrettyLexer } from "./pretty-lexers.ts";
-import { INITIAL_MARKUP, type MarkupState, markupEqual, startMarkupLine, stepMarkup } from "./pretty-markup.ts";
+import { closeBracketLine, stepBracket } from "./pretty-bracket.ts";
+import { closeChainLine, startChainLine, stepChain } from "./pretty-chain.ts";
+import { INITIAL_CLAUSE_STATE, stepClause } from "./pretty-clause.ts";
+import { isClosingFence, parseOpeningFence, unlabelledFenceSpan } from "./pretty-fenced.ts";
+import { stepJsx } from "./pretty-jsx.ts";
+import { INITIAL_MARKUP, startMarkupLine, stepMarkup } from "./pretty-markup.ts";
+import { closeSexpLine, stepSexp } from "./pretty-sexp.ts";
 import {
-  type Fence,
   type PrettyRule,
   type PrettyScanOptions,
   type PrettySink,
   type ScanCursor,
   ScanState,
 } from "./pretty-scan-state.ts";
+import { enterScanRule, type PrettySnapshot, restoreSnapshot, snapshotsEqual, takeSnapshot } from "./pretty-snapshot.ts";
 import { TextWindow } from "./pretty-text-window.ts";
 import { exceedsLineWidth } from "./pretty-width.ts";
 
+export { type PrettySnapshot, snapshotsEqual };
+
 const SPACE = 0x20;
 const TAB = 0x09;
-
-/** Scan state at a position, with positions stored as distances back from it. */
-export interface PrettySnapshot {
-  readonly rule: PrettyRule | null;
-  readonly lexer: PrettyLexer | null;
-  readonly frames: Frame | null;
-  readonly containers: Container | null;
-  readonly markup: MarkupState;
-  readonly listDepth: number;
-  readonly fence: Fence | null;
-  readonly inLine: boolean;
-  readonly laidOut: boolean;
-  readonly leadColumns: number;
-  readonly hasContent: boolean;
-  readonly col: number;
-  readonly pendingAhead: number;
-  readonly pendingColumns: number;
-  readonly visualBack: number;
-  readonly visualColumns: number;
-}
-
-export function snapshotsEqual(a: PrettySnapshot, b: PrettySnapshot): boolean {
-  if (a.rule !== b.rule || a.inLine !== b.inLine || a.laidOut !== b.laidOut || a.leadColumns !== b.leadColumns) return false;
-  if (a.hasContent !== b.hasContent || a.col !== b.col || a.pendingAhead !== b.pendingAhead) return false;
-  if (a.pendingAhead >= 0 && a.pendingColumns !== b.pendingColumns) return false;
-  if (a.visualBack !== b.visualBack || (a.visualBack >= 0 && a.visualColumns !== b.visualColumns)) return false;
-  if ((a.lexer === null) !== (b.lexer === null) || (a.lexer && !a.lexer.equals(b.lexer!))) return false;
-  if (!framesEqual(a.frames, b.frames) || !containersEqual(a.containers, b.containers)) return false;
-  if (!markupEqual(a.markup, b.markup) || a.listDepth !== b.listDepth) return false;
-  const fa = a.fence;
-  const fb = b.fence;
-  return fa === fb || (!!fa && !!fb && fa.char === fb.char && fa.length === fb.length && fa.rule === fb.rule);
-}
 
 /**
  * Streams one document through its layout rules. The scanner keeps all state
@@ -80,46 +52,12 @@ export class PrettyScanner implements ScanCursor {
   }
 
   snapshot(pos: number): PrettySnapshot {
-    const s = this.state;
-    return {
-      rule: s.rule,
-      lexer: s.lexer?.copy() ?? null,
-      frames: s.frames,
-      containers: s.containers,
-      markup: s.markup,
-      listDepth: s.listDepth,
-      fence: s.fence,
-      inLine: s.inLine,
-      laidOut: s.laidOut,
-      leadColumns: s.leadColumns,
-      hasContent: s.hasContent,
-      col: s.col,
-      pendingAhead: s.pending < 0 ? -1 : s.pending - pos,
-      pendingColumns: s.pendingColumns,
-      visualBack: s.visualFrom < 0 ? -1 : pos - s.visualFrom,
-      visualColumns: s.visualColumns,
-    };
+    return takeSnapshot(this.state, pos);
   }
 
   restore(snapshot: PrettySnapshot, pos: number): void {
-    const s = this.state;
-    s.rule = snapshot.rule;
-    s.lexer = snapshot.lexer?.copy() ?? null;
-    s.frames = snapshot.frames;
-    s.containers = snapshot.containers;
-    s.markup = snapshot.markup;
-    s.listDepth = snapshot.listDepth;
-    s.fence = snapshot.fence;
-    s.inLine = snapshot.inLine;
-    s.laidOut = snapshot.laidOut;
-    s.leadColumns = snapshot.leadColumns;
-    s.hasContent = snapshot.hasContent;
-    s.col = snapshot.col;
-    s.pending = snapshot.pendingAhead < 0 ? -1 : pos + snapshot.pendingAhead;
-    s.pendingColumns = snapshot.pendingColumns;
-    s.visualFrom = snapshot.visualBack < 0 ? -1 : pos - snapshot.visualBack;
-    s.visualColumns = snapshot.visualColumns;
-    if (s.inLine) s.lineEnd = this.options.doc.lineAt(pos).to;
+    const lineEnd = snapshot.inLine ? this.options.doc.lineAt(pos).to : 0;
+    restoreSnapshot(this.state, snapshot, pos, lineEnd);
   }
 
   /**
@@ -150,6 +88,12 @@ export class PrettyScanner implements ScanCursor {
       const end = Math.min(lineEnd, stop);
       while (pos < end && !s.failure) pos = this.step(pos, end);
       if (pos >= lineEnd) {
+        if (this.spanEnd >= 0 && this.spanEnd < s.lineEnd) {
+          this.spanIndex += 1;
+          this.endLine();
+          pos = lineEnd;
+          continue;
+        }
         this.endLine();
         if (s.lineEnd >= doc.length) return doc.length;
         pos = s.lineEnd + 1;
@@ -161,7 +105,9 @@ export class PrettyScanner implements ScanCursor {
   emitBreak(pos: number, columns: number): void {
     const s = this.state;
     if (pos === s.visualFrom) return;
-    if (s.visualFrom >= 0 && s.visualColumns > 0 && pos > s.visualFrom) this.sink.indent(s.visualFrom, pos, s.visualColumns);
+    if (s.visualFrom >= 0 && s.visualColumns > 0 && pos > s.visualFrom) {
+      this.sink.indent(s.visualFrom, pos, s.visualColumns);
+    }
     this.sink.break(pos);
     s.visualFrom = pos;
     s.visualColumns = columns;
@@ -191,19 +137,16 @@ export class PrettyScanner implements ScanCursor {
     const rule = s.rule!;
     switch (rule.kind) {
       case "bracket": return stepBracket(this, rule, pos, end);
-      case "markup": return stepMarkup(this, pos);
+      case "markup": return stepMarkup(this, pos, end);
       case "clause": return stepClause(this, pos, end);
+      case "sexp": return stepSexp(this, rule.data, pos, end);
+      case "chain": return stepChain(this, pos, end);
+      case "jsx": return stepJsx(this, pos, end);
     }
   }
 
   private enterRule(rule: PrettyRule | null): void {
-    const s = this.state;
-    s.rule = rule;
-    s.lexer = rule?.kind === "bracket" ? rule.lexer() : rule?.kind === "clause" ? SQL_GROUPS.lexer() : null;
-    s.frames = null;
-    s.containers = null;
-    s.markup = INITIAL_MARKUP;
-    s.listDepth = -1;
+    enterScanRule(this.state, rule);
   }
 
   /** Starts the line; returns the first position to scan, leaving `inLine` false when nothing on it is laid out. */
@@ -218,14 +161,28 @@ export class PrettyScanner implements ScanCursor {
       if (s.fence) {
         if (to - from <= 200 && isClosingFence(head, s.fence)) {
           s.fence = null;
+          this.spanEnd = -1;
           this.enterRule(null);
           return from;
+        }
+        if (s.fence.unlabelled && !s.rule) {
+          const detected = unlabelledFenceSpan(this.text, from, to, s.fence);
+          if (detected) {
+            this.enterRule(detected.rule);
+            this.spanEnd = detected.spanEnd;
+          }
         }
       } else {
         const fence = parseOpeningFence(head);
         if (fence) {
           const rule = plan.fenceRule(fence.info);
-          s.fence = { char: fence.char, length: fence.length, rule };
+          s.fence = {
+            char: fence.char,
+            length: fence.length,
+            rule,
+            quoteDepth: fence.quoteDepth,
+            unlabelled: fence.info === "",
+          };
           this.enterRule(rule);
         }
         return from;
@@ -254,6 +211,7 @@ export class PrettyScanner implements ScanCursor {
     }
     s.leadColumns = leadColumns;
     s.laidOut = (rule.kind === "bracket" && rule.data) ||
+      (rule.kind === "sexp" && rule.data) ||
       exceedsLineWidth(this.text, from, to, this.options.tabSize, rule, this.options.lineWidth);
     s.hasContent = false;
     s.col = 0;
@@ -261,33 +219,33 @@ export class PrettyScanner implements ScanCursor {
     s.visualFrom = -1;
     if (rule.kind === "bracket" && rule.records) s.containers = null;
     if (rule.kind === "markup") s.markup = startMarkupLine(s.markup);
-    if (rule.kind === "clause") s.listDepth = -1;
+    if (rule.kind === "chain") s.chainState = startChainLine(s, this.text.slice(from, Math.min(to, from + 200)));
+    if (rule.kind === "clause") s.clauseState = INITIAL_CLAUSE_STATE;
     return start;
   }
 
   private endLine(): void {
     const s = this.state;
     const end = this.spanEnd >= 0 ? this.spanEnd : s.lineEnd;
-    if (s.visualFrom >= 0 && s.visualColumns > 0 && end > s.visualFrom) this.sink.indent(s.visualFrom, end, s.visualColumns);
+    if (s.visualFrom >= 0 && s.visualColumns > 0 && end > s.visualFrom) {
+      this.sink.indent(s.visualFrom, end, s.visualColumns);
+    }
     s.visualFrom = -1;
     s.pending = -1;
     s.inLine = false;
-    if (s.rule?.kind === "bracket" || s.rule?.kind === "clause") closeBracketLine(s);
-    if (this.spanEnd >= 0) this.enterRule(null);
+    if (
+      s.rule?.kind === "bracket" ||
+      s.rule?.kind === "clause" ||
+      s.rule?.kind === "jsx" ||
+      (s.rule?.kind === "markup" && s.markup.embedded)
+    ) {
+      closeBracketLine(s);
+    }
+    if (s.rule?.kind === "sexp") closeSexpLine(s);
+    if (s.rule?.kind === "chain") closeChainLine(s);
+    if (this.spanEnd >= 0 && s.lineEnd >= this.spanEnd) {
+      this.enterRule(null);
+      this.spanEnd = -1;
+    }
   }
-}
-
-/** A Markdown opening fence and its info string. */
-function parseOpeningFence(lineText: string): { char: number; length: number; info: string } | null {
-  const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(lineText);
-  if (!match) return null;
-  const fence = match[1]!;
-  const info = match[2] ?? "";
-  if (fence[0] === "`" && info.includes("`")) return null;
-  return { char: fence.charCodeAt(0), length: fence.length, info: (info.trim().split(/\s+/)[0] ?? "").toLowerCase() };
-}
-
-function isClosingFence(lineText: string, fence: Fence): boolean {
-  const match = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(lineText);
-  return !!match && match[1]!.charCodeAt(0) === fence.char && match[1]!.length >= fence.length;
 }

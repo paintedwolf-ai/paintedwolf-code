@@ -34,7 +34,7 @@ when: mcp_result.status == "denied"
 |------|--------|----------|
 | **Core** (every anchor) | Bare name | `tool`, `tool_args`, `fire_count`, `breaker_count`, `same_code_reject_run`, `same_call_run` |
 | **Standard** (profiles `filesystem`, `content-safety`, `mcp`; [`catalogue.go`](../lycaon/internal/oar/catalogue.go)) | Bare name | `is_directory`, `not_found`, `path_outside_scope`, `secret_matches`, `mcp_result` |
-| **Host** | Published as `paintedwolf.<name>` (`HostFactNamespace` in [`oarcopy/facts.go`](../lycaon/internal/oarcopy/facts.go)) | `paintedwolf.session_posture`, `paintedwolf.stub_valid`, `paintedwolf.unobserved_cited_handles` |
+| **Host** | Published as `paintedwolf.<name>` (`HostFactNamespace` in [`oarcopy/facts.go`](../lycaon/internal/oarcopy/facts.go)) | `paintedwolf.session_posture`, `paintedwolf.stub_valid`, `paintedwolf.unobserved_cited_handles`, `paintedwolf.reproduced_source_lines`, `paintedwolf.reproduced_source_file_lines`, `paintedwolf.reproduced_source_path`, `paintedwolf.reproduced_source_start_line`, `paintedwolf.reproduced_source_end_line` |
 
 The prefix keeps a portable rule from binding this engine's host vocabulary.
 
