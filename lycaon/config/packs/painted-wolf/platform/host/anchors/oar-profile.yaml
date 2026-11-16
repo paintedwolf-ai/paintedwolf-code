@@ -792,8 +792,6 @@ host_facts:
    type: bool
  - name: paintedwolf.tool_command_forms
    type: list<string>
- - name: paintedwolf.task_dispatchable
-   type: bool
  - name: paintedwolf.tool_discovery_available
    type: bool
  - name: paintedwolf.offered_tools

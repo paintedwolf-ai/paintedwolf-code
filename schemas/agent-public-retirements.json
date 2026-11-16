@@ -220,6 +220,9 @@
       "paintedwolf.task_loadable": [
         "paintedwolf.next_steps"
       ],
+      "paintedwolf.task_dispatchable": [
+        "paintedwolf.can_task"
+      ],
       "paintedwolf.habit_redirect_match": [
         "paintedwolf.native_operation",
         "paintedwolf.native_command"

@@ -203,7 +203,6 @@ var staticOccurrenceFactDecls = []factDecl{
 	{"tool_retired_to_content", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_retired_to_command", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_command_forms", oarcore.TypeListString, FactTierHost, ""},
-	{"task_dispatchable", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_discovery_available", oarcore.TypeBool, FactTierHost, ""},
 	{"offered_tools", oarcore.TypeListString, FactTierHost, ""},
 	{"next_steps", oarcore.TypeString, FactTierHost, ""},
