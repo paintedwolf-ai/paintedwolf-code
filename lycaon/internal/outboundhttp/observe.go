@@ -211,12 +211,14 @@ type dispatchConn struct {
 	obs *dispatchObserver
 }
 
+// Write records the hand-off before the bytes can leave. The response can
+// settle the request while a write is still returning, and a value that may
+// have reached the server must never be recorded as undispatched.
 func (c *dispatchConn) Write(p []byte) (int, error) {
-	n, err := c.Conn.Write(p)
-	if n > 0 {
+	if len(p) > 0 {
 		c.obs.wrote()
 	}
-	return n, err
+	return c.Conn.Write(p)
 }
 
 type dispatchBody struct {
