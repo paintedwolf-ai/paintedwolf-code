@@ -3,15 +3,14 @@ package webresearch
 import (
 	"context"
 	"errors"
+	grobotstxt "github.com/jimsmart/grobotstxt"
+	"github.com/lycaon/lycaon/internal/observability"
 	"io"
 	"regexp"
 	"strings"
 	"sync/atomic"
 	"time"
 	"unicode"
-
-	grobotstxt "github.com/jimsmart/grobotstxt"
-	"github.com/lycaon/lycaon/internal/observability"
 )
 
 // queryOps is a query with its search operators parsed out. Operators are
@@ -149,6 +148,22 @@ func releaseDirectSlot() {
 		// under an in-flight test search; warn rather than panic.
 		wrlog.Warn("unbalanced direct-search slot release")
 	}
+}
+
+// resetDirectState reinitializes the discover semaphore and clears the site
+// index cache, seed-plan cache, and seen-URL memory; tests call it for
+// isolation.
+func resetDirectState(parallel int) {
+	if parallel <= 0 {
+		parallel = directDiscoverMaxParallel
+	}
+	directDiscoverSem = make(chan struct{}, parallel)
+	resetSeedCallSems()
+	activeUserSearches.Store(0)
+	resetPoliteness(5 * time.Millisecond)
+	siteIndexCache.reset()
+	providerSeedCache.reset()
+	resetDirectMemory()
 }
 
 // seedLead supplies a host to crawl and title words to rank discovered URLs.

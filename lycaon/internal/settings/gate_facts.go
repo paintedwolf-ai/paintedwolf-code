@@ -53,6 +53,10 @@ func (s Sources) normalized() Sources {
 
 type inertDetections struct{}
 
+func (inertDetections) MatchAction(hitl.ProposedAction, gate.Posture) (hitl.DetectionMatch, bool) {
+	return hitl.DetectionMatch{}, false
+}
+
 type inertPins struct{}
 
 func (inertPins) ToolDefinitionChanged(string) bool { return false }

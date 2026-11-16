@@ -76,6 +76,15 @@ func NewConfigStore() (*ConfigStore, error) {
 	return s, nil
 }
 
+// NewConfigStoreAt is for tests.
+func NewConfigStoreAt(path string) *ConfigStore {
+	s := &ConfigStore{path: path}
+	if err := s.load(); err != nil && !os.IsNotExist(err) {
+		s.raw.ProviderOverrides = make(map[string]map[string]string)
+	}
+	return s
+}
+
 func userConfigPath(name string) (string, error) {
 	dir, err := configdir.UserConfigDir()
 	if err != nil {

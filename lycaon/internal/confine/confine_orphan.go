@@ -82,3 +82,10 @@ func evictOldestOrphanLocked() {
 	}
 	delete(orphanEgress.attempts, oldestKey)
 }
+
+// ForgetOrphanEgressAttempts clears the recorded refusals.
+func ForgetOrphanEgressAttempts() {
+	orphanEgress.mu.Lock()
+	orphanEgress.attempts = map[string]*OrphanEgressAttempt{}
+	orphanEgress.mu.Unlock()
+}
