@@ -329,6 +329,17 @@ directly, and unavailable forms use `COMMAND_NATIVE_FORM_UNSUPPORTED`. The
 retirement catalog records this lineage; it does not translate old facts or
 restore retired rules.
 
+Painted Wolf 1.0.2 shipped the OAR 1.0 candidate, whose rule documents name
+their version with `oar` rather than `spec_version`. Extension packs written
+for it keep loading: the pack inventory reads each candidate rule in the
+published OAR 1.0 shape (`internal/oardraft`), leaving the file untouched. A
+candidate rule that relies on something OAR 1.0 removed, such as a `transform`
+effect, `overrides`, `enforcement: off` or a selector clause other than `tool`,
+is refused on its own with a diagnostic naming the file; the rest of the pack
+loads. `pw rules upgrade PATH…` rewrites candidate rules in place when their
+author chooses. A release contract reads every candidate rule a post-v1 release
+shipped and checks the result against the vendored OAR 1.0 schema.
+
 The release controller is pinned to `refs/heads/main` and reads the selected candidate tree
 (including [`agent-public-retirements.json`](../schemas/agent-public-retirements.json)),
 so neither a tag push nor an older qualified source can select an older compatibility gate.

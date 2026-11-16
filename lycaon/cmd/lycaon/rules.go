@@ -1,30 +1,71 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/oardraft"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
 func runRules(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: pw rules test [--project DIR] [--json] [PATH…]")
+		return fmt.Errorf("usage: pw rules test [--project DIR] [--json] [PATH…] | pw rules upgrade PATH…")
 	}
 	switch args[0] {
 	case "test":
 		return runRulesTest(ctx, args[1:])
+	case "upgrade":
+		return runRulesUpgrade(args[1:], os.Stdout)
 	default:
-		return fmt.Errorf("unknown rules command %q (want test)", args[0])
+		return fmt.Errorf("unknown rules command %q (want test or upgrade)", args[0])
 	}
+}
+
+// runRulesUpgrade rewrites OAR 1.0 candidate rules in the OAR 1.0 shape, in
+// place. The engine already reads candidate rules; this makes the change
+// explicit in the author's files. A rule OAR 1.0 cannot express is named and
+// left as it is.
+func runRulesUpgrade(paths []string, out io.Writer) error {
+	if len(paths) == 0 {
+		return fmt.Errorf("usage: pw rules upgrade PATH…")
+	}
+	var refused []string
+	for _, path := range paths {
+		data, err := os.ReadFile(path) // #nosec G304 -- the author names the rule files to upgrade
+		if err != nil {
+			return err
+		}
+		upgraded, changed, err := oardraft.Upgrade(data)
+		if err != nil {
+			refused = append(refused, fmt.Sprintf("%s: %v", path, err))
+			continue
+		}
+		if !changed {
+			continue
+		}
+		if _, err := fseffect.Replace(fseffect.ReplaceRequest{
+			Location: fseffect.PathLocation(path), Source: bytes.NewReader(upgraded), Mode: 0o644, DirMode: 0o755,
+		}); err != nil {
+			return err
+		}
+		fmt.Fprintf(out, "upgraded %s\n", path)
+	}
+	if len(refused) > 0 {
+		return fmt.Errorf("%d rule(s) need a hand edit:\n%s", len(refused), strings.Join(refused, "\n"))
+	}
+	return nil
 }
 
 type rulesTestFlags struct {
