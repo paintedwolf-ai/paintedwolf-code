@@ -99,7 +99,7 @@ def probe(args, run=subprocess.run, popen=subprocess.Popen):
                     "-model", model, "-device", args.device], capture_output=True, text=True)
     if verified.returncode:
         raise ValueError("bundle does not verify against the release authority: " + verified.stderr[-500:])
-    signed = json.loads(verified.stdout)
+    signed = json.loads(verified.stdout)["manifest"]
     export = json.loads(args.export_receipt.read_text())
     output = export["outputs"][args.device]
     if export["student"] != args.student or signed["artifact"]["digest"] != output["sha256"]:

@@ -72,7 +72,7 @@ class LoadProbe(unittest.TestCase):
         if command[0] == str(self.root / "verifier"):
             if self.signed is None:
                 return done(code=1, err="signature mismatch")
-            return done(json.dumps({"revision": "r1", "artifact": {"digest": self.signed}}))
+            return done(json.dumps({"manifest": {"revision": "r1", "artifact": {"digest": self.signed}}, "signature": "s"}))
         self.request = json.loads(Path(command[2]).read_text())
         return done(json.dumps({"prompt_tokens": self.rendered})) if self.rendered else done(code=1, err="unsupported conversation format")
 
