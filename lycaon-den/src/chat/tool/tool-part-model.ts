@@ -278,6 +278,11 @@ export function shouldOmitToolPartFromTranscript(
   return !options.verboseMode;
 }
 
+/** Whether a tool's row is drawn before its result arrives; fixed per tool and view. */
+export function toolDrawsWhileRunning(toolName: string, options: ToolPartTranscriptOmitOptions): boolean {
+  return !shouldOmitToolPartFromTranscript(undefined, toolName, options);
+}
+
 /** One-line label for collapsed group hints and card summaries. */
 export function toolPartSummaryTitle(part: ToolPartView): string {
   // The host-stamped skill identifies the activation reliably.
