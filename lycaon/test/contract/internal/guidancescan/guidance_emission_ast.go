@@ -5,7 +5,6 @@ package guidancescan
 import (
 	"go/ast"
 	"go/token"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -274,61 +273,4 @@ func guidanceAppendUnique(slice []string, v string) []string {
 		}
 	}
 	return append(slice, v)
-}
-
-// CodesReferencedInAgentToolProfilesYAML returns hint codes wired via runtime_rules.code.
-func CodesReferencedInAgentToolProfilesYAML(path string) (map[string]bool, error) {
-	out := make(map[string]bool)
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return out, nil
-		}
-		return nil, err
-	}
-	for _, m := range regexp.MustCompile(`\bcode:\s*([A-Z][A-Z0-9_]+)\b`).FindAllStringSubmatch(string(raw), -1) {
-		if len(m) > 1 {
-			out[m[1]] = true
-		}
-	}
-	return out, nil
-}
-
-type rulesYAMLCodesCacheEntry struct {
-	once  sync.Once
-	codes map[string]bool
-	err   error
-}
-
-var rulesYAMLCodesCache sync.Map // abs rules dir → *rulesYAMLCodesCacheEntry
-
-var rulesYAMLCodeRE = regexp.MustCompile(`code:\s*([A-Z][A-Z0-9_]+)`)
-
-func CodesReferencedInRulesYAML(rulesDir string) (map[string]bool, error) {
-	abs, err := filepath.Abs(rulesDir)
-	if err != nil {
-		return nil, err
-	}
-	raw, _ := rulesYAMLCodesCache.LoadOrStore(abs, &rulesYAMLCodesCacheEntry{})
-	entry := raw.(*rulesYAMLCodesCacheEntry)
-	entry.once.Do(func() {
-		entry.codes, entry.err = buildRulesYAMLCodes(abs)
-	})
-	return entry.codes, entry.err
-}
-
-func buildRulesYAMLCodes(rulesDir string) (map[string]bool, error) {
-	corp, err := contractcheck.SourceLoader.Load(rulesDir, testcorpus.Options{Extensions: []string{".yaml"}})
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]bool)
-	for _, f := range corp.Files() {
-		for _, m := range rulesYAMLCodeRE.FindAllStringSubmatch(f.Text(), -1) {
-			if len(m) > 1 {
-				out[m[1]] = true
-			}
-		}
-	}
-	return out, nil
 }

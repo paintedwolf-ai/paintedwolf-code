@@ -79,6 +79,13 @@ def knip(tree, policy):
     return found
 
 
+def emitter_flags(policy, tree):
+    """Reach also judges declared codes, facts and anchors when the policy names them."""
+    if "emitters" not in policy:
+        return []
+    return ["-emitters", json.dumps(policy["emitters"]), "-repo", tree]
+
+
 def checks(binary, tree, policy, go=True, den=False):
     """Every arch-lint check over one tree, as (kind, key) → finding. Without go,
     the Go checks are skipped; with den, knip runs over Den."""
@@ -88,7 +95,7 @@ def checks(binary, tree, policy, go=True, den=False):
     go_commands = [
         [binary, "reach", "-dir", go_dir, "-goos", ",".join(reach["goos"]), "-report", reach["report"],
          "-skip", support, "-schema", go_dir / reach["schema"], "-scope", ",".join(reach.get("scope", [])),
-         "-emitters", json.dumps(policy["emitters"]), "-repo", tree, *reach["roots"]],
+         *emitter_flags(policy, tree), *reach["roots"]],
         [binary, "vet", "-dir", go_dir, "-test-support", support, *policy["vet"]["packages"]],
     ]
     found = {}
