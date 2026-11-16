@@ -1,3 +1,4 @@
+import { createSignal } from "solid-js";
 import { fireEvent, render } from "@solidjs/testing-library";
 import { describe, expect, it } from "vitest";
 import type { ActionDescriptor } from "../../api/types.ts";
@@ -128,6 +129,17 @@ describe("ActionCard", () => {
     open(container);
     const opener = container.querySelector('[data-testid="action-opener"]')!;
     expect(opener.querySelector('[data-testid="source-path-link"]')?.textContent).toBe("Open in Files");
+  });
+
+  it("keeps its record links mounted when the same descriptor arrives as a new object", () => {
+    const [current, setCurrent] = createSignal<CardAction>(descriptor);
+    const { container } = render(() => <ActionCard part={part()} action={current()} layout="chat" projectId="p" />);
+    open(container);
+    const output = container.querySelector('[data-testid="action-link-output"]');
+    const opener = container.querySelector('[data-testid="action-opener"]');
+    setCurrent(structuredClone(descriptor));
+    expect(container.querySelector('[data-testid="action-link-output"]')).toBe(output);
+    expect(container.querySelector('[data-testid="action-opener"]')).toBe(opener);
   });
 
   it("names a fold's further targets beside what ran", () => {

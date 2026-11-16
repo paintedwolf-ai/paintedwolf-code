@@ -1,4 +1,4 @@
-import { For, Match, Show, Switch, type JSX } from "solid-js";
+import { Index, Match, Show, Switch, createMemo, type JSX } from "solid-js";
 import type { ActionLink, ActionOpener } from "../../api/types.ts";
 import type { CardAction } from "../../chat/action/action-merge.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
@@ -34,31 +34,37 @@ export function ActionLinks(props: Props) {
     if (content?.revealedCallId?.() !== props.part.toolCallId) return undefined;
     return kind === "input" ? content.argsOffset() : kind === "output" ? content.outputOffset() : undefined;
   };
+  const decisionsText = createMemo(() => {
+    const decisions = props.part.commandActivity?.decisions ?? [];
+    return decisions.length ? decisions.map((decision) => { const row = turnLoadRowSummary(decision.row); return `${row.title} · ${row.operation} · ${row.state}`; }).join("\n") : undefined;
+  });
+  const opener = createMemo(() => props.action.opener, undefined, { equals: sameShape });
   return (
     <nav class="den-action-card__links" aria-label="Activity records" data-testid="action-links">
-      <For each={props.action.links}>
+      <Index each={props.action.links}>
         {(link) => {
-          const content = linkContent(link, props.part);
+          // Descriptors arrive as new objects on every update; a link stays mounted while it opens the same record.
+          const document = createMemo(() => linkContent(link(), props.part), undefined, { equals: sameShape });
           return (
-            <Show when={content} keyed>
-              {(document) => (
-                <ToolContentLink short label={LINK_LABELS[link.kind]} testId={`action-link-${link.kind}`} projectId={props.projectId}
-                  pane={`action:${props.part.id}:${link.kind}`} content={document} language={link.kind === "receipt" ? "jsonl" : undefined}
-                  messageId={link.kind === "input" ? props.part.argsMessageId ?? props.part.assistantMessageId : props.part.messageId}
-                  toolCallId={props.part.toolCallId} revealOffset={revealOffset(link.kind)} />
+            <Show when={document()} keyed>
+              {(shown) => (
+                <ToolContentLink short label={LINK_LABELS[link().kind]} testId={`action-link-${link().kind}`} projectId={props.projectId}
+                  pane={`action:${props.part.id}:${link().kind}`} content={shown} language={link().kind === "receipt" ? "jsonl" : undefined}
+                  messageId={link().kind === "input" ? props.part.argsMessageId ?? props.part.assistantMessageId : props.part.messageId}
+                  toolCallId={props.part.toolCallId} revealOffset={revealOffset(link().kind)} />
               )}
             </Show>
           );
         }}
-      </For>
-      <Show when={props.part.commandActivity?.decisions?.length ? props.part.commandActivity.decisions : undefined} keyed>
-        {(decisions) => (
+      </Index>
+      <Show when={decisionsText()} keyed>
+        {(text) => (
           <ToolContentLink short label="Host decisions" testId="action-link-decisions" projectId={props.projectId} pane={`action:${props.part.id}:decisions`}
-            content={{ kind: "inline", text: decisions.map((decision) => { const row = turnLoadRowSummary(decision.row); return `${row.title} · ${row.operation} · ${row.state}`; }).join("\n") }} />
+            content={{ kind: "inline", text }} />
         )}
       </Show>
       {props.evidence}
-      <Show when={props.action.opener} keyed>
+      <Show when={opener()} keyed>
         {(opener) => <Opener opener={opener} part={props.part} projectId={props.projectId} rootRefs={props.rootRefs} />}
       </Show>
     </nav>
@@ -124,4 +130,9 @@ function openDestination(opener: ActionOpener, projectId: string | undefined): v
     case "terminal":
       return;
   }
+}
+
+/** Equal when two values describe the same record or destination. */
+function sameShape(a: unknown, b: unknown): boolean {
+  return a === b || (a !== undefined && b !== undefined && JSON.stringify(a) === JSON.stringify(b));
 }
