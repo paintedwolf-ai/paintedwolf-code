@@ -22,7 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerplan"
-	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -131,25 +130,7 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 	r.Plan = plan
 	deps.Workflows.Manager.Fanout.PlannedWorkKnown = r.Plan.HasPlannedWorker
 	deps.Sessions.Manager.Coordinator.Guards.SetPlanCloseout(r.Plan)
-	r.Queue.SetRoundDeliveryHooks(
-		func(c context.Context, task *wire.WorkerTask, projectDir string, jobComplete bool, summary string, diverged []string, report *wire.WorkerChangeReport) string {
-			if task == nil {
-				return ""
-			}
-			outcomes, err := r.Plan.EvaluateRoundDelivery(c, task.ParentSessionID, task.ID, workerplan.DeliveryInput{
-				ChildSessionID: task.ChildSessionID, ProjectDir: projectDir, JobComplete: jobComplete,
-				Summary: summary, ModifiedPaths: diverged, ChangeReport: report,
-			})
-			if err != nil {
-				// The result settles without outcomes; closeout evaluates
-				// its criteria again and reports what it cannot read.
-				slog.WarnContext(c, "evaluate round criteria", "job_id", task.ID, "err", err)
-				return ""
-			}
-			return workerrecords.EncodeCriteriaOutcomes(outcomes)
-		},
-		r.NotifySettledPlanCloseout,
-	)
+	r.Queue.SetRoundDeliveryHooks(r.roundCriteriaOutcomes, r.NotifySettledPlanCloseout)
 
 	dispatchGate := delegation.ImplementWorkflowDispatchGate{
 		Inner: delegation.WorkflowDispatchGate{
