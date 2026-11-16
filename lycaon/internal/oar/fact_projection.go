@@ -31,7 +31,7 @@ func activation(gc *GuardContext) map[string]any {
 			if !strings.HasPrefix(name, "paintedwolf.") || occurrenceIdentityFacts[name] {
 				continue
 			}
-			// Host presentation fields are declared strings; serialize their structured source at the producer boundary.
+			// Host presentation fields are declared strings; serialize structured values at the boundary.
 			if declaredFactTypes[name] == "string" && strings.HasPrefix(name, "paintedwolf.") {
 				if value == nil {
 					value = ""
@@ -215,6 +215,11 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"http_request_web_page":               gc.Invocation.HTTPRequestWebPage,
 		"http_request_loopback_other_session": gc.Invocation.HTTPRequestLoopbackOtherSession,
 		"git_no_repository_on_write_leg":      gc.Source.GitNoRepositoryOnWriteLeg,
+		"reproduced_source_lines":             gc.Source.ReproducedSourceLines,
+		"reproduced_source_file_lines":        gc.Source.ReproducedSourceFileLines,
+		"reproduced_source_path":              gc.Source.ReproducedSourcePath,
+		"reproduced_source_start_line":        gc.Source.ReproducedSourceStartLine,
+		"reproduced_source_end_line":          gc.Source.ReproducedSourceEndLine,
 	}
 	maps.Copy(out, rejectObservationActivation(gc))
 	maps.Copy(out, sessionActivation(gc))

@@ -131,6 +131,12 @@ func NamespaceLedger(ev Ledger, legID string) Ledger {
 			out.handleOrder = append(out.handleOrder, prefixed)
 		}
 	}
+	out.observationOrder = make([]string, 0, len(ev.observationOrder))
+	for _, handle := range ev.observationOrder {
+		if prefixed, ok := handleMap[handle]; ok {
+			out.observationOrder = append(out.observationOrder, prefixed)
+		}
+	}
 	for path, handles := range ev.ByPath {
 		for _, handle := range handles {
 			if prefixed, ok := handleMap[handle]; ok {

@@ -141,27 +141,40 @@ describe("SessionTranscript time rows", () => {
     rows().forEach((row, index) => expect(row).toBe(before[index]));
   });
 
-  it("puts a message's time in its hover toolbar, or under the bubble when the person asks", () => {
+  it("puts each message's time in its hover toolbar, and moves user times below when set to always", () => {
     const recovery = { held: () => false, onEdit: () => {}, onRewind: () => {}, onCopy: () => {} };
+    const reply: Message = {
+      id: "a1", role: "assistant", origin: "model", authority: "none", trust_tier: "trusted",
+      content: "done", created_at: ago(11), ord: 2,
+    };
     const { container } = render(() => (
       <SessionTranscript
         layout="chat"
         sessionId="s-time"
-        messages={[prompt("u1", 1, 12)]}
+        messages={[prompt("u1", 1, 12), reply]}
         recovery={recovery}
         turnClocks={{ u1: settled("u1", 11) }}
       />
     ));
-    const time = () => container.querySelector('[data-testid="message-time"]');
-    expect(text(time())).toBe("12m ago");
-    expect(time()?.closest('[data-testid="message-actions"]')).not.toBeNull();
+    const userTurn = () => container.querySelector(".user-turn")!;
+    const assistantTurn = () => container.querySelector(".assistant-turn")!;
+    const userToolbar = () => userTurn().querySelector('[data-testid="message-actions"]');
+    const assistantToolbar = () => assistantTurn().querySelector('[data-testid="message-actions"]');
+
+    expect(userToolbar()?.getAttribute("data-align")).toBe("end");
+    expect(assistantToolbar()?.getAttribute("data-align")).toBe("start");
+    expect(text(userToolbar()?.querySelector('[data-testid="message-time"]'))).toBe("12m ago");
+    expect(text(assistantToolbar()?.querySelector('[data-testid="message-time"]'))).toBe("11m ago");
     expect(container.querySelector('[data-testid="turn-tail"]')).not.toBeNull();
 
-    // The preference applies at once; persisting it waits on a debounce.
+    // The preference applies at once; assistant hover times stay in their toolbar.
     void saveMessageTimes("always");
-    expect(time()?.closest('[data-testid="message-actions"]')).toBeNull();
-    expect(time()?.classList.contains("den-msg-time-below")).toBe(true);
-    expect(time()?.previousElementSibling?.classList.contains("bubble--user")).toBe(true);
+    expect(userToolbar()?.querySelector('[data-testid="message-time"]')).toBeNull();
+    const belowTime = container.querySelector(".den-msg-time-below");
+    expect(text(belowTime)).toBe("12m ago");
+    expect(belowTime?.parentElement?.classList.contains("den-user-msg-footer")).toBe(true);
+    expect(belowTime?.previousElementSibling).toBe(userToolbar());
+    expect(text(assistantToolbar()?.querySelector('[data-testid="message-time"]'))).toBe("11m ago");
   });
 
   it("keeps every turn's tail readable whatever the message-times preference says", () => {
