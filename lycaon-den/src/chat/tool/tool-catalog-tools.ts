@@ -18,6 +18,7 @@ const CATALOG_PATH = join(
   REPO_ROOT,
   "lycaon/config/packs/painted-wolf/platform/tools/lycaon-tools.yaml",
 );
+const RETIREMENTS_PATH = join(REPO_ROOT, "schemas/agent-public-retirements.json");
 const EVIDENCE_KINDS_PATH = join(
   REPO_ROOT,
   "lycaon/config/packs/painted-wolf/platform/guidance/evidence-kinds.yaml",
@@ -39,6 +40,14 @@ export function toolOperationSchemaNames(): string[] {
   return loadSourceCorpus(OPERATION_SCHEMA_DIR, { extensions: [".yaml"] }).files
     .map((file) => file.rel.replace(/\.yaml$/, ""))
     .sort();
+}
+
+/** Tools a published release offered and later retired; stored transcripts still name them. */
+export function retiredToolNames(): string[] {
+  const catalog = JSON.parse(readFileSync(RETIREMENTS_PATH, "utf8")) as {
+    vocabularies: { tools: Record<string, unknown> };
+  };
+  return Object.keys(catalog.vocabularies.tools).sort();
 }
 
 /** Catalog opt-in / coordinator profile tools from lycaon-tools.yaml. */

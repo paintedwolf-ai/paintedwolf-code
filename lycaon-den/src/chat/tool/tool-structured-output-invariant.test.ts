@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   genericTranscriptToolNames,
   lycaonCatalogToolNames,
+  retiredToolNames,
   toolEvidenceKindMap,
   toolOperationSchemaNames,
   toolSchemaNames,
@@ -143,11 +144,19 @@ describe("tool structured output invariant", () => {
     }
   });
 
-  it("renders a stored surface_note result with the default card", () => {
-    expect(TOOL_STRUCTURED_OUTPUT_FIXTURES.surface_note).toBeUndefined();
-    const output = JSON.stringify({ status: "noted", message_id: "note-1" });
-    const view = buildStructuredToolPresentation(part("surface_note", output));
-    expect(violatesStructuredToolPresentation(view, output)).toBeNull();
+  it("renders every retired tool a stored transcript may name", () => {
+    const retired = retiredToolNames();
+    expect(retired.length).toBeGreaterThan(0);
+    const schemaTools = new Set([...toolSchemaNames(), ...toolOperationSchemaNames()]);
+    for (const tool of retired) {
+      const fixture = TOOL_STRUCTURED_OUTPUT_FIXTURES[tool];
+      // A tool retired with its schema keeps its own card; one retired into a
+      // content contract renders with the default card.
+      if (schemaTools.has(tool)) expect(fixture, `missing fixture: ${tool}`).toBeDefined();
+      const output = fixture ?? JSON.stringify({ status: "completed" });
+      const view = buildStructuredToolPresentation(part(tool, output));
+      expect(violatesStructuredToolPresentation(view, output), tool).toBeNull();
+    }
   });
 
   it("presents source_history overview and session diff results", () => {
