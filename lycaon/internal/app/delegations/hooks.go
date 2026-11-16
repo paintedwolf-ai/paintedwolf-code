@@ -10,6 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/workerplan"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
@@ -327,4 +329,20 @@ func (r *Runtime) SessionVerdictCatalog(ctx context.Context, sessionID string) m
 		}
 	}
 	return nil
+}
+
+// roundCriteriaOutcomes evaluates a delivering round against its worker's
+// typed criteria and returns the encoded outcomes the result records. When
+// the evidence cannot be read the result settles without outcomes, and
+// closeout evaluates the criteria again and reports what it cannot read.
+func (r *Runtime) roundCriteriaOutcomes(ctx context.Context, task *wire.WorkerTask, projectDir string, jobComplete bool, summary string, diverged []string, report *wire.WorkerChangeReport) string {
+	outcomes, err := r.Plan.EvaluateRoundDelivery(ctx, task.ParentSessionID, task.ID, workerplan.DeliveryInput{
+		ChildSessionID: task.ChildSessionID, ProjectDir: projectDir, JobComplete: jobComplete,
+		Summary: summary, ModifiedPaths: diverged, ChangeReport: report,
+	})
+	if err != nil {
+		slog.WarnContext(ctx, "evaluate round criteria", "job_id", task.ID, "err", err)
+		return ""
+	}
+	return workerrecords.EncodeCriteriaOutcomes(outcomes)
 }
