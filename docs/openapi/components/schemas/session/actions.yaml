@@ -133,10 +133,7 @@ components:
         duration_ms:
           type: integer
           format: int64
-          description: "took: elapsed time; for a running action, time so far."
-        running:
-          type: boolean
-          description: "took: the action has not settled."
+          description: "took: elapsed time of a settled action."
         failed:
           type: integer
           description: "steps: members that failed, were refused or were interrupted."
@@ -223,6 +220,14 @@ components:
         tail:
           type: boolean
           description: "output: the lines are the end of the stream."
+        receipts:
+          type: array
+          description: >-
+            output: the lines are in these activities' execution receipts, which
+            Den reads when the card opens; head for a success, tail for a
+            failure or a running activity.
+          items:
+            $ref: "#/components/schemas/ActionReceiptScope"
         artifact_id:
           type: string
           description: "image: the artifact to show."

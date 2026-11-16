@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type terminalOpenArgs struct {
@@ -175,6 +176,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 			}
 			attachSnapshotToOpen(&outPayload, snap)
 		}
+		tctx.Effects.Out.Process = &api.ToolProcessHandle{Handle: handle, Running: outPayload.Running}
 		out, _ := surveyjson.Marshal(outPayload)
 		return string(out), nil
 	}

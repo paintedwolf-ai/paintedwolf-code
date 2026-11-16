@@ -3,6 +3,7 @@ package messageview
 import (
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -49,5 +50,56 @@ func TestTranscriptToolStepOmitsAlternateProseAndKeepsArgumentMasks(t *testing.T
 	}
 	if len(msg.ContentParts) != 1 || msg.Grounding == nil || msg.ToolCalls[0].Args["input"] != "private keystrokes" {
 		t.Fatal("projection mutated its source")
+	}
+}
+
+// Every projection describes each action, so a row recorded before
+// descriptors existed reads with them, and the stored row is left as it was.
+func TestTranscriptDescribesEveryAction(t *testing.T) {
+	settled := time.Date(2026, 11, 15, 8, 0, 4, 0, time.UTC)
+	call := api.Message{ID: "a", Role: api.MessageRoleAssistant,
+		ToolCalls: []api.ToolCall{{ID: "r1", Name: "terminal_send", Args: map[string]any{"id": "term-1", "input": "1"}}}}
+	activity := api.CommandActivity{ID: "act", Label: "Run command", State: "completed", StatusCode: new(int), ExecutionIDs: []string{"e1"}}
+	program := api.Message{ID: "p", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
+		Tool: "command", ToolCallID: "c1", ToolArgs: map[string]any{"command": "go test ./..."}, Content: "ok",
+		CommandProgram: &api.CommandProgramReceipt{ID: "prog", StartedAt: settled.Add(-4 * time.Second), SettledAt: &settled, Activities: []api.CommandActivity{activity}},
+	}}
+	terminal := api.Message{ID: "t", Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
+		Tool: "terminal_close", ToolCallID: "r2", ToolArgs: map[string]any{"id": "term-1"}, Content: "{}",
+	}}
+
+	out := TranscriptMessages([]api.Message{call, program, terminal})
+
+	if action := out[0].ToolCalls[0].Action; action == nil || action.Status != "running" || action.Label != "Terminal session" {
+		t.Fatalf("running call card %+v", action)
+	}
+	described := out[1].ToolResult.CommandProgram.Activities[0].Action
+	if described == nil || described.Ran.Text != "go test ./..." || described.Status != "done" || out[1].ToolResult.Action != nil {
+		t.Fatalf("activity card %+v, result card %+v", described, out[1].ToolResult.Action)
+	}
+	if action := out[2].ToolResult.Action; action == nil || action.FoldKey != "terminal:term-1" {
+		t.Fatalf("terminal card %+v", action)
+	}
+	if call.ToolCalls[0].Action != nil || program.ToolResult.CommandProgram.Activities[0].Action != nil || terminal.ToolResult.Action != nil {
+		t.Fatal("projection wrote descriptors into the stored rows")
+	}
+}
+
+// A compound command's activity is cut from its source only while no
+// redaction mark has shifted the offsets.
+func TestTranscriptPassesCommandMarksToActivities(t *testing.T) {
+	source := "echo [secret] && ls"
+	first := api.CommandActivity{ID: "a", State: "completed", Subject: "echo", Spans: []api.CommandActivitySpan{{SourceRef: "src", StartByte: 0, EndByte: 13}}}
+	second := api.CommandActivity{ID: "b", State: "completed", Subject: "list folder", Spans: []api.CommandActivitySpan{{SourceRef: "src", StartByte: 17, EndByte: 19}}}
+	msg := api.Message{ID: "p", Role: api.MessageRoleTool,
+		HostSecretRedaction: &api.HostSecretRedactionMeta{Spans: []api.RedactedSpan{{Field: "tool_result.tool_args.command", Start: 5, Length: 8, Kind: api.RedactionKind("secret")}}},
+		ToolResult: &api.ToolResult{Tool: "command", ToolCallID: "c", ToolArgs: map[string]any{"command": source}, Content: "ok",
+			CommandProgram: &api.CommandProgramReceipt{ID: "prog", SourceRef: "src", Activities: []api.CommandActivity{first, second}}}}
+	if got := TranscriptMessage(msg).ToolResult.CommandProgram.Activities[1].Action.Ran.Text; got != "list folder" {
+		t.Fatalf("marked source was sliced: %q", got)
+	}
+	msg.HostSecretRedaction = nil
+	if got := TranscriptMessage(msg).ToolResult.CommandProgram.Activities[1].Action.Ran.Text; got != "ls" {
+		t.Fatalf("unmarked source was not sliced: %q", got)
 	}
 }

@@ -66,10 +66,8 @@ type ActionFact struct {
 	Medium int `json:"medium,omitempty"`
 	// found: low-severity findings.
 	Low int `json:"low,omitempty"`
-	// took: elapsed time; for a running action, time so far.
+	// took: elapsed time of a settled action.
 	DurationMs int64 `json:"duration_ms,omitempty"`
-	// took: the action has not settled.
-	Running bool `json:"running,omitempty"`
 	// steps: members that failed, were refused or were interrupted.
 	Failed int `json:"failed,omitempty"`
 	// steps: what a member is.
@@ -139,6 +137,8 @@ type ActionPreview struct {
 	More int `json:"more,omitempty"`
 	// output: the lines are the end of the stream.
 	Tail bool `json:"tail,omitempty"`
+	// output: the lines are in these activities' execution receipts, which Den reads when the card opens; head for a success, tail for a failure or a running activity.
+	Receipts []ActionReceiptScope `json:"receipts,omitempty"`
 	// image: the artifact to show.
 	ArtifactID string `json:"artifact_id,omitempty"`
 	// image: the artifact's caption.

@@ -8492,11 +8492,9 @@ export interface components {
             low?: number;
             /**
              * Format: int64
-             * @description took: elapsed time; for a running action, time so far.
+             * @description took: elapsed time of a settled action.
              */
             duration_ms?: number;
-            /** @description took: the action has not settled. */
-            running?: boolean;
             /** @description steps: members that failed, were refused or were interrupted. */
             failed?: number;
             /**
@@ -8561,6 +8559,8 @@ export interface components {
             more?: number;
             /** @description output: the lines are the end of the stream. */
             tail?: boolean;
+            /** @description output: the lines are in these activities' execution receipts, which Den reads when the card opens; head for a success, tail for a failure or a running activity. */
+            receipts?: components["schemas"]["ActionReceiptScope"][];
             /** @description image: the artifact to show. */
             artifact_id?: string;
             /** @description image: the artifact's caption. */
