@@ -3,11 +3,10 @@ package sourceview
 import (
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
-	"io"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	attachmentformat "github.com/lycaon/lycaon/internal/promptattach/format"
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -35,23 +34,6 @@ func ReadTextDocumentWithStat(tool string, access Access, resolved projectpaths.
 	}
 	doc, err := textDocument(tool, access, resolved, raw, maxBytes)
 	return doc, stat, err
-}
-
-// LoadTextStream decodes an already authorized reader under the same text limits.
-func LoadTextStream(tool string, access Access, tc tools.ToolContext, resolved projectpaths.Resolved, reader io.Reader) (Text, error) {
-	maxBytes := access.MaxBytes()
-	if resolved.ToolOutput {
-		maxBytes = int64(tooloutput.EffectiveMaxSpillFileBytes(tc.Host.MaxToolSpillBytes))
-	}
-	raw, err := readPlainContentCapped(tool, access, reader, resolved.DisplayPath, maxBytes)
-	if err != nil {
-		return Text{}, err
-	}
-	doc, err := textDocument(tool, access, resolved, raw, maxBytes)
-	if err != nil {
-		return Text{}, err
-	}
-	return Text{Content: doc.Text(), Disk: &doc}, nil
 }
 
 func textDocument(tool string, access Access, resolved projectpaths.Resolved, raw []byte, maxBytes int64) (textfile.UntrustedDocument, error) {

@@ -2,18 +2,19 @@ package guidance
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/hintregistry"
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/extpacks"
+
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestFormatCoordinatorNudgeBatchWrongPhase(t *testing.T) {
 	SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	cfg, err := LoadHintConfig(extpacks.Bundled(hintregistry.DefaultDir))
+	cfg, err := LoadHintConfig(extpacks.Bundled(config.PlatformPolicy))
 	testutil.FailErr(t, "LoadHintConfig failed", err)
 	f := NewStaticRejectFormatter(cfg)
 	raw, err := FormatCoordinatorNudge(context.Background(), f, "COORDINATOR_BATCH_WRONG_PHASE", nil)

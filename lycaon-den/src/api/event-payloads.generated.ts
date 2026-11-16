@@ -14,7 +14,6 @@ import type {
   CheckpointEvent,
   CodeScanEvent,
   CostEvent,
-  DelegationEvent,
   EditorDocumentEvent,
   FileBriefingEvent,
   FindingsEvent,
@@ -48,7 +47,6 @@ export type EventPayloadMap = {
   worker: WorkerEvent;
   checkpoint: CheckpointEvent;
   board: BoardEvent;
-  delegation: DelegationEvent;
   cost: CostEvent;
   llm: LLMCallEvent;
   activity: ActivityEvent;

@@ -849,3 +849,13 @@ func commandIndex(catalog toolcontract.LanguageCatalog) map[string]toolcontract.
 	}
 	return index
 }
+
+func joinSettle(err, settle error) error {
+	if settle == nil {
+		return err
+	}
+	if err == nil {
+		return settle
+	}
+	return errors.Join(err, settle)
+}

@@ -40,7 +40,6 @@ describe("TaskCard", () => {
       const worker: WorkerTask = {
         ...runningWorker(),
         status: "canceled",
-        max_tool_loops: 20,
         tool_loops_used: 2,
       };
       const part: ToolPartView = {
@@ -111,76 +110,51 @@ describe("TaskCard", () => {
     expect(screen.queryByTestId("worker-evidence-section")).toBeNull();
   });
 
-  it("renders tool-turn progress from wire budget fields", () => {
+  it("shows the turns chip and no progress bar between batches", () => {
     const worker = (): WorkerTask => ({
       ...runningWorker(),
-      max_tool_loops: 10,
       tool_loops_used: 2,
     });
     const { container } = render(() => (
       <TaskCard part={runningPart} layout="chat" worker={worker} />
     ));
-    const progress = container.querySelector('[data-testid="task-card-progress"]');
-    expect(progress).toBeTruthy();
-    const fill = container.querySelector(".den-task-card-progress-fill") as HTMLElement;
-    expect(fill?.style.width).toBe("20%");
-    expect(screen.getByText("2/10")).toBeTruthy();
+    expect(container.querySelector(".den-worker-turns")?.textContent).toBe("2 turns");
+    expect(container.querySelector('[data-testid="task-card-progress"]')).toBeNull();
   });
 
-  it("updates tool-turn progress when worker budget ticks", async () => {
+  it("updates the turns chip as the round advances", async () => {
     const [worker, setWorker] = createSignal<WorkerTask>({
       ...runningWorker(),
-      max_tool_loops: 10,
       tool_loops_used: 2,
     });
     const { container } = render(() => (
       <TaskCard part={runningPart} layout="chat" worker={worker} />
     ));
-    const fill = () =>
-      container.querySelector(".den-task-card-progress-fill") as HTMLElement;
-    expect(fill()?.style.width).toBe("20%");
-
+    expect(container.querySelector(".den-worker-turns")?.textContent).toBe("2 turns");
     setWorker({ ...worker(), tool_loops_used: 5 });
     await Promise.resolve();
-    expect(fill()?.style.width).toBe("50%");
-    expect(screen.getByText("5/10")).toBeTruthy();
+    expect(container.querySelector(".den-worker-turns")?.textContent).toBe("5 turns");
   });
 
-  it("applies low-runway styling on the task card budget chip", () => {
-    const worker = (): WorkerTask => ({
-      ...runningWorker(),
-      max_tool_loops: 40,
-      tool_loops_used: 30,
-    });
-    const { container } = render(() => (
-      <TaskCard part={runningPart} layout="chat" worker={worker} />
-    ));
-    const chip = container.querySelector(".den-worker-budget--low");
-    expect(chip).toBeTruthy();
-    expect(chip?.textContent).toBe("30/40");
-  });
-
-  it("fills progress to 100% when the worker is finished", () => {
+  it("drops the progress bar once the worker is finished", () => {
     const worker = (): WorkerTask => ({
       ...runningWorker(),
       status: "complete",
-      max_tool_loops: 40,
       tool_loops_used: 12,
+      turn_tool_calls: 4,
+      turn_tools_done: 1,
       result: { status: "complete", summary: "done" },
     });
     const { container } = render(() => (
       <TaskCard part={runningPart} layout="chat" worker={worker} />
     ));
-    const fill = container.querySelector(".den-task-card-progress-fill") as HTMLElement;
-    expect(fill?.style.width).toBe("100%");
+    expect(container.querySelector('[data-testid="task-card-progress"]')).toBeNull();
   });
 
-  // The budget bar advances once per round; the tools inside that round are most
-  // of its wall-clock, and this is the mark that moves while they run.
-  it("renders the in-flight tool batch on its own bar", async () => {
+  // The tools inside a turn are most of its wall-clock; this is the mark that moves while they run.
+  it("renders the in-flight tool batch", async () => {
     const [worker, setWorker] = createSignal<WorkerTask>({
       ...runningWorker(),
-      max_tool_loops: 40,
       tool_loops_used: 34,
       tool_calls_used: 128,
       turn_tool_calls: 4,
@@ -197,47 +171,19 @@ describe("TaskCard", () => {
         .querySelector('[data-testid="task-card-progress-batch"]')
         ?.getAttribute("data-batch-total"),
     ).toBe("4");
-    // The budget bar has not moved; only the batch has.
-    const budgetFill = container.querySelector(
-      ".den-task-card-progress-fill:not(.den-task-card-progress-fill--batch)",
-    ) as HTMLElement;
-    expect(budgetFill?.style.width).toBe("85%");
 
     setWorker({ ...worker(), turn_tools_done: 3 });
     await Promise.resolve();
     expect(batchFill()?.style.width).toBe("75%");
-    expect(budgetFill?.style.width).toBe("85%");
 
     setWorker({ ...worker(), tool_loops_used: 35, turn_tools_done: undefined, turn_tool_calls: undefined });
     await Promise.resolve();
     expect(screen.queryByTestId("task-card-progress-batch")).toBeNull();
   });
 
-  // Two units, two chips: only the round pair is bounded, and a tool count in
-  // the same chip reads as a second ratio against the budget's ceiling.
-  it("shows rounds and tool calls as separate chips", () => {
+  it("shows turns and tool calls as separate chips", () => {
     const worker = (): WorkerTask => ({
       ...runningWorker(),
-      max_tool_loops: 40,
-      tool_loops_used: 12,
-      tool_calls_used: 128,
-    });
-    const { container } = render(() => (
-      <TaskCard part={runningPart} layout="chat" worker={worker} />
-    ));
-    expect(container.querySelector(".den-worker-budget")?.textContent).toBe("12/40");
-    expect(screen.getByTestId("worker-tool-calls").textContent).toBe("128 tools");
-    expect(
-      container
-        .querySelector('[data-testid="task-card-progress"]')
-        ?.getAttribute("aria-label"),
-    ).toBe("Tool round 12 of 40");
-  });
-
-  it("adds the in-flight batch to the tool chip, not the budget chip", () => {
-    const worker = (): WorkerTask => ({
-      ...runningWorker(),
-      max_tool_loops: 40,
       tool_loops_used: 12,
       tool_calls_used: 128,
       turn_tool_calls: 6,
@@ -246,14 +192,13 @@ describe("TaskCard", () => {
     const { container } = render(() => (
       <TaskCard part={runningPart} layout="chat" worker={worker} />
     ));
-    expect(container.querySelector(".den-worker-budget")?.textContent).toBe("12/40");
+    expect(container.querySelector(".den-worker-turns")?.textContent).toBe("12 turns");
     expect(screen.getByTestId("worker-tool-calls").textContent).toBe("128 tools · 2/6");
   });
 
   it("omits the tool chip until the first call settles", () => {
     const worker = (): WorkerTask => ({
       ...runningWorker(),
-      max_tool_loops: 40,
       tool_loops_used: 1,
     });
     render(() => <TaskCard part={runningPart} layout="chat" worker={worker} />);
@@ -263,7 +208,6 @@ describe("TaskCard", () => {
   it("names the in-flight batch in the progress aria label", () => {
     const worker = (): WorkerTask => ({
       ...runningWorker(),
-      max_tool_loops: 40,
       tool_loops_used: 12,
       turn_tool_calls: 6,
       turn_tools_done: 2,
@@ -275,7 +219,7 @@ describe("TaskCard", () => {
       container
         .querySelector('[data-testid="task-card-progress"]')
         ?.getAttribute("aria-label"),
-    ).toBe("Tool round 12 of 40, tool 2 of 6");
+    ).toBe("Tool 2 of 6 in this turn");
   });
 
   it("renders the worker context ring from context_usage", () => {

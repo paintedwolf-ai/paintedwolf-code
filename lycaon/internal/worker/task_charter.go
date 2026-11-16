@@ -111,7 +111,7 @@ func taskCharterStrings(raw map[string]any, field string, required bool) ([]stri
 
 func formatTaskCharter(charter api.WorkerTaskCharter) string {
 	var out strings.Builder
-	out.WriteString("Goal:\n")
+	out.WriteString(spawn.CharterGoalHeader)
 	out.WriteString(charter.Goal)
 	for _, section := range []struct {
 		title string

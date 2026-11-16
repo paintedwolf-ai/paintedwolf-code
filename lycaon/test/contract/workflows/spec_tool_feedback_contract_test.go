@@ -63,9 +63,9 @@ func TestSpecToolFeedbackRejectShape(t *testing.T) {
 
 	scenarios := []specRejectScenario{
 		{
-			name: "delegation forbidden smoke", tool: "delegate_dispatch", plan: stubComplete,
+			name: "delegation forbidden smoke", tool: "plan_from_blueprint", plan: stubComplete,
 			wantCode: "SPEC_POSTURE_DELEGATION_FORBIDDEN", wantPhase: "1",
-			blockContains: []string{">>> Spec posture blocked", "Tool: delegate_dispatch", "Code: SPEC_POSTURE_DELEGATION_FORBIDDEN", "Cause:", "Fix:", "Progress:"},
+			blockContains: []string{">>> Spec posture blocked", "Tool: plan_from_blueprint", "Code: SPEC_POSTURE_DELEGATION_FORBIDDEN", "Cause:", "Fix:", "Progress:"},
 		},
 		{
 			name: "state forbidden stub valid", tool: "state_create", plan: stubComplete,

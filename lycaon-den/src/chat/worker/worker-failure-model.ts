@@ -17,7 +17,7 @@ const DISPATCH_REJECTED: WorkerFailureDisplay = {
   message: "The coordinator called a worker with arguments the host rejected.",
 };
 
-/** Structured failure for a task()/delegate_dispatch reject that never enqueued a job. */
+/** Structured failure for a worker dispatch reject that never enqueued a job. */
 export function workerFailureFromDispatchReject(
   code: string | undefined,
 ): WorkerFailure {
@@ -41,9 +41,9 @@ export function workerFailureDisplay(worker?: WorkerTask): WorkerFailureDisplay 
     };
   }
   const failure = worker.failure;
-  if (failure?.title?.trim() && failure.message?.trim()) {
+  if (failure?.message?.trim()) {
     return {
-      headline: failure.title.trim(),
+      headline: failure.title?.trim() || GENERIC_FAILED.headline,
       message: failure.message.trim(),
       suggestedAction: failure.suggested_action?.trim() || undefined,
       code: failure.code?.trim() || undefined,

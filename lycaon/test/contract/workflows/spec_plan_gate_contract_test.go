@@ -52,7 +52,7 @@ func TestSpecPlanGateRejectCodesSubset(t *testing.T) {
 	allowed := []string{"plan-writer", "repo-researcher", "plan-reviewer", "implementer"}
 
 	cases := []specPlanGateCase{
-		{"delegation forbidden", "delegate_dispatch", nil, stubComplete, nil, "", "SPEC_POSTURE_DELEGATION_FORBIDDEN", "1", "plan workflow"},
+		{"delegation forbidden", "plan_from_blueprint", nil, stubComplete, nil, "", "SPEC_POSTURE_DELEGATION_FORBIDDEN", "1", "plan workflow"},
 		{"state create stub invalid", "state_create", nil, stubInvalid, nil, "", "SPEC_POSTURE_STATE_FORBIDDEN", "1", "blueprints"},
 		{"state create stub valid", "state_create", nil, stubComplete, nil, "", "SPEC_POSTURE_STATE_FORBIDDEN", "2", "repo-researcher"},
 		{"plan writer stub invalid", "task", map[string]any{"agent_type": "plan-writer"}, stubInvalid, nil, "", "SPEC_POSTURE_STUB_REQUIRED", "1", "plan-writer"},
@@ -104,7 +104,7 @@ func TestSpecDelegateDenyCarriesPlanProgress(t *testing.T) {
 	engine := specPlanEngine(t)
 	plan := "---\nresearch_depth: none\n---\n## Goal\n\nx\n\n## Assumptions\n\nx\n"
 	progress := guidance.ComputePlanProgress(plan, guidance.PlanEvalFlags{}, guidance.DispatchSnapshot{})
-	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "delegate_dispatch", PlanContent: plan}, PlanProgress: progress})
+	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint", PlanContent: plan}, PlanProgress: progress})
 	contractcheck.FailErr(t, "engine.Evaluate failed", err)
 	if out.Allowed || out.Code != "SPEC_POSTURE_DELEGATION_FORBIDDEN" {
 		t.Fatalf("outcome = %+v", out)

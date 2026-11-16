@@ -245,10 +245,6 @@ func writeAtomicJSONOrText(dir, name string, raw []byte, mode fs.FileMode) error
 	return err
 }
 
-func syncFile(f *os.File) error {
-	return fssync.File(f)
-}
-
 func syncDir(dirPath string) error {
 	if fssync.Relaxed() {
 		return nil

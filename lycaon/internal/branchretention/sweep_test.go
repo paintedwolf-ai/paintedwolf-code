@@ -3,6 +3,7 @@ package branchretention
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,7 +22,7 @@ type fixtureTree struct {
 
 func plantTrees(t *testing.T, branchRoot, project string, trees []fixtureTree) map[string]string {
 	t.Helper()
-	mgr := workspace.NewManager(branchRoot)
+	mgr := workspace.NewManager(branchRoot, platform.NewSelector(platform.Config{}))
 	roots := []projectroot.RootRef{{ID: "primary", Label: "primary", Path: project, IsPrimary: true}}
 	paths := map[string]string{}
 	for _, tree := range trees {

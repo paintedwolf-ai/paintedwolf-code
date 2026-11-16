@@ -38,10 +38,8 @@ import {
   projectFilesState,
   type FileBuffer,
 } from "../documents/files-buffer-state.ts";
-import {
-  applyFilesBufferEditorDocument,
-  filesBufferText,
-} from "../documents/project-files-buffers.ts";
+import { applyFilesBufferEditorDocument } from "../documents/project-files-buffer-io.ts";
+import { filesBufferText } from "../documents/files-buffer-state.ts";
 import { FilesEditor } from "./FilesEditor.tsx";
 import { getFilesEditorView, getFilesEditorViewDoc } from "./files-editor-host.ts";
 import { applyBufferReveal } from "./files-editor-reveal.ts";

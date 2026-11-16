@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
@@ -91,7 +92,7 @@ func newScriptedHarness(t *testing.T, files map[string]string) *scriptedHarness 
 	h.ledger = sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
 	h.queue.SetBaselineStore(h.ledger.Baselines)
 	h.queue.SetProjectStore(h.projects)
-	h.manager = workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"))
+	h.manager = workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}))
 	h.queue.SetWorkerWorkspaceManager(h.manager)
 	h.decisions = sessiondecisions.NewSQL(database)
 	return h

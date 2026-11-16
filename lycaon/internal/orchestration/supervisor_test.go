@@ -2,11 +2,8 @@ package orchestration_test
 
 import (
 	"context"
-	"sync"
 	"testing"
-	"time"
 
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
@@ -15,33 +12,24 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func newSupervisorTestOrchestrator(t *testing.T, del orchestration.PipelineDelegation) (*orchestration.OrchestratorImpl, *delegation.MemoryStore, *session.Host, *store.Memory) {
+func newSupervisorTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestration.OrchestratorImpl, *orchestration.MemoryTopologyWorkers, *session.Host, *store.Memory) {
 	t.Helper()
-	delStore := delegation.NewMemoryStore()
+	mem := orchestration.NewMemoryTopologyWorkers()
 	sessStore := store.NewMemory()
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	queue := worker.NewInMemoryQueue(10)
-	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
-	if del == nil {
-		del = &recordingDelegation{inner: delMgr, store: delStore}
-	} else if rec, ok := del.(*recordingDelegation); ok {
-		rec.inner = delMgr
-		rec.store = delStore
-	} else if rec, ok := del.(*timestampRecording); ok {
-		rec.inner = delMgr
-		rec.store = delStore
+	if rec == nil {
+		rec = &recordingWorkers{}
 	}
+	rec.TopologyWorkers = mem
 	reg := orchestration.NewMemoryAgentRegistryForTest()
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
-		Delegation: del,
-		Store:      delStore,
-		Agents:     reg,
+		Workers: rec,
+		Agents:  reg,
 	})
-	return orch, delStore, sessMgr, sessStore
+	return orch, mem, sessMgr, sessStore
 }
 
 func supervisorSpec(profileIDs ...string) orchestration.TopologySpec {
@@ -58,8 +46,8 @@ func supervisorSpec(profileIDs ...string) orchestration.TopologySpec {
 
 func TestSupervisorTopologyParentLinks(t *testing.T) {
 	ctx := context.Background()
-	rec := &recordingDelegation{}
-	orch, store, sessMgr, sessStore := newSupervisorTestOrchestrator(t, rec)
+	rec := &recordingWorkers{}
+	orch, mem, sessMgr, sessStore := newSupervisorTestOrchestrator(t, rec)
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
@@ -72,35 +60,36 @@ func TestSupervisorTopologyParentLinks(t *testing.T) {
 	})
 	testutil.FailErr(t, "orch.Run failed", err)
 
-	delegationID, ok := store.DelegationBySessionID(sess.ID)
+	batchID, ok, err := mem.BatchBySession(ctx, sess.ID)
+	testutil.FailErr(t, "BatchBySession failed", err)
 	if !ok {
-		t.Fatal("missing delegation")
+		t.Fatal("missing topology batch")
 	}
-	legs, err := store.ListLegs(ctx, delegationID)
-	testutil.FailErr(t, "store.ListLegs failed", err)
+	units, err := mem.ListUnits(ctx, batchID)
+	testutil.FailErr(t, "mem.ListUnits failed", err)
 
 	var supervisorID string
-	for _, leg := range legs {
-		if leg.Title == "Supervisor" {
-			supervisorID = leg.ID
-			if leg.ParentID != "" {
-				t.Fatalf("supervisor leg should not have parent, got %q", leg.ParentID)
+	for _, u := range units {
+		if u.WorkID == "Supervisor" {
+			supervisorID = u.ID
+			if u.ParentID != "" {
+				t.Fatalf("supervisor unit should not have parent, got %q", u.ParentID)
 			}
 			break
 		}
 	}
 	if supervisorID == "" {
-		t.Fatal("supervisor leg not found")
+		t.Fatal("supervisor unit not found")
 	}
 
 	workers := 0
-	for _, leg := range legs {
-		if leg.Title == "Supervisor" {
+	for _, u := range units {
+		if u.WorkID == "Supervisor" {
 			continue
 		}
 		workers++
-		if leg.ParentID != supervisorID {
-			t.Fatalf("worker %q parent = %q want supervisor %q", leg.Title, leg.ParentID, supervisorID)
+		if u.ParentID != supervisorID {
+			t.Fatalf("worker %q parent = %q want supervisor %q", u.WorkID, u.ParentID, supervisorID)
 		}
 	}
 	if workers != 2 {
@@ -142,7 +131,7 @@ func TestSupervisorMaxAgentsRejected(t *testing.T) {
 
 func TestSupervisorStrategyParallel(t *testing.T) {
 	ctx := context.Background()
-	rec := &recordingDelegation{order: make([]string, 0, 4)}
+	rec := &recordingWorkers{order: make([]string, 0, 4)}
 	orch, _, sessMgr, sessStore := newSupervisorTestOrchestrator(t, rec)
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
@@ -168,8 +157,13 @@ func TestSupervisorStrategyParallel(t *testing.T) {
 }
 
 func TestSupervisorWorkersDispatchInParallel(t *testing.T) {
-	ctx := context.Background()
-	rec := &timestampRecording{}
+	ctx := t.Context()
+	rec := &recordingWorkers{
+		barrierSet: map[string]bool{
+			orchestration.ProfileImplementer:  true,
+			orchestration.ProfileCodeReviewer: true,
+		},
+	}
 	orch, _, sessMgr, sessStore := newSupervisorTestOrchestrator(t, rec)
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
@@ -182,18 +176,8 @@ func TestSupervisorWorkersDispatchInParallel(t *testing.T) {
 		Input:     map[string]any{"project_dir": projectDir, "project_id": testdbseed.DefaultProjectID},
 	})
 	testutil.FailErr(t, "orch.Run failed", err)
-
-	t1, ok1 := rec.timestamps[orchestration.ProfileImplementer]
-	t2, ok2 := rec.timestamps[orchestration.ProfileCodeReviewer]
-	if !ok1 || !ok2 {
-		t.Fatalf("missing worker timestamps: %v", rec.timestamps)
-	}
-	delta := t1.Sub(t2)
-	if delta < 0 {
-		delta = -delta
-	}
-	if delta > 100*time.Millisecond {
-		t.Fatalf("worker dispatches not parallel enough: delta=%v", delta)
+	if rec.barrierSeen != 2 {
+		t.Fatalf("parallel barrier seen = %d want 2", rec.barrierSeen)
 	}
 }
 
@@ -220,24 +204,4 @@ func TestSupervisorParallelYamlMockRun(t *testing.T) {
 	if result.FinalOutput == "" {
 		t.Fatal("expected final output")
 	}
-}
-
-type timestampRecording struct {
-	recordingDelegation
-	mu         sync.Mutex
-	timestamps map[string]time.Time
-}
-
-func (r *timestampRecording) DispatchLeg(ctx context.Context, delegationID, legID, sourceToolCallID string) (*api.Leg, error) {
-	leg, err := r.store.GetLeg(ctx, delegationID, legID)
-	if err != nil {
-		return nil, err
-	}
-	r.mu.Lock()
-	if r.timestamps == nil {
-		r.timestamps = make(map[string]time.Time)
-	}
-	r.timestamps[leg.Title] = time.Now()
-	r.mu.Unlock()
-	return r.recordingDelegation.DispatchLeg(ctx, delegationID, legID, sourceToolCallID)
 }

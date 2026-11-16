@@ -1,7 +1,6 @@
 package workerworkspace
 
 import (
-	"context"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -11,26 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/workspace"
 )
-
-type serviceContextKey struct{}
-
-// WithService attaches a scoped *Service to ctx so callers without a direct Host receiver
-// can resolve workspace-owned observation trackers without process-global state.
-func WithService(ctx context.Context, svc *Service) context.Context {
-	if ctx == nil || svc == nil {
-		return ctx
-	}
-	return context.WithValue(ctx, serviceContextKey{}, svc)
-}
-
-// FromContext retrieves a scoped *Service from ctx if present.
-func FromContext(ctx context.Context) *Service {
-	if ctx == nil {
-		return nil
-	}
-	svc, _ := ctx.Value(serviceContextKey{}).(*Service)
-	return svc
-}
 
 // WorkspaceObservationState holds the scoped observation.Tracker and verification bindings.
 type WorkspaceObservationState struct {
@@ -83,7 +62,7 @@ func (r *WorkspaceTrackerRegistry) EnsureTracker(
 		viewID := firstNonEmpty(caps.ViewID, jobID, childSessionID, branchRoot, workspacePath, "workspace-view")
 		facts := observation.UnknownVisibilityFacts("unbound")
 		if hasCaps {
-			facts = observation.VisibilityFactsFromDescriptor(caps)
+			facts = caps.Facts
 		}
 		rootSpecs := buildRootSpecs(workspacePath, roots)
 		tr, err := observation.NewTracker(observation.TrackerConfig{
@@ -106,7 +85,7 @@ func (r *WorkspaceTrackerRegistry) EnsureTracker(
 			st.Tracker.BindCore(nil, rootSpecs...)
 		}
 		if hasCaps {
-			_ = st.Tracker.SetVisibilityFacts(observation.VisibilityFactsFromDescriptor(caps))
+			_ = st.Tracker.SetVisibilityFacts(caps.Facts)
 			st.CapabilitiesBound = true
 			st.ViewCapabilities = caps
 		}
@@ -139,33 +118,6 @@ func (r *WorkspaceTrackerRegistry) EnsureTracker(
 		indexCapabilitiesLocked(r, st.ViewCapabilities, st.JobID, st.ChildSessionID, st.BranchRoot)
 	}
 	return st.Tracker
-}
-
-// AttachTracker binds an existing *observation.Tracker (and optional VerificationBinding) to scoped keys.
-func (r *WorkspaceTrackerRegistry) AttachTracker(tracker *observation.Tracker, binding observation.VerificationBinding, checkpointID string, keys ...string) {
-	if r == nil || tracker == nil {
-		return
-	}
-	r.obsMu.Lock()
-	defer r.obsMu.Unlock()
-	if r.trackers == nil {
-		r.trackers = make(map[string]*WorkspaceObservationState)
-	}
-	st := lookupStateLocked(r, keys...)
-	if st == nil {
-		st = &WorkspaceObservationState{Bindings: make(map[string]observation.VerificationBinding)}
-	}
-	st.Tracker = tracker
-	if strings.TrimSpace(checkpointID) != "" {
-		st.CheckpointID = strings.TrimSpace(checkpointID)
-	}
-	if binding.ReceiptID != "" || binding.ViewID != "" || binding.ScopeSourceGeneration > 0 {
-		st.LatestBinding, st.HasBinding = binding, true
-		if binding.ReceiptID != "" {
-			st.Bindings[binding.ReceiptID] = binding
-		}
-	}
-	indexStateLocked(r, st, keys...)
 }
 
 // CleanupTracker removes tracker registrations for the given keys.

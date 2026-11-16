@@ -3,6 +3,7 @@ package briefingstore
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"testing"
 	"time"
@@ -231,7 +232,7 @@ func seedCheckpoint(t *testing.T, f fixture) string {
 	session, err := store.NewSQL(f.database).Create(t.Context(), api.CreateSessionRequest{}, project)
 	testutil.FailErr(t, "session", err)
 	_, err = f.database.ExecContext(t.Context(), `INSERT INTO checkpoints(id, session_id, project_id, kind, status, created_at) VALUES ('cp1', ?, ?, 'tool_approval', 'approved', ?)`,
-		session.ID, project, db.FormatTime(time.Now().UTC()))
+		session.ID, project, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "checkpoint", err)
 	return "cp1"
 }
@@ -327,7 +328,7 @@ func TestApprovedRationaleLinksOnlyFromApprovedCards(t *testing.T) {
 	testutil.FailErr(t, "session", err)
 	insert := func(id, status string) {
 		_, err := f.database.ExecContext(ctx, `INSERT INTO checkpoints(id, session_id, project_id, kind, status, payload_json, created_at) VALUES (?, ?, ?, 'tool_approval', ?, ?, ?)`,
-			id, session.ID, project, status, `{"tool_call_id":"call","ai_rationale":"Pushes the fix."}`, db.FormatTime(time.Now().UTC()))
+			id, session.ID, project, status, `{"tool_call_id":"call","ai_rationale":"Pushes the fix."}`, timelayout.Format(time.Now().UTC()))
 		testutil.FailErr(t, "checkpoint "+id, err)
 	}
 	settle(t, f, f.epoch(t), "a", "evidence")

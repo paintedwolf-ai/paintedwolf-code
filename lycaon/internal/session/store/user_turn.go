@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -20,7 +21,7 @@ func currentUserTurnLocked(s *memoryCore, sessionID string) int {
 
 // UserIntentBefore reads the latest human opener at a worker's creation boundary.
 func (t *sqlTurnTelemetry) UserIntentBefore(ctx context.Context, sessionID string, before time.Time) (time.Time, error) {
-	value, err := t.core.queries.UserIntentBefore(ctx, db.UserIntentBeforeParams{SessionID: sessionID, Ts: db.FormatTime(before)})
+	value, err := t.core.queries.UserIntentBefore(ctx, db.UserIntentBeforeParams{SessionID: sessionID, Ts: timelayout.Format(before)})
 	if db.IsNoRows(err) {
 		return before, nil
 	}

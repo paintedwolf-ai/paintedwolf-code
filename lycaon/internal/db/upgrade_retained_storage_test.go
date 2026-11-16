@@ -15,7 +15,7 @@ import (
 
 func TestRetainedStoragePlanMeasuresOnceAndAdmitsPublishedWAL(t *testing.T) {
 	path, _ := seedLegacyManifestStore(t, t.TempDir(), map[string]int{"/work/a": 300, "/work/b": 37})
-	reader, err := openReader(t.Context(), path)
+	reader, err := OpenReadOnly(t.Context(), path)
 	testutil.FailErr(t, "open released source", err)
 	plan, err := PlanUpgrade(t.Context(), reader)
 	testutil.FailErr(t, "plan released route", err)

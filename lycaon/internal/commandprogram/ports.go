@@ -358,12 +358,6 @@ type ExternalLauncher interface {
 	Launch(context.Context, OperationRequest, Streams) (toolcontract.ProducerResult, error)
 }
 
-// HeldEffects keeps exact prepared inputs; approval revalidates before one attempt.
-type HeldEffects interface {
-	Resume(context.Context, toolcontract.ExecutionIdentity) (toolcontract.ProducerResult, error)
-	Stop(context.Context, toolcontract.ExecutionIdentity) error
-}
-
 // ProgressAdmission invokes the existing progress owner. Its outcome is recorded
 // independently; successful progress never authorizes a program child effect.
 type ProgressAdmission interface {

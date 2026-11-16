@@ -59,7 +59,7 @@ func (r *startRetention) Retain(ctx context.Context, windowID, snapshotID string
 // storeObjects stores what it can and returns what it stored, including when it
 // stops early with an error.
 func (r *startRetention) storeObjects(ctx context.Context, windowID, snapshotID string) ([]string, error) {
-	entries, err := r.snapshots.HashedEntries(ctx, snapshotID, MaxRevisionContentBytes, r.files+1)
+	entries, err := r.snapshots.HashedEntries(ctx, snapshotID, sourceblob.MaxRevisionContentBytes, r.files+1)
 	if err != nil {
 		return nil, err
 	}

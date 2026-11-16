@@ -6,7 +6,8 @@ import { isShellLayoutUnstable, onShellLayoutSettled } from "../../shell/shell-l
 import { scheduleSessionFidelityPersist } from "../editor/editor-session-fidelity.ts";
 import { scheduleFilesHotExitPersist } from "../documents/files-hot-exit.ts";
 import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts";
-import { moveFilesBuffer, openFilesBuffer, setFilesActiveBuffer } from "../documents/project-files-buffers.ts";
+import { moveFilesBuffer, setFilesActiveBuffer } from "../documents/project-files-buffers.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { type FileBufferKey } from "../components/project-files-model.ts";
 import type { FilesScope } from "../components/files-scope.ts";

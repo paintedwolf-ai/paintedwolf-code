@@ -19,12 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
-// guardedGet validates and pins every redirect hop before dialing; the body
-// is the first limit bytes of the response.
-func guardedGet(ctx context.Context, u *url.URL, accept string, limit int64) (*http.Response, string, error) {
-	return guardedGetWithHopPolicy(ctx, u, accept, limit, nil, nil)
-}
-
 type beforeGuardedGetHop func(context.Context, *url.URL) (func(), error)
 type recordGuardedGetHop func(*url.URL, *http.Response)
 
@@ -210,10 +204,6 @@ func normalizeFetchURL(raw string) (*url.URL, error) {
 	}
 	u.User = nil
 	return u, nil
-}
-
-func resolvePublicIPs(ctx context.Context, host string) ([]netip.Addr, error) {
-	return resolveIPsWithPolicy(ctx, host, ipAllowed)
 }
 
 func resolveIPsWithPolicy(ctx context.Context, host string, allow func(netip.Addr) bool) ([]netip.Addr, error) {

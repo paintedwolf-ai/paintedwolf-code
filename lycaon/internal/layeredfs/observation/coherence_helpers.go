@@ -129,7 +129,7 @@ func buildTrunkInvalidationsLocked(
 	ev TrunkChangeEvent,
 	gen uint64,
 ) []InvalidationEvent {
-	if t.facts.UntouchedVisibility != VisibilityLive || !t.facts.SupportsInvalidationUpcall {
+	if !t.facts.Live() || !t.facts.SupportsInvalidation {
 		return nil
 	}
 	parentDir, childName := splitParentAndName(qpath)

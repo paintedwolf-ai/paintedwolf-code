@@ -1,6 +1,6 @@
 import { required } from "../../test/at.ts";
 import "../../test/document-outbox-fixture.ts";
-import { filesBufferBase, filesBufferText } from "../documents/project-files-buffers.ts";
+import { filesBufferBase, filesBufferText } from "../documents/files-buffer-state.ts";
 import { stubFilesClient } from "../../test/source-client-fixture.ts";
 import { PROJECT, ROOTS, loadedBuffer, resetProjectFilesViewTest, sourceWorkspace, PROJECT_SOURCE_IDENTITY, deferred, waitForFilesStageReady } from "./project-files-view-test-harness.ts";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
@@ -17,7 +17,9 @@ import { suspendFileDocument } from "../documents/files-residency.ts";
 import { PROJECT_WORKSPACE_LOADING_HINT } from "../../components/shell/ProjectLoadingStage.tsx";
 import { editorReplica } from "../documents/editor-document.ts";
 import { createAppStore } from "../../store/app-state.ts";
-import { applyFilesBufferDraft, openFilesBuffer, setFilesActiveBuffer } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferDraft } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
+import { setFilesActiveBuffer } from "../documents/project-files-buffers.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { fileBufferKey } from "./project-files-model.ts";

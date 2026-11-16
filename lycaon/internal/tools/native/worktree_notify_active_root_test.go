@@ -8,13 +8,15 @@ import (
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // Catalog invalidation must follow the root a mutated path resolves against
 // under the session's active root, not the primary root.
-func TestNotifyWorktreeChangedResolvesAgainstTheActiveRoot(t *testing.T) {
+func TestWorktreeChangesFollowTheActiveRoot(t *testing.T) {
 	t.Cleanup(repochange.ResetObserversForTest)
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) }) // t.Context() is already canceled during cleanup
 
@@ -26,7 +28,7 @@ func TestNotifyWorktreeChangedResolvesAgainstTheActiveRoot(t *testing.T) {
 	}
 	events := make(chan repochange.Event, 8)
 	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
-		if ev.Kind != repochange.WorktreeChanged {
+		if ev.Kind != repochange.WorktreeChanged || (ev.ProjectDir != primary && ev.ProjectDir != secondary) {
 			return
 		}
 		events <- ev
@@ -37,7 +39,13 @@ func TestNotifyWorktreeChangedResolvesAgainstTheActiveRoot(t *testing.T) {
 			SourceWorkspaceKind: api.SourceWorkspaceKindProject},
 	}
 
-	notifyWorktreeChanged(context.Background(), tctx, "notes.txt", "@app/other.txt")
+	var locations []mutationLocation
+	for _, path := range []string{"notes.txt", "@app/other.txt"} {
+		resolved, err := projectpaths.ResolveRead(t.Context(), nil, tctx, path)
+		testutil.FailErr(t, "resolve "+path, err)
+		locations = append(locations, resolvedMutationLocation(resolved))
+	}
+	notifyWorktreeChangedLocations(context.Background(), tctx, locations...)
 	seen := map[string][]string{}
 	deadline := time.After(5 * time.Second)
 	for len(seen) < 2 {

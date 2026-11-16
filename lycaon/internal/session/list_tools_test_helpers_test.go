@@ -2,6 +2,10 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerplan/plantest"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"path/filepath"
 	"testing"
 
@@ -9,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -28,6 +31,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
@@ -116,7 +120,12 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	if err := workflowinputs.RegisterAskUserTool(rt.Registry, workflowMgr.Asks, rt.Boundary); err != nil {
 		testutil.FailErr(t, "workflowinputs.RegisterAskUserTool failed", err)
 	}
-	registerContextualToolsCoordinatorExtras(t, configRoot, rt.Registry, mgr, agents, sessionWF, bundledDir)
+	planDeps := plantest.Deps(workerrecords.New(sqlDB))
+	planDeps.Plans, planDeps.Approvals = blueprintMgr, blueprintMgr
+	if err := workerplan.RegisterPlanFromBlueprintTool(rt.Registry, plantest.New(t, planDeps)); err != nil {
+		testutil.FailErr(t, "workerplan.RegisterPlanFromBlueprintTool failed", err)
+	}
+	registerContextualToolsCoordinatorExtras(t, sqlDB, configRoot, rt.Registry, mgr, agents, sessionWF, bundledDir)
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
 	ctx := context.Background()
@@ -188,6 +197,7 @@ func newContextualToolsRuntime(t *testing.T, configRoot string) *toolhost.Runtim
 
 func registerContextualToolsCoordinatorExtras(
 	t *testing.T,
+	sqlDB *db.Store,
 	configRoot string,
 	reg *tools.DefaultRegistry,
 	mgr *session.Host,
@@ -196,18 +206,16 @@ func registerContextualToolsCoordinatorExtras(
 	bundledDir string,
 ) {
 	t.Helper()
-	delegStore := delegation.NewMemoryStore()
 	queue := worker.NewInMemoryQueue(4)
-	delegMgr := delegation.NewManager(delegStore, queue, mgr, delegation.AllowGate{})
-	if err := delegation.RegisterDelegationTools(reg, delegMgr); err != nil {
-		testutil.FailErr(t, "delegation.RegisterDelegationTools failed", err)
-	}
 	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:   queue,
-		Agents:  agents,
-		Workers: worker.DefaultWorkersConfig(),
+		Queue:         queue,
+		Agents:        agents,
+		Workers:       worker.DefaultWorkersConfig(),
+		WorkerRecords: workerrecords.New(sqlDB),
+		Reviews:       &workerops.Service{Reader: workerops.Reader{Records: workerrecords.New(sqlDB), Jobs: queue}},
+		Plan:          plantest.New(t, plantest.Deps(workerrecords.New(sqlDB))),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	testutil.FailErr(t, "build conditions registry", err)

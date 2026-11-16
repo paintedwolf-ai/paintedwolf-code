@@ -128,7 +128,7 @@ Host conditions and transport-independent client conditions therefore always ren
 | `http` | The `Error` envelope (`code`, `message`, `details`, plus the rendered presentation fields) on a `/v1` call: the inline path, rendered where the action was taken. The overwhelming majority of codes. The HTTP status comes from the code's vocabulary entry ([host contract § 5](host-contract.md#5-error-handling)) |
 | `host_error` | `NoticeCode` on the session wire: the dock rows and cards this page routes |
 | `preflight` | `GET /v1/preflight` results, carrying the `tier` that decides card versus stop |
-| `worker_failure` | A worker leg that could not finish, reported through the parent envelope |
+| `worker_failure` | A worker round that could not finish, reported through the parent envelope |
 
 There is a fifth state: an entry may declare `user_visible: false` and **no** surfaces at all. `session_aborted` is the one that does; a host abort the user asked for is not news to report back. Validation makes the pairing exclusive in both directions: a `user_visible: false` entry may not list surfaces or inherit defaults, and a visible entry must carry copy. Codes documented as never surfaced are still documented, so a code that quietly stops reaching anyone is a review finding rather than an absence nobody notices.
 

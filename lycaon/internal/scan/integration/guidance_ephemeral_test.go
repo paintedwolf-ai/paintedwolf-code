@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -26,17 +27,11 @@ func TestScanGuidancePrependDoesNotPersistMessages(t *testing.T) {
 	projectDir := t.TempDir()
 	scanStore := scan.NewSQLStore(sqlDB)
 	coord := newTestCoordinator(t, scanStore, nil)
-	_ = seedScanWithGuidance(t, scanStore, "dep-1", []api.ScanGuidanceSummary{
-		{Code: "SCAN_SQL_INJECTION", Message: "fix sql", RuleID: "lycaon.ruby.sql-string-concat", Severity: "ERROR"},
-	})
 
 	provider := scan.NewGuidanceProvider(coord, scancfg.DefaultAgentBudget())
 	provider.SetInjectRenderer(prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	adapter := &scan.SessionGuidanceAdapter{
 		Provider: provider,
-		DelegationBySession: func(string) (string, string, bool) {
-			return "dep-1", "", true
-		},
 	}
 
 	sessStore := store.NewMemory()
@@ -53,6 +48,11 @@ func TestScanGuidancePrependDoesNotPersistMessages(t *testing.T) {
 	ctx := context.Background()
 	sess, err := mgr.Chats.CreateForProject(ctx, projectDir, api.SessionPostureBuild)
 	testutil.FailErr(t, "mgr.Create failed", err)
+	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, sqlDB, sess.ID, testdbseed.DefaultProjectID)
+	_ = seedScanWithGuidance(t, scanStore, sess.ID, []api.ScanGuidanceSummary{
+		{Code: "SCAN_SQL_INJECTION", Message: "fix sql", RuleID: "lycaon.ruby.sql-string-concat", Severity: "ERROR"},
+	})
 
 	history := []api.Message{{Role: api.MessageRoleUser, Content: "next"}}
 	out := adapter.PrependGuidance(ctx, sess.ID, history)

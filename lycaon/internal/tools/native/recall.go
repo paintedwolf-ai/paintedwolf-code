@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/recall"
@@ -62,6 +63,9 @@ func runRecall(ctx context.Context, args map[string]any, tctx tools.ToolContext,
 	}
 
 	addRecallRecoveryAction(ctx, result)
+	if result.History == nil {
+		tctx.Effects.Out.StateCardFact(api.ActionFact{Kind: api.ActionFactFound, Count: len(result.Hits), Noun: "results"})
+	}
 	for _, hit := range result.Hits {
 		tctx.RecordSourceContext(hit.SourceContext)
 	}

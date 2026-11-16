@@ -1,6 +1,5 @@
 id: bugbash
 pattern: pipeline
-iteration_cap: 8
 task: |
   Run the Bugbash pipeline against the user's request and current project.
   Hunt stages report only evidence-backed defects. In the triage stage, synthesize

@@ -147,7 +147,7 @@ func (m *Matcher) RedactString(ctx context.Context, s string) string {
 
 // ScreenLabeledContext applies a field label while preserving value offsets.
 func (m *Matcher) ScreenLabeledContext(ctx context.Context, label, value string) []Match {
-	return dedupeAndSort(m.screenLabeledRaw(ctx, label, value))
+	return DedupeAndSort(m.screenLabeledRaw(ctx, label, value))
 }
 
 // screenLabeledRaw screens label and value but returns value-relative hits.
@@ -198,7 +198,7 @@ func (m *Matcher) RedactLabeledSpansWhere(
 
 // ScreenContext returns ranked, non-overlapping findings.
 func (m *Matcher) ScreenContext(ctx context.Context, s string) []Match {
-	return dedupeAndSort(m.screenRaw(ctx, s))
+	return DedupeAndSort(m.screenRaw(ctx, s))
 }
 
 // screenRaw returns unmerged catalog and exact-match findings. Both lenses read
@@ -233,11 +233,6 @@ func (m *Matcher) runCatalog(ctx context.Context, s string) []Match {
 
 // DedupeAndSort ranks one winner per overlapping span.
 func DedupeAndSort(hits []Match) []Match {
-	return dedupeAndSort(hits)
-}
-
-// dedupeAndSort ranks one winner per overlapping span.
-func dedupeAndSort(hits []Match) []Match {
 	if len(hits) == 0 {
 		return nil
 	}

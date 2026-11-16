@@ -133,7 +133,7 @@ func TestIntegrityQuarantineNotifiesBeforeActiveTransactionDrains(t *testing.T) 
 func TestAuditOperationalFailureRemainsRetryable(t *testing.T) {
 	_, store := uncleanAuditStore(t)
 	testutil.FailErr(t, "close audit reader", store.reader.Close())
-	if err := RunIntegrityAudit(t.Context(), store); err == nil || errors.Is(err, ErrStoreIncompatible) {
+	if err := AuditIntegrity(t.Context(), store); err == nil || errors.Is(err, ErrStoreIncompatible) {
 		t.Fatalf("operational failure = %v", err)
 	}
 	if store.Failure() != nil {

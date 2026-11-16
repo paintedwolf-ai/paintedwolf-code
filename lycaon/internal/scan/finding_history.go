@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"sort"
 	"strings"
 	"time"
@@ -35,7 +36,7 @@ func (s *sqlFindingStore) RecordFindingEvents(ctx context.Context, scan *api.Cod
 	if s == nil || scan == nil || (len(introduced) == 0 && len(fixed) == 0) {
 		return nil
 	}
-	stamp := db.FormatTime(at.UTC())
+	stamp := timelayout.Format(at.UTC())
 	return s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		for _, batch := range []struct {
 			event    string
@@ -107,7 +108,7 @@ func (s *sqlFindingStore) OpenFindings(ctx context.Context, canonicalPath, scann
 // Results include the boundary timestamp and run newest first.
 func (s *sqlCore) FixedFindingsSince(ctx context.Context, canonicalPath, scannerID string, since time.Time) ([]api.SecurityFinding, error) {
 	rows, err := s.queries.ListScanFindingEventsSince(ctx, db.ListScanFindingEventsSinceParams{
-		CanonicalPath: canonicalPath, ScannerID: scannerID, Event: findingEventFixed, ObservedAt: db.FormatTime(since.UTC()),
+		CanonicalPath: canonicalPath, ScannerID: scannerID, Event: findingEventFixed, ObservedAt: timelayout.Format(since.UTC()),
 	})
 	if err != nil {
 		return nil, err
@@ -200,7 +201,7 @@ func (s *sqlFindingStore) SaveBlobFindings(ctx context.Context, executionFingerp
 			}
 			if err := q.UpsertScanBlobFindings(ctx, db.UpsertScanBlobFindingsParams{
 				ExecutionFingerprint: executionFingerprint, ContentID: file.ContentID, TargetPath: file.Path,
-				FindingsJson: string(raw), CreatedAt: db.FormatTime(at.UTC()),
+				FindingsJson: string(raw), CreatedAt: timelayout.Format(at.UTC()),
 			}); err != nil {
 				return err
 			}
@@ -213,7 +214,7 @@ func (s *sqlFindingStore) SaveBlobFindings(ctx context.Context, executionFingerp
 // after since with a level at or above minLevel.
 func (s *sqlFindingStore) IntroducedSince(ctx context.Context, canonicalPath string, since time.Time, minLevel api.FindingLevel) (int, error) {
 	rows, err := s.queries.ListScanFindingIntroductionsSince(ctx, db.ListScanFindingIntroductionsSinceParams{
-		CanonicalPath: canonicalPath, ObservedAt: db.FormatTime(since.UTC()),
+		CanonicalPath: canonicalPath, ObservedAt: timelayout.Format(since.UTC()),
 	})
 	if err != nil {
 		return 0, err

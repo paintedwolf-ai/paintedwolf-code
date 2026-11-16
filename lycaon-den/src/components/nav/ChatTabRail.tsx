@@ -224,6 +224,7 @@ export function ChatTabRail(props: ChatTabRailProps) {
   const workersPanel = () => (
     <WorkersTab
       workers={workers()}
+      board={props.appStore.state.board}
       pendingCheckpoints={props.appStore.state.pendingCheckpoints}
       selectedId={props.selectedWorkerId ?? null}
       onSelect={(id) => props.onOpenWorker(id)}

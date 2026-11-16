@@ -8,7 +8,9 @@ import { applyBufferSourceChanged, setBufferLiveHandlers } from "./buffer-live.t
 import { bindFilesBufferSynchronization } from "./files-buffer-synchronization.ts";
 import { observeEditorDocument } from "./editor-document.ts";
 import { projectFilesState, setFilesStore } from "./files-buffer-state.ts";
-import { applyFilesBufferDraft, applyFilesBufferLoad, filesBufferText, openFilesBuffer, resetProjectFilesForTests } from "./project-files-buffers.ts";
+import { applyFilesBufferDraft, applyFilesBufferLoad } from "./project-files-buffer-io.ts";
+import { filesBufferText } from "./files-buffer-state.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "./project-files-buffer-lifecycle.ts";
 
 vi.mock("./editor-document.ts", async (original) => ({
   ...await original<typeof import("./editor-document.ts")>(),

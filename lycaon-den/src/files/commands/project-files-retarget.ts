@@ -3,7 +3,7 @@
 import { batch } from "solid-js";
 import { flushFilesDraftSyncFor } from "../documents/files-draft-sync.ts";
 import { rekeyFilesEditorHostsUnderPath } from "../editor/files-editor-host.ts";
-import { retargetFilesBufferStoreUnderPath } from "../documents/project-files-buffers.ts";
+import { retargetFilesBufferStoreUnderPath } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { rekeySessionFidelityUnderPath } from "../editor/editor-session-fidelity.ts";
 import { retargetProjectJumpHistory } from "../components/project-files-jump-bridge.ts";

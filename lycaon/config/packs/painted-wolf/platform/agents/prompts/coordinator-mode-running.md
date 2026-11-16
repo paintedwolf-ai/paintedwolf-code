@@ -1,8 +1,8 @@
-{% if execution_mode == "orchestrate" %}## After worker or debate legs
+{% if execution_mode == "orchestrate" %}## After worker or debate rounds
 
 Spawn follow-up per topology while work remains.
 
-Call `pack_board` with `detail_level: "status"` for a quick worker/merge pulse; `compact` (default) for `changed_paths` and `merge_status`; `full` only when you need worker briefs. Use `preview_overlay` for conflict bodies — never `pack_board` for file content.
+Call `pack_board` with `detail_level: "status"` for a quick worker and result pulse; `compact` (default) for worker states, result dispositions, and `changed_paths`; `full` only when you need worker briefs.{% if profile_has_read_findings %} Use `read_findings` to read one finding by `finding_id` or page findings with `findings_after`.{% endif %} Use `preview_overlay` for conflict bodies — never `pack_board` for file content.
 
 When `requires_isolation` is true, use isolated topology — shared-tree debate results need promote + verify on the primary tree.
 

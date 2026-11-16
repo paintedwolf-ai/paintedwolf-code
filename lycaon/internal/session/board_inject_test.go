@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/repoinfo"
@@ -42,9 +41,8 @@ func boardInjectManager(t *testing.T) (*session.Host, *llm.RecordingClient, *sto
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
 	reconP := repotest.NewProvider(t)
 	builder := &board.SnapshotBuilder{
-		Repo:        reconP,
-		Delegations: delegation.NewMemoryStore(),
-		Workers:     worker.NewInMemoryQueue(10),
+		Repo:    reconP,
+		Workers: worker.NewInMemoryQueue(10),
 	}
 	mgr.Coordinator.ConfigureBoard(&board.InjectBuilder{SnapshotBuilder: builder}, board.DefaultInjectFormatter(), mgr.Promotion)
 	return mgr, rec, store, reconP
@@ -149,30 +147,25 @@ func TestInjectOmitsWorkflowWhenRunContext(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module rally\n"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	depStore := delegation.NewMemoryStore()
 	rec2 := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	store := store.NewMemory()
 	mgr2 := session.NewHost(store, session.Models{Client: rec2, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr2)
 	wirePromptTestManager(t, mgr2)
 	mgr2.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	builder := &board.SnapshotBuilder{Repo: repotest.NewProvider(t), Delegations: depStore, Workers: worker.NewInMemoryQueue(10)}
+	builder := &board.SnapshotBuilder{Repo: repotest.NewProvider(t), Workers: worker.NewInMemoryQueue(10)}
 	mgr2.Coordinator.ConfigureBoard(&board.InjectBuilder{SnapshotBuilder: builder}, board.DefaultInjectFormatter(), mgr2.Promotion)
 	mgr2.SetCoordinatorTurnFrameSource(&phaseStubCoordinator{phase: "implement"})
 
 	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	testdbseed.BindSessionWorkspace(t, store, sess.ID, dir)
-	if _, err := depStore.Create(ctx, api.Delegation{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir, Task: "task", Phase: api.DelegationPhaseWorker}, sess.ID, []api.Leg{{}}); err != nil {
-		testutil.FailErr(t, "depStore.Create failed", err)
-	}
 	if _, err := mgr2.Submissions.Prompt(ctx, sess.ID, "go"); err != nil {
 		testutil.FailErr(t, "mgr2.Prompt failed", err)
 	}
 	for _, msg := range rec2.LastRequest().Messages {
-		// Match the emitted line, not the orientation prose that names the field.
-		if boardInjectMarker(msg.Content) && strings.Contains(msg.Content, "\nDelegation:") {
-			t.Fatalf("inject should omit the delegation line when run context is present: %q", msg.Content)
+		if boardInjectMarker(msg.Content) && strings.Contains(msg.Content, "\nWorkflow:") {
+			t.Fatalf("inject should omit the workflow line when run context is present: %q", msg.Content)
 		}
 	}
 }

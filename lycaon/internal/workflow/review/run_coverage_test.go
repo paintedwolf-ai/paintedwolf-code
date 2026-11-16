@@ -30,7 +30,7 @@ func TestCoverageAdmissionRejectsStaleReviewWithoutSpendingRound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("coverage fixture: %v", err)
 	}
-	if out.Valid || out.Terminal || out.CoverageIssue == nil || out.CoverageIssue.Code != workflowreview.ReviewContextChangedCode {
+	if out.Valid || out.Terminal || out.CoverageIssue == nil || out.CoverageIssue.Code != runstate.ReviewContextChangedCode {
 		t.Fatalf("stale coverage advanced: %+v", out)
 	}
 	vars, err := mgr.Store.Runs.GetScaffoldVars(t.Context(), run.ID)

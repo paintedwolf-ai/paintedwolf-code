@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -28,7 +29,7 @@ func seedDeleteSessionTreeFixture(t testing.TB, sessionID string, runCount, chai
 	sqlDB, err := Open(filepath.Join(t.TempDir(), "store.db"))
 	testutil.FailErr(t, "Open", err)
 	t.Cleanup(func() { _ = sqlDB.Close() })
-	now := FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	_, err = sqlDB.ExecContext(ctx, `
 		INSERT OR IGNORE INTO projects (id, name, last_opened_at, created_at, roots_generation)
 		VALUES (?, NULL, ?, ?, 0)
@@ -113,7 +114,7 @@ func BenchmarkDeleteSessionTreeBulkFixture(b *testing.B) {
 // Completed runs permit multiple chain roots under the active-run uniqueness constraints.
 func insertBenchWorkflowRuns(t testing.TB, tx *sql.Tx, sessionID string, runIDs []string, chainLen int) {
 	t.Helper()
-	now := FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	var b strings.Builder
 	b.WriteString(`INSERT INTO workflow_runs (
 		id, session_id, project_id, workflow_id, workflow_version, status,
@@ -139,7 +140,7 @@ func insertBenchWorkflowRuns(t testing.TB, tx *sql.Tx, sessionID string, runIDs 
 // Chunking keeps fixture inserts below the bound-parameter limit.
 func insertBenchEntriesAndMessages(t testing.TB, tx *sql.Tx, sessionID string, runIDs []string, entryCount, chunkRows int) {
 	t.Helper()
-	now := FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	ctx := context.Background()
 	for start := 0; start < entryCount; start += chunkRows {
 		end := start + chunkRows

@@ -149,7 +149,7 @@ func TestActiveWorkflowInjectMakesStampedFanoutActionable(t *testing.T) {
 		},
 	}
 	block := renderTestActiveWorkflow(t, runCtx, snap, nil, nil)
-	for _, want := range []string{"call `task`", "as `agent_type`", "all_workers_idle", "Inspect the workflow runtime", "dormant"} {
+	for _, want := range []string{"call `task`", "with its `workflow_work_id`", "all_workers_idle", "Inspect the workflow runtime", "dormant"} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)
 		}

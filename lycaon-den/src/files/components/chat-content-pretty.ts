@@ -17,7 +17,7 @@ import {
   redactionMarkTitle,
 } from "../../chat/transcript/content/redaction-spans.ts";
 
-export interface ChatContentLanguage {
+interface ChatContentLanguage {
   readonly extension: Extension | null;
   readonly label: string;
   readonly formatters: readonly FormatTool[];

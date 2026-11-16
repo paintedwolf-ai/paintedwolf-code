@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"testing"
 	"time"
@@ -382,7 +383,7 @@ func insertUserIntentMessage(t *testing.T, sqlDB db.Handle, sessionID, messageID
 	_, err := sqlDB.ExecContext(context.Background(), `
 INSERT INTO messages(id, entry_id, session_id, role, content, origin, authority, trust_tier, seq, ord, ts)
 VALUES(?, ?, ?, 'user', 'carry on', 'user', 'user', 'trusted', 1, 1, ?)`,
-		messageID, entryID, sessionID, db.FormatTime(at))
+		messageID, entryID, sessionID, timelayout.Format(at))
 	testutil.FailErr(t, "insert user intent message", err)
 }
 

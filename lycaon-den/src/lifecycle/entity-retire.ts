@@ -1,5 +1,5 @@
 import { clearComposerDrafts } from "../chat/composer/composer-drafts.ts";
-import { dropFilesBuffersForProject } from "../files/documents/project-files-buffers.ts";
+import { dropFilesBuffersForProject } from "../files/documents/project-files-buffer-lifecycle.ts";
 import { clearDraftVersionCache } from "../chat/draft/draft-version-cache.ts";
 import {
   dropSessionChatCacheForProject,

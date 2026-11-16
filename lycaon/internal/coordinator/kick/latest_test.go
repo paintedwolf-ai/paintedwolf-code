@@ -8,7 +8,7 @@ func TestRenderLatestReachesPastTheStagedKick(t *testing.T) {
 	kicks.SetPromptEngine(engine)
 	kicks.QueueDeferred("s1", "coordinator-leg-finished")
 	kicks.QueueDeferredLatest("s1", "phase.entered", "coordinator-security-claims")
-	if id := kicks.TakePendingKickID("s1"); id != "coordinator-leg-finished" {
+	if id := kicks.TakePendingKickIDUnless("s1", nil); id != "coordinator-leg-finished" {
 		t.Fatalf("staged = %q, want the earlier kick", id)
 	}
 	if !kicks.HasLatest("s1", "phase.entered") {

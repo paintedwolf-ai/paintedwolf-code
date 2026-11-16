@@ -35,7 +35,7 @@ func TestDurableWaitResumePreservesWorkerSubscription(t *testing.T) {
 			loop.Waits.EnterSleep(t.Context(), id, deadline, "waiting for workers", DefaultCoordinatorWaitTriggers(false), nil, SleepMoverHost)
 			loop.Waits.breakSleep(t.Context(), id, "worker.budget.requested", !expired)
 			registry := tools.NewDefaultRegistry()
-			testutil.FailErr(t, "register durable wait", RegisterWaitTool(registry, loop.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
+			testutil.FailErr(t, "register durable wait", RegisterWaitTool(registry, loop.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context(), WorkerKnown: func(context.Context, string, string) bool { return true }}))
 			before := time.Now().UTC()
 			args := map[string]any{"resume": true}
 			if expired {
@@ -82,7 +82,7 @@ func TestWaitResumeRechecksLoopbackAuthority(t *testing.T) {
 			loop.SetDeps(busyWaitLoopDeps())
 			t.Cleanup(func() { loop.ForgetSession(context.Background(), id) })
 			registry := tools.NewDefaultRegistry()
-			testutil.FailErr(t, "register wait", RegisterWaitTool(registry, loop.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
+			testutil.FailErr(t, "register wait", RegisterWaitTool(registry, loop.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context(), WorkerKnown: func(context.Context, string, string) bool { return true }}))
 			_, err = registry.Run(t.Context(), "wait", map[string]any{"resume": true}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: id, ProjectID: testdbseed.DefaultProjectID, Agent: "coordinator", ToolCallID: "resume-call"}})
 			reject := toolrejection.AsToolReject(err)
 			if reject == nil || reject.Code != isolation.CodeTryLoopbackConnect {

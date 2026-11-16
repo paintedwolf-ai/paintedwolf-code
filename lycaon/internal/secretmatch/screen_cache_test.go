@@ -25,10 +25,10 @@ func TestScreenCacheDoesNotChangeResults(t *testing.T) {
 		"github":  bodyWith("gh = " + plantGitHub),
 		"nothing": bodyWith("port = 8080"),
 	} {
-		want := dedupeAndSort(uncached.screenRaw(ctx, body))
+		want := DedupeAndSort(uncached.screenRaw(ctx, body))
 		// Twice: the first screen fills the cache, the second reads it.
 		for pass := range 2 {
-			got := dedupeAndSort(cached.screenRaw(ctx, body))
+			got := DedupeAndSort(cached.screenRaw(ctx, body))
 			if len(got) != len(want) {
 				t.Fatalf("%s pass %d: %d hits, want %d", name, pass, len(got), len(want))
 			}

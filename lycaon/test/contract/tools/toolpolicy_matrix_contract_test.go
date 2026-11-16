@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/rules"
@@ -24,6 +23,10 @@ import (
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerplan"
+	"github.com/lycaon/lycaon/internal/workerplan/plantest"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
@@ -51,11 +54,11 @@ var frozenPostureToolMatrix = []postureToolExpectation{
 	{
 		posture: api.SessionPostureSpec,
 		include: []string{"restore_version", "workflow_compose", "command"},
-		exclude: []string{"delegate_dispatch", "read", "write", "grep", "git_diff"},
+		exclude: []string{"plan_from_blueprint", "read", "write", "grep", "git_diff"},
 	},
 	{
 		posture: api.SessionPostureBuild,
-		include: []string{"delegate_dispatch", "task", "state_start", "workflow_advance", "workflow_transition", "command"},
+		include: []string{"plan_from_blueprint", "task", "state_start", "workflow_advance", "workflow_transition", "command"},
 	},
 	{
 		posture: api.SessionPostureBuild,
@@ -194,13 +197,21 @@ func wireToolpolicyMatrixContract(
 		contractcheck.FailErr(t, "workflowinputs.RegisterAskUserTool failed", err)
 	}
 
-	delegStore := delegation.NewMemoryStore()
 	queue := worker.NewInMemoryQueue(4)
-	delegMgr := delegation.NewManager(delegStore, queue, mgr, delegation.AllowGate{})
-	if err := delegation.RegisterDelegationTools(reg, delegMgr); err != nil {
-		contractcheck.FailErr(t, "delegation.RegisterDelegationTools failed", err)
+	planDeps := plantest.Deps(workerrecords.New(sqlDB))
+	planDeps.Plans, planDeps.Approvals = blueprintMgr, blueprintMgr
+	planSvc := plantest.New(t, planDeps)
+	if err := workerplan.RegisterPlanFromBlueprintTool(reg, planSvc); err != nil {
+		contractcheck.FailErr(t, "workerplan.RegisterPlanFromBlueprintTool failed", err)
 	}
-	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{Queue: queue, Agents: agents, Workers: worker.DefaultWorkersConfig()}); err != nil {
+	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
+		Queue:         queue,
+		Agents:        agents,
+		Workers:       worker.DefaultWorkersConfig(),
+		WorkerRecords: workerrecords.New(sqlDB),
+		Reviews:       &workerops.Service{},
+		Plan:          planSvc,
+	}); err != nil {
 		contractcheck.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
 	policy, err := workflowcomposition.LoadComposePolicy()

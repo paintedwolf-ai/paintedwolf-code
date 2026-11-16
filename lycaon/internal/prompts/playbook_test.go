@@ -32,7 +32,7 @@ func TestMatchPlaybookByPhase(t *testing.T) {
 	m := loadTestPlaybookMatcher(t)
 	got, err := m.MatchPlaybook([]string{"worker-leg-default", "implement-addenda"}, "pipeline", "implement")
 	testutil.FailErr(t, "m.MatchPlaybook failed", err)
-	if !containsAll(got, "Run tests and the leg's external-state commands", "Branch on rejection Code:") {
+	if !containsAll(got, "Run tests and the worker's external-state commands", "Branch on rejection Code:") {
 		t.Fatalf("checklist = %v", got)
 	}
 }
@@ -41,7 +41,7 @@ func TestPlaybookFallback(t *testing.T) {
 	m := loadTestPlaybookMatcher(t)
 	got, err := m.MatchPlaybook([]string{"worker-leg-default", "implement-addenda"}, "pipeline", "unknown-phase-xyz")
 	testutil.FailErr(t, "m.MatchPlaybook failed", err)
-	if containsAny(got, "Run tests and the leg's external-state commands") {
+	if containsAny(got, "Run tests and the worker's external-state commands") {
 		t.Fatalf("addenda leaked on unknown phase: %v", got)
 	}
 	if !containsAll(got, "Branch on rejection Code:", "Claim evidence_passed:* only from inspector JSONL anchors") {
@@ -54,7 +54,7 @@ func TestPlaybookExtendsMerge(t *testing.T) {
 	got, err := m.MatchPlaybook([]string{"worker-leg-default", "implement-addenda"}, "pipeline", "implement")
 	testutil.FailErr(t, "m.MatchPlaybook failed", err)
 	idxBase := indexOf(got, "Branch on rejection Code:")
-	idxAddenda := indexOf(got, "Run tests and the leg's external-state commands")
+	idxAddenda := indexOf(got, "Run tests and the worker's external-state commands")
 	if idxBase < 0 || idxAddenda < 0 || idxBase > idxAddenda {
 		t.Fatalf("order wrong: %v", got)
 	}

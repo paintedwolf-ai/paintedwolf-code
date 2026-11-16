@@ -71,8 +71,8 @@ export function registerGitReviewJourney(browserName: "chromium" | "webkit"): vo
     }, { timeout: 30_000 }).toBe(true);
     const change = walk!.git_changes.find((entry) => entry.to_commit === commit)!;
     await page.evaluate(async ({ projectId, rootId }) => {
-      const url = "/src/files/documents/project-files-buffers.ts";
-      const buffers = await import(/* @vite-ignore */ url) as typeof import("../src/files/documents/project-files-buffers.ts");
+      const url = "/src/files/documents/project-files-buffer-lifecycle.ts";
+      const buffers = await import(/* @vite-ignore */ url) as typeof import("../src/files/documents/project-files-buffer-lifecycle.ts");
       buffers.openFilesBuffer(projectId, { rootId, rootLabel: "Project root", path: "src/app.ts", intent: "transient" });
     }, { projectId: project.id, rootId: project.roots[0]!.id });
     const currentDocument = page.getByTestId("files-editor-host").filter({ visible: true });
@@ -105,8 +105,8 @@ export function registerGitReviewJourney(browserName: "chromium" | "webkit"): vo
       requestAnimationFrame(sample);
     });
     await page.evaluate(async ({ projectId, change }) => {
-      const url = "/src/files/documents/project-files-buffers.ts";
-      const buffers = await import(/* @vite-ignore */ url) as typeof import("../src/files/documents/project-files-buffers.ts");
+      const url = "/src/files/documents/project-files-buffer-lifecycle.ts";
+      const buffers = await import(/* @vite-ignore */ url) as typeof import("../src/files/documents/project-files-buffer-lifecycle.ts");
       buffers.openFilesBuffer(projectId, {
         kind: "walk", name: "Git commit · on main", rootId: "", rootLabel: "", path: "", intent: "transient",
         walkStep: { kind: "git", key: `git:${change.id}`, change, ordinal: change.ordinal, effects: [], toolCallId: null, label: "git commit" },

@@ -16,7 +16,7 @@ type teardownStopStub struct {
 	workers     int
 	runningOnly int
 	held        int
-	delegations int
+	planned     int
 }
 
 func (s *teardownStopStub) CancelWorkersByRunID(context.Context, string, string) error {
@@ -34,8 +34,8 @@ func (s *teardownStopStub) HoldPendingWorkersByRunID(context.Context, string) er
 	return s.err
 }
 
-func (s *teardownStopStub) CancelDelegationsByRunID(context.Context, string) error {
-	s.delegations++
+func (s *teardownStopStub) WithdrawPlannedWorkersByRunID(context.Context, string) error {
+	s.planned++
 	return s.err
 }
 
@@ -89,8 +89,8 @@ func TestExitPersistsAndRecoversTeardown(t *testing.T) {
 	if len(pending) != 0 {
 		t.Fatalf("pending after recovery = %+v", pending)
 	}
-	if recovered.workers != 1 || recovered.delegations != 1 {
-		t.Fatalf("recovered calls workers=%d delegations=%d, want one each", recovered.workers, recovered.delegations)
+	if recovered.workers != 1 || recovered.planned != 1 {
+		t.Fatalf("recovered calls workers=%d planned=%d, want one each", recovered.workers, recovered.planned)
 	}
 }
 
@@ -116,8 +116,8 @@ func TestExitHonorsNoTeardownControls(t *testing.T) {
 	if len(pending) != 0 {
 		t.Fatalf("pending = %+v, want no teardown", pending)
 	}
-	if stop.workers != 0 || stop.delegations != 0 {
-		t.Fatalf("stop calls workers=%d delegations=%d, want none", stop.workers, stop.delegations)
+	if stop.workers != 0 || stop.planned != 0 {
+		t.Fatalf("stop calls workers=%d planned=%d, want none", stop.workers, stop.planned)
 	}
 }
 

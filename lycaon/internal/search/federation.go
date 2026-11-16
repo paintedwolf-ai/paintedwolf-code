@@ -58,6 +58,7 @@ type Hit struct {
 	// Worker coordinates locate child-session hits in their coordinator.
 	ParentSessionID string
 	WorkerID        string
+	WorkerName      string
 	// AgentType is the producing session's role, joined at read time.
 	AgentType string
 	// Kind is the evidence sub-kind (read, grep, web …) behind HitKind.
