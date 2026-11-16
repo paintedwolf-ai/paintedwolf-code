@@ -94,7 +94,7 @@ export function ActivitySummary(props: Props) {
           </Show>
           <Show when={props.state.kind === "ready" ? props.state : undefined} keyed>
             {(ready) => (
-              <p class="den-activity-summary__text den-activity-summary__measure" aria-hidden="true" ref={(el) => (measure = el)}>
+              <p class="den-activity-summary__measure" aria-hidden="true" ref={(el) => (measure = el)}>
                 <Show when={ready.purpose}>{(purpose) => <><Inline text={purpose()} />{" "}</>}</Show><Show when={ready.change}>{(change) => <Inline text={change()} />}</Show>
               </p>
             )}

@@ -180,11 +180,11 @@
 @utility den-activity-summary__measure {
   position: absolute;
   inset: 0 0 auto;
-  display: block;
+  margin: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
   visibility: hidden;
   pointer-events: none;
-  -webkit-line-clamp: none;
-  line-clamp: none;
 }
 
 @utility den-activity-summary__text {
