@@ -6,12 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"github.com/lycaon/lycaon/internal/pkgmanifest"
+	"golang.org/x/sys/unix"
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/lycaon/lycaon/internal/pkgmanifest"
-	"golang.org/x/sys/unix"
 )
 
 // Select holds the lifetime lock across the protected caller's atomic policy commit.
@@ -44,6 +43,15 @@ func (l layout) selectGeneration(identity string, commit func(Generation) error)
 		return err
 	}
 	return commit(Generation{Root: filepath.Join(l.store, identity), ManifestSHA256: identity, LogicalInstallRoot: manifest.InstallRoot})
+}
+
+// Reclaim never blocks a running generation. The fixed policy reader is called
+// under the exclusive lock; selection takes the matching shared lock.
+func Reclaim(identity string, freshSelection func() (string, error)) (bool, error) {
+	if os.Geteuid() != 0 {
+		return false, errors.New("native generation: reclamation requires root")
+	}
+	return native.reclaim(identity, freshSelection)
 }
 
 func (l layout) reclaim(identity string, freshSelection func() (string, error)) (bool, error) {

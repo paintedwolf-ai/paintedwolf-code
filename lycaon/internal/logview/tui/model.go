@@ -215,6 +215,9 @@ func (m *Model) render() modelRender   { return modelRender{m} }
 func (m *Model) live() modelLive       { return modelLive{m} }
 func (m *Model) pipe() modelPipe       { return modelPipe{m} }
 func (m *Model) livePoll()             { m.live().poll() }
+func (m *Model) visibleLogs() []logview.LogRecord {
+	return m.filter().visibleLogs()
+}
 
 // New builds the initial model. An empty dir starts at the captures picker; a
 // non-empty dir resolves and opens that capture directly at its session view, with

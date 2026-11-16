@@ -83,6 +83,9 @@ func LinuxKernelMin() string { return linuxFloor["kernel"] }
 // LinuxGlibcMin is the oldest C library the host links against.
 func LinuxGlibcMin() string { return linuxFloor["glibc"] }
 
+// LinuxWebKitGTKMin is the oldest WebKitGTK the desktop shell renders in.
+func LinuxWebKitGTKMin() string { return linuxFloor["webkitgtk"] }
+
 // linuxArches lists the shipped Linux executables.
 var linuxArches = []string{"amd64", "arm64"}
 

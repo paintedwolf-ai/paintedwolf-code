@@ -4,6 +4,8 @@ package gitengine
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"runtime"
 	"sync"
 )
 
@@ -72,4 +74,26 @@ func TestingEnableBundledBinary() {
 	_ = os.Setenv(EnvTest, "1")
 	_ = os.Setenv(EnvGitBinary, bin)
 	resetForTest()
+}
+
+func findBundledGitBinary() string {
+	dir, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	for {
+		gitRel, _ := engineBinaryPaths(runtime.GOOS)
+		candidate := filepath.Join(dir, "lycaon-den", "src-tauri", "engine-root", "gitengine", gitRel)
+		if st, err := os.Stat(candidate); err == nil && !st.IsDir() && (runtime.GOOS == "windows" || st.Mode()&0o111 != 0) {
+			return candidate
+		}
+		if _, err := os.Stat(filepath.Join(dir, "Taskfile.yml")); err == nil {
+			return ""
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return ""
+		}
+		dir = parent
+	}
 }

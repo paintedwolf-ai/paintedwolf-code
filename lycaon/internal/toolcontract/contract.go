@@ -110,6 +110,26 @@ func (l Lifecycle) String() string {
 	}
 }
 
+// ParseLifecycle parses a catalog lifecycle value.
+func ParseLifecycle(value string) (Lifecycle, bool) {
+	switch value {
+	case nativemanifest.LifecycleReadOnly:
+		return LifecycleReadOnly, true
+	case nativemanifest.LifecycleDBTransaction:
+		return LifecycleDBTransaction, true
+	case nativemanifest.LifecycleJournaledMutation:
+		return LifecycleJournaledMutation, true
+	case nativemanifest.LifecycleDurableJob:
+		return LifecycleDurableJob, true
+	case nativemanifest.LifecycleEffectAttempt:
+		return LifecycleEffectAttempt, true
+	case nativemanifest.LifecycleEphemeralControl:
+		return LifecycleEphemeralControl, true
+	default:
+		return LifecycleReadOnly, false
+	}
+}
+
 // Reversibility describes the recovery posture shown for an action.
 type Reversibility uint8
 
