@@ -29,12 +29,13 @@ async function linkGeometry(card: Locator): Promise<LinkGeometry> {
   });
 }
 
-async function toggleAndSettle(card: Locator, expanded: boolean): Promise<void> {
+/** Toggles the card and waits for its label to finish sliding to `labelLeft`. */
+async function toggleAndSettle(card: Locator, expanded: boolean, labelLeft: number): Promise<LinkGeometry> {
   await card.locator(":scope > .den-transcript-disclosure-header").click();
   await expect(card).toHaveAttribute("data-expanded", String(expanded));
   await expect(card).not.toHaveAttribute("data-animating", /.*/);
-  // The inset slide runs on the same duration as the height motion.
-  await expect.poll(() => card.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0);
+  await expect.poll(async () => Math.abs((await linkGeometry(card)).label.left - labelLeft)).toBeLessThan(0.5);
+  return linkGeometry(card);
 }
 
 webE2e(
@@ -103,16 +104,14 @@ webE2e(
       expect(resting.card.width).toBeLessThan(streamWidth / 2);
       expect(resting.chevronLeft).toBeGreaterThanOrEqual(resting.label.right);
 
-      await toggleAndSettle(card, true);
-      const open = await linkGeometry(card);
+      const open = await toggleAndSettle(card, true, textEdge + resting.cardInset);
       expect(open.card.left).toBeCloseTo(textEdge, 0);
       expect(open.card.width).toBeCloseTo(streamWidth, 0);
       expect(open.label.left).toBeCloseTo(textEdge + open.cardInset, 0);
       expect(open.label.top).toBeCloseTo(resting.label.top, 0);
       expect(open.chevronLeft).toBeGreaterThanOrEqual(open.label.right);
 
-      await toggleAndSettle(card, false);
-      const closed = await linkGeometry(card);
+      const closed = await toggleAndSettle(card, false, textEdge);
       expect(closed.label.left).toBeCloseTo(textEdge, 0);
       expect(closed.label.top).toBeCloseTo(resting.label.top, 0);
       expect(closed.card.width).toBeCloseTo(resting.card.width, 0);
