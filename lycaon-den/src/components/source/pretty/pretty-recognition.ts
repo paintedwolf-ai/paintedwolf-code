@@ -43,12 +43,12 @@ export const SCRIPT_RULE: BracketRule = {
   kind: "bracket", data: false, statements: true, afterBlock: "script", records: false, parsed: false,
   lexer: () => new ScriptLexer(false),
 };
-export const SCRIPT_JSX_RULE: JsxRule = { kind: "jsx" };
+const SCRIPT_JSX_RULE: JsxRule = { kind: "jsx" };
 export const STYLE_RULE: BracketRule = {
   kind: "bracket", data: false, statements: true, afterBlock: "style", records: false, parsed: false,
   lexer: () => new StyleLexer(false),
 };
-export const LINE_COMMENT_STYLE_RULE: BracketRule = { ...STYLE_RULE, lexer: () => new StyleLexer(true) };
+const LINE_COMMENT_STYLE_RULE: BracketRule = { ...STYLE_RULE, lexer: () => new StyleLexer(true) };
 export const MARKUP_RULE: MarkupRule = { kind: "markup" };
 /** Any brace language: groups over the editor's tokens, with `;` separating statements where the language has them. */
 const BRACKET_RULE: BracketRule = {
