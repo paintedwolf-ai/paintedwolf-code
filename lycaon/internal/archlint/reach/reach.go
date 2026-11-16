@@ -11,6 +11,7 @@ import (
 	"go/token"
 	"go/types"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -223,25 +224,44 @@ func mainPaths(lc *packages.Config, patterns []string) (map[string]bool, error) 
 }
 
 // deadFuncs reports a function dead when no GOOS that compiles it reaches it.
+// Platform variants share a key, so each of their declarations is reported,
+// keyed by its file.
 func deadFuncs(passes []*pass) []archlint.Finding {
-	dead := map[string]archlint.Finding{}
+	dead := map[string]map[string]archlint.Finding{}
 	live := map[string]bool{}
 	for _, p := range passes {
 		for key, f := range p.compiled {
 			if p.reachable[key] {
 				live[key] = true
-			} else if _, seen := dead[key]; !seen {
-				dead[key] = f
+				continue
 			}
+			if dead[key] == nil {
+				dead[key] = map[string]archlint.Finding{}
+			}
+			dead[key][declFile(f.Pos)] = f
 		}
 	}
 	var out []archlint.Finding
-	for key, f := range dead {
-		if !live[key] {
+	for key, decls := range dead {
+		if live[key] {
+			continue
+		}
+		for file, f := range decls {
+			if len(decls) > 1 {
+				f.Key = key + "@" + path.Base(file)
+			}
 			out = append(out, f)
 		}
 	}
 	return out
+}
+
+// declFile is the file part of a "file:line" position.
+func declFile(pos string) string {
+	if i := strings.LastIndex(pos, ":"); i >= 0 {
+		return pos[:i]
+	}
+	return pos
 }
 
 func prettyName(fn *ssa.Function) string {
