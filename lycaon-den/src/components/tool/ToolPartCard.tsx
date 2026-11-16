@@ -1,5 +1,4 @@
-import { Show } from "solid-js";
-import { CommandActivityCard } from "./CommandActivityCard.tsx";
+import { Show, createMemo } from "solid-js";
 import type { WorkerTask } from "../../api/types.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import type { ResolveProjectRoot } from "../../api/project-path.ts";
@@ -9,8 +8,10 @@ import { isTaskToolPart } from "../../chat/task/task-card-model.ts";
 import type { TaskActivityContext } from "../../chat/task/task-card-model.ts";
 import { isSkillToolPart } from "../../chat/skill/skill-card-model.ts";
 import { isVerdictToolPart } from "../../chat/verdict/verdict-card-model.ts";
+import { partAction } from "../../chat/action/part-action.ts";
 import { GenericToolCard } from "./GenericToolCard.tsx";
 import { commandActivityPart } from "../../chat/tool/command-activity-model.ts";
+import { ActionCard } from "../action/ActionCard.tsx";
 import { SkillCard } from "../skill/SkillCard.tsx";
 import { TaskCard } from "../TaskCard.tsx";
 import { VerdictCard } from "../verdict/VerdictCard.tsx";
@@ -31,22 +32,25 @@ type Props = {
   slots?: ToolBriefingSlots;
 };
 
-/** Route tool parts to specialized or generic cards. */
+/** Routes worker calls to their worker card and every described action to the action card. */
 export function ToolPartCard(props: Props) {
-  // Task cards open no activity detail, so they never ask for a briefing.
+  const part = () => (props.part.commandProgram ? commandActivityPart(props.part) : props.part);
+  // Worker cards open no activity detail, so they never ask for a summary.
   const slots = props.slots ?? (isTaskToolPart(props.part) ? undefined
-    : useActivityBriefingSlots({ part: () => (props.part.commandActivity || props.part.commandProgram ? commandActivityPart(props.part) : props.part), sessionId: () => props.sessionId, projectId: () => props.projectId }));
+    : useActivityBriefingSlots({ part, sessionId: () => props.sessionId, projectId: () => props.projectId }));
+  const action = createMemo(() => (isTaskToolPart(props.part) ? undefined : partAction(part())));
   return (
-    <Show
-      when={Boolean(props.part.commandActivity || props.part.commandProgram)}
-      fallback={<NonCommandToolPartCard {...props} slots={slots} />}
-    >
-      <CommandActivityCard {...props} part={commandActivityPart(props.part)} slots={slots} />
+    <Show when={action()} keyed fallback={<UndescribedToolPartCard {...props} slots={slots} />}>
+      {(described) => (
+        <ActionCard part={part()} action={described} layout={props.layout} sessionId={props.sessionId}
+          projectId={props.projectId} client={props.client} slots={slots} />
+      )}
     </Show>
   );
 }
 
-function NonCommandToolPartCard(props: Props) {
+/** Calls the host has not described keep their family's card. */
+function UndescribedToolPartCard(props: Props) {
   if (isTaskToolPart(props.part)) {
     return (
       <TaskCard
@@ -63,38 +67,13 @@ function NonCommandToolPartCard(props: Props) {
     );
   }
   if (isSkillToolPart(props.part)) {
-    return (
-      <SkillCard
-        part={props.part}
-        slots={props.slots}
-        layout={props.layout}
-        sessionId={props.sessionId}
-        projectId={props.projectId}
-        rootRefs={props.rootRefs}
-      />
-    );
+    return <SkillCard part={props.part} slots={props.slots} layout={props.layout} sessionId={props.sessionId} projectId={props.projectId} rootRefs={props.rootRefs} />;
   }
   if (isVerdictToolPart(props.part)) {
-    return (
-      <VerdictCard
-        part={props.part}
-        slots={props.slots}
-        layout={props.layout}
-        sessionId={props.sessionId}
-        projectId={props.projectId}
-        rootRefs={props.rootRefs}
-      />
-    );
+    return <VerdictCard part={props.part} slots={props.slots} layout={props.layout} sessionId={props.sessionId} projectId={props.projectId} rootRefs={props.rootRefs} />;
   }
   return (
-    <GenericToolCard
-      part={props.part}
-      slots={props.slots}
-      layout={props.layout}
-      sessionId={props.sessionId}
-      projectId={props.projectId}
-      client={props.client}
-      rootRefs={props.rootRefs}
-    />
+    <GenericToolCard part={props.part} slots={props.slots} layout={props.layout} sessionId={props.sessionId}
+      projectId={props.projectId} client={props.client} rootRefs={props.rootRefs} />
   );
 }

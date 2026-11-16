@@ -1,5 +1,6 @@
 import type { CommandActivityView } from "./command-activity-model.ts";
 import type {
+  ActionDescriptor,
   Message,
   ChatContentReference,
   ToolCall,
@@ -118,6 +119,10 @@ export interface ToolPartView {
   codes?: string[];
   /** Structured guidance facts. */
   feedback?: ToolFeedback[];
+  /** The host's account of this action for the action card. */
+  action?: ActionDescriptor;
+  /** Further calls the host folded into this card, such as one terminal session's. */
+  foldMembers?: ToolPartView[];
 }
 
 const TOOL_PART_KINDS = new Set<string>([
@@ -366,6 +371,7 @@ export function toolPartFromCall(
     outcome: resultMsg?.tool_result?.outcome,
     codes: resultMsg?.tool_result?.codes,
     feedback: resultMsg?.tool_result?.feedback,
+    action: resultMsg?.tool_result?.action ?? call.action,
   };
 }
 
