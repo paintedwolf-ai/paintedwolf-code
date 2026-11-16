@@ -12,6 +12,17 @@
     font-family: var(--den-font-ui);
     font-size: var(--text-den-body);
   }
+  /* Notices shared with other surfaces take the card's face and size too. */
+  & :is(.den-network-chicklet, .den-redaction-chicklet),
+  & :is(.den-network-chicklet, .den-redaction-chicklet) * {
+    font-family: var(--den-font-ui);
+    font-size: var(--text-den-body);
+  }
+}
+
+@utility den-action-card__notice {
+  margin: 0;
+  color: var(--den-text-muted);
 }
 
 @utility den-action-card__ran {

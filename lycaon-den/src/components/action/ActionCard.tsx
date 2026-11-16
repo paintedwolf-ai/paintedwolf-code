@@ -8,6 +8,9 @@ import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import { writeClipboardText } from "../../utils/clipboard.ts";
 import { ThemeIcon } from "../primitives/ThemeIcon.tsx";
 import { RedactedText } from "../transcript/RedactionMark.tsx";
+import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
+import { NetworkChicklet } from "../tool/NetworkChicklet.tsx";
+import { RedactionChicklet } from "../tool/RedactionChicklet.tsx";
 import type { ToolBriefingSlots } from "../tool/tool-briefing-slots.ts";
 import { ToolPartShell } from "../tool/ToolPartShell.tsx";
 import { ActionLinks } from "./ActionLinks.tsx";
@@ -28,6 +31,10 @@ type Props = {
 /** Every action's card: what ran, its summary, facts, preview and records, in that order. */
 export function ActionCard(props: Props) {
   const status = () => (props.action.status === "done" ? "completed" : props.action.status);
+  // A fold's members share one card, so it shows the first member that has each notice.
+  const members = () => [props.part, ...(props.part.foldMembers ?? [])];
+  const externalAccess = () => members().find((member) => member.externalAccess)?.externalAccess ?? undefined;
+  const redaction = () => members().find((member) => member.redaction?.spans?.length)?.redaction ?? undefined;
   return (
     <ToolPartShell
       part={{ ...props.part, title: props.action.ran.text }}
@@ -44,8 +51,14 @@ export function ActionCard(props: Props) {
         <ActionRanRegion ran={props.action.ran} more={props.action.more} />
         {props.slots?.summary}
         <ActionFacts facts={props.action.facts} />
+        <Show when={externalAccess()} keyed>
+          {(access) => <NetworkChicklet externalAccess={access} sessionId={props.sessionId} disclosureKey={transcriptDisclosureKey.toolNetwork(props.part.id)} />}
+        </Show>
         <Show when={props.action.preview}>
           {(preview) => <ActionPreview preview={preview()} action={props.action} part={props.part} sessionId={props.sessionId} client={props.client} />}
+        </Show>
+        <Show when={redaction()} keyed>
+          {(meta) => <p class="den-action-card__notice" data-testid="action-redaction"><RedactionChicklet message={{ host_secret_redaction: meta }} /></p>}
         </Show>
         <ActionLinks action={props.action} part={props.part} projectId={props.projectId} evidence={props.slots?.evidence} />
       </div>

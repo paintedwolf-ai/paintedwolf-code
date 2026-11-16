@@ -67,6 +67,23 @@ describe("ActionCard", () => {
     for (const text of visible) expect(allowed).toContain(text);
   });
 
+  it("keeps the host's network and redaction notices, from whichever folded member has them", () => {
+    const member: ToolPartView = {
+      ...part(), id: "member", toolCallId: "member",
+      externalAccess: { modes: ["mediated_http"], visibility_summary: "observed",
+        endpoints: [{ host: "example.test", port: 443, transport: "http_connect", visibility: "observed", decision: "allow", attempt_count: 1 }] },
+      redaction: { spans: [{ field: "tool_result.content", start: 0, length: 6, kind: "secret" }] },
+    };
+    const { container } = render(() => <ActionCard part={{ ...part(), foldMembers: [member] }} action={descriptor} layout="chat" />);
+    open(container);
+    const body = container.querySelector('[data-testid="action-card-body"]')!;
+    expect(body.querySelector('[data-testid="network-chicklet"]')?.textContent).toContain("example.test");
+    expect(body.querySelector('[data-testid="action-redaction"]')?.textContent).toMatch(/secret/);
+    const regions = [...body.children].map((child) => child.getAttribute("data-testid"));
+    expect(regions.indexOf("network-chicklet")).toBeGreaterThan(regions.indexOf("action-facts"));
+    expect(regions.indexOf("action-redaction")).toBe(regions.indexOf("action-links") - 1);
+  });
+
   it("names a fold's further targets beside what ran", () => {
     const { container } = render(() => <ActionCard part={part()} action={{ ...descriptor, more: 2 }} layout="chat" />);
     open(container);
