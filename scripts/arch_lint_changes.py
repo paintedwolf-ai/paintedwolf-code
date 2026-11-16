@@ -88,6 +88,14 @@ def target_goos(reach, host=sys.platform):
     return reach["goos"][host]
 
 
+def identity_flags(vet):
+    """The identity fields whose constants only their owner package may declare."""
+    identity = vet.get("identity")
+    if not identity:
+        return []
+    return ["-identity-fields", ",".join(identity["fields"]), "-identity-owner", identity["owner"]]
+
+
 def checks(binary, tree, policy, go=True, den=False, refs=True):
     """Every arch-lint check over one tree, as (kind, key) → finding. Without go,
     the Go checks are skipped; without refs, the cross-language references are;
@@ -99,7 +107,8 @@ def checks(binary, tree, policy, go=True, den=False, refs=True):
         [binary, "reach", "-dir", go_dir, "-goos", ",".join(target_goos(reach)), "-report", reach["report"],
          "-skip", support, "-schema", go_dir / reach["schema"], "-scope", ",".join(reach.get("scope", [])),
          *reach["roots"]],
-        [binary, "vet", "-dir", go_dir, "-test-support", support, *policy["vet"]["packages"]],
+        [binary, "vet", "-dir", go_dir, "-test-support", support, *identity_flags(policy["vet"]),
+         *policy["vet"]["packages"]],
     ]
     found = {}
     with tempfile.NamedTemporaryFile("w", suffix=".index") as index:

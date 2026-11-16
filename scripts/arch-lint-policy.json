@@ -23,7 +23,18 @@
       "./cmd/...",
       "./internal/...",
       "./pkg/..."
-    ]
+    ],
+    "identity": {
+      "owner": "github.com/lycaon/lycaon/internal/projectroot",
+      "fields": [
+        "github.com/lycaon/lycaon/internal/projectroot.RootRef.ID",
+        "github.com/lycaon/lycaon/internal/layeredfs.QualifiedPath.RootID",
+        "github.com/lycaon/lycaon/internal/layeredfs.RootSpec.ID",
+        "github.com/lycaon/lycaon/internal/layeredfs/adapter.RootGrant.RootID",
+        "github.com/lycaon/lycaon/internal/tools.WorkerFileObservationFacts.RootID",
+        "github.com/lycaon/lycaon/pkg/api.WorkerTask.WorkspaceRootID"
+      ]
+    }
   },
   "test_support": [
     "(^|/)test[a-z0-9]*(/|$)",

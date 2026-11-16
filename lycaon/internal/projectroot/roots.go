@@ -68,6 +68,10 @@ const (
 	VirtualOutputLabel  = "output"
 )
 
+// WorkerBranchRootID identifies a worker's own branch when it is addressed as
+// one root rather than through the project roots it copies.
+const WorkerBranchRootID = "worker-branch"
+
 // SingleRootID identifies the only root of a view that holds one root and
 // never maps onto project roots: a sandbox copy, a private Git seed or a mount
 // probe.

@@ -4,11 +4,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"github.com/lycaon/lycaon/internal/fspath"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/fspath"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
@@ -230,7 +231,7 @@ func resolveFactsPath(
 	roots []projectroot.RootRef,
 	facts tools.WorkerFileObservationFacts,
 ) (layeredfs.QualifiedPath, string) {
-	if rootID := strings.TrimSpace(facts.RootID); rootID != "" && rootID != "worker-branch" && strings.TrimSpace(facts.RelPath) != "" {
+	if rootID := strings.TrimSpace(facts.RootID); rootID != "" && rootID != projectroot.WorkerBranchRootID && strings.TrimSpace(facts.RelPath) != "" {
 		rel := filepath.ToSlash(filepath.Clean(strings.TrimPrefix(strings.TrimSpace(facts.RelPath), "/")))
 		disk := strings.TrimSpace(facts.AbsPath)
 		if disk == "" {

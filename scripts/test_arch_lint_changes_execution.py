@@ -148,6 +148,12 @@ class ArchLintChangesTest(unittest.TestCase):
         later = self.git("rev-parse", "HEAD").strip()
         self.assertEqual(arch_lint_changes.base_checks(self.repo, later, self.binary, POLICY, self.cache), {})
 
+    def test_vet_receives_the_identity_fields_the_policy_names(self):
+        vet = {"packages": ["./..."], "identity": {"fields": ["x/p.Ref.ID", "x/q.Path.RootID"], "owner": "x/p"}}
+        self.assertEqual(arch_lint_changes.identity_flags(vet),
+                         ["-identity-fields", "x/p.Ref.ID,x/q.Path.RootID", "-identity-owner", "x/p"])
+        self.assertEqual(arch_lint_changes.identity_flags({"packages": ["./..."]}), [])
+
     def test_target_platforms_follow_the_host(self):
         reach = {"goos": {"darwin": ["darwin", "linux"], "linux": ["linux"]}}
         self.assertEqual(arch_lint_changes.target_goos(reach, "darwin"), ["darwin", "linux"])

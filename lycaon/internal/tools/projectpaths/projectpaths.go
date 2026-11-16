@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -369,7 +370,7 @@ func UnionDiscoveryRoots(ctx context.Context, tctx tools.ToolContext, modelPath 
 					return refs, nil
 				}
 			}
-			return []projectroot.RootRef{{ID: "worker-branch", Path: branch, IsPrimary: true}}, nil
+			return []projectroot.RootRef{{ID: projectroot.WorkerBranchRootID, Path: branch, IsPrimary: true}}, nil
 		}
 		return tctx.Source.Roots, nil
 	}

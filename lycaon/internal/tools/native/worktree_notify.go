@@ -118,7 +118,7 @@ func notifyWorktreeChangedLocations(ctx context.Context, tctx tools.ToolContext,
 // mutationRootPath maps a structured root id onto the host path the catalog
 // indexes for it.
 func mutationRootPath(tctx tools.ToolContext, rootID string) string {
-	if rootID == "worker-branch" {
+	if rootID == projectroot.WorkerBranchRootID {
 		return strings.TrimSpace(tctx.Source.WorkerBranchRoot)
 	}
 	for _, root := range tctx.Source.Roots {
