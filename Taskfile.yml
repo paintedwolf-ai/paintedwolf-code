@@ -1919,11 +1919,18 @@ tasks:
       - python3 -m scripts.linux_release.package_probe {{.CLI_ARGS}}
 
   release:rehearse:rpm-metadata:
-    desc: 'Build and rpmlint production RPM metadata around a tiny nonapplication payload on native Linux (-- --receipt PATH [--container])'
+    desc: 'Build and rpmlint production RPM metadata around a tiny nonapplication payload on native Linux; a misspelled summary must fail (-- [--receipt PATH] [--container])'
     env:
       PYTHONPATH: '{{.SCRIPTS_DIR}}'
     cmds:
       - python3 -m scripts.linux_release.rpm_metadata_rehearsal {{.CLI_ARGS}}
+
+  release:rehearse:deb-metadata:
+    desc: 'Build and lintian the production Debian control data, conffiles and maintainer scripts around a tiny nonapplication payload on native Linux; an unmarked /etc file must fail (-- [--receipt PATH] [--container])'
+    env:
+      PYTHONPATH: '{{.SCRIPTS_DIR}}'
+    cmds:
+      - python3 -m scripts.linux_release.deb_metadata_rehearsal {{.CLI_ARGS}}
 
   release:rehearse:pacman-construction:
     desc: 'Build and admit a sealed tiny pacman fixture with native makepkg in the pinned official substrate (-- --receipt PATH)'

@@ -10,7 +10,9 @@ class NativeAdmissionTests(unittest.TestCase):
         for scope in (None, {'full': True}, {'full': False, 'paths': ['lycaon-den/src-tauri/src/main.rs']},
                       {'full': False, 'paths': ['lycaon/internal/decide/native/src/main.rs']}):
             self.assertEqual(native_admission.targets(scope), [])
-            expected = [['./task', 'test:confine:linux', '--', 'supervisor']] if scope is None or scope['full'] else []
+            broad = scope is None or scope['full']
+            expected = [['./task', 'test:confine:linux', '--', 'supervisor'],
+                        ['./task', 'release:rehearse:deb-metadata'], ['./task', 'release:rehearse:rpm-metadata']] if broad else []
             if scope and scope['full']:
                 expected = [*expected, ['./task', 'scripts:coverage:changes']]
             self.assertEqual(native_admission.commands(scope), expected)
@@ -21,6 +23,21 @@ class NativeAdmissionTests(unittest.TestCase):
         self.assertEqual(lanes['native']['targets'], ['den:test:rust', 'decide:test'])
         self.assertIn('integration', lanes['native']['profiles'])
         self.assertFalse(lanes['native']['runtime_engines'])
+
+    def test_package_metadata_lint_runs_for_exactly_its_inputs(self):
+        lint = [['./task', 'release:rehearse:deb-metadata'], ['./task', 'release:rehearse:rpm-metadata']]
+        for path in ('packaging/linux/deb/postinst', 'packaging/linux/rpm/rpmlint.toml', 'scripts/linux_release/payload.py',
+                     'scripts/linux-package-assemble.py', 'scripts/linux-package-config.py'):
+            with self.subTest(path=path):
+                scope = {'full': False, 'paths': [path]}
+                commands = native_admission.commands(scope)
+                self.assertEqual([command for command in commands if command in lint], lint)
+                ready = next(row for row in hosted_plan.matrix('fast', scope=scope)['include'] if row['lane'] == 'ready')
+                self.assertTrue(ready['repository_tools'])
+        for path in ('lycaon-den/src/ui.ts', 'lycaon/internal/settings/settings.go', 'scripts/linux-package-manifest.py',
+                     'docs/packaging.md'):
+            with self.subTest(path=path):
+                self.assertFalse(any(command in lint for command in native_admission.commands({'full': False, 'paths': [path]})))
 
     def test_native_selection_is_checked_before_admission_and_cannot_reuse_full_tests(self):
         for target in ('den:test:rust', 'decide:test'):

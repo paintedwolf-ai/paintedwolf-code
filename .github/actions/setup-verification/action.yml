@@ -31,7 +31,7 @@ inputs:
     description: Provision GTK and display dependencies for protected launch tests
     default: 'false'
   repository-tools:
-    description: Install native package and signature tools used by repository and script-coverage fixtures
+    description: Install native package, lint and signature tools used by repository, package metadata and script-coverage fixtures
     default: 'false'
   nix:
     description: Provision the pinned Nix toolchain and locked flake inputs before an offline Nix lane

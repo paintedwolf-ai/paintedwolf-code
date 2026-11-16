@@ -61,7 +61,7 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("max-parallel: 1", execution)
         self.assertIn("matrix: ${{ fromJSON(needs.prepare-bundle-upgrade.outputs.matrix) }}", execution)
         self.assertIn('matrix.case_id', execution)
-        self.assertIn("aggregate-release, bundle-upgrade]", publication)
+        self.assertIn("linux-pacman-repositories, bundle-upgrade]", publication)
         self.assertIn("ref: ${{ github.workflow_sha }}", prepare)
         self.assertIn("if: always()", execution)
 
