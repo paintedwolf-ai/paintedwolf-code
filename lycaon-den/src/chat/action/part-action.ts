@@ -1,6 +1,7 @@
 import type { ActionDescriptor } from "../../api/types.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
 import type { ToolPartView } from "../tool/tool-part-model.ts";
+import { TOOL_ACTION_LABELS } from "../tool/tool-presentation.generated.ts";
 import { mergeActions, type CardAction } from "./action-merge.ts";
 
 /**
@@ -16,6 +17,21 @@ export function partAction(part: ToolPartView): CardAction | undefined {
     return mergeActions(members.length ? [...members, ...calls.filter((action) => !members.includes(action))] : calls);
   }
   return part.action;
+}
+
+/**
+ * A call the host has not described yet, such as a command before its first
+ * activity: its catalog name, its title and its status, with no facts.
+ */
+export function pendingAction(part: ToolPartView): CardAction {
+  return {
+    label: TOOL_ACTION_LABELS[part.tool.toLowerCase()] ?? part.tool,
+    status: part.status === "completed" ? "done" : part.status,
+    ran: { text: part.title?.trim() || part.tool, noun: "target" },
+    facts: [],
+    row: [],
+    links: part.output ? [{ kind: "input" }, { kind: "output" }] : [{ kind: "input" }],
+  };
 }
 
 function foldKey(entry: ActivitySpanEntry): string {

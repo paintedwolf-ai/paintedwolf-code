@@ -25,7 +25,7 @@ import {
   type ToolArgsRedaction,
 } from "../transcript/content/redaction-spans.ts";
 import { resolveChickletTitle } from "./tool-chicklet-titles.ts";
-import { skillReadResource, skillResourceTitle } from "../skill/skill-card-model.ts";
+import { skillReadResource, skillResourceTitle } from "../skill/skill-read.ts";
 import {
   COORDINATOR_INTERNAL_TOOLS,
   LONG_RUNNING_COORDINATOR_TOOLS,

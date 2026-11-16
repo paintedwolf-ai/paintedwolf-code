@@ -119,6 +119,18 @@ func renderTS(cfg Config) []byte {
 	}
 	b.WriteString("};\n\n")
 
+	b.WriteString("/** Action card name each tool declares; worker tools keep their own card. */\n")
+	b.WriteString("export const TOOL_ACTION_LABELS: Readonly<Record<string, string>> = {\n")
+	actionLabels := cfg.Labels()
+	for _, name := range sortedKeys(actionLabels) {
+		b.WriteString("  ")
+		b.WriteString(tsKey(name))
+		b.WriteString(": ")
+		b.WriteString(strconv.Quote(actionLabels[name]))
+		b.WriteString(",\n")
+	}
+	b.WriteString("};\n\n")
+
 	b.WriteString("/** In-flight label shown while a tool is running. */\n")
 	b.WriteString("export const TOOL_CHICKLET_RUNNING_LABELS: Readonly<\n")
 	b.WriteString("  Record<string, string>\n")

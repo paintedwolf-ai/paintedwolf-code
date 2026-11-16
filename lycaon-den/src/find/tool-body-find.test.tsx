@@ -13,7 +13,6 @@ import {
 } from "./find-controller.ts";
 import { FIND_MARK_ATTR } from "./find-match.ts";
 import { bindFindableView } from "./use-findable-view.ts";
-import { GenericToolCard } from "../components/tool/GenericToolCard.tsx";
 import { registerOpenFilesSurfaceSink, resetOpenFilesSurfaceForTests } from "../platform/navigation/open-files-surface.ts";
 import { ToolPartShell } from "../components/tool/ToolPartShell.tsx";
 import { ToolPartCard } from "../components/tool/ToolPartCard.tsx";
@@ -182,10 +181,10 @@ describe("tool body find + collapsed reveal", () => {
     expect(isDisclosureOpen(cards().find((c) => c.getAttribute("data-tool-call-id") === "r2"))).toBe(false);
   });
 
-  it("opens linked inline output from a collapsed production tool card", async () => {
+  it("opens linked inline output from a collapsed action card", async () => {
     const sink = vi.fn();
     registerOpenFilesSurfaceSink(sink);
-    render(() => <FindRoot><GenericToolCard part={part()} layout="chat" sessionId="s1" projectId="project" /></FindRoot>);
+    render(() => <FindRoot><ToolPartCard part={part()} layout="chat" sessionId="s1" projectId="project" /></FindRoot>);
     openFind();
     setFindQuery("TOOL_BODY_FIND_NEEDLE");
     expect(findController.collapsedCount()).toBeGreaterThan(0);
