@@ -138,7 +138,7 @@ Project changing contracts from their owners. Review-loop instructions carry the
 Use system-derived tests rather than prompt snapshots or required sentences:
 
 - [`verdict_projection_contract_test.go`](../lycaon/test/contract/agentcontext/verdict_projection_contract_test.go) walks the workflow catalog, generates admitted submissions (including empty claim arrays), adds fields, and checks required-field rejection and cache invalidation.
-- [`pongo_loop_binding_contract_test.go`](../lycaon/test/contract/agentcontext/pongo_loop_binding_contract_test.go) checks catalog loop selectors against the pinned Pongo implementation. Pongo field names are case-sensitive; unknown fields otherwise render silently empty.
+- [`loop_bindings_test.go`](../lycaon/internal/pongoplain/loop_bindings_test.go) checks catalog loop selectors against the pinned Pongo implementation. Pongo field names are case-sensitive; unknown fields otherwise render silently empty.
 
 These tests protect structured contracts, not the truth of arbitrary prose. Do not add heavyweight service fixtures merely to lock down a shell recipe, or tests that assert a preferred sentence. If a procedure needs a machine-enforced guarantee, first model that guarantee as a typed contract.
 

@@ -85,14 +85,6 @@
   object-fit: contain;
 }
 
-.den-artifacts-page-error {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 8px var(--den-stage-inset-x);
-  color: var(--den-danger);
-  font-size: var(--text-den-hint);
-}
-
 .den-artifacts-empty {
   margin: 24px var(--den-stage-inset-x);
   max-width: var(--den-prose-measure);

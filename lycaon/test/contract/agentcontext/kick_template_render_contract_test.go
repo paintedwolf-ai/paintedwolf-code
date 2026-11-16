@@ -21,7 +21,7 @@ func TestKickTemplatesRenderWithKickEngineVars(t *testing.T) {
 
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	data := kickRenderFixture()
-	contractcheck.FailErr(t, "merge coordinator kick policy vars", prompts.MergeCoordinatorKickPolicyVars(data))
+	prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, "implement_investigate", 1))
 
 	for _, b := range reg.AllInform() {
 		if b == nil || !b.IsInform() || !strings.HasPrefix(b.Render, "coordinator-") {
@@ -51,7 +51,7 @@ func TestKickTemplatesRenderWithMinimalDataAreNonEmpty(t *testing.T) {
 
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	data := map[string]any{}
-	contractcheck.FailErr(t, "merge coordinator kick policy vars", prompts.MergeCoordinatorKickPolicyVars(data))
+	prompts.MergeCoordinatorKickVarsForTools(data, coordinatorTestReader(t, "implement_investigate", 1))
 
 	var empty []string
 	for _, id := range ids {

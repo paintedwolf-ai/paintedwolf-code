@@ -7,6 +7,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/pongoplain"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -184,17 +186,34 @@ func BoardInjectToMap(data BoardInjectData) map[string]any {
 			"truncated": root.Truncated,
 		}
 	}
-	return map[string]any{
+	occurrence := map[string]any{
 		"pack_sentinel":       data.PackSentinel,
 		"now_line":            data.NowLine,
 		"omit_delegation":     data.OmitDelegation,
 		"include_scan_legend": data.IncludeScanLegend,
-		"root_count":          data.RootCount,
 		"multi_root":          data.MultiRoot,
 		"orientation_roots":   orientationRoots,
 		"root_omitted_count":  data.RootOmittedCount,
 		"lines":               lines,
 	}
+	profiles, err := sandbox.LoadToolProfiles()
+	if err != nil {
+		return occurrence
+	}
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		Profiles:  profiles,
+		RootCount: data.RootCount,
+		WebSearch: true,
+	})
+	if err != nil {
+		return occurrence
+	}
+	vars, err := prompts.Vars(reader, occurrence)
+	if err != nil {
+		return occurrence
+	}
+	return vars
 }
 
 // BuildWorkerLegInjectData maps worker leg context into inject DTO fields.

@@ -237,4 +237,52 @@ describe("AnchoredSurface", () => {
       HTMLElement.prototype.focus = focus;
     }
   });
+
+  it("closes the topmost interactive surface first, ignores passive tooltips above it, and yields to a focused modal or find bar", () => {
+    const [dialogOpen, setDialogOpen] = createSignal(true);
+    const [menuOpen, setMenuOpen] = createSignal(true);
+    const dismissDialog = vi.fn(() => setDialogOpen(false));
+    const dismissMenu = vi.fn(() => setMenuOpen(false));
+    const dismissTip = vi.fn();
+    let findInput: HTMLInputElement | undefined;
+    let modalInput: HTMLInputElement | undefined;
+    let outside: HTMLButtonElement | undefined;
+
+    render(() => (
+      <>
+        <button ref={outside} type="button">Outside</button>
+        <div class="den-find-bar"><input ref={findInput} /></div>
+        <div role="dialog" aria-modal="true"><input ref={modalInput} /></div>
+        <Show when={dialogOpen()}>
+          <AnchoredSurface anchor={() => anchorRect} role="dialog" ariaLabel="Card" onDismiss={dismissDialog}>
+            <div>Card</div>
+          </AnchoredSurface>
+        </Show>
+        <Show when={menuOpen()}>
+          <AnchoredSurface anchor={() => anchorRect} role="menu" menuFocus="managed" ariaLabel="Menu" onDismiss={dismissMenu}>
+            <div>Menu</div>
+          </AnchoredSurface>
+        </Show>
+        <AnchoredSurface anchor={() => anchorRect} role="tooltip" onDismiss={dismissTip}>
+          <div>Hint</div>
+        </AnchoredSurface>
+      </>
+    ));
+
+    fireEvent.keyDown(outside!, { key: "Escape" });
+    expect(dismissMenu).toHaveBeenCalledOnce();
+    expect(dismissDialog).not.toHaveBeenCalled();
+    expect(dismissTip).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(findInput!, { key: "Escape" });
+    fireEvent.keyDown(modalInput!, { key: "Escape" });
+    expect(dismissDialog).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(outside!, { key: "Escape" });
+    expect(dismissDialog).toHaveBeenCalledOnce();
+    expect(dismissTip).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(outside!, { key: "Escape" });
+    expect(dismissTip).toHaveBeenCalledOnce();
+  });
 });

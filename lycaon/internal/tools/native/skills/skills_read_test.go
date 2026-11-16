@@ -14,6 +14,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -452,34 +453,44 @@ func TestSkillsReadTreatsSelfReferentialSkillMarkdownAsMainBody(t *testing.T) {
 }
 
 func TestSkillsReadUsesCallerAgentProfile(t *testing.T) {
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load tool profiles", err)
+	routingPlan, err := prompts.CompileSurfacePlan("implement_routing", 2)
+	testutil.FailErr(t, "compile surface plan", err)
 	body := "caller:{% if is_coordinator %}coord{% else %}worker{% endif %} " +
 		"spawn:{% if profile_has_task %}yes{% else %}no{% endif %} " +
 		"branch:{% if on_worker_branch %}isolated{% else %}shared{% endif %} " +
 		"git:{% if has_git %}yes{% else %}no{% endif %}"
 	for _, tc := range []struct {
 		name  string
-		input prompts.SkillSurfaceVarsInput
+		input prompts.ReaderInput
 		want  string
 	}{
 		{
 			name: "coordinator surface",
-			input: prompts.SkillSurfaceVarsInput{
+			input: prompts.ReaderInput{
 				ProfileID: prompts.CoordinatorProfileID,
 				SurfaceID: "implement_routing",
-				Offered:   []string{"command", "task", "ask_user"},
+				Profiles:  profiles,
+				Plan:      routingPlan,
+				Loaded:    map[string]bool{"command": true, "task": true, "ask_user": true},
 				HasGit:    true,
 				RootCount: 2,
+				WebSearch: true,
 			},
 			want: "caller:coord spawn:yes branch:shared git:yes",
 		},
 		{
 			name: "worker readonly leg",
-			input: prompts.SkillSurfaceVarsInput{
+			input: prompts.ReaderInput{
 				ProfileID:      "worker_readonly",
-				Offered:        []string{"command", "summarize", "recall"},
+				Profiles:       profiles,
+				Visible:        []string{"command", "summarize", "recall"},
+				Loaded:         map[string]bool{"command": true, "summarize": true, "recall": true},
 				OnWorkerBranch: true,
 				HasGit:         true,
 				RootCount:      1,
+				WebSearch:      true,
 			},
 			want: "caller:worker spawn:no branch:isolated git:yes",
 		},
@@ -491,9 +502,9 @@ func TestSkillsReadUsesCallerAgentProfile(t *testing.T) {
 					return []skills.Skill{sk}
 				},
 				TemplateVars: func(_ context.Context, _ tools.ToolContext) map[string]any {
-					vars, err := prompts.SkillSurfaceTemplateVars(tc.input)
-					testutil.FailErr(t, "skill surface vars", err)
-					return vars
+					reader, err := prompts.NewReader(tc.input)
+					testutil.FailErr(t, "new reader", err)
+					return prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
 				},
 				PackConfiguration: func(context.Context, tools.ToolContext, string) map[string]any {
 					return nil

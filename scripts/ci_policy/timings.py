@@ -11,6 +11,7 @@ from ci_policy import github
 WORKFLOW = "nightly.yml"
 RECEIPTS = ("receipt-verification-nightly-",)
 RECENT_RUNS = 20
+PACKAGE_LANES = ("behavior",)
 
 
 def row_key(lane, shard):
@@ -41,15 +42,16 @@ def record(root, run):
 
 
 def merge(paths):
-    """Passed lanes' durations by matrix row, and every package duration the sharded lanes measured."""
+    """Passed lanes' durations by matrix row, and every package duration the uninstrumented lane measured."""
     lanes, packages = {}, {}
     for path in paths:
         measured = json.loads(path.read_text())
         if (measured.get("basis") == "setup-and-execution" and measured["status"] == "passed"
                 and valid_seconds(measured["seconds"])):
             lanes[row_key(measured["lane"], measured["shard"])] = measured["seconds"]
-        packages.update({name: seconds for name, seconds in measured["packages"].items()
-                         if valid_seconds(seconds, allow_zero=True)})
+        if measured.get("lane") in PACKAGE_LANES:
+            packages.update({name: seconds for name, seconds in measured["packages"].items()
+                             if valid_seconds(seconds, allow_zero=True)})
     return {"lanes": lanes, "packages": packages}
 
 

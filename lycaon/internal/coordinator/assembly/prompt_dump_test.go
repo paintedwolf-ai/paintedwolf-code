@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -26,10 +27,20 @@ func TestRenderPromptDumpInvestigateFixture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderPromptDump: %v", err)
 	}
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
 	plans, err := surface.CompileToolPlans(1)
-	testutil.FailErr(t, "compile surfaces", err)
-	summaryGuidance, err := engine.Render(context.Background(), "units/native-summarize-tool.md",
-		prompts.VisibleToolsNativePartialVars(plans["implement_investigate"].ImmediateNames()))
+	testutil.FailErr(t, "CompileToolPlans", err)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Profiles:  profiles,
+		Plan:      plans["implement_investigate"],
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "new reader", err)
+	summaryGuidance, err := engine.Render(context.Background(), "units/native-summarize-tool.md", reader.Facts())
 	testutil.FailErr(t, "render summarize guidance", err)
 	if strings.TrimSpace(summaryGuidance) == "" {
 		t.Fatal("summarize guidance is empty")

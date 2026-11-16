@@ -227,8 +227,6 @@ export function FilesEditorGitReviewPreview(props: { projectId: string; buffer: 
 export function FilesEditorOverlays(props: {
   lineFacts: {
     lineFactsCard: () => Parameters<typeof LineFactsCard>[0]["state"];
-    cancelHidePopover: () => void;
-    scheduleHidePopover: () => void;
     hideLineFacts: () => void;
     returnLineFactsFocus: () => void;
     activateLineFact: Parameters<typeof LineFactsCard>[0]["onActivate"];
@@ -245,8 +243,6 @@ export function FilesEditorOverlays(props: {
     <>
       <LineFactsCard
         state={props.lineFacts.lineFactsCard()}
-        onKeepOpen={props.lineFacts.cancelHidePopover}
-        onLeave={props.lineFacts.scheduleHidePopover}
         onDismiss={props.lineFacts.hideLineFacts}
         onReturnFocus={props.lineFacts.returnLineFactsFocus}
         onActivate={props.lineFacts.activateLineFact}

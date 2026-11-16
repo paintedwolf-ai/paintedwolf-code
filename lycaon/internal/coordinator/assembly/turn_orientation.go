@@ -8,9 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -71,15 +69,12 @@ func (e *turnContextAssembler) prependCoordinatorRunInject(
 		if len(spawnAgents) == 0 {
 			return out, nil
 		}
-		var catalog *extpacks.EffectiveCatalog
-		var toolProfiles []sandbox.ToolProfile
-		if view := e.surface.sessionCatalogView(ctx, sess); view != nil {
-			catalog = view.Catalog
-			toolProfiles = view.ToolProfiles
+		reader, err := e.surface.turnReader(ctx, sess, frame, history, turn, facts.RootCount)
+		if err != nil {
+			return nil, fmt.Errorf("implement-spawn reader: %w", err)
 		}
 		block, err := inject.RenderImplementSpawnInject(
-			ctx, deps.Injects, sess.ID, spawnAgents, spawn.MaxInFlightTaskWorkers, facts.SurfaceID, facts.RootCount, facts.RepoKnownEmpty, facts.WebSearchEnabled,
-			catalog, toolProfiles,
+			ctx, deps.Injects, sess.ID, spawnAgents, spawn.MaxInFlightTaskWorkers, reader, facts.RepoKnownEmpty,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("implement-spawn inject: %w", err)
@@ -135,18 +130,13 @@ func (e *turnContextAssembler) prependTransitionInject(
 	if inj == nil {
 		return "", false
 	}
-	surfaceVars := map[string]any{"project_dir": sess.WorkspacePath}
-	if roots, count, activePath, omitted, ok := e.surface.workspaceRootsForTurn(ctx, sess, turn); ok {
-		mergeWorkspaceRootTurnVars(surfaceVars, roots, count, activePath, omitted)
-	}
-	var toolProfiles []sandbox.ToolProfile
-	turnSurface := prompts.SurfaceTurn{Loaded: e.surface.loadedTools(sess)}
-	if view := e.surface.sessionCatalogView(ctx, sess); view != nil {
-		toolProfiles = view.ToolProfiles
-		turnSurface.Schemas = view.ToolSchemas
-	}
-	if err := prompts.MergeCoordinatorSurfacePathVars(profile.SurfaceID, toolProfiles, surfaceVars, turnSurface); err != nil {
+	reader, err := e.surface.turnReader(ctx, sess, frame, history, turn, 0)
+	if err != nil {
 		return "", false
+	}
+	occ := map[string]any{"project_dir": sess.WorkspacePath}
+	if roots, _, activePath, omitted, ok := e.surface.workspaceRootsForTurn(ctx, sess, turn); ok {
+		mergeWorkspaceRootTurnVars(occ, roots, activePath, omitted)
 	}
 	if err := prompts.MergeCoordinatorPromptVars(
 		profile.SurfaceID,
@@ -157,8 +147,12 @@ func (e *turnContextAssembler) prependTransitionInject(
 			ExecutionModeLeft:     transition.ExecutionModeLeft,
 		},
 		implState.VerifyCommand,
-		surfaceVars,
+		occ,
 	); err != nil {
+		return "", false
+	}
+	surfaceVars, err := prompts.Vars(reader, occ)
+	if err != nil {
 		return "", false
 	}
 	block, err := anchor.RenderInform(ctx, anchor.InjectTransition, anchor.MatchContext{Surface: "coordinator", SessionID: sess.ID}, inj, surfaceVars)

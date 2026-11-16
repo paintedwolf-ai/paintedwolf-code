@@ -313,6 +313,11 @@ func checkToolVocabulary(
 	if err != nil {
 		return nil, err
 	}
+	templateNotes, err := prompts.CheckTemplateVocabulary(eff)
+	if err != nil {
+		return nil, err
+	}
+	notes = append(notes, templateNotes...)
 	// Malformed skills already surface as catalog diagnostics; this reads the
 	// ones that loaded.
 	loaded, _ := extpacks.LoadEffectiveSkills(eff)

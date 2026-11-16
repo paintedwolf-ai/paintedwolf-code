@@ -13,7 +13,8 @@ import { clearTranscriptEntryMemory, noteTranscriptEntryBaseline, transcriptEntr
 import { clearVisualArtifactSessionMemory, noteVisualArtifactIntroBaseline } from "../chat/visual/visual-artifact-reveal.ts";
 import { mergeTranscriptBaseline } from "../chat/transcript/projection/transcript-baseline-merge.ts";
 import { transcriptReaderReach } from "../chat/transcript/history/transcript-reader-reach.ts";
-import { TRANSCRIPT_PAGE_BUDGET, appendToTail, applyTranscriptPage, copyTranscriptWindow, emptyTranscriptWindow, installTailWindow, materializeTranscriptWindow, mergeIntoTail, patchRowInWindow, precedesLiveTail, refreshTailWindow, resetOlderPages, transcriptWindowPage, trimOldestPages } from "../chat/transcript/layout/transcript-window.ts";
+import { traceTranscriptPageEvictions } from "../chat/transcript/layout/transcript-paging-trace.ts";
+import { TRANSCRIPT_RESIDENT_ORD_BUDGET, appendToTail, applyTranscriptPage, copyTranscriptWindow, emptyTranscriptWindow, installTailWindow, materializeTranscriptWindow, mergeIntoTail, patchRowInWindow, precedesLiveTail, refreshTailWindow, resetOlderPages, residentPageOrds, transcriptWindowPage, trimOldestPages, type TranscriptEvictedPage } from "../chat/transcript/layout/transcript-window.ts";
 import { clearDraftVersionCache } from "../chat/draft/draft-version-cache.ts";
 import { clearChatContentCache } from "../chat/transcript/content/chat-content-reader.ts";
 import { messagesEqual } from "../chat/transcript/projection/messages-equal.ts";
@@ -348,13 +349,14 @@ export function createAppStore(
     loadTranscriptPage(request, page) {
       const sessionId = state.transcriptSessionId?.trim();
       let applied = false;
+      const evicted: TranscriptEvictedPage[] = [];
       setState(
         produce((draft) => {
           const next = applyTranscriptPage(
             draft.transcript,
             request,
             transcriptWindowPage(page),
-            residencyPolicy(sessionId),
+            { ...residencyPolicy(sessionId), evicted },
           );
           if (!next) return;
           draft.transcript = next;
@@ -364,6 +366,7 @@ export function createAppStore(
           applied = true;
         }),
       );
+      traceTranscriptPageEvictions(evicted);
       // Paged history enters the reveal baseline immediately.
       if (applied && sessionId && page.messages.length > 0) {
         noteTranscriptEntryBaseline(
@@ -375,15 +378,17 @@ export function createAppStore(
     },
     trimTranscriptPages() {
       const sessionId = state.transcriptSessionId?.trim();
-      if (Object.keys(state.transcript.pages).length <= TRANSCRIPT_PAGE_BUDGET) return;
+      if (residentPageOrds(state.transcript.pages) <= TRANSCRIPT_RESIDENT_ORD_BUDGET) return;
+      const evicted: TranscriptEvictedPage[] = [];
       setState(
         produce((draft) => {
-          const next = trimOldestPages(draft.transcript, residencyPolicy(sessionId));
+          const next = trimOldestPages(draft.transcript, { ...residencyPolicy(sessionId), evicted });
           if (next === draft.transcript) return;
           draft.transcript = next;
           draft.messages = materializeTranscriptWindow(next);
         }),
       );
+      traceTranscriptPageEvictions(evicted);
     },
     resetOlderTranscriptPages() {
       setState(
@@ -430,7 +435,9 @@ export function createAppStore(
           // Unknown older rows return with their paged transcript window.
           if (precedesLiveTail(draft.transcript, message)) return;
           const sessionId = draft.transcriptSessionId?.trim();
-          draft.transcript = appendToTail(draft.transcript, message, residencyPolicy(sessionId));
+          const evicted: TranscriptEvictedPage[] = [];
+          draft.transcript = appendToTail(draft.transcript, message, { ...residencyPolicy(sessionId), evicted });
+          traceTranscriptPageEvictions(evicted);
           draft.messages = materializeTranscriptWindow(draft.transcript);
           applied = true;
         }),

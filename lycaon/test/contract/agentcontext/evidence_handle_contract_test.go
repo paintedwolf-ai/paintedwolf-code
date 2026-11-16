@@ -14,6 +14,8 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -31,24 +33,46 @@ func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 	engine := contractPersonaEngine(t)
 	units, err := prompts.UnitCatalogForEngine(engine)
 	contractcheck.FailErr(t, "unit catalog", err)
-	base := mergeCoordinatorTemplateVars(t)
+	base := mergeCoordinatorSurfaceVars(t, "implement_synthesis")
+	mergeFixtureWorkspaceRoot(t, base, "")
 	for _, state := range toolFactStates(t, binding, units) {
-		vars := maps.Clone(base)
-		maps.Copy(vars, prompts.VisibleToolsNativePartialVars(state.offered))
-		prompts.MergeVisualShowVars(state.offered, state.requestable, vars)
-		vars["is_coordinator"] = state.host == promptunit.HostCoordinator
-		held := map[string]bool{}
+		allTools := map[string]bool{}
 		for _, tool := range slices.Concat(state.offered, state.requestable) {
-			held[tool] = true
+			allTools[tool] = true
 		}
-		if held["command"] && vars["profile_command_mutation"] != false {
-			held[toolvocab.ReachCommandMutation] = true
+		deferred := map[string]bool{}
+		for _, tool := range state.requestable {
+			deferred[tool] = true
 		}
 		offered := map[string]bool{}
 		for _, tool := range state.offered {
 			offered[tool] = true
 		}
-		selection := promptunit.Selection{Host: state.host, Mode: state.mode, Offered: offered}
+		profileID := "synthetic"
+		if state.host == promptunit.HostCoordinator {
+			profileID = prompts.CoordinatorProfileID
+		}
+		reader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: profileID,
+			Mode:      state.mode,
+			Profiles: []sandbox.ToolProfile{{
+				ID:             profileID,
+				Tools:          allTools,
+				DeferredTools:  deferred,
+				CommandEffects: toolcontract.AllCommandEffects(),
+			}},
+			Plan:      toolsurface.Compile(state.offered, state.requestable),
+			Loaded:    offered,
+			Visible:   slices.Concat(state.offered, state.requestable),
+			RootCount: 1,
+			HasGit:    true,
+			WebSearch: true,
+		})
+		contractcheck.FailErr(t, "build state reader", err)
+		vars, err := prompts.Vars(reader, maps.Clone(base))
+		contractcheck.FailErr(t, "merge state vars", err)
+		held := reader.Held()
+		selection := reader.Selection()
 		for _, slot := range units.Rendered(selection) {
 			for _, unit := range slot {
 				if !unit.Stock {

@@ -40,7 +40,7 @@ func activeWorkspaceRoot(roots []projectroot.RootRef, activeRootID string) (proj
 	return projectroot.RootRef{}, false
 }
 
-// MergeWorkspaceRootsVars adds workspace_roots, root_count, project_dir, and
+// MergeWorkspaceRootsVars adds workspace_roots, project_dir, and
 // workspace_roots_omitted_count for workspace-roots.md.
 func MergeWorkspaceRootsVars(vars map[string]any, roots []projectroot.RootRef, activeRootID string) {
 	if vars == nil {
@@ -49,7 +49,6 @@ func MergeWorkspaceRootsVars(vars map[string]any, roots []projectroot.RootRef, a
 	if _, ok := vars["reviews_confined_writes"].(bool); !ok {
 		vars["reviews_confined_writes"] = true
 	}
-	vars["root_count"] = len(roots)
 	rows, omitted := WorkspaceRootRows(roots, activeRootID)
 	vars["workspace_roots"] = rows
 	vars["workspace_roots_omitted_count"] = omitted

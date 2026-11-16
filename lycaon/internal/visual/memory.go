@@ -109,8 +109,11 @@ func (s *MemoryStore) absentElsewhereLocked(excludeRoot, artifactID string) Reso
 }
 
 // ListProject has no project index in the memory store.
-func (s *MemoryStore) ListProject(_ context.Context, _ string, _ ArtifactPageQuery) (ArtifactPage, error) {
-	return ArtifactPage{Items: []api.ArtifactListItem{}}, nil
+func (s *MemoryStore) ListProject(_ context.Context, _ string, query ArtifactPageQuery) (ArtifactPage, error) {
+	if strings.TrimSpace(query.BeforeCreatedAt) != "" {
+		return ArtifactPage{Items: []api.ArtifactListItem{}}, nil
+	}
+	return ArtifactPage{Items: []api.ArtifactListItem{}, SessionIDs: []string{}}, nil
 }
 
 func (s *MemoryStore) ListTree(_ context.Context, rootSessionID string) ([]api.ArtifactListItem, error) {
@@ -134,6 +137,7 @@ func (s *MemoryStore) ListTree(_ context.Context, rootSessionID string) ([]api.A
 			ID:              art.meta.ID,
 			Mime:            art.meta.Mime,
 			Source:          art.meta.Source,
+			ContentHash:     artifactContentHash(art.bytes),
 			Caption:         art.meta.Caption,
 			EvidenceHandle:  art.meta.EvidenceHandle,
 			PageID:          art.meta.PageID,

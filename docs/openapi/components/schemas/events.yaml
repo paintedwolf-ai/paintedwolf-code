@@ -881,9 +881,9 @@ components:
       - op
       additionalProperties: false
       description: >-
-        A durable visual artifact was written or deleted. Identity only: clients
-        re-read the artifact list so one tile's metadata, reference counts, and
-        bytes all render from one place.
+        A durable visual artifact was written or deleted. Clients re-read the
+        artifact list for metadata and reference counts; written events carry
+        content_hash so byte caches only invalidate when stored bytes change.
       properties:
         artifact_id:
           type: string
@@ -901,6 +901,9 @@ components:
           description: Session tree that resolves the event, when one is known.
         op:
           $ref: events.yaml#/components/schemas/ArtifactChangeOp
+        content_hash:
+          type: string
+          description: SHA-256 hex digest of stored bytes when op is written.
     SourceChange:
       x-go-generate: true
       type: object

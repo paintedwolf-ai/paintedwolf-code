@@ -9,6 +9,8 @@ import {
   hasTranscriptEntryMemory,
   transcriptEntryKeysFromMessages,
 } from "../chat/transcript/presentation/transcript-entry.ts";
+import { publishTranscriptReaderReach } from "../chat/transcript/history/transcript-reader-reach.ts";
+import { residentPageOrds } from "../chat/transcript/layout/transcript-window.ts";
 import { createAppStore } from "./app-state.ts";
 
 describe("createAppStore", () => {
@@ -398,5 +400,76 @@ describe("createAppStore", () => {
     const drained = store.actions.takeHydrationBuffer();
     expect(drained).toHaveLength(1);
     expect(store.actions.takeHydrationBuffer()).toHaveLength(0);
+  });
+
+  it("trimTranscriptPages counts resident older messages rather than host page count", () => {
+    const store = createAppStore();
+    const row = (ord: number) => ({
+      id: `m-${ord}`,
+      role: "assistant" as const,
+      origin: "model" as const,
+      authority: "none" as const,
+      trust_tier: "trusted" as const,
+      content: `msg ${ord}`,
+      created_at: "t",
+      seq: ord,
+      ord,
+    });
+    const span = (start: number, end: number) =>
+      Array.from({ length: end - start + 1 }, (_, i) => row(start + i));
+
+    store.actions.installTranscriptBaseline("sess-trim", span(561, 600), 600, {
+      hasMoreBefore: true,
+    });
+    // Load 6 older pages of 40 messages each (240 messages total <= 500 budget).
+    for (let end = 560; end >= 360; end -= 40) {
+      const start = end - 39;
+      expect(
+        store.actions.loadTranscriptPage(
+          { edge: "older", beforeMessageId: `m-${end + 1}` },
+          {
+            messages: span(start, end),
+            before_cursor: "older",
+            after_cursor: "newer",
+            watermark: 600,
+            turn_clocks: {},
+            turn_loads: {},
+          },
+        ),
+      ).toBe(true);
+    }
+    expect(Object.keys(store.state.transcript.pages)).toHaveLength(6);
+    expect(residentPageOrds(store.state.transcript.pages)).toBe(240);
+    store.actions.trimTranscriptPages();
+    expect(Object.keys(store.state.transcript.pages)).toHaveLength(6);
+
+    // Hold reader reach while loading 7 more 40-message pages (520 total), then trim once reach clears.
+    publishTranscriptReaderReach("sess-trim", { firstOrd: 1, lastOrd: 600 });
+    try {
+      for (let end = 320; end >= 80; end -= 40) {
+        const start = end - 39;
+        store.actions.loadTranscriptPage(
+          { edge: "older", beforeMessageId: `m-${end + 1}` },
+          {
+            messages: span(start, end),
+            before_cursor: start > 1 ? "older" : undefined,
+            after_cursor: "newer",
+            watermark: 600,
+            turn_clocks: {},
+            turn_loads: {},
+          },
+        );
+      }
+      expect(Object.keys(store.state.transcript.pages)).toHaveLength(13);
+      expect(residentPageOrds(store.state.transcript.pages)).toBe(520);
+    } finally {
+      publishTranscriptReaderReach("sess-trim", undefined);
+    }
+
+    store.actions.trimTranscriptPages();
+    expect(Object.keys(store.state.transcript.pages)).toHaveLength(12);
+    expect(residentPageOrds(store.state.transcript.pages)).toBe(480);
+    expect(store.state.transcript.pages["41:80"]).toBeUndefined();
+    expect(store.state.transcript.pages["81:120"]).toHaveLength(40);
   });
 });

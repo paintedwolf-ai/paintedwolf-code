@@ -4,9 +4,19 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 )
+
+func toolSetMap(names []string) map[string]bool {
+	m := make(map[string]bool, len(names))
+	for _, n := range names {
+		m[n] = true
+	}
+	return m
+}
 
 func effectSet(t *testing.T, classes ...toolcontract.CommandEffectClass) toolcontract.CommandEffects {
 	t.Helper()
@@ -15,7 +25,7 @@ func effectSet(t *testing.T, classes ...toolcontract.CommandEffectClass) toolcon
 	return effects
 }
 
-func TestRestrictCommandEffectsProjectsEachEffect(t *testing.T) {
+func TestReaderProjectsEachCommandEffect(t *testing.T) {
 	const (
 		ro  = toolcontract.CommandReadOnly
 		mut = toolcontract.CommandMutation
@@ -37,8 +47,17 @@ func TestRestrictCommandEffectsProjectsEachEffect(t *testing.T) {
 		{"command not offered", []string{"recall"}, []toolcontract.CommandEffectClass{ro, mut, exe, net}, false, false, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			vars := prompts.VisibleToolsNativePartialVars(tc.offered)
-			prompts.RestrictCommandEffects(effectSet(t, tc.effects...), tc.offered, nil, vars)
+			reader, err := prompts.NewReader(prompts.ReaderInput{
+				ProfileID: "worker",
+				Plan:      toolsurface.Compile(tc.offered, nil),
+				Profiles: []sandbox.ToolProfile{{
+					ID:             "worker",
+					Tools:          toolSetMap(tc.offered),
+					CommandEffects: effectSet(t, tc.effects...),
+				}},
+			})
+			testutil.FailErr(t, "new reader", err)
+			vars := reader.Facts()
 			for name, want := range map[string]bool{
 				"profile_command_mutation":       tc.mutation,
 				"profile_command_external_exec":  tc.exec,
@@ -61,22 +80,27 @@ func TestRestrictCommandEffectsProjectsEachEffect(t *testing.T) {
 
 func TestCommandEffectRestrictionsIntersect(t *testing.T) {
 	offered := []string{"command"}
-	writes := effectSet(t, toolcontract.CommandReadOnly, toolcontract.CommandMutation)
 	reaches := effectSet(t, toolcontract.CommandReadOnly, toolcontract.CommandExternalExec, toolcontract.CommandNetworkEgress)
-	for _, order := range [][]toolcontract.CommandEffects{{writes, reaches}, {reaches, writes}, {writes, reaches, writes}} {
-		vars := prompts.VisibleToolsNativePartialVars(offered)
-		for _, effects := range order {
-			prompts.RestrictCommandEffects(effects, offered, nil, vars)
-		}
-		for _, name := range []string{"profile_command_mutation", "profile_command_external_exec", "profile_command_network_egress", "profile_has_terminal_capture"} {
-			if vars[name] != false {
-				t.Fatalf("order %v: %s = %v after disjoint restrictions", order, name, vars[name])
-			}
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "decision_adjudicate",
+		Plan:      toolsurface.Compile(offered, nil),
+		Profiles: []sandbox.ToolProfile{{
+			ID:             prompts.CoordinatorProfileID,
+			Tools:          toolSetMap(offered),
+			CommandEffects: reaches,
+		}},
+	})
+	testutil.FailErr(t, "new reader", err)
+	vars := reader.Facts()
+	for _, name := range []string{"profile_command_mutation", "profile_command_external_exec", "profile_command_network_egress", "profile_has_terminal_capture"} {
+		if vars[name] != false {
+			t.Fatalf("%s = %v after disjoint surface and profile restrictions", name, vars[name])
 		}
 	}
 }
 
-func TestScopeCommandEffectsFollowsDeclaredCatalogs(t *testing.T) {
+func TestDeclaredReaderEffectsFollowCatalogs(t *testing.T) {
 	mutation := effectSet(t, toolcontract.CommandMutation)
 	programs := effectSet(t, toolcontract.CommandExternalExec)
 	for scope, want := range map[string][2]bool{
@@ -85,7 +109,9 @@ func TestScopeCommandEffectsFollowsDeclaredCatalogs(t *testing.T) {
 		"implement_routing":     {false, false},
 		"worker_readonly":       {false, false},
 	} {
-		got := prompts.ScopeCommandEffects(scope)
+		reader, err := prompts.DeclaredReader(nil, scope)
+		testutil.FailErr(t, "DeclaredReader "+scope, err)
+		got := reader.Effects()
 		if got.Allows(mutation) != want[0] || got.Allows(programs) != want[1] {
 			t.Errorf("%s effects = %v", scope, got.Classes())
 		}

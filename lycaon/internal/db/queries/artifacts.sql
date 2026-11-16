@@ -73,12 +73,22 @@ SELECT id, project_id, root_session_id, session_id, workflow_run_id, tool_call_i
     created_at, updated_at, deleted_at, deleted_reason, width, height
 FROM artifacts
 WHERE project_id = sqlc.arg(project_id) AND deleted_at IS NULL
-  AND (
-    created_at > sqlc.arg(after_created_at)
-    OR (created_at = sqlc.arg(after_created_at) AND id > sqlc.arg(after_id))
-  )
-ORDER BY created_at ASC, id ASC
+  AND (CAST(sqlc.arg(source_filter) AS TEXT) = '' OR source = CAST(sqlc.arg(source_filter) AS TEXT))
+  AND (CAST(sqlc.arg(session_filter) AS TEXT) = '' OR session_id = CAST(sqlc.arg(session_filter) AS TEXT))
+  AND created_at <= CAST(sqlc.arg(before_created_at) AS TEXT)
+  AND (created_at < CAST(sqlc.arg(before_created_at) AS TEXT) OR id < CAST(sqlc.arg(before_id) AS TEXT))
+ORDER BY created_at DESC, id DESC
 LIMIT sqlc.arg(page_limit);
+
+-- name: ListProjectArtifactSessions :many
+SELECT CAST(session_id AS TEXT) AS session_id
+FROM artifacts
+WHERE project_id = sqlc.arg(project_id)
+  AND deleted_at IS NULL
+  AND session_id IS NOT NULL
+  AND TRIM(session_id) != ''
+GROUP BY session_id
+ORDER BY MAX(created_at) DESC, session_id DESC;
 
 -- name: ListTreeArtifacts :many
 SELECT id, project_id, root_session_id, session_id, workflow_run_id, tool_call_id,

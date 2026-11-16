@@ -27,7 +27,7 @@ func TestHintCodeCacheIsBoundToRevisionAndContent(t *testing.T) {
 }
 
 func TestLoadAgentToolSurfaceRequiresCatalogBoundProfiles(t *testing.T) {
-	if _, err := LoadAgentToolSurface("implement", nil, nil, SurfaceTurn{}, nil); err == nil {
+	if _, err := LoadAgentToolSurface("implement", nil, nil, ReaderInput{}, nil); err == nil {
 		t.Fatal("surface fell back to process-global profiles")
 	}
 }

@@ -2,13 +2,10 @@ package toolexecution
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolcommand"
-	"github.com/lycaon/lycaon/internal/tools"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/platform"
-	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
@@ -88,31 +85,16 @@ func (e *Metadata) enrichToolMeta(ctx context.Context, meta tools.ToolMeta, filt
 			meta.ArgsSchema = pruneWaitConditionSchema(meta.ArgsSchema, source.WaitConditions(profileID))
 		}
 	case "command":
-		if !e.profileAllowsExternalExec(ctx, profileID) {
-			meta.ArgsSchema = tools.PruneCommandReadOnlySchema(meta.ArgsSchema)
-		} else if !e.externalHidden {
-			meta.Description = strings.TrimSpace(meta.Description) + " " + toolcommand.ExternalSelectorLine
+		if len(meta.DescriptionEffects) == 0 {
+			if cfg := e.schemasFor(ctx, ""); cfg != nil {
+				if declared, ok := cfg.ToolMeta("command"); ok {
+					meta.DescriptionEffects = declared.DescriptionEffects
+				}
+			}
 		}
+		meta = ProjectCommandMeta(meta, e.commandEffectsForFilter(ctx, filter), e.externalHidden)
 	}
 	return meta
-}
-
-func (e *Metadata) profileAllowsExternalExec(ctx context.Context, profileID string) bool {
-	if e == nil || e.policy == nil {
-		return true
-	}
-	source, ok := e.policy.(interface {
-		CommandEffects(context.Context, string) (toolcontract.CommandEffects, error)
-	})
-	if !ok {
-		return true
-	}
-	effects, err := source.CommandEffects(ctx, profileID)
-	if err != nil || effects == 0 {
-		return true
-	}
-	externalExec, err := toolcontract.NewCommandEffects(toolcontract.CommandExternalExec)
-	return err == nil && effects.Allows(externalExec)
 }
 
 func pruneWaitConditionSchema(schema map[string]any, allowed []string) map[string]any {

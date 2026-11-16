@@ -835,13 +835,6 @@ func (c Config) ResourceImpliedTools(fact string) []string {
 	return append([]string(nil), c.ResourceImplied[fact]...)
 }
 
-// ArgvHostRunnerTools returns a copy of the argv host-runner tool names.
-func ArgvHostRunnerTools() []string {
-	out := make([]string, len(argvHostRunnerTools))
-	copy(out, argvHostRunnerTools)
-	return out
-}
-
 // multiRootCapabilities is the closed set of multi-root capability ids, ordered
 // from no path surface to the widest.
 var multiRootCapabilities = []string{"none", "path", "discovery", "command"}

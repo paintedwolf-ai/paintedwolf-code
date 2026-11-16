@@ -6,13 +6,38 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestRenderTurnStateBlock(t *testing.T) {
 	root := testConfigRoot(t)
 	renderer := prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root}))
+
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	plans, err := surface.CompileToolPlans(1)
+	testutil.FailErr(t, "CompileToolPlans", err)
+	withProgress, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Profiles:  profiles,
+		Plan:      plans["implement_investigate"],
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader implement_investigate", err)
+	withoutProgress, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		Profiles:  profiles,
+		Visible:   []string{"read_file"},
+		Loaded:    map[string]bool{"read_file": true},
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader without progress", err)
 
 	t.Run("empty inputs render empty", func(t *testing.T) {
 		block, err := inject.RenderTurnStateBlock(context.Background(), renderer, "sess-empty", inject.TurnStateInjectInput{})
@@ -24,8 +49,8 @@ func TestRenderTurnStateBlock(t *testing.T) {
 
 	t.Run("progress missing with update_progress", func(t *testing.T) {
 		block, err := inject.RenderTurnStateBlock(context.Background(), renderer, "sess-progress", inject.TurnStateInjectInput{
-			ProgressMissing:          true,
-			ProfileHasUpdateProgress: true,
+			ProgressMissing: true,
+			Reader:          withProgress,
 		})
 		testutil.FailErr(t, "RenderTurnStateBlock", err)
 		if !strings.Contains(block, "No checklist is stored") {
@@ -35,8 +60,8 @@ func TestRenderTurnStateBlock(t *testing.T) {
 
 	t.Run("progress missing without update_progress", func(t *testing.T) {
 		block, err := inject.RenderTurnStateBlock(context.Background(), renderer, "sess-progress-no-tool", inject.TurnStateInjectInput{
-			ProgressMissing:          true,
-			ProfileHasUpdateProgress: false,
+			ProgressMissing: true,
+			Reader:          withoutProgress,
 		})
 		testutil.FailErr(t, "RenderTurnStateBlock", err)
 		if strings.Contains(block, "No checklist is stored") {
@@ -68,8 +93,21 @@ func TestRenderTurnStateBlock(t *testing.T) {
 
 func TestTurnStateCarriesCurrentProgressSnapshot(t *testing.T) {
 	renderer := prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: testConfigRoot(t)}))
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	plans, err := surface.CompileToolPlans(1)
+	testutil.FailErr(t, "CompileToolPlans", err)
+	withProgress, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_investigate",
+		Profiles:  profiles,
+		Plan:      plans["implement_investigate"],
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader implement_investigate", err)
 	snapshot := `{"content":"- [ ] Deliver","revision":"current-snapshot-revision","reconciliation":{"token":"worker-finish-token","jobs":["worker-one"]}}`
-	block, err := inject.RenderTurnStateBlock(t.Context(), renderer, "snapshot", inject.TurnStateInjectInput{ProgressSnapshot: snapshot, ProfileHasUpdateProgress: true})
+	block, err := inject.RenderTurnStateBlock(t.Context(), renderer, "snapshot", inject.TurnStateInjectInput{ProgressSnapshot: snapshot, Reader: withProgress})
 	testutil.FailErr(t, "render current progress", err)
 	for _, value := range []string{"current-snapshot-revision", "worker-finish-token", "worker-one", "Deliver"} {
 		if !strings.Contains(block, value) {

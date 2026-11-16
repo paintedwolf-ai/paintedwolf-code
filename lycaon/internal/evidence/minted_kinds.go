@@ -1,6 +1,7 @@
 package evidence
 
 import (
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/nativemanifest"
@@ -56,8 +57,19 @@ func (b *Binding) MintedKinds(reachable map[string]bool) (map[string]bool, error
 		if !reachable[tool] && !(operations[tool] && toolcontract.CommandLanguageReachable(tool, reachable)) {
 			continue
 		}
-		for _, kind := range b.ProducibleKinds(tool) {
+		if kind := b.ToolKind(tool); kind != "" {
 			out[kind] = true
+		}
+		b.mu.RLock()
+		variants := b.toolVariants[tool]
+		b.mu.RUnlock()
+		for _, variant := range variants {
+			if tool == "command" && strings.TrimSpace(variant.WhenArgPresent) == "terminal_capture" && !reachable[toolcontract.ReachCommandExternalExec] {
+				continue
+			}
+			if kind := strings.TrimSpace(variant.Kind); kind != "" {
+				out[kind] = true
+			}
 		}
 		if reachable[tool] && toolcontract.CommandFormTool(tool) {
 			out[b.ReceiptKind(tool)] = true
