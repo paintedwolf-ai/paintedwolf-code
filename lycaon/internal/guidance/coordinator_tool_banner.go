@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/hostmarker"
 	"strconv"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/hostmarker"
 
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/spawn"

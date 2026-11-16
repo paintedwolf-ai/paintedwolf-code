@@ -1,10 +1,11 @@
 package guidance
 
 import (
-	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/hintregistry"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/hintregistry"
 )
 
 func TestDraftVersionOutcomeLabelFromCatalog(t *testing.T) {

@@ -61,7 +61,7 @@ func TestForcedFinalTurnKicksReadWhatCloseoutSends(t *testing.T) {
 	reference := regexp.MustCompile(`(?:\{\{\s*|\{%\s*if\s+)(\w+)`)
 	for _, stem := range []string{"coordinator-closeout", "coordinator-turn-closeout"} {
 		raw, _, err := (prompts.BundledLayout{}).ReadBundled("guidance/" + stem + ".md")
-		testutil.FailErr(t, "prompts.DefaultBundledLayout failed", err)
+		testutil.FailErr(t, "read bundled template", err)
 		reads := map[string]bool{}
 		for _, match := range reference.FindAllStringSubmatch(string(raw), -1) {
 			reads[match[1]] = true

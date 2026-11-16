@@ -2,9 +2,10 @@ package guidance
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/extpacks"
 
 	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/prompts"

@@ -105,13 +105,6 @@ func TestToolRejectFormatterRetainsFrozenRecovery(t *testing.T) {
 	}
 }
 
-func TestHostRejectCode(t *testing.T) {
-	raw := ">>> Spec posture blocked\nCode: SPEC_POSTURE_STUB_REQUIRED\n"
-	if got := HostRejectCode(raw); got != "SPEC_POSTURE_STUB_REQUIRED" {
-		t.Fatalf("HostRejectCode = %q", got)
-	}
-}
-
 func TestToolRejectFormatter_ProgressCompactFromChecklist(t *testing.T) {
 	setTestRenderer(t)
 	f := NewToolRejectFormatter(NewFeedbackDeduper())

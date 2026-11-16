@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
 
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/pkg/api"

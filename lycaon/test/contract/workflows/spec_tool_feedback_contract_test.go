@@ -2,11 +2,12 @@ package contract
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolfeedback"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
@@ -164,7 +165,7 @@ func TestSpecToolFeedbackRejectShape(t *testing.T) {
 					t.Fatalf("block missing %q:\n%s", want, block)
 				}
 			}
-			if parsed := guidance.HostRejectCode(block); parsed != sc.wantCode {
+			if parsed := contractcheck.HostRejectCode(block); parsed != sc.wantCode {
 				t.Fatalf("HostRejectCode = %q want %q", parsed, sc.wantCode)
 			}
 		})
