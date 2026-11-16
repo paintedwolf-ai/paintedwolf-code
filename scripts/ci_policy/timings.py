@@ -98,8 +98,8 @@ def merge(paths):
 
 def publish(receipts, output, environment):
     """One file for the whole run, bound to the source it measured."""
-    # A later attempt's receipt sorts after the one it reran.
-    measured = merge(sorted(Path(receipts).glob("*/**/ci/timings.json")))
+    # One directory per receipt; the archive may root it at `ci/`. A later attempt sorts after the one it reran.
+    measured = merge(sorted(Path(receipts).glob("*/**/timings.json")))
     measured.update(run=int(environment["GITHUB_RUN_ID"]),
                     source_sha=environment["SOURCE_SHA"], source_tree=environment["SOURCE_TREE"])
     Path(output).write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n")

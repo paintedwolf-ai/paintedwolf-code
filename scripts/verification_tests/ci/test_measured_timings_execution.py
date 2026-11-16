@@ -105,8 +105,9 @@ class MeasuredTimingsTests(unittest.TestCase):
                                                                        {"package": "q", "test": "TestSlower", "seconds": 12}]},
                     "receipt-verification-nightly-behavior-0-1": {"lane": "behavior", "shard": "1/2", "status": "passed", "seconds": 900,
                                                                    "packages": {"a": 3}}}
-            for name, row in rows.items():
-                path = root / "receipts" / name / "ci" / "timings.json"
+            for index, (name, row) in enumerate(rows.items()):
+                # The artifact service may root a receipt at its common directory, `ci/`.
+                path = root / "receipts" / name / ("ci" if index else "") / "timings.json"
                 path.parent.mkdir(parents=True)
                 path.write_text(json.dumps({"basis": "setup-and-execution", **row}))
             environment = {"GITHUB_RUN_ID": "77", "SOURCE_SHA": "a" * 40, "SOURCE_TREE": "b" * 40}
