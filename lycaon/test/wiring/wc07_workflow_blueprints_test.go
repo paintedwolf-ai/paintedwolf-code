@@ -250,7 +250,7 @@ func TestBlueprintFlow11CriteriaReconcileAndBoardPlanFilter(t *testing.T) {
 	testutil.FailErr(t, "create unrelated worker", err)
 
 	call.Identity.ToolCallID = uuid.NewString()
-	boardRaw, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"plan": "wc07-flow11.md"}, call)
+	boardRaw, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"plan": bpPath}, call)
 	testutil.FailErr(t, "pack_board plan filter", err)
 	var view api.BoardView
 	testutil.FailErr(t, "decode board view", json.Unmarshal([]byte(boardRaw), &view))
