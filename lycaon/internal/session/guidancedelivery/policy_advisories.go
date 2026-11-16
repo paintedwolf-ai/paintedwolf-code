@@ -30,8 +30,12 @@ func (m *Service) queuePolicy(_ context.Context, sessionID, anchor string, decis
 	if sessionID == "" {
 		return fmt.Errorf("policy advisory delivery requires a session")
 	}
+	retain := ""
+	if anchor == oar.AnchorCoordinatorPostTurn && decision.Effect == oar.EffectNudge {
+		retain = api.PolicyFeedbackRetainNextTurn
+	}
 	m.kicks.QueuePolicyFeedback(sessionID, []guidance.PolicyFeedback{{
-		Anchor: anchor, Rule: decision.Rule, Effect: string(decision.Effect), Copy: decision.Copy,
+		Anchor: anchor, Rule: decision.Rule, Effect: string(decision.Effect), Retain: retain, Copy: decision.Copy,
 		ToolFeedback: api.ToolFeedback{Code: decision.Code, Details: decision.Data, Subject: policyfeedback.Subject(sessionID, decision.Data)},
 	}})
 	return nil

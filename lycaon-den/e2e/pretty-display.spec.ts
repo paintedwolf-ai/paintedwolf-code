@@ -526,3 +526,64 @@ modelIndependentWebE2e("renders source text at every scroll position", async ({ 
   }
   expect(nodes[1]!).toBeLessThan(nodes[0]! * 2 + 2_000);
 });
+
+modelIndependentWebE2e("lays out a 14,000-character simplified Java line past column 10,000 without breaking strings", async ({ page, request }) => {
+  const chunk = "process(alpha, beta), ";
+  const repeatCount = Math.ceil(11_000 / chunk.length);
+  const head = `class App { void run() { call(${chunk.repeat(repeatCount)}`;
+  const trap = '"keep, (this); [string] unbroken"';
+  const tail = `, finalCall(one, two, three)); } }`;
+  const text = `${head}${trap}${tail}`;
+  const strStart = head.length;
+  const strEnd = strStart + trap.length;
+
+  await openPretty(page, request, { name: "LongLine.java", text });
+  const status = page.locator(".den-files-editor__status").filter({ visible: true });
+  await expect(status).toContainText("Simplified");
+
+  await expect.poll(async () => page.evaluate((minCol) => {
+    const posList = window.__pretty.breaksIn(0, window.__pretty.view().state.doc.length);
+    return posList.filter((pos) => pos > minCol).length;
+  }, 10_000)).toBeGreaterThan(0);
+
+  const breaksInsideTrap = await page.evaluate(([from, to]) => {
+    return window.__pretty.breaksIn(from + 1, to - 1);
+  }, [strStart, strEnd] as const);
+  expect(breaksInsideTrap).toEqual([]);
+});
+
+modelIndependentWebE2e("lays out wide Python tool output in ChatContentPage with Python status label", async ({ page, request }) => {
+  const { project } = await openProjectFilesFixture(page, request, {
+    prefix: "pretty-display-chat",
+    name: "Pretty display chat",
+    seed: (root) => writeFileSync(path.join(root, "placeholder.txt"), "ok\n"),
+  });
+  const py = `result = compute(${Array.from({ length: 24 }, (_, i) => `arg_${i}=${i}`).join(", ")})\n`;
+  await page.evaluate(async ({ projectId, text }) => {
+    const nav = await import(/* @vite-ignore */ String("/src/platform/navigation/open-files-surface.ts")) as typeof import("../src/platform/navigation/open-files-surface.ts");
+    nav.openFilesSurface({
+      kind: "chat-content",
+      projectId,
+      document: {
+        kind: "tool",
+        sessionId: "e2e-session",
+        messageId: "e2e-message",
+        toolCallId: "e2e-call",
+        pane: "output",
+        title: "worker.py",
+        path: "src/worker.py",
+        content: { kind: "inline", text },
+      },
+    });
+  }, { projectId: project.id, text: py });
+
+  const reader = page.getByTestId("chat-content-page");
+  await expect(reader).toBeVisible();
+  const prettyButton = reader.getByTestId("files-editor-layout-pretty");
+  if ((await prettyButton.getAttribute("aria-pressed")) !== "true") {
+    await prettyButton.click();
+  }
+  await expect(prettyButton).toHaveAttribute("aria-pressed", "true");
+  await expect(reader.locator(".den-files-editor__status-language")).toContainText("Python");
+  await expect.poll(() => reader.locator(".pw-pretty-break").count()).toBeGreaterThan(0);
+});

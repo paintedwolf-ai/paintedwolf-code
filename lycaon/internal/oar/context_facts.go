@@ -161,6 +161,11 @@ type SourceFacts struct {
 	GitNoRepositoryOnWriteLeg bool
 	SourceAnalysisUnavailable bool
 	SyntaxCheckOverridden     bool
+	ReproducedSourceLines     int64
+	ReproducedSourceFileLines int64
+	ReproducedSourcePath      string
+	ReproducedSourceStartLine int64
+	ReproducedSourceEndLine   int64
 }
 
 type AccessFacts struct {

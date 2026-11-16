@@ -11,7 +11,7 @@ import { findController, resetFindControllerForTests, setFindQuery } from "../..
 import { FIND_BAR_ID } from "../../find/command-bar-disclosure.ts";
 import { applyBackgroundProcessEvent, resetBackgroundProcessStoreForTests } from "../../chat/tool/background-process-store.ts";
 import { clearChatContentCache } from "../../chat/transcript/content/chat-content-reader.ts";
-import { resetEditorPrefsForTests } from "../../settings/editor/editor-prefs.ts";
+import { resetEditorPrefsForTests, saveEditorLineLayout } from "../../settings/editor/editor-prefs.ts";
 import { languageLabelForDetectedLanguage, PLAIN_TEXT_LABEL } from "../../components/source/editor/codemirror-lang.ts";
 
 afterEach(() => {
@@ -379,5 +379,60 @@ describe("chat content Files pane", () => {
     await waitFor(() => expect(paged.container.querySelector(".cm-content")?.textContent).toContain('"row":0'));
     fireEvent.click(assertNamedControl(paged.getByTestId("files-readonly-goto"), "button"));
     expect(paged.getByTestId("files-readonly-goto").getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("mounts language grammars, renders language labels, and applies project lineWidth in ChatContentPage", async () => {
+    void saveEditorLineLayout("pretty");
+    const py = `def f(a, b): return {${Array.from({ length: 16 }, (_, i) => `"key_${i}": ${i}`).join(", ")}}\n`;
+    const client = {
+      getProjectSourceFormatSettings: async () => ({
+        config_names: ["pyproject.toml"],
+        sources: [{ tool: "ruff", configs: ["pyproject.toml"], settings: { line_width: 80 } }],
+      }),
+    } as never;
+    const view = render(() => (
+      <ChatContentPage
+        projectId="proj"
+        client={client}
+        document={{
+          kind: "tool",
+          sessionId: "session",
+          messageId: "m1",
+          toolCallId: "c1",
+          pane: "raw",
+          title: "app.py",
+          path: "src/app.py",
+          content: { kind: "inline", text: py },
+        }}
+      />
+    ));
+    await waitFor(() => {
+      expect(view.container.querySelectorAll(".pw-pretty-break").length).toBeGreaterThan(0);
+    });
+    expect(view.container.querySelector(".den-files-editor__status-language")?.textContent).toContain("Python");
+
+    const mdView = render(() => (
+      <ChatContentPage
+        projectId="proj"
+        client={null}
+        document={{
+          kind: "tool",
+          sessionId: "session",
+          messageId: "m2",
+          toolCallId: "c2",
+          pane: "raw",
+          title: "notes.md",
+          path: "docs/notes.md",
+          content: {
+            kind: "inline",
+            text: `\`\`\`python\nmsg = "${"a".repeat(120)}, ${"b".repeat(120)}"\n\`\`\`\n`,
+          },
+        }}
+      />
+    ));
+    await waitFor(() => {
+      expect(mdView.container.querySelector(".den-files-editor__status-language")?.textContent).toContain("Markdown");
+    });
+    expect(mdView.container.querySelectorAll(".pw-pretty-break").length).toBe(0);
   });
 });

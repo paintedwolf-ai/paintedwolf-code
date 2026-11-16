@@ -1,12 +1,18 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { ensureSyntaxTree } from "@codemirror/language";
 import {
+  formattersForBuffer,
+  formattersForPath,
+  languageExtensionForBuffer,
   languageExtensionForPath,
   languageLabelForDetectedLanguage,
   languageForInfoString,
   languageLabelForPath,
   prettyLayoutCatalog,
+  prettyLayoutForBuffer,
   prettyLayoutForLanguage,
   prettyLayoutForPath,
 } from "./codemirror-lang.ts";
@@ -208,14 +214,17 @@ describe("codemirror-lang", () => {
 
   it("declares the Pretty layout of every catalog language", () => {
     const declared: Record<string, string> = {
-      "data": "json jsonc json5 jsonl ndjson webmanifest har avsc jsonnet libsonnet",
-      "markup": "xml svg html htm vue svelte astro",
-      "code": "ts tsx js jsx mjs cjs css scss less",
-      "bracket statements": "c h cc cpp cxx hpp hh hxx java cs scala kt kts dart rs swift groovy gradle d php hack sol move cairo circom cls trigger ql qll proto hcl tf tfvars",
-      "bracket": "go py pyi yaml yml toml rb cr ex exs lua r jl hs elm ml mli erl hrl al perl ph pl plx pm psgi t promql sass",
+      "data": "json jsonc json5 jsonl ndjson webmanifest har avsc jsonnet libsonnet geojson sarif tfstate topojson",
+      "markup": "xml svg html htm vue svelte astro csproj fsproj nuspec plist props targets vbproj vcxproj wsdl xaml xsd",
+      "code": "ts mts cts tsx js mjs cjs jsx css scss less",
+      "bracket statements": "c h cc cpp cxx hpp hh hxx java cs csx cake scala kt kts dart rs swift groovy gradle gvy d php hack sol move cairo circom cls trigger ql qll proto hcl tf tfvars tofu nomad ps1 psm1 psd1",
+      "bracket": "go py pyi yaml yml toml rb rake gemspec ru cr ex exs lua r jl hs elm ml mli erl hrl al perl ph pl plx pm psgi t promql sass bzl",
       "clause": "sql",
+      "sexp": "clj cljs cljc edn scm ss lisp cl lsp",
+      "chain": "sh bash zsh dockerfile",
       "fenced": "md mdx",
-      "none": "sh bash zsh ps1 psm1 psd1 dockerfile diff patch properties ini env cfg cmake tcl f f90 f95 f03 pas clj cljs cljc edn scm ss lisp cl lsp txt",
+      "containers": "log out txt",
+      "none": "diff patch properties ini env cfg cmake tcl f f90 f95 f03 pas",
     };
     const outcome = (ext: string) => {
       const layout = prettyLayoutForPath(`file.${ext}`);
@@ -234,5 +243,44 @@ describe("codemirror-lang", () => {
     expect(prettyLayoutForLanguage("Markdown").kind).toBe("fenced");
     expect(prettyLayoutForLanguage("TypeScript title=x").kind).toBe("code");
     expect(prettyLayoutForLanguage("no-such-language").kind).toBe("none");
+  });
+
+  it("maps all 44 host supportedLanguages, commented JSON configs, extensions, and fence aliases", () => {
+    const supportedSrc = readFileSync(
+      resolve(__dirname, "../../../../../lycaon/internal/filekind/supported.go"),
+      "utf8",
+    );
+    const match = supportedSrc.match(/supportedLanguages\s*=\s*\[\]string\{([\s\S]*?)\}/);
+    expect(match).not.toBeNull();
+    const langs = [...match![1]!.matchAll(/"([^"]+)"/g)].map((m) => m[1]!);
+    expect(langs).toHaveLength(44);
+    for (const lang of langs) {
+      expect(languageForInfoString(lang), `grammar for ${lang}`).not.toBeNull();
+      expect(languageExtensionForBuffer("bin/unknown", lang), `buffer ext for ${lang}`).not.toBeNull();
+    }
+
+    for (const cfg of ["tsconfig.json", "tsconfig.node.json", "jsconfig.json", "devcontainer.json", ".devcontainer.json"]) {
+      expect(prettyLayoutForPath(cfg)).toEqual({ kind: "data", comments: true, records: false });
+    }
+    expect(languageExtensionForPath("src/index.mts")).not.toBeNull();
+    expect(languageExtensionForPath("src/index.cts")).not.toBeNull();
+    expect(languageLabelForPath("Jenkinsfile")).toBe("Groovy");
+    expect(languageLabelForPath("App.csproj")).toBe("XML");
+    expect(languageLabelForPath("Cargo.lock")).toBe("TOML");
+    expect(formattersForPath("main.go")).toEqual(["golangci"]);
+    expect(formattersForPath("lib/app.ex")).toEqual(["mix_format"]);
+    expect(formattersForPath("app/User.php")).toEqual(["phpcs", "prettier"]);
+    expect(formattersForPath("src/core.clj")).toEqual([]);
+    expect(formattersForPath("src/Main.java")).toEqual(["checkstyle", "clang_format"]);
+    expect(prettyLayoutForPath("App.tsx")).toEqual({ kind: "code", dialect: "script-jsx" });
+    expect(prettyLayoutForPath("App.jsx")).toEqual({ kind: "code", dialect: "script-jsx" });
+    expect(prettyLayoutForPath("a.ts")).toEqual({ kind: "code", dialect: "script" });
+    expect(prettyLayoutForPath("a.js")).toEqual({ kind: "code", dialect: "script" });
+    expect(languageForInfoString("csharp")).not.toBeNull();
+    expect(languageForInfoString("Common Lisp")).not.toBeNull();
+    expect(languageForInfoString("golang")).not.toBeNull();
+    expect(languageForInfoString("postgresql")).not.toBeNull();
+    expect(prettyLayoutForBuffer("bin/deploy", "python")).toEqual(prettyLayoutForPath("deploy.py"));
+    expect(formattersForBuffer("bin/deploy", "python")).toEqual(["ruff", "black"]);
   });
 });

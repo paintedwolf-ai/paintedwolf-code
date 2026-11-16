@@ -1,0 +1,152 @@
+package touchedpaths
+
+import (
+	"context"
+	"sort"
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/sandbox"
+)
+
+const MaxCandidates = 64
+
+// Path is a canonical workspace file identity within an attached root.
+type Path struct {
+	RootID  string
+	RelPath string
+}
+
+type LedgerSource interface {
+	LoadLedger(ctx context.Context, sessionID string) (evidence.Ledger, error)
+}
+
+type AuthoredSource interface {
+	SessionAuthoredPaths(ctx context.Context, projectID, sessionID, rootID string) ([]string, error)
+}
+
+// List returns deduplicated paths the session authored or observed, capped at max
+// when max > 0. Authored paths come first (roots in attachment order, paths sorted),
+// followed by observed ledger paths (newest handle first).
+func List(
+	ctx context.Context,
+	projectID, sessionID, activeRootID string,
+	roots []projectroot.RootRef,
+	ledger LedgerSource,
+	authored AuthoredSource,
+	max int,
+) []Path {
+	activeID := resolveActiveRootID(roots, activeRootID)
+	rootsByID := make(map[string]projectroot.RootRef, len(roots))
+	for _, r := range roots {
+		rootsByID[r.ID] = r
+	}
+
+	canonicalize := func(rootID, raw string) (Path, bool) {
+		rel := evidence.NormalizeLedgerPath(raw)
+		if rel == "" || rel == "." || sandbox.HasParentTraversal(rel) {
+			return Path{}, false
+		}
+		if rootID != "" {
+			if r, ok := rootsByID[rootID]; ok && r.External {
+				return Path{}, false
+			}
+			return Path{RootID: rootID, RelPath: rel}, true
+		}
+		if rest, ok := strings.CutPrefix(rel, "@"); ok {
+			label, sub, hasSlash := strings.Cut(rest, "/")
+			if !hasSlash || label == "" || projectroot.IsVirtualRootLabel(label) {
+				return Path{}, false
+			}
+			sub = evidence.NormalizeLedgerPath(sub)
+			if sub == "" || sub == "." || sandbox.HasParentTraversal(sub) {
+				return Path{}, false
+			}
+			for _, r := range roots {
+				if !r.External && strings.EqualFold(r.Label, label) {
+					return Path{RootID: r.ID, RelPath: sub}, true
+				}
+			}
+			return Path{}, false
+		}
+		if activeID != "" {
+			return Path{RootID: activeID, RelPath: rel}, true
+		}
+		return Path{RelPath: rel}, true
+	}
+
+	seen := make(map[Path]struct{})
+	var out []Path
+	full := func() bool {
+		return max > 0 && len(out) >= max
+	}
+	add := func(p Path) bool {
+		if full() {
+			return false
+		}
+		if _, ok := seen[p]; !ok {
+			seen[p] = struct{}{}
+			out = append(out, p)
+		}
+		return !full()
+	}
+
+	if authored != nil && sessionID != "" && projectID != "" {
+		for _, root := range roots {
+			if root.External {
+				continue
+			}
+			rawPaths, err := authored.SessionAuthoredPaths(ctx, projectID, sessionID, root.ID)
+			if err != nil || len(rawPaths) == 0 {
+				continue
+			}
+			sorted := make([]string, 0, len(rawPaths))
+			for _, raw := range rawPaths {
+				if p, ok := canonicalize(root.ID, raw); ok {
+					sorted = append(sorted, p.RelPath)
+				}
+			}
+			sort.Strings(sorted)
+			for _, rel := range sorted {
+				if !add(Path{RootID: root.ID, RelPath: rel}) {
+					return out
+				}
+			}
+		}
+	}
+
+	if full() || ledger == nil || sessionID == "" {
+		return out
+	}
+	ev, err := ledger.LoadLedger(ctx, sessionID)
+	if err != nil {
+		return out
+	}
+
+	for _, h := range evidence.HandlesNewestFirst(ev) {
+		rec, ok := ev.Handles[h]
+		if !ok || rec.IsGate() || rec.SupersededBy != "" {
+			continue
+		}
+		for _, id := range evidence.PathIdentitiesForRecord(rec) {
+			if p, ok := canonicalize(id.RootID, id.ScopeRel); ok {
+				if !add(p) {
+					return out
+				}
+			}
+		}
+	}
+
+	return out
+}
+
+func resolveActiveRootID(roots []projectroot.RootRef, activeRootID string) string {
+	if active, err := projectroot.ActiveRoot(roots, activeRootID); err == nil && !active.External {
+		return active.ID
+	}
+	if primary, err := projectroot.PrimaryRoot(roots); err == nil && !primary.External {
+		return primary.ID
+	}
+	return ""
+}
