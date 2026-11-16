@@ -338,11 +338,15 @@ def run_python(scope):
     floor = coverage_policy.changed("python")
     changed = python_coverage.sources(ROOT, scope.paths)
     if not changed:
-        if "test:runner" not in coverage_policy.python_suites():
+        suites = coverage_policy.python_suites()
+        # A commit with no change to measure, as nightly verifies, runs every declared suite; a change
+        # that leaves scripts alone runs the runner suite.
+        selected = suites if not scope.paths else {name: suite for name, suite in suites.items() if name == "test:runner"}
+        if not selected:
             return [], False, "no changed scripts Python"
-        code = subprocess.call([sys.executable, str(ROOT / "scripts/ci_policy/runner_tests.py")], cwd=ROOT)
-        findings = [Finding("error", "python", "script tests failed; inspect the unittest output")] if code else []
-        return findings, bool(code), "complete script tests; no changed source to measure"
+        failed = python_coverage.run(ROOT, selected)
+        findings = [Finding("error", "python", f"{name} failed; inspect the unittest output") for name in failed]
+        return findings, bool(failed), f"{len(selected)} complete script suite(s); no changed source to measure"
     measured = f"{len(changed)} changed file(s)"
     measurements = python_coverage.measure(ROOT, changed, coverage_policy.python_suites(),
                                            artifact_root(ROOT) / "coverage" / "changes-python")

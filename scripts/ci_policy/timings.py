@@ -1,17 +1,23 @@
-"""Lane and package durations that main's nightly measures and later hosted plans read."""
+"""Durations nightly measures: each lane records its own, the run publishes them merged in one
+artifact, and every later hosted plan reads that file."""
+import io
 import json
 import math
+import os
 from pathlib import Path
 import subprocess
 import sys
-import tempfile
+import zipfile
 
 from ci_policy import github
 
-WORKFLOW = "nightly.yml"
-RECEIPTS = ("receipt-verification-nightly-",)
-RECENT_RUNS = 20
+ARTIFACT = "nightly-timings"
+FILE = "timings.json"
+MAX_BYTES = 4 * 1024 * 1024
 PACKAGE_LANES = ("behavior",)
+SLOWEST_TESTS = 50
+# A lane that ran to a verdict; a torn-down job measured only where it stopped.
+FINISHED = {"passed", "failed"}
 
 
 def row_key(lane, shard):
@@ -22,8 +28,35 @@ def valid_seconds(value, *, allow_zero=False):
     return type(value) in (int, float) and math.isfinite(value) and (value >= 0 if allow_zero else value > 0)
 
 
+def slowest(tests):
+    """The longest tests first; ties order by name so the file is stable."""
+    ranked = sorted(tests, key=lambda row: (-row["seconds"], row["package"], row["test"]))
+    return ranked[:SLOWEST_TESTS]
+
+
+def test_durations(root):
+    """Every top-level Go test that finished in this job's stage streams."""
+    tests = {}
+    for stream in sorted((root / "verification").glob("*/stage-*-go.json")):
+        with stream.open(errors="replace") as lines:
+            for line in lines:
+                try:
+                    event = json.loads(line)
+                except ValueError:
+                    continue
+                if not isinstance(event, dict):
+                    continue
+                name, package = event.get("Test"), event.get("Package")
+                if (event.get("Action") in ("pass", "fail") and isinstance(name, str) and "/" not in name
+                        and isinstance(package, str) and valid_seconds(event.get("Elapsed"))):
+                    key = (package, name)
+                    tests[key] = max(tests.get(key, 0), event["Elapsed"])
+    return [{"package": package, "test": name, "seconds": seconds} for (package, name), seconds in tests.items()]
+
+
 def record(root, run):
-    """Write the lane's elapsed time beside its receipts; a sharded lane adds its Go packages' durations."""
+    """Write the lane's elapsed time and slowest tests beside its receipts; a sharded lane adds its
+    Go packages' durations."""
     packages = {}
     if run["shard"]:
         for events in sorted((root / "verification").glob("*/stage-*-events.jsonl")):
@@ -37,75 +70,87 @@ def record(root, run):
     start = job_start if complete else run['started_at']
     measured = {"basis": "setup-and-execution" if complete else "execution", "lane": run["lane"], "shard": run["shard"], "status": run["status"],
                 "seconds": round(run["finished_at"] - start, 1),
-                "packages": {name: round(seconds, 3) for name, seconds in sorted(packages.items())}}
+                "packages": {name: round(seconds, 3) for name, seconds in sorted(packages.items())},
+                "tests": slowest(test_durations(root))}
     (root / "ci" / "timings.json").write_text(json.dumps(measured, indent=2) + "\n")
 
 
 def merge(paths):
-    """Passed lanes' durations by matrix row, and every package duration the uninstrumented lane measured."""
-    lanes, packages = {}, {}
+    """Finished lanes' durations by matrix row, every package duration the uninstrumented lane
+    measured, and the slowest tests across lanes."""
+    lanes, packages, tests = {}, {}, {}
     for path in paths:
         measured = json.loads(path.read_text())
-        if (measured.get("basis") == "setup-and-execution" and measured["status"] == "passed"
+        if (measured.get("basis") == "setup-and-execution" and measured["status"] in FINISHED
                 and valid_seconds(measured["seconds"])):
             lanes[row_key(measured["lane"], measured["shard"])] = measured["seconds"]
         if measured.get("lane") in PACKAGE_LANES:
             packages.update({name: seconds for name, seconds in measured["packages"].items()
                              if valid_seconds(seconds, allow_zero=True)})
-    return {"lanes": lanes, "packages": packages}
+        for row in measured.get("tests", []):
+            if valid_seconds(row.get("seconds")) and isinstance(row.get("package"), str) and isinstance(row.get("test"), str):
+                key = (row["package"], row["test"])
+                tests[key] = max(tests.get(key, 0), row["seconds"])
+    return {"lanes": lanes, "packages": packages,
+            "tests": slowest([{"package": package, "test": name, "seconds": seconds}
+                              for (package, name), seconds in tests.items()])}
 
 
-def download(repository, run, names, directory):
-    command = ["gh", "run", "download", str(run), "--repo", repository, "--dir", str(directory)]
-    for name in names:
-        command += ["--name", name]
-    subprocess.run(command, check=True, capture_output=True, text=True)
+def publish(receipts, output, environment):
+    """One file for the whole run, bound to the source it measured."""
+    # A later attempt's receipt sorts after the one it reran.
+    measured = merge(sorted(Path(receipts).glob("*/**/ci/timings.json")))
+    measured.update(run=int(environment["GITHUB_RUN_ID"]),
+                    source_sha=environment["SOURCE_SHA"], source_tree=environment["SOURCE_TREE"])
+    Path(output).write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n")
+    return measured
 
 
-def nightly_rows():
-    from verification_plan import catalog
-    return {row_key(name, f"{index}/{count}" if count > 1 else "")
-            for name, lane in catalog()["ci"].items()
-            if "nightly" in lane["profiles"]
-            for count in [lane.get("shards", 1)] for index in range(1, count + 1)}
+def decode(raw):
+    if len(raw) > MAX_BYTES:
+        raise ValueError("timings archive exceeds its limit")
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        members = archive.infolist()
+        if len(members) != 1 or members[0].filename != FILE or members[0].file_size > MAX_BYTES:
+            raise ValueError("timings archive has unexpected contents")
+        measured = json.loads(archive.read(members[0]))
+    if not isinstance(measured, dict) or not isinstance(measured.get("lanes"), dict) \
+            or not isinstance(measured.get("packages"), dict):
+        raise ValueError("timings file has no lane and package durations")
+    return measured
 
 
 def latest(repository):
-    """Newest measurements per row, filling incomplete nightly runs from bounded main history."""
-    path = f"repos/{repository}/actions/workflows/{WORKFLOW}/runs?branch=main&status=completed&per_page={RECENT_RUNS}"
-    result = {"runs": [], "lanes": {}, "packages": {}, "lane_runs": {}}
-    required = nightly_rows()
-    for run in github.api(path)["workflow_runs"]:
-        names = [artifact["name"] for artifact in github.pages(f"repos/{repository}/actions/runs/{run['id']}/artifacts",
-                                                                "artifacts")
-                 if artifact["name"].startswith(RECEIPTS) and not artifact["expired"]]
-        if not names:
-            continue
-        with tempfile.TemporaryDirectory() as directory:
-            download(repository, run["id"], names, directory)
-            measured = merge(sorted(Path(directory).glob("*/**/ci/timings.json")))
-        contributed = False
-        for key, seconds in measured["lanes"].items():
-            if key not in result["lanes"]:
-                result["lanes"][key] = seconds
-                result["lane_runs"][key] = run["id"]
-                contributed = True
-        for key, seconds in measured["packages"].items():
-            if key not in result["packages"]:
-                result["packages"][key] = seconds
-                contributed = True
-        if contributed:
-            result["runs"].append(run["id"])
-        if required <= result["lanes"].keys():
-            break
-    return result if result["lanes"] else {}
+    """The newest unexpired timings file a main nightly published; one listing and one download."""
+    listing = github.api(f"repos/{repository}/actions/artifacts?name={ARTIFACT}&per_page=100")
+    published = [artifact for artifact in listing["artifacts"]
+                 if not artifact["expired"] and artifact["workflow_run"]["head_branch"] == "main"]
+    if not published:
+        print(f"No main nightly has published {ARTIFACT}", file=sys.stderr)
+        return {}
+    artifact = max(published, key=lambda row: row["created_at"])
+    print(f"Downloading {ARTIFACT} artifact {artifact['id']} from nightly run {artifact['workflow_run']['id']}",
+          file=sys.stderr)
+    return decode(subprocess.check_output(["gh", "api", f"repos/{repository}/actions/artifacts/{artifact['id']}/zip"]))
 
 
 def resolve(repository):
     """Measured timings, or none: a plan without them falls back to lane budgets and even shards."""
     try:
         return latest(repository)
-    except (subprocess.CalledProcessError, OSError, KeyError, ValueError) as error:
-        detail = error.stderr.strip() if isinstance(error, subprocess.CalledProcessError) else error
+    except (subprocess.CalledProcessError, OSError, KeyError, TypeError, ValueError, zipfile.BadZipFile) as error:
+        detail = error.stderr.strip() if isinstance(error, subprocess.CalledProcessError) and isinstance(error.stderr, str) else error
         print(f"::warning title=Measured timings unavailable::{detail}".replace("\n", "%0A"), file=sys.stderr)
         return {}
+
+
+def main(arguments):
+    receipts, output = arguments
+    measured = publish(receipts, output, os.environ)
+    print(f"Merged {len(measured['lanes'])} lane, {len(measured['packages'])} package and "
+          f"{len(measured['tests'])} test durations from {measured['source_sha']}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
