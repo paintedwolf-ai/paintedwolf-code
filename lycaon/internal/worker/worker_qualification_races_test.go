@@ -32,6 +32,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerlane"
 	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerplan/plantest"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -199,10 +200,11 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 
 	reg := tools.NewDefaultRegistry()
 	agents := orchestration.NewMemoryAgentRegistryForTest()
+	plan := plantest.New(t, plantest.Deps(records))
 	testutil.FailErr(t, "register task", RegisterTaskTool(reg, TaskToolDeps{
-		Queue: queue, Agents: agents, Workers: DefaultWorkersConfig(), WorkerRecords: records, Reviews: ops,
+		Queue: queue, Agents: agents, Workers: DefaultWorkersConfig(), WorkerRecords: records, Reviews: ops, Plan: plan,
 	}))
-	testutil.FailErr(t, "register worker tools", RegisterWorkerTools(reg, WorkerToolDeps{Ops: ops, Queue: queue, Workers: DefaultWorkersConfig()}))
+	testutil.FailErr(t, "register worker tools", RegisterWorkerTools(reg, WorkerToolDeps{Ops: ops, Queue: queue, Workers: DefaultWorkersConfig(), Plan: plan}))
 	testutil.FailErr(t, "register overlay tools", RegisterOverlayTools(reg, OverlayToolDeps{Merge: merge, Results: ops}))
 	testutil.FailErr(t, "register answer tool", RegisterAnswerDecisionTool(reg, AnswerDecisionToolDeps{Answer: answer, Workers: ops}))
 	testutil.FailErr(t, "register cancel tool", RegisterWorkerCancelTool(reg, CancelToolDeps{Cancel: cancel, Workers: ops}))
