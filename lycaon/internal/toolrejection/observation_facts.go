@@ -132,7 +132,6 @@ var rejectCodeObservation = map[string]string{
 	"GREP_MATCH_BUDGET":                         "match_budget",
 	"GREP_PATH_NOT_FOUND":                       "not_found",
 	"GREP_REGEX_INVALID":                        "regex_invalid",
-	"GREP_SCOPE_REQUIRED":                       "scope_required",
 	"HOST_APPROVAL_PLAN_INVALID":                "approval_plan_invalid",
 	"IMAGE_BYTES_EXCEEDED":                      "resource_limit",
 	"IMAGE_CORRUPTED":                           "corrupted",

@@ -902,12 +902,6 @@ host_facts:
    type: list<string>
  - name: paintedwolf.extracted_paths_omitted
    type: int
- - name: paintedwolf.git_after_observed
-   type: bool
- - name: paintedwolf.git_merge_active
-   type: bool
- - name: paintedwolf.git_conflict_paths
-   type: list<string>
  - name: paintedwolf.http_method
    type: string
  - name: paintedwolf.http_requests_started

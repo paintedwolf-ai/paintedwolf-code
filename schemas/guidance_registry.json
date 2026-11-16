@@ -1194,12 +1194,6 @@
       "emit": "guard:git_no_repository_on_write_leg",
       "summary": "A Git read in this command found no repository on this write leg."
     },
-    "GIT_OPERATION_FAILED": {
-      "branch_instruction": "Report any unresolved state; do not claim the repository was left unchanged or that the operation completed.",
-      "category": "recoverable",
-      "emit": "guard:git_operation_failed",
-      "summary": "The Git operation did not finish cleanly."
-    },
     "GIT_OPERATION_PRECONDITION": {
       "branch_instruction": "Keep the current repository state until the precondition is resolved.",
       "category": "recoverable",
@@ -1277,12 +1271,6 @@
       "category": "recoverable",
       "emit": "guard:grep",
       "summary": "The search pattern uses a construct outside its declared regex dialect."
-    },
-    "GREP_SCOPE_REQUIRED": {
-      "branch_instruction": "Branch on Code; repeat the search with a narrower directory or file filter",
-      "category": "recoverable",
-      "emit": "guard:grep",
-      "summary": "Open-root grep requires a selected directory or narrowing file filter when the file count is unknown or meets the structural threshold."
     },
     "HELD_CALL_CAP_REACHED": {
       "branch_instruction": "Free a held call before starting another",

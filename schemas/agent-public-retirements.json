@@ -200,6 +200,26 @@
     "paintedwolf.tool_turn_has_text": {
       "version": 1,
       "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.git_after_observed": {
+      "version": 1,
+      "summary": "Host fact of type bool; whether the repository state after a structured Git operation was inspected."
+    },
+    "paintedwolf.git_merge_active": {
+      "version": 1,
+      "summary": "Host fact of type bool; whether the inspected state after a structured Git operation had an active merge."
+    },
+    "paintedwolf.git_conflict_paths": {
+      "version": 1,
+      "summary": "Host fact of type list<string>; conflicted paths in the inspected state after a structured Git operation."
+    },
+    "paintedwolf.git_operation_failed": {
+      "version": 1,
+      "summary": "A structured checkout, merge or stash failed or left conflicts; git through command reports the exit status and the repository state in its output."
+    },
+    "paintedwolf.grep_scope_required": {
+      "version": 1,
+      "summary": "Open-root grep needed a path or narrowing glob; search through command walks the requested scope under the program's own budgets."
     }
   },
   "vocabularies": {
@@ -467,12 +487,32 @@
       ],
       "paintedwolf.progress_reconciled_since_arm": [
         "paintedwolf.progress_closure_armed"
-      ]
+      ],
+      "paintedwolf.git_after_observed": {
+        "content_contract": "paintedwolf.git_after_observed",
+        "version": 1
+      },
+      "paintedwolf.git_merge_active": {
+        "content_contract": "paintedwolf.git_merge_active",
+        "version": 1
+      },
+      "paintedwolf.git_conflict_paths": {
+        "content_contract": "paintedwolf.git_conflict_paths",
+        "version": 1
+      }
     },
     "rejection_codes": {
       "COORDINATOR_CLOSEOUT_ENVELOPE_ONLY": [
         "COORDINATOR_CLOSEOUT_NO_ANSWER"
       ],
+      "GIT_OPERATION_FAILED": {
+        "content_contract": "paintedwolf.git_operation_failed",
+        "version": 1
+      },
+      "GREP_SCOPE_REQUIRED": {
+        "content_contract": "paintedwolf.grep_scope_required",
+        "version": 1
+      },
       "SANDBOX_REFUSAL_REPORT_SILENT": [
         "SANDBOX_BOUNDARY_REFUSED"
       ],

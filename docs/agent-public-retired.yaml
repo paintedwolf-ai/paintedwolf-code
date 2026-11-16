@@ -276,3 +276,11 @@ retired:
     kind: tool_name
     summary: Retired as a callable tool; the work runs through native forms in command.
     date: 2026-11-04
+  - id: GREP_SCOPE_REQUIRED
+    kind: hint_code
+    summary: Open-root grep needed a path or narrowing glob; it was retired with the grep tool, and search through command walks the requested scope under the program's budgets.
+    date: 2026-11-15
+  - id: GIT_OPERATION_FAILED
+    kind: hint_code
+    summary: A structured checkout, merge or stash failed or left conflicts; it was retired with those tools, and git through command reports the exit status and repository state in its output.
+    date: 2026-11-15
