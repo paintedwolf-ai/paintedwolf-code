@@ -8745,6 +8745,8 @@ type ToolResult struct {
 	Feedback []ToolFeedback `json:"feedback,omitempty"`
 	// Card for a settled call that is not a command program; projected on read, never stored.
 	Action *ActionDescriptor `json:"action,omitempty"`
+	// Facts the tool's handler stated for its action card, such as what it found or the HTTP status it got. Stored with the result; never part of the model's tool result.
+	CardFacts []ActionFact `json:"card_facts,omitempty"`
 	// Quiet-chrome for Den verbose prefs. Host stamps from the policy registry (`guard:` emit, advisory/informational/expected_behavior categories, info|warning severity) or a structured reject `code` with no registry row. `benign` hides unless verbose; `normal` stays visible (worker_dispatch, SPEC_POSTURE, …).
 	UiVisibility ToolResultUiVisibility `json:"ui_visibility,omitempty"`
 	// Producer-stated worker dispatch identity.

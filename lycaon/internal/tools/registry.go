@@ -97,6 +97,8 @@ type ToolInvocationOut struct {
 	SourceDeliveries []SourceDeliveryTag
 	// Listener is Den UI and wire metadata for loopback listener attribution on http_request.
 	Listener *api.LoopbackListenerFact
+	// CardFacts are facts the handler states for its action card; the model never sees them.
+	CardFacts []api.ActionFact
 	// SourceRun is nil until a command or verify run exits.
 	SourceRun *SourceRunCapture
 	// RetrievedFrom is the final retrieval host after redirects.

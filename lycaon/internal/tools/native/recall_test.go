@@ -45,6 +45,9 @@ func TestRecallHistoryAndCoordinateReject(t *testing.T) {
 		},
 	}, tctx)
 	testutil.FailErr(t, "run recall history record", err)
+	if facts := tctx.Effects.Out.CardFacts; len(facts) != 0 {
+		t.Fatalf("a history page stated found results: %+v", facts)
+	}
 	if !strings.Contains(out, `"format":"record"`) || !strings.Contains(out, "recovered canonical detail") {
 		t.Fatalf("unexpected recall history output: %s", out)
 	}
