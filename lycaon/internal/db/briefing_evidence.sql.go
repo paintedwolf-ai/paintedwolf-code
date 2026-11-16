@@ -218,8 +218,9 @@ type BriefingToolResultOrdParams struct {
 	ToolCallID sql.NullString `json:"tool_call_id"`
 }
 
-// Bounded reads anchored on one tool call. Every query limits rows and the
-// bytes it returns, so a large transcript or record cannot widen a briefing.
+// Bounded reads anchored on one tool call or one worker job. Every query limits
+// rows and the bytes it returns, so a large transcript or record cannot widen a
+// briefing.
 func (q *Queries) BriefingToolResultOrd(ctx context.Context, arg BriefingToolResultOrdParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, briefingToolResultOrd, arg.SessionID, arg.ToolCallID)
 	var ord int64

@@ -1,5 +1,6 @@
--- Bounded reads anchored on one tool call. Every query limits rows and the
--- bytes it returns, so a large transcript or record cannot widen a briefing.
+-- Bounded reads anchored on one tool call or one worker job. Every query limits
+-- rows and the bytes it returns, so a large transcript or record cannot widen a
+-- briefing.
 
 -- name: BriefingToolResultOrd :one
 SELECT ord FROM messages
