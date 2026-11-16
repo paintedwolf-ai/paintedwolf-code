@@ -3,7 +3,12 @@ import type { CitationGrounding } from "../../api/types.ts";
 import {
   buildCitationGroundingView,
   citationGroundingHadTraceableWork,
+  citationGroundingIsGrounded,
 } from "../../chat/grounding/citation-grounding-model.ts";
+import {
+  GROUNDING_STATUS_GROUNDED,
+  GROUNDING_STATUS_PARTIAL,
+} from "../../chat/grounding/grounding-copy.ts";
 import {
   groundingEvidenceEntryKey,
   useTranscriptEntry,
@@ -15,10 +20,9 @@ import {
 } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
 import { CitationEvidenceSection } from "./CitationEvidenceSection.tsx";
-import { CitationGroundingChicklet } from "./CitationGroundingChicklet.tsx";
 import type { CitationExploreContext } from "./CitationGroundingPanel.tsx";
 
-import { TranscriptChickletSummary } from "../transcript/TranscriptChickletSummary.tsx";
+import { TranscriptLinkSummary } from "../transcript/TranscriptLinkSummary.tsx";
 
 type Props = {
   grounding?: CitationGrounding | null;
@@ -53,13 +57,15 @@ export function CitationEvidenceChicklet(props: Props) {
         <TranscriptDisclosureShell
           disclosure={disclosure}
           ref={bindTranscriptEntry}
-          class="den-citation-evidence-chicklet den-transcript-disclosure-card"
+          class="den-citation-evidence-chicklet den-transcript-disclosure-card den-transcript-disclosure-link"
           data-testid="citation-evidence-chicklet"
           data-evidence-outcome={detail.outcome}
         >
-          <TranscriptChickletSummary disclosure={disclosure}>
-            <CitationGroundingChicklet view={detail} />
-          </TranscriptChickletSummary>
+          <TranscriptLinkSummary
+            disclosure={disclosure}
+            label={citationGroundingIsGrounded(detail) ? GROUNDING_STATUS_GROUNDED : GROUNDING_STATUS_PARTIAL}
+            attention={!citationGroundingIsGrounded(detail)}
+          />
           <TranscriptDisclosurePanel disclosure={disclosure} class="den-citation-evidence-chicklet-body">
             <CitationEvidenceSection
               view={detail}

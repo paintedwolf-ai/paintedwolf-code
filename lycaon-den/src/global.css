@@ -63,6 +63,10 @@
   --den-transcript-card-row-h: calc(var(--text-den-label) * 1.5 + 15px);
   --den-transcript-card-inset-x: 12px;
 
+  /* A link disclosure rests one label line tall, padded only by its hover chip. */
+  --den-transcript-link-row-h: calc(var(--text-den-label) * 1.5 + 8px);
+  --den-transcript-link-inset-x: 8px;
+
   /* Radius ladder follows nesting depth. */
   --den-radius-sm: 6px;
   --den-radius: 8px;
