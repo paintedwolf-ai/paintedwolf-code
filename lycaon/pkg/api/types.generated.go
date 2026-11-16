@@ -4997,7 +4997,7 @@ type ProgressStep struct {
 	Label string `json:"label"`
 }
 
-// ProgressUpdateMeta Incremental progress update with a plan, delta, or aggregate summary.
+// ProgressUpdateMeta Incremental progress update. `summary` states the plan it leaves; `steps` or `changes` list its rows unless they are too many to show.
 type ProgressUpdateMeta struct {
 	Changes []ProgressChange       `json:"changes,omitempty"`
 	Steps   []ProgressStep         `json:"steps,omitempty"`
@@ -5006,7 +5006,7 @@ type ProgressUpdateMeta struct {
 	Seq     int                    `json:"seq"`
 }
 
-// ProgressUpdateSummary Aggregate progress update; the full checklist remains in ProgressDigest.
+// ProgressUpdateSummary The plan's state after a progress update; the full checklist remains in ProgressDigest.
 type ProgressUpdateSummary struct {
 	ChangeCount int `json:"change_count"`
 	TotalSteps  int `json:"total_steps"`

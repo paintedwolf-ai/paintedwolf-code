@@ -10906,7 +10906,7 @@ export interface components {
             prev_label?: string;
             state: components["schemas"]["ProgressState"];
         };
-        /** @description Aggregate progress update; the full checklist remains in ProgressDigest. */
+        /** @description The plan's state after a progress update; the full checklist remains in ProgressDigest. */
         ProgressUpdateSummary: {
             change_count: number;
             total_steps: number;
@@ -10914,7 +10914,7 @@ export interface components {
             done: number;
             na: number;
         };
-        /** @description Incremental progress update with a plan, delta, or aggregate summary. */
+        /** @description Incremental progress update. `summary` states the plan it leaves; `steps` or `changes` list its rows unless they are too many to show. */
         ProgressUpdateMeta: {
             changes?: components["schemas"]["ProgressChange"][];
             steps?: components["schemas"]["ProgressStep"][];
