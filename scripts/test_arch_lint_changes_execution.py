@@ -56,6 +56,7 @@ class ArchLintChangesTest(unittest.TestCase):
         (self.repo / "lycaon-den" / "package.json").write_text("{}")
         (self.repo / "fake_knip.py").write_text(FAKE_KNIP)
         (self.repo / "lycaon" / "internal" / "store" / "store.go").write_text("package store\n")
+        (self.repo / "lycaon" / "go.mod").write_text("module x\n\ngo 1.22\n")
         self.git("init", "-q", "-b", "main")
         self.write_findings({"reach": [finding("dead-func", "x/store.Old")]})
         self.git("add", "-A")
@@ -114,6 +115,15 @@ class ArchLintChangesTest(unittest.TestCase):
             "lycaon/internal/store/store.go", "lycaon/internal/store/store_test.go",
             "lycaon/internal/store/testdata/x.go", "lycaon/internal/gone/gone.go", "docs/x.go",
         ]), ["./internal/store"])
+
+    def test_host_packages_skip_packages_the_host_does_not_build(self):
+        darwin = self.repo / "lycaon" / "internal" / "mac"
+        darwin.mkdir()
+        (darwin / "mac.go").write_text("//go:build darwin\n\npackage mac\n")
+        dirs = ["./internal/mac", "./internal/store"]
+        self.assertEqual(arch_lint_changes.host_packages(self.repo, dirs, "linux"), ["./internal/store"])
+        self.assertEqual(arch_lint_changes.host_packages(self.repo, dirs, "darwin"), dirs)
+        self.assertEqual(arch_lint_changes.host_packages(self.repo, []), [])
 
     def test_den_changes_compare_knip_findings_with_the_base(self):
         (self.repo / "knip.json").write_text(json.dumps({"files": ["src/old.ts"]}))

@@ -17,6 +17,7 @@ Policy, including the test-support package rule, is scripts/arch-lint-policy.jso
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -146,6 +147,19 @@ def changed_go_packages(root, paths):
     return sorted(d for d in dirs if (root / "lycaon" / d).is_dir())
 
 
+def host_packages(root, dirs, goos=None):
+    """The package directories with Go files for this host's build; unparam type-checks only those."""
+    if not dirs:
+        return []
+    env = {**os.environ, **({"GOOS": goos} if goos else {})}
+    result = subprocess.run(["go", "list", "-e", "-f", "{{if .GoFiles}}{{.Dir}}{{end}}", *dirs],
+                            cwd=root / "lycaon", capture_output=True, text=True, env=env)
+    if result.returncode != 0:
+        raise RuntimeError(f"go list: {result.stderr.strip()}")
+    built = {str(Path(line).resolve()) for line in result.stdout.split()}
+    return [d for d in dirs if str((root / "lycaon" / d).resolve()) in built]
+
+
 def unparam(root, base, linter, packages):
     """Unused parameters golangci-lint's unparam finds on lines the change touched."""
     if not packages:
@@ -175,7 +189,7 @@ def changes(root, scope, policy, cache, binary, linter):
     head = checks(binary, root, policy, go)
     base = base_checks(root, scope.base, binary, policy, cache, go)
     new = [f for key, f in sorted(head.items()) if key not in base]
-    new += unparam(root, scope.base, linter, changed_go_packages(root, scope.paths))
+    new += unparam(root, scope.base, linter, host_packages(root, changed_go_packages(root, scope.paths)))
     findings = [to_finding("error", f) for f in new]
     header = f"{scope.describe()}; {len(head)} finding(s) at the working tree, {len(base)} at the base"
     return header, findings, bool(findings)
