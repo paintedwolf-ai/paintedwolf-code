@@ -110,7 +110,7 @@ describe("the files floor of the dismissal chain", () => {
     dockTray: () => null,
     closeLayoutTray: vi.fn(),
     layoutTrigger: () => undefined,
-    workersOpen: () => false,
+    drawerContent: () => null,
     closeDrawer: vi.fn(),
     stageTabs: { openTab: () => null, selectTab: vi.fn() },
     isSettingsNav: () => false,
