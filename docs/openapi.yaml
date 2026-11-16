@@ -22373,6 +22373,7 @@ components:
     ActionOpener:
       x-go-generate: true
       type: object
+      description: Where the action's subject opens, beyond its records.
       additionalProperties: false
       required:
         - kind
@@ -22381,36 +22382,22 @@ components:
           type: string
           enum:
             - file
-            - diff
             - terminal
-            - image
-            - worker
-            - commit
-            - search
-            - git
-            - security
             - running
-            - workflow
-            - skill
+            - search
         path:
           type: string
+          description: 'file: the path, as the action named it.'
         line:
           type: integer
           x-go-pointer: true
-        ref:
-          type: string
-          description: 'commit: the commit. git: the ref to show.'
+          description: 'file: the line to open at.'
         query:
           type: string
           description: 'search: what to search for.'
-        artifact_id:
-          type: string
         process_handle:
           type: string
-        worker_id:
-          type: string
-        workflow_run_id:
-          type: string
+          description: 'terminal: the session whose output opens.'
     ExternalAccess:
       x-go-generate: true
       type: object

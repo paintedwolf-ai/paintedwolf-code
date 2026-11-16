@@ -114,19 +114,17 @@ type ActionLink struct {
 	Receipts []ActionReceiptScope `json:"receipts,omitempty"`
 }
 
-// ActionOpener
+// ActionOpener Where the action's subject opens, beyond its records.
 type ActionOpener struct {
 	Kind string `json:"kind"`
+	// file: the path, as the action named it.
 	Path string `json:"path,omitempty"`
-	Line *int   `json:"line,omitempty"`
-	// commit: the commit. git: the ref to show.
-	Ref string `json:"ref,omitempty"`
+	// file: the line to open at.
+	Line *int `json:"line,omitempty"`
 	// search: what to search for.
-	Query         string `json:"query,omitempty"`
-	ArtifactID    string `json:"artifact_id,omitempty"`
+	Query string `json:"query,omitempty"`
+	// terminal: the session whose output opens.
 	ProcessHandle string `json:"process_handle,omitempty"`
-	WorkerID      string `json:"worker_id,omitempty"`
-	WorkflowRunID string `json:"workflow_run_id,omitempty"`
 }
 
 // ActionPreview
