@@ -7,7 +7,9 @@ files, exports and types production code never uses. Each finding is keyed by
 symbol, never by line. This runs arch-lint on the working tree and on the change base and
 fails on findings the base does not have, so deleting a function's last caller
 fails as surely as adding a dead function. unparam reports unused parameters
-on changed lines. `--all` lists every finding at the working tree instead.
+on changed lines. `--den` judges only Den's knip report, so it runs where Den's
+dependencies are installed; without it the Go and cross-language checks run.
+`--all` lists every finding at the working tree instead.
 
 Policy, including the test-support package rule, is scripts/arch-lint-policy.json.
 """
@@ -86,9 +88,10 @@ def target_goos(reach, host=sys.platform):
     return reach["goos"][host]
 
 
-def checks(binary, tree, policy, go=True, den=False):
+def checks(binary, tree, policy, go=True, den=False, refs=True):
     """Every arch-lint check over one tree, as (kind, key) → finding. Without go,
-    the Go checks are skipped; with den, knip runs over Den."""
+    the Go checks are skipped; without refs, the cross-language references are;
+    with den, knip runs over Den."""
     go_dir = tree / "lycaon"
     support = ",".join(policy["test_support"])
     reach = policy["reach"]
@@ -102,7 +105,7 @@ def checks(binary, tree, policy, go=True, den=False):
     with tempfile.NamedTemporaryFile("w", suffix=".index") as index:
         index.write(run(["git", "-C", str(tree), "ls-files", "-s", "-z"]))
         index.flush()
-        commands = (go_commands if go else []) + [[binary, "refs", "-root", tree, "-index", index.name]]
+        commands = (go_commands if go else []) + ([[binary, "refs", "-root", tree, "-index", index.name]] if refs else [])
         for command in commands:
             for finding in json.loads(run([str(part) for part in command]) or "null") or []:
                 found[(finding["kind"], finding["key"])] = finding
@@ -111,10 +114,11 @@ def checks(binary, tree, policy, go=True, den=False):
     return found
 
 
-def base_checks(root, base, binary, policy, cache, go=True, den=False):
+def base_checks(root, base, binary, policy, cache, go=True, den=False, refs=True):
     """Findings at the base, cached by base commit, scope and the binary that judged it."""
-    digest = hashlib.sha256(binary.read_bytes()).hexdigest()[:16]
-    cached = cache / f"base-{base}-{digest}{'' if go else '-xrefs'}{'-den' if den else ''}.json"
+    digest = hashlib.sha256(binary.read_bytes()).hexdigest()[:16] if binary else "knip"
+    parts = ('' if go else '-nogo') + ('' if refs else '-norefs') + ('-den' if den else '')
+    cached = cache / f"base-{base}-{digest}{parts}.json"
     if cached.exists():
         return {(f["kind"], f["key"]): f for f in json.loads(cached.read_text())}
     tree = cache / "base-tree"
@@ -122,7 +126,7 @@ def base_checks(root, base, binary, policy, cache, go=True, den=False):
         run(["git", "-C", str(tree), "checkout", "-q", "--force", "--detach", base])
     else:
         run(["git", "-C", str(root), "worktree", "add", "-q", "--force", "--detach", str(tree), base])
-    found = checks(binary, tree, policy, go, den)
+    found = checks(binary, tree, policy, go, den, refs)
     cached.write_text(json.dumps(list(found.values())))
     return found
 
@@ -166,14 +170,25 @@ def to_finding(level, f):
 
 
 def changes(root, scope, policy, cache, binary, linter):
+    """The Go and cross-language findings the change adds."""
     go = scope.touches(["lycaon/"])
-    den = scope.touches([policy["den"]["dir"] + "/"])
-    head = checks(binary, root, policy, go, den)
-    base = base_checks(root, scope.base, binary, policy, cache, go, den)
+    head = checks(binary, root, policy, go)
+    base = base_checks(root, scope.base, binary, policy, cache, go)
     new = [f for key, f in sorted(head.items()) if key not in base]
     new += unparam(root, scope.base, linter, changed_go_packages(root, scope.paths))
     findings = [to_finding("error", f) for f in new]
     header = f"{scope.describe()}; {len(head)} finding(s) at the working tree, {len(base)} at the base"
+    return header, findings, bool(findings)
+
+
+def den_changes(root, scope, policy, cache):
+    """The knip findings a change to Den adds."""
+    if not scope.touches([policy["den"]["dir"] + "/"]):
+        return f"{scope.describe()}; no Den change", [], False
+    head = checks(None, root, policy, go=False, den=True, refs=False)
+    base = base_checks(root, scope.base, None, policy, cache, go=False, den=True, refs=False)
+    findings = [to_finding("error", f) for key, f in sorted(head.items()) if key not in base]
+    header = f"{scope.describe()}; {len(head)} Den finding(s) at the working tree, {len(base)} at the base"
     return header, findings, bool(findings)
 
 
@@ -190,17 +205,20 @@ def everything(root, policy, binary):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--all", action="store_true", help="list every finding at the working tree")
+    parser.add_argument("--den", action="store_true", help="judge only the knip findings a Den change adds")
     args = parser.parse_args(argv)
     policy = json.loads(POLICY.read_text())
     cache = artifact_root(ROOT) / "arch-lint"
-    binary = build(ROOT, cache / "bin")
     if args.all:
-        header, findings, failed = everything(ROOT, policy, binary)
+        header, findings, failed = everything(ROOT, policy, build(ROOT, cache / "bin"))
     else:
         scope = change_report.resolve(ROOT)
         if scope is None:
             raise RuntimeError("no main branch to measure the change against; set PW_CHANGE_BASE")
-        header, findings, failed = changes(ROOT, scope, policy, cache, binary, golangci_lint(ROOT))
+        if args.den:
+            header, findings, failed = den_changes(ROOT, scope, policy, cache)
+        else:
+            header, findings, failed = changes(ROOT, scope, policy, cache, build(ROOT, cache / "bin"), golangci_lint(ROOT))
     change_report.emit(ROOT, TITLE, header, findings, failed)
     return 1 if failed else 0
 
