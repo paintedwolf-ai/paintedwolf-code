@@ -1,6 +1,6 @@
 import { expect, type Page } from "@playwright/test";
-import { apiJson, apiPostPrompt, bootstrapChatSession, liveChatStage, settledChatSessionId, webE2e } from "./helpers.ts";
-import { manualHarnessTools } from "./manual-harness-tools.ts";
+import { apiJson, apiPostPrompt, bootstrapChatSession, liveChatStage, settledChatSessionId, webE2e } from "../helpers.ts";
+import { manualHarnessTools } from "../manual-harness-tools.ts";
 
 const CARDS = '[data-testid="progress-strip-created"], [data-testid="activity-span-card"]';
 
