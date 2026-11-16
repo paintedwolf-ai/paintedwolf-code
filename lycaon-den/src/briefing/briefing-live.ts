@@ -305,11 +305,3 @@ export function requestBriefingResync(): void {
     if (entry.users > 0) requestBriefing(entry.projectId, entry.target, { fresh: true });
   }
 }
-
-/** Drops every target, as when summaries are turned off. */
-export function clearBriefings(): void {
-  for (const entry of store.entries.values()) {
-    clearTimers(entry);
-    entry.setView({ snapshot: null, stalled: false });
-  }
-}
