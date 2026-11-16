@@ -68,6 +68,11 @@ var phaseSet = func() map[Phase]struct{} {
 	return set
 }()
 
+// Phases returns the complete protocol vocabulary in lifecycle order.
+func Phases() []Phase {
+	return append([]Phase(nil), phases...)
+}
+
 type kind string
 
 const (

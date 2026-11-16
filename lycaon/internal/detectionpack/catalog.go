@@ -536,6 +536,18 @@ func markDuplicateRuleIDs(packs []Pack) []string {
 	return warnings
 }
 
+// SupportedFields returns the closed field vocabulary for one synthetic source.
+// The authoring schema contract compares its projection to this runtime list.
+func SupportedFields(source LogSource) []string {
+	fields := fieldsForSource(source)
+	out := make([]string, 0, len(fields))
+	for field := range fields {
+		out = append(out, field)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // PackByID returns the pack with the given id, or false.
 func (c *Catalog) PackByID(id string) (Pack, bool) {
 	if c == nil {

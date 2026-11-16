@@ -196,6 +196,15 @@ func ApprovalRecoverableIDs() []string {
 	return append(slices.Clone(recoverableTools), recoverableOperations...)
 }
 
+// ToolTierDeclared reports whether a callable tool has a defined tier.
+func ToolTierDeclared(tool string) bool {
+	tool = strings.TrimSpace(tool)
+	if _, ok := toolTierSet[tool]; ok {
+		return true
+	}
+	return ingestion.IsMCPToolName(tool)
+}
+
 // ApprovalIrreversibleIDs returns irreversible-tier tool and operation names.
 func ApprovalIrreversibleIDs() []string {
 	return append(slices.Clone(irreversibleTools), irreversibleOperations...)

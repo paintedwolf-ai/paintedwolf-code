@@ -195,6 +195,34 @@ func ResolveModulePath(lycaonRoot, rel string) string {
 	return filepath.Join(lycaonRoot, filepath.FromSlash(rel))
 }
 
+// CollectRuleIDsFromDir returns rule IDs from YAML gate files.
+func CollectRuleIDsFromDir(dir string) (map[string]string, error) {
+	ids := make(map[string]string)
+	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		if !isGateRuleYAML(path) {
+			return nil
+		}
+		rf, err := LoadRuleFile(path)
+		if err != nil {
+			return err
+		}
+		for _, r := range rf.Rules {
+			if prev, dup := ids[r.ID]; dup {
+				return fmt.Errorf("duplicate rule id %q in %s and %s", r.ID, prev, path)
+			}
+			ids[r.ID] = path
+		}
+		return nil
+	})
+	return ids, err
+}
+
 // ActiveLycaonGatePaths returns configured first-party rule paths.
 func ActiveLycaonGatePaths(cfg *OpengrepGatesConfig) []string {
 	if cfg == nil {

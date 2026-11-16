@@ -24,6 +24,15 @@ func AllMessageKinds() []MessageKind {
 	}
 }
 
+// AllCompletionReportScopes returns every declared CompletionReportScope.
+func AllCompletionReportScopes() []CompletionReportScope {
+	return []CompletionReportScope{
+		CompletionReportScopeSession,
+		CompletionReportScopePhase,
+		CompletionReportScopeRun,
+	}
+}
+
 // AllCompletionReportFindingDispositions returns every declared disposition.
 func AllCompletionReportFindingDispositions() []CompletionReportFindingDisposition {
 	return []CompletionReportFindingDisposition{

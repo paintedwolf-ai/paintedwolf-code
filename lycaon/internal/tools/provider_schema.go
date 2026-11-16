@@ -98,3 +98,18 @@ func ValidateCatalogSchemaParity(reg *DefaultRegistry, cfg *toolschema.Config) e
 	sort.Strings(violations)
 	return fmt.Errorf("registry metadata differs from catalog:\n  - %s", strings.Join(violations, "\n  - "))
 }
+
+// ValidatePromptToolMetas checks a prompt-visible tool surface (ListForPrompt output).
+func ValidatePromptToolMetas(label string, metas []ToolMeta) error {
+	var violations []string
+	for _, meta := range metas {
+		if err := ValidateProviderArgsSchema(meta); err != nil {
+			violations = append(violations, fmt.Sprintf("%s: %v", label, err))
+		}
+	}
+	if len(violations) == 0 {
+		return nil
+	}
+	sort.Strings(violations)
+	return fmt.Errorf("prompt tool surface missing provider args schema:\n  - %s", strings.Join(violations, "\n  - "))
+}

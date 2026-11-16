@@ -22,6 +22,31 @@ type playbookSource struct {
 	Data []byte
 }
 
+// LoadPlaybookMatcher reads playbooks from a host directory — a project overlay
+// or a test fixture. A bare directory is not pack content, so no unit gate applies.
+func LoadPlaybookMatcher(playbooksDir string, contract *PersonaContract) (*PlaybookMatcher, error) {
+	dir := extpacks.OnDisk(playbooksDir)
+	if dir.Empty() {
+		return nil, fmt.Errorf("playbooks directory required")
+	}
+	entries, err := dir.List()
+	if err != nil {
+		return nil, err
+	}
+	var sources []playbookSource
+	for _, ent := range entries {
+		if ent.IsDir() || !strings.HasSuffix(ent.Name(), ".yaml") {
+			continue
+		}
+		raw, err := dir.Join(ent.Name()).Read()
+		if err != nil {
+			return nil, err
+		}
+		sources = append(sources, playbookSource{Name: ent.Name(), Data: raw})
+	}
+	return loadPlaybookMatcherSources(sources, contract)
+}
+
 // LoadPlaybookMatcherEffective loads effective playbooks.
 func LoadPlaybookMatcherEffective(contract *PersonaContract) (*PlaybookMatcher, error) {
 	catalog, err := extpacks.CatalogForConsumers()

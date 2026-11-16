@@ -94,6 +94,15 @@ func ShapeIDs() []string {
 	}
 }
 
+// SurfaceSnapshotHandleFields returns snapshot metadata fields.
+func SurfaceSnapshotHandleFields() []string {
+	return []string{
+		SurfaceSnapshotHandleFieldSurface,
+		SurfaceSnapshotHandleFieldArtifactID,
+		SurfaceSnapshotHandleFieldFrameIndex,
+	}
+}
+
 // EvidenceVerbatimShapeIDs are classification-free verbatim-substring shapes.
 func EvidenceVerbatimShapeIDs() []string {
 	return []string{ShapeCommand, ShapeOpaque, ShapeStructuredEvent}
