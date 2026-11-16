@@ -1,28 +1,38 @@
-import { For, Show, type JSX } from "solid-js";
+import { Index, Match, Show, Switch, createMemo, type JSX } from "solid-js";
 import type { ActionLink, ActionOpener } from "../../api/types.ts";
 import type { CardAction } from "../../chat/action/action-merge.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import type { ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
 import { openRunningStage } from "../../platform/navigation/open-running.ts";
-import { openSourceLocation } from "../../platform/navigation/open-source.ts";
 import { openInSearch } from "../../search/search-nav.ts";
 import { useToolContent } from "../../chat/tool/tool-content.tsx";
 import { ToolContentLink } from "../tool/ToolContentLink.tsx";
+import type { ResolveProjectRoot } from "../../api/project-path.ts";
+import { SourcePathLink } from "../source/SourcePathLink.tsx";
+import { TOOL_PATH_ENTRY_KINDS } from "../../chat/tool/tool-presentation.generated.ts";
+import { turnLoadRowSummary } from "../../chat/turnload/turn-load-rows.ts";
+import { addToChat } from "../../chat/composer/add-to-chat.ts";
+import { chatRefForToolRaw } from "../../chat/composer/search-add-to-chat.ts";
+import { startChatAttachmentDrag } from "../../chat/composer/chat-attachment-drag.ts";
+import { useChatDestinationScope } from "../../chat/composer/chat-destination-scope.tsx";
+import { exploreRelatedToolCallsQuery } from "../../search/search-query-model.ts";
 
 const LINK_LABELS: Readonly<Record<ActionLink["kind"], string>> = { input: "Input", output: "Output", receipt: "Receipt" };
 
 const OPENER_LABELS: Readonly<Record<ActionOpener["kind"], string>> = {
-  file: "Open file", terminal: "Open terminal", running: "Open in Running", search: "Open in Search",
+  file: "Open in Files", terminal: "Open terminal", running: "Open in Running", search: "Open in Search",
 };
 
 type Props = {
   action: CardAction;
   part: ToolPartView;
   projectId?: string;
+  sessionId?: string;
+  rootRefs?: readonly ResolveProjectRoot[];
   evidence?: JSX.Element;
 };
 
-/** Input, Output, Receipt and Evidence in that order, then the opener. */
+/** Input, Output, Receipt, host decisions and Evidence, the call's chat and search actions, then the opener. */
 export function ActionLinks(props: Props) {
   const content = useToolContent();
   // A Find match inside this call's input or output opens its document at the match.
@@ -30,26 +40,67 @@ export function ActionLinks(props: Props) {
     if (content?.revealedCallId?.() !== props.part.toolCallId) return undefined;
     return kind === "input" ? content.argsOffset() : kind === "output" ? content.outputOffset() : undefined;
   };
+  const decisionsText = createMemo(() => {
+    const decisions = props.part.commandActivity?.decisions ?? [];
+    return decisions.length ? decisions.map((decision) => { const row = turnLoadRowSummary(decision.row); return `${row.title} · ${row.operation} · ${row.state}`; }).join("\n") : undefined;
+  });
+  const opener = createMemo(() => props.action.opener, undefined, { equals: sameShape });
+  const chatDestination = useChatDestinationScope();
+  // The call's output as a chat attachment, citing its session and call.
+  const outputRef = createMemo(() => chatRefForToolRaw({
+    projectId: props.projectId?.trim() ?? "", sessionId: props.sessionId?.trim() ?? "",
+    toolCallId: props.part.toolCallId?.trim() ?? "", name: props.part.tool.trim() || props.part.toolCallId,
+  }));
+  const relatedQuery = createMemo(() => {
+    const sessionId = props.sessionId?.trim(), projectId = props.projectId?.trim(), toolCallId = props.part.toolCallId?.trim();
+    return sessionId && projectId && toolCallId ? exploreRelatedToolCallsQuery({ toolCallId, sessionId, tool: props.part.tool }) : undefined;
+  });
   return (
-    <nav class="den-action-card__links" aria-label="Activity records" data-testid="action-links">
-      <For each={props.action.links}>
+    <nav class="den-action-card__links" aria-label="Activity records" data-testid="action-links"
+      draggable={outputRef() ? true : undefined} onDragStart={(event) => startChatAttachmentDrag(event, outputRef())}>
+      <Index each={props.action.links}>
         {(link) => {
-          const content = linkContent(link, props.part);
+          // Descriptors arrive as new objects on every update; a link stays mounted while it opens the same record.
+          const document = createMemo(() => linkContent(link(), props.part), undefined, { equals: sameShape });
           return (
-            <Show when={content} keyed>
-              {(document) => (
-                <ToolContentLink short label={LINK_LABELS[link.kind]} testId={`action-link-${link.kind}`} projectId={props.projectId}
-                  pane={`action:${props.part.id}:${link.kind}`} content={document} language={link.kind === "receipt" ? "jsonl" : undefined}
-                  messageId={link.kind === "input" ? props.part.argsMessageId ?? props.part.assistantMessageId : props.part.messageId}
-                  toolCallId={props.part.toolCallId} revealOffset={revealOffset(link.kind)} />
-              )}
+            <Show when={document()} keyed>
+              {(shown) => {
+                const kind = link().kind;
+                const messageId = kind === "input" ? props.part.argsMessageId ?? props.part.assistantMessageId : props.part.messageId;
+                const language = kind === "receipt" ? "jsonl" : undefined;
+                return (
+                  <ToolContentLink short label={LINK_LABELS[kind]} testId={`action-link-${kind}`} projectId={props.projectId}
+                    pane={`action:${props.part.id}:${kind}`} content={shown} language={language}
+                    messageId={messageId} toolCallId={props.part.toolCallId} revealOffset={revealOffset(kind)} />
+                );
+              }}
             </Show>
           );
         }}
-      </For>
+      </Index>
+      <Show when={decisionsText()} keyed>
+        {(text) => (
+          <ToolContentLink short label="Host decisions" testId="action-link-decisions" projectId={props.projectId} pane={`action:${props.part.id}:decisions`}
+            content={{ kind: "inline", text }} />
+        )}
+      </Show>
       {props.evidence}
-      <Show when={props.action.opener} keyed>
-        {(opener) => <Opener opener={opener} part={props.part} projectId={props.projectId} />}
+      <Show when={outputRef()} keyed>
+        {(ref) => (
+          <button type="button" class="den-chat-content-link" data-testid="tool-raw-add-to-chat" onClick={() => void addToChat(ref, { destination: chatDestination() })}>
+            Add to chat
+          </button>
+        )}
+      </Show>
+      <Show when={relatedQuery()} keyed>
+        {(query) => (
+          <button type="button" class="den-chat-content-link" data-testid="tool-related-search-link" onClick={() => props.projectId && openInSearch(props.projectId, query)}>
+            Find related
+          </button>
+        )}
+      </Show>
+      <Show when={opener()} keyed>
+        {(opener) => <Opener opener={opener} part={props.part} projectId={props.projectId} rootRefs={props.rootRefs} />}
       </Show>
     </nav>
   );
@@ -72,37 +123,51 @@ function linkContent(link: ActionLink, part: ToolPartView): ChatContentDocument[
   }
 }
 
-function Opener(props: { opener: ActionOpener; part: ToolPartView; projectId?: string }) {
+function Opener(props: { opener: ActionOpener; part: ToolPartView; projectId?: string; rootRefs?: readonly ResolveProjectRoot[] }) {
   const label = () => OPENER_LABELS[props.opener.kind];
   return (
-    <Show when={props.opener.kind === "terminal" && props.opener.process_handle} keyed fallback={
+    <Switch fallback={
       <button type="button" class="den-chat-content-link den-action-card__opener" data-testid="action-opener" onClick={() => openDestination(props.opener, props.projectId)}>
         {label()}
       </button>
     }>
-      {(handle) => (
-        <span class="den-action-card__opener">
-          <ToolContentLink short label={label()} testId="action-opener" projectId={props.projectId} pane={`action:${props.part.id}:terminal`}
-            content={{ kind: "process", handle }} toolCallId={props.part.toolCallId} messageId={props.part.messageId} />
-        </span>
-      )}
-    </Show>
+      <Match when={props.opener.kind === "file" && props.opener.path ? props.opener.path : undefined} keyed>
+        {(path) => (
+          <span class="den-action-card__opener" data-testid="action-opener">
+            {/* The path resolves against the project's roots, so @label/ paths and folders open where they live. */}
+            <SourcePathLink projectId={props.projectId ?? ""} path={path} line={props.opener.line} label={label()}
+              entryKind={TOOL_PATH_ENTRY_KINDS[props.part.tool.toLowerCase()] ?? "unknown"} rootRefs={props.rootRefs} />
+          </span>
+        )}
+      </Match>
+      <Match when={props.opener.kind === "terminal" && props.opener.process_handle ? props.opener.process_handle : undefined} keyed>
+        {(handle) => (
+          <span class="den-action-card__opener">
+            <ToolContentLink short label={label()} testId="action-opener" projectId={props.projectId} pane={`action:${props.part.id}:terminal`}
+              content={{ kind: "process", handle }} toolCallId={props.part.toolCallId} messageId={props.part.messageId} />
+          </span>
+        )}
+      </Match>
+    </Switch>
   );
 }
 
 function openDestination(opener: ActionOpener, projectId: string | undefined): void {
   if (!projectId) return;
   switch (opener.kind) {
-    case "file":
-      if (opener.path) void openSourceLocation({ projectId, path: opener.path, line: opener.line, entryKind: "unknown", intent: "permanent" });
-      return;
     case "running":
       openRunningStage({ projectId });
       return;
     case "search":
       if (opener.query) openInSearch(projectId, opener.query);
       return;
+    case "file":
     case "terminal":
       return;
   }
+}
+
+/** Equal when two values describe the same record or destination. */
+function sameShape(a: unknown, b: unknown): boolean {
+  return a === b || (a !== undefined && b !== undefined && JSON.stringify(a) === JSON.stringify(b));
 }

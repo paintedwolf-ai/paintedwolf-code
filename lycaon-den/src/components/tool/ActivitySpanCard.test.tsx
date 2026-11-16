@@ -544,7 +544,7 @@ describe("ActivitySpanCard", () => {
     const { container } = render(() => (
       <ActivitySpanCard label="web research" entries={webEntries} layout="chat" sessionId="s1" entryKey="iw-span" />
     ));
-    const tool = container.querySelector<HTMLElement>(".den-activity-span-items [data-testid='tool-part-card']")!;
+    const tool = container.querySelector<HTMLElement>(".den-activity-span-items [data-testid='action-card']")!;
     const warming = container.querySelector<HTMLElement>("[data-testid='index-warming-chicklet']")!;
     expect(warming.querySelector(".den-row-mark")).toBeTruthy();
     expect(warming.querySelector(".den-tool-chicklet-caret")).toBeNull();

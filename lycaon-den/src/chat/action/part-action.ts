@@ -30,7 +30,10 @@ export function pendingAction(part: ToolPartView): CardAction {
     ran: { text: part.title?.trim() || part.tool, noun: "target" },
     facts: [],
     row: [],
-    links: part.output ? [{ kind: "input" }, { kind: "output" }] : [{ kind: "input" }],
+    links: [
+      { kind: "input", ...(part.argsReference ? { content_ref: part.argsReference } : {}) },
+      ...(part.outputReference ? [{ kind: "output" as const, content_ref: part.outputReference }] : part.output ? [{ kind: "output" as const }] : []),
+    ],
   };
 }
 

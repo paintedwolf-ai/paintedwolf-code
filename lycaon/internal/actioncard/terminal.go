@@ -27,10 +27,6 @@ func terminalResult(result api.ToolResult) Parts {
 	parts.Facts = append(parts.Facts, api.ActionFact{Kind: api.ActionFactSteps, Count: 1, Unit: "actions", Sequence: []string{step}})
 	switch {
 	case resultStatus(result) == statusError:
-		parts.Facts = append(parts.Facts, resultFact(rejectedOutcome(result)))
-		if code := firstCode(result); code != "" {
-			parts.Facts = append(parts.Facts, stoppedByFact("host_stop", code))
-		}
 		parts.Row = []api.ActionFactKind{api.ActionFactResult}
 	case result.Tool == "terminal_close":
 		parts.Facts = append(parts.Facts, resultFact("completed"))

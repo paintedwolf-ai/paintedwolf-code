@@ -8392,6 +8392,8 @@ export interface components {
             feedback?: components["schemas"]["ToolFeedback"][];
             /** @description Card for a settled call that is not a command program; projected on read, never stored. */
             action?: components["schemas"]["ActionDescriptor"];
+            /** @description Facts the tool's handler stated for its action card, such as what it found or the HTTP status it got. Stored with the result; never part of the model's tool result. */
+            card_facts?: components["schemas"]["ActionFact"][];
             /** @description Quiet-chrome for Den verbose prefs. Host stamps from the policy registry (`guard:` emit, advisory/informational/expected_behavior categories, info|warning severity) or a structured reject `code` with no registry row. `benign` hides unless verbose; `normal` stays visible (worker_dispatch, SPEC_POSTURE, …). */
             ui_visibility?: components["schemas"]["ToolResultUiVisibility"];
             /** @description Producer-stated worker dispatch identity. */
