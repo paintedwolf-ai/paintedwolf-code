@@ -125,3 +125,11 @@
   margin-left: auto;
   font-weight: 500;
 }
+
+@utility den-action-card__process {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  min-width: 0;
+}

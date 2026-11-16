@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ActionDescriptor } from "../../api/types.ts";
 import { ACTION_FACT_LABELS, formatActionRow, formatFact } from "../../chat/action/action-format.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
+import type { CardAction } from "../../chat/action/action-merge.ts";
 import { ActionCard } from "./ActionCard.tsx";
 
 function part(): ToolPartView {
@@ -82,6 +83,21 @@ describe("ActionCard", () => {
     const regions = [...body.children].map((child) => child.getAttribute("data-testid"));
     expect(regions.indexOf("network-chicklet")).toBeGreaterThan(regions.indexOf("action-facts"));
     expect(regions.indexOf("action-redaction")).toBe(regions.indexOf("action-links") - 1);
+  });
+
+  it("shows a live process's own state and Stop in place of its recorded process fact", () => {
+    const running: CardAction = { ...descriptor, facts: [{ kind: "process", state: "running", port: 5173 }], row: ["process"] };
+    const live: ToolPartView = { ...part(), process: { handle: "job-1", running: true } };
+    const { container } = render(() => <ActionCard part={live} action={running} layout="chat" sessionId="s" />);
+    open(container);
+    const body = container.querySelector('[data-testid="action-card-body"]')!;
+    expect(body.querySelector('[data-testid="action-facts"]')).toBeNull();
+    expect(body.querySelector('[data-testid="background-process-running"]')?.textContent).toBe("Running · listening on 5173");
+    expect(body.querySelector('[data-testid="background-process-stop"]')).not.toBeNull();
+    const recorded = render(() => <ActionCard part={live} action={running} layout="chat" />);
+    open(recorded.container);
+    expect(recorded.container.querySelector('[data-testid="action-process"]')).toBeNull();
+    expect(recorded.container.querySelector('[data-testid="action-facts"]')?.textContent).toContain("5173");
   });
 
   it("draws every folded member's capture, in order", () => {

@@ -15,6 +15,8 @@ import type { ToolBriefingSlots } from "../tool/tool-briefing-slots.ts";
 import { ToolPartShell } from "../tool/ToolPartShell.tsx";
 import { ActionLinks } from "./ActionLinks.tsx";
 import { TurnLoadFootLine } from "../tool/TurnLoadFootLine.tsx";
+import { liveToolProcess } from "../../chat/tool/tool-part-model.ts";
+import { ActionProcess } from "./ActionProcess.tsx";
 import { visualFromPart } from "../../chat/visual/visual-artifact-model.ts";
 import { visualProducerEntryKey } from "../../chat/visual/visual-artifact-canonical.ts";
 import { TranscriptVisualSlot } from "../transcript/TranscriptVisualSlot.tsx";
@@ -39,6 +41,10 @@ export function ActionCard(props: Props) {
   const members = () => [props.part, ...(props.part.foldMembers ?? [])];
   const externalAccess = () => members().find((member) => member.externalAccess)?.externalAccess ?? undefined;
   const redaction = () => members().find((member) => member.redaction?.spans?.length)?.redaction ?? undefined;
+  const process = () => (props.sessionId ? members().map(liveToolProcess).find((handle) => handle !== null) ?? undefined : undefined);
+  // A live process states its own state, so the card drops the recorded one.
+  const facts = () => (process() ? props.action.facts.filter((fact) => fact.kind !== "process") : props.action.facts);
+  const port = () => props.action.facts.find((fact) => fact.kind === "process")?.port;
   const captures = () => members().flatMap((member) => {
     const artifact = visualFromPart(member);
     return artifact ? [{ artifact, output: member.output }] : [];
@@ -58,7 +64,10 @@ export function ActionCard(props: Props) {
       <div class="den-action-card" data-testid="action-card-body">
         <ActionRanRegion ran={props.action.ran} more={props.action.more} />
         {props.slots?.summary}
-        <ActionFacts facts={props.action.facts} />
+        <ActionFacts facts={facts()} />
+        <Show when={process()} keyed>
+          {(live) => <ActionProcess sessionId={props.sessionId!} processId={live.handle} initialRunning={live.running} terminationReason={live.termination_reason} port={port()} />}
+        </Show>
         <Show when={externalAccess()} keyed>
           {(access) => <NetworkChicklet externalAccess={access} sessionId={props.sessionId} disclosureKey={transcriptDisclosureKey.toolNetwork(props.part.id)} />}
         </Show>
