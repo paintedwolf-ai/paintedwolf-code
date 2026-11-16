@@ -203,3 +203,8 @@ func (p Posture) Gates() []api.ApprovalGate {
 	}
 	return out
 }
+
+// Postures returns every posture, quietest first.
+func Postures() []Posture {
+	return []Posture{PostureLight, PostureBalanced, PostureStrict}
+}

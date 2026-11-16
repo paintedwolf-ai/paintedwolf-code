@@ -71,6 +71,16 @@ var sourceGen atomic.Uint64
 // SourceGeneration identifies the current bundled-source swap state.
 func SourceGeneration() uint64 { return sourceGen.Load() }
 
+// UseFS replaces the bundled source until its restore function runs.
+func UseFS(fsys fs.FS) func() {
+	prev := source.Swap(&sourceTree{fsys: fsys})
+	sourceGen.Add(1)
+	return func() {
+		source.Store(prev)
+		sourceGen.Add(1)
+	}
+}
+
 // overlay prefers disk files and falls back to embedded files.
 type overlay struct {
 	disk fs.FS

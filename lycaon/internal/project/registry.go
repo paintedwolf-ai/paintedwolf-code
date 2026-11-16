@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -163,6 +164,8 @@ type Registry interface {
 	SetTrustEnabled(ctx context.Context, id string, updates map[string]bool) (*Project, error)
 }
 
+func (*MemoryRegistry) MutationEventsOutboxed() bool { return false }
+
 // AttachedPrimaryPath returns the primary root path as the person attached it,
 // whether or not agents work there.
 func AttachedPrimaryPath(p *Project) string {
@@ -282,6 +285,187 @@ func (r *MemoryRegistry) List(ctx context.Context) ([]Project, error) {
 	return out, nil
 }
 
+func (r *MemoryRegistry) UpdateNameIfUnset(ctx context.Context, id, name string) (bool, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false, nil
+	}
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.projects[id]
+	if !ok {
+		return false, fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
+	if strings.TrimSpace(p.Name) != "" {
+		return false, nil
+	}
+	p.Name = name
+	return true, nil
+}
+
+func (r *MemoryRegistry) Patch(ctx context.Context, id string, params PatchParams) (*Project, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	var name *string
+	if params.Name != nil {
+		trimmed := strings.TrimSpace(*params.Name)
+		if trimmed == "" {
+			return nil, ErrInvalidName
+		}
+		name = &trimmed
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.projects[id]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
+	if name != nil {
+		p.Name = *name
+	}
+	if params.Starred != nil {
+		p.Starred = *params.Starred
+	}
+	return cloneProject(p), nil
+}
+
+func (r *MemoryRegistry) TouchLastOpened(ctx context.Context, id string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.projects[id]
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
+	p.LastOpenedAt = time.Now().UTC()
+	return nil
+}
+
+func (r *MemoryRegistry) AttachRoot(ctx context.Context, id string, params AttachRootParams) (*RootChange, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.projects[id]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
+	if p.IsDraft {
+		return nil, ErrDraftRootImmutable
+	}
+	before := cloneProject(p)
+	added, err := r.attachRootLocked(ctx, p, params, RootKindAttached)
+	if err != nil {
+		return nil, err
+	}
+	p.RootsGeneration++
+	after := cloneProject(p)
+	return &RootChange{Before: before, After: after, Added: &added, Changed: true, RootContextChanged: true}, nil
+}
+
+func (r *MemoryRegistry) DetachRoot(ctx context.Context, id, rootID string) (*RootChange, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.projects[id]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
+	if p.IsDraft {
+		return nil, ErrDraftRootImmutable
+	}
+	idx := -1
+	for i, root := range p.Roots {
+		if root.ID == rootID {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return nil, fmt.Errorf("%w: %s", ErrRootNotFound, rootID)
+	}
+	before := cloneProject(p)
+	removed := p.Roots[idx]
+	wasPrimary := removed.IsPrimary
+	p.Roots = append(p.Roots[:idx], p.Roots[idx+1:]...)
+	if wasPrimary {
+		promoteEarliestPrimary(p.Roots)
+	}
+	p.RootsGeneration++
+	after := cloneProject(p)
+	return &RootChange{Before: before, After: after, Removed: &removed, Changed: true, RootContextChanged: true}, nil
+}
+
+func (r *MemoryRegistry) PatchRoot(ctx context.Context, id, rootID string, params PatchRootParams) (*RootChange, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.projects[id]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
+	if p.IsDraft {
+		return nil, ErrDraftRootImmutable
+	}
+	idx := -1
+	for i, root := range p.Roots {
+		if root.ID == rootID {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return nil, fmt.Errorf("%w: %s", ErrRootNotFound, rootID)
+	}
+	before := cloneProject(p)
+	changed := false
+	rootContextChanged := false
+	if params.Label != nil {
+		label, err := NormalizeRootDisplayLabel(*params.Label)
+		if err != nil {
+			return nil, err
+		}
+		if rootLabelTaken(p.Roots, label, rootID) {
+			return nil, fmt.Errorf("%w: %s", ErrDuplicateRootLabel, label)
+		}
+		if p.Roots[idx].Label != label {
+			p.Roots[idx].Label = label
+			// A rename retires the old @label spelling, so it is a new generation.
+			changed = true
+			rootContextChanged = true
+		}
+	}
+	if params.IsPrimary != nil && *params.IsPrimary {
+		if !p.Roots[idx].IsPrimary {
+			for i := range p.Roots {
+				p.Roots[i].IsPrimary = i == idx
+			}
+			changed = true
+			rootContextChanged = true
+		}
+	}
+	if !changed {
+		return &RootChange{Before: before, After: cloneProject(p)}, nil
+	}
+	if rootContextChanged {
+		p.RootsGeneration++
+	}
+	return &RootChange{
+		Before: before, After: cloneProject(p), Changed: true, RootContextChanged: rootContextChanged,
+	}, nil
+}
+
 func (r *MemoryRegistry) Delete(ctx context.Context, id string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -294,6 +478,113 @@ func (r *MemoryRegistry) Delete(ctx context.Context, id string) error {
 	delete(r.projects, id)
 	delete(r.promotions, id)
 	return nil
+}
+
+func (r *MemoryRegistry) SetCover(ctx context.Context, id, artifactID, rootSessionID, source string, updatedAt time.Time) (*Project, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.projects[id]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
+	p.CoverArtifactID = strings.TrimSpace(artifactID)
+	p.CoverRootSessionID = strings.TrimSpace(rootSessionID)
+	p.CoverSource = strings.TrimSpace(source)
+	t := updatedAt.UTC()
+	p.CoverUpdatedAt = &t
+	return cloneProject(p), nil
+}
+
+func (r *MemoryRegistry) MarkTrustSeen(ctx context.Context, id string, expected *Project, seen map[string]SeenRecord) (*Project, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.projects[id]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
+	if expected == nil || p.RootsGeneration != expected.RootsGeneration || !sameSeenRecords(p.TrustSeen, expected.TrustSeen) {
+		return nil, ErrTrustReviewChanged
+	}
+	p.TrustSeen = cloneTrustReadBaseline(seen)
+	return cloneProject(p), nil
+}
+
+func (r *MemoryRegistry) SetTrustEnabled(ctx context.Context, id string, updates map[string]bool) (*Project, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	p, ok := r.projects[id]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", ErrNotFound, id)
+	}
+	p.TrustEnabled = MergeTrustEnabled(p.TrustEnabled, updates)
+	return cloneProject(p), nil
+}
+
+func (r *MemoryRegistry) attachRootLocked(ctx context.Context, p *Project, params AttachRootParams, kind RootKind) (Root, error) {
+	abs, err := ResolveExistingDir(params.Path)
+	if err != nil {
+		return Root{}, err
+	}
+	for _, existing := range p.Roots {
+		if existing.Path == abs {
+			return Root{}, fmt.Errorf("%w: %s", ErrDuplicateRoot, abs)
+		}
+	}
+	wantPrimary := len(p.Roots) == 0 || params.IsPrimary != nil && *params.IsPrimary
+	if wantPrimary {
+		for i := range p.Roots {
+			p.Roots[i].IsPrimary = false
+		}
+	}
+	now := time.Now().UTC()
+	label := strings.TrimSpace(params.Label)
+	if label == "" {
+		existing := make([]string, 0, len(p.Roots))
+		for _, r := range p.Roots {
+			existing = append(existing, r.Label)
+		}
+		label = deriveUniqueRootLabel(existing, abs)
+	} else {
+		normalized, err := NormalizeRootDisplayLabel(label)
+		if err != nil {
+			return Root{}, err
+		}
+		if rootLabelTaken(p.Roots, normalized, "") {
+			return Root{}, fmt.Errorf("%w: %s", ErrDuplicateRootLabel, normalized)
+		}
+		label = normalized
+	}
+	root := Root{
+		ID:            uuid.NewString(),
+		ProjectID:     p.ID,
+		Path:          abs,
+		Label:         label,
+		IsPrimary:     wantPrimary,
+		GitRemoteHash: gitRemoteHash(ctx, abs),
+		AddedAt:       now,
+		Kind:          kind,
+	}
+	p.Roots = append(p.Roots, root)
+	return root, nil
+}
+
+func sortProjectsRecentFirst(projects []Project) {
+	for i := 1; i < len(projects); i++ {
+		j := i
+		for j > 0 && projects[j].LastOpenedAt.After(projects[j-1].LastOpenedAt) {
+			projects[j], projects[j-1] = projects[j-1], projects[j]
+			j--
+		}
+	}
 }
 
 func cloneProject(p *Project) *Project {
@@ -327,9 +618,31 @@ func cloneProject(p *Project) *Project {
 	return &out
 }
 
+func promoteEarliestPrimary(roots []Root) {
+	if len(roots) == 0 {
+		return
+	}
+	best := 0
+	for i := range roots {
+		roots[i].IsPrimary = false
+		if roots[i].AddedAt.Before(roots[best].AddedAt) {
+			best = i
+		}
+	}
+	roots[best].IsPrimary = true
+}
+
 // CreateWithRoot creates a project with one primary root.
 func CreateWithRoot(ctx context.Context, reg Registry, path string) (*Project, error) {
 	return reg.Create(ctx, CreateParams{
 		Roots: []AttachRootParams{{Path: path}},
 	})
+}
+
+func (r *MemoryRegistry) ReadTrustBaseline(ctx context.Context, id string) (map[string]SeenRecord, error) {
+	p, err := r.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return p.TrustSeen, nil
 }
