@@ -68,9 +68,6 @@ func applyPlannedWorkerTask(
 	files []string,
 	after []string,
 ) (*workerrecords.Worker, []string, []string, error) {
-	if deps.Plan == nil || strings.TrimSpace(workID) == "" {
-		return nil, after, files, nil
-	}
 	var mode string
 	var paths []string
 	if scope != nil {
@@ -113,7 +110,7 @@ func ensureTaskWorker(
 		}
 		return workerrecords.WorkerReceipt{WorkerID: planned.ID, Name: planned.Name}, false, nil
 	}
-	if deps.Plan != nil && task.WorkflowRunID != "" && task.WorkflowWorkID != "" {
+	if task.WorkflowRunID != "" && task.WorkflowWorkID != "" {
 		if err := deps.Plan.SupersedeSettledWorkflowWorker(ctx, coordinatorActor(tctx), taskWorkerOp(tctx, "supersede"), task.WorkflowRunID, task.WorkflowPhase, task.WorkflowWorkID); err != nil {
 			return workerrecords.WorkerReceipt{}, false, err
 		}

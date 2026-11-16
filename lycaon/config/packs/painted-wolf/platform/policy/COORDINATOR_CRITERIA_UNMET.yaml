@@ -3,22 +3,66 @@ id: COORDINATOR_CRITERIA_UNMET
 kind: invariant
 on: coordinator.closeout_check
 selector: {}
-requires_facts: [paintedwolf.grounding_reason, paintedwolf.grounding_verdict, paintedwolf.leg_id]
+requires_facts: [paintedwolf.closeout_changes_discarded, paintedwolf.closeout_changes_pending, paintedwolf.closeout_criteria_unmet, paintedwolf.closeout_round_active, paintedwolf.closeout_scan_failed, paintedwolf.closeout_scan_pending, paintedwolf.closeout_unstarted, paintedwolf.grounding_reason, paintedwolf.grounding_verdict, paintedwolf.leg_id, paintedwolf.overlay_id, paintedwolf.unmet_criteria, paintedwolf.worker]
 when: paintedwolf.grounding_verdict == "COORDINATOR_CRITERIA_UNMET"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:grounding
-message: Completion claimed while leg criteria are unmet
-what: 'Planned leg {{ paintedwolf.leg_id }} has unmet closeout criteria.'
-cause: '{{ paintedwolf.grounding_reason }}'
-why: Worker delivery alone does not establish that typed criteria, required evidence, and change disposition are settled.
-fix: Inspect the worker's criteria outcomes and change state. Complete the missing verification, instruct the worker for another round when criteria failed, or land pending changes before closing out.
-instead: Resolve the unmet criteria on the existing worker and its delivered result before closing out.
+message: Completion claimed while planned work is not settled
+what: 'Planned work {{ paintedwolf.leg_id }} is not settled.'
+cause: '{% if paintedwolf.closeout_unstarted %}Worker {{ paintedwolf.worker }} has not run.{% endif %}{% if paintedwolf.closeout_round_active %}Worker {{ paintedwolf.worker }} has not delivered its current round.{% endif %}{% if paintedwolf.closeout_criteria_unmet %}Result {{ paintedwolf.overlay_id }} from worker {{ paintedwolf.worker }} does not meet: {{ paintedwolf.unmet_criteria }}.{% endif %}{% if paintedwolf.closeout_changes_pending %}The changes in result {{ paintedwolf.overlay_id }} from worker {{ paintedwolf.worker }} are neither landed nor shelved.{% endif %}{% if paintedwolf.closeout_changes_discarded %}The plan requires file changes, and the changes in result {{ paintedwolf.overlay_id }} from worker {{ paintedwolf.worker }} were rejected or shelved.{% endif %}{% if paintedwolf.closeout_scan_pending %}The security scan of the landed changes is still running.{% endif %}{% if paintedwolf.closeout_scan_failed %}The security scan of the landed changes did not clear.{% endif %}{% if paintedwolf.grounding_reason %}{{ paintedwolf.grounding_reason }}{% endif %}'
+why: A delivered result does not settle planned work until its typed criteria pass and its changes have landed.
+fix: '{% if paintedwolf.closeout_unstarted %}Start worker {{ paintedwolf.worker }} with task.{% endif %}{% if paintedwolf.closeout_round_active %}Wait for worker {{ paintedwolf.worker }} to deliver.{% endif %}{% if paintedwolf.closeout_criteria_unmet %}Send worker {{ paintedwolf.worker }} back with instruct_worker to meet them.{% endif %}{% if paintedwolf.closeout_changes_pending %}Land result {{ paintedwolf.overlay_id }} with promote_overlay, or set it aside with shelve_overlay.{% endif %}{% if paintedwolf.closeout_changes_discarded %}Land a result from worker {{ paintedwolf.worker }} that makes them: promote a shelved result with promote_overlay, or send the worker back with instruct_worker.{% endif %}{% if paintedwolf.closeout_scan_pending %}Wait for the scan to finish.{% endif %}{% if paintedwolf.closeout_scan_failed %}Resolve the scan findings before closing out.{% endif %}{% if paintedwolf.grounding_reason %}Complete the delegation leg before closing out.{% endif %}'
+instead: Settle the planned work, then close out.
 x-paintedwolf-scenarios:
-  - id: default
+  - id: unstarted
     vars:
-      grounding_reason: "worker parser-fix result res-1 criteria outcomes: file:modified:src/main.go=failed (file not modified)"
+      closeout_unstarted: true
       leg_id: leg-1
-      path: src/main.go
+      worker: parser-fix
       session_role: coordinator
-      tool: read
+  - id: round-active
+    vars:
+      closeout_round_active: true
+      leg_id: leg-1
+      worker: parser-fix
+      session_role: coordinator
+  - id: criteria-unmet
+    vars:
+      closeout_criteria_unmet: true
+      leg_id: leg-1
+      worker: parser-fix
+      overlay_id: res-1
+      unmet_criteria: ["file:modified:src/main.go", "test:pass:go test ./..."]
+      session_role: coordinator
+  - id: changes-pending
+    vars:
+      closeout_changes_pending: true
+      leg_id: leg-1
+      worker: parser-fix
+      overlay_id: res-1
+      session_role: coordinator
+  - id: changes-discarded
+    vars:
+      closeout_changes_discarded: true
+      leg_id: leg-1
+      worker: parser-fix
+      overlay_id: res-1
+      session_role: coordinator
+  - id: scan-pending
+    vars:
+      closeout_scan_pending: true
+      leg_id: leg-1
+      worker: parser-fix
+      session_role: coordinator
+  - id: scan-failed
+    vars:
+      closeout_scan_failed: true
+      leg_id: leg-1
+      worker: parser-fix
+      session_role: coordinator
+  - id: delegation-leg
+    vars:
+      grounding_reason: leg completion criteria not satisfied
+      leg_id: leg-1
+      session_role: coordinator

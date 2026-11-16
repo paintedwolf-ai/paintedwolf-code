@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerplan/plantest"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"path/filepath"
 	"testing"
@@ -212,6 +213,7 @@ func registerContextualToolsCoordinatorExtras(
 		Workers:       worker.DefaultWorkersConfig(),
 		WorkerRecords: workerrecords.New(sqlDB),
 		Reviews:       &workerops.Service{Reader: workerops.Reader{Records: workerrecords.New(sqlDB), Jobs: queue}},
+		Plan:          plantest.New(t, plantest.Deps(workerrecords.New(sqlDB))),
 	}); err != nil {
 		testutil.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}

@@ -65,17 +65,12 @@ func TestCompletionCoverageValidationUsesDurableWorkerIdentity(t *testing.T) {
 	}
 }
 
-func TestScanAndPromotionCloseoutHooks(t *testing.T) {
+func TestScanCloseoutRetriesItsDelegation(t *testing.T) {
 	database := testdbfixture.Open(t, "closeout-hooks.db")
 	runtime := New(database, nil, worker.WorkersConfig{})
 	runtime.Manager = delegation.NewManager(runtime.Store, runtime.Queue, nil, delegation.AllowGate{})
 
-	var nilRuntime *Runtime
-	nilRuntime.NotifySettledPlanCloseout(t.Context(), "parent")
-
-	runtime.NotifyPromotedTask(t.Context(), api.WorkerTask{ParentSessionID: "parent"})
-	testutil.FailErr(t, "session scan closeout", runtime.OnScanCloseout(t.Context(), api.CodeScan{SessionID: "parent"}))
-	testutil.FailErr(t, "idle scan closeout", runtime.OnScanCloseout(t.Context(), api.CodeScan{}))
+	testutil.FailErr(t, "scan of no session", runtime.OnScanCloseout(t.Context(), api.CodeScan{}))
 	if err := runtime.OnScanCloseout(t.Context(), api.CodeScan{DelegationID: "missing-delegation"}); err == nil {
 		t.Fatal("expected missing delegation retry error")
 	}

@@ -73,7 +73,18 @@ func (m *Service) OpenGates(ctx context.Context, sess *api.Session, workersIdle,
 	return reject, blocked
 }
 
-// PlanCloseout blocks batch closeout while a planned or criteria-bearing worker has unmet criteria or missing evidence.
+// closeoutGapFacts names the fact each closeout gap sets for the refusal copy.
+var closeoutGapFacts = map[workerplan.Gap]string{
+	workerplan.GapUnstarted:        "closeout_unstarted",
+	workerplan.GapRoundActive:      "closeout_round_active",
+	workerplan.GapCriteriaUnmet:    "closeout_criteria_unmet",
+	workerplan.GapChangesPending:   "closeout_changes_pending",
+	workerplan.GapChangesDiscarded: "closeout_changes_discarded",
+	workerplan.GapScanPending:      "closeout_scan_pending",
+	workerplan.GapScanFailed:       "closeout_scan_failed",
+}
+
+// PlanCloseout blocks batch closeout while a planned worker is unsettled.
 func (m *Service) PlanCloseout(ctx context.Context, sess *api.Session, workersIdle, invokeAllowed bool) (*guidance.Refusal, bool) {
 	if m == nil || sess == nil || sess.IsWorkerChild() || m.planCloseout == nil || !workersIdle {
 		return nil, false
@@ -82,17 +93,14 @@ func (m *Service) PlanCloseout(ctx context.Context, sess *api.Session, workersId
 	if m.Workspace != nil {
 		workspacePath, _ = m.Workspace.ActivePath(ctx, sess)
 	}
-	verdict, err := m.planCloseout.CheckSessionCloseout(ctx, sess.ID, sess.ProjectID, workspacePath)
+	verdict, err := m.planCloseout.CheckSessionCloseout(ctx, sess.ID, workspacePath)
 	if err != nil {
 		return guidance.NewRefusal("", err.Error()).WithCause(errors.Join(guidance.ErrCloseoutStopped, err)), true
 	}
 	if verdict.OK {
 		return nil, false
 	}
-	code := strings.TrimSpace(verdict.Code)
-	if code == "" {
-		code = "COORDINATOR_CRITERIA_UNMET"
-	}
+	code := verdict.Code
 	root := sessiontree.RootID(ctx, m.store, sess.ID)
 	count, retry := m.closeouts.Delay(sess.ID, root, closeouts.GateDelay, invokeAllowed, closeoutGateDelayMaxPerPrompt)
 	reject, blocked := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
@@ -100,18 +108,22 @@ func (m *Service) PlanCloseout(ctx context.Context, sess *api.Session, workersId
 		gc.Grounding.ClaimsCompletion = true
 		gc.Grounding.HasMatchingLedgerJob = true
 		data := map[string]any{
-			"grounding_verdict": code,
-			"grounding_reason":  verdict.Reason,
-			"leg_id":            verdict.LegID,
-		}
-		if verdict.Worker != "" {
-			data["worker"] = verdict.Worker
+			"grounding_verdict":           code,
+			"leg_id":                      verdict.LegID,
+			"worker":                      verdict.Worker,
+			closeoutGapFacts[verdict.Gap]: true,
 		}
 		if verdict.ResultID != "" {
 			data["overlay_id"] = verdict.ResultID
 		}
+		if len(verdict.Unmet) > 0 {
+			data["unmet_criteria"] = verdict.Unmet
+		}
 		if len(verdict.Outcomes) > 0 {
 			data["criteria_outcomes"] = verdict.Outcomes
+		}
+		if verdict.ScanID != "" {
+			data["scan_id"] = verdict.ScanID
 		}
 		gc.PutRejectData(code, data)
 		return nil

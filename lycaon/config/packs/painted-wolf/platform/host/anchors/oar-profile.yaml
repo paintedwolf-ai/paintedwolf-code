@@ -780,6 +780,22 @@ host_facts:
    type: string
  - name: paintedwolf.grounding_reason
    type: string
+ - name: paintedwolf.closeout_unstarted
+   type: bool
+ - name: paintedwolf.closeout_round_active
+   type: bool
+ - name: paintedwolf.closeout_criteria_unmet
+   type: bool
+ - name: paintedwolf.closeout_changes_pending
+   type: bool
+ - name: paintedwolf.closeout_changes_discarded
+   type: bool
+ - name: paintedwolf.closeout_scan_pending
+   type: bool
+ - name: paintedwolf.closeout_scan_failed
+   type: bool
+ - name: paintedwolf.unmet_criteria
+   type: list<string>
  - name: paintedwolf.missing_paths
    type: list<string>
  - name: paintedwolf.can_request_tools
