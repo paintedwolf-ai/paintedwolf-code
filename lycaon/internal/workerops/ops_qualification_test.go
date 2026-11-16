@@ -190,7 +190,7 @@ func TestStateOperationAdmissionMatrix(t *testing.T) {
 				t.Fatalf("view = %+v, want state=%s reason=%s", snap.View, cell.wantState, cell.wantWhy)
 			}
 
-			page, err := f.svc.History(t.Context(), f.coord, w.Name, 0, 8)
+			page, err := f.svc.HistoryPaged(t.Context(), f.coord, w.Name, workerops.HistoryQuery{Limit: 8})
 			testutil.FailErr(t, "history", err)
 			if page.State.State != cell.wantState {
 				t.Fatalf("history state = %s, want %s", page.State.State, cell.wantState)
