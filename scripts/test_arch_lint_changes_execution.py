@@ -147,16 +147,21 @@ class ArchLintChangesTest(unittest.TestCase):
         later = self.git("rev-parse", "HEAD").strip()
         self.assertEqual(arch_lint_changes.base_checks(self.repo, later, self.binary, POLICY, self.cache), {})
 
-    def test_reach_receives_the_emitter_spec_the_policy_names(self):
-        policy = {**POLICY, "reach": {**POLICY["reach"], "product": ["./cmd/app"]}, "emitters": {"registry": "r.json"}}
-        arch_lint_changes.checks(self.binary, self.repo, policy)
+    def test_reach_receives_the_product_checks_the_policy_names(self):
+        product = {**POLICY["reach"], "product": ["./cmd/app"]}
+        arch_lint_changes.checks(self.binary, self.repo, {**POLICY, "reach": {**product, "config_fields": True},
+                                                          "emitters": {"registry": "r.json"}})
         args = json.loads((self.repo / "args-reach.json").read_text())
-        spec = args[args.index("-emitters") + 1]
-        self.assertEqual(json.loads(spec), {"registry": "r.json"})
-        self.assertEqual(args[args.index("-product") + 1], "./cmd/app")
+        self.assertEqual(json.loads(args[args.index("-emitters") + 1]), {"registry": "r.json"})
         self.assertEqual(args[args.index("-repo") + 1], str(self.repo))
+        self.assertEqual(args[args.index("-product") + 1], "./cmd/app")
+        self.assertIn("-config-fields", args)
+        arch_lint_changes.checks(self.binary, self.repo, {**POLICY, "reach": product})
+        args = json.loads((self.repo / "args-reach.json").read_text())
+        self.assertNotIn("-emitters", args)
+        self.assertNotIn("-config-fields", args)
         arch_lint_changes.checks(self.binary, self.repo, POLICY)
-        self.assertNotIn("-emitters", json.loads((self.repo / "args-reach.json").read_text()))
+        self.assertNotIn("-product", json.loads((self.repo / "args-reach.json").read_text()))
 
     def test_all_lists_every_finding_without_failing(self):
         header, findings, failed = arch_lint_changes.everything(self.repo, POLICY, self.binary)
