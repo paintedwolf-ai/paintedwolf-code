@@ -104,7 +104,7 @@ describe("workspace placement contract", () => {
     const shell = read("src/components/shell/Shell.tsx");
     expect(read("src/components/shell/WorkspaceStage.tsx")).toContain("back: () => stageBack(stage)");
     expect(shell).toMatch(/<ShellStageColumn[\s\S]*?back=\{titlebarBack\(\)\}/);
-    expect(read("src/components/shell/ShellColumns.tsx")).toMatch(/<ShellHeaderTitlebar back=\{props\.back\}/);
+    expect(read("src/components/shell/ShellColumns.tsx")).toMatch(/<ShellHeaderTitlebar\s+back=\{props\.back\}/);
   });
 
   it("keeps the Files return chip out of Files layout flow", () => {
