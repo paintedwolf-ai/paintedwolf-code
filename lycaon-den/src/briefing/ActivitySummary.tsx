@@ -71,7 +71,7 @@ export function ActivitySummary(props: Props) {
         <div class="den-activity-summary__body">
           <Show when={props.state.kind === "ready" ? props.state : undefined} keyed fallback={
             <p class="den-activity-summary__text">
-              <Show when={props.state.purpose}>{(purpose) => <><span class="den-activity-summary__purpose"><Inline text={purpose()} /></span>{" "}</>}</Show>
+              <Show when={props.state.purpose} keyed>{(purpose) => <><span class="den-activity-summary__purpose"><Inline text={purpose} /></span>{" "}</>}</Show>
               <Show when={props.state.kind === "missing"} fallback={<span class="den-activity-summary__waiting">{briefingCopy.waiting}</span>}>
                 <span class="den-activity-summary__waiting">{briefingCopy.notArrived}</span>{" "}
                 <button type="button" class="den-chat-content-link" data-testid="activity-summary-retry" onClick={() => props.onRetry()}>{briefingCopy.retry}</button>
@@ -83,11 +83,10 @@ export function ActivitySummary(props: Props) {
                 class="den-activity-summary__text"
                 classList={{ [SUMMARY_FADE_CLASS]: claimSummaryFade(fadeKey(ready.recordId)) }}
                 data-expanded={expanded() ? "" : undefined}
-               
               >
-                <Show when={ready.purpose}>{(purpose) => <><span class="den-activity-summary__purpose"><Inline text={purpose()} /></span>{" "}</>}</Show>
-                <Show when={ready.change} fallback={<Show when={ready.changePending || props.running}><span class="den-activity-summary__waiting">{later()}</span></Show>}>
-                  {(change) => <span class="den-activity-summary__change"><Inline text={change()} /></span>}
+                <Show when={ready.purpose} keyed>{(purpose) => <><span class="den-activity-summary__purpose"><Inline text={purpose} /></span>{" "}</>}</Show>
+                <Show when={ready.change} keyed fallback={<Show when={ready.changePending || props.running}><span class="den-activity-summary__waiting">{later()}</span></Show>}>
+                  {(change) => <span class="den-activity-summary__change"><Inline text={change} /></span>}
                 </Show>
               </p>
             )}
@@ -95,7 +94,7 @@ export function ActivitySummary(props: Props) {
           <Show when={props.state.kind === "ready" ? props.state : undefined} keyed>
             {(ready) => (
               <p class="den-activity-summary__measure" aria-hidden="true" ref={(el) => (measure = el)}>
-                <Show when={ready.purpose}>{(purpose) => <><Inline text={purpose()} />{" "}</>}</Show><Show when={ready.change}>{(change) => <Inline text={change()} />}</Show>
+                <Show when={ready.purpose} keyed>{(purpose) => <><Inline text={purpose} />{" "}</>}</Show><Show when={ready.change} keyed>{(change) => <Inline text={change} />}</Show>
               </p>
             )}
           </Show>
