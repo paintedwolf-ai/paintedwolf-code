@@ -59,7 +59,6 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 	b.startup.resources.Track("git-status-observer", 22, func(context.Context) error { releaseGitStatus(); return nil })
 	b.git.repoSets = git.NewRepoSetCache(git.DefaultStatusCacheTTL)
 	if b.execution.Host != nil {
-		b.execution.Host.Survey.SetGitStatusCache(b.git.status)
 	}
 
 	snapshotStore := b.storage.SourceLedger.Snapshots

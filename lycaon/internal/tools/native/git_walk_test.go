@@ -2,7 +2,6 @@ package native
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -73,19 +72,14 @@ func TestNativeCommitAndAmendProduceStandaloneWalkSteps(t *testing.T) {
 	fixture := newNativeWalkFixture(t)
 	dir, manager, ledger, tc := fixture.dir, fixture.manager, fixture.ledger, fixture.tc
 	tc.Invocation.ToolName = "git_commit"
-	tool := &GitCommitTool{Git: manager, Boundary: nativefixture.Boundary(t)}
+	mutations := GitMutations{Git: manager, Boundary: nativefixture.Boundary(t)}
 	for i, name := range []string{"first.txt", "second.txt"} {
 		testutil.FailErr(t, "write existing work", os.WriteFile(filepath.Join(dir, name), []byte(name), 0o644))
 		tc.Identity.ToolCallID = name
-		out, err := tool.Run(t.Context(), map[string]any{"message": name, "paths": []any{name}, "amend": i == 1}, tc)
+		hash, _, err := mutations.Commit(t.Context(), tc, GitCommitRequest{Message: name, Paths: []string{name}, Amend: i == 1})
 		testutil.FailErr(t, "commit existing work", err)
-		var receipt struct {
-			Hash      string `json:"hash"`
-			Available bool   `json:"available"`
-		}
-		testutil.FailErr(t, "read commit receipt", json.Unmarshal([]byte(out), &receipt))
-		if !receipt.Available || receipt.Hash == "" {
-			t.Fatalf("missing commit receipt: %s", out)
+		if hash == "" {
+			t.Fatal("commit returned no hash")
 		}
 		page, err := ledger.Walk.QueryWalk(t.Context(), "p1", sourceledger.Baseline{Kind: sourceledger.BaselineTurn, SessionID: "s1", Turn: 1}, 10, 0, sourceledger.CommitLens{})
 		testutil.FailErr(t, "read native commit walk", err)
@@ -93,11 +87,11 @@ func TestNativeCommitAndAmendProduceStandaloneWalkSteps(t *testing.T) {
 		if i == 1 {
 			kind = "amend"
 		}
-		if len(page.Files) != 0 || len(page.GitChanges) != i+1 || page.GitChanges[0].Kind != kind || page.GitChanges[0].ToCommit != receipt.Hash || page.GitChanges[0].ToolCallID != name {
+		if len(page.Files) != 0 || len(page.GitChanges) != i+1 || page.GitChanges[0].Kind != kind || page.GitChanges[0].ToCommit != hash || page.GitChanges[0].ToolCallID != name {
 			t.Fatalf("native commit walk = %+v", page)
 		}
 	}
-	_, _ = tool.Run(t.Context(), map[string]any{"message": "Nothing changed", "paths": []any{"first.txt"}}, tc)
+	_, _, _ = mutations.Commit(t.Context(), tc, GitCommitRequest{Message: "Nothing changed", Paths: []string{"first.txt"}})
 	page, err := ledger.Walk.QueryWalk(t.Context(), "p1", sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"}, 10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "read after failed commit", err)
 	if len(page.GitChanges) != 2 {
@@ -121,8 +115,7 @@ func TestNativeCheckoutRecordsReviewedPathsWithItsGitMovement(t *testing.T) {
 	testutil.FailErr(t, "track current file", err)
 	f.tc.Identity.ToolCallID, f.tc.Invocation.ToolName = "checkout-call", "git_checkout"
 	f.tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { return nil }
-	tool := GitOperationTool{Git: f.manager, Boundary: nativefixture.Boundary(t), Kind: "checkout"}
-	_, err = tool.Run(t.Context(), map[string]any{"branch": "main"}, f.tc)
+	_, err = GitMutations{Git: f.manager, Boundary: nativefixture.Boundary(t)}.Operate(t.Context(), f.tc, git.OperationRequest{Kind: "checkout", Branch: "main"})
 	testutil.FailErr(t, "checkout main", err)
 	page, err := f.ledger.Walk.QueryWalk(t.Context(), "p1", sourceledger.Baseline{Kind: sourceledger.BaselineTurn, SessionID: "s1", Turn: 1}, 10, 0, sourceledger.CommitLens{})
 	testutil.FailErr(t, "read checkout walk", err)

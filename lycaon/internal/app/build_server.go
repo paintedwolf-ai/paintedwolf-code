@@ -65,7 +65,7 @@ func (b *serveBuilder) wireRuntimeServices() error {
 func (b *serveBuilder) wireRuntimeObservers() error {
 	b.sessions.Manager.SetEventPublisher(b.events.Publisher)
 	b.delegations.Queue.SetEventPublisher(b.events.Publisher)
-	releaseObservers := observations.Bind(b.events.Publisher, b.storage.Sessions, b.boards.Progress, b.workflows.Store.Runs, b.boards.RepoProvider, b.execution.Host.Survey.InvalidateFileAge, b.providers.Service)
+	releaseObservers := observations.Bind(b.events.Publisher, b.storage.Sessions, b.boards.Progress, b.workflows.Store.Runs, b.boards.RepoProvider, b.providers.Service)
 	b.startup.resources.Track("runtime-observers", 22, releaseObservers)
 	return nil
 }
@@ -96,7 +96,7 @@ func (b *serveBuilder) wireServer() error {
 		Blueprints: b.workflows.Blueprints, Orchestrator: b.server.Orchestrator, Delegations: b.delegations.Manager, Workers: b.delegations.Queue,
 		WorkerCancel: b.delegations.Cancel, Board: b.boards.Snapshot, RepoSetCache: b.git.repoSets}, Source: api.SourceDependencies{
 		AgentPresence: b.events.Agents, ProjectRules: b.workflows.ProjectRules, HintConfig: b.execution.Hints, RepoProvider: b.boards.RepoProvider,
-		FileAgeWarmer: b.execution.Host.Survey.WarmFileAge, VisualStore: b.boards.Visual, ProgressStore: b.boards.Progress,
+		VisualStore: b.boards.Visual, ProgressStore: b.boards.Progress,
 		Video: videoDecoder(b)}, Extensions: api.ExtensionsDependencies{
 		ExtensionViews: b.catalog.ViewCache, ExtensionJournal: extensionJournal}, External: api.ExternalDependencies{
 		MCP: b.server.MCP, WebResearch: b.boards.WebRuntime, WebDiscoverer: b.boards.WebDiscoverer, WebIndex: b.storage.WebIndex}, Harness: api.HarnessDependencies{ManualLLM: b.providers.Manual, HarnessWorkers: b.worker.harnessWorkers}}

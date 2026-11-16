@@ -414,10 +414,6 @@ func mkdirAgentPath(ctx context.Context, tctx tools.ToolContext, target mutation
 	return created, effectErr
 }
 
-func renameAgentPath(ctx context.Context, tctx tools.ToolContext, from, to mutationTarget, memory *toolcontract.ProgramMemory) error {
-	return renameAgentEntry(ctx, tctx, from, to, 0, memory, nil)
-}
-
 func renameAgentEntry(ctx context.Context, tctx tools.ToolContext, from, to mutationTarget, displacedBytes int64, memory *toolcontract.ProgramMemory, reviewDisplacedPolicy func() ([]sourceeffect.ReviewedFile, error)) error {
 	if filepath.Clean(from.Location.Root) != filepath.Clean(to.Location.Root) {
 		return fmt.Errorf("rename crosses filesystem effect roots")

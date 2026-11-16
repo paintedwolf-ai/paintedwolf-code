@@ -3,9 +3,10 @@ package boards
 import (
 	"context"
 	"fmt"
-	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"path/filepath"
 	"strings"
+
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/app/decisions"
@@ -32,7 +33,6 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
-	"github.com/lycaon/lycaon/internal/toolscope"
 	"github.com/lycaon/lycaon/internal/visualscreen"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -82,12 +82,6 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 			r.deps.Events.Publisher.PublishBoardForRoot(context.WithoutCancel(ctx), projectDir)
 		}
 	})
-
-	scopeCfg, scopeErr := toolscope.Load()
-	if scopeErr != nil {
-		return fmt.Errorf("toolscope: %w", scopeErr)
-	}
-	r.deps.Execution.Host.Survey.SetScopeGuards(scopeCfg)
 
 	r.Snapshot = &board.SnapshotBuilder{
 		Delegations:            r.deps.Delegations.Store,

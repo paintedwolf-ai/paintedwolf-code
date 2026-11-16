@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
@@ -168,7 +167,6 @@ type SourceDependencies struct {
 	ProjectLiveness *projectliveness.Tracker
 	ProjectRules    *rules.ProjectRulesOverlay
 	HintConfig      *guidance.HintConfig
-	FileAgeWarmer   func(ctx context.Context, projectDir string)
 	VisualStore     visual.Store
 	ProgressStore   progress.Store
 	Video           promptattach.VideoDecoder

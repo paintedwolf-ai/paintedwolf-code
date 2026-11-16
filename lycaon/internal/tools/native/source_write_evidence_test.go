@@ -130,7 +130,7 @@ func TestDeleteRecordsPreImageAndRenameRecordsTip(t *testing.T) {
 	from := filepath.Join(dir, "from.txt")
 	to := filepath.Join(dir, "to.txt")
 	testutil.FailErr(t, "seed rename", os.WriteFile(from, []byte("moved\n"), 0o644))
-	testutil.FailErr(t, "rename", renameAgentPath(t.Context(), tctx, testMutationTarget(from), testMutationTarget(to), programDoorMemory(t)))
+	testutil.FailErr(t, "rename", renameAgentEntry(t.Context(), tctx, testMutationTarget(from), testMutationTarget(to), 0, programDoorMemory(t), nil))
 	res, err := st.Walk.QueryWalk(t.Context(), "p1",
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"},
 		10, 0, sourceledger.CommitLens{})

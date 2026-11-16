@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,9 +13,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
@@ -161,52 +162,6 @@ func TestSummarizeModeResolution(t *testing.T) {
 	testutil.FailErr(t, "hybrid run", err)
 	if got := decodeSummarizeResponse(t, hybrid).Gather.Mode; got != string(summarize.ModeHybrid) {
 		t.Fatalf("hybrid mode = %q", got)
-	}
-}
-
-func TestSummarizePinsAuthorizationAndKeepsReferenceLeadsAtScale(t *testing.T) {
-	dir := t.TempDir()
-	writeFile(t, dir, "go.mod", "module example.com/app\n\ngo 1.22\n")
-	writeFile(t, dir, "pkg/target.go", "package pkg\n\nfunc TargetFn() {}\n")
-	writeFile(t, dir, "cmd/main.go", "package main\n\nimport \"example.com/app/pkg\"\n\nfunc main() { pkg.TargetFn() }\n")
-	for i := range 256 {
-		writeFile(t, dir, fmt.Sprintf("noise/file-%03d.go", i), fmt.Sprintf("package noise\nfunc Noise%03d() {}\n", i))
-	}
-
-	profile := sandbox.ToolProfile{ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"summarize": true}}
-	boundary := sandbox.NewBoundary(sandbox.Config{
-		ProjectRootRequired: true,
-		RejectSymlinkEscape: true,
-	}, []sandbox.ToolProfile{profile})
-	var profileLookups atomic.Int64
-	boundary.SetProfileSource(func(_ context.Context, sessionID string) []sandbox.ToolProfile {
-		if sessionID != "large-session" {
-			t.Fatalf("profile source session = %q", sessionID)
-		}
-		profileLookups.Add(1)
-		return []sandbox.ToolProfile{profile}
-	})
-	tctx := testCtxSession(dir, "large-session")
-	ctx := tools.SandboxScopeContext(context.Background(), tctx)
-	tool := &SummarizeTool{
-		Boundary: boundary,
-		Caps:     summarize.DefaultCaps(),
-		Catalog:  sourcecatalog.New(),
-	}
-	tool.Caps.Gather.CallSiteMax = 12
-	tool.Caps.Gather.NeighborMax = 6
-
-	raw, err := tool.Run(ctx, map[string]any{"path": "pkg/target.go", "task": "TargetFn callers"}, tctx)
-	testutil.FailErr(t, "summarize large repository", err)
-	resp := decodeSummarizeResponse(t, raw)
-	if !resp.Coverage.Complete {
-		t.Fatalf("coverage = %+v", resp.Coverage)
-	}
-	if len(resp.Pack.CallSites) == 0 || len(resp.Pack.Neighbors) == 0 {
-		t.Fatalf("reference leads lost: call_sites=%+v neighbors=%+v", resp.Pack.CallSites, resp.Pack.Neighbors)
-	}
-	if got := profileLookups.Load(); got != 1 {
-		t.Fatalf("effective profile lookups = %d, want one invocation snapshot", got)
 	}
 }
 
@@ -357,4 +312,56 @@ func TestSummarizeToolRunsWithoutOptionalDeps(t *testing.T) {
 	if len(resp.Pack.Identity) == 0 && len(resp.Pack.Skeleton) == 0 && len(resp.Pack.Substance) == 0 {
 		t.Fatal("expected non-empty pack")
 	}
+}
+
+func TestSummarizePinsAuthorizationAndKeepsReferenceLeadsAtScale(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "go.mod", "module example.com/app\n\ngo 1.22\n")
+	writeFile(t, dir, "pkg/target.go", "package pkg\n\nfunc TargetFn() {}\n")
+	writeFile(t, dir, "cmd/main.go", "package main\n\nimport \"example.com/app/pkg\"\n\nfunc main() { pkg.TargetFn() }\n")
+	for i := range 256 {
+		writeFile(t, dir, fmt.Sprintf("noise/file-%03d.go", i), fmt.Sprintf("package noise\nfunc Noise%03d() {}\n", i))
+	}
+
+	profile := sandbox.ToolProfile{ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"summarize": true}}
+	boundary := sandbox.NewBoundary(sandbox.Config{
+		ProjectRootRequired: true,
+		RejectSymlinkEscape: true,
+	}, []sandbox.ToolProfile{profile})
+	var profileLookups atomic.Int64
+	boundary.SetProfileSource(func(_ context.Context, sessionID string) []sandbox.ToolProfile {
+		if sessionID != "large-session" {
+			t.Fatalf("profile source session = %q", sessionID)
+		}
+		profileLookups.Add(1)
+		return []sandbox.ToolProfile{profile}
+	})
+	tctx := testCtxSession(dir, "large-session")
+	ctx := tools.SandboxScopeContext(context.Background(), tctx)
+	tool := &SummarizeTool{
+		Boundary: boundary,
+		Caps:     summarize.DefaultCaps(),
+		Catalog:  sourcecatalog.New(),
+	}
+	tool.Caps.Gather.CallSiteMax = 12
+	tool.Caps.Gather.NeighborMax = 6
+
+	raw, err := tool.Run(ctx, map[string]any{"path": "pkg/target.go", "task": "TargetFn callers"}, tctx)
+	testutil.FailErr(t, "summarize large repository", err)
+	resp := decodeSummarizeResponse(t, raw)
+	if !resp.Coverage.Complete {
+		t.Fatalf("coverage = %+v", resp.Coverage)
+	}
+	if len(resp.Pack.CallSites) == 0 || len(resp.Pack.Neighbors) == 0 {
+		t.Fatalf("reference leads lost: call_sites=%+v neighbors=%+v", resp.Pack.CallSites, resp.Pack.Neighbors)
+	}
+	if got := profileLookups.Load(); got != 1 {
+		t.Fatalf("effective profile lookups = %d, want one invocation snapshot", got)
+	}
+}
+
+func testCtxSession(dir, sessionID string) tools.ToolContext {
+	ctx := nativefixture.Context(dir)
+	ctx.Identity.SessionID = sessionID
+	return ctx
 }

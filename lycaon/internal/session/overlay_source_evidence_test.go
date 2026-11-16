@@ -36,7 +36,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native/survey"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -466,16 +467,18 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	)
 	testutil.FailErr(t, "BindViewCapabilities job", err)
 
-	// Execute ordinary ReadTool calls (without workerharness.Service.Read and without calling ObserveReadPath).
-	_, err = reg.Run(workerCtx, "read", map[string]any{"path": "game.py"}, tctx)
-	testutil.FailErr(t, "ordinary ReadTool game.py", err)
-	_, err = reg.Run(workerCtx, "read", map[string]any{"path": "pkg/dep.py"}, tctx)
-	testutil.FailErr(t, "ordinary ReadTool pkg/dep.py", err)
+	// Shipped source reads record worker observations without calling ObserveReadPath.
+	for _, path := range []string{"game.py", "pkg/dep.py"} {
+		resolved, err := projectpaths.ResolveRead(workerCtx, nil, tctx, path)
+		testutil.FailErr(t, "resolve "+path, err)
+		_, err = sourceview.LoadText(workerCtx, "read", sourceview.AccessRead, tctx, resolved)
+		testutil.FailErr(t, "load "+path, err)
+	}
 
 	depPath := layeredfs.QualifiedPath{RootID: "primary", Rel: "pkg/dep.py"}
 	depObs, ok := tracker.LatestObservationForPath(depPath)
 	if !ok || depObs.SHA256 != textfile.SHA256([]byte("dep = 1\n")) || depObs.Completeness != observation.CompletenessComplete || depObs.Layer != layeredfs.LayerTrunk {
-		t.Fatalf("expected ordinary ReadTool to record complete structured observation for pkg/dep.py, got %+v (ok=%v)", depObs, ok)
+		t.Fatalf("expected the source read to record a complete structured observation for pkg/dep.py, got %+v (ok=%v)", depObs, ok)
 	}
 
 	// Perform a worker write on dirty_upper.py so it is pinned in LayerPrivate.
@@ -585,8 +588,6 @@ func newObservationHost(t *testing.T) (*store.Memory, *tools.StubRegistry, *sess
 	t.Helper()
 	mem := store.NewMemory()
 	reg := tools.NewStubRegistry()
-	readTool := &survey.ReadTool{}
-	testutil.FailErr(t, "Register read tool", reg.Register(readTool.Name(), readTool.Run))
 
 	mgr := session.NewHost(
 		mem,

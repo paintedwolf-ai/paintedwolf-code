@@ -4,30 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"sync/atomic"
 
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/structrewrite"
-	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 	"github.com/lycaon/lycaon/internal/tools/safecmd"
-	"github.com/lycaon/lycaon/internal/toolscope"
 	"github.com/lycaon/lycaon/internal/tsparse"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // hostGrepMaxFileBytes is mutable for small cap tests.
@@ -44,14 +36,7 @@ var grepMetavarRe = regexp.MustCompile(`\$(\$\$)?[A-Za-z_]`)
 type GrepTool struct {
 	Boundary *sandbox.Boundary
 	Catalog  *sourcecatalog.Catalog
-	// Scope overrides process defaults.
-	Scope *toolscope.Config
-	// FileCount fills missing or stale repository counts.
-	FileCount     func(projectDir string) (count int, ok bool)
-	densenessGate grepDensenessGate
 }
-
-func (t *GrepTool) Name() string { return "grep" }
 
 type grepMatch struct {
 	Path          string            `json:"path"`
@@ -94,7 +79,6 @@ type grepResponse struct {
 	FilesFromEditor int `json:"files_from_editor,omitempty"`
 	// Inventory is set when the file list came from a generation that predates
 	// the latest repository changes.
-	Inventory *inventoryFacts `json:"inventory,omitempty"`
 }
 
 type grepDirCount struct {
@@ -142,194 +126,6 @@ type grepTarget struct {
 	root        projectroot.RootRef
 	fullRoot    string
 	displayRoot string
-}
-
-func (t *GrepTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	ctx, _ = withInventoryReport(ctx)
-	opts, err := parseGrepArgs(args)
-	if err != nil {
-		return "", err
-	}
-	filter, err := compileSurveyGlob("path_glob", opts.pathGlob)
-	if err != nil {
-		return "", err
-	}
-	ctx, cancel := (safecmd.Caps{Timeout: safecmd.GrepTimeout}).WithTimeout(ctx)
-	defer cancel()
-	// Validate patterns before repository-density checks.
-	re, err := compileGrepPattern(opts)
-	if err != nil {
-		return "", err
-	}
-	relRoot, targets, err := t.resolveGrepTargets(ctx, tctx, args)
-	if err != nil {
-		return "", grepExecutionError(nil, err)
-	}
-	receiptRoot := relRoot
-	if len(targets) == 1 {
-		receiptRoot = targets[0].displayRoot
-	}
-	reportGrepScope(tctx, targets)
-	if opts.structural && strings.TrimSpace(opts.lang) != "" {
-		if _, ok := structrewrite.SupportedLanguage(opts.lang, ""); !ok {
-			return "", sourceview.LanguageUnknown(relRoot, opts.lang)
-		}
-	}
-	if out, guarded, gerr := t.maybeGuardOpenRootScope(ctx, args, tctx, opts); guarded {
-		return out, grepExecutionError(nil, gerr)
-	}
-	offset := toolkit.ClampIntArg(args, "offset", 0, 0, 1_000_000)
-	stats := &grepEngineStats{}
-	reads := projectpaths.NewReadSession(t.Boundary, tctx)
-	defer reads.Close()
-	search := &grepSearch{
-		ctx: ctx, boundary: t.Boundary, tctx: tctx, reads: reads, pattern: opts.pattern, re: re,
-		structural: opts.structural, lang: opts.lang,
-		offset: offset, maxMatches: opts.maxMatches,
-		contextLines: opts.contextLines, pathFilter: filter,
-		resp:    &grepResponse{Matches: []grepMatch{}, Offset: offset},
-		require: litprefilter.Extract(opts.pattern, opts.caseInsensitive),
-		stats:   stats,
-		drafts:  sourceview.DraftsFor(ctx, tctx),
-	}
-	search.publishProgress("selecting")
-	for _, target := range targets {
-		info, err := os.Stat(target.fullRoot)
-		if err != nil {
-			return "", grepRootStatErr(target.displayRoot, err)
-		}
-		if !info.IsDir() {
-			out, err := t.grepSingleFile(ctx, receiptRoot, target, info, opts.includeHidden, search, opts, args)
-			if err != nil {
-				return "", grepExecutionError(search, err)
-			}
-			if search.resp.Truncated {
-				return out, nil
-			}
-			continue
-		}
-		walkExtra := sandbox.SurveyOptions{}
-		if !opts.includeIgnored {
-			walkExtra.Scope = newIgnoreScope(target.root, target.fullRoot)
-		}
-		if err := t.grepWalkTree(ctx, tctx, target, opts.includeHidden, search, walkExtra); err != nil {
-			return "", grepExecutionError(search, err)
-		}
-		if search.resp.Truncated {
-			break
-		}
-	}
-	if err := ctx.Err(); err != nil {
-		return "", grepExecutionError(search, err)
-	}
-	return t.finalizeGrepResponse(ctx, receiptRoot, search, opts, args)
-}
-
-func (t *GrepTool) finalizeGrepResponse(ctx context.Context, root string, search *grepSearch, opts grepOptions, args map[string]any) (string, error) {
-	resp := *search.resp
-	resp.MaxMatches = opts.maxMatches
-	resp.BinarySkipped = search.binarySkipped
-	resp.PrefilterSkipped = search.prefilterSkipped
-	if search.stats != nil {
-		resp.PrefilterSkipped += int(search.stats.IndexBloomPruned.Load())
-	}
-	resp.FilesBytesTruncated = search.filesBytesTruncated
-	resp.FilesParseFailed = search.filesParseFailed
-	resp.ParseFailures = search.parseFailures
-	resp.ParseFailuresTruncated = search.filesParseFailed > len(search.parseFailures)
-	sourceview.ReportParseFailures(search.tctx, search.parseFailures, search.filesParseFailed)
-	resp.FilesUnreadable = search.unreadable
-	resp.FilesSearched = search.textScanned + resp.PrefilterSkipped
-	resp.FilesFromEditor = int(search.fromEditor.Load())
-	resp.Inventory = inventoryFactsFrom(ctx)
-	search.publishProgress("searching")
-	var bannerParts []string
-	bannerParts = toolkit.AppendClampBanner(bannerParts, "max_matches", opts.maxMatchesArg)
-	if resp.Truncated {
-		next := search.offset + len(resp.Matches)
-		resp.NextOffset = &next
-		resp.Distribution = grepMatchDistribution(resp.Matches)
-		bannerParts = append(bannerParts,
-			fmt.Sprintf("showing %d matches from offset %d; use offset=%d, or scope path to a directory in 'distribution' to narrow", len(resp.Matches), resp.Offset, next),
-		)
-	}
-	if resp.FilesBytesTruncated > 0 {
-		bannerParts = append(bannerParts,
-			fmt.Sprintf("%d file(s) exceeded the %d-byte grep cap — only the leading bytes were searched; use read with offset/limit on those paths (or narrow path) for content past the cap", resp.FilesBytesTruncated, hostGrepMaxFileBytes),
-		)
-	}
-	if search.unreadable > 0 {
-		bannerParts = append(bannerParts, fmt.Sprintf("%d file(s) could not be read; search coverage is incomplete", search.unreadable))
-	}
-	// A consumed offset suppresses empty-result guidance.
-	if len(resp.Matches) == 0 && !resp.Truncated && search.skipped == 0 && search.unreadable == 0 && resp.FilesBytesTruncated == 0 && resp.FilesParseFailed == 0 {
-		if opts.structural {
-			resp.Note = emptyStructuralNote(ctx, search.structuralParsed)
-		} else {
-			resp.Note = emptyTextNote(ctx, search.textScanned+search.prefilterSkipped, opts.pattern)
-		}
-	}
-	if len(bannerParts) > 0 {
-		resp.TruncationBanner = toolkit.TruncationBanner(strings.Join(bannerParts, "; "))
-	}
-	unbounded := grepIsUnbounded(args, resp.Truncated)
-	if unbounded {
-		collected := append([]grepMatch(nil), resp.Matches...)
-		resp = buildGrepZoomedOutResponse(ctx, resp, collected)
-	}
-	for _, match := range resp.Matches {
-		if match.rootID != "" && match.scopeRel != "" {
-			search.tctx.RecordSourceIdentity(match.rootID, match.scopeRel, api.NavigationEntryKindFile)
-			continue
-		}
-		search.tctx.RecordSourcePath(match.Path, api.NavigationEntryKindFile)
-	}
-	for _, hit := range resp.Highlights {
-		search.tctx.RecordSourcePath(hit.Path, api.NavigationEntryKindFile)
-	}
-	if err := deliverGrepCredentials(ctx, search, resp); err != nil {
-		return "", err
-	}
-	recordGrepMatches(ctx, t.Boundary, search.tctx, search.re, search.structural, resp.Matches)
-	return t.encodeGrepResponse(root, resp)
-}
-
-// grepMatchDistribution groups retained matches by path prefix.
-func grepMatchDistribution(matches []grepMatch) []grepDirCount {
-	counts := map[string]int{}
-	for _, m := range matches {
-		counts[grepPathBucket(m.Path)]++
-	}
-	out := make([]grepDirCount, 0, len(counts))
-	for dir, n := range counts {
-		out = append(out, grepDirCount{Dir: dir, Count: n})
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Count != out[j].Count {
-			return out[i].Count > out[j].Count
-		}
-		return out[i].Dir < out[j].Dir
-	})
-	if len(out) > 8 {
-		out = out[:8]
-	}
-	return out
-}
-
-func grepPathBucket(p string) string {
-	p = strings.TrimPrefix(filepath.ToSlash(p), "./")
-	segs := strings.SplitN(p, "/", 3)
-	switch len(segs) {
-	case 0, 1:
-		return "."
-	case 2:
-		return segs[0]
-	default:
-		return segs[0] + "/" + segs[1]
-	}
 }
 
 type grepOptions struct {
@@ -420,40 +216,6 @@ func (t *GrepTool) resolveGrepTargets(ctx context.Context, tctx tools.ToolContex
 	}}, nil
 }
 
-func (t *GrepTool) grepSingleFile(ctx context.Context, relRoot string, target grepTarget, info fs.FileInfo, includeHidden bool, search *grepSearch, opts grepOptions, args map[string]any) (string, error) {
-	relSlash := filepath.ToSlash(target.displayRoot)
-	if (!includeHidden && isHiddenPath(relSlash)) || !search.pathFilter.Match(relSlash) {
-		return t.finalizeGrepResponse(ctx, relRoot, search, opts, args)
-	}
-	content, binary, bytesTruncated, err := search.loadGrepFile(ctx, target.fullRoot, info)
-	if err != nil {
-		return "", err
-	}
-	var scanErr error
-	if binary {
-		scanErr = search.applyFileOutcome(grepFileOutcome{binarySkipped: true})
-	} else {
-		scanErr = search.scanFile(ctx, relSlash, grepFileIdentity{rootID: target.root.ID, scopeRel: projectroot.ScopeRel(target.root, target.fullRoot)}, content, bytesTruncated)
-	}
-	if scanErr != nil && !errors.Is(scanErr, errGrepMatchCap) {
-		return "", scanErr
-	}
-	return t.finalizeGrepResponse(ctx, relRoot, search, opts, args)
-}
-
-// loadGrepFile serves one file as the person sees it: their unsaved editor
-// text when they have it open, the file otherwise.
-func (s *grepSearch) loadGrepFile(ctx context.Context, absPath string, info fs.FileInfo) (content []byte, binary, bytesTruncated bool, err error) {
-	if text, ok := s.drafts.Lookup(absPath); ok {
-		s.fromEditor.Add(1)
-		if len(text) > hostGrepMaxFileBytes {
-			return []byte(textfile.TrimIncompleteTail(text[:hostGrepMaxFileBytes])), false, true, nil
-		}
-		return text, false, false, nil
-	}
-	return readGrepFile(ctx, s.reads, absPath, info)
-}
-
 // scanFile matches one loaded text file.
 func (s *grepSearch) scanFile(ctx context.Context, relSlash string, ident grepFileIdentity, content []byte, bytesTruncated bool) error {
 	if !s.pathFilter.Match(relSlash) {
@@ -486,17 +248,6 @@ func (s *grepSearch) noteSubtree(rel string) {
 		s.subtreeFiles = map[string]int{}
 	}
 	s.subtreeFiles[top]++
-}
-
-// largestSubtree names the top-level directory holding the most searched files.
-func (s *grepSearch) largestSubtree() (string, int) {
-	best, count := "", 0
-	for dir, n := range s.subtreeFiles {
-		if n > count || n == count && dir < best {
-			best, count = dir, n
-		}
-	}
-	return best, count
 }
 
 // scanContent matches non-structural text.
@@ -591,47 +342,4 @@ func (s *grepSearch) scanStructural(ctx context.Context, relSlash string, ident 
 		}
 	}
 	return nil
-}
-
-func emptyStructuralNote(ctx context.Context, filesParsed int) string {
-	out, err := guidance.RenderCatalog(ctx, guidance.SurveyGrepEmptyStructuralRef, map[string]any{
-		"files_parsed": filesParsed,
-	})
-	if err != nil {
-		return ""
-	}
-	return out
-}
-
-func emptyTextNote(ctx context.Context, filesSearched int, pattern string) string {
-	out, err := guidance.RenderCatalog(ctx, guidance.SurveyGrepEmptyTextRef, map[string]any{
-		"files_searched": filesSearched,
-		"operators":      unescapedRegexOperators(pattern),
-	})
-	if err != nil {
-		return ""
-	}
-	return out
-}
-
-func (t *GrepTool) encodeGrepResponse(root string, resp grepResponse) (string, error) {
-	pathsTouched := len(resp.Matches)
-	if pathsTouched == 0 && len(resp.Highlights) > 0 {
-		pathsTouched = len(resp.Highlights)
-	}
-	return safecmd.Shape(safecmd.ShapeInput{
-		Tool:         "grep",
-		Path:         root,
-		PathsTouched: pathsTouched,
-		Truncated:    resp.Truncated,
-		Banner:       resp.TruncationBanner,
-		Selected:     resp.Selected,
-		Total:        resp.Total,
-		Value:        resp,
-	})
-}
-
-func isHiddenPath(relSlash string) bool {
-	base := filepath.Base(relSlash)
-	return strings.HasPrefix(base, ".")
 }
