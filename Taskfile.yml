@@ -271,6 +271,11 @@ tasks:
     cmds:
       - python3 {{.SCRIPTS_DIR}}/arch_lint_changes.py
 
+  den:knip:changes:
+    desc: Den files, exports and types a change leaves unused by production code (knip, compared with the change base)
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/arch_lint_changes.py --den
+
   arch-lint:report:
     desc: List every arch-lint finding at the working tree
     cmds:

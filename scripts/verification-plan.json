@@ -9,6 +9,7 @@
       "budgets",
       "coverage:changes",
       "arch-lint:changes",
+      "den:knip:changes",
       "den:typecheck",
       "den:lint",
       "den:test:fast",
@@ -37,6 +38,7 @@
       "budgets",
       "coverage:changes",
       "arch-lint:changes",
+      "den:knip:changes",
       "den:coverage:changes",
       "scripts:coverage:changes",
       "lint:vuln",
@@ -490,6 +492,9 @@
     ],
     "arch-lint:report": [
       "arch-lint:report"
+    ],
+    "den:knip:changes": [
+      "den:knip:changes"
     ]
   },
   "private": [
@@ -1034,6 +1039,12 @@
         "go"
       ],
       "workers": "shared"
+    },
+    "den:knip:changes": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": 1
     }
   },
   "environment": {
@@ -1092,7 +1103,8 @@
   "ci": {
     "ready-lint": {
       "targets": [
-        "lint:full"
+        "lint:full",
+        "arch-lint:changes"
       ],
       "minutes": 120,
       "profiles": [
@@ -1107,9 +1119,9 @@
         "build",
         "budgets",
         "coverage:changes",
-        "arch-lint:changes",
         "den:typecheck",
         "den:lint",
+        "den:knip:changes",
         "den:test:fast"
       ],
       "minutes": 120,
@@ -1127,8 +1139,7 @@
       ],
       "early_targets": [
         "budgets",
-        "coverage:changes",
-        "arch-lint:changes"
+        "coverage:changes"
       ]
     },
     "ready-tests": {
@@ -1147,8 +1158,7 @@
     "limits": {
       "targets": [
         "budgets",
-        "coverage:changes",
-        "arch-lint:changes"
+        "coverage:changes"
       ],
       "minutes": 120,
       "profiles": [
@@ -1184,7 +1194,8 @@
       "targets": [
         "lint:full",
         "test:fail-messages:check",
-        "comments:check"
+        "comments:check",
+        "arch-lint:changes"
       ],
       "minutes": 90,
       "profiles": [
@@ -1251,6 +1262,7 @@
       "targets": [
         "den:typecheck",
         "den:lint",
+        "den:knip:changes",
         "den:coverage:changes"
       ],
       "minutes": 90,
