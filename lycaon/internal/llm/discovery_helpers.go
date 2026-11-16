@@ -2,14 +2,13 @@ package llm
 
 import (
 	"encoding/json"
-	"sort"
-	"strings"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"github.com/lycaon/lycaon/internal/modelfeed"
+	"sort"
+	"strings"
+	"time"
 )
 
 // CatalogAuthoritative reports whether assignable models should use the
@@ -68,6 +67,21 @@ var discoveryKeepSet = map[providerprofile.DiscoveryStrategy]string{
 
 	providerprofile.DiscoveryVertex: "Model Garden publishers/google/models with " +
 		"supportedActions.openGenerationAiStudio; OpenAI-compat /models is not the Garden catalog.",
+}
+
+// DiscoveryKeepSetGap returns the documented capability gap for strategy, if any.
+func DiscoveryKeepSetGap(strategy providerprofile.DiscoveryStrategy) (string, bool) {
+	gap, ok := discoveryKeepSet[strategy]
+	return gap, ok
+}
+
+// DiscoveryKeepSetSnapshot returns a copy of the mint-rule table.
+func DiscoveryKeepSetSnapshot() map[providerprofile.DiscoveryStrategy]string {
+	out := make(map[providerprofile.DiscoveryStrategy]string, len(discoveryKeepSet))
+	for k, v := range discoveryKeepSet {
+		out[k] = v
+	}
+	return out
 }
 
 const discoverModelsTimeout = 2 * time.Second

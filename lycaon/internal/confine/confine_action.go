@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -342,4 +343,13 @@ func CommandForLineage(lineageID string) (EgressCommand, bool) {
 	}
 	cmd, ok := egressBroker.lineages[lineageID]
 	return cmd, ok
+}
+
+// LineageMarkerForTest returns the descendant marker a confined launch hands its
+// child, so a test can start a descendant without a full spawn.
+func LineageMarkerForTest(c *Confinement) *os.File {
+	if c == nil {
+		return nil
+	}
+	return c.lineage.ChildFile()
 }

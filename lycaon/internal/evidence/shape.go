@@ -78,3 +78,18 @@ type Shape struct {
 	Verifier   Verifier
 	Normalizer Normalizer
 }
+
+// ShapeIDs returns registered shape ids.
+func ShapeIDs() []string {
+	return []string{
+		ShapeFileRegion,
+		ShapeURL,
+		ShapeCommand,
+		ShapeArtifact,
+		ShapeOpaque,
+		ShapeStructuredEvent,
+		ShapeVisual,
+		ShapeSurfaceSnapshot,
+		ShapePageGeometry,
+	}
+}

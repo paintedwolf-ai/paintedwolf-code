@@ -16,6 +16,14 @@ const credentialFillTimeout = 30 * time.Second
 // agentCredentialStore is what an agent's credential service reads.
 var agentCredentialStore = func() gitcredential.Backend { return userHelpers{} }
 
+// TestingUseAgentCredentialStore makes agent credential services read store
+// until the returned restore runs.
+func TestingUseAgentCredentialStore(store gitcredential.Backend) (restore func()) {
+	previous := agentCredentialStore
+	agentCredentialStore = func() gitcredential.Backend { return store }
+	return func() { agentCredentialStore = previous }
+}
+
 // userHelpers answers from the person's own configured credential helpers,
 // run by the host as their own Git would run them: the Keychain or vault the
 // host translates, gh, a credential manager or a keyring helper. A helper may

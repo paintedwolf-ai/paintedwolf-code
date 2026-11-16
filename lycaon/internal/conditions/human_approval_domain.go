@@ -6,6 +6,11 @@ import (
 	"strings"
 )
 
+// ShippedHumanApprovalDomainIDs returns generic human_approval gate vocabulary.
+func ShippedHumanApprovalDomainIDs() []string {
+	return []string{"human_approval"}
+}
+
 // RegisterHumanApprovalDomain registers the generic human_approval gate evaluator.
 func RegisterHumanApprovalDomain(reg *ConditionRegistry, deps RegistryDeps) error {
 	if reg == nil {

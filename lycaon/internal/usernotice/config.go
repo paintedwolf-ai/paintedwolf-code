@@ -284,6 +284,11 @@ func HostErrorCodes(cfg *Config) []string {
 	return surfaceCodes(cfg, "host_error")
 }
 
+// HTTPCodes returns sorted codes registered for HTTP ErrorResponse rendering.
+func HTTPCodes(cfg *Config) []string {
+	return surfaceCodes(cfg, "http")
+}
+
 func surfaceCodes(cfg *Config, surface string) []string {
 	if cfg == nil {
 		return nil

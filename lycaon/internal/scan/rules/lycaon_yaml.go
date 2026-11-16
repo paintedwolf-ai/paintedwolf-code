@@ -176,6 +176,19 @@ func LoadOpengrepGates() (*OpengrepGatesConfig, error) {
 	return &cfg, nil
 }
 
+// LoadRulesProvenance returns the bundled provenance ledger for the shipped rules.
+func LoadRulesProvenance() (*RulesProvenanceConfig, error) {
+	data, err := config.Read(rulesProvenance)
+	if err != nil {
+		return nil, err
+	}
+	var cfg RulesProvenanceConfig
+	if err := config.DecodeYAML(data, &cfg); err != nil {
+		return nil, fmt.Errorf("parse rules-provenance: %w", err)
+	}
+	return &cfg, nil
+}
+
 // ActiveLycaonGatePaths returns configured first-party rule paths.
 func ActiveLycaonGatePaths(cfg *OpengrepGatesConfig) []string {
 	if cfg == nil {

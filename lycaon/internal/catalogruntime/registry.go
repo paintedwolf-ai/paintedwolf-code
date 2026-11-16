@@ -128,3 +128,14 @@ func (f FactorySet[S, A]) Build(ctx context.Context, kind string, spec S) (A, er
 	var zero A
 	return zero, fmt.Errorf("catalog runtime: no factory for kind %q", kind)
 }
+
+// Kinds returns the explicitly registered kinds in stable order. Declared
+// fallbacks are absent because they do not enumerate kinds.
+func (f FactorySet[S, A]) Kinds() []string {
+	kinds := make([]string, 0, len(f.byKind))
+	for kind := range f.byKind {
+		kinds = append(kinds, kind)
+	}
+	sort.Strings(kinds)
+	return kinds
+}

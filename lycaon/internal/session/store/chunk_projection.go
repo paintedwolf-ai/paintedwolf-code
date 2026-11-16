@@ -63,3 +63,11 @@ func (s *memoryCompaction) PutChunkProjection(ctx context.Context, sessionID, me
 	}
 	return nil
 }
+
+func cloneChunkProjection(projection messageview.ChunkProjection) messageview.ChunkProjection {
+	if projection.Meta != nil {
+		meta := *projection.Meta
+		projection.Meta = &meta
+	}
+	return projection
+}

@@ -127,3 +127,24 @@ func (r *MockRegistry) List(categories ...api.ScanCategory) []ScannerMeta {
 	}
 	return out
 }
+
+func (r *MockRegistry) allScanners() []CodeScanner {
+	if len(r.Scanners) > 0 {
+		return r.Scanners
+	}
+	if r.Scanner != nil {
+		return []CodeScanner{r.Scanner}
+	}
+	return nil
+}
+
+func mockCategoryOverlap(have, want []api.ScanCategory) bool {
+	for _, left := range have {
+		for _, right := range want {
+			if left == right {
+				return true
+			}
+		}
+	}
+	return false
+}

@@ -74,6 +74,16 @@ func (s *memorySessionViews) LatestFinishes(ctx context.Context) (map[string]tim
 	return latestFinishesLocked(s.core), nil
 }
 
+func latestFinishesLocked(s *memoryCore) map[string]time.Time {
+	out := make(map[string]time.Time)
+	for _, turn := range s.turns {
+		if turn.Status == TurnStatusComplete && turn.CompletedAt != nil && turn.CompletedAt.After(out[turn.SessionID]) {
+			out[turn.SessionID] = *turn.CompletedAt
+		}
+	}
+	return out
+}
+
 // ListAttentionCandidates selects unarchived root sessions that are active or
 // hold an unread completed turn. Memory holds no checkpoints or workflow runs,
 // so those never select an idle session here.

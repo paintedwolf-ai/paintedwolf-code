@@ -54,6 +54,11 @@ func extractPlanTasks(content string) []planTask {
 	return tasks
 }
 
+// ShippedPlanDomainIDs returns registered plan predicates.
+func ShippedPlanDomainIDs() []string {
+	return append([]string(nil), shippedPlanDomainIDs...)
+}
+
 var shippedPlanDomainIDs = []string{
 	"plan_stub_valid",
 	"plan_awaiting_approval",

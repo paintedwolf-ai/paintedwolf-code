@@ -62,3 +62,8 @@ func dirNonEmpty(p string) bool {
 	entries, err := os.ReadDir(p)
 	return err == nil && len(entries) > 0
 }
+
+// CredentialRelPaths returns the secret-bearing durable relative paths.
+func CredentialRelPaths() []string {
+	return append([]string(nil), credentialRelPaths...)
+}

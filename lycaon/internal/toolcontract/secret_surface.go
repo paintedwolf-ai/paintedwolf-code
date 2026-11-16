@@ -1,5 +1,7 @@
 package toolcontract
 
+import "sort"
+
 // SecretSurface names the outbound screen that reviews a tool's resolved
 // managed-secret references. Values equal secretmatch screen surfaces.
 type SecretSurface string
@@ -27,4 +29,16 @@ func (s SecretSurface) IsFile() bool {
 // AcceptsSecretReferences reports whether arguments resolve managed-secret references.
 func (c Contract) AcceptsSecretReferences() bool {
 	return c.SecretReferenceSurface != SecretSurfaceNone
+}
+
+// SecretReferenceTools returns the sorted catalog tools that resolve references.
+func SecretReferenceTools() []string {
+	var out []string
+	for name, contract := range compiledContracts {
+		if contract.AcceptsSecretReferences() {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
 }

@@ -7,6 +7,11 @@ import (
 	"github.com/lycaon/lycaon/internal/blueprintfile"
 )
 
+// ShippedBlueprintDomainIDs returns Blueprint-content predicates registered at boot.
+func ShippedBlueprintDomainIDs() []string {
+	return []string{"blueprint_materialized", "options_selection_valid"}
+}
+
 // BlueprintMaterializedText requires authored content and a host-set lifecycle.
 func BlueprintMaterializedText(content string) bool {
 	meta, body := blueprintfile.SplitMarkdownFrontmatter(content)

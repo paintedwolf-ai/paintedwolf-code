@@ -28,6 +28,21 @@ func SetKeyMaterialPathsSource(fn func() []string) (previous func() []string) {
 	return nil
 }
 
+// KeyMaterialHomeRelPaths returns the floor with the catalogue's `~/` prefix and
+// trailing separator removed, ready to join onto a home directory.
+func KeyMaterialHomeRelPaths() []string {
+	catalogued := catalogedKeyMaterialPaths()
+	out := make([]string, 0, len(catalogued))
+	for _, p := range catalogued {
+		rel := strings.TrimSuffix(strings.TrimPrefix(strings.TrimSpace(p), "~/"), "/")
+		if rel == "" || strings.HasPrefix(rel, "/") {
+			continue
+		}
+		out = append(out, filepath.Clean(rel))
+	}
+	return out
+}
+
 // catalogedKeyMaterialPaths returns the raw catalogue entries, or nil when no
 // source is installed.
 func catalogedKeyMaterialPaths() []string {
