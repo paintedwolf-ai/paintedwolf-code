@@ -96,7 +96,7 @@ func TestUnexpectedListenerClosureDrainsVerifiedConnections(t *testing.T) {
 		t.Fatalf("caller was not verified: %+v", response)
 	}
 	testutil.FailErr(t, "close listener", listener.Close())
-	err := testutil.Receive(t, "the listener failure returns without waiting for the verified client", done)
+	err = testutil.Receive(t, "the listener failure returns without waiting for the verified client", done)
 	if !errors.Is(err, net.ErrClosed) {
 		t.Fatalf("unexpected listener failure was lost: %v", err)
 	}

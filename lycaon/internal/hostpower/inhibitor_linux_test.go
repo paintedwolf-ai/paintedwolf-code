@@ -170,7 +170,7 @@ func TestLogindLeaseReportsServiceLossAndClosesItsDescriptor(t *testing.T) {
 	held := &logindLease{file: writer, done: make(chan error, 1), stop: make(chan struct{}), stopped: make(chan struct{})}
 	go held.watch()
 	testutil.FailErr(t, "end service lifetime", reader.Close())
-	err := testutil.Receive(t, "the service loss ends the inhibition", held.Done())
+	err = testutil.Receive(t, "the service loss ends the inhibition", held.Done())
 	if err == nil {
 		t.Fatal("lost inhibitor had no failure")
 	}
