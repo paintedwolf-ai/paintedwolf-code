@@ -76,6 +76,24 @@ func CheckIntegrity(hintsDir extpacks.Source, registryPath string, rules *RuleSe
 	return rep, nil
 }
 
+func loadRegistryCodes(path string) (map[string]struct{}, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read guidance_registry: %w", err)
+	}
+	var doc struct {
+		HintCodes map[string]any `json:"hint_codes"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return nil, fmt.Errorf("parse guidance_registry: %w", err)
+	}
+	out := make(map[string]struct{}, len(doc.HintCodes))
+	for code := range doc.HintCodes {
+		out[code] = struct{}{}
+	}
+	return out, nil
+}
+
 // SyncRegistryFromStock regenerates guidance_registry.json from the union of
 // every shipped pack's policy/ dir (the same load path production uses).
 func SyncRegistryFromStock(registryPath string) error {

@@ -43,6 +43,58 @@ type FactComparison struct {
 	Value string
 }
 
+// ConditionFactComparisons extracts all fact-to-literal comparisons from when source.
+func ConditionFactComparisons(source string) ([]FactComparison, error) {
+	if strings.TrimSpace(source) == "" {
+		return nil, nil
+	}
+	root, err := parseCondition(source)
+	if err != nil {
+		return nil, err
+	}
+	var comparisons []FactComparison
+	walkNodes(root, func(n *node) {
+		if n == nil || n.kind != nodeBinary {
+			return
+		}
+		switch n.op {
+		case "==", "!=":
+			if n.left.kind == nodeIdent && n.right.kind == nodeString {
+				comparisons = append(comparisons, FactComparison{
+					Fact:  n.left.strValue,
+					Op:    n.op,
+					Value: n.right.strValue,
+				})
+			} else if n.right.kind == nodeIdent && n.left.kind == nodeString {
+				comparisons = append(comparisons, FactComparison{
+					Fact:  n.right.strValue,
+					Op:    n.op,
+					Value: n.left.strValue,
+				})
+			}
+		case "in":
+			if n.left.kind == nodeIdent && n.right.kind == nodeList {
+				for _, item := range n.right.items {
+					if item.kind == nodeString {
+						comparisons = append(comparisons, FactComparison{
+							Fact:  n.left.strValue,
+							Op:    "in",
+							Value: item.strValue,
+						})
+					}
+				}
+			} else if n.left.kind == nodeString && n.right.kind == nodeIdent {
+				comparisons = append(comparisons, FactComparison{
+					Fact:  n.right.strValue,
+					Op:    "in",
+					Value: n.left.strValue,
+				})
+			}
+		}
+	})
+	return comparisons, nil
+}
+
 // ConjunctValues returns the values a condition requires fact to take: the
 // literals of `fact == "v"` and `fact in [...]` among the top-level conjuncts.
 // It is empty when no conjunct constrains fact that way.

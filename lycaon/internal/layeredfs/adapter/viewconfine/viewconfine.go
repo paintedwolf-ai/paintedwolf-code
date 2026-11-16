@@ -4,7 +4,11 @@
 package viewconfine
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/confine/denialprobe"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/protectedpath"
@@ -158,6 +163,51 @@ const maxEntriesScanned = 64
 
 // probeName is what the probe tries to create, and removes when it can.
 const probeName = ".pw-confinement-probe"
+
+// workerBox is the boundary of a worker's command, which holds no loopback authority by default.
+func workerBox(roots []string, boundary confine.ViewBoundary) (*confine.Confinement, error) {
+	box, ok := confine.DefaultConfinement(confine.Request{
+		Roots: roots, ReadRoots: roots, Egress: confine.EgressDeny, View: boundary,
+	})
+	if !ok || box == nil {
+		return nil, unavailable(errors.New("this host applies no confinement to a worker's commands"))
+	}
+	return box, nil
+}
+
+// Launch runs steps in one process through the launcher under box, entering dir. A boundary may end
+// the process at a mount step, so results stop at the step that ended it.
+func Launch(ctx context.Context, box *confine.Confinement, dir string, steps []denialprobe.Step) ([]denialprobe.Result, error) {
+	self, err := os.Executable()
+	if err != nil {
+		return nil, err
+	}
+	plan, err := denialprobe.Encode(steps)
+	if err != nil {
+		return nil, err
+	}
+	// The probe answers on stderr: an engine binary keeps stdout for its startup protocol.
+	_, answers, _, err := execpkg.RunSeparate(ctx, self, []string{denialprobe.Flag, plan}, execpkg.ExecOpts{
+		Launch: execpkg.AgentLaunch(execpkg.LaunchAgentCommand, "view_confinement_probe", box).WithPathAuthority(confine.NativeLaunchPaths(dir)), Dir: dir,
+		Timeout: probeBound, MaxOutputBytes: maxProbeOutput,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("launch confinement probe: %w (%s)", err, bytes.TrimSpace(answers))
+	}
+	results := make([]denialprobe.Result, 0, len(steps))
+	lines := bufio.NewScanner(bytes.NewReader(answers))
+	for lines.Scan() {
+		var result denialprobe.Result
+		if err := json.Unmarshal(lines.Bytes(), &result); err != nil {
+			return nil, fmt.Errorf("read confinement probe: %w (%s)", err, lines.Text())
+		}
+		results = append(results, result)
+	}
+	if len(results) < len(steps) && (len(results) != len(steps)-1 || !endsProcess(steps[len(results)].Kind)) {
+		return nil, fmt.Errorf("confinement probe answered %d of %d steps (%s)", len(results), len(steps), bytes.TrimSpace(answers))
+	}
+	return results, nil
+}
 
 // judge requires the first allowed results to have worked and the rest to have been refused.
 func judge(results []denialprobe.Result, allowed int) error {
