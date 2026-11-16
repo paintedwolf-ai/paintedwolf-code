@@ -1,5 +1,6 @@
 """The run's one time limit reports where a hung test waits before it ends the run."""
 
+import importlib.util
 import os
 from pathlib import Path
 import shutil
@@ -114,6 +115,20 @@ class HungTestBackstopTests(unittest.TestCase):
         except ProcessLookupError:
             pass
         run.wait()
+
+
+class FailureReportTests(unittest.TestCase):
+    def test_a_test_found_waiting_is_named_with_the_tests_that_failed(self):
+        spec = importlib.util.spec_from_file_location("go_test_exec", SCRIPTS / "go-test-exec.py")
+        wrapper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(wrapper)
+        output = (b"--- FAIL: TestFailed (0.00s)\n"
+                  b"pending wait: TestHung/sub: the job ends\n"
+                  b"pending wait: TestHung/sub: the job ends\n"
+                  b"pending waits: none\n")
+        with tempfile.TemporaryDirectory() as directory:
+            report = wrapper.failure_report(str(Path(directory) / "stage-events.jsonl"), "fixture/p", output)
+        self.assertEqual(report["tests"], ["TestFailed", "TestHung/sub"])
 
 
 if __name__ == "__main__":
