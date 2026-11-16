@@ -38,6 +38,41 @@ class ReceiptAdmissionTests(unittest.TestCase):
             self.assertFalse((Path(temporary) / 'missing.json').exists())
 
 
+class MetadataCommandTests(unittest.TestCase):
+    def invoke(self, *arguments, rehearse=lambda work: {'work': work.is_dir()}):
+        with patch.object(sys, 'argv', ['rehearsal', *arguments]), \
+                patch.object(metadata_fixture.subprocess, 'run') as container, \
+                patch('sys.stdout') as stdout, \
+                patch.dict(os.environ, {'PW_METADATA_FIXTURE_COMMIT': 'a' * 40, 'PW_METADATA_FIXTURE_TREE': 'b' * 40}):
+            metadata_fixture.main('scripts.linux_release.deb_metadata_rehearsal', 'fixture', rehearse)
+        return container, ''.join(call.args[0] for call in stdout.write.call_args_list)
+
+    def test_a_report_goes_to_a_fresh_receipt_or_to_standard_output(self):
+        container, printed = self.invoke()
+        container.assert_not_called()
+        self.assertEqual(json.loads(printed), {'work': True})
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = Path(temporary) / 'nested' / 'receipt.json'
+            _, printed = self.invoke('--receipt', str(receipt))
+            self.assertEqual(printed, '')
+            self.assertEqual(json.loads(receipt.read_text()), {'work': True})
+
+    def test_the_container_installs_the_declared_tools_and_rehearses_only_inside(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            receipt = Path(temporary) / 'receipt.json'
+            container, printed = self.invoke('--container', '--receipt', str(receipt),
+                                             rehearse=lambda _work: self.fail('the host must not rehearse'))
+        command = container.call_args.args[0]
+        self.assertEqual(printed, '')
+        self.assertIn(metadata_fixture.IMAGE, command)
+        self.assertIn('PW_METADATA_FIXTURE_COMMIT=' + 'a' * 40, command)
+        self.assertIn(f'type=bind,src={Path(temporary).resolve()},dst=/receipt', command)
+        self.assertIn(' '.join(metadata_fixture.PACKAGES), command[-1])
+        self.assertTrue(command[-1].endswith('-m scripts.linux_release.deb_metadata_rehearsal --receipt /receipt/receipt.json'))
+        container, _ = self.invoke('--container', rehearse=lambda _work: self.fail('the host must not rehearse'))
+        self.assertFalse(any('/receipt' in part for part in container.call_args.args[0]))
+
+
 class NativeHostAdmissionTests(unittest.TestCase):
     def test_construction_rehearsals_require_native_linux_amd64_or_arm64(self):
         for system, machine in (('Darwin', 'arm64'), ('Linux', 'riscv64'), ('Linux', 'armv7l')):

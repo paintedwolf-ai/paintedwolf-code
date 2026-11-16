@@ -1,5 +1,6 @@
 """The artifact key probe signs only a temporary file and trusts only the committed key."""
 import base64
+import io
 import os
 from pathlib import Path
 import subprocess
@@ -51,3 +52,16 @@ class ArtifactCredentialTests(unittest.TestCase):
                 self.assertNotIn("secret-key", str(result))
                 if "environment" in arguments:
                     self.assertEqual(seen, {})
+
+    def test_the_command_reports_its_generation_or_one_redacted_error(self):
+        for outcome, code, stream in ((2, None, "stdout"), (ValueError("no key"), 1, "stderr")):
+            with self.subTest(outcome=outcome), patch.object(probe, "load_registry", return_value=self.registry), \
+                    patch.object(probe, "check", side_effect=[outcome]), \
+                    patch.object(probe.sys, stream, new_callable=io.StringIO) as output:
+                if code is None:
+                    probe.main()
+                    self.assertEqual(output.getvalue(), "updater artifact key signs for generation 2\n")
+                else:
+                    with self.assertRaises(SystemExit) as exit:
+                        probe.main()
+                    self.assertEqual((exit.exception.code, output.getvalue()), (1, "error: no key\n"))
