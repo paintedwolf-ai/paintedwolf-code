@@ -9,8 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
-
-	"github.com/godbus/dbus/v5"
 )
 
 // fixtureBus starts a private session bus daemon and returns its socket path.
@@ -44,32 +42,6 @@ func fixtureBus(t *testing.T) string {
 		t.Fatalf("wait for isolated bus readiness: %v", err)
 	}
 	return path
-}
-
-type fixtureLoginManager struct {
-	sessionPath dbus.ObjectPath
-	fail        bool
-}
-
-func (f *fixtureLoginManager) GetSessionByPID(uint32) (dbus.ObjectPath, *dbus.Error) {
-	if f.fail {
-		return "", dbus.NewError("org.freedesktop.login1.NoSessionForPID", nil)
-	}
-	return f.sessionPath, nil
-}
-
-// seatRecord marshals as the login manager's (so) seat property.
-type seatRecord struct {
-	ID   string
-	Path dbus.ObjectPath
-}
-
-type fixtureLoginSession struct {
-	properties map[string]dbus.Variant
-}
-
-func (f *fixtureLoginSession) GetAll(string) (map[string]dbus.Variant, *dbus.Error) {
-	return f.properties, nil
 }
 
 func TestSessionConnectTriesAlternativesAndReportsStaleSockets(t *testing.T) {
