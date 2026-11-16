@@ -115,6 +115,11 @@ func NoteCompletionTurnBudget(sessionID string, maxTokens, completionTokens, est
 	MarkSessionReasoningRecovery(sessionID)
 }
 
+// ResetTurnBudgetForTest clears recovery state without replacing the shared store.
+func ResetTurnBudgetForTest() {
+	sessionReasoningRecovery.Clear()
+}
+
 // ClearSessionReasoningRecovery restores reasoning after a useful response.
 func ClearSessionReasoningRecovery(sessionID string) { sessionReasoningRecovery.Delete(sessionID) }
 

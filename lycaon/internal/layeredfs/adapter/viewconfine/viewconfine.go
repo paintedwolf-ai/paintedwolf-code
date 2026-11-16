@@ -159,6 +159,12 @@ func proveInScratch(ctx context.Context, runtimeDir string) error {
 	return judge(results, 1)
 }
 
+// VerifyView proves enforcement against one prepared view: its roots work through the kernel client
+// while the process is refused the view's storage, its sources, its listeners and its own unmount.
+func (e *Enforcer) VerifyView(ctx context.Context, view *adapter.PreparedView) error {
+	return verify(ctx, view, Boundary(view))
+}
+
 const maxEntriesScanned = 64
 
 // probeName is what the probe tries to create, and removes when it can.

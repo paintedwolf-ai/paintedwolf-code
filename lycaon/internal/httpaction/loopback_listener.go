@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"net/netip"
+	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -292,4 +294,50 @@ func mergeListenerHolders(a, b []api.LoopbackListenerHolder) []api.LoopbackListe
 		add(h)
 	}
 	return out
+}
+
+func reportLoopbackListener(tctx tools.ToolContext, fact *api.LoopbackListenerFact) {
+	if fact == nil || tctx.Effects.Out == nil {
+		return
+	}
+	tctx.Effects.Out.Listener = fact
+	hasOtherSession := fact.Kind == "other_session"
+	if !hasOtherSession {
+		for _, h := range fact.Holders {
+			if h.Kind == "other_session" {
+				hasOtherSession = true
+				break
+			}
+		}
+	}
+	if !hasOtherSession && !fact.ContainerMismatch {
+		return
+	}
+	dest := strings.TrimSpace(fact.ConnectedAddress)
+	if dest == "" {
+		dest = strings.TrimSpace(fact.Address)
+	}
+	portStr := ""
+	if ap, err := netip.ParseAddrPort(dest); err == nil {
+		portStr = strconv.Itoa(int(ap.Port()))
+	} else if fact.PublishedContainer != nil && fact.PublishedContainer.HostPort > 0 {
+		portStr = strconv.Itoa(fact.PublishedContainer.HostPort)
+	}
+	detail := strings.TrimSpace(fact.Description)
+	if detail == "" {
+		if fact.Command != "" && fact.SessionID != "" {
+			detail = fmt.Sprintf("Port %s is served by `%s` in chat %s.", portStr, fact.Command, fact.SessionID)
+		} else {
+			detail = fmt.Sprintf("Port %s is held by another session or competing listener.", portStr)
+		}
+	}
+	tctx.Effects.Out.Facts = tctx.Effects.Out.Facts.WithFeedback(
+		toolrejection.HTTPRequestLoopbackOtherSessionCode,
+		map[string]any{
+			"destination": dest,
+			"port":        portStr,
+			"detail":      detail,
+		},
+		&api.FeedbackSubject{Kind: "host", ID: dest},
+	)
 }

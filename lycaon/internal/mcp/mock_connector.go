@@ -1,6 +1,8 @@
 package mcp
 
 import (
+	"context"
+
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -19,6 +21,18 @@ type MockConnector struct {
 	// HTTPStatusOnce fires opts.OnHTTPStatus with the given code on the provider's
 	// next CallTool, then clears itself; the call fails as on a real 401/403.
 	HTTPStatusOnce map[string]int
+}
+
+func (m *MockConnector) Connect(_ context.Context, entry MCPProviderEntry, opts ConnectOpts) (ProviderSession, error) {
+	if m.Err != nil {
+		if err := m.Err[entry.ID]; err != nil {
+			return nil, err
+		}
+	}
+	if m.ConnectCount != nil {
+		m.ConnectCount[entry.ID]++
+	}
+	return &mockSession{providerID: entry.ID, calls: m.Calls, parent: m, onHTTPStatus: opts.OnHTTPStatus}, nil
 }
 
 type mockSession struct {
