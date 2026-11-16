@@ -13,4 +13,5 @@ fi
 python3 scripts/rewrite-fail-messages.py --check || status=1
 (cd scripts/commentlint && go run . --root ../.. --config .commentlint.json) || status=1
 bash scripts/doc-link-check.sh || status=1
+bash scripts/release-preflight.sh --static || status=1
 exit "${status}"

@@ -1842,7 +1842,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/upgrade-corpus-prepare.sh
 
   release:preflight:
-    desc: 'Validate version, updater, brand, and optional corpus identity and integrity against the current engine'
+    desc: 'Release inputs: --static checks version, changelog, update keys, platforms and URLs without a build; --require-corpus builds the engine and verifies the versioned upgrade corpus'
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-preflight.sh {{.CLI_ARGS}}
 
