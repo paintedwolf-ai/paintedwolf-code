@@ -45,11 +45,6 @@ var bootToolClaimNames = []string{
 	"web_search", "fetch_url",
 }
 
-// BootToolClaimNames returns a copy of the tools BootRegisteredToolSet treats as available beyond native-tools.yaml.
-func BootToolClaimNames() []string {
-	return append([]string(nil), bootToolClaimNames...)
-}
-
 // ValidateBootToolClaimsHonest fails when a boot claim is not registered on the registry.
 func ValidateBootToolClaimsHonest(reg *DefaultRegistry) error {
 	registered := RegisteredToolSet(reg)
