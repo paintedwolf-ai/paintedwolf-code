@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/hostmarker"
-	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -247,18 +246,10 @@ func (e *turnContextAssembler) turnStateInject(
 	if e == nil || e.deps.Injects == nil || sess == nil || e.surface == nil {
 		return "", false
 	}
-	profile, implState := e.surface.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
-
-	floor, _ := prompts.LoadCoordinatorSurfaceFloor(profile.SurfaceID)
-	loadable, _ := prompts.LoadCoordinatorSurfaceLoadable(profile.SurfaceID)
-	offered, _ := prompts.OfferedTools(floor, loadable, e.surface.loadedTools(sess))
-
-	profileHasUpdateProgress := false
-	for _, tool := range offered {
-		if tool == "update_progress" {
-			profileHasUpdateProgress = true
-			break
-		}
+	_, implState := e.surface.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
+	reader, err := e.surface.turnReader(ctx, sess, frame, history, turn, 0)
+	if err != nil {
+		return "", false
 	}
 
 	partial := surface.PartialWorkerSummaryJobIDs(history)
@@ -275,12 +266,12 @@ func (e *turnContextAssembler) turnStateInject(
 	}
 
 	in := inject.TurnStateInjectInput{
-		ProgressSnapshot:         implState.ProgressSnapshot,
-		ProgressMissing:          implState.ProgressMissing,
-		ProfileHasUpdateProgress: profileHasUpdateProgress,
-		VerifyRequired:           frame.RequiresEvidence("verify"),
-		PendingOverlayJobs:       pending,
-		PartialWorkerJobs:        partialWorkerJobs,
+		Reader:             reader,
+		ProgressSnapshot:   implState.ProgressSnapshot,
+		ProgressMissing:    implState.ProgressMissing,
+		VerifyRequired:     frame.RequiresEvidence("verify"),
+		PendingOverlayJobs: pending,
+		PartialWorkerJobs:  partialWorkerJobs,
 	}
 
 	block, err := inject.RenderTurnStateBlock(ctx, e.deps.Injects, sess.ID, in)

@@ -63,7 +63,7 @@ func TestWorkspaceRootsPromptMarksSessionFolderAndOmittedCount(t *testing.T) {
 			contractcheck.FailErr(t, "render live workspace-roots", err)
 
 			// prompt_dump path: prompts.MergeWorkspaceRootsVars.
-			dumpVars := map[string]any{"project_dir": sess.WorkspacePath}
+			dumpVars := map[string]any{"project_dir": sess.WorkspacePath, "root_count": len(refs)}
 			prompts.MergeWorkspaceRootsVars(dumpVars, refs, active.ID)
 			dumpBlock, err := engine.Render(ctx, "partials/workspace-roots.md", dumpVars)
 			contractcheck.FailErr(t, "render prompt_dump workspace-roots", err)
@@ -142,7 +142,7 @@ func TestUnifiedFolderBlockGrammarAtEveryRootCount(t *testing.T) {
 				refs = r
 				activeID = active.ID
 			}
-			vars := map[string]any{"profile_has_command": true}
+			vars := map[string]any{"profile_has_command": true, "root_count": len(refs)}
 			prompts.MergeWorkspaceRootsVars(vars, refs, activeID)
 
 			block, err := engine.Render(ctx, "partials/workspace-roots.md", vars)

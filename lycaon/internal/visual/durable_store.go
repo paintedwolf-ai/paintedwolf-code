@@ -196,6 +196,16 @@ func (s *DurableStore) ListProject(ctx context.Context, projectID string, query 
 	if err != nil {
 		return ArtifactPage{}, err
 	}
+	var sessions []string
+	if strings.TrimSpace(query.BeforeCreatedAt) == "" {
+		sessions, err = s.records.ProjectSessions(ctx, projectID)
+		if err != nil {
+			return ArtifactPage{}, err
+		}
+		if sessions == nil {
+			sessions = []string{}
+		}
+	}
 	origins, err := s.records.ProjectOriginsFor(ctx, projectID, records)
 	if err != nil {
 		return ArtifactPage{}, err
@@ -204,7 +214,7 @@ func (s *DurableStore) ListProject(ctx context.Context, projectID string, query 
 	if err != nil {
 		return ArtifactPage{}, err
 	}
-	page := ArtifactPage{Items: listItems(records, origins, refs)}
+	page := ArtifactPage{Items: listItems(records, origins, refs), SessionIDs: sessions}
 	if hasMore && len(records) > 0 {
 		last := records[len(records)-1]
 		page.NextCreatedAt, page.NextID = last.CreatedAt, last.ID

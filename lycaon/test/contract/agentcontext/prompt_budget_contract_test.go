@@ -153,7 +153,9 @@ func measurePromptBudgets(t *testing.T, root string, reg *PromptBudgetRegistry) 
 			mergePromptBudgetHostResources(t, personaExtra)
 			requirePromptBudgetHostResources(t, personaExtra, "worker persona "+id)
 		}
-		rendered, err := prompts.RenderPersona(context.Background(), engine, id, personaExtra)
+		reader, err := prompts.DeclaredReader(nil, id)
+		contractcheck.FailErr(t, "DeclaredReader "+id, err)
+		rendered, err := prompts.RenderPersona(context.Background(), engine, id, reader, personaExtra)
 		contractcheck.FailErr(t, "RenderPersona "+id, err)
 		out["worker_personas"][id] = len(rendered)
 	}

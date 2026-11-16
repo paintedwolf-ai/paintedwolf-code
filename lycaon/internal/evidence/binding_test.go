@@ -170,8 +170,13 @@ func TestMintedKindsCountOperationsOnlyThroughCommand(t *testing.T) {
 	}
 	withCommand, err := b.MintedKinds(map[string]bool{"terminal_snapshot": true, "command": true})
 	testutil.FailErr(t, "minted with command", err)
-	if !withCommand[held] || !withCommand[sealed] || !withCommand[readKind] {
-		t.Fatalf("with command: held %t sealed %t read %t", withCommand[held], withCommand[sealed], withCommand[readKind])
+	if !withCommand[held] || withCommand[sealed] || !withCommand[readKind] {
+		t.Fatalf("with read-only command: held %t sealed %t read %t", withCommand[held], withCommand[sealed], withCommand[readKind])
+	}
+	withExec, err := b.MintedKinds(map[string]bool{"terminal_snapshot": true, "command": true, "command_external_exec": true})
+	testutil.FailErr(t, "minted with command external exec", err)
+	if !withExec[held] || !withExec[sealed] || !withExec[readKind] {
+		t.Fatalf("with external-exec command: held %t sealed %t read %t", withExec[held], withExec[sealed], withExec[readKind])
 	}
 }
 

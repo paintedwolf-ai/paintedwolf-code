@@ -8,8 +8,38 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 )
+
+func loadSpawnTestProfiles(t *testing.T) []sandbox.ToolProfile {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	if err != nil {
+		t.Fatalf("LoadToolProfiles: %v", err)
+	}
+	return profiles
+}
+
+func dispatchTestReader(t *testing.T) prompts.Reader {
+	t.Helper()
+	profiles := loadSpawnTestProfiles(t)
+	plan, err := prompts.CompileSurfacePlan("implement_dispatch", 1)
+	if err != nil {
+		t.Fatalf("CompileSurfacePlan: %v", err)
+	}
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_dispatch",
+		Plan:      plan,
+		Profiles:  profiles,
+		RootCount: 1,
+	})
+	if err != nil {
+		t.Fatalf("NewReader: %v", err)
+	}
+	return reader
+}
 
 func excludedDisclosuresForTest(t *testing.T, data prompts.SpawnRosterData) []prompts.SpawnAgentView {
 	t.Helper()
@@ -42,7 +72,7 @@ func TestSpawnRosterRoleVarsSplitByEditAndSkipCoordinator(t *testing.T) {
 }
 
 func TestLoadSpawnRosterSurfaceImplementDefault(t *testing.T) {
-	data, err := prompts.LoadSpawnRosterSurface(spawn.AmbientAllowedAgents(), spawn.MaxInFlightTaskWorkers, nil, nil, nil)
+	data, err := prompts.LoadSpawnRosterSurface(spawn.AmbientAllowedAgents(), spawn.MaxInFlightTaskWorkers, nil, nil, loadSpawnTestProfiles(t))
 	if err != nil {
 		t.Fatalf("LoadSpawnRosterSurface: %v", err)
 	}
@@ -84,9 +114,7 @@ func TestLoadSpawnRosterSurfaceImplementDefault(t *testing.T) {
 
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	spawnVars := spawnRosterTemplateVarsForTest(t, data)
-	if err := prompts.MergeCoordinatorKickPolicyVars(spawnVars); err != nil {
-		t.Fatalf("MergeCoordinatorKickPolicyVars: %v", err)
-	}
+	prompts.MergeCoordinatorKickVarsForTools(spawnVars, dispatchTestReader(t))
 	spawnOut, err := engine.Render(context.Background(), "inject/implement-spawn.md", spawnVars)
 	if err != nil {
 		t.Fatalf("Render implement-spawn: %v", err)
@@ -118,14 +146,14 @@ func TestLoadSpawnRosterSurfaceImplementDefault(t *testing.T) {
 }
 
 func TestLoadSpawnRosterSurfaceUnknownAgent(t *testing.T) {
-	_, err := prompts.LoadSpawnRosterSurface([]string{"not-a-real-agent"}, 3, nil, nil, nil)
+	_, err := prompts.LoadSpawnRosterSurface([]string{"not-a-real-agent"}, 3, nil, nil, loadSpawnTestProfiles(t))
 	if err == nil {
 		t.Fatalf("err = %v", err)
 	}
 }
 
 func TestLoadSpawnRosterSurfaceNoAllowedAgents(t *testing.T) {
-	data, err := prompts.LoadSpawnRosterSurface(nil, 3, nil, nil, nil)
+	data, err := prompts.LoadSpawnRosterSurface(nil, 3, nil, nil, loadSpawnTestProfiles(t))
 	if err != nil {
 		t.Fatalf("LoadSpawnRosterSurface: %v", err)
 	}
@@ -153,9 +181,7 @@ func TestSpawnRosterTemplateVars(t *testing.T) {
 			EnabledTools: []string{"fetch_url", "web_search"},
 		}},
 	}, nil)
-	if err := prompts.MergeCoordinatorKickPolicyVars(vars); err != nil {
-		t.Fatalf("MergeCoordinatorKickPolicyVars: %v", err)
-	}
+	prompts.MergeCoordinatorKickVarsForTools(vars, dispatchTestReader(t))
 	out, err := engine.Render(context.Background(), "inject/implement-spawn.md", vars)
 	if err != nil {
 		t.Fatalf("Render: %v", err)

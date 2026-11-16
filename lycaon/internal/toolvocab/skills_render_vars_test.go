@@ -3,6 +3,8 @@ package toolvocab
 import (
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -10,7 +12,11 @@ import (
 // profile_has_<name> template facts; real held tools still do.
 func TestSkillRenderVarsSkipsInvalidToolNames(t *testing.T) {
 	t.Parallel()
-	vars := StockCatalog().skillRenderVars(map[string]bool{"command": true, "edit": true, "mcp_*": true, toolcontract.ReachCommandMutation: true}, false)
+	reader, err := offeredReader(map[string]bool{"command": true, "edit": true, "mcp_*": true, toolcontract.ReachCommandMutation: true})
+	if err != nil {
+		t.Fatalf("offeredReader: %v", err)
+	}
+	vars := prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
 	if _, ok := vars["profile_has_mcp_*"]; ok {
 		t.Fatalf("wildcard family leaked into template facts: %#v", vars)
 	}

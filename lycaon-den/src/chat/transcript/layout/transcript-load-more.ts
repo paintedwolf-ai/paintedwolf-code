@@ -1,6 +1,10 @@
 import { createMemo, type Accessor } from "solid-js";
 import { scrollportMotionForViewport } from "../../../platform/scrolling/scrollport-motion.ts";
 import { TranscriptPageIntent } from "./transcript-page-intent.ts";
+import {
+  traceTranscriptPageApply,
+  traceTranscriptPageRequest,
+} from "./transcript-paging-trace.ts";
 import type { LycaonClient } from "../../../api/client.ts";
 import type { Message } from "../../../api/types.ts";
 import type { AppStore } from "../../../store/app-state-model.ts";
@@ -8,7 +12,6 @@ import {
   subscribeStreamScroll,
 } from "../../stream/stream-scroll.ts";
 import type { TranscriptRevealAnchor } from "../presentation/transcript-reveal-target.ts";
-import { isTranscriptTimeItem } from "../presentation/transcript-time-rows.ts";
 import type { DisplayTranscriptItem } from "../projection/transcript-item-model.ts";
 import { transcriptItemOrd } from "../projection/transcript-item-order.ts";
 import { publishTranscriptReaderReach } from "../history/transcript-reader-reach.ts";
@@ -44,6 +47,8 @@ export type TranscriptHistoryGeometry = {
   residentEndPx: number;
   /** Height of the unloaded newer runway below the resident window, when known. */
   afterPx?: number;
+  /** Measured pixels per message ordinal from the virtualizer's runway budget. */
+  densityPxPerOrd?: number;
   /** Ordinal span of the presented resident window, when any rows are resident. */
   residentSpan: TranscriptOrdSpan | undefined;
   /** Unloaded ordinal counts on each side of the presented resident window. */
@@ -60,7 +65,6 @@ export function createTranscriptHistoryView(opts: {
   appStore: () => AppStore | undefined;
 }): {
   unloadedOrds: () => TranscriptUnloadedOrds;
-  residentRowSpan: () => { count: number; ordSpan: number };
   geometry: (virtualizer: MeasuredTranscriptVirtualizer) => TranscriptHistoryGeometry | null;
 } {
   const ordById = createMemo(() => {
@@ -83,14 +87,6 @@ export function createTranscriptHistoryView(opts: {
     }
     return firstOrd <= lastOrd ? { firstOrd, lastOrd } : undefined;
   });
-  const residentRowSpan = createMemo(() => {
-    const span = residentOrdSpan();
-    const messageBacked = opts
-      .items()
-      .filter((item) => !isTranscriptTimeItem(item) && item.kind !== "pending_user").length;
-    const ordSpan = span ? Math.max(1, span.lastOrd - span.firstOrd + 1) : messageBacked;
-    return { count: messageBacked, ordSpan };
-  });
   const unloadedOrds = createMemo<TranscriptUnloadedOrds>(() => {
     if (!opts.enabled()) return { before: 0, after: 0 };
     const store = opts.appStore();
@@ -106,13 +102,15 @@ export function createTranscriptHistoryView(opts: {
     return {
       residentStartPx: extent.startPx,
       residentEndPx: extent.endPx,
-      ...(runway ? { afterPx: runway.afterPx } : {}),
+      ...(runway
+        ? { afterPx: runway.afterPx, densityPxPerOrd: runway.densityPxPerOrd }
+        : {}),
       residentSpan: residentOrdSpan(),
       unloaded: unloadedOrds(),
       prepareLanding: (targetPx) => virtualizer.prepareLanding(targetPx),
     };
   };
-  return { unloadedOrds, residentRowSpan, geometry };
+  return { unloadedOrds, geometry };
 }
 
 async function fetchTranscriptRequest(
@@ -129,18 +127,31 @@ async function fetchTranscriptRequest(
     ...transcriptPageQuery(request),
   });
   if (appStore.state.transcriptSessionId !== sessionId || appStore.state.sessionViewEpoch !== epoch) return false;
-  if (!appStore.actions.loadTranscriptPage(request, page) || page.messages.length === 0) return false;
-  if (request.edge === "seek") {
-    const nextSpan = presentedOrdSpan(appStore.state.transcript);
-    return Boolean(
-      nextSpan &&
-        (!prevSpan ||
-          nextSpan.firstOrd !== prevSpan.firstOrd ||
-          nextSpan.lastOrd !== prevSpan.lastOrd),
-    );
+  const applied = appStore.actions.loadTranscriptPage(request, page);
+  const loaded = applied && page.messages.length > 0;
+  let advanced = false;
+  if (loaded) {
+    if (request.edge === "seek") {
+      const nextSpan = presentedOrdSpan(appStore.state.transcript);
+      advanced = Boolean(
+        nextSpan &&
+          (!prevSpan ||
+            nextSpan.firstOrd !== prevSpan.firstOrd ||
+            nextSpan.lastOrd !== prevSpan.lastOrd),
+      );
+    } else {
+      const next = transcriptPageRequest(appStore.state.transcript, request.edge);
+      advanced = !next || transcriptPageRequestKey(next) !== transcriptPageRequestKey(request);
+    }
   }
-  const next = transcriptPageRequest(appStore.state.transcript, request.edge);
-  return !next || transcriptPageRequestKey(next) !== transcriptPageRequestKey(request);
+  traceTranscriptPageApply({
+    request,
+    messages: page.messages,
+    applied,
+    advanced,
+    tw: appStore.state.transcript,
+  });
+  return advanced;
 }
 
 /** Fetches one page at a resident edge; returns true when the resident edge advanced. */
@@ -217,12 +228,14 @@ function ordInRunway(
   if (!span) return undefined;
   const firstOrd = Math.max(1, span.firstOrd - layout.unloaded.before);
   const lastOrd = Math.max(span.lastOrd, span.lastOrd + layout.unloaded.after);
+  const densityPxPerOrd =
+    layout.densityPxPerOrd ?? DEFAULT_TRANSCRIPT_ORD_DENSITY_PX;
   const afterPx =
     layout.afterPx ??
     Math.max(
       0,
       scrollHeightPx - layout.residentEndPx,
-      transcriptRunwayHeight(layout.unloaded.after, DEFAULT_TRANSCRIPT_ORD_DENSITY_PX),
+      transcriptRunwayHeight(layout.unloaded.after, densityPxPerOrd),
     );
   return transcriptRunwayOrd({
     offsetPx: targetPx,
@@ -230,7 +243,7 @@ function ordInRunway(
     runway: {
       beforePx: layout.residentStartPx,
       afterPx,
-      densityPxPerOrd: DEFAULT_TRANSCRIPT_ORD_DENSITY_PX,
+      densityPxPerOrd,
     },
     residentHeightPx: Math.max(0, layout.residentEndPx - layout.residentStartPx),
     residentSpan: span,
@@ -342,6 +355,14 @@ export function createTranscriptPaging(
     if (request.edge === "seek") {
       opts.geometry?.()?.prepareLanding(streamTarget.scrollTop);
     }
+    traceTranscriptPageRequest({
+      tw: opts.appStore.state.transcript,
+      request,
+      intent: intent.currentDirection(),
+      scrollTop: streamTarget.scrollTop,
+      scrollHeight: streamTarget.scrollHeight,
+      layout: opts.geometry?.() ?? null,
+    });
     inFlight = true;
     intent.started();
     let advanced = false;

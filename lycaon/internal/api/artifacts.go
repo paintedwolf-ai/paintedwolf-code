@@ -246,7 +246,13 @@ func (s *Artifacts) HandleListProjectArtifacts(w http.ResponseWriter, r *http.Re
 		s.responses.InvalidQuery(w, err)
 		return
 	}
-	query, err := artifactPageQuery(pq, p.ID)
+	source, sessionID, err := readArtifactFilters(r)
+	if err != nil {
+		s.responses.InvalidQuery(w, err)
+		return
+	}
+	scope := pagecursor.Scope(p.ID, string(source), sessionID)
+	query, err := artifactPageQuery(pq, scope, source, sessionID)
 	if err != nil {
 		s.responses.PageCursorError(w, r, "cursor", err)
 		return
@@ -259,13 +265,17 @@ func (s *Artifacts) HandleListProjectArtifacts(w http.ResponseWriter, r *http.Re
 	if page.Items == nil {
 		page.Items = []wire.ArtifactListItem{}
 	}
-	nextCursor, err := encodeArtifactCursor(p.ID, page.NextCreatedAt, page.NextID)
+	var facets *wire.ArtifactListFacets
+	if page.SessionIDs != nil {
+		facets = &wire.ArtifactListFacets{SessionIDs: page.SessionIDs}
+	}
+	nextCursor, err := encodeArtifactCursor(scope, page.NextCreatedAt, page.NextID)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}
 	httpio.WriteJSON(w, http.StatusOK, wire.ArtifactListResponse{
-		Artifacts: page.Items, NextCursor: nextCursor,
+		Artifacts: page.Items, NextCursor: nextCursor, Facets: facets,
 	})
 }
 
@@ -275,31 +285,55 @@ type artifactCursor struct {
 }
 
 var (
-	artifactPages     = pagecursor.For[artifactCursor]("project_artifacts")
+	artifactPages     = pagecursor.For[artifactCursor]("project_artifacts_v2")
 	artifactPageLimit = httpio.MustPageLimit(visual.DefaultArtifactPageLimit, 1, visual.MaxArtifactPageLimit)
 )
 
-func artifactPageQuery(pq httpio.PageQuery, projectID string) (visual.ArtifactPageQuery, error) {
-	query := visual.ArtifactPageQuery{Limit: pq.Limit}
+func readArtifactFilters(r *http.Request) (wire.VisualArtifactSource, string, error) {
+	var source wire.VisualArtifactSource
+	if raw, ok, err := httpio.SingleQueryValue(r, "source"); err != nil {
+		return "", "", err
+	} else if ok {
+		s := wire.VisualArtifactSource(strings.TrimSpace(raw))
+		if !s.Valid() {
+			return "", "", &httpio.QueryParameterError{Parameter: "source", Reason: "must name an artifact source"}
+		}
+		source = s
+	}
+	var sessionID string
+	if raw, ok, err := httpio.SingleQueryValue(r, "session_id"); err != nil {
+		return "", "", err
+	} else if ok {
+		parsed, parseErr := uuid.Parse(strings.TrimSpace(raw))
+		if parseErr != nil {
+			return "", "", &httpio.QueryParameterError{Parameter: "session_id", Reason: "must be a UUID"}
+		}
+		sessionID = parsed.String()
+	}
+	return source, sessionID, nil
+}
+
+func artifactPageQuery(pq httpio.PageQuery, scope string, source wire.VisualArtifactSource, sessionID string) (visual.ArtifactPageQuery, error) {
+	query := visual.ArtifactPageQuery{Limit: pq.Limit, Source: source, SessionID: sessionID}
 	if pq.Cursor == "" {
 		return query, nil
 	}
-	cursor, err := artifactPages.Decode(pq.Cursor, pagecursor.Scope(projectID))
+	cursor, err := artifactPages.Decode(pq.Cursor, scope)
 	if err != nil {
 		return query, err
 	}
 	if strings.TrimSpace(cursor.CreatedAt) == "" || strings.TrimSpace(cursor.ID) == "" {
 		return query, pagecursor.ErrInvalid
 	}
-	query.AfterCreatedAt, query.AfterID = cursor.CreatedAt, cursor.ID
+	query.BeforeCreatedAt, query.BeforeID = cursor.CreatedAt, cursor.ID
 	return query, nil
 }
 
-func encodeArtifactCursor(projectID, createdAt, id string) (string, error) {
+func encodeArtifactCursor(scope, createdAt, id string) (string, error) {
 	if strings.TrimSpace(createdAt) == "" || strings.TrimSpace(id) == "" {
 		return "", nil
 	}
-	return artifactPages.Encode(pagecursor.Scope(projectID), artifactCursor{CreatedAt: createdAt, ID: id})
+	return artifactPages.Encode(scope, artifactCursor{CreatedAt: createdAt, ID: id})
 }
 
 // Deletion preserves durable references after removing artifact bytes.

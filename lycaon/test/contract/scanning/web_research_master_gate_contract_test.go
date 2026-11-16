@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -14,9 +15,12 @@ import (
 
 func TestCapabilitySurfaceOmitsWebToolsWhenSearchDisabled(t *testing.T) {
 	t.Parallel()
+	profiles, err := sandbox.LoadToolProfiles()
+	contractcheck.FailErr(t, "LoadToolProfiles", err)
 	off := false
 	surf, err := capability.Resolve(capability.ResolveInput{
 		Profile:          surface.TurnProfile{SurfaceID: spawn.SurfaceImplementRouting},
+		ToolProfiles:     profiles,
 		RootCount:        1,
 		SpawnAllowlist:   inject.ResolveAgentRoster(spawn.SurfaceImplementRouting, spawn.AmbientAllowedAgents(), 1, false, false).Effective,
 		WebSearchEnabled: &off,
@@ -38,6 +42,7 @@ func TestCapabilitySurfaceOmitsWebToolsWhenSearchDisabled(t *testing.T) {
 	on := true
 	surfOn, err := capability.Resolve(capability.ResolveInput{
 		Profile:          surface.TurnProfile{SurfaceID: spawn.SurfaceImplementRouting},
+		ToolProfiles:     profiles,
 		RootCount:        1,
 		SpawnAllowlist:   inject.ResolveAgentRoster(spawn.SurfaceImplementRouting, spawn.AmbientAllowedAgents(), 1, false, true).Effective,
 		WebSearchEnabled: &on,

@@ -3,8 +3,6 @@ package promptloop
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"maps"
 	"strings"
 
@@ -14,6 +12,9 @@ import (
 	"github.com/lycaon/lycaon/internal/jsonshape"
 	"github.com/lycaon/lycaon/internal/limits"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -193,18 +194,11 @@ func (l *turnCloseout) rejectCloseoutGrounding(
 	// turn, so repair copy may name them.
 	renderDecision.Data["resume_work_allowed"] = !st.proseFinish && len(st.offeredToolNames) > 0
 	renderDecision.Data["can_recall"] = st.requestReach().Status("recall") == toolreach.Callable
-	offered := make(map[string]bool, len(st.offeredToolNames))
-	for _, name := range st.offeredToolNames {
-		offered[name] = true
-	}
-	if minted, err := evidence.ActiveBinding().MintedKinds(offered); err == nil {
-		renderDecision.Data["mints"] = minted
-	}
 	decision = &renderDecision
 	nudge, err := guard.FormatCloseoutGroundingReject(
 		ctx,
 		l.Deps.RejectFmt,
-		l.hostKickRenderer(ctx),
+		l.hostKickRenderer(ctx, st),
 		anchor.InformRenderFor(ctx, budget.kick, anchor.MatchContext{Surface: "coordinator", SessionID: sessionID}),
 		budget.attempt,
 		budget.displayMax(),
@@ -237,18 +231,45 @@ func (l *turnCloseout) rejectCloseoutGrounding(
 }
 
 // Rendering failures retain the host marker for the requested kick.
-func (l *turnCloseout) hostKickRenderer(ctx context.Context) guard.HostKickRenderer {
+func (l *turnCloseout) hostKickRenderer(ctx context.Context, st *promptLoopTurnState) guard.HostKickRenderer {
 	if l == nil || l.Deps.RenderHostKick == nil {
 		return nil
 	}
 	render := l.Deps.RenderHostKick
+	reader := closeoutTurnReader(st)
 	return func(kickID string, data map[string]any) string {
+		if reader.Valid() {
+			if merged, err := prompts.Vars(reader, data); err == nil {
+				data = merged
+			}
+		}
 		kick, err := render(ctx, kickID, data)
 		if err != nil || strings.TrimSpace(kick) == "" {
 			return guard.HostKickMarker(kickID)
 		}
 		return strings.TrimSpace(kick)
 	}
+}
+
+func closeoutTurnReader(st *promptLoopTurnState) prompts.Reader {
+	profiles, err := sandbox.LoadToolProfiles()
+	if err != nil {
+		return prompts.Reader{}
+	}
+	offered := []string{}
+	if st != nil && len(st.offeredToolNames) > 0 {
+		offered = append(offered, st.offeredToolNames...)
+	}
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		Profiles:  profiles,
+		Visible:   offered,
+		WebSearch: true,
+	})
+	if err != nil {
+		return prompts.Reader{}
+	}
+	return reader
 }
 
 func closeoutDraftSlotID(st *promptLoopTurnState, assistantMessageID string) string {

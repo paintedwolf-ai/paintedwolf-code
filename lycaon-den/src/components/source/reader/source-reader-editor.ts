@@ -306,8 +306,8 @@ export class ReaderEditor {
       options.viewportInput?.(this);
     }, () => { this.pendingNativeScroll = undefined; });
     setLineFactsHandlers(this.view, {
-      show: (line, anchor, via) => options.facts(this, line, anchor, via === "enter"),
-      leave: options.hideFacts, dismiss: options.hideFacts, refresh: options.hideFacts,
+      open: (line, anchor, via) => options.facts(this, line, anchor, via === "keyboard"),
+      dismiss: options.hideFacts, refresh: options.hideFacts,
     });
   }
 

@@ -91,9 +91,6 @@ func TestMergeWorkspaceRootsVarsDelegatesToBuilder(t *testing.T) {
 
 	vars := map[string]any{}
 	prompts.MergeWorkspaceRootsVars(vars, []projectroot.RootRef{primary, draft}, "r2")
-	if vars["root_count"] != 2 {
-		t.Fatalf("root_count=%v", vars["root_count"])
-	}
 	if vars["project_dir"] != "/abs/draft" {
 		t.Fatalf("project_dir=%v want active root path", vars["project_dir"])
 	}
@@ -110,7 +107,7 @@ func TestMergeWorkspaceRootsVarsDelegatesToBuilder(t *testing.T) {
 
 	empty := map[string]any{}
 	prompts.MergeWorkspaceRootsVars(empty, nil, "")
-	if empty["root_count"] != 0 || empty["workspace_roots_omitted_count"] != 0 {
+	if empty["workspace_roots_omitted_count"] != 0 {
 		t.Fatalf("empty vars=%+v", empty)
 	}
 	if _, ok := empty["project_dir"]; ok {

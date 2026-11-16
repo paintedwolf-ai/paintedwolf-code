@@ -143,6 +143,11 @@ facts. Existing egress endpoint records may carry the additive
 `authority_refused` outcome after a later payload refusal; prior connected facts
 remain distinct. These changes add no OpenAPI fields or generated DTOs.
 
+A tool schema may declare `description_effects` (`mutation`, `external_exec`,
+`external_exec_selector`, `network_egress`) to append effect-specific description
+fragments for the reader's admitted command effects. When `description_effects`
+is absent, the tool description is static.
+
 The durable checkpoint authority descriptor includes `execution_id` for
 socket/direct-IP once permits. Its canonical reader keeps session and real
 model-call identity distinct from the native child. Absence or an empty value
@@ -407,6 +412,22 @@ external-program or network text on `profile_command_mutation` must use the
 matching variable. `profile_has_terminal_capture` follows external execution,
 and `shared/units/coordinator-progress-procedure.md` renders only while
 `update_progress` is offered.
+
+Unit front-matter `attaches` accepts the reach marks `command_mutation`,
+`command_external_exec`, and `command_network_egress` in addition to registered
+tool names, and selection evaluates against the reader's held reach set. The
+shipped `native-edit-tool`, `http-operating-procedure`,
+`coordinator-host-runner`, `secure-by-default-run`, and
+`visual-show-the-design` units express their eligibility in `attaches` rather
+than a whole-body conditional; a project or site override of a unit replaces its
+front matter along with its body.
+
+Reader-fact template variables are declared in
+`config/packs/painted-wolf/platform/host/reader-facts.yaml`. Pack, site, and
+project prompt overrides that reference an undeclared name in the reserved
+reader-fact prefixes (`profile_`, `mints`, `receipt_kind`, `tool_check_`,
+`runner_`, `agent_has_skill_`, `visual_show_`, `caps`) emit a load note naming
+the template and variable.
 
 ## Agent-public vocabulary
 

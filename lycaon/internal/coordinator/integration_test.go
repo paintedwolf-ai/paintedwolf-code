@@ -22,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -317,10 +318,20 @@ func TestScaffoldAnyDecisionPending(t *testing.T) {
 func TestRenderCoordinatorTripartiteComposeDraft(t *testing.T) {
 	root := kickTestRoot(t)
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
-	vars := map[string]any{}
-	if err := prompts.MergeCoordinatorSurfacePathVars("implement_synthesis", nil, vars, prompts.SurfaceTurn{}); err != nil {
-		testutil.FailErr(t, "MergeCoordinatorSurfacePathVars", err)
-	}
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	plans, err := surface.CompileToolPlans(1)
+	testutil.FailErr(t, "CompileToolPlans", err)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		SurfaceID: "implement_synthesis",
+		Profiles:  profiles,
+		Plan:      plans["implement_synthesis"],
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader", err)
+	vars := reader.Facts()
 	profile := surface.ResolveTurnProfile(api.CoordinatorRunContext{HasComposeDraft: true}, nil, nil)
 	var parts []string
 	for _, ref := range append([]string{"agents/coordinator-core.md"}, surface.ModeTemplateRef(profile.ModeRefs[0])) {

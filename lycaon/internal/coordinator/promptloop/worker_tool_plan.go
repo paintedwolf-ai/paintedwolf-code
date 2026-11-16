@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolscope"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -106,7 +107,11 @@ func (l *promptContext) coordinatorToolsForTurn(
 	if l.Deps.Policy == nil {
 		return nil, toolsurface.Plan{}, surfaceID, nil
 	}
-	all := l.Deps.Policy.ListForPrompt(ctx, sess, profileID)
+	listCtx := ctx
+	if surfaceID != "" {
+		listCtx = toolpolicy.WithCoordinatorSurface(ctx, surfaceID)
+	}
+	all := l.Deps.Policy.ListForPrompt(listCtx, sess, profileID)
 	if frame.Machine.Compiled() {
 		all = tools.HideSkillsReadWhenEmpty(all, frame.Machine.SkillCount)
 	}

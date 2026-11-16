@@ -25,14 +25,16 @@ func TestRenderPersonaIsDeterministic(t *testing.T) {
 
 	for _, agent := range agents {
 		t.Run(agent, func(t *testing.T) {
-			first, err := prompts.RenderPersona(ctx, engine, agent, map[string]any{
+			reader, err := prompts.DeclaredReader(nil, agent)
+			testutil.FailErr(t, "DeclaredReader", err)
+			first, err := prompts.RenderPersona(ctx, engine, agent, reader, map[string]any{
 				"project_dir": "/tmp/det",
 			})
 			if err != nil {
 				t.Fatalf("first render: %v", err)
 			}
 			for i := 1; i < renders; i++ {
-				got, err := prompts.RenderPersona(ctx, engine, agent, map[string]any{
+				got, err := prompts.RenderPersona(ctx, engine, agent, reader, map[string]any{
 					"project_dir": "/tmp/det",
 				})
 				if err != nil {
@@ -54,7 +56,9 @@ func TestRenderPersonaConcurrentSafe(t *testing.T) {
 	// a cross-process extension lock whose retry deadline collapses on the
 	// bubble's fake clock. Warm the catalog outside the bubble so renders
 	// inside it are cache hits.
-	if _, err := prompts.RenderPersona(context.Background(), prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}), "implementer", nil); err != nil {
+	warmReader, err := prompts.DeclaredReader(nil, "implementer")
+	testutil.FailErr(t, "warm DeclaredReader", err)
+	if _, err := prompts.RenderPersona(context.Background(), prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}), "implementer", warmReader, nil); err != nil {
 		t.Fatalf("warm persona render: %v", err)
 	}
 	synctest.Test(t, func(t *testing.T) {
@@ -68,7 +72,7 @@ func TestRenderPersonaConcurrentSafe(t *testing.T) {
 		)
 		agent := "implementer"
 
-		want, err := prompts.RenderPersona(ctx, engine, agent, nil)
+		want, err := prompts.RenderPersona(ctx, engine, agent, warmReader, nil)
 		testutil.FailErr(t, "prompts.RenderPersona failed", err)
 
 		var (
@@ -81,7 +85,7 @@ func TestRenderPersonaConcurrentSafe(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				for i := 0; i < renders; i++ {
-					got, err := prompts.RenderPersona(ctx, engine, agent, nil)
+					got, err := prompts.RenderPersona(ctx, engine, agent, warmReader, nil)
 					if err != nil {
 						mu.Lock()
 						if mismatch == "" {

@@ -57,7 +57,9 @@ func TestCoordinatorToolSurface_managedSecretLifecycleFollowsMutationCapability(
 		plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: surfaceID}, 1)
 		contractcheck.FailErr(t, "compile tool plan for "+surfaceID, err)
 		available := plan.AddressableNames()
-		if !prompts.CoordinatorSurfaceMutationCapable(surfaceID) {
+		reader, err := prompts.DeclaredReader(nil, surfaceID)
+		contractcheck.FailErr(t, "DeclaredReader for "+surfaceID, err)
+		if capable, _ := reader.Facts()["profile_mutation_capable"].(bool); !capable {
 			continue
 		}
 		if !contractcheck.ContainsString(available, "skills_read") {

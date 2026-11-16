@@ -6,7 +6,25 @@ import (
 
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// ForSession returns the effective tool profiles constrained by the session posture.
+func (m *Service) ForSession(ctx context.Context, sess *api.Session) []sandbox.ToolProfile {
+	var profiles []sandbox.ToolProfile
+	if m != nil && m.catalog != nil {
+		if view := m.catalog.ViewForSession(ctx, sess); view != nil {
+			profiles = view.ToolProfiles
+		}
+	}
+	if len(profiles) == 0 {
+		profiles, _ = sandbox.LoadToolProfiles()
+	}
+	if sess == nil {
+		return profiles
+	}
+	return m.ConstrainCommandProfiles(ctx, sess.ID, profiles)
+}
 
 // ConstrainCommandProfiles freezes the actual session posture restriction into
 // the same effective profiles that the sandbox snapshots for native admission.

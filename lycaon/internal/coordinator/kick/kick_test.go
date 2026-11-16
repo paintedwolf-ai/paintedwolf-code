@@ -330,6 +330,9 @@ func TestQueueCoordinatorKickRendersAtTake(t *testing.T) {
 	if got, _ := eng.lastData["pending_overlay_jobs"].([]string); len(got) != 1 || got[0] != "job-a" {
 		t.Errorf("pending_overlay_jobs = %v want live job-a not queued stale-job", eng.lastData["pending_overlay_jobs"])
 	}
+	if _, err := kickReader(CoordinatorKickRenderContext{SurfaceID: "implement_investigate", RootCount: 1}); err != nil {
+		t.Fatalf("kickReader with surface: %v", err)
+	}
 }
 
 func TestQueueCoordinatorKickEmptyRenderIsNoop(t *testing.T) {

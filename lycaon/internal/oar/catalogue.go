@@ -226,6 +226,11 @@ var factDecls = []factDecl{
 	{"source_analysis_unavailable", oarcore.TypeBool, FactTierHost, ""},
 	{"http_request_web_page", oarcore.TypeBool, FactTierHost, ""},
 	{"http_request_loopback_other_session", oarcore.TypeBool, FactTierHost, ""},
+	{"reproduced_source_lines", oarcore.TypeInt, FactTierHost, ""},
+	{"reproduced_source_file_lines", oarcore.TypeInt, FactTierHost, ""},
+	{"reproduced_source_path", oarcore.TypeString, FactTierHost, ""},
+	{"reproduced_source_start_line", oarcore.TypeInt, FactTierHost, ""},
+	{"reproduced_source_end_line", oarcore.TypeInt, FactTierHost, ""},
 }
 
 // observationFn is one parameterized observation function.

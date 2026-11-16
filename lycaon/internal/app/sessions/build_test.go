@@ -3,12 +3,10 @@ package sessions
 import (
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"log/slog"
 	"maps"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -16,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -25,6 +22,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -42,17 +40,18 @@ func gitRepoDir(t *testing.T) string {
 	return dir
 }
 
-// skillSurfaceVarsInput maps the invocation context onto the skill reader's
-// surface facts: the agent's tool profile, the turn surface, the offered
-// tools, and the workspace shape (worker branch, git, root count).
-func TestSkillSurfaceVarsInputMapsReaderFacts(t *testing.T) {
+func TestSkillToolReaderMapsReaderFacts(t *testing.T) {
 	gitDir := gitRepoDir(t)
 	plainDir := t.TempDir()
-	budget := spawn.WorkerToolBudget{Default: 9, Min: 2, Max: 21}
 	for _, tc := range []struct {
-		name string
-		tctx tools.ToolContext
-		want prompts.SkillSurfaceVarsInput
+		name          string
+		tctx          tools.ToolContext
+		wantProfileID string
+		wantSurfaceID string
+		wantOnBranch  bool
+		wantHasGit    bool
+		wantRootCount int
+		wantErr       bool
 	}{
 		{
 			name: "coordinator on a worker branch with git and two roots",
@@ -69,28 +68,21 @@ func TestSkillSurfaceVarsInputMapsReaderFacts(t *testing.T) {
 				},
 				Turn: tools.InvocationTurn{TurnSurfaceID: " implement_routing ", TurnOfferedToolNames: []string{"recall", "task"}},
 			},
-			want: prompts.SkillSurfaceVarsInput{
-				ProfileID:        "coordinator",
-				SurfaceID:        "implement_routing",
-				Offered:          []string{"recall", "task"},
-				OnWorkerBranch:   true,
-				HasGit:           true,
-				RootCount:        2,
-				DelegationBudget: budget,
-			},
+			wantProfileID: "coordinator",
+			wantSurfaceID: "implement_routing",
+			wantOnBranch:  true,
+			wantHasGit:    true,
+			wantRootCount: 2,
 		},
 		{
-			name: "unregistered agent keeps its id and reports no workspace facts",
+			name: "unregistered agent returns error",
 			tctx: tools.ToolContext{
 				Identity: tools.InvocationIdentity{Agent: "mystery-agent"},
 				Source: tools.InvocationSource{
 					SourceWorkspaceKind: api.SourceWorkspaceKindWorker,
 				},
 			},
-			want: prompts.SkillSurfaceVarsInput{
-				ProfileID:        "mystery-agent",
-				DelegationBudget: budget,
-			},
+			wantErr: true,
 		},
 		{
 			name: "worker branch facts need the worker source kind",
@@ -101,22 +93,28 @@ func TestSkillSurfaceVarsInputMapsReaderFacts(t *testing.T) {
 					WorkerBranchRoot: gitDir,
 				},
 			},
-			want: prompts.SkillSurfaceVarsInput{
-				ProfileID:        "implement",
-				HasGit:           true,
-				RootCount:        1,
-				DelegationBudget: budget,
-			},
+			wantProfileID: "implement",
+			wantHasGit:    true,
+			wantRootCount: 1,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := skillSurfaceVarsInput(tc.tctx, budget)
-			want := tc.want
-			if got.ProfileID != want.ProfileID || got.SurfaceID != want.SurfaceID ||
-				got.OnWorkerBranch != want.OnWorkerBranch || got.HasGit != want.HasGit ||
-				got.RootCount != want.RootCount || got.DelegationBudget != want.DelegationBudget ||
-				!slices.Equal(got.Offered, want.Offered) {
-				t.Fatalf("skillSurfaceVarsInput = %+v, want %+v", got, want)
+			reader, err := skillToolReader(t.Context(), nil, tc.tctx)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("expected error for unregistered agent")
+				}
+				return
+			}
+			testutil.FailErr(t, "skillToolReader", err)
+			facts := reader.Facts()
+			onBranch, _ := facts["on_worker_branch"].(bool)
+			hasGit, _ := facts["has_git"].(bool)
+			if reader.ProfileID() != tc.wantProfileID || reader.SurfaceID() != tc.wantSurfaceID ||
+				onBranch != tc.wantOnBranch || hasGit != tc.wantHasGit ||
+				reader.RootCount() != tc.wantRootCount {
+				t.Fatalf("skillToolReader = profile=%q surface=%q onBranch=%v hasGit=%v rootCount=%d",
+					reader.ProfileID(), reader.SurfaceID(), onBranch, hasGit, reader.RootCount())
 			}
 		})
 	}
@@ -185,10 +183,7 @@ func TestSkillReaderHasGitPrefersActiveRootThenBranchThenRoots(t *testing.T) {
 	}
 }
 
-// skillReaderOfferedTools checks skill reach against the turn's offered tools,
-// widened on coordinator surfaces by the surface's full addressable set, and
-// adds command mutation reach only when the reader's scope allows it.
-func TestSkillReaderOfferedTools(t *testing.T) {
+func TestSkillToolReaderHeldTools(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
 		tctx         tools.ToolContext
@@ -210,10 +205,10 @@ func TestSkillReaderOfferedTools(t *testing.T) {
 				Identity: tools.InvocationIdentity{Agent: "coordinator"},
 				Turn: tools.InvocationTurn{
 					TurnSurfaceID:        "implement_routing",
-					TurnOfferedToolNames: []string{"custom_probe"},
+					TurnOfferedToolNames: []string{"recall"},
 				},
 			},
-			wantContains: []string{"custom_probe", "recall", "command", "command_output", "command_stop"},
+			wantContains: []string{"recall", "command", "command_output", "command_stop"},
 			wantMissing:  []string{toolcontract.ReachCommandMutation},
 		},
 		{
@@ -261,7 +256,7 @@ func TestSkillReaderOfferedTools(t *testing.T) {
 			wantMissing:  []string{toolcontract.ReachCommandMutation},
 		},
 		{
-			name: "unknown scope falls open and skips the surface merge",
+			name: "unknown surface skips the surface merge",
 			tctx: tools.ToolContext{
 				Identity: tools.InvocationIdentity{Agent: "coordinator"},
 				Turn: tools.InvocationTurn{
@@ -274,18 +269,20 @@ func TestSkillReaderOfferedTools(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			offered := skillReaderOfferedTools(tc.tctx)
+			reader, err := skillToolReader(t.Context(), nil, tc.tctx)
+			testutil.FailErr(t, "skillToolReader", err)
+			offered := reader.Held()
 			if tc.wantExact != nil && !maps.Equal(offered, tc.wantExact) {
-				t.Fatalf("skillReaderOfferedTools = %v, want exactly %v", offered, tc.wantExact)
+				t.Fatalf("reader.Held() = %v, want exactly %v", offered, tc.wantExact)
 			}
 			for _, name := range tc.wantContains {
 				if !offered[name] {
-					t.Fatalf("skillReaderOfferedTools is missing %q: %v", name, offered)
+					t.Fatalf("reader.Held() is missing %q: %v", name, offered)
 				}
 			}
 			for _, name := range tc.wantMissing {
 				if offered[name] {
-					t.Fatalf("skillReaderOfferedTools unexpectedly holds %q: %v", name, offered)
+					t.Fatalf("reader.Held() unexpectedly holds %q: %v", name, offered)
 				}
 			}
 		})

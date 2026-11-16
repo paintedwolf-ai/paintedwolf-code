@@ -1,6 +1,7 @@
 import { createTranscriptRowMeasurements, type RowSize } from "./transcript-row-measurements.ts";
 import {
   createTranscriptRunwayBudget,
+  measureTranscriptResidentRows,
   type TranscriptRunwayState,
   type TranscriptUnloadedOrds,
 } from "../history/transcript-runway.ts";
@@ -21,6 +22,7 @@ import {
   denScrollDebugLog,
   isStreamScrollDebugEnabled,
 } from "../../stream/den-scroll-debug.ts";
+import { traceTranscriptRunwayDensity } from "./transcript-paging-trace.ts";
 import type { TranscriptItem } from "../projection/transcript-item-model.ts";
 
 const ROW_ESTIMATE_MISS_REPORT_PX = 24;
@@ -438,6 +440,8 @@ export type CreateTranscriptVirtualizerOptions<
   /** Carries the offset with content that moved above it; returns the applied shift. */
   shiftContent: (deltaY: number, fromOffset: number) => number;
   rowSizeHint?: (item: T) => number | undefined;
+  /** Persisted row height from a prior mount, used to seed runway density before DOM measurement. */
+  restoredRowEstimate?: (item: T) => number | undefined;
   /** Inputs to `rowSizeHint` beyond the item; unmeasured rows re-estimate when they change. */
   estimateBasis?: () => unknown;
   /** Placement changes refresh unmeasured estimates without discarding measured interiors. */
@@ -449,8 +453,6 @@ export type CreateTranscriptVirtualizerOptions<
   originPx?: () => number;
   /** Unloaded message ordinals on each side of the resident window. */
   unloadedOrds?: () => TranscriptUnloadedOrds;
-  /** Message-backed resident row count and ordinal span, for sizing unloaded runways. */
-  residentRowSpan?: () => { count: number; ordSpan: number };
   minimumBufferRows?: number;
   bufferViewports?: number;
   observeElementRect?: VirtualizerOptions<
@@ -483,46 +485,24 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
   const estimatedSize = (index: number): number => {
     const item = opts.items()[index];
     if (!item) return 72;
-    return opts.rowSizeHint?.(item) ?? transcriptRowEstimatedHeight(item);
+    return opts.restoredRowEstimate?.(item) ?? opts.rowSizeHint?.(item) ?? transcriptRowEstimatedHeight(item);
   };
   const [measurementEpoch, setMeasurementEpoch] = createSignal(0);
   const virtualizerRef: { current?: TranscriptVirtualizer } = {};
-  const residentHeight = (): number => {
-    const count = opts.items().length;
-    if (count === 0) return 0;
-    let total = 0;
-    for (let index = 0; index < count; index += 1) {
-      const item = opts.items()[index];
-      const cached = item ? virtualizerRef.current?.itemSizeCache.get(item.key) : undefined;
-      total += cached ?? estimatedSize(index);
-    }
-    return total;
-  };
-  const runwayBudget = createTranscriptRunwayBudget();
+  const residentMetrics = () =>
+    measureTranscriptResidentRows({
+      items: opts.items(),
+      cachedSize: (key) => virtualizerRef.current?.itemSizeCache.get(key),
+      persistedSize: (item) => opts.restoredRowEstimate?.(item),
+      estimatedSize: (_, index) => estimatedSize(index),
+    });
+  const residentHeight = (): number => residentMetrics().residentHeightPx;
+  const runwayBudget = createTranscriptRunwayBudget(traceTranscriptRunwayDensity);
   const runway = createMemo<TranscriptRunwayState>(() => {
     measurementEpoch();
-    const items = opts.items();
     const unloaded = opts.unloadedOrds?.() ?? { before: 0, after: 0 };
-    const span = opts.residentRowSpan?.() ?? { count: items.length, ordSpan: items.length };
-    const heightPx = residentHeight();
-    const viewport = opts.scrollElement();
-    const viewportHeightPx =
-      virtualizerRef.current?.scrollRect?.height ||
-      viewport?.clientHeight ||
-      TRANSCRIPT_VIRTUAL_INITIAL_VIEWPORT_HEIGHT_PX;
-    const scrollOffsetPx =
-      virtualizerRef.current?.scrollOffset ??
-      viewport?.scrollTop ??
-      0;
-    return runwayBudget.observe({
-      unloaded,
-      residentRowCount: span.count,
-      residentOrdSpan: span.ordSpan,
-      residentHeightPx: heightPx,
-      scrollOffsetPx,
-      viewportHeightPx,
-      following: unloaded.after === 0,
-    });
+    const { measuredHeightPx, measuredOrdSpan } = residentMetrics();
+    return runwayBudget.observe({ unloaded, measuredHeightPx, measuredOrdSpan });
   });
   const initialEndOffset = (): number => {
     const count = opts.items().length;

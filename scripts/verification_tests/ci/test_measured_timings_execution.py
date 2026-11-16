@@ -50,13 +50,14 @@ class MeasuredTimingsTests(unittest.TestCase):
             root = Path(directory)
             rows = [{"lane": "behavior", "shard": "1/2", "status": "passed", "seconds": 900, "packages": {"a": 1}},
                     {"lane": "behavior", "shard": "2/2", "status": "failed", "seconds": 300, "packages": {"b": 2}},
+                    {"lane": "race", "shard": "1/3", "status": "passed", "seconds": 1800, "packages": {"a": 25, "c": 40}},
                     {"lane": "lint", "shard": "", "status": "passed", "seconds": 600, "packages": {}}]
             paths = []
             for index, row in enumerate(rows):
                 path = root / f"{index}.json"
                 path.write_text(json.dumps({"basis": "setup-and-execution", **row}))
                 paths.append(path)
-            self.assertEqual(timings.merge(paths), {"lanes": {"behavior 1/2": 900, "lint": 600},
+            self.assertEqual(timings.merge(paths), {"lanes": {"behavior 1/2": 900, "race 1/3": 1800, "lint": 600},
                                                     "packages": {"a": 1, "b": 2}})
 
     def test_invalid_durations_cannot_poison_history(self):

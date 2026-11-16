@@ -1,0 +1,37 @@
+spec_version: "1.0"
+id: REPRODUCED_SOURCE_IN_ANSWER
+kind: policy
+on: coordinator.post_turn
+selector: {}
+requires_facts: [paintedwolf.reproduced_source_end_line, paintedwolf.reproduced_source_file_lines, paintedwolf.reproduced_source_lines, paintedwolf.reproduced_source_path, paintedwolf.reproduced_source_start_line, paintedwolf.session_role]
+when: >-
+  paintedwolf.session_role == "coordinator" &&
+  (paintedwolf.reproduced_source_lines >= 30 ||
+   (paintedwolf.reproduced_source_lines >= 12 &&
+    paintedwolf.reproduced_source_lines * 5 >= paintedwolf.reproduced_source_file_lines * 4))
+effect: nudge
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+message: The answer reproduced a source file
+what: 'Your last answer reproduced {{ paintedwolf.reproduced_source_path }}:{{ paintedwolf.reproduced_source_start_line }}-{{ paintedwolf.reproduced_source_end_line }} ({{ paintedwolf.reproduced_source_lines }} non-blank lines).'
+cause: A fence in that answer matched the file line for line.
+why: The person can open the file from a citation; a copy costs their reading and goes stale.
+fix: 'Cite [{{ paintedwolf.reproduced_source_path }}:{{ paintedwolf.reproduced_source_start_line }}-{{ paintedwolf.reproduced_source_end_line }}] instead, and show that code works with the receipt of the check that ran.'
+instead: Quote only the few lines a point depends on.
+x-paintedwolf-scenarios:
+  - id: whole_small_file
+    vars:
+      reproduced_source_path: internal/config/load.go
+      reproduced_source_start_line: 1
+      reproduced_source_end_line: 18
+      reproduced_source_lines: 14
+      reproduced_source_file_lines: 15
+      session_role: coordinator
+  - id: large_file_run
+    vars:
+      reproduced_source_path: internal/server/handler.go
+      reproduced_source_start_line: 85
+      reproduced_source_end_line: 132
+      reproduced_source_lines: 40
+      reproduced_source_file_lines: 400
+      session_role: coordinator

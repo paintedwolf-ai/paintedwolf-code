@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/session/touchedpaths"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -266,25 +267,10 @@ func (m *Service) sessionTouchedPaths(
 	reader tools.SourceHistory,
 	roots []projectroot.RootRef,
 ) map[string]bool {
-	touched := make(map[string]bool)
-	if ev, err := m.store.LoadLedger(ctx, sess.ID); err == nil {
-		for path := range ev.ByPath {
-			if normalized := evidence.NormalizeLedgerPath(path); normalized != "" {
-				touched[normalized] = true
-			}
-		}
-	}
-	for _, root := range roots {
-		authored, err := reader.Authorship.SessionAuthoredPaths(ctx, sess.ProjectID, sess.ID, root.ID)
-		if err != nil {
-			continue
-		}
-		for _, path := range authored {
-			if path = strings.TrimSpace(path); path != "" {
-				touched[path] = true
-				touched[projectroot.DisplayPath(roots, sess.WorkspaceRootID, root.ID, path)] = true
-			}
-		}
+	paths := touchedpaths.List(ctx, sess.ProjectID, sess.ID, sess.WorkspaceRootID, roots, m.store, reader.Authorship, 0)
+	touched := make(map[string]bool, len(paths))
+	for _, p := range paths {
+		touched[projectroot.DisplayPath(roots, sess.WorkspaceRootID, p.RootID, p.RelPath)] = true
 	}
 	return touched
 }

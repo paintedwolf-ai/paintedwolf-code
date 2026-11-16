@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"sync"
@@ -46,7 +47,11 @@ func NewCatalogRegistry(catalog *toolschema.Config) (*DefaultRegistry, error) {
 			continue
 		}
 		metadata[name] = cloneToolMeta(ToolMeta{
-			Name: declared.Name, Description: declared.Description, Tags: declared.Tags, ArgsSchema: declared.ArgsSchema,
+			Name:               declared.Name,
+			Description:        declared.Description,
+			DescriptionEffects: declared.DescriptionEffects,
+			Tags:               declared.Tags,
+			ArgsSchema:         declared.ArgsSchema,
 		})
 	}
 	return &DefaultRegistry{
@@ -305,6 +310,8 @@ func (r *DefaultRegistry) List() []ToolMeta {
 func cloneToolMeta(meta ToolMeta) ToolMeta {
 	meta.ArgsSchema = jsonvalue.CloneMap(meta.ArgsSchema)
 	meta.Tags = append([]string(nil), meta.Tags...)
+	meta.DescriptionEffects = maps.Clone(meta.DescriptionEffects)
+	meta.DescriptionParts = append([]string(nil), meta.DescriptionParts...)
 	return meta
 }
 

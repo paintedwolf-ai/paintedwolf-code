@@ -97,6 +97,7 @@ export type UseTranscriptProjectionModelOptions = {
   hasMoreBefore: () => boolean | undefined;
   checkpointAppStore: () => AppStore | undefined;
   exploreContext: () => CitationExploreContext | undefined;
+  hasMessageActions: () => boolean;
   disclosureOpen: (key: TranscriptDisclosureKey) => boolean;
   rowMetrics: () => TranscriptRowMetrics | null;
   rowGeometry: () => string | undefined;
@@ -402,20 +403,36 @@ export function useTranscriptProjectionModel(options: UseTranscriptProjectionMod
         height: estimate,
       });
     }
-    return estimate !== undefined &&
-      (item.kind === "user" || item.kind === "pending_user") &&
+    if (estimate === undefined || options.layout() !== "chat") return estimate;
+    const remPx = transcriptRootRemPx();
+    const gapPx = transcriptSpacing().messageTimeGap * remPx;
+    if (
+      options.hasMessageActions() &&
+      (item.kind === "user" || item.kind === "pending_user" || item.kind === "assistant")
+    ) {
+      return estimate + 4 + 1.5 * remPx + gapPx;
+    }
+    return (item.kind === "user" || item.kind === "pending_user") &&
       messageTimesPref() === "always"
-      ? estimate + 16 + transcriptSpacing().messageTimeGap * transcriptRootRemPx()
+      ? estimate + 16 + gapPx
       : estimate;
   };
 
-  // A time under the bubble changes the user row's height.
+  // Below-bubble chrome changes the row's height.
   const rowPresentation = (item: DisplayTranscriptItem): string => {
     const presentation = transcriptRowPresentation(item, options.disclosureOpen);
-    return (item.kind === "user" || item.kind === "pending_user") &&
+    const actionsTag =
+      options.layout() === "chat" &&
+      options.hasMessageActions() &&
+      (item.kind === "user" || item.kind === "pending_user" || item.kind === "assistant")
+        ? "+actions"
+        : "";
+    const timeTag =
+      (item.kind === "user" || item.kind === "pending_user") &&
       messageTimesPref() === "always"
-      ? `${presentation}+time-below`
-      : presentation;
+        ? "+time-below"
+        : "";
+    return `${presentation}${actionsTag}${timeTag}`;
   };
 
   /** A remembered height is reused only for the same content, geometry, and presentation. */
@@ -463,6 +480,7 @@ export function useTranscriptProjectionModel(options: UseTranscriptProjectionMod
     rowHeightScope,
     artifactPlacements,
     rowHeightKey,
+    restoredRowEstimate,
     estimatedContentHeight,
   };
 }

@@ -1,7 +1,11 @@
-import { Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { Show, createMemo, createRenderEffect, createSignal, onCleanup, onMount } from "solid-js";
 import type { ResolveProjectRoot } from "../../api/project-path.ts";
 import type { RedactedSpan } from "../../api/types.ts";
 import { useChatDestinationScope } from "../../chat/composer/chat-destination-scope.tsx";
+import {
+  createMarkdownCodeFoldController,
+  syncMarkdownFenceChrome,
+} from "../../chat/markdown/code-fold.ts";
 import { prepareMarkdownSource } from "../../chat/markdown/markdown-output.ts";
 import { renderMarkdownHtml } from "../../chat/markdown/markdown-render.ts";
 import {
@@ -9,6 +13,8 @@ import {
   planProseRedaction,
 } from "../../chat/markdown/prose-redaction.ts";
 import { remoteImagePlaceholderURL } from "../../chat/markdown/untrusted-markdown.ts";
+import { useTranscriptViewport } from "../../chat/stream/transcript-viewport.tsx";
+import { useTranscriptDisclosureStore } from "../../chat/transcript/presentation/disclosure-state.tsx";
 import { confirmAndOpenExternalLink } from "../../platform/desktop/external-link.ts";
 import { clickSelectedText } from "../../platform/interaction/selection-gesture.ts";
 import {
@@ -50,6 +56,8 @@ type Props = {
   activeRootId?: string;
   /** Host-stamped offsets into the unchanged message content. */
   redactionSpans?: readonly RedactedSpan[];
+  /** Transcript row scope for persisting code-fence fold state across remounts. */
+  disclosureScope?: string;
 };
 
 /** Render accepted coordinator prose in one stable node. */
@@ -73,6 +81,14 @@ export function AssistantProseBody(props: Props) {
     items: ContextMenuItem[];
   } | null>(null);
   const chatDestination = useChatDestinationScope();
+  const viewport = useTranscriptViewport();
+  const disclosures = useTranscriptDisclosureStore() ?? viewport?.disclosures;
+  const codeFold = createMarkdownCodeFoldController({
+    viewport,
+    disclosures,
+    scope: () => props.disclosureScope ?? props.messageId,
+  });
+  onCleanup(() => codeFold.dispose());
 
   const onProseClick = (event: MouseEvent) => {
     const target = event.target;
@@ -118,24 +134,37 @@ export function AssistantProseBody(props: Props) {
   });
 
   /* eslint-disable solid/no-innerhtml -- Markdown is sanitized before redaction marks are added. */
+  const proseEl = (
+    <div
+      ref={root}
+      class="markdown-body assistant-prose"
+      innerHTML={html()}
+      onClick={onProseClick}
+      onContextMenu={(e) => {
+        const next = markdownProjectPathLinkContextMenu(e, {
+          projectId: props.projectId,
+          rootRefs: props.rootRefs,
+          activeRootId: props.activeRootId,
+          chatDestination: chatDestination(),
+          onReferenceAction: (anchor, referenceId, action) => void referenceActions.activate(anchor, referenceId, action),
+        });
+        if (next) setMenu(next);
+      }}
+    />
+  );
+  /* eslint-enable solid/no-innerhtml */
+
+  createRenderEffect(() => {
+    html();
+    if (root) syncMarkdownFenceChrome(root, codeFold);
+  });
+  createRenderEffect(() => {
+    codeFold.syncState();
+  });
+
   return (
     <>
-      <div
-        ref={root}
-        class="markdown-body assistant-prose"
-        innerHTML={html()}
-        onClick={onProseClick}
-        onContextMenu={(e) => {
-          const next = markdownProjectPathLinkContextMenu(e, {
-            projectId: props.projectId,
-            rootRefs: props.rootRefs,
-            activeRootId: props.activeRootId,
-            chatDestination: chatDestination(),
-            onReferenceAction: (anchor, referenceId, action) => void referenceActions.activate(anchor, referenceId, action),
-          });
-          if (next) setMenu(next);
-        }}
-      />
+      {proseEl}
       <Show when={referenceActions.displayedChooser()} keyed>{(state) => <NavigationChooser
         action={state.action} anchor={state.anchor} reference={state.reference} error={state.error} busy={state.busy} roots={props.rootRefs}
         activeRootId={props.activeRootId}
@@ -154,5 +183,4 @@ export function AssistantProseBody(props: Props) {
       </Show>
     </>
   );
-  /* eslint-enable solid/no-innerhtml */
 }

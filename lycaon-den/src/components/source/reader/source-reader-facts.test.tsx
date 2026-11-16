@@ -1,4 +1,4 @@
-import { render, cleanup } from "@solidjs/testing-library";
+import { render, cleanup, screen, fireEvent } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createReaderFacts } from "./source-reader-facts.tsx";
 import type { ReaderEditor } from "./source-reader-editor.ts";
@@ -47,18 +47,30 @@ afterEach(() => {
 });
 
 describe("createReaderFacts", () => {
-  it("clears aria-expanded and is-open on previous anchor when hovering a new line", () => {
+  it("opens, toggles on the same line, swaps to another line, and hides", () => {
     const editor = createMockEditor();
     const cell1 = createMockCell();
     const cell2 = createMockCell();
+    const activate = vi.fn();
 
     let facts!: ReturnType<typeof createReaderFacts>;
     render(() => {
-      facts = createReaderFacts(() => "test.ts", vi.fn());
+      facts = createReaderFacts(() => "test.ts", activate);
       return facts.card;
     });
 
     facts.show(editor, 1, cell1.cell, false);
+    expect(cell1.cell.classList.contains("is-open")).toBe(true);
+    expect(cell1.button.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.queryByRole("dialog")).toBeTruthy();
+
+    facts.show(editor, 1, cell1.cell, false);
+    expect(cell1.cell.classList.contains("is-open")).toBe(false);
+    expect(cell1.button.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    facts.show(editor, 1, cell1.cell, false);
+    facts.show(editor, 1, cell1.cell, true);
     expect(cell1.cell.classList.contains("is-open")).toBe(true);
     expect(cell1.button.getAttribute("aria-expanded")).toBe("true");
 
@@ -67,9 +79,26 @@ describe("createReaderFacts", () => {
     expect(cell1.button.getAttribute("aria-expanded")).toBe("false");
     expect(cell2.cell.classList.contains("is-open")).toBe(true);
     expect(cell2.button.getAttribute("aria-expanded")).toBe("true");
+
+    facts.hide();
+    expect(cell2.cell.classList.contains("is-open")).toBe(false);
+    expect(cell2.button.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    facts.show(editor, 1, cell1.cell, true);
+    const rowButton = document.querySelector<HTMLButtonElement>(".files-line-facts__row")!;
+    rowButton.focus();
+    fireEvent.keyDown(rowButton, { key: "Escape" });
+    expect(document.activeElement).toBe(cell1.button);
+    expect(cell1.cell.classList.contains("is-open")).toBe(false);
+
+    facts.show(editor, 2, cell2.cell, false);
+    fireEvent.click(document.querySelector<HTMLButtonElement>(".files-line-facts__row")!);
+    expect(activate).toHaveBeenCalledWith(expect.objectContaining({ session_id: "session-2" }), 2);
+    expect(cell2.cell.classList.contains("is-open")).toBe(false);
   });
 
-  it("clears aria-expanded when moving to a line without contributors", () => {
+  it("clears aria-expanded when opening a line without contributors", () => {
     const editor = createMockEditor((line) =>
       line === 1
         ? ({

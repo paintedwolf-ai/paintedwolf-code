@@ -19,22 +19,13 @@ func evidenceMints(reachHeld map[string]bool) map[string]bool {
 // surface: mutating native operations require command mutation, and command's
 // terminal_capture variant (tui#) requires external execution.
 func evidenceMintsForCommand(enabled map[string]bool, commandMutates, commandExternalExec bool) map[string]bool {
-	reachHeld := make(map[string]bool, len(enabled)+1)
-	for name, ok := range enabled {
-		reachHeld[name] = ok
-	}
+	var classes []toolcontract.CommandEffectClass
 	if commandMutates {
-		reachHeld[toolcontract.ReachCommandMutation] = true
+		classes = append(classes, toolcontract.CommandMutation)
 	}
-	minted := evidenceMints(reachHeld)
-	if !commandExternalExec && reachHeld["command"] && minted["tui"] {
-		withoutCommand := make(map[string]bool, len(reachHeld))
-		for name, ok := range reachHeld {
-			if name != "command" && name != toolcontract.ReachCommandMutation {
-				withoutCommand[name] = ok
-			}
-		}
-		minted["tui"] = evidenceMints(withoutCommand)["tui"]
+	if commandExternalExec {
+		classes = append(classes, toolcontract.CommandExternalExec)
 	}
-	return minted
+	effects, _ := toolcontract.NewCommandEffects(classes...)
+	return evidenceMints(readerHeldSet(enabled, effects))
 }

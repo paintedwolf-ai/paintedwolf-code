@@ -61,7 +61,10 @@ func (e *engine) ListForPrompt(ctx context.Context, sess *api.Session, profileID
 	if e == nil || e.deps.ToolLister == nil {
 		return nil
 	}
-	filter := platform.ToolFilter{ProfileID: profileID}
+	filter := platform.ToolFilter{
+		ProfileID: profileID,
+		SurfaceID: coordinatorSurfaceFromContext(ctx),
+	}
 	if e.deps.ToolAccess != nil {
 		filter.ToolAccess = e.deps.ToolAccess(ctx, sess)
 	}

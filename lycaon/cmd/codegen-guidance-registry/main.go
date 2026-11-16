@@ -16,7 +16,7 @@ import (
 
 func main() {
 	root := flag.String("root", ".", "lycaon module root (contains config/) or repo root")
-	check := flag.Bool("check", false, "exit 1 if guidance_registry.json is stale")
+	check := flag.Bool("check", false, "exit 1 if guidance_registry.json or reader_facts.generated.go is stale")
 	flag.Parse()
 
 	abs, err := filepath.Abs(*root)
@@ -27,8 +27,13 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
+	readerFactsPath := filepath.Join(moduleRoot, "internal", "prompts", "reader_facts.generated.go")
 
 	if err := validateStockPolicy(moduleRoot); err != nil {
+		fatal(err)
+	}
+
+	if err := syncReaderFacts(moduleRoot, readerFactsPath, *check); err != nil {
 		fatal(err)
 	}
 

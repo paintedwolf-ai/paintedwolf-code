@@ -36,6 +36,9 @@ function isClipped(el: HTMLElement): boolean {
 }
 
 function tooltipIsUseful(anchor: HTMLElement): boolean {
+  if (anchor.hasAttribute("aria-haspopup") && anchor.getAttribute("aria-expanded") === "true") {
+    return false;
+  }
   if (!("tipWhenClipped" in anchor.dataset)) return true;
   const selector = anchor.dataset.tipWhenClipped?.trim();
   const labels = selector
@@ -162,6 +165,15 @@ export function TooltipHost() {
       reconcile();
     };
 
+    const onPointerDown = () => {
+      clearTimer();
+      hovered = null;
+      focused = null;
+      probed = null;
+      setOpen(null);
+    };
+
+    document.addEventListener("pointerdown", onPointerDown, true);
     document.addEventListener("mouseover", onMouseOver);
     document.addEventListener("mouseout", onMouseOut);
     document.addEventListener("mousemove", onMouseMove);
@@ -170,6 +182,7 @@ export function TooltipHost() {
     document.addEventListener("focusout", onFocusOut);
     onCleanup(() => {
       clearTimer();
+      document.removeEventListener("pointerdown", onPointerDown, true);
       document.removeEventListener("mouseover", onMouseOver);
       document.removeEventListener("mouseout", onMouseOut);
       document.removeEventListener("mousemove", onMouseMove);

@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { AgentSessionPresence, AgentRead, SecurityFinding } from "../../../api/types.ts";
 import { agentDocumentMarks } from "../../../files/components/agent-presence.ts";
 import { currentAgentSteps, type PaintedAgentMark } from "../../../files/documents/agent-paint-lifetime.ts";
-import { agentMarkLines, lineFacts } from "./line-facts.ts";
+import { agentMarkLines, lineFacts, lineFactsHint, lineFactsHintLabel } from "./line-facts.ts";
 
 const doc = Text.of(["one", "two", "three", "four", "five"]);
 const read = (id: string, sequence: number, fields: Partial<AgentRead> = {}): AgentRead => ({
@@ -68,5 +68,72 @@ describe("line facts", () => {
     expect(facts.changed[1]?.title).toBe("Earlier chat");
     expect(facts.changed.every(row => row.color === undefined)).toBe(true);
     expect(facts.findings.map(row => row.title)).toEqual(["high", "low"]);
+  });
+
+  it("derives the hint from the first card row and keeps relative time out of fact text", () => {
+    const levels: SecurityFinding["level"][] = ["critical", "high", "medium"];
+    const nowPool = marks({
+      reads: [read("r1", 1)],
+      worker_drafts: [{ worker_id: "w1", state: "ready", root_id: "root", path: "a.go", extent: "range", ranges: [{ start_line: 2, end_line: 3 }], insertions: 1, deletions: 1 }],
+      intents: [{ id: "i1", tool_call_id: "edit", checkpoint_id: "cp", tool: "replace_lines", operation: "edit", state: "awaiting_approval", root_id: "root", path: "a.go", extent: "range", ranges: [{ start_line: 2, end_line: 3 }] }],
+    });
+    const baseMs = Date.now() - 15 * 60_000;
+    for (let nowCount = 0; nowCount <= 3; nowCount++) {
+      for (let changedCount = 0; changedCount <= 3; changedCount++) {
+        for (let findingCount = 0; findingCount <= 3; findingCount++) {
+          const contributors = Array.from({ length: changedCount }, (_, i) => ({
+            sessionId: `s-${i}`,
+            turn: i + 1,
+            ts: new Date(baseMs + i * 60_000).toISOString(),
+            toolCallId: `tc-${i}`,
+          }));
+          const findingItems: SecurityFinding[] = levels.slice(0, findingCount).map(level => ({
+            rule_id: level,
+            level,
+            message: `msg-${level}`,
+            locations: [],
+            fingerprints: { primary: `fp-${level}` },
+            tool: { name: "opengrep", driver_id: "opengrep" },
+          }));
+          const facts = lineFacts(2, {
+            doc,
+            marks: nowPool.slice(0, nowCount),
+            attribution: changedCount ? [{ startLine: 2, endLine: 3, contributors }] : [],
+            findings: findingCount ? [{ line: 2, level: findingItems[0]!.level, findings: findingItems }] : [],
+          });
+          const timeless = lineFacts(2, {
+            doc,
+            marks: nowPool.slice(0, nowCount),
+            attribution: changedCount ? [{ startLine: 2, endLine: 3, contributors: contributors.map(c => ({ ...c, ts: "" })) }] : [],
+            findings: findingCount ? [{ line: 2, level: findingItems[0]!.level, findings: findingItems }] : [],
+          });
+          expect(facts.count).toBe(nowCount + changedCount + findingCount);
+          const hint = lineFactsHint(facts);
+          if (facts.count === 0) {
+            expect(hint).toBeNull();
+            continue;
+          }
+          const rows = [...facts.now, ...facts.changed, ...facts.findings];
+          expect(hint).not.toBeNull();
+          expect(hint!.lead).toBe(rows[0]);
+          expect(hint!.more).toBe(facts.count - 1);
+          const baseLabel = hint!.lead.target.kind === "finding"
+            ? `${hint!.lead.fact} · ${hint!.lead.title}`
+            : hint!.lead.fact;
+          expect(lineFactsHintLabel(hint!)).toBe(
+            hint!.more > 0 ? `${baseLabel} · ${hint!.more} more` : baseLabel,
+          );
+          for (let i = 0; i < facts.changed.length; i++) {
+            const row = facts.changed[i]!;
+            expect(row.when).toBeTruthy();
+            expect(row.fact).toBe(timeless.changed[i]!.fact);
+            expect(row.fact.includes(row.when!)).toBe(false);
+          }
+          for (const row of rows) {
+            if (row.when) expect(row.fact.includes(row.when)).toBe(false);
+          }
+        }
+      }
+    }
   });
 });

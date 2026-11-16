@@ -1,6 +1,7 @@
 package toolvocab
 
 import (
+	"crypto/sha256"
 	"fmt"
 	"io/fs"
 	"regexp"
@@ -12,7 +13,9 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/pongoplain"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -72,9 +75,6 @@ func AgentSurfaces(agents []agentdef.Profile, profiles []sandbox.ToolProfile) ([
 	return out, surfaces, nil
 }
 
-// profileHasCapabilityAliases lists the capability aliases behind
-// profile_has_<alias> template facts that describe a surface capability rather
-// than a single tool name.
 var profileHasCapabilityAliases = map[string]bool{
 	"write_tools":      true,
 	"terminal_capture": true,
@@ -83,17 +83,10 @@ var profileHasCapabilityAliases = map[string]bool{
 	"managed_secrets":  true,
 }
 
-// profileHasIdentifier matches the profile_has_<name> template facts copy
-// guards on, so validation can reject facts that name no tool.
 var profileHasIdentifier = regexp.MustCompile(`profile_has_([a-z0-9_]+)`)
 
-// UnreachableNames returns the tool, operation, and command-program names copy
-// tells its reader to reach but the reachable map cannot, and the evidence
-// handles (as "kind#") no reachable tool mints, sorted. A name is reachable when
-// the map holds it or when a reader with those facts can run it as a command
-// program: command forms need `command`, mutating forms need
-// ReachCommandMutation, and a dual-state form needs its tool. Callers render
-// copy first so guarded branches resolve against the reader's actual facts.
+// UnreachableNames returns the tool, operation, command-program, and evidence
+// handle names (as "kind#") that corpus names but reachable cannot supply.
 func UnreachableNames(c *Catalog, corpus string, reachable map[string]bool) []string {
 	seen := map[string]bool{}
 	var out []string
@@ -125,27 +118,6 @@ func UnreachableNames(c *Catalog, corpus string, reachable map[string]bool) []st
 	return out
 }
 
-// profileReachable maps every registered tool to whether profileID holds it,
-// adds tools the profile grants that this catalog does not register (a minimal
-// catalog can lack host runners like `command`), and sets ReachCommandMutation
-// when the profile runs mutating command programs.
-func profileReachable(c *Catalog, profileID string) map[string]bool {
-	held := make(map[string]bool, len(c.registered)+1)
-	for name := range c.registered {
-		held[name] = c.ProfileHolds(profileID, name)
-	}
-	if prof, ok := c.profiles[strings.TrimSpace(profileID)]; ok {
-		for name := range prof.Tools {
-			name = strings.TrimSpace(name)
-			if name != "" && !c.registered[name] && plainToolName(name) {
-				held[name] = prof.ToolAllowed(name)
-			}
-		}
-	}
-	held[toolcontract.ReachCommandMutation] = c.profileCommandMutates(profileID)
-	return held
-}
-
 // plainToolName reports whether name can appear as a template fact suffix.
 func plainToolName(name string) bool {
 	for i := 0; i < len(name); i++ {
@@ -159,53 +131,108 @@ func plainToolName(name string) bool {
 	return name != "" && name[0] >= 'a' && name[0] <= 'z'
 }
 
-// profileCommandMutates reports whether profileID can run mutating command
-// programs, matching the profile_command_mutation template fact.
-func (c *Catalog) profileCommandMutates(profileID string) bool {
+func (c *Catalog) profileReader(profileID string) (prompts.Reader, error) {
 	prof, ok := c.profiles[strings.TrimSpace(profileID)]
-	if !ok || !prof.ToolAllowed("command") {
-		return false
+	if !ok {
+		return prompts.Reader{}, fmt.Errorf("unknown tool profile %q", profileID)
 	}
-	mutation, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
-	if err != nil {
-		return false
-	}
-	return prof.CommandEffects == 0 || prof.CommandEffects.Allows(mutation)
-}
-
-// skillRenderVars builds the template variables one skill text renders with for
-// a reader: spawn policy and sizing facts, a profile_has_<tool> fact per held
-// tool, derived surface capability aliases, and the caller shape. Unheld tools
-// stay unset, which renders false. has_git is true and root_count is 1 — the
-// workspace case, where guarded command guidance is visible; ValidateSkills
-// renders the git-less and other root-count states besides these defaults.
-func (c *Catalog) skillRenderVars(held map[string]bool, coordinator bool) map[string]any {
-	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
-	spawn.RefreshSizingHintVars(vars)
-	for name, ok := range held {
-		if ok && name != toolcontract.ReachCommandMutation && toolschema.ValidToolName(name) {
-			vars["profile_has_"+name] = true
+	var visible []string
+	loaded := map[string]bool{}
+	for name := range c.registered {
+		if c.ProfileHolds(profileID, name) {
+			visible = append(visible, name)
+			loaded[name] = true
 		}
 	}
-	commandMutates := held["command"] && held[toolcontract.ReachCommandMutation]
-	vars["profile_has_write_tools"] = held[writeToolMarker] || commandMutates
-	vars["profile_command_mutation"] = commandMutates
-	vars["profile_has_jq_edit"] = commandMutates
-	vars["profile_has_terminal_capture"] = commandMutates || held["terminal_snapshot"] || held["terminal_read"]
-	vars["profile_has_page_controls"] = held["page_open"] || held["page_act"] || held["page_snapshot"] || held["page_close"]
-	vars["profile_has_managed_secrets"] = held["secret_generate"] && held["secret_list"] && held["secret_revoke"]
-	vars["command_on_floor"] = held["command"]
-	vars["is_coordinator"] = coordinator
-	vars["has_git"] = true
-	vars["root_count"] = 1
-	vars["mints"] = c.mintFacts(held)
-	vars["receipt_kind"] = c.evidence.ReceiptKinds()
-	return vars
+	for name := range prof.Tools {
+		name = strings.TrimSpace(name)
+		if name != "" && !loaded[name] && plainToolName(name) && prof.ToolAllowed(name) {
+			visible = append(visible, name)
+			loaded[name] = true
+		}
+	}
+	sort.Strings(visible)
+	if prof.CommandEffects == 0 && prof.ToolAllowed("command") {
+		prof.CommandEffects = toolcontract.AllCommandEffects()
+	}
+	return prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prof.ID,
+		Profiles:  []sandbox.ToolProfile{prof},
+		Visible:   visible,
+		Loaded:    loaded,
+		Schemas:   c.schemas,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	})
 }
 
-// writeToolMarker mirrors prompts' write-tool surface: the one tool whose
-// presence marks a profile as able to write (prompts.writeToolDisplayOrder).
-const writeToolMarker = "restore_version"
+func offeredReader(offered map[string]bool) (prompts.Reader, error) {
+	profileID := "worker"
+	if offered["task"] {
+		profileID = prompts.CoordinatorProfileID
+	}
+	tools := make(map[string]bool, len(offered))
+	var visible []string
+	for name, ok := range offered {
+		if !ok || toolcontract.IsReachMark(name) || !plainToolName(name) {
+			continue
+		}
+		tools[name] = true
+		visible = append(visible, name)
+	}
+	sort.Strings(visible)
+	var effects toolcontract.CommandEffects
+	if tools["command"] {
+		classes := []toolcontract.CommandEffectClass{toolcontract.CommandReadOnly}
+		if offered[toolcontract.ReachCommandMutation] {
+			classes = append(classes, toolcontract.CommandMutation)
+		}
+		if offered[toolcontract.ReachCommandExternalExec] {
+			classes = append(classes, toolcontract.CommandExternalExec)
+		}
+		if offered[toolcontract.ReachCommandNetworkEgress] {
+			classes = append(classes, toolcontract.CommandNetworkEgress)
+		}
+		effects, _ = toolcontract.NewCommandEffects(classes...)
+	}
+	return prompts.NewReader(prompts.ReaderInput{
+		ProfileID: profileID,
+		Profiles: []sandbox.ToolProfile{{
+			ID:             profileID,
+			Tools:          tools,
+			CommandEffects: effects,
+		}},
+		Visible:   visible,
+		Loaded:    tools,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	})
+}
+
+type skillRenderMemo struct {
+	out string
+	err error
+}
+
+var skillRenderCache = scopedstore.New[skillRenderMemo](2048)
+
+func varsDigestKey(vars map[string]any) string {
+	h := sha256.New()
+	_, _ = fmt.Fprintf(h, "%v", vars)
+	return string(h.Sum(nil))
+}
+
+func renderSkillTextCached(varsKey, text string, vars map[string]any) (string, error) {
+	key := varsKey + "\x00" + text
+	if hit, ok := skillRenderCache.Load(key); ok {
+		return hit.out, hit.err
+	}
+	out, err := renderSkillText(text, vars)
+	skillRenderCache.Store(key, skillRenderMemo{out: out, err: err})
+	return out, err
+}
 
 // renderSkillText renders one skill text through its template.
 func renderSkillText(text string, vars map[string]any) (string, error) {
@@ -273,6 +300,7 @@ func skillVocabularyProblems(c *Catalog, skill skills.Skill) []string {
 func skillReachProblems(
 	c *Catalog, agent AgentSurface, skill skills.Skill,
 	held map[string]bool, vars map[string]any,
+	render func(body string, vars map[string]any) (string, error),
 ) []string {
 	var problems []string
 	texts := []struct{ rel, body string }{{"", skill.Body}}
@@ -287,7 +315,7 @@ func skillReachProblems(
 		texts = append(texts, struct{ rel, body string }{rel, string(body)})
 	}
 	for _, text := range texts {
-		rendered, err := renderSkillText(text.body, vars)
+		rendered, err := render(text.body, vars)
 		if err != nil {
 			problems = append(problems, fmt.Sprintf(
 				"skill %q: %s does not render for agent %q, so reading it fails at activation: %v",
@@ -318,18 +346,12 @@ func relLabel(rel string) string {
 	return "resource " + rel
 }
 
-// skillRenderVariant is one alternative environment state validation renders
-// besides the default: the label problem reports carry and the variable
-// overrides that produce the state.
+// skillRenderVariant is one alternative environment state validation renders.
 type skillRenderVariant struct {
 	label string
 	vars  map[string]any
 }
 
-// skillRenderVarVariants forks the render variables into the environment
-// states the default never varies — a git-less workspace and workspace root
-// counts other than one — so guard branches under those facts are exercised
-// by validation too, not only by the contract matrix.
 func skillRenderVarVariants(vars map[string]any) []skillRenderVariant {
 	fork := func(key string, value any) map[string]any {
 		variant := make(map[string]any, len(vars)+1)
@@ -347,15 +369,7 @@ func skillRenderVarVariants(vars map[string]any) []skillRenderVariant {
 }
 
 // ValidateSkills checks every tool and command program a stock skill names is
-// reachable by every profile the skill is offered to; instructions naming
-// absent tools reject on contact. Each skill body and resource renders through
-// its template with the selecting agent's facts first, so guarded branches
-// resolve against what that reader actually holds — and again under the
-// environment states the default never varies (skillRenderVarVariants), so a
-// guard that hides an unreachable name on the default render is still caught.
-// It also checks the template vocabulary itself: profile_has_ facts must name
-// registered tools, and any_of_tools members must be registered tools. Skills
-// the user supplied are the author's vocabulary and are left alone.
+// reachable by every profile the skill is offered to.
 func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) error {
 	byName := make(map[string]skills.Skill, len(loaded))
 	var problems []string
@@ -366,10 +380,26 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 		}
 		problems = append(problems, skillVocabularyProblems(c, s)...)
 	}
+	offeredByProfile := map[string]bool{}
 	for _, agent := range agents {
-		held := profileReachable(c, agent.ProfileID)
-		vars := c.skillRenderVars(held, agent.ProfileID == "coordinator")
+		reader, err := c.profileReader(agent.ProfileID)
+		if err != nil {
+			problems = append(problems, err.Error())
+			continue
+		}
+		held := reader.Held()
+		vars := prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
+		defaultKey := varsDigestKey(vars)
 		variants := skillRenderVarVariants(vars)
+		variantKeys := make([]string, len(variants))
+		for i, v := range variants {
+			variantKeys[i] = varsDigestKey(v.vars)
+		}
+		memoRender := func(varsKey string) func(string, map[string]any) (string, error) {
+			return func(body string, renderVars map[string]any) (string, error) {
+				return renderSkillTextCached(varsKey, body, renderVars)
+			}
+		}
 		seen := map[string]bool{}
 		report := func(problem, label string) {
 			if seen[problem] {
@@ -395,14 +425,20 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 			// whose tools cover its rendered body (SkillToolsOffered), so
 			// validation checks the same eligibility set rather than demanding
 			// every skill render clean for every profile.
-			if !SkillToolsOffered(skill, held) {
+			offerKey := agent.ProfileID + "\x00" + skill.Name + "\x00" + skill.Body
+			isOffered, cachedOffer := offeredByProfile[offerKey]
+			if !cachedOffer {
+				isOffered = SkillToolsOffered(skill, held)
+				offeredByProfile[offerKey] = isOffered
+			}
+			if !isOffered {
 				continue
 			}
-			for _, problem := range skillReachProblems(c, agent, skill, held, vars) {
+			for _, problem := range skillReachProblems(c, agent, skill, held, vars, memoRender(defaultKey)) {
 				report(problem, "")
 			}
-			for _, variant := range variants {
-				for _, problem := range skillReachProblems(c, agent, skill, held, variant.vars) {
+			for i, variant := range variants {
+				for _, problem := range skillReachProblems(c, agent, skill, held, variant.vars, memoRender(variantKeys[i])) {
 					report(problem, variant.label)
 				}
 			}
@@ -511,14 +547,8 @@ var fallbackStockCatalog = sync.OnceValue(func() *Catalog {
 	return c
 })
 
-// SkillToolsOffered reports whether offered covers every tool, retired
-// operation, and command form the skill's rendered body unconditionally names,
-// and satisfies sk's disjunctive requirement: when
-// `metadata.paintedwolf.any_of_tools` names tools, at least one member must be
-// offered or reachable as a command program. The body renders through
-// pongoplain with the offered-tool template vars, so guarded branches for
-// tools the reader lacks do not count against reachability. User-provided
-// skills are not restricted.
+// SkillToolsOffered reports whether offered covers every tool, operation, and
+// command form sk's rendered body requires, and satisfies any_of_tools.
 func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 	if sk.UserProvided {
 		return true
@@ -528,8 +558,6 @@ func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 		return true
 	}
 	anyOf := sk.AnyOfTools()
-	// any_of members are individually optional in the body scan; the
-	// disjunction below decides usability.
 	for _, name := range UnreachableNames(c, renderSkillBody(sk, offered), offered) {
 		if !slices.Contains(anyOf, name) {
 			return false
@@ -546,11 +574,35 @@ func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 	return false
 }
 
-// renderSkillBody renders sk.Body with the offered-tool template vars so
-// profile-guarded branches resolve against the reader's actual tool set.
-// Compilation or execution failures fall back to the raw body.
+var offeredSkillVarsCache = scopedstore.New[map[string]any](64)
+
+func offeredSkillVars(offered map[string]bool) (string, map[string]any, error) {
+	keys := make([]string, 0, len(offered))
+	for name, ok := range offered {
+		if ok {
+			keys = append(keys, name)
+		}
+	}
+	sort.Strings(keys)
+	cacheKey := "offered:" + strings.Join(keys, "\x00")
+	if vars, ok := offeredSkillVarsCache.Load(cacheKey); ok {
+		return cacheKey, vars, nil
+	}
+	reader, err := offeredReader(offered)
+	if err != nil {
+		return "", nil, err
+	}
+	vars := prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
+	offeredSkillVarsCache.Store(cacheKey, vars)
+	return cacheKey, vars, nil
+}
+
 func renderSkillBody(sk skills.Skill, offered map[string]bool) string {
-	rendered, err := renderSkillText(sk.Body, StockCatalog().skillRenderVars(offered, offered["task"]))
+	cacheKey, vars, err := offeredSkillVars(offered)
+	if err != nil {
+		return sk.Body
+	}
+	rendered, err := renderSkillTextCached(cacheKey, sk.Body, vars)
 	if err != nil {
 		return sk.Body
 	}

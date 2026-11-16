@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -176,6 +177,50 @@ func (c Catalog) Surface(id string) (Surface, error) {
 	row.Floor = append([]string(nil), row.Floor...)
 	row.Loadable = append([]string(nil), row.Loadable...)
 	return row, nil
+}
+
+// CommandEffects resolves the command effects declared for surfaceID.
+func (c Catalog) CommandEffects(surfaceID string) (toolcontract.CommandEffects, error) {
+	surf, err := c.Surface(surfaceID)
+	if err != nil {
+		return 0, err
+	}
+	if len(surf.CommandEffects) == 0 {
+		return toolcontract.AllCommandEffects(), nil
+	}
+	return toolcontract.NewCommandEffects(surf.CommandEffects...)
+}
+
+// CommandEffects resolves the command effects declared for surfaceID in the stock catalog.
+func CommandEffects(surfaceID string) (toolcontract.CommandEffects, error) {
+	cat, err := Load()
+	if err != nil {
+		return 0, err
+	}
+	return cat.CommandEffects(surfaceID)
+}
+
+// RestrictCommandEffects narrows profileEffects by the surface's declared
+// command effects when surfaceID is set.
+func RestrictCommandEffects(profileEffects toolcontract.CommandEffects, surfaceID string) (toolcontract.CommandEffects, error) {
+	if strings.TrimSpace(surfaceID) == "" {
+		return profileEffects, nil
+	}
+	restriction, err := CommandEffects(surfaceID)
+	if err != nil {
+		return 0, err
+	}
+	return profileEffects & restriction, nil
+}
+
+// AdmittedCommandEffects resolves the command effects admitted for profileID
+// and surfaceID across profiles.
+func AdmittedCommandEffects(profiles []sandbox.ToolProfile, profileID, surfaceID string) (toolcontract.CommandEffects, error) {
+	allowed, err := sandbox.ProfileCommandEffects(profiles, profileID)
+	if err != nil {
+		return 0, err
+	}
+	return RestrictCommandEffects(allowed, surfaceID)
 }
 
 // SurfaceIDs returns the sorted coordinator surface ids.
