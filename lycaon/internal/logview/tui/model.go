@@ -214,7 +214,6 @@ func (m *Model) nav() modelNav         { return modelNav{m} }
 func (m *Model) render() modelRender   { return modelRender{m} }
 func (m *Model) live() modelLive       { return modelLive{m} }
 func (m *Model) pipe() modelPipe       { return modelPipe{m} }
-func (m *Model) livePoll()             { m.live().poll() }
 func (m *Model) visibleLogs() []logview.LogRecord {
 	return m.filter().visibleLogs()
 }

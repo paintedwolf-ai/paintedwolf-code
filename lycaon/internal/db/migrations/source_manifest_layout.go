@@ -154,10 +154,6 @@ func layoutCutAfter(path string, n int) bool {
 	return h.Sum64()&layoutChunkCutMask == 0
 }
 
-func writeLayoutChunk(ctx context.Context, tx *sql.Tx, insert *sql.Stmt, entries []layoutEntry) (layoutChunk, error) {
-	return insertLayoutChunk(ctx, tx, insert, buildLayoutChunk(entries), entries)
-}
-
 func buildLayoutChunk(entries []layoutEntry) layoutChunk {
 	hash := sha256.New()
 	_, _ = hash.Write([]byte("painted-wolf-source-manifest-chunk-v3\x00"))
