@@ -27,8 +27,171 @@
   border-top-color: color-mix(in srgb, var(--den-border) 70%, transparent);
 }
 
-.progress-strip--snapshot .progress-strip__columns {
-  max-height: none;
+/* A snapshot header is as tall as a resting update, so opening one moves nothing above it. */
+.progress-strip--snapshot .progress-strip__header,
+.progress-strip__summary {
+  box-sizing: border-box;
+  min-height: var(--den-transcript-link-row-h);
+}
+
+/* An update rests as one line and opens into the plan's box. */
+.progress-strip--update {
+  transition:
+    background-color var(--den-duration-drawer) var(--den-ease),
+    border-color var(--den-duration-drawer) var(--den-ease);
+}
+
+.progress-strip--update[data-expanded="false"],
+.progress-strip--update[data-closing] {
+  border-color: transparent;
+  background: transparent;
+}
+
+/* The resting line's hover chip reaches past the card edge. */
+.progress-strip--update[data-expanded="false"] {
+  overflow: visible;
+}
+
+.progress-strip--update[data-closing] > .progress-strip__body {
+  border-top-color: transparent;
+}
+
+.progress-strip__summary {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 0 0.75rem;
+  border-radius: var(--den-radius);
+  transition:
+    background-color var(--den-duration) var(--den-ease),
+    margin-inline-start var(--den-duration-drawer) var(--den-ease),
+    padding-inline-start var(--den-duration-drawer) var(--den-ease),
+    padding-inline-end var(--den-duration-drawer) var(--den-ease);
+}
+
+/* At rest the line hugs its text, and the text sits on the card's edge. */
+.progress-strip--update[data-expanded="false"] > .progress-strip__summary,
+.progress-strip--update[data-closing] > .progress-strip__summary {
+  width: fit-content;
+  max-width: calc(100% + var(--den-transcript-link-inset-x) + 1px);
+  margin-inline-start: calc(-1 * var(--den-transcript-link-inset-x) - 1px);
+  padding-inline: var(--den-transcript-link-inset-x) calc(var(--den-transcript-link-inset-x) + 2px);
+}
+
+.progress-strip--update[data-expanded="false"] > .progress-strip__summary:hover {
+  background: var(--den-tint-2);
+  color: var(--den-text);
+}
+
+.progress-strip--update[data-expanded="false"] > .progress-strip__summary:active {
+  background: var(--den-tint-3);
+}
+
+.progress-strip__summary:has(> .progress-strip__opener:focus-visible) {
+  outline: 2px solid var(--den-accent-signal);
+  outline-offset: -2px;
+}
+
+.progress-strip__opener {
+  flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline: none;
+}
+
+/* The opener covers its whole row. */
+.progress-strip__opener::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
+.progress-strip__rest {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-den-label);
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.progress-strip__rest-sep {
+  margin-inline: 0.45em;
+}
+
+.progress-strip__rest .progress-strip__glyph {
+  display: inline-block;
+  margin-inline-end: 0.4em;
+  line-height: inherit;
+}
+
+.progress-strip__rest-step[data-state="done"] .progress-strip__glyph {
+  color: var(--den-status-positive-text);
+}
+
+.progress-strip__rest-step[data-state="na"] .markdown-body {
+  text-decoration: line-through;
+}
+
+.progress-strip__rest .markdown-body,
+.progress-strip__rest .markdown-body p {
+  display: inline;
+  margin: 0;
+}
+
+.progress-strip__summary > .progress-strip__count {
+  margin-inline-start: auto;
+}
+
+/* One set of header words per state. */
+.progress-strip--update[data-expanded="false"] > .progress-strip__summary :is(.progress-strip__title, .progress-strip__count),
+.progress-strip--update[data-closing] > .progress-strip__summary :is(.progress-strip__title, .progress-strip__count),
+.progress-strip--update[data-expanded="true"]:not([data-closing]) > .progress-strip__summary > .progress-strip__rest {
+  display: none;
+}
+
+/* The incoming words fade in while the box opens or closes. */
+.progress-strip--update[data-animating]:not([data-closing]) > .progress-strip__summary :is(.progress-strip__title, .progress-strip__count),
+.progress-strip--update[data-closing] > .progress-strip__summary > .progress-strip__rest {
+  animation: den-enter-reveal var(--den-duration-drawer) var(--den-ease) both;
+}
+
+.progress-strip--update[data-expanded="true"]:not([data-closing]) > .progress-strip__summary > .den-disclosure-chevron {
+  transform: rotate(45deg) translate(-1px, -1px);
+}
+
+/* An arriving update lands its ticks after the row fades in. */
+.progress-strip--update.den-enter-fade .progress-strip__rest .progress-strip__glyph {
+  animation: progress-strip-tick 0.42s cubic-bezier(0.3, 1.5, 0.5, 1) 0.12s both;
+}
+
+@keyframes progress-strip-tick {
+  from {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-strip--update,
+  .progress-strip__summary {
+    transition: none;
+  }
+
+  .progress-strip--update > .progress-strip__summary *,
+  .progress-strip--update > .progress-strip__summary > .progress-strip__rest {
+    animation: none;
+  }
 }
 
 .progress-strip__header {

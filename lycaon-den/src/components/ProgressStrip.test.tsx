@@ -40,21 +40,6 @@ describe("ProgressStrip", () => {
     ).toHaveLength(1);
   });
 
-  it("does not attach scrollbars to unbounded transcript snapshots", () => {
-    const { container } = render(() => (
-      <ProgressStrip
-        created
-        steps={[{ state: "pending", label: "Build the lexer" }]}
-      />
-    ));
-
-    expect(container.querySelector(".progress-strip__body")).toBeTruthy();
-    expect(container.querySelector(".progress-strip__list")).toBeTruthy();
-    expect(
-      container.querySelectorAll("[data-den-scrollport]"),
-    ).toHaveLength(0);
-  });
-
   it("uses one scrollbar host for the embedded checklist", () => {
     const { container } = render(() => (
       <ProgressStrip
@@ -78,59 +63,26 @@ describe("ProgressStrip", () => {
     ).toHaveLength(1);
   });
 
-  it("does not start the shared clock for a read-only snapshot", () => {
-    const interval = vi.spyOn(globalThis, "setInterval");
-    const { unmount } = render(() => (
-      <ProgressStrip
-        completed
-        steps={[{ state: "done", label: "Build the lexer" }]}
-      />
-    ));
-
-    expect(interval).not.toHaveBeenCalled();
-    unmount();
-    interval.mockRestore();
-  });
-
-  it("subscribes to the shared clock only while progress is live", async () => {
+  it("subscribes to the shared clock only while the turn clock runs", async () => {
     const interval = vi.spyOn(globalThis, "setInterval");
     const clear = vi.spyOn(globalThis, "clearInterval");
-    const [completed, setCompleted] = createSignal(false);
+    const [running, setRunning] = createSignal(true);
     const { unmount } = render(() => (
       <ProgressStrip
-        completed={completed()}
-        running={!completed()}
+        running={running()}
         runningSince="2026-01-01T00:00:00Z"
-        steps={[{ state: completed() ? "done" : "pending", label: "Build" }]}
+        steps={[{ state: "pending", label: "Build" }]}
       />
     ));
 
     expect(interval).toHaveBeenCalledTimes(1);
-    setCompleted(true);
+    setRunning(false);
     await Promise.resolve();
     expect(clear).toHaveBeenCalledTimes(1);
 
     unmount();
     interval.mockRestore();
     clear.mockRestore();
-  });
-
-  it("replaces the scrolling list when a live strip becomes read-only", async () => {
-    const [completed, setCompleted] = createSignal(false);
-    const { container } = render(() => (
-      <ProgressStrip
-        completed={completed()}
-        steps={[{ state: completed() ? "done" : "pending", label: "Build" }]}
-      />
-    ));
-    const liveList = container.querySelector(".progress-strip__list");
-    expect(liveList?.closest("[data-den-scrollport]")).toBeTruthy();
-
-    setCompleted(true);
-    await Promise.resolve();
-    const snapshotList = container.querySelector(".progress-strip__list");
-    expect(snapshotList).not.toBe(liveList);
-    expect(snapshotList?.closest("[data-den-scrollport]")).toBeNull();
   });
 
   it("is hidden when there is no phase chip and no rows", () => {
@@ -192,67 +144,6 @@ describe("ProgressStrip", () => {
       />
     ));
     expect(screen.getByTestId("progress-strip-count").textContent).toBe("2");
-  });
-
-  it("renders a read-only completed snapshot with no toggle, phase, or worklog", () => {
-    const { container } = render(() => (
-      <ProgressStrip
-        completed
-        batchPhase="integrate"
-        onOpenWorklog={() => undefined}
-        steps={[
-          { state: "done", label: "Build the lexer" },
-          { state: "done", label: "Sketch the grammar" },
-        ]}
-      />
-    ));
-    expect(screen.getByTestId("progress-strip-completed")).toBeTruthy();
-    expect(screen.queryByTestId("progress-strip")).toBeNull();
-    expect(screen.queryByTestId("progress-strip-toggle")).toBeNull();
-    expect(screen.queryByTestId("progress-batch-phase")).toBeNull();
-    expect(screen.queryByTestId("worklog-open")).toBeNull();
-    expect(screen.getAllByTestId("progress-strip-item")).toHaveLength(2);
-    expect(screen.getByText("Build the lexer")).toBeTruthy();
-    const list = container.querySelector(
-      ".progress-strip--snapshot .progress-strip__list",
-    );
-    expect(list).toBeTruthy();
-  });
-
-  it("retains a read-only snapshot through a rebuild that carries no steps", () => {
-    const [items, setItems] = createSignal<ProgressStep[]>([
-      { state: "pending", label: "Add Dockerfile" },
-      { state: "pending", label: "Build the container" },
-      { state: "pending", label: "Snapshot the UI" },
-    ]);
-    render(() => <ProgressStrip created steps={items()} />);
-    expect(screen.getAllByTestId("progress-strip-item")).toHaveLength(3);
-
-    // Keep the snapshot through empty rebuild frames.
-    setItems([]);
-    expect(screen.getByTestId("progress-strip-created")).toBeTruthy();
-    expect(screen.getAllByTestId("progress-strip-item")).toHaveLength(3);
-    expect(screen.getByTestId("progress-strip-count").textContent).toBe("3");
-
-    setItems([
-      { state: "pending", label: "Add Dockerfile" },
-      { state: "pending", label: "Build the container" },
-      { state: "pending", label: "Snapshot the UI" },
-    ]);
-    expect(screen.getAllByTestId("progress-strip-item")).toHaveLength(3);
-  });
-
-  it("replaces read-only rows in one frame", () => {
-    const [items, setItems] = createSignal<ProgressStep[]>([
-      { state: "done", label: "Old step" },
-    ]);
-    const { container } = render(() => <ProgressStrip completed steps={items()} />);
-
-    // Snapshot replacements skip the exit transition.
-    setItems([{ state: "done", label: "New step" }]);
-    expect(screen.getByText("New step")).toBeTruthy();
-    expect(screen.queryByText("Old step")).toBeNull();
-    expect(container.querySelector(".progress-strip__item--leaving")).toBeNull();
   });
 
   it("pins the Worklog opener to the left of the progress header", () => {
@@ -457,62 +348,6 @@ describe("ProgressStrip", () => {
       />
     ));
     expect(screen.getByTestId("progress-strip-count").textContent).toBe("1");
-  });
-
-  it("renders mid-run plan delta rows as a read-only strip", () => {
-    render(() => (
-      <ProgressStrip
-        deltaChanges={[
-          { kind: "done", label: "Ship auth", state: "done" },
-          { kind: "created", label: "Verify build", state: "pending" },
-        ]}
-      />
-    ));
-    expect(screen.getByTestId("progress-strip-delta")).toBeTruthy();
-    expect(screen.getAllByTestId("progress-strip-item")).toHaveLength(2);
-  });
-
-  it("renders a large update as one aggregate row", () => {
-    render(() => (
-      <ProgressStrip
-        summary={{
-          change_count: 16,
-          total_steps: 48,
-          pending: 32,
-          done: 16,
-          na: 0,
-        }}
-      />
-    ));
-    expect(screen.getByTestId("progress-strip-delta")).toBeTruthy();
-    expect(screen.getByTestId("progress-strip-count").textContent).toBe("16");
-    expect(screen.getAllByTestId("progress-strip-item")).toHaveLength(1);
-  });
-
-  it("renders a read-only created checklist snapshot without scrolling on mount", async () => {
-    vi.useFakeTimers();
-    const items: ProgressStep[] = Array.from({ length: 8 }, (_, i) => ({
-      state: i < 3 ? "done" : "pending",
-      label: `Step ${i + 1}`,
-    }));
-    const { container } = render(() => (
-      <ProgressStrip steps={items} created />
-    ));
-    const scrollEl = container.querySelector(
-      ".progress-strip__list",
-    ) as HTMLUListElement;
-    Object.defineProperty(scrollEl, "scrollHeight", {
-      configurable: true,
-      value: 480,
-    });
-    Object.defineProperty(scrollEl, "clientHeight", {
-      configurable: true,
-      value: 80,
-    });
-    scrollEl.scrollTop = 400;
-    await vi.advanceTimersToNextTimerAsync();
-    expect(scrollEl.scrollTop).toBe(400);
-    vi.useRealTimers();
   });
 
   it("renders every embedded checklist row in one scrollable list", () => {

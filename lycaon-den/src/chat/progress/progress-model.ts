@@ -61,6 +61,48 @@ export function progressChangesToSteps(
   }));
 }
 
+/** A progress row in the transcript: the plan as authored, a later change, or the finished plan. */
+export type ProgressSnapshotKind = "created" | "updated" | "completed";
+
+export type ProgressSnapshotSource = {
+  kind: ProgressSnapshotKind;
+  steps?: readonly ProgressStep[];
+  changes?: readonly ProgressChange[];
+  summary?: ProgressUpdateSummary;
+};
+
+export const PROGRESS_SNAPSHOT_TITLES: Record<ProgressSnapshotKind, string> = {
+  created: "Progress",
+  updated: "Updated",
+  completed: "Done",
+};
+
+/** The rows a snapshot lists; an aggregate update is one row. */
+export function progressSnapshotSteps(source: ProgressSnapshotSource): ProgressStep[] {
+  if (source.summary) {
+    return [{
+      label: progressUpdateSummaryLabel(source.summary, source.kind === "created"),
+      state: source.summary.pending > 0 ? "pending" : "done",
+    }];
+  }
+  if (source.kind === "updated") return progressChangesToSteps(source.changes ?? []);
+  return [...(source.steps ?? [])];
+}
+
+/** The steps a snapshot covers, which an aggregate update states without listing them. */
+export function progressSnapshotCount(source: ProgressSnapshotSource, listed: number): number {
+  if (!source.summary) return listed;
+  return source.kind === "created" ? source.summary.total_steps : source.summary.change_count;
+}
+
+/** The one line a finished plan rests as. */
+export function progressCompletedLabel(steps: readonly ProgressStep[]): string {
+  const done = steps.filter((step) => step.state === "done").length;
+  const noun = steps.length === 1 ? "step" : "steps";
+  if (done !== steps.length) return `${done} of ${steps.length} ${noun} done`;
+  return steps.length === 1 ? "1 step done" : `All ${steps.length} steps done`;
+}
+
 function progressChangeEntries(
   message: Message,
   changes: readonly ProgressChange[],
