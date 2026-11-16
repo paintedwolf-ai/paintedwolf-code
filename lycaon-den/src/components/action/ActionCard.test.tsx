@@ -5,6 +5,7 @@ import type { ActionDescriptor } from "../../api/types.ts";
 import { ACTION_FACT_LABELS, formatActionRow, formatFact } from "../../chat/action/action-format.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import type { CardAction } from "../../chat/action/action-merge.ts";
+import { NetworkActionContext } from "../../chat/network-action-context.ts";
 import { ActionCard } from "./ActionCard.tsx";
 
 function part(): ToolPartView {
@@ -69,21 +70,28 @@ describe("ActionCard", () => {
     for (const text of visible) expect(allowed).toContain(text);
   });
 
-  it("keeps the host's network and redaction notices, from whichever folded member has them", () => {
-    const member: ToolPartView = {
-      ...part(), id: "member", toolCallId: "member",
+  it("offers to block each allowed host on the network fact, and nothing more", () => {
+    const reached = (host: string, decision: "allow" | "deny"): ToolPartView => ({
+      ...part(), id: host, toolCallId: host,
       externalAccess: { modes: ["mediated_http"], visibility_summary: "observed",
-        endpoints: [{ host: "example.test", port: 443, transport: "http_connect", visibility: "observed", decision: "allow", attempt_count: 1 }] },
+        endpoints: [{ host, port: 443, transport: "http_connect", visibility: "observed", decision, attempt_count: 1 }] },
       redaction: { spans: [{ field: "tool_result.content", start: 0, length: 6, kind: "secret" }] },
-    };
-    const { container } = render(() => <ActionCard part={{ ...part(), foldMembers: [member] }} action={descriptor} layout="chat" />);
+    });
+    const blocked = new Set<string>();
+    const [, setTick] = createSignal(0);
+    const actions = { isBlocked: (host: string) => blocked.has(host), blockHost: async (host: string) => { blocked.add(host); setTick((n) => n + 1); } };
+    const network: CardAction = { ...descriptor, facts: [{ kind: "network", hosts: ["a.test", "b.test"], egress: "proxy_only" }], row: ["network"] };
+    const { container } = render(() => (
+      <NetworkActionContext.Provider value={actions}>
+        <ActionCard part={{ ...reached("a.test", "allow"), foldMembers: [reached("b.test", "deny")] }} action={network} layout="chat" />
+      </NetworkActionContext.Provider>
+    ));
     open(container);
     const body = container.querySelector('[data-testid="action-card-body"]')!;
-    expect(body.querySelector('[data-testid="network-chicklet"]')?.textContent).toContain("example.test");
-    expect(body.querySelector('[data-testid="action-redaction"]')?.textContent).toMatch(/secret/);
-    const regions = [...body.children].map((child) => child.getAttribute("data-testid"));
-    expect(regions.indexOf("network-chicklet")).toBeGreaterThan(regions.indexOf("action-facts"));
-    expect(regions.indexOf("action-redaction")).toBe(regions.indexOf("action-links") - 1);
+    const buttons = [...body.querySelectorAll('[data-testid="action-block-host"]')];
+    expect(buttons.map((button) => button.textContent)).toEqual(["Block a.test"]);
+    expect(buttons[0]!.closest("[data-kind]")?.getAttribute("data-kind")).toBe("network");
+    expect([...body.children].map((child) => child.getAttribute("data-testid"))).toEqual(["action-ran", "action-facts", "action-links"]);
   });
 
   it("shows a live process's own state and Stop in place of its recorded process fact", () => {
@@ -101,27 +109,13 @@ describe("ActionCard", () => {
     expect(recorded.container.querySelector('[data-testid="action-facts"]')?.textContent).toContain("5173");
   });
 
-  it("draws every folded member's capture, in order", () => {
+  it("draws only a fold's newest capture", () => {
     const capture = (id: string): ToolPartView => ({ ...part(), id, toolCallId: id, tool: "page_snapshot",
       visual: { id, mime: "image/png", source: "capture", caption: `Capture ${id}`, bytes: "iVBORw0KGgo=" } });
-    const { container } = render(() => <ActionCard part={{ ...capture("one"), foldMembers: [part(), capture("two")] }} action={descriptor} layout="chat" sessionId="s" />);
+    const { container } = render(() => <ActionCard part={{ ...capture("one"), foldMembers: [capture("two"), part()] }} action={descriptor} layout="chat" sessionId="s" />);
     open(container);
     const shown = [...container.querySelectorAll('[data-testid="action-card-body"] [data-testid="transcript-visual-artifact"]')];
-    expect(shown.map((node) => node.getAttribute("data-artifact-id"))).toEqual(["one", "two"]);
-  });
-
-  it("links a command's host decisions between its records and its evidence", () => {
-    const decision = { kind: "turn_load", key: "tl", row: { load: { elapsed_ms: 12, tools: [{ tool: "fetch_url" }] } } } as never;
-    const command: ToolPartView = { ...part(), tool: "command", commandActivity: {
-      fact: { id: "f", group: "g", label: "Run command", subject: "curl", outcome: "", state: "completed", execution_ids: [], spans: [] },
-      calls: [], members: [], receiptScopes: [], decisions: [decision],
-    } };
-    const evidence = <button type="button" data-testid="supplied-evidence">supplied evidence</button>;
-    const { container } = render(() => <ActionCard part={command} action={descriptor} layout="chat" slots={{ evidence }} />);
-    open(container);
-    const links = [...container.querySelectorAll('[data-testid="action-links"] [data-testid]')].map((node) => node.getAttribute("data-testid"));
-    expect(links.indexOf("action-link-decisions")).toBe(links.indexOf("supplied-evidence") - 1);
-    expect(links.indexOf("action-link-decisions")).toBeGreaterThan(links.indexOf("action-link-output"));
+    expect(shown.map((node) => node.getAttribute("data-artifact-id"))).toEqual(["two"]);
   });
 
   it("opens a file destination through the project's paths", () => {
@@ -142,11 +136,11 @@ describe("ActionCard", () => {
     expect(container.querySelector('[data-testid="action-opener"]')).toBe(opener);
   });
 
-  it("offers the call's output to chat and its related calls in Search, before the opener", () => {
+  it("ends its links with the opener and attaches the output to chat when dragged", () => {
     const { container } = render(() => <ActionCard part={part()} action={descriptor} layout="chat" projectId="p" sessionId="s" />);
     open(container);
     const links = [...container.querySelectorAll('[data-testid="action-links"] [data-testid]')].map((node) => node.getAttribute("data-testid"));
-    expect(links.slice(-3)).toEqual(["tool-raw-add-to-chat", "tool-related-search-link", "action-opener"]);
+    expect(links).toEqual(["action-link-input", "action-link-output", "action-opener"]);
     expect(container.querySelector('[data-testid="action-links"]')?.getAttribute("draggable")).toBe("true");
   });
 

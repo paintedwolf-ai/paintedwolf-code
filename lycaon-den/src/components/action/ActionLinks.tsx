@@ -10,12 +10,8 @@ import { ToolContentLink } from "../tool/ToolContentLink.tsx";
 import type { ResolveProjectRoot } from "../../api/project-path.ts";
 import { SourcePathLink } from "../source/SourcePathLink.tsx";
 import { TOOL_PATH_ENTRY_KINDS } from "../../chat/tool/tool-presentation.generated.ts";
-import { turnLoadRowSummary } from "../../chat/turnload/turn-load-rows.ts";
-import { addToChat } from "../../chat/composer/add-to-chat.ts";
 import { chatRefForToolRaw } from "../../chat/composer/search-add-to-chat.ts";
 import { startChatAttachmentDrag } from "../../chat/composer/chat-attachment-drag.ts";
-import { useChatDestinationScope } from "../../chat/composer/chat-destination-scope.tsx";
-import { exploreRelatedToolCallsQuery } from "../../search/search-query-model.ts";
 
 const LINK_LABELS: Readonly<Record<ActionLink["kind"], string>> = { input: "Input", output: "Output", receipt: "Receipt" };
 
@@ -32,7 +28,7 @@ type Props = {
   evidence?: JSX.Element;
 };
 
-/** Input, Output, Receipt, host decisions and Evidence, the call's chat and search actions, then the opener. */
+/** Input, Output, Receipt and Evidence, then the opener; dragging the links attaches the output to chat. */
 export function ActionLinks(props: Props) {
   const content = useToolContent();
   // A Find match inside this call's input or output opens its document at the match.
@@ -40,21 +36,12 @@ export function ActionLinks(props: Props) {
     if (content?.revealedCallId?.() !== props.part.toolCallId) return undefined;
     return kind === "input" ? content.argsOffset() : kind === "output" ? content.outputOffset() : undefined;
   };
-  const decisionsText = createMemo(() => {
-    const decisions = props.part.commandActivity?.decisions ?? [];
-    return decisions.length ? decisions.map((decision) => { const row = turnLoadRowSummary(decision.row); return `${row.title} · ${row.operation} · ${row.state}`; }).join("\n") : undefined;
-  });
   const opener = createMemo(() => props.action.opener, undefined, { equals: sameShape });
-  const chatDestination = useChatDestinationScope();
   // The call's output as a chat attachment, citing its session and call.
   const outputRef = createMemo(() => chatRefForToolRaw({
     projectId: props.projectId?.trim() ?? "", sessionId: props.sessionId?.trim() ?? "",
     toolCallId: props.part.toolCallId?.trim() ?? "", name: props.part.tool.trim() || props.part.toolCallId,
   }));
-  const relatedQuery = createMemo(() => {
-    const sessionId = props.sessionId?.trim(), projectId = props.projectId?.trim(), toolCallId = props.part.toolCallId?.trim();
-    return sessionId && projectId && toolCallId ? exploreRelatedToolCallsQuery({ toolCallId, sessionId, tool: props.part.tool }) : undefined;
-  });
   return (
     <nav class="den-action-card__links" aria-label="Activity records" data-testid="action-links"
       draggable={outputRef() ? true : undefined} onDragStart={(event) => startChatAttachmentDrag(event, outputRef())}>
@@ -78,27 +65,7 @@ export function ActionLinks(props: Props) {
           );
         }}
       </Index>
-      <Show when={decisionsText()} keyed>
-        {(text) => (
-          <ToolContentLink short label="Host decisions" testId="action-link-decisions" projectId={props.projectId} pane={`action:${props.part.id}:decisions`}
-            content={{ kind: "inline", text }} />
-        )}
-      </Show>
       {props.evidence}
-      <Show when={outputRef()} keyed>
-        {(ref) => (
-          <button type="button" class="den-chat-content-link" data-testid="tool-raw-add-to-chat" onClick={() => void addToChat(ref, { destination: chatDestination() })}>
-            Add to chat
-          </button>
-        )}
-      </Show>
-      <Show when={relatedQuery()} keyed>
-        {(query) => (
-          <button type="button" class="den-chat-content-link" data-testid="tool-related-search-link" onClick={() => props.projectId && openInSearch(props.projectId, query)}>
-            Find related
-          </button>
-        )}
-      </Show>
       <Show when={opener()} keyed>
         {(opener) => <Opener opener={opener} part={props.part} projectId={props.projectId} rootRefs={props.rootRefs} />}
       </Show>
