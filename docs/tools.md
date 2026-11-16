@@ -1012,7 +1012,7 @@ Provisioning failure settles the round without starting a child. A partially cre
 
 ### Promotion
 
-Promotion validates current evidence, observed changes, target generation, conflicts, and final syntax health before applying bytes to the integration tree. Syntax is re-evaluated over the prepared target bytes, including command-authored files and caller conflict resolutions. Applying the overlay advances the source generation, records the landed change, and schedules an idle workspace refresh for the worker's next round. A failed preview or promotion preserves the overlay for repair; `shelve_overlay` retains it unlanded with a reason, and `reject_overlay` discards it and resets the worker's lane. See [Coordination](coordination.md#worker-workspace-and-promotion).
+Promotion validates current evidence, observed changes, target generation, conflicts, and final syntax health before applying bytes to the integration tree. Syntax is re-evaluated over the prepared target bytes, including command-authored files and caller conflict resolutions. Applying the overlay advances the source generation, records the landed change, and schedules an idle workspace refresh for the worker's next round. A failed preview or promotion preserves the overlay for repair; `shelve_overlay` retains it unlanded with a reason, and `reject_overlay` discards it and resets the worker's lane. See [Coordination](coordination.md#worker-workspace-refresh-and-dispositions).
 
 ### Caps
 
