@@ -335,6 +335,8 @@ class HostedPlanTests(unittest.TestCase):
 
     def test_combined_analysis_targets_restore_both_tool_sets(self):
         self.assertEqual(ci.analysis_set(["lint:full", "lint:vuln"]), "all")
+        # The structural ratchet runs unparam through golangci-lint.
+        self.assertEqual(ci.analysis_set(["arch-lint:changes"]), "lint")
 
     def test_lane_setup_restores_only_the_required_tool_sets(self):
         for profile in ci.PROFILES:

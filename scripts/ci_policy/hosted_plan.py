@@ -90,10 +90,12 @@ def lanes():
             raise ValueError(f"invalid CI profiles: {name}")
         if lane["suite"] not in SUITES or lane.get("setup") not in SETUPS:
             raise ValueError(f"invalid CI setup or suite: {name}")
-        if lane["setup"] == "frontend" and not set(lane["targets"]).issubset({"den:typecheck", "den:lint", "den:test", "den:coverage:changes"}):
+        if lane["setup"] == "frontend" and not set(lane["targets"]).issubset({
+                "den:typecheck", "den:lint", "den:test", "den:coverage:changes", "den:knip:changes"}):
             raise ValueError(f"CI lane {name} requires toolchains outside frontend setup")
         if lane["setup"] == "analysis" and not set(lane["targets"]).issubset({
-                "lint:fast", "lint:full", "lint:vuln", "lint:vuln:fresh", "comments:check", "test:fail-messages:check"}):
+                "lint:fast", "lint:full", "lint:vuln", "lint:vuln:fresh", "comments:check", "test:fail-messages:check",
+                "arch-lint:changes"}):
             raise ValueError(f"CI lane {name} requires inputs outside Go analysis setup")
         # Only a platform lane runs on its platform's other runners.
         if lane.get("runner", "macos-15") not in {"macos-15", "ubuntu-24.04"} | PLATFORMS.get(lane.get("platform"), set()):
@@ -167,7 +169,7 @@ def selects_package(pattern, package):
 
 
 def analysis_set(targets):
-    lint = bool(set(targets) & {"lint:fast", "lint:full"})
+    lint = bool(set(targets) & {"lint:fast", "lint:full", "arch-lint:changes"})
     vulnerabilities = bool(set(targets) & {"lint:vuln", "lint:vuln:fresh"})
     return "all" if lint and vulnerabilities else "lint" if lint else "vulnerabilities" if vulnerabilities else "none"
 
