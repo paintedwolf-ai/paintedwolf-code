@@ -18,17 +18,16 @@ def rehearse(work):
     tree = metadata_fixture.payload(work / "payload", assembler.BOOTSTRAP["path"])
     version = linux_package_version(parse((ROOT / "VERSION").read_text().strip()))
     outcomes = {}
-    for name in ("current", "spelling-regression"):
+    for name in ("current", "spelling-error"):
         directory = work / name
         directory.mkdir()
         top = directory / "rpmbuild"
         top.mkdir()
         content = assembler.rpm_spec(ROOT, tree, version, 3)
-        if name == "spelling-regression":
-            # The historical failure differs only in the two real metadata fields.
-            meta = assembler.tauri_metadata(ROOT)
-            content = content.replace(meta["shortDescription"], "Agentic coding assistant with a local security engine")
-            content = content.replace("Git tools", "Git toolchain")
+        if name == "spelling-error":
+            # A misspelling outside the accepted domain vocabulary must still fail the summary.
+            summary = assembler.tauri_metadata(ROOT)["shortDescription"]
+            content = content.replace(f"Summary: {summary}", f"Summary: {summary} with a securty engine")
         specification = directory / "painted-wolf-code.spec"
         specification.write_text(content)
         built = run(["rpmbuild", "-bb", "--quiet", "--target", architecture,
@@ -42,7 +41,7 @@ def rehearse(work):
             raise ValueError("construction did not produce exactly one RPM")
         lint = run(["rpmlint", "--config", str(ROOT / "packaging/linux/rpm/rpmlint.toml"), str(packages[0])])
         if (lint.returncode == 0) != (name == "current"):
-            raise ValueError("production metadata must pass and historical spelling metadata must fail")
+            raise ValueError("production metadata must pass and a misspelled summary must fail")
         outcomes[name] = {"rpmlint_exit_code": lint.returncode,
                           "rpm_sha256": hashlib.sha256(packages[0].read_bytes()).hexdigest(),
                           "specification_sha256": hashlib.sha256(specification.read_bytes()).hexdigest()}
