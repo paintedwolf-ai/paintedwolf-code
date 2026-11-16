@@ -39,7 +39,9 @@ webE2e.describe("session tabs in the stage title bar", () => {
     const last = await stageTab(page, "workers").boundingBox();
     expect(stage!.x + stage!.width - (last!.x + last!.width)).toBeLessThan(40);
 
-    await page.getByTestId("focused-session-list").getByRole("button").first().click();
+    await page
+      .locator('[data-testid="focused-session-list"] [data-session-id][aria-current="true"]')
+      .click();
     await expect(conversationTabs(page)).toBeVisible();
     await expect(stageTabs(page)).toHaveCount(0);
   });
