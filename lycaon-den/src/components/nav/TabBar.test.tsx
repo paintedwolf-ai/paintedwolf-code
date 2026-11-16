@@ -568,3 +568,71 @@ describe("TabBar", () => {
     expect(viewport.style.overflowY).toBe("hidden");
   });
 });
+
+describe("TabBar in a stage title bar", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function mountStageBar() {
+    stubResizeObserver();
+    const [open, setOpen] = createSignal<"progress" | "git" | null>(null);
+    render(() => (
+      <TabBar
+        placement="stage"
+        open={open()}
+        onOpenChange={(next) => setOpen(next as "progress" | "git" | null)}
+        dock={<div data-testid="dock-row">Notice</div>}
+        tabs={[
+          { id: "progress", label: "Progress", icon: <svg />, badge: "2", panel: () => <p>Plan</p> },
+          { id: "git", label: "Git", icon: <svg />, firstTimeTip: "workflows", panel: () => <p>Changes</p> },
+        ]}
+      />
+    ));
+    return { open };
+  }
+
+  it("names each icon chip for assistive tech and the hover tip, and keeps its count", () => {
+    mountStageBar();
+    const chip = screen.getByTestId("stage-tab-progress");
+    expect(chip.getAttribute("aria-label")).toBe("Progress");
+    expect(chip.getAttribute("data-tip")).toBe("Progress");
+    expect(chip.hasAttribute("data-tip-when-clipped")).toBe(false);
+    expect(chip.querySelector(".tabs__chip-badge")?.textContent).toBe("2");
+  });
+
+  it("opens one tab's panel at a time and closes it from its own chip", () => {
+    const { open } = mountStageBar();
+    fireEvent.click(screen.getByTestId("stage-tab-progress"));
+    expect(open()).toBe("progress");
+    const chip = screen.getByTestId("stage-tab-progress");
+    const panel = screen.getByTestId("stage-tabs-panel");
+    expect(panel.textContent).toBe("Plan");
+    expect(chip.getAttribute("aria-expanded")).toBe("true");
+    expect(chip.getAttribute("aria-controls")).toBe(panel.id);
+    fireEvent.click(chip);
+    expect(open()).toBeNull();
+    expect(chip.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  it("leaves the conversation's dock rows and guidance to the conversation's bar", () => {
+    resetFirstTimeTipRequestsForTests();
+    mountStageBar();
+    expect(screen.queryByTestId("dock-row")).toBeNull();
+    expect(requestedFirstTimeTips()).toEqual([]);
+  });
+
+  it("gives the conversation's bar and the stage's bar separate panels", () => {
+    stubResizeObserver();
+    const tabs = [{ id: "git" as const, label: "Git", icon: <svg />, panel: () => <p>Changes</p> }];
+    render(() => (
+      <>
+        <TabBar open="git" onOpenChange={() => {}} tabs={tabs} />
+        <TabBar placement="stage" open="git" onOpenChange={() => {}} tabs={tabs} />
+      </>
+    ));
+    const conversationPanel = screen.getByTestId("tabs-panel");
+    const stagePanel = screen.getByTestId("stage-tabs-panel");
+    expect(conversationPanel.id).not.toBe(stagePanel.id);
+    expect(screen.getByTestId("tab-git").getAttribute("aria-controls")).toBe(conversationPanel.id);
+    expect(screen.getByTestId("stage-tab-git").getAttribute("aria-controls")).toBe(stagePanel.id);
+  });
+});

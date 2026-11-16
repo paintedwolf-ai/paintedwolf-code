@@ -51,6 +51,7 @@ function mountChat() {
   const settingsStore = createSettingsStore();
   const [active, setActive] = createSignal(true);
   const [pending, setPending] = createSignal(false);
+  const [presented, setPresented] = createSignal(true);
   const actions = { sendPrompt: vi.fn(async () => undefined), stopChat: vi.fn(async () => undefined), resumeSpendLimitedChat: vi.fn(async () => undefined) };
   const workerDrawer = { selectedWorkerId: () => "worker", workersOpen: () => true, workerDrawerFocus: () => null,
     closeWorkers: vi.fn(), acknowledgeDrawerFocus: vi.fn(() => null), openWorkers: vi.fn() };
@@ -59,7 +60,7 @@ function mountChat() {
   const notices = { index: () => new Map(), dismiss: vi.fn(), dismissScope: vi.fn() };
   const showWindowNav = vi.fn(async () => true);
   render(() => <ChatWorkspace shell={shell} appStore={appStore} recents={{} as never} projects={{} as never}
-    chat={{ projectId: "project", sessionId: "session" }} pending={pending} surfaceActive={active}
+    chat={{ projectId: "project", sessionId: "session" }} pending={pending} surfaceActive={active} sessionPresented={presented}
     settingsStore={settingsStore} costStore={{ state: { session: { estimated_nano_usd: 3e9 } } } as never} notices={notices as never}
     actions={actions as never} workerDrawer={workerDrawer} panes={{ chatHeaderLeadsWindow: () => true, windowNavCollapsed: () => true,
       navTouchesChat: () => false, navAutomaticallyCollapsed: () => false, contextHidden: () => false, navSide: () => "left",
@@ -68,7 +69,7 @@ function mountChat() {
     onboarding={{ showNoProviderBanner: () => true, providerGap: () => "missing-provider" as never }}
     projectDirForChat={() => "/garden"} nav={() => "projects"} splitLive={() => true} notificationStack={() => <div>Shared notice</div>}
     showPromoteNudge={() => true} showNoFolderBanner={() => true} {...callbacks} />);
-  return { appStore, settingsStore, actions, workerDrawer, callbacks, notices, setActive, setPending, showWindowNav };
+  return { appStore, settingsStore, actions, workerDrawer, callbacks, notices, setActive, setPending, setPresented, showWindowNav };
 }
 
 beforeEach(() => vi.clearAllMocks());
@@ -84,6 +85,14 @@ describe("chat workspace composition", () => {
     setPending(true); expect(document.querySelector('.den-shell-stage--chat')?.getAttribute("data-boot")).toBe("ready");
     expect(seams.rail.navCollapsed).toBe(true); expect(seams.rail.navSplitFallback).toBe(true);
     seams.rail.onNavExpand?.(); expect(showWindowNav).toHaveBeenCalledOnce();
+  });
+
+  it("has the hidden chat serve its session's tabs until the store holds another session", () => {
+    const { setActive, setPresented } = mountChat();
+    setActive(false);
+    expect(seams.chat.servesSessionTabs).toBe(true);
+    setPresented(false);
+    expect(seams.chat.servesSessionTabs).toBe(false);
   });
 
   it("routes notices, recovery limits, and project nudges to their owning scope", async () => {

@@ -8,8 +8,9 @@ import { tryDismissOnboardingWelcome } from "../onboarding/onboarding-welcome-di
 import type { ShellNavigation } from "./shell-navigation-state.ts";
 import type { ShellScope } from "./shell-scope.ts";
 import type { ShellSearchState } from "./shell-search-state.ts";
+import type { StageTabRail } from "../../shell/stage-tab-rail.ts";
+import type { TabId } from "../chatview/tabs.ts";
 import type { ShellWorkerDrawer } from "./shell-worker-drawer.ts";
-import type { createShellWorkspaceContext } from "./shell-workspace-context.ts";
 
 type Dependencies = Pick<ShellScope,
   "recentSwitcher" | "peerViewSwitcher" | "helpOpen" | "setHelpOpen" | "launcherOpen" | "setLauncherOpen" | "splitLive" |
@@ -17,7 +18,8 @@ type Dependencies = Pick<ShellScope,
   & Pick<ShellSearchState, "crossbarOpen" | "closeCrossbar" | "searchOpen" | "closeSearch">
   & Pick<ShellNavigation, "dockTray" | "closeLayoutTray" | "isSettingsNav" | "closeSettingsNav">
   & Pick<ShellWorkerDrawer, "workersOpen" | "closeWorkers">
-  & Pick<ReturnType<typeof createShellWorkspaceContext>, "stageTabs"> & {
+  & {
+  stageTabs: Pick<StageTabRail<TabId>, "openTab" | "selectTab">;
   layoutTrigger: () => HTMLElement | undefined;
 };
 
