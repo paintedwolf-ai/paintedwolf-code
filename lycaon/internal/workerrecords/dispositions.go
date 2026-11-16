@@ -17,6 +17,27 @@ const (
 	ChangeShelved  = "shelved"
 )
 
+// Dispositions a settled result has before its changes reach a change state.
+const (
+	ResultUnaccounted = "unaccounted"
+	ResultAccounted   = "accounted"
+	ResultOpen        = "open"
+)
+
+// ResultDisposition names what became of a settled result: its change state,
+// else open while its checkpoint holds changes, else whether it was accounted for.
+func ResultDisposition(changeState, checkpointID, accountedAt string) string {
+	switch {
+	case changeState != "":
+		return changeState
+	case checkpointID != "":
+		return ResultOpen
+	case accountedAt != "":
+		return ResultAccounted
+	}
+	return ResultUnaccounted
+}
+
 // CriterionOutcome records whether one typed completion criterion passed when
 // a worker round settled.
 type CriterionOutcome struct {

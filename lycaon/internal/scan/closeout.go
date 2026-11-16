@@ -61,7 +61,7 @@ func closeoutError(result closeoutEval) error {
 			Reason:   result.Reason,
 		}
 	}
-	return fmt.Errorf("security gate failed: %s", result.Reason)
+	return &GateFailedError{ScanID: result.ScanID, Guidance: result.Guidance, Reason: result.Reason}
 }
 
 func (c *SecurityCloseoutChecker) evaluateLanded(ctx context.Context, landed *LandedChange, evidenceRunID, projectDir string) (closeoutEval, error) {

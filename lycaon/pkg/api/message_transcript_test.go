@@ -516,4 +516,56 @@ func TestFilterPromptHistoryDropsConsumedPolicyFeedbackAndKeepsTrailing(t *testi
 			t.Fatalf("next turn position %d = %s want %s", i, afterNewUserTurn[i].ID, id)
 		}
 	}
+
+	// A next_turn advisory survives the opening user intent and mid-turn tool steps of
+	// the next turn, then retires once that turn commits a final assistant reply.
+	postTurnNudge := feedback("pf-post-turn")
+	postTurnNudge.ContentParts = []MessageContentPart{{
+		Source:  "policy_feedback",
+		Content: `{"retain":"next_turn"}`,
+	}}
+	withPostTurn := []Message{
+		{ID: "u1", Role: MessageRoleUser, Origin: MessageOriginUser, Content: "show file"},
+		{ID: "a1", Role: MessageRoleAssistant, Content: "done"},
+		postTurnNudge,
+		{ID: "u2", Role: MessageRoleUser, Origin: MessageOriginUser, Content: "next question"},
+	}
+	forTurn2 := FilterPromptHistory(withPostTurn)
+	wantTurn2 := []string{"u1", "a1", "pf-post-turn", "u2"}
+	if len(forTurn2) != len(wantTurn2) {
+		t.Fatalf("turn 2 len = %d want %d: %+v", len(forTurn2), len(wantTurn2), forTurn2)
+	}
+	for i, id := range wantTurn2 {
+		if forTurn2[i].ID != id {
+			t.Fatalf("turn 2 position %d = %s want %s", i, forTurn2[i].ID, id)
+		}
+	}
+	withTurn2Tool := append([]Message{}, withPostTurn...)
+	withTurn2Tool = append(withTurn2Tool,
+		Message{ID: "a2-tool", Role: MessageRoleAssistant, ToolCalls: []ToolCall{{ID: "call_1", Name: "command"}}},
+		Message{ID: "t2", Role: MessageRoleTool, ToolResult: &ToolResult{ToolCallID: "call_1", Tool: "command"}, Content: "ok"},
+	)
+	forTurn2FinalCall := FilterPromptHistory(withTurn2Tool)
+	wantTurn2FinalCall := []string{"u1", "a1", "pf-post-turn", "u2", "a2-tool", "t2"}
+	if len(forTurn2FinalCall) != len(wantTurn2FinalCall) {
+		t.Fatalf("turn 2 post-tool len = %d want %d: %+v", len(forTurn2FinalCall), len(wantTurn2FinalCall), forTurn2FinalCall)
+	}
+	for i, id := range wantTurn2FinalCall {
+		if forTurn2FinalCall[i].ID != id {
+			t.Fatalf("turn 2 post-tool position %d = %s want %s", i, forTurn2FinalCall[i].ID, id)
+		}
+	}
+	forTurn3 := FilterPromptHistory(append(withTurn2Tool,
+		Message{ID: "a2", Role: MessageRoleAssistant, Content: "answered"},
+		Message{ID: "u3", Role: MessageRoleUser, Origin: MessageOriginUser, Content: "follow-up"},
+	))
+	wantTurn3 := []string{"u1", "a1", "u2", "a2-tool", "t2", "a2", "u3"}
+	if len(forTurn3) != len(wantTurn3) {
+		t.Fatalf("turn 3 len = %d want %d: %+v", len(forTurn3), len(wantTurn3), forTurn3)
+	}
+	for i, id := range wantTurn3 {
+		if forTurn3[i].ID != id {
+			t.Fatalf("turn 3 position %d = %s want %s", i, forTurn3[i].ID, id)
+		}
+	}
 }

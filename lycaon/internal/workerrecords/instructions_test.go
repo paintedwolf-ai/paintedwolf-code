@@ -32,7 +32,7 @@ func TestRoundsCarryOnlyTheirOwnInstructions(t *testing.T) {
 	if len(missed) != 1 || missed[0].Body != "check the encoder too" {
 		t.Fatalf("not applied = %+v", missed)
 	}
-	page, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 0, workerrecords.MaxPageMessages)
+	page, err := f.store.OpenPageBounded(t.Context(), child, w.WorkerID, 0, workerrecords.MaxPageMessages, workerrecords.MaxHistoryPageBytes)
 	testutil.FailErr(t, "page between rounds", err)
 	if len(page.Messages) != 0 {
 		t.Fatalf("stopped worker got a page: %+v", page.Messages)
@@ -46,7 +46,7 @@ func TestRoundsCarryOnlyTheirOwnInstructions(t *testing.T) {
 	}
 	_, err = f.store.AppendMessage(t.Context(), f.coord, op("follow-up"), w.WorkerID, workerrecords.MessageSpec{Body: "keep the old test name"})
 	testutil.FailErr(t, "queue follow-up", err)
-	page, err = f.store.OpenPage(t.Context(), child, w.WorkerID, 0, workerrecords.MaxPageMessages)
+	page, err = f.store.OpenPageBounded(t.Context(), child, w.WorkerID, 0, workerrecords.MaxPageMessages, workerrecords.MaxHistoryPageBytes)
 	testutil.FailErr(t, "round 2 page", err)
 	if len(page.Messages) != 1 || page.Messages[0].Body != "keep the old test name" || page.Messages[0].RoundOrdinal != 2 {
 		t.Fatalf("round 2 page = %+v", page.Messages)
@@ -153,13 +153,13 @@ func TestRoundFrameCarriesTheRoundsStartingPoint(t *testing.T) {
 	}
 }
 
-func TestLatestSentSeqIsTheWorkersLatestMessageToItsCoordinator(t *testing.T) {
+func TestRoundProvenanceNamesTheWorkersLatestMessageToItsCoordinator(t *testing.T) {
 	f := newFixture(t)
 	w, child := f.workerWithRound(t, "fixer", "child-1", "job-1")
-	seq, err := f.store.LatestSentSeq(t.Context(), "job-1")
-	testutil.FailErr(t, "latest before any message", err)
-	if seq != 0 {
-		t.Fatalf("seq = %d before the worker sent anything", seq)
+	prov, ok, err := f.store.RoundProvenanceByJob(t.Context(), "job-1")
+	testutil.FailErr(t, "provenance before any message", err)
+	if !ok || prov.Worker != "fixer" || prov.LatestSentSeq != 0 {
+		t.Fatalf("provenance = %+v ok=%v before the worker sent anything", prov, ok)
 	}
 	_, err = f.store.AppendMessage(t.Context(), f.coord, op("instruct-1"), w.WorkerID, workerrecords.MessageSpec{Body: "start with the parser"})
 	testutil.FailErr(t, "instruct", err)
@@ -167,9 +167,9 @@ func TestLatestSentSeqIsTheWorkersLatestMessageToItsCoordinator(t *testing.T) {
 	testutil.FailErr(t, "worker message", err)
 	_, err = f.store.AppendMessage(t.Context(), f.coord, op("instruct-2"), w.WorkerID, workerrecords.MessageSpec{Body: "fix it"})
 	testutil.FailErr(t, "later instruction", err)
-	seq, err = f.store.LatestSentSeq(t.Context(), "job-1")
-	testutil.FailErr(t, "latest", err)
-	if seq != sent.Seq {
-		t.Fatalf("seq = %d, want the worker's message %d", seq, sent.Seq)
+	prov, _, err = f.store.RoundProvenanceByJob(t.Context(), "job-1")
+	testutil.FailErr(t, "provenance", err)
+	if prov.LatestSentSeq != sent.Seq {
+		t.Fatalf("latest sent = %d, want the worker's message %d", prov.LatestSentSeq, sent.Seq)
 	}
 }

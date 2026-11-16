@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcesnapshot"
 	"github.com/lycaon/lycaon/internal/vocabulary"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
@@ -28,7 +27,8 @@ import (
 // ConditionDependencies declares dependencies needed to construct condition and rule engines.
 type ConditionDependencies struct {
 	ModuleRoot              string
-	Plan                    *workerplan.Service
+	PlanCloseout            func(ctx context.Context, sessionID string) (bool, error)
+	PlanWorkIDs             func(ctx context.Context, sessionID string) ([]string, error)
 	ScanStore               *scan.SQLStore
 	ScanObligation          *scan.WorkflowObligation
 	Snapshots               *sourcesnapshot.Store
@@ -52,16 +52,8 @@ func (r *Runtime) BuildConditions(ctx context.Context, deps ConditionDependencie
 		proactiveCategories = scancfg.DefaultGatesConfig().Gates.ProactiveCategories
 	}
 
-	var closeoutComplete func(context.Context, string) (bool, error)
-	var sessionWorkIDs func(context.Context, string) ([]string, error)
-	if deps.Plan != nil {
-		closeoutComplete = deps.Plan.CloseoutComplete()
-		sessionWorkIDs = deps.Plan.SessionWorkIDs
-	} else {
-		closeoutComplete = func(context.Context, string) (bool, error) { return true, nil }
-	}
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		SessionWorkIDs: sessionWorkIDs,
+		SessionWorkIDs: deps.PlanWorkIDs,
 		Evidence:       conditions.StoreEvidenceReader{Store: r.Evidence},
 		ObligationResolvers: map[string]conditions.ObligationStatusReader{
 			scan.WorkflowObligationKind: deps.ScanObligation,
@@ -69,7 +61,7 @@ func (r *Runtime) BuildConditions(ctx context.Context, deps ConditionDependencie
 		BlueprintContent: func(_ context.Context, projectDir, relPath string) (string, error) {
 			return workflowblueprintfiles.ReadBlueprintFile(projectDir, relPath)
 		},
-		DelegationCloseout:      closeoutComplete,
+		DelegationCloseout:      deps.PlanCloseout,
 		SourceVerifyPassed:      deps.SourceVerifyPassed,
 		DeliveryReported:        deps.DeliveryReported,
 		ScanLedger:              deps.ScanStore,

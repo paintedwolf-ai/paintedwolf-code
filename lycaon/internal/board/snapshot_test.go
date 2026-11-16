@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/scan"
@@ -448,11 +449,7 @@ func TestSnapshotBuilderBuildEnrichesActiveReservations(t *testing.T) {
 	}
 	snap, err := b.Build(ctx, testdbseed.DefaultProjectID, dir, "sess-1", api.BoardDetailLevelCompact, nil)
 	testutil.FailErr(t, "Build", err)
-	view := BuildBoardView(snap, "sess-1", api.BoardDetailLevelCompact, time.Now().UTC())
-	if len(view.Roster) != 1 {
-		t.Fatalf("roster = %d want 1", len(view.Roster))
-	}
-	if got := view.Roster[0].Reservations; len(got) != 1 || got[0] != "pkg/foo.go" {
+	if got := packboard.ReservationsFromSnapshot(*snap); len(got) != 1 || got[0].Path != "pkg/foo.go" || got[0].JobID != "job-a" {
 		t.Fatalf("reservations = %#v", got)
 	}
 }

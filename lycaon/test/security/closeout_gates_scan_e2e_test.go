@@ -24,7 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workerplan"
+	"github.com/lycaon/lycaon/internal/workerplan/plantest"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -83,7 +83,9 @@ func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
 		State: workerrecords.ChangeLanded, LandedChangeID: "land-leg-1",
 	})
 	testutil.FailErr(t, "SetChange landed", err)
-	planSvc := &workerplan.Service{Records: records}
+	planDeps := plantest.Deps(records)
+	planDeps.Jobs = worker.NewSQLQueue(sqlDB, 1)
+	planSvc := plantest.New(t, planDeps)
 
 	verifyRec := evidence.Record{
 		GateType:    string(evidence.GateTypeVerify),
@@ -102,7 +104,7 @@ func TestCloseoutGatesPassedAnchoredSecurityEvidence(t *testing.T) {
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
 		SessionWorkIDs:          planSvc.SessionWorkIDs,
 		Evidence:                conditions.StoreEvidenceReader{Store: evidenceStore},
-		DelegationCloseout:      planSvc.CloseoutComplete(),
+		DelegationCloseout:      planSvc.CloseoutComplete,
 		ScanLedger:              store,
 		SourceSnapshots:         coord.SnapshotStore(),
 		ScanProactiveCategories: proactive,

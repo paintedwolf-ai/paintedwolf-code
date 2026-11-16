@@ -17,10 +17,10 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ClaimWorkerBranch provisions a write-worker branch once.
 // ReviewsWorker is false: the memory queue runs no reviewer lanes.
 func (q *memoryQueueQuery) ReviewsWorker(context.Context, *api.WorkerTask) bool { return false }
 
+// ClaimWorkerBranch provisions a write-worker branch once.
 func (q *memoryQueueQuery) ClaimWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, error) {
 	jobID = strings.TrimSpace(jobID)
 	if jobID == "" {

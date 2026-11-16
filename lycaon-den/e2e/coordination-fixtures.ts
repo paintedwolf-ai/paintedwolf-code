@@ -51,18 +51,19 @@ export const coordinationBoardFixture = {
     file_count: 0,
     generated_at: "2026-01-02T00:00:00Z",
   },
-  roster: [
+  workers: [
     {
-      worker_id: COORDINATION_JOB_A,
+      name: "auth",
       agent_type: "implementer",
-      status: "running",
+      state: "working",
+      latest_job_id: COORDINATION_JOB_A,
       reservations: ["pkg/a.go"],
-      tool_loops_used: 34,
     },
     {
-      worker_id: COORDINATION_JOB_B,
+      name: "wiring",
       agent_type: "implementer",
-      status: "running",
+      state: "working",
+      latest_job_id: COORDINATION_JOB_B,
     },
   ],
   cost: null,

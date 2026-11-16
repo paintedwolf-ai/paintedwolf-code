@@ -2,7 +2,7 @@ package workerplan
 
 import (
 	"context"
-	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/scan"
@@ -10,372 +10,266 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// CloseoutVerdict reports whether a coordinator session's planned legs and typed criteria are settled.
+// Rejection codes for an unsettled plan at closeout. An ungrounded claim is
+// planned work with no completed, reported round behind it; unmet criteria
+// are everything else.
+const (
+	CodeCriteriaUnmet   = "COORDINATOR_CRITERIA_UNMET"
+	CodeUngroundedClaim = "COORDINATOR_UNGROUNDED_CLAIM"
+)
+
+// Gap names what a closeout check found unsettled.
+type Gap string
+
+const (
+	// GapUnstarted: a planned worker has not run.
+	GapUnstarted Gap = "unstarted"
+	// GapRoundActive: the worker's latest round has not settled.
+	GapRoundActive Gap = "round_active"
+	// GapRoundIncomplete: the worker's latest round ended without completing.
+	GapRoundIncomplete Gap = "round_incomplete"
+	// GapCriteriaUnmet: the latest result fails typed criteria; Unmet lists them.
+	GapCriteriaUnmet Gap = "criteria_unmet"
+	// GapChangesPending: the latest result's changes are neither landed nor shelved.
+	GapChangesPending Gap = "changes_pending"
+	// GapChangesShelved: the plan requires file changes that were shelved.
+	GapChangesShelved Gap = "changes_shelved"
+	// GapChangesRejected: the plan requires file changes that were rejected.
+	GapChangesRejected Gap = "changes_rejected"
+	// GapScanPending: the landed change's scan obligation is still running.
+	GapScanPending Gap = "scan_pending"
+	// GapScanFailed: the landed change's scan obligation did not clear.
+	GapScanFailed Gap = "scan_failed"
+)
+
+// CloseoutVerdict reports whether a session's planned workers are settled.
+// A verdict that is not OK names one gap and the worker it concerns.
 type CloseoutVerdict struct {
-	OK          bool
-	Code        string
-	LegID       string
-	Worker      string
-	ResultID    string
-	Reason      string
-	Outcomes    []workerrecords.CriterionOutcome
-	GatePending *scan.GatePendingError
+	OK     bool
+	Code   string
+	Gap    Gap
+	LegID  string
+	Worker string
+	// WorkID is the worker's plan work identity, empty for a worker with
+	// criteria but no plan.
+	WorkID   string
+	ResultID string
+	// Unmet lists the criteria that did not pass, in plan order.
+	Unmet    []string
+	Outcomes []workerrecords.CriterionOutcome
+	// ScanID names the scan behind a scan gap.
+	ScanID string
 }
 
-// CheckSessionCloseout verifies that every open planned or criteria-bearing worker in sessionID
-// has delivered a result whose typed criteria and required evidence are satisfied.
-func (s *Service) CheckSessionCloseout(
-	ctx context.Context,
-	sessionID string,
-	projectID string,
-	workspacePath string,
-) (CloseoutVerdict, error) {
-	sessionID = strings.TrimSpace(sessionID)
-	if s == nil || s.Records == nil || sessionID == "" {
-		return CloseoutVerdict{OK: true}, nil
+func settled() CloseoutVerdict { return CloseoutVerdict{OK: true} }
+
+func unsettled(w workerrecords.Worker, gap Gap) CloseoutVerdict {
+	return CloseoutVerdict{Code: CodeCriteriaUnmet, Gap: gap, LegID: legIdentifier(w), Worker: w.Name, WorkID: w.WorkflowWorkID}
+}
+
+// CheckSessionCloseout reports the first gap among the session's open planned
+// or criteria-bearing workers, then the scan gate of its latest landed change.
+// workspacePath is where file criteria read diffs.
+func (s *Service) CheckSessionCloseout(ctx context.Context, sessionID, workspacePath string) (CloseoutVerdict, error) {
+	actor := coordinator(sessionID)
+	planned, err := s.plannedWorkers(ctx, actor)
+	if err != nil || len(planned) == 0 {
+		return settled(), err
 	}
-	actor := workerrecords.Actor{
-		SessionID:   sessionID,
-		Role:        workerrecords.RoleCoordinator,
-		PrincipalID: sessionID,
+	for _, w := range planned {
+		verdict, err := s.checkWorkerCloseout(ctx, actor, w, workspacePath)
+		if err != nil || !verdict.OK {
+			return verdict, err
+		}
 	}
-	workers, err := s.Records.Workers(ctx, actor)
+	hostDir, err := s.hostDataDir(ctx, planned[0].ProjectID)
 	if err != nil {
 		return CloseoutVerdict{}, err
 	}
+	err = s.security.CheckSession(ctx, sessionID, hostDir)
+	if pending, ok := scan.AsGatePending(err); ok {
+		verdict := unsettled(planned[0], GapScanPending)
+		verdict.ScanID = pending.ScanID
+		return verdict, nil
+	}
+	if failed, ok := scan.AsGateFailed(err); ok {
+		verdict := unsettled(planned[0], GapScanFailed)
+		verdict.ScanID = failed.ScanID
+		return verdict, nil
+	}
+	if err != nil {
+		return CloseoutVerdict{}, err
+	}
+	return settled(), nil
+}
+
+// plannedWorkers lists the session's open workers that closeout answers for.
+func (s *Service) plannedWorkers(ctx context.Context, actor workerrecords.Actor) ([]workerrecords.Worker, error) {
+	workers, err := s.records.Workers(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
 	var planned []workerrecords.Worker
 	for _, w := range workers {
-		if w.ClosedAt != "" {
-			continue
-		}
-		if w.BlueprintPath != "" || len(w.Criteria) > 0 {
+		if w.ClosedAt == "" && (w.BlueprintPath != "" || len(w.Criteria) > 0) {
 			planned = append(planned, w)
 		}
 	}
-	if len(planned) == 0 {
-		return CloseoutVerdict{OK: true}, nil
-	}
-	for _, w := range planned {
-		if projectID == "" {
-			projectID = w.ProjectID
-		}
-		verdict, vErr := s.checkWorkerCloseout(ctx, actor, w, workspacePath)
-		if vErr != nil {
-			return CloseoutVerdict{}, vErr
-		}
-		if !verdict.OK {
-			return verdict, nil
-		}
-	}
-	if s.Security != nil && s.HostDataDir != nil && strings.TrimSpace(projectID) != "" {
-		hostDir, hErr := s.HostDataDir(ctx, projectID)
-		if hErr != nil {
-			return CloseoutVerdict{}, hErr
-		}
-		if secErr := s.Security.CheckSession(ctx, sessionID, hostDir); secErr != nil {
-			legID := legIdentifier(planned[0])
-			if pending, ok := scan.AsGatePending(secErr); ok {
-				return CloseoutVerdict{
-					OK:          false,
-					Code:        "COORDINATOR_CRITERIA_UNMET",
-					LegID:       legID,
-					Worker:      planned[0].Name,
-					Reason:      pending.Reason,
-					GatePending: pending,
-				}, nil
-			}
-			return CloseoutVerdict{
-				OK:     false,
-				Code:   "COORDINATOR_CRITERIA_UNMET",
-				LegID:  legID,
-				Worker: planned[0].Name,
-				Reason: secErr.Error(),
-			}, nil
-		}
-	}
-	return CloseoutVerdict{OK: true}, nil
+	return planned, nil
 }
 
-func (s *Service) checkWorkerCloseout(
-	ctx context.Context,
-	actor workerrecords.Actor,
-	w workerrecords.Worker,
-	workspacePath string,
-) (CloseoutVerdict, error) {
-	legID := legIdentifier(w)
-	rounds, err := s.Records.Rounds(ctx, actor, w.ID)
+func (s *Service) checkWorkerCloseout(ctx context.Context, actor workerrecords.Actor, w workerrecords.Worker, workspacePath string) (CloseoutVerdict, error) {
+	rounds, err := s.records.Rounds(ctx, actor, w.ID)
 	if err != nil {
 		return CloseoutVerdict{}, err
 	}
 	if len(rounds) == 0 {
-		return CloseoutVerdict{
-			OK:     false,
-			Code:   "COORDINATOR_CRITERIA_UNMET",
-			LegID:  legID,
-			Worker: w.Name,
-			Reason: fmt.Sprintf("worker %s (leg %s) has not run; criteria unmet: %s", w.Name, legID, strings.Join(w.Criteria, ", ")),
-		}, nil
+		return unsettled(w, GapUnstarted), nil
 	}
 	last := rounds[len(rounds)-1]
 	if last.SettledAt == "" {
-		return CloseoutVerdict{
-			OK:     false,
-			Code:   "COORDINATOR_CRITERIA_UNMET",
-			LegID:  legID,
-			Worker: w.Name,
-			Reason: fmt.Sprintf("worker %s (leg %s) round %d is still active", w.Name, legID, last.Ordinal),
-		}, nil
+		return unsettled(w, GapRoundActive), nil
 	}
-	var job *api.WorkerTask
-	if s.Jobs != nil {
-		if found, ok := s.Jobs.Get(last.JobID); ok {
-			job = found
-		}
-		if job == nil || job.Status != api.WorkerStatusComplete {
-			return CloseoutVerdict{
-				OK:       false,
-				Code:     "COORDINATOR_UNGROUNDED_CLAIM",
-				LegID:    legID,
-				Worker:   w.Name,
-				ResultID: last.ResultID,
-				Reason:   fmt.Sprintf("worker %s (leg %s) job not complete on ledger", w.Name, legID),
-			}, nil
-		}
+	verdict := unsettled(w, "")
+	verdict.ResultID = last.ResultID
+	job, ok := s.jobs.Get(last.JobID)
+	if !ok || job.Status != api.WorkerStatusComplete {
+		verdict.Code, verdict.Gap = CodeUngroundedClaim, GapRoundIncomplete
+		return verdict, nil
 	}
-	disps, err := s.Records.Dispositions(ctx, actor, w.ID)
+	disp, err := s.resultDisposition(ctx, actor, w.ID, last.ResultID)
 	if err != nil {
 		return CloseoutVerdict{}, err
 	}
-	var disp workerrecords.Disposition
-	for _, item := range disps {
-		if item.ResultID == last.ResultID && last.ResultID != "" {
-			disp = item
-			break
-		}
-	}
+	// Outcomes recorded at delivery stand; a result delivered before the
+	// worker had criteria is evaluated now.
 	outcomes := disp.CriteriaOutcomes
-	if len(outcomes) == 0 && len(w.Criteria) > 0 {
-		jobComplete := false
-		summary := ""
-		var report *api.WorkerChangeReport
-		if job != nil {
-			jobComplete = job.Status == api.WorkerStatusComplete
-			if job.Result != nil {
-				summary = job.Result.Summary
-				report = job.Result.ChangeReport
-			}
+	if len(outcomes) == 0 {
+		in := DeliveryInput{Worker: w, ChildSessionID: w.ChildSessionID, ProjectDir: workspacePath, JobComplete: true}
+		if job.Result != nil {
+			in.Summary = job.Result.Summary
+			in.ChangeReport = job.Result.ChangeReport
 		}
-		outcomes = s.EvaluateCriteria(ctx, DeliveryInput{
-			Worker:         w,
-			JobID:          last.JobID,
-			ChildSessionID: w.ChildSessionID,
-			ProjectDir:     workspacePath,
-			JobComplete:    jobComplete,
-			Summary:        summary,
-			ChangeReport:   report,
-		})
-	}
-	if !allCriteriaPassed(w.Criteria, outcomes) {
-		code := "COORDINATOR_CRITERIA_UNMET"
-		if ungroundedCriterionFailed(w.Criteria, outcomes) {
-			code = "COORDINATOR_UNGROUNDED_CLAIM"
+		if outcomes, err = s.EvaluateCriteria(ctx, in); err != nil {
+			return CloseoutVerdict{}, err
 		}
-		return CloseoutVerdict{
-			OK:       false,
-			Code:     code,
-			LegID:    legID,
-			Worker:   w.Name,
-			ResultID: last.ResultID,
-			Outcomes: outcomes,
-			Reason:   formatCriteriaOutcomes(w.Name, last.ResultID, w.Criteria, outcomes),
-		}, nil
 	}
-	if job != nil && api.WorkerTaskOverlayOpen(job) && disp.ChangeState != workerrecords.ChangeShelved {
-		return CloseoutVerdict{
-			OK:       false,
-			Code:     "COORDINATOR_CRITERIA_UNMET",
-			LegID:    legID,
-			Worker:   w.Name,
-			ResultID: last.ResultID,
-			Outcomes: outcomes,
-			Reason:   fmt.Sprintf("worker %s result %s changes have not landed", w.Name, last.ResultID),
-		}, nil
+	verdict.Outcomes = outcomes
+	if unmet := unmetCriteria(w.Criteria, outcomes); len(unmet) > 0 {
+		verdict.Gap, verdict.Unmet = GapCriteriaUnmet, unmet
+		if slices.Contains(unmet, criterionJobComplete) || slices.Contains(unmet, criterionSummaryPresent) {
+			verdict.Code = CodeUngroundedClaim
+		}
+		return verdict, nil
 	}
-	if hasFileModifiedCriterion(w.Criteria) && (disp.ChangeState == workerrecords.ChangeRejected || disp.ChangeState == workerrecords.ChangeShelved) {
-		return CloseoutVerdict{
-			OK:       false,
-			Code:     "COORDINATOR_CRITERIA_UNMET",
-			LegID:    legID,
-			Worker:   w.Name,
-			ResultID: last.ResultID,
-			Outcomes: outcomes,
-			Reason:   fmt.Sprintf("worker %s result %s changes were %s; required file modifications have not landed", w.Name, last.ResultID, disp.ChangeState),
-		}, nil
+	if api.WorkerTaskOverlayOpen(job) && disp.ChangeState != workerrecords.ChangeShelved {
+		verdict.Gap = GapChangesPending
+		return verdict, nil
 	}
-	return CloseoutVerdict{OK: true}, nil
+	if requiresFileChanges(w.Criteria) {
+		switch disp.ChangeState {
+		case workerrecords.ChangeShelved:
+			verdict.Gap = GapChangesShelved
+			return verdict, nil
+		case workerrecords.ChangeRejected:
+			verdict.Gap = GapChangesRejected
+			return verdict, nil
+		}
+	}
+	return settled(), nil
 }
 
-// SettledWorkflowRunID returns the workflow run ID bound to sessionID's settled plan legs, if any.
-func (s *Service) SettledWorkflowRunID(ctx context.Context, sessionID string) string {
-	verdict, err := s.CheckSessionCloseout(ctx, sessionID, "", "")
-	if err != nil || !verdict.OK || s == nil || s.Records == nil {
-		return ""
+func (s *Service) resultDisposition(ctx context.Context, actor workerrecords.Actor, workerID, resultID string) (workerrecords.Disposition, error) {
+	if resultID == "" {
+		return workerrecords.Disposition{}, nil
 	}
-	actor := workerrecords.Actor{
-		SessionID:   strings.TrimSpace(sessionID),
-		Role:        workerrecords.RoleCoordinator,
-		PrincipalID: strings.TrimSpace(sessionID),
-	}
-	workers, err := s.Records.Workers(ctx, actor)
+	dispositions, err := s.records.Dispositions(ctx, actor, workerID)
 	if err != nil {
-		return ""
+		return workerrecords.Disposition{}, err
 	}
-	for _, w := range workers {
-		if w.ClosedAt == "" && (w.BlueprintPath != "" || len(w.Criteria) > 0) && strings.TrimSpace(w.WorkflowRunID) != "" {
-			return strings.TrimSpace(w.WorkflowRunID)
+	for _, d := range dispositions {
+		if d.ResultID == resultID {
+			return d, nil
 		}
 	}
-	return ""
+	return workerrecords.Disposition{}, nil
 }
 
-// CloseoutComplete builds the delegation_closeout_complete condition callback over workerrecords.
-func (s *Service) CloseoutComplete() func(context.Context, string) (bool, error) {
-	return func(ctx context.Context, sessionID string) (bool, error) {
-		if s == nil || s.Records == nil {
-			return true, nil
-		}
-		actor := workerrecords.Actor{
-			SessionID:   strings.TrimSpace(sessionID),
-			Role:        workerrecords.RoleCoordinator,
-			PrincipalID: strings.TrimSpace(sessionID),
-		}
-		workers, err := s.Records.Workers(ctx, actor)
-		if err != nil {
-			return false, err
-		}
-		hasPlan := false
-		for _, w := range workers {
-			if w.ClosedAt == "" && (w.BlueprintPath != "" || len(w.Criteria) > 0) {
-				hasPlan = true
-				break
-			}
-		}
-		if !hasPlan {
-			return true, nil
-		}
-		verdict, err := s.CheckSessionCloseout(ctx, sessionID, "", "")
-		if err != nil {
-			return false, err
-		}
-		return verdict.OK, nil
+// SettledWorkflowRunID returns the workflow run of the session's planned
+// workers once all of them are settled, and "" until then.
+func (s *Service) SettledWorkflowRunID(ctx context.Context, sessionID string) (string, error) {
+	verdict, err := s.CheckSessionCloseout(ctx, sessionID, "")
+	if err != nil || !verdict.OK {
+		return "", err
 	}
+	planned, err := s.plannedWorkers(ctx, coordinator(sessionID))
+	if err != nil {
+		return "", err
+	}
+	for _, w := range planned {
+		if w.WorkflowRunID != "" {
+			return w.WorkflowRunID, nil
+		}
+	}
+	return "", nil
 }
 
-// SessionWorkIDs returns active or completed planned work identities for sessionID.
+// CloseoutComplete reports whether the session's planned workers are settled.
+// A session with none is complete.
+func (s *Service) CloseoutComplete(ctx context.Context, sessionID string) (bool, error) {
+	verdict, err := s.CheckSessionCloseout(ctx, sessionID, "")
+	return verdict.OK, err
+}
+
+// SessionWorkIDs returns the work identities of the session's open workers
+// that belong to a plan, a workflow or carry criteria, and have started.
 func (s *Service) SessionWorkIDs(ctx context.Context, sessionID string) ([]string, error) {
-	if s == nil || s.Records == nil || strings.TrimSpace(sessionID) == "" {
-		return nil, nil
-	}
-	actor := workerrecords.Actor{
-		SessionID:   strings.TrimSpace(sessionID),
-		Role:        workerrecords.RoleCoordinator,
-		PrincipalID: strings.TrimSpace(sessionID),
-	}
-	workers, err := s.Records.Workers(ctx, actor)
+	actor := coordinator(sessionID)
+	workers, err := s.records.Workers(ctx, actor)
 	if err != nil {
 		return nil, err
 	}
 	var out []string
 	for _, w := range workers {
-		if w.ClosedAt != "" {
+		if w.ClosedAt != "" || (w.BlueprintPath == "" && len(w.Criteria) == 0 && w.WorkflowWorkID == "") {
 			continue
 		}
-		if w.BlueprintPath == "" && len(w.Criteria) == 0 && strings.TrimSpace(w.WorkflowWorkID) == "" {
-			continue
+		rounds, err := s.records.Rounds(ctx, actor, w.ID)
+		if err != nil {
+			return nil, err
 		}
-		rounds, rErr := s.Records.Rounds(ctx, actor, w.ID)
-		if rErr != nil {
-			return nil, rErr
+		if len(rounds) > 0 {
+			out = append(out, legIdentifier(w))
 		}
-		if len(rounds) == 0 {
-			continue
-		}
-		out = append(out, legIdentifier(w))
 	}
 	return out, nil
 }
 
-func ungroundedCriterionFailed(criteria []string, outcomes []workerrecords.CriterionOutcome) bool {
-	byName := make(map[string]bool, len(outcomes))
-	for _, o := range outcomes {
-		byName[strings.TrimSpace(o.Criterion)] = o.Passed
-	}
-	for _, raw := range criteria {
-		c := strings.TrimSpace(raw)
-		if (c == "job:complete" || c == "summary:present") && !byName[c] {
-			return true
-		}
-	}
-	return false
-}
-
 func legIdentifier(w workerrecords.Worker) string {
-	if strings.TrimSpace(w.WorkflowWorkID) != "" {
-		return strings.TrimSpace(w.WorkflowWorkID)
+	if w.WorkflowWorkID != "" {
+		return w.WorkflowWorkID
 	}
 	return w.Name
 }
 
-func allCriteriaPassed(criteria []string, outcomes []workerrecords.CriterionOutcome) bool {
-	if len(criteria) == 0 {
-		return true
-	}
-	byName := make(map[string]bool, len(outcomes))
+// unmetCriteria lists the criteria with no passing outcome, in plan order.
+func unmetCriteria(criteria []string, outcomes []workerrecords.CriterionOutcome) []string {
+	passed := make(map[string]bool, len(outcomes))
 	for _, o := range outcomes {
-		byName[strings.TrimSpace(o.Criterion)] = o.Passed
+		passed[o.Criterion] = o.Passed
 	}
-	for _, raw := range criteria {
-		c := strings.TrimSpace(raw)
-		if c != "" && !byName[c] {
-			return false
-		}
-	}
-	return true
-}
-
-func formatCriteriaOutcomes(workerName, resultID string, criteria []string, outcomes []workerrecords.CriterionOutcome) string {
-	byName := make(map[string]workerrecords.CriterionOutcome, len(outcomes))
-	for _, o := range outcomes {
-		byName[strings.TrimSpace(o.Criterion)] = o
-	}
-	parts := make([]string, 0, len(criteria))
-	for _, raw := range criteria {
-		c := strings.TrimSpace(raw)
-		if c == "" {
-			continue
-		}
-		o, ok := byName[c]
-		switch {
-		case !ok:
-			parts = append(parts, c+"=unmet")
-		case o.Passed:
-			parts = append(parts, c+"=passed")
-		case strings.TrimSpace(o.Detail) != "":
-			parts = append(parts, fmt.Sprintf("%s=failed (%s)", c, strings.TrimSpace(o.Detail)))
-		default:
-			parts = append(parts, c+"=failed")
-		}
-	}
-	prefix := "worker " + workerName
-	if strings.TrimSpace(resultID) != "" {
-		prefix += " result " + strings.TrimSpace(resultID)
-	}
-	return prefix + " criteria outcomes: " + strings.Join(parts, ", ")
-}
-
-func hasFileModifiedCriterion(criteria []string) bool {
+	var unmet []string
 	for _, c := range criteria {
-		if strings.HasPrefix(strings.TrimSpace(c), "file:modified:") {
+		if !passed[c] {
+			unmet = append(unmet, c)
+		}
+	}
+	return unmet
+}
+
+func requiresFileChanges(criteria []string) bool {
+	for _, c := range criteria {
+		if strings.HasPrefix(c, criterionFileModified) {
 			return true
 		}
 	}

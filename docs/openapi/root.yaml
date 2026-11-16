@@ -703,8 +703,6 @@ components:
       $ref: components/schemas/board.yaml#/components/schemas/BoardScanSummary
     BoardView:
       $ref: components/schemas/board.yaml#/components/schemas/BoardView
-    BoardWorkerRosterEntry:
-      $ref: components/schemas/board.yaml#/components/schemas/BoardWorkerRosterEntry
     BoardWorker:
       $ref: components/schemas/board.yaml#/components/schemas/BoardWorker
     RepoBrief:

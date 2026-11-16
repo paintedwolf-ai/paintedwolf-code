@@ -253,6 +253,48 @@ describe("AssistantChatTurn agent note", () => {
   });
 });
 
+describe("AssistantChatTurn message actions", () => {
+  it("renders the assistant action toolbar after grounding chrome", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.parse("2026-09-12T18:00:00Z"));
+    try {
+      const onCopy = vi.fn();
+      const messages = [
+        groundedMessage({
+          created_at: "2026-09-12T17:55:00Z",
+          grounding: {
+            traced: true,
+            cited_evidence: [{ path: "src/foo.ts", line: 12 }],
+          },
+        }),
+      ];
+
+      const { container } = render(() => (
+        <AssistantChatTurn
+          item={{ kind: "assistant", key: "msg-1", text: "Survey complete." }}
+          wireRow={() => messages.find((row) => row.id === "msg-1")}
+          projectId="p1"
+          onCopy={onCopy}
+        />
+      ));
+
+      const bubble = container.querySelector(".bubble--assistant")!;
+      const chicklet = screen.getByTestId("citation-evidence-chicklet");
+      const toolbar = screen.getByTestId("message-actions");
+      expect(bubble.contains(toolbar)).toBe(false);
+      expect(
+        Boolean(chicklet.compareDocumentPosition(toolbar) & Node.DOCUMENT_POSITION_FOLLOWING),
+      ).toBe(true);
+      expect(toolbar.getAttribute("data-align")).toBe("start");
+      expect(screen.getByTestId("message-time").textContent).toBe("5m ago");
+      fireEvent.click(screen.getByTestId("bubble-copy"));
+      expect(onCopy).toHaveBeenCalledWith("Survey complete.");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("AssistantChatTurn prose citation links", () => {
   it("linkifies a cited path mentioned in the answer prose", () => {
     const messages = [

@@ -94,7 +94,6 @@ export function sessionTranscriptHandlers(
     operationHandler("getBoard", () => ({
       summary: "",
       repo: { languages: [], file_count: 0, generated_at: "2026-01-01T00:00:00Z" },
-      roster: [],
       cost: null,
       pack_content_hash: "msw",
       detail_level: "compact",

@@ -11,14 +11,15 @@ import { WorkerTranscriptSection } from "./WorkerTranscriptSection.tsx";
 type Props = {
   worker: WorkerTask;
   findings?: FindingsDigest;
-  roster?: BoardView["roster"];
+  board?: BoardView;
+  workers?: readonly WorkerTask[];
   onSelect: () => void;
 };
 
 function FindingRows(props: {
   rows: Finding[];
   testId: string;
-  roster?: BoardView["roster"];
+  workers?: readonly WorkerTask[];
   showAgent: boolean;
 }) {
   return (
@@ -26,7 +27,7 @@ function FindingRows(props: {
       <For each={props.rows}>
         {(finding) => {
           const agent = () =>
-            props.showAgent ? findingAgentLabel(props.roster, finding.agent) : "";
+            props.showAgent ? findingAgentLabel(props.workers, finding.agent) : "";
           return (
             <li
               class="den-worker-transcript-coordination-finding"
@@ -64,7 +65,7 @@ export function WorkerCoordinationSection(props: Props) {
   const posted = () => findingsByWorker(props.findings, jobId());
   const received = () =>
     siblingNotesFor(props.findings, jobId(), props.worker.created_at);
-  const reserved = () => reservationsFor(props.roster, jobId());
+  const reserved = () => reservationsFor(props.board, props.worker);
   const isEmpty = () =>
     posted().length === 0 && received().length === 0 && reserved().length === 0;
 
@@ -101,7 +102,7 @@ export function WorkerCoordinationSection(props: Props) {
             <FindingRows
               rows={received()}
               testId="worker-coordination-received"
-              roster={props.roster}
+              workers={props.workers}
               showAgent
             />
           </section>

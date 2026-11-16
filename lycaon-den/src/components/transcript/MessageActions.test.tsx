@@ -2,7 +2,11 @@ import { render, fireEvent, screen, cleanup, waitFor } from "@solidjs/testing-li
 import { createSignal } from "solid-js";
 import type { RecoveryTarget } from "../../chat/recovery/session-recovery.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MessageActions } from "./MessageActions.tsx";
+import {
+  MessageActions,
+  buildAssistantMessageActions,
+  buildUserMessageActions,
+} from "./MessageActions.tsx";
 import { SessionRecoverDialog } from "./SessionRecoverDialog.tsx";
 
 afterEach(cleanup);
@@ -10,8 +14,15 @@ afterEach(cleanup);
 describe("MessageActions", () => {
   it("renders one icon per provided handler, labelled for assistive tech", () => {
     render(() => (
-      <MessageActions onCopy={() => {}} onEdit={() => {}} onRewind={() => {}} />
+      <MessageActions
+        actions={buildUserMessageActions({
+          onCopy: () => {},
+          onEdit: () => {},
+          onRewind: () => {},
+        })}
+      />
     ));
+    expect(screen.getByTestId("message-actions").getAttribute("data-align")).toBe("end");
     for (const [testid, label] of [
       ["bubble-copy", "Copy"],
       ["user-bubble-edit", "Edit from here"],
@@ -30,7 +41,13 @@ describe("MessageActions", () => {
 
   it("caps recovery chrome at three actions", () => {
     render(() => (
-      <MessageActions onCopy={() => {}} onEdit={() => {}} onRewind={() => {}} />
+      <MessageActions
+        actions={buildUserMessageActions({
+          onCopy: () => {},
+          onEdit: () => {},
+          onRewind: () => {},
+        })}
+      />
     ));
     expect(
       screen.getByTestId("message-actions").querySelectorAll("button"),
@@ -43,7 +60,9 @@ describe("MessageActions", () => {
     const onEdit = vi.fn();
     const onRewind = vi.fn();
     render(() => (
-      <MessageActions onCopy={onCopy} onEdit={onEdit} onRewind={onRewind} />
+      <MessageActions
+        actions={buildUserMessageActions({ onCopy, onEdit, onRewind })}
+      />
     ));
     fireEvent.click(screen.getByTestId("bubble-copy"));
     fireEvent.click(screen.getByTestId("user-bubble-edit"));
@@ -53,16 +72,76 @@ describe("MessageActions", () => {
     expect(onRewind).toHaveBeenCalledTimes(1);
   });
 
-  it("offers Copy alone on an assistant row", () => {
-    render(() => <MessageActions onCopy={() => {}} />);
+  it("offers Copy with start alignment and relative time on an assistant row", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.parse("2026-09-12T18:00:00Z"));
+    try {
+      const { container } = render(() => (
+        <MessageActions
+          align="start"
+          ts="2026-09-12T17:54:00Z"
+          actions={buildAssistantMessageActions({ onCopy: () => {} })}
+        />
+      ));
+      const toolbar = screen.getByTestId("message-actions");
+      expect(toolbar.getAttribute("data-align")).toBe("start");
+      expect(toolbar.classList.contains("den-msg-actions--start")).toBe(true);
+      expect(screen.getByTestId("message-time").textContent).toBe("6m ago");
+      expect(container.querySelector(".den-msg-actions__sep")).not.toBeNull();
+      expect(screen.getByTestId("bubble-copy")).toBeTruthy();
+      expect(screen.queryByTestId("user-bubble-rewind")).toBeNull();
+      expect(screen.queryByTestId("user-bubble-edit")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("formats historical stamps older than an hour without subscribing to the minute clock", () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(Date.parse("2026-09-12T18:00:00Z"));
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    try {
+      render(() => (
+        <MessageActions
+          align="start"
+          ts="2026-09-12T15:00:00Z"
+          actions={buildAssistantMessageActions({ onCopy: () => {} })}
+        />
+      ));
+      expect(screen.getByTestId("message-time").textContent).not.toContain("ago");
+      expect(setTimeoutSpy).not.toHaveBeenCalled();
+    } finally {
+      setTimeoutSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
+  it("omits the timestamp and separator when ts is invalid", () => {
+    const { container } = render(() => (
+      <MessageActions
+        ts="not-a-timestamp"
+        actions={buildAssistantMessageActions({ onCopy: () => {} })}
+      />
+    ));
+    expect(screen.queryByTestId("message-time")).toBeNull();
+    expect(container.querySelector(".den-msg-actions__sep")).toBeNull();
     expect(screen.getByTestId("bubble-copy")).toBeTruthy();
-    expect(screen.queryByTestId("user-bubble-rewind")).toBeNull();
-    expect(screen.queryByTestId("user-bubble-edit")).toBeNull();
+  });
+
+  it("renders nothing when neither actions nor a valid timestamp are present", () => {
+    render(() => <MessageActions ts="not-a-timestamp" actions={[]} />);
+    expect(screen.queryByTestId("message-actions")).toBeNull();
   });
 
   it("walks the toolbar with arrow keys, wrapping at the ends", () => {
     render(() => (
-      <MessageActions onCopy={() => {}} onEdit={() => {}} onRewind={() => {}} />
+      <MessageActions
+        actions={buildUserMessageActions({
+          onCopy: () => {},
+          onEdit: () => {},
+          onRewind: () => {},
+        })}
+      />
     ));
     const copy = screen.getByTestId("bubble-copy");
     const edit = screen.getByTestId("user-bubble-edit");
@@ -78,15 +157,34 @@ describe("MessageActions", () => {
     expect(document.activeElement).toBe(rewind);
   });
 
-  it("flashes Copied on the copy button, then reverts", () => {
+  it("flashes Copied on the copy button, resets on re-click or identity change, and reverts", () => {
     vi.useFakeTimers();
     try {
-      render(() => <MessageActions onCopy={() => {}} />);
+      const [id, setId] = createSignal("copy");
+      const { unmount } = render(() => (
+        <MessageActions
+          actions={[
+            {
+              ...buildAssistantMessageActions({ onCopy: () => {} })[0]!,
+              id: id(),
+            },
+          ]}
+        />
+      ));
       const btn = screen.getByTestId("bubble-copy");
       fireEvent.click(btn);
       expect(btn.getAttribute("aria-label")).toBe("Copied");
+      fireEvent.click(btn);
       vi.advanceTimersByTime(1500);
       expect(btn.getAttribute("aria-label")).toBe("Copy");
+
+      fireEvent.click(btn);
+      expect(btn.getAttribute("aria-label")).toBe("Copied");
+      setId("copy-next");
+      expect(btn.getAttribute("aria-label")).toBe("Copy");
+
+      fireEvent.click(btn);
+      unmount();
     } finally {
       vi.useRealTimers();
     }
@@ -94,7 +192,13 @@ describe("MessageActions", () => {
 
   it("leaves every action available unless recovery is held", () => {
     render(() => (
-      <MessageActions onCopy={() => {}} onEdit={() => {}} onRewind={() => {}} />
+      <MessageActions
+        actions={buildUserMessageActions({
+          onCopy: () => {},
+          onEdit: () => {},
+          onRewind: () => {},
+        })}
+      />
     ));
     for (const testid of ["bubble-copy", "user-bubble-edit", "user-bubble-rewind"]) {
       const button = screen.getByTestId(testid) as HTMLButtonElement;
@@ -110,10 +214,12 @@ describe("MessageActions", () => {
     const [held, setHeld] = createSignal(true);
     render(() => (
       <MessageActions
-        onCopy={onCopy}
-        onEdit={onEdit}
-        onRewind={onRewind}
-        recoveryHeld={held()}
+        actions={buildUserMessageActions({
+          onCopy,
+          onEdit,
+          onRewind,
+          recoveryHeld: held(),
+        })}
       />
     ));
     const toolbar = screen.getByTestId("message-actions");

@@ -925,11 +925,10 @@ type BoardView struct {
 	// Coordinator session this board snapshot belongs to.
 	SessionID string `json:"session_id,omitempty"`
 	// One-line coordination headline (worker counts, merge status, conflicts).
-	Summary string                   `json:"summary"`
-	Repo    RepoBrief                `json:"repo"`
-	Git     *BoardGitSlice           `json:"git,omitempty"`
-	Scans   *BoardScansSlice         `json:"scans,omitempty"`
-	Roster  []BoardWorkerRosterEntry `json:"roster,omitempty"`
+	Summary string           `json:"summary"`
+	Repo    RepoBrief        `json:"repo"`
+	Git     *BoardGitSlice   `json:"git,omitempty"`
+	Scans   *BoardScansSlice `json:"scans,omitempty"`
 	// Open workers in the session, needing the coordinator and most recent first.
 	Workers []BoardWorker `json:"workers,omitempty"`
 	// Opaque cursor for the next page of workers when workers_has_more is true.
@@ -995,28 +994,8 @@ type BoardWorker struct {
 	ReadOmitted    int      `json:"read_omitted,omitempty"`
 	ChangedPaths   []string `json:"changed_paths,omitempty"`
 	ChangedOmitted int      `json:"changed_omitted,omitempty"`
-}
-
-// BoardWorkerRosterEntry
-type BoardWorkerRosterEntry struct {
-	Dependencies []WorkerDependency `json:"dependencies,omitempty"`
-	WorkerID     string             `json:"worker_id"`
-	AgentType    string             `json:"agent_type"`
-	Status       WorkerStatus       `json:"status"`
-	MergeStatus  WorkerMergeStatus  `json:"merge_status,omitempty"`
-	OverlayID    string             `json:"overlay_id,omitempty"`
-	ScopeSummary string             `json:"scope_summary,omitempty"`
-	ChangedPaths []string           `json:"changed_paths,omitempty"`
-	TouchedPaths []string           `json:"touched_paths,omitempty"`
-	// Worker assignment goal included in full board detail.
-	Brief string `json:"brief,omitempty"`
-	Error string `json:"error,omitempty"`
-	// Completed tool rounds this worker run
-	ToolLoopsUsed int `json:"tool_loops_used,omitempty"`
-	// Repo-relative paths held by handoff_reserve for this worker
+	// Repo-relative paths the worker's live round holds with handoff_reserve.
 	Reservations []string `json:"reservations,omitempty"`
-	// True when checkpoint SSE reports a pending human checkpoint for this worker child session
-	BlockedOnApproval bool `json:"blocked_on_approval,omitempty"`
 }
 
 // BriefingEvent A snapshot of one target, or a reset clearing earlier epochs for the listed profiles.

@@ -55,7 +55,6 @@ describe("persistent worker collaboration UI", () => {
       session_id: "sess-1",
       summary: "ok",
       repo: { languages: [], file_count: 0, generated_at: "2026-11-15T01:00:00Z" },
-      roster: [],
       cost: null,
       pack_content_hash: "hash",
       detail_level: "compact",

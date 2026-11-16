@@ -276,12 +276,26 @@ func (r *Runtime) OnDelegationCloseout(ctx context.Context, sessionID, workflowR
 
 // NotifySettledPlanCloseout advances the active workflow run once every planned worker is settled.
 func (r *Runtime) NotifySettledPlanCloseout(ctx context.Context, sessionID string) {
-	if r == nil || r.Plan == nil {
+	runID, err := r.Plan.SettledWorkflowRunID(ctx, sessionID)
+	if err != nil {
+		slog.WarnContext(ctx, "check plan closeout", "session_id", sessionID, "err", err)
 		return
 	}
-	if runID := r.Plan.SettledWorkflowRunID(ctx, sessionID); runID != "" {
+	if runID != "" {
 		r.OnDelegationCloseout(ctx, sessionID, runID)
 	}
+}
+
+// PlanCloseoutComplete reports whether the session's planned workers are
+// settled. Workflow conditions are built before the plan service, so they
+// hold this method rather than the service.
+func (r *Runtime) PlanCloseoutComplete(ctx context.Context, sessionID string) (bool, error) {
+	return r.Plan.CloseoutComplete(ctx, sessionID)
+}
+
+// PlanWorkIDs lists the session's started plan work, for the same reason.
+func (r *Runtime) PlanWorkIDs(ctx context.Context, sessionID string) ([]string, error) {
+	return r.Plan.SessionWorkIDs(ctx, sessionID)
 }
 
 // NotifyPromotedTask advances settled workflow runs when a worker overlay promotes.

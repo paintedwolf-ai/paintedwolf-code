@@ -62,16 +62,6 @@ func (o *OrchestratorImpl) bindUnitWorkspacesIfIsolated(
 	return bindings, nil
 }
 
-// BindLegWorkspacesIfIsolatedForTest exposes bindUnitWorkspacesIfIsolated for unit tests.
-func (o *OrchestratorImpl) BindLegWorkspacesIfIsolatedForTest(
-	ctx context.Context,
-	spec TopologySpec,
-	projectDir, batchID string,
-	unitIDs []string,
-) ([]*workspace.Binding, error) {
-	return o.bindUnitWorkspacesIfIsolated(ctx, spec, projectDir, batchID, unitIDs)
-}
-
 func (o *OrchestratorImpl) destroyBindings(ctx context.Context, bindings []*workspace.Binding) {
 	if o == nil || o.workspaces == nil {
 		return

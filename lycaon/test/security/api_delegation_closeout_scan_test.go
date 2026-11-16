@@ -12,7 +12,9 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerplan"
+	"github.com/lycaon/lycaon/internal/workerplan/plantest"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -77,20 +79,20 @@ func TestDelegationCloseoutWithoutSecurityEvidenceGatePending(t *testing.T) {
 	})
 	testutil.FailErr(t, "SetChange landed", err)
 
-	planSvc := &workerplan.Service{
-		Records:     records,
-		Security:    checker,
-		HostDataDir: func(context.Context, string) (string, error) { return projectDir, nil },
-	}
-	verdict, err := planSvc.CheckSessionCloseout(ctx, "sess-closeout", testdbseed.DefaultProjectID, projectDir)
+	planDeps := plantest.Deps(records)
+	planDeps.Jobs = worker.NewSQLQueue(sqlDB, 1)
+	planDeps.Security = checker
+	planDeps.HostDataDir = func(context.Context, string) (string, error) { return projectDir, nil }
+	planSvc := plantest.New(t, planDeps)
+	verdict, err := planSvc.CheckSessionCloseout(ctx, "sess-closeout", projectDir)
 	testutil.FailErr(t, "CheckSessionCloseout", err)
-	if verdict.OK || verdict.GatePending == nil {
-		t.Fatalf("expected gate_pending without evidence, got %+v", verdict)
+	if verdict.OK || verdict.Gap != workerplan.GapScanPending {
+		t.Fatalf("expected a pending scan gate without evidence, got %+v", verdict)
 	}
 
 	completeSecurityLanding(t, store, evidenceStore, projectDir, obligation)
 
-	verdict, err = planSvc.CheckSessionCloseout(ctx, "sess-closeout", testdbseed.DefaultProjectID, projectDir)
+	verdict, err = planSvc.CheckSessionCloseout(ctx, "sess-closeout", projectDir)
 	testutil.FailErr(t, "CheckSessionCloseout after ingest", err)
 	if !verdict.OK {
 		t.Fatalf("expected closeout pass after ingested evidence: %+v", verdict)

@@ -58,9 +58,6 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 	if r.Records == nil {
 		r.Records = workerrecords.New(deps.Storage.Database)
 	}
-	if r.Plan == nil {
-		r.Plan = &workerplan.Service{Records: r.Records}
-	}
 	if r.Topology == nil {
 		r.Topology = workertopology.New(r.Records, r.Queue)
 	}
@@ -112,21 +109,26 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 		Sessions: deps.Storage.Sessions,
 		Runs:     deps.Workflows.Store.Runs,
 	}
-	r.Plan.Records = r.Records
-	r.Plan.Plans = deps.Workflows.Blueprints
-	r.Plan.Approvals = deps.Workflows.Blueprints
-	r.Plan.WorkflowReady = workflowReady
-	r.Plan.Runs = deps.Workflows.Manager.Policy
-	r.Plan.ActiveRuns = deps.Workflows.Store.Runs
-	r.Plan.HeadSHA = deps.Git
-	r.Plan.GitDiff = workerplan.NewGitDiffAdapter(deps.Git)
-	r.Plan.SourceRuns = deps.Sessions.Manager.Verification
-	r.Plan.Inspector = deps.Workflows.Inspector
-	r.Plan.Security = deps.Scanning.Closeout
-	r.Plan.Jobs = r.Queue
-	r.Plan.HostDataDir = func(_ context.Context, projectID string) (string, error) {
-		return project.EnsureHostDataDir(deps.Storage.Directory, projectID)
+	plan, err := workerplan.New(workerplan.Deps{
+		Records:       r.Records,
+		Plans:         deps.Workflows.Blueprints,
+		Approvals:     deps.Workflows.Blueprints,
+		WorkflowReady: workflowReady,
+		Runs:          deps.Workflows.Manager.Policy,
+		ActiveRuns:    deps.Workflows.Store.Runs,
+		HeadSHA:       deps.Git,
+		GitDiff:       workerplan.NewGitDiffAdapter(deps.Git),
+		SourceRuns:    deps.Sessions.Manager.Verification,
+		Jobs:          r.Queue,
+		Security:      deps.Scanning.Closeout,
+		HostDataDir: func(_ context.Context, projectID string) (string, error) {
+			return project.EnsureHostDataDir(deps.Storage.Directory, projectID)
+		},
+	})
+	if err != nil {
+		return err
 	}
+	r.Plan = plan
 	deps.Workflows.Manager.Fanout.PlannedWorkKnown = r.Plan.HasPlannedWorker
 	deps.Sessions.Manager.Coordinator.Guards.SetPlanCloseout(r.Plan)
 	r.Queue.SetRoundDeliveryHooks(
@@ -134,7 +136,16 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 			if task == nil {
 				return ""
 			}
-			outcomes := r.Plan.EvaluateRoundDelivery(c, task.ParentSessionID, task.ID, task.ChildSessionID, projectDir, jobComplete, summary, diverged, report)
+			outcomes, err := r.Plan.EvaluateRoundDelivery(c, task.ParentSessionID, task.ID, workerplan.DeliveryInput{
+				ChildSessionID: task.ChildSessionID, ProjectDir: projectDir, JobComplete: jobComplete,
+				Summary: summary, ModifiedPaths: diverged, ChangeReport: report,
+			})
+			if err != nil {
+				// The result settles without outcomes; closeout evaluates
+				// its criteria again and reports what it cannot read.
+				slog.WarnContext(c, "evaluate round criteria", "job_id", task.ID, "err", err)
+				return ""
+			}
 			return workerrecords.EncodeCriteriaOutcomes(outcomes)
 		},
 		r.NotifySettledPlanCloseout,

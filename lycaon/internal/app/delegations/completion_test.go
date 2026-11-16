@@ -63,15 +63,3 @@ func TestCompletionCoverageValidationUsesDurableWorkerIdentity(t *testing.T) {
 		t.Fatalf("branch retention ignored query cancellation: %v", err)
 	}
 }
-
-func TestScanAndPromotionCloseoutHooks(t *testing.T) {
-	database := testdbfixture.Open(t, "closeout-hooks.db")
-	runtime := New(database, nil, worker.WorkersConfig{})
-
-	var nilRuntime *Runtime
-	nilRuntime.NotifySettledPlanCloseout(t.Context(), "parent")
-
-	runtime.NotifyPromotedTask(t.Context(), api.WorkerTask{ParentSessionID: "parent"})
-	testutil.FailErr(t, "session scan closeout", runtime.OnScanCloseout(t.Context(), api.CodeScan{SessionID: "parent"}))
-	testutil.FailErr(t, "idle scan closeout", runtime.OnScanCloseout(t.Context(), api.CodeScan{}))
-}

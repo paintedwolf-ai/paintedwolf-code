@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerplan"
+	"github.com/lycaon/lycaon/internal/workerplan/plantest"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
@@ -197,7 +198,10 @@ func wireToolpolicyMatrixContract(
 	}
 
 	queue := worker.NewInMemoryQueue(4)
-	if err := workerplan.RegisterPlanFromBlueprintTool(reg, &workerplan.Service{Records: workerrecords.New(sqlDB), Plans: blueprintMgr}); err != nil {
+	planDeps := plantest.Deps(workerrecords.New(sqlDB))
+	planDeps.Plans, planDeps.Approvals = blueprintMgr, blueprintMgr
+	planSvc := plantest.New(t, planDeps)
+	if err := workerplan.RegisterPlanFromBlueprintTool(reg, planSvc); err != nil {
 		contractcheck.FailErr(t, "workerplan.RegisterPlanFromBlueprintTool failed", err)
 	}
 	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
@@ -206,6 +210,7 @@ func wireToolpolicyMatrixContract(
 		Workers:       worker.DefaultWorkersConfig(),
 		WorkerRecords: workerrecords.New(sqlDB),
 		Reviews:       &workerops.Service{},
+		Plan:          planSvc,
 	}); err != nil {
 		contractcheck.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}

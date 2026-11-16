@@ -39,7 +39,7 @@ type TaskToolDeps struct {
 	WorkerRecords *workerrecords.Store
 	// Reviews binds a reviewer to the sealed result it reads.
 	Reviews ReviewBinder
-	// Plan binds Blueprint and criteria-bearing planned legs onto worker rounds.
+	// Plan resolves a task to its planned worker and gates its admission.
 	Plan *workerplan.Service
 }
 
@@ -62,18 +62,15 @@ func (d TaskToolDeps) resolveWorkflowWork(ctx context.Context, sessionID, workID
 			return work, found, err
 		}
 	}
-	if d.Plan != nil {
-		return d.Plan.ResolvePlannedWorkflowWork(ctx, sessionID, workID)
-	}
-	return spawn.WorkflowWork{}, false, nil
+	return d.Plan.ResolvePlannedWorkflowWork(ctx, sessionID, workID)
 }
 
 var taskToolLog = observability.LazyComponent("task_tool")
 
 // RegisterTaskTool registers task(agent_type, brief, files?) for coordinator spawns.
 func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
-	if reg == nil || deps.Queue == nil || deps.Agents == nil || deps.WorkerRecords == nil || deps.Reviews == nil {
-		return fmt.Errorf("registry, queue, agents, worker records and reviews required")
+	if reg == nil || deps.Queue == nil || deps.Agents == nil || deps.WorkerRecords == nil || deps.Reviews == nil || deps.Plan == nil {
+		return fmt.Errorf("registry, queue, agents, worker records, reviews and plan required")
 	}
 	identityResolver := deps.IdentityResolver()
 	return reg.Register("task", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {

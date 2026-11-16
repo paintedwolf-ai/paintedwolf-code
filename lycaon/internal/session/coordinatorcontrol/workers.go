@@ -26,9 +26,6 @@ type Workers struct {
 	// RoundProvenance resolves a job's worker name, round ordinal, workflow
 	// work ID, and latest sent message seq in one lookup when set.
 	RoundProvenance func(ctx context.Context, jobID string) (worker string, ordinal int64, workID string, latestSent int64, ok bool, err error)
-	// LatestSent is the seq of the latest message the worker running a job
-	// sent to its coordinator; zero when it has sent none.
-	LatestSent func(ctx context.Context, jobID string) (int64, error)
 }
 
 func (m *Workers) Terminal(ctx context.Context, parentID, completingJobID string) {
@@ -56,22 +53,16 @@ func (m *Workers) RoundNotice(ctx context.Context, parentID string, facts kick.W
 // addressed adds what the coordinator knows the round's worker by: its name,
 // round ordinal, workflow work ID, and latest message.
 func (m *Workers) addressed(ctx context.Context, facts kick.WorkerRoundNoticeFacts) kick.WorkerRoundNoticeFacts {
-	if m.RoundProvenance != nil {
-		if worker, ord, workID, latest, ok, err := m.RoundProvenance(ctx, facts.JobID); err == nil && ok {
-			facts.Worker = worker
-			facts.RoundOrdinal = ord
-			if facts.WorkflowWorkID == "" {
-				facts.WorkflowWorkID = workID
-			}
-			facts.LatestMessageSeq = latest
-			return facts
-		}
+	if m.RoundProvenance == nil {
+		return facts
 	}
-	facts.Worker = m.Names.Name(ctx, facts.JobID)
-	if m.LatestSent != nil {
-		if seq, err := m.LatestSent(ctx, facts.JobID); err == nil {
-			facts.LatestMessageSeq = seq
+	if worker, ord, workID, latest, ok, err := m.RoundProvenance(ctx, facts.JobID); err == nil && ok {
+		facts.Worker = worker
+		facts.RoundOrdinal = ord
+		if facts.WorkflowWorkID == "" {
+			facts.WorkflowWorkID = workID
 		}
+		facts.LatestMessageSeq = latest
 	}
 	return facts
 }

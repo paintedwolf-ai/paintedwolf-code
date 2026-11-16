@@ -6,10 +6,11 @@ package workerroster
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"slices"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/spawn"
 
 	"github.com/lycaon/lycaon/internal/overlayplan"
 	"github.com/lycaon/lycaon/internal/workerops"
@@ -255,10 +256,11 @@ func (s Source) row(ctx context.Context, actor workerrecords.Actor, snap workero
 		}
 	}
 	if round, ok := snap.LatestResult(); ok {
-		disp := disposition(snap, round)
+		d := snap.Dispositions[round.ResultID]
+		disp := workerrecords.ResultDisposition(d.ChangeState, round.CheckpointID, d.AccountedAt)
 		row.Result = &Result{Handle: round.ResultID, Disposition: disp}
 		row.DispositionLabel = dispositionLabel(disp)
-		row.ShelveReason = snap.Dispositions[round.ResultID].ShelveReason
+		row.ShelveReason = d.ShelveReason
 	}
 	start := 0
 	if len(snap.Rounds) > MaxRoundPathScan {
@@ -392,19 +394,6 @@ func (s Source) changedPaths(jobID string) []string {
 		return nil
 	}
 	return job.Result.ChangeReport.ChangedPaths
-}
-
-func disposition(snap workerops.Snapshot, round workerrecords.Round) string {
-	d := snap.Dispositions[round.ResultID]
-	switch {
-	case d.ChangeState != "":
-		return d.ChangeState
-	case round.CheckpointID != "":
-		return "open"
-	case d.AccountedAt != "":
-		return "accounted"
-	}
-	return "unaccounted"
 }
 
 // bound dedupes paths in first-seen order and keeps MaxPaths of them.

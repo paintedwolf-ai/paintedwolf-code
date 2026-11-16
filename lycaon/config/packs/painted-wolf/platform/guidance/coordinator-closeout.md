@@ -8,5 +8,4 @@ Stop calling tools and give your final answer; do not update the checklist, as o
 If a report document is requested, end with its one `json` fence; never send JSON alone.
 
 {% include "partials/project-path-presentation.md" %}
-
-Do not paste file or code content; it is discarded.
+Cite file ranges instead of pasting their content.

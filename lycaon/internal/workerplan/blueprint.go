@@ -3,82 +3,15 @@ package workerplan
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/blueprint"
-	"github.com/lycaon/lycaon/internal/inspector"
-	"github.com/lycaon/lycaon/internal/scan"
-	"github.com/lycaon/lycaon/internal/session/workercompletion"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerrecords"
-	"github.com/lycaon/lycaon/pkg/api"
 )
-
-// PlanReader loads Blueprint documents by project and path.
-type PlanReader interface {
-	Get(ctx context.Context, projectID, path string) (*api.Blueprint, error)
-}
-
-// ApprovalChecker reports whether a Blueprint revision is currently approved.
-type ApprovalChecker interface {
-	IsApproved(ctx context.Context, projectID, blueprintPath string) (bool, error)
-}
-
-// WorkflowReadyChecker reports whether implement handoff preconditions hold.
-type WorkflowReadyChecker interface {
-	ImplementWorkflowReady(ctx context.Context, sessionID, blueprintPath string) (bool, error)
-}
-
-// RunChecker enforces workflow run runnability.
-type RunChecker interface {
-	AssertRunnable(ctx context.Context, runID string) error
-}
-
-// ActiveRunReader looks up the active workflow run for a coordinator session.
-type ActiveRunReader interface {
-	ActiveBySession(ctx context.Context, sessionID string) (*api.WorkflowRun, error)
-}
-
-// HeadSHAReader captures the current workspace HEAD commit when available.
-type HeadSHAReader interface {
-	HeadSHA(ctx context.Context, workspacePath string) (string, error)
-}
-
-// GitDiffReader checks working-tree and base-commit diffs for file criteria.
-type GitDiffReader interface {
-	DiffFromRef(ctx context.Context, projectDir, baseSHA, path string) (bool, error)
-	HasUncommittedDiff(ctx context.Context, projectDir, path string) (bool, error)
-}
-
-// SourceRunReader lists command and verify receipts attributed to a worker session.
-type SourceRunReader interface {
-	WorkerSourceRuns(ctx context.Context, childSessionID string) ([]workercompletion.WorkerInvocationReceipt, error)
-}
-
-// JobStatusReader looks up worker jobs for closeout status checks.
-type JobStatusReader interface {
-	Get(id string) (*api.WorkerTask, bool)
-}
-
-// Service manages Blueprint seeding, round admission gates, criteria evaluation, and plan closeout.
-type Service struct {
-	Records       *workerrecords.Store
-	Plans         PlanReader
-	Approvals     ApprovalChecker
-	WorkflowReady WorkflowReadyChecker
-	Runs          RunChecker
-	ActiveRuns    ActiveRunReader
-	HeadSHA       HeadSHAReader
-	GitDiff       GitDiffReader
-	SourceRuns    SourceRunReader
-	Inspector     inspector.Inspector
-	Security      *scan.SecurityCloseoutChecker
-	Jobs          JobStatusReader
-	HostDataDir   func(ctx context.Context, projectID string) (string, error)
-}
 
 // SeededLeg describes one reconciled Blueprint leg in the session roster.
 type SeededLeg struct {
@@ -112,38 +45,55 @@ type SeedRequest struct {
 	BlueprintPath string
 }
 
-// PlanFromBlueprint reconciles planned workers in req.Actor's session from an approved Blueprint.
+// PlanFromBlueprint reconciles the session's planned workers with an approved
+// Blueprint: it creates a worker per new task, restages unstarted ones whose
+// task changed and withdraws unstarted ones whose task is gone. Workers that
+// already ran are left as they are.
 func (s *Service) PlanFromBlueprint(ctx context.Context, req SeedRequest) (SeedResult, error) {
-	if s == nil || s.Records == nil || s.Plans == nil {
-		return SeedResult{}, fmt.Errorf("blueprint planning service not configured")
-	}
+	const tool = "plan_from_blueprint"
 	path := strings.TrimSpace(req.BlueprintPath)
 	if path == "" {
-		return SeedResult{}, invalidBlueprintArg("blueprint_path_required", "")
+		return SeedResult{}, blueprintReject(tool, "blueprint_path_required", "")
 	}
-	planDoc, err := s.Plans.Get(ctx, req.ProjectID, path)
+	planDoc, err := s.plans.Get(ctx, req.ProjectID, path)
+	if errors.Is(err, blueprint.ErrNotFound) || errors.Is(err, blueprint.ErrInvalidBlueprintPath) {
+		return SeedResult{}, blueprintReject(tool, "blueprint_not_found", path)
+	}
 	if err != nil {
-		return SeedResult{}, invalidBlueprintArg("blueprint_not_found", path)
-	}
-	if err := s.checkBlueprintApproval(ctx, req.Actor.SessionID, req.ProjectID, path, "plan_from_blueprint"); err != nil {
 		return SeedResult{}, err
 	}
-	runID, phase, err := s.checkActiveWorkflowRun(ctx, req.Actor.SessionID, "plan_from_blueprint", path)
+	if err := s.checkBlueprintApproval(ctx, req.Actor.SessionID, req.ProjectID, path, tool); err != nil {
+		return SeedResult{}, err
+	}
+	runID, phase, err := s.activeRun(ctx, req.Actor.SessionID, tool)
 	if err != nil {
 		return SeedResult{}, err
 	}
 	legs, err := ParseBlueprintLegs(planDoc)
+	var graph *GraphError
+	if errors.As(err, &graph) {
+		reject := blueprintReject(tool, graph.Reason, path)
+		if graph.Task != "" {
+			reject.Data["task"] = graph.Task
+		}
+		if graph.Other != "" {
+			reject.Data["other_task"] = graph.Other
+		}
+		return SeedResult{}, reject
+	}
 	if err != nil {
-		return SeedResult{}, invalidBlueprintArg(err.Error(), path)
+		return SeedResult{}, err
 	}
 	revision := blueprint.ContentDigest(planDoc.Content)
-	existing, err := s.Records.ByBlueprint(ctx, req.Actor, path)
+	existing, err := s.records.ByBlueprint(ctx, req.Actor, path)
 	if err != nil {
 		return SeedResult{}, err
 	}
 	baseSHA := existingBaseSHA(existing)
-	if baseSHA == "" && s.HeadSHA != nil && strings.TrimSpace(req.WorkspacePath) != "" {
-		if sha, shaErr := s.HeadSHA.HeadSHA(ctx, req.WorkspacePath); shaErr == nil {
+	if baseSHA == "" && req.WorkspacePath != "" {
+		// A workspace without a commit has no base; file criteria then rest
+		// on each round's change report.
+		if sha, err := s.headSHA.HeadSHA(ctx, req.WorkspacePath); err == nil {
 			baseSHA = strings.TrimSpace(sha)
 		}
 	}
@@ -157,7 +107,7 @@ func (s *Service) reconcileBlueprintLegs(
 	legs []LegSpec,
 	existing []workerrecords.Worker,
 ) (SeedResult, error) {
-	sessionWorkers, err := s.Records.Workers(ctx, req.Actor)
+	sessionWorkers, err := s.records.Workers(ctx, req.Actor)
 	if err != nil {
 		return SeedResult{}, err
 	}
@@ -177,14 +127,14 @@ func (s *Service) reconcileBlueprintLegs(
 		if w.ClosedAt != "" {
 			continue
 		}
-		rounds, rErr := s.Records.Rounds(ctx, req.Actor, w.ID)
+		rounds, rErr := s.records.Rounds(ctx, req.Actor, w.ID)
 		if rErr != nil {
 			return SeedResult{}, rErr
 		}
 		roundsByWorker[w.ID] = rounds
 		if _, wanted := wantByWorkID[w.WorkflowWorkID]; !wanted && len(rounds) == 0 {
 			op := workerrecords.Op{ID: fmt.Sprintf("%s:withdraw:%s", req.OperationID, w.ID)}
-			if _, cErr := s.Records.Close(ctx, req.Actor, op, w.ID, "withdrawn"); cErr != nil {
+			if _, cErr := s.records.Close(ctx, req.Actor, op, w.ID, "withdrawn"); cErr != nil {
 				return SeedResult{}, cErr
 			}
 			withdrawn = append(withdrawn, w.Name)
@@ -205,7 +155,7 @@ func (s *Service) reconcileBlueprintLegs(
 				continue
 			}
 			op := workerrecords.Op{ID: fmt.Sprintf("%s:stage:%s", req.OperationID, leg.WorkID)}
-			updated, uErr := s.Records.UpdatePlanned(ctx, req.Actor, op, cur.ID, spec, nil)
+			updated, uErr := s.records.UpdatePlanned(ctx, req.Actor, op, cur.ID, spec, nil)
 			if uErr != nil {
 				return SeedResult{}, uErr
 			}
@@ -216,12 +166,12 @@ func (s *Service) reconcileBlueprintLegs(
 			spec.Name = leg.WorkID
 		}
 		op := workerrecords.Op{ID: fmt.Sprintf("%s:create:%s", req.OperationID, leg.WorkID)}
-		created, cErr := s.Records.CreateWorker(ctx, req.Actor, op, spec)
+		created, cErr := s.records.CreateWorker(ctx, req.Actor, op, spec)
 		if cErr != nil {
 			return SeedResult{}, cErr
 		}
 		takenNames[created.Name] = true
-		w, wErr := s.Records.Worker(ctx, req.Actor, created.WorkerID)
+		w, wErr := s.records.Worker(ctx, req.Actor, created.WorkerID)
 		if wErr != nil {
 			return SeedResult{}, wErr
 		}
@@ -242,7 +192,7 @@ func (s *Service) reconcileBlueprintLegs(
 		if len(rounds) == 0 && !unchanged[w.ID] && len(afterNames) > 0 {
 			spec := legWorkerSpec(leg, blueprintPath, revision, baseSHA, runID, phase)
 			op := workerrecords.Op{ID: fmt.Sprintf("%s:deps:%s", req.OperationID, leg.WorkID)}
-			updated, uErr := s.Records.UpdatePlanned(ctx, req.Actor, op, w.ID, spec, afterNames)
+			updated, uErr := s.records.UpdatePlanned(ctx, req.Actor, op, w.ID, spec, afterNames)
 			if uErr != nil {
 				return SeedResult{}, uErr
 			}
@@ -256,7 +206,7 @@ func (s *Service) reconcileBlueprintLegs(
 			Files:        append([]string(nil), w.Files...),
 			AfterWorkers: afterNames,
 			Criteria:     append([]string(nil), w.Criteria...),
-			State:        legRunState(rounds, s.Jobs),
+			State:        legRunState(rounds),
 		})
 	}
 	return SeedResult{
@@ -295,59 +245,32 @@ func existingBaseSHA(workers []workerrecords.Worker) string {
 	return ""
 }
 
-func legRunState(rounds []workerrecords.Round, jobs JobStatusReader) string {
+// legRunState is a planned leg's state in the plan_from_blueprint result.
+func legRunState(rounds []workerrecords.Round) string {
 	if len(rounds) == 0 {
 		return "planned"
 	}
-	last := rounds[len(rounds)-1]
-	if last.SettledAt == "" {
-		return "started"
-	}
-	if jobs != nil {
-		if job, ok := jobs.Get(last.JobID); ok && job != nil && job.Status == api.WorkerStatusComplete {
-			return "completed"
-		}
-	}
-	if last.ResultID != "" {
+	if last := rounds[len(rounds)-1]; last.SettledAt != "" && last.ResultID != "" {
 		return "completed"
 	}
 	return "started"
 }
 
-func invalidBlueprintArg(reason, blueprintPath string) error {
-	data := map[string]any{
-		"tool":   "plan_from_blueprint",
-		"field":  "blueprint_path",
-		"reason": reason,
-	}
-	if blueprintPath != "" {
-		data["blueprint_path"] = blueprintPath
-	}
-	return &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: data}
-}
-
 // RegisterPlanFromBlueprintTool registers plan_from_blueprint on reg.
 func RegisterPlanFromBlueprintTool(reg *tools.DefaultRegistry, svc *Service) error {
-	if reg == nil || svc == nil {
-		return fmt.Errorf("registry and workerplan service required")
-	}
-	return reg.Register("plan_from_blueprint", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		sessionID := strings.TrimSpace(tctx.Identity.SessionID)
+	const tool = "plan_from_blueprint"
+	return reg.Register(tool, func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
+		sessionID := tctx.Identity.SessionID
 		if sessionID == "" {
-			return "", fmt.Errorf("plan_from_blueprint requires a session identity")
+			return "", fmt.Errorf("%s requires a session identity", tool)
 		}
-		agent := strings.TrimSpace(tctx.Identity.Agent)
-		if strings.TrimSpace(tctx.Identity.ParentSessionID) != "" || (agent != "" && !strings.EqualFold(agent, "coordinator")) {
-			return "", &toolrejection.ToolReject{
-				Code: "TOOL_ARGS_INVALID",
-				Data: map[string]any{"tool": "plan_from_blueprint", "reason": "coordinator_only"},
-			}
+		if agent := tctx.Identity.Agent; tctx.Identity.ParentSessionID != "" || (agent != "" && !strings.EqualFold(agent, "coordinator")) {
+			return "", planReject(tool, "coordinator_only", nil)
 		}
-		opID := "plan_from_blueprint:" + sessionID + ":" + strings.TrimSpace(tctx.Identity.ToolCallID)
 		blueprintPath, _ := args["blueprint_path"].(string)
 		out, err := svc.PlanFromBlueprint(ctx, SeedRequest{
-			Actor:         workerrecords.Actor{SessionID: sessionID, Role: workerrecords.RoleCoordinator, PrincipalID: sessionID},
-			OperationID:   opID,
+			Actor:         coordinator(sessionID),
+			OperationID:   tool + ":" + sessionID + ":" + tctx.Identity.ToolCallID,
 			ProjectID:     tctx.Identity.ProjectID,
 			WorkspacePath: tctx.ActiveRootPath(),
 			BlueprintPath: blueprintPath,
@@ -357,30 +280,22 @@ func RegisterPlanFromBlueprintTool(reg *tools.DefaultRegistry, svc *Service) err
 		}
 		raw, err := json.Marshal(out)
 		if err != nil {
-			return "", fmt.Errorf("encode plan_from_blueprint output: %w", err)
+			return "", fmt.Errorf("encode %s output: %w", tool, err)
 		}
 		return string(raw), nil
 	})
 }
 
-// PlanWorkers returns the names of open workers in sessionID bound to plan (exact or suffix/substring match).
-func (s *Service) PlanWorkers(ctx context.Context, sessionID, plan string) (map[string]bool, error) {
-	sessionID = strings.TrimSpace(sessionID)
-	plan = strings.TrimSpace(plan)
-	if s == nil || s.Records == nil || sessionID == "" || plan == "" {
-		return nil, nil
-	}
-	actor := workerrecords.Actor{SessionID: sessionID, Role: workerrecords.RoleCoordinator, PrincipalID: sessionID}
-	workers, err := s.Records.Workers(ctx, actor)
+// PlanWorkers returns the names of the session's open workers planned from
+// the Blueprint at blueprintPath.
+func (s *Service) PlanWorkers(ctx context.Context, sessionID, blueprintPath string) (map[string]bool, error) {
+	workers, err := s.records.ByBlueprint(ctx, coordinator(sessionID), blueprintPath)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]bool)
+	out := make(map[string]bool, len(workers))
 	for _, w := range workers {
-		if w.ClosedAt != "" {
-			continue
-		}
-		if w.BlueprintPath == plan || (w.BlueprintPath != "" && strings.Contains(w.BlueprintPath, plan)) {
+		if w.ClosedAt == "" {
 			out[w.Name] = true
 		}
 	}

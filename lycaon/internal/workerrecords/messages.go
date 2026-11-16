@@ -123,14 +123,6 @@ type Page struct {
 	More     bool      `json:"more,omitempty"`
 }
 
-// OpenPage returns up to limit messages a recipient session has not yet been
-// shown, oldest first, at most MaxPageMessages and MaxHistoryPageBytes. Until
-// CommitPage records a successful response the same page is returned again, so
-// a failed request replays it.
-func (s *Store) OpenPage(ctx context.Context, actor Actor, workerID string, generation int64, limit int) (Page, error) {
-	return s.OpenPageBounded(ctx, actor, workerID, generation, limit, MaxHistoryPageBytes)
-}
-
 // OpenPageBounded opens or replays an undelivered page bounded by message
 // count and byte budget, always delivering at least one message when unread
 // messages exist so oversized bodies never stall delivery.
@@ -431,12 +423,6 @@ func (s *Store) NotApplied(ctx context.Context, actor Actor, workerID string, or
 		out = append(out, messageFromRow(m))
 	}
 	return out, nil
-}
-
-// LatestSentSeq is the seq of the latest message sent by the worker whose
-// round jobID runs, to its coordinator; zero when it has sent none.
-func (s *Store) LatestSentSeq(ctx context.Context, jobID string) (int64, error) {
-	return s.q.GetLatestWorkerSentSeqByJob(ctx, strings.TrimSpace(jobID))
 }
 
 // UnreadCoordinatorCount counts messages sent to the coordinator that have not

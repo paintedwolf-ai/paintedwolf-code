@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
 	"github.com/lycaon/lycaon/internal/api/httpio"
@@ -36,11 +37,9 @@ import (
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/webindex"
 	"github.com/lycaon/lycaon/internal/worker"
-	"github.com/lycaon/lycaon/internal/workerlane"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
-	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 type Activity struct {
@@ -174,37 +173,8 @@ func buildWorkerOps(deps Dependencies) *workerops.Service {
 	if deps.Core.Database == nil {
 		return nil
 	}
-	records := workerrecords.New(deps.Core.Database)
-	lanes := workerlane.NewM14State(deps.Workflow.Workers)
-	checkpoints := deps.Approvals.Checkpoints
-	toolApproval := wire.CheckpointKindToolApproval
-	return &workerops.Service{
-		Reader: workerops.Reader{
-			Records:   records,
-			Jobs:      deps.Workflow.Workers,
-			Decisions: decisions.NewSQL(deps.Core.Database),
-			Readiness: func(ctx context.Context, actor workerrecords.Actor, workerID string) (bool, error) {
-				prep, ok, err := records.LatestPreparation(ctx, actor, workerID)
-				if err != nil || !ok {
-					return false, err
-				}
-				recovery, _, err := lanes.Readiness(ctx, prep.PreparationRef)
-				if err != nil || recovery {
-					return recovery, err
-				}
-				round, _, hasResult, err := records.LatestSettledResult(ctx, actor, workerID)
-				if err != nil || !hasResult {
-					return false, err
-				}
-				return lanes.PromotionUnsettled(ctx, round.JobID)
-			},
-			ApprovalWait: func(ctx context.Context, childSessionID string) bool {
-				if checkpoints == nil {
-					return false
-				}
-				pending, err := checkpoints.ListPending(ctx, childSessionID, &toolApproval)
-				return err == nil && len(pending) > 0
-			},
-		},
-	}
+	return &workerops.Service{Reader: workerops.NewReader(
+		workerrecords.New(deps.Core.Database), deps.Workflow.Workers,
+		decisions.NewSQL(deps.Core.Database), deps.Approvals.Checkpoints,
+	)}
 }

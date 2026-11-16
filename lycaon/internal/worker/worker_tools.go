@@ -39,8 +39,8 @@ type WorkerToolDeps struct {
 // RegisterWorkerTools registers instruct_worker, shelve_overlay and
 // worker_history.
 func RegisterWorkerTools(reg *tools.DefaultRegistry, deps WorkerToolDeps) error {
-	if reg == nil || deps.Ops == nil || deps.Queue == nil {
-		return fmt.Errorf("registry, worker operations and queue required")
+	if reg == nil || deps.Ops == nil || deps.Queue == nil || deps.Plan == nil {
+		return fmt.Errorf("registry, worker operations, queue and plan required")
 	}
 	for name, h := range map[string]tools.ToolHandler{
 		InstructWorkerTool: instructWorkerHandler(deps),
@@ -131,17 +131,15 @@ func roundEnqueuer(deps WorkerToolDeps, tctx tools.ToolContext, args map[string]
 		} else if len(w.Files) > 0 && taskScope.Mode == api.TaskScopeMode(w.ScopeMode) {
 			taskScope.Paths = append([]string(nil), w.Files...)
 		}
-		if deps.Plan != nil {
-			if err := deps.Plan.CheckRoundAdmission(ctx, workerplan.RoundAdmissionRequest{
-				Actor:      coordinatorActor(tctx),
-				Tool:       InstructWorkerTool,
-				ProjectID:  scope.ProjectID,
-				Worker:     w,
-				ScopeMode:  string(taskScope.Mode),
-				WritePaths: taskScope.Paths,
-			}); err != nil {
-				return "", "", err
-			}
+		if err := deps.Plan.CheckRoundAdmission(ctx, workerplan.RoundAdmissionRequest{
+			Actor:      coordinatorActor(tctx),
+			Tool:       InstructWorkerTool,
+			ProjectID:  scope.ProjectID,
+			Worker:     w,
+			ScopeMode:  string(taskScope.Mode),
+			WritePaths: taskScope.Paths,
+		}); err != nil {
+			return "", "", err
 		}
 		task := api.WorkerTask{
 			ID:               uuid.NewString(),

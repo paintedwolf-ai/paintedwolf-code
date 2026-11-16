@@ -1,7 +1,6 @@
 import type {
   BoardView,
   BoardWorker,
-  BoardWorkerRosterEntry,
   CheckpointKind,
   WorkerTask,
 } from "../../api/types.ts";
@@ -72,25 +71,19 @@ export function pendingWorkerApprovalByJob(
   );
 }
 
-/** Project the SSE join onto the board roster and workers without mutating the sidecar snapshot. */
+/** Project the SSE join onto the board workers without mutating the sidecar snapshot. */
 export function boardWithWorkerApprovalState(
   board: BoardView | undefined,
   workers: readonly WorkerTask[],
   checkpoints: readonly PendingCheckpoint[],
 ): BoardView | undefined {
-  if (!board?.roster && !board?.workers) return board;
+  if (!board?.workers) return board;
   const approvals = pendingWorkerApprovals(workers, checkpoints);
   const blockedJobs = new Set(approvals.map((approval) => approval.jobId));
   const blockedChildren = new Set(
     approvals.map((approval) => approval.childSessionId),
   );
-  const roster: BoardWorkerRosterEntry[] | undefined = board.roster?.map(
-    (row) => ({
-      ...row,
-      blocked_on_approval: blockedJobs.has(row.worker_id) || undefined,
-    }),
-  );
-  const boardWorkers: BoardWorker[] | undefined = board.workers?.map((bw) => {
+  const boardWorkers: BoardWorker[] = board.workers.map((bw) => {
     const child = bw.child_session_id?.trim() ?? "";
     const latestJob = bw.latest_job_id?.trim() ?? "";
     const waitingForApproval =
@@ -104,9 +97,5 @@ export function boardWithWorkerApprovalState(
       state_label: "Waiting for approval",
     };
   });
-  return {
-    ...board,
-    ...(roster ? { roster } : {}),
-    ...(boardWorkers ? { workers: boardWorkers } : {}),
-  };
+  return { ...board, workers: boardWorkers };
 }

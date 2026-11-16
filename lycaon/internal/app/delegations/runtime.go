@@ -64,7 +64,6 @@ func New(database *db.Store, outbox *eventoutbox.Outbox, workersCfg worker.Worke
 	return &Runtime{
 		Queue:    queue,
 		Records:  records,
-		Plan:     &workerplan.Service{Records: records},
 		Topology: workertopology.New(records, queue),
 	}
 }

@@ -16,133 +16,53 @@ const baseBoard = {
 };
 
 describe("reconcileWorkersFromBoard", () => {
-  it("patches merge_status on a terminal merge", () => {
-    const workers: WorkerTask[] = [
-      {
-        id: "job-1",
-        agent_type: "implementer",
-        status: "complete",
-        merge_status: "pending",
-        created_at: "t",
-      },
-    ];
-    const next = reconcileWorkersFromBoard(workers, {
-      ...baseBoard,
-      roster: [
-        {
-          worker_id: "job-1",
-          agent_type: "implementer",
-          status: "complete",
-          merge_status: "merged",
-        },
-      ],
-    });
-    expect(next[0]?.merge_status).toBe("merged");
+  const row = (id: string, extra: Partial<WorkerTask> = {}): WorkerTask => ({
+    id,
+    agent_type: "implementer",
+    status: "complete",
+    created_at: "t",
+    ...extra,
   });
 
-  it("patches merge_status when overlay is rejected", () => {
-    const workers: WorkerTask[] = [
-      {
-        id: "job-1",
-        agent_type: "implementer",
-        status: "complete",
-        merge_status: "pending",
-        created_at: "t",
-      },
-    ];
+  it("applies the worker's identity to every round and its latest result to the latest round", () => {
+    const workers = [row("job-1", { worker_record_id: "rec-1" }), row("job-2", { worker_record_id: "rec-1" })];
     const next = reconcileWorkersFromBoard(workers, {
       ...baseBoard,
-      roster: [
+      workers: [
         {
-          worker_id: "job-1",
+          worker_id: "rec-1",
+          name: "parser",
           agent_type: "implementer",
-          status: "complete",
-          merge_status: "rejected",
+          state: "delivered",
+          child_session_id: "child-1",
+          latest_job_id: "job-2",
+          round: 2,
+          result_handle: "parser#2",
+          result_disposition: "landed",
         },
       ],
     });
-    expect(next[0]?.merge_status).toBe("rejected");
+    expect(next[0]).toMatchObject({ worker_name: "parser", child_session_id: "child-1" });
+    expect(next[0]?.result_handle).toBeUndefined();
+    expect(next[1]).toMatchObject({
+      worker_name: "parser",
+      round: 2,
+      result_handle: "parser#2",
+      result_disposition: "landed",
+    });
   });
 
   it("returns the same workers array when board reconcile is a no-op", () => {
-    const workers: WorkerTask[] = [
-      {
-        id: "job-1",
-        agent_type: "implementer",
-        status: "complete",
-        merge_status: "pending",
-        created_at: "t",
-      },
-    ];
+    const workers = [row("job-1", { worker_name: "parser", round: 1 })];
     const next = reconcileWorkersFromBoard(workers, {
       ...baseBoard,
-      roster: [
-        {
-          worker_id: "job-1",
-          agent_type: "implementer",
-          status: "complete",
-          merge_status: "pending",
-        },
-      ],
+      workers: [{ name: "parser", agent_type: "implementer", state: "idle", latest_job_id: "job-1", round: 1 }],
     });
     expect(next).toBe(workers);
   });
 
-  it("refuses to regress a terminal status back to running from a stale board snapshot", () => {
-    // Ignore stale snapshots that would regress a terminal worker.
-    const workers: WorkerTask[] = [
-      {
-        id: "job-1",
-        agent_type: "web-researcher",
-        status: "complete",
-        created_at: "t",
-      },
-    ];
-    const next = reconcileWorkersFromBoard(workers, {
-      ...baseBoard,
-      roster: [
-        {
-          worker_id: "job-1",
-          agent_type: "web-researcher",
-          status: "running",
-        },
-      ],
-    });
-    expect(next[0]?.status).toBe("complete");
-  });
-
-  it("still applies a forward transition into a terminal status", () => {
-    const workers: WorkerTask[] = [
-      {
-        id: "job-1",
-        agent_type: "web-researcher",
-        status: "running",
-        created_at: "t",
-      },
-    ];
-    const next = reconcileWorkersFromBoard(workers, {
-      ...baseBoard,
-      roster: [
-        {
-          worker_id: "job-1",
-          agent_type: "web-researcher",
-          status: "complete",
-        },
-      ],
-    });
-    expect(next[0]?.status).toBe("complete");
-  });
-
-  it("returns the same workers array when board snapshot has no roster", () => {
-    const workers: WorkerTask[] = [
-      {
-        id: "job-1",
-        agent_type: "implementer",
-        status: "running",
-        created_at: "t",
-      },
-    ];
-    const next = reconcileWorkersFromBoard(workers, baseBoard);
-    expect(next).toBe(workers);
+  it("returns the same workers array when the board has no workers", () => {
+    const workers = [row("job-1", { status: "running" })];
+    expect(reconcileWorkersFromBoard(workers, baseBoard)).toBe(workers);
   });
 });

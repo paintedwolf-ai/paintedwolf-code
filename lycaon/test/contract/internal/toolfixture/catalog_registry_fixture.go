@@ -49,6 +49,7 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerplan"
+	"github.com/lycaon/lycaon/internal/workerplan/plantest"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
@@ -79,7 +80,10 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	if err := blueprint.RegisterPlanTools(reg, blueprintMgr); err != nil {
 		contractcheck.FailErr(t, "blueprint.RegisterPlanTools failed", err)
 	}
-	if err := workerplan.RegisterPlanFromBlueprintTool(reg, &workerplan.Service{Records: workerrecords.New(sqlDB), Plans: blueprintMgr}); err != nil {
+	planDeps := plantest.Deps(workerrecords.New(sqlDB))
+	planDeps.Plans, planDeps.Approvals = blueprintMgr, blueprintMgr
+	planSvc := plantest.New(t, planDeps)
+	if err := workerplan.RegisterPlanFromBlueprintTool(reg, planSvc); err != nil {
 		contractcheck.FailErr(t, "workerplan.RegisterPlanFromBlueprintTool failed", err)
 	}
 	boardSnap := &board.SnapshotBuilder{Repo: repotest.NewProvider(t)}
@@ -98,6 +102,7 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 		Ops:     &workerops.Service{},
 		Queue:   worker.NewInMemoryQueue(2),
 		Workers: worker.DefaultWorkersConfig(),
+		Plan:    planSvc,
 	}); err != nil {
 		contractcheck.FailErr(t, "worker.RegisterWorkerTools failed", err)
 	}
@@ -208,12 +213,14 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 
 	agents := orchestration.NewMemoryAgentRegistry()
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
+	planSvc := plantest.New(t, plantest.Deps(workerrecords.New(sqlDB)))
 	if err := worker.RegisterTaskTool(rt.Registry, worker.TaskToolDeps{
 		Queue:         worker.NewInMemoryQueue(2),
 		Agents:        agents,
 		Workers:       worker.DefaultWorkersConfig(),
 		WorkerRecords: workerrecords.New(sqlDB),
 		Reviews:       &workerops.Service{},
+		Plan:          planSvc,
 	}); err != nil {
 		contractcheck.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
@@ -221,6 +228,7 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 		Ops:     &workerops.Service{},
 		Queue:   worker.NewInMemoryQueue(2),
 		Workers: worker.DefaultWorkersConfig(),
+		Plan:    planSvc,
 	}); err != nil {
 		contractcheck.FailErr(t, "worker.RegisterWorkerTools failed", err)
 	}
