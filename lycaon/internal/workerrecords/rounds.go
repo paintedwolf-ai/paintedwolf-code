@@ -358,9 +358,13 @@ func latestSettledResult(ctx context.Context, q *db.Queries, workerID string) (R
 		OperationID: r.OperationID, CreatedAt: r.CreatedAt, SettledAt: r.SettledAt, CheckpointID: r.CheckpointID,
 	})
 	round.ResultID = r.ResultID
-	disp := Disposition{
-		ResultID: r.ResultID, WorkerID: r.WorkerID,
-		ChangeState: r.ChangeState, ShelveReason: r.ShelveReason, AccountedAt: r.AccountedAt,
+	disp := Disposition{ResultID: r.ResultID, WorkerID: r.WorkerID, ChangeState: r.ChangeState, AccountedAt: r.AccountedAt}
+	if r.ChangeState == ChangeShelved {
+		dRow, err := q.GetWorkerResultDisposition(ctx, r.ResultID)
+		if err != nil && !db.IsNoRows(err) {
+			return Round{}, Disposition{}, false, err
+		}
+		disp.ShelveReason = dRow.ShelveReason
 	}
 	return round, disp, true, nil
 }
