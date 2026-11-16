@@ -54,8 +54,8 @@ export function ActionCard(props: Props) {
         <Show when={externalAccess()} keyed>
           {(access) => <NetworkChicklet externalAccess={access} sessionId={props.sessionId} disclosureKey={transcriptDisclosureKey.toolNetwork(props.part.id)} />}
         </Show>
-        <Show when={props.action.preview}>
-          {(preview) => <ActionPreview preview={preview()} action={props.action} part={props.part} sessionId={props.sessionId} client={props.client} />}
+        <Show when={props.action.preview} keyed>
+          {(preview) => <ActionPreview preview={preview} action={props.action} part={props.part} sessionId={props.sessionId} client={props.client} />}
         </Show>
         <Show when={redaction()} keyed>
           {(meta) => <p class="den-action-card__notice" data-testid="action-redaction"><RedactionChicklet message={{ host_secret_redaction: meta }} /></p>}
