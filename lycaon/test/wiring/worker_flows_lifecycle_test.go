@@ -173,6 +173,7 @@ func TestFlow13Flow14AndFlow15ReuseSurveyorSmallEditAndExternalWait(t *testing.T
 	actor14 := workerrecords.Actor{SessionID: sess14.ID, Role: workerrecords.RoleCoordinator, PrincipalID: sess14.ID}
 	scripts.results["coordinator"] = MockCoordinatorCloseoutMarkdown("Updated direct.go directly.", "direct.go") + "\n[verify: inspection - Direct edit verified]"
 	scripts.push("coordinator",
+		api.ToolCall{ID: "c-load", Name: "request_tools", Args: map[string]any{"need": "command"}},
 		api.ToolCall{ID: "c-edit", Name: "command", Args: map[string]any{"command": "printf 'package auth\\nvar Direct = 1\\n' > direct.go"}},
 		api.ToolCall{ID: "c-prog", Name: "update_progress", Args: h.ProgressUpdateArgs(t, ctx, sess14.ID, "## Progress\n- [x] wiring test plan\n")},
 	)
