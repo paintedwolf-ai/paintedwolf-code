@@ -420,7 +420,7 @@ PERF_BENCH_BASELINE="$(python3 scripts/artifact_paths.py artifacts)/perf/old.jso
 
 `perf:soak` gracefully restarts the exact engine it started against the same store, proves the persisted task and transcript recover, confirms the old in-memory SSE cursor receives `event_replay_unavailable`, reconnects from the new generation, and continues paced mixed concurrent reads and prompts. It finishes with `PRAGMA quick_check`, zero duplicate event ids, settled/replay parity, no dropped performance records, and bounded steady-state growth. Reports and embedded budgets live under `perf/` in the artifact root; the nightly job retains them for 30 days and runs a ten-minute soak.
 
-`perf:bench` discovers benchmark packages from source, records package-qualified medians plus allocation counts in the artifact root's `perf/go-bench.json`, and compares with any prior report through `PERF_BENCH_BASELINE`. Machine-to-machine timing is not a universal baseline; budgets are deliberately generous for the supported macOS runner.
+`perf:bench` discovers benchmark packages from source, records package-qualified medians plus allocation counts in the artifact root's `perf/go-bench.json`, and compares with any prior report through `PERF_BENCH_BASELINE`. Gated benchmarks fail on their median bytes or allocations per operation; time per operation, and its change against a baseline, is reported and never judged.
 
 ### Sidecar profiling
 

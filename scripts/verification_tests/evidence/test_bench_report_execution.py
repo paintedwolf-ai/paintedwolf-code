@@ -28,15 +28,17 @@ def gated_bench_text(overrides=None, omit=(), extra_lines=()):
 
 
 class BenchReportTests(unittest.TestCase):
-    def report(self, text):
+    def report(self, text, baseline=None):
         with tempfile.TemporaryDirectory() as directory:
             raw = Path(directory, "bench.txt")
             raw.write_text(text, encoding="utf-8")
             output = Path(directory, "report.json")
-            result = subprocess.run(
-                [sys.executable, str(SCRIPT), "--input", str(raw), "--output", str(output)],
-                text=True, capture_output=True, check=False,
-            )
+            command = [sys.executable, str(SCRIPT), "--input", str(raw), "--output", str(output)]
+            if baseline is not None:
+                prior = Path(directory, "baseline.json")
+                prior.write_text(json.dumps(baseline), encoding="utf-8")
+                command += ["--baseline", str(prior)]
+            result = subprocess.run(command, text=True, capture_output=True, check=False)
             report = json.loads(output.read_text(encoding="utf-8")) if output.exists() else None
             return result, report
 
@@ -86,6 +88,15 @@ class BenchReportTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn(f"{target}: 138000001 B/op > 138000000 B/op", result.stderr)
         self.assertFalse(report["benchmarks"][target]["gate_passed"])
+
+    def test_slower_time_is_reported_without_failing(self):
+        target = "internal/toolhost/BenchmarkCommandProgram/noop"
+        result, report = self.report(
+            gated_bench_text(),
+            baseline={"benchmarks": {target: {"median_ns_per_op": 50}}},
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(report["comparison"], [{"name": target, "time_change_percent": 9900.0}])
 
     def test_missing_gated_benchmark_fails_report(self):
         missing = "internal/toolhost/BenchmarkStructuredWc"

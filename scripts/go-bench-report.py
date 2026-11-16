@@ -13,6 +13,7 @@ from pathlib import Path
 
 REQUIRED_METRICS = {"ns/op": "ns_per_op", "B/op": "bytes_per_op", "allocs/op": "allocs_per_op"}
 
+# Gates bound work a runner's speed cannot change. Time per operation is reported only.
 BENCHMARK_GATES: dict[str, dict[str, float]] = {
     "internal/toolhost/BenchmarkCommandProgram/noop": {
         "bytes_per_op": 1_100_000.0,
@@ -178,8 +179,7 @@ def main() -> None:
             f"{float(values['median_bytes_per_op']):10.0f} B/op {float(values['median_allocs_per_op']):8.0f} allocs/op{gate_suffix}"
         )
     for change in result.get("comparison", []):
-        marker = "REGRESSION" if change["time_change_percent"] > 10 else "change"
-        print(f"  {marker}: {change['name']} {change['time_change_percent']:+.2f}%")
+        print(f"  time change: {change['name']} {change['time_change_percent']:+.2f}%")
     if gate_failures:
         raise SystemExit("benchmark gate exceeded:\n  " + "\n  ".join(gate_failures))
 
