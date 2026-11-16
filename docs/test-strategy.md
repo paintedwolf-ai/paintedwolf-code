@@ -593,7 +593,8 @@ each host type-checks are declared in `scripts/arch-lint-policy.json`. A Linux
 host cannot type-check the darwin build of cgo-only packages, so Linux judges
 the Linux build alone: code only darwin files call can look unreachable there,
 and belongs in a darwin file. Reachability cannot see reflection or
-`go:linkname`; code reached only that way is a defect to fix at its source.
+`go:linkname`; code reached only that way is a defect to fix at its source. Functions in generated files are judged through their generator, so a
+generator's uniform surface does not fail the ratchet one enum at a time.
 
 ### The change base
 

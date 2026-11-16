@@ -155,6 +155,11 @@ func load(cfg Config, goos string) (*pass, error) {
 			}
 		}
 		for _, file := range p.Syntax {
+			// A generated file is judged through its generator, which is itself
+			// a command reach checks.
+			if ast.IsGenerated(file) {
+				continue
+			}
 			for _, decl := range file.Decls {
 				if fd, ok := decl.(*ast.FuncDecl); ok {
 					fn := prog.FuncValue(p.TypesInfo.Defs[fd.Name].(*types.Func))
