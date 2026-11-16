@@ -19,7 +19,7 @@ func TestIntegrityFailureStopsRunnerAndStoreCoupledMaintenance(t *testing.T) {
 	_, err = store.ExecContext(t.Context(), `INSERT INTO project_roots(id,project_id,path,label,added_at) VALUES('invalid','absent','/absent','absent','2026-01-01T00:00:00Z')`)
 	testutil.FailErr(t, "inject damaged relation", err)
 	app := &ServeApp{resources: &runtimeResources{db: store}}
-	runner := &backgroundRunner{name: "store-integrity-audit", run: func(ctx context.Context) error { return db.RunIntegrityAudit(ctx, store) }, retryDelay: func(int) time.Duration {
+	runner := &backgroundRunner{name: "store-integrity-audit", run: func(ctx context.Context) error { return runStoreIntegrityAudit(ctx, store, nil) }, retryDelay: func(int) time.Duration {
 		t.Error("permanent integrity failure entered retry")
 		return time.Millisecond
 	}}
