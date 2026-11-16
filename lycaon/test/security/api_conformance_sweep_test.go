@@ -32,24 +32,25 @@ import (
 type conformanceRule string
 
 const (
-	ruleResponsesConform          conformanceRule = "responses_conform"
-	ruleUnknownResources          conformanceRule = "unknown_resources_answer_not_found"
-	ruleRequestBodies             conformanceRule = "request_bodies_are_validated"
-	rulePagination                conformanceRule = "page_inputs_are_validated"
-	ruleReadsHaveNoEffects        conformanceRule = "reads_have_no_side_effects"
-	ruleNoSecretMaterial          conformanceRule = "no_secret_material_escapes"
-	ruleMessageIsNoticeCopy       conformanceRule = "error_message_is_notice_copy"
-	ruleDetailsAreDeclared        conformanceRule = "error_details_are_declared"
-	ruleEventScopesAreHostIDs     conformanceRule = "event_scopes_name_host_resources"
-	ruleEventPayloadsMatchSchemas conformanceRule = "event_payloads_match_their_schemas"
-	ruleOperationsSucceed         conformanceRule = "every_operation_succeeds"
+	ruleResponsesConform             conformanceRule = "responses_conform"
+	ruleUnknownResources             conformanceRule = "unknown_resources_answer_not_found"
+	ruleRequestBodies                conformanceRule = "request_bodies_are_validated"
+	rulePagination                   conformanceRule = "page_inputs_are_validated"
+	ruleReadsHaveNoEffects           conformanceRule = "reads_have_no_side_effects"
+	ruleNoSecretMaterial             conformanceRule = "no_secret_material_escapes"
+	ruleMessageIsNoticeCopy          conformanceRule = "error_message_is_notice_copy"
+	ruleDetailsAreDeclared           conformanceRule = "error_details_are_declared"
+	ruleEventScopesAreHostIDs        conformanceRule = "event_scopes_name_host_resources"
+	ruleEventPayloadsMatchSchemas    conformanceRule = "event_payloads_match_their_schemas"
+	ruleOperationsSucceed            conformanceRule = "every_operation_succeeds"
+	ruleKeyedOperationsAreIdempotent conformanceRule = "keyed_operations_are_idempotent"
 )
 
 var conformanceRules = []conformanceRule{
 	ruleResponsesConform, ruleUnknownResources, ruleRequestBodies, rulePagination,
 	ruleReadsHaveNoEffects, ruleNoSecretMaterial, ruleMessageIsNoticeCopy,
 	ruleDetailsAreDeclared, ruleEventScopesAreHostIDs, ruleEventPayloadsMatchSchemas,
-	ruleOperationsSucceed,
+	ruleOperationsSucceed, ruleKeyedOperationsAreIdempotent,
 }
 
 // conformanceRequestBudget bounds one request so a handler that never returns
@@ -92,7 +93,8 @@ func TestAPIConformance(t *testing.T) {
 	sweep := newConformanceSweep(doc, validator, h.Server, usernotice.NewCatalog(noticeCfg))
 	sweep.eventSchemas = newEventSchemas(filepath.Join(root, "docs"))
 	settleSourceWatcher(t, h.Server.WaitForBackground, hub, projectDir)
-	sweep.effects = openConformanceEffects(t, h, hub, projectDir)
+	effects := openConformanceEffects(t, h, hub, projectDir)
+	sweep.effects, sweep.keyRows = effects, effects
 	bindConformanceFixtures(sweep.values, project, sess, "README.md")
 	sweep.values.bind("/v1/providers/{provider_id}", "", provider)
 	// A keyed web research provider.
@@ -142,6 +144,7 @@ type conformanceSweep struct {
 	notices   *usernotice.Catalog
 	values    *conformanceValues
 	effects   conformanceEffects
+	keyRows   conformanceKeyRows
 	// readObserved names reads whose answered request has already been checked for effects.
 	readObserved map[string]bool
 	secrets      *conformanceSecrets
@@ -153,6 +156,8 @@ type conformanceSweep struct {
 	// and the last answer otherwise.
 	outcomesMu sync.Mutex
 	succeeded  map[string]bool
+	// replayed counts keyed operations whose success was replayed.
+	replayed   int
 	lastAnswer map[string]string
 }
 

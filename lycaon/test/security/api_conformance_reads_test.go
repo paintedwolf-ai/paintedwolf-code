@@ -147,6 +147,8 @@ type hostEffects struct {
 	projectDir string
 	// barrierStep makes every barrier write change the file's content.
 	barrierStep int
+	// textColumns lists each table's text columns, read once.
+	textColumns map[string][]string
 }
 
 // watcherQuietGrace is how long the fixture tree's change debouncer must stay
@@ -409,4 +411,55 @@ func sourceChangeNamed(published <-chan wire.EventEnvelope, path string) bool {
 			return false
 		}
 	}
+}
+
+// keyRows counts, per table, the rows any text column of which equals key.
+func (e *hostEffects) keyRows(ctx context.Context, key string) (map[string]int, error) {
+	if e.textColumns == nil {
+		columns, err := storeTextColumns(ctx, e.conn)
+		if err != nil {
+			return nil, err
+		}
+		e.textColumns = columns
+	}
+	counts := map[string]int{}
+	for table, columns := range e.textColumns {
+		conditions := make([]string, len(columns))
+		args := make([]any, len(columns))
+		for i, column := range columns {
+			conditions[i] = fmt.Sprintf("%q = ?", column)
+			args[i] = key
+		}
+		var n int
+		query := fmt.Sprintf("SELECT COUNT(*) FROM %q WHERE %s", table, strings.Join(conditions, " OR "))
+		if err := e.conn.QueryRowContext(ctx, query, args...).Scan(&n); err != nil {
+			return nil, fmt.Errorf("count %s: %w", table, err)
+		}
+		if n > 0 {
+			counts[table] = n
+		}
+	}
+	return counts, nil
+}
+
+// storeTextColumns lists the text columns of every ordinary table.
+func storeTextColumns(ctx context.Context, conn *sql.Conn) (map[string][]string, error) {
+	rows, err := conn.QueryContext(ctx, `SELECT m.name, p.name FROM sqlite_schema m JOIN pragma_table_info(m.name) p
+		WHERE m.type = 'table' AND m.name NOT LIKE 'sqlite_%' AND upper(p.type) LIKE '%TEXT%'`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][]string{}
+	for rows.Next() {
+		var table, column string
+		if err := rows.Scan(&table, &column); err != nil {
+			return nil, err
+		}
+		out[table] = append(out[table], column)
+	}
+	if len(out) == 0 && rows.Err() == nil {
+		return nil, errors.New("the store has no text columns")
+	}
+	return out, rows.Err()
 }

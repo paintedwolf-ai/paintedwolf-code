@@ -57,6 +57,20 @@ paths:
         '404': {$ref: '#/components/responses/Error'}
         '413': {$ref: '#/components/responses/Error'}
         '415': {$ref: '#/components/responses/Error'}
+  /v1/widgets/{id}/renames:
+    parameters: [{$ref: '#/components/parameters/WidgetID'}]
+    post:
+      operationId: renameWidget
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: '#/components/schemas/RenameInput'}}}
+      responses:
+        '200': {description: renamed, content: {application/json: {schema: {$ref: '#/components/schemas/Widget'}}}}
+        '400': {$ref: '#/components/responses/Error'}
+        '404': {$ref: '#/components/responses/Error'}
+        '409': {$ref: '#/components/responses/Error'}
+        '413': {$ref: '#/components/responses/Error'}
+        '415': {$ref: '#/components/responses/Error'}
   /v1/widgets/{id}/parts/{part_id}:
     parameters:
       - {$ref: '#/components/parameters/WidgetID'}
@@ -93,6 +107,13 @@ components:
       required: [id, name]
       additionalProperties: false
       properties: {id: {type: string, format: uuid}, name: {type: string}}
+    RenameInput:
+      type: object
+      required: [operation_id, label]
+      additionalProperties: false
+      properties:
+        operation_id: {type: string, format: uuid}
+        label: {type: string, minLength: 1}
     PartInput:
       type: object
       required: [name]
@@ -119,6 +140,8 @@ type widgetFaults struct {
 	rawMessage       bool // a 404 carries Go error text as its message
 	undeclaredDetail bool // a 404 carries a details key its notice does not declare
 	refusesCreate    bool // createPart refuses every valid body
+	rowPerReplay     bool // renameWidget stores a row for every replay of a key
+	acceptsReuse     bool // renameWidget applies a different body under a used key
 }
 
 // widgetAPI serves widgetSpec through the production responder.
@@ -128,7 +151,11 @@ type widgetAPI struct {
 	writes    atomic.Int64
 	mu        sync.Mutex
 	token     string
+	// renames holds one row per operation_id: the label it applied.
+	renames []widgetRename
 }
+
+type widgetRename struct{ key, label string }
 
 func (a *widgetAPI) routes() http.Handler {
 	mux := http.NewServeMux()
@@ -136,6 +163,7 @@ func (a *widgetAPI) routes() http.Handler {
 	mux.HandleFunc("GET /v1/widgets/{id}", a.getWidget)
 	mux.HandleFunc("POST /v1/widgets/{id}/parts", a.createPart)
 	mux.HandleFunc("GET /v1/widgets/{id}/parts/{part_id}", a.getPart)
+	mux.HandleFunc("POST /v1/widgets/{id}/renames", a.renameWidget)
 	return mux
 }
 
@@ -215,6 +243,53 @@ func (a *widgetAPI) createPart(w http.ResponseWriter, r *http.Request) {
 	httpio.WriteJSON(w, http.StatusCreated, map[string]any{"id": fixturePartID, "name": in.Name})
 }
 
+func (a *widgetAPI) renameWidget(w http.ResponseWriter, r *http.Request) {
+	if r.PathValue("id") != fixtureWidgetID {
+		a.widgetNotFound(w)
+		return
+	}
+	var in struct {
+		OperationID string `json:"operation_id"`
+		Label       string `json:"label"`
+	}
+	if err := httpio.DecodeJSON(w, r, &in); err != nil {
+		a.responses.DecodeError(w, r, err)
+		return
+	}
+	if in.OperationID == "" || in.Label == "" {
+		a.responses.FailDetails(w, wire.ApiErrorCodeInvalidRequest, map[string]any{"field": "label"}, "")
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for _, done := range a.renames {
+		if done.key != in.OperationID || a.faults.acceptsReuse || a.faults.rowPerReplay {
+			continue
+		}
+		if done.label != in.Label {
+			a.responses.Fail(w, wire.ApiErrorCodeIdempotencyConflict, "")
+			return
+		}
+		httpio.WriteJSON(w, http.StatusOK, map[string]any{"id": fixtureWidgetID, "label": done.label})
+		return
+	}
+	a.renames = append(a.renames, widgetRename{key: in.OperationID, label: in.Label})
+	httpio.WriteJSON(w, http.StatusOK, map[string]any{"id": fixtureWidgetID, "label": in.Label})
+}
+
+// keyRows counts the renames stored under key.
+func (a *widgetAPI) keyRows(_ context.Context, key string) (map[string]int, error) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	counts := map[string]int{}
+	for _, done := range a.renames {
+		if done.key == key {
+			counts["renames"]++
+		}
+	}
+	return counts, nil
+}
+
 func (a *widgetAPI) getPart(w http.ResponseWriter, r *http.Request) {
 	unknownWidget := r.PathValue("id") != fixtureWidgetID
 	unknownPart := r.PathValue("part_id") != fixturePartID
@@ -266,6 +341,7 @@ func widgetNotices(t *testing.T) *usernotice.Catalog {
 			"invalid_request":        entry("Invalid request", "field", "reason"),
 			"invalid_query":          entry("Invalid query", "param", "reason"),
 			"invalid_page_cursor":    entry("Invalid cursor", "param"),
+			"idempotency_conflict":   entry("Operation reused"),
 			"invalid_json":           entry("Invalid JSON"),
 			"unsupported_media_type": entry("Unsupported media type"),
 			"body_too_large":         entry("Body too large"),
@@ -286,6 +362,7 @@ func newWidgetSweep(t *testing.T, faults widgetFaults) *conformanceSweep {
 	api := &widgetAPI{faults: faults, responses: httpio.Responder{Logger: slog.New(slog.DiscardHandler), Notices: notices}}
 	sweep := newConformanceSweep(doc, validator, api.routes(), notices)
 	sweep.effects = counterEffects{writes: &api.writes}
+	sweep.keyRows = api
 	sweep.eventSchemas = newEventSchemas(widgetEventSchemaDir(t))
 	sweep.values.bind("/v1/widgets/{id}/parts/{part_id}", "part_id", fixturePartID)
 	return sweep

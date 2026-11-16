@@ -81,9 +81,14 @@ func (s *conformanceSweep) probeSuccessPaths(ctx context.Context) {
 			continue
 		}
 		ex := s.send(ctx, req)
-		if ex.status/100 == 2 {
-			s.bindCreated(op, ex)
+		if ex.status/100 != 2 {
+			continue
 		}
+		if op.keyed() {
+			s.checkIdempotent(ctx, ex)
+			s.replayed++
+		}
+		s.bindCreated(op, ex)
 	}
 }
 
@@ -156,5 +161,12 @@ func (s *conformanceSweep) checkCoverage() {
 		}
 		s.findings.add(ruleOperationsSucceed, op.ID, "success", "never answered a success; last answer %s", s.lastAnswer[op.ID])
 	}
+	keyed := 0
+	for _, op := range s.ops {
+		if op.keyed() {
+			keyed++
+		}
+	}
 	s.findings.note("success path: %d of %d operations answered a validated success", covered, len(s.ops))
+	s.findings.note("idempotency: %d of %d keyed operations replayed", s.replayed, keyed)
 }

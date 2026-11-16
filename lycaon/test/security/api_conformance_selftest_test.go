@@ -69,6 +69,10 @@ func TestConformanceSweepDetectsEachBrokenInvariant(t *testing.T) {
 			`getWidget: unknown {id}: session_not_found message is "sql: no rows in result set", not the notice copy "Widget not found."`},
 		{"undeclared detail", widgetFaults{undeclaredDetail: true}, ruleDetailsAreDeclared,
 			"getWidget: unknown {id}: session_not_found details.path is not declared by its notice context_schema"},
+		{"replay stores a second row", widgetFaults{rowPerReplay: true}, ruleKeyedOperationsAreIdempotent,
+			"renameWidget: replay: replays changed the rows naming the key: map[renames:1], then map[renames:11]"},
+		{"reused key applies a different body", widgetFaults{acceptsReuse: true}, ruleKeyedOperationsAreIdempotent,
+			"renameWidget: changed body: answered 200, want 409 idempotency_conflict"},
 		{"mutation never succeeds", widgetFaults{refusesCreate: true}, ruleOperationsSucceed,
 			"createPart: success: never answered a success; last answer success answered 400 invalid_request"},
 	} {
