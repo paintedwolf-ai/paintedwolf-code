@@ -2,6 +2,7 @@ import { expect, type APIRequestContext, type Locator, type Page } from "@playwr
 import { writeFileSync } from "node:fs";
 import { setTranscriptSpacingForTest as setSpacing } from "./transcript-spacing-helpers.ts";
 import { apiConfig, apiSeedSessionTranscript, bootstrapChatSession, liveChatStage, modelIndependentWebE2e as test, settledChatSessionId, transcriptMessages } from "./helpers.ts";
+import { animationsFinished, scrollSettled } from "./fixtures/settle.ts";
 
 test.afterEach(async ({ page }, info) => {
   if (info.status === info.expectedStatus) return;
@@ -118,10 +119,10 @@ async function seed(page: Page, request: APIRequestContext) {
 }
 async function readHistory(page: Page, stream: Locator) {
   await stream.press("PageUp");
-  await page.waitForTimeout(400);
+  await scrollSettled(stream);
   // Place the fixture beyond the jump button's near-tail threshold after native key motion.
   await stream.evaluate((host) => { host.scrollTop = host.scrollHeight - host.clientHeight * 3; });
-  await settleLayout(page);
+  await scrollSettled(stream);
   await expect(page.getByTestId("stream-scroll-jump")).toHaveAttribute("aria-hidden", "false");
   // Pick a point near a row's beginning that remains inside it after contraction.
   await stream.evaluate((host) => {
@@ -131,7 +132,7 @@ async function readHistory(page: Page, stream: Locator) {
     if (!row) throw new Error("visible reading row is missing");
     host.scrollTop += row.getBoundingClientRect().top - top + 10;
   });
-  await page.waitForTimeout(200);
+  await scrollSettled(stream);
 }
 
 for (const following of [true, false]) {
@@ -194,18 +195,24 @@ for (const following of [true, false]) {
     const stage = liveChatStage(page);
     await trace(stream);
     const composer = stage.getByTestId("chat-composer");
+    // Chrome motion has ended and the stream has stopped moving with it.
+    const rested = async () => { await animationsFinished(stage); await scrollSettled(stream); };
+    const composerHeight = () => composer.evaluate((element) => element.clientHeight);
+    const restingHeight = await composerHeight();
     await phase(page, "composer grow");
     await composer.fill("A line\n".repeat(12));
-    await page.waitForTimeout(400);
+    await expect.poll(composerHeight).toBeGreaterThan(restingHeight);
+    await rested();
     await phase(page, "composer shrink");
     await composer.fill("");
-    await page.waitForTimeout(400);
+    await expect.poll(composerHeight).toBe(restingHeight);
+    await rested();
     await phase(page, "tab open");
     await stage.getByTestId("tab-progress").click();
-    await page.waitForTimeout(400);
+    await rested();
     await phase(page, "tab close");
     await stage.getByTestId("tab-progress").click();
-    await page.waitForTimeout(400);
+    await rested();
     await phase(page, "notification show");
     await page.evaluate(() => {
       const harness = (window as unknown as { __harness: { publishNotice: (notice: unknown) => unknown } }).__harness;
@@ -215,10 +222,12 @@ for (const following of [true, false]) {
     await expect(notice).toBeVisible();
     await phase(page, "notification collapse");
     await notice.getByRole("button", { name: "Hide details" }).click();
-    await page.waitForTimeout(400);
+    await expect(notice.getByRole("button", { name: "Show details" })).toBeVisible();
+    await rested();
     await phase(page, "notification expand");
     await notice.getByRole("button", { name: "Show details" }).click();
-    await page.waitForTimeout(400);
+    await expect(notice.getByRole("button", { name: "Hide details" })).toBeVisible();
+    await rested();
     await phase(page, "notification dismiss");
     await notice.getByRole("button", { name: "Dismiss", exact: true }).click();
     const { apiUrl, token } = apiConfig();
@@ -228,13 +237,15 @@ for (const following of [true, false]) {
     expect(ask.ok(), await ask.text()).toBe(true);
     const dock = stage.getByTestId("ask-user-dock");
     await expect(dock).toBeVisible();
-    await page.waitForTimeout(400);
+    await rested();
     await phase(page, "question minimize");
     await dock.getByTestId("ask-user-dock-minimize").click();
-    await page.waitForTimeout(400);
+    await expect(dock).toHaveAttribute("data-minimized", "");
+    await rested();
     await phase(page, "question expand");
     await dock.getByTestId("ask-user-dock-expand").click();
-    await page.waitForTimeout(400);
+    await expect(dock).not.toHaveAttribute("data-minimized");
+    await rested();
     await phase(page, "approval show");
     const approval = await request.post(`${apiUrl}/harness/checkpoints/tool_approval`, { headers, data: { session_id: sessionId, command: "printf '%s' '" + "Detail ".repeat(40) + "'" } });
     expect(approval.ok(), await approval.text()).toBe(true);
@@ -242,14 +253,16 @@ for (const following of [true, false]) {
     await expect(card).toBeVisible();
     await phase(page, "approval minimize");
     await card.getByTestId("approval-card-minimize").click();
-    await page.waitForTimeout(400);
+    await expect(card.getByTestId("approval-card-expand")).toBeVisible();
+    await rested();
     await phase(page, "approval expand");
     await card.getByTestId("approval-card-expand").click();
-    await page.waitForTimeout(400);
+    await expect(card.getByTestId("approval-card-minimize")).toBeVisible();
+    await rested();
     await phase(page, "approval resolve");
     await card.getByTestId("approval-approve-primary").click();
     await expect(card).toHaveCount(0);
-    await page.waitForTimeout(400);
+    await rested();
     const samples = await stopTrace(page);
     expect(samples.length).toBeGreaterThan(20);
     if (following) expect(Math.max(...samples.map((sample) => Math.abs(sample.tail)))).toBeLessThan(2);

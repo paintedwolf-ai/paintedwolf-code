@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { expect } from "@playwright/test";
 import { apiSeedSessionTranscript, bootstrapChatSession, liveChatStage, modelIndependentWebE2e as test, settledChatSessionId, transcriptMessages } from "./helpers.ts";
+import { scrollSettled } from "./fixtures/settle.ts";
 
 test("transcript geometry keeps measurement work bounded during scrolling and resizing", async ({ page, request }, info) => {
   await bootstrapChatSession(page, request);
@@ -17,7 +18,7 @@ test("transcript geometry keeps measurement work bounded during scrolling and re
   await page.keyboard.press("End");
   await page.evaluate(async () => { for (let n = 0; n < 30; n++) await new Promise(requestAnimationFrame); });
   await stream.press("PageUp");
-  await page.waitForTimeout(400);
+  await scrollSettled(stream);
   await stream.evaluate((host) => { host.scrollTop = host.scrollHeight - host.clientHeight * 2; });
   await expect(page.getByTestId("stream-scroll-jump")).toHaveAttribute("aria-hidden", "false");
   const sample = await stream.evaluate(async (host) => {

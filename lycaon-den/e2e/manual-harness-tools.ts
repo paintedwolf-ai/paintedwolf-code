@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 import { expect, type APIRequestContext } from "@playwright/test";
 import { apiConfig } from "./helpers.ts";
 
+/** One literal word of a command program. */
+export function shellWord(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
+}
+
 export function manualHarnessTools(request: APIRequestContext, sessionId: string) {
   const { apiUrl, token } = apiConfig();
   const headers = { Authorization: `Bearer ${token}` };

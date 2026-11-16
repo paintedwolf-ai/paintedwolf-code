@@ -11,6 +11,7 @@ import {
   transcriptMessages,
   webE2e,
 } from "./helpers.ts";
+import { settleFrames, settleTranscriptLayout } from "./fixtures/settle.ts";
 
 const SESSION_LEN = 500;
 const MAX_MOUNTED_TRANSCRIPT_ROWS = 80;
@@ -184,57 +185,6 @@ async function transcriptScrollSample(page: Page): Promise<TranscriptScrollSampl
         ? row.getBoundingClientRect().top - viewportTop
         : null,
     };
-  });
-}
-
-async function settleTranscriptLayout(page: Page): Promise<void> {
-  await page.evaluate(async () => {
-    await document.fonts.ready;
-    await new Promise<void>((resolve, reject) => {
-      let previous = "";
-      let stableFrames = 0;
-      let frames = 0;
-      const sample = () => {
-        const viewport = document.querySelector<HTMLElement>(
-          ".den-resident-surface:not([data-resident=idle]) .den-shell-stage--chat .den-chat-stream",
-        );
-        if (!viewport) return "";
-        const rows = [
-          ...viewport.querySelectorAll<HTMLElement>(
-            ".transcript-viewport-row[data-index]",
-          ),
-        ];
-        return [
-          viewport.scrollHeight,
-          viewport.clientHeight,
-          viewport.scrollTop,
-          ...rows.flatMap((row) => {
-            const rect = row.getBoundingClientRect();
-            return [row.dataset.msgId ?? row.dataset.timeRow ?? "", rect.top, rect.height];
-          }),
-        ].join(":");
-      };
-      const tick = () => {
-        frames += 1;
-        const next = sample();
-        const animating = document.getAnimations().some((animation) =>
-          (animation.playState === "running" || animation.pending) &&
-          Number.isFinite(animation.effect?.getComputedTiming().endTime),
-        );
-        stableFrames = !animating && next && next === previous ? stableFrames + 1 : 0;
-        previous = next;
-        if (stableFrames >= 4) {
-          resolve();
-          return;
-        }
-        if (frames >= 120) {
-          reject(new Error("transcript layout did not settle"));
-          return;
-        }
-        requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-    });
   });
 }
 
@@ -412,6 +362,14 @@ async function transcriptWheelHandlingStatus(page: Page): Promise<string> {
   });
 }
 
+type TranscriptAnchor = { firstVisibleKey: string | null; firstVisibleTop: number | null };
+
+/** The same row leads the viewport at the same painted position. */
+function anchorHeld(before: TranscriptAnchor, after: TranscriptAnchor): boolean {
+  return after.firstVisibleKey === before.firstVisibleKey &&
+    Math.abs((after.firstVisibleTop ?? 0) - (before.firstVisibleTop ?? 0)) < 0.5;
+}
+
 /** Walk scroll positions until a row with data-msg-id is mounted. */
 async function revealMsgByScroll(page: Page, msgId: string): Promise<boolean> {
   await settleTranscriptLayout(page);
@@ -426,7 +384,7 @@ async function revealMsgByScroll(page: Page, msgId: string): Promise<boolean> {
   for (let i = 0; i < 80; i += 1) {
     if ((await row.count()) > 0) return true;
     await page.mouse.wheel(0, 1_200);
-    await page.waitForTimeout(100);
+    await settleTranscriptLayout(page);
   }
   return (await row.count()) > 0;
 }
@@ -473,10 +431,14 @@ webE2e.describe("transcript scale den", () => {
       await expect(
         page.locator(`[data-msg-id="${growingId}"] .assistant-prose`),
       ).toHaveCount(1, { timeout: 10_000 });
-      for (let sample = 0; sample < 20; sample += 1) {
+      // Rows stay apart in every sample until the growing response comes to rest.
+      let settled = false;
+      const settling = settleTranscriptLayout(page).finally(() => { settled = true; });
+      do {
         expect(await transcriptRowFlowStatus(page)).toBe("separated");
-        await page.waitForTimeout(50);
-      }
+        await settleFrames(page);
+      } while (!settled);
+      await settling;
       expect(await transcriptRowFlowStatus(page)).toBe("separated");
     },
   );
@@ -568,12 +530,16 @@ webE2e.describe("transcript scale den", () => {
           timeout: 15_000,
         })
         .not.toBe(before.maxTop);
-      await settleTranscriptLayout(page);
-      const after = await transcriptScrollSample(page);
-
-      const diagnostic = JSON.stringify({ before, after, trace: await stopTranscriptScrollTrace(page) });
-      expect(after.firstVisibleKey, diagnostic).toBe(before.firstVisibleKey);
-      expect(after.firstVisibleTop, diagnostic).toBeCloseTo(before.firstVisibleTop ?? 0, 0);
+      // The activity and its diff land in separate layouts; the anchor holds once both have.
+      let after = before;
+      await expect
+        .poll(async () => {
+          await settleTranscriptLayout(page);
+          after = await transcriptScrollSample(page);
+          return anchorHeld(before, after) || JSON.stringify({ before, after });
+        })
+        .toBe(true);
+      await stopTranscriptScrollTrace(page);
     },
   );
 
@@ -634,7 +600,6 @@ webE2e.describe("transcript scale den", () => {
       const ambientRun = await apiGetActiveWorkflowRun(request, sessionId);
       const planRun = await apiStartWorkflowRun(request, sessionId, {
         workflow_id: "plan",
-        workflow_version: "1.0.0",
         parameters: { research_depth: "none" },
       });
       const activityAssistantId = crypto.randomUUID();
@@ -785,9 +750,9 @@ webE2e.describe("transcript scale den", () => {
             (summary as HTMLElement).click();
           });
         }
-        await page.waitForTimeout(16);
+        await settleFrames(page);
       }
-      await page.waitForTimeout(800);
+      await settleTranscriptLayout(page);
       const samples = await stopTranscriptScrollTrace(page);
 
       expect(samples.length).toBeGreaterThan(5);
@@ -796,8 +761,8 @@ webE2e.describe("transcript scale den", () => {
         JSON.stringify(samples),
       ).toBeNull();
       expect(await transcriptBottomBoundaryStatus(page)).toBe("aligned");
-      expect(await nestedTool).toHaveAttribute("data-expanded", "true");
-      expect(await activity).toHaveAttribute("data-expanded", "true");
+      await expect(nestedTool).toHaveAttribute("data-expanded", "true");
+      await expect(activity).toHaveAttribute("data-expanded", "true");
     },
   );
 
@@ -853,11 +818,14 @@ webE2e.describe("transcript scale den", () => {
           timeout: 10_000,
         })
         .toBeGreaterThan(before.index ?? 0);
-      await settleTranscriptLayout(page);
-      const after = await transcriptScrollSample(page);
-
-      expect(after.firstVisibleKey).toBe(before.firstVisibleKey);
-      expect(after.firstVisibleTop).toBeCloseTo(before.firstVisibleTop ?? 0, 0);
+      let after = before;
+      await expect
+        .poll(async () => {
+          await settleTranscriptLayout(page);
+          after = await transcriptScrollSample(page);
+          return anchorHeld(before, after) || JSON.stringify({ before, after });
+        })
+        .toBe(true);
 
       await page.mouse.wheel(0, -237.5);
       await settleTranscriptLayout(page);

@@ -571,6 +571,7 @@ tasks:
     dir: lycaon-den
     sources:
       - 'src/**/*.{ts,tsx}'
+      - 'e2e/**/*.{ts,tsx}'
       - eslint.config.js
       - package.json
     env:

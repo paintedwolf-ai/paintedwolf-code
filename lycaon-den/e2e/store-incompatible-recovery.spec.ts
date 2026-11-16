@@ -1,11 +1,14 @@
 import type { ProjectListResponse } from "../src/api/types.ts";
 import { expect } from "@playwright/test";
 import { mockedBackendE2e, seedAppState } from "./helpers.ts";
+import { settleFrames } from "./fixtures/settle.ts";
 
 /** Exercises recovery UI with an isolated store. */
 mockedBackendE2e.describe("store incompatible recovery", () => {
   mockedBackendE2e("unavailable readiness endpoints do not form a retry storm", async ({ page }) => {
     let unavailableRequests = 0;
+    let unanswered = 0;
+    await page.clock.install();
     await page.route("**/health", (route) => route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -15,18 +18,25 @@ mockedBackendE2e.describe("store incompatible recovery", () => {
         recovery_reason: "schema_mismatch", recovery_snapshot_available: false,
       }),
     }));
-    await page.route("**/v1/**", (route) => {
+    await page.route("**/v1/**", async (route) => {
       unavailableRequests++;
-      return route.fulfill({
+      unanswered++;
+      await route.fulfill({
         status: 503, contentType: "application/json",
         body: JSON.stringify({ code: "store_incompatible", message: "Store incompatible" }),
       });
+      unanswered--;
     });
     await seedAppState(page, { onboarding: { firstRunSetupCompleted: true } });
     await page.goto("/");
     await expect(page.getByTestId("critical-stop")).toHaveAttribute("data-code", "store_incompatible", { timeout: 30_000 });
-    // Observe a retry interval: a reachable 503 must not recursively start another read.
-    await page.waitForTimeout(2_000);
+    // A retry interval passes on the page's clock: a reachable 503 must not start another read by itself.
+    await page.clock.runFor(2_000);
+    await expect.poll(async () => {
+      const before = unavailableRequests;
+      await settleFrames(page);
+      return unanswered === 0 && unavailableRequests === before;
+    }).toBe(true);
     expect(unavailableRequests).toBeLessThanOrEqual(12);
     await expect(page.getByTestId("critical-stop-secondary")).toBeEnabled();
   });

@@ -156,7 +156,7 @@ webE2e("Keep going preserves completed workflow reviewers through accepted verdi
       return reviewer?.child_session_id;
     }).toBeTruthy();
     const skeptic = manualHarnessTools(request, reviewer!.child_session_id!);
-    await skeptic.completed(await skeptic.invoke("read", { path: "README.md" }));
+    await skeptic.completed(await skeptic.invoke("command", { command: "cat README.md" }));
     await skeptic.completed(await skeptic.invoke("complete_leg", {
       leg_status: "complete", brief: "The README describes a small standalone service fixture.",
       findings: [{ path: "README.md", line: 1, excerpt }],

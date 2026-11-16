@@ -33,6 +33,7 @@ import type {
   Session,
   SessionTranscriptPage,
   StartWorkflowRunRequest,
+  WorkflowListResponse,
   WorkflowRun,
 } from "../src/api/types.ts";
 
@@ -258,7 +259,7 @@ export async function apiListProjects(
   return projects;
 }
 
-/** Removes a project and its attached data through the assessed removal flow. */
+/** Removes a project and its attached data through the assessed removal flow, and returns the settled outcome. */
 export async function apiRemoveProject(
   request: APIRequestContext,
   projectId: string,
@@ -272,12 +273,22 @@ export async function apiRemoveProject(
     expect(assessed.ok(), JSON.stringify(body)).toBeTruthy();
   }
   const assessment = (await assessed.json()) as ProjectRemovalAssessment;
-  return apiJson<ProjectRemovalResult>(request, "POST", `/v1/projects/${projectId}/removals`, {
-    operation_id: crypto.randomUUID(),
+  const operationId = crypto.randomUUID();
+  const removals = `/v1/projects/${projectId}/removals`;
+  let result = await apiJson<ProjectRemovalResult>(request, "POST", removals, {
+    operation_id: operationId,
     assessment_token: assessment.assessment_token,
     remove_extensions: [],
     force: true,
   });
+  // The host accepts the removal and reports live progress until it settles.
+  await expect
+    .poll(async () => {
+      result = await apiJson<ProjectRemovalResult>(request, "GET", `${removals}/${operationId}`);
+      return result.progress ?? null;
+    }, { timeout: 60_000 })
+    .toBeNull();
+  return result;
 }
 
 /** Seeds current persisted app state before navigation. */
@@ -1013,14 +1024,19 @@ export async function apiGetWorkflowRun(
   return apiJson<WorkflowRun>(request, "GET", `/v1/workflow-runs/${runId}`);
 }
 
+/** Starts a workflow at the version the session's catalog installs. */
 export async function apiStartWorkflowRun(
   request: APIRequestContext,
   sessionId: string,
-  body: Omit<StartWorkflowRunRequest, "operation_id">,
+  body: Omit<StartWorkflowRunRequest, "operation_id" | "workflow_version">,
 ): Promise<WorkflowRun> {
   await waitForSessionReady(request, sessionId);
+  const { workflows } = await apiJson<WorkflowListResponse>(request, "GET", `/v1/workflows?session_id=${sessionId}`);
+  const installed = workflows.find((workflow) => workflow.id === body.workflow_id);
+  if (!installed) throw new Error(`workflow ${body.workflow_id} is not in the catalog`);
   return apiJson<WorkflowRun>(request, "POST", `/v1/sessions/${sessionId}/workflow-runs`, {
     operation_id: crypto.randomUUID(),
+    workflow_version: installed.version,
     ...body,
   } satisfies StartWorkflowRunRequest);
 }

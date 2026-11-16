@@ -102,6 +102,19 @@ export default tseslint.config(
     },
   },
   {
+    // A fixed wait passes or fails with the machine's speed.
+    files: ["e2e/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "CallExpression[callee.property.name='waitForTimeout']",
+          message: "Wait on the state or event the test needs; e2e/fixtures/settle.ts has the settle waits.",
+        },
+      ],
+    },
+  },
+  {
     // Tests permit setup assertions and non-reactive fixtures.
     files: ["src/**/*.test.{ts,tsx}", "vitest.setup.ts", "eslint.config.js"],
     rules: {
