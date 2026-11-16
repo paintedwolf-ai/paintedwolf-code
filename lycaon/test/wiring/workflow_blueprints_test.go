@@ -56,6 +56,21 @@ func (q *queuedWorkerScripts) mock(h **Harness) *llm.KickDrivenMock {
 		Fallback: func(ctx context.Context, _ llm.Snapshot) modelcall.Completion {
 			jobID := workercontext.Job(ctx)
 			if jobID == "" {
+				q.mu.Lock()
+				defer q.mu.Unlock()
+				if list := q.queues["coordinator"]; len(list) > 0 {
+					script := list[0]
+					idx := q.step["coordinator"]
+					if idx < len(script) {
+						q.step["coordinator"] = idx + 1
+						return modelcall.Completion{ToolCalls: []api.ToolCall{script[idx]}}
+					}
+					q.queues["coordinator"] = list[1:]
+					q.step["coordinator"] = 0
+					if reply := q.results["coordinator"]; reply != "" {
+						return modelcall.Completion{Content: reply}
+					}
+				}
 				return modelcall.Completion{Content: "All obligations are complete."}
 			}
 			task, ok := (*h).Delegations.Queue.Get(jobID)
