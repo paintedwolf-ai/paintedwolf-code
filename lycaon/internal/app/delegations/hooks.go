@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/reenter"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -286,10 +287,13 @@ func (r *Runtime) NotifySettledPlanCloseout(ctx context.Context, sessionID strin
 	}
 }
 
-// PlanCloseoutComplete reports whether the session's planned workers are
-// settled. Workflow conditions are built before the plan service, so they
-// hold this method rather than the service.
+// PlanCloseoutComplete reports whether the session's delegation and its
+// planned workers are settled. Workflow conditions are built before the plan
+// service, so they hold this method rather than the service.
 func (r *Runtime) PlanCloseoutComplete(ctx context.Context, sessionID string) (bool, error) {
+	if ok, err := delegation.CloseoutComplete(r.Store)(ctx, sessionID); err != nil || !ok {
+		return ok, err
+	}
 	return r.Plan.CloseoutComplete(ctx, sessionID)
 }
 

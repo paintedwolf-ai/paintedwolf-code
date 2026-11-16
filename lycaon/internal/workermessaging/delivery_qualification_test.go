@@ -103,7 +103,7 @@ func TestMultiWorkerOverflowProviderFailureRestartAndHistoryIsolation(t *testing
 
 	first, err := delivery.PrepareMessages(t.Context(), &api.Session{ID: "coord"})
 	testutil.FailErr(t, "prepare first", err)
-	if len(first.Lines) != 32 || !first.More || first.Lines[0].Worker != "alpha" || first.Lines[0].Seq != 1 || first.Lines[31].Seq != 32 {
+	if len(first.Lines) != 31 || !first.More || first.Lines[0].Worker != "alpha" || first.Lines[0].Seq != 1 || first.Lines[15].Seq != 16 || first.Lines[16].Worker != "beta" || first.Lines[30].Seq != 15 {
 		t.Fatalf("first page = %+v", first)
 	}
 
@@ -115,19 +115,19 @@ func TestMultiWorkerOverflowProviderFailureRestartAndHistoryIsolation(t *testing
 
 	replayed, err := restartedDelivery.PrepareMessages(t.Context(), &api.Session{ID: "coord"})
 	testutil.FailErr(t, "replay after restart", err)
-	if len(replayed.Pages) != 1 || replayed.Pages[0].PageID != first.Pages[0].PageID || len(replayed.Lines) != 32 || replayed.Lines[0].Seq != 1 {
-		t.Fatalf("replay = %+v, want page %s", replayed, first.Pages[0].PageID)
+	if len(replayed.Pages) != 2 || replayed.Pages[0].PageID != first.Pages[0].PageID || replayed.Pages[1].PageID != first.Pages[1].PageID || len(replayed.Lines) != 31 || replayed.Lines[0].Seq != 1 {
+		t.Fatalf("replay = %+v, want pages %+v", replayed, first.Pages)
 	}
 
-	// Commit page 1; page 2 delivers the remaining 8 alpha messages and all 15 beta messages.
+	// Commit page 1; page 2 delivers the remaining 24 alpha messages.
 	testutil.FailErr(t, "commit page 1", restartedDelivery.CommitMessages(t.Context(), "coord", replayed))
 	second, err := restartedDelivery.PrepareMessages(t.Context(), &api.Session{ID: "coord"})
 	testutil.FailErr(t, "prepare second", err)
-	if len(second.Lines) != 23 || second.More {
-		t.Fatalf("second page = %d lines (more=%v), want 23 (more=false)", len(second.Lines), second.More)
+	if len(second.Lines) != 24 || second.More {
+		t.Fatalf("second page = %d lines (more=%v), want 24 (more=false)", len(second.Lines), second.More)
 	}
-	if second.Lines[0].Worker != "alpha" || second.Lines[0].Seq != 33 || !second.Lines[7].NeedsReply || second.Lines[8].Worker != "beta" || second.Lines[22].Seq != 15 {
-		t.Fatalf("second page ordering = first:%+v eighth:%+v ninth:%+v last:%+v", second.Lines[0], second.Lines[7], second.Lines[8], second.Lines[22])
+	if second.Lines[0].Worker != "alpha" || second.Lines[0].Seq != 17 || !second.Lines[23].NeedsReply || second.Lines[23].Seq != 40 {
+		t.Fatalf("second page ordering = first:%+v last:%+v", second.Lines[0], second.Lines[23])
 	}
 	testutil.FailErr(t, "commit page 2", restartedDelivery.CommitMessages(t.Context(), "coord", second))
 
