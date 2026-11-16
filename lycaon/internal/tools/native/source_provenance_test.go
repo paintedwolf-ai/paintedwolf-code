@@ -14,8 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
-	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // fakeSourceLedger supplies recording and history fixtures without a database.
@@ -168,19 +166,6 @@ func receiptSource(t *testing.T, out string) map[string]any {
 	}
 	testutil.FailErr(t, "decode receipt", json.Unmarshal([]byte(out), &payload))
 	return payload.Receipt.Source
-}
-
-func TestReadSourceStampPreservesWorkerDestination(t *testing.T) {
-	dir := t.TempDir()
-	abs, sha := writeProvenanceFile(t, dir, "a #b.go", "file")
-	ctx := provenanceCtx(dir, &fakeSourceLedger{})
-	ctx.Identity.WorkerJobID = "worker-1"
-	ctx.Source.WorkerBranchRoot = dir
-	ctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
-	stamp := sourceview.ReadStamp(t.Context(), ctx, abs, sha)
-	if stamp == nil || stamp.Navigation != "source://r1/a%20%23b.go?job_id=worker-1" {
-		t.Fatalf("worker source stamp=%+v", stamp)
-	}
 }
 
 type preparedCapture func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error)

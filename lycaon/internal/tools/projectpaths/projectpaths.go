@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fseffect"
@@ -273,22 +274,6 @@ func actionRootPaths(tctx tools.ToolContext) []string {
 		return []string{branch}
 	}
 	return workspaceRoots(tctx)
-}
-
-// ResolveMisplacedSpill resolves a read path that embeds one exact
-// content-addressed spill reference under another prefix, such as a root
-// label, to that spill. The digest names the content, so the reference is
-// unambiguous wherever it appears.
-func ResolveMisplacedSpill(tctx tools.ToolContext, modelPath string) (Resolved, bool) {
-	refs := tooloutput.SpillPaths(filepath.ToSlash(modelPath))
-	if len(refs) != 1 || refs[0] == filepath.ToSlash(strings.TrimSpace(modelPath)) {
-		return Resolved{}, false
-	}
-	resolved, ok, err := resolveHostDataRead(tctx, refs[0])
-	if !ok || err != nil {
-		return Resolved{}, false
-	}
-	return resolved, true
 }
 
 // resolveHostDataRead exposes allowlisted host spill paths.
