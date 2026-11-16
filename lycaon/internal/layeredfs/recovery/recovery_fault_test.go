@@ -84,7 +84,7 @@ func (fx *recoveryFixture) coordinatorOnBoot(boot string) *recovery.Coordinator 
 		MountReconciler: recovery.ConnectionReconciler{},
 	})
 	if err != nil {
-		fx.t.Fatal(err)
+		testutil.FailErr(fx.t, "recovery.NewCoordinator failed", err)
 	}
 	return coord
 }

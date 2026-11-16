@@ -59,7 +59,7 @@ func TestRegexDialectsCancelAndReleaseSessionAdmission(t *testing.T) {
 		session, err := program.Session(ctx, limits)
 		if err != nil {
 			cancel()
-			t.Fatal(err)
+			testutil.FailErr(t, "program.Session failed", err)
 		}
 		if err = session.ReserveMemory(1024); err != nil {
 			testutil.FailErr(t, "session.ReserveMemory failed", err)

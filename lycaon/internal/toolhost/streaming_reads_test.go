@@ -86,7 +86,7 @@ func writeRepeatedFixture(t *testing.T, path string, chunk []byte, repetitions i
 	for range repetitions {
 		if _, err := writer.Write(chunk); err != nil {
 			_ = file.Close()
-			t.Fatal(err)
+			testutil.FailErr(t, "writer.Write failed", err)
 		}
 	}
 	if err := file.Close(); err != nil {

@@ -249,7 +249,7 @@ func BenchmarkStructuredWc(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		if _, err := tool.run(b, []string{"small.txt"}); err != nil {
-			b.Fatal(err)
+			testutil.FailErr(b, "tool.run failed", err)
 		}
 	}
 }
