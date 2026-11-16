@@ -91,7 +91,7 @@ func TestCheckAllDiscoversStableWorkflowBaselines(t *testing.T) {
 	if err := CheckCompatibility(t.Context(), repo, "", &report); err == nil || !strings.Contains(err.Error(), "no stable") {
 		t.Fatalf("missing baseline: %v", err)
 	}
-	for _, tag := range []string{"v0.9.0", "v1.0.1-rc.1", "v1.0.1"} {
+	for _, tag := range []string{"v0.9.0", "v1.0.0-rc.1", "v1.0.1-rc.1", "v1.0.1"} {
 		gittest.Run(t, repo, "tag", tag)
 	}
 	report.Reset()

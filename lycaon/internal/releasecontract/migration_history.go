@@ -156,7 +156,7 @@ func CheckPublishedMigrations(ctx context.Context, repoRoot string, versions []s
 		if err != nil {
 			return err
 		}
-		if version.LessThan(semver.MustParse("1.0.0")) || version.String() != value {
+		if version.LessThan(firstStable) || version.String() != value {
 			return fmt.Errorf("invalid published migration source %s", value)
 		}
 		source := gitRelease{ctx: ctx, repoRoot: repoRoot, tag: "refs/tags/v" + value}

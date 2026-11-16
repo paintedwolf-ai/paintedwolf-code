@@ -145,6 +145,8 @@ func ReleasedVersions(ctx context.Context, repoRoot string) ([]string, error) {
 	return out, nil
 }
 
+var firstStable = semver.MustParse("1.0.0")
+
 func mergedReleaseVersions(git gitRelease) ([]*semver.Version, error) {
 	tags, err := git.run("tag", "--merged", "HEAD", "--list", "v*")
 	if err != nil {
@@ -153,7 +155,7 @@ func mergedReleaseVersions(git gitRelease) ([]*semver.Version, error) {
 	var versions []*semver.Version
 	for _, tag := range strings.Fields(string(tags)) {
 		version, err := semver.StrictNewVersion(strings.TrimPrefix(tag, "v"))
-		if err == nil && version.Major() >= 1 && "v"+version.String() == tag {
+		if err == nil && !version.LessThan(firstStable) && "v"+version.String() == tag {
 			versions = append(versions, version)
 		}
 	}
