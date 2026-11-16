@@ -251,8 +251,8 @@ func TestVisibilityClassMembership(t *testing.T) {
 		vis  Visibility
 		want []string
 	}{
-		{VisibilityCoordinatorInternal, []string{"git_status", "pack_board", "update_progress"}},
-		{VisibilityLongRunning, []string{"command", "summarize", "survey_repo", "verify"}},
+		{VisibilityCoordinatorInternal, []string{"git_status", "pack_board", "read_findings", "read_review", "update_progress"}},
+		{VisibilityLongRunning, []string{"command", "instruct_worker", "summarize", "survey_repo", "verify"}},
 	} {
 		got := cfg.ToolsWithVisibility(tc.vis)
 		if strings.Join(got, ",") != strings.Join(tc.want, ",") {
