@@ -37,11 +37,15 @@ type EmitterSpec struct {
 	// Plumbing lists module-relative files whose constant tables declare or
 	// consume identifiers rather than produce them.
 	Plumbing []string `json:"plumbing"`
+	// Derived lists fact name prefixes the host publishes for every declared
+	// member, deriving each value from the member's name.
+	Derived []string `json:"derived"`
 }
 
 // Emitters is a loaded EmitterSpec.
 type Emitters struct {
 	Plumbing []string
+	derived  []string
 	codes    map[string]declaredCode
 	facts    map[string]string
 	anchors  map[string]string
@@ -59,7 +63,7 @@ type declaredCode struct {
 
 // LoadEmitters reads the declarations a spec names under repoRoot.
 func LoadEmitters(repoRoot string, spec EmitterSpec) (*Emitters, error) {
-	e := &Emitters{Plumbing: spec.Plumbing, codes: map[string]declaredCode{}, facts: map[string]string{}, anchors: map[string]string{}}
+	e := &Emitters{Plumbing: spec.Plumbing, derived: spec.Derived, codes: map[string]declaredCode{}, facts: map[string]string{}, anchors: map[string]string{}}
 	if err := e.loadRegistry(repoRoot, spec.Registry); err != nil {
 		return nil, err
 	}
@@ -232,7 +236,7 @@ func (e *Emitters) loadAnchors(root, rel string) error {
 func (e *Emitters) findings(passes []*pass) []archlint.Finding {
 	flows := map[string]bool{}
 	produced := map[string]bool{}
-	var families []string
+	families := append([]string(nil), e.derived...)
 	for _, p := range passes {
 		for s := range p.product.flows {
 			flows[s] = true

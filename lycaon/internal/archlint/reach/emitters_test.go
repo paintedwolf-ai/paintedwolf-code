@@ -18,6 +18,7 @@ func emitterSpec() reach.EmitterSpec {
 		Facts:    "facts.yaml",
 		Anchors:  "anchors.yaml",
 		Plumbing: []string{"facts/declarations.go"},
+		Derived:  []string{"paintedwolf.derived_"},
 	}
 }
 
