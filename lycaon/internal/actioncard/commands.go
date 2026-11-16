@@ -59,11 +59,11 @@ func programParts(parts Parts, program api.CommandProgramReceipt) Parts {
 		parts.Facts = append(parts.Facts, exitFact("failed", program.StatusCode))
 	case "refused", "rejected":
 		parts.Facts = append(parts.Facts, resultFact("refused"))
-		if program.StopCode != "" {
-			parts.Facts = append(parts.Facts, stoppedByFact("host_stop", program.StopCode))
-		}
 	case "interrupted":
 		parts.Facts = append(parts.Facts, resultFact("interrupted"))
+	}
+	if program.StopCode != "" && program.State != "completed" {
+		parts.Facts = append(parts.Facts, stoppedByFact("host_stop", program.StopCode))
 	}
 	if len(parts.Facts) > 0 {
 		parts.Row = []api.ActionFactKind{api.ActionFactResult}

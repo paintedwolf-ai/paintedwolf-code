@@ -88,8 +88,8 @@ const receiptPage: CommandProgramReceiptPage = {
   nodes_omitted: 0,
 };
 
-webE2e.describe("command activity details", () => {
-  webE2e("opens retained receipts through compact activity details", async ({ page, request }) => {
+webE2e.describe("command action card", () => {
+  webE2e("names a failed program's stop and opens its retained receipts", async ({ page, request }) => {
     await page.route(`**/v1/sessions/*/program-receipts/${programId}*`, (route) =>
       route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(receiptPage) }));
     await bootstrapChatSession(page, request);
@@ -111,15 +111,15 @@ webE2e.describe("command activity details", () => {
     ]));
     const stream = liveChatStage(page).locator(`[data-testid="chat-stream"][data-session-id="${sessionId}"]`);
     await stream.getByTestId("activity-span-card").locator(":scope > .den-transcript-disclosure-header").click();
-    const card = stream.getByTestId("tool-part-card");
+    const card = stream.getByTestId("action-card");
     await expect(card).toHaveCount(1);
     if (await card.getAttribute("data-expanded") !== "true") await card.locator(":scope > .den-transcript-disclosure-header").click();
-    const body = card.getByTestId("command-activity-details");
-    await expect(body.getByTestId("activity-target")).toContainText("cat input.json");
-    await expect(body.getByTestId("activity-exceptions")).toContainText("HTTP_REQUEST_FAILED");
-    await expect(body.getByTestId("activity-input")).toBeVisible();
-    await expect(body.getByTestId("command-activity-receipts")).toBeVisible();
-    await expect(body.locator("pre")).toHaveCount(await body.locator('[data-testid="activity-output"] pre').count());
+    const body = card.getByTestId("action-card-body");
+    await expect(body.getByTestId("action-ran")).toContainText("cat input.json");
+    await expect(body.getByTestId("action-facts")).toContainText("HTTP_REQUEST_FAILED");
+    await expect(body.getByTestId("action-link-input")).toBeVisible();
+    await body.getByTestId("action-link-receipt").click();
+    await expect(page.getByText("curl -X POST https://example.test/upload").last()).toBeVisible();
     await expect(body.locator("details")).toHaveCount(0);
   });
 });
@@ -146,10 +146,10 @@ modelIndependentWebE2e("command activities contain long text at narrow card widt
  for (const width of [320,420,680]) {
   await group.evaluate((element,width) => { element.style.width = `${width}px`; element.style.maxWidth = `${width}px`; },width);
   if (await row.getAttribute("data-expanded") !== "true") await row.locator(":scope > .den-transcript-disclosure-header").click();
-  await expect(row.getByTestId("command-activity-details")).toBeVisible();
+  await expect(row.getByTestId("action-card-body")).toBeVisible();
   await expect.poll(() => group.evaluate(element => {
    const boundary = element.getBoundingClientRect();
-   const selectors = [".den-tool-part-chicklet-main", ".den-tool-part-outcome", ".den-row-mark", '[data-testid="command-activity-details"]', '[data-testid="activity-target"]', ".den-activity-target__copy"];
+   const selectors = [".den-tool-part-chicklet-main", ".den-tool-part-outcome", ".den-row-mark", '[data-testid="action-card-body"]', '[data-testid="action-ran"]', '[data-testid="action-ran-copy"]'];
    const children = selectors.flatMap(selector => [...element.querySelectorAll<HTMLElement>(selector)]);
    return children.length >= selectors.length && children.every(child => {
     const rect = child.getBoundingClientRect();
@@ -157,7 +157,7 @@ modelIndependentWebE2e("command activities contain long text at narrow card widt
    });
   })).toBe(true);
   await expect(row.locator(":scope > .den-transcript-disclosure-header")).not.toContainText("x".repeat(64));
-  const target = await row.getByTestId("activity-target").locator(".den-activity-target__text").evaluate(element => ({
+  const target = await row.getByTestId("action-ran").locator(".den-action-card__ran-text").evaluate(element => ({
    height: element.getBoundingClientRect().height, line: parseFloat(getComputedStyle(element).lineHeight), scroll: element.scrollWidth, client: element.clientWidth,
   }));
   expect(target.height).toBeGreaterThan(target.line * 1.5);
@@ -166,7 +166,7 @@ modelIndependentWebE2e("command activities contain long text at narrow card widt
   const outcome = await row.locator(".den-tool-part-outcome").boundingBox();
   expect(outcome!.x).toBeGreaterThanOrEqual(name!.x + name!.width);
   await expect(row.locator("pre")).toHaveCount(0);
-  await expect(row.getByTestId("activity-input")).toBeVisible();
+  await expect(row.getByTestId("action-link-input")).toBeVisible();
   for (const selector of [".den-tool-part-name", ".den-tool-part-outcome"]) {
    expect(await row.locator(selector).evaluate(element => element.scrollWidth <= element.clientWidth+1)).toBe(true);
   }

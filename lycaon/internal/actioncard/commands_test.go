@@ -210,4 +210,13 @@ func TestProgramWithoutActivitiesUsesItsOwnState(t *testing.T) {
 	if last := d.Links[len(d.Links)-1]; last.Kind != linkReceipt || last.Receipts[0].ProgramID != "prog" {
 		t.Fatalf("links %+v", d.Links)
 	}
+	result.Outcome = api.ToolResultOutcomeRejected
+	result.CommandProgram = &api.CommandProgramReceipt{ID: "prog", State: "failed", StatusCode: intPtr(1), StopCode: "HTTP_REQUEST_FAILED", StartedAt: time.Unix(100, 0)}
+	d = ForResult(result, nil)
+	if d.Status != statusError || !reflect.DeepEqual(kinds(d.Facts), []api.ActionFactKind{api.ActionFactResult, api.ActionFactStoppedBy}) {
+		t.Fatalf("failed program card %+v", d)
+	}
+	if stopped, _ := fact(d.Facts, api.ActionFactStoppedBy); stopped.Code != "HTTP_REQUEST_FAILED" {
+		t.Fatalf("stopped by %+v", stopped)
+	}
 }
