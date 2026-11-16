@@ -16,6 +16,32 @@
   animation: den-drawer-in var(--den-duration-drawer) var(--den-ease) both;
 }
 
+/* The session drawer's layer covers the column on screen: a lone column fills
+   the host, and a split's conversation gives way to its stage when hidden or dropped. */
+.den-session-drawer-layer {
+  position: absolute;
+  inset: 0;
+  z-index: var(--den-z-context-drawer);
+  pointer-events: none;
+}
+
+.den-session-drawer-layer > * {
+  pointer-events: auto;
+}
+
+.den-shell-stage-host--split > .den-session-drawer-layer {
+  position: relative;
+  inset: auto;
+  grid-area: chat;
+}
+
+.den-shell-stage-host--split[data-conversation-hidden] > .den-session-drawer-layer,
+.den-shell-stage-host--split:where(
+    [data-host-band~="max-900"][data-narrow-survivor="stage"]
+  ):not([data-context-hidden]) > .den-session-drawer-layer {
+  grid-area: stage;
+}
+
 .den-shell--orientation-mirrored .den-context-drawer {
   left: 0;
   right: auto;

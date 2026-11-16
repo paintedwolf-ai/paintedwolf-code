@@ -610,7 +610,6 @@ export function Shell(props: ShellProps) {
             />}
           </ShellStageColumn>
         }
-        drawerOver={conversationShown() ? "chat" : "stage"}
         drawer={
           <ShellSessionDrawerHost
         appStore={props.appStore} projects={props.projects.state.projects} projectDir={projectDirForChat()}

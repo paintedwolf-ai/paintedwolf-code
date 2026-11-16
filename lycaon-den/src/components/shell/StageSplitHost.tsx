@@ -1,5 +1,4 @@
-import { Show, createSignal, onCleanup, type JSX } from "solid-js";
-import { Portal } from "solid-js/web";
+import { Show, onCleanup, type JSX } from "solid-js";
 import type { NarrowSplitSurvivor } from "../../../shared/app-state-types.ts";
 import { LAYOUT_BAND_SCALES, bindLayoutBand } from "../../layout/layout-bands.ts";
 
@@ -33,9 +32,8 @@ export type StageSplitHostProps = {
   stageColumn: JSX.Element;
   chatColumn: JSX.Element;
   divider: JSX.Element;
-  /** The session drawer, laid over the column that is on screen. */
+  /** The session drawer; the stylesheet lays it over the column on screen. */
   drawer: JSX.Element;
-  drawerOver: "stage" | "chat";
 };
 
 /** Split host with stable stage and chat columns. */
@@ -75,15 +73,9 @@ export function StageSplitHost(props: StageSplitHostProps) {
     publish(el.getBoundingClientRect().width);
   };
 
-  const [stageEl, setStageEl] = createSignal<HTMLDivElement>();
-  const [chatEl, setChatEl] = createSignal<HTMLDivElement>();
-
   const stageCol = () => (
     <div
-      ref={(el) => {
-        bindLayoutBand(el, LAYOUT_BAND_SCALES.stageColumn);
-        setStageEl(el);
-      }}
+      ref={(el) => bindLayoutBand(el, LAYOUT_BAND_SCALES.stageColumn)}
       class="den-split-col den-split-col--stage"
       classList={{ "den-split-col--dual": props.stageColDual }}
       data-testid="split-col-stage"
@@ -107,10 +99,7 @@ export function StageSplitHost(props: StageSplitHostProps) {
   // is exposed as its own named object.
   const chatCol = () => (
     <div
-      ref={(el) => {
-        bindLayoutBand(el, LAYOUT_BAND_SCALES.chatColumn);
-        setChatEl(el);
-      }}
+      ref={(el) => bindLayoutBand(el, LAYOUT_BAND_SCALES.chatColumn)}
       class="den-split-col den-split-col--chat"
       classList={{ "den-split-col--dual": props.chatColDual }}
       data-testid="split-col-chat"
@@ -158,9 +147,7 @@ export function StageSplitHost(props: StageSplitHostProps) {
       {stageCol()}
       <Show when={props.splitLive}>{props.divider}</Show>
       {chatCol()}
-      <Show when={props.drawerOver === "chat" ? chatEl() : stageEl()} keyed={false}>
-        <Portal mount={props.drawerOver === "chat" ? chatEl() : stageEl()}>{props.drawer}</Portal>
-      </Show>
+      <div class="den-session-drawer-layer">{props.drawer}</div>
     </div>
   );
 }
