@@ -209,6 +209,11 @@ func Launch(ctx context.Context, box *confine.Confinement, dir string, steps []d
 	return results, nil
 }
 
+// endsProcess names the steps a boundary may answer by ending the process.
+func endsProcess(kind denialprobe.Kind) bool {
+	return kind == denialprobe.Mount || kind == denialprobe.Unmount
+}
+
 // judge requires the first allowed results to have worked and the rest to have been refused.
 func judge(results []denialprobe.Result, allowed int) error {
 	for i, result := range results {

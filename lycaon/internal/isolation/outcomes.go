@@ -111,6 +111,11 @@ var outcomes = [...]Outcome{
 	{CodeRemotePackageRequiresFreshBoundary, DispositionRetry},
 }
 
+// Outcomes returns the closed isolation outcome inventory.
+func Outcomes() []Outcome {
+	return append([]Outcome(nil), outcomes[:]...)
+}
+
 // Lookup returns the registered disposition for code.
 func Lookup(code string) (Outcome, bool) {
 	for _, outcome := range outcomes {

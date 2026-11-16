@@ -157,6 +157,37 @@ type bindingDoc struct {
 	Invariants BindingInvariants `yaml:"invariants"`
 }
 
+// loadInformDir loads a bare bindings directory — a test fixture or overlay,
+// not pack content, so no catalog gate applies.
+func (r *Registry) loadInformDir(dir extpacks.Source) error {
+	if dir.Empty() {
+		return fmt.Errorf("anchor: empty bindings dir")
+	}
+	entries, err := dir.List()
+	if err != nil {
+		return fmt.Errorf("read bindings dir: %w", err)
+	}
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
+			continue
+		}
+		raw, err := dir.Join(e.Name()).Read()
+		if err != nil {
+			return err
+		}
+		var doc bindingDoc
+		if err := yaml.Unmarshal(raw, &doc); err != nil {
+			return fmt.Errorf("%s: %w", e.Name(), err)
+		}
+		b, err := r.parseBindingDoc(doc)
+		if err != nil {
+			return fmt.Errorf("%s: %w", e.Name(), err)
+		}
+		r.add(b)
+	}
+	return nil
+}
+
 func (r *Registry) parseBindingDoc(doc bindingDoc) (*Binding, error) {
 	on := ID(strings.TrimSpace(doc.On))
 	if on == "" {
