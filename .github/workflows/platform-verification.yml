@@ -30,7 +30,7 @@ jobs:
   # than skip when the host cannot confine; setup-verification loads the
   # profiles that let verification engines create user namespaces on Ubuntu.
   upgrade-corpus:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 255
     env:
       PW_TEST_HOST: dedicated
