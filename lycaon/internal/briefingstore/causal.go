@@ -50,7 +50,7 @@ func (c *Causal) ReadActionCause(ctx context.Context, ref briefing.ActionRef) (b
 	}
 	read := briefing.CausalRead{Found: true, OutputID: output.ID, Prose: output.Prose, CallsInOutput: int(output.CallCount),
 		Reasoning: reasoningRead(output.ReasoningPresent, output.ReasoningOverCeiling, output.ReasoningTextChars, output.ReasoningDetails, output.ReasoningTail),
-		Call: briefing.CallExcerpt{Name: output.CallName, Args: output.CallArgs}}
+		Call:      briefing.CallExcerpt{Name: output.CallName, Args: output.CallArgs}}
 	result, err := q.BriefingCallResult(ctx, db.BriefingCallResultParams{ContentBytes: briefing.ResultReadChars, SessionID: ref.SessionID, ToolCallID: db.NullString(ref.ToolCallID)})
 	switch {
 	case err == nil:
