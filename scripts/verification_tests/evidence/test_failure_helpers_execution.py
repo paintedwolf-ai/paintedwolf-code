@@ -1,6 +1,8 @@
 """Failure-label rewrites import the helper for the destination package."""
 
+import contextlib
 import importlib.util
+import io
 from pathlib import Path
 import tempfile
 import unittest
@@ -53,3 +55,50 @@ func fixture(t *testing.T) {
         result, count = rewrite.relabel(source, "contractcheck.FailErr")
         self.assertEqual(count, 1)
         self.assertIn('contractcheck.FailErr(t, "read file", err)', result)
+
+    def test_check_refuses_a_bare_failure_in_any_form(self):
+        forms = {
+            "block": "if err != nil {\n\t\tt.Fatal(err)\n\t}",
+            "multi-line condition": "if err := os.WriteFile(\"input\",\n\t\tnil, 0o600); err != nil {\n\t\tt.Fatal(err)\n\t}",
+            "multi-statement body": "if err != nil {\n\t\tcleanup()\n\t\tt.Fatal(err)\n\t}",
+            "fixture receiver": "if err != nil {\n\t\tfx.t.Fatal(err)\n\t}",
+            "benchmark receiver": "if err != nil {\n\t\tb.Fatal(err)\n\t}",
+            "single line": "if err != nil { t.Fatal(err) }",
+            "inside an expression": "defer func() { t.Fatal( err ) }()",
+        }
+        for name, statement in forms.items():
+            with self.subTest(form=name), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                path = root / "lycaon/internal/worker/example_test.go"
+                path.parent.mkdir(parents=True)
+                path.write_text(f"package worker\n\nfunc fixture() {{\n\terr := run()\n\t{statement}\n}}\n")
+                self.assertEqual(self.check(root), 1)
+
+    def test_check_accepts_labeled_failures_and_other_fatal_calls(self):
+        accepted = [
+            'testutil.FailErr(t, "run", err)',
+            't.Fatalf("run: %v", err)',
+            "log.Fatal(err)",
+            "// t.Fatal(err) is refused.",
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "lycaon/internal/worker/example_test.go"
+            path.parent.mkdir(parents=True)
+            path.write_text("package worker\n\nfunc fixture() {\n\t" + "\n\t".join(accepted) + "\n}\n")
+            fixture = root / "lycaon/test/testdata/corpus/example.go"
+            fixture.parent.mkdir(parents=True)
+            fixture.write_text("package corpus\n\nfunc fixture() {\n\tt.Fatal(err)\n}\n")
+            self.assertEqual(self.check(root), 0)
+
+    def test_rewrite_labels_a_bare_failure_on_a_fixture_receiver(self):
+        source = "\terr := os.WriteFile(path, nil, 0o600)\n\tif err != nil {\n\t\tcleanup()\n\t\tfx.t.Fatal(err)\n\t}\n"
+        result, count = rewrite.transform(source, "testutil.FailErr")
+        self.assertEqual(count, 1)
+        self.assertIn('\t\ttestutil.FailErr(fx.t, "write file", err)\n', result)
+        self.assertEqual(rewrite.bare_failures(result), [])
+
+    @staticmethod
+    def check(root):
+        with contextlib.redirect_stdout(io.StringIO()):
+            return rewrite.main(["--check", "--root", str(root)])

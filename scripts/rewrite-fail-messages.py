@@ -11,6 +11,7 @@ from pathlib import Path
 TESTUTIL_IMPORT = "github.com/lycaon/lycaon/internal/testutil"
 CONTRACT_IMPORT = "github.com/lycaon/lycaon/test/contract/internal/check"
 CONTRACT_DIR = "lycaon/test/contract"
+TEST_DIR = "lycaon/test"
 
 # Failure helpers cannot call themselves.
 SKIP_FILES = {
@@ -71,6 +72,9 @@ BLOCK_IF_RE = re.compile(r"^(\s*)if err != nil \{\s*$")
 # Init-if header, allowing extra LHS before err (e.g. `if _, err := ...`).
 INIT_IF_RE = re.compile(r"^(\s*)if (?:[\w.*]+\s*,\s*)*err :?= (.+); err != nil \{\s*$")
 FATAL_RE = re.compile(r"^(\s*)t\.Fatal\(err\)\s*$")
+# A bare failure on any testing receiver: t, b, tb, f, h.t.
+BARE_FATAL_RE = re.compile(r"(?<![\w.])((?:\w+\.)*\w+)\.Fatal\(\s*err\s*\)")
+BARE_FATAL_LINE_RE = re.compile(r"^(\s*)((?:\w+\.)*\w+)\.Fatal\(err\)\s*$")
 CLOSE_RE = re.compile(r"^(\s*)\}\s*$")
 
 # Uninferable steps leave the original call unchanged.
@@ -111,6 +115,31 @@ def infer_step(lines: list[str], fatal_idx: int) -> str:
         if "err" in stripped and ("(" in stripped or stripped.startswith("return err")):
             return step_for_call(stripped.split("err", 1)[-1].lstrip("=:").strip())
         break
+    return UNKNOWN_STEP
+
+
+def bare_failures(content: str) -> list[int]:
+    """Return the 1-based lines that fail a test with an unlabeled error."""
+    found = []
+    for number, line in enumerate(content.splitlines(), 1):
+        if line.lstrip().startswith("//"):
+            continue
+        if any(m.group(1) != "log" for m in BARE_FATAL_RE.finditer(line)):
+            found.append(number)
+    return found
+
+
+def enclosing_step(lines: list[str], fatal_idx: int) -> str:
+    """Infer the step of a bare failure from the err check that encloses it."""
+    for j in range(fatal_idx - 1, max(fatal_idx - 8, -1), -1):
+        line = lines[j]
+        if BLOCK_IF_RE.match(line):
+            return infer_step(lines, j)
+        m = INIT_IF_RE.match(line)
+        if m:
+            return step_for_call(m.group(2))
+        if line.rstrip().endswith("{") or CLOSE_RE.match(line):
+            break
     return UNKNOWN_STEP
 
 
@@ -177,6 +206,16 @@ def transform(content: str, call: str) -> tuple[str, int]:
             i += 1
             changes += 1
             continue
+
+        # Any other bare failure, labeled where its err check names the step.
+        m = BARE_FATAL_LINE_RE.match(lines[i])
+        if m and m.group(2) != "log":
+            step = enclosing_step(lines, i)
+            if step != UNKNOWN_STEP:
+                out.append(f'{m.group(1)}{call}({m.group(2)}, "{step}", err)\n')
+                i += 1
+                changes += 1
+                continue
 
         out.append(lines[i])
         i += 1
@@ -307,25 +346,25 @@ def main(argv: list[str]) -> int:
 
     total = 0
     touched: list[str] = []
-    # All _test.go plus contract package's helper .go files.
+    # Test files and the helper packages under lycaon/test.
     candidates = sorted(lycaon_dir.rglob("*.go"))
     for path in candidates:
         rel = path.relative_to(repo_root).as_posix()
         if rel in SKIP_FILES:
             continue
-        if not is_test_file(path):
-            # Contract helpers also contain fatal calls.
-            if not rel.startswith(CONTRACT_DIR + "/"):
-                continue
+        if "/testdata/" in rel or not (is_test_file(path) or rel.startswith(TEST_DIR + "/")):
+            continue
 
         if args.check:
             call, _, _ = failure_helper(path, repo_root)
             text, n = transform(path.read_text(), call)
-            _, r = relabel(text, call)
+            text, r = relabel(text, call)
             n += r
-            if n:
-                total += n
-                touched.append(f"{rel}: {n}")
+            # What no rewrite can label still fails the check.
+            unlabeled = bare_failures(text)
+            if n or unlabeled:
+                total += n + len(unlabeled)
+                touched.append(f"{rel}: {n + len(unlabeled)}")
             continue
 
         n = rewrite_file(path, repo_root)
