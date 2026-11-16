@@ -1,3 +1,4 @@
+import { prettyStreamParserFacet } from "../editor/codemirror-lang.ts";
 import { getIndentUnit, syntaxTree } from "@codemirror/language";
 import {
   type EditorState,
@@ -9,8 +10,8 @@ import {
   type Transaction,
 } from "@codemirror/state";
 import { Decoration, type DecorationSet } from "@codemirror/view";
-import { Tree } from "@lezer/common";
-import { prettyPlanFor, prettyTargetFor } from "./pretty-recognition.ts";
+import { planHasLayout } from "./pretty-fenced.ts";
+import { prettyPlanFor, type PrettyTarget, prettyTargetFor } from "./pretty-recognition.ts";
 import { PrettyScanner, type PrettySnapshot, snapshotsEqual } from "./pretty-scan.ts";
 import {
   PRETTY_CHECKPOINT_INTERVAL,
@@ -159,20 +160,28 @@ function planReadsTree(plan: PrettyPlan): boolean {
   return plan.kind === "fenced" || (plan.kind === "document" && readsSyntaxTree(plan.rule));
 }
 
-/**
- * Where layout may reach: the whole document, or the lines the syntax tree
- * fully covers. Fenced text with no grammar loaded has no tree to wait for.
- */
+/** Where layout may reach: the whole document, or the lines the syntax tree fully covers. */
 function layoutEnd(state: EditorState, plan: PrettyPlan): number {
   const doc = state.doc;
   if (!planReadsTree(plan)) return doc.length;
   const tree = syntaxTree(state);
-  if (plan.kind === "fenced" && tree === Tree.empty) return doc.length;
   return tree.length >= doc.length ? doc.length : doc.lineAt(tree.length).from;
 }
 
 function tokensFor(state: EditorState, plan: PrettyPlan): TreeTokens | null {
-  return planReadsTree(plan) ? new TreeTokens(syntaxTree(state)) : null;
+  if (!planReadsTree(plan)) return null;
+  return new TreeTokens(
+    syntaxTree(state),
+    state.doc,
+    state.facet(prettyStreamParserFacet),
+    state.tabSize,
+    getIndentUnit(state),
+  );
+}
+
+/** Whether `target` can produce any layout on `doc`. */
+export function prettyPlanHasLayout(doc: Text, target: PrettyTarget | null): boolean {
+  return target !== null && planHasLayout(doc, prettyPlanFor(doc, target));
 }
 
 function collect(added: Range<Decoration>[]): PrettySink {
@@ -191,9 +200,12 @@ export function buildLayout(state: EditorState, config: PrettyConfig): PrettyLay
   const target = prettyTargetFor(config.path, config.languageHint);
   if (!target) return emptyState(config, null, UNAVAILABLE, state);
   if (!config.enabled) return emptyState(config, null, OFF, state);
-  const plan = prettyPlanFor(doc, target);
   if (doc.length > PRETTY_MAX_INPUT) {
-    return emptyState(config, plan, { kind: "limit", reason: "size", length: doc.length }, state);
+    return emptyState(config, prettyPlanFor(doc, target), { kind: "limit", reason: "size", length: doc.length }, state);
+  }
+  const plan = prettyPlanFor(doc, target);
+  if (!planHasLayout(doc, plan)) {
+    return emptyState(config, plan, UNAVAILABLE, state);
   }
   const builder = new RangeSetBuilder<Decoration>();
   let added = 0;
@@ -418,6 +430,9 @@ export function updateLayout(prev: PrettyLayoutState, tr: Transaction): PrettyLa
     return doc.length < prev.outcome.length ? buildLayout(state, prev.config) : prev;
   }
   if (doc.length > PRETTY_MAX_INPUT) return limited(prev, "size", state);
+  if (plan.kind === "fenced" && !planHasLayout(doc, plan)) {
+    return emptyState(prev.config, plan, UNAVAILABLE, state);
+  }
   const change = summarize(tr);
   let facts = prev.facts.map(tr.changes);
   let restart = Math.max(0, change.from - lookbehind(prev.config));

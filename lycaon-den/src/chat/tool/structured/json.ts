@@ -563,8 +563,19 @@ export function presentationFromDiscoveryToolJson(parsed: Record<string, unknown
 export function presentationFromReadableFileJson(
   parsed: Record<string, unknown>,
   jsonBody: string,
+  pathFallback?: string,
 ): StructuredToolSection[] {
   const body = extractReadableToolBody(parsed, jsonBody);
+  const bodyPath =
+    typeof parsed.path === "string" && parsed.path.trim()
+      ? parsed.path.trim()
+      : typeof parsed.file_path === "string" && parsed.file_path.trim()
+        ? parsed.file_path.trim()
+        : pathFallback;
+  const bodyLanguage =
+    typeof parsed.language === "string" && parsed.language.trim()
+      ? parsed.language.trim()
+      : undefined;
   const rest = { ...parsed };
   for (const key of ["content", "text", "body"] as const) {
     delete rest[key];
@@ -574,7 +585,7 @@ export function presentationFromReadableFileJson(
   if (facts.length) sections.push({ kind: "facts", facts });
   sections.push(...content);
   if (body !== null) {
-    sections.push(contentSection(body));
+    sections.push(contentSection(body, { path: bodyPath, language: bodyLanguage }));
   } else if (!sections.length) {
     sections.push({
       kind: "note",

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 )
 
@@ -94,30 +93,31 @@ func (s *Service) FactsFor(ctx context.Context, state LaneState, checkpoints Che
 			f.LastChange = ChangeNone
 			break
 		}
-		f.PriorCheckpoint = priorUnlandedCheckpoint(rounds[:last], changes, prep)
+		f.PriorCheckpoint = checkpointBefore(rounds[:last], changes, f.BaseCheckpoint)
 	}
 	return f, nil
 }
 
-// priorUnlandedCheckpoint is the latest earlier checkpoint in the current
-// lane generation whose result was neither landed nor rejected. Rounds run one
-// at a time and a lane switches only when a round's job is claimed, after the
-// previous round settled; so a round belongs to the generation when it settled
-// after the generation was prepared. Admission order says nothing: a round is
-// admitted before the claim that prepares its lane.
-func priorUnlandedCheckpoint(earlier []workerrecords.Round, changes map[string]string, prep workerrecords.PreparationRecord) string {
-	switched, _ := db.ParseTime(prep.CreatedAt)
+// checkpointBefore is what the lane held before its latest result: the
+// nearest earlier result whose changes are still unlanded, else the base a
+// stacked worker started on. It is empty when current source already holds
+// everything earlier, which a landing guarantees: a landed result carries the
+// unlanded results before it.
+func checkpointBefore(earlier []workerrecords.Round, changes map[string]string, base string) string {
 	for i := len(earlier) - 1; i >= 0; i-- {
 		r := earlier[i]
-		if settled, err := db.ParseTime(r.SettledAt); err == nil && settled.Before(switched) {
-			return ""
+		if r.CheckpointID == "" {
+			continue
 		}
-		state := ChangeState(changes[r.ResultID])
-		if r.CheckpointID != "" && state != ChangeLanded && state != ChangeRejected {
+		switch ChangeState(changes[r.ResultID]) {
+		case ChangeLanded:
+			return ""
+		case ChangeRejected:
+		default:
 			return r.CheckpointID
 		}
 	}
-	return ""
+	return base
 }
 
 func (s *Service) changeStates(ctx context.Context, actor workerrecords.Actor, workerID string) (map[string]string, error) {

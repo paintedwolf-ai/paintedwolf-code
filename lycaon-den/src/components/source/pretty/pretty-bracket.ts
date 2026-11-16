@@ -23,7 +23,8 @@ const BACKTICK = 0x60;
 
 /** Words after `}` that continue a statement rather than start one. */
 const CONTINUATIONS = new Set([
-  "else", "catch", "finally", "while", "from", "as", "satisfies", "of", "in", "instanceof",
+  "else", "elseif", "elif", "catch", "finally", "while", "until", "where", "except",
+  "from", "as", "satisfies", "of", "in", "instanceof",
 ]);
 
 function closerOf(opener: number): number {
@@ -168,7 +169,7 @@ function close(cursor: ScanCursor, rule: BracketRule, c: number, pos: number): v
     return;
   }
   state.col += 1;
-  if (state.laidOut && c === CLOSE_BRACE && breaksAfterBlock(cursor, rule, pos)) {
+  if (state.laidOut && c === CLOSE_BRACE && breaksAfterBlock(cursor, rule, pos, state.lexer)) {
     state.pending = cursor.skipSpaces(pos + 1, state.lineEnd);
     state.pendingColumns = cursor.columns(state.frames?.childIndent ?? 0);
   }
@@ -195,18 +196,24 @@ function separatorBreaks(state: ScanState, c: number, group: Frame | null): bool
 }
 
 /** Whether the `}` at `pos` is followed by a token that starts a new visual line. */
-function breaksAfterBlock(cursor: ScanCursor, rule: BracketRule, pos: number): boolean {
-  if (!rule.afterBlock) return false;
+function breaksAfterBlock(
+  cursor: ScanCursor,
+  rule: BracketRule,
+  pos: number,
+  lexer = cursor.state.lexer,
+): boolean {
+  if (!rule.afterBlock || lexer?.inProtected()) return false;
   const { text, state } = cursor;
   const next = cursor.skipSpaces(pos + 1, state.lineEnd);
   if (next >= state.lineEnd) return false;
   const c = text.at(next);
   if (c === QUOTE || c === APOS || c === BACKTICK || c === SLASH) return false;
   if (rule.afterBlock === "style") return c !== CLOSE_BRACE && c !== COMMA && c !== SEMICOLON;
+  if (rule.afterBlock === "block" && (c === 0x40 || c === 0x23)) return true;
   if (!isWordStart(c)) return false;
   let wordEnd = next + 1;
   while (wordEnd < state.lineEnd && wordEnd - next < 12 && isWordCode(text.at(wordEnd))) wordEnd += 1;
-  return !CONTINUATIONS.has(text.slice(next, wordEnd));
+  return !CONTINUATIONS.has(text.slice(next, wordEnd).toLowerCase());
 }
 
 function nonEmptyAt(cursor: ScanCursor, pos: number): boolean {
@@ -254,11 +261,11 @@ function fits(cursor: ScanCursor, rule: BracketRule, openPos: number): boolean {
         pos += 1;
         break;
       }
-      if (c === CLOSE_BRACE && breaksAfterBlock(cursor, rule, pos)) return false;
+      if (c === CLOSE_BRACE && breaksAfterBlock(cursor, rule, pos, lexer)) return false;
     }
     pos += 1;
   }
-  if (text.at(openPos) === OPEN_BRACE && breaksAfterBlock(cursor, rule, pos - 1)) return true;
+  if (text.at(openPos) === OPEN_BRACE && breaksAfterBlock(cursor, rule, pos - 1, lexer)) return true;
   const parent = state.frames;
   for (;;) {
     if (pos >= lineEnd) return true;
