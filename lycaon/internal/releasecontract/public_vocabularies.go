@@ -1,4 +1,4 @@
-package main
+package releasecontract
 
 import (
 	"encoding/json"
@@ -14,6 +14,13 @@ const dispositionsPath = packsRoot + "/painted-wolf/platform/tools/command-langu
 
 func publicVocabularies(source releaseSource) (map[string]map[string]string, error) {
 	result := map[string]map[string]string{"tools": {}, "workflow_terms": {}, "anchors": {}, "themes": {}}
+	var err error
+	if result["theme_keys"], err = themeKeys(source); err != nil {
+		return nil, err
+	}
+	if result["virtual_roots"], err = virtualRoots(source); err != nil {
+		return nil, err
+	}
 	paths, err := source.paths(packsRoot)
 	if err != nil {
 		return nil, err

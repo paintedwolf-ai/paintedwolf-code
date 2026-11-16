@@ -347,9 +347,13 @@ an object such as `{"content_contract": "paintedwolf.markdown_note", "version": 
 the meaning moves out of the vocabulary into a non-callable content contract. The object
 must match an entry in the catalog's `content_contracts` map at its declared version.
 Contract identifiers are dotted namespaces that never name a tool, and a released
-contract stays declared at its version or later. Both forms belong to catalog format 1:
-released catalogs parse unchanged, and the gate that reads a candidate's catalog runs
-from `main`.
+contract stays declared at its version or later. A candidate's catalog uses format 2,
+which adds the `theme_keys` and `virtual_roots` vocabularies. Released format-1 catalogs
+still parse, so the records they published are compared unchanged.
+
+The same check runs on every pull request through the release contract test
+(`lycaon/test/contract/release`), against the newest stable tag merged into the
+candidate. A checkout without release tags fails that test rather than skipping it.
 
 ### Release coverage
 
@@ -366,7 +370,7 @@ store schema, and a regenerated cache does not justify changing an archive forma
 | Project configuration | Overlay format, extension manifest/desired-state/lock formats, ignore document version | Format, transition, unknown-shape refusal, dependency-lock, and catalog publication tests run during qualification. Compatible stock updates are resolved against declared constraints. |
 | Extension and suite releases | Pack version, suite version, extension API requirement | Early checks require changed pack/suite bytes to advance their own release identity and reject API regressions or unavailable capabilities. Suite membership has its own version; member content changes do not change membership. |
 | Workflows and prompt content | Workflow ID/version, sealed archives, persona contract, prompt-unit identity | Early checks preserve released workflow bytes and archives. Persona, prompt rendering, bindings, and unit/catalog validation run during qualification. Copied prompt overrides need the explicit repairs above. |
-| Agent and extension vocabulary | OAR facts, rejection codes, tool names/runtime prefixes, workflow terms, anchors, theme IDs | Early checks reject unnamed removals, retired-name reuse, changed fact/term signatures, and missing successors. Anchor contract changes advance the catalog's minor or major version as appropriate. |
+| Agent and extension vocabulary | OAR facts, rejection codes, tool names/runtime prefixes, workflow terms, anchors, theme IDs, theme unit keys, virtual root labels | Early checks reject unnamed removals, retired-name reuse, changed fact/term signatures, and missing successors. Anchor contract changes advance the catalog's minor or major version as appropriate. |
 | OAR language and authoring schemas | Vendored spec/capability version and pinned source digests | Vendor integrity, schema synchronization, conformance, and catalog tests run during qualification. A pack version does not authorize changing a language contract. |
 | Den/host and native IPC | Generated OpenAPI, startup/document/decision protocols | OpenAPI evidence is retained against the pinned stable source. Drift, generated-consumer, native protocol, and platform tests run on the qualified commit. Co-shipped protocols move with both consumers. |
 | Device settings and credentials | App-state/preferences formats, exact grants, identity and vault custody | Strict decoding, explicit updater format-1 conversions, unknown-journal preservation, app-state normalization, credential custody, and store-reset tests run during qualification. A database wipe is never their migration. |

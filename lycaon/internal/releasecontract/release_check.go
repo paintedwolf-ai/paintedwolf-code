@@ -1,4 +1,4 @@
-package main
+package releasecontract
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/Masterminds/semver/v3"
@@ -17,7 +18,9 @@ import (
 
 const packsRoot = "lycaon/config/packs"
 
-func checkReleaseCompatibility(ctx context.Context, repoRoot, baseline string, out io.Writer) error {
+// CheckCompatibility compares the candidate at repoRoot with a stable release:
+// baseline when given, otherwise the newest stable tag merged into HEAD.
+func CheckCompatibility(ctx context.Context, repoRoot, baseline string, out io.Writer) error {
 	git := gitRelease{ctx: ctx, repoRoot: repoRoot}
 	source, err := git.run("rev-parse", "HEAD")
 	if err != nil {
@@ -42,15 +45,14 @@ func checkReleaseCompatibility(ctx context.Context, repoRoot, baseline string, o
 	if baseline != "" {
 		releases = []string{baseline}
 	} else {
-		tags, err := git.run("tag", "--merged", "HEAD", "--list", "v*")
+		versions, err := mergedReleaseVersions(git)
 		if err != nil {
 			return err
 		}
 		var latest *semver.Version
-		for _, tag := range strings.Fields(string(tags)) {
-			version, err := semver.StrictNewVersion(strings.TrimPrefix(tag, "v"))
-			if err == nil && version.Major() >= 1 && version.Prerelease() == "" && (latest == nil || version.GreaterThan(latest)) {
-				latest, releases = version, []string{tag}
+		for _, version := range versions {
+			if version.Prerelease() == "" && (latest == nil || version.GreaterThan(latest)) {
+				latest, releases = version, []string{"v" + version.String()}
 			}
 		}
 	}
@@ -127,6 +129,36 @@ func checkReleaseCompatibility(ctx context.Context, repoRoot, baseline string, o
 		}
 	}
 	return nil
+}
+
+// ReleasedVersions lists the post-v1 versions, previews included, whose tags are
+// merged into HEAD.
+func ReleasedVersions(ctx context.Context, repoRoot string) ([]string, error) {
+	versions, err := mergedReleaseVersions(gitRelease{ctx: ctx, repoRoot: repoRoot})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(versions))
+	for _, version := range versions {
+		out = append(out, version.String())
+	}
+	return out, nil
+}
+
+func mergedReleaseVersions(git gitRelease) ([]*semver.Version, error) {
+	tags, err := git.run("tag", "--merged", "HEAD", "--list", "v*")
+	if err != nil {
+		return nil, err
+	}
+	var versions []*semver.Version
+	for _, tag := range strings.Fields(string(tags)) {
+		version, err := semver.StrictNewVersion(strings.TrimPrefix(tag, "v"))
+		if err == nil && version.Major() >= 1 && "v"+version.String() == tag {
+			versions = append(versions, version)
+		}
+	}
+	sort.Slice(versions, func(i, j int) bool { return versions[i].LessThan(versions[j]) })
+	return versions, nil
 }
 
 func workflowPath(rel string) (string, string, bool) {

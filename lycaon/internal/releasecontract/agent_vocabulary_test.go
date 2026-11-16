@@ -1,4 +1,4 @@
-package main
+package releasecontract
 
 import (
 	"strings"
@@ -78,19 +78,25 @@ func TestAgentVocabularyReadsStructuredDeclarations(t *testing.T) {
 func TestRetirementCatalogIsClosedAndVersioned(t *testing.T) {
 	for _, raw := range []string{
 		`{}`, `{"format_version":2,"facts":{},"rejection_codes":{}}`,
-		`{"format_version":1,"facts":{},"rejection_codes":{},"extra":true}`,
-		`{"format_version":1,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}} {}`,
+		`{"format_version":2,"facts":{},"rejection_codes":{},"extra":true}`,
+		`{"format_version":2,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{},"theme_keys":{},"virtual_roots":{}}} {}`,
+		`{"format_version":2,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}}`,
+		`{"format_version":3,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{},"theme_keys":{},"virtual_roots":{}}}`,
 	} {
 		if _, err := parseRetirements([]byte(raw)); err == nil {
 			t.Fatalf("invalid retirement catalog passed: %s", raw)
 		}
 	}
-	_, err := parseRetirements([]byte(`{"format_version":1,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}}`))
+	_, err := parseRetirements([]byte(`{"format_version":2,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{},"theme_keys":{},"virtual_roots":{}}}`))
 	testutil.FailErr(t, "parse closed retirement catalog", err)
+	// The released catalog keeps the format it shipped with.
 	before := treeRelease{"schemas/agent-public-retirements.json": []byte(`{"format_version":1,"vocabularies":{"host_facts":{"paintedwolf.forgotten":["paintedwolf.successor"]},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}}`)}
-	after := treeRelease{"schemas/agent-public-retirements.json": []byte(`{"format_version":1,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}}`)}
+	after := treeRelease{"schemas/agent-public-retirements.json": []byte(`{"format_version":2,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{},"theme_keys":{},"virtual_roots":{}}}`)}
 	if err := checkAgentVocabulary(before, after); err == nil || !strings.Contains(err.Error(), "released retirement") {
 		t.Fatalf("retirement removal: %v", err)
+	}
+	if err := checkAgentVocabulary(before, before); err == nil || !strings.Contains(err.Error(), "must use format") {
+		t.Fatalf("candidate kept the released format: %v", err)
 	}
 }
 

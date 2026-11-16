@@ -1,4 +1,4 @@
-package main
+package releasecontract
 
 import (
 	"bytes"
@@ -12,7 +12,15 @@ import (
 
 const retirementCatalogPath = "schemas/agent-public-retirements.json"
 
-var vocabularyKinds = []string{"host_facts", "rejection_codes", "tools", "workflow_terms", "anchors", "themes"}
+// catalogFormat is the format a candidate's catalog must use. Released catalogs
+// keep the format they shipped with.
+const catalogFormat = 2
+
+// vocabularyKinds lists each format's vocabularies; format 2 adds theme keys and virtual roots.
+var vocabularyKinds = map[int][]string{
+	1: {"host_facts", "rejection_codes", "tools", "workflow_terms", "anchors", "themes"},
+	2: {"host_facts", "rejection_codes", "tools", "workflow_terms", "anchors", "themes", "theme_keys", "virtual_roots"},
+}
 
 // The required dotted namespace keeps a bare tool name from declaring a contract.
 var contentContractID = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$`)
@@ -68,7 +76,8 @@ func parseRetirements(raw []byte) (vocabularyRetirements, error) {
 	if err := decodeStrict(raw, &retired); err != nil {
 		return retired, err
 	}
-	if retired.FormatVersion != 1 || len(retired.Vocabularies) != len(vocabularyKinds) {
+	kinds, ok := vocabularyKinds[retired.FormatVersion]
+	if !ok || len(retired.Vocabularies) != len(kinds) {
 		return retired, fmt.Errorf("unsupported or incomplete agent-public retirement catalog")
 	}
 	for name, contract := range retired.ContentContracts {
@@ -79,7 +88,7 @@ func parseRetirements(raw []byte) (vocabularyRetirements, error) {
 			return retired, fmt.Errorf("content contract %s needs a positive version and a summary", name)
 		}
 	}
-	for _, kind := range vocabularyKinds {
+	for _, kind := range kinds {
 		if retired.Vocabularies[kind] == nil {
 			return retired, fmt.Errorf("missing retirement vocabulary %s", kind)
 		}

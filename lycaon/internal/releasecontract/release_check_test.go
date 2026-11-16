@@ -1,9 +1,10 @@
-package main
+package releasecontract
 
 import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -79,45 +80,40 @@ func TestCheckAllDiscoversStableWorkflowBaselines(t *testing.T) {
 	testutil.FailErr(t, "read valid host fact vocabulary", err)
 	files[capabilityPath] = facts
 	files["schemas/guidance_registry.json"] = []byte(`{"hint_codes":{}}`)
-	files["schemas/agent-public-retirements.json"] = []byte(`{"format_version":1,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}}`)
+	files["schemas/agent-public-retirements.json"] = []byte(`{"format_version":2,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{},"theme_keys":{},"virtual_roots":{}}}`)
 	for rel, raw := range publicVocabularyFixture() {
 		files[rel] = raw
 	}
 	files[securityPack+"/extension.yaml"] = []byte("manifest_version: 1\nid: painted-wolf/security-survey\nname: Security survey\nversion: 1.0.0\ncompatibility:\n  extension_api: '^1.1.0'\n")
 	writeReleaseTree(t, repo, files)
 	gittest.InitCommit(t, repo, "released workflow")
-	var stdout, stderr bytes.Buffer
-	if code := run(t.Context(), repo, []string{"--check-all"}, &stdout, &stderr); code != 1 || !strings.Contains(stderr.String(), "no stable") {
-		t.Fatalf("missing baseline exit=%d: %s", code, &stderr)
+	var report bytes.Buffer
+	if err := CheckCompatibility(t.Context(), repo, "", &report); err == nil || !strings.Contains(err.Error(), "no stable") {
+		t.Fatalf("missing baseline: %v", err)
 	}
 	for _, tag := range []string{"v0.9.0", "v1.0.1-rc.1", "v1.0.1"} {
 		gittest.Run(t, repo, "tag", tag)
 	}
-	stdout.Reset()
-	stderr.Reset()
-	if code := run(t.Context(), repo, []string{"--check-all"}, &stdout, &stderr); code != 0 {
-		t.Fatalf("stable check exit=%d: %s", code, &stderr)
+	report.Reset()
+	testutil.FailErr(t, "stable check", CheckCompatibility(t.Context(), repo, "", &report))
+	if got := report.String(); !strings.Contains(got, "v1.0.1 ") || !strings.Contains(got, "security-survey/security-survey") || strings.Contains(got, "Stable baseline: v0.9.0") || strings.Contains(got, "Stable baseline: v1.0.1-rc.1") {
+		t.Fatalf("wrong baseline discovery: %s", got)
 	}
-	report := stdout.String()
-	if !strings.Contains(report, "v1.0.1 ") || !strings.Contains(report, "security-survey/security-survey") || strings.Contains(report, "Stable baseline: v0.9.0") || strings.Contains(report, "Stable baseline: v1.0.1-rc.1") {
-		t.Fatalf("wrong baseline discovery: %s", report)
+	versions, err := ReleasedVersions(t.Context(), repo)
+	testutil.FailErr(t, "list released versions", err)
+	if !slices.Equal(versions, []string{"1.0.1-rc.1", "1.0.1"}) {
+		t.Fatalf("released versions = %q", versions)
 	}
-	if code := run(t.Context(), repo, []string{"--check-all", "--published-versions", `["1.0.1"]`}, &stdout, &stderr); code != 0 {
-		t.Fatalf("published migration check exit=%d: %s", code, &stderr)
-	}
-	for _, raw := range []string{"null", "{}", `["0.9.0"]`, `["invalid"]`, `["1.0.2"]`} {
-		if code := run(t.Context(), repo, []string{"--check-all", "--published-versions", raw}, &stdout, &stderr); code != 1 {
-			t.Fatalf("invalid published sources %s exit=%d", raw, code)
+	testutil.FailErr(t, "published migration check", CheckPublishedMigrations(t.Context(), repo, versions))
+	for _, invalid := range [][]string{{"0.9.0"}, {"invalid"}, {"1.0.2"}} {
+		if err := CheckPublishedMigrations(t.Context(), repo, invalid); err == nil {
+			t.Fatalf("accepted published sources %q", invalid)
 		}
 	}
-	if code := run(t.Context(), repo, []string{"--check-all", "--check"}, &stdout, &stderr); code != 2 {
-		t.Fatalf("conflicting flags exit=%d", code)
-	}
 	testutil.FailErr(t, "change candidate guidance", os.WriteFile(filepath.Join(repo, filepath.FromSlash(securityPack), "guidance", "coordinator-security-plan.md"), []byte("drift\n"), 0o600))
-	stdout.Reset()
-	stderr.Reset()
-	if code := run(t.Context(), repo, []string{"--check-all"}, &stdout, &stderr); code != 1 || !strings.Contains(stderr.String(), "without a version bump") || !strings.Contains(stdout.String(), "(dirty)") {
-		t.Fatalf("drift exit=%d stdout=%s stderr=%s", code, &stdout, &stderr)
+	report.Reset()
+	if err := CheckCompatibility(t.Context(), repo, "", &report); err == nil || !strings.Contains(err.Error(), "without a version bump") || !strings.Contains(report.String(), "(dirty)") {
+		t.Fatalf("drift: %v report=%s", err, &report)
 	}
 }
 
@@ -139,7 +135,7 @@ func TestCheckBundledReleaseCompatibilityFromStablePatch(t *testing.T) {
 		t.Fatal("module root not found")
 	}
 	var report bytes.Buffer
-	testutil.FailErr(t, "check bundled release contracts", checkReleaseCompatibility(t.Context(), filepath.Dir(root), "v1.0.1", &report))
+	testutil.FailErr(t, "check bundled release contracts", CheckCompatibility(t.Context(), filepath.Dir(root), "v1.0.1", &report))
 	if !strings.Contains(report.String(), "Stable baseline: v1.0.1 ") {
 		t.Fatalf("missing released baseline: %s", &report)
 	}

@@ -1,4 +1,4 @@
-package main
+package releasecontract
 
 import (
 	"encoding/json"
@@ -31,6 +31,9 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 	retired, err := parseRetirements(raw)
 	if err != nil {
 		return err
+	}
+	if retired.FormatVersion != catalogFormat {
+		return fmt.Errorf("%s must use format %d", retirementCatalogPath, catalogFormat)
 	}
 	paths, err := release.paths("schemas")
 	if err != nil {
@@ -85,7 +88,7 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 	if err := checkContractIdentities(retired.ContentContracts, beforePublic["tools"], afterPublic["tools"], retired.Vocabularies["tools"]); err != nil {
 		return err
 	}
-	for _, kind := range []string{"tools", "workflow_terms", "anchors", "themes"} {
+	for _, kind := range []string{"tools", "workflow_terms", "anchors", "themes", "theme_keys", "virtual_roots"} {
 		if err := checkVocabulary(kind, beforePublic[kind], afterPublic[kind], retired.Vocabularies[kind], nil); err != nil {
 			return err
 		}

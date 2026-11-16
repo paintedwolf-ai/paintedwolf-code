@@ -1,4 +1,4 @@
-package main
+package releasecontract
 
 import (
 	"context"
@@ -148,14 +148,9 @@ func checkMigrationHistory(release, current releaseSource) error {
 	return nil
 }
 
-func checkPublishedMigrationHistory(ctx context.Context, repoRoot, raw string) error {
-	var versions []string
-	if err := json.Unmarshal([]byte(raw), &versions); err != nil {
-		return err
-	}
-	if versions == nil {
-		return fmt.Errorf("published versions must be an array")
-	}
+// CheckPublishedMigrations requires every migration a published version shipped
+// to keep its identity and checksum in the candidate.
+func CheckPublishedMigrations(ctx context.Context, repoRoot string, versions []string) error {
 	for _, value := range versions {
 		version, err := semver.StrictNewVersion(value)
 		if err != nil {

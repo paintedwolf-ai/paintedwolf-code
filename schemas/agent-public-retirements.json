@@ -1,5 +1,5 @@
 {
-  "format_version": 1,
+  "format_version": 2,
   "content_contracts": {
     "paintedwolf.markdown_note": {
       "version": 1,
@@ -670,6 +670,8 @@
         "worker.report_check"
       ]
     },
-    "themes": {}
+    "themes": {},
+    "theme_keys": {},
+    "virtual_roots": {}
   }
 }

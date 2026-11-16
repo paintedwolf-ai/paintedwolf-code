@@ -1,4 +1,4 @@
-package main
+package releasecontract
 
 import (
 	"os"
@@ -19,7 +19,7 @@ const (
 )
 
 func retirementCatalog(contracts, toolEntries string) []byte {
-	return []byte(`{"format_version":1,` + contracts + `"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{` + toolEntries + `},"workflow_terms":{},"anchors":{},"themes":{}}}`)
+	return []byte(`{"format_version":2,` + contracts + `"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{` + toolEntries + `},"workflow_terms":{},"anchors":{},"themes":{},"theme_keys":{},"virtual_roots":{}}}`)
 }
 
 func contractRelease(catalog []byte, withNote bool) treeRelease {
@@ -126,13 +126,13 @@ func TestRetirementCatalogRefusesMalformedContentContracts(t *testing.T) {
 		"declaration string version":   retirementCatalog(`"content_contracts":{"paintedwolf.note":{"version":"1","summary":"Note."}},`, ""),
 		"tool shaped declaration":      retirementCatalog(`"content_contracts":{"surface_note":{"version":1,"summary":"Note."}},`, ""),
 		"mcp shaped declaration":       retirementCatalog(`"content_contracts":{"mcp_*":{"version":1,"summary":"Note."}},`, ""),
-		"unknown vocabulary":           []byte(`{"format_version":1,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"palettes":{}}}`),
+		"unknown vocabulary":           []byte(`{"format_version":2,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"palettes":{}}}`),
 		"null successor":               retirementCatalog(noteContracts, `"old":null`),
 		"scalar successor":             retirementCatalog(noteContracts, `"old":"read"`),
 		"mixed successor list":         retirementCatalog(noteContracts, `"old":["read",`+noteSuccessor+`]`),
 		"object list":                  retirementCatalog(noteContracts, `"old":[`+noteSuccessor+`]`),
 		"contract and names":           retirementCatalog(noteContracts, `"old":{"content_contract":"paintedwolf.markdown_note","version":1,"names":["read"]}`),
-		"contract in other vocabulary": []byte(`{"format_version":1,"vocabularies":{"host_facts":{"old":{"content_contract":"paintedwolf.other","version":1}},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}}`),
+		"contract in other vocabulary": []byte(`{"format_version":2,"vocabularies":{"host_facts":{"old":{"content_contract":"paintedwolf.other","version":1}},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{},"theme_keys":{},"virtual_roots":{}}}`),
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := parseRetirements(raw); err == nil {
