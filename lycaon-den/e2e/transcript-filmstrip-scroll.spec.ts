@@ -81,7 +81,7 @@ modelIndependentWebE2e("filmstrip thumbnails pass vertical scrolling through to 
   await expect.poll(thumbnailTop).toBeGreaterThan(before + 180);
   // Row measurement can move the tail under one wheel; the jump shows past the near-tail threshold.
   await expect.poll(async () => {
-    const pastThreshold = await stream.evaluate(async (el) => {
+    const pastThreshold = await stream.evaluate(async (el: HTMLElement) => {
       const moduleUrl = "/src/chat/stream/stream-scroll.ts";
       const { streamTailOffset, STREAM_SCROLL_BOTTOM_THRESHOLD_PX } = await import(/* @vite-ignore */ moduleUrl) as
         typeof import("../src/chat/stream/stream-scroll.ts");
