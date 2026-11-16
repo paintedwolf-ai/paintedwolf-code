@@ -89,7 +89,7 @@ export function ActionCard(props: Props) {
         <Show when={redaction()} keyed>
           {(meta) => <p class="den-action-card__notice" data-testid="action-redaction"><RedactionChicklet message={{ host_secret_redaction: meta }} /></p>}
         </Show>
-        <ActionLinks action={props.action} part={props.part} projectId={props.projectId} rootRefs={props.rootRefs} evidence={props.slots?.evidence} />
+        <ActionLinks action={props.action} part={props.part} projectId={props.projectId} sessionId={props.sessionId} rootRefs={props.rootRefs} evidence={props.slots?.evidence} />
         <TurnLoadFootLine part={props.part} />
       </div>
     </ToolPartShell>

@@ -142,6 +142,14 @@ describe("ActionCard", () => {
     expect(container.querySelector('[data-testid="action-opener"]')).toBe(opener);
   });
 
+  it("offers the call's output to chat and its related calls in Search, before the opener", () => {
+    const { container } = render(() => <ActionCard part={part()} action={descriptor} layout="chat" projectId="p" sessionId="s" />);
+    open(container);
+    const links = [...container.querySelectorAll('[data-testid="action-links"] [data-testid]')].map((node) => node.getAttribute("data-testid"));
+    expect(links.slice(-3)).toEqual(["tool-raw-add-to-chat", "tool-related-search-link", "action-opener"]);
+    expect(container.querySelector('[data-testid="action-links"]')?.getAttribute("draggable")).toBe("true");
+  });
+
   it("names a fold's further targets beside what ran", () => {
     const { container } = render(() => <ActionCard part={part()} action={{ ...descriptor, more: 2 }} layout="chat" />);
     open(container);
