@@ -1444,11 +1444,12 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs beside the `release` platform lanes one at a time, then two browser shards beside the desktop journey |
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
 | Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then the two platform jobs, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
-| Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
+| Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | DCO certification | `dco.yml` | `dco-certification` | 1 |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
 | Queue batching | `queue-batching.yml` | `queue-batching` | 1 |
-| Maintenance | dispatch-only Linux desktop environment and installed rehearsals, Linux candidate requests, dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
+| Release rehearsals | release dry runs and replays, the weekly release-system live test, a dispatched release secrets check | one group per dry run or replay; `release-system-live-test`; none for the read-only secrets check | a dry run as a release; 1 otherwise |
+| Maintenance | dispatch-only Linux desktop environment and installed rehearsals, Linux candidate requests, dependency inventory, queue health, issue staleness, the issue sweep | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 12: two groups × the `integration` cap of six |
 | Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 3 per pull request, with a two-hour execution ceiling |
 
