@@ -167,6 +167,11 @@ candidates actually scored. The released tool head encodes each option separatel
 so adding or removing another permitted option does not change its representation.
 Joint heads require a matching joint release and retain their roster sensitivity.
 
+A release's vocabulary is the one its turn-load head was trained with.
+`scripts/bialy/preload.py` derives it from the training corpus, and
+`scripts/bialy/adopt_heads.py` writes it into the release together with the
+head pins, so weights and option texts never change apart.
+
 ## The standing surface and the prompt cache
 
 The tools a chat offers beyond its floor and the units it leaves out are part
