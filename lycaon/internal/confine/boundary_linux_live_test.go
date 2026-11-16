@@ -168,6 +168,8 @@ func runLinuxProbe(mode string) int {
 		return networkProbe(mode)
 	case "udpsend", "udpsendto", "udpserve":
 		return datagramProbe(mode)
+	case "tcpstart", "tcpblocking":
+		return hostConnectProbe(mode)
 	case "orphan":
 		daemon := child("sleep", true)
 		if err := daemon.Start(); err != nil {
