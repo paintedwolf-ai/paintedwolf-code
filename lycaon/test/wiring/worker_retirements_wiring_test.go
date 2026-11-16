@@ -256,7 +256,7 @@ func verifyOverlayHandlesAndWithdraw(
 	testutil.FailErr(t, "withdraw planned workers on run stop", h.Workflows.Manager.Controls.Cleanup.Workers.WithdrawPlannedWorkersByRunID(ctx, "run-stop-check"))
 	reloaded, err := h.Delegations.Records.Worker(ctx, actor, planned.WorkerID)
 	testutil.FailErr(t, "reload withdrawn planned leg", err)
-	if !reloaded.Closed || workerstate.Derive(workerstate.Inputs{Planned: true, Withdrawn: reloaded.Withdrawn}).State != workerstate.Closed {
+	if reloaded.ClosedAt == "" || workerstate.Derive(workerstate.Facts{Closed: reloaded.ClosedAt != "", Planned: true}).State != workerstate.Closed {
 		t.Fatalf("expected planned leg withdrawn and closed on run stop, got %+v", reloaded)
 	}
 }
@@ -271,10 +271,9 @@ func TestRetirementsHistoricalTranscriptReadback(t *testing.T) {
 	now := time.Now().UTC()
 	testutil.FailErr(t, "append historical retired tool calls", h.Store.AppendMessages(ctx, sess.ID,
 		api.Message{
-			ID:        uuid.NewString(),
-			SessionID: sess.ID,
-			Role:      api.MessageRoleAssistant,
-			Content:   "Dispatching planned leg.",
+			ID:      uuid.NewString(),
+			Role:    api.MessageRoleAssistant,
+			Content: "Dispatching planned leg.",
 			ToolCalls: []api.ToolCall{
 				{ID: "hist-1", Name: "delegate_dispatch", Args: map[string]any{"leg_id": "leg-1"}},
 				{ID: "hist-2", Name: "request_budget", Args: map[string]any{"requested_max": 12}},
@@ -282,13 +281,15 @@ func TestRetirementsHistoricalTranscriptReadback(t *testing.T) {
 			CreatedAt: now,
 		},
 		api.Message{
-			ID:         uuid.NewString(),
-			SessionID:  sess.ID,
-			Role:       api.MessageRoleTool,
-			ToolCallID: "hist-1",
-			ToolName:   "delegate_dispatch",
-			Content:    `{"job_id":"job-hist-1","status":"queued"}`,
-			CreatedAt:  now.Add(time.Second),
+			ID:      uuid.NewString(),
+			Role:    api.MessageRoleTool,
+			Content: `{"job_id":"job-hist-1","status":"queued"}`,
+			ToolResult: &api.ToolResult{
+				Tool:       "delegate_dispatch",
+				ToolCallID: "hist-1",
+				Content:    `{"job_id":"job-hist-1","status":"queued"}`,
+			},
+			CreatedAt: now.Add(time.Second),
 		},
 	))
 
