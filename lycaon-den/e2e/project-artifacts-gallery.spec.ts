@@ -16,11 +16,13 @@ import {
 /** Exact base64 of visual.TestPNG1x1Bytes. */
 const PNG_B64 =
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVQI12P4z8AAAAMBAQAY3Y20AAAAAElFTkSuQmCC";
+const PNG_SECOND_B64 =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQmHAHAAJgAY2WsQ4zAAAAAElFTkSuQmCC";
 
 // Manual responses keep the seeded image turn open.
 webE2e(
   "den:harness — Artifacts gallery shows tiles, source badge, and lightbox",
-  async ({ page, request }) => {
+  async ({ page, request }, testInfo) => {
     test.skip(
       process.env.LYCAON_LLM_MANUAL !== "1",
       "set LYCAON_LLM_MANUAL=1 to seed a durable user artifact",
@@ -82,6 +84,8 @@ webE2e(
 
     const tile = page.getByTestId("project-artifact-tile").first();
     await expect(tile).toBeVisible();
+    const firstArtifactId = await tile.getAttribute("data-artifact-id");
+    expect(firstArtifactId).toBeTruthy();
     await expect(
       tile.getByTestId("project-artifact-source-badge"),
     ).toHaveText(/User|Render|Capture/);
@@ -89,6 +93,71 @@ webE2e(
     const enlarge = tile.getByRole("button").first();
     await expect(enlarge).toBeEnabled({ timeout: 60_000 });
     await enlarge.click();
-    await expect(page.getByTestId("project-artifacts-lightbox")).toBeVisible();
+    const lightbox = page.getByTestId("project-artifacts-lightbox");
+    await expect(lightbox).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(lightbox).toBeHidden();
+
+    await apiJson(request, "POST", "/harness/llm/auto", { enabled: false });
+    try {
+      const upload = await apiUploadAttachment(
+        request,
+        project.id,
+        "gallery-live-second.png",
+        "image/png",
+        Buffer.from(PNG_SECOND_B64, "base64"),
+      );
+      const promptRes = await apiPostPrompt(request, sessionId, {
+        text: "second live gallery image",
+        attachments: [{ blob_id: upload.blob_id }],
+      });
+      expect(promptRes.ok(), await promptRes.text()).toBeTruthy();
+
+      const pending = await apiJson<{ pending: boolean; id: string }>(
+        request,
+        "GET",
+        `/harness/llm/pending?wait=30000&session_id=${sessionId}`,
+      );
+      expect(pending.pending).toBe(true);
+      await apiJson(request, "POST", "/harness/llm/respond", {
+        id: pending.id,
+        content: "Got the second gallery fixture.",
+      });
+    } finally {
+      await apiJson(request, "POST", "/harness/llm/auto", {
+        enabled: true,
+        text: "Harness reply.",
+      });
+    }
+
+    const tiles = page.getByTestId("project-artifact-tile");
+    await expect(tiles).toHaveCount(2, { timeout: 60_000 });
+    await expect(tiles.nth(1)).toHaveAttribute("data-artifact-id", firstArtifactId!);
+    const secondArtifactId = await tiles.nth(0).getAttribute("data-artifact-id");
+    expect(secondArtifactId).toBeTruthy();
+    expect(secondArtifactId).not.toBe(firstArtifactId);
+
+    const newestEnlarge = tiles.nth(0).getByRole("button").first();
+    const olderEnlarge = tiles.nth(1).getByRole("button").first();
+    await expect(newestEnlarge).toBeEnabled({ timeout: 60_000 });
+    await expect(olderEnlarge).toBeEnabled({ timeout: 60_000 });
+    await expect(page.getByTestId("project-artifact-load-error")).toHaveCount(0);
+
+    await page.screenshot({
+      path:
+        process.env.LYCAON_REVIEW_SCREENSHOT ??
+        testInfo.outputPath("artifacts-stage-live.png"),
+      animations: "disabled",
+    });
+
+    await newestEnlarge.click();
+    await expect(lightbox).toBeVisible();
+    await expect(lightbox.locator("img")).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(lightbox).toBeHidden();
+
+    await olderEnlarge.click();
+    await expect(lightbox).toBeVisible();
+    await expect(lightbox.locator("img")).toBeVisible();
   },
 );

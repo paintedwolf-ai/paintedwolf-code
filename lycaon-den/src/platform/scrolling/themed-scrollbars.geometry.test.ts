@@ -127,6 +127,40 @@ describe("themed scrollbars", () => {
     expect(reads).not.toHaveBeenCalled();
   });
 
+  it("repaints thumb percent on mid-drag extent change without committing scroll", () => {
+    const host = document.createElement("div");
+    const viewport = document.createElement("div");
+    const vertical = document.createElement("div");
+    const horizontal = document.createElement("div");
+    host.append(viewport, vertical, horizontal);
+    document.body.append(host);
+    let offset = 2_500;
+    let extent = 5_500;
+    const scrollTo = vi.fn((next: number) => { offset = next; });
+    const scrollbar = OverlayScrollbars({ target: host }, {}) as unknown as ReturnType<typeof instance>;
+    (scrollbar as { elements: () => unknown }).elements = () => ({
+      scrollOffsetElement: viewport,
+      scrollbarVertical: { scrollbar: vertical },
+      scrollbarHorizontal: { scrollbar: horizontal },
+    });
+    attachThemedViewportScrollbar(host, viewport, {
+      vertical: {
+        read: () => ({ offset, viewport: 500, extent }),
+        scrollTo,
+      },
+    });
+    const refreshGeometry = vi.fn(() => true);
+    scrollbarChrome.bindInput(host, { dispose: () => {}, refreshGeometry });
+    scrollbarChrome.place(host);
+    expect(refreshGeometry).toHaveBeenCalledOnce();
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(vertical.style.getPropertyValue("--os-scroll-percent")).toBe("0.5");
+    extent = 10_500;
+    scrollbarChrome.place(host);
+    expect(scrollTo).not.toHaveBeenCalled();
+    expect(vertical.style.getPropertyValue("--os-scroll-percent")).toBe("0.25");
+  });
+
   it("re-arms one direct-input recheck timer through an input stream", () => {
     vi.useFakeTimers();
     const host = document.createElement("div");

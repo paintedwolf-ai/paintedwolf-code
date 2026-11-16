@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/pongoplain"
 	"github.com/lycaon/lycaon/internal/promptunit"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -78,7 +77,15 @@ func AuthorRender(ctx context.Context, req AuthorRenderRequest) (AuthorRenderRes
 
 	out := AuthorRenderResult{Revision: engine.Revision()}
 	if agentID != "" {
-		body, err := renderPersona(ctx, engine, agentID, vars, false)
+		reader, err := DeclaredReader(engine.Layers().Catalog, agentID)
+		if err != nil {
+			return AuthorRenderResult{}, err
+		}
+		personaEngine, _, ref, data, err := personaVars(ctx, engine, agentID, reader, vars)
+		if err != nil {
+			return AuthorRenderResult{}, err
+		}
+		body, err := personaEngine.Render(ctx, ref, data)
 		if err != nil {
 			return AuthorRenderResult{}, err
 		}
@@ -126,12 +133,16 @@ func renderSkillPreview(ctx context.Context, req AuthorRenderRequest, skillName,
 	if err != nil {
 		return AuthorRenderResult{}, err
 	}
+	reader, err := skillPreviewReader(profileID, surfaceID)
+	if err != nil {
+		return AuthorRenderResult{}, err
+	}
 	out := AuthorRenderResult{}
 	templated := !sk.Project && (resource == "" || sk.TemplatesResource(resource))
 	var vars map[string]any
 	if templated {
 		var err error
-		vars, err = skillPreviewVars(req.Vars, profileID, surfaceID, sk)
+		vars, err = skillPreviewVars(req.Vars, reader, sk)
 		if err != nil {
 			return AuthorRenderResult{}, err
 		}
@@ -148,12 +159,13 @@ func renderSkillPreview(ctx context.Context, req AuthorRenderRequest, skillName,
 		out.Output = source
 	}
 	if req.Check {
-		violations, err := checkSkillRender(sk, resource, source, out.Output, templated, profileID, surfaceID)
+		held := reader.Held()
+		violations, err := checkSkillRender(sk, resource, source, out.Output, templated, held)
 		if err != nil {
 			return AuthorRenderResult{}, err
 		}
 		if templated && !sk.UserProvided {
-			extra, err := checkSkillRenderVarVariants(ctx, source, vars, violations, profileID, surfaceID)
+			extra, err := checkSkillRenderVarVariants(ctx, source, vars, violations, held)
 			if err != nil {
 				return AuthorRenderResult{}, err
 			}
@@ -182,20 +194,35 @@ func skillPreviewProfile(agentID, surfaceID string) (string, string, error) {
 	return profileID, surfaceID, nil
 }
 
+func skillPreviewReader(profileID, surfaceID string) (Reader, error) {
+	if surfaceID == "" {
+		return DeclaredReader(nil, profileID)
+	}
+	profiles, err := declaredToolProfiles(nil)
+	if err != nil {
+		return Reader{}, err
+	}
+	plan, err := CompileSurfacePlan(surfaceID, 1)
+	if err != nil {
+		return Reader{}, err
+	}
+	return NewReader(ReaderInput{
+		ProfileID: profileID,
+		SurfaceID: surfaceID,
+		Profiles:  profiles,
+		Plan:      plan,
+		Loaded:    toolNameSet(plan.AddressableNames()),
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	})
+}
+
 // skillPreviewVars builds the render context one pack skill read carries: the
 // caller surface vars, the pack's effective configuration, and the explicit
 // preview vars on top.
-func skillPreviewVars(explicit map[string]any, profileID, surfaceID string, sk skills.Skill) (map[string]any, error) {
-	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{
-		ProfileID:        profileID,
-		SurfaceID:        surfaceID,
-		HasGit:           true,
-		RootCount:        1,
-		DelegationBudget: spawn.DefaultWorkerToolBudget(),
-	})
-	if err != nil {
-		return nil, err
-	}
+func skillPreviewVars(explicit map[string]any, reader Reader, sk skills.Skill) (map[string]any, error) {
+	vars := SkillVars(reader, spawn.DefaultWorkerToolBudget())
 	configuration, err := packConfigurationVars(sk.PackID)
 	if err != nil {
 		return nil, err
@@ -299,7 +326,7 @@ func packConfigurationVars(packID string) (map[string]any, error) {
 // the byte budget, template markers that leaked outside verbatim protection,
 // and tool names the rendered copy tells its reader to call but the target
 // profile and surface cannot reach.
-func checkSkillRender(sk skills.Skill, resource, source, rendered string, templated bool, profileID, surfaceID string) ([]string, error) {
+func checkSkillRender(sk skills.Skill, resource, source, rendered string, templated bool, reachable map[string]bool) ([]string, error) {
 	var violations []string
 	budget := skills.BundledBodyBudget
 	name := sk.Name
@@ -318,10 +345,6 @@ func checkSkillRender(sk skills.Skill, resource, source, rendered string, templa
 	}
 	if sk.UserProvided {
 		return violations, nil
-	}
-	reachable, err := skillReachableTools(profileID, surfaceID)
-	if err != nil {
-		return nil, err
 	}
 	declared, err := skillDeclaredNames()
 	if err != nil {
@@ -354,11 +377,7 @@ var skillRenderVarOverrides = []struct {
 // branches expose that the reader cannot reach. Each violation names the
 // variant that exposed it; names the base render already reports are left to
 // the base violation.
-func checkSkillRenderVarVariants(ctx context.Context, source string, vars map[string]any, base []string, profileID, surfaceID string) ([]string, error) {
-	reachable, err := skillReachableTools(profileID, surfaceID)
-	if err != nil {
-		return nil, err
-	}
+func checkSkillRenderVarVariants(ctx context.Context, source string, vars map[string]any, base []string, reachable map[string]bool) ([]string, error) {
 	declared, err := skillDeclaredNames()
 	if err != nil {
 		return nil, err
@@ -394,50 +413,6 @@ func checkSkillRenderVarVariants(ctx context.Context, source string, vars map[st
 		}
 	}
 	return violations, nil
-}
-
-// skillReachableTools names every tool the target reader can reach: a
-// coordinator surface's floor plus its loadable set, or a worker profile's
-// enabled plus requestable tools, along with ReachCommandMutation when the
-// scope permits mutating command programs.
-func skillReachableTools(profileID, surfaceID string) (map[string]bool, error) {
-	if profileID == CoordinatorProfileID && surfaceID != "" {
-		floor, err := LoadCoordinatorSurfaceFloor(surfaceID)
-		if err != nil {
-			return nil, err
-		}
-		loadable, err := LoadCoordinatorSurfaceLoadable(surfaceID)
-		if err != nil {
-			return nil, err
-		}
-		offered, requestable := OfferedTools(floor, loadable, nil)
-		out := make(map[string]bool, len(offered)+len(requestable)+1)
-		for _, name := range offered {
-			out[name] = true
-		}
-		for _, name := range requestable {
-			out[name] = true
-		}
-		out[toolcontract.ReachCommandMutation] = out["command"] && CoordinatorSurfaceAllowsCommandMutation(surfaceID)
-		return out, nil
-	}
-	profiles, err := sandbox.LoadToolProfiles()
-	if err != nil {
-		return nil, err
-	}
-	surface, err := LoadAgentToolSurface(profileID, nil, nil, SurfaceTurn{}, profiles)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]bool, len(surface.Tools)+len(surface.Requestable)+1)
-	for _, tool := range surface.Tools {
-		out[tool.Name] = true
-	}
-	for _, row := range surface.Requestable {
-		out[row.Name] = true
-	}
-	out[toolcontract.ReachCommandMutation] = out["command"] && ScopeAllowsCommandMutation(profileID)
-	return out, nil
 }
 
 // skillDeclaredNames builds the declared tool vocabulary the unreachable check
@@ -530,14 +505,36 @@ func mergeAuthorUnits(ctx context.Context, engine *FileTemplateEngine, vars map[
 	if err != nil {
 		return fmt.Errorf("unit catalog: %w", err)
 	}
-	var offered []string
+	held := make(map[string]bool)
 	for key, value := range vars {
 		if name, ok := strings.CutPrefix(key, "profile_has_"); ok && value == true {
-			offered = append(offered, name)
+			held[name] = true
 		}
 	}
+	if canRequest, ok := vars["profile_can_request"].(map[string]bool); ok {
+		for name, ok := range canRequest {
+			if ok {
+				held[name] = true
+			}
+		}
+	}
+	var classes []toolcontract.CommandEffectClass
+	if vars["profile_command_mutation"] == true {
+		classes = append(classes, toolcontract.CommandMutation)
+		held["command"] = true
+	}
+	if vars["profile_command_external_exec"] == true {
+		classes = append(classes, toolcontract.CommandExternalExec)
+		held["command"] = true
+	}
+	if vars["profile_command_network_egress"] == true {
+		classes = append(classes, toolcontract.CommandNetworkEgress)
+		held["command"] = true
+	}
+	effects, _ := toolcontract.NewCommandEffects(classes...)
+	held = readerHeldSet(held, effects)
 	mode, _ := vars["execution_mode"].(string)
-	sel := UnitSelectionVars(promptunit.HostCoordinator, mode, offered)
+	sel := promptunit.Selection{Host: promptunit.HostCoordinator, Mode: strings.TrimSpace(mode), Held: held}
 	blocks, err := RenderUnitSlots(ctx, UnitRendererFor(engine), catalog, sel, vars)
 	if err != nil {
 		return err

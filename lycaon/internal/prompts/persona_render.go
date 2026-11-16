@@ -6,118 +6,94 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash/fnv"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/hintregistry"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
 // RenderPersona renders a runtime worker persona and enforces its final contract.
-func RenderPersona(ctx context.Context, engine *FileTemplateEngine, agentID string, extra map[string]any) (string, error) {
-	return renderPersona(ctx, engine, agentID, extra, true)
+func RenderPersona(ctx context.Context, engine *FileTemplateEngine, agentID string, reader Reader, occurrence map[string]any) (string, error) {
+	engine, id, ref, data, err := personaVars(ctx, engine, agentID, reader, occurrence)
+	if err != nil {
+		return "", err
+	}
+	body, err := engine.Render(ctx, ref, data)
+	if err != nil {
+		return "", err
+	}
+	// Artifact budgets catch authoring regressions before runtime expansion.
+	violations, err := validatePersonaContractRender(id, body)
+	if err != nil {
+		return "", err
+	}
+	if len(violations) > 0 {
+		return "", fmt.Errorf("persona %q final render invalid: %s", id, strings.Join(violations, ", "))
+	}
+	return body, nil
 }
 
-// renderPersona composes a persona with optional validation.
-func renderPersona(ctx context.Context, engine *FileTemplateEngine, agentID string, extra map[string]any, validate bool) (string, error) {
+// PersonaVars builds the variable map RenderPersona hands the template engine.
+func PersonaVars(ctx context.Context, engine *FileTemplateEngine, agentID string, reader Reader, occurrence map[string]any) (map[string]any, error) {
+	_, _, _, data, err := personaVars(ctx, engine, agentID, reader, occurrence)
+	return data, err
+}
+
+func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string, reader Reader, occurrence map[string]any) (*FileTemplateEngine, string, string, map[string]any, error) {
 	if engine == nil {
-		return "", fmt.Errorf("prompt engine not configured")
+		return nil, "", "", nil, fmt.Errorf("prompt engine not configured")
+	}
+	if !reader.Valid() {
+		return nil, "", "", nil, fmt.Errorf("persona render requires a valid reader")
 	}
 	eff := engine.Layers().Catalog
 	if eff == nil {
 		var err error
 		eff, err = extpacks.CatalogForConsumers()
 		if err != nil {
-			return "", fmt.Errorf("persona effective catalog: %w", err)
+			return nil, "", "", nil, fmt.Errorf("persona effective catalog: %w", err)
 		}
 	}
 	engine = engine.WithEffectiveCatalog(eff)
 	cfg, err := loadPersonaContractCached(eff)
 	if err != nil {
-		return "", err
+		return nil, "", "", nil, err
 	}
 	id := strings.TrimSpace(agentID)
 	def, ok := cfg.Agents[id]
 	if !ok {
-		return "", fmt.Errorf("%w: persona contract: agent %q not in contract", ErrUnknownAgent, id)
+		return nil, "", "", nil, fmt.Errorf("%w: persona contract: agent %q not in contract", ErrUnknownAgent, id)
 	}
 	ref, err := TemplateRefForAgent(id)
 	if err != nil {
-		return "", err
+		return nil, "", "", nil, err
 	}
-	data := PersonaDataMap(def)
-	if _, ok := extra["web_search_enabled"]; !ok {
-		data["web_search_enabled"] = true
+	occ := PersonaDataMap(def)
+	for k, v := range occurrence {
+		occ[k] = v
 	}
-	for k, v := range extra {
-		data[k] = v
+	if err := MergeWorkerPolicyTemplateVars(id, occ); err != nil {
+		return nil, "", "", nil, fmt.Errorf("agent spawn vars for %q: %w", id, err)
 	}
-	if err := MergeWorkerPolicyTemplateVars(id, data); err != nil {
-		return "", fmt.Errorf("agent spawn vars for %q: %w", id, err)
-	}
-	toolProfile, err := ToolProfileForAgent(id)
+	data, err := Vars(reader, occ)
 	if err != nil {
-		return "", fmt.Errorf("agent tool profile for %q: %w", id, err)
+		return nil, "", "", nil, fmt.Errorf("persona vars for %q: %w", id, err)
 	}
-	{
-		schemas, err := loadToolSchemaCached(eff)
-		if err != nil {
-			return "", fmt.Errorf("agent tool schemas for %q: %w", id, err)
-		}
-		policy, err := hintregistry.ListEffectiveWithCatalog(eff)
-		if err != nil {
-			return "", fmt.Errorf("agent hint policy for %q: %w", id, err)
-		}
-		hints, err := loadHintCodeRowsCached(eff.Revision, policy)
-		if err != nil {
-			return "", fmt.Errorf("agent hint codes for %q: %w", id, err)
-		}
-		profiles, err := sandbox.LoadToolProfilesWithCatalog(eff)
-		if err != nil {
-			return "", fmt.Errorf("agent tool profiles for %q: %w", id, err)
-		}
-		var visible []string
-		var loaded map[string]bool
-		if extra != nil {
-			if raw, ok := extra["visible_tools"].([]string); ok {
-				visible = raw
-			}
-			if raw, ok := extra["loaded_tools"].(map[string]bool); ok {
-				loaded = raw
-			}
-		}
-		if err := MergeAgentToolSurfaceVars(toolProfile, visible, hints, SurfaceTurn{Loaded: loaded, Schemas: schemas}, data, profiles); err != nil {
-			return "", fmt.Errorf("agent tool surface for %q: %w", id, err)
-		}
-		offered, _ := data["agent_tool_names"].([]string)
-		unitCatalog, err := UnitCatalogFor(eff)
-		if err != nil {
-			return "", fmt.Errorf("unit catalog for %q: %w", id, err)
-		}
-		blocks, err := RenderUnitSlots(ctx, engine, unitCatalog, UnitSelectionVars(promptunit.HostWorker, "", offered), data)
-		if err != nil {
-			return "", fmt.Errorf("units for %q: %w", id, err)
-		}
-		MergeUnitVars(data, blocks)
-	}
-	body, err := engine.Render(ctx, ref, data)
+	unitCatalog, err := UnitCatalogFor(eff)
 	if err != nil {
-		return "", err
+		return nil, "", "", nil, fmt.Errorf("unit catalog for %q: %w", id, err)
 	}
-	if validate {
-		// Artifact budgets catch authoring regressions before runtime expansion.
-		violations, err := validatePersonaContractRender(id, body)
-		if err != nil {
-			return "", err
-		}
-		if len(violations) > 0 {
-			return "", fmt.Errorf("persona %q final render invalid: %s", id, strings.Join(violations, ", "))
-		}
+	blocks, err := RenderUnitSlots(ctx, engine, unitCatalog, reader.Selection(), data)
+	if err != nil {
+		return nil, "", "", nil, fmt.Errorf("units for %q: %w", id, err)
 	}
-	return body, nil
+	MergeUnitVars(data, blocks)
+	return engine, id, ref, data, nil
 }
 
 // pathCache memoizes one load per active path.
@@ -151,7 +127,32 @@ var (
 	personaContractCache pathCache[*PersonaContract]
 	toolSchemaCache      pathCache[*toolschema.Config]
 	hintCodeRowsCache    pathCache[map[string]hintCodeRow]
+	hintPolicyCache      pathCache[[]hintregistry.Entry]
+	toolProfilesCache    pathCache[[]sandbox.ToolProfile]
+	readerFactVocabCache pathCache[ReaderFactVocabulary]
+	templateVocabCache   pathCache[[]string]
 )
+
+func catalogCacheKey(eff *extpacks.EffectiveCatalog) string {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(strings.TrimSpace(eff.Revision)))
+	for _, id := range eff.LoadedUnitIDs() {
+		u := eff.Loaded[id]
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(id))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write([]byte(u.WinnerPackID))
+		_, _ = h.Write([]byte{0})
+		_, _ = h.Write(u.Content)
+	}
+	return strconv.FormatUint(h.Sum64(), 16)
+}
+
+func loadHintPolicyCached(eff *extpacks.EffectiveCatalog) ([]hintregistry.Entry, error) {
+	return hintPolicyCache.get(catalogCacheKey(eff), func(string) ([]hintregistry.Entry, error) {
+		return hintregistry.ListEffectiveWithCatalog(eff)
+	})
+}
 
 // Rows come from the catalog, so the cache keys on its revision.
 func loadPersonaContractCached(eff *extpacks.EffectiveCatalog) (*PersonaContract, error) {
@@ -199,4 +200,8 @@ func ResetPersonaContractCache() {
 	personaContractCache.reset()
 	toolSchemaCache.reset()
 	hintCodeRowsCache.reset()
+	hintPolicyCache.reset()
+	toolProfilesCache.reset()
+	readerFactVocabCache.reset()
+	templateVocabCache.reset()
 }

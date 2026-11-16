@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -66,12 +67,27 @@ func Resolve(input ResolveInput) (CapabilitySurface, error) {
 	spawnAllowlist := append([]string(nil), input.SpawnAllowlist...)
 	flags := Derive(input.RootCount, resolvedTools, spawnAllowlist)
 
-	surfaceToolOverride := coordinatorSurfaceToolOverride(spawnAllowlist, resolvedTools, prompts.CoordinatorSurfaceAllowsCommandMutation(surfaceID))
+	profiles := input.ToolProfiles
+	if len(profiles) == 0 {
+		var loaded []sandbox.ToolProfile
+		var err error
+		if input.Catalog != nil {
+			loaded, err = sandbox.LoadToolProfilesWithCatalog(input.Catalog)
+		} else {
+			loaded, err = sandbox.LoadToolProfiles()
+		}
+		if err != nil {
+			return CapabilitySurface{}, err
+		}
+		profiles = loaded
+	}
+
+	surfaceToolOverride := coordinatorSurfaceToolOverride(spawnAllowlist, resolvedTools, surfaceCommandMutates(surfaceID, profiles))
 	maxInFlight := input.MaxInFlight
 	if maxInFlight <= 0 {
 		maxInFlight = spawn.MaxInFlightTaskWorkers
 	}
-	roster, err := prompts.LoadSpawnRosterSurface(spawnAllowlist, maxInFlight, surfaceToolOverride, input.Catalog, input.ToolProfiles)
+	roster, err := prompts.LoadSpawnRosterSurface(spawnAllowlist, maxInFlight, surfaceToolOverride, input.Catalog, profiles)
 	if err != nil {
 		return CapabilitySurface{}, err
 	}
@@ -100,17 +116,21 @@ func Resolve(input ResolveInput) (CapabilitySurface, error) {
 // MergeSpawnInjectVars returns pongo vars for inject/implement-spawn.md from the surface.
 func (s CapabilitySurface) MergeSpawnInjectVars() map[string]any {
 	vars := prompts.SpawnRosterTemplateVars(s.Roster, s.ExcludedDisclosures)
-	vars["surface_id"] = s.SurfaceID
-	vars["execution_mode"] = surface.ExecutionModeFamily(s.SurfaceID)
-	for key, value := range prompts.CoordinatorPolicyTemplateVars(s.ResolvedTools, s.DeferredTools) {
-		vars[key] = value
-	}
 	vars["repo_known_empty"] = s.RepoKnownEmpty
 	MergeVars(vars, s.Flags)
 	allowed := append([]string(nil), s.SpawnAllowlist...)
 	sort.Strings(allowed)
 	vars["allowed_agents"] = allowed
 	return vars
+}
+
+func surfaceCommandMutates(surfaceID string, profiles []sandbox.ToolProfile) bool {
+	effects, err := surfacecatalog.AdmittedCommandEffects(profiles, coordinatorAgentID, surfaceID)
+	if err != nil {
+		return false
+	}
+	mutation, err := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
+	return err == nil && effects.Allows(mutation)
 }
 
 func coordinatorSurfaceToolOverride(allowedAgents []string, resolvedTools []string, commandMutates bool) map[string]prompts.SpawnToolSurface {

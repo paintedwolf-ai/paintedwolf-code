@@ -13,6 +13,24 @@ func TestParseEntryRejectsUnknownFields(t *testing.T) {
 	}
 }
 
+func TestParseEntryRejectsUnknownDescriptionEffectKey(t *testing.T) {
+	raw := []byte("description: x\ndescription_effects:\n  not_an_effect: extra\nschema: {}\n")
+	if _, err := toolschema.ParseEntry(raw); err == nil {
+		t.Fatal("unknown description_effects key accepted")
+	}
+}
+
+func TestParseEntryAcceptsValidDescriptionEffects(t *testing.T) {
+	raw := []byte("description: base\ndescription_effects:\n  mutation: m\n  external_exec: e\n  external_exec_selector: s\n  network_egress: n\nschema: {}\n")
+	entry, err := toolschema.ParseEntry(raw)
+	if err != nil {
+		t.Fatalf("ParseEntry: %v", err)
+	}
+	if len(entry.DescriptionEffects) != 4 {
+		t.Fatalf("description_effects = %v, want 4 keys", entry.DescriptionEffects)
+	}
+}
+
 func TestParseEntryAcceptsTags(t *testing.T) {
 	entry, err := toolschema.ParseEntry([]byte("description: render\ntags: [visual, design]\nschema: {}\n"))
 	if err != nil {

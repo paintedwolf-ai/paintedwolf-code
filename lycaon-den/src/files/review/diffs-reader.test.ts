@@ -153,7 +153,7 @@ it("latches prior comparison rows during in-flight revision reloads", async () =
       onError: vi.fn(),
     });
     cleanup.push(() => { readerInstance.destroy(); parent.remove(); });
-    readerInstance.mount(parent, { show: vi.fn(), leave: vi.fn() });
+    readerInstance.mount(parent, { show: vi.fn(), hide: vi.fn() });
   });
 
   await waitFor(() => {
@@ -248,7 +248,7 @@ it("resets runtimes, resets scroll, and closes sessions on reset()", async () =>
       onError: vi.fn(),
     });
     cleanup.push(() => { readerInstance.destroy(); parent.remove(); });
-    const editor = readerInstance.mount(parent, { show: vi.fn(), leave: vi.fn() });
+    const editor = readerInstance.mount(parent, { show: vi.fn(), hide: vi.fn() });
     editor.view.scrollDOM.scrollTop = 500;
   });
 
@@ -362,7 +362,7 @@ it("automatically reloads when input source updates for an already loaded sectio
       onError: vi.fn(),
     });
     cleanup.push(() => { readerInstance.destroy(); parent.remove(); });
-    readerInstance.mount(parent, { show: vi.fn(), leave: vi.fn() });
+    readerInstance.mount(parent, { show: vi.fn(), hide: vi.fn() });
   });
 
   await waitFor(() => {
@@ -441,7 +441,7 @@ it("prunes removed sections and closes their backend sessions", async () => {
       onError: vi.fn(),
     });
     cleanup.push(() => { readerInstance.destroy(); parent.remove(); });
-    readerInstance.mount(parent, { show: vi.fn(), leave: vi.fn() });
+    readerInstance.mount(parent, { show: vi.fn(), hide: vi.fn() });
   });
 
   await waitFor(() => {
@@ -517,7 +517,7 @@ it("drops a read whose source changed mid-load and reads the new source instead"
       onError: vi.fn(),
     });
     cleanup.push(() => { reader.destroy(); parent.remove(); });
-    reader.mount(parent, { show: vi.fn(), leave: vi.fn() });
+    reader.mount(parent, { show: vi.fn(), hide: vi.fn() });
   });
   // The stale read is waiting on its presentation.
   await new Promise((resolve) => setTimeout(resolve, 20));
@@ -553,7 +553,7 @@ it("rescales loaded windows when the line height changes", async () => {
       onError: vi.fn(),
     });
     cleanup.push(() => { reader.destroy(); parent.remove(); });
-    editor = reader.mount(parent, { show: vi.fn(), leave: vi.fn() });
+    editor = reader.mount(parent, { show: vi.fn(), hide: vi.fn() });
   });
   const gapLines = () => editor.document.entries.find((entry) => entry.section === "file-1" && entry.slot.pending)?.slot.lines;
   await waitFor(() => expect(parent.querySelector(".cm-content")?.textContent).toContain("first"));

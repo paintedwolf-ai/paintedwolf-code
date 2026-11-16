@@ -2359,6 +2359,17 @@ paths:
           description: Opaque cursor returned as next_cursor by the previous page.
           schema:
             type: string
+        - name: source
+          in: query
+          description: Filter artifacts to one producer source.
+          schema:
+            $ref: '#/components/schemas/VisualArtifactSource'
+        - name: session_id
+          in: query
+          description: Filter artifacts to one producer session.
+          schema:
+            type: string
+            format: uuid
       responses:
         '200':
           description: Artifact metadata for the project (no bytes)
@@ -16460,7 +16471,7 @@ components:
         - project_id
         - op
       additionalProperties: false
-      description: 'A durable visual artifact was written or deleted. Identity only: clients re-read the artifact list so one tile''s metadata, reference counts, and bytes all render from one place.'
+      description: A durable visual artifact was written or deleted. Clients re-read the artifact list for metadata and reference counts; written events carry content_hash so byte caches only invalidate when stored bytes change.
       properties:
         artifact_id:
           type: string
@@ -16478,6 +16489,9 @@ components:
           description: Session tree that resolves the event, when one is known.
         op:
           $ref: '#/components/schemas/ArtifactChangeOp'
+        content_hash:
+          type: string
+          description: SHA-256 hex digest of stored bytes when op is written.
     ArtifactChangeOp:
       type: string
       enum:
@@ -22196,6 +22210,9 @@ components:
           type: string
         source:
           $ref: '#/components/schemas/VisualArtifactSource'
+        content_hash:
+          type: string
+          description: Lowercase hex SHA-256 digest of the unencoded artifact body.
         caption:
           type: string
         evidence_handle:
@@ -22235,6 +22252,21 @@ components:
             What would break if this artifact were deleted, counted by kind. Absent or empty means nothing durable claims it.
           items:
             $ref: '#/components/schemas/ArtifactReferenceCount'
+    ArtifactListFacets:
+      x-go-generate: true
+      type: object
+      required:
+        - session_ids
+      additionalProperties: false
+      description: Filter facets across live artifacts in the project, returned on the first page.
+      properties:
+        session_ids:
+          x-go-name: SessionIDs
+          type: array
+          description: Producer session IDs for live artifacts in the project, newest first.
+          items:
+            type: string
+            format: uuid
     ArtifactListResponse:
       x-go-generate: true
       type: object
@@ -22249,6 +22281,9 @@ components:
         next_cursor:
           type: string
           description: Opaque cursor for the next project artifact page; empty at the end.
+        facets:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ArtifactListFacets'
     WorkerSummaryStatus:
       type: string
       enum:

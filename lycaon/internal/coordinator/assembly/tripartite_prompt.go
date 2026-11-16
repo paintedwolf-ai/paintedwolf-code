@@ -31,7 +31,10 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 	if fn := e.deps.WebSearchEnabled; fn != nil {
 		webSearchEnabled = fn()
 	}
-	rootCount := rootCountFromVars(vars)
+	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
+	if !ok && sess != nil && strings.TrimSpace(sess.WorkspacePath) != "" {
+		rootCount = 1
+	}
 	roster := frame.Roster
 	if roster == nil {
 		declared := frame.RunContext.AllowedAgents
@@ -48,6 +51,10 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 	}
 	transition := surface.ComputeModeTransition(previous, current, causes)
 
+	reader, err := e.turnReader(ctx, sess, frame, history, turn, rootCount)
+	if err != nil {
+		return "", err
+	}
 	in := standingPromptInputs{
 		PromptRevision: promptRevision,
 		Profile: standingProfileInputs{
@@ -56,15 +63,14 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 			ModeRefs:        profile.ModeRefs,
 		},
 		Vars:             vars,
-		RootCount:        rootCount,
+		RootCount:        reader.RootCount(),
 		EffectiveAgents:  roster.Effective,
 		WebSearchEnabled: webSearchEnabled,
 		LoadedTools:      sortedLoadedSet(e.loadedTools(sess)),
 		ExecutionMode:    transition.ExecutionMode,
 		VerifyCommand:    strings.TrimSpace(implState.VerifyCommand),
 		WorkerToolBudget: e.workerToolBudget(ctx, sess),
-	}
-	in = in.withCatalogView(e.sessionCatalogView(ctx, sess))
+	}.withReader(reader)
 	stableKey, err := in.cacheKey()
 	if err != nil {
 		return "", err
@@ -113,7 +119,10 @@ func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 	if fn := e.deps.WebSearchEnabled; fn != nil {
 		webSearchEnabled = fn()
 	}
-	rootCount := rootCountFromVars(vars)
+	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
+	if !ok && sess != nil && strings.TrimSpace(sess.WorkspacePath) != "" {
+		rootCount = 1
+	}
 	roster := frame.Roster
 	if roster == nil {
 		declared := frame.RunContext.AllowedAgents
@@ -131,6 +140,10 @@ func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 	}
 	transition := surface.ComputeModeTransition(previous, current, causes)
 
+	reader, err := e.turnReader(ctx, sess, frame, history, turn, rootCount)
+	if err != nil {
+		return "", profile, transition, err
+	}
 	in := standingPromptInputs{
 		Profile: standingProfileInputs{
 			SurfaceID:       profile.SurfaceID,
@@ -138,15 +151,14 @@ func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 			ModeRefs:        profile.ModeRefs,
 		},
 		Vars:             vars,
-		RootCount:        rootCount,
+		RootCount:        reader.RootCount(),
 		EffectiveAgents:  roster.Effective,
 		WebSearchEnabled: webSearchEnabled,
 		LoadedTools:      sortedLoadedSet(e.loadedTools(sess)),
 		ExecutionMode:    transition.ExecutionMode,
 		VerifyCommand:    strings.TrimSpace(implState.VerifyCommand),
 		WorkerToolBudget: e.workerToolBudget(ctx, sess),
-	}
-	in = in.withCatalogView(e.sessionCatalogView(ctx, sess))
+	}.withReader(reader)
 	rendered, err := renderStandingPrompt(ctx, pe, in)
 	if err != nil {
 		return "", profile, transition, err
@@ -173,16 +185,6 @@ func (e *promptSurface) implementSessionState(ctx context.Context, sess *api.Ses
 		return surface.ImplementSessionState{}
 	}
 	return e.deps.ImplementSessionState(ctx, sess)
-}
-
-func rootCountFromVars(vars map[string]any) int {
-	if vars == nil {
-		return 0
-	}
-	if v, ok := vars["root_count"].(int); ok {
-		return v
-	}
-	return 0
 }
 
 // loadedTools returns the turn ledger's loaded set for the session.

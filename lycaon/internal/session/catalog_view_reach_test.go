@@ -203,12 +203,30 @@ func TestW12PersonaTemplateIsolation(t *testing.T) {
 	}
 	// Persona cache keys by catalog fingerprint.
 	prompts.ResetPersonaContractCache()
-	_, err = prompts.RenderPersona(ctx, a, "implementer", nil)
+	rA, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "implement",
+		Profiles:  v1.ToolProfiles,
+		Schemas:   v1.ToolSchemas,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader A", err)
+	_, err = prompts.RenderPersona(ctx, a, "implementer", rA, nil)
 	if err != nil {
 		// Rendering may reject unknown agent variants.
 		t.Logf("render A: %v", err)
 	}
-	_, err = prompts.RenderPersona(ctx, b, "implementer", nil)
+	rB, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "implement",
+		Profiles:  v2.ToolProfiles,
+		Schemas:   v2.ToolSchemas,
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader B", err)
+	_, err = prompts.RenderPersona(ctx, b, "implementer", rB, nil)
 	if err != nil {
 		t.Logf("render B: %v", err)
 	}

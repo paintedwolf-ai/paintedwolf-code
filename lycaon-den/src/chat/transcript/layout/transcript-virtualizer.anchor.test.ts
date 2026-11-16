@@ -191,7 +191,6 @@ describe("createTranscriptVirtualizer lost anchor resolution", () => {
         items,
         scrollElement: () => el,
         unloadedOrds: () => ({ before: unloadedBefore(), after: 0 }),
-        residentRowSpan: () => ({ count: items().length, ordSpan: items().length }),
         resolveLostAnchor: (rowKey) =>
           resolveTranscriptItemAnchor(items(), rowKey, () => true, 42),
         rowSizeHint: (item) => (item.kind === "activity_span" ? 200 : 72),

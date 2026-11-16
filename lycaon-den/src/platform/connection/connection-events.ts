@@ -15,6 +15,7 @@ import { requestSourceProjectionResync } from "../../files/source/source-events.
 import { resyncSourceOperations } from "../../store/source-operations.ts";
 import { requestFileBriefingResync } from "../../files/components/file-briefing-live.ts";
 import { requestBriefingResync, setBriefingClient } from "../../briefing/briefing-live.ts";
+import { requestArtifactResync } from "../../chat/visual/artifact-change-store.ts";
 import type { AttentionView, CLIOpenEvent, ProjectEvent, SessionEvent } from "../../api/types.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import type { RecentsStore } from "../../store/recents-store.ts";
@@ -245,6 +246,7 @@ export function createConnectionEvents(ports: EventPorts) {
         requestWalkRefresh(projectId);
         refreshWalkPreviews(projectId);
         if (reason === "resume") return;
+        requestArtifactResync(projectId);
         // Presence is held in host memory, so a fresh stream may follow a host restart.
         resyncPresence();
         appStore.actions.setSidecarStatus("connected");

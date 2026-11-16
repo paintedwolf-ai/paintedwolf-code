@@ -13,6 +13,12 @@ import {
   hasTranscriptEntryMemory,
 } from "../presentation/transcript-entry.ts";
 import { createAppStore } from "../../../store/app-state.ts";
+import { bindOverlayScrollbarInput } from "../../../platform/scrolling/overlay-scrollbar-input.ts";
+import {
+  bindScrollportMotion,
+  unbindScrollportMotion,
+} from "../../../platform/scrolling/scrollport-motion.ts";
+import type { Elements } from "overlayscrollbars";
 import type { Message } from "../../../api/types.ts";
 
 function older(i: number): Message {
@@ -564,6 +570,74 @@ describe("createTranscriptPaging", () => {
     }
   });
 
+  it("maps after-runway seeks through the geometry's measured densityPxPerOrd", async () => {
+    const appStore = createAppStore();
+    const prepareLanding = vi.fn();
+    // Resident window ends at 2_000px; 400 unloaded after at 25px/ord = 10_000px after-runway (2_000..12_000).
+    // Scroll offset 7_000px is halfway (50%) into the 10_000px after-runway -> ord ~300 -> afterOrd = 250.
+    const { el } = mockStreamHost({
+      scrollTop: 7_000,
+      clientHeight: 500,
+      scrollHeight: () => 5_000,
+    });
+    appStore.actions.installTranscriptBaseline(
+      "s-seek-density",
+      Array.from({ length: 100 }, (_, i) => older(i)),
+      500,
+      {
+        hasMoreBefore: false,
+        hasMoreAfter: true,
+        bounds: { firstOrd: 1, lastOrd: 500 },
+      },
+    );
+    appStore.actions.loadTranscriptPage(
+      { edge: "seek", afterOrd: 0 },
+      {
+        messages: Array.from({ length: 100 }, (_, i) => older(i)),
+        watermark: 500,
+        turn_clocks: {},
+        turn_loads: {},
+        before_cursor: undefined,
+        after_cursor: "newer",
+        ord_bounds: { first_ord: 1, last_ord: 500 },
+      },
+    );
+    const listSessionMessages = vi.fn().mockResolvedValue({
+      messages: Array.from({ length: 100 }, (_, i) => older(250 + i)),
+      turn_clocks: {},
+      turn_loads: {},
+      before_cursor: "older",
+      after_cursor: "newer",
+      ord_bounds: { first_ord: 1, last_ord: 500 },
+    });
+    const stop = createTranscriptPaging(el, {
+      client: () => stubClient({ listSessionMessages }),
+      appStore,
+      sessionId: () => "s-seek-density",
+      geometry: () => ({
+        residentStartPx: 0,
+        residentEndPx: 2_000,
+        densityPxPerOrd: 25,
+        residentSpan: { firstOrd: 1, lastOrd: 100 },
+        unloaded: { before: 0, after: 400 },
+        prepareLanding,
+      }),
+    });
+    try {
+      await vi.waitFor(() => {
+        expect(listSessionMessages).toHaveBeenCalledTimes(1);
+      });
+      expect(prepareLanding).toHaveBeenCalledWith(7_000);
+      expect(listSessionMessages).toHaveBeenCalledWith(
+        "s-seek-density",
+        expect.objectContaining({ afterOrd: 250 }),
+      );
+    } finally {
+      stop.dispose();
+      el.remove();
+    }
+  });
+
   it("does not flip to a newer sweep after a before-runway seek lands at the top of history", async () => {
     const appStore = createAppStore();
     const prepareLanding = vi.fn();
@@ -704,10 +778,113 @@ describe("createTranscriptPaging", () => {
       await vi.waitFor(() => {
         expect(appStore.state.transcript.pages["1:100"]).toBeUndefined();
       });
-      expect(Object.keys(appStore.state.transcript.pages).length).toBe(5);
+      expect(Object.keys(appStore.state.transcript.pages).length).toBe(4);
     } finally {
       stop.dispose();
       el.remove();
+    }
+  });
+
+  it("does not trigger an opposite-edge fetch when extent changes under a held thumb", async () => {
+    vi.stubGlobal("requestAnimationFrame", undefined);
+    const appStore = createAppStore();
+    appStore.actions.installTranscriptBaseline(
+      "s-thumb",
+      Array.from({ length: 10 }, (_, i) => older(100 + i)),
+      200,
+      { hasMoreBefore: true, bounds: { firstOrd: 1, lastOrd: 200 } },
+    );
+    appStore.actions.loadTranscriptPage(
+      { edge: "older", beforeMessageId: older(100).id },
+      {
+        messages: Array.from({ length: 10 }, (_, i) => older(90 + i)),
+        before_cursor: "older",
+        after_cursor: "newer",
+        watermark: 200,
+        turn_clocks: {},
+        turn_loads: {},
+      },
+    );
+    const listSessionMessages = vi.fn().mockResolvedValue({
+      messages: [],
+      watermark: 200,
+      turn_clocks: {},
+      turn_loads: {},
+    });
+
+    let scrollTop = 2_000;
+    let extent = 10_000;
+    const { el } = mockStreamHost({
+      scrollTop,
+      scrollHeight: () => extent,
+      clientHeight: 500,
+    });
+    const track = document.createElement("div");
+    const handle = document.createElement("div");
+    track.appendChild(handle);
+    Object.defineProperty(track, "clientHeight", { value: 500, configurable: true });
+    Object.defineProperty(handle, "clientHeight", { value: 50, configurable: true });
+    const elements = {
+      host: el,
+      scrollOffsetElement: el,
+      scrollbarVertical: { scrollbar: document.createElement("div"), track, handle },
+      scrollbarHorizontal: {
+        scrollbar: document.createElement("div"),
+        track: document.createElement("div"),
+        handle: document.createElement("div"),
+      },
+    } as unknown as Elements;
+    const motion = bindScrollportMotion(el, el, el);
+    const input = bindOverlayScrollbarInput(elements, motion, {
+      read: () => ({ offset: scrollTop, viewport: 500, extent }),
+      scrollTo: (next, source) => {
+        scrollTop = next;
+        motion.commit(next, source, { axis: "y", measuredMaxOffset: extent - 500 });
+      },
+    });
+    const paging = createTranscriptPaging(el, {
+      client: () => stubClient({ listSessionMessages }),
+      appStore,
+      sessionId: () => "s-thumb",
+      geometry: () => ({
+        residentStartPx: 1_800,
+        residentEndPx: 2_600,
+        residentSpan: { firstOrd: 91, lastOrd: 110 },
+        unloaded: { before: 90, after: 90 },
+        prepareLanding: () => {},
+      }),
+    });
+    try {
+      const pointer = (type: string, clientY: number) =>
+        Object.assign(new Event(type, { bubbles: true, cancelable: true }), {
+          isPrimary: true,
+          button: 0,
+          pointerId: 1,
+          clientY,
+        });
+      handle.dispatchEvent(pointer("pointerdown", 200));
+      handle.dispatchEvent(pointer("pointermove", 190));
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+      const olderCalls = listSessionMessages.mock.calls.filter(
+        (call) => call[1]?.beforeMessageId !== undefined,
+      );
+      expect(olderCalls.length).toBe(1);
+      listSessionMessages.mockClear();
+
+      // Prepending a page shrinks runway and changes extent while the thumb stays held.
+      extent = 8_000;
+      expect(input.refreshGeometry()).toBe(true);
+      await new Promise<void>((resolve) => queueMicrotask(resolve));
+      expect(listSessionMessages).not.toHaveBeenCalled();
+      expect(motion.input.isThumbGestureActive()).toBe(true);
+
+      handle.dispatchEvent(pointer("pointerup", 190));
+    } finally {
+      paging.dispose();
+      input.dispose();
+      unbindScrollportMotion(el);
+      el.remove();
+      vi.unstubAllGlobals();
     }
   });
 
@@ -733,7 +910,6 @@ describe("createTranscriptPaging", () => {
         appStore: () => appStore,
       });
       expect(withStore.unloadedOrds()).toEqual({ before: 10, after: 0 });
-      expect(withStore.residentRowSpan()).toEqual({ count: 2, ordSpan: 10 });
       const geo = withStore.geometry(fakeVirtualizer);
       expect(geo).toMatchObject({
         residentStartPx: 1_000,
@@ -751,7 +927,6 @@ describe("createTranscriptPaging", () => {
         appStore: () => undefined,
       });
       expect(withoutStore.unloadedOrds()).toEqual({ before: 0, after: 0 });
-      expect(withoutStore.residentRowSpan()).toEqual({ count: 2, ordSpan: 10 });
       expect(withoutStore.geometry(fakeVirtualizer)).toBeNull();
       dispose();
     });

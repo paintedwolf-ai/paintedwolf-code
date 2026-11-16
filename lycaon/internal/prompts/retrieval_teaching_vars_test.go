@@ -5,11 +5,27 @@ import (
 
 	"github.com/lycaon/lycaon/internal/ingestion"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
 func retrievalVar(t *testing.T, visible ...string) bool {
 	t.Helper()
-	vars := prompts.VisibleToolsNativePartialVars(visible)
+	tools := make(map[string]bool, len(visible))
+	for _, name := range visible {
+		tools[name] = true
+	}
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "worker",
+		Plan:      toolsurface.Compile(visible, nil),
+		Visible:   visible,
+		Profiles:  []sandbox.ToolProfile{{ID: "worker", Tools: tools}},
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader", err)
+	vars := reader.Facts()
 	got, ok := vars["profile_has_retrieval"].(bool)
 	if !ok {
 		t.Fatalf("profile_has_retrieval missing or not a bool: %#v", vars["profile_has_retrieval"])

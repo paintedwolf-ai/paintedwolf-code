@@ -1213,7 +1213,7 @@
       ],
       "suite": "behavior",
       "setup": "verification",
-      "workers": 3,
+      "workers": 2,
       "shards": 2,
       "contract_first": true,
       "priority": "critical"

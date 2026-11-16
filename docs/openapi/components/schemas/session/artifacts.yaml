@@ -91,6 +91,9 @@ components:
           type: string
         source:
           $ref: "#/components/schemas/VisualArtifactSource"
+        content_hash:
+          type: string
+          description: Lowercase hex SHA-256 digest of the unencoded artifact body.
         caption:
           type: string
         evidence_handle:
@@ -155,6 +158,21 @@ components:
         count:
           type: integer
           minimum: 0
+    ArtifactListFacets:
+      x-go-generate: true
+      type: object
+      required:
+      - session_ids
+      additionalProperties: false
+      description: Filter facets across live artifacts in the project, returned on the first page.
+      properties:
+        session_ids:
+          x-go-name: "SessionIDs"
+          type: array
+          description: Producer session IDs for live artifacts in the project, newest first.
+          items:
+            type: string
+            format: uuid
     ArtifactListResponse:
       x-go-generate: true
       type: object
@@ -169,3 +187,6 @@ components:
         next_cursor:
           type: string
           description: Opaque cursor for the next project artifact page; empty at the end.
+        facets:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ArtifactListFacets"

@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 )
 
@@ -15,6 +16,7 @@ type TurnAssemblyScratch struct {
 	Iteration                  int
 	PromptTurnSeq              int
 	SurfaceID                  string
+	Reader                     prompts.Reader
 	PendingKickIDs             []string
 	StablePrompt               string
 	StablePromptKey            string

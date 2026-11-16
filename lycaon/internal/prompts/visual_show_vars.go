@@ -12,11 +12,11 @@ var (
 	visualShowHeldTerminalTools = []string{"terminal_open", "terminal_snapshot"}
 )
 
-// MergeVisualShowVars sets visual capture availability and requestable flags
+// fillVisualShowFacts sets visual capture availability and requestable flags
 // from offered and requestable tool sets. Requestable flags require request_tools
 // and a mutation-capable agent.
-func MergeVisualShowVars(offered, requestable []string, into map[string]any) {
-	if into == nil {
+func fillVisualShowFacts(offered, requestable []string, f *ReaderFacts) {
+	if f == nil {
 		return
 	}
 	set := toolNameSet(offered)
@@ -26,11 +26,11 @@ func MergeVisualShowVars(offered, requestable []string, into map[string]any) {
 	canRequest := set["request_tools"] && (hasMutationRole(set) || hasMutationRole(loadable))
 	needsRequest := !page && canRequest && anyPresent(visualShowPageTools, loadable)
 	terminalNeedsRequest := canRequest && !set["terminal_open"] && allPresent(visualShowHeldTerminalTools, loadable)
-	into["visual_show_page"] = page
-	into["visual_show_terminal"] = terminal
-	into["visual_show_needs_request"] = needsRequest
-	into["visual_show_terminal_needs_request"] = terminalNeedsRequest
-	into["visual_show_available"] = page || terminal || needsRequest || terminalNeedsRequest
+	f.VisualShowPage = page
+	f.VisualShowTerminal = terminal
+	f.VisualShowNeedsRequest = needsRequest
+	f.VisualShowTerminalNeedsRequest = terminalNeedsRequest
+	f.VisualShowAvailable = page || terminal || needsRequest || terminalNeedsRequest
 }
 
 func allPresent(names []string, set map[string]bool) bool {
@@ -60,8 +60,4 @@ func toolNameSet(names []string) map[string]bool {
 		}
 	}
 	return out
-}
-
-func mergeVisualShowVarsFromSurface(data AgentToolSurfaceData, into map[string]any) {
-	MergeVisualShowVars(toolViewNames(data.Tools), requestableToolNames(data.Requestable), into)
 }

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -42,11 +41,15 @@ func TestRecallPartialTeachesWideningOnlyToRoot(t *testing.T) {
 }
 
 func TestRecallMayWidenFollowsRenderRole(t *testing.T) {
-	coordinator := prompts.CoordinatorPolicyTemplateVars([]string{"recall", "read"}, nil)
+	coordReader, err := prompts.DeclaredReader(nil, "implement_investigate")
+	testutil.FailErr(t, "DeclaredReader implement_investigate", err)
+	coordinator := coordReader.Facts()
 	if v, _ := coordinator["recall_may_widen"].(bool); !v {
 		t.Fatalf("coordinator vars must allow widening: %#v", coordinator["recall_may_widen"])
 	}
-	worker := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+	workerReader, err := prompts.DeclaredReader(nil, "implement")
+	testutil.FailErr(t, "DeclaredReader implement", err)
+	worker := workerReader.Facts()
 	if v, ok := worker["recall_may_widen"].(bool); !ok || v {
 		t.Fatalf("worker vars must deny widening: %#v", worker["recall_may_widen"])
 	}

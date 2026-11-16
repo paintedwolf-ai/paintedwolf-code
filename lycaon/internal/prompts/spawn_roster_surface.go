@@ -64,10 +64,7 @@ func LoadSpawnRosterSurface(allowedAgentIDs []string, maxInFlight int, surfaceTo
 	}
 
 	if len(profiles) == 0 {
-		profiles, err = sandbox.LoadToolProfiles()
-		if err != nil {
-			return SpawnRosterData{}, fmt.Errorf("load tool profiles: %w", err)
-		}
+		return SpawnRosterData{}, fmt.Errorf("tool profiles required")
 	}
 	profileByID := make(map[string]sandbox.ToolProfile, len(profiles))
 	for _, p := range profiles {
@@ -230,7 +227,6 @@ func spawnAgentTemplateVars(a SpawnAgentView) map[string]any {
 		"id":               a.ID,
 		"name":             a.Name,
 		"description":      a.Description,
-		"tool_profile":     a.ToolProfile,
 		"enabled_tools":    a.EnabledTools,
 		"denied_tools":     a.DeniedTools,
 		"can_edit":         a.CanEdit,

@@ -16,8 +16,6 @@ export type LineFactsCardState = {
 type Props = {
   state: LineFactsCardState | null;
   onActivate: (row: LineFactRow, line: number) => void;
-  onKeepOpen: () => void;
-  onLeave: () => void;
   onDismiss: () => void;
   onReturnFocus: () => void;
 };
@@ -47,9 +45,7 @@ export function LineFactsCard(props: Props) {
       dismissOnScroll
       dismissWhenAnchorHidden
       onDismiss={props.onDismiss}
-      onEscape={props.onReturnFocus}
-      onMouseEnter={props.onKeepOpen}
-      onMouseLeave={() => { if (!surface?.contains(document.activeElement)) props.onLeave(); }}
+      onEscape={() => { if (surface?.contains(document.activeElement)) props.onReturnFocus(); else props.onDismiss(); }}
       onPositioned={() => { if (state().enter && !surface?.contains(document.activeElement)) rows()[0]?.focus({ preventScroll: true }); }}
       onKeyDown={event => {
         const items = rows(), at = items.indexOf(document.activeElement as HTMLButtonElement);
@@ -58,15 +54,16 @@ export function LineFactsCard(props: Props) {
         else if (event.key === "ArrowUp") next = Math.max(0, at - 1);
         else if (event.key === "Home") next = 0;
         else if (event.key === "End") next = items.length - 1;
-        else if (event.key === "ArrowLeft" || event.key === "Escape") {
+        else if (event.key === "ArrowLeft") {
           event.preventDefault(); event.stopPropagation(); props.onReturnFocus(); return;
         }
         if (next < 0) return;
         event.preventDefault(); event.stopPropagation(); items[next]?.focus();
       }}
     >
-      <div class="files-line-facts__content" onFocusIn={props.onKeepOpen} onFocusOut={event => {
-        if (!(event.relatedTarget instanceof Node) || (!surface?.contains(event.relatedTarget) && !state().anchor.contains(event.relatedTarget))) props.onDismiss();
+      <div class="files-line-facts__content" onFocusOut={event => {
+        const editor = state().anchor.closest(".cm-editor") ?? state().anchor;
+        if (!(event.relatedTarget instanceof Node) || (!surface?.contains(event.relatedTarget) && !editor.contains(event.relatedTarget))) props.onDismiss();
       }}>
         <div class="files-line-facts__head">
           <span class="files-line-facts__title">Line {state().line}</span>
@@ -84,7 +81,7 @@ export function LineFactsCard(props: Props) {
                   <Show when={sectionRows()[0]?.effectId} keyed>
                     {(effectId) => (
                       <LineFactsBriefing projectId={projectId} effectId={effectId} line={state().line}
-                        onOpenEvidence={props.onDismiss} returnFocus={() => state().anchor.querySelector<HTMLButtonElement>(".files-line-gutter__facts")?.focus()} />
+                        onOpenEvidence={props.onDismiss} returnFocus={() => state().anchor.querySelector<HTMLButtonElement>(".files-line-gutter__facts")?.focus({ preventScroll: true })} />
                     )}
                   </Show>
                 )}
@@ -100,7 +97,7 @@ export function LineFactsCard(props: Props) {
                   <span class="files-line-facts__main">
                     <span class="files-line-facts__who" data-tip={row().title} data-tip-when-clipped>{row().title}</span>
                     <span class="files-line-facts__fact" classList={{ "files-line-facts__fact--waiting": row().waiting }}>
-                      {row().fact}<Show when={row().tool}> · <span class="files-line-facts__tool">{row().tool}</span></Show>
+                      {row().fact}<Show when={row().when}>{when => ` · ${when()}`}</Show><Show when={row().tool}> · <span class="files-line-facts__tool">{row().tool}</span></Show>
                     </span>
                   </span>
                   <span class="files-line-facts__go" classList={{ "files-line-facts__go--waiting": row().waiting }}>

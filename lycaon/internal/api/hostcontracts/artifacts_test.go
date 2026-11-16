@@ -258,7 +258,17 @@ func TestHandleSessionArtifact_childSessionResolvesTreeStore(t *testing.T) {
 	}
 }
 
-func TestHandleListArtifacts_scopesAndReferenceOnly(t *testing.T) {
+type listArtifactsFixture struct {
+	dataDir string
+	projID  string
+	sessAID string
+	sessBID string
+	rawC    []byte
+	router  *chi.Mux
+}
+
+func newListArtifactsFixture(t *testing.T) listArtifactsFixture {
+	t.Helper()
 	dataDir := t.TempDir()
 	reg := project.NewMemoryRegistry()
 	proj, err := reg.Create(t.Context(), project.CreateParams{Draft: true, Name: "list-scope"})
@@ -275,86 +285,83 @@ func TestHandleListArtifacts_scopesAndReferenceOnly(t *testing.T) {
 	}, proj.ID)
 	testutil.FailErr(t, "sessStore.Create failed", err)
 	visualStore := contractfixture.DurableArtifacts(t, dataDir, proj.ID, sessA.ID, sessB.ID)
+	rawA := visual.TestPNG1x1Bytes()
+	rawB := append(visual.TestPNG1x1Bytes(), 0)
+	rawC := append(visual.TestPNG1x1Bytes(), 1)
 	_, err = visualStore.Put(t.Context(), sessA.ID, visual.Entry{
 		Meta:  api.VisualArtifact{Mime: "image/png", Source: api.VisualArtifactSourceRender, Caption: "a"},
-		Bytes: visual.TestPNG1x1Bytes(),
+		Bytes: rawA,
 	})
 	testutil.FailErr(t, "put session A artifact", err)
 	_, err = visualStore.Put(t.Context(), sessB.ID, visual.Entry{
 		Meta:  api.VisualArtifact{Mime: "image/png", Source: api.VisualArtifactSourceCapture, Caption: "b"},
-		Bytes: append(visual.TestPNG1x1Bytes(), 0),
+		Bytes: rawB,
 	})
 	testutil.FailErr(t, "put session B artifact", err)
+	_, err = visualStore.Put(t.Context(), sessA.ID, visual.Entry{
+		Meta:  api.VisualArtifact{Mime: "image/png", Source: api.VisualArtifactSourceUser, Caption: "c"},
+		Bytes: rawC,
+	})
+	testutil.FailErr(t, "put second session A artifact", err)
 
-	srv := hostapi.NewServer(apitest.Dependencies(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessStore, Projects: reg}, Source: hostapi.SourceDependencies{VisualStore: visualStore}}), nil, hostapi.TestAPIToken)
+	srv := hostapi.NewServer(apitest.Dependencies(t, hostapi.Dependencies{
+		Core:   hostapi.CoreDependencies{Store: sessStore, Projects: reg},
+		Source: hostapi.SourceDependencies{VisualStore: visualStore},
+	}), nil, hostapi.TestAPIToken)
 	r := chi.NewRouter()
 	r.Get("/v1/sessions/{id}/artifacts", srv.Routes.Artifacts.HandleListSessionArtifacts)
 	r.Get("/v1/projects/{id}/artifacts", srv.Routes.Artifacts.HandleListProjectArtifacts)
+	return listArtifactsFixture{
+		dataDir: dataDir,
+		projID:  proj.ID,
+		sessAID: sessA.ID,
+		sessBID: sessB.ID,
+		rawC:    rawC,
+		router:  r,
+	}
+}
+
+func TestHandleListArtifacts_scopesAndReferenceOnly(t *testing.T) {
+	fx := newListArtifactsFixture(t)
+	r := fx.router
 
 	treeRec := httptest.NewRecorder()
-	r.ServeHTTP(treeRec, httptest.NewRequest(http.MethodGet, "/v1/sessions/"+sessA.ID+"/artifacts", nil))
+	r.ServeHTTP(treeRec, httptest.NewRequest(http.MethodGet, "/v1/sessions/"+fx.sessAID+"/artifacts", nil))
 	if treeRec.Code != http.StatusOK {
 		t.Fatalf("session list status = %d body = %s", treeRec.Code, treeRec.Body.String())
 	}
 	var tree api.ArtifactListResponse
-	if err := json.Unmarshal(treeRec.Body.Bytes(), &tree); err != nil {
-		testutil.FailErr(t, "unmarshal JSON document", err)
+	testutil.FailErr(t, "unmarshal JSON document", json.Unmarshal(treeRec.Body.Bytes(), &tree))
+	if len(tree.Artifacts) != 2 || tree.Artifacts[0].Caption != "a" || tree.Artifacts[1].Caption != "c" || tree.Artifacts[0].SessionID != fx.sessAID {
+		t.Fatalf("session list = %+v want chronological [a, c]", tree.Artifacts)
 	}
-	if len(tree.Artifacts) != 1 || tree.Artifacts[0].Caption != "a" || tree.Artifacts[0].SessionID != sessA.ID {
-		t.Fatalf("session list = %+v", tree.Artifacts)
+	if tree.Facets != nil {
+		t.Fatalf("session list facets = %+v want nil", tree.Facets)
 	}
 
 	projRec := httptest.NewRecorder()
-	r.ServeHTTP(projRec, httptest.NewRequest(http.MethodGet, "/v1/projects/"+proj.ID+"/artifacts", nil))
+	r.ServeHTTP(projRec, httptest.NewRequest(http.MethodGet, "/v1/projects/"+fx.projID+"/artifacts", nil))
 	if projRec.Code != http.StatusOK {
 		t.Fatalf("project list status = %d body = %s", projRec.Code, projRec.Body.String())
 	}
 	var all api.ArtifactListResponse
-	if err := json.Unmarshal(projRec.Body.Bytes(), &all); err != nil {
-		testutil.FailErr(t, "unmarshal JSON document", err)
+	testutil.FailErr(t, "unmarshal JSON document", json.Unmarshal(projRec.Body.Bytes(), &all))
+	if len(all.Artifacts) != 3 || all.Artifacts[0].Caption != "c" || all.Artifacts[1].Caption != "b" || all.Artifacts[2].Caption != "a" {
+		t.Fatalf("project list = %+v want newest-first [c, b, a]", all.Artifacts)
 	}
-	if len(all.Artifacts) != 2 {
-		t.Fatalf("project list len = %d want 2", len(all.Artifacts))
+	wantHashC := fmt.Sprintf("%x", sha256.Sum256(fx.rawC))
+	if all.Artifacts[0].ContentHash != wantHashC {
+		t.Fatalf("content_hash = %q want %q", all.Artifacts[0].ContentHash, wantHashC)
 	}
-	firstRec := httptest.NewRecorder()
-	r.ServeHTTP(firstRec, httptest.NewRequest(http.MethodGet, "/v1/projects/"+proj.ID+"/artifacts?limit=1", nil))
-	if firstRec.Code != http.StatusOK {
-		t.Fatalf("first project page status = %d body = %s", firstRec.Code, firstRec.Body.String())
-	}
-	var first api.ArtifactListResponse
-	testutil.FailErr(t, "decode first project page", json.Unmarshal(firstRec.Body.Bytes(), &first))
-	if len(first.Artifacts) != 1 || first.NextCursor == "" {
-		t.Fatalf("first project page = %+v", first)
+	if all.Facets == nil || len(all.Facets.SessionIDs) != 2 || all.Facets.SessionIDs[0] != fx.sessAID || all.Facets.SessionIDs[1] != fx.sessBID {
+		t.Fatalf("facets = %+v want [%s, %s]", all.Facets, fx.sessAID, fx.sessBID)
 	}
 
-	secondRec := httptest.NewRecorder()
-	r.ServeHTTP(secondRec, httptest.NewRequest(http.MethodGet,
-		"/v1/projects/"+proj.ID+"/artifacts?limit=1&cursor="+first.NextCursor, nil))
-	if secondRec.Code != http.StatusOK {
-		t.Fatalf("second project page status = %d body = %s", secondRec.Code, secondRec.Body.String())
-	}
-	var second api.ArtifactListResponse
-	testutil.FailErr(t, "decode second project page", json.Unmarshal(secondRec.Body.Bytes(), &second))
-	if len(second.Artifacts) != 1 || second.Artifacts[0].ID == first.Artifacts[0].ID || second.NextCursor != "" {
-		t.Fatalf("second project page = %+v", second)
-	}
-
-	tamperedRec := httptest.NewRecorder()
-	r.ServeHTTP(tamperedRec, httptest.NewRequest(http.MethodGet,
-		"/v1/projects/"+proj.ID+"/artifacts?limit=1&cursor="+first.NextCursor+"x", nil))
-	if tamperedRec.Code != http.StatusBadRequest {
-		t.Fatalf("tampered cursor status = %d body = %s", tamperedRec.Code, tamperedRec.Body.String())
-	}
-	var cursorErr api.ErrorResponse
-	testutil.FailErr(t, "decode cursor error", json.Unmarshal(tamperedRec.Body.Bytes(), &cursorErr))
-	if cursorErr.Code != "invalid_page_cursor" {
-		t.Fatalf("tampered cursor code = %q want invalid_page_cursor", cursorErr.Code)
-	}
 	raw := projRec.Body.String()
 	if strings.Contains(raw, `"bytes"`) || strings.Contains(raw, "base64") {
 		t.Fatal("list response must not carry bytes/base64")
 	}
-	if strings.Contains(raw, dataDir) || strings.Contains(raw, filepath.Join(dataDir, "projects")) {
+	if strings.Contains(raw, fx.dataDir) || strings.Contains(raw, filepath.Join(fx.dataDir, "projects")) {
 		t.Fatal("list response must not leak host filesystem paths")
 	}
 
@@ -367,6 +374,86 @@ func TestHandleListArtifacts_scopesAndReferenceOnly(t *testing.T) {
 	r.ServeHTTP(missProj, httptest.NewRequest(http.MethodGet, "/v1/projects/missing/artifacts", nil))
 	if missProj.Code != http.StatusNotFound {
 		t.Fatalf("unknown project status = %d", missProj.Code)
+	}
+}
+
+func TestHandleListProjectArtifacts_filtersAndCursorScope(t *testing.T) {
+	fx := newListArtifactsFixture(t)
+	r := fx.router
+
+	firstRec := httptest.NewRecorder()
+	r.ServeHTTP(firstRec, httptest.NewRequest(http.MethodGet, "/v1/projects/"+fx.projID+"/artifacts?limit=2", nil))
+	if firstRec.Code != http.StatusOK {
+		t.Fatalf("first project page status = %d body = %s", firstRec.Code, firstRec.Body.String())
+	}
+	var first api.ArtifactListResponse
+	testutil.FailErr(t, "decode first project page", json.Unmarshal(firstRec.Body.Bytes(), &first))
+	if len(first.Artifacts) != 2 || first.Artifacts[0].Caption != "c" || first.Artifacts[1].Caption != "b" || first.NextCursor == "" || first.Facets == nil {
+		t.Fatalf("first project page = %+v", first)
+	}
+
+	secondRec := httptest.NewRecorder()
+	r.ServeHTTP(secondRec, httptest.NewRequest(http.MethodGet,
+		"/v1/projects/"+fx.projID+"/artifacts?limit=2&cursor="+first.NextCursor, nil))
+	if secondRec.Code != http.StatusOK {
+		t.Fatalf("second project page status = %d body = %s", secondRec.Code, secondRec.Body.String())
+	}
+	var second api.ArtifactListResponse
+	testutil.FailErr(t, "decode second project page", json.Unmarshal(secondRec.Body.Bytes(), &second))
+	if len(second.Artifacts) != 1 || second.Artifacts[0].Caption != "a" || second.NextCursor != "" || second.Facets != nil {
+		t.Fatalf("second project page = %+v", second)
+	}
+
+	sourceRec := httptest.NewRecorder()
+	r.ServeHTTP(sourceRec, httptest.NewRequest(http.MethodGet, "/v1/projects/"+fx.projID+"/artifacts?source=capture", nil))
+	if sourceRec.Code != http.StatusOK {
+		t.Fatalf("source filter status = %d body = %s", sourceRec.Code, sourceRec.Body.String())
+	}
+	var bySource api.ArtifactListResponse
+	testutil.FailErr(t, "decode source-filtered page", json.Unmarshal(sourceRec.Body.Bytes(), &bySource))
+	if len(bySource.Artifacts) != 1 || bySource.Artifacts[0].Caption != "b" || bySource.Facets == nil || len(bySource.Facets.SessionIDs) != 2 {
+		t.Fatalf("source-filtered page = %+v", bySource)
+	}
+
+	sessFilterRec := httptest.NewRecorder()
+	r.ServeHTTP(sessFilterRec, httptest.NewRequest(http.MethodGet, "/v1/projects/"+fx.projID+"/artifacts?session_id="+fx.sessAID, nil))
+	if sessFilterRec.Code != http.StatusOK {
+		t.Fatalf("session filter status = %d body = %s", sessFilterRec.Code, sessFilterRec.Body.String())
+	}
+	var bySession api.ArtifactListResponse
+	testutil.FailErr(t, "decode session-filtered page", json.Unmarshal(sessFilterRec.Body.Bytes(), &bySession))
+	if len(bySession.Artifacts) != 2 || bySession.Artifacts[0].Caption != "c" || bySession.Artifacts[1].Caption != "a" {
+		t.Fatalf("session-filtered page = %+v", bySession)
+	}
+
+	for _, badQuery := range []string{"?source=unknown", "?source=", "?session_id=not-a-uuid", "?session_id="} {
+		badRec := httptest.NewRecorder()
+		r.ServeHTTP(badRec, httptest.NewRequest(http.MethodGet, "/v1/projects/"+fx.projID+"/artifacts"+badQuery, nil))
+		if badRec.Code != http.StatusBadRequest {
+			t.Fatalf("%s status = %d body = %s", badQuery, badRec.Code, badRec.Body.String())
+		}
+		var qErr api.ErrorResponse
+		testutil.FailErr(t, "decode query error", json.Unmarshal(badRec.Body.Bytes(), &qErr))
+		if qErr.Code != api.ApiErrorCodeInvalidQuery {
+			t.Fatalf("%s code = %q want invalid_query", badQuery, qErr.Code)
+		}
+	}
+
+	for _, crossScope := range []string{
+		"?limit=2&cursor=" + first.NextCursor + "x",
+		"?limit=2&source=render&cursor=" + first.NextCursor,
+		"?limit=2&session_id=" + fx.sessAID + "&cursor=" + first.NextCursor,
+	} {
+		tamperedRec := httptest.NewRecorder()
+		r.ServeHTTP(tamperedRec, httptest.NewRequest(http.MethodGet, "/v1/projects/"+fx.projID+"/artifacts"+crossScope, nil))
+		if tamperedRec.Code != http.StatusBadRequest {
+			t.Fatalf("cursor %s status = %d body = %s", crossScope, tamperedRec.Code, tamperedRec.Body.String())
+		}
+		var cursorErr api.ErrorResponse
+		testutil.FailErr(t, "decode cursor error", json.Unmarshal(tamperedRec.Body.Bytes(), &cursorErr))
+		if cursorErr.Code != "invalid_page_cursor" {
+			t.Fatalf("cursor %s code = %q want invalid_page_cursor", crossScope, cursorErr.Code)
+		}
 	}
 }
 

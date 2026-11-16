@@ -10,6 +10,8 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/nativemanifest"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // Catalog is the validated set of units in the effective catalog.
@@ -155,8 +157,8 @@ type Selection struct {
 	Host Host
 	// Mode is the execution mode family; empty matches units without modes.
 	Mode string
-	// Offered is every tool on this call: floor plus loaded.
-	Offered map[string]bool
+	// Held is every tool and command reach mark in the reader's reach.
+	Held map[string]bool
 }
 
 // applies reports whether a unit belongs to this render.
@@ -167,7 +169,48 @@ func (c Catalog) applies(u Unit, sel Selection) bool {
 	if len(u.Attaches) == 0 {
 		return true
 	}
-	return u.AttachedTo(sel.Offered)
+	return u.AttachedTo(sel.Held)
+}
+
+var knownAttachTargets = sync.OnceValues(func() (map[string]bool, error) {
+	cfg, err := nativemanifest.Load()
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(cfg.ApprovalReversibility)+4)
+	for _, tool := range cfg.AllTools() {
+		out[tool] = true
+	}
+	for tool := range cfg.ApprovalReversibility {
+		if !cfg.HasOperation(tool) {
+			out[tool] = true
+		}
+	}
+	for _, mark := range []string{
+		toolcontract.ReachCommandMutation,
+		toolcontract.ReachCommandExternalExec,
+		toolcontract.ReachCommandExternalExecSelector,
+		toolcontract.ReachCommandNetworkEgress,
+	} {
+		out[mark] = true
+	}
+	return out, nil
+})
+
+func validateAttaches(stem string, attaches []string) error {
+	if len(attaches) == 0 {
+		return nil
+	}
+	known, err := knownAttachTargets()
+	if err != nil {
+		return fmt.Errorf("unit %q: %w", stem, err)
+	}
+	for _, name := range attaches {
+		if !known[name] {
+			return fmt.Errorf("unit %q: attaches %q is not a registered tool or command reach mark", stem, name)
+		}
+	}
+	return nil
 }
 
 // Rendered returns the units each slot renders for sel, in order.

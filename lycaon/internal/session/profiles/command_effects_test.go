@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -61,6 +62,63 @@ func TestShippedReadOnlyProfilesDeclareOnlyNativeReads(t *testing.T) {
 		}
 		if !found {
 			t.Fatalf("missing shipped profile %s", id)
+		}
+	}
+}
+
+func TestWorkerChildSessionPostureAndConstrainedCommandProfiles(t *testing.T) {
+	registry, err := LoadPostureRegistry()
+	testutil.FailErr(t, "load actual postures", err)
+
+	read, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	readMut, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation)
+	readEgress, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandNetworkEgress)
+	all, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandExternalExec, toolcontract.CommandNetworkEgress)
+
+	profileEffects := func(profiles []sandbox.ToolProfile, id string) toolcontract.CommandEffects {
+		for _, p := range profiles {
+			if p.ID == id {
+				return p.CommandEffects
+			}
+		}
+		t.Fatalf("missing profile %s", id)
+		return 0
+	}
+
+	for _, parentPosture := range []api.SessionPosture{api.SessionPostureSpec, api.SessionPostureVet, api.SessionPostureBuild, api.SessionPostureOrchestrate} {
+		if got := store.ChildSessionPosture(parentPosture, "implementer"); got != api.SessionPostureBuild {
+			t.Fatalf("implementer child posture under parent %s = %s, want build", parentPosture, got)
+		}
+		for _, agentType := range []string{"plan-author", "web-researcher", "path-explorer", "plan-reviewer", "general"} {
+			if got := store.ChildSessionPosture(parentPosture, agentType); got != parentPosture {
+				t.Fatalf("%s child posture under parent %s = %s, want %s", agentType, parentPosture, got, parentPosture)
+			}
+		}
+
+		service := New(commandSessionFixture{posture: parentPosture}, nil, nil)
+		service.SetPostureRegistry(registry)
+		narrowed := service.ForSession(t.Context(), &api.Session{ID: "session", Posture: parentPosture})
+		if len(service.ForSession(t.Context(), nil)) == 0 {
+			t.Fatal("expected fallback profiles for nil session")
+		}
+
+		readOnlyPosture := parentPosture == api.SessionPostureSpec || parentPosture == api.SessionPostureVet
+		if got := profileEffects(narrowed, "plan_write_only"); (readOnlyPosture && got != read) || (!readOnlyPosture && got != readMut) {
+			t.Fatalf("plan_write_only under %s = %v", parentPosture, got.Classes())
+		}
+		if got := profileEffects(narrowed, "editor_file"); (readOnlyPosture && got != read) || (!readOnlyPosture && got != readMut) {
+			t.Fatalf("editor_file under %s = %v", parentPosture, got.Classes())
+		}
+		if got := profileEffects(narrowed, "web_research"); (readOnlyPosture && got != read) || (!readOnlyPosture && got != readEgress) {
+			t.Fatalf("web_research under %s = %v", parentPosture, got.Classes())
+		}
+		if got := profileEffects(narrowed, "implement"); (readOnlyPosture && got != read) || (!readOnlyPosture && got != all) {
+			t.Fatalf("implement under %s = %v", parentPosture, got.Classes())
+		}
+		for _, roID := range []string{"worker_readonly", "explore_readonly", "plan_review_readonly"} {
+			if got := profileEffects(narrowed, roID); got != read {
+				t.Fatalf("%s under %s = %v, want [read_only]", roID, parentPosture, got.Classes())
+			}
 		}
 	}
 }

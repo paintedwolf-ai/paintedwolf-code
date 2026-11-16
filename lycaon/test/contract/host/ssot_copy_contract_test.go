@@ -15,8 +15,8 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -41,7 +41,7 @@ func TestCompactionWorkerSummaryBudgetMatchesLimitsDefault(t *testing.T) {
 func TestCoordinatorPolicyWorkerSummaryMatchesCompactionYAML(t *testing.T) {
 	t.Parallel()
 	budget := limits.DefaultWorkerSummaryMaxChars
-	vars := prompts.CoordinatorPolicyTemplateVars([]string{"find", "grep", "read", "task"}, nil)
+	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
 	got, ok := vars["worker_summary_max_chars"].(int)
 	if !ok || got != budget {
 		t.Fatalf("worker_summary_max_chars = %v want %d from limits default (YAML omits key)", vars["worker_summary_max_chars"], budget)
@@ -50,7 +50,7 @@ func TestCoordinatorPolicyWorkerSummaryMatchesCompactionYAML(t *testing.T) {
 
 func TestCoordinatorPolicyProgressLimitsMatchProgressPackage(t *testing.T) {
 	t.Parallel()
-	vars := prompts.CoordinatorPolicyTemplateVars([]string{"find", "grep", "read", "task", "update_progress"}, nil)
+	vars := progress.ProgressTemplateVars()
 	if got, ok := vars["max_author_progress_lines"].(int); !ok || got != progress.MaxAuthorProgressLines {
 		t.Fatalf("max_author_progress_lines = %v want %d", vars["max_author_progress_lines"], progress.MaxAuthorProgressLines)
 	}

@@ -56,7 +56,9 @@ func TestEachAgentPersonaRenders(t *testing.T) {
 	contractcheck.FailErr(t, "prompts.LoadPersonaContract failed", err)
 	engine := contractPersonaEngine(t)
 	for id := range cfg.Agents {
-		if _, err := prompts.RenderPersona(context.Background(), engine, id, nil); err != nil {
+		reader, err := prompts.DeclaredReader(nil, id)
+		contractcheck.FailErr(t, "DeclaredReader "+id, err)
+		if _, err := prompts.RenderPersona(context.Background(), engine, id, reader, nil); err != nil {
 			t.Fatalf("agent %q: %v", id, err)
 		}
 	}

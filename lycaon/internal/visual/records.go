@@ -199,6 +199,10 @@ func (r *Records) EvidenceHandleBound(ctx context.Context, artifactID, handle st
 }
 
 func (c recordsCatalog) enqueueTx(ctx context.Context, tx *sql.Tx, rec ArtifactRecord, op api.ArtifactChangeOp) error {
+	var contentHash string
+	if op == api.ArtifactChangeOpWritten {
+		contentHash = rec.ContentHash
+	}
 	return c.r.outbox.EnqueueTx(ctx, tx, api.EventTopicArtifact,
 		events.PublishKey{Project: rec.ProjectID, Session: rec.RootSessionID},
 		api.ArtifactEvent{
@@ -207,6 +211,7 @@ func (c recordsCatalog) enqueueTx(ctx context.Context, tx *sql.Tx, rec ArtifactR
 			SessionID:     rec.SessionID,
 			RootSessionID: rec.RootSessionID,
 			Op:            op,
+			ContentHash:   contentHash,
 		})
 }
 

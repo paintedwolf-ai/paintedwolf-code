@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -20,8 +21,18 @@ func TestHostResourcesPartialGroupsPresenceAndCap(t *testing.T) {
 		},
 		HostResourcesOmitted: 2,
 	})
-	vars["visible_tools"] = []string{"read", "write", "edit", "command", "skills_read"}
-	got, err := prompts.RenderPersona(context.Background(), engine, "implementer", vars)
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "implement",
+		Profiles:  profiles,
+		Visible:   []string{"read", "write", "edit", "command", "skills_read"},
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader", err)
+	got, err := prompts.RenderPersona(context.Background(), engine, "implementer", reader, vars)
 	testutil.FailErr(t, "RenderPersona", err)
 	if !strings.Contains(got, "## Host resources") {
 		t.Fatal("expected Host resources section")
@@ -45,9 +56,18 @@ func TestHostResourcesPartialGroupsPresenceAndCap(t *testing.T) {
 func TestHostResourcesPartialOmitsEmptyInventory(t *testing.T) {
 	prompts.ResetPersonaContractCache()
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	got, err := prompts.RenderPersona(context.Background(), engine, "implementer", map[string]any{
-		"visible_tools": []string{"read", "write", "edit", "command"},
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	reader, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: "implement",
+		Profiles:  profiles,
+		Visible:   []string{"read", "write", "edit", "command"},
+		RootCount: 1,
+		HasGit:    true,
+		WebSearch: true,
 	})
+	testutil.FailErr(t, "NewReader", err)
+	got, err := prompts.RenderPersona(context.Background(), engine, "implementer", reader, nil)
 	testutil.FailErr(t, "RenderPersona", err)
 	if strings.Contains(got, "## Host resources") {
 		t.Fatal("empty inventory must omit Host resources")

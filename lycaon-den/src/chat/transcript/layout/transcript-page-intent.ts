@@ -18,6 +18,10 @@ export class TranscriptPageIntent {
     this.direction = direction;
   }
 
+  currentDirection(): HistoryDirection | undefined {
+    return this.direction;
+  }
+
   edge(older: boolean, newer: boolean): HistoryDirection | undefined {
     if (this.direction) return (this.direction === "older" ? older : newer) ? this.direction : undefined;
     if (older === newer) return undefined;

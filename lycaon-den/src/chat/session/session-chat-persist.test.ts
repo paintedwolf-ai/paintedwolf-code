@@ -15,8 +15,10 @@ import {
 } from "../../store/app-state-snapshot.ts";
 import { wireProject } from "../../api/mocks/project-fixture.ts";
 import {
-  TRANSCRIPT_PAGE_BUDGET,
+  DEFAULT_TRANSCRIPT_PAGE_LIMIT,
+  TRANSCRIPT_RESIDENT_ORD_BUDGET,
   TRANSCRIPT_TAIL_BUDGET,
+  residentPageOrds,
 } from "../transcript/layout/transcript-window.ts";
 
 vi.mock("../../platform/connection/health.ts", () => ({
@@ -64,7 +66,7 @@ describe("session-chat-persist", () => {
     resetAppStateSnapshotForTests();
   });
 
-  it("caps older pages to the page budget and stamps store revision", () => {
+  it("caps older pages to the resident message budget and stamps store revision", () => {
     const pages: Record<
       string,
       {
@@ -79,18 +81,27 @@ describe("session-chat-persist", () => {
         ord: number;
       }[]
     > = {};
-    for (let i = 0; i < TRANSCRIPT_PAGE_BUDGET + 3; i++) {
-      const key = `${i}:${i}`;
-      pages[key] = [
-        {
-          id: `p${i}`,
-          role: "user", origin: "user" as const, authority: "user" as const, trust_tier: "trusted" as const,
-          content: `page ${i}`,
-          seq: i + 1,
-          created_at: "t",
-          ord: i,
+    const pageCount = TRANSCRIPT_RESIDENT_ORD_BUDGET / DEFAULT_TRANSCRIPT_PAGE_LIMIT + 3;
+    for (let i = 0; i < pageCount; i++) {
+      const start = i * DEFAULT_TRANSCRIPT_PAGE_LIMIT + 1;
+      const end = start + DEFAULT_TRANSCRIPT_PAGE_LIMIT - 1;
+      pages[`${start}:${end}`] = Array.from(
+        { length: DEFAULT_TRANSCRIPT_PAGE_LIMIT },
+        (_, j) => {
+          const ord = start + j;
+          return {
+            id: `p${ord}`,
+            role: "user" as const,
+            origin: "user" as const,
+            authority: "user" as const,
+            trust_tier: "trusted" as const,
+            content: `page ${ord}`,
+            seq: ord,
+            created_at: "t",
+            ord,
+          };
         },
-      ];
+      );
     }
     const base = sampleSnapshot();
     const persisted = trimSnapshotForPersist({
@@ -103,8 +114,8 @@ describe("session-chat-persist", () => {
         hasMoreAfter: false,
       },
     });
-    expect(Object.keys(persisted.transcript.pages)).toHaveLength(
-      TRANSCRIPT_PAGE_BUDGET,
+    expect(residentPageOrds(persisted.transcript.pages)).toBeLessThanOrEqual(
+      TRANSCRIPT_RESIDENT_ORD_BUDGET,
     );
     expect(persisted.transcript.hasTailGap).toBe(true);
     expect(persisted.storeRevisionAtPersist).toBe(7);

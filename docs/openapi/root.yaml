@@ -1233,6 +1233,8 @@ components:
       $ref: components/schemas/external-access.yaml#/components/schemas/ExternalAccessDetection
     ArtifactListItem:
       $ref: components/schemas/session/artifacts.yaml#/components/schemas/ArtifactListItem
+    ArtifactListFacets:
+      $ref: components/schemas/session/artifacts.yaml#/components/schemas/ArtifactListFacets
     ArtifactListResponse:
       $ref: components/schemas/session/artifacts.yaml#/components/schemas/ArtifactListResponse
     WorkerSummaryStatus:

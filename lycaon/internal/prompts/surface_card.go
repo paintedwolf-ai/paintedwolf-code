@@ -55,19 +55,6 @@ func CoordinatorSurfaceCardVars(card SurfaceCard, sticky, deferred []string, com
 	return out
 }
 
-func (v SurfaceCardVars) TemplateVars() map[string]any {
-	return map[string]any{
-		"surface_card_label":     v.Label,
-		"surface_card_rule":      v.Rule,
-		"surface_publishes_text": v.PublishesText,
-		"card_may_edit":          v.MayEdit,
-		"card_may_run":           v.MayRun,
-		"card_may_dispatch":      v.MayDispatch,
-		"card_edit_deferred":     v.EditDeferred,
-		"card_only_tools":        v.OnlyTools,
-	}
-}
-
 func anyPresent(names []string, set map[string]bool) bool {
 	for _, name := range names {
 		if set[name] {
