@@ -94,7 +94,7 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   &[data-sign="added"] {
-    color: var(--den-success-text, var(--den-text));
+    color: var(--den-status-positive-text);
   }
   &[data-sign="removed"],
   &[data-state="failed"] {

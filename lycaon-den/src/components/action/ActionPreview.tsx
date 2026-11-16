@@ -36,7 +36,7 @@ export function ActionPreview(props: Props) {
               </div>
             )}
           </Index>
-          <Show when={props.preview.more}>{(more) => <p class="den-action-card__preview-note">{more().toLocaleString()} more</p>}</Show>
+          <Show when={props.preview.lines_omitted}>{(more) => <p class="den-action-card__preview-note">{more().toLocaleString()} more</p>}</Show>
         </div>
       </Match>
     </Switch>
