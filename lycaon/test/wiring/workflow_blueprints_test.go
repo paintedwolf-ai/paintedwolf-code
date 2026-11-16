@@ -88,6 +88,7 @@ func coordToolCtx(t *testing.T, h *Harness, ctx context.Context, sess *api.Sessi
 	call := wiringToolContext(sess.ID, dir)
 	call.Identity.ProjectID = sess.ProjectID
 	call.Identity.Agent = "coordinator"
+	call.Identity.ToolCallID = uuid.NewString()
 	testutil.FailErr(t, "resolve primary root", h.DB.QueryRowContext(
 		ctx,
 		"SELECT id FROM project_roots WHERE project_id = ? AND is_primary = 1",

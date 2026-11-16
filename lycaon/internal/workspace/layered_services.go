@@ -224,7 +224,10 @@ func settleBranchLayeredView(ctx context.Context, branchRoot string, view *branc
 func BranchProcessRecorder(branchRoot string) func(pid int) error {
 	clean := filepath.Clean(branchRoot)
 	return func(pid int) error {
-		raw, ok := sharedBranchViews.Load(clean)
+		raw, ok := sharedBranchViews.Load(branchRootKey(clean))
+		if !ok {
+			raw, ok = sharedBranchViews.Load(clean)
+		}
 		if !ok {
 			return nil
 		}
@@ -248,7 +251,7 @@ func BranchProcessRecorder(branchRoot string) func(pid int) error {
 // false for a branch of an earlier format, whose changes its baseline captures instead.
 func PublishBranchCheckpoint(ctx context.Context, branchRoot string) (handled bool, err error) {
 	branchClaimsMu.RLock()
-	rec, ok := branchClaimStates[filepath.Clean(branchRoot)]
+	rec, ok := lookupBranchClaimRecord(branchRoot)
 	branchClaimsMu.RUnlock()
 	if ok && rec.layered == nil && rec.reopen != nil {
 		layered, err := rec.reopen(ctx)

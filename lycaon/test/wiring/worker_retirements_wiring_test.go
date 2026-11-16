@@ -248,6 +248,14 @@ func verifyOverlayHandlesAndWithdraw(
 	_, err = h.ToolRegistry.Run(ctx, "update_progress", h.ProgressUpdateArgs(t, ctx, sess.ID, "## Progress\n- [x] mod-fixer landed\n"), call)
 	testutil.FailErr(t, "update_progress", err)
 
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err = h.DB.ExecContext(
+		ctx,
+		`INSERT INTO workflow_runs (id, session_id, project_id, workflow_id, workflow_version, status, current_phase, created_at, updated_at)
+		 VALUES (?, ?, ?, 'vet', '1.0.0', 'running', 'work', ?, ?)`,
+		"run-stop-check", sess.ID, sess.ProjectID, now, now,
+	)
+	testutil.FailErr(t, "seed workflow run for stop check", err)
 	planned, err := h.Delegations.Records.CreateWorker(ctx, actor, workerrecords.Op{ID: "seed-run-stop"}, workerrecords.WorkerSpec{
 		Name: "planned-stop-leg", AgentType: "implementer", ScopeMode: workerrecords.ScopeWrite,
 		WorkflowRunID: "run-stop-check", WorkflowPhase: "work", WorkflowWorkID: "leg-stop",
