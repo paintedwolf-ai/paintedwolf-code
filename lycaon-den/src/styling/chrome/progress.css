@@ -113,6 +113,14 @@
   line-height: 1.5;
 }
 
+/* The plan's standing follows the line and never gives way to it. */
+.progress-strip__standing {
+  flex: 0 0 auto;
+  margin-inline-start: 0.6em;
+  font-size: var(--text-den-label);
+  font-variant-numeric: tabular-nums;
+}
+
 .progress-strip__rest-sep {
   margin-inline: 0.45em;
 }
