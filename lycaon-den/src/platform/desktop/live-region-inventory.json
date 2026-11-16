@@ -1,5 +1,6 @@
 {
   "briefing/BriefingEvidencePage.tsx": 2,
+  "components/action/ActionCard.tsx": 1,
   "components/blueprint/BlueprintCard.tsx": 2,
   "components/blueprint/BlueprintReviewModal.tsx": 3,
   "components/chatview/chat-view-composer.tsx": 1,

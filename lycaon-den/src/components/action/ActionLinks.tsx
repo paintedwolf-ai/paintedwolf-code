@@ -36,10 +36,10 @@ export function ActionLinks(props: Props) {
         {(link) => {
           const content = linkContent(link, props.part);
           return (
-            <Show when={content}>
+            <Show when={content} keyed>
               {(document) => (
                 <ToolContentLink short label={LINK_LABELS[link.kind]} testId={`action-link-${link.kind}`} projectId={props.projectId}
-                  pane={`action:${props.part.id}:${link.kind}`} content={document()} language={link.kind === "receipt" ? "jsonl" : undefined}
+                  pane={`action:${props.part.id}:${link.kind}`} content={document} language={link.kind === "receipt" ? "jsonl" : undefined}
                   messageId={link.kind === "input" ? props.part.argsMessageId ?? props.part.assistantMessageId : props.part.messageId}
                   toolCallId={props.part.toolCallId} revealOffset={revealOffset(link.kind)} />
               )}
@@ -48,8 +48,8 @@ export function ActionLinks(props: Props) {
         }}
       </For>
       {props.evidence}
-      <Show when={props.action.opener}>
-        {(opener) => <Opener opener={opener()} part={props.part} projectId={props.projectId} />}
+      <Show when={props.action.opener} keyed>
+        {(opener) => <Opener opener={opener} part={props.part} projectId={props.projectId} />}
       </Show>
     </nav>
   );
@@ -75,7 +75,7 @@ function linkContent(link: ActionLink, part: ToolPartView): ChatContentDocument[
 function Opener(props: { opener: ActionOpener; part: ToolPartView; projectId?: string }) {
   const label = () => OPENER_LABELS[props.opener.kind];
   return (
-    <Show when={props.opener.kind === "terminal" && props.opener.process_handle} fallback={
+    <Show when={props.opener.kind === "terminal" && props.opener.process_handle} keyed fallback={
       <button type="button" class="den-chat-content-link den-action-card__opener" data-testid="action-opener" onClick={() => openDestination(props.opener, props.projectId)}>
         {label()}
       </button>
@@ -83,7 +83,7 @@ function Opener(props: { opener: ActionOpener; part: ToolPartView; projectId?: s
       {(handle) => (
         <span class="den-action-card__opener">
           <ToolContentLink short label={label()} testId="action-opener" projectId={props.projectId} pane={`action:${props.part.id}:terminal`}
-            content={{ kind: "process", handle: handle() }} toolCallId={props.part.toolCallId} messageId={props.part.messageId} />
+            content={{ kind: "process", handle }} toolCallId={props.part.toolCallId} messageId={props.part.messageId} />
         </span>
       )}
     </Show>
