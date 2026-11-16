@@ -15,6 +15,7 @@ func TestRunReportsUnreachableFunctionsKeysAndTables(t *testing.T) {
 	got, err := reach.Run(reach.Config{
 		Dir:      dir,
 		Patterns: []string{"./cmd/..."},
+		Scope:    []string{"./..."},
 		GOOS:     []string{"linux", "darwin"},
 		Report:   regexp.MustCompile(`^example\.com/fixture/`),
 		Skip:     []*regexp.Regexp{regexp.MustCompile(`test$`)},
@@ -28,6 +29,7 @@ func TestRunReportsUnreachableFunctionsKeysAndTables(t *testing.T) {
 	want := []string{
 		"dead-func example.com/fixture/store.WithTenant",
 		"dead-func example.com/fixture/store.unusedLinux",
+		"dead-func example.com/fixture/orphan.Unused",
 		"unset-context-key example.com/fixture/store.tenantKey",
 		"write-only-table audit",
 		"write-only-table events",

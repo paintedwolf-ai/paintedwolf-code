@@ -36,8 +36,11 @@ const (
 type Config struct {
 	Dir      string
 	Patterns []string // main packages that ship or run
-	GOOS     []string
-	Tags     []string
+	// Scope adds packages whose functions are judged even when no root
+	// imports them, so a whole unimported package is reported too.
+	Scope []string
+	GOOS  []string
+	Tags  []string
 	// Report limits findings to matching package paths; Skip removes
 	// test-support packages that only tests import.
 	Report *regexp.Regexp
@@ -113,7 +116,7 @@ func load(cfg Config, goos string) (*pass, error) {
 	if len(cfg.Tags) > 0 {
 		lc.BuildFlags = []string{"-tags=" + strings.Join(cfg.Tags, ",")}
 	}
-	initial, err := packages.Load(lc, cfg.Patterns...)
+	initial, err := packages.Load(lc, append(append([]string(nil), cfg.Patterns...), cfg.Scope...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -121,9 +124,15 @@ func load(cfg Config, goos string) (*pass, error) {
 		return nil, fmt.Errorf("packages contain errors")
 	}
 	prog, pkgs := ssautil.AllPackages(initial, ssa.InstantiateGenerics)
+	rootPaths, err := mainPaths(lc, cfg.Patterns)
+	if err != nil {
+		return nil, err
+	}
 	var roots []*ssa.Function
 	for _, main := range ssautil.MainPackages(pkgs) {
-		roots = append(roots, main.Func("init"), main.Func("main"))
+		if rootPaths[main.Pkg.Path()] {
+			roots = append(roots, main.Func("init"), main.Func("main"))
+		}
 	}
 	if len(roots) == 0 {
 		return nil, fmt.Errorf("no main packages in %v", cfg.Patterns)
@@ -190,6 +199,22 @@ func load(cfg Config, goos string) (*pass, error) {
 		}
 	}
 	return p, nil
+}
+
+// mainPaths lists the import paths the root patterns name, without loading
+// their syntax a second time.
+func mainPaths(lc *packages.Config, patterns []string) (map[string]bool, error) {
+	light := *lc
+	light.Mode = packages.NeedName
+	pkgs, err := packages.Load(&light, patterns...)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for _, p := range pkgs {
+		out[p.PkgPath] = true
+	}
+	return out, nil
 }
 
 // deadFuncs reports a function dead when no GOOS that compiles it reaches it.

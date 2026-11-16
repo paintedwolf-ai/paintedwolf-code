@@ -87,7 +87,8 @@ def checks(binary, tree, policy, go=True, den=False):
     reach = policy["reach"]
     go_commands = [
         [binary, "reach", "-dir", go_dir, "-goos", ",".join(reach["goos"]), "-report", reach["report"],
-         "-skip", support, "-schema", go_dir / reach["schema"], *reach["roots"]],
+         "-skip", support, "-schema", go_dir / reach["schema"], "-scope", ",".join(reach.get("scope", [])),
+         *reach["roots"]],
         [binary, "vet", "-dir", go_dir, "-test-support", support, *policy["vet"]["packages"]],
     ]
     commands = (go_commands if go else []) + [[binary, "refs", "-root", tree]]
