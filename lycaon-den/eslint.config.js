@@ -44,7 +44,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/**/*.{ts,tsx}"],
+    files: ["src/**/*.{ts,tsx}", "e2e/**/*.{ts,tsx}"],
     settings: {
       tailwindcss: {
         cssConfigPath: "./src/tailwind.css",
