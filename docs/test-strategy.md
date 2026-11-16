@@ -583,7 +583,9 @@ packages that import test-support packages, and commands and executable scripts
 no other file names. Findings are keyed by symbol, so the check runs on the working tree
 and on the change base and fails on findings the base lacks: deleting a
 function's last caller fails like adding a dead function. Unused parameters
-come from `unparam` on changed lines. `arch-lint:report` lists every finding.
+come from `unparam` on changed lines, and a change to Den compares knip's
+production-mode report of unused files, exports and types (`lycaon-den/knip.json`)
+with the base the same way. `arch-lint:report` lists every finding.
 The test-support package rule and the shipped roots are declared in
 `scripts/arch-lint-policy.json`. Reachability cannot see reflection or
 `go:linkname`; code reached only that way is a defect to fix at its source.

@@ -34,7 +34,13 @@ sys.exit(1)
 """
 
 POLICY = {"reach": {"roots": ["./cmd/..."], "goos": ["linux"], "report": "^x/", "schema": "schema.sql"},
-          "vet": {"packages": ["./..."]}, "test_support": ["test$"]}
+          "vet": {"packages": ["./..."]}, "test_support": ["test$"],
+          "den": {"dir": "lycaon-den", "command": [sys.executable, "../fake_knip.py"]}}
+
+# The fake reports what <tree>/knip.json holds, from inside the Den directory.
+FAKE_KNIP = """import json, os
+print(open(os.path.join(os.path.dirname(os.getcwd()), "knip.json")).read() if os.path.exists("../knip.json") else "{}")
+"""
 
 
 def finding(kind, key, pos="lycaon/internal/store/store.go:3:6"):
@@ -46,6 +52,9 @@ class ArchLintChangesTest(unittest.TestCase):
         self.tmp = Path(tempfile.mkdtemp())
         self.repo = self.tmp / "repo"
         (self.repo / "lycaon" / "internal" / "store").mkdir(parents=True)
+        (self.repo / "lycaon-den" / "node_modules").mkdir(parents=True)
+        (self.repo / "lycaon-den" / "package.json").write_text("{}")
+        (self.repo / "fake_knip.py").write_text(FAKE_KNIP)
         (self.repo / "lycaon" / "internal" / "store" / "store.go").write_text("package store\n")
         self.git("init", "-q", "-b", "main")
         self.write_findings({"reach": [finding("dead-func", "x/store.Old")]})
@@ -105,6 +114,29 @@ class ArchLintChangesTest(unittest.TestCase):
             "lycaon/internal/store/store.go", "lycaon/internal/store/store_test.go",
             "lycaon/internal/store/testdata/x.go", "lycaon/internal/gone/gone.go", "docs/x.go",
         ]), ["./internal/store"])
+
+    def test_den_changes_compare_knip_findings_with_the_base(self):
+        (self.repo / "knip.json").write_text(json.dumps({"files": ["src/old.ts"]}))
+        self.git("add", "-A")
+        self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "knip base")
+        base = self.git("rev-parse", "HEAD").strip()
+        (self.repo / "knip.json").write_text(json.dumps({
+            "files": ["src/old.ts", "src/new.ts"],
+            "issues": [{"file": "src/a.ts", "exports": [{"name": "helper", "line": 3}], "types": [{"name": "Shape"}]}],
+        }))
+        (self.repo / "lycaon-den" / "knip.json").write_text("{}")
+        scope = change_report.Scope(base, "test base", ["knip.json", "lycaon-den/src/a.ts"])
+        with mock.patch.object(arch_lint_changes, "ROOT", self.repo):
+            _, findings, failed = arch_lint_changes.changes(self.repo, scope, POLICY, self.cache, self.binary, self.linter)
+        self.assertTrue(failed)
+        self.assertEqual(sorted((f.area, f.path, f.line) for f in findings), [
+            ("unused-export", "lycaon-den/src/a.ts", 3),
+            ("unused-file", "lycaon-den/src/new.ts", None),
+            ("unused-type", "lycaon-den/src/a.ts", 0),
+        ])
+        base_den = self.cache / "base-tree" / "lycaon-den"
+        self.assertTrue((base_den / "node_modules").is_symlink())
+        self.assertTrue((base_den / "knip.json").exists())
 
     def test_reuses_the_base_tree_for_a_new_base(self):
         arch_lint_changes.base_checks(self.repo, self.base, self.binary, POLICY, self.cache)

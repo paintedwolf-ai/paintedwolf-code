@@ -2,8 +2,9 @@
 
 arch-lint (lycaon/cmd/arch-lint) reports code no shipped program reaches,
 context keys nothing sets, tables nothing reads, forwarders, dropped fields,
-test-support imports, and unreferenced commands and scripts. Each finding is
-keyed by symbol, never by line. This runs arch-lint on the working tree and on the change base and
+test-support imports, and unreferenced commands and scripts; knip reports Den
+files, exports and types production code never uses. Each finding is keyed by
+symbol, never by line. This runs arch-lint on the working tree and on the change base and
 fails on findings the base does not have, so deleting a function's last caller
 fails as surely as adding a dead function. unparam reports unused parameters
 on changed lines. `--all` lists every finding at the working tree instead.
@@ -15,6 +16,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -42,9 +44,37 @@ def build(root, out_dir):
     return binary
 
 
-def checks(binary, tree, policy, go=True):
+def knip(tree, policy):
+    """Den's unused files, exports and types under knip's production mode."""
+    den = policy["den"]
+    den_dir = tree / den["dir"]
+    modules = den_dir / "node_modules"
+    if tree != ROOT:
+        # The base tree is judged with the working tree's dependencies and knip policy.
+        if not modules.exists():
+            modules.symlink_to(ROOT / den["dir"] / "node_modules", target_is_directory=True)
+        config = ROOT / den["dir"] / "knip.json"
+        if config.exists():
+            shutil.copyfile(config, den_dir / "knip.json")
+    report = json.loads(run(den["command"], cwd=den_dir) or "{}")
+    found = {}
+    for path in report.get("files") or []:
+        found[("unused-file", path)] = {"kind": "unused-file", "key": path, "pos": f"{den['dir']}/{path}",
+                                        "message": f"{path} is not imported by Den production code"}
+    for issue in report.get("issues") or []:
+        for kind in ("exports", "types"):
+            for item in issue.get(kind) or []:
+                key = f"{issue['file']}:{item['name']}"
+                label = "unused-export" if kind == "exports" else "unused-type"
+                found[(label, key)] = {"kind": label, "key": key,
+                                       "pos": f"{den['dir']}/{issue['file']}:{item.get('line', 0)}",
+                                       "message": f"{item['name']} in {issue['file']} is not used by Den production code"}
+    return found
+
+
+def checks(binary, tree, policy, go=True, den=False):
     """Every arch-lint check over one tree, as (kind, key) → finding. Without go,
-    only the cross-language checks run."""
+    the Go checks are skipped; with den, knip runs over Den."""
     go_dir = tree / "lycaon"
     support = ",".join(policy["test_support"])
     reach = policy["reach"]
@@ -58,13 +88,15 @@ def checks(binary, tree, policy, go=True):
     for command in commands:
         for finding in json.loads(run([str(part) for part in command]) or "null") or []:
             found[(finding["kind"], finding["key"])] = finding
+    if den:
+        found.update(knip(tree, policy))
     return found
 
 
-def base_checks(root, base, binary, policy, cache, go=True):
+def base_checks(root, base, binary, policy, cache, go=True, den=False):
     """Findings at the base, cached by base commit, scope and the binary that judged it."""
     digest = hashlib.sha256(binary.read_bytes()).hexdigest()[:16]
-    cached = cache / f"base-{base}-{digest}{'' if go else '-xrefs'}.json"
+    cached = cache / f"base-{base}-{digest}{'' if go else '-xrefs'}{'-den' if den else ''}.json"
     if cached.exists():
         return {(f["kind"], f["key"]): f for f in json.loads(cached.read_text())}
     tree = cache / "base-tree"
@@ -72,7 +104,7 @@ def base_checks(root, base, binary, policy, cache, go=True):
         run(["git", "-C", str(tree), "checkout", "-q", "--force", "--detach", base])
     else:
         run(["git", "-C", str(root), "worktree", "add", "-q", "--force", "--detach", str(tree), base])
-    found = checks(binary, tree, policy, go)
+    found = checks(binary, tree, policy, go, den)
     cached.write_text(json.dumps(list(found.values())))
     return found
 
@@ -117,8 +149,9 @@ def to_finding(level, f):
 
 def changes(root, scope, policy, cache, binary, linter):
     go = scope.touches(["lycaon/"])
-    head = checks(binary, root, policy, go)
-    base = base_checks(root, scope.base, binary, policy, cache, go)
+    den = scope.touches([policy["den"]["dir"] + "/"])
+    head = checks(binary, root, policy, go, den)
+    base = base_checks(root, scope.base, binary, policy, cache, go, den)
     new = [f for key, f in sorted(head.items()) if key not in base]
     new += unparam(root, scope.base, linter, changed_go_packages(root, scope.paths))
     findings = [to_finding("error", f) for f in new]
@@ -127,7 +160,7 @@ def changes(root, scope, policy, cache, binary, linter):
 
 
 def everything(root, policy, binary):
-    head = checks(binary, root, policy)
+    head = checks(binary, root, policy, den=True)
     findings = [to_finding("notice", f) for _, f in sorted(head.items())]
     counts = {}
     for kind, _ in head:
