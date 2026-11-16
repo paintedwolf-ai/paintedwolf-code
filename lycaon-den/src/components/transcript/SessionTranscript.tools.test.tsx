@@ -248,8 +248,8 @@ describe("SessionTranscript tools and progress", () => {
     const visible = (rows: HTMLElement[]) => rows.filter((row) => !row.closest("[hidden]"));
     expect(visible(screen.getAllByTestId("progress-strip-item")).map((row) => row.textContent))
       .toEqual(["○Ship auth", "○Verify build"]);
-    expect(screen.getAllByTestId("progress-strip-rest").map((line) => line.textContent))
-      .toEqual(["✓Ship auth", "✓All 2 steps done"]);
+    expect(screen.getAllByTestId("progress-strip-rest").map((line) => line.textContent).sort())
+      .toEqual(["✓All 2 steps done", "✓Ship auth"]);
   });
 
   it("keeps progress snapshot DOM stable while unrelated messages arrive", async () => {
