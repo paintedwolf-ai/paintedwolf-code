@@ -61,18 +61,38 @@ height: 1.8571rem;
 }
 
 
-/* Default clears the titlebar traffic-light corner. */
 .den-shell {
+  --den-context-drawer-header-pad-top: var(--den-tabs-top-gap);
+}
+
+/* A drawer at a window edge that carries controls starts its header below
+   the title bar strip. A claim held on one side of the narrow band applies only there. */
+.den-custom-chrome
+  :is(
+    .den-session-drawer-layer[data-window-edge]:not([data-narrow-only], [data-narrow-hidden]),
+    .den-shell-stage-host--split:where([data-host-band~="max-900"])
+      > .den-session-drawer-layer[data-window-edge][data-narrow-only],
+    .den-shell-stage-host--split:not([data-host-band~="max-900"])
+      > .den-session-drawer-layer[data-window-edge][data-narrow-hidden]
+  ) {
   --den-context-drawer-header-pad-top: calc(
     var(--den-titlebar-inset) + var(--den-tabs-top-gap)
   );
 }
 
-/* Only a mirrored workspace puts the drawer under the traffic lights. */
-.den-custom-chrome:not(.den-tauri-macos) .den-shell,
-.den-tauri-macos.den-custom-chrome
-  .den-shell:not(.den-shell--orientation-mirrored) {
-  --den-context-drawer-header-pad-top: var(--den-tabs-top-gap);
+/* The edge's drawn controls stay in the strip, above the drawer. */
+.den-custom-chrome .den-session-drawer-layer > .den-shell-window-controls {
+  position: absolute;
+  top: calc(var(--den-pane-control-center) - var(--den-window-control-size) / 2);
+  z-index: calc(var(--den-z-context-drawer) + 1);
+}
+
+.den-custom-chrome .den-session-drawer-layer > .den-shell-window-controls[data-side="left"] {
+  left: var(--den-window-controls-inset);
+}
+
+.den-custom-chrome .den-session-drawer-layer > .den-shell-window-controls[data-side="right"] {
+  right: var(--den-window-controls-inset);
 }
 
 @utility den-context-drawer-header {

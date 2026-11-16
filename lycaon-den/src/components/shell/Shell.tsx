@@ -119,8 +119,9 @@ export function Shell(props: ShellProps) {
     presentedSplitLive: () => presentedSplitLive(),
     stageColumnOccupied: () => showStageColumn(),
     presentedStageId: () => presentedStageColumn().stageId,
+    sessionDrawerOpen: () => sessionDrawer.drawerContent() !== null,
   });
-  const { windowNavUserCollapsed, windowNavCollapsed, navAutomaticallyCollapsed, navSlotWidthCss, showConversation, hideConversation, contextHidden, revealConversation, splitFitClaim, conversationHidden, stageIsLeading, stageHeaderLeadsWindow, stageEdges} = panes;
+  const { windowNavUserCollapsed, windowNavCollapsed, navAutomaticallyCollapsed, navSlotWidthCss, showConversation, hideConversation, contextHidden, revealConversation, splitFitClaim, conversationHidden, stageIsLeading, stageEdges} = panes;
 
   let layoutTriggerEl: HTMLButtonElement | undefined;
   const setPendingRegionFocus = createShellFocusRequest();
@@ -581,7 +582,6 @@ export function Shell(props: ShellProps) {
             occupied={showStageColumn()}
             stageId={stageColumnStageId()}
             stack={stageStack}
-            headerLeadsWindow={stageHeaderLeadsWindow()}
             back={titlebarBack()}
             edges={stageEdges(conversationAttention())}
             windowEdges={panes.windowEdgeClaims("stage")}
@@ -620,6 +620,7 @@ export function Shell(props: ShellProps) {
         onOpenWorker={openWorkers} onClose={closeDrawer}
       />
         }
+        drawerEdges={panes.windowEdgeClaims("drawer")}
         chatColumn={
           <ShellChatColumn
             stack={chatStack}

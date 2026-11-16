@@ -27,6 +27,11 @@ import { CHAT_COL_MIN, DEFAULT_SPLIT_COMPANION } from "../../shell/stage-placeme
 import { focusRegion } from "../../shortcuts/focus-region.ts";
 import { setStageShown, startViewReporter } from "../../shell/view-report.ts";
 import type { ChatTabRailProps } from "../nav/ChatTabRail.tsx";
+import {
+  windowEdgeClaims as claimWindowEdges,
+  type WindowEdgeHost,
+  type WindowEdgeLayout,
+} from "./window-edges.ts";
 import type { StageEdgePanes } from "../nav/StageEdgeControls.tsx";
 import { stageLabelFor } from "../stage/stage-registry.tsx";
 
@@ -39,19 +44,15 @@ type PaneVisibilityDependencies = {
   presentedStageId: () => ContextNavItemId | null;
   /** The stage column holds content; otherwise a lone column is the chat. */
   stageColumnOccupied: () => boolean;
+  /** The session drawer covers the trailing side of the column on screen. */
+  sessionDrawerOpen: () => boolean;
 };
-
-/** A column whose title bar can draw one window edge's controls. */
-export type WindowEdgeHost = "nav" | "stage" | "chat";
-
-/** Which column draws one window edge's controls now, and once the narrow band drops a split column. */
-export type WindowEdgeHosts = { owner: WindowEdgeHost; narrow: WindowEdgeHost };
 
 export type ShellPaneVisibility = ReturnType<typeof createShellPaneVisibility>;
 
 /** Pane visibility shares width claims with the controls that reopen each pane. */
 export function createShellPaneVisibility({ windowSubject, splitLive, presentedSplitLive,
-  presentedStageId, stageColumnOccupied }: PaneVisibilityDependencies) {
+  presentedStageId, stageColumnOccupied, sessionDrawerOpen }: PaneVisibilityDependencies) {
   const [fileWindowNavCollapsed, setFileWindowNavCollapsed] = createSignal(
     windowSubject?.kind === "file",
   );
@@ -206,36 +207,19 @@ export function createShellPaneVisibility({ windowSubject, splitLive, presentedS
   const navTouchesChat = () => !presentedSplitLive() || contextHidden() || order().chatBesideNav;
   const navSide = () => order().navSide;
   const conversationSide = () => order().conversationSide;
-  /** Which column header sits under the overlay window controls. */
-  const navLeadsWindow = () => navSide() === "left" && !windowNavCollapsed();
-  const stageHeaderLeadsWindow = () =>
-    !navLeadsWindow() &&
-    (stageIsLeading() || conversationHidden() === "hidden");
-  const chatHeaderLeadsWindow = () =>
-    !navLeadsWindow() && (!presentedSplitLive() || !stageIsLeading() || contextHidden());
-
-  /** The column against a window edge draws that edge's window controls. */
-  const windowEdgeHosts = (edge: "left" | "right"): WindowEdgeHosts => {
-    if (navSide() === edge && !windowNavCollapsed()) return { owner: "nav", narrow: "nav" };
-    if (!presentedSplitLive()) {
-      const host = stageColumnOccupied() ? "stage" : "chat";
-      return { owner: host, narrow: host };
-    }
-    if (contextHidden()) return { owner: "chat", narrow: "chat" };
-    if (conversationHidden() === "hidden") return { owner: "stage", narrow: "stage" };
-    const stageSide = order().stageOnLeft ? "left" : "right";
-    return {
-      owner: stageSide === edge ? "stage" : "chat",
-      // The stylesheet drops the other column below the narrow band.
-      narrow: narrowSurvivorPref() === "stage" ? "stage" : "chat",
-    };
-  };
-  /** One column's claims on both window edges. */
-  const windowEdgeClaims = (host: WindowEdgeHost) =>
-    (["left", "right"] as const).map((side) => {
-      const hosts = windowEdgeHosts(side);
-      return { side, owner: hosts.owner === host, narrow: hosts.narrow === host };
-    });
+  /** The layout facts every window edge decision reads. */
+  const windowEdgeLayout = createMemo((): WindowEdgeLayout => ({
+    navSide: windowNavCollapsed() ? null : navSide(),
+    split: presentedSplitLive(),
+    stageOccupied: stageColumnOccupied(),
+    contextHidden: contextHidden(),
+    conversationHidden: conversationHidden() === "hidden",
+    stageSide: order().stageOnLeft ? "left" : "right",
+    narrowSurvivor: narrowSurvivorPref() === "stage" ? "stage" : "chat",
+    drawerSide: sessionDrawerOpen() ? (workspaceOrientationPref() === "mirrored" ? "left" : "right") : null,
+  }));
+  /** One surface's claims on the window edges that carry controls. */
+  const windowEdgeClaims = (host: WindowEdgeHost) => claimWindowEdges(host, windowEdgeLayout());
 
   /** Hidden panes reopen from the stage title bar's window edges. */
   const stageEdges = (conversationAttention: StageEdgePanes["conversation"]["attention"]): StageEdgePanes => ({
@@ -281,7 +265,6 @@ export function createShellPaneVisibility({ windowSubject, splitLive, presentedS
     showConversation, hideConversation, toggleConversation, revealConversation, splitFitClaim,
     showContext, hideContext, toggleContext, contextHidden,
     conversationHidden, stageIsLeading, navTouchesChat, navSide, conversationSide,
-    stageHeaderLeadsWindow, chatHeaderLeadsWindow, stageEdges, conversationSeam,
-    windowEdgeHosts, windowEdgeClaims,
+    stageEdges, conversationSeam, windowEdgeClaims,
   };
 }

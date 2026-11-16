@@ -23,7 +23,7 @@ import { SessionDrawer, type SessionDrawerProps } from "./SessionDrawer.tsx";
 import { ShellHeaderTitlebar } from "./ShellHeaderTitlebar.tsx";
 import { StageBackChip, type StageBack } from "./StageBackChip.tsx";
 import { StageErrorBoundary } from "./StageErrorBoundary.tsx";
-import type { WindowEdgeClaim } from "./WindowControls.tsx";
+import { nativeWindowEdgeAttributes, type WindowEdgeClaim } from "./window-edges.ts";
 
 /** Entering a stage lands in its editor, then the files tree, then its first control. */
 const STAGE_ENTRY_PRIORITY = [
@@ -40,7 +40,6 @@ export function ShellStageColumn(props: {
   occupied: boolean;
   stageId: ContextNavItemId | null;
   stack: ResidentStack;
-  headerLeadsWindow: boolean;
   back: StageBack | null;
   edges: StageEdgePanes;
   windowEdges: readonly WindowEdgeClaim[];
@@ -104,9 +103,7 @@ export function ShellStageColumn(props: {
       >
         <header
           class="den-shell-header"
-          classList={{
-            "den-shell-header--window-leading": props.headerLeadsWindow,
-          }}
+          {...nativeWindowEdgeAttributes(props.windowEdges)}
           {...chromeProps()}
           {...tauriDragRegionProps()}
         >

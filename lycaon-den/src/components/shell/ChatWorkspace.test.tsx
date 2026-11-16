@@ -61,10 +61,10 @@ function mountChat() {
   render(() => <ChatWorkspace shell={shell} appStore={appStore} recents={{} as never} projects={{} as never}
     chat={{ projectId: "project", sessionId: "session" }} pending={pending} surfaceActive={active} sessionPresented={presented}
     settingsStore={settingsStore} costStore={{ state: { session: { estimated_nano_usd: 3e9 } } } as never} notices={notices as never}
-    actions={actions as never} sessionDrawer={sessionDrawer} panes={{ chatHeaderLeadsWindow: () => true, windowNavCollapsed: () => true,
+    actions={actions as never} sessionDrawer={sessionDrawer} panes={{  windowNavCollapsed: () => true,
       navTouchesChat: () => false, navAutomaticallyCollapsed: () => false, contextHidden: () => false, navSide: () => "left",
       showWindowNav, conversationSeam: () => false,
-      windowEdgeClaims: () => [{ side: "right", owner: true, narrow: true }] } as never}
+      windowEdgeClaims: () => [{ side: "right", chrome: "drawn", owner: true, narrow: true }] } as never}
     onboarding={{ showNoProviderBanner: () => true, providerGap: () => "missing-provider" as never }}
     projectDirForChat={() => "/garden"} splitLive={() => true} notificationStack={() => <div>Shared notice</div>}
     showPromoteNudge={() => true} showNoFolderBanner={() => true} {...callbacks} />);

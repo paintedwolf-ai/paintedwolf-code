@@ -274,10 +274,6 @@ describe("den-shell drawer layout contract", () => {
     expect(shellCss).toMatch(
       /\.den-shell-header-chat\s*\{[\s\S]*?padding:\s*calc\(var\(--den-titlebar-inset\) \+ var\(--den-tabs-top-gap\)\) 0 0/,
     );
-    // Whichever header sits at the window's left edge clears the lights.
-    expect(shellCss).toMatch(
-      /\.den-custom-chrome \.den-shell-header--window-leading \.den-shell-header-titlebar[\s\S]*?padding-left:\s*var\(--den-traffic-light-clearance/,
-    );
     expect(componentsCssForFade).toMatch(
       /@container den-tab-chips \(max-width:\s*28rem\)/,
     );

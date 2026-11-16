@@ -35,6 +35,7 @@ import {
 import { VerifyTestNudge } from "../VerifyTestNudge.tsx";
 import { ChromeDragSurface } from "./ChromeDragSurface.tsx";
 import { WindowControls } from "./WindowControls.tsx";
+import { nativeWindowEdgeAttributes } from "./window-edges.ts";
 import {
   SessionProtectionBanners,
   sessionProtectionPresent,
@@ -61,7 +62,6 @@ type Props = Pick<ShellScope, "shell" | "appStore" | "recents" | "projects"> & {
   >;
   panes: Pick<
     ReturnType<typeof createShellPaneVisibility>,
-    | "chatHeaderLeadsWindow"
     | "windowNavCollapsed"
     | "navTouchesChat"
     | "navAutomaticallyCollapsed"
@@ -107,7 +107,6 @@ export function ChatWorkspace(props: Props) {
     openWorkers,
   } = props.sessionDrawer;
   const {
-    chatHeaderLeadsWindow,
     windowNavCollapsed,
     navTouchesChat,
     navAutomaticallyCollapsed,
@@ -332,9 +331,7 @@ export function ChatWorkspace(props: Props) {
         >
           <header
             class="den-shell-header-chat den-shell-header"
-            classList={{
-              "den-shell-header--window-leading": chatHeaderLeadsWindow(),
-            }}
+            {...nativeWindowEdgeAttributes(windowEdgeClaims("chat"))}
             {...chromeProps()}
             {...tauriDragRegionProps()}
           >

@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { createSignal, onCleanup, onMount } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { StageSplitHost } from "./StageSplitHost.tsx";
+import type { WindowEdgeClaim } from "./window-edges.ts";
 
 function Host(props: {
   splitLive?: boolean;
@@ -9,6 +10,7 @@ function Host(props: {
   mirrored?: boolean;
   narrowSurvivor?: "conversation" | "stage";
   onWidth?: (width: number) => void;
+  drawerEdges?: readonly WindowEdgeClaim[];
 }) {
   return (
     <StageSplitHost
@@ -29,6 +31,7 @@ function Host(props: {
       chatColumn={<input data-testid="chat-body" />}
       divider={<div data-testid="split-divider" />}
       drawer={<div data-testid="drawer" />}
+      drawerEdges={props.drawerEdges ?? []}
     />
   );
 }
@@ -164,6 +167,7 @@ describe("StageSplitHost", () => {
         chatColumn={<p data-testid="chat-prose">chat</p>}
         divider={<div data-testid="split-divider" />}
         drawer={null}
+        drawerEdges={[]}
       />
     ));
 
@@ -204,6 +208,7 @@ describe("StageSplitHost", () => {
         }
         divider={<div data-testid="split-divider" />}
         drawer={null}
+        drawerEdges={[]}
       />
     ));
 
@@ -229,6 +234,7 @@ describe("StageSplitHost", () => {
         chatColumn={<div>chat</div>}
         divider={<div data-testid="split-divider" />}
         drawer={null}
+        drawerEdges={[]}
       />
     ));
     const host = screen.getByTestId("shell-stage-host");
@@ -264,6 +270,7 @@ describe("StageSplitHost", () => {
         chatColumn={<StatefulChat />}
         divider={<div data-testid="split-divider" />}
         drawer={null}
+        drawerEdges={[]}
       />
     ));
 
@@ -314,6 +321,7 @@ describe("StageSplitHost", () => {
         chatColumn={<StatefulChat />}
         divider={<div data-testid="split-divider" />}
         drawer={null}
+        drawerEdges={[]}
       />
     ));
 
@@ -372,6 +380,7 @@ describe("StageSplitHost", () => {
         chatColumn={<StatefulChat />}
         divider={<div data-testid="split-divider" />}
         drawer={null}
+        drawerEdges={[]}
       />
     ));
     const host = screen.getByTestId("shell-stage-host");
@@ -437,6 +446,7 @@ describe("StageSplitHost", () => {
         chatColumn={<div>chat</div>}
         divider={<div data-testid="split-divider" />}
         drawer={null}
+        drawerEdges={[]}
       />
     ));
     expect(
@@ -452,5 +462,20 @@ describe("StageSplitHost", () => {
     expect(screen.getByTestId("split-col-stage").contains(drawer)).toBe(false);
     expect(screen.getByTestId("split-col-chat").contains(drawer)).toBe(false);
     expect(screen.getByTestId("shell-stage-host").contains(drawer)).toBe(true);
+  });
+
+  it("marks the drawer layer with the window edge it holds and draws that edge's controls in it", () => {
+    render(() => <Host drawerEdges={[{ side: "right", chrome: "drawn", owner: true, narrow: false }]} />);
+    const layer = screen.getByTestId("drawer").parentElement!;
+    expect(layer.getAttribute("data-window-edge")).toBe("right");
+    expect(layer.hasAttribute("data-narrow-hidden")).toBe(true);
+    expect(layer.contains(screen.getByTestId("window-close"))).toBe(true);
+  });
+
+  it("leaves the layer unmarked while the drawer holds no edge", () => {
+    render(() => <Host />);
+    const layer = screen.getByTestId("drawer").parentElement!;
+    expect(layer.hasAttribute("data-window-edge")).toBe(false);
+    expect(screen.queryByTestId("window-close")).toBeNull();
   });
 });

@@ -45,44 +45,23 @@
   padding: var(--den-chat-chrome-top) 0 0;
 }
 
-/* The header at the window's left edge clears the overlay traffic lights. */
-.den-custom-chrome .den-shell-header--window-leading.den-shell-header-chat .tabs__rail-leading {
-  padding-left: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
-}
-
+/* A conversation header under the OS's own window buttons starts past them. */
 .den-custom-chrome
-  .den-shell-header--window-leading.den-shell-header-chat
-  .tabs__rail:has(.tabs__rail-leading):not(:has(.tabs__rail-trailing)) {
-  --tabs-rail-side: calc(
-    var(--den-traffic-light-clearance, var(--den-chat-gutter-x)) +
-      var(--den-unified-chrome-row) + 0.25rem
-  );
-}
-
-/* Without a leading slot, the chips themselves start past the lights. */
-.den-custom-chrome
-  .den-shell-header--window-leading.den-shell-header-chat
-  .tabs__rail:not(:has(.tabs__rail-leading)) {
-  --tabs-strip-inset-start: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
-}
-
-/* A hidden split stage leaves the conversation against the window controls. */
-.den-custom-chrome
-  .den-shell-nav-collapsed
-  .den-shell-stage-host--split:where([data-host-band~="max-900"]):not(
-    [data-conversation-hidden]
+  :is(
+    .den-shell-header-chat[data-window-edge="left"][data-window-edge-chrome="native"]:not([data-narrow-only], [data-narrow-hidden]),
+    .den-shell-stage-host--split:where([data-host-band~="max-900"]) .den-shell-header-chat[data-window-edge="left"][data-window-edge-chrome="native"][data-narrow-only],
+    .den-shell-stage-host--split:not([data-host-band~="max-900"]) .den-shell-header-chat[data-window-edge="left"][data-window-edge-chrome="native"][data-narrow-hidden]
   )
-  .den-shell-header-chat
   .tabs__rail-leading {
   padding-left: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
 }
 
 .den-custom-chrome
-  .den-shell-nav-collapsed
-  .den-shell-stage-host--split:where([data-host-band~="max-900"]):not(
-    [data-conversation-hidden]
+  :is(
+    .den-shell-header-chat[data-window-edge="left"][data-window-edge-chrome="native"]:not([data-narrow-only], [data-narrow-hidden]),
+    .den-shell-stage-host--split:where([data-host-band~="max-900"]) .den-shell-header-chat[data-window-edge="left"][data-window-edge-chrome="native"][data-narrow-only],
+    .den-shell-stage-host--split:not([data-host-band~="max-900"]) .den-shell-header-chat[data-window-edge="left"][data-window-edge-chrome="native"][data-narrow-hidden]
   )
-  .den-shell-header-chat
   .tabs__rail:has(.tabs__rail-leading):not(:has(.tabs__rail-trailing)) {
   --tabs-rail-side: calc(
     var(--den-traffic-light-clearance, var(--den-chat-gutter-x)) +
@@ -90,12 +69,13 @@
   );
 }
 
+/* Without a leading slot, the chips themselves start past the buttons. */
 .den-custom-chrome
-  .den-shell-nav-collapsed
-  .den-shell-stage-host--split:where([data-host-band~="max-900"]):not(
-    [data-conversation-hidden]
+  :is(
+    .den-shell-header-chat[data-window-edge="left"][data-window-edge-chrome="native"]:not([data-narrow-only], [data-narrow-hidden]),
+    .den-shell-stage-host--split:where([data-host-band~="max-900"]) .den-shell-header-chat[data-window-edge="left"][data-window-edge-chrome="native"][data-narrow-only],
+    .den-shell-stage-host--split:not([data-host-band~="max-900"]) .den-shell-header-chat[data-window-edge="left"][data-window-edge-chrome="native"][data-narrow-hidden]
   )
-  .den-shell-header-chat
   .tabs__rail:not(:has(.tabs__rail-leading)) {
   --tabs-strip-inset-start: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
 }

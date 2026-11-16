@@ -8,13 +8,14 @@ import {
 } from "../nav/StageEdgeControls.tsx";
 import { ChromeDragSurface } from "./ChromeDragSurface.tsx";
 import { StageBackChip, type StageBack } from "./StageBackChip.tsx";
-import { WindowControls, type WindowEdgeClaim } from "./WindowControls.tsx";
+import { WindowControls } from "./WindowControls.tsx";
+import type { WindowEdgeClaim } from "./window-edges.ts";
 
 type Props = {
   back?: StageBack | null;
   /** Panes that reopen from this title bar's window edges. */
   edges?: StageEdgePanes;
-  /** Window edges whose drawn controls this title bar carries. */
+  /** The stage's claims on the window edges that carry controls. */
   windowEdges?: readonly WindowEdgeClaim[];
   /** The session's tabs, carried here while its conversation is off screen. */
   sessionTabs?: SlotContent;
