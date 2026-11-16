@@ -81,7 +81,7 @@ Painting is refused wherever the offsets no longer describe the rendered text: a
 
 A `managed_reference` span is painted as a readable reference mark rather than a hatched mask: the reference is model-visible text a person may copy, and its tooltip says the source still holds the value. `observer_mask` is presentation of a host policy mask rather than a detected credential; it follows the same structured-span contract, and Den distinguishes it by kind and copy, never by marker shape or prose.
 
-Tool cards summarize their spans with a redaction chicklet ([`RedactionChicklet.tsx`](../lycaon-den/src/components/tool/RedactionChicklet.tsx)): **1 secret removed**, **1 secret protected**, **2 values not shown**, or **N hidden** when kinds are mixed. The summary is present even when no approval card appeared, because commit-boundary redaction still owes the reader an explanation; its tooltip states that the file on disk was not changed.
+Action cards carry no redaction summary. What ran paints its marks inline, and the Input and Output records paint each span where it sits.
 
 Redaction metadata describes the current message copy. It does not accumulate across later projections, reveal original length, or authorize reconstruction. When the host rescreens an older row, the ordinary message patch replaces both the redacted content and its span list under the same durable row identity.
 
@@ -120,14 +120,11 @@ A large set of file folds may receive a manifest group. That is presentation ove
 - **Body**, in fixed order:
   1. What ran, with copy and replacement marks, clamped to three lines (the Input record has all of it).
   2. The summary box.
-  3. Up to four facts, in a fixed order: result, changed, found, took, steps, stopped by, network, worker, budget, process, captured, containment, loaded by.
+  3. Up to four facts, in a fixed order: result, changed, found, took, steps, stopped by, network, worker, budget, process, captured, containment, loaded by. The network fact offers Block for each host the host let through.
   4. A background process's live state, with Stop while it runs; it takes the place of the recorded process fact.
-  5. The network notice for exceptional egress.
-  6. A preview of up to four lines.
-  7. Any captured visual, one per folded call.
-  8. The redaction notice.
-  9. One records row: Input, Output, Receipt, Host decisions and Evidence, then the opener (file, terminal, Running or Search).
-  10. A foot line saying how the local AI bore on the call, when it did.
+  5. A preview of up to four lines.
+  6. The newest captured visual; a fold shows only its latest.
+  7. One records row: Input, Output, Receipt and Evidence, then the opener (file, terminal, Running or Search). Dragging the row attaches the call's output to chat.
 
 The card uses the app font at the chat reading size; hierarchy comes from weight and colour, and literal text sits on an inset rather than in a code face.
 
