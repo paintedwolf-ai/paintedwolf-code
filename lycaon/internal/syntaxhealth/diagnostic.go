@@ -1,18 +1,5 @@
 package syntaxhealth
 
-const (
-	indentPreviewMaxBytes = 80
-	linePreviewMaxBytes   = 160
-)
-
-// LineContext is a seam-adjacent source line with visible indentation facts.
-type LineContext struct {
-	Row           int    `json:"row"`
-	IndentColumns int    `json:"indent_columns"`
-	Indent        string `json:"indent"`
-	Text          string `json:"text"`
-}
-
 // LineRange is a 1-based inclusive mutation seam.
 type LineRange struct {
 	Start int
