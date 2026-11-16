@@ -106,7 +106,7 @@ export function ChatView(props: ChatViewProps) {
   const { scrollToRun } = transcript;
 
   const [composerRefocus, setComposerRefocus] = createSignal(0);
-  const { dragActive, dropBlockedReason } = createChatViewAttachments(props, chatRootEl, catalogRun);
+  const { dragActive, dropBlockedReason } = createChatViewAttachments(props, chatRootEl, catalogRun, surfaceActive, chatNotices);
   const [composerRehydrate, setComposerRehydrate] = createSignal(0);
   const workflow = createChatWorkflowState({
     appStore: props.appStore,
