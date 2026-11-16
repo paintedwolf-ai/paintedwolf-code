@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { LycaonClient } from "../../api/client.ts";
 import type { ArtifactListItem } from "../../api/types.ts";
+import { stubClient } from "../../test/client-fixture.ts";
 import { KeyedIndex } from "../keyed-index.tsx";
 import { ArtifactGalleryTile } from "./ArtifactGalleryTile.tsx";
 
@@ -33,9 +33,7 @@ describe("ArtifactGalleryTile", () => {
   const onOpen = vi.fn();
   const onSrc = vi.fn();
   const onRequestDelete = vi.fn();
-  const mockClient = {
-    getSessionArtifact,
-  } as unknown as LycaonClient;
+  const mockClient = stubClient({ getSessionArtifact });
 
   let nextUrlId = 0;
   let createObjectURLSpy: ReturnType<typeof vi.spyOn>;
