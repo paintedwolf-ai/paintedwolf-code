@@ -285,7 +285,7 @@ func (e *Engine) generateSection(ctx context.Context, r resolved, section Sectio
 		raw, provider, model, err := e.generator.Generate(ctx, Invocation{ProjectID: request.ProjectID, ProjectDir: request.ProjectDir, Purpose: request.ProfileID, Requested: request.Manual || request.Policy.Admission == Immediate, Prompt: section.Prompt})
 		if err == nil {
 			if text, parseErr := contract.Parse(observability.RedactCaptureText(raw)); parseErr == nil {
-				result := Result{Text: text, Source: SourceSummarizer, Provider: provider, Model: model, CreatedAt: time.Now().UTC()}
+				result := Result{Text: text, Source: SourceSummarizer, Provider: provider, Model: model, Quality: section.Quality, CreatedAt: time.Now().UTC()}
 				return result, e.store.PutResult(context.WithoutCancel(ctx), request.ProjectID, r.epoch, section.Manifest, hash, result)
 			}
 		} else if ctx.Err() != nil {
@@ -295,7 +295,7 @@ func (e *Engine) generateSection(ctx context.Context, r resolved, section Sectio
 	if section.Fallback == "" {
 		return Result{}, ErrNoText
 	}
-	result := Result{Text: section.Fallback, Source: SourceFallback, CreatedAt: time.Now().UTC()}
+	result := Result{Text: section.Fallback, Source: SourceFallback, Quality: section.Quality, CreatedAt: time.Now().UTC()}
 	return result, e.store.PutResult(context.WithoutCancel(ctx), request.ProjectID, r.epoch, section.Manifest, hash, result)
 }
 
