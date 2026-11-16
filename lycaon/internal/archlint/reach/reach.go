@@ -256,12 +256,10 @@ func deadFuncs(passes []*pass) []archlint.Finding {
 	return out
 }
 
-// declFile is the file part of a "file:line" position.
+// declFile is the file part of a "file:line:column" position.
 func declFile(pos string) string {
-	if i := strings.LastIndex(pos, ":"); i >= 0 {
-		return pos[:i]
-	}
-	return pos
+	file, _, _ := strings.Cut(pos, ":")
+	return file
 }
 
 func prettyName(fn *ssa.Function) string {
