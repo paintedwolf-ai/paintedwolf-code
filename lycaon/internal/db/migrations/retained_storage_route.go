@@ -24,5 +24,5 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// rewrites and index sync through declared Writes estimates, adding no
 	// sorters or rebuilds.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
-		p.steps[0].Checksum == "7083231ed3019fce3ab65de03f29251afea6455b44866861c909675713970ffb"
+		p.steps[0].Checksum == "56633360e5628c0c808211e67624bc2a43d3692e06c12bbc35902156439b81a3"
 }

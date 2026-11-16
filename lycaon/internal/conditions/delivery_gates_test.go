@@ -34,8 +34,8 @@ func TestDeliveryGatesDoNotRequireTests(t *testing.T) {
 
 func TestDeliveryGatesRequireSessionLandingScans(t *testing.T) {
 	for _, tc := range []struct {
-		name                                                                   string
-		missingSession, noScan, pending, evidence, stale, histEvidence, want   bool
+		name                                                                 string
+		missingSession, noScan, pending, evidence, stale, histEvidence, want bool
 	}{
 		{name: "missing session blocks scan obligation", missingSession: true},
 		{name: "session has no required scan", noScan: true, want: true},

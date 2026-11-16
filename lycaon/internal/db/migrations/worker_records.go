@@ -73,10 +73,10 @@ type legacyDelegation struct {
 }
 
 type legacyDelegationLeg struct {
-	id, title, status, dependsOnJSON      string
-	filesJSON, criteriaJSON, prompt       string
-	agentType, workerID, createdAt        string
-	startedAt, completedAt                string
+	id, title, status, dependsOnJSON string
+	filesJSON, criteriaJSON, prompt  string
+	agentType, workerID, createdAt   string
+	startedAt, completedAt           string
 }
 
 func migrateWorkerRecords(ctx context.Context, tx *sql.Tx) error {
@@ -521,13 +521,21 @@ func migrateDelegationLeg(ctx context.Context, tx *sql.Tx, d legacyDelegation, l
 	return err
 }
 
-func migrateLegDependencies(ctx context.Context, tx *sql.Tx, d legacyDelegation, leg legacyDelegationLeg) error {
-	raw := strings.TrimSpace(leg.dependsOnJSON)
+func parseLegacyStringList(raw string) []string {
+	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
 	}
-	var deps []string
-	if json.Unmarshal([]byte(raw), &deps) != nil || len(deps) == 0 {
+	var items []string
+	if json.Unmarshal([]byte(raw), &items) != nil {
+		return nil
+	}
+	return items
+}
+
+func migrateLegDependencies(ctx context.Context, tx *sql.Tx, d legacyDelegation, leg legacyDelegationLeg) error {
+	deps := parseLegacyStringList(leg.dependsOnJSON)
+	if len(deps) == 0 {
 		return nil
 	}
 	for _, dep := range deps {

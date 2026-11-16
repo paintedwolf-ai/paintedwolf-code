@@ -143,7 +143,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		Lanes: lanes, Queue: b.delegations.Queue, Store: b.delegations.Queue, Workspace: b.delegations.Workspace,
 		Reject: b.execution.Rejections, Names: b.boards.WorkerRecords, Sessions: b.delegations.Queue,
 		Reconcile: b.sessions.Manager.Promotion, Captures: b.sessions.Manager.Chats.Captures,
-		Coord: b.sessions.Manager.Workers.Workspaces,
+		Coord:      b.sessions.Manager.Workers.Workspaces,
 		OnPromoted: b.delegations.NotifyPromotedTask, Projects: b.storage.Projects, Scans: b.scanning.Triggers,
 		SourceLedger: b.storage.SourceLedger, SourceHistory: b.storage.SourceLedger.Walk,
 		DataDir: b.storage.Directory, Accounted: b.boards.ReleaseAccounted,

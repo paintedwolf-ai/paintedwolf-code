@@ -257,9 +257,10 @@ func TestFlow05Flow06AndFlow08WrongDirectionCancelAndPrerequisites(t *testing.T)
 	testutil.FailErr(t, "workers", err)
 	var schemaW, callerW workerrecords.Worker
 	for _, w := range ws {
-		if w.Name == "schema" {
+		switch w.Name {
+		case "schema":
 			schemaW = w
-		} else if w.Name == "caller" {
+		case "caller":
 			callerW = w
 		}
 	}
