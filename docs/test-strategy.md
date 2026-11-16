@@ -583,11 +583,16 @@ packages that import test-support packages, and commands and executable scripts
 no other file names. Findings are keyed by symbol, so the check runs on the working tree
 and on the change base and fails on findings the base lacks: deleting a
 function's last caller fails like adding a dead function. Unused parameters
-come from `unparam` on changed lines, and a change to Den compares knip's
-production-mode report of unused files, exports and types (`lycaon-den/knip.json`)
-with the base the same way. `arch-lint:report` lists every finding.
-The test-support package rule and the shipped roots are declared in
-`scripts/arch-lint-policy.json`. Reachability cannot see reflection or
+come from `unparam` on changed lines. `den:knip:changes` compares knip's
+production-mode report of unused Den files, exports and types
+(`lycaon-den/knip.json`) with the base the same way; it runs in the lanes that
+install Den's dependencies, and `arch-lint:changes` in the lanes that provision
+Go analysis tools. `arch-lint:report` lists every finding.
+The test-support package rule, the shipped roots and the target platforms
+each host type-checks are declared in `scripts/arch-lint-policy.json`. A Linux
+host cannot type-check the darwin build of cgo-only packages, so Linux judges
+the Linux build alone: code only darwin files call can look unreachable there,
+and belongs in a darwin file. Reachability cannot see reflection or
 `go:linkname`; code reached only that way is a defect to fix at its source.
 
 ### The change base

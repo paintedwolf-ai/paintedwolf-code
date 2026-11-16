@@ -34,7 +34,7 @@ print("1 issues.")
 sys.exit(1)
 """
 
-POLICY = {"reach": {"roots": ["./cmd/..."], "goos": ["linux"], "report": "^x/", "schema": "schema.sql"},
+POLICY = {"reach": {"roots": ["./cmd/..."], "goos": {"darwin": ["linux"], "linux": ["linux"]}, "report": "^x/", "schema": "schema.sql"},
           "vet": {"packages": ["./..."]}, "test_support": ["test$"],
           "den": {"dir": "lycaon-den", "command": [sys.executable, "../fake_knip.py"]}}
 
@@ -108,7 +108,7 @@ class ArchLintChangesTest(unittest.TestCase):
         _, findings, failed = arch_lint_changes.changes(self.repo, scope, POLICY, self.cache, self.binary, self.linter)
         self.assertTrue(failed)
         self.assertEqual([f.area for f in findings], ["unreferenced-script"])
-        self.assertTrue(list(self.cache.glob("base-*-xrefs.json")))
+        self.assertTrue(list(self.cache.glob("base-*-nogo.json")))
 
     def test_changed_go_packages_skip_tests_testdata_and_removed_packages(self):
         self.assertEqual(arch_lint_changes.changed_go_packages(self.repo, [
@@ -128,8 +128,10 @@ class ArchLintChangesTest(unittest.TestCase):
         (self.repo / "lycaon-den" / "knip.json").write_text("{}")
         scope = change_report.Scope(base, "test base", ["knip.json", "lycaon-den/src/a.ts"])
         with mock.patch.object(arch_lint_changes, "ROOT", self.repo):
-            _, findings, failed = arch_lint_changes.changes(self.repo, scope, POLICY, self.cache, self.binary, self.linter)
+            _, findings, failed = arch_lint_changes.den_changes(self.repo, scope, POLICY, self.cache)
+            _, go_findings, _ = arch_lint_changes.changes(self.repo, scope, POLICY, self.cache, self.binary, self.linter)
         self.assertTrue(failed)
+        self.assertFalse(any(f.area.startswith("unused-") for f in go_findings))
         self.assertEqual(sorted((f.area, f.path, f.line) for f in findings), [
             ("unused-export", "lycaon-den/src/a.ts", 3),
             ("unused-file", "lycaon-den/src/new.ts", None),
@@ -163,6 +165,13 @@ class ArchLintChangesTest(unittest.TestCase):
         arch_lint_changes.checks(self.binary, self.repo, POLICY)
         self.assertNotIn("-product", json.loads((self.repo / "args-reach.json").read_text()))
 
+    def test_target_platforms_follow_the_host(self):
+        reach = {"goos": {"darwin": ["darwin", "linux"], "linux": ["linux"]}}
+        self.assertEqual(arch_lint_changes.target_goos(reach, "darwin"), ["darwin", "linux"])
+        self.assertEqual(arch_lint_changes.target_goos(reach, "linux"), ["linux"])
+        with self.assertRaises(RuntimeError):
+            arch_lint_changes.target_goos(reach, "win32")
+
     def test_all_lists_every_finding_without_failing(self):
         header, findings, failed = arch_lint_changes.everything(self.repo, POLICY, self.binary)
         self.assertFalse(failed)
@@ -177,6 +186,12 @@ class ArchLintChangesTest(unittest.TestCase):
             arch_lint_changes.unparam(self.repo, self.base, broken, ["./internal/store"])
         self.assertEqual(arch_lint_changes.unparam(self.repo, self.base, broken, []), [])
 
+    def test_den_check_passes_a_change_outside_den(self):
+        scope = change_report.Scope(self.base, "test base", ["lycaon/internal/store/store.go"])
+        header, findings, failed = arch_lint_changes.den_changes(self.repo, scope, POLICY, self.cache)
+        self.assertEqual((findings, failed), ([], False))
+        self.assertIn("no Den change", header)
+
     def test_main_measures_against_the_change_base(self):
         self.write_findings({"reach": [finding("dead-func", "x/store.Old"), finding("dead-func", "x/store.New")]})
         (self.repo / "lycaon" / "internal" / "store" / "store.go").write_text("package store\n\nfunc New() {}\n")
@@ -190,6 +205,7 @@ class ArchLintChangesTest(unittest.TestCase):
             policy.write_text(json.dumps(POLICY))
             with mock.patch.object(arch_lint_changes, "POLICY", policy):
                 self.assertEqual(arch_lint_changes.main([]), 1)
+                self.assertEqual(arch_lint_changes.main(["--den"]), 0)
                 self.assertEqual(arch_lint_changes.main(["--all"]), 0)
 
     def test_main_needs_a_base(self):

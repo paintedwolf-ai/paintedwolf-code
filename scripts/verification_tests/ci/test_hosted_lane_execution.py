@@ -86,7 +86,7 @@ class HostedExecutionTests(unittest.TestCase):
                         patch.object(ci.subprocess, "call", return_value=code) as run:
                     self.assertEqual(ci.run_lane("frontend"), code)
                     run.assert_called_once()
-                    self.assertEqual(run.call_args.args[0], ["./task", "den:typecheck", "den:lint", "den:coverage:changes"])
+                    self.assertEqual(run.call_args.args[0], ["./task", "den:typecheck", "den:lint", "den:knip:changes", "den:coverage:changes"])
                     self.assertEqual(run.call_args.kwargs["cwd"], ci.ROOT)
                 record = json.loads((root / "ci/run.json").read_text())
                 self.assertEqual(record["status"], status)
