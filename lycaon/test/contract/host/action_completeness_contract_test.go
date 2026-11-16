@@ -38,13 +38,13 @@ func TestRunStopServiceRoutesCancelThroughSessionAppend(t *testing.T) {
 	body, err := os.ReadFile(path)
 	testutil.FailErr(t, "read run_stop_service", err)
 	text := string(body)
-	for _, needle := range []string{"s.Cancellations.Append", "s.Holds.Hold", "CancelActiveByWorkflowRunID"} {
+	for _, needle := range []string{"s.Cancellations.Append", "s.Holds.Hold", "WithdrawPlannedWorkersByRunID"} {
 		if !strings.Contains(text, needle) {
 			t.Fatalf("run_stop_service.go must route stop through %s", needle)
 		}
 	}
 	bindings := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/delegations/build.go")
-	for _, needle := range []string{"Holds:         deps.Sessions.Manager.Workers.Cards", "Cancellations: deps.Sessions.Manager.Workers.Cancellations"} {
+	for _, needle := range []string{"Holds:         deps.Sessions.Manager.Workers.Cards", "Cancellations: deps.Sessions.Manager.Workers.Cancellations", "Records:       r.Records"} {
 		if !strings.Contains(bindings, needle) {
 			t.Fatalf("run stop must bind the actual session outcome owner: %s", needle)
 		}

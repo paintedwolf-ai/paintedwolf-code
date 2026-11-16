@@ -125,8 +125,7 @@ func TestSchemaDefinesCoreTables(t *testing.T) {
 		"code_scans",
 		"workflow_runs",
 	} {
-		needle := "CREATE TABLE IF NOT EXISTS " + table
-		if !strings.Contains(sql, needle) {
+		if !strings.Contains(sql, "CREATE TABLE IF NOT EXISTS "+table+" (") && !strings.Contains(sql, "CREATE TABLE "+table+" (") {
 			t.Fatalf("schema.sql missing table %q", table)
 		}
 	}

@@ -10,7 +10,7 @@ agents:
     must_substrings_rendered:
       - "plan"
       - "PLAN_MODE"
-      - "Leg tools"
+      - "Assignment tools"
     delta:
       role_title: Plan Writer
       focus: "Author plan files; do not implement product code."

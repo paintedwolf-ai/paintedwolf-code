@@ -9,7 +9,7 @@ agents:
     playbook_ids: [worker-leg-default, implement-addenda]
     must_substrings_rendered:
       - "DOOM_LOOP"
-      - "Leg tools"
+      - "Assignment tools"
       - "SUBAGENT_MISCONFIGURED"
       - "Stale-training check"
       - "web_search"

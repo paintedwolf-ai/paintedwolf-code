@@ -15,7 +15,7 @@ agents:
       role_title: Repository Researcher
       focus: "Gather facts from the codebase without writes."
       process:
-        - "Use read-only command programs (cat, grep, find) per Leg tools."
+        - "Use read-only command programs (cat, grep, find) per Assignment tools."
         - "Report findings for coordinator dispatch."
 
   path-explorer:
