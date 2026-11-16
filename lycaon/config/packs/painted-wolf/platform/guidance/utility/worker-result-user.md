@@ -13,4 +13,7 @@ Result handle: {{ result_handle }}
 
 {% endif %}{% if receipts %}Host receipts for this round (observed):
 {{ receipts }}
+{% endif %}{% if reasoning %}
+Worker's last reasoning before the round stopped (its own account, advisory, not proof):
+{{ reasoning }}
 {% endif %}

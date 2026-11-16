@@ -84,3 +84,25 @@ WHERE session_id = sqlc.arg(session_id) AND tool_result_call_id = sqlc.arg(tool_
   AND tool_result_json IS NOT NULL AND tool_result_json <> ''
 ORDER BY ord
 LIMIT 1;
+
+-- A worker job's newest assistant row in its own session, with the same
+-- bounded reasoning read as BriefingActionOutput.
+-- name: BriefingWorkerFinalOutput :one
+SELECT m.id,
+       CAST(m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AS INTEGER) AS reasoning_present,
+       CAST(COALESCE(length(CAST(m.reasoning_json AS BLOB)), 0) > CAST(sqlc.arg(reasoning_ceiling) AS INTEGER) AS INTEGER) AS reasoning_over_ceiling,
+       CAST(CASE WHEN m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(sqlc.arg(reasoning_ceiling) AS INTEGER)
+            THEN CASE WHEN json_type(m.reasoning_json, '$.text') = 'text' THEN length(json_extract(m.reasoning_json, '$.text')) ELSE 0 END
+            ELSE 0 END AS INTEGER) AS reasoning_text_chars,
+       CAST(CASE WHEN m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(sqlc.arg(reasoning_ceiling) AS INTEGER)
+            THEN COALESCE(json_array_length(m.reasoning_json, '$.details'), 0)
+            ELSE 0 END AS INTEGER) AS reasoning_details,
+       CAST(CASE WHEN m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(sqlc.arg(reasoning_ceiling) AS INTEGER)
+            THEN CASE WHEN json_type(m.reasoning_json, '$.text') = 'text'
+                      THEN substr(json_extract(m.reasoning_json, '$.text'),
+                                  max(1, length(json_extract(m.reasoning_json, '$.text')) - CAST(sqlc.arg(reasoning_tail_chars) AS INTEGER) + 1)) ELSE '' END
+            ELSE '' END AS TEXT) AS reasoning_tail
+FROM messages AS m
+WHERE m.session_id = sqlc.arg(session_id) AND m.worker_job_id = sqlc.arg(worker_job_id) AND m.role = 'assistant'
+ORDER BY m.ord DESC
+LIMIT 1;

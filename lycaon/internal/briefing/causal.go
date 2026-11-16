@@ -82,6 +82,28 @@ type CausalReader interface {
 	ReadActionCause(ctx context.Context, ref ActionRef) (CausalRead, error)
 }
 
+// WorkerFinalRead is the newest settled model output of one worker job.
+type WorkerFinalRead struct {
+	Found     bool
+	OutputID  string
+	Reasoning ReasoningRead
+}
+
+// WorkerFinalReader reads a worker job's final output in its own session
+// without loading the transcript.
+type WorkerFinalReader interface {
+	ReadWorkerFinal(ctx context.Context, sessionID, workerJobID string) (WorkerFinalRead, error)
+}
+
+// ReasoningInput is the final output's reasoning as a section input. A job
+// that never produced an output had no reasoning.
+func (r WorkerFinalRead) ReasoningInput() ReasoningInput {
+	if !r.Found {
+		return ReasoningInput{}
+	}
+	return ReasoningExcerpt(r.Reasoning, messageRef(r.OutputID), false).Input()
+}
+
 // ApplyCause fills the transcript-derived inputs of action evidence.
 func ApplyCause(ev *ActionEvidence, read CausalRead) {
 	if !read.Found {

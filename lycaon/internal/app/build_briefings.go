@@ -46,7 +46,7 @@ func registerBriefingProfiles(b *serveBuilder) error {
 		return err
 	}
 	if b.delegations != nil && b.delegations.Queue != nil {
-		if err := b.providers.Briefings.Registry.Register(workerbriefing.New(b.delegations.Queue)); err != nil {
+		if err := b.providers.Briefings.Registry.Register(workerbriefing.New(b.delegations.Queue, cause)); err != nil {
 			return err
 		}
 	}

@@ -18,7 +18,7 @@ import (
 
 const (
 	ProfileID      = "worker_result"
-	profileVersion = "2"
+	profileVersion = "3"
 	// sectionRunes bounds each source block; summaryMaxTokens bounds the answer.
 	sectionRunes     = 2000
 	summaryMaxTokens = 400
@@ -28,7 +28,7 @@ const (
 var summaryLabels = []string{"Contribution", "Verification", "Remaining"}
 
 var (
-	summaryTemplate = briefing.Template{ID: "worker_result", Version: "2"}
+	summaryTemplate = briefing.Template{ID: briefing.WorkerResultQuestion, Version: "3"}
 	summaryContract = briefing.Contract{MaxRunes: 1800, Labels: summaryLabels}
 )
 
@@ -37,11 +37,16 @@ type Workers interface {
 	LookupByResult(ctx context.Context, resultHandle string) (*wire.WorkerTask, bool)
 }
 
-type Profile struct{ workers Workers }
+type Profile struct {
+	workers Workers
+	final   briefing.WorkerFinalReader
+}
 
 var _ briefing.Profile = (*Profile)(nil)
 
-func New(workers Workers) *Profile { return &Profile{workers: workers} }
+func New(workers Workers, final briefing.WorkerFinalReader) *Profile {
+	return &Profile{workers: workers, final: final}
+}
 
 func (*Profile) ID() string              { return ProfileID }
 func (*Profile) Version() string         { return profileVersion }
@@ -66,7 +71,11 @@ func (p *Profile) Resolve(ctx context.Context, target briefing.Target) (briefing
 	if !ok || task == nil || task.ProjectID != target.ProjectID || task.CompletedAt == nil {
 		return briefing.Request{}, fmt.Errorf("%w: unknown worker result", briefing.ErrTargetUnavailable)
 	}
-	section, err := summarySection(ctx, task, handle)
+	reasoning, err := p.stoppedReasoning(ctx, task)
+	if err != nil {
+		return briefing.Request{}, err
+	}
+	section, err := summarySection(ctx, task, handle, reasoning)
 	if err != nil {
 		return briefing.Request{}, err
 	}
@@ -81,9 +90,23 @@ func (p *Profile) Resolve(ctx context.Context, target briefing.Target) (briefing
 	}, nil
 }
 
+// stoppedReasoning reads the last reasoning of a round that failed or was
+// canceled: what the worker had in hand when it stopped. Other rounds get none.
+func (p *Profile) stoppedReasoning(ctx context.Context, task *wire.WorkerTask) (*briefing.ReasoningInput, error) {
+	if task.Status != wire.WorkerStatusFailed && task.Status != wire.WorkerStatusCanceled {
+		return nil, nil
+	}
+	read, err := p.final.ReadWorkerFinal(ctx, task.ChildSessionID, task.ID)
+	if err != nil {
+		return nil, err
+	}
+	input := read.ReasoningInput()
+	return &input, nil
+}
+
 // summarySection keeps the round's own report apart from host receipts, so the
 // summary can tell claims from what was observed.
-func summarySection(ctx context.Context, task *wire.WorkerTask, resultHandle string) (briefing.SectionPlan, error) {
+func summarySection(ctx context.Context, task *wire.WorkerTask, resultHandle string, reasoning *briefing.ReasoningInput) (briefing.SectionPlan, error) {
 	vars := map[string]any{"result_handle": resultHandle}
 	if task.Round > 0 {
 		vars["round"] = task.Round
@@ -112,6 +135,14 @@ func summarySection(ctx context.Context, task *wire.WorkerTask, resultHandle str
 	add("outcome", briefing.RoleObservation, "worker_status", outcome(task))
 	add("report", briefing.RoleContext, "worker_report", report(task))
 	add("receipts", briefing.RoleVerification, "worker_receipts", receipts(task))
+	var quality []string
+	if reasoning != nil {
+		evidence := briefing.ReasoningItem(*reasoning, task.ParentSessionID)
+		items, quality = append(items, evidence.Item), evidence.Quality
+		if evidence.Text != "" {
+			vars["reasoning"] = evidence.Text
+		}
+	}
 	system, err := guidance.RenderCatalog(ctx, guidance.UtilityWorkerResultSystemRef, nil)
 	if err != nil {
 		return briefing.SectionPlan{}, err
@@ -122,7 +153,7 @@ func summarySection(ctx context.Context, task *wire.WorkerTask, resultHandle str
 	}
 	manifest := briefing.Manifest{ProfileID: ProfileID, ProfileVersion: profileVersion, SectionID: "summary", Template: summaryTemplate, Contract: summaryContract, Items: items}.Sealed()
 	return briefing.SectionPlan{ID: "summary", Mode: briefing.Generated, Manifest: manifest,
-		Prompt: briefing.Prompt{System: system, User: user, MaxTokens: summaryMaxTokens}}, nil
+		Prompt: briefing.Prompt{System: system, User: user, MaxTokens: summaryMaxTokens}, Quality: quality}, nil
 }
 
 func outcome(task *wire.WorkerTask) string {

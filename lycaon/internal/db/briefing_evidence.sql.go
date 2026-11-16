@@ -257,3 +257,61 @@ func (q *Queries) BriefingUserIntentBefore(ctx context.Context, arg BriefingUser
 	err := row.Scan(&i.ID, &i.Ord, &i.Intent)
 	return i, err
 }
+
+const briefingWorkerFinalOutput = `-- name: BriefingWorkerFinalOutput :one
+SELECT m.id,
+       CAST(m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AS INTEGER) AS reasoning_present,
+       CAST(COALESCE(length(CAST(m.reasoning_json AS BLOB)), 0) > CAST(?1 AS INTEGER) AS INTEGER) AS reasoning_over_ceiling,
+       CAST(CASE WHEN m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(?1 AS INTEGER)
+            THEN CASE WHEN json_type(m.reasoning_json, '$.text') = 'text' THEN length(json_extract(m.reasoning_json, '$.text')) ELSE 0 END
+            ELSE 0 END AS INTEGER) AS reasoning_text_chars,
+       CAST(CASE WHEN m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(?1 AS INTEGER)
+            THEN COALESCE(json_array_length(m.reasoning_json, '$.details'), 0)
+            ELSE 0 END AS INTEGER) AS reasoning_details,
+       CAST(CASE WHEN m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(?1 AS INTEGER)
+            THEN CASE WHEN json_type(m.reasoning_json, '$.text') = 'text'
+                      THEN substr(json_extract(m.reasoning_json, '$.text'),
+                                  max(1, length(json_extract(m.reasoning_json, '$.text')) - CAST(?2 AS INTEGER) + 1)) ELSE '' END
+            ELSE '' END AS TEXT) AS reasoning_tail
+FROM messages AS m
+WHERE m.session_id = ?3 AND m.worker_job_id = ?4 AND m.role = 'assistant'
+ORDER BY m.ord DESC
+LIMIT 1
+`
+
+type BriefingWorkerFinalOutputParams struct {
+	ReasoningCeiling   int64          `json:"reasoning_ceiling"`
+	ReasoningTailChars int64          `json:"reasoning_tail_chars"`
+	SessionID          string         `json:"session_id"`
+	WorkerJobID        sql.NullString `json:"worker_job_id"`
+}
+
+type BriefingWorkerFinalOutputRow struct {
+	ID                   string `json:"id"`
+	ReasoningPresent     int64  `json:"reasoning_present"`
+	ReasoningOverCeiling int64  `json:"reasoning_over_ceiling"`
+	ReasoningTextChars   int64  `json:"reasoning_text_chars"`
+	ReasoningDetails     int64  `json:"reasoning_details"`
+	ReasoningTail        string `json:"reasoning_tail"`
+}
+
+// A worker job's newest assistant row in its own session, with the same
+// bounded reasoning read as BriefingActionOutput.
+func (q *Queries) BriefingWorkerFinalOutput(ctx context.Context, arg BriefingWorkerFinalOutputParams) (BriefingWorkerFinalOutputRow, error) {
+	row := q.db.QueryRowContext(ctx, briefingWorkerFinalOutput,
+		arg.ReasoningCeiling,
+		arg.ReasoningTailChars,
+		arg.SessionID,
+		arg.WorkerJobID,
+	)
+	var i BriefingWorkerFinalOutputRow
+	err := row.Scan(
+		&i.ID,
+		&i.ReasoningPresent,
+		&i.ReasoningOverCeiling,
+		&i.ReasoningTextChars,
+		&i.ReasoningDetails,
+		&i.ReasoningTail,
+	)
+	return i, err
+}

@@ -15,10 +15,14 @@ const (
 
 const reasoningItemKey = "assistant_reasoning"
 
+// WorkerResultQuestion is the template id of the worker round summary.
+const WorkerResultQuestion = "worker_result"
+
 // reasoningQuestions are the templates whose question is about intent. Only
 // they may carry a reasoning item; Canonical refuses it anywhere else.
 var reasoningQuestions = map[string]bool{
-	purposeTemplate.ID: true,
+	purposeTemplate.ID:   true,
+	WorkerResultQuestion: true,
 }
 
 // ReasoningEvidence is a section's reasoning item, the text its prompt
