@@ -315,7 +315,7 @@ func TestCloseoutDynamicEvaluationAndUngroundedVerdict(t *testing.T) {
 	if ids, err := env.svc.SessionWorkIDs(ctx, env.coord.SessionID); err != nil || len(ids) != 0 {
 		t.Fatalf("SessionWorkIDs before start = (%v, %v), want empty", ids, err)
 	}
-	_, err = env.records.CloseWorker(ctx, env.coord, workerrecords.Op{ID: "dyn-close-unstarted"}, unstarted.WorkerID, "withdrawn")
+	_, err = env.records.Close(ctx, env.coord, workerrecords.Op{ID: "dyn-close-unstarted"}, unstarted.WorkerID, "withdrawn")
 	testutil.FailErr(t, "close unstarted worker", err)
 
 	active, err := env.records.CreateWorker(ctx, env.coord, workerrecords.Op{ID: "dyn-active"}, workerrecords.WorkerSpec{

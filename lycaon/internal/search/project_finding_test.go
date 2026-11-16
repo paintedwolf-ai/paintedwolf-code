@@ -67,10 +67,10 @@ func TestProjectScanCompleteResolvesSessionAndDelegationScopes(t *testing.T) {
 		{scanID: "scan-unmatched", scopeID: "unknown-scope"},
 	} {
 		_, err = sqlDB.ExecContext(ctx, `INSERT INTO code_scans (
-			id, canonical_path, categories_json, status, delegation_id,
+			id, canonical_path, categories_json, status, delegation_id, reuse_key,
 			ingest_json, created_at, completed_at
-		) VALUES (?, '', '["sast"]', 'complete', ?, ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:01Z')`,
-			tc.scanID, tc.scopeID, string(ingestBytes))
+		) VALUES (?, '', '["sast"]', 'complete', ?, ?, ?, '2026-01-01T00:00:00Z', '2026-01-01T00:00:01Z')`,
+			tc.scanID, tc.scopeID, "rk-"+tc.scanID, string(ingestBytes))
 		testutil.FailErr(t, "insert code_scan", err)
 		testutil.FailErr(t, "ProjectScanComplete", search.ProjectScanComplete(ctx, sqlDB, tc.scanID))
 	}

@@ -29,42 +29,38 @@ func TestInsertLandedChangeAccumulatesSessionPathDeltas(t *testing.T) {
 	}
 
 	manifest := api.ScanExecutionManifest{DefinitionFingerprint: "def-fp-1"}
-	err := db.WithTx(ctx, sqlDB, func(q *db.Queries) error {
-		if err := insertLandedChangeTx(ctx, q, obligation.Plan{
-			ID:                   "lc-1",
-			WorkerJobID:          "job-land-1",
-			CanonicalPath:        root,
-			SessionID:            "sess-landed",
-			ChangedPaths:         []string{"a.go", "b.go"},
-			Required:             true,
-			PathScoped:           true,
-			ScanID:               "scan-land-1",
-			AssessmentID:         "assess-land-1",
-			ScannerID:            "lycaon-sast",
-			ExecutionManifest:    manifest,
-			ExecutionFingerprint: "exec-fp-1",
-			FingerprintScheme:    "v1",
-		}); err != nil {
-			return err
-		}
-		return insertLandedChangeTx(ctx, q, obligation.Plan{
-			ID:                   "lc-2",
-			WorkerJobID:          "job-land-2",
-			CanonicalPath:        root,
-			SessionID:            "sess-landed",
-			ChangedPaths:         []string{"c.go"},
-			DeletedPaths:         []string{"b.go"},
-			Required:             true,
-			PathScoped:           true,
-			ScanID:               "scan-land-2",
-			AssessmentID:         "assess-land-2",
-			ScannerID:            "lycaon-sast",
-			ExecutionManifest:    manifest,
-			ExecutionFingerprint: "exec-fp-2",
-			FingerprintScheme:    "v1",
-		})
-	})
-	testutil.FailErr(t, "insert session landed changes", err)
+	q := db.New(sqlDB)
+	testutil.FailErr(t, "insert first session landed change", insertLandedChangeTx(ctx, q, obligation.Plan{
+		ID:                   "lc-1",
+		WorkerJobID:          "job-land-1",
+		CanonicalPath:        root,
+		SessionID:            "sess-landed",
+		ChangedPaths:         []string{"a.go", "b.go"},
+		Required:             true,
+		PathScoped:           true,
+		ScanID:               "scan-land-1",
+		AssessmentID:         "assess-land-1",
+		ScannerID:            "lycaon-sast",
+		ExecutionManifest:    manifest,
+		ExecutionFingerprint: "exec-fp-1",
+		FingerprintScheme:    "v1",
+	}))
+	testutil.FailErr(t, "insert second session landed change", insertLandedChangeTx(ctx, q, obligation.Plan{
+		ID:                   "lc-2",
+		WorkerJobID:          "job-land-2",
+		CanonicalPath:        root,
+		SessionID:            "sess-landed",
+		ChangedPaths:         []string{"c.go"},
+		DeletedPaths:         []string{"b.go"},
+		Required:             true,
+		PathScoped:           true,
+		ScanID:               "scan-land-2",
+		AssessmentID:         "assess-land-2",
+		ScannerID:            "lycaon-sast",
+		ExecutionManifest:    manifest,
+		ExecutionFingerprint: "exec-fp-2",
+		FingerprintScheme:    "v1",
+	}))
 
 	var bound int
 	testutil.FailErr(t, "count session scan bindings", sqlDB.QueryRowContext(ctx,

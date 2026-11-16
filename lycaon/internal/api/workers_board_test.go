@@ -112,7 +112,10 @@ func TestWorkersBoardAndCancelHandlers(t *testing.T) {
 	if rec := serve(http.MethodGet, "/v1/projects/"+proj.ID+"/board?session_id="+coord.ID+"&detail_level=bogus"); rec.Code != http.StatusBadRequest {
 		t.Fatalf("invalid detail_level code = %d, want 400", rec.Code)
 	}
-	okBoard := serve(http.MethodGet, "/v1/projects/"+proj.ID+"/board?session_id="+coord.ID+"&detail_level=status")
+	if rec := serve(http.MethodGet, "/v1/projects/"+proj.ID+"/board?session_id="+coord.ID+"&detail_level=status"); rec.Code != http.StatusOK {
+		t.Fatalf("status board code = %d body = %s", rec.Code, rec.Body.String())
+	}
+	okBoard := serve(http.MethodGet, "/v1/projects/"+proj.ID+"/board?session_id="+coord.ID+"&detail_level=compact")
 	if okBoard.Code != http.StatusOK || !strings.Contains(okBoard.Body.String(), `"roster":[{`) {
 		t.Fatalf("board status = %d body = %s", okBoard.Code, okBoard.Body.String())
 	}
