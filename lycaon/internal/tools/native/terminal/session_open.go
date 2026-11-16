@@ -176,7 +176,9 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 			}
 			attachSnapshotToOpen(&outPayload, snap)
 		}
-		tctx.Effects.Out.Process = &api.ToolProcessHandle{Handle: handle, Running: outPayload.Running}
+		if tctx.Effects.Out != nil {
+			tctx.Effects.Out.Process = &api.ToolProcessHandle{Handle: handle, Running: outPayload.Running}
+		}
 		out, _ := surveyjson.Marshal(outPayload)
 		return string(out), nil
 	}
