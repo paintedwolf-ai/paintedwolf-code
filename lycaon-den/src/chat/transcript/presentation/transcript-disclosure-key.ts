@@ -39,7 +39,6 @@ function disclosureKey(
 
 export const transcriptDisclosureKey = {
   tool: (partId: string) => disclosureKey("tool", partId),
-  toolNetwork: (partId: string) => disclosureKey("tool-network", partId),
   groundingEvidence: (rowKey: string) => disclosureKey("grounding-evidence", rowKey),
   activitySpan: (leadEntryKey: string) => disclosureKey("activity-span", leadEntryKey),
   indexWarming: (entryKey: string) => disclosureKey("index-warming", entryKey),

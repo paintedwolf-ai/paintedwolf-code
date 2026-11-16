@@ -9,13 +9,10 @@ import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import { writeClipboardText } from "../../utils/clipboard.ts";
 import { ThemeIcon } from "../primitives/ThemeIcon.tsx";
 import { RedactedText } from "../transcript/RedactionMark.tsx";
-import { transcriptDisclosureKey } from "../../chat/transcript/presentation/transcript-disclosure-key.ts";
-import { NetworkChicklet } from "../tool/NetworkChicklet.tsx";
-import { RedactionChicklet } from "../tool/RedactionChicklet.tsx";
+import { useNetworkActions } from "../../chat/network-action-context.ts";
 import type { ToolBriefingSlots } from "../tool/tool-briefing-slots.ts";
 import { ToolPartShell } from "../tool/ToolPartShell.tsx";
 import { ActionLinks } from "./ActionLinks.tsx";
-import { TurnLoadFootLine } from "../tool/TurnLoadFootLine.tsx";
 import { liveToolProcess } from "../../chat/tool/tool-part-model.ts";
 import { ActionProcess } from "./ActionProcess.tsx";
 import { visualFromPart } from "../../chat/visual/visual-artifact-model.ts";
@@ -36,13 +33,13 @@ type Props = {
   slots?: ToolBriefingSlots;
 };
 
-/** Every action's card: what ran, its summary, facts, preview and records, then how the local AI bore on the call. */
+/** Every action's card: what ran, its summary, facts, preview, latest capture and records. */
 export function ActionCard(props: Props) {
   const status = () => (props.action.status === "done" ? "completed" : props.action.status);
-  // A fold's members share one card, so it shows the first member that has each notice.
   const members = () => [props.part, ...(props.part.foldMembers ?? [])];
-  const externalAccess = () => members().find((member) => member.externalAccess)?.externalAccess ?? undefined;
-  const redaction = () => members().find((member) => member.redaction?.spans?.length)?.redaction ?? undefined;
+  // Hosts the host let through, which the network fact offers to block.
+  const allowedHosts = () => new Set(members().flatMap((member) =>
+    (member.externalAccess?.endpoints ?? []).filter((endpoint) => endpoint.decision === "allow").map((endpoint) => endpoint.host)));
   const process = () => {
     const sessionId = props.sessionId;
     const handle = sessionId ? members().map(liveToolProcess).find((live) => live !== null) : undefined;
@@ -51,10 +48,14 @@ export function ActionCard(props: Props) {
   // A live process states its own state, so the card drops the recorded one.
   const facts = () => (process() ? props.action.facts.filter((fact) => fact.kind !== "process") : props.action.facts);
   const port = () => props.action.facts.find((fact) => fact.kind === "process")?.port;
-  const captures = () => members().flatMap((member) => {
-    const artifact = visualFromPart(member);
-    return artifact ? [{ artifact, output: member.output }] : [];
-  });
+  // A fold keeps only its newest capture; the captured fact names it.
+  const capture = () => {
+    for (const member of [...members()].reverse()) {
+      const artifact = visualFromPart(member);
+      if (artifact) return { artifact, output: member.output };
+    }
+    return undefined;
+  };
   return (
     <ToolPartShell
       part={{ ...props.part, title: props.action.ran.text }}
@@ -70,27 +71,20 @@ export function ActionCard(props: Props) {
       <div class="den-action-card" data-testid="action-card-body">
         <ActionRanRegion ran={props.action.ran} more={props.action.more} />
         {props.slots?.summary}
-        <ActionFacts facts={facts()} />
+        <ActionFacts facts={facts()} allowedHosts={allowedHosts()} />
         <Show when={process()} keyed>
           {(live) => <ActionProcess sessionId={live.sessionId} processId={live.handle.handle} initialRunning={live.handle.running} terminationReason={live.handle.termination_reason} port={port()} />}
-        </Show>
-        <Show when={externalAccess()} keyed>
-          {(access) => <NetworkChicklet externalAccess={access} sessionId={props.sessionId} disclosureKey={transcriptDisclosureKey.toolNetwork(props.part.id)} />}
         </Show>
         <Show when={props.action.preview} keyed>
           {(preview) => <ActionPreview preview={preview} action={props.action} part={props.part} sessionId={props.sessionId} client={props.client} />}
         </Show>
-        <For each={captures()}>
-          {(capture) => (
-            <TranscriptVisualSlot artifact={capture.artifact} sessionId={props.sessionId} projectId={props.projectId} client={props.client}
-              entryKey={visualProducerEntryKey(capture.artifact.id)} toolOutput={capture.output} />
+        <Show when={capture()} keyed>
+          {(shown) => (
+            <TranscriptVisualSlot artifact={shown.artifact} sessionId={props.sessionId} projectId={props.projectId} client={props.client}
+              entryKey={visualProducerEntryKey(shown.artifact.id)} toolOutput={shown.output} />
           )}
-        </For>
-        <Show when={redaction()} keyed>
-          {(meta) => <p class="den-action-card__notice" data-testid="action-redaction"><RedactionChicklet message={{ host_secret_redaction: meta }} /></p>}
         </Show>
         <ActionLinks action={props.action} part={props.part} projectId={props.projectId} sessionId={props.sessionId} rootRefs={props.rootRefs} evidence={props.slots?.evidence} />
-        <TurnLoadFootLine part={props.part} />
       </div>
     </ToolPartShell>
   );
@@ -123,7 +117,7 @@ function ActionRanRegion(props: { ran: ActionRan; more?: number }) {
   );
 }
 
-function ActionFacts(props: { facts: readonly ActionFact[] }) {
+function ActionFacts(props: { facts: readonly ActionFact[]; allowedHosts: ReadonlySet<string> }) {
   return (
     <Show when={props.facts.length}>
       <dl class="den-action-card__facts" data-testid="action-facts">
@@ -131,11 +125,45 @@ function ActionFacts(props: { facts: readonly ActionFact[] }) {
           {(fact) => (
             <div data-kind={fact.kind} data-tone={dangerous(fact) ? "danger" : undefined}>
               <dt>{ACTION_FACT_LABELS[fact.kind]}</dt>
-              <dd>{formatFact(fact)}</dd>
+              <dd>
+                {formatFact(fact)}
+                <Show when={fact.kind === "network"}>
+                  <BlockHosts hosts={(fact.hosts ?? []).filter((host) => props.allowedHosts.has(host))} />
+                </Show>
+              </dd>
             </div>
           )}
         </For>
       </dl>
+    </Show>
+  );
+}
+
+/** Blocks a host the call reached for every later call, through a global deny rule. */
+function BlockHosts(props: { hosts: readonly string[] }) {
+  const actions = useNetworkActions();
+  const [blocking, setBlocking] = createSignal<string | null>(null);
+  const block = async (host: string) => {
+    if (!actions) return;
+    setBlocking(host);
+    try {
+      await actions.blockHost(host);
+    } finally {
+      setBlocking(null);
+    }
+  };
+  return (
+    <Show when={actions}>
+      <For each={props.hosts}>
+        {(host) => (
+          <Show when={!actions?.isBlocked(host)} fallback={<span class="den-action-card__blocked" data-testid="action-host-blocked">{host} blocked</span>}>
+            <button type="button" class="den-chat-content-link den-action-card__block" data-testid="action-block-host"
+              disabled={blocking() === host} onClick={() => void block(host)}>
+              Block {host}
+            </button>
+          </Show>
+        )}
+      </For>
     </Show>
   );
 }
