@@ -314,6 +314,12 @@ func (r *WatcherRegistry) CloseRoot(root string) {
 	}
 }
 
+// ResetWatchersForTest closes the process-global registry.
+func ResetWatchersForTest() {
+	globalWatchers.CloseAll()
+	globalWatchers = NewWatcherRegistry()
+}
+
 // CloseWatchers releases every process-wide filesystem descriptor at shutdown.
 func CloseWatchers() { globalWatchers.CloseAll() }
 

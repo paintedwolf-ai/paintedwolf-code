@@ -102,6 +102,12 @@ type structure struct {
 	definitions map[int]string
 }
 
+// LiteralZones returns the source's literal zones, under Parse's budgets. Past a
+// budget they are the coarse zones of a source that was not structurally parsed.
+func LiteralZones(source string) []Zone {
+	return Parse(source, Options{}).Zones
+}
+
 // documentStructure parses source and, once, the body of a whole-response
 // Markdown fence, with spans mapped back to the source.
 func documentStructure(source string) structure {

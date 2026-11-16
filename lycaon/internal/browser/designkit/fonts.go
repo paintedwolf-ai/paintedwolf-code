@@ -34,6 +34,11 @@ var fontByFamily = func() map[string]Font {
 	return m
 }()
 
+// Fonts returns a copy of the hermetic type catalog.
+func Fonts() []Font {
+	return append([]Font(nil), fonts...)
+}
+
 // FontFamilies returns catalog family names in stable order.
 func FontFamilies() []string {
 	out := make([]string, len(fonts))

@@ -66,6 +66,22 @@ func ResolveBinary(opts ResolveOptions) (ResolvedBrowser, bool) {
 // replaces HOME, so a test can use the browser the developer already provisioned.
 const EnvTestHostHome = "PW_TEST_HOST_HOME"
 
+// TestingEnableBundledBinary points tests at a staged browser, or else at the pinned browser
+// provisioned in the developer's own cache.
+func TestingEnableBundledBinary() {
+	if strings.TrimSpace(os.Getenv(EnvBrowserBin)) != "" {
+		return
+	}
+	bin := findStagedHeadlessShell()
+	if bin == "" {
+		bin = hostProvisionedHeadlessShell()
+	}
+	if bin == "" {
+		return
+	}
+	_ = os.Setenv(EnvBrowserBin, bin)
+}
+
 func bundleCandidates() []string {
 	name := headlessShellName()
 	var cands []string

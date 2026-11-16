@@ -82,6 +82,10 @@ type Meta struct {
 	SourceURL string    `json:"source_url"`
 }
 
+func ParseDocument(raw []byte) (*Document, error) {
+	return parseDocument(raw, time.Time{}, DefaultURL)
+}
+
 func parseDocument(raw []byte, fetchedAt time.Time, sourceURL string) (*Document, error) {
 	var root map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &root); err != nil {

@@ -26,3 +26,8 @@ func LinuxOperandNames() OperandNames { return OperandNames{Grammar: POSIXNames}
 
 // DarwinOperandNames are macOS's declared operand facts: names must be UTF-8.
 func DarwinOperandNames() OperandNames { return OperandNames{Grammar: POSIXNames, UTF8: true} }
+
+// WindowsOperandNames are Windows's declared operand facts.
+func WindowsOperandNames() OperandNames {
+	return OperandNames{Grammar: WindowsNames, UTF8: true, NullDevice: "NUL"}
+}

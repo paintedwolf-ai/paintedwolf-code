@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 
@@ -141,6 +142,29 @@ func LoadValidatedHintConfig(dir extpacks.Source) (*HintConfig, error) {
 		return nil, err
 	}
 	return cfg, nil
+}
+
+// ValidateHintConfig enforces enriched schema + scenarios for every code.
+func ValidateHintConfig(cfg *HintConfig) error {
+	if cfg == nil || len(cfg.HintCodes) == 0 {
+		return fmt.Errorf("hint_codes required")
+	}
+	var errs []string
+	for code, entry := range cfg.HintCodes {
+		if err := validateHintEntry(code, entry); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+	for code, entry := range cfg.HintCodes {
+		if err := validateHintSuccessors(code, entry, cfg.HintCodes); err != nil {
+			errs = append(errs, err.Error())
+		}
+	}
+	sort.Strings(errs)
+	if len(errs) > 0 {
+		return fmt.Errorf("hint-codes:\n%s", strings.Join(errs, "\n"))
+	}
+	return nil
 }
 
 var hintCodeRE = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)

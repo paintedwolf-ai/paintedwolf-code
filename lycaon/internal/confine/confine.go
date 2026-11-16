@@ -275,6 +275,15 @@ func BrowserConfinement(req Request) (*Confinement, bool) {
 // ErrNestedHelper rejects wrapping from a process that is already the confine helper.
 var ErrNestedHelper = errors.New("confine: this process is already applying a sandbox profile")
 
+// BuildSeatbeltProfile renders the macOS profile on every platform.
+func BuildSeatbeltProfile(c Confinement) (string, error) {
+	c, err := validateProfileInputs(c)
+	if err != nil {
+		return "", err
+	}
+	return renderSeatbeltProfile(c)
+}
+
 // validateProfileInputs settles the grants every platform's rendering reads.
 func validateProfileInputs(c Confinement) (Confinement, error) {
 	if c.HostExecution {

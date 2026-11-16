@@ -16,6 +16,9 @@ type BundledLayout struct {
 	Catalog *extpacks.EffectiveCatalog
 }
 
+// DefaultBundledLayout returns a layout backed by the process Active catalog.
+func DefaultBundledLayout() BundledLayout { return BundledLayout{} }
+
 // ErrTemplateNotEffective marks a disabled or conflicted unit.
 var ErrTemplateNotEffective = errors.New("template unit not in the effective catalog")
 

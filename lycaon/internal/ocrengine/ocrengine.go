@@ -183,3 +183,10 @@ func verifyPayload(path string, payload Payload) error {
 	}
 	return nil
 }
+
+// resetForTest forgets verified roots.
+func resetForTest() {
+	verifiedMu.Lock()
+	verified = map[string]Engine{}
+	verifiedMu.Unlock()
+}

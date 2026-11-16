@@ -537,6 +537,20 @@ func (c *Directories) AwaitSubtree(ctx context.Context, project string, root Roo
 	return c.awaitStructure(ctx, project, root, store, normalizeDir(dir), settled)
 }
 
+// SubtreeCovered reports whether every directory under dir has been listed.
+func SubtreeCovered(ctx context.Context, navigation *Navigation, dir string) (bool, error) {
+	children, err := navigation.Children(ctx, dir)
+	if err != nil {
+		return false, err
+	}
+	state, err := navigation.State(ctx, dir)
+	if err != nil {
+		return false, err
+	}
+	unresolved, err := directoryUnresolved(ctx, children, state)
+	return unresolved == 0, err
+}
+
 // awaitStructure retries settled against the head generation, then against the
 // last complete generation published since the call began, until it reports
 // done. Between attempts it asks the inventory to cover dir when it is idle.

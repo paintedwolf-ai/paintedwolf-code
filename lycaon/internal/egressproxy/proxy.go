@@ -166,6 +166,9 @@ func (b *Broker) SetRefusalReporter(fn RefusalReporter) {
 	}
 }
 
+// SetDialEndpointForTest overrides upstream dialing in tests.
+func (b *Broker) SetDialEndpointForTest(d DialEndpoint) { b.dialEndpoint = d }
+
 // Start binds both front doors and serves them until Close, preferring the
 // recorded ports so an already-running descendant keeps reaching them.
 func (b *Broker) Start(opts ...Options) (Addrs, error) {

@@ -30,6 +30,17 @@ func setAutoConfine(on bool) {
 // EnableAutoConfine turns confinement on for this process.
 func EnableAutoConfine() { setAutoConfine(true) }
 
+// TestingSetAutoConfine turns confinement on for this test and restores it.
+func TestingSetAutoConfine(t interface {
+	Helper()
+	Cleanup(func())
+}) {
+	t.Helper()
+	prev := autoConfineEnabled()
+	setAutoConfine(true)
+	t.Cleanup(func() { setAutoConfine(prev) })
+}
+
 // BypassEnabled reports the explicit host-wide bypass.
 func BypassEnabled() bool {
 	return configdir.EnvTruthy(os.Getenv("LYCAON_BYPASS_APPROVALS"))

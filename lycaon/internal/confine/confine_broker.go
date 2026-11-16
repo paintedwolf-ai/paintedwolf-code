@@ -94,6 +94,11 @@ func brokerAddrs() (egressproxy.Addrs, error) {
 	return broker.addrs, nil
 }
 
+// SetBrokerForTest installs a front door without binding real listeners.
+func SetBrokerForTest(b *egressproxy.Broker, addrs egressproxy.Addrs) func() {
+	return setBrokerState(b, addrs, true, nil)
+}
+
 func brokerPortsPath(stateRoot string) string {
 	stateRoot = strings.TrimSpace(stateRoot)
 	if stateRoot == "" {

@@ -10,6 +10,12 @@ import (
 	"syscall"
 )
 
+// ResolveSystemExecutable selects the physical executable behind administrator
+// controlled aliases. Both aliases and targets must stay under trusted ancestry.
+func ResolveSystemExecutable(path string) (string, error) {
+	return native.systemExecutable(path)
+}
+
 func (l layout) systemExecutable(path string) (string, error) {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path {
 		return "", fmt.Errorf("native generation: unclean system executable %q", path)

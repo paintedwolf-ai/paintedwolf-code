@@ -77,6 +77,14 @@ func SyntaxUnitByteLimit(sourced bool) int64 {
 	return languageLimit(catalog, id)
 }
 
+// ParseProgram validates the complete syntax unit before exposing any plan.
+// This pure entry applies local bounds; execution uses ParseAdmitted to charge
+// scratch against its enclosing program while parsing.
+// It only uses the upstream syntax package, never its interpreter or executor.
+func ParseProgram(source []byte, options ParseOptions) (*ParsedProgram, error) {
+	return parseProgram(context.Background(), source, options, nil, nil)
+}
+
 func parseProgram(ctx context.Context, source []byte, options ParseOptions, memory ProgramMemoryAdmission, pool *syntax.AllocationBudget) (program *ParsedProgram, resultErr error) {
 	defer func() {
 		var diagnostic *SyntaxDiagnostic

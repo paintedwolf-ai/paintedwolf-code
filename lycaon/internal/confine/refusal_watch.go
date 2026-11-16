@@ -473,3 +473,9 @@ func (f *refusalFeed) listen(fn func()) {
 	f.listeners = append(f.listeners, fn)
 	f.mu.Unlock()
 }
+
+func (w *refusalWatchT) currentState() watchState {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.state
+}

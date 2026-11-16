@@ -91,6 +91,17 @@ func CarriesWorkerCharter(content string) bool {
 		strings.Contains(content, MarkerWorkerTaskAssignment)
 }
 
+// HostRejectCode returns the Code: line the host wrote into a reject or kick block.
+func HostRejectCode(content string) string {
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if rest, ok := strings.CutPrefix(line, codeLinePrefix); ok {
+			return strings.TrimSpace(rest)
+		}
+	}
+	return ""
+}
+
 // Code family prefixes name the registry a code came from.
 const (
 	codeFamilySpec        = "SPEC_"

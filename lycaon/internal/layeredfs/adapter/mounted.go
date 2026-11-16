@@ -3,6 +3,8 @@ package adapter
 import (
 	"context"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -108,6 +110,46 @@ func (a *MountedAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Prep
 	}
 	a.mu.Unlock()
 	return view, nil
+}
+
+func buildMountedRoots(runtimeViewDir string, targetDirs map[string]string, narrowed []RootGrant, hidden, hiddenNames []string) ([]layeredfs.RootSpec, []PreparedRoot, []string, string, string, error) {
+	var specs []layeredfs.RootSpec
+	var prepared []PreparedRoot
+	var denyPaths []string
+	var primaryID, primaryPath string
+
+	for _, g := range narrowed {
+		mntPath := filepath.Join(runtimeViewDir, "mounts", g.RootID)
+		if custom := strings.TrimSpace(targetDirs[g.RootID]); custom != "" {
+			mntPath = filepath.Clean(custom)
+		}
+		if err := os.MkdirAll(mntPath, 0o750); err != nil {
+			return nil, nil, nil, "", "", err
+		}
+		specs = append(specs, layeredfs.RootSpec{
+			ID:          g.RootID,
+			Label:       g.Label,
+			TrunkPath:   g.SourcePath,
+			Subroot:     g.Subroot,
+			IsPrimary:   g.IsPrimary,
+			Hidden:      HiddenRelsUnder(g.SourcePath, hidden),
+			HiddenNames: hiddenNames,
+		})
+		prepared = append(prepared, PreparedRoot{
+			RootID:        g.RootID,
+			Label:         g.Label,
+			SourcePath:    g.SourcePath,
+			Subroot:       g.Subroot,
+			WorkspacePath: mntPath,
+			IsPrimary:     g.IsPrimary,
+		})
+		denyPaths = append(denyPaths, g.SourcePath)
+		if g.IsPrimary && primaryID == "" {
+			primaryID = g.RootID
+			primaryPath = mntPath
+		}
+	}
+	return specs, prepared, denyPaths, primaryID, primaryPath, nil
 }
 
 // Release retires handles, settles the filesystem connection, and cleans up runtime directories.

@@ -98,6 +98,28 @@ type LycaonProvenanceBlock struct {
 // LycaonProvenanceOriginBundledInRepo marks first-party gap-fill rules shipped in-repo (CC-BY-4.0).
 const LycaonProvenanceOriginBundledInRepo = "bundled-in-repo"
 
+// ValidateRuleFile validates all rules in a lycaon gate rule file.
+func ValidateRuleFile(path string) error {
+	rf, err := LoadRuleFile(path)
+	if err != nil {
+		return err
+	}
+	if len(rf.Rules) == 0 {
+		return fmt.Errorf("%s: no rules", path)
+	}
+	seen := make(map[string]struct{}, len(rf.Rules))
+	for _, r := range rf.Rules {
+		if err := ValidateRule(r); err != nil {
+			return fmt.Errorf("%s: %w", path, err)
+		}
+		if _, dup := seen[r.ID]; dup {
+			return fmt.Errorf("%s: duplicate rule id %q", path, r.ID)
+		}
+		seen[r.ID] = struct{}{}
+	}
+	return nil
+}
+
 func LoadOpengrepGates() (*OpengrepGatesConfig, error) {
 	data, err := config.Read(config.OpengrepGates)
 	if err != nil {

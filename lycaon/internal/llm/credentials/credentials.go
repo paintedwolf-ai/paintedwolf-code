@@ -42,6 +42,13 @@ func New() (*Store, error) {
 	return &Store{store: store}, nil
 }
 
+// NewAt opens an empty store at path with a development identity file.
+func NewAt(path string) *Store {
+	return &Store{store: credentialstore.NewEmpty(credentialstore.Slot{
+		Path: path, Namespace: credentialstore.NamespaceProviders, Context: credentialContext,
+	}, nil)}
+}
+
 // Get returns the stored API key for providerID.
 func (s *Store) Get(providerID string) (credentialstore.SecretValue, bool) {
 	if s == nil || s.store == nil {

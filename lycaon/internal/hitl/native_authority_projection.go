@@ -99,6 +99,13 @@ func validateNativeAuthorityOptions(options []ApprovalOption) error {
 	return nil
 }
 
+// RestoreNativeAuthorityProjection is the canonical native authority reader.
+// Unknown domains, versions and host-field shapes fail before installation.
+func RestoreNativeAuthorityProjection(ctx context.Context, state toolcontract.ReviewStateAdmission, representation, digest, canonical string) (NativeAuthorityProjection, func(), error) {
+	restored, release, err := restoreNativeAuthority(ctx, state, representation, digest, canonical)
+	return restored.projection, release, err
+}
+
 type restoredAuthority struct {
 	projection NativeAuthorityProjection
 	options    []ApprovalOption

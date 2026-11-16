@@ -6,11 +6,56 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 	"gopkg.in/yaml.v3"
 )
+
+// LoadDir loads every *.yaml / *.yml binding under dir. Duplicate keys across
+// files fail closed. Filename stem must equal the document id.
+func LoadDir(dir string) ([]Binding, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var out []Binding
+	seenKeys := map[string]string{} // key -> binding id
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		ext := strings.ToLower(filepath.Ext(name))
+		if ext != ".yaml" && ext != ".yml" {
+			continue
+		}
+		path := filepath.Join(dir, name)
+		// #nosec G304 -- name is a direct child returned by ReadDir.
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return nil, err
+		}
+		stem := strings.TrimSuffix(name, filepath.Ext(name))
+		b, err := LoadBytes(stem, raw)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", name, err)
+		}
+		if b.ID != stem {
+			return nil, fmt.Errorf("%s: id %q must equal filename stem %q", name, b.ID, stem)
+		}
+		for _, f := range b.Fields {
+			if prev, ok := seenKeys[f.Key]; ok {
+				return nil, fmt.Errorf("duplicate field key %q in bindings %q and %q", f.Key, prev, b.ID)
+			}
+			seenKeys[f.Key] = b.ID
+		}
+		out = append(out, b)
+	}
+	return out, nil
+}
 
 // LoadBytes parses and validates one binding document. idHint is the expected
 // id (usually the filename stem); when non-empty it must match the document id.

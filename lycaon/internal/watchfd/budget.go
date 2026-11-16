@@ -62,3 +62,13 @@ func (b *Budget) Give(n int) {
 	defer b.mu.Unlock()
 	b.remaining += n
 }
+
+// Remaining reports what is left to spend.
+func (b *Budget) Remaining() int {
+	if b == nil {
+		return 0
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.remaining
+}

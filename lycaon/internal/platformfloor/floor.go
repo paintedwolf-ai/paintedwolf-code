@@ -44,6 +44,12 @@ var machOArchForGoArch = map[string]string{
 // DarwinArches returns an independent copy of the supported architectures.
 func DarwinArches() []string { return slices.Clone(darwinArches) }
 
+// MachOArchForGoArch translates a compiler architecture to its artifact name.
+func MachOArchForGoArch(goArch string) (string, bool) {
+	machO, ok := machOArchForGoArch[goArch]
+	return machO, ok
+}
+
 //go:embed linux_floor.txt
 var linuxFloorRaw string
 
@@ -73,6 +79,12 @@ var linuxArches = []string{"amd64", "arm64"}
 var elfArchForGoArch = map[string]string{
 	"amd64": "x86_64",
 	"arm64": "aarch64",
+}
+
+// ELFArchForGoArch translates a compiler architecture to its package name.
+func ELFArchForGoArch(goArch string) (string, bool) {
+	elf, ok := elfArchForGoArch[goArch]
+	return elf, ok
 }
 
 // LinuxELFArches preserves the configured architecture order.

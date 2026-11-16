@@ -2,6 +2,7 @@ package observability
 
 import (
 	"encoding/json"
+	"sort"
 	"strings"
 )
 
@@ -40,6 +41,13 @@ func IsSecretFieldName(name string) bool {
 		}
 	}
 	return false
+}
+
+// SecretFieldNames returns the sorted field-name needles.
+func SecretFieldNames() []string {
+	out := append([]string(nil), secretFieldNames...)
+	sort.Strings(out)
+	return out
 }
 
 // ScrubValue redacts fields and embedded patterns in a decoded value tree.
@@ -139,4 +147,21 @@ func ScrubJSON(raw []byte) []byte {
 		return []byte(RedactString(string(raw)))
 	}
 	return scrubbed
+}
+
+// ScrubHeaders retains header names while redacting their secret values.
+func ScrubHeaders(headers map[string][]string) map[string][]string {
+	out := make(map[string][]string, len(headers))
+	for name, values := range headers {
+		if IsSecretFieldName(name) {
+			out[name] = []string{redacted}
+			continue
+		}
+		scrubbed := make([]string, len(values))
+		for i, v := range values {
+			scrubbed[i] = RedactString(v)
+		}
+		out[name] = scrubbed
+	}
+	return out
 }

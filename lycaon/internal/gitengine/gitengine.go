@@ -3,6 +3,7 @@ package gitengine
 
 import (
 	"fmt"
+	"os"
 	"sync"
 )
 
@@ -52,4 +53,23 @@ func LFSPath() (string, error) {
 
 func resolveAll() {
 	cachedBin, cachedLFS, cachedErr = resolve()
+}
+
+func resetForTest() {
+	resolveOnce = sync.Once{}
+	cachedBin = ""
+	cachedLFS = ""
+	cachedErr = nil
+	versionOfFn = versionOf
+}
+
+// TestingEnableBundledBinary configures the staged test binary when present.
+func TestingEnableBundledBinary() {
+	bin := findBundledGitBinary()
+	if bin == "" {
+		return
+	}
+	_ = os.Setenv(EnvTest, "1")
+	_ = os.Setenv(EnvGitBinary, bin)
+	resetForTest()
 }

@@ -1,5 +1,29 @@
 package api
 
+// AllMessageKinds returns every declared MessageKind.
+func AllMessageKinds() []MessageKind {
+	return []MessageKind{
+		MessageKindWorkflowBoundary,
+		MessageKindProgressComplete,
+		MessageKindProgressUpdate,
+		MessageKindWorkflowFeedback,
+		MessageKindWorkflowExplain,
+		MessageKindDraft,
+		MessageKindIndexWarming,
+		MessageKindSuperseded,
+		MessageKindBlueprint,
+		MessageKindAgentNote,
+		MessageKindCompletionReport,
+		MessageKindIterationCapCloseout,
+		MessageKindHostKick,
+		MessageKindCoordinatorGuidance,
+		MessageKindHostNudge,
+		MessageKindHostLoopWake,
+		MessageKindHostSecretRedactionNotice,
+		MessageKindUserContinuation,
+	}
+}
+
 // AllCompletionReportFindingDispositions returns every declared disposition.
 func AllCompletionReportFindingDispositions() []CompletionReportFindingDisposition {
 	return []CompletionReportFindingDisposition{

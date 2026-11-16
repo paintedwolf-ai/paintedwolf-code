@@ -254,6 +254,12 @@ func RasterMIMEs() []string { return sortedKeys(rasterMIME) }
 // VideoMIMEs returns the video container MIME set intake accepts.
 func VideoMIMEs() []string { return sortedKeys(videoMIME) }
 
+// IsVideoMIME reports whether mime is an accepted video container.
+func IsVideoMIME(mime string) bool {
+	_, ok := videoMIME[normalizeMIME(mime)]
+	return ok
+}
+
 // TextFamilyMIMEs returns the host-defined text-family MIME set.
 func TextFamilyMIMEs() []string { return sortedKeys(textFamilyMIME) }
 

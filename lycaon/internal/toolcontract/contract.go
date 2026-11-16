@@ -31,6 +31,20 @@ func (p BatchPolicy) String() string {
 	}
 }
 
+// ParseBatchPolicy parses a catalog batch value.
+func ParseBatchPolicy(value string) (BatchPolicy, bool) {
+	switch value {
+	case nativemanifest.BatchSerial:
+		return BatchSerial, true
+	case nativemanifest.BatchShared:
+		return BatchShared, true
+	case nativemanifest.BatchSameTool:
+		return BatchSameTool, true
+	default:
+		return BatchSerial, false
+	}
+}
+
 // TurnOrder positions control tools in an assistant batch.
 type TurnOrder uint8
 
