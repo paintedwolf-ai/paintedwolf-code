@@ -224,7 +224,7 @@ func readOverlayDir(t *testing.T, name, dir string) overlaySource {
 
 func exampleOverlay(t *testing.T, moduleRoot string) overlaySource {
 	t.Helper()
-	return readOverlayDir(t, "example", filepath.Join(moduleRoot, "testdata", "overlay-example", settingsoverlay.DirName()))
+	return readOverlayDir(t, "example", filepath.Join(moduleRoot, "testdata", "overlay-example", "overlay-dir"))
 }
 
 func corpusOverlays(t *testing.T, moduleRoot string) []overlaySource {
