@@ -1092,7 +1092,8 @@
   "ci": {
     "ready-lint": {
       "targets": [
-        "lint:full"
+        "lint:full",
+        "arch-lint:changes"
       ],
       "minutes": 120,
       "profiles": [
@@ -1107,7 +1108,6 @@
         "build",
         "budgets",
         "coverage:changes",
-        "arch-lint:changes",
         "den:typecheck",
         "den:lint",
         "den:test:fast"
@@ -1127,8 +1127,7 @@
       ],
       "early_targets": [
         "budgets",
-        "coverage:changes",
-        "arch-lint:changes"
+        "coverage:changes"
       ]
     },
     "ready-tests": {
@@ -1147,8 +1146,7 @@
     "limits": {
       "targets": [
         "budgets",
-        "coverage:changes",
-        "arch-lint:changes"
+        "coverage:changes"
       ],
       "minutes": 120,
       "profiles": [
@@ -1184,7 +1182,8 @@
       "targets": [
         "lint:full",
         "test:fail-messages:check",
-        "comments:check"
+        "comments:check",
+        "arch-lint:changes"
       ],
       "minutes": 90,
       "profiles": [

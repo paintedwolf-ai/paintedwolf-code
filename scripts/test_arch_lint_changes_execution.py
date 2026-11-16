@@ -33,7 +33,7 @@ print("1 issues.")
 sys.exit(1)
 """
 
-POLICY = {"reach": {"roots": ["./cmd/..."], "goos": ["linux"], "report": "^x/", "schema": "schema.sql"},
+POLICY = {"reach": {"roots": ["./cmd/..."], "goos": {"darwin": ["linux"], "linux": ["linux"]}, "report": "^x/", "schema": "schema.sql"},
           "vet": {"packages": ["./..."]}, "test_support": ["test$"],
           "den": {"dir": "lycaon-den", "command": [sys.executable, "../fake_knip.py"]}}
 
@@ -145,6 +145,13 @@ class ArchLintChangesTest(unittest.TestCase):
         self.git("-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "next")
         later = self.git("rev-parse", "HEAD").strip()
         self.assertEqual(arch_lint_changes.base_checks(self.repo, later, self.binary, POLICY, self.cache), {})
+
+    def test_target_platforms_follow_the_host(self):
+        reach = {"goos": {"darwin": ["darwin", "linux"], "linux": ["linux"]}}
+        self.assertEqual(arch_lint_changes.target_goos(reach, "darwin"), ["darwin", "linux"])
+        self.assertEqual(arch_lint_changes.target_goos(reach, "linux"), ["linux"])
+        with self.assertRaises(RuntimeError):
+            arch_lint_changes.target_goos(reach, "win32")
 
     def test_all_lists_every_finding_without_failing(self):
         header, findings, failed = arch_lint_changes.everything(self.repo, POLICY, self.binary)

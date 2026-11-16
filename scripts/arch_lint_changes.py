@@ -79,6 +79,13 @@ def knip(tree, policy):
     return found
 
 
+def target_goos(reach, host=sys.platform):
+    """The platforms this host can type-check; cgo-only packages stop a cross-platform load."""
+    if host not in reach["goos"]:
+        raise RuntimeError(f"arch-lint policy names no target platforms for host {host}")
+    return reach["goos"][host]
+
+
 def checks(binary, tree, policy, go=True, den=False):
     """Every arch-lint check over one tree, as (kind, key) → finding. Without go,
     the Go checks are skipped; with den, knip runs over Den."""
@@ -86,7 +93,7 @@ def checks(binary, tree, policy, go=True, den=False):
     support = ",".join(policy["test_support"])
     reach = policy["reach"]
     go_commands = [
-        [binary, "reach", "-dir", go_dir, "-goos", ",".join(reach["goos"]), "-report", reach["report"],
+        [binary, "reach", "-dir", go_dir, "-goos", ",".join(target_goos(reach)), "-report", reach["report"],
          "-skip", support, "-schema", go_dir / reach["schema"], "-scope", ",".join(reach.get("scope", [])),
          *reach["roots"]],
         [binary, "vet", "-dir", go_dir, "-test-support", support, *policy["vet"]["packages"]],
