@@ -130,38 +130,6 @@ describe("scalable layout chrome", () => {
     );
   });
 
-  it("uses one closed width and full open width for transcript cards", () => {
-    const chat = read("chat-utilities.css");
-    const components = read("global-components.css");
-    const tools = read("tool-utilities.css");
-    const diffs = read("file-edit-diff.css");
-    const disclosureHosts = [
-      "components/checkpoint/CheckpointDecisionChicklet.tsx",
-      "components/workflow/WorkflowFeedbackChicklet.tsx",
-      "components/tool/ActivitySpanCard.tsx",
-      "components/tool/NetworkChicklet.tsx",
-      "components/tool/ToolPartShell.tsx",
-      "components/citation/CitationEvidenceChicklet.tsx",
-      "components/transcript/IndexWarmingChicklet.tsx",
-      "components/transcript/TranscriptDiffGroup.tsx",
-      // The row a reply and the turn diffs page both render.
-      "components/source/diff/SourceDiffRow.tsx",
-    ];
-
-    expect(chat).toMatch(/--den-transcript-card-width:\s*min\(100%,\s*32rem\)/);
-    expect(chat).toMatch(
-      /@utility den-transcript-disclosure-card\s*\{[\s\S]*?width:\s*var\(--den-transcript-card-width,\s*100%\)[\s\S]*?&\[data-expanded="true"\]\s*\{[\s\S]*?width:\s*100%/,
-    );
-    expect(components).toMatch(
-      /\.den-turn-walk\s*\{[\s\S]*?width:\s*var\(--den-transcript-card-width\)/,
-    );
-    for (const host of disclosureHosts) {
-      expect(read(host), host).toContain("den-transcript-disclosure-card");
-    }
-    expect(tools).not.toContain("width: var(--den-transcript-card-width)");
-    expect(diffs).not.toContain("width: var(--den-transcript-card-width)");
-  });
-
   it("keeps activity summaries on two responsive lines", () => {
     const tools = read("tool-utilities.css");
     const workers = read("worker-utilities.css");

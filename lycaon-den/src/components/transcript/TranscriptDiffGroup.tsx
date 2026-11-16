@@ -136,7 +136,7 @@ export function TranscriptDiffGroup(props: Props) {
         bindTranscriptEntry(el);
         setHostEl(el);
       }}
-      class="den-diff-group den-transcript-disclosure-card den-transcript-disclosure-link"
+      class="den-diff-group den-transcript-card den-transcript-disclosure-card den-transcript-disclosure-link"
       data-testid="diff-group"
       data-files={summary().files}
       data-layout={props.layout}
