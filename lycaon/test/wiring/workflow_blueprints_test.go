@@ -98,27 +98,9 @@ func (q *queuedWorkerScripts) mock(h **Harness) *llm.KickDrivenMock {
 	})
 }
 
-// CoordinatorToolContext builds a coordinator ToolContext bound to sess and dir.
-func (h *Harness) CoordinatorToolContext(t *testing.T, ctx context.Context, sess *api.Session, dir string) tools.ToolContext {
-	t.Helper()
-	return coordToolCtx(t, h, ctx, sess, dir)
-}
-
 func coordToolCtx(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, dir string) tools.ToolContext {
 	t.Helper()
-	call := wiringToolContext(sess.ID, dir)
-	call.Identity.ProjectID = sess.ProjectID
-	call.Identity.Agent = "coordinator"
-	call.Identity.ToolCallID = uuid.NewString()
-	testutil.FailErr(t, "resolve primary root", h.DB.QueryRowContext(
-		ctx,
-		"SELECT id FROM project_roots WHERE project_id = ? AND is_primary = 1",
-		sess.ProjectID,
-	).Scan(&call.Source.ActiveRootID))
-	call.Source.Roots[0].ID = call.Source.ActiveRootID
-	call.Host.SessionOutputDir = t.TempDir()
-	call.Host.SessionScratchDir = t.TempDir()
-	return call
+	return h.CoordinatorToolContext(t, ctx, sess, dir)
 }
 
 func approveBlueprintOnDisk(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, dir, relPath, content string) {

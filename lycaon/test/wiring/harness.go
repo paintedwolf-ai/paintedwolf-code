@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/api"
@@ -24,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/scan"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/session"
@@ -226,6 +228,33 @@ func (h *Harness) CreateHarnessSession(t *testing.T, req wire.CreateSessionReque
 func (h *Harness) OwnerCtx(t testing.TB, ctx context.Context) context.Context {
 	t.Helper()
 	return testdbseed.OwnerCaller(t, ctx, h.DB)
+}
+
+// CoordinatorToolContext builds a coordinator ToolContext bound to sess and dir.
+func (h *Harness) CoordinatorToolContext(t *testing.T, ctx context.Context, sess *wire.Session, dir string) tools.ToolContext {
+	t.Helper()
+	var activeRootID string
+	testutil.FailErr(t, "resolve primary root", h.DB.QueryRowContext(
+		ctx,
+		"SELECT id FROM project_roots WHERE project_id = ? AND is_primary = 1",
+		sess.ProjectID,
+	).Scan(&activeRootID))
+	return tools.ToolContext{
+		Identity: tools.InvocationIdentity{
+			SessionID:  sess.ID,
+			ProjectID:  sess.ProjectID,
+			Agent:      "coordinator",
+			ToolCallID: uuid.NewString(),
+		},
+		Source: tools.InvocationSource{
+			Roots:        []projectroot.RootRef{{ID: activeRootID, Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: activeRootID,
+		},
+		Host: tools.InvocationHost{
+			SessionOutputDir:  t.TempDir(),
+			SessionScratchDir: t.TempDir(),
+		},
+	}
 }
 
 // SeedProgress supplies a pending checklist that survives turn bootstrap.
