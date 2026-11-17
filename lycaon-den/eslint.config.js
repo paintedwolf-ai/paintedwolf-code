@@ -21,7 +21,7 @@ export default tseslint.config(
   },
   {
     // Specs are held to the source laws only.
-    files: ["e2e/**/*.ts"],
+    files: ["e2e/**/*.{ts,tsx}"],
     languageOptions: { parser: tseslint.parser },
   },
   {
