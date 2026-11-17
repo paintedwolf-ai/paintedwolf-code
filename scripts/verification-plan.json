@@ -196,7 +196,7 @@
       "packages": [
         "./..."
       ],
-      "exclude": "/test/security$|/test/wiring/conformance$|/internal/launchguard$",
+      "exclude": "/test/wiring/conformance$|/internal/launchguard$",
       "report_all_failures": true
     },
     "seatbelt:confine": {

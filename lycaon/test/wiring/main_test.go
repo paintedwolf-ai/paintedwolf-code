@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/gitcredential"
-
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestMain(m *testing.M) {
@@ -24,6 +24,19 @@ func TestMain(m *testing.M) {
 	if len(os.Args) > 1 && os.Args[1] == sshAgentProbeVerb {
 		os.Exit(probeSSHAgent())
 	}
+	testutil.SelectRaceTests(
+		"TestParallelWorkerRecordFindingSiblingInjectWiring",
+		"TestCoordinatorParallelWorkersReplaySiblingNotes",
+		"TestCoordinatorParallelWorkersReplayRootSessionKeyParity",
+		"TestCoordinatorParallelWorkersReplayOverlayPathReadForbidden",
+		"TestCoordinatorParallelWorkersReplayLineShiftAtomicRejection",
+		"TestCoordinatorParallelWorkersReplayPriorRunFindingsExcluded",
+		"TestCoordinatorParallelTaskCapMixedAgents",
+		"TestCoordinatorTaskScopeDispatchReadFanOutParallelWriteAllowed",
+		"TestWorkflowVersionDualRun_Concurrent100And200Isolation",
+		"TestWorkflowBackgroundBuildWaitAndStatusCheck",
+		"TestContentApplyHoldsEveryContentMutatingTool",
+	)
 	gittestsetup.Enable()
 	os.Exit(RunReleasingHosts(m))
 }

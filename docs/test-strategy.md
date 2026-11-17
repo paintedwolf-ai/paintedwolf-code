@@ -879,7 +879,7 @@ allocation before claiming an end-to-end speedup.
 | Task | Proof |
 |------|-------|
 | `./task test:full` | Complete Go behavior, wiring, smoke, HTTP, and required bundled scanner suites |
-| `./task test:race` | Go race detector with integration scenarios and no `-short`; the dedicated `test/security` HTTP journeys remain in `test:full`, and so does `internal/launchguard`: its identity transitions use `syscall.AllThreadsSyscall`, which Go refuses in a binary that links cgo, as every race-instrumented binary does |
+| `./task test:race` | Go race detector with integration scenarios and six nightly shards. Wiring and HTTP suites select concurrent worker, workflow, and event journeys by default. The shell reference corpus runs in `test:full`. The protected launch suite runs in `test:full` because its identity transitions require a binary built without cgo. |
 | `./task den:test:rust` | Tauri Rust tests |
 | `./task upgrade:rehearse -- --bundle …` | Signed macOS automatic update discovery, staging, activation, startup confirmation, retained history, and another restart |
 | `./task test:scanners` | Bundled scanners against the committed corpus, with a staged engine |
