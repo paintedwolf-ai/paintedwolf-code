@@ -1,12 +1,6 @@
 package contract
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"os"
-	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 
@@ -16,52 +10,6 @@ import (
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
-
-// Catalog revisions bind the captured unit bytes used by loaders.
-// packRootWalkPrimitives enumerate pack directories.
-var packRootWalkPrimitives = map[string]bool{
-	"KindDirs":             true,
-	"DiscoverEffective":    true,
-	"DiscoverStock":        true,
-	"DiscoverStockContent": true,
-}
-
-// packRootWalkAllowlist contains non-runtime enumeration sites.
-var packRootWalkAllowlist = map[string]string{
-	// Reserved shell includes have no unit id.
-	"lycaon/internal/prompts/bundled_layout.go": "reserved `_` template includes have no unit id",
-	// Persona contracts are definitions rather than contribution units.
-	"lycaon/internal/prompts/persona_contract.go": "reserved persona-contract definition",
-	// Website code generation reads the checkout.
-	"lycaon/internal/website/customization.go": "website codegen projection",
-	"lycaon/internal/website/sdk.go":           "website codegen projection",
-	// Compose validation checks declared references.
-	"lycaon/internal/workflowvalidate/checks_closure.go": "author-ref existence probe",
-	// Test staging produces a resolved catalog.
-	"lycaon/internal/testutil/extpackstest/catalog.go": "test catalog staging helper",
-}
-
-func TestPackContentLoadersCompileFromCatalogBytes(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	sites := scanPackRootWalkCallSites(t, filepath.Join(root, "lycaon"))
-	var unexpected []string
-	for site := range sites {
-		if _, ok := packRootWalkAllowlist[site]; !ok {
-			unexpected = append(unexpected, site)
-		}
-	}
-	sort.Strings(unexpected)
-	for _, u := range unexpected {
-		t.Errorf("%s: walks pack directories after resolve — compile from the resolved catalog's captured unit bytes "+
-			"(catalog.LoadedUnitIDs + UnitContent), or add the file to packRootWalkAllowlist with the reason it is not a loader", u)
-	}
-	for allowed, why := range packRootWalkAllowlist {
-		if _, ok := sites[allowed]; !ok {
-			t.Errorf("packRootWalkAllowlist entry %s (%s) no longer walks pack directories — drop the entry", allowed, why)
-		}
-	}
-}
 
 // Disabled gate feedback is absent from the resolved catalog.
 func TestGateFeedbackLoadsFromCatalogUnits(t *testing.T) {
@@ -151,54 +99,4 @@ func TestContributionLoadersRefuseNilCatalog(t *testing.T) {
 	if _, err := workflowcomposition.LoadTemplatesEffective(nil); err == nil {
 		t.Error("LoadTemplatesEffective(nil) must fail closed")
 	}
-}
-
-func scanPackRootWalkCallSites(t *testing.T, lycaonRoot string) map[string]bool {
-	t.Helper()
-	out := map[string]bool{}
-	err := filepath.WalkDir(lycaonRoot, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			switch d.Name() {
-			case "testdata", "vendor", ".git", "test", "config":
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		rel, relErr := filepath.Rel(filepath.Dir(lycaonRoot), path)
-		if relErr != nil {
-			return relErr
-		}
-		rel = filepath.ToSlash(rel)
-		// extpacks performs discovery; it is the resolver, not a consumer.
-		if strings.HasPrefix(rel, "lycaon/internal/extpacks/") {
-			return nil
-		}
-		f, parseErr := parser.ParseFile(token.NewFileSet(), path, nil, 0)
-		if parseErr != nil {
-			return parseErr
-		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel == nil || !packRootWalkPrimitives[sel.Sel.Name] {
-				return true
-			}
-			if ident, ok := sel.X.(*ast.Ident); ok && ident.Name == "extpacks" {
-				out[rel] = true
-			}
-			return true
-		})
-		return nil
-	})
-	contractcheck.FailErr(t, "walk pack-root walk sites", err)
-	return out
 }

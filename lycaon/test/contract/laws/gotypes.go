@@ -42,7 +42,7 @@ func (c *Corpus) Types() *Program {
 	g := c.Go()
 	prog, err := c.typed.get(func() (*Program, error) {
 		c.typings.Add(1)
-		return typeCheck(g)
+		return typeCheck(g, c.goEnv)
 	})
 	if err != nil {
 		panic(abort{fmt.Errorf("type-check Go corpus: %w", err)})
@@ -61,10 +61,10 @@ type listedPackage struct {
 	Error      *struct{ Err string }
 }
 
-func goList(moduleDir string, args ...string) ([]listedPackage, error) {
+func goList(moduleDir string, env []string, args ...string) ([]listedPackage, error) {
 	cmd := exec.Command("go", append([]string{"list", "-e", "-json=ImportPath,Dir,GoFiles,CgoFiles,Imports,Export,Module,Error"}, args...)...)
 	cmd.Dir = moduleDir
-	cmd.Env = append(os.Environ(), "PWD="+moduleDir)
+	cmd.Env = append(append(os.Environ(), "PWD="+moduleDir), env...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
@@ -88,7 +88,7 @@ func goList(moduleDir string, args ...string) ([]listedPackage, error) {
 	return pkgs, nil
 }
 
-func typeCheck(g *GoCorpus) (*Program, error) {
+func typeCheck(g *GoCorpus, env []string) (*Program, error) {
 	var patterns []string
 	for _, root := range goRoots {
 		if root == "test" {
@@ -98,7 +98,7 @@ func typeCheck(g *GoCorpus) (*Program, error) {
 			patterns = append(patterns, "./"+root+"/...")
 		}
 	}
-	listed, err := goList(g.ModuleDir, append([]string{"-deps"}, patterns...)...)
+	listed, err := goList(g.ModuleDir, env, append([]string{"-deps"}, patterns...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func typeCheck(g *GoCorpus) (*Program, error) {
 	}
 	exports := map[string]string{}
 	if len(external) > 0 {
-		deps, err := goList(g.ModuleDir, append([]string{"-deps", "-export"}, sortedKeys(external)...)...)
+		deps, err := goList(g.ModuleDir, env, append([]string{"-deps", "-export"}, sortedKeys(external)...)...)
 		if err != nil {
 			return nil, err
 		}

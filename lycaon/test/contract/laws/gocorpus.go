@@ -100,7 +100,10 @@ func parseGo(moduleDir string) (*GoCorpus, error) {
 				}
 				return nil
 			}
-			if strings.HasSuffix(name, ".go") && entry.Type().IsRegular() {
+			if strings.HasSuffix(name, ".go") {
+				if !entry.Type().IsRegular() {
+					return fmt.Errorf("%s is not a regular file", p)
+				}
 				paths = append(paths, p)
 			}
 			return nil

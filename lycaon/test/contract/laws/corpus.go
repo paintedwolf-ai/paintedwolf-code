@@ -16,7 +16,8 @@ import (
 // Corpus is everything the laws read. Each part loads on first use, once.
 // Accessors end the running check on a load error or an empty selection.
 type Corpus struct {
-	root string
+	root  string
+	goEnv []string
 
 	goOnce  sync.Once
 	goSrc   *GoCorpus
@@ -44,6 +45,14 @@ func Load(root string) *Corpus {
 		root = abs
 	}
 	return &Corpus{root: root}
+}
+
+// LoadFixture returns a corpus over a fixture tree whose module resolves
+// without the repository's workspace or vendor settings.
+func LoadFixture(root string) *Corpus {
+	c := Load(root)
+	c.goEnv = []string{"GOFLAGS=-mod=mod", "GOWORK=off"}
+	return c
 }
 
 var shared struct {

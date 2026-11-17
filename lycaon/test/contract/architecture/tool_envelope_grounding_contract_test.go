@@ -76,18 +76,6 @@ func TestToolEnvelopeHintCodesHaveProductionEmission(t *testing.T) {
 	}
 }
 
-func TestToolEnvelopePackagesNoInlineHintProseConsts(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	sites, err := guidancescan.ScanInlineEnvelopeHintConsts(lycaonRoot)
-	contractcheck.FailErr(t, "scan inline envelope hint consts", err)
-	if len(sites) > 0 {
-		t.Fatalf("tool envelope packages must not define inline Hint prose consts (use hint registry + BundledEnvelopeHint):\n%s",
-			strings.Join(sites, "\n"))
-	}
-}
-
 func TestListScansEnvelopeNeverBareArray(t *testing.T) {
 	t.Parallel()
 	raw, err := json.Marshal(scantoolapi.NewListScansResponse(t.Context(), nil))

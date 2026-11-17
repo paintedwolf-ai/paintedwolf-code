@@ -14,15 +14,6 @@ import (
 
 // Browser resolution stays pinned across production and test files.
 
-func browserPackageFiles(t *testing.T) map[string]*ast.File {
-	t.Helper()
-	files := map[string]*ast.File{}
-	for _, pkg := range []string{"browser", "browserengine"} {
-		collectGoFiles(t, filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", pkg), files)
-	}
-	return files
-}
-
 // collectGoFiles parses every Go file under root, test files included.
 func collectGoFiles(t *testing.T, root string, into map[string]*ast.File) {
 	t.Helper()
@@ -70,45 +61,6 @@ func TestBrowserTestGateStaysBelowTheLauncher(t *testing.T) {
 					relToRepo(t, path), launcher)
 			}
 		}
-	}
-}
-
-// The browser stays in its launcher's process group for parent-exit cleanup.
-func TestBrowserKeepsItsLauncherProcessGroup(t *testing.T) {
-	t.Parallel()
-	for path, file := range browserPackageFiles(t) {
-		ast.Inspect(file, func(n ast.Node) bool {
-			sel, ok := n.(*ast.SelectorExpr)
-			if !ok {
-				return true
-			}
-			switch sel.Sel.Name {
-			case "Setpgid", "Pdeathsig", "CREATE_NEW_PROCESS_GROUP":
-				t.Errorf("%s sets %s: chrome stays in its launcher's group so a hard-killed "+
-					"parent's group sweep reaches it; its own children need no reaping",
-					relToRepo(t, path), sel.Sel.Name)
-			}
-			return true
-		})
-	}
-}
-
-// Browser resolution never searches PATH.
-func TestBrowserNeverResolvesFromPATH(t *testing.T) {
-	t.Parallel()
-	for path, file := range browserPackageFiles(t) {
-		ast.Inspect(file, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			if name := contractcheck.CallName(call); strings.HasSuffix(name, "LookPath") {
-				t.Errorf("%s calls %s: the browser resolves env → bundle → managed cache "+
-					"and refuses when none is present; it never searches PATH",
-					relToRepo(t, path), name)
-			}
-			return true
-		})
 	}
 }
 

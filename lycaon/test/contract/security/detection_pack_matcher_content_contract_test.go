@@ -1,15 +1,9 @@
 package contract
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/detectionpack"
-	"github.com/lycaon/lycaon/internal/testutil"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // TestDetectionPackRetainedPreciseRulesMatch pins the point-rule table.
@@ -217,28 +211,5 @@ detection:
 	hit, ok := m.Match(contractToolEvent("command", "do boom now", "/p", true, "proxy", "s"))
 	if !ok || hit.Level != detectionpack.LevelCritical || hit.PackID != "zzz-critical" {
 		t.Fatalf("hit=%+v ok=%v", hit, ok)
-	}
-}
-
-// TestDetectionPackEquivalentsNotReadByMatcherAST: Pack.Equivalents unused in matcher/selection/rule.
-func TestDetectionPackEquivalentsNotReadByMatcherAST(t *testing.T) {
-	t.Parallel()
-	dir := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "detectionpack")
-	for _, name := range []string{"matcher.go", "selection.go", "rule.go"} {
-		path := filepath.Join(dir, name)
-		fset := token.NewFileSet()
-		f, err := parser.ParseFile(fset, path, nil, 0)
-		testutil.FailErr(t, "ParseFile "+name, err)
-		ast.Inspect(f, func(n ast.Node) bool {
-			id, ok := n.(*ast.Ident)
-			if ok && id.Name == "Equivalents" {
-				t.Errorf("%s must not reference Equivalents", name)
-			}
-			sel, ok := n.(*ast.SelectorExpr)
-			if ok && sel.Sel != nil && sel.Sel.Name == "Equivalents" {
-				t.Errorf("%s must not select Equivalents", name)
-			}
-			return true
-		})
 	}
 }

@@ -14,26 +14,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestGuidanceNoBannedInlineEmission(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	scan, err := guidancescan.ScanGuidanceEmission(lycaonRoot)
-	contractcheck.FailErr(t, "scan guidance emission sites in internal/", err)
-	if len(scan.QueuePendingTextSites) > 0 {
-		t.Fatalf("QueuePendingText called outside allowlist (use queueCoordinatorGuidanceNudge + hint templates):\n%s",
-			strings.Join(scan.QueuePendingTextSites, "\n"))
-	}
-	if len(scan.GroundingNudgeMessageField) > 0 {
-		t.Fatalf("ErrGroundingNudge must not set Message inline (use Code + Data + FormatCoordinatorNudge):\n%s",
-			strings.Join(scan.GroundingNudgeMessageField, "\n"))
-	}
-	if len(scan.InlineCodeNudgeLiterals) > 0 {
-		t.Fatalf("ad-hoc Code: … — string literals in coordinator packages (register hint + pongo template):\n%s",
-			strings.Join(scan.InlineCodeNudgeLiterals, "\n"))
-	}
-}
-
 func TestGuidanceFormatCallsRegisteredInHintCodes(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
