@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/test/contract/laws"
 )
 
@@ -39,9 +40,13 @@ var topology = []laws.Rule{{
 		r.Expect(loaded, "bundled topologies")
 	},
 }, {
-	// The fan-out and pack patterns each ship a working topology.
-	Name:    "bundled-fan-out-and-pack-topologies-load",
-	Anchors: []laws.Anchor{laws.File(topologyDir + "/fan-out-recon.yaml"), laws.File(topologyDir + "/pack-probe.yaml")},
+	// The fan-out and pack patterns each ship a working topology, and the
+	// bugbash workflow's topology exists.
+	Name: "bundled-fan-out-and-pack-topologies-load",
+	Anchors: []laws.Anchor{
+		laws.File(topologyDir + "/fan-out-recon.yaml"), laws.File(topologyDir + "/pack-probe.yaml"),
+		laws.File(topologyDir + "/default-pipeline.yaml"),
+	},
 	Check: func(r *laws.Run) {
 		fan, err := orchestration.LoadTopologyFromFile(extpacks.OnDisk(r.Path(topologyDir + "/fan-out-recon.yaml")))
 		r.Must(err)
@@ -53,6 +58,13 @@ var topology = []laws.Rule{{
 		r.Must(err)
 		if pack.Pattern != orchestration.TopologyPack || pack.Pack == nil || pack.Pack.Count != 3 {
 			r.Report("pack-probe is not a pack of three: %+v", pack)
+		}
+		bugbash, err := workflowdef.LoadManifestFromFile(r.Path("lycaon/config/packs/painted-wolf/bugbash/workflows/bugbash/workflow.yaml"))
+		r.Must(err)
+		if bugbash.Topology == "" {
+			r.Report("the bugbash workflow names no topology")
+		} else {
+			r.Bytes(topologyDir + "/" + bugbash.Topology + ".yaml")
 		}
 	},
 }}

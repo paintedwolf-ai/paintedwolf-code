@@ -19,6 +19,8 @@ var Family = laws.Family{Name: "catalog-load", Rules: slices.Concat(
 	policyCopy,
 	topology,
 	workflows,
+	phaseGraph,
+	rulesConfig,
 )}
 
 var errNotRegistered = errors.New("not registered")
