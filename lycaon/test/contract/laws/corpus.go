@@ -28,6 +28,7 @@ type Corpus struct {
 	parts   sync.Map // part name -> *onceValue[any]
 	parses  atomic.Int64
 	typings atomic.Int64
+	scratch onceValue[string]
 }
 
 // Stats counts the expensive loads one Corpus performed.
@@ -94,6 +95,24 @@ func (c *Corpus) Root() string { return c.root }
 // Stats reports the loads performed so far.
 func (c *Corpus) Stats() Stats {
 	return Stats{GoParses: c.parses.Load(), TypeChecks: c.typings.Load()}
+}
+
+// Scratch returns a directory loaders may write to, such as a user config
+// directory a catalog loads against. Close removes it.
+func (c *Corpus) Scratch() string {
+	dir, err := c.scratch.get(func() (string, error) { return os.MkdirTemp("", "laws-") })
+	if err != nil {
+		panic(abort{fmt.Errorf("create scratch directory: %w", err)})
+	}
+	return dir
+}
+
+// Close removes the scratch directory, if one was made.
+func (c *Corpus) Close() error {
+	if c.scratch.value == "" {
+		return nil
+	}
+	return os.RemoveAll(c.scratch.value)
 }
 
 // Path joins a repository-relative path onto the root.

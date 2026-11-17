@@ -10,12 +10,14 @@ import (
 
 func TestMain(m *testing.M) {
 	code := m.Run()
-	if code == 0 {
-		if corpus, err := laws.Shared(); err == nil {
-			if stats := corpus.Stats(); stats.GoParses > 1 || stats.TypeChecks > 1 {
-				println("laws: the Go corpus loaded more than once:", stats.GoParses, "parses,", stats.TypeChecks, "type-checks")
-				code = 1
-			}
+	if corpus, err := laws.Shared(); err == nil {
+		if stats := corpus.Stats(); stats.GoParses > 1 || stats.TypeChecks > 1 {
+			println("laws: the Go corpus loaded more than once:", stats.GoParses, "parses,", stats.TypeChecks, "type-checks")
+			code = 1
+		}
+		if err := corpus.Close(); err != nil {
+			println("laws:", err.Error())
+			code = 1
 		}
 	}
 	os.Exit(code)
