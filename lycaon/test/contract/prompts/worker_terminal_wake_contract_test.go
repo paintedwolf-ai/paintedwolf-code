@@ -127,6 +127,7 @@ func TestWorkerPollerTerminalQueueOpsNotifyOutcomes(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	sqlDB := testdbfixture.Open(t, "poller-outcomes.db")
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	parent, err := store.NewSQL(sqlDB).Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
 	queue := worker.NewSQLQueue(sqlDB, 3)

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
@@ -75,6 +76,7 @@ func TestCoordinatorCoreVarWhitelist(t *testing.T) {
 			t.Run(fmt.Sprintf("%s/%d-roots", id, rootCount), func(t *testing.T) {
 				vars, supplied := coordinatorCoreVars(t, id, rootCount)
 				for _, ref := range refs {
+					ref, _, _ = strings.Cut(ref, ".")
 					if !supplied[ref] && !prompts.IsDeclaredOrReservedReaderFact(ref) {
 						t.Errorf("coordinator-core reads %q, which no reader fact or prompt builder supplies", ref)
 					}

@@ -26,6 +26,7 @@ func TestSynthesisGroundingInvariants_closeoutCitationAuditUsesCloseoutEvidenceU
 	ctx := context.Background()
 	root := t.TempDir()
 	sqlDB := testdbfixture.Open(t, "closeout-union.db")
+	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, root)
 	sessions := store.NewSQL(sqlDB)
 	parent, err := sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create parent", err)
