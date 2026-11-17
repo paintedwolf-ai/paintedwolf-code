@@ -82,22 +82,47 @@ func TestCommandCurlUnsupportedFormDoesNotLaunchInstalledCurl(t *testing.T) {
 }
 
 // Basic credentials carry a reference in their password, a placement curl
-// declares, and the service receives the resolved value.
+// declares, and the service receives the resolved value, with or without a
+// declared service and a loopback capability.
 func TestCommandCurlDeliversAReferenceInBasicCredentials(t *testing.T) {
-	run, sess := newSecretSinkRun(t)
-	reference := run.generatedReference(t, sess, secretcap.ScopeChat)
-	server, seen := requestRecorder(t, run)
-	run.script.steps = []citableStep{{command: "curl -sS -u 'user:" + reference + "' " + server.URL}}
-	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "call the service")
-	testutil.FailErr(t, "prompt", err)
-	outcomes := run.outcomes(t)
-	if len(outcomes) != 1 || outcomes[0].state != "completed" || outcomes[0].stopCode != "" {
-		run.logResults(t)
-		t.Fatalf("outcomes = %+v", outcomes)
-	}
-	want := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:"+sinkSentinel))
-	if got := seen(); len(got) != 1 || got[0] != want {
-		run.logResults(t)
-		t.Fatalf("service saw %q", got)
+	for _, declared := range []bool{false, true} {
+		name := "plain"
+		if declared {
+			name = "declared service"
+		}
+		t.Run(name, func(t *testing.T) {
+			run, sess := newSecretSinkRun(t)
+			scope := secretcap.ScopeChat
+			if declared {
+				scope = secretcap.ScopeProject
+			}
+			reference := run.generatedReference(t, sess, scope)
+			server, seen := requestRecorder(t, run)
+			command := "curl -sS -u 'user:" + reference + "' " + server.URL
+			step := citableStep{command: command}
+			if declared {
+				parsed, err := url.Parse(server.URL)
+				testutil.FailErr(t, "parse server", err)
+				port, err := strconv.Atoi(parsed.Port())
+				testutil.FailErr(t, "parse port", err)
+				step = citableStep{tool: "command", args: map[string]any{
+					"command": command, "secret_use": map[string]any{"services": []any{server.URL}},
+					"capability_request": map[string]any{"loopback_connect": map[string]any{"ports": []any{port}}},
+				}}
+			}
+			run.script.steps = []citableStep{step}
+			_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "call the service")
+			testutil.FailErr(t, "prompt", err)
+			outcomes := run.outcomes(t)
+			if len(outcomes) != 1 || outcomes[0].state != "completed" || outcomes[0].stopCode != "" {
+				run.logResults(t)
+				t.Fatalf("outcomes = %+v", outcomes)
+			}
+			want := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:"+sinkSentinel))
+			if got := seen(); len(got) != 1 || got[0] != want {
+				run.logResults(t)
+				t.Fatalf("service saw %q", got)
+			}
+		})
 	}
 }
