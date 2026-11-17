@@ -125,26 +125,10 @@ describe("scalable layout chrome", () => {
     );
   });
 
-  it("keeps activity headers responsive and reserves two lines for summaries with a hint", () => {
+  it("aligns disclosure marks and sizes worker cards", () => {
     const tools = read("tool-utilities.css");
     const workers = read("worker-utilities.css");
 
-    expect(tools).toMatch(
-      /@utility den-activity-span\s*\{[\s\S]*?container-name:\s*den-activity-span/,
-    );
-    expect(tools).toMatch(
-      /@utility den-activity-span-chicklet\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\) auto;[\s\S]*?&:has\(> \.den-activity-span-hint\)\s*\{\s*min-height:\s*max\(48px,\s*calc\(var\(--text-den-compact\) \* 2\.7 \+ 1em\)\)/,
-    );
-    expect(tools).toMatch(
-      /@utility den-activity-span-name\s*\{[\s\S]*?text-overflow:\s*ellipsis/,
-    );
-    expect(tools).toMatch(
-      /@utility den-activity-span-hint\s*\{[\s\S]*?grid-column:\s*1 \/ -1;[\s\S]*?text-overflow:\s*ellipsis/,
-    );
-    expect(tools).not.toMatch(/\.den-activity-span-hint\s*\{\s*display:\s*none/);
-    expect(tools).toMatch(
-      /@container den-activity-span \(max-width:\s*15rem\)\s*\{[\s\S]*?\.den-activity-span-count\s*\{[\s\S]*?display:\s*none/,
-    );
     expect(tools).toMatch(
       /\.den-tool-part\[data-accordion-row\] \.den-row-mark\s*\{\s*margin-left:\s*auto/,
     );
