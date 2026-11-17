@@ -8,11 +8,11 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func loadCheckout(t *testing.T) (*Graph, declarations) {
+func loadCheckout(t *testing.T) (*Graph, Declarations) {
 	t.Helper()
 	root := testutil.CheckoutRoot(t)
 	tree := NewFileSystem(root)
-	graph, err := buildGraph(tree)
+	graph, err := BuildGraph(tree)
 	testutil.FailErr(t, "build import graph", err)
 	loaded, err := loadDeclarations(tree.Read)
 	testutil.FailErr(t, "load structure declarations", err)
@@ -31,7 +31,7 @@ func TestDeclaredDirectoriesMatchCheckout(t *testing.T) {
 	}
 	slices.Sort(names)
 	for _, name := range names {
-		if _, err := analyze(graph, name, loaded[name]); err != nil {
+		if _, err := Analyze(graph, name, loaded[name]); err != nil {
 			t.Errorf("declaration %s: %v", name, err)
 		}
 	}

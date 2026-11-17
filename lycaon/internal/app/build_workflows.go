@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/lycaon/lycaon/internal/app/delegations"
 	"github.com/lycaon/lycaon/internal/app/scanning"
+	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitexec"
@@ -18,8 +18,7 @@ import (
 )
 
 func (b *serveBuilder) wireWorkflows() error {
-	b.delegations = delegations.New(b.storage.Database, b.events.Outbox, b.worker.cfg)
-	b.sessions.Manager.Coordinator.Closeout.SetDelegations(b.delegations.Store)
+	b.workerRuntime = workerruntime.New(b.storage.Database, b.events.Outbox, b.worker.cfg)
 
 	var err error
 	b.workflows, err = workflows.Build(b.startup.ctx, workflows.Dependencies{
@@ -30,7 +29,6 @@ func (b *serveBuilder) wireWorkflows() error {
 		Projects:            b.storage.Projects,
 		Sessions:            b.storage.Sessions,
 		SessionManager:      b.sessions.Manager,
-		DelegationStore:     b.delegations.Store,
 		EventsOutbox:        b.events.Outbox,
 		EventPublisher:      b.events.Publisher,
 		AuthzRecorder:       b.security.Authority.Recorder,
@@ -58,9 +56,6 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 	releaseGitStatus := b.git.status.RegisterRepochangeObserver()
 	b.startup.resources.Track("git-status-observer", 22, func(context.Context) error { releaseGitStatus(); return nil })
 	b.git.repoSets = git.NewRepoSetCache(git.DefaultStatusCacheTTL)
-	if b.execution.Host != nil {
-		b.execution.Host.Survey.SetGitStatusCache(b.git.status)
-	}
 
 	snapshotStore := b.storage.SourceLedger.Snapshots
 
@@ -81,17 +76,10 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 		SimpleInspector:       b.workflows.Inspector,
 		FingerprintScannerKey: b.security.Fingerprinter.ScannerKey,
 		ScanIgnores:           b.security.ScanIgnores,
-		InjectRenderer:        b.delegations.InjectRenderer,
+		InjectRenderer:        b.workerRuntime.InjectRenderer,
 		Fixtures: scanning.ScannerFixtures{
 			Registry:         b.startup.cfg.TestScanRegistry,
 			AdvisoryDatabase: b.startup.cfg.TestAdvisoryDatabase,
-		},
-		DelegationBySession: func(sessionID string) (string, string, bool) {
-			delegationID, ok := b.delegations.Store.DelegationBySessionID(sessionID)
-			if !ok {
-				return "", "", false
-			}
-			return delegationID, "", true
 		},
 		WorkflowRunsGet:   b.workflows.Store.Runs.Get,
 		WorkflowRunParams: b.workflows.Manager.Obligations.ObligationParams,
@@ -103,12 +91,7 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 		OnScanDone: func(ctx context.Context, completed api.CodeScan) {
 			b.sessions.Manager.Coordinator.Scans.Finished(ctx, completed)
 		},
-		RetryCloseout: func(ctx context.Context, delegationID string) error {
-			if b.delegations != nil && b.delegations.Manager != nil {
-				return b.delegations.Manager.RetryCloseout(ctx, delegationID)
-			}
-			return nil
-		},
+		OnScanCloseout: b.workerRuntime.OnScanCloseout,
 		WorkflowTerminals: func(ctx context.Context, scanID string) error {
 			return scanning.ReconcileTerminals(ctx, b.scanning.Store, scanID, b.workflows.Manager.Obligations.RecordObligationTerminal)
 		},
@@ -128,9 +111,9 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 	b.sessions.Manager.SetReportDocumentChecker(b.workflows.Manager.Reports)
 	b.sessions.Manager.Coordinator.Scans.Evidence = b.workflows.Manager.Coverage
 
-	b.events.BindWorkers(b.delegations.Queue)
-	b.delegations.Queue.SetWorkflowDomains(&worker.WorkflowDomains{Runs: b.workflows.Manager.Policy, Tasks: b.workflows.Manager.Fanout})
-	b.workflows.Store.Transactions.SetWorkerRunnableNotifier(b.delegations.Queue)
+	b.events.BindWorkers(b.workerRuntime.Queue)
+	b.workerRuntime.Queue.SetWorkflowDomains(&worker.WorkflowDomains{Runs: b.workflows.Manager.Policy, Tasks: b.workflows.Manager.Fanout})
+	b.workflows.Store.Transactions.SetWorkerRunnableNotifier(b.workerRuntime.Queue)
 
 	if err := b.seedHostPowerWork(); err != nil {
 		return err
@@ -140,7 +123,7 @@ func (b *serveBuilder) wireWorkflowScanServices() error {
 }
 
 func (b *serveBuilder) seedHostPowerWork() error {
-	openWorkers, err := b.delegations.Queue.List(b.startup.ctx, "", api.WorkerStatusPending, api.WorkerStatusRunning)
+	openWorkers, err := b.workerRuntime.Queue.List(b.startup.ctx, "", api.WorkerStatusPending, api.WorkerStatusRunning)
 	if err != nil {
 		return fmt.Errorf("seed host power from workers: %w", err)
 	}
@@ -164,14 +147,15 @@ func (b *serveBuilder) wireWorkflowConditions() error {
 	}
 	err := b.workflows.BuildConditions(b.startup.ctx, workflows.ConditionDependencies{
 		ModuleRoot:              b.catalog.ModuleRoot,
-		DelegationStore:         b.delegations.Store,
+		PlanCloseout:            b.workerRuntime.PlanCloseoutComplete,
+		PlanWorkIDs:             b.workerRuntime.PlanWorkIDs,
 		ScanStore:               b.scanning.Store,
 		ScanObligation:          b.scanning.Obligation,
 		Snapshots:               b.storage.SourceLedger.Snapshots,
 		GatesCfg:                b.scanning.GatesCfg,
 		SecurityScannersEnabled: scannersEnabled,
 		Checkpoints:             b.sessions.Checkpoints,
-		WorkerQueue:             b.delegations.Queue,
+		WorkerQueue:             b.workerRuntime.Queue,
 		Agents:                  b.agents.Registry,
 		Postures:                b.agents.Postures,
 		EffectiveCatalog:        b.catalog.Effective,
@@ -200,13 +184,12 @@ func (b *serveBuilder) wireWorkflowConditions() error {
 	}
 	b.workflows.Manager.Obligations.Register(b.scanning.Obligation)
 	workflowTaskQuery1 := func(ctx context.Context, runID string) ([]api.WorkerTask, error) {
-		return b.delegations.Queue.ListByWorkflowRunID(ctx, runID)
+		return b.workerRuntime.Queue.ListByWorkflowRunID(ctx, runID)
 	}
 	b.workflows.Manager.Fanout.WorkerTasks = workflowTaskQuery1
 	b.workflows.Manager.Coverage.WorkerTasks = workflowTaskQuery1
 	b.workflows.Manager.Verdicts.Questions.WorkerTasks = workflowTaskQuery1
 	b.workflows.Manager.Verdicts.WorkerTasks = workflowTaskQuery1
-	b.workflows.Manager.Fanout.WorkerToolBudget = b.sessions.WorkerToolBudgetFor
 	b.security.BindSpawnAgents(b.workflows.Manager.Policy.AllowedAgents)
 	b.workflows.Manager.Verdicts.Evidence.EvidenceDigests = append(b.workflows.Manager.Verdicts.Evidence.EvidenceDigests, scan.WorkflowEvidenceDigest(b.scanning.Store))
 	return nil

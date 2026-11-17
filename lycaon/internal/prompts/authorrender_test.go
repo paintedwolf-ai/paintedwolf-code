@@ -249,7 +249,7 @@ func TestAuthorRender_SkillVarOverlay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AuthorRender: %v", err)
 	}
-	if !strings.Contains(res.Output, "at most **2** legs") {
+	if !strings.Contains(res.Output, "at most **2** workers") {
 		t.Fatalf("--var did not overlay the sizing var:\n%s", res.Output)
 	}
 }

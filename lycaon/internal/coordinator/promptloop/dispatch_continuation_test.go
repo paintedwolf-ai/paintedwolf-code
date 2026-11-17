@@ -48,7 +48,7 @@ func TestDispatchContinuesUntilExplicitWait(t *testing.T) {
 				tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: role}
 				return "accepted", nil
 			}))
-			testutil.FailErr(t, "register wait", loopwake.RegisterWaitTool(reg, wakes.Subscriptions, loopwake.WaitToolDeps{}))
+			testutil.FailErr(t, "register wait", loopwake.RegisterWaitTool(reg, wakes.Subscriptions, loopwake.WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}))
 			calls := []api.ToolCall{
 				{ID: "comparison", Name: "task", Args: taskCallArgs("web-researcher", "Compare codebase sizes using current external sources")},
 				{ID: "composition", Name: "task", Args: taskCallArgs("repo-researcher", "Explain the local codebase composition and growth")},

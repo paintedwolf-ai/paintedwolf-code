@@ -334,11 +334,6 @@ var allDiagnosticCodes = []string{
 	DiagExtendsCoResolve,
 }
 
-// AllDiagnosticCodes returns a copy of the resolve diagnostic code registry.
-func AllDiagnosticCodes() []string {
-	return append([]string(nil), allDiagnosticCodes...)
-}
-
 // Manifest is extension.yaml (author-facing).
 type Manifest struct {
 	ManifestVersion  int                          `yaml:"manifest_version"`

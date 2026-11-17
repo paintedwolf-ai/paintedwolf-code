@@ -187,7 +187,6 @@ func bodyDecidesLoopback(body *ast.BlockStmt) bool {
 var confinementProducers = []laws.Exemption{
 	{Key: "internal/tools/native/command/program_external.go", Reason: "programEnvironment: DefaultConfinement from ActionConfineInputsForContext; host-derived roots and grants for the shared launch environment"},
 	{Key: "internal/tools/native/command/command_exec.go", Reason: "commandConfineRoots(tctx, extraWriteRoots): host-selected root, attached roots and the approved chat write-root overlay"},
-	{Key: "internal/tools/native/command/background_tools.go", Reason: "commandConfineRoots(tctx, extraWriteRoots): the same union as a foreground command"},
 	{Key: "internal/tools/native/terminal/session_open.go", Reason: "tools.ConfineRootsForAction(tctx): host provenance only"},
 	{Key: "internal/tools/safecmd/safecmd.go", Reason: "Confine(roots) wrapper; callers supply session roots"},
 	{Key: "internal/mcp/connector.go", Reason: "stdioConfinement(roots): server spawn roots from the session, never from tool arguments"},

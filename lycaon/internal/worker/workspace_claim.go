@@ -2,8 +2,8 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workerops"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -11,7 +11,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
-	"github.com/lycaon/lycaon/internal/layeredfs/claim"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/project"
@@ -21,28 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-var (
-	workerClaimStateMu sync.RWMutex
-	workerClaimStates  = make(map[string]claim.WorkspaceStateSnapshot)
-)
-
-func recordWorkerClaimState(jobID string, snap claim.WorkspaceStateSnapshot) {
-	workerClaimStateMu.Lock()
-	workerClaimStates[strings.TrimSpace(jobID)] = snap
-	workerClaimStateMu.Unlock()
-}
-
-// WorkerClaimWorkspaceState returns the typed WorkspaceStateSnapshot and DispatchWorkspaceReceipt for jobID.
-func WorkerClaimWorkspaceState(jobID string) (claim.WorkspaceStateSnapshot, claim.DispatchWorkspaceReceipt, bool) {
-	workerClaimStateMu.RLock()
-	snap, ok := workerClaimStates[strings.TrimSpace(jobID)]
-	workerClaimStateMu.RUnlock()
-	if !ok {
-		return claim.WorkspaceStateSnapshot{}, claim.DispatchWorkspaceReceipt{}, false
-	}
-	return snap, claim.BuildReceipt(snap), true
-}
 
 const workspacePreparationEmitInterval = 500 * time.Millisecond
 
@@ -83,34 +60,46 @@ func (q *sqlQueuePromotion) ClaimWorkerBranch(ctx context.Context, jobID string)
 	if !ok || task == nil {
 		return nil, ErrWorkerBranchClaimFailed
 	}
-	for _, id := range task.AfterWorkers {
-		upstream, ok := q.Get(id) //nolint:contextcheck // bounded Get
-		if !ok || !api.WorkerOutputReady(upstream) {
-			return nil, ErrWorkerPrerequisitesPending
-		}
+	if pending, err := workerops.PrerequisitePending(ctx, q.store.queries.LatestRoundJobForJob, q, *task); err != nil {
+		return nil, err
+	} else if pending {
+		return nil, ErrWorkerPrerequisitesPending
 	}
-	if !task.EffectiveScope().IsWrite() {
+	if !task.EffectiveScope().IsWrite() && !q.ReviewsWorker(ctx, task) {
 		return task, nil
 	}
 	if strings.TrimSpace(task.WorkspaceRoot) != "" {
 		return task, nil
 	}
-	claimCtx := q.withWorkspacePreparation(ctx, task)
+	claimCtx, stopPreparation := q.withWorkspacePreparation(ctx, task)
+	defer stopPreparation()
 	if err := q.provisionWorkerBranch(claimCtx, task); err != nil {
-		q.clearWorkspacePreparation(task)
 		return nil, err
 	}
-	q.clearWorkspacePreparation(task)
+	stopPreparation()
 	q.refreshBoard(ctx, *task, task.ProjectID)
 	return task, nil
 }
 
+// ReviewsWorker reports a read job that reviews a sealed result: it runs in
+// a view of that result, prepared like a lane.
+func (q *sqlQueuePromotion) ReviewsWorker(ctx context.Context, task *api.WorkerTask) bool {
+	q.mu.Lock()
+	lanes := q.lanes
+	q.mu.Unlock()
+	return lanes != nil && lanes.Reviews(ctx, task)
+}
+
 func (q *sqlQueuePromotion) provisionWorkerBranch(ctx context.Context, task *api.WorkerTask) error {
-	if task == nil || !task.EffectiveScope().IsWrite() || strings.TrimSpace(task.WorkspaceRoot) != "" {
+	if task == nil || strings.TrimSpace(task.WorkspaceRoot) != "" {
+		return nil
+	}
+	reviewer := q.ReviewsWorker(ctx, task)
+	if !task.EffectiveScope().IsWrite() && !reviewer {
 		return nil
 	}
 	q.mu.Lock()
-	ws, projects, baselines := q.workerWorkspace, q.projects, q.baselines
+	ws, projects, baselines, lanes := q.workerWorkspace, q.projects, q.baselines, q.lanes
 	q.mu.Unlock()
 	if ws == nil || baselines == nil {
 		return ErrWorkerBranchClaimFailed
@@ -119,34 +108,58 @@ func (q *sqlQueuePromotion) provisionWorkerBranch(ctx context.Context, task *api
 	if len(roots) == 0 {
 		return ErrWorkerBranchClaimFailed
 	}
+	if task.Scope != nil && len(task.Scope.Paths) > 0 {
+		ctx = workspace.WithWorkspaceSelection(ctx, adapter.WorkspaceSelection{}, task.Scope.Paths...)
+	}
+	ctx = workspace.WithWorkspaceProject(ctx, task.ProjectID)
+	if lanes != nil {
+		root, ok, err := lanes.Prepare(ctx, task, roots)
+		if ok {
+			if err != nil {
+				return fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
+			}
+			return q.bindWorkerBranch(ctx, task, &workspace.Binding{ID: task.ID, Root: root}, workspace.SandboxLayout{}, baselines, ws, false)
+		}
+		if err != nil {
+			return fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
+		}
+	}
+	if reviewer {
+		// A reviewer has no view but its subject's.
+		return fmt.Errorf("%w: review view unavailable", ErrWorkerBranchClaimFailed)
+	}
 	parentCheckpoint, err := stackedParentCheckpoint(ctx, task, roots, q.self, ws)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
 	}
 	activeID := strings.TrimSpace(task.WorkspaceRootID)
-	if task.Scope != nil && len(task.Scope.Paths) > 0 {
-		ctx = workspace.WithWorkspaceSelection(ctx, adapter.WorkspaceSelection{}, task.Scope.Paths...)
-	}
-	ctx = workspace.WithWorkspaceProject(ctx, task.ProjectID)
 	binding, layout, err := createTaskBranch(ctx, ws, roots, activeID, task.ID, parentCheckpoint)
 	if err != nil {
-		readiness := claim.StateFailedPreparation
-		if errors.Is(err, claim.ErrSettlementUnresolved) {
-			readiness = claim.StateRecoveryRequired
-		}
-		recordWorkerClaimState(task.ID, claim.WorkspaceStateSnapshot{
-			Identity:  claim.ClaimIdentity{WorkerID: task.ID, ProjectID: task.ProjectID, ViewID: task.ID},
-			Readiness: readiness,
-			Notice:    claim.WorkspaceNotice{Severity: claim.SeverityError, ReasonCode: claim.ClassifyFailureReason(err), Diagnostic: err.Error()},
-		})
 		return fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
 	}
+	if binding == nil || strings.TrimSpace(binding.Root) == "" {
+		return ErrWorkerBranchClaimFailed
+	}
+	return q.bindWorkerBranch(ctx, task, binding, layout, baselines, ws, true)
+}
+
+// bindWorkerBranch records the branch a job runs in. A branch the job
+// created is released if another claim recorded one first; a worker's lane
+// outlives the job and is never released here.
+func (q *sqlQueuePromotion) bindWorkerBranch(ctx context.Context, task *api.WorkerTask, binding *workspace.Binding, layout workspace.SandboxLayout, baselines *workspacebaseline.Store, ws WorkerWorkspaceManager, owned bool) error {
 	if binding == nil || strings.TrimSpace(binding.Root) == "" {
 		return ErrWorkerBranchClaimFailed
 	}
 	// A view captured by checkpoint keeps nothing here: hashing the tree is what claiming must not do.
 	baselinePath := ""
 	if !workspace.BranchUsesCheckpoints(binding.Root) {
+		if !owned {
+			roots, err := workspace.BranchRootRefs(binding.Root)
+			if err != nil {
+				return fmt.Errorf("%w: lane roots: %w", ErrWorkerBranchClaimFailed, err)
+			}
+			layout = workspace.SandboxLayout{Roots: roots}
+		}
 		var err error
 		baselinePath, err = baselines.Capture(ctx, task.ID, workspacebaseline.Branch(layout.Roots, binding.Root))
 		if err != nil {
@@ -163,14 +176,14 @@ func (q *sqlQueuePromotion) provisionWorkerBranch(ctx context.Context, task *api
 		return err
 	}
 	if !won {
+		if !owned {
+			binding = &workspace.Binding{ID: task.ID}
+		}
 		if err := q.adoptExistingWorkerWorkspace(ctx, task, binding, ws); err != nil {
 			return err
 		}
 	} else {
 		task.WorkspaceRoot, task.WorkspaceBaselinePath = binding.Root, baselinePath
-	}
-	if snap, _, ok := workspace.BranchWorkspaceState(task.WorkspaceRoot); ok {
-		recordWorkerClaimState(task.ID, snap)
 	}
 	return nil
 }
@@ -190,16 +203,32 @@ func (q *sqlQueuePromotion) adoptExistingWorkerWorkspace(ctx context.Context, ta
 	return nil
 }
 
-func (q *sqlQueueCore) withWorkspacePreparation(ctx context.Context, task *api.WorkerTask) context.Context {
+func (q *sqlQueueCore) withWorkspacePreparation(ctx context.Context, task *api.WorkerTask) (context.Context, func()) {
 	if task == nil || !task.EffectiveScope().IsWrite() {
-		return ctx
+		return ctx, func() {}
 	}
 	var reportMu sync.Mutex
 	var lastEmit time.Time
 	lastStage := ""
+	stopped := false
+	stop := func() {
+		reportMu.Lock()
+		defer reportMu.Unlock()
+		if stopped {
+			return
+		}
+		stopped = true
+		q.mu.Lock()
+		delete(q.preparations, task.ID)
+		task.WorkspacePreparation = nil
+		q.mu.Unlock()
+	}
 	return workspace.WithPreparationReporter(ctx, func(progress workspace.PreparationProgress) {
 		reportMu.Lock()
 		defer reportMu.Unlock()
+		if stopped {
+			return
+		}
 		preparation := &api.WorkspacePreparation{
 			Strategy:          api.WorkspaceProvisionStrategy(progress.Strategy),
 			Stage:             progress.Stage,
@@ -220,17 +249,7 @@ func (q *sqlQueueCore) withWorkspacePreparation(ctx context.Context, task *api.W
 			lastEmit, lastStage = now, progress.Stage
 			q.refreshBoard(context.WithoutCancel(ctx), snapshot, task.ProjectID)
 		}
-	})
-}
-
-func (q *sqlQueueCore) clearWorkspacePreparation(task *api.WorkerTask) {
-	if task == nil {
-		return
-	}
-	q.mu.Lock()
-	delete(q.preparations, task.ID)
-	task.WorkspacePreparation = nil
-	q.mu.Unlock()
+	}), stop
 }
 
 func (q *sqlQueueCore) decorateWorkspacePreparations(tasks []api.WorkerTask) {
@@ -257,9 +276,9 @@ func (q *sqlQueueCore) destroyWorkerWorkspace(ctx context.Context, task *api.Wor
 		return
 	}
 	q.mu.Lock()
-	ws := q.workerWorkspace
+	ws, lanes := q.workerWorkspace, q.lanes
 	q.mu.Unlock()
-	if ws == nil {
+	if ws == nil || lanes.Holds(ctx, task) {
 		return
 	}
 	if err := ws.DestroyWorkerWorkspace(context.WithoutCancel(ctx), &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}); err != nil {
@@ -341,9 +360,17 @@ func (q *sqlQueuePromotion) ListBranchJobs(ctx context.Context) ([]BranchJob, er
 			}
 		}
 		out = append(out, BranchJob{
-			ID: row.ID, ProjectID: row.ProjectID,
+			ID: row.ID, ProjectID: row.ProjectID, Branch: branchName(db.StringFromNull(row.WorkspaceRelpath)),
 			Sealed: branchJobSealed(status, mergeStatus, overlayID, branchRoot),
 		})
 	}
 	return out, nil
+}
+
+// branchName is the directory a branch root names, or "" for none.
+func branchName(root string) string {
+	if root = strings.TrimSpace(root); root == "" {
+		return ""
+	}
+	return filepath.Base(filepath.Clean(root))
 }

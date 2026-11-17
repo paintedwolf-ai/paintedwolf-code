@@ -17,7 +17,8 @@ import type {
 import type { AppStore } from "../../store/app-state-model.ts";
 import { overlayRel } from "../../platform/files/overlay-dir.ts";
 import { emptyProjects } from "../../test/projects-fixture.ts";
-import { applyFilesBufferDraft, applyFilesBufferLoad, applyFilesBufferEditorDocument, openFilesBuffer, resetProjectFilesForTests } from "../../files/documents/project-files-buffers.ts";
+import { applyFilesBufferDraft, applyFilesBufferLoad, applyFilesBufferEditorDocument } from "../../files/documents/project-files-buffer-io.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../../files/documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../../files/documents/files-buffer-state.ts";
 import {
   filesTreeCollapsed,

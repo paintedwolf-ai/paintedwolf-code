@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -125,7 +126,7 @@ func appendMessagesTx(ctx context.Context, s *sqlCore, tx *sql.Tx, id string, ms
 		if err := qtx.InsertSessionEntry(ctx, db.InsertSessionEntryParams{
 			ID: msgs[i].ID, SessionID: id, Ord: ord,
 			ResourceKind: resourceKind, ResourceID: resourceID,
-			CreatedAt: db.FormatTime(msgs[i].CreatedAt),
+			CreatedAt: timelayout.Format(msgs[i].CreatedAt),
 		}); err != nil {
 			if db.IsUniqueConstraint(err) {
 				return duplicateMessageID(msgs[i].ID)
@@ -173,7 +174,7 @@ func appendMessagesTx(ctx context.Context, s *sqlCore, tx *sql.Tx, id string, ms
 			return err
 		}
 	}
-	at := db.FormatTime(time.Now().UTC())
+	at := timelayout.Format(time.Now().UTC())
 	if appendsActivity(msgs) {
 		return qtx.TouchSessionActivity(ctx, db.TouchSessionActivityParams{At: at, ID: id})
 	}

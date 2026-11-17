@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -37,7 +36,6 @@ type Dependencies struct {
 	Projects            project.Registry
 	Sessions            *store.SQL
 	SessionManager      *session.Host
-	DelegationStore     *delegation.SQLStore
 	EventsOutbox        *eventoutbox.Outbox
 	EventPublisher      *events.Publisher
 	AuthzRecorder       authzledger.TransactionalRecorder

@@ -38,19 +38,23 @@ type AssemblyWorkflow struct {
 }
 
 type Assembly struct {
-	Workflow      AssemblyWorkflow
-	Messages      inject.MessageWindowReader
-	Briefs        *sourcebrief.Service
-	Catalog       *sessioncatalog.Service
-	Closeout      *closeoutassembly.Service
-	Feedback      *feedback.GateFeedbackCatalog
-	Frame         inject.CoordinatorTurnFrameSource
-	Guards        *turnguards.Service
-	Hints         *guidance.HintConfig
-	Limits        *sessionlimits.Service
-	Loading       *loading.Service
-	Model         *Model
-	Notes         *workeroutcomes.Notes
+	Workflow AssemblyWorkflow
+	Messages inject.MessageWindowReader
+	Briefs   *sourcebrief.Service
+	Catalog  *sessioncatalog.Service
+	Closeout *closeoutassembly.Service
+	Feedback *feedback.GateFeedbackCatalog
+	Frame    inject.CoordinatorTurnFrameSource
+	Guards   *turnguards.Service
+	Hints    *guidance.HintConfig
+	Limits   *sessionlimits.Service
+	Loading  *loading.Service
+	Model    *Model
+	Notes    *workeroutcomes.Notes
+	// MessageDelivery delivers coordinator and worker messages into requests.
+	MessageDelivery assembly.MessageDeliveryRecorder
+	// WorkerRoster lists a coordinator's workers for its requests.
+	WorkerRoster  assembly.WorkerRosterSource
 	PolicyIndex   *policyindex.Service
 	Processes     *processcontrol.Service
 	Profiles      *profiles.Service
@@ -76,8 +80,8 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		Agents:                m.Profiles.Agents,
 		Workflows:             m.Workflow.Manifests,
 		CoordinatorFrame:      m.Frame,
-		WorkerContext:         m.WorkerContext,
-		SiblingNoteDelivery:   m.Notes,
+		Workers:               assembly.Workers{Leg: m.WorkerContext, Roster: m.WorkerRoster},
+		Deliveries:            assembly.Deliveries{SiblingNotes: m.Notes, Messages: m.MessageDelivery},
 		PeerReservations:      m.Workspaces,
 		ImplementSessionState: m.State.ForSession,
 		ExecutionModes:        rt.ExecutionModeStore(),

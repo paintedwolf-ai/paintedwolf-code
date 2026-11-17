@@ -10,7 +10,6 @@ components:
       - $ref: '#/components/schemas/EventEnvelopeWorker'
       - $ref: '#/components/schemas/EventEnvelopeCheckpoint'
       - $ref: '#/components/schemas/EventEnvelopeBoard'
-      - $ref: '#/components/schemas/EventEnvelopeDelegation'
       - $ref: '#/components/schemas/EventEnvelopeCost'
       - $ref: '#/components/schemas/EventEnvelopeLlm'
       - $ref: '#/components/schemas/EventEnvelopeActivity'
@@ -50,7 +49,6 @@ components:
           worker: '#/components/schemas/EventEnvelopeWorker'
           checkpoint: '#/components/schemas/EventEnvelopeCheckpoint'
           board: '#/components/schemas/EventEnvelopeBoard'
-          delegation: '#/components/schemas/EventEnvelopeDelegation'
           cost: '#/components/schemas/EventEnvelopeCost'
           llm: '#/components/schemas/EventEnvelopeLlm'
           activity: '#/components/schemas/EventEnvelopeActivity'
@@ -142,18 +140,6 @@ components:
             const: board
           data:
             $ref: 'events.yaml#/components/schemas/BoardEvent'
-    EventEnvelopeDelegation:
-      allOf:
-      - $ref: 'events.yaml#/components/schemas/EventEnvelopeBase'
-      - type: object
-        required:
-        - topic
-        - data
-        properties:
-          topic:
-            const: delegation
-          data:
-            $ref: 'events.yaml#/components/schemas/DelegationEvent'
     EventEnvelopeCost:
       allOf:
       - $ref: 'events.yaml#/components/schemas/EventEnvelopeBase'

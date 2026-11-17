@@ -41,7 +41,7 @@ type SiblingNoteView struct {
 // ReservedPathView is one sibling path reservation for worker-leg inject.
 type ReservedPathView struct {
 	Path     string
-	JobID    string
+	Worker   string
 	LegLabel string
 }
 
@@ -64,6 +64,9 @@ type WorkerLegInjectData struct {
 	SiblingNotes       []SiblingNoteView
 	ReservedPaths      []ReservedPathView
 	LayoutTopLevel     []string
+	ReviewHandle       string
+	ReviewWorker       string
+	ViewKind           string
 }
 
 // BoardOrientationRootView is one root section for board-orientation inject.
@@ -83,6 +86,7 @@ type BoardInjectData struct {
 	MultiRoot         bool
 	OrientationRoots  []BoardOrientationRootView
 	RootOmittedCount  int
+	WorkersOmitted    int
 	Lines             []BoardLineView
 }
 
@@ -124,6 +128,10 @@ func BuildBoardInjectData(snap api.BoardSnapshot, scope packboard.InjectScope, o
 	if multiRoot && scope == packboard.InjectScopeFull {
 		orientationRoots, rootOmittedCount = boardRootViews(snap.OrientationRoots)
 	}
+	workersOmitted := 0
+	if named := packboard.NamedWorkersFromSnapshot(snap); len(named) > packboard.MaxOrientationWorkers {
+		workersOmitted = len(named) - packboard.MaxOrientationWorkers
+	}
 	return BoardInjectData{
 		PackSentinel:      packboard.InjectSentinel(scope),
 		NowLine:           nowLine,
@@ -133,6 +141,7 @@ func BuildBoardInjectData(snap api.BoardSnapshot, scope packboard.InjectScope, o
 		MultiRoot:         multiRoot,
 		OrientationRoots:  orientationRoots,
 		RootOmittedCount:  rootOmittedCount,
+		WorkersOmitted:    workersOmitted,
 		Lines:             lines,
 	}
 }
@@ -194,6 +203,7 @@ func BoardInjectToMap(data BoardInjectData) map[string]any {
 		"multi_root":          data.MultiRoot,
 		"orientation_roots":   orientationRoots,
 		"root_omitted_count":  data.RootOmittedCount,
+		"workers_omitted":     data.WorkersOmitted,
 		"lines":               lines,
 	}
 	profiles, err := sandbox.LoadToolProfiles()
@@ -248,7 +258,7 @@ func BuildWorkerLegInjectData(ctx WorkerLegContext) WorkerLegInjectData {
 		}
 		reservedPaths = append(reservedPaths, ReservedPathView{
 			Path:     path,
-			JobID:    strings.TrimSpace(hold.JobID),
+			Worker:   strings.TrimSpace(hold.Worker),
 			LegLabel: strings.TrimSpace(hold.LegLabel),
 		})
 	}
@@ -270,6 +280,9 @@ func BuildWorkerLegInjectData(ctx WorkerLegContext) WorkerLegInjectData {
 		SiblingNotesAfter:  ctx.SiblingNotesAfter,
 		ReservedPaths:      reservedPaths,
 		LayoutTopLevel:     append([]string(nil), ctx.LayoutTopLevel...),
+		ReviewHandle:       strings.TrimSpace(ctx.ReviewHandle),
+		ReviewWorker:       strings.TrimSpace(ctx.ReviewWorker),
+		ViewKind:           strings.TrimSpace(ctx.ViewKind),
 	}
 }
 
@@ -308,7 +321,7 @@ func WorkerLegInjectToMap(data WorkerLegInjectData) map[string]any {
 	for i, hold := range reservedRows {
 		reservedPaths[i] = map[string]any{
 			"path":      hold.Path,
-			"job_id":    hold.JobID,
+			"worker":    hold.Worker,
 			"leg_label": hold.LegLabel,
 		}
 	}
@@ -333,6 +346,9 @@ func WorkerLegInjectToMap(data WorkerLegInjectData) map[string]any {
 		partial = append(partial, workerOmission("layout entries", omitted))
 	}
 	return map[string]any{
+		"review_handle":       data.ReviewHandle,
+		"review_worker":       data.ReviewWorker,
+		"view_kind":           data.ViewKind,
 		"leg_id":              data.LegID,
 		"agent_type":          data.AgentType,
 		"workflow_id":         data.WorkflowID,

@@ -1,0 +1,44 @@
+{
+  "reach": {
+    "roots": [
+      "./cmd/..."
+    ],
+    "goos": {
+      "darwin": [
+        "darwin",
+        "linux"
+      ],
+      "linux": [
+        "linux"
+      ]
+    },
+    "report": "^github.com/lycaon/lycaon/",
+    "schema": "internal/db/schema.sql",
+    "scope": [
+      "./..."
+    ]
+  },
+  "vet": {
+    "packages": [
+      "./cmd/...",
+      "./internal/...",
+      "./pkg/..."
+    ]
+  },
+  "test_support": [
+    "(^|/)test[a-z0-9]*(/|$)",
+    "[a-z0-9]test(/|$)",
+    "/contractfixture$"
+  ],
+  "den": {
+    "dir": "lycaon-den",
+    "command": [
+      "bun",
+      "node_modules/.bin/knip",
+      "--production",
+      "--reporter",
+      "json",
+      "--no-exit-code"
+    ]
+  }
+}

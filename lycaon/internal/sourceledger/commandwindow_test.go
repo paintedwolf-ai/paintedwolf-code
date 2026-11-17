@@ -3,6 +3,7 @@ package sourceledger
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"path/filepath"
 	"testing"
@@ -39,7 +40,7 @@ func openDiskLedger(t *testing.T) diskLedger {
 	_, err := sqlDB.ExecContext(t.Context(), `
 		INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
 		VALUES ('r1', 'p1', ?, 'root', 1, ?, 'attached')
-	`, root, db.FormatTime(time.Now().UTC()))
+	`, root, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert root", err)
 	contentDir := t.TempDir()
 	store := New(sqlDB, contentDir)

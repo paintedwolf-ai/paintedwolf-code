@@ -75,23 +75,28 @@ func TestUserTurnOrdinalSQLMatchesGoPredicate(t *testing.T) {
 	contractcheck.FailErr(t, "append sql messages", sqlStore.AppendMessages(ctx, sqlSess.ID, transcript...))
 	contractcheck.FailErr(t, "append memory messages", memStore.AppendMessages(ctx, memSess.ID, transcript...))
 
-	want := wire.UserTurnOrdinal(transcript)
+	want := 0
+	for _, msg := range transcript {
+		if wire.IsUserIntentMessage(msg) {
+			want++
+		}
+	}
 	if want != 3 {
-		t.Fatalf("fixture drifted: api.UserTurnOrdinal = %d, want 3 user turns", want)
+		t.Fatalf("fixture drifted: user intents = %d, want 3 user turns", want)
 	}
 
 	gotSQLSource, err := sqlStore.ReadSourceTurn(ctx, sqlSess.ID, 0)
 	gotSQL := gotSQLSource.Number
 	contractcheck.FailErr(t, "sql user turn ordinal", err)
 	if gotSQL != want {
-		t.Fatalf("SQL CountSessionUserTurns = %d, api.UserTurnOrdinal = %d", gotSQL, want)
+		t.Fatalf("SQL CountSessionUserTurns = %d, user intents = %d", gotSQL, want)
 	}
 
 	gotMemSource, err := memStore.ReadSourceTurn(ctx, memSess.ID, 0)
 	gotMem := gotMemSource.Number
 	contractcheck.FailErr(t, "memory user turn ordinal", err)
 	if gotMem != want {
-		t.Fatalf("memory UserTurnOrdinal = %d, api.UserTurnOrdinal = %d", gotMem, want)
+		t.Fatalf("memory UserTurnOrdinal = %d, user intents = %d", gotMem, want)
 	}
 
 	// The same number reaches the wire, which is what a turn scope cites back.

@@ -28,25 +28,6 @@ func TestNormalizeLedgerPath(t *testing.T) {
 	}
 }
 
-func TestLedgerPathToken(t *testing.T) {
-	cases := []struct {
-		in, want string
-	}{
-		{"pkg/a.go", "pkg/a.go"},
-		{`pkg\a.go`, "pkg/a.go"},
-		{`src\internal`, "src/internal"},
-		{"a.go", "a.go"},
-		{"read#2", ""},
-		{"README", ""},
-		{"", ""},
-	}
-	for _, tc := range cases {
-		if got := evidence.LedgerPathToken(tc.in); got != tc.want {
-			t.Fatalf("LedgerPathToken(%q) = %q want %q", tc.in, got, tc.want)
-		}
-	}
-}
-
 func TestResolveCitationAbsAllowsDotsInsideFilename(t *testing.T) {
 	dir := t.TempDir()
 	name := "notes..draft.md"

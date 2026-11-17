@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"math/big"
 	"strings"
 	"time"
@@ -141,7 +142,7 @@ func (s *serviceCore) createWithFirstVersion(ctx context.Context, id string, req
 	if err := s.values.put(valueID, firstEntry(req)); err != nil {
 		return fmt.Errorf("store managed secret: %w", err)
 	}
-	stamp := db.FormatTime(now)
+	stamp := timelayout.Format(now)
 	params := db.CreateManagedSecretParams{
 		ID: id, ProjectID: req.ProjectID, Scope: req.Scope, Name: req.Name,
 		Purpose: req.Purpose, Origin: req.Origin, Format: nullable(req.Format),

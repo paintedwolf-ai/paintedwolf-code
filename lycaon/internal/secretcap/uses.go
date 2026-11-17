@@ -2,6 +2,7 @@ package secretcap
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"log/slog"
 	"strings"
 
@@ -96,7 +97,7 @@ func (s *serviceCore) recordUse(ctx context.Context, secretID string, version in
 		ID: id, ToolCallID: nullable(access.ToolCallID), Delivery: delivery, SecretID: secretID, Version: nullableInt(version),
 		ToolName: toolName, SessionID: nullable(access.SessionID),
 		ChatSessionID: nullable(access.ChatSessionID), Outcome: outcome,
-		UsedAt: db.FormatTime(s.now()),
+		UsedAt: timelayout.Format(s.now()),
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "managed secret history write failed", "secret_id", secretID, "tool_call_id", access.ToolCallID)

@@ -87,11 +87,6 @@ func (s *LimitsStore) Get(scope llm.SettingsScope, projectDir string) SessionLim
 	return lim
 }
 
-// SessionLimits returns merged limits for project scope.
-func (s *LimitsStore) SessionLimits(scope llm.SettingsScope, projectDir string) SessionLimits {
-	return s.Get(scope, projectDir)
-}
-
 // ProjectLimitsAdapter adapts LimitsStore for session.Manager dynamic limits.
 type ProjectLimitsAdapter struct {
 	Store *LimitsStore
@@ -102,7 +97,7 @@ func (a ProjectLimitsAdapter) SessionLimits(projectDir string) SessionLimits {
 	if a.Store == nil {
 		return DefaultSessionLimits()
 	}
-	return a.Store.SessionLimits(llm.SettingsScopeProject, projectDir)
+	return a.Store.Get(llm.SettingsScopeProject, projectDir)
 }
 
 // MergedFrom reports which layers contributed.

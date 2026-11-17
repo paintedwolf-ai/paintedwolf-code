@@ -9,7 +9,7 @@ import {
   setComposerDraft,
 } from "../chat/composer/composer-drafts.ts";
 import { createEntityRetire } from "./entity-retire.ts";
-import { openFilesBuffer, resetProjectFilesForTests } from "../files/documents/project-files-buffers.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../files/documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../files/documents/files-buffer-state.ts";
 
 vi.mock("../platform/desktop/notifications.ts", () => ({

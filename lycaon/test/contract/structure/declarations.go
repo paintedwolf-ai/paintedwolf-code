@@ -19,28 +19,28 @@ const (
 	container character = "container"
 )
 
-// declaration states what kind of thing one directory under lycaon/internal is.
+// Declaration states what kind of thing one directory under lycaon/internal is.
 // A subsystem may be imported from outside only through its entry points. A
 // family holds alternatives behind one contract package. A container's members
 // are governed individually.
-type declaration struct {
+type Declaration struct {
 	Kind        character `yaml:"kind"`
 	Description string    `yaml:"description"`
 	EntryPoints []string  `yaml:"entry_points"`
 	Contract    string    `yaml:"contract"`
 }
 
-// declarations maps a directory under lycaon/internal, relative to it, to its
+// Declarations maps a directory under lycaon/internal, relative to it, to its
 // declaration. Directories absent from the map are containers.
-type declarations map[string]declaration
+type Declarations map[string]Declaration
 
 // loadDeclarations reads and validates the declaration document through read.
-func loadDeclarations(read func(string) ([]byte, error)) (declarations, error) {
+func loadDeclarations(read func(string) ([]byte, error)) (Declarations, error) {
 	raw, err := read(declarationPath)
 	if err != nil {
 		return nil, fmt.Errorf("read structure declarations: %w", err)
 	}
-	var parsed declarations
+	var parsed Declarations
 	decoder := yaml.NewDecoder(strings.NewReader(string(raw)))
 	decoder.KnownFields(true)
 	if err := decoder.Decode(&parsed); err != nil {
@@ -59,7 +59,7 @@ func loadDeclarations(read func(string) ([]byte, error)) (declarations, error) {
 	return parsed, nil
 }
 
-func validate(name string, d declaration) error {
+func validate(name string, d Declaration) error {
 	switch {
 	case name == "internal":
 	case strings.HasPrefix(name, "internal/") && !strings.Contains(strings.TrimPrefix(name, "internal/"), "/") && cleanDir(name):

@@ -1,9 +1,10 @@
-import { filesBufferText } from "../documents/project-files-buffers.ts";
+import { filesBufferText } from "../documents/files-buffer-state.ts";
 import { sourceReaderFixture } from "../../test/source-reader-fixture.ts";
 import { beforeEach, describe, expect, it } from "vitest";
 import { gitReviewPreview, openGitReviewFile } from "./git-review-preview.ts";
 import { gitReview, gitReviewComparison, gitReviewFile, gitReviewStep } from "./git-review-fixtures.ts";
-import { applyFilesBufferLoad, applyFilesBufferDraft, openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferLoad, applyFilesBufferDraft } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 
 beforeEach(resetProjectFilesForTests);

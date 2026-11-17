@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // Approving a cookie's disclosure to a recipient is consent to the connection
@@ -37,7 +38,7 @@ func TestCookieApprovalConsentsToItsConnection(t *testing.T) {
 			return secretmatch.Resolution{Decision: decision}, nil
 		})}
 		ctx := hitl.WithStopContext(egressgate.WithReviewedRecipients(t.Context()), t.Context())
-		beforeHop, err := prepareCookieDelivery(ctx, deps, spec, jar)
+		beforeHop, err := prepareRequestCookieDelivery(ctx, deps, spec, tools.ToolContext{}, jar, secretcap.CookieJarRequest{}, nil, true)
 		testutil.FailErr(t, "prepare cookies", err)
 		testutil.FailErr(t, "cookie review", beforeHop(ctx, hop))
 

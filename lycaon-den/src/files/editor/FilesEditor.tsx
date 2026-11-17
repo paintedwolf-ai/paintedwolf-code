@@ -10,7 +10,7 @@ import { LAYOUT_BAND_SCALES, bindLayoutBand } from "../../layout/layout-bands.ts
 import type { EditorWindow } from "../../platform/windows/editor-windows.ts";
 import { DocumentWindows } from "../components/DocumentWindows.tsx";
 import type { FileBuffer } from "../documents/files-buffer-state.ts";
-import { filesBufferText } from "../documents/project-files-buffers.ts";
+import { filesBufferText } from "../documents/files-buffer-state.ts";
 import type { FileHistoryCommit } from "../history/file-history-model.ts";
 import type { FileVersionHistory, FileVersionView } from "../history/file-version.ts";
 import { FileVersionDocument } from "../history/FileVersionDocument.tsx";

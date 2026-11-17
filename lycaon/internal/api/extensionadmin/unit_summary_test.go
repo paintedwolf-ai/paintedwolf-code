@@ -27,7 +27,7 @@ func TestExtensionUnitContributionArrayContract(t *testing.T) {
 }
 
 func TestExtensionUnitWireCarriesProjectDisableCapability(t *testing.T) {
-	for _, kind := range append(extpacks.UnitKindRoots(), "unknown/future-kind") {
+	for _, kind := range []string{"workflows", "agents", "guidance", "policy", "skills", "tools", "contributions/commands", "unknown/future-kind"} {
 		unit := extpacks.UnitEffective{ID: kind + "/fixture", Kind: kind,
 			Contributions: []extpacks.UnitContribution{{PackID: "fixture/pack"}}}
 		for _, bodies := range []bool{false, true} {

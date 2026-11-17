@@ -61,19 +61,6 @@ func pathsOf(nodes []*SubtreeNode) []string {
 	return out
 }
 
-func TestRankChildrenImportanceTiebreak(t *testing.T) {
-	root, _ := equalMaterialSiblings()
-	ranked := rankChildren(root)
-	if ranked[0].Path != "root/alpha" {
-		t.Fatalf("material-only first = %s, want root/alpha", ranked[0].Path)
-	}
-	imp := SubtreeImportance{"root/beta": {DocLinks: 3}}
-	ranked = rankChildrenImportance(root, imp, "")
-	if ranked[0].Path != "root/beta" {
-		t.Fatalf("doc-link first = %s, want root/beta", ranked[0].Path)
-	}
-}
-
 func TestDocLinkWinsDepthTie(t *testing.T) {
 	root, structure := equalMaterialSiblings()
 	caps := DefaultCaps()

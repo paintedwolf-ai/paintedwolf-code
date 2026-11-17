@@ -18,8 +18,8 @@ var hintRulePairs = []struct {
 	{"spec_posture_unresolved", "posture_unresolved and high_risk_tool"},
 	{"spec_posture_no_delegation_dispatch", "not plan_awaiting_approval and posture_is_spec and tool_is_delegation"},
 	{"spec_posture_delegation_awaiting_approval", "plan_awaiting_approval and posture_is_spec and tool_is_delegation"},
-	{"spec_posture_disallowed_agent", "posture_is_spec and tool_is_task and disallowed_agent"},
-	{"spec_posture_stub_required_plan_writer", "posture_is_spec and tool_is_task and stub_invalid and agent_is_plan_writer"},
+	{"spec_posture_disallowed_agent", "posture_is_spec and tool_names_agent and disallowed_agent"},
+	{"spec_posture_stub_required_plan_writer", "posture_is_spec and tool_names_agent and stub_invalid and agent_is_plan_writer"},
 }
 
 func loadSpecRules(t *testing.T) *RulesConfig {
@@ -58,16 +58,16 @@ func TestMapWhenMatchesHintDSLAcrossContexts(t *testing.T) {
 		}}},
 		{"spec delegate", EvalContext{EvalContext: conditions.EvalContext{
 			SessionPosture: api.SessionPostureSpec,
-			ToolName:       "delegate_dispatch",
+			ToolName:       "plan_from_blueprint",
 			PlanContent:    validStubPlan,
 		}}},
 		{"unresolved high risk", EvalContext{EvalContext: conditions.EvalContext{
 			SessionPosture: "",
-			ToolName:       "delegate_dispatch",
+			ToolName:       "plan_from_blueprint",
 		}}},
 		{"build delegate ok", EvalContext{EvalContext: conditions.EvalContext{
 			SessionPosture: api.SessionPostureBuild,
-			ToolName:       "delegate_dispatch",
+			ToolName:       "plan_from_blueprint",
 			PlanContent:    validStubPlan,
 		}}},
 		{"spec task disallowed agent", EvalContext{EvalContext: conditions.EvalContext{
@@ -113,7 +113,7 @@ func TestEngineOrderingFirstMatchWins(t *testing.T) {
 	engine := NewSimpleEngine(loadSpecRules(t), ruleTestRegistry(t))
 	out, err := engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{
 		SessionPosture: api.SessionPostureSpec,
-		ToolName:       "delegate_dispatch",
+		ToolName:       "plan_from_blueprint",
 	}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if out.Allowed || out.Code != "SPEC_POSTURE_DELEGATION_FORBIDDEN" {

@@ -33,7 +33,7 @@ func TestSchemaRejectsMissingRequiredFields(t *testing.T) {
 		want string
 	}{
 		{tool: "task", args: map[string]any{}, want: "TOOL_ARGS_INVALID"},
-		{tool: "delegate_init", args: map[string]any{"blueprint_path": "p1"}, want: "TOOL_ARGS_INVALID"},
+		{tool: "plan_from_blueprint", args: map[string]any{}, want: "TOOL_ARGS_INVALID"},
 	}
 	for _, tc := range cases {
 		_, err := exec.Invoke(context.Background(), tc.tool, tc.args, tools.ToolContext{

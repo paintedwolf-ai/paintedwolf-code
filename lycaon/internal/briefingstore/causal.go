@@ -39,7 +39,7 @@ func (c *Causal) ReadActionCause(ctx context.Context, ref briefing.ActionRef) (b
 		return briefing.CausalRead{}, err
 	}
 	output, err := q.BriefingActionOutput(ctx, db.BriefingActionOutputParams{ArgsBytes: briefing.ArgsReadChars,
-		ProseBytes: briefing.ProseReadChars, ReasoningCap: briefing.ReasoningReadBytes,
+		ProseBytes: briefing.ProseReadChars, ReasoningCeiling: briefing.ReasoningCeilingBytes, ReasoningTailChars: briefing.ReasoningTailChars,
 		SessionID: ref.SessionID, BeforeOrd: before, WorkerJobID: ref.WorkerJobID, ToolCallID: ref.ToolCallID,
 	})
 	if errors.Is(err, sql.ErrNoRows) {
@@ -48,8 +48,9 @@ func (c *Causal) ReadActionCause(ctx context.Context, ref briefing.ActionRef) (b
 	if err != nil {
 		return briefing.CausalRead{}, err
 	}
-	read := briefing.CausalRead{Found: true, OutputID: output.ID, Prose: output.Prose, ReasoningJSON: output.ReasoningPayload, ReasoningBytes: output.ReasoningBytes, CallsInOutput: int(output.CallCount),
-		Call: briefing.CallExcerpt{Name: output.CallName, Args: output.CallArgs}}
+	read := briefing.CausalRead{Found: true, OutputID: output.ID, Prose: output.Prose, CallsInOutput: int(output.CallCount),
+		Reasoning: reasoningRead(output.ReasoningPresent, output.ReasoningOverCeiling, output.ReasoningTextChars, output.ReasoningDetails, output.ReasoningTail),
+		Call:      briefing.CallExcerpt{Name: output.CallName, Args: output.CallArgs}}
 	result, err := q.BriefingCallResult(ctx, db.BriefingCallResultParams{ContentBytes: briefing.ResultReadChars, SessionID: ref.SessionID, ToolCallID: db.NullString(ref.ToolCallID)})
 	switch {
 	case err == nil:
@@ -73,4 +74,24 @@ func (c *Causal) ReadActionCause(ctx context.Context, ref briefing.ActionRef) (b
 		read.Results = append(read.Results, briefing.ResultExcerpt{Tool: row.Tool, Outcome: row.Outcome, Content: row.Content, Ref: "message:" + row.ID})
 	}
 	return read, tx.Commit()
+}
+
+// ReadWorkerFinal reads a worker job's newest model output in its session.
+func (c *Causal) ReadWorkerFinal(ctx context.Context, sessionID, workerJobID string) (briefing.WorkerFinalRead, error) {
+	output, err := c.queries.BriefingWorkerFinalOutput(ctx, db.BriefingWorkerFinalOutputParams{
+		ReasoningCeiling: briefing.ReasoningCeilingBytes, ReasoningTailChars: briefing.ReasoningTailChars,
+		SessionID: sessionID, WorkerJobID: db.NullString(workerJobID),
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return briefing.WorkerFinalRead{}, nil
+	}
+	if err != nil {
+		return briefing.WorkerFinalRead{}, err
+	}
+	return briefing.WorkerFinalRead{Found: true, OutputID: output.ID,
+		Reasoning: reasoningRead(output.ReasoningPresent, output.ReasoningOverCeiling, output.ReasoningTextChars, output.ReasoningDetails, output.ReasoningTail)}, nil
+}
+
+func reasoningRead(present, overCeiling, textChars, details int64, tail string) briefing.ReasoningRead {
+	return briefing.ReasoningRead{Present: present != 0, OverCeiling: overCeiling != 0, TextChars: textChars, Details: details, Tail: tail}
 }

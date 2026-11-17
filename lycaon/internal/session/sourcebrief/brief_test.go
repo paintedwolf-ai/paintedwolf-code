@@ -3,12 +3,12 @@ package sourcebrief
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"slices"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -225,7 +225,7 @@ func TestBuildWindowKeepsProjectWideEffects(t *testing.T) {
 		testdbseed.InsertProject(t, sqlDB, "p1")
 		_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO project_roots
  (id, project_id, path, label, is_primary, added_at, kind)
- VALUES ('r1','p1','/tmp/brief-root','root',1,?,'attached')`, db.FormatTime(time.Now().UTC()))
+ VALUES ('r1','p1','/tmp/brief-root','root',1,?,'attached')`, timelayout.Format(time.Now().UTC()))
 		testutil.FailErr(t, "seed root", err)
 		ledger := sourceledger.New(sqlDB, t.TempDir())
 		checkpoint := func(turn int) {

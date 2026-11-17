@@ -176,8 +176,12 @@ type Manager struct {
 	servicesErr error
 }
 
-// NewManager returns a workspace manager rooted at an out-of-repo branch base.
-func NewManager(branchRoot string) *Manager {
+// NewManager returns a workspace manager rooted at an out-of-repo branch base that chooses each
+// worker's adapter with selector.
+func NewManager(branchRoot string, selector *adapter.Selector) *Manager {
+	if selector == nil {
+		panic("workspace: NewManager requires a selector")
+	}
 	branchRoot = strings.TrimSpace(branchRoot)
 	stateRoot := filepath.Dir(branchRoot)
 	if registry, err := workerplacement.Load(stateRoot); err == nil {
@@ -186,6 +190,7 @@ func NewManager(branchRoot string) *Manager {
 	return &Manager{
 		branchRoot: branchRoot,
 		stateRoot:  stateRoot,
+		selector:   selector,
 		views:      make(map[string]branchViewState),
 	}
 }
@@ -199,18 +204,13 @@ func (m *Manager) WithRecovery(coord *recovery.Coordinator) *Manager {
 	return m
 }
 
-// WithSelector configures an explicit workspace adapter Selector on the Manager.
-func (m *Manager) WithSelector(selector *adapter.Selector) *Manager {
-	m.selector = selector
-	return m
-}
-
 func (m *Manager) recordBranchViews(branchRoot string, sel WorkspaceStrategySelection, views ...*adapter.PreparedView) {
 	m.viewsMu.Lock()
 	defer m.viewsMu.Unlock()
 	if m.views == nil {
 		m.views = make(map[string]branchViewState)
 	}
+	key := branchRootKey(branchRoot)
 	clean := filepath.Clean(branchRoot)
 	st := branchViewState{
 		selection: sel,
@@ -222,14 +222,23 @@ func (m *Manager) recordBranchViews(branchRoot string, sel WorkspaceStrategySele
 			st.writers = m.services.recovery
 		}
 	}
-	m.views[clean] = st
-	sharedBranchViews.Store(clean, st)
+	if clean != key {
+		delete(m.views, clean)
+		sharedBranchViews.Delete(clean)
+	}
+	m.views[key] = st
+	sharedBranchViews.Store(key, st)
 }
 
 func (m *Manager) lookupBranchViews(branchRoot string) (WorkspaceStrategySelection, *adapter.PreparedView, bool) {
+	key := branchRootKey(branchRoot)
+	clean := filepath.Clean(branchRoot)
 	m.viewsMu.Lock()
 	defer m.viewsMu.Unlock()
-	st, ok := m.views[filepath.Clean(branchRoot)]
+	st, ok := m.views[key]
+	if !ok && clean != key {
+		st, ok = m.views[clean]
+	}
 	if !ok || len(st.views) == 0 {
 		return WorkspaceStrategySelection{}, nil, false
 	}
@@ -238,19 +247,30 @@ func (m *Manager) lookupBranchViews(branchRoot string) (WorkspaceStrategySelecti
 
 // forgetBranchViews drops the record of views a claim settlement already released.
 func (m *Manager) forgetBranchViews(branchRoot string) {
-	key := filepath.Clean(branchRoot)
+	key := branchRootKey(branchRoot)
+	clean := filepath.Clean(branchRoot)
 	m.viewsMu.Lock()
 	delete(m.views, key)
+	if clean != key {
+		delete(m.views, clean)
+	}
 	m.viewsMu.Unlock()
 	sharedBranchViews.Delete(key)
+	if clean != key {
+		sharedBranchViews.Delete(clean)
+	}
 }
 
 // releaseBranchViews releases the adapter views recorded for a branch and names the ones it settled.
 // A view that fails stays recorded with its data in custody, and the caller keeps the branch.
 func (m *Manager) releaseBranchViews(branchRoot string) (map[string]bool, error) {
-	key := filepath.Clean(branchRoot)
+	key := branchRootKey(branchRoot)
+	clean := filepath.Clean(branchRoot)
 	m.viewsMu.Lock()
 	st, ok := m.views[key]
+	if !ok && clean != key {
+		st, ok = m.views[clean]
+	}
 	m.viewsMu.Unlock()
 	settled := make(map[string]bool, len(st.views))
 	if !ok || st.selection.Adapter == nil {
@@ -331,6 +351,15 @@ func LookupBranchPreparedView(branchRoot string) (*adapter.PreparedView, adapter
 		viewID = jobIDForBranch(clean)
 	}
 	return nil, *meta.AdapterFacts, viewID, true
+}
+
+// BranchViewKind returns "mounted" or "materialized" when a prepared branch
+// view is recorded for branchRoot, or empty when none is prepared yet.
+func BranchViewKind(branchRoot string) string {
+	if _, facts, _, ok := LookupBranchPreparedView(branchRoot); ok && facts.PreparationKind != "" {
+		return string(facts.PreparationKind)
+	}
+	return ""
 }
 
 func absDir(dir string) (string, error) {

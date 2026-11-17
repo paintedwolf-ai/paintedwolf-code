@@ -155,17 +155,18 @@ var promptInputs = []laws.Rule{{
 		}
 	},
 }, {
-	// Delegation spawns and prompts children through its ports, not the
-	// session service directly.
-	Name:    "delegation-does-not-spawn-through-sessions",
-	Anchors: []laws.Anchor{laws.GoPath("internal/delegation/manager_impl.go")},
+	// Worker planning spawns and prompts children through its ports, not
+	// the session service directly.
+	Name:    "worker-planning-does-not-spawn-through-sessions",
+	Anchors: []laws.Anchor{laws.Package("internal/workerplan"), laws.Package("internal/workertopology")},
 	Check: func(r *laws.Run) {
-		f := r.GoFile("internal/delegation/manager_impl.go")
-		f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
-			if name := laws.CalleeName(call); name == "SpawnChild" || name == "Prompt" {
-				r.ReportAt(call.Pos(), "delegation calls %s on sessions directly", name)
-			}
-		})
+		for _, f := range r.GoFiles(laws.Production, "internal/workerplan", "internal/workertopology") {
+			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+				if name := laws.CalleeName(call); name == "SpawnChild" || name == "Prompt" {
+					r.ReportAt(call.Pos(), "calls %s on sessions directly", name)
+				}
+			})
+		}
 	},
 }, {
 	// Synthesis reads the whole worker union; summarizing or compacting it

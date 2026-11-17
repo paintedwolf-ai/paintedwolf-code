@@ -2,10 +2,11 @@ package projectpaths_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -134,26 +135,5 @@ func TestIsAgentWireSpillRelRejectsEscapes(t *testing.T) {
 	}
 	if !tooloutput.IsAgentWireSpillRel("tool-output/a.txt") {
 		t.Fatal("expected allowlisted tool-output path")
-	}
-}
-
-func TestResolveMisplacedSpillFindsTheReferencedSpill(t *testing.T) {
-	host := t.TempDir()
-	rel := tooloutput.ToolOutputSpillRelPath("observation")
-	tctx := tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Path: t.TempDir(), IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Host:     tools.InvocationHost{HostDataDir: host},
-		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
-	}
-	resolved, ok := projectpaths.ResolveMisplacedSpill(tctx, "@scratch/"+rel)
-	if !ok || resolved.DisplayPath != "@output/"+rel || resolved.Abs != filepath.Join(host, filepath.FromSlash(rel)) {
-		t.Fatalf("resolved = %+v ok=%v", resolved, ok)
-	}
-	if _, ok := projectpaths.ResolveMisplacedSpill(tctx, rel); ok {
-		t.Fatal("a path that already names the spill is not misplaced")
-	}
-	if _, ok := projectpaths.ResolveMisplacedSpill(tctx, "@scratch/notes/tool-output/short.txt"); ok {
-		t.Fatal("only an exact content-addressed reference resolves")
 	}
 }

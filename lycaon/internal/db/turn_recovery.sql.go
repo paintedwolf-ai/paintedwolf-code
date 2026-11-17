@@ -95,15 +95,6 @@ func (q *Queries) CompleteSubmissionsForRecoveredTurnsForSession(ctx context.Con
 	return err
 }
 
-const deleteLiveModelOutputsForSession = `-- name: DeleteLiveModelOutputsForSession :exec
-DELETE FROM live_model_outputs WHERE session_id = ?
-`
-
-func (q *Queries) DeleteLiveModelOutputsForSession(ctx context.Context, sessionID string) error {
-	_, err := q.db.ExecContext(ctx, deleteLiveModelOutputsForSession, sessionID)
-	return err
-}
-
 const interruptRunningTurnAttemptsForSession = `-- name: InterruptRunningTurnAttemptsForSession :exec
 UPDATE turn_attempts
 SET status = 'interrupted', error = 'host stopped during turn execution',

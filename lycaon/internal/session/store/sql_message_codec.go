@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -147,7 +148,7 @@ func insertMessage(ctx context.Context, q *db.Queries, sessionID string, msg api
 		DraftStatus:             string(msg.DraftStatus),
 		Seq:                     msg.Seq,
 		Ord:                     msg.Ord,
-		Ts:                      db.FormatTime(msg.CreatedAt),
+		Ts:                      timelayout.Format(msg.CreatedAt),
 		ReasoningJson:           encoded.reasoning,
 	})
 }

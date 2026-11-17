@@ -63,8 +63,6 @@ func candidateCheckpointStoreDirsOnDisk(configDir string, declared string) []str
 	add(declared)
 	if strings.TrimSpace(configDir) != "" {
 		add(filepath.Join(configDir, enginepaths.WorkerRecoveryDirName, "checkpoints"))
-		add(filepath.Join(configDir, enginepaths.WorkerBranchesDirName, ".adapter", "recovery", "checkpoints"))
-		add(filepath.Join(configDir, enginepaths.WorkerBaselinesDirName, ".task-checkpoints"))
 	}
 	return out
 }
@@ -163,46 +161,32 @@ func verifyCheckpointChainOnDisk(ctx context.Context, configDir, branchRel, stor
 }
 
 func readCheckpointManifestOnDisk(storeDir, checkpointID string) (checkpoint.Manifest, error) {
-	candidates := []string{
-		filepath.Join(storeDir, "checkpoints", checkpointID, "manifest.json"),
-		filepath.Join(storeDir, "checkpoints", checkpointID+".json"),
+	raw, err := os.ReadFile(filepath.Join(storeDir, "checkpoints", checkpointID, "manifest.json"))
+	if err != nil {
+		return checkpoint.Manifest{}, fmt.Errorf("checkpoint manifest %s not found", checkpointID)
 	}
-	for _, p := range candidates {
-		raw, err := os.ReadFile(p)
-		if err != nil {
-			continue
-		}
-		var m checkpoint.Manifest
-		if err := json.Unmarshal(raw, &m); err != nil {
-			return checkpoint.Manifest{}, err
-		}
-		if m.FormatVersion != checkpoint.FormatVersion || m.CheckpointID != checkpointID {
-			return checkpoint.Manifest{}, fmt.Errorf("invalid checkpoint manifest %s", checkpointID)
-		}
-		return m, nil
+	var m checkpoint.Manifest
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return checkpoint.Manifest{}, err
 	}
-	return checkpoint.Manifest{}, fmt.Errorf("checkpoint manifest %s not found", checkpointID)
+	if m.FormatVersion != checkpoint.FormatVersion || m.CheckpointID != checkpointID {
+		return checkpoint.Manifest{}, fmt.Errorf("invalid checkpoint manifest %s", checkpointID)
+	}
+	return m, nil
 }
 
 func verifyBlobOnDisk(ctx context.Context, storeDir, sha string, expectedSize int64) error {
 	if len(sha) != 64 {
 		return fmt.Errorf("invalid blob sha256 %q", sha)
 	}
-	candidates := []string{
-		filepath.Join(storeDir, "blobs", sha),
-		filepath.Join(storeDir, "blobs", sha[:2], sha+".blob"),
+	actual, size, err := sha256FileInSession(ctx, filepath.Join(storeDir, "blobs", sha))
+	if err != nil {
+		return fmt.Errorf("missing blob %s", sha)
 	}
-	for _, p := range candidates {
-		actual, size, err := sha256FileInSession(ctx, p)
-		if err != nil {
-			continue
-		}
-		if actual != sha || (expectedSize >= 0 && size != expectedSize) {
-			return fmt.Errorf("corrupt blob %s", sha)
-		}
-		return nil
+	if actual != sha || (expectedSize >= 0 && size != expectedSize) {
+		return fmt.Errorf("corrupt blob %s", sha)
 	}
-	return fmt.Errorf("missing blob %s", sha)
+	return nil
 }
 
 func collectRootGitRefOIDs(headRef string, refs map[string]string) ([]string, error) {

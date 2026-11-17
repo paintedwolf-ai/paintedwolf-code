@@ -9,13 +9,14 @@ import (
 	"testing"
 	"time"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"gopkg.in/yaml.v3"
 )
 
 func loadTestRegistry(t *testing.T) *anchor.Registry {
@@ -32,7 +33,7 @@ func TestKickTemplateIDRoundTrip(t *testing.T) {
 	for _, id := range []anchor.ID{
 		anchor.GateBlocked, anchor.ComposeDone, anchor.LegFinished, anchor.WorkerTaskFinished,
 		anchor.PhaseAdvanced, anchor.WaitTimerFired, anchor.ScanFinished, anchor.ProcessFinished,
-		anchor.WorkerBudgetRequested, anchor.FeedbackPending, anchor.FeedbackReceived,
+		anchor.WorkerRoundNotice, anchor.FeedbackPending, anchor.FeedbackReceived,
 		anchor.OverlayPromoteComplete, anchor.EditFollowUpRepeat,
 	} {
 		if got := anchor.MustAnchor(string(id)); got != id {
@@ -73,11 +74,11 @@ func TestCatalogContainsKickMappedAnchors(t *testing.T) {
 		anchor.GateBlocked, anchor.ComposeDone, anchor.LegFinished, anchor.WorkerTaskFinished,
 		anchor.PhaseAdvanced,
 		anchor.ReviewLoopContinue, anchor.ReviewLoopDecide,
-		anchor.FeedbackPending, anchor.FeedbackReceived, anchor.WorkerTaskStarted, anchor.WorkerLegStarted,
+		anchor.FeedbackPending, anchor.FeedbackReceived, anchor.WorkerTaskStarted,
 		anchor.WaitTimerFired, anchor.OverlayPromoteComplete, anchor.ScanFinished, anchor.ScanDelta, anchor.ProcessFinished,
-		anchor.WorkerBudgetRequested, anchor.WorkerBudgetRaised, anchor.WorkerBudgetDeclined, anchor.EditFollowUpRepeat, anchor.CoordinatorCloseout,
+		anchor.WorkerRoundNotice, anchor.EditFollowUpRepeat, anchor.CoordinatorCloseout,
 		anchor.CoordinatorCitationGrounding, anchor.CoordinatorReportDocument, anchor.ProjectRootsChanged, anchor.ProjectPostureChanged, anchor.ProjectRootDetachCanceled,
-		anchor.WorkerCloseout, anchor.WorkerIterationsLow, anchor.WorkerCancelCloseout,
+		anchor.WorkerCloseout, anchor.WorkerCancelCloseout,
 		anchor.WorkerCitationGrounding, anchor.LoopWake, anchor.BoardChanged,
 		anchor.ProgressMissing, anchor.ProgressStale, anchor.PhaseExitRequired,
 		anchor.AuthzSealFailed, anchor.TurnCloseout, anchor.TurnIterationsLow,
@@ -136,7 +137,7 @@ func TestGoldenKickRenderByteIdenticalViaEmit(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			bus.Emit(context.Background(), "sess-golden", tc.id, tc.env)
-			id := kicks.TakePendingKickID("sess-golden")
+			id := kicks.TakePendingKickIDUnless("sess-golden", nil)
 			if id != anchor.InformRender(tc.id) {
 				t.Fatalf("pending id = %q want %q", id, anchor.InformRender(tc.id))
 			}
@@ -146,7 +147,7 @@ func TestGoldenKickRenderByteIdenticalViaEmit(t *testing.T) {
 			}
 			kicks.AckPendingNudge("sess-golden", lease)
 			bus.Emit(context.Background(), "sess-golden2", tc.id, tc.env)
-			_ = kicks.TakePendingKickID("sess-golden2")
+			_ = kicks.TakePendingKickIDUnless("sess-golden2", nil)
 			text2, lease2, ok, _ := kicks.RenderPendingNudge(t.Context(), "sess-golden2", tc.live)
 			if !ok {
 				t.Fatal("second render missing")
@@ -193,15 +194,15 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		"completed_ago": true, "worker_digest": true, "last_worker_decision_request": true,
 		"evidence_digest": true, "command_completion": true, "command_refusal": true, "topology_output": true, "options_criterion": true,
 		"fanout_plan": true, "max_fanout_legs": true, "batch_phase": true,
-		"pending_overlay_jobs": true, "partial_worker_jobs": true, "promoted_paths": true,
+		"pending_overlays": true, "partial_workers": true, "promoted_paths": true,
 		"advance_when_gate_met": true, "failed_leaves": true, "gate_obligations": true,
 		"progress_open_items": true, "progress_closure_armed": true,
 		"batches": true, "tools": true,
 		"scan_id": true, "scan_status": true, "scan_categories": true, "scan_findings_count": true,
-		"job_id": true, "tool_loops_used": true, "max_tool_loops": true, "remaining": true,
-		"host_max_tool_loops": true, "budget_request_open": true, "requested_max": true,
-		"requested_rounds": true, "remaining_work": true, "at_host_max": true, "request_open": true,
-		"worker_budget_exhausted": true, "child_session_id": true, "suggested_resume_max": true,
+		"job_id": true, "remaining": true, "notice_kind": true, "model_calls": true, "tokens": true,
+		"round_ordinal": true, "workflow_work_id": true, "latest_message_seq": true, "tools_minutes": true,
+		"spend_under_cent": true, "estimated_spend_usd": true, "quiet_minutes": true, "in_flight": true,
+		"tool_calls": true, "tools_done": true, "child_session_id": true,
 		"workspace_path": true, "project_id": true, "config_root": true,
 		"coordinator_brief": true, "pending_feedback": true, "current_phase": true,
 		"folder": true, "roots": true, "active_root": true, "reviews_confined_writes": true, "command_external_changed": true, "command_external_hidden": true, "canceled": true, "root_id": true, "root_label": true, "session_folder_changed": true,
@@ -224,6 +225,12 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		// Envelope.Vars keys declared on the post-turn / landing-advisory anchors.
 		"tool": true, "pending": true, "workflow_id": true, "guidance": true, "llm_timeout": true,
 		"held_call_handle": true, "held_call_tool": true, "held_call_outcome": true,
+		// The worker message page counts the messages it carries.
+		"message_count": true,
+		// The worker round frame names its round, what it carries and, on a
+		// later round, its starting point and earlier results.
+		"round": true, "has_brief": true, "instruction_count": true,
+		"workspace": true, "prior_change": true, "earlier_results": true,
 	}
 	entries, err := config.List(config.PlatformGuidance)
 	testutil.FailErr(t, "readdir kicks", err)

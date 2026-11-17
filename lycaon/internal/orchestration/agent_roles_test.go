@@ -97,8 +97,8 @@ func TestMisconfiguredSurfaceBlocked(t *testing.T) {
 		return decision != nil && decision.Blocked
 	}
 
-	if !block("implement", "delegate_dispatch") {
-		t.Fatal("implement profile should block delegate_dispatch")
+	if !block("implement", "task") {
+		t.Fatal("implement profile should block task")
 	}
 	// Profile grant; the turn surface gates invoke.
 	if block("coordinator", "command") {

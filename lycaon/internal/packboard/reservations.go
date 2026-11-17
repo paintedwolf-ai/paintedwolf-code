@@ -40,11 +40,10 @@ func FormatReservedPathsLines(reservations []api.BoardReservationEntry) []string
 		if path == "" || job == "" {
 			continue
 		}
-		label := strings.TrimSpace(r.LegLabel)
-		if label != "" {
-			lines = append(lines, fmt.Sprintf("- %s — job %s (%s)", path, WorkerJobIDPrefix(job), label))
+		if label := strings.TrimSpace(r.LegLabel); label != "" {
+			lines = append(lines, fmt.Sprintf("- %s (%s)", path, label))
 		} else {
-			lines = append(lines, fmt.Sprintf("- %s — job %s", path, WorkerJobIDPrefix(job)))
+			lines = append(lines, "- "+path)
 		}
 	}
 	if len(lines) <= 1 {

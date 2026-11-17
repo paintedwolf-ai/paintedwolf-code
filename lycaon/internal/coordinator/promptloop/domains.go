@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
@@ -45,10 +46,11 @@ type ContextDeps struct {
 }
 
 type ContextSurfaceDeps struct {
-	ObservePrompt       func(sessionID string) func(inject.CoordinatorTurnFrame)
-	CommitWorkerContext func(context.Context, string, string) error
-	PrepareAgentPolicy  func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error)
-	ToolProcedures      func(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error)
+	ObservePrompt func(sessionID string) func(inject.CoordinatorTurnFrame)
+	// CommitTurnContext advances delivered findings and messages after a successful response.
+	CommitTurnContext  func(context.Context, string, string) error
+	PrepareAgentPolicy func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error)
+	ToolProcedures     func(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error)
 	// PromptSurface reports the host facts that selected a request's tools and units.
 	PromptSurface                   func(ctx context.Context, sess *api.Session, profileID string, offered []string) (trainingcapture.PromptSurface, error)
 	CoordinatorSurfaceActivityLabel func(surfaceID string) string
@@ -83,7 +85,6 @@ type ToolsDeps struct {
 	BeforeToolRun               func(ctx context.Context, sess *api.Session, history []api.Message, userPrompt, tool string, args map[string]any) (output string, skipRun bool, err error)
 	AfterToolRun                func(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, succeeded bool, out *tools.ToolInvocationOut) string
 	EnrichToolOutput            func(ctx context.Context, sess *api.Session, tool string, args map[string]any, output string, raised guidance.ToolResultFacts, completion *api.ToolCompletion, doomCompletionCountAfter int) (string, guidance.ToolResultFacts)
-	InFlightWorkerRosterNote    func(ctx context.Context, sess *api.Session) string
 	DataDir                     string
 	ReloadHistory               func(ctx context.Context, sessionID string, sess *api.Session, surfaceID string) ([]api.Message, error)
 	CompactOversizedToolResults func(ctx context.Context, sessionID string, sess *api.Session) error
@@ -138,25 +139,29 @@ type ProjectionDeps struct {
 	SettleModelOutput           func(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error)
 	MarkModelOutputProjected    func(ctx context.Context, outputID string) error
 	CheckpointTurn              func(ctx context.Context, turnID, attemptID string, phase store.TurnPhase, checkpointJSON string) error
-	AppendDraftVersion          func(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error)
-	CountDraftVersions          func(ctx context.Context, sessionID, slotID string) (int, error)
+	// TouchTurnProgress records that a running turn made durable progress.
+	TouchTurnProgress  func(ctx context.Context, turnID string) error
+	AppendDraftVersion func(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error)
+	CountDraftVersions func(ctx context.Context, sessionID, slotID string) (int, error)
 }
 
 type NudgesDeps struct {
-	DoomLoop                  DoomLoopGuard
-	FormatDoomLoopReject      func(ctx context.Context, sessionID, tool string, args map[string]any, count int, repeatedCode string) (*guidance.Refusal, error)
-	EscalateRepeatedCode      func(ctx context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal
-	CheckSpendCeiling         func(ctx context.Context, sessionID string, sess *api.Session) (SpendCeilingCheck, error)
-	IsSpendCeiling            func(error) bool
-	SecretWithheldNudge       SecretWithheldNudge
-	SurveyStreakNudge         SurveyStreakNudge
-	SpendRunwayNudge          SpendRunwayNudge
-	SpendSoftStopNudge        SpendSoftStopNudge
-	PublishWorkerProgress     func(ctx context.Context, workerJobID string, snap workerprogress.Snapshot, checkpoint bool)
-	WorkerJob                 func(ctx context.Context, workerJobID string) (*api.WorkerTask, bool)
-	WorkerBudgetRaisedNudge   func(ctx context.Context, sess *api.Session, used, max int) HostNudge
-	WorkerBudgetDeclinedNudge func(ctx context.Context, sess *api.Session, used, max int) HostNudge
-	WorkerBudgetAnswerWait    time.Duration
+	DoomLoop              DoomLoopGuard
+	FormatDoomLoopReject  func(ctx context.Context, sessionID, tool string, args map[string]any, count int, repeatedCode string) (*guidance.Refusal, error)
+	EscalateRepeatedCode  func(ctx context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal
+	CheckSpendCeiling     func(ctx context.Context, sessionID string, sess *api.Session) (SpendCeilingCheck, error)
+	IsSpendCeiling        func(error) bool
+	SecretWithheldNudge   SecretWithheldNudge
+	SurveyStreakNudge     SurveyStreakNudge
+	SpendRunwayNudge      SpendRunwayNudge
+	SpendSoftStopNudge    SpendSoftStopNudge
+	PublishWorkerProgress func(ctx context.Context, workerJobID string, snap workerprogress.Snapshot, checkpoint bool)
+	WorkerJob             func(ctx context.Context, workerJobID string) (*api.WorkerTask, bool)
+	// WorkerRounds bounds tool-less worker responses and sets round notice thresholds.
+	WorkerRounds spawn.RoundPolicy
+	// WorkerRoundConsumption tells the worker's coordinator its round crossed a
+	// consumption threshold at modelCalls.
+	WorkerRoundConsumption func(ctx context.Context, sess *api.Session, workerJobID string, modelCalls int)
 }
 
 type ControlDeps struct {

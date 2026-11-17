@@ -199,12 +199,6 @@ func decodeJSONL[T any](path string) ([]T, error) {
 	return out, nil
 }
 
-// ReadJSONL decodes a JSONL stream (file, stdin) into typed records, skipping
-// malformed lines. It is the pipe-in entry point for the CLI.
-func ReadJSONL[T any](r io.Reader) ([]T, error) {
-	return decodeJSONLReader[T](r)
-}
-
 // ReadJSONLFile decodes a JSONL capture file, returning no records (and no error)
 // when the file does not yet exist.
 func ReadJSONLFile[T any](path string) ([]T, error) {
@@ -215,8 +209,9 @@ func ReadJSONLFile[T any](path string) ([]T, error) {
 	return recs, err
 }
 
-// decodeJSONLReader is the io.Reader form used by tests with in-memory fixtures.
-func decodeJSONLReader[T any](r io.Reader) ([]T, error) {
+// ReadJSONL decodes a JSONL stream (file, stdin) into typed records, skipping
+// malformed lines. It is the pipe-in entry point for the CLI.
+func ReadJSONL[T any](r io.Reader) ([]T, error) {
 	var out []T
 	scan := bufio.NewScanner(r)
 	scan.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)

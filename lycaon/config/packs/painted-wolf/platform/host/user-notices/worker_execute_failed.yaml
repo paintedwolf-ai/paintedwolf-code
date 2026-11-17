@@ -1,11 +1,14 @@
 surfaces:
   - worker_failure
 notification: { tier: non_catastrophic, scope: session }
-title: Worker could not finish
-message: The worker stopped before it could return a summary to the coordinator.
+title: Worker round could not finish
+message: >-
+  This round stopped before returning a report to the coordinator. Work saved
+  in the worker's workspace is kept, and the coordinator can instruct the
+  worker again.
 suggested_action: >-
-  Retry the task. If it keeps happening, open the worker to see where it
-  stopped.
+  Open the worker to see where this round stopped, or ask in chat to continue
+  from its current state.
 scenarios:
   - id: generic
     vars: {}

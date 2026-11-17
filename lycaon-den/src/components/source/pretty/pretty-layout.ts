@@ -11,14 +11,12 @@ import {
   type PrettyConfig,
   type PrettyLayoutState,
   type PrettyOutcome,
-  prettyPlanHasLayout,
   type PrettyWork,
   updateLayout,
 } from "./pretty-rescan.ts";
 import { prettyTabMarks } from "./pretty-tab-marks.ts";
 import { prettyLayoutActive, prettyLayoutDecorations, prettyPresentation } from "./pretty-view.ts";
 
-export { prettyPlanHasLayout };
 
 const setPrettyConfig = StateEffect.define<PrettyConfig>();
 

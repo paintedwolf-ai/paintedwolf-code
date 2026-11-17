@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"os"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -144,7 +144,7 @@ func agentMutationPreview(tc tools.ToolContext, m agentMutation, target, from fs
 }
 
 func approvalText(raw []byte, size int64) (string, string) {
-	if size > sourceledger.MaxRevisionContentBytes {
+	if size > sourceblob.MaxRevisionContentBytes {
 		return "", "This file is too large for a text preview. The change identifies its size and content hash."
 	}
 	if size > int64(len(raw)) {
@@ -153,7 +153,7 @@ func approvalText(raw []byte, size int64) (string, string) {
 	if len(raw) == 0 {
 		return "", ""
 	}
-	text, _, err := textfile.Decode(raw, textfile.LimitsForRaw(sourceledger.MaxRevisionContentBytes))
+	text, _, err := textfile.Decode(raw, textfile.LimitsForRaw(sourceblob.MaxRevisionContentBytes))
 	if err != nil {
 		return "", "This file has no text preview. The change identifies its size and content hash."
 	}

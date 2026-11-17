@@ -41,7 +41,7 @@ func TestCompactionWorkerSummaryBudgetMatchesLimitsDefault(t *testing.T) {
 func TestCoordinatorPolicyWorkerSummaryMatchesCompactionYAML(t *testing.T) {
 	t.Parallel()
 	budget := limits.DefaultWorkerSummaryMaxChars
-	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+	vars := spawn.PolicyTemplateVars()
 	got, ok := vars["worker_summary_max_chars"].(int)
 	if !ok || got != budget {
 		t.Fatalf("worker_summary_max_chars = %v want %d from limits default (YAML omits key)", vars["worker_summary_max_chars"], budget)

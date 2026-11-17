@@ -62,7 +62,7 @@ func (c *CoherenceTracker) RecordWorkerMutation(qpath layeredfs.QualifiedPath, k
 	delete(t.store.negativeLookups, qpath)
 	gen := rootGenLocked(t, qpath.RootID)
 	var events []InvalidationEvent
-	if t.facts.SupportsInvalidationUpcall {
+	if t.facts.SupportsInvalidation {
 		parentDir, childName := splitParentAndName(qpath)
 		if (wasNegative || kind == TrunkCreate) && t.facts.SupportsNegativeLookupInvalidation {
 			events = append(events, InvalidationEvent{
@@ -145,7 +145,7 @@ func (c *CoherenceTracker) RecordWatcherOverflow(rootID string, reason string) [
 		t.coherence.pendingObsRefs[obs.ObservationID] = struct{}{}
 	}
 	var events []InvalidationEvent
-	if t.facts.UntouchedVisibility == VisibilityLive && t.facts.SupportsInvalidationUpcall {
+	if t.facts.Live() && t.facts.SupportsInvalidation {
 		for rID := range targetRoots {
 			events = append(events, InvalidationEvent{
 				Kind:             InvalidateAllUncertain,

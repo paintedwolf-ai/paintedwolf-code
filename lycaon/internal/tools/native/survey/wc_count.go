@@ -59,13 +59,6 @@ type Counter struct {
 	display, longestDisplay int64
 }
 
-// CountBytes counts one complete captured byte sequence.
-func CountBytes(content []byte) TextCounts {
-	c := NewCounter(allCountMetrics)
-	_, _ = c.Write(content)
-	return c.Counts()
-}
-
 func (c *Counter) Write(p []byte) (int, error) {
 	metrics := c.metrics
 	c.counts.Bytes += int64(len(p))
@@ -167,14 +160,4 @@ func (c *Counter) Counts() TextCounts {
 	}
 	out.MaxLineLength = max(out.MaxLineLength, c.line)
 	return out
-}
-
-func countWcFile(content []byte, includeWords bool) TextCounts {
-	metrics := CountLines
-	if includeWords {
-		metrics |= CountWords
-	}
-	counter := NewCounter(metrics)
-	_, _ = counter.Write(content)
-	return counter.Counts()
 }

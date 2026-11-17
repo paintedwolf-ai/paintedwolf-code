@@ -1,10 +1,13 @@
 package tools
 
 import (
+	"cmp"
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolpresentation"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/pkg/api"
 	"slices"
 	"sort"
 	"strings"
@@ -143,6 +146,7 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 	}
 	if !browsing && len(result.Loaded)+len(result.AlreadyLoaded) > 0 {
 		t.deps.Activation.Activate(tctx.Identity.SessionID, append(slices.Clone(result.Loaded), result.AlreadyLoaded...), need)
+		stateLoadedTools(tctx, len(outcome.Exact) > 0, slices.Concat(result.Loaded, result.AlreadyLoaded))
 		result.Note = "Loaded schemas are on the next model call; this turn continues automatically."
 	}
 	if t.deps.Record != nil {
@@ -150,6 +154,24 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 	}
 	raw, err := surveyjson.Marshal(result)
 	return string(raw), err
+}
+
+// maxLoadedItems bounds the tool names a card lists.
+const maxLoadedItems = 3
+
+// stateLoadedTools puts the tools a request loaded, and how they were
+// resolved, on the call's action card.
+func stateLoadedTools(tctx ToolContext, exact bool, names []string) {
+	items := make([]string, 0, min(len(names), maxLoadedItems))
+	for _, name := range names[:min(len(names), maxLoadedItems)] {
+		items = append(items, cmp.Or(toolpresentation.Label(name), name))
+	}
+	tctx.Effects.Out.StateCardFact(api.ActionFact{Kind: api.ActionFactFound, Count: len(names), Noun: "tools", Items: items})
+	by := "engine"
+	if exact {
+		by = "name"
+	}
+	tctx.Effects.Out.StateCardFact(api.ActionFact{Kind: api.ActionFactLoadedBy, By: by})
 }
 
 // Exact identifiers do not need scores for unrelated registered tools.

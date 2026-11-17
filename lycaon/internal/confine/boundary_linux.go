@@ -63,13 +63,11 @@ func (c *capabilityCache) get() linuxsandbox.Capabilities {
 
 // Available reports whether confined commands can run: every kernel capability
 // is present and one helper run applied and attested a boundary.
-func Available() bool { return linuxCapabilities().Available() }
+func Available() bool { return linuxHost.get().Available() }
 
 // LinuxCapabilities reports the facts behind Available, so the host can say
 // why confinement is unavailable.
-func LinuxCapabilities() (linuxsandbox.Capabilities, bool) { return linuxCapabilities(), true }
-
-func linuxCapabilities() linuxsandbox.Capabilities { return linuxHost.get() }
+func LinuxCapabilities() (linuxsandbox.Capabilities, bool) { return linuxHost.get(), true }
 
 func probeCapabilities() linuxsandbox.Capabilities {
 	caps := linuxsandbox.Facts()

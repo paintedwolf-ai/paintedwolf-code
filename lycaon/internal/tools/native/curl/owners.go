@@ -12,6 +12,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"net/netip"
 	"net/url"
@@ -287,7 +288,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		*p.transfer = inv.transfer
 	}
 	if inv.exchange != nil {
-		httpaction.ReportExchangeProvenance(ctx, inv.provenance)
+		evidence.ReportExchangeProvenance(ctx, inv.provenance)
 	}
 	return res, settleErr
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -35,8 +36,8 @@ func (s *sqlRunStore) ClaimNext(ctx context.Context) (*api.CodeScan, error) {
 	now := time.Now().UTC()
 	n, err := qtx.ClaimPendingScan(ctx, db.ClaimPendingScanParams{
 		ClaimedBy: db.NullString("local-scan-runner"), ClaimToken: db.NullString(uuid.NewString()),
-		HeartbeatAt:    db.NullString(db.FormatTime(now)),
-		LeaseExpiresAt: db.NullString(db.FormatTime(now.Add(ScanClaimLease))), ID: id,
+		HeartbeatAt:    db.NullString(timelayout.Format(now)),
+		LeaseExpiresAt: db.NullString(timelayout.Format(now.Add(ScanClaimLease))), ID: id,
 	})
 	if err != nil {
 		return nil, err
@@ -85,7 +86,7 @@ func (s *sqlRunStore) SetExecutionPolicy(ctx context.Context, claimed *api.CodeS
 	}
 	return s.casInTx(ctx, claimed.ID, func(qtx *db.Queries) (int64, error) {
 		return qtx.SetScanExecutionPolicy(ctx, db.SetScanExecutionPolicyParams{
-			RuntimeJson: string(raw), StartedAt: db.NullString(db.FormatTime(startedAt.UTC())),
+			RuntimeJson: string(raw), StartedAt: db.NullString(timelayout.Format(startedAt.UTC())),
 			ID: claimed.ID, ClaimToken: db.NullString(claimed.ClaimToken),
 		})
 	})
@@ -97,7 +98,7 @@ func (s *sqlRunStore) MarkLongRunning(ctx context.Context, claimed *api.CodeScan
 	}
 	return s.casInTx(ctx, claimed.ID, func(qtx *db.Queries) (int64, error) {
 		return qtx.MarkScanLongRunning(ctx, db.MarkScanLongRunningParams{
-			LongRunningAt: db.NullString(db.FormatTime(at.UTC())), ID: claimed.ID,
+			LongRunningAt: db.NullString(timelayout.Format(at.UTC())), ID: claimed.ID,
 			ClaimToken: db.NullString(claimed.ClaimToken),
 		})
 	})
@@ -201,7 +202,7 @@ func (s *sqlRunStore) MarkPendingSuperseded(ctx context.Context, id, replacement
 		changed, err := qtx.MarkPendingScanSuperseded(ctx, db.MarkPendingScanSupersededParams{
 			Error:             db.NullString(scanSupersededMessage),
 			ReplacementScanID: replacementScanID,
-			CompletedAt:       db.NullString(db.FormatTime(time.Now().UTC())),
+			CompletedAt:       db.NullString(timelayout.Format(time.Now().UTC())),
 			ID:                id,
 		})
 		if err != nil || changed != 1 {

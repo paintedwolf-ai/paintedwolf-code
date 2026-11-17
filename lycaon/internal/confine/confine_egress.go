@@ -527,11 +527,6 @@ func (b *egressBrokerT) decideEndpoint(ctx context.Context, token string, ep egr
 	return allow
 }
 
-// DecideAttributedHost gates an attributed host without request metadata.
-func DecideAttributedHost(ctx context.Context, cmd EgressCommand, host string) bool {
-	return DecideAttributedHTTPRequest(ctx, cmd, host, "", "")
-}
-
 // DecideAttributedHTTPRequest gates an attributed request with pack metadata.
 func DecideAttributedHTTPRequest(ctx context.Context, cmd EgressCommand, host, method, path string) bool {
 	host = strings.TrimSpace(host)

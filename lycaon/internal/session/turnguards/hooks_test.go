@@ -20,6 +20,8 @@ import (
 	sessionverification "github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workerplan"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -208,5 +210,70 @@ func TestBeforeFinishPrioritizesOpenProgressAndWaivesAfterRetryCap(t *testing.T)
 	)
 	if !blocked || reject == nil || reject.Code() != progressOpenBeforeCloseoutCode {
 		t.Fatalf("updated checklist after waiver: got blocked=%v reject=%v, want %s", blocked, reject, progressOpenBeforeCloseoutCode)
+	}
+}
+
+type stubPlanCloseout struct {
+	verdict workerplan.CloseoutVerdict
+	err     error
+}
+
+func (s stubPlanCloseout) CheckSessionCloseout(context.Context, string, string) (workerplan.CloseoutVerdict, error) {
+	return s.verdict, s.err
+}
+
+type stubWorkspace struct{ path string }
+
+func (w stubWorkspace) ActivePath(context.Context, *api.Session) (string, error) { return w.path, nil }
+func (w stubWorkspace) SettingsPath(context.Context, *api.Session) string        { return w.path }
+func (w stubWorkspace) RootCount(context.Context, *api.Session) int              { return 1 }
+func (w stubWorkspace) SettingsRoots(context.Context, *api.Session) []string     { return []string{w.path} }
+
+func TestPlanCloseoutBlocksUnmetCriteriaAndAssertCompletion(t *testing.T) {
+	testutil.FailErr(t, "install anchors", anchorcatalog.InstallBundled())
+	loader, err := oar.NewLoader(filepath.Join("..", "..", "..", "..", "schemas"))
+	testutil.FailErr(t, "oar.NewLoader", err)
+	rs, err := loader.LoadEffectivePolicy()
+	testutil.FailErr(t, "oar.LoadEffectivePolicy", err)
+	pipeline := oar.NewGuardPipeline(rs, loader, oar.NewCounterStore())
+	pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
+
+	policy := policyfacts.New(stubProfiles{})
+	policy.SetSources(nil, nil, stubFeedback{}, nil)
+	policy.SetPipeline(pipeline)
+
+	sess := &api.Session{ID: "coord-plan", ProjectID: "proj-1", Posture: api.SessionPostureBuild}
+	store := stubSessions{sess: sess}
+	state := stubState{state: surface.ImplementSessionState{}}
+	svc := New(store, policy, nil, nil, state, nil, stubWorkspace{path: "/tmp/ws"}, nil, nil, closeouts.New(store), nil, nil)
+
+	svc.SetPlanCloseout(stubPlanCloseout{verdict: workerplan.CloseoutVerdict{OK: true}})
+	if reject, blocked := svc.PlanCloseout(t.Context(), sess, true, true); blocked || reject != nil {
+		t.Fatalf("ok closeout blocked: %v", reject)
+	}
+	testutil.FailErr(t, "assert completion ok", svc.AssertCompletion(t.Context(), sess))
+
+	svc.SetPlanCloseout(stubPlanCloseout{verdict: workerplan.CloseoutVerdict{
+		Code:     workerplan.CodeCriteriaUnmet,
+		Gap:      workerplan.GapCriteriaUnmet,
+		Worker:   "api-builder",
+		LegID:    "leg-1",
+		ResultID: "res-1",
+		Unmet:    []string{"test:pass:go test ./..."},
+		Outcomes: []workerrecords.CriterionOutcome{{Criterion: "test:pass:go test ./...", Detail: "run_missing"}},
+	}})
+	reject, blocked := svc.PlanCloseout(t.Context(), sess, true, false)
+	if !blocked || reject == nil || reject.Code() != workerplan.CodeCriteriaUnmet || !errors.Is(reject, guidance.ErrCloseoutStopped) {
+		t.Fatalf("unmet criteria was not blocked: blocked=%v reject=%v", blocked, reject)
+	}
+	if err := svc.AssertCompletion(t.Context(), sess); err == nil {
+		t.Fatal("AssertCompletion accepted unmet criteria")
+	}
+
+	wantErr := errors.New("closeout store offline")
+	svc.SetPlanCloseout(stubPlanCloseout{err: wantErr})
+	reject, blocked = svc.PlanCloseout(t.Context(), sess, true, true)
+	if !blocked || reject == nil || !errors.Is(reject, wantErr) {
+		t.Fatalf("closeout error not surfaced: blocked=%v reject=%v", blocked, reject)
 	}
 }

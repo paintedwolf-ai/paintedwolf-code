@@ -134,7 +134,7 @@ func RequiredTestDeps(t *testing.T, deps hostapi.Dependencies) hostapi.Dependenc
 		HostIdentity: deps.Host.HostIdentity, Checkpoints: deps.Approvals.Checkpoints, ProgressStore: deps.Source.ProgressStore,
 		VisualStore: deps.Source.VisualStore, HistoryStorage: deps.External.HistoryStorage, HostResources: deps.Host.HostResources,
 		HostPower: deps.Host.HostPower, Pricing: deps.Host.Pricing, AgentPresence: deps.Source.AgentPresence, Workers: deps.Workflow.Workers,
-		WorkerCancel: deps.Workflow.WorkerCancel, Delegations: deps.Workflow.Delegations, Board: deps.Workflow.Board,
+		WorkerCancel: deps.Workflow.WorkerCancel, Board: deps.Workflow.Board,
 		HarnessWorkers: deps.Harness.HarnessWorkers, WebResearch: deps.External.WebResearch, WebDiscoverer: deps.External.WebDiscoverer,
 	}
 	apitestdeps.Fill(t, &fill)
@@ -157,7 +157,7 @@ func RequiredTestDeps(t *testing.T, deps hostapi.Dependencies) hostapi.Dependenc
 	deps.Host.HostIdentity, deps.Approvals.Checkpoints, deps.Source.ProgressStore = fill.HostIdentity, fill.Checkpoints, fill.ProgressStore
 	deps.Source.VisualStore, deps.External.HistoryStorage, deps.Host.HostResources = fill.VisualStore, fill.HistoryStorage, fill.HostResources
 	deps.Host.HostPower, deps.Host.Pricing, deps.Source.AgentPresence = fill.HostPower, fill.Pricing, fill.AgentPresence
-	deps.Workflow.Workers, deps.Workflow.WorkerCancel, deps.Workflow.Delegations, deps.Workflow.Board = fill.Workers, fill.WorkerCancel, fill.Delegations, fill.Board
+	deps.Workflow.Workers, deps.Workflow.WorkerCancel, deps.Workflow.Board = fill.Workers, fill.WorkerCancel, fill.Board
 	deps.Harness.HarnessWorkers = fill.HarnessWorkers
 	deps.External.WebResearch, deps.External.WebDiscoverer = fill.WebResearch, fill.WebDiscoverer
 	return deps

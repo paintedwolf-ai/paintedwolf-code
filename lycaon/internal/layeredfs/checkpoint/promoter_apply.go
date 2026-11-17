@@ -80,7 +80,7 @@ func (txn *Transaction) applyCheckpoint(ctx context.Context, pr *Promoter, req A
 	if txID == "" {
 		txID = "tx-" + m.CheckpointID
 	}
-	existing, found, err := pr.loadPromotionRecord(txID)
+	existing, found, err := pr.cfg.Store.LoadPromotionRecord(txID)
 	if err != nil {
 		return nil, err
 	}

@@ -3,12 +3,12 @@ package mutation
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -47,7 +47,7 @@ func TestRemovalReviewCannotApproveChangedTree(t *testing.T) {
 
 func TestOverwriteAboveRecoveryQuotaRequiresRecoveryLossReview(t *testing.T) {
 	h := newHarness(t, map[string]string{"from": "new"})
-	original := strings.Repeat("x", sourceledger.MaxRevisionContentBytes+1)
+	original := strings.Repeat("x", sourceblob.MaxRevisionContentBytes+1)
 	testutil.FailErr(t, "seed unversioned destination", os.WriteFile(h.path("to"), []byte(original), 0o600))
 	h.service.Effects.SetSameFilesystem(func(string, string) (bool, error) { return false, nil })
 	lossReviews := 0

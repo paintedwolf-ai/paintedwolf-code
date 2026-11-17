@@ -3,10 +3,10 @@ package sourceledger
 import (
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -19,7 +19,7 @@ func insertWalkMessage(t *testing.T, store *Store, id, session, kind, visibility
 		INSERT INTO messages (id, entry_id, session_id, role, content, origin, authority,
 		 trust_tier, kind, visibility, ord, ts)
 		VALUES (?, ?, ?, 'user', ?, 'user', 'user', 'trusted', ?, ?, ?, ?)
-	`, id, "entry-"+id, session, content, kind, visibility, ord, db.FormatTime(time.Now().UTC()))
+	`, id, "entry-"+id, session, content, kind, visibility, ord, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert walk message", err)
 }
 
@@ -67,7 +67,7 @@ func TestWalkEffectsByIDAndGroup(t *testing.T) {
 	_, err := store.sqlDB.ExecContext(ctx, `
 		INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
 		VALUES ('r2', 'p2', '/tmp/source-ledger-other', 'other', 1, ?, 'attached')
-	`, db.FormatTime(time.Now().UTC()))
+	`, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert second root", err)
 
 	if _, err := store.Walk.EffectsByID(ctx, "p1", make([]string, maxEffectsByID+1)); err == nil {

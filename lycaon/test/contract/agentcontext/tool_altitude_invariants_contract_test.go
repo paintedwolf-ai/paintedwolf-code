@@ -6,7 +6,6 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -17,114 +16,10 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance/ledgertest"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
-	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
-	"github.com/lycaon/lycaon/internal/tools/safecmd"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
-
-func TestAltitudeInvariantReadEscalation(t *testing.T) {
-	t.Parallel()
-	tmp := t.TempDir()
-	writeLargeGoFile(t, tmp, "big.go")
-	esc := surveytools.NewReadEscalationStore()
-	tool := &surveytools.ReadTool{Boundary: altitudeBoundary(t), Escalation: esc}
-	ctx := altitudeCtx(tmp, "esc-read")
-
-	out1, err := tool.Run(context.Background(), map[string]any{"path": "big.go"}, ctx)
-	contractcheck.FailErr(t, "first read", err)
-	if !strings.Contains(out1, `"mode":"outline"`) && !strings.Contains(out1, `"mode": "outline"`) {
-		t.Fatalf("first unbounded read want outline: %s", out1)
-	}
-
-	out2, err := tool.Run(context.Background(), map[string]any{"path": "big.go"}, ctx)
-	contractcheck.FailErr(t, "second read", err)
-	if !strings.Contains(out2, `"mode":"content"`) && !strings.Contains(out2, `"mode": "content"`) {
-		t.Fatalf("second unbounded read want literal full: %s", out2)
-	}
-	if evidence.ReadEvidenceSurvey(map[string]any{"path": "big.go"}, canonicalSurveyJSON(t, out2)) {
-		t.Fatal("escalated full read must not be survey-grade")
-	}
-
-	other := altitudeCtx(tmp, "esc-other")
-	if esc.Strike("esc-other", "big.go") != 0 {
-		t.Fatalf("escalation counter must be session-scoped")
-	}
-	_, err = tool.Run(context.Background(), map[string]any{"path": "big.go", "offset": 1, "limit": 1}, other)
-	contractcheck.FailErr(t, "scoped read", err)
-	if esc.Strike("esc-other", "big.go") != 0 {
-		t.Fatal("expressed-scope read must not bump escalation counter")
-	}
-}
-
-func TestAltitudeInvariantSurveyTieringAndGloss(t *testing.T) {
-	boundary := altitudeBoundary(t)
-	ctx := context.Background()
-
-	t.Run("zoomed_survey", func(t *testing.T) {
-		tmp := t.TempDir()
-		writeGrepHits(t, tmp, safecmd.GrepMaxMatches+50)
-		out, err := (&surveytools.GrepTool{Boundary: boundary}).Run(ctx, map[string]any{"pattern": "needle"}, altitudeCtx(tmp, "survey"))
-		contractcheck.FailErr(t, "grep overflow", err)
-		if !evidence.GrepEvidenceSurvey(map[string]any{"pattern": "needle"}, canonicalSurveyJSON(t, out)) {
-			t.Fatal("overflow grep must be survey-grade")
-		}
-		assertSurveyResponseHasCoverage(t, out)
-	})
-
-	t.Run("literal_non_survey", func(t *testing.T) {
-		tmp := t.TempDir()
-		contractcheck.FailErr(t, "write", os.WriteFile(filepath.Join(tmp, "a.txt"), []byte("alpha\n"), 0o644))
-		args := map[string]any{"pattern": "alpha"}
-		out, err := (&surveytools.GrepTool{Boundary: boundary}).Run(ctx, args, altitudeCtx(tmp, "literal"))
-		contractcheck.FailErr(t, "grep narrow", err)
-		if evidence.GrepEvidenceSurvey(args, canonicalSurveyJSON(t, out)) {
-			t.Fatal("narrow grep must not be survey-grade at capture")
-		}
-	})
-
-	t.Run("gloss_fenced", func(t *testing.T) {
-		guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-		snapshot := snapshotFromReadLine(t, "a.go", "1| x", 1)
-		var gloss []string
-		for i := 0; i < 12; i++ {
-			gloss = append(gloss, fmt.Sprintf(`{"label":"hint-%d"}`, i))
-		}
-		provider := &stubCuratorProvider{
-			id: "lite",
-			responses: []string{fmt.Sprintf(
-				`{"selections":[{"path":"a.go","line":1,"excerpt":"x"}],"gloss":[%s]}`,
-				strings.Join(gloss, ","),
-			)},
-		}
-		cur, err := llm.NewTestRegistrySummarizer(provider)
-		contractcheck.FailErr(t, "NewTestRegistrySummarizer", err)
-		got, err := cur.Curate(context.Background(), snapshot, llm.CurationFocus{Target: "focus"}, 3)
-		contractcheck.FailErr(t, "Curate", err)
-		if len(got.Gloss) > 5 {
-			t.Fatalf("gloss lines = %d want <=5", len(got.Gloss))
-		}
-		for _, g := range got.Gloss {
-			if strings.Contains(g.Label, "func ") {
-				t.Fatalf("gloss must not carry verbatim code claims: %q", g.Label)
-			}
-		}
-	})
-
-	t.Run("tier1_deterministic_only", func(t *testing.T) {
-		tmp := t.TempDir()
-		writeLargeGoFile(t, tmp, "big.go")
-		out, err := (&surveytools.ReadTool{
-			Boundary: boundary, Escalation: surveytools.NewReadEscalationStore(),
-		}).Run(ctx, map[string]any{"path": "big.go"}, altitudeCtx(tmp, "tier1-read"))
-		contractcheck.FailErr(t, "read Tier 1", err)
-		if strings.Contains(out, `"highlights"`) {
-			t.Fatal("Tier 1 overflow must not surface curated highlights")
-		}
-		assertSurveyResponseHasCoverage(t, out)
-	})
-}
 
 func TestAltitudeCompactorBoundary(t *testing.T) {
 	t.Parallel()
@@ -222,4 +117,33 @@ func sortedKeys(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// Curated gloss stays bounded and never carries verbatim code claims.
+func TestAltitudeGlossIsFenced(t *testing.T) {
+	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
+	snapshot := snapshotFromReadLine(t, "a.go", "1| x", 1)
+	var gloss []string
+	for i := 0; i < 12; i++ {
+		gloss = append(gloss, fmt.Sprintf(`{"label":"hint-%d"}`, i))
+	}
+	provider := &stubCuratorProvider{
+		id: "lite",
+		responses: []string{fmt.Sprintf(
+			`{"selections":[{"path":"a.go","line":1,"excerpt":"x"}],"gloss":[%s]}`,
+			strings.Join(gloss, ","),
+		)},
+	}
+	cur, err := llm.NewTestRegistrySummarizer(provider)
+	contractcheck.FailErr(t, "NewTestRegistrySummarizer", err)
+	got, err := cur.Curate(context.Background(), snapshot, llm.CurationFocus{Target: "focus"}, 3)
+	contractcheck.FailErr(t, "Curate", err)
+	if len(got.Gloss) > 5 {
+		t.Fatalf("gloss lines = %d want <=5", len(got.Gloss))
+	}
+	for _, g := range got.Gloss {
+		if strings.Contains(g.Label, "func ") {
+			t.Fatalf("gloss must not carry verbatim code claims: %q", g.Label)
+		}
+	}
 }

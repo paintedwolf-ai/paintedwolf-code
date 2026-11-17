@@ -1,0 +1,6 @@
+steps:
+  - tool: "request_decision"
+    say: "If you cannot proceed without an answer, ask with {{ call }}."
+    otherwise: "Put what you wanted to say in your leg report."
+  - tool: "complete_leg"
+    say: "Otherwise put it in your report when you deliver with {{ call }}."

@@ -2,6 +2,7 @@ package workspace_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
@@ -133,7 +134,7 @@ func TestReconcileSandboxRootsDefersHeldBranchLocks(t *testing.T) {
 	}
 }
 
-func TestResolveDispatchWorkspaceSelectionNarrowsRootsAndIgnoresTaskPathHints(t *testing.T) {
+func TestResolveDispatchWorkspaceSelectionNarrowsRoots(t *testing.T) {
 	rootA := t.TempDir()
 	rootB := t.TempDir()
 	testutil.FailErr(t, "mkdir subroot", os.MkdirAll(filepath.Join(rootA, "services", "api"), 0o755))
@@ -144,23 +145,22 @@ func TestResolveDispatchWorkspaceSelectionNarrowsRootsAndIgnoresTaskPathHints(t 
 		{ID: "docs", Label: "docs", Path: rootB},
 	}
 
-	// TaskPathHints alone do not narrow or expand selection when WorkspaceSelection is empty.
+	// An empty selection keeps every attached root.
 	grantsAll, refsAll, err := workspace.ResolveDispatchWorkspaceSelection(
-		attached, adapter.WorkspaceSelection{}, []string{"primary/services/api/handler.go"},
+		attached, adapter.WorkspaceSelection{},
 	)
 	testutil.FailErr(t, "ResolveDispatchWorkspaceSelection default", err)
 	if len(grantsAll) != 2 || len(refsAll) != 2 || refsAll[0].Path != filepath.Clean(rootA) {
 		t.Fatalf("expected default selection to include all attached roots unchanged, got %+v", refsAll)
 	}
 
-	// Explicit WorkspaceSelection narrows root and subroot while ignoring TaskPathHints to other roots.
+	// An explicit selection narrows root and subroot.
 	grantsNarrow, refsNarrow, err := workspace.ResolveDispatchWorkspaceSelection(
 		attached,
 		adapter.WorkspaceSelection{
 			RootIDs:  []string{"primary"},
 			Subroots: map[string]string{"primary": "services/api"},
 		},
-		[]string{"docs/README.md", "primary/services/billing/invoice.go"},
 	)
 	testutil.FailErr(t, "ResolveDispatchWorkspaceSelection narrow", err)
 	wantSubPath := filepath.Join(filepath.Clean(rootA), "services", "api")
@@ -170,18 +170,18 @@ func TestResolveDispatchWorkspaceSelectionNarrowsRootsAndIgnoresTaskPathHints(t 
 
 	// Unauthorized root selection must be rejected.
 	if _, _, err := workspace.ResolveDispatchWorkspaceSelection(
-		attached, adapter.WorkspaceSelection{RootIDs: []string{"ungranted"}}, nil,
+		attached, adapter.WorkspaceSelection{RootIDs: []string{"ungranted"}},
 	); err == nil {
 		t.Fatal("expected unauthorized root selection to fail")
 	}
 
-	// Verify real Manager.CreateWorkerWorkspaceSelected and ReconcileSelectedSandboxRoots wire WorkspaceSelection.
+	// A selected worker workspace holds only the selected root and subroot.
 	testutil.FailErr(t, "write api handler", os.WriteFile(filepath.Join(rootA, "services", "api", "handler.go"), []byte("package api\n"), 0o644))
 	testutil.FailErr(t, "write billing invoice", os.WriteFile(filepath.Join(rootA, "services", "billing", "invoice.go"), []byte("package billing\n"), 0o644))
 	testutil.FailErr(t, "write docs readme", os.WriteFile(filepath.Join(rootB, "README.md"), []byte("# docs\n"), 0o644))
 
 	branches := t.TempDir()
-	mgr := workspace.NewManager(branches)
+	mgr := workspace.NewManager(branches, platform.NewSelector(platform.Config{}))
 	narrowSel := adapter.WorkspaceSelection{
 		RootIDs:  []string{"primary"},
 		Subroots: map[string]string{"primary": "services/api"},
@@ -202,8 +202,5 @@ func TestResolveDispatchWorkspaceSelectionNarrowsRootsAndIgnoresTaskPathHints(t 
 	}
 	if _, err := os.Stat(filepath.Join(binding.Root, "invoice.go")); !os.IsNotExist(err) {
 		t.Fatalf("unselected sibling subroot file must not exist in narrowed workspace: %v", err)
-	}
-	if _, err := workspace.ReconcileSelectedSandboxRoots(t.Context(), branches, attached, narrowSel, nil, nil, retainedJobIDs(map[string]struct{}{"selected-job": {}})); err != nil {
-		testutil.FailErr(t, "ReconcileSelectedSandboxRoots", err)
 	}
 }

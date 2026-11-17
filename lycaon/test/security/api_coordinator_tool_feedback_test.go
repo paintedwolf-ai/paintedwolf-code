@@ -74,7 +74,7 @@ func TestCoordinatorPromptRejectsOffSurfaceDelegate(t *testing.T) {
 	mock := &sequentialLLMClient{completions: []*modelcall.Completion{
 		{ToolCalls: []wire.ToolCall{{
 			ID:   "call_delegate",
-			Name: "delegate_dispatch",
+			Name: "plan_from_blueprint",
 			Args: map[string]any{},
 		}}},
 		{Content: "cannot delegate yet"},
@@ -109,7 +109,7 @@ func TestCoordinatorPromptRejectsOffSurfaceDelegate(t *testing.T) {
 	seenRejection := false
 	for _, msg := range msgs {
 		if result := msg.ToolResult; result != nil && result.ToolCallID == "call_delegate" {
-			if result.Tool != "delegate_dispatch" || result.Outcome != wire.ToolResultOutcomeRejected || !slices.Contains(result.Codes, "SPEC_POSTURE_DELEGATION_FORBIDDEN") {
+			if result.Tool != "plan_from_blueprint" || result.Outcome != wire.ToolResultOutcomeRejected || !slices.Contains(result.Codes, "SPEC_POSTURE_DELEGATION_FORBIDDEN") {
 				t.Fatalf("off-surface delegate result = %+v", result)
 			}
 			seenRejection = true

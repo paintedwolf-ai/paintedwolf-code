@@ -21,15 +21,49 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func scanInventoryKindRoots(t *testing.T) []string {
+	t.Helper()
+	src := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/extpacks/inventory.go")
+	start := strings.Index(src, "var inventoryKindRoots = []string{")
+	if start < 0 {
+		t.Fatal("inventoryKindRoots not found in inventory.go")
+	}
+	end := strings.Index(src[start:], "}")
+	if end < 0 {
+		t.Fatal("unterminated inventoryKindRoots")
+	}
+	var roots []string
+	for _, line := range strings.Split(src[start:start+end], "\n")[1:] {
+		line = strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(line), ","))
+		switch {
+		case strings.HasPrefix(line, `"`):
+			roots = append(roots, strings.Trim(line, `"`))
+		case line == "ArchiveKindRoot":
+			roots = append(roots, extpacks.ArchiveKindRoot)
+		case line == "NextStepsKindRoot":
+			roots = append(roots, extpacks.NextStepsKindRoot)
+		case line == "DetectionPackKindRoot":
+			roots = append(roots, extpacks.DetectionPackKindRoot)
+		case line == "CredentialSlotsKindRoot":
+			roots = append(roots, extpacks.CredentialSlotsKindRoot)
+		}
+	}
+	if len(roots) == 0 {
+		t.Fatal("no kind roots parsed from inventoryKindRoots")
+	}
+	return roots
+}
+
 func TestProjectScopeCoversEveryKindRootContract(t *testing.T) {
 	t.Parallel()
-	for _, root := range extpacks.UnitKindRoots() {
+	kindRoots := scanInventoryKindRoots(t)
+	for _, root := range kindRoots {
 		if extpacks.ProjectScope(root) == 0 {
 			t.Fatalf("kind root %q has no ProjectScope class", root)
 		}
 	}
 	var deviceOnly []string
-	for _, root := range extpacks.UnitKindRoots() {
+	for _, root := range kindRoots {
 		if extpacks.ProjectScope(root) == extpacks.ScopeDeviceOnly {
 			deviceOnly = append(deviceOnly, root)
 		}

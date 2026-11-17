@@ -2,15 +2,26 @@ package app
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/app/delegations"
+	"slices"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/app/boards"
+	"github.com/lycaon/lycaon/internal/app/persistence"
+	"github.com/lycaon/lycaon/internal/app/scanning"
 	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -19,15 +30,13 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
-	"slices"
-	"strings"
-	"testing"
-	"time"
 )
 
 func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
@@ -55,9 +64,9 @@ func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
 
 	sessionMgr := session.NewHost(sessionStore, session.Models{Client: nil, Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
-	delegationsRt := delegations.New(sqlDB, nil, worker.WorkersConfig{})
+	workersRt := workerruntime.New(sqlDB, nil, worker.WorkersConfig{})
 	starts := 0
-	delegationsRt.SetDependencies(delegations.Dependencies{Workflows: &workflows.Runtime{Manager: wfMgr}, Sessions: &sessions.Runtime{Manager: sessionMgr}, StartOrchestratedTopology: func(c context.Context, id string, started *api.WorkflowRun) {
+	workersRt.SetDependencies(workerruntime.Dependencies{Workflows: &workflows.Runtime{Manager: wfMgr}, Sessions: &sessions.Runtime{Manager: sessionMgr}, StartOrchestratedTopology: func(c context.Context, id string, started *api.WorkflowRun) {
 		if c.Err() != nil || id != sess.ID || started.ID != run.ID {
 			t.Fatalf("initial topology start crossed run identity: %s, %+v, %v", id, started, c.Err())
 		}
@@ -65,27 +74,27 @@ func TestCrossPhaseHostAdvanceQueuesCoordinatorWake(t *testing.T) {
 	}})
 	finishExecution := sessionMgr.Coordinator.Runtime.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
 	defer finishExecution()
-	delegationsRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "triage", "expand")
+	workersRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "triage", "expand")
 
 	nudges := sessionMgr.Coordinator.Runtime.CoordinatorLoop().Nudges
 	nudges.ClearPending(sess.ID)
-	delegationsRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "", "expand")
+	workersRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "", "expand")
 	if starts != 1 {
 		t.Fatalf("initial phase topology starts=%d", starts)
 	}
 	nudges.ClearPending(sess.ID)
-	delegationsRt.OnWorkflowRunResumed(ctx, run)
+	workersRt.OnWorkflowRunResumed(ctx, run)
 	if got, ok := nudges.Pending(sess.ID); !ok || got != anchor.PhaseAdvanced {
 		t.Fatalf("resumed run wake=%s,%v", got, ok)
 	}
 	nudges.ClearPending(sess.ID)
 	stale := *run
 	stale.ID = "stale-run"
-	delegationsRt.OnWorkflowRunResumed(ctx, &stale)
+	workersRt.OnWorkflowRunResumed(ctx, &stale)
 	if got, ok := nudges.Pending(sess.ID); ok {
 		t.Fatalf("stale run resumed active coordinator: %s", got)
 	}
-	delegationsRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "triage", "expand")
+	workersRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "triage", "expand")
 	got, ok := nudges.Pending(sess.ID)
 	if !ok || got != anchor.PhaseAdvanced {
 		t.Fatalf("pending wake = %q, %v want %q, true", got, ok, anchor.PhaseAdvanced)
@@ -117,10 +126,10 @@ func TestTerminalCompletionSettlesWithoutAmbientWake(t *testing.T) {
 
 	sessionMgr := session.NewHost(sessionStore, session.Models{Client: nil, Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
-	delegationsRt := delegations.New(sqlDB, nil, worker.WorkersConfig{})
-	delegationsRt.SetDependencies(delegations.Dependencies{Workflows: &workflows.Runtime{Manager: wfMgr}, Sessions: &sessions.Runtime{Manager: sessionMgr}})
-	delegationsRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "select", "done")
-	delegationsRt.OnWorkflowRunCompleted(ctx, run)
+	workersRt := workerruntime.New(sqlDB, nil, worker.WorkersConfig{})
+	workersRt.SetDependencies(workerruntime.Dependencies{Workflows: &workflows.Runtime{Manager: wfMgr}, Sessions: &sessions.Runtime{Manager: sessionMgr}})
+	workersRt.OnWorkflowPhaseAutoAdvanced(ctx, sess.ID, run.ID, "select", "done")
+	workersRt.OnWorkflowRunCompleted(ctx, run)
 	settled, err := sessionStore.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read completed session", err)
 	if settled.Status != api.SessionStatusIdle {
@@ -164,11 +173,11 @@ func TestHumanApprovalAdvanceQueuesWakeForRunningChild(t *testing.T) {
 
 	sessionMgr := session.NewHost(sessionStore, session.Models{Client: nil, Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
 	sessionMgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
-	delegationsChildRt := delegations.New(sqlDB, nil, worker.WorkersConfig{})
-	delegationsChildRt.SetDependencies(delegations.Dependencies{Workflows: &workflows.Runtime{Manager: wfMgr}, Sessions: &sessions.Runtime{Manager: sessionMgr}})
+	workersChildRt := workerruntime.New(sqlDB, nil, worker.WorkersConfig{})
+	workersChildRt.SetDependencies(workerruntime.Dependencies{Workflows: &workflows.Runtime{Manager: wfMgr}, Sessions: &sessions.Runtime{Manager: sessionMgr}})
 	finishExecution := sessionMgr.Coordinator.Runtime.CoordinatorLoop().Admission.BeginPromptExecution(t.Context(), sess.ID)
 	defer finishExecution()
-	delegationsChildRt.OnWorkflowHumanApprovalAdvanced(ctx, parent)
+	workersChildRt.OnWorkflowHumanApprovalAdvanced(ctx, parent)
 
 	got, ok := sessionMgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Pending(sess.ID)
 	if !ok || got != anchor.PhaseAdvanced {
@@ -190,8 +199,8 @@ func TestPhaseEntryGuidanceUsesTheRunWorkflowVersion(t *testing.T) {
 	host := session.NewHost(sessionsStore, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
 	registry, err := anchor.LoadRegistryFromConfigRoot()
 	testutil.FailErr(t, "load versioned phase guidance bindings", err)
-	runtime := delegations.New(sqlDB, nil, worker.WorkersConfig{})
-	runtime.SetDependencies(delegations.Dependencies{Workflows: &workflows.Runtime{Manager: manager}, Sessions: &sessions.Runtime{Manager: host}})
+	runtime := workerruntime.New(sqlDB, nil, worker.WorkersConfig{})
+	runtime.SetDependencies(workerruntime.Dependencies{Workflows: &workflows.Runtime{Manager: manager}, Sessions: &sessions.Runtime{Manager: host}})
 	for _, tc := range []struct {
 		version      string
 		wantGuidance bool
@@ -203,7 +212,7 @@ func TestPhaseEntryGuidanceUsesTheRunWorkflowVersion(t *testing.T) {
 			host.Coordinator.Guidance.Bind(kicks, bus)
 			rc := &workflowphases.RunContext{SessionID: sess.ID, RunID: "phase-guidance-run", WorkflowID: "security-survey", WorkflowVersion: tc.version, Phase: "plan"}
 			runtime.OnWorkflowPhaseEnter(ctx, rc, workflowdef.PhaseDef{ID: "plan"})
-			got := kicks.TakePendingKickID(sess.ID)
+			got := kicks.TakePendingKickIDUnless(sess.ID, nil)
 			if tc.wantGuidance && got != "coordinator-security-plan" {
 				t.Fatalf("versioned phase guidance = %q", got)
 			}
@@ -241,9 +250,9 @@ func TestPhaseHandoffCarriesDurableEvidenceAndResetsPreviousRunProgress(t *testi
 	progressStore := progress.NewMemoryStore()
 	progressStore.BindRun("chat", "previous-run")
 	testutil.FailErr(t, "seed old progress", progressStore.Set("chat", "old run checklist"))
-	runtime := delegations.New(database, nil, worker.WorkersConfig{})
+	runtime := workerruntime.New(database, nil, worker.WorkersConfig{})
 	topologyCalls := 0
-	runtime.SetDependencies(delegations.Dependencies{Sessions: &sessions.Runtime{Manager: host}, Workflows: &workflows.Runtime{Manager: manager}, Progress: func() progress.RunScopedStore { return progressStore }, StartOrchestratedTopology: func(_ context.Context, id string, snapshot *api.WorkflowRun) {
+	runtime.SetDependencies(workerruntime.Dependencies{Sessions: &sessions.Runtime{Manager: host}, Workflows: &workflows.Runtime{Manager: manager}, Progress: func() progress.RunScopedStore { return progressStore }, StartOrchestratedTopology: func(_ context.Context, id string, snapshot *api.WorkflowRun) {
 		topologyCalls++
 		if id != "chat" || snapshot.ID != run.ID || snapshot.CurrentPhase != "claims" {
 			t.Fatalf("topology handoff used wrong run:%q,%+v", id, snapshot)
@@ -254,7 +263,7 @@ func TestPhaseHandoffCarriesDurableEvidenceAndResetsPreviousRunProgress(t *testi
 		t.Fatal("phase handoff retained previous run progress or missed topology")
 	}
 	kicks.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()}))
-	if got := kicks.TakePendingKickID("chat"); got != "coordinator-security-claims" {
+	if got := kicks.TakePendingKickIDUnless("chat", nil); got != "coordinator-security-claims" {
 		t.Fatalf("phase handoff guidance=%q", got)
 	}
 	text, _, ok, err := kicks.RenderPendingNudge(ctx, "chat", kick.CoordinatorKickRenderContext{WorkflowID: run.WorkflowID, CurrentPhase: run.CurrentPhase})
@@ -285,8 +294,8 @@ func TestFeedbackAndReviewCallbacksRetainGuidanceUntilCoordinatorWake(t *testing
 	anchor.SetDefaultRegistry(registry)
 	t.Cleanup(func() { anchor.SetDefaultRegistry(previousRegistry) })
 	host.Coordinator.Guidance.Bind(kicks, bus)
-	runtime := delegations.New(database, nil, worker.WorkersConfig{})
-	runtime.SetDependencies(delegations.Dependencies{Sessions: &sessions.Runtime{Manager: host}})
+	runtime := workerruntime.New(database, nil, worker.WorkersConfig{})
+	runtime.SetDependencies(workerruntime.Dependencies{Sessions: &sessions.Runtime{Manager: host}})
 	finish := host.Coordinator.Runtime.CoordinatorLoop().Admission.BeginPromptExecution(ctx, sess.ID)
 	defer finish()
 	runtime.OnWorkflowFeedbackPending(ctx, sess.ID, "run")
@@ -310,5 +319,77 @@ func TestFeedbackAndReviewCallbacksRetainGuidanceUntilCoordinatorWake(t *testing
 	}
 	if id, ok := host.Coordinator.Runtime.CoordinatorLoop().Nudges.Pending(sess.ID); !ok || id != anchor.PhaseAdvanced {
 		t.Fatalf("feedback/review callbacks did not wake coordinator:%q,%v", id, ok)
+	}
+}
+
+func TestComposeWorkerAssignmentRendersNamedFollowUpAndWorkflowContext(t *testing.T) {
+	ctx := t.Context()
+	database := testdbfixture.Open(t, "compose-assignment.db")
+	projectDir := t.TempDir()
+	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", projectDir)
+	sessionStore := store.NewSQL(database)
+	sess, err := sessionStore.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create coordinator session", err)
+	childSess, err := sessionStore.CreateChild(ctx, sess, api.SpawnChildRequest{AgentType: "skeptic"})
+	testutil.FailErr(t, "create child session", err)
+
+	records := workerrecords.New(database)
+	actor := workerrecords.Actor{SessionID: sess.ID, Role: workerrecords.RoleCoordinator, PrincipalID: sess.ID}
+	_, err = records.CreateWorker(ctx, actor, workerrecords.Op{ID: "op-create"}, workerrecords.WorkerSpec{
+		Name: "challenger", AgentType: "skeptic", ScopeMode: "read", ChildSessionID: childSess.ID,
+	})
+	testutil.FailErr(t, "create worker record", err)
+
+	manifests, err := workflowdef.RegistryFromDirs("")
+	testutil.FailErr(t, "load workflow manifests", err)
+	wfStore := workflowpersistence.New(database)
+	wfMgr := workflow.NewManager(wfStore, sessionStore, manifests, nil)
+	now := time.Now().UTC()
+	run := &api.WorkflowRun{
+		ID: "survey-run", SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID,
+		WorkflowID: "security-survey", WorkflowVersion: "2.0.0",
+		Status: api.WorkflowRunStatusRunning, CurrentPhase: "challenge",
+		CreatedAt: now, UpdatedAt: now,
+	}
+	testutil.FailErr(t, "create workflow run", wfStore.State.CreateState(ctx, run, projectDir, nil))
+
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
+	registry, err := anchor.LoadRegistryFromConfigRoot()
+	testutil.FailErr(t, "load anchor registry", err)
+	previousRegistry := anchor.DefaultRegistry()
+	anchor.SetDefaultRegistry(registry)
+	t.Cleanup(func() { anchor.SetDefaultRegistry(previousRegistry) })
+	builder := &serveBuilder{
+		storage: persistence.Runtime{Sessions: sessionStore},
+		workflows: &workflows.Runtime{
+			Store:   wfStore,
+			Manager: wfMgr,
+		},
+		scanning: &scanning.Runtime{Store: scan.NewSQLStore(database)},
+		boards:   &boards.Runtime{WorkerRecords: records},
+		workerRuntime: &workerruntime.Runtime{
+			Workspace:      workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{})),
+			InjectRenderer: prompts.NewInjectRenderer(engine),
+		},
+	}
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: sess.ID, ProjectID: testdbseed.DefaultProjectID},
+		Source:   tools.InvocationSource{ActiveRootID: "root-id", Roots: []projectroot.RootRef{{ID: "root-id", Path: projectDir, IsPrimary: true}}},
+	}
+	brief := api.WorkerTaskCharter{
+		Goal:     "Challenge the authentication boundary claims",
+		DoneWhen: []string{"Every open claim has grounding evidence or a refutation"},
+	}
+	task := &api.WorkerTask{
+		ID:              "job-round-2",
+		ParentSessionID: sess.ID,
+		ChildSessionID:  childSess.ID,
+		Prompt:          "Re-verify token expiry handling in middleware",
+		Scope:           &api.TaskScope{Mode: api.TaskScopeModeRead},
+	}
+	rendered, err := builder.composeWorkerAssignment(ctx, tctx, "skeptic", brief, task)
+	testutil.FailErr(t, "compose worker assignment", err)
+	if !strings.Contains(rendered, "challenger") || !strings.Contains(rendered, "Re-verify token expiry handling in middleware") {
+		t.Fatalf("rendered assignment missing worker name or round instructions: %q", rendered)
 	}
 }

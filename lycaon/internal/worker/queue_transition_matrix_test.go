@@ -77,6 +77,9 @@ var queueStatusTransitions = map[string]queueStatusTransition{
 	"Hold": func(ctx context.Context, q worker.WorkerQueue, jobID string, _ *api.WorkerTask) (bool, error) {
 		return false, q.Hold(ctx, jobID)
 	},
+	"ReleaseAdmitted": func(ctx context.Context, q worker.WorkerQueue, jobID string, _ *api.WorkerTask) (bool, error) {
+		return false, q.ReleaseAdmitted(ctx, jobID)
+	},
 	"RecoverExpiredClaims": func(ctx context.Context, q worker.WorkerQueue, _ string, _ *api.WorkerTask) (bool, error) {
 		recovered, err := q.RecoverExpiredClaims(ctx)
 		return len(recovered) > 0, err

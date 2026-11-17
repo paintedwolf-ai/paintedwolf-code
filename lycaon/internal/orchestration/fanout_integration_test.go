@@ -7,9 +7,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
-	"time"
 
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
@@ -18,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -35,28 +32,24 @@ func fanOutSpec(subtasks ...string) orchestration.TopologySpec {
 	}
 }
 
-func newFanOutTestOrchestrator(t *testing.T, rec *fanOutTimestampRecording) (*orchestration.OrchestratorImpl, *delegation.MemoryStore, *session.Host, *store.Memory) {
+func newFanOutTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestration.OrchestratorImpl, *orchestration.MemoryTopologyWorkers, *session.Host, *store.Memory) {
 	t.Helper()
-	delStore := delegation.NewMemoryStore()
+	mem := orchestration.NewMemoryTopologyWorkers()
 	sessStore := store.NewMemory()
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	queue := worker.NewInMemoryQueue(10)
-	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
 	if rec == nil {
-		rec = &fanOutTimestampRecording{}
+		rec = &recordingWorkers{}
 	}
-	rec.inner = delMgr
-	rec.store = delStore
+	rec.TopologyWorkers = mem
 	if rec.order == nil {
 		rec.order = make([]string, 0, 8)
 	}
 	reg := orchestration.NewMemoryAgentRegistryForTest()
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
-		Delegation: rec,
-		Store:      delStore,
-		Agents:     reg,
+		Workers: rec,
+		Agents:  reg,
 	})
-	return orch, delStore, sessMgr, sessStore
+	return orch, mem, sessMgr, sessStore
 }
 
 func TestFanOutUnknownProfileFails(t *testing.T) {
@@ -84,8 +77,11 @@ func TestFanOutUnknownProfileFails(t *testing.T) {
 }
 
 func TestFanOutParallelDispatch(t *testing.T) {
-	ctx := context.Background()
-	rec := &fanOutTimestampRecording{recordingDelegation: recordingDelegation{order: make([]string, 0, 4)}}
+	ctx := t.Context()
+	rec := &recordingWorkers{
+		order:      make([]string, 0, 4),
+		barrierSet: map[string]bool{"subtask-0": true, "subtask-1": true, "subtask-2": true},
+	}
 	orch, _, sessMgr, sessStore := newFanOutTestOrchestrator(t, rec)
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
@@ -98,28 +94,8 @@ func TestFanOutParallelDispatch(t *testing.T) {
 		Input:     map[string]any{"project_dir": projectDir, "project_id": testdbseed.DefaultProjectID},
 	})
 	testutil.FailErr(t, "orch.Run failed", err)
-	if len(rec.order) != 3 {
-		t.Fatalf("dispatch count = %d want 3", len(rec.order))
-	}
-
-	times := make([]time.Time, 0, 3)
-	for _, key := range []string{"subtask-0", "subtask-1", "subtask-2"} {
-		ts, ok := rec.timestamps[key]
-		if !ok {
-			t.Fatalf("missing timestamp for %q", key)
-		}
-		times = append(times, ts)
-	}
-	for i := 0; i < len(times); i++ {
-		for j := i + 1; j < len(times); j++ {
-			delta := times[i].Sub(times[j])
-			if delta < 0 {
-				delta = -delta
-			}
-			if delta > 100*time.Millisecond {
-				t.Fatalf("subtasks not parallel enough: delta=%v", delta)
-			}
-		}
+	if len(rec.order) != 3 || rec.barrierSeen != 3 {
+		t.Fatalf("dispatch count = %d barrier = %d want 3", len(rec.order), rec.barrierSeen)
 	}
 }
 
@@ -154,9 +130,9 @@ func TestFanOutReconYamlMockRun(t *testing.T) {
 	}
 }
 
-func TestFanOutLateCancelPreservesCompletedDelegation(t *testing.T) {
+func TestFanOutLateCancelPreservesCompletedBatch(t *testing.T) {
 	ctx := context.Background()
-	orch, store, sessMgr, sessStore := newFanOutTestOrchestrator(t, nil)
+	orch, mem, sessMgr, sessStore := newFanOutTestOrchestrator(t, nil)
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
@@ -171,14 +147,15 @@ func TestFanOutLateCancelPreservesCompletedDelegation(t *testing.T) {
 	if err := orch.Cancel(ctx, result.RunID, orchestration.TerminationReasonHumanAbort); err != nil {
 		testutil.FailErr(t, "orch.Cancel failed", err)
 	}
-	delegationID, ok := store.DelegationBySessionID(sess.ID)
+	batchID, ok, err := mem.BatchBySession(ctx, sess.ID)
+	testutil.FailErr(t, "BatchBySession failed", err)
 	if !ok {
-		t.Fatal("missing delegation")
+		t.Fatal("missing topology batch")
 	}
-	del, err := store.Get(ctx, delegationID)
-	testutil.FailErr(t, "store.Get failed", err)
-	if del.Status != api.DelegationStatusDone {
-		t.Fatalf("delegation status = %q want done", del.Status)
+	b, err := mem.GetBatch(ctx, batchID)
+	testutil.FailErr(t, "mem.GetBatch failed", err)
+	if b.Status != orchestration.TopologyBatchDone {
+		t.Fatalf("batch status = %q want done", b.Status)
 	}
 	status, err := orch.Status(ctx, result.RunID)
 	testutil.FailErr(t, "read completed run status", err)
@@ -187,15 +164,15 @@ func TestFanOutLateCancelPreservesCompletedDelegation(t *testing.T) {
 	}
 }
 
-func TestFanOutCancelAbortsActiveDelegation(t *testing.T) {
+func TestFanOutCancelAbortsActiveBatch(t *testing.T) {
 	ctx := t.Context()
 	dispatched := make(chan struct{}, 2)
 	release := make(chan struct{})
 	var releaseOnce sync.Once
 	unblock := func() { releaseOnce.Do(func() { close(release) }) }
 	defer unblock()
-	rec := &fanOutTimestampRecording{recordingDelegation: recordingDelegation{dispatched: dispatched, holdOutcomes: release}}
-	orch, delStore, sessMgr, sessStore := newFanOutTestOrchestrator(t, rec)
+	rec := &recordingWorkers{dispatched: dispatched, holdOutcomes: release}
+	orch, mem, sessMgr, sessStore := newFanOutTestOrchestrator(t, rec)
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "create orchestration session", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
@@ -216,11 +193,12 @@ func TestFanOutCancelAbortsActiveDelegation(t *testing.T) {
 			t.Fatal("test context ended before workers were dispatched")
 		}
 	}
-	delegationID, ok := delStore.DelegationBySessionID(sess.ID)
+	batchID, ok, err := mem.BatchBySession(ctx, sess.ID)
+	testutil.FailErr(t, "BatchBySession failed", err)
 	if !ok {
-		t.Fatal("missing active delegation")
+		t.Fatal("missing active topology batch")
 	}
-	runID := orchestration.RunIDForDelegationForTest(orch, delegationID)
+	runID := orchestration.RunIDForBatchForTest(orch, batchID)
 	status, err := orch.Status(ctx, runID)
 	testutil.FailErr(t, "read active run", err)
 	if !status.Active {
@@ -233,16 +211,16 @@ func TestFanOutCancelAbortsActiveDelegation(t *testing.T) {
 	if !errors.As(runErr, &failure) || failure.Code != orchestration.RunFailureCodeStageFailed {
 		t.Fatalf("canceled fan-out returned %v, want stage failure", runErr)
 	}
-	del, err := delStore.Get(ctx, delegationID)
-	testutil.FailErr(t, "read aborted delegation", err)
-	if del.Status != api.DelegationStatusAborted {
-		t.Fatalf("delegation status = %q want aborted", del.Status)
+	b, err := mem.GetBatch(ctx, batchID)
+	testutil.FailErr(t, "read aborted batch", err)
+	if b.Status != orchestration.TopologyBatchAborted {
+		t.Fatalf("batch status = %q want aborted", b.Status)
 	}
-	legs, err := delStore.ListLegs(ctx, delegationID)
-	testutil.FailErr(t, "read canceled legs", err)
-	for _, leg := range legs {
-		if leg.Status != api.LegStatusCanceled {
-			t.Fatalf("leg %s status = %q want canceled", leg.ID, leg.Status)
+	units, err := mem.ListUnits(ctx, batchID)
+	testutil.FailErr(t, "read canceled units", err)
+	for _, u := range units {
+		if u.Status != api.LegStatusCanceled {
+			t.Fatalf("unit %s status = %q want canceled", u.ID, u.Status)
 		}
 	}
 	status, err = orch.Status(ctx, runID)
@@ -257,8 +235,8 @@ func TestFanOutCancelAfterSettlementBeforeReturnPreservesDone(t *testing.T) {
 	settled := make(chan struct{}, 2)
 	release := make(chan struct{})
 	defer close(release)
-	rec := &fanOutTimestampRecording{recordingDelegation: recordingDelegation{settled: settled, holdReturns: release}}
-	orch, delStore, sessMgr, sessStore := newFanOutTestOrchestrator(t, rec)
+	rec := &recordingWorkers{settled: settled, holdReturns: release}
+	orch, mem, sessMgr, sessStore := newFanOutTestOrchestrator(t, rec)
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "create session", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
@@ -276,8 +254,8 @@ func TestFanOutCancelAfterSettlementBeforeReturnPreservesDone(t *testing.T) {
 			t.Fatal("context ended before settlement")
 		}
 	}
-	delegationID, _ := delStore.DelegationBySessionID(sess.ID)
-	runID := orchestration.RunIDForDelegationForTest(orch, delegationID)
+	batchID, _, _ := mem.BatchBySession(ctx, sess.ID)
+	runID := orchestration.RunIDForBatchForTest(orch, batchID)
 	testutil.FailErr(t, "cancel settled run", orch.Cancel(ctx, runID, orchestration.TerminationReasonHumanAbort))
 	status, err := orch.Status(ctx, runID)
 	testutil.FailErr(t, "read settled status", err)
@@ -291,30 +269,31 @@ func TestFanOutCancelAfterSettlementBeforeReturnPreservesDone(t *testing.T) {
 }
 
 type blockedFanOutCreate struct {
-	*delegation.MemoryStore
+	*recordingWorkers
 	entered chan struct{}
 	release chan struct{}
 }
 
-func (s *blockedFanOutCreate) Create(ctx context.Context, d api.Delegation, sessionID string, legs []api.Leg) (*api.Delegation, error) {
+func (s *blockedFanOutCreate) CreateBatch(ctx context.Context, batch orchestration.TopologyBatch, units []orchestration.TopologyUnit) (*orchestration.TopologyBatch, []orchestration.TopologyUnit, error) {
 	close(s.entered)
 	select {
 	case <-s.release:
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, nil, ctx.Err()
 	}
-	return s.MemoryStore.Create(ctx, d, sessionID, legs)
+	return s.recordingWorkers.CreateBatch(ctx, batch, units)
 }
 
 func TestFanOutCancellationDuringSetupAbortsBeforeDispatch(t *testing.T) {
 	ctx := t.Context()
-	rec := &fanOutTimestampRecording{}
-	_, delStore, sessMgr, sessStore := newFanOutTestOrchestrator(t, rec)
-	blocked := &blockedFanOutCreate{MemoryStore: delStore, entered: make(chan struct{}), release: make(chan struct{})}
+	mem := orchestration.NewMemoryTopologyWorkers()
+	rec := &recordingWorkers{TopologyWorkers: mem, order: make([]string, 0, 4)}
+	_, _, sessMgr, sessStore := newFanOutTestOrchestrator(t, nil)
+	blocked := &blockedFanOutCreate{recordingWorkers: rec, entered: make(chan struct{}), release: make(chan struct{})}
 	var once sync.Once
 	release := func() { once.Do(func() { close(blocked.release) }) }
 	defer release()
-	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{Delegation: rec, Store: blocked, Agents: orchestration.NewMemoryAgentRegistryForTest()})
+	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{Workers: blocked, Agents: orchestration.NewMemoryAgentRegistryForTest()})
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "create session", err)
 	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
@@ -330,36 +309,16 @@ func TestFanOutCancellationDuringSetupAbortsBeforeDispatch(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("context ended before setup")
 	}
-	runID := orchestration.RunIDForDelegationForTest(orch, "")
+	runID := orchestration.RunIDForBatchForTest(orch, "")
 	testutil.FailErr(t, "cancel setup", orch.Cancel(ctx, runID, orchestration.TerminationReasonHumanAbort))
 	release()
 	if err := <-finished; !errors.Is(err, context.Canceled) {
 		t.Fatalf("setup returned %v, want canceled", err)
 	}
-	id, _ := delStore.DelegationBySessionID(sess.ID)
-	d, err := delStore.Get(ctx, id)
+	id, _, _ := mem.BatchBySession(ctx, sess.ID)
+	b, err := mem.GetBatch(ctx, id)
 	testutil.FailErr(t, "read aborted setup", err)
-	if d.Status != api.DelegationStatusAborted || len(rec.order) != 0 {
-		t.Fatalf("setup cancellation: status=%q dispatched=%v", d.Status, rec.order)
+	if b.Status != orchestration.TopologyBatchAborted || len(rec.order) != 0 {
+		t.Fatalf("setup cancellation: status=%q dispatched=%v", b.Status, rec.order)
 	}
-}
-
-type fanOutTimestampRecording struct {
-	recordingDelegation
-	mu         sync.Mutex
-	timestamps map[string]time.Time
-}
-
-func (r *fanOutTimestampRecording) DispatchLeg(ctx context.Context, delegationID, legID, sourceToolCallID string) (*api.Leg, error) {
-	leg, err := r.store.GetLeg(ctx, delegationID, legID)
-	if err != nil {
-		return nil, err
-	}
-	r.mu.Lock()
-	if r.timestamps == nil {
-		r.timestamps = make(map[string]time.Time)
-	}
-	r.timestamps[leg.Title] = time.Now()
-	r.mu.Unlock()
-	return r.recordingDelegation.DispatchLeg(ctx, delegationID, legID, sourceToolCallID)
 }

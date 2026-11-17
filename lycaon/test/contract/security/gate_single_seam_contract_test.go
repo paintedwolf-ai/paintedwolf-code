@@ -58,7 +58,7 @@ func TestGateLadderPolicyHasOneHome(t *testing.T) {
 // exhaustiveness test at the contract layer: every gate is enabled by a posture
 // or is structural.
 func TestEveryGateIsPostureReachableOrStructural(t *testing.T) {
-	for _, g := range gate.All() {
+	for _, g := range api.AllApprovalGateValues() {
 		if g == api.GateIncompleteFacts {
 			continue
 		}

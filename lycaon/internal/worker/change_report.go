@@ -9,8 +9,9 @@ import (
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
-	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/session/workerworkspace"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -67,6 +68,9 @@ func BuildChangeReport(ctx context.Context, task api.WorkerTask, deps ChangeRepo
 
 // SourceEvidenceContext supplies source identity for advisory validation evidence.
 type SourceEvidenceContext struct {
+	// Workspaces owns the observation trackers that invalidate receipts made stale by source changes.
+	// Without it no receipt can be proved current, so evidence is unmet.
+	Workspaces      *workerworkspace.Service
 	DeclaredCommand func(context.Context, *api.WorkerTask) string
 	SourceRevision  func(context.Context, *api.WorkerTask) workercompletion.SourceRevision
 }
@@ -88,26 +92,47 @@ func (g SourceEvidenceContext) revision(ctx context.Context, task *api.WorkerTas
 // CancelToolDeps wires the coordinator worker_cancel tool.
 type CancelToolDeps struct {
 	Cancel *CancelService
+	// Workers resolves the worker a call names and what stopping it means.
+	Workers *workerops.Service
 }
 
-// RegisterWorkerCancelTool registers worker_cancel(job_id, reason?) for coordinator sessions.
+// RegisterWorkerCancelTool registers worker_cancel(worker, reason?) for coordinator sessions.
 func RegisterWorkerCancelTool(reg *tools.DefaultRegistry, deps CancelToolDeps) error {
 	if reg == nil || deps.Cancel == nil {
 		return fmt.Errorf("registry and cancel service required")
 	}
 	return reg.Register("worker_cancel", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		jobID, _ := args["job_id"].(string)
-		jobID = strings.TrimSpace(jobID)
-		if jobID == "" {
-			return "", fmt.Errorf("job_id is required")
+		name := strings.TrimSpace(stringArg(args["worker"]))
+		if name == "" {
+			return "", fmt.Errorf("worker is required")
 		}
-		captureWorkerSubject(tctx, deps.Cancel.Queue, jobID)
 		reason, _ := args["reason"].(string)
-		out, err := deps.Cancel.CancelForSession(ctx, tctx.Identity.SessionID, jobID, reason)
+		if deps.Workers == nil {
+			return "", fmt.Errorf("worker operations not configured")
+		}
+		op, err := toolOp("worker_cancel", tctx)
 		if err != nil {
 			return "", err
 		}
-		raw, err := json.Marshal(out)
+		result := map[string]any{}
+		cancel := func(ctx context.Context, jobID string) error {
+			captureWorkerSubject(tctx, deps.Cancel.Queue, jobID)
+			out, err := deps.Cancel.CancelForSession(ctx, tctx.Identity.SessionID, jobID, reason)
+			if err != nil {
+				return err
+			}
+			result["status"], result["change_report"], result["result"] = out.Status, out.Report, out.Result
+			return nil
+		}
+		stop, err := deps.Workers.Stop(ctx, coordinatorActor(tctx), op, name, reason, cancel)
+		if err != nil {
+			return "", workerToolReject("worker_cancel", name, "", err)
+		}
+		result["worker"] = stop.Worker
+		if stop.Withdrawn {
+			result["withdrawn"] = true
+		}
+		raw, err := json.Marshal(result)
 		if err != nil {
 			return "", err
 		}
@@ -122,11 +147,22 @@ func RegisterAnswerDecisionTool(reg *tools.DefaultRegistry, deps AnswerDecisionT
 	}
 	svc := deps.Answer
 	return reg.Register("answer_decision", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		jobID, _ := args["job_id"].(string)
-		option, _ := args["option"].(string)
-		resolvedBy, _ := args["resolved_by"].(string)
+		name := strings.TrimSpace(stringArg(args["worker"]))
+		answer := strings.TrimSpace(stringArg(args["answer"]))
+		resolvedBy := strings.TrimSpace(stringArg(args["resolved_by"]))
+		if name == "" || answer == "" {
+			return "", fmt.Errorf("worker and answer are required")
+		}
+		if deps.Workers == nil {
+			return "", fmt.Errorf("worker operations not configured")
+		}
+		jobID, unlock, err := deps.Workers.Asking(ctx, coordinatorActor(tctx), name)
+		if err != nil {
+			return "", workerToolReject("answer_decision", name, "", err)
+		}
+		defer unlock()
 		captureWorkerSubject(tctx, svc.Queue, jobID)
-		out, err := svc.AnswerJob(ctx, strings.TrimSpace(tctx.Identity.SessionID), strings.TrimSpace(jobID), strings.TrimSpace(option), strings.TrimSpace(resolvedBy))
+		out, err := svc.AnswerJob(ctx, strings.TrimSpace(tctx.Identity.SessionID), name, jobID, answer, resolvedBy)
 		if err != nil {
 			return "", err
 		}
@@ -139,8 +175,8 @@ func RegisterAnswerDecisionTool(reg *tools.DefaultRegistry, deps AnswerDecisionT
 		}
 		raw, _ := json.Marshal(map[string]any{
 			"status":      "resumed",
-			"job_id":      out.JobID,
-			"option":      out.Option,
+			"worker":      name,
+			"answer":      out.Option,
 			"resolved_by": out.ResolvedBy,
 		})
 		return string(raw), nil
@@ -150,59 +186,8 @@ func RegisterAnswerDecisionTool(reg *tools.DefaultRegistry, deps AnswerDecisionT
 // AnswerDecisionToolDeps wires the coordinator answer_decision tool.
 type AnswerDecisionToolDeps struct {
 	Answer *AnswerDecisionService
-}
-
-const (
-	workerBudgetDeclineNoRequestCode       = "WORKER_BUDGET_DECLINE_NO_REQUEST"
-	workerBudgetDeclineSessionMismatchCode = "WORKER_BUDGET_DECLINE_SESSION_MISMATCH"
-)
-
-// DeclineBudgetToolDeps wires decline_worker_budget for coordinator sessions.
-type DeclineBudgetToolDeps struct {
-	Queue  WorkerQueue
-	Ledger BudgetLedger
-}
-
-// RegisterDeclineWorkerBudgetTool registers decline_worker_budget(job_id).
-func RegisterDeclineWorkerBudgetTool(reg *tools.DefaultRegistry, deps DeclineBudgetToolDeps) error {
-	if reg == nil || deps.Queue == nil || deps.Ledger == nil {
-		return fmt.Errorf("registry, queue, and budget ledger required")
-	}
-	return reg.Register("decline_worker_budget", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		jobID, _ := args["job_id"].(string)
-		jobID = strings.TrimSpace(jobID)
-		if jobID == "" {
-			return "", fmt.Errorf("job_id is required")
-		}
-		task, ok := deps.Queue.Get(jobID)
-		if !ok || task == nil {
-			return "", &toolrejection.ToolReject{Code: workerBudgetDeclineNoRequestCode, Data: map[string]any{"job_id": jobID}}
-		}
-		if strings.TrimSpace(task.ParentSessionID) != strings.TrimSpace(tctx.Identity.SessionID) {
-			return "", &toolrejection.ToolReject{Code: workerBudgetDeclineSessionMismatchCode, Data: map[string]any{"job_id": jobID}}
-		}
-		tctx.SetDisplaySubject(task.Brief)
-		declined, err := deps.Ledger.Decline(ctx, jobID)
-		if err != nil {
-			return "", err
-		}
-		if !declined {
-			return "", &toolrejection.ToolReject{Code: workerBudgetDeclineNoRequestCode, Data: map[string]any{"job_id": jobID, "status": string(task.Status)}}
-		}
-		out := map[string]any{
-			"job_id":          jobID,
-			"max_tool_loops":  task.MaxToolLoops,
-			"tool_loops_used": task.ToolLoopsUsed,
-		}
-		if task.BudgetRequest != nil {
-			out["requested_max"] = task.BudgetRequest.RequestedMax
-		}
-		raw, err := json.Marshal(out)
-		if err != nil {
-			return "", fmt.Errorf("encode decline_worker_budget result: %w", err)
-		}
-		return string(raw), nil
-	})
+	// Workers resolves the worker a call names to its asking round.
+	Workers *workerops.Service
 }
 
 type overlayTaskLookup interface {

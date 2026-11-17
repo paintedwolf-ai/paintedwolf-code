@@ -377,11 +377,11 @@ func TestToolEvidenceEligibleRequiresAcceptedDispatch(t *testing.T) {
 		t.Fatal("a task result without a dispatch outcome is not a dispatch record")
 	}
 	succeeded.captures.dispatch = &api.WorkerDispatch{WorkerID: " "}
-	if toolEvidenceEligible(succeeded, "delegate_dispatch", nil) {
+	if toolEvidenceEligible(succeeded, "task", nil) {
 		t.Fatal("a dispatch needs worker identity")
 	}
 	succeeded.captures.dispatch = &api.WorkerDispatch{WorkerID: "w1"}
-	if !toolEvidenceEligible(succeeded, "task", nil) || !toolEvidenceEligible(succeeded, "delegate_dispatch", nil) {
+	if !toolEvidenceEligible(succeeded, "task", nil) {
 		t.Fatal("an accepted dispatch records evidence")
 	}
 }

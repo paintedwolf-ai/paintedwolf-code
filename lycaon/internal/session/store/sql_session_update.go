@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -17,7 +18,7 @@ func (s *sqlSessions) SetPostureTx(ctx context.Context, tx *sql.Tx, sessionID st
 		return fmt.Errorf("posture transaction required")
 	}
 	_, err := s.core.queries.WithTx(tx).SetSessionPosture(ctx, db.SetSessionPostureParams{
-		Posture: string(posture), UpdatedAt: db.FormatTime(time.Now().UTC()), ID: sessionID,
+		Posture: string(posture), UpdatedAt: timelayout.Format(time.Now().UTC()), ID: sessionID,
 	})
 	return err
 }
@@ -67,10 +68,6 @@ func updateSession(
 		return &SessionStatusTransitionError{From: previousStatus, To: sess.Status}
 	}
 	sess.UpdatedAt = time.Now().UTC()
-	maxLoops := sql.NullInt64{}
-	if sess.MaxToolLoops > 0 {
-		maxLoops = sql.NullInt64{Int64: int64(sess.MaxToolLoops), Valid: true}
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -83,13 +80,12 @@ func updateSession(
 		AgentType:            db.NullString(sess.AgentType),
 		ProviderID:           db.NullString(sess.ProviderID),
 		Model:                db.NullString(sess.Model),
-		MaxToolLoops:         maxLoops,
 		Title:                db.NullString(sess.Title),
 		Status:               string(sess.Status),
 		CompactionGeneration: int64(sess.CompactionGeneration),
 		ArchivedAt:           db.NullTimePtr(sess.ArchivedAt),
 		SeenAt:               db.NullTimePtr(sess.SeenAt),
-		UpdatedAt:            db.FormatTime(sess.UpdatedAt),
+		UpdatedAt:            timelayout.Format(sess.UpdatedAt),
 		ID:                   id,
 	}); err != nil {
 		return err
@@ -129,7 +125,7 @@ func (s *sqlSessions) UpdateTitleIfUnset(ctx context.Context, id, title string) 
 	qtx := core.queries.WithTx(tx)
 	n, err := qtx.UpdateSessionTitleIfUnset(ctx, db.UpdateSessionTitleIfUnsetParams{
 		Title:     db.NullString(title),
-		UpdatedAt: db.FormatTime(time.Now().UTC()),
+		UpdatedAt: timelayout.Format(time.Now().UTC()),
 		ID:        id,
 	})
 	if err != nil {
@@ -267,9 +263,6 @@ func sessionFromRow(r db.GetSessionRow) (*api.Session, error) {
 		ProviderID:           db.StringFromNull(r.ProviderID),
 		Model:                db.StringFromNull(r.Model),
 		ParentSessionID:      db.StringFromNull(r.ParentSessionID),
-	}
-	if r.MaxToolLoops.Valid && r.MaxToolLoops.Int64 > 0 {
-		sess.MaxToolLoops = int(r.MaxToolLoops.Int64)
 	}
 	var err error
 	sess.CreatedAt, err = db.ParseTime(r.CreatedAt)
