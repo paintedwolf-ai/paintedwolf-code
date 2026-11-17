@@ -3,6 +3,7 @@ package progress_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"path/filepath"
 	"sync"
 	"testing"
@@ -165,5 +166,63 @@ func TestDelayedNotificationsCannotReorderOrRelabelPlanRows(t *testing.T) {
 	testutil.FailErr(t, "finish delayed notification", <-done)
 	if len(f.messages(t)) != len(rows) {
 		t.Fatal("notification duplicated history")
+	}
+}
+
+func TestConcurrentPlanWritersUseEachCommittedPredecessor(t *testing.T) {
+	f := newProgressFixture(t)
+	const writers = 12
+	start := make(chan struct{})
+	results := make(chan error, writers)
+	for i := 0; i < writers; i++ {
+		go func() {
+			<-start
+			_, err := f.plans.Update(t.Context(), "session", func(before progress.Snapshot) (progress.Document, error) {
+				return progress.Document{Content: fmt.Sprintf("- [ ] Revision %d", before.DocumentVersion()+1), ItemIDs: before.ItemIDs}, nil
+			})
+			results <- err
+		}()
+	}
+	close(start)
+	for i := 0; i < writers; i++ {
+		testutil.FailErr(t, "concurrent transition", <-results)
+	}
+	rows := f.messages(t)
+	if len(rows) != writers {
+		t.Fatalf("concurrent rows=%d", len(rows))
+	}
+	for i, row := range rows {
+		if row.Ord != int64(i+1) || row.ProgressUpdate == nil {
+			t.Fatalf("row %d=%+v", i, row)
+		}
+		if i == 0 {
+			if !row.ProgressUpdate.Initial || row.ProgressUpdate.Steps[0].Label != "Revision 1" {
+				t.Fatalf("initial row=%+v", row)
+			}
+		} else {
+			changes := row.ProgressUpdate.Changes
+			if len(changes) != 1 || changes[0].PrevLabel != fmt.Sprintf("Revision %d", i) || changes[0].Label != fmt.Sprintf("Revision %d", i+1) {
+				t.Fatalf("transition %d lost predecessor: %+v", i, changes)
+			}
+		}
+	}
+}
+
+func TestCancellationAfterCommitRetainsThePlanAndRow(t *testing.T) {
+	f := newProgressFixture(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	release := progress.RegisterWriteObserver(func(_ context.Context, event progress.WriteEvent) {
+		if event.SessionID == "session" {
+			cancel()
+		}
+	})
+	defer release()
+	snapshot, err := f.plans.Update(ctx, "session", func(progress.Snapshot) (progress.Document, error) {
+		return progress.Document{Content: "- [ ] Committed"}, nil
+	})
+	testutil.FailErr(t, "return committed transition", err)
+	if ctx.Err() == nil || snapshot.Content != "- [ ] Committed" || len(f.messages(t)) != 1 {
+		t.Fatal("post-commit cancellation changed the outcome")
 	}
 }
