@@ -55,7 +55,7 @@ The loader parses and type-checks every condition against the closed catalogue, 
 
 ## Fact discipline
 
-Facts are observations, not verdicts: `paintedwolf.unobserved_cited_paths`, `paintedwolf.workers_idle`, `paintedwolf.command_not_argv`. Composition belongs in `when`. Contracts: `TestOARNoVerdictFacts` and `TestOARObservationOnlyFacts` in [`oar_catalog_contract_test.go`](../lycaon/test/contract/catalogs/oar_catalog_contract_test.go).
+Facts are observations, not verdicts: `paintedwolf.unobserved_cited_paths`, `paintedwolf.workers_idle`, `paintedwolf.command_not_argv`. Composition belongs in `when`. Contract: `TestOARNoVerdictFacts` in [`oar_catalog_contract_test.go`](../lycaon/test/contract/catalogs/oar_catalog_contract_test.go).
 
 ---
 
