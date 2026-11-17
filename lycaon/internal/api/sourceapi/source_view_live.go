@@ -20,7 +20,8 @@ func (s *Trees) watchTreeView(view *sourceView, p *project.Project) {
 		}
 	})
 	s.background.Go(view.ctx, func(ctx context.Context) { s.Watch.ensureWorkspaceWatch(ctx, p) })
-	s.background.Go(view.ctx, func(ctx context.Context) {
+	// The refresh loop lives as long as the view; it is not pending work.
+	s.background.GoService(view.ctx, func(ctx context.Context) {
 		defer unsubscribe()
 		for {
 			select {
