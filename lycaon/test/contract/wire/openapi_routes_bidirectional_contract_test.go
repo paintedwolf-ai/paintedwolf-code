@@ -7,8 +7,12 @@ import (
 	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 )
 
-// TestOpenAPIRoutesBidirectionalParity aggregates bidirectional route sync checks into
-// one failure surface. Complements the per-direction tests in openapi_routes_sync_test.go.
+// anchorOperations are operations both loaders must find; an empty or partial
+// parse fails here instead of passing on nothing.
+var anchorOperations = []string{"listWorkflowTemplates", "composeWorkflowFromTemplate", "persistWorkflow"}
+
+// TestOpenAPIRoutesBidirectionalParity checks server and OpenAPI routes in both
+// directions, stub markers, and schema $ref targets.
 func TestOpenAPIRoutesBidirectionalParity(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
@@ -21,6 +25,20 @@ func TestOpenAPIRoutesBidirectionalParity(t *testing.T) {
 	openAPI := wirespec.RouteSet(openAPIRoutes)
 
 	var violations []string
+	loaded := map[string]map[string]bool{"OpenAPI": {}, "the server": {}}
+	for _, route := range openAPIRoutes {
+		loaded["OpenAPI"][route.OperationID] = true
+	}
+	for _, route := range serverRoutes {
+		loaded["the server"][route.OperationID] = true
+	}
+	for _, operation := range anchorOperations {
+		for source, operations := range loaded {
+			if !operations[operation] {
+				violations = append(violations, "anchor operation not loaded from "+source+": "+operation)
+			}
+		}
+	}
 
 	for _, route := range serverRoutes {
 		key := wirespec.RouteKey(route.Method, route.Path)

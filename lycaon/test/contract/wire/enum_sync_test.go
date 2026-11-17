@@ -9,6 +9,13 @@ import (
 	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 )
 
+// anchorEnums must be discovered; an empty or partial discovery fails instead of
+// passing on nothing.
+var anchorEnums = []string{
+	"BlueprintStatus", "CheckpointKind", "CodeScanStatus", "LegStatus",
+	"SessionPosture", "SessionStatus", "WorkerStatus", "WorkerSummaryStatus",
+}
+
 func TestEnumSyncAutoDiscovered(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
@@ -20,6 +27,12 @@ func TestEnumSyncAutoDiscovered(t *testing.T) {
 	tsEnums, err := wirespec.ParseTSEnumUnions(tsPath)
 	contractcheck.FailErr(t, "parse TS enum unions in lycaon-den/src/api/types.ts", err)
 
+	for _, name := range anchorEnums {
+		if len(goEnums[name]) < 2 {
+			t.Errorf("anchor enum %s discovered with %d values; discovery must see every enum", name, len(goEnums[name]))
+		}
+	}
+
 	var names []string
 	for name := range goEnums {
 		names = append(names, name)
@@ -30,6 +43,13 @@ func TestEnumSyncAutoDiscovered(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			goVals := goEnums[name]
+			seen := make(map[string]bool, len(goVals))
+			for _, v := range goVals {
+				if v == "" || seen[v] {
+					t.Fatalf("%s holds an empty or duplicate value %q", name, v)
+				}
+				seen[v] = true
+			}
 			tsVals, ok := tsEnums[name]
 			if !ok {
 				t.Fatalf("missing TS enum type %s", name)

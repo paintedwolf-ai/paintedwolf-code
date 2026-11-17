@@ -14,23 +14,6 @@ import (
 	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 )
 
-func TestOpenAPIPersistRoute(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	routes, err := wirespec.LoadOpenAPIRoutes(root)
-	contractcheck.FailErr(t, "load OpenAPI routes from docs/openapi.yaml", err)
-	found := false
-	for _, r := range routes {
-		if r.Method == "POST" && r.Path == "/v1/sessions/{id}/workflows/{workflow_id}/persist" && r.OperationID == "persistWorkflow" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatal("persistWorkflow route missing from openapi")
-	}
-}
-
 func TestPersistedFixturePassesVocabularyLoad(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	fixture := filepath.Join(root, "lycaon", "test", "contract", "testdata", "workflow", "persist_hotfix.yaml")
