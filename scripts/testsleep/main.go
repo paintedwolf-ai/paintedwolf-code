@@ -115,13 +115,18 @@ func importNames(file *ast.File) map[string]string {
 }
 
 // allowed walks out from the sleep to the nearest function: a loop, a synctest
-// bubble or a helper-process branch on the way makes the sleep legitimate.
+// bubble or a helper-process branch on the way makes the sleep legitimate. A
+// loop counts only within the sleep's own function; a bubble encloses every
+// closure it runs.
 func allowed(stack []ast.Node, names map[string]string, exits map[string]bool) bool {
 	os := names["os"]
+	inClosure := false
 	for i := len(stack) - 2; i >= 0; i-- {
 		switch node := stack[i].(type) {
 		case *ast.ForStmt, *ast.RangeStmt:
-			return true
+			if !inClosure {
+				return true
+			}
 		case *ast.IfStmt:
 			if readsEnvironment(node.Init, os) || readsEnvironment(node.Cond, os) {
 				return true
@@ -134,7 +139,7 @@ func allowed(stack []ast.Node, names map[string]string, exits map[string]bool) b
 			if i > 0 && isBubble(stack[i-1], names["testing/synctest"]) {
 				return true
 			}
-			return false
+			inClosure = true
 		case *ast.FuncDecl:
 			return node.Name.Name == "TestMain" || exits[node.Name.Name] || endsProcess(node.Body, os) ||
 				gatedByEnvironment(node.Body, stack[len(stack)-1].Pos(), os)

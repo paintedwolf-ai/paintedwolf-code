@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -233,21 +234,24 @@ func TestStopCancelsTheHeldCall(t *testing.T) {
 }
 
 func TestTurnCancellationCancelsAnUnheldCall(t *testing.T) {
-	registry := New(nil, nil)
-	ctx, cancel := context.WithCancel(t.Context())
-	release := make(chan struct{})
-	defer close(release)
-	go func() {
-		time.Sleep(20 * time.Millisecond)
-		cancel()
-	}()
-	outcome, err := registry.Run(ctx, spec("find", "a", time.Minute), blocked(release))
-	if err != nil {
-		testutil.FailErr(t, "run", err)
-	}
-	if outcome.Settled == nil || outcome.Settled.Content != "canceled" {
-		t.Fatalf("outcome = %+v, want the canceled result", outcome)
-	}
+	synctest.Test(t, func(t *testing.T) {
+		registry := New(nil, nil)
+		ctx, cancel := context.WithCancel(t.Context())
+		release := make(chan struct{})
+		defer close(release)
+		go func() {
+			// Cancel once the call is running and blocked, not before it starts.
+			synctest.Wait()
+			cancel()
+		}()
+		outcome, err := registry.Run(ctx, spec("find", "a", time.Minute), blocked(release))
+		if err != nil {
+			testutil.FailErr(t, "run", err)
+		}
+		if outcome.Settled == nil || outcome.Settled.Content != "canceled" {
+			t.Fatalf("outcome = %+v, want the canceled result", outcome)
+		}
+	})
 }
 
 func TestPanickingCallSettlesAsAnError(t *testing.T) {

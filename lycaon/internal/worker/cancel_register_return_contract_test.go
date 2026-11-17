@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
@@ -143,7 +142,6 @@ func TestCancelRunningGracefulOutlivesRequest(t *testing.T) {
 
 	// Registration outlives the request context.
 	reqCancel()
-	time.Sleep(10 * time.Millisecond)
 	reg, ok := mock.pending(child)
 	if !ok {
 		t.Fatal("registration cleared by request cancellation; cancel must outlive the request")

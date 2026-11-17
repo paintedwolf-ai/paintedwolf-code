@@ -66,7 +66,12 @@ func TestWrapLLMClientIfDebugCapturesStreamTiming(t *testing.T) {
 		t.Setenv("LYCAON_LLM_DEBUG_FILE", logPath)
 		observability.CloseLLMDebug()
 
-		inner := &delayedStreamProvider{firstDelay: 25 * time.Millisecond}
+		inner := &producedStreamProvider{produce: func(ch chan<- modelcall.StreamChunk) {
+			time.Sleep(25 * time.Millisecond)
+			ch <- modelcall.StreamChunk{Content: "tok"}
+			time.Sleep(20 * time.Millisecond)
+			ch <- modelcall.StreamChunk{Done: true}
+		}}
 		client := WrapLLMClientIfDebug(inner, "mock")
 		ch, err := client.Stream(t.Context(), modelcall.CompletionRequest{
 			Model: "mock",
@@ -154,22 +159,20 @@ func (p *recordingProvider) Stream(_ context.Context, req modelcall.CompletionRe
 	return ch, nil
 }
 
-type delayedStreamProvider struct {
-	firstDelay time.Duration
+// producedStreamProvider streams whatever its test's produce function sends.
+type producedStreamProvider struct {
+	produce func(chan<- modelcall.StreamChunk)
 }
 
-func (p *delayedStreamProvider) Complete(context.Context, modelcall.CompletionRequest) (*modelcall.Completion, error) {
+func (p *producedStreamProvider) Complete(context.Context, modelcall.CompletionRequest) (*modelcall.Completion, error) {
 	return &modelcall.Completion{Content: "ok"}, nil
 }
 
-func (p *delayedStreamProvider) Stream(_ context.Context, _ modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
+func (p *producedStreamProvider) Stream(_ context.Context, _ modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
 	ch := make(chan modelcall.StreamChunk)
 	go func() {
 		defer close(ch)
-		time.Sleep(p.firstDelay)
-		ch <- modelcall.StreamChunk{Content: "tok"}
-		time.Sleep(20 * time.Millisecond)
-		ch <- modelcall.StreamChunk{Done: true}
+		p.produce(ch)
 	}()
 	return ch, nil
 }

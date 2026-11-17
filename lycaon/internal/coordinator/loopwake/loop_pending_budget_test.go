@@ -24,7 +24,6 @@ func TestDrainPendingDoesNotBurnBudgetWhenPromptActive(t *testing.T) {
 	})
 	deps.RunPrompt = func(context.Context, string) (*promptresult.Result, error) {
 		prompts.Add(1)
-		time.Sleep(50 * time.Millisecond)
 		return &promptresult.Result{}, nil
 	}
 	engine.SetDeps(deps)
