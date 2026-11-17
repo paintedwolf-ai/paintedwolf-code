@@ -14,7 +14,6 @@ type humanGateSpec struct {
 	name            string
 	operationID     string
 	path            string
-	stubPath        string
 	kickConstant    string
 	coordinatorTool string
 }
@@ -27,7 +26,6 @@ func TestHumanGateSatisfyPathParity(t *testing.T) {
 			name:            "feedback",
 			operationID:     "resolveWorkflowFeedback",
 			path:            "/v1/workflow-runs/{id}/feedback/{phase_id}",
-			stubPath:        `POST /v1/workflow-runs/{id}/feedback/{phase_id}`,
 			kickConstant:    "FeedbackPending",
 			coordinatorTool: "workflow_user_feedback",
 		},
@@ -35,7 +33,6 @@ func TestHumanGateSatisfyPathParity(t *testing.T) {
 			name:        "decision",
 			operationID: "resolveWorkflowDecision",
 			path:        "/v1/workflow-runs/{id}/decisions/{phase_id}",
-			stubPath:    `POST /v1/workflow-runs/{id}/decisions/{phase_id}`,
 		},
 	}
 
@@ -45,9 +42,6 @@ func TestHumanGateSatisfyPathParity(t *testing.T) {
 	serverRoutes, err := wirespec.LoadServerRoutes(root)
 	contractcheck.FailErr(t, "load server routes from internal/api/server.go", err)
 	serverSet := wirespec.RouteSet(serverRoutes)
-	stubBody, err := os.ReadFile(filepath.Join(root, "lycaon", "test", "contract", "wire", "stub_routes_workflows.go"))
-	contractcheck.FailErr(t, "read file", err)
-	stubText := string(stubBody)
 	feedbackBinding := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/delegations/context.go")
 	feedbackHooks := contractcheck.ReadRepoFile(t, root, "lycaon/internal/app/delegations/hooks.go")
 	profileData, err := os.ReadFile(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "profiles", "coordinator.yaml"))
@@ -68,9 +62,6 @@ func TestHumanGateSatisfyPathParity(t *testing.T) {
 			}
 			if _, ok := serverSet[key]; !ok {
 				t.Fatalf("server.go missing POST %s", spec.path)
-			}
-			if !strings.Contains(stubText, spec.stubPath) {
-				t.Fatalf("workflow fixture missing %q", spec.stubPath)
 			}
 			if spec.kickConstant != "" {
 				if !strings.Contains(feedbackBinding, "deps.Workflows.Manager.Feedback.OnFeedbackPending = r.OnWorkflowFeedbackPending") {

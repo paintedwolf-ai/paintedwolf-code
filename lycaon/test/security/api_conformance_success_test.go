@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"slices"
 	"sort"
@@ -15,7 +16,9 @@ import (
 type successStage int
 
 const (
-	stageCreate successStage = iota
+	// stageAuto places an operation by its method and path.
+	stageAuto successStage = iota
+	stageCreate
 	stageChange
 	stageDelete
 	stageHostWide
@@ -33,13 +36,19 @@ type successRecipe struct {
 type successInputs struct {
 	params map[string]string
 	query  map[string]string
+	// fields are set on the generated JSON body.
 	fields map[string]any
+	// body replaces the generated body, sent as contentType.
+	body        []byte
+	contentType string
 }
 
 // successRecipes holds the operations whose success needs more than fixture
-// ids and a schema-valid body.
-var successRecipes = map[string]successRecipe{
-	// Each of these ends the host's ordinary service, so they run last.
+// ids and a schema-valid body, one map per domain.
+var successRecipes = mergeRecipes(hostWideRecipes)
+
+// hostWideRecipes end the host's ordinary service, so they run last.
+var hostWideRecipes = map[string]successRecipe{
 	"lockVault":               {stage: stageHostWide},
 	"clearLocalData":          {stage: stageHostWide},
 	"resetStore":              {stage: stageHostWide},
@@ -48,9 +57,22 @@ var successRecipes = map[string]successRecipe{
 	"createProjectRemoval":    {stage: stageHostWide},
 }
 
+func mergeRecipes(domains ...map[string]successRecipe) map[string]successRecipe {
+	out := map[string]successRecipe{}
+	for _, domain := range domains {
+		for id, recipe := range domain {
+			if _, dup := out[id]; dup {
+				panic("two success recipes for " + id)
+			}
+			out[id] = recipe
+		}
+	}
+	return out
+}
+
 // stageOf places op in the mutating phase.
 func stageOf(op *conformanceOp) successStage {
-	if recipe, ok := successRecipes[op.ID]; ok {
+	if recipe := successRecipes[op.ID]; recipe.stage != stageAuto {
 		return recipe.stage
 	}
 	switch {
@@ -119,6 +141,9 @@ func (s *conformanceSweep) successRequest(ctx context.Context, op *conformanceOp
 	for name, value := range in.query {
 		query.Set(name, value)
 	}
+	if in.body != nil {
+		return conformanceRequest{op: op, probe: "success", params: params, query: query, body: in.body, contentType: in.contentType}, nil
+	}
 	if op.JSONBody == nil {
 		if op.BodyRequired {
 			return conformanceRequest{}, fmt.Errorf("body media %v has no success recipe", op.BodyMedia)
@@ -136,6 +161,47 @@ func (s *conformanceSweep) successRequest(ctx context.Context, op *conformanceOp
 		}
 	}
 	return jsonRequest(op, "success", params, query, body), nil
+}
+
+// prerequisite runs another operation's success request with inputs and
+// returns its decoded answer, for recipes that build on what it makes.
+func (s *conformanceSweep) prerequisite(ctx context.Context, operationID string, in successInputs) (map[string]any, error) {
+	op := s.op(operationID)
+	if op == nil {
+		return nil, fmt.Errorf("no operation %s", operationID)
+	}
+	params, _ := s.values.pathParams(op)
+	maps.Copy(params, in.params)
+	query := s.values.requiredQuery(op)
+	for name, value := range in.query {
+		query.Set(name, value)
+	}
+	req := conformanceRequest{op: op, probe: "prerequisite", params: params, query: query, body: in.body, contentType: in.contentType}
+	if in.body == nil && op.JSONBody != nil {
+		body, ok := s.values.body(op.JSONBody, nil).(map[string]any)
+		if !ok {
+			body = map[string]any{}
+		}
+		maps.Copy(body, in.fields)
+		req = jsonRequest(op, "prerequisite", params, query, body)
+	}
+	ex := s.send(ctx, req)
+	if ex.status/100 != 2 {
+		return nil, fmt.Errorf("%s answered %s", operationID, ex.outcome())
+	}
+	s.bindCreated(op, ex)
+	var answer map[string]any
+	_ = json.Unmarshal(ex.body, &answer)
+	return answer, nil
+}
+
+func (s *conformanceSweep) op(id string) *conformanceOp {
+	for _, op := range s.ops {
+		if op.ID == id {
+			return op
+		}
+	}
+	return nil
 }
 
 // bindCreated binds the id a create answered to the resource address below

@@ -100,11 +100,15 @@ func TestAPIConformance(t *testing.T) {
 	sweep.values.bind("/v1/providers/{provider_id}", "", provider)
 	// A keyed web research provider.
 	sweep.values.bind("/v1/web-research/providers/{provider_id}", "", string(wire.WebSearchProviderTavily))
+	sweep.host = h
+	sweep.fixture = conformanceFixture{t: t, projectDir: projectDir, project: project, session: sess}
+	hostIDs := conformanceHostLookup(t, h)
+	sweep.beforeDeletes = hostIDs.remember
 	sweep.runAll(t.Context())
 
 	hub.FlushDebounced()
 	events := capture.stop(t)
-	sweep.checkEventScopes(events, conformanceHostLookup(t, h))
+	sweep.checkEventScopes(events, hostIDs)
 	sweep.checkEventPayloads(events)
 	sweep.checkCorpus(sweep.corpus.corpus(events), filepath.Join(root, hostCorpusPath), os.Getenv("UPDATE_HOST_CORPUS") == "1")
 	sweep.secrets.scanEvents(sweep.findings, events)
@@ -151,8 +155,15 @@ type conformanceSweep struct {
 	readObserved map[string]bool
 	secrets      *conformanceSecrets
 	eventSchemas *eventSchemas
-	corpus       *corpusRecorder
-	findings     *conformanceFindings
+	// host and fixture serve recipes that seed what no operation creates;
+	// both are empty for the sweep's own fixture API.
+	host    *wiring.Harness
+	fixture conformanceFixture
+	// beforeDeletes runs once the resources every later probe needs exist,
+	// before the delete stage removes them.
+	beforeDeletes func(context.Context)
+	corpus        *corpusRecorder
+	findings      *conformanceFindings
 	// children maps a collection path to the path parameters addressed below it.
 	children map[string][]string
 	// outcomes records, per operation, whether a validated success was seen
@@ -199,6 +210,9 @@ func (s *conformanceSweep) runAll(ctx context.Context) {
 	s.probeSuccessPaths(ctx, stageCreate, stageChange)
 	s.sweepReads(ctx)
 	s.walkPages(ctx)
+	if s.beforeDeletes != nil {
+		s.beforeDeletes(ctx)
+	}
 	s.probeSuccessPaths(ctx, stageDelete, stageHostWide)
 	s.checkCoverage()
 }
@@ -415,4 +429,13 @@ func (s *conformanceSweep) recordOutcome(ex conformanceExchange, valid bool) {
 		return
 	}
 	s.lastAnswer[id] = ex.req.probe + " answered " + ex.outcome()
+}
+
+// conformanceFixture is the project and chat every sweep starts from, and
+// the test that owns them, for recipes that start servers or write files.
+type conformanceFixture struct {
+	t          *testing.T
+	projectDir string
+	project    wire.Project
+	session    wire.Session
 }

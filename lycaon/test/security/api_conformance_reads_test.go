@@ -46,8 +46,12 @@ func (s *conformanceSweep) sweepReads(ctx context.Context) {
 	}
 	sort.SliceStable(reads, func(i, j int) bool { return len(reads[i].PathParams) < len(reads[j].PathParams) })
 	for _, op := range reads {
-		params, _ := s.values.pathParams(op)
-		req := conformanceRequest{op: op, probe: "read", params: params, query: s.values.requiredQuery(op)}
+		req, err := s.successRequest(ctx, op)
+		if err != nil {
+			s.findings.add(ruleOperationsSucceed, op.ID, "read", "could not prepare: %v", err)
+			continue
+		}
+		req.probe = "read"
 		var ex conformanceExchange
 		if s.readObserved[op.ID] {
 			ex = s.send(ctx, req)
