@@ -228,3 +228,13 @@ class CommandTests(unittest.TestCase):
         with patch.object(rehearsal.sys, "argv", ["rehearsal", "assembly", "--receipt", str(root / "failed.json")]), \
              self.assertRaises(SystemExit):
             rehearsal.main()
+
+    def test_the_macos_stage_passes_its_bundle_and_key_through(self):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        arguments = ["rehearsal", "macos", "--app", str(root / "Product.app"), "--dmg", str(root / "Product.dmg"),
+                     "--public-key", "cHVibGlj", "--receipt", str(root / "macos.json")]
+        with patch.object(rehearsal, "macos", return_value={"cask": {"uninstalled": True}}) as stage, \
+             patch.object(rehearsal.sys, "argv", arguments):
+            rehearsal.main()
+        self.assertEqual(stage.call_args.args[1:], ((root / "Product.app").resolve(), (root / "Product.dmg").resolve(), "cHVibGlj"))
+        self.assertEqual(json.loads((root / "macos.json").read_text())["stage"], "macos")
