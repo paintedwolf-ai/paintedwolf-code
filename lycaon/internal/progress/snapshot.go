@@ -13,6 +13,7 @@ import (
 
 // Document pairs checklist markdown with stable item identities aligned by row index.
 type Document struct {
+	RunID   string
 	Content string
 	ItemIDs []string
 }

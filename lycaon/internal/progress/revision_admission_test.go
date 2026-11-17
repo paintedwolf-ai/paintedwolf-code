@@ -2,6 +2,7 @@ package progress_test
 
 import (
 	"errors"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"sync"
 	"testing"
 
@@ -17,8 +18,8 @@ func TestProgressCreationCannotBlindlyReplaceAnExistingDocument(t *testing.T) {
 			var store progress.Store = progress.NewMemoryStore()
 			if name == "sql" {
 				database := testdbfixture.Open(t, "progress-first-creation")
-				testdbseed.InsertSession(t, database, "session", testdbseed.DefaultProjectID)
-				store = progress.NewSQLStore(database)
+				testdbseed.InsertWorkflowRun(t, database, "run", "session", testdbseed.DefaultProjectID)
+				store = progress.NewSQLStore(database, sessionstore.NewSQL(database))
 			}
 			var workers sync.WaitGroup
 			results := make(chan error, 2)

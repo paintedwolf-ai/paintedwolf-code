@@ -17,7 +17,7 @@ describe("transcript-items", () => {
         role: "system", origin: "host" as const, authority: "system" as const, trust_tier: "trusted" as const,
         content: "",
         kind: "progress_complete",
-        progress_complete: { steps, seq: 1 },
+        progress_complete: { steps, },
         created_at: "t2",
       },
     ]);
@@ -41,7 +41,7 @@ describe("transcript-items", () => {
         role: "system", origin: "host" as const, authority: "system" as const, trust_tier: "trusted" as const,
         content: "",
         kind: "progress_update",
-        progress_update: { steps, initial: true, seq: 1 },
+        progress_update: { steps, initial: true, },
         created_at: "t2",
       },
     ]);
@@ -67,7 +67,7 @@ describe("transcript-items", () => {
         role: "system", origin: "host" as const, authority: "system" as const, trust_tier: "trusted" as const,
         content: "",
         kind: "progress_update",
-        progress_update: { changes, initial: false, seq: 2 },
+        progress_update: { changes, initial: false, },
         created_at: "t2",
       },
     ]);
@@ -93,7 +93,7 @@ describe("transcript-items", () => {
       role: "system", origin: "host" as const, authority: "system" as const, trust_tier: "trusted" as const,
       content: "",
       kind: "progress_update",
-      progress_update: { initial: true, summary, seq: 1 },
+      progress_update: { initial: true, summary, },
       created_at: "t2",
     }]);
     expect(items.find((item) => item.kind === "progress_update")).toMatchObject({
@@ -156,7 +156,7 @@ describe("transcript-items", () => {
         role: "system" as const, origin: "host" as const, authority: "system" as const, trust_tier: "trusted" as const,
         content: "",
         kind: "progress_update" as const,
-        progress_update: { steps, initial: true, seq: 1 },
+        progress_update: { steps, initial: true, },
         created_at: "2026-01-01T00:00:02.000Z",
       },
     ];
@@ -216,7 +216,7 @@ describe("transcript-items", () => {
         role: "system" as const, origin: "host" as const, authority: "system" as const, trust_tier: "trusted" as const,
         content: "",
         kind: "progress_update" as const,
-        progress_update: { steps, initial: true, seq: 1 },
+        progress_update: { steps, initial: true, },
         created_at: "2026-01-01T00:00:03.000Z",
       },
       {
@@ -227,7 +227,6 @@ describe("transcript-items", () => {
         kind: "progress_update" as const,
         progress_update: {
           initial: false,
-          seq: 2,
           changes: [{ kind: "done" as const, label: "Survey", state: "done" as const }],
         },
         created_at: "2026-01-01T00:00:05.000Z",

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -43,7 +44,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		mu.Unlock()
 		if jobID == "" {
 			if turn == 1 {
-				content := progress.NewSQLStore(h.DB).Get(ctx, parentID)
+				content := progress.NewSQLStore(h.DB, sessionstore.NewSQL(h.DB)).Get(ctx, parentID)
 				return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: uuid.NewString(), Name: "update_progress", Args: h.ProgressUpdateArgs(t, ctx, parentID, strings.ReplaceAll(content, "[ ]", "[x]"))}}}
 			}
 			return modelcall.Completion{Content: body}

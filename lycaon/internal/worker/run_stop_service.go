@@ -283,47 +283,50 @@ func (r *SQLDecisionResolver) Resolve(ctx context.Context, expected api.WorkerDe
 func (r *SQLDecisionResolver) resolve(ctx context.Context, expected api.WorkerDecisionRequest, message api.Message) error {
 	childSessionID := strings.TrimSpace(expected.ChildSessionID)
 	jobID := strings.TrimSpace(expected.WorkerID)
-	err := r.messages.AppendMessagesWith(ctx, childSessionID, func(tx *sql.Tx) error {
+	err := r.messages.AppendMessagesWith(ctx, childSessionID, func(tx *sql.Tx) ([]api.Message, error) {
 		queries := db.New(tx)
 		row, err := queries.GetWorkerDecision(ctx, childSessionID)
 		if db.IsNoRows(err) {
-			return errDecisionMissing
+			return nil, errDecisionMissing
 		}
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if strings.TrimSpace(row.JobID) != jobID {
-			return errDecisionJobMismatch
+			return nil, errDecisionJobMismatch
 		}
 		var current api.WorkerDecisionRequest
 		if err := json.Unmarshal([]byte(row.DecisionJson), &current); err != nil {
-			return fmt.Errorf("decode decision: %w", err)
+			return nil, fmt.Errorf("decode decision: %w", err)
 		}
 		if !reflect.DeepEqual(current, expected) {
-			return errDecisionChanged
+			return nil, errDecisionChanged
 		}
 		resumed, err := queries.ResumeWorkerJobDecision(ctx, db.ResumeWorkerJobDecisionParams{
 			ID:             jobID,
 			ChildSessionID: db.NullString(childSessionID),
 		})
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if resumed != 1 {
 			job, loadErr := queries.GetWorkerJob(ctx, jobID)
 			if loadErr != nil {
-				return loadErr
+				return nil, loadErr
 			}
-			return &DecisionStateError{JobID: jobID, Status: job.Status}
+			return nil, &DecisionStateError{JobID: jobID, Status: job.Status}
 		}
 		if err := queries.ClearWorkerOutcomeDelivery(ctx, jobID); err != nil {
-			return err
+			return nil, err
 		}
 		if err := r.queue.store.jobs.EnqueueJobEventTx(ctx, tx, r.queue.store.outbox, jobID); err != nil {
-			return err
+			return nil, err
 		}
-		return queries.DeleteWorkerDecision(ctx, childSessionID)
-	}, message)
+		if err := queries.DeleteWorkerDecision(ctx, childSessionID); err != nil {
+			return nil, err
+		}
+		return []api.Message{message}, nil
+	})
 	if err != nil {
 		return err
 	}

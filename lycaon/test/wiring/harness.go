@@ -3,6 +3,7 @@ package wiring
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/progress"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io/fs"
 	"os"
@@ -284,7 +285,7 @@ func (h *Harness) SeedProgress(t *testing.T, ctx context.Context, sessionID stri
 // keeping each existing row's identity and leaving added rows to the host.
 func (h *Harness) ProgressUpdateArgs(t *testing.T, ctx context.Context, sessionID, content string) map[string]any {
 	t.Helper()
-	current, err := progress.NewSQLStore(h.DB).Snapshot(ctx, sessionID)
+	current, err := progress.NewSQLStore(h.DB, sessionstore.NewSQL(h.DB)).Snapshot(ctx, sessionID)
 	testutil.FailErr(t, "read progress snapshot", err)
 	args := map[string]any{"content": content}
 	if current.Content == "" {

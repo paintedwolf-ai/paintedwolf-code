@@ -31,7 +31,11 @@ func (r stubWorkflowRuns) ActiveBySession(context.Context, string) (*api.Workflo
 
 func TestBootstrapProgressNotifiesWithBeforeAndAfterSnapshots(t *testing.T) {
 	store := progress.NewMemoryStore()
-	store.EnsureRun("sess-1", "run-0", "Initial run")
+	if _, err := store.Update(t.Context(), "sess-1", func(progress.Snapshot) (progress.Document, error) {
+		return progress.Document{RunID: "run-0", Content: "# Goal\n\n" + "Initial run" + "\n\n## Progress\n"}, nil
+	}); err != nil {
+		t.Fatalf("seed progress run: %v", err)
+	}
 	svc := New(stubInstructionStore{session: &api.Session{ID: "sess-1"}}, nil, nil, nil)
 	svc.SetProgress(store)
 	svc.SetWorkflow(&WorkflowDomains{Runs: stubWorkflowRuns{run: &api.WorkflowRun{ID: "run-1"}}})

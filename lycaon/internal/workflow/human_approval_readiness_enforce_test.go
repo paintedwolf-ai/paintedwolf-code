@@ -200,7 +200,10 @@ func TestOptionsTerminalApprovalDoesNotWakeAmbientImplementation(t *testing.T) {
 	phaseEnterCount := 0
 	mgr.Approvals.OnHumanApprovalAdvanced = func(context.Context, *api.WorkflowRun) { humanWakeCount++ }
 	mgr.Publication.OnPhaseAutoAdvanced = func(context.Context, string, string, string, string) { phaseWakeCount++ }
-	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) { phaseEnterCount++ }
+	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) error {
+		phaseEnterCount++
+		return nil
+	}
 	completed, err := mgr.Approvals.ApprovePlan(ctx, run.ProjectID, run.BlueprintPath, projectDir, run.ID, current.Revision, workflowdef.HashBlueprintContent(reviewed.Content))
 	testutil.FailErr(t, "ApprovePlan", err)
 	if completed.Status != api.WorkflowRunStatusComplete || completed.CurrentPhase != "done" {

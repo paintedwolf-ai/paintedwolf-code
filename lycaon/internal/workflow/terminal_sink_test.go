@@ -29,7 +29,10 @@ func TestInitialTerminalPhaseCompletesWithoutCoordinatorHooks(t *testing.T) {
 		completedIDs = append(completedIDs, run.ID)
 	}
 	mgr.Publication.OnPhaseAutoAdvanced = func(context.Context, string, string, string, string) { phaseWakeCount++ }
-	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) { phaseEnterCount++ }
+	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) error {
+		phaseEnterCount++
+		return nil
+	}
 
 	run, err := startRun(context.Background(), mgr, "sess-1", manifest.ID, manifest.Version)
 	testutil.FailErr(t, "start terminal workflow", err)
@@ -76,7 +79,10 @@ func TestInitialTerminalChildCompletesAndResumesParentWithoutCoordinatorHooks(t 
 		}
 		completedIDs = append(completedIDs, run.ID)
 	}
-	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) { phaseEnterCount++ }
+	mgr.Phases.PhaseEnterHook = func(context.Context, *workflowphases.RunContext, workflowdef.PhaseDef) error {
+		phaseEnterCount++
+		return nil
+	}
 
 	child, err := mgr.Children.InvokeChild(context.Background(), parent.ID, workflowdef.InvokeWorkflowSpec{
 		WorkflowID: childManifest.ID,

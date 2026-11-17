@@ -67,7 +67,7 @@ func (b *serveBuilder) wireRuntimeServices() error {
 func (b *serveBuilder) wireRuntimeObservers() error {
 	b.sessions.Manager.SetEventPublisher(b.events.Publisher)
 	b.workerRuntime.Queue.SetEventPublisher(b.events.Publisher)
-	releaseObservers := observations.Bind(b.events.Publisher, b.storage.Sessions, b.boards.Progress, b.workflows.Store.Runs, b.boards.RepoProvider, b.providers.Service)
+	releaseObservers := observations.Bind(b.events.Publisher, b.boards.RepoProvider, b.providers.Service)
 	b.startup.resources.Track("runtime-observers", 22, releaseObservers)
 	return nil
 }

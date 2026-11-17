@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/workflow/toolguard"
-	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/progress"
@@ -50,9 +49,12 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *Fanout) error {
 			OK: true, Legs: len(plan.Legs),
 			Message: fmt.Sprintf("fanout plan stamped (%d leg(s)); no workers were dispatched — call workflow_advance when ready to execute", len(plan.Legs)),
 		}
-		if _, ok, replayErr := runs.Journal.ReplayOperation(ctx, tctx.Identity.ToolCallID, "fanout_plan", args); replayErr != nil || ok {
+		if replay, ok, replayErr := runs.Journal.ReplayOperation(ctx, tctx.Identity.ToolCallID, "fanout_plan", args); replayErr != nil || ok {
 			if replayErr != nil {
 				return "", replayErr
+			}
+			if err := seedFanoutProgress(ctx, runs.Progress, replay.SessionID, replay.ID, plan); err != nil {
+				return "", err
 			}
 			return marshalFanoutPlanResult(result)
 		}
@@ -100,38 +102,35 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *Fanout) error {
 		if err := runs.Journal.Commit(commandCtx, active, "fanout_plan", args, vars, nil, "", runstate.WorkerMutation{}, nil); err != nil {
 			return "", err
 		}
-		seedFanoutProgress(ctx, runs.Progress, tctx.Identity.SessionID, active.ID, plan)
+		if err := seedFanoutProgress(ctx, runs.Progress, tctx.Identity.SessionID, active.ID, plan); err != nil {
+			return "", err
+		}
 		return marshalFanoutPlanResult(result)
 	})
 }
 
 // seedFanoutProgress gives a coordinator with no checklist one pending row per
 // planned leg, so the progress gate opens on the plan it just stamped.
-func seedFanoutProgress(ctx context.Context, store progress.RunScopedStore, sessionID, runID string, plan runstate.FanoutPlan) {
+func seedFanoutProgress(ctx context.Context, store progress.RunScopedStore, sessionID, runID string, plan runstate.FanoutPlan) error {
 	if store == nil {
-		return
-	}
-	switch store.BoundRunID(sessionID) {
-	case "":
-		progress.AdoptActiveRun(ctx, store, sessionID, runID, "")
-	case runID:
-	default:
-		return
-	}
-	before, err := store.Snapshot(ctx, sessionID)
-	if err != nil || !progress.ProgressMissing(before.Content) {
-		return
+		return nil
 	}
 	labels := make([]string, 0, len(plan.Legs))
 	for _, leg := range plan.Legs {
 		labels = append(labels, leg.ID+" "+leg.Subject)
 	}
-	if err := store.Set(sessionID, progress.SeedChecklist(before.Content, labels)); err != nil {
-		slog.WarnContext(ctx, "seed fan-out progress", "session", sessionID, "error", err)
-		return
-	}
-	after, _ := store.Snapshot(ctx, sessionID)
-	progress.NotifyWriteObservers(ctx, progress.WriteEvent{SessionID: sessionID, Before: before, After: after})
+	_, err := store.Update(ctx, sessionID, func(before progress.Snapshot) (progress.Document, error) {
+		doc := progress.Document{Content: before.Content, ItemIDs: before.ItemIDs}
+		if before.RunID != "" && before.RunID != runID {
+			return doc, nil
+		}
+		doc.RunID = runID
+		if progress.ProgressMissing(before.Content) {
+			doc.Content = progress.SeedChecklist(before.Content, labels)
+		}
+		return doc, nil
+	})
+	return err
 }
 
 func parseFanoutPlanArgs(args map[string]any) (runstate.FanoutPlan, error) {

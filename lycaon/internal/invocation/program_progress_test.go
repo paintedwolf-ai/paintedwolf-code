@@ -2,6 +2,7 @@ package invocation_test
 
 import (
 	"context"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"path/filepath"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
@@ -63,7 +65,8 @@ func TestProgramActualParserProgressStoreAndReceiptRemainIndependent(t *testing.
 				return "", nil
 			}))
 			executor := toolexecution.NewExecutor(nil, registry, "fixture")
-			store := progress.NewSQLStore(f.database)
+			testdbseed.InsertWorkflowRun(t, f.database, "progress-run", f.session, testdbseed.DefaultProjectID)
+			store := progress.NewSQLStore(f.database, sessionstore.NewSQL(f.database))
 			inputs := f.capture(t)
 			observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: inputs}
 			update := &toolexecution.ProgramProgressUpdate{ExecutionID: uuid.NewString(), Arguments: map[string]any{"content": "- [ ] Create fixture"}}

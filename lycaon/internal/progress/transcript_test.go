@@ -1,18 +1,17 @@
-package observations
+package progress
 
 import (
 	"fmt"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/progress"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestBuildProgressUpdate(t *testing.T) {
 	t.Run("initial 0 to N carries the full plan and its counts", func(t *testing.T) {
 		before, after := snapshotPair("", "- [ ] a\n- [ ] b\n")
-		meta, ok := buildProgressUpdate(before, after, 1)
+		meta, ok := buildProgressUpdate(before, after)
 		if !ok {
 			t.Fatal("expected an update")
 		}
@@ -32,7 +31,7 @@ func TestBuildProgressUpdate(t *testing.T) {
 
 	t.Run("mid-run delta carries its changes and the plan counts", func(t *testing.T) {
 		before, after := snapshotPair("- [ ] a\n- [ ] b\n", "- [x] a\n- [ ] b\n")
-		meta, ok := buildProgressUpdate(before, after, 2)
+		meta, ok := buildProgressUpdate(before, after)
 		if !ok {
 			t.Fatal("expected an update")
 		}
@@ -48,9 +47,9 @@ func TestBuildProgressUpdate(t *testing.T) {
 	})
 
 	t.Run("large initial plan carries only its counts", func(t *testing.T) {
-		latest := checklistRows(progress.MaxDetailedProgressUpdateRows + 1)
+		latest := checklistRows(MaxDetailedProgressUpdateRows + 1)
 		before, after := snapshotPair("", latest)
-		meta, ok := buildProgressUpdate(before, after, 2)
+		meta, ok := buildProgressUpdate(before, after)
 		if !ok {
 			t.Fatal("expected an update")
 		}
@@ -66,11 +65,11 @@ func TestBuildProgressUpdate(t *testing.T) {
 	})
 
 	t.Run("large mid-run delta carries only the plan counts", func(t *testing.T) {
-		const changed = progress.MaxDetailedProgressUpdateRows + 2
+		const changed = MaxDetailedProgressUpdateRows + 2
 		baseline := checklistRows(changed + 1)
 		latest := strings.Replace(baseline, "- [ ]", "- [x]", changed)
 		before, after := snapshotPair(baseline, latest)
-		meta, ok := buildProgressUpdate(before, after, 3)
+		meta, ok := buildProgressUpdate(before, after)
 		if !ok {
 			t.Fatal("expected an update")
 		}
@@ -87,14 +86,14 @@ func TestBuildProgressUpdate(t *testing.T) {
 
 	t.Run("completing write is superseded by completion bar", func(t *testing.T) {
 		before, after := snapshotPair("- [ ] a\n- [ ] b\n", "- [x] a\n- [x] b\n")
-		if _, ok := buildProgressUpdate(before, after, 3); ok {
+		if _, ok := buildProgressUpdate(before, after); ok {
 			t.Error("completing window should not emit a progress_update")
 		}
 	})
 
 	t.Run("no change is silent", func(t *testing.T) {
 		before, after := snapshotPair("- [ ] a\n", "- [ ] a\n")
-		if _, ok := buildProgressUpdate(before, after, 4); ok {
+		if _, ok := buildProgressUpdate(before, after); ok {
 			t.Error("no-op write should not emit")
 		}
 	})
@@ -102,7 +101,7 @@ func TestBuildProgressUpdate(t *testing.T) {
 	t.Run("already-complete baseline still emits non-completing delta", func(t *testing.T) {
 		// Baseline already terminal, latest adds a new pending step: not a completing edge.
 		before, after := snapshotPair("- [x] a\n", "- [x] a\n- [ ] b\n")
-		meta, ok := buildProgressUpdate(before, after, 5)
+		meta, ok := buildProgressUpdate(before, after)
 		if !ok {
 			t.Fatal("expected an update when a new step is added to a done plan")
 		}
@@ -112,9 +111,9 @@ func TestBuildProgressUpdate(t *testing.T) {
 	})
 }
 
-func snapshotPair(beforeContent, afterContent string) (progress.Snapshot, progress.Snapshot) {
-	beforeCount := len(progress.DeriveProgress(beforeContent, progress.DefaultProgressCap).Items)
-	afterCount := len(progress.DeriveProgress(afterContent, progress.DefaultProgressCap).Items)
+func snapshotPair(beforeContent, afterContent string) (Snapshot, Snapshot) {
+	beforeCount := len(DeriveProgress(beforeContent, DefaultProgressCap).Items)
+	afterCount := len(DeriveProgress(afterContent, DefaultProgressCap).Items)
 	beforeIDs := make([]string, beforeCount)
 	for i := range beforeIDs {
 		beforeIDs[i] = fmt.Sprintf("item-%d", i+1)
@@ -123,8 +122,8 @@ func snapshotPair(beforeContent, afterContent string) (progress.Snapshot, progre
 	for i := range afterIDs {
 		afterIDs[i] = fmt.Sprintf("item-%d", i+1)
 	}
-	return progress.Snapshot{Content: beforeContent, ItemIDs: beforeIDs},
-		progress.Snapshot{Content: afterContent, ItemIDs: afterIDs}
+	return Snapshot{Content: beforeContent, ItemIDs: beforeIDs},
+		Snapshot{Content: afterContent, ItemIDs: afterIDs}
 }
 
 func checklistRows(count int) string {

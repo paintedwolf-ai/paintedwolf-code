@@ -141,7 +141,9 @@ func (m *Service) FireTransition(ctx context.Context, runID, transitionID, actor
 			PreviousPhase:   prevPhase,
 		}
 		if m.PhaseEnterHook != nil {
-			m.PhaseEnterHook(ctx, rc, def)
+			if err := m.PhaseEnterHook(ctx, rc, def); err != nil {
+				return nil, err
+			}
 		}
 		if err := m.Settlement.InvokeOnPhaseEnter(ctx, run, def); err != nil {
 			return nil, err

@@ -248,7 +248,9 @@ func TestPhaseHandoffCarriesDurableEvidenceAndResetsPreviousRunProgress(t *testi
 	t.Cleanup(func() { anchor.SetDefaultRegistry(previousRegistry) })
 	host.Coordinator.Guidance.Bind(kicks, bus)
 	progressStore := progress.NewMemoryStore()
-	progressStore.BindRun("chat", "previous-run")
+	if _, err := progress.AdoptActiveRun(t.Context(), progressStore, "chat", "previous-run", ""); err != nil {
+		t.Fatalf("bind progress run: %v", err)
+	}
 	testutil.FailErr(t, "seed old progress", progressStore.Set("chat", "old run checklist"))
 	runtime := workerruntime.New(database, nil, worker.WorkersConfig{})
 	topologyCalls := 0

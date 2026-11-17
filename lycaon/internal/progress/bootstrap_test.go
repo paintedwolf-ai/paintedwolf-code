@@ -14,10 +14,14 @@ func TestEnsureBootstrap_staleRunRefreshesGoalAndPlan(t *testing.T) {
 		priorRun  = "run-prior"
 		newRun    = "run-survey"
 	)
-	store.EnsureRun(sessionID, priorRun, "Implement auth middleware for the API")
+	if _, err := store.Update(t.Context(), sessionID, func(progress.Snapshot) (progress.Document, error) {
+		return progress.Document{RunID: priorRun, Content: "# Goal\n\n" + "Implement auth middleware for the API" + "\n\n## Progress\n"}, nil
+	}); err != nil {
+		t.Fatalf("seed progress run: %v", err)
+	}
 	store.Set(sessionID, "# Goal\n\nImplement auth middleware for the API\n\n## Progress\n- [x] stale step\n")
 
-	if refreshed := progress.EnsureBootstrap(t.Context(), store, sessionID, newRun, "Survey this repo and produce a research brief"); !refreshed {
+	if refreshed, err := progress.EnsureBootstrap(t.Context(), store, sessionID, newRun, "Survey this repo and produce a research brief"); err != nil || !refreshed {
 		t.Fatal("expected stale-run refresh")
 	}
 	got := store.Get(t.Context(), sessionID)
@@ -42,10 +46,14 @@ func TestEnsureBootstrap_sameRunOpenPlanNoOp(t *testing.T) {
 		runID     = "run-1"
 	)
 	before := "# Goal\n\nKeep me\n\n## Progress\n- [ ] step"
-	store.EnsureRun(sessionID, runID, "Keep me")
+	if _, err := store.Update(t.Context(), sessionID, func(progress.Snapshot) (progress.Document, error) {
+		return progress.Document{RunID: runID, Content: "# Goal\n\n" + "Keep me" + "\n\n## Progress\n"}, nil
+	}); err != nil {
+		t.Fatalf("seed progress run: %v", err)
+	}
 	store.Set(sessionID, before)
 
-	if refreshed := progress.EnsureBootstrap(t.Context(), store, sessionID, runID, "Different prompt text"); refreshed {
+	if refreshed, err := progress.EnsureBootstrap(t.Context(), store, sessionID, runID, "Different prompt text"); err != nil || refreshed {
 		t.Fatal("same run with an open plan must not refresh")
 	}
 	if got := store.Get(t.Context(), sessionID); got != before {
@@ -61,10 +69,14 @@ func TestEnsureBootstrap_sameRunTerminalPlanStartsFreshRun(t *testing.T) {
 	)
 	// The ambient implement@ run keeps the same id across turns. A finished plan from the
 	// prior turn must not carry into the next task.
-	store.EnsureRun(sessionID, runID, "Implement the first task")
+	if _, err := store.Update(t.Context(), sessionID, func(progress.Snapshot) (progress.Document, error) {
+		return progress.Document{RunID: runID, Content: "# Goal\n\n" + "Implement the first task" + "\n\n## Progress\n"}, nil
+	}); err != nil {
+		t.Fatalf("seed progress run: %v", err)
+	}
 	store.Set(sessionID, "# Goal\n\nImplement the first task\n\n## Progress\n- [x] done step\n- [~] skipped step\n")
 
-	if refreshed := progress.EnsureBootstrap(t.Context(), store, sessionID, runID, "Now do the second task"); !refreshed {
+	if refreshed, err := progress.EnsureBootstrap(t.Context(), store, sessionID, runID, "Now do the second task"); err != nil || !refreshed {
 		t.Fatal("same run with a fully terminal plan must refresh for the new turn")
 	}
 	got := store.Get(t.Context(), sessionID)
@@ -90,10 +102,14 @@ func TestEnsureBootstrap_sameRunEmptyPlanNoOp(t *testing.T) {
 	)
 	// A turn that authored no checklist is not a finished run — AllTerminal is false with no
 	// items, so a follow-up turn under the same run must not spuriously refresh.
-	store.EnsureRun(sessionID, runID, "Answer a question")
+	if _, err := store.Update(t.Context(), sessionID, func(progress.Snapshot) (progress.Document, error) {
+		return progress.Document{RunID: runID, Content: "# Goal\n\n" + "Answer a question" + "\n\n## Progress\n"}, nil
+	}); err != nil {
+		t.Fatalf("seed progress run: %v", err)
+	}
 	before := store.Get(t.Context(), sessionID)
 
-	if refreshed := progress.EnsureBootstrap(t.Context(), store, sessionID, runID, "Answer another question"); refreshed {
+	if refreshed, err := progress.EnsureBootstrap(t.Context(), store, sessionID, runID, "Answer another question"); err != nil || refreshed {
 		t.Fatal("same run with no checklist must not refresh")
 	}
 	if got := store.Get(t.Context(), sessionID); got != before {
@@ -110,7 +126,7 @@ func TestAdoptActiveRun_unboundBindsWithoutWipe(t *testing.T) {
 	seeded := "## Progress\n- [ ] keep me"
 	store.Set(sessionID, seeded)
 
-	if refreshed := progress.AdoptActiveRun(t.Context(), store, sessionID, runID, "ignored"); refreshed {
+	if refreshed, err := progress.AdoptActiveRun(t.Context(), store, sessionID, runID, "ignored"); err != nil || refreshed {
 		t.Fatal("first adopt must not refresh content")
 	}
 	if got := store.Get(t.Context(), sessionID); got != seeded {
@@ -128,10 +144,14 @@ func TestAdoptActiveRun_distinctRunResets(t *testing.T) {
 		priorRun  = "run-plan"
 		childRun  = "run-implement"
 	)
-	store.EnsureRun(sessionID, priorRun, "Plan the feature")
+	if _, err := store.Update(t.Context(), sessionID, func(progress.Snapshot) (progress.Document, error) {
+		return progress.Document{RunID: priorRun, Content: "# Goal\n\n" + "Plan the feature" + "\n\n## Progress\n"}, nil
+	}); err != nil {
+		t.Fatalf("seed progress run: %v", err)
+	}
 	store.Set(sessionID, "# Goal\n\nPlan the feature\n\n## Progress\n- [x] draft blueprint\n")
 
-	if refreshed := progress.AdoptActiveRun(t.Context(), store, sessionID, childRun, "Build from blueprint"); !refreshed {
+	if refreshed, err := progress.AdoptActiveRun(t.Context(), store, sessionID, childRun, "Build from blueprint"); err != nil || !refreshed {
 		t.Fatal("distinct run must refresh")
 	}
 	got := store.Get(t.Context(), sessionID)
@@ -152,11 +172,15 @@ func TestAdoptActiveRun_sameRunNoOp(t *testing.T) {
 		sessionID = "sess-same-adopt"
 		runID     = "run-1"
 	)
-	store.EnsureRun(sessionID, runID, "Keep")
+	if _, err := store.Update(t.Context(), sessionID, func(progress.Snapshot) (progress.Document, error) {
+		return progress.Document{RunID: runID, Content: "# Goal\n\n" + "Keep" + "\n\n## Progress\n"}, nil
+	}); err != nil {
+		t.Fatalf("seed progress run: %v", err)
+	}
 	store.Set(sessionID, "# Goal\n\nKeep\n\n## Progress\n- [x] done\n")
 	before := store.Get(t.Context(), sessionID)
 
-	if refreshed := progress.AdoptActiveRun(t.Context(), store, sessionID, runID, "New goal ignored"); refreshed {
+	if refreshed, err := progress.AdoptActiveRun(t.Context(), store, sessionID, runID, "New goal ignored"); err != nil || refreshed {
 		t.Fatal("same run must not refresh on phase re-entry")
 	}
 	if got := store.Get(t.Context(), sessionID); got != before {
@@ -173,7 +197,7 @@ func TestEnsureBootstrap_unboundDocBindsWithoutWipe(t *testing.T) {
 	seeded := "## Progress\n- [ ] resolve TODOs"
 	store.Set(sessionID, seeded)
 
-	if refreshed := progress.EnsureBootstrap(t.Context(), store, sessionID, runID, "Build the stub"); refreshed {
+	if refreshed, err := progress.EnsureBootstrap(t.Context(), store, sessionID, runID, "Build the stub"); err != nil || refreshed {
 		t.Fatal("first bind must not refresh content")
 	}
 	if got := store.Get(t.Context(), sessionID); got != seeded {
@@ -190,7 +214,11 @@ func TestEnsureBootstrap_setPreservesBoundRun(t *testing.T) {
 		sessionID = "sess-preserve"
 		runID     = "run-bound"
 	)
-	store.EnsureRun(sessionID, runID, "Goal text")
+	if _, err := store.Update(t.Context(), sessionID, func(progress.Snapshot) (progress.Document, error) {
+		return progress.Document{RunID: runID, Content: "# Goal\n\n" + "Goal text" + "\n\n## Progress\n"}, nil
+	}); err != nil {
+		t.Fatalf("seed progress run: %v", err)
+	}
 	store.Set(sessionID, "# Goal\n\nGoal text\n\n## Progress\n- [ ] authored\n")
 	if store.BoundRunID(sessionID) != runID {
 		t.Fatalf("bound run after Set = %q want %q", store.BoundRunID(sessionID), runID)

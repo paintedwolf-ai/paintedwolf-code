@@ -5,6 +5,7 @@ package apitestdeps
 import (
 	"context"
 	"errors"
+	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"path/filepath"
 	"testing"
 	"time"
@@ -250,7 +251,7 @@ func fillHost(t *testing.T, d *Deps) {
 		d.Checkpoints = hitl.NewCheckpoints(hitl.NewSQLStore(d.Database), d.EventPublisher, authzcontext.SQLRecorder(d.Database))
 	}
 	if d.ProgressStore == nil {
-		d.ProgressStore = progress.NewSQLStore(d.Database)
+		d.ProgressStore = progress.NewSQLStore(d.Database, sessionstore.NewSQL(d.Database))
 	}
 	if d.VisualStore == nil {
 		d.VisualStore = visual.NewMemoryStore()

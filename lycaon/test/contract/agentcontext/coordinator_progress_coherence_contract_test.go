@@ -30,10 +30,14 @@ func TestProgressBootstrapRefreshesOnNewRun(t *testing.T) {
 	fix := coordinatorcoordinationplane.Load(t)
 	store := progress.NewMemoryStore()
 	const sessionID = "parent-session"
-	store.EnsureRun(sessionID, fix.PriorRunID, fix.PriorGoal)
+	if _, err := store.Update(t.Context(), sessionID, func(progress.Snapshot) (progress.Document, error) {
+		return progress.Document{RunID: fix.PriorRunID, Content: "# Goal\n\n" + fix.PriorGoal + "\n\n## Progress\n"}, nil
+	}); err != nil {
+		t.Fatalf("seed progress run: %v", err)
+	}
 	store.Set(sessionID, fix.StaleProgressContent)
 
-	if refreshed := progress.EnsureBootstrap(t.Context(), store, sessionID, fix.NewRunID, fix.UserPrompt); !refreshed {
+	if refreshed, err := progress.EnsureBootstrap(t.Context(), store, sessionID, fix.NewRunID, fix.UserPrompt); err != nil || !refreshed {
 		t.Fatal("expected bootstrap refresh on new run")
 	}
 	got := store.Get(t.Context(), sessionID)

@@ -183,7 +183,9 @@ func (m *Service) advanceToNextPhase(ctx context.Context, run *api.WorkflowRun, 
 					m.PhaseReenterHook(ctx, rc, def)
 				}
 			} else if m.PhaseEnterHook != nil {
-				m.PhaseEnterHook(ctx, rc, def)
+				if err := m.PhaseEnterHook(ctx, rc, def); err != nil {
+					return nil, err
+				}
 			}
 			if err := m.Settlement.InvokeOnPhaseEnter(ctx, run, def); err != nil {
 				return nil, err

@@ -83,8 +83,7 @@ describe("transcript-items", () => {
         progress_update: {
           steps: [{ state: "pending", label: "Plan" }] satisfies ProgressStep[],
           initial: true,
-          seq: 1,
-        },
+          },
         created_at: sharedTs,
       },
     ];

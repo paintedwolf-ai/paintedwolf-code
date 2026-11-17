@@ -13,7 +13,11 @@ import (
 
 func TestAuthorUpdateRevisionAdmitsOneConcurrentReplacement(t *testing.T) {
 	store := NewMemoryStore()
-	store.EnsureRun("session", "run", "Deliver change")
+	if _, err := store.Update(t.Context(), "session", func(Snapshot) (Document, error) {
+		return Document{RunID: "run", Content: "# Goal\n\n" + "Deliver change" + "\n\n## Progress\n"}, nil
+	}); err != nil {
+		t.Fatalf("seed progress run: %v", err)
+	}
 	initial, err := store.Snapshot(t.Context(), "session")
 	testutil.FailErr(t, "read initial progress", err)
 	var wait sync.WaitGroup
