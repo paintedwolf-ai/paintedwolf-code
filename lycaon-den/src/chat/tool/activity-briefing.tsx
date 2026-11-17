@@ -92,7 +92,7 @@ export function useActivityBriefingSlots(args: Args): ToolBriefingSlots {
     if (projectId && wanted) retryBriefing(projectId, wanted);
   };
   const reference = () => (state().kind === "ready" ? view().snapshot?.result?.evidence_ref : undefined);
-  const summaryElement = <ActivitySummary state={state()} running={running()} onRetry={retry} />;
+  const summaryElement = <Show when={target()}><ActivitySummary state={state()} running={running()} onRetry={retry} /></Show>;
   const evidenceElement = <Show when={reference()} keyed>{(ref) => <BriefingEvidenceLink reference={ref} />}</Show>;
   return {
     get summary() {

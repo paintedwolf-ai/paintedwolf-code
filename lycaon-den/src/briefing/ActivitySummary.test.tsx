@@ -96,4 +96,22 @@ describe("ActivitySummary", () => {
     expect(disconnect).toHaveBeenCalledTimes(2);
   });
 
+
+  it("measures summary text only after it arrives", () => {
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    vi.stubGlobal("ResizeObserver", class {
+      observe = observe;
+      disconnect = disconnect;
+    });
+    const [state, setState] = createSignal<ActivitySummaryState>({ kind: "pending" });
+    const view = render(() => <ActivitySummary state={state()} running={false} onRetry={() => {}} />);
+    expect(observe).not.toHaveBeenCalled();
+    setState({ kind: "ready", purpose: "Reads source.", change: "Found the entry point.", recordId: "measure" });
+    expect(observe).toHaveBeenCalledTimes(2);
+    setState({ kind: "pending" });
+    expect(disconnect).toHaveBeenCalledTimes(2);
+    view.unmount();
+  });
+
 });

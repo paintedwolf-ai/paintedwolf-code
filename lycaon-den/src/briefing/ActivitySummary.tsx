@@ -32,7 +32,10 @@ function ActivitySummarySection(props: {
   const [expanded, setExpanded] = createSignal(false);
   // Measure an unclamped copy because the visible text reports only its clipped height.
   createEffect(() => {
-    void props.text;
+    if (!props.text) {
+      setClamped(false);
+      return;
+    }
     const sectionEl = section;
     const measureEl = measure;
     if (!sectionEl || !measureEl || expanded() || typeof ResizeObserver === "undefined") return;
