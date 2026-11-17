@@ -11,6 +11,7 @@ import { scrollportMotionForHost } from "../../platform/scrolling/scrollport-mot
 import { FILES_TREE_ROW_HEIGHT_PX } from "./project-files-tree-flat.ts";
 import { getFilesTreeScrollTop } from "./files-tree-view-state.ts";
 import { workspaceMismatchId } from "../source/source-workspace-identity.ts";
+import { chatLocationsEpoch, recordChatLocations } from "../source/chat-locations.ts";
 import { type FilesTreeProps, type ActiveFile } from "./files-tree-context.ts";
 
 function activeFileRevealKey(file: ActiveFile): string | null {
@@ -18,7 +19,7 @@ function activeFileRevealKey(file: ActiveFile): string | null {
 }
 
 
-type SourceProps = Pick<FilesTreeProps, "projectId" | "workspaceId" | "client" | "sessionId" |
+type SourceProps = Pick<FilesTreeProps, "projectId" | "workspaceId" | "client" | "sessionId" | "chatId" |
   "filterQuery" | "reviewScope" | "activeFile" | "navigationRevision" | "autoReveal" |
   "onWorkspaceMismatch" | "onInitialLoadSettled" | "onSelectEntry">;
 
@@ -96,12 +97,18 @@ export function createFilesTreeSource(props: SourceProps, deps: {
 
   function observeSession() {
     createEffect(() => {
+      const current = state();
+      if (current) recordChatLocations(props.projectId, current.outside_locations);
+    });
+    createEffect(() => {
       const project = props.projectId;
       const workspace = props.workspaceId;
       const client = props.client;
       const session = props.sessionId;
+      const chat = props.chatId;
+      const locations = chatLocationsEpoch(project);
       if (!project || !workspace || !client) { setSourceView(undefined); return; }
-      const held = untrack(() => retainFilesTreeSession(client, project, workspace, session, {
+      const held = untrack(() => retainFilesTreeSession(client, project, workspace, session, { chat, epoch: locations }, {
         disclosures: restoredFilesTreeDisclosures(workspace), filter: props.filterQuery, review: props.reviewScope,
       }));
       if (seededWorkspaceKey !== workspace) {

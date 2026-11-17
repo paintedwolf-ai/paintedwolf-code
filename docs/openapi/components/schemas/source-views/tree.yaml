@@ -86,6 +86,12 @@ components:
         session_id:
           type: "string"
           format: "uuid"
+        chat_id:
+          type: "string"
+          format: "uuid"
+          description: >
+            The chat whose locations outside the project the view lists after
+            the project's roots. Omitted, the view lists none.
         workspace_id:
           type: "string"
           pattern: '^ws_[0-9a-f]{32}$'

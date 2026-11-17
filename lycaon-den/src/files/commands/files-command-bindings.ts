@@ -1,4 +1,5 @@
 import { editorLineLayoutPref, editorLineNumbersPref, editorWordWrapPref, saveEditorLineLayout, saveEditorLineNumbers } from "../../settings/editor/editor-prefs.ts";
+import { openOutsideFile } from "./open-outside-file.ts";
 import { EDITOR_STANDARD_COMMANDS } from "../../components/source/editor/editor-standard-commands.ts";
 import { focusRegion } from "../../shortcuts/focus-region.ts";
 import { editorTabMovesFocusPref, saveEditorTabMovesFocus } from "../../settings/editor/editor-prefs.ts";
@@ -41,7 +42,7 @@ import { enterWalk, isWalking, leaveWalk, stepWalk } from "../walk/walk-store.ts
 import { currentTurnFromStore } from "../../components/project/SidebarScopePicker.tsx";
 
 type CommandBindings = {
-  scope: Pick<FilesScope, "projectId" | "client" | "state" | "activeBuffer" | "aimedKey" | "versionForBuffer" | "setSaveError">;
+  scope: Pick<FilesScope, "projectId" | "client" | "sourceSessionId" | "state" | "activeBuffer" | "aimedKey" | "versionForBuffer" | "setSaveError">;
   appStore: AppStore;
   tree: () => FilesTreeHandle | undefined;
   createTargetDir: () => { rootId: string; dir: string } | null;
@@ -186,6 +187,7 @@ export function bindFilesCommands(options: CommandBindings): void {
       if (isWalking(scope.projectId())) stepWalk(scope.projectId(), -1);
     });
     on("files.newFile", () => startCreate("file"));
+    on("files.openOutsideFile", () => void openOutsideFile(scope.client(), scope.projectId(), scope.sourceSessionId()));
     on("files.newFolder", () => startCreate("folder"));
     on("files.undoLifecycle", () => void runSourceHistory("undo"));
     on("files.redoLifecycle", () => void runSourceHistory("redo"));

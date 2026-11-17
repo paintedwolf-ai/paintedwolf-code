@@ -8144,8 +8144,10 @@ type SourceTreeViewCreate struct {
 	Kind        string `json:"kind"`
 	OperationID string `json:"operation_id"`
 	// Stable window identity shared with editor requests; grants no authority.
-	ClientID    string           `json:"client_id"`
-	SessionID   string           `json:"session_id,omitempty"`
+	ClientID  string `json:"client_id"`
+	SessionID string `json:"session_id,omitempty"`
+	// The chat whose locations outside the project the view lists after the project's roots. Omitted, the view lists none.
+	ChatID      string           `json:"chat_id,omitempty"`
 	WorkspaceID string           `json:"workspace_id"`
 	Intent      SourceTreeIntent `json:"intent"`
 }

@@ -1,4 +1,6 @@
 import type { ProjectFilesViewProps } from "../components/project-files-view-props.ts";
+import { treeAddress } from "../source/chat-locations.ts";
+import { outsideRootId } from "../source/outside-namespace.ts";
 import { createFileContextActions, createFilePathIntents } from "../commands/file-context-actions.ts";
 import { createFilesSelection } from "../tree/files-selection.ts";
 import { createFilesTabCommands } from "../tabs/files-tab-commands.ts";
@@ -172,7 +174,10 @@ export function createFilesTreeInteraction(options: TreeInteraction) {
     if (!request || !workspaceSettled() || mountedTreeWorkspace() !== filesWorkspaceId()) return;
     untrack(() => {
       setRequestedTreeReveal(null);
-      if (request.current()) tree?.revealPath(request.rootId, request.path, request.isDir);
+      if (!request.current()) return;
+      // An outside file reveals in the chat location holding it, when one does.
+      const address = treeAddress(props.projectId, outsideRootId(props.projectId), request.rootId, request.path);
+      if (address) tree?.revealPath(address.rootId, address.path, request.isDir);
     });
   });
 

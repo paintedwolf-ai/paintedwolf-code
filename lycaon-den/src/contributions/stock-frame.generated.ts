@@ -1617,6 +1617,27 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "result_treatment": "effect"
     },
     {
+      "id": "painted-wolf/platform:files-open-outside-file",
+      "provider": "painted-wolf/platform",
+      "title": "Open file outside the project…",
+      "category": "navigation",
+      "scope": "files",
+      "keywords": [
+        "open file",
+        "outside project",
+        "other folder"
+      ],
+      "icon": "play",
+      "executor": "den",
+      "invocation": "den",
+      "action_kind": "native_ui",
+      "handler_id": "files.openOutsideFile",
+      "when": {
+        "fact": "files_stage_active"
+      },
+      "result_treatment": "effect"
+    },
+    {
       "id": "painted-wolf/platform:files-open-version-history",
       "provider": "painted-wolf/platform",
       "title": "Open version history",

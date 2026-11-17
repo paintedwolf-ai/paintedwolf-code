@@ -29,10 +29,11 @@ func (s *Trees) newTreeView(scope pagedview.Scope, p *project.Project, request w
 			slog.Warn("Source inventory could not start", "root", root.ID, "error", err)
 		}
 	}
-	view.navigation.outside = s.chatLocations(ctx, p, request.SessionID)
+	view.navigation.outside = s.chatLocations(ctx, p, request.ChatID)
 	for _, location := range view.navigation.outside {
 		roots = append(roots, chatLocationRoot(location))
 	}
+	view.navigation.treeIntent.Disclosures = disclosuresWithin(view.navigation.treeIntent.Disclosures, roots)
 	view.navigation.tree = sourcetree.New(ctx, scope, roots, sourcecatalog.Process(), func() { s.treeViewChanged(view) })
 	s.watchTreeView(view, p)
 	return view
@@ -88,4 +89,20 @@ func treeDisclosures(disclosures []wire.SourceTreeDisclosure) []sourcetree.Inten
 			Disclosure: sourcetree.Disclosure{Open: disclosure.Open, Recursive: disclosure.Recursive}}
 	}
 	return changes
+}
+
+// disclosuresWithin keeps the saved disclosures of roots this view lists;
+// another chat's locations share the workspace's saved intent.
+func disclosuresWithin(disclosures []wire.SourceTreeDisclosure, roots []sourcetree.Root) []wire.SourceTreeDisclosure {
+	listed := make(map[string]bool, len(roots))
+	for _, root := range roots {
+		listed[root.ID] = true
+	}
+	kept := disclosures[:0:0]
+	for _, disclosure := range disclosures {
+		if listed[disclosure.Address.RootID] {
+			kept = append(kept, disclosure)
+		}
+	}
+	return kept
 }

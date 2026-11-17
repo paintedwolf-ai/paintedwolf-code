@@ -16560,6 +16560,11 @@ export interface components {
             client_id: string;
             /** Format: uuid */
             session_id?: string;
+            /**
+             * Format: uuid
+             * @description The chat whose locations outside the project the view lists after the project's roots. Omitted, the view lists none.
+             */
+            chat_id?: string;
             workspace_id: string;
             intent: components["schemas"]["SourceTreeIntent"];
         };

@@ -1,4 +1,5 @@
 import { captureReaderBufferViewState, readerBufferViewState } from "../editor/editor-session-fidelity.ts";
+import { outsideRootId } from "../source/outside-namespace.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import { sourceReaderAccess } from "../../api/source-reader.ts";
 import { SourceReader, type SourceReaderHandle } from "../../components/source/reader/SourceReader.tsx";
@@ -228,7 +229,7 @@ export function FilesInfoCard(props: Props) {
                     Open as UTF-16 BE
                   </DenButton>
                 </Show>
-                <OpenInButton target={fileOpenTarget(props.buffer, props.roots)} onOpenChange={setOpenInMenuOpen} />
+                <OpenInButton target={fileOpenTarget(props.buffer, props.roots, undefined, props.projectId ? outsideRootId(props.projectId) : undefined)} onOpenChange={setOpenInMenuOpen} />
                 <Show when={variant() === "binary" && props.onReopenAsUTF16}>
                   <DenButton
                     variant="ghost"
