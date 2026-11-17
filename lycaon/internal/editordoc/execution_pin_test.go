@@ -112,7 +112,6 @@ func TestPinnedEditRefusesReviewBehindItsCapture(t *testing.T) {
 	}
 }
 
-
 func TestPublishAgentEditsSavesHeldAgentDraftWithoutTouchingHumanDraft(t *testing.T) {
 	f := newAgentFixture(t, nil)
 	dir := filepath.Join(f.root, "dir")
