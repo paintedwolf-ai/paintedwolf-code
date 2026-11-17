@@ -10,10 +10,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/godbus/dbus/v5"
 	"github.com/lycaon/lycaon/internal/linuxbus"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func agentFixtureBus(t *testing.T) string {
