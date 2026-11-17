@@ -46,14 +46,14 @@ func TestClassifyWatcherWriteUsesStatFacts(t *testing.T) {
 	}
 }
 
-func TestUseDebounceForTestDeliversPendingBurstsAcrossTheSwap(t *testing.T) {
+func TestUseDebounceDeliversPendingBurstsAcrossTheSwap(t *testing.T) {
 	t.Cleanup(ResetObserversForTest)
 	var delivered []string
 	RegisterObserver(func(_ context.Context, ev Event) { delivered = append(delivered, ev.ProjectDir) })
 	previous := globalDebounce.currentDelay()
 	dir := t.TempDir()
 
-	restore := UseDebounceForTest(t.Context(), time.Hour)
+	restore := UseDebounce(t.Context(), time.Hour)
 	if got := globalDebounce.currentDelay(); got != time.Hour {
 		t.Fatalf("delay = %v, want the hour set for the test", got)
 	}

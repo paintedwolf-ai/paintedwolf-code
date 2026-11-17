@@ -98,9 +98,8 @@ func (d *Debouncer) currentDelay() time.Duration {
 	return d.delay
 }
 
-// UseDebounceForTest sets the process coalesce window, after delivering every
-// pending burst, until the returned restore runs.
-func UseDebounceForTest(ctx context.Context, delay time.Duration) (restore func()) {
+// UseDebounce flushes pending changes before swapping the process coalesce window.
+func UseDebounce(ctx context.Context, delay time.Duration) (restore func()) {
 	flushCtx := context.WithoutCancel(ctx)
 	set := func(next time.Duration) {
 		globalDebounce.FlushForTest(flushCtx)

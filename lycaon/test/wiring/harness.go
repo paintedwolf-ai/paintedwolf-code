@@ -23,7 +23,6 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/scan"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/session"
@@ -76,11 +75,7 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	if o.changeDebounce > 0 {
-		t.Cleanup(repochange.UseDebounceForTest(t.Context(), o.changeDebounce))
-	}
-
-	cfg := configuration.Config{}
+	cfg := configuration.Config{TestChangeDebounce: o.changeDebounce}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()
 	// Install packs before the builder resolves the catalog.
 	installHarnessPacks(t, o.installedPackDirs)

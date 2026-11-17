@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/app/boards"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/app/decisions"
@@ -27,6 +28,7 @@ import (
 	"github.com/lycaon/lycaon/internal/harnessfixture"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
 	"github.com/lycaon/lycaon/internal/worker"
 )
@@ -75,6 +77,10 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 	buildOutcome := "error"
 	defer func() { buildPerf.End(buildOutcome) }()
 	resources := newRuntimeResources()
+	if cfg.TestChangeDebounce > 0 {
+		restore := repochange.UseDebounce(ctx, cfg.TestChangeDebounce)
+		resources.Track("change-debounce", 5, func(context.Context) error { restore(); return nil })
+	}
 	b := &serveBuilder{startup: startupBootstrap{ctx: ctx, cfg: cfg, resources: resources, recovery: bootrecovery.New()},
 		storage: persistence.Runtime{}}
 	for _, step := range []struct {
