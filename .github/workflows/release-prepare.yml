@@ -1,0 +1,339 @@
+name: Release preparation
+
+# Builds the unsigned release artifacts of one source commit, once. A trusted
+# receipt for the same commit and tree is reused instead. No job here may hold a
+# signing or publication credential, and nothing is published.
+on:
+  workflow_call:
+    inputs:
+      source_sha:
+        description: Full commit to prepare
+        type: string
+        required: true
+    outputs:
+      run_id:
+        description: Run that holds the receipt and every prepared artifact
+        value: ${{ jobs.source.outputs.run_id }}
+      reused:
+        description: Whether an earlier preparation of the same source was reused
+        value: ${{ jobs.source.outputs.reused }}
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    outputs:
+      commit: ${{ steps.source.outputs.commit }}
+      version: ${{ steps.source.outputs.version }}
+      plan: ${{ steps.source.outputs.plan }}
+      linux: ${{ steps.source.outputs.linux }}
+      nix: ${{ steps.source.outputs.nix }}
+      macos: ${{ steps.source.outputs.macos }}
+      run_id: ${{ steps.resolve.outputs.run_id }}
+      reused: ${{ steps.resolve.outputs.reused }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          persist-credentials: false
+      - id: source
+        env:
+          REQUESTED: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          commit="$(git rev-parse HEAD)"
+          [[ "${commit}" == "${REQUESTED}" ]] || { echo "error: preparation needs a full commit, got ${REQUESTED}" >&2; exit 1; }
+          plan="$(python3 -m scripts.release_preparation plan)"
+          {
+            echo "commit=${commit}"
+            echo "version=$(python3 scripts/release-metadata.py | jq -er .product_version)"
+            echo "plan=${plan}"
+            echo "linux=$(jq -c .linux <<<"${plan}")"
+            echo "nix=$(jq -c .nix <<<"${plan}")"
+            echo "macos=$(jq -c .macos <<<"${plan}")"
+          } >> "${GITHUB_OUTPUT}"
+      - id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN: ${{ steps.source.outputs.plan }}
+        run: python3 -m scripts.release_preparation resolve --source-commit "$(git rev-parse HEAD)" --plan "${PLAN}"
+
+  # Package lint runs on a tiny payload before the compile and on the real packages after it.
+  linux-packages:
+    needs: source
+    if: needs.source.outputs.reused == 'false'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.source.outputs.linux) }}
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b2a9ab24f04885adb52faf6bdccb0bb7dfb3c187 # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+      - name: Verify the native runner and its catalog row
+        env:
+          PLATFORM: ${{ matrix.updater_key }}
+          RUNNER_LABEL: ${{ matrix.runner }}
+          EXPECTED_GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          [[ "$(go env GOOS)" == linux && "$(go env GOARCH)" == "${EXPECTED_GOARCH}" ]]
+          case "${EXPECTED_GOARCH}" in
+            amd64) [[ "$(rustc --print host-tuple)" == x86_64-unknown-linux-gnu ]] ;;
+            arm64) [[ "$(rustc --print host-tuple)" == aarch64-unknown-linux-gnu ]] ;;
+          esac
+          ./task release:candidate:select -- --platform "${PLATFORM}" --runner-label "${RUNNER_LABEL}" \
+            --architecture "${EXPECTED_GOARCH}"
+      - name: Install Linux bundle and audit dependencies
+        uses: ./.github/actions/setup-apt
+        with:
+          packages: libwebkit2gtk-4.1-dev librsvg2-dev xdg-utils rpm rpmlint lintian aspell-en cpio gnupg libarchive-tools
+      - name: Lint production package metadata on a tiny payload
+        run: |
+          set -euo pipefail
+          ./task release:rehearse:deb-metadata
+          ./task release:rehearse:rpm-metadata
+      # The engine's native generation build needs the pinned llama.cpp source and the Vulkan tools.
+      - name: Provision generation runtime inputs
+        run: ./task generation:prepare -- --backend native --install-build-tools
+      - name: Download or restore qualified maintained engine
+        uses: ./.github/actions/setup-opengrep
+      - name: Download pinned Bialy heads
+        uses: ./.github/actions/setup-bialy
+      - name: Install frontend dependencies
+        working-directory: lycaon-den
+        run: bun install --frozen-lockfile
+      - name: Build the declared Linux package families
+        id: package-build
+        env:
+          PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}
+        run: |
+          case "${PACKAGE_EXTENSIONS}" in
+            deb,rpm) ./task den:bundle ;;
+            deb,rpm,pkg.tar.zst) ./task den:bundle -- --pacman-container ;;
+            *) echo "Unsupported package-family contract" >&2; exit 1 ;;
+          esac
+      # The disposable runner prepares this host; the probe gets no lease, so it never invokes sudo.
+      - name: Allow the staged package diagnostic to create user namespaces
+        run: |
+          if [[ "$(cat /proc/sys/kernel/apparmor_restrict_unprivileged_userns 2>/dev/null)" == 1 ]]; then
+            printf '%s\n' 'abi <abi/4.0>,' 'include <tunables/global>' \
+              'profile paintedwolf-candidate-diagnostic /tmp/painted-wolf-linux.*/deb/opt/painted-wolf-code/bin/pw flags=(unconfined) {' \
+              '  userns,' '}' | sudo tee /etc/apparmor.d/paintedwolf-candidate-diagnostic >/dev/null
+            sudo apparmor_parser -r /etc/apparmor.d/paintedwolf-candidate-diagnostic
+          fi
+      - name: Audit, lint and stage the packages
+        env:
+          VERSION: ${{ needs.source.outputs.version }}
+          PLATFORM: ${{ matrix.updater_key }}
+          ARCH: ${{ matrix.artifact_arch }}
+          PACKAGE_EXTENSIONS: ${{ join(matrix.package_extensions, ',') }}
+          TMPDIR: /tmp
+        run: |
+          bash scripts/release-stage-platform-artifacts.sh \
+            --platform "${PLATFORM}" --goos linux --arch "${ARCH}" \
+            --version "${VERSION}" --package-extensions "${PACKAGE_EXTENSIONS}" \
+            --output "${RUNNER_TEMP}/prepared"
+      - name: Rehearse Linux signatures with a disposable local key
+        env:
+          ARCH: ${{ matrix.artifact_arch }}
+        run: |
+          ./task release:rehearse:linux-signing -- --candidate-dir "${RUNNER_TEMP}/prepared" \
+            --require-architectures "${ARCH}" --receipt "${RUNNER_TEMP}/signing-rehearsal.json"
+      - name: Bind the packages to their source
+        env:
+          NAME: prepared-${{ matrix.updater_key }}
+        run: |
+          python3 -m scripts.release_preparation stamp --artifact "${RUNNER_TEMP}/prepared" --name "${NAME}" \
+            --kind linux-packages --source-commit "$(git rev-parse HEAD)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: prepared-${{ matrix.updater_key }}
+          path: ${{ runner.temp }}/prepared
+          if-no-files-found: error
+          retention-days: 90
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: preparation-stamp-prepared-${{ matrix.updater_key }}
+          path: ${{ runner.temp }}/prepared/preparation.json
+          if-no-files-found: error
+          retention-days: 90
+      - name: Retain partial native bytes without candidate authority
+        id: diagnostic-retention
+        if: ${{ failure() && steps.package-build.outcome != 'skipped' }}
+        env:
+          CONTROLLER_COMMIT: ${{ github.workflow_sha }}
+        run: |
+          ./task release:candidate:diagnostics -- \
+            --source "$GITHUB_WORKSPACE" --controller "$CONTROLLER_COMMIT" \
+            --output "$RUNNER_TEMP/candidate-diagnostics"
+      - name: Upload unqualified partial package diagnostics
+        if: ${{ failure() && steps.diagnostic-retention.outcome == 'success' }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: linux-partial-diagnostics-${{ matrix.updater_key }}
+          path: ${{ runner.temp }}/candidate-diagnostics/*
+          if-no-files-found: error
+          retention-days: 90
+
+  nix-closures:
+    needs: source
+    if: needs.source.outputs.reused == 'false'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.source.outputs.nix) }}
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.commit }}
+          persist-credentials: false
+      - name: Install the pinned Nix
+        run: python3 -c 'from scripts.linux_release.nix_runner import install; print(install())' >> "${GITHUB_PATH}"
+      - name: Build and export the application closure
+        env:
+          SYSTEM: ${{ matrix.system }}
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/prepared"
+          nix build --extra-experimental-features 'nix-command flakes' --no-link --print-out-paths \
+            ".#packages.${SYSTEM}.default" > "${RUNNER_TEMP}/prepared/outputs.txt"
+          xargs nix copy --extra-experimental-features nix-command \
+            --to "file://${RUNNER_TEMP}/prepared/cache" < "${RUNNER_TEMP}/prepared/outputs.txt"
+      - name: Bind the closure to its source
+        env:
+          NAME: prepared-nix-${{ matrix.system }}
+        run: |
+          python3 -m scripts.release_preparation stamp --artifact "${RUNNER_TEMP}/prepared" --name "${NAME}" \
+            --kind nix-closure --source-commit "$(git rev-parse HEAD)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: prepared-nix-${{ matrix.system }}
+          path: ${{ runner.temp }}/prepared
+          if-no-files-found: error
+          retention-days: 90
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: preparation-stamp-prepared-nix-${{ matrix.system }}
+          path: ${{ runner.temp }}/prepared/preparation.json
+          if-no-files-found: error
+          retention-days: 90
+
+  # The compiled application before any signing; the release signs, notarizes and staples it.
+  macos-app:
+    needs: source
+    if: needs.source.outputs.reused == 'false'
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.source.outputs.macos) }}
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-go@b2a9ab24f04885adb52faf6bdccb0bb7dfb3c187 # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+      - name: Verify the native runner
+        env:
+          EXPECTED_GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
+          [[ "$(go env GOOS)" == darwin && "$(go env GOARCH)" == "${EXPECTED_GOARCH}" ]]
+          [[ "${EXPECTED_GOARCH}" == arm64 && "$(rustc --print host-tuple)" == aarch64-apple-darwin ]]
+      - name: Restore the decision engine build
+        uses: ./.github/actions/cache-decide
+      - uses: ./.github/actions/cache-go
+      - uses: ./.github/actions/cache-notices-tools
+      - uses: ./.github/actions/cache-document-core
+      - name: Restore the release build warmed on main
+        uses: ./.github/actions/cache-release-build
+      - name: Download or restore qualified maintained engine
+        uses: ./.github/actions/setup-opengrep
+      - name: Download pinned Bialy heads
+        uses: ./.github/actions/setup-bialy
+      - name: Install frontend dependencies
+        working-directory: lycaon-den
+        run: bun install --frozen-lockfile
+      - name: Compile the unsigned application
+        run: |
+          mkdir -p "${RUNNER_TEMP}/prepared"
+          ./task den:bundle -- --phase compile --archive "${RUNNER_TEMP}/prepared/compiled.tar"
+      - name: Bind the application to its source
+        env:
+          NAME: prepared-${{ matrix.updater_key }}
+        run: |
+          python3 -m scripts.release_preparation stamp --artifact "${RUNNER_TEMP}/prepared" --name "${NAME}" \
+            --kind macos-app --source-commit "$(git rev-parse HEAD)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: prepared-${{ matrix.updater_key }}
+          path: ${{ runner.temp }}/prepared
+          if-no-files-found: error
+          retention-days: 90
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: preparation-stamp-prepared-${{ matrix.updater_key }}
+          path: ${{ runner.temp }}/prepared/preparation.json
+          if-no-files-found: error
+          retention-days: 90
+
+  receipt:
+    needs: [source, linux-packages, nix-closures, macos-app]
+    if: needs.source.outputs.reused == 'false'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.commit }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: preparation-stamp-*
+          path: ${{ runner.temp }}/stamps
+      - name: Record the preparation receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN: ${{ needs.source.outputs.plan }}
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}/stamps"
+          for directory in preparation-stamp-*; do mv "${directory}" "${directory#preparation-stamp-}"; done
+          cd "${GITHUB_WORKSPACE}"
+          python3 -m scripts.release_preparation receipt --stamps "${RUNNER_TEMP}/stamps" --plan "${PLAN}" \
+            --source-commit "$(git rev-parse HEAD)" --output "${RUNNER_TEMP}/receipt/receipt.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-preparation-${{ needs.source.outputs.commit }}
+          path: ${{ runner.temp }}/receipt/receipt.json
+          if-no-files-found: error
+          retention-days: 90

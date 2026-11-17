@@ -1863,7 +1863,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/release-recovery-prepare.sh {{.CLI_ARGS}}
 
   release:candidate:select:
-    desc: 'Select the native Linux candidate matrix from the platform catalog, or verify one candidate row (--platform, --runner-label, --architecture)'
+    desc: 'Verify that a native Linux runner matches its platform catalog row (--platform, --runner-label, --architecture)'
     silent: true
     cmds:
       - python3 -m scripts.linux_release.candidates {{.CLI_ARGS}}
