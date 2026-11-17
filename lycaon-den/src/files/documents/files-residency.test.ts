@@ -1,9 +1,10 @@
 import { createRoot, createSignal } from "solid-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+// The lifecycle loads first so it binds the mock; the document module imports it back.
+import { openFilesBuffer, resetProjectFilesForTests } from "./project-files-buffer-lifecycle.ts";
 import { documentResidency } from "./document-residency.ts";
 import { evictEditorDocument } from "./editor-document.ts";
 import { createFilesResidency } from "./files-residency.ts";
-import { openFilesBuffer, resetProjectFilesForTests } from "./project-files-buffer-lifecycle.ts";
 
 vi.mock("./editor-document.ts", async (importOriginal) => ({
   ...await importOriginal<typeof import("./editor-document.ts")>(),
