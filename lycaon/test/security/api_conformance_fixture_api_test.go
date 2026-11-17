@@ -383,7 +383,7 @@ func newWidgetSweep(t *testing.T, faults widgetFaults) *conformanceSweep {
 	sweep := newConformanceSweep(doc, validator, api.routes(), notices)
 	sweep.effects = counterEffects{writes: &api.writes}
 	sweep.keyRows = api
-	sweep.eventSchemas = newEventSchemas(widgetEventSchemaDir(t))
+	sweep.eventSchemas = openapi.NewEventSchemas(widgetEventSchemaDir(t))
 	sweep.values.bind("/v1/widgets/{id}/parts/{part_id}", "part_id", fixturePartID)
 	return sweep
 }

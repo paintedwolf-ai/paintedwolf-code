@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	wire "github.com/lycaon/lycaon/pkg/api"
+	openapi "github.com/lycaon/lycaon/test/openapi"
 )
 
 // TestConformanceSweepPassesAConformingAPI proves the sweep reports nothing
@@ -160,7 +161,7 @@ func TestConformanceSweepDetectsAStaleCorpus(t *testing.T) {
 	changed := newWidgetSweep(t, widgetFaults{labelsWidget: true})
 	changed.runAll(t.Context())
 	changed.checkCorpus(changed.corpus.corpus(nil), path, false)
-	want := `getWidget 200: corpus: $.label was "", is now "string"; refresh with ` + hostCorpusRefresh
+	want := `getWidget 200: corpus: $.label was "", is now "string"; refresh with ` + openapi.HostCorpusRefresh
 	if got := changed.findings.list(ruleCorpusIsCurrent); !slices.Contains(got, want) {
 		t.Fatalf("stale corpus findings do not include %q:\n%s", want, strings.Join(got, "\n"))
 	}

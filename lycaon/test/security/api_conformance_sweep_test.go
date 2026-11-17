@@ -92,7 +92,7 @@ func TestAPIConformance(t *testing.T) {
 	root, err := openapi.RepoRoot()
 	testutil.FailErr(t, "find the repository root", err)
 	sweep := newConformanceSweep(doc, validator, h.Server, usernotice.NewCatalog(noticeCfg))
-	sweep.eventSchemas = newEventSchemas(filepath.Join(root, "docs"))
+	sweep.eventSchemas = openapi.NewEventSchemas(filepath.Join(root, "docs"))
 	settleSourceWatcher(t, h.Server.WaitForBackground, hub, projectDir)
 	effects := openConformanceEffects(t, h, hub, projectDir)
 	sweep.effects, sweep.keyRows = effects, effects
@@ -110,7 +110,7 @@ func TestAPIConformance(t *testing.T) {
 	events := capture.stop(t)
 	sweep.checkEventScopes(events, hostIDs)
 	sweep.checkEventPayloads(events)
-	sweep.checkCorpus(sweep.corpus.corpus(events), filepath.Join(root, hostCorpusPath), os.Getenv("UPDATE_HOST_CORPUS") == "1")
+	sweep.checkCorpus(sweep.corpus.corpus(events), filepath.Join(root, openapi.HostCorpusPath), os.Getenv("UPDATE_HOST_CORPUS") == "1")
 	sweep.secrets.scanEvents(sweep.findings, events)
 	sweep.report(t)
 }
@@ -154,7 +154,7 @@ type conformanceSweep struct {
 	// readObserved names reads whose answered request has already been checked for effects.
 	readObserved map[string]bool
 	secrets      *conformanceSecrets
-	eventSchemas *eventSchemas
+	eventSchemas *openapi.EventSchemas
 	// host and fixture serve recipes that seed what no operation creates;
 	// both are empty for the sweep's own fixture API.
 	host    *wiring.Harness
