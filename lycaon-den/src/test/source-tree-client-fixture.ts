@@ -54,7 +54,7 @@ export function sourceTreeClientFixture(client: () => LycaonClient, workspaceRea
       if (request.kind !== "tree") throw new Error("Expected tree fixture");
       const workspace = workspaces.get(request.workspace_id);
       const roots: ProjectRoot[] = (workspace?.roots ?? []).map((root, index) => ({ ...root, label: root.path.split("/").at(-1) ?? "", is_primary: index === 0, kind: "attached", admitted: true, admission_code: null, added_at: "2026-01-01T00:00:00Z" }));
-      const view: SourceTreeView = { kind: "tree", id: crypto.randomUUID(), workspace_id: request.workspace_id, roots,
+      const view: SourceTreeView = { kind: "tree", id: crypto.randomUUID(), workspace_id: request.workspace_id, roots, outside_locations: [],
         intent: request.intent, state: "ready", intent_revision: "1", projection_revision: "1", expires_at: "2027-01-01T00:00:00Z",
         extent: { rows: 0, complete: true }, loading_directories: 0 };
       const held = { view, rows: [], project, session: request.session_id };

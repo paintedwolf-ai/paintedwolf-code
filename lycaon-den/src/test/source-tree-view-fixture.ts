@@ -33,7 +33,7 @@ export function treeViewFixture(initial = [treeRow(".", "directory", true), tree
   type Generation = { state: SourceTreeView; revision: string; rows: SourceTreeRow[]; total: number; rowAt: (index: number) => SourceTreeRow; rank?: (path: string) => number };
   // Captured generations remain immutable.
   const retained = new Map<string, Generation>();
-  const state = (): SourceTreeView => ({ kind: "tree", id, workspace_id: workspace, roots: TREE_ROOTS,
+  const state = (): SourceTreeView => ({ kind: "tree", id, workspace_id: workspace, roots: TREE_ROOTS, outside_locations: [],
     intent_revision: `intent-${intentRevision}`, projection_revision: `projection-${revision}`,
     state: failure ? "failed" : complete ? "ready" : "preparing", extent: { rows: total, complete },
     ...(failure ? { failure: { code: "preparation_failed" as const, message: failure } } : {}),
