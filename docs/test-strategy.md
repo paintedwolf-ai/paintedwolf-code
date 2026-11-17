@@ -783,9 +783,15 @@ one-million-, and ten-million-row source trees, the 50,000-message session
 tree, and a working year of 25,000 real editor saves with retained source
 history and three recovery captures. Its catalog recipe keeps packages and tests
 serial and allows 90 minutes per package before host-load scaling. The nightly
-workflow includes this tier. Active fuzz exploration runs through
-`./task test:fuzz` in nightly verification, separately from
-`check`; ordinary Go tests still execute saved fuzz seed cases. Transcript
+workflow includes this tier. Every Go fuzz target is declared in the `fuzz`
+section of `scripts/verification-plan.json` with its exploration seconds: five
+minutes for parsers, encoders and the property targets that guard secrets,
+root containment, archive extraction and Git arguments, thirty seconds for the
+rest. `./task test:fuzz` gives each target that time in nightly verification,
+and `./task test:fuzz:smoke` in the ready tier replays seeds and committed
+corpus, then explores briefly, for targets in the packages a change touches.
+Minimized corpora live under each package's `testdata/fuzz/`, so ordinary Go
+tests replay them too. Transcript
 scale tests use the `.perf.test.ts` suffix and run through
 `./task den:test:transcript-scale` in nightly verification. Den suites assert
 memory, DOM and row bounds, never elapsed time. SQL query and OpenAPI bundle generation drift are

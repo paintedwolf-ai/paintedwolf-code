@@ -5,7 +5,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 if ! python3 "$ROOT/scripts/test-execution.py" holding; then
-  exec python3 "$ROOT/scripts/test-execution.py" run --name "fuzz-$1" -- bash "$0" "$@"
+  exec python3 "$ROOT/scripts/test-execution.py" run --name "fuzz-${1:-}" -- bash "$0" "$@"
 fi
 SOURCE_SNAPSHOT_SH="${ROOT}/scripts/test-source-snapshot.sh"
 if ! bash "$SOURCE_SNAPSHOT_SH" holding; then

@@ -40,10 +40,10 @@ def test_files(tags, patterns):
                 "{{.ImportPath}}\t{{.Dir}}\t{{join .TestGoFiles \" \"}} {{join .XTestGoFiles \" \"}}", *patterns)
     if result.returncode:
         raise RuntimeError(f"go list: {result.stderr.strip()}")
-    packages = {}
+    packages, module = {}, GO_MODULE.resolve()
     for line in result.stdout.splitlines():
         path, directory, files = line.split("\t")
-        packages[path] = ("./" + Path(directory).relative_to(GO_MODULE).as_posix(),
+        packages[path] = ("./" + Path(directory).relative_to(module).as_posix(),
                           [Path(directory, name) for name in files.split()])
     return packages
 
