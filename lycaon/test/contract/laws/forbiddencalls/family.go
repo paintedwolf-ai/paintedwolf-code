@@ -44,4 +44,11 @@ var Family = laws.Family{Name: "forbidden-calls", Rules: slices.Concat(
 	gitArgv,
 	overlayDir,
 	projectFiles,
+	frontendText,
+	hostBounds,
+	hostDoors,
+	engineProcess,
+	globals,
+	confineHelper,
+	writeDoor,
 )}
