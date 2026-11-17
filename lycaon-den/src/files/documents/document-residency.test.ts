@@ -91,6 +91,22 @@ describe("document residency", () => {
     expect(release).toHaveBeenCalledOnce();
   });
 
+  it("settles a release wait once the last presentation lets go", async () => {
+    const residency = new DocumentResidency(10);
+    await expect(residency.whenUnprotected("open")).resolves.toBeUndefined();
+    const one = Symbol(), two = Symbol();
+    residency.protect("shown", true, one);
+    residency.protect("shown", true, two);
+    const released = vi.fn();
+    const waiting = residency.whenUnprotected("shown").then(released);
+    residency.protect("shown", false, one);
+    await Promise.resolve();
+    expect(released).not.toHaveBeenCalled();
+    residency.protect("shown", false, two);
+    await waiting;
+    expect(released).toHaveBeenCalledOnce();
+  });
+
   it("allows two acquisitions with only one speculative acquisition", async () => {
     const residency = new DocumentResidency(100);
     const background = await residency.acquire("one", 10, "background");
