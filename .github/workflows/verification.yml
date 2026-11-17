@@ -64,7 +64,7 @@ jobs:
           AFFECTED: ${{ inputs.affected }}
           PLATFORM: ${{ inputs.platform }}
           LANE: ${{ inputs.lane }}
-          # Reads main's nightly receipts; without actions read access the plan uses lane budgets.
+          # Reads main's nightly timings; without actions read access the plan uses lane budgets.
           GH_TOKEN: ${{ github.token }}
         run: |
           if [[ "$PROFILE" == integration && "$GITHUB_EVENT_NAME" == workflow_dispatch && -z "$LANE" ]]; then

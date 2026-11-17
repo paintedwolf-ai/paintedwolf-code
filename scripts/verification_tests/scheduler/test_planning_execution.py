@@ -291,7 +291,6 @@ class PlanningTests(unittest.TestCase):
         self.assertIsNone(planning.request(["check"], {"PW_TEST_REPLAY_MANIFEST": "replay.json"}))
         self.assertIsNone(planning.request(["check"], {"GOFLAGS": "-count=2"}))
         self.assertIsNone(planning.request(["check"], {"GOFLAGS": "-failfast"}))
-        self.assertIsNone(planning.request(["den:test"], {"LYCAON_VITEST_PERF": "1"}))
         self.assertIsNotNone(planning.request([], {}))
 
     def test_budgets_share_admission(self):

@@ -7,11 +7,11 @@ from ci_policy import hosted_plan, hosted_schedule
 
 class HostedScheduleTests(unittest.TestCase):
     def test_incomplete_nightly_uses_one_basis_for_the_whole_matrix(self):
-        measured = {"lanes": {"behavior 1/2": 1287.2, "limits": 226.1, "lint": 822.5}}
+        measured = {"lanes": {"behavior 1/2": 1287.2, "build": 226.1, "lint": 822.5}}
         original = copy.deepcopy(measured)
         rows = hosted_plan.matrix("integration", timings=measured)["include"]
         self.assertEqual(measured, original)
-        self.assertEqual({row["lane"] for row in rows[:3]}, {"limits", "lint", "runner"})
+        self.assertEqual({row["lane"] for row in rows[:3]}, {"build", "lint", "runner"})
         self.assertEqual({row["timing_basis"] for row in rows}, {"catalog-budget"})
         self.assertTrue(all(row["expected_seconds"] == row["minutes"] * 60 for row in rows))
         self.assertEqual(rows, hosted_plan.matrix("integration")["include"])
@@ -22,7 +22,7 @@ class HostedScheduleTests(unittest.TestCase):
         seconds = {row["timing_row"]: 600 for row in baseline}
         seconds.update({"behavior 1/2": 60, "behavior 2/2": 1500})
         rows = hosted_plan.matrix("integration", timings={"lanes": seconds})["include"]
-        self.assertEqual([row["lane"] for row in rows[:3]], ["limits", "lint", "runner"])
+        self.assertEqual([row["lane"] for row in rows[:3]], ["build", "lint", "runner"])
         self.assertEqual([row["lane"] for row in rows[3:5]], ["behavior", "behavior"])
         self.assertEqual([row["expected_seconds"] for row in rows[3:5]], [1500, 1500])
         self.assertEqual({row["timing_basis"] for row in rows}, {"measured"})
@@ -41,11 +41,11 @@ class HostedScheduleTests(unittest.TestCase):
                 self.assertEqual(rows[0]["expected_seconds"], rows[0]["minutes"] * 60)
 
     def test_summary_explains_fallback_and_sources(self):
-        measured = {"runs": [30, 20], "lanes": {"behavior 1/2": 1287.2}}
+        measured = {"run": 30, "lanes": {"behavior 1/2": 1287.2}}
         matrix = hosted_plan.matrix("integration", timings=measured)
         summary = hosted_schedule.summarize(matrix, measured)
         self.assertIn("Estimate basis: `catalog-budget`", summary)
         self.assertIn("`behavior 2/2`", summary)
-        self.assertIn("Nightly timing sources: 30, 20", summary)
+        self.assertIn("Nightly timing source: run 30.", summary)
         self.assertIn("| 3 | runner |  | reject | 3600 |", summary)
         self.assertIn("| 4 | behavior | 1/2 | critical | 9000 |", summary)

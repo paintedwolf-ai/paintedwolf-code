@@ -80,6 +80,7 @@ jobs:
             {"Go":{"active":true,"hit":"${{ steps.probe.outputs.go-cache-hit }}"},
              "Desktop Rust":{"active":true,"hit":"${{ steps.probe.outputs.rust-cache-hit }}"},
              "Decision engine":{"active":true,"hit":"${{ steps.probe.outputs.decide-cache-hit }}"},
+             "Generation runtime":{"active":true,"hit":"${{ steps.probe.outputs.generation-cache-hit }}"},
              "Document core":{"active":true,"hit":"${{ steps.probe.outputs.document-cache-hit }}"},
              "Base tools":{"active":true,"hit":"${{ steps.probe.outputs.analysis-base-cache-hit }}"},
              "Lint tools":{"active":true,"hit":"${{ steps.probe.outputs.analysis-lint-cache-hit }}"},
@@ -140,8 +141,10 @@ jobs:
         if: steps.state.outputs.prepare == 'true' && (steps.setup.outputs.document-cache-hit != 'true')
         run: ./task build:document-core
 
+      # The engine's decision and generation runtimes compile here, once per platform, so the
+      # jobs that build the engine only link them.
       - name: Warm desktop workspace builds
-        if: steps.state.outputs.prepare == 'true' && (steps.setup.outputs.rust-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true')
+        if: steps.state.outputs.prepare == 'true' && (steps.setup.outputs.rust-cache-hit != 'true' || steps.setup.outputs.decide-cache-hit != 'true' || steps.setup.outputs.generation-cache-hit != 'true')
         run: ./task setup-dev -- --workspace-cache
 
       - name: Warm release compiler inputs
@@ -175,6 +178,12 @@ jobs:
       - name: Publish prepared decision engine
         if: steps.state.outputs.prepare == 'true' && (github.ref == 'refs/heads/main' && steps.setup.outputs.decide-cache-hit != 'true')
         uses: ./.github/actions/cache-decide
+        with:
+          save: 'true'
+
+      - name: Publish prepared generation runtime
+        if: steps.state.outputs.prepare == 'true' && (github.ref == 'refs/heads/main' && steps.setup.outputs.generation-cache-hit != 'true')
+        uses: ./.github/actions/cache-generation
         with:
           save: 'true'
 

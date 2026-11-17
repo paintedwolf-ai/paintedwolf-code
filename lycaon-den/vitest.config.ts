@@ -7,7 +7,6 @@ import {
   VITEST_HOOK_TIMEOUT_MS,
 } from "./src/test/vitest-timeouts.ts";
 
-const includePerf = process.env.LYCAON_VITEST_PERF === "1";
 const vitestFast = process.env.LYCAON_VITEST_FAST === "1";
 // Changed-coverage runs measure only tests related to changed sources, whatever else changed.
 const changedOnly = process.env.PW_VITEST_CHANGED_ONLY === "1";
@@ -54,12 +53,6 @@ function projectInclude(kind: "ts" | "tsx"): string[] {
   return [`src/**/*.test.${kind}`];
 }
 
-function projectExclude(kind: "ts" | "tsx"): string[] {
-  const extra: string[] = [];
-  if (!includePerf) extra.push(`src/**/*.perf.test.${kind}`);
-  return extra;
-}
-
 export default defineConfig({
   plugins: [solid()],
   server: {
@@ -84,7 +77,6 @@ export default defineConfig({
           name: "model",
           environment: "node",
           include: projectInclude("ts"),
-          exclude: projectExclude("ts"),
         },
       },
       {
@@ -93,7 +85,6 @@ export default defineConfig({
           name: "dom",
           environment: "jsdom",
           include: projectInclude("tsx"),
-          exclude: projectExclude("tsx"),
         },
       },
     ],

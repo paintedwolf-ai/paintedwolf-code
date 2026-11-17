@@ -25,12 +25,13 @@ jobs:
   # confinement on the same runner. Booting stored databases is
   # platform-neutral, so it stays off the scarce macOS runners; the Linux
   # boundary needs a Linux runner, and sharing this one keeps the stage at two.
+  # The runner matches the cache warmer's, so the Go and engine builds restore.
   # The confine live suites (namespaces, mounts, Landlock, seccomp, the
   # supervisor's network grants and refusal reports, toolchains) fail rather
   # than skip when the host cannot confine; setup-verification loads the
   # profiles that let verification engines create user namespaces on Ubuntu.
   upgrade-corpus:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 255
     env:
       PW_TEST_HOST: dedicated
@@ -45,6 +46,10 @@ jobs:
           linux-launch: 'true'
 
       - uses: ./.github/actions/setup-bialy
+
+      - uses: ./.github/actions/cache-decide
+
+      - uses: ./.github/actions/cache-generation
 
       - name: Applied Linux launch boundary
         id: launch
@@ -126,6 +131,8 @@ jobs:
       - uses: ./.github/actions/setup-bialy
 
       - uses: ./.github/actions/cache-decide
+
+      - uses: ./.github/actions/cache-generation
 
       - uses: ./.github/actions/cache-document-core
 

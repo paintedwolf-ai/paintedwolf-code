@@ -14,7 +14,7 @@ GATE = "check"
 FAST_GATE = "check-fast"
 # The static job runs these before any lane, so the fast tier omits them.
 STATIC_STAGES = {"comments:check", "test:fail-messages:check", "docs:links"}
-SUITES = {"all", "behavior", "race", "coverage", "performance", "fuzz", "e2e"}
+SUITES = {"all", "behavior", "race", "performance", "fuzz", "e2e"}
 SETUPS = {"verification", "shell", "harness", "frontend", "analysis"}
 # A platform lane runs a check that only its platform can run, so the cross-platform check gate,
 # which every development host runs, leaves it out; the merge queue runs it beside that gate.
@@ -32,7 +32,7 @@ USERLANDS_TARGET = "test:userlands"
 LAUNCH_PACKAGE = "./internal/launchguard"
 # Go runs that select their packages in their own scripts, outside the catalog's `go` recipes,
 # and reach the protected launch leg.
-LAUNCH_SCRIPT_TARGETS = {"test:confine:linux", "coverage:changes", "check:coverage"}
+LAUNCH_SCRIPT_TARGETS = {"test:confine:linux", "coverage:changes"}
 
 
 def supplemental(lane):
@@ -40,8 +40,6 @@ def supplemental(lane):
 
 
 def lanes():
-    from ci_policy.quarantine import entries
-    entries()
     values = catalog()["ci"]
     taskfile = (ROOT / "Taskfile.yml").read_text()
     targets = set(re.findall(r"^  ([\w:-]+):$", taskfile, re.M))

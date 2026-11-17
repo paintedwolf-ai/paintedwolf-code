@@ -264,14 +264,14 @@ class HostedExecutionTests(unittest.TestCase):
         with patch.object(ci.subprocess, "run", return_value=refused):
             self.assertEqual(ci.task_json(["test:cancel"]), (1, None))
 
-    def test_full_limits_lane_receives_structured_change_base(self):
+    def test_full_build_lane_receives_structured_change_base(self):
         scope = dict(base='b' * 40, head='a' * 40, paths=['lycaon/internal/a/a.go'], full=True, reasons=[])
         with tempfile.TemporaryDirectory() as directory, \
                 patch.dict('os.environ', PW_CI_AFFECTED='0'), \
                 patch('ci_policy.impact.change', return_value=scope), \
                 patch.object(ci, 'artifact_root', return_value=Path(directory)), \
                 patch.object(ci.subprocess, 'call', return_value=0) as command:
-            ci.run_lane('limits')
+            ci.run_lane('build')
         self.assertEqual(command.call_args.kwargs['env']['PW_CHANGE_BASE'], 'b' * 40)
 
     def test_fast_lanes_run_every_phase_and_keep_the_worst_verdict(self):
@@ -321,6 +321,6 @@ class HostedExecutionTests(unittest.TestCase):
                 patch('ci_policy.impact.change', return_value=scope), \
                 patch.object(ci, 'artifact_root', return_value=Path(directory)), \
                 patch.object(ci.subprocess, 'call', return_value=1) as run:
-            self.assertEqual(ci.run_lane('limits'), 1)
+            self.assertEqual(ci.run_lane('build'), 1)
         self.assertEqual(run.call_count, 1)
         self.assertNotIn('PW_TEST_KEEP_GOING', run.call_args.kwargs['env'])

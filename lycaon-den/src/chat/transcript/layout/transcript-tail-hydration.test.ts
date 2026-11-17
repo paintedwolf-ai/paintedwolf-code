@@ -7,10 +7,9 @@ import {
 } from "./transcript-window.ts";
 import { messagesInRange } from "./transcript-scale-fixture.ts";
 
-const PERF_N = 5000;
-const PERF_N_DOUBLE = 10_000;
+const SESSION_LENGTHS = [5000, 10_000];
 
-describe("transcript hydration performance", () => {
+describe("transcript tail hydration", () => {
   it("hydrates the same number of rows from a tail window independent of N", () => {
     const run = (n: number) => {
       const start = Math.max(1, n - DEFAULT_TRANSCRIPT_PAGE_LIMIT + 1);
@@ -26,7 +25,7 @@ describe("transcript hydration performance", () => {
       );
       return materializeTranscriptWindow(tw);
     };
-    for (const n of [PERF_N, PERF_N_DOUBLE]) {
+    for (const n of SESSION_LENGTHS) {
       const rows = run(n);
       expect(rows).toHaveLength(DEFAULT_TRANSCRIPT_PAGE_LIMIT);
       expect(rows.at(-1)?.ord).toBe(n);
