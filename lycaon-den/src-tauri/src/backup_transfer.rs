@@ -476,12 +476,18 @@ mod tests {
         }
     }
 
-    fn server(length: u64, body: Vec<u8>, delay: Duration) -> String {
+    /// Serves body after the headers; with a hold, only once the hold is released or dropped.
+    fn server(length: u64, body: Vec<u8>, hold: Option<std::sync::mpsc::Receiver<()>>) -> String {
         let digest = hex::encode(Sha256::digest(&body));
-        server_with_digest(length, body, delay, digest)
+        server_with_digest(length, body, hold, digest)
     }
 
-    fn server_with_digest(length: u64, body: Vec<u8>, delay: Duration, digest: String) -> String {
+    fn server_with_digest(
+        length: u64,
+        body: Vec<u8>,
+        hold: Option<std::sync::mpsc::Receiver<()>>,
+        digest: String,
+    ) -> String {
         let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind fixture");
         let address = listener.local_addr().expect("fixture address");
         std::thread::spawn(move || {
@@ -492,7 +498,9 @@ mod tests {
                 socket,
                 "HTTP/1.1 200 OK\r\nContent-Length: {length}\r\nX-Backup-SHA256: {digest}\r\nConnection: close\r\n\r\n"
             );
-            std::thread::sleep(delay);
+            if let Some(hold) = hold {
+                let _ = hold.recv();
+            }
             for chunk in body.chunks(BUFFER_BYTES) {
                 if socket.write_all(chunk).is_err() {
                     break;
@@ -502,10 +510,14 @@ mod tests {
         format!("http://{address}/archive")
     }
 
-    async fn response(length: u64, body: Vec<u8>, delay: Duration) -> reqwest::Response {
+    async fn response(
+        length: u64,
+        body: Vec<u8>,
+        hold: Option<std::sync::mpsc::Receiver<()>>,
+    ) -> reqwest::Response {
         transfer_client()
             .expect("fixture client")
-            .get(server(length, body, delay))
+            .get(server(length, body, hold))
             .send()
             .await
             .expect("fixture response")
@@ -517,7 +529,7 @@ mod tests {
         let target = dir.join("backup.zip");
         std::fs::write(&target, b"previous").expect("seed previous");
         let body = vec![0x5a; 4 << 20];
-        let response = response(body.len() as u64, body.clone(), Duration::ZERO).await;
+        let response = response(body.len() as u64, body.clone(), None).await;
         let mut saved = false;
         receive_archive(response, &target, &dir, |phase, count, total| {
             if phase == "saving" {
@@ -542,7 +554,7 @@ mod tests {
         let dir = crate::test_support::TempDir::new("backup-truncated");
         let target = dir.join("backup.zip");
         std::fs::write(&target, b"previous").expect("seed previous");
-        let response = response(1024, vec![0; 17], Duration::ZERO).await;
+        let response = response(1024, vec![0; 17], None).await;
         receive_archive(response, &target, &dir, |_, _, _| {})
             .await
             .expect_err("truncation refused");
@@ -560,7 +572,7 @@ mod tests {
             .get(server_with_digest(
                 17,
                 vec![1; 17],
-                Duration::ZERO,
+                None,
                 "0".repeat(64),
             ))
             .send()
@@ -579,11 +591,26 @@ mod tests {
         let dir = crate::test_support::TempDir::new("backup-cancelled");
         let target = dir.join("backup.zip");
         std::fs::write(&target, b"previous").expect("seed previous");
-        let response = response(1024, vec![0; 1024], Duration::from_millis(200)).await;
+        let (release, hold) = std::sync::mpsc::channel();
+        let response = response(1024, vec![0; 1024], Some(hold)).await;
+        let receiving = receive_archive(response, &target, &dir, |_, _, _| {});
+        tokio::pin!(receiving);
+        // The body is held, so the download is in flight once its partial file exists.
+        let partial = async {
+            while !std::fs::read_dir(&dir).expect("directory").any(|entry| {
+                let name = entry.expect("entry").file_name();
+                let name = name.to_string_lossy();
+                name.starts_with(".backup-") && name.ends_with(".tmp")
+            }) {
+                tokio::time::sleep(Duration::from_millis(5)).await;
+            }
+        };
         tokio::select! {
-            result = receive_archive(response, &target, &dir, |_, _, _| {}) => panic!("completed before cancellation: {result:?}"),
-            _ = tokio::time::sleep(Duration::from_millis(20)) => {},
+            result = &mut receiving => panic!("completed before cancellation: {result:?}"),
+            _ = partial => {},
         }
+        drop(receiving);
+        drop(release);
         assert_eq!(std::fs::read(&target).expect("prior intact"), b"previous");
         assert_eq!(std::fs::read_dir(&dir).expect("directory").count(), 2);
     }
@@ -591,7 +618,7 @@ mod tests {
     #[tokio::test]
     async fn oversized_archive_is_rejected_before_creating_a_file() {
         let dir = crate::test_support::TempDir::new("backup-size");
-        let response = response(archive_limit() + 1, vec![], Duration::ZERO).await;
+        let response = response(archive_limit() + 1, vec![], None).await;
         receive_archive(response, &dir.join("backup.zip"), &dir, |_, _, _| {})
             .await
             .expect_err("size cap");

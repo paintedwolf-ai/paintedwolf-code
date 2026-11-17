@@ -636,14 +636,22 @@ fn an_intentional_stop_is_not_answered_as_a_crash() {
     launch_fixture(&state, "exec sleep 30").expect("engine");
 
     stop_sidecar(&state);
-    std::thread::sleep(Duration::from_millis(100));
-
     assert_eq!(state.engine_state(), supervisor::EngineState::Idle);
-    assert_eq!(relaunches.load(Ordering::Acquire), 0);
-    assert!(
-        !published.lock().unwrap().iter().any(|engine| matches!(engine, supervisor::EngineState::Restarting { .. })),
-        "an engine stopped on request was reported as crashed"
-    );
+
+    // The supervisor answers exits in launch order, so once a later engine's
+    // crash is answered the stopped engine's exit has been handled too.
+    launch_fixture(&state, "exec sleep 30").expect("second engine");
+    kill_engine(&state);
+    wait_until("the second engine's crash to be answered", || relaunches.load(Ordering::Acquire) > 0);
+    assert_eq!(relaunches.load(Ordering::Acquire), 1, "the stopped engine was relaunched too");
+    let restarts = published
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|engine| matches!(engine, supervisor::EngineState::Restarting { .. }))
+        .count();
+    assert_eq!(restarts, 1, "an engine stopped on request was reported as crashed");
+    stop_sidecar(&state);
 }
 
 #[cfg(unix)]
