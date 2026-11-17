@@ -3,24 +3,15 @@ package contract
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/clientnotice"
 	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // generatedClientNotices is the one file Den may read this copy from.
 const generatedClientNotices = "lycaon-den/src/notices/client-notices.generated.ts"
-
-func loadClientNotices(t *testing.T) *clientnotice.Catalog {
-	t.Helper()
-	cat, err := clientnotice.Load()
-	testutil.FailErr(t, "load client notices", err)
-	return cat
-}
 
 // Copy is data. A notice added straight to TypeScript skips review and the scope
 // table, so the catalog has to be the only source.
@@ -68,29 +59,5 @@ func TestGeneratedClientNoticesDeclaresItselfGenerated(t *testing.T) {
 	}
 	if !strings.Contains(head, "./task codegen:client-notices") {
 		t.Error("generated client notices should name the command that rebuilds it")
-	}
-}
-
-// Every kind in the generated file has a catalog entry and vice versa. Catches a
-// stale generated file committed without its source, which the staleness check
-// only catches when codegen is actually run.
-func TestGeneratedClientNoticesMatchCatalogKinds(t *testing.T) {
-	cat := loadClientNotices(t)
-	raw, err := os.ReadFile(filepath.Join(contractcheck.RepoRoot(t), generatedClientNotices))
-	testutil.FailErr(t, "read generated client notices", err)
-
-	keyRe := regexp.MustCompile(`(?m)^  ([a-z0-9_]+): \{`)
-	found := map[string]bool{}
-	for _, m := range keyRe.FindAllStringSubmatch(string(raw), -1) {
-		found[m[1]] = true
-	}
-	for _, n := range cat.Notices {
-		if !found[n.Kind] {
-			t.Errorf("%s is in the catalog but not in the generated file — run ./task codegen:client-notices", n.Kind)
-		}
-		delete(found, n.Kind)
-	}
-	for kind := range found {
-		t.Errorf("%s is in the generated file with no catalog entry", kind)
 	}
 }

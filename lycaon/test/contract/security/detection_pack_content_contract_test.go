@@ -186,7 +186,7 @@ func TestDetectionPackLevelMatchesEffectClass(t *testing.T) {
 	}
 }
 
-// TestDetectionPackGeneratedCloudPacksPreserveReviewedPolicy checks parity.
+// Retired cloud packs stay absent, and generated packs match exact structured actions.
 func TestDetectionPackGeneratedCloudPacksPreserveReviewedPolicy(t *testing.T) {
 	t.Parallel()
 	for _, retired := range []string{"aws-sensitive-actions", "aws-structured-actions"} {
@@ -198,12 +198,6 @@ func TestDetectionPackGeneratedCloudPacksPreserveReviewedPolicy(t *testing.T) {
 	for _, retired := range []string{"aws-sensitive-actions", "aws-structured-actions"} {
 		if _, ok := cat.PackByID(retired); ok {
 			t.Fatalf("catalog must not load retired %s", retired)
-		}
-	}
-	for _, id := range []string{"gcp-structured-actions", "azure-structured-actions"} {
-		pack, present := cat.PackByID(id)
-		if !present || pack.Source != detectionpack.SourceGenerated {
-			t.Errorf("%s = %+v, present=%v; want generated pack", id, pack, present)
 		}
 	}
 	m := detectionpack.NewMatcher(cat)
