@@ -104,6 +104,7 @@ func TestLandWorktreeCountsExactSourceAndIsIdempotent(t *testing.T) {
 // Each state that blocks a land refuses with its reason before anything merges,
 // and the base keeps its branch tip.
 func TestLandWorktreeRefusesEachBlockedState(t *testing.T) {
+	t.Parallel()
 	run := func(t *testing.T, dir string, args ...string) string {
 		t.Helper()
 		out, code, err := gitexec.Run(t.Context(), dir, args, hermeticOpts(0))

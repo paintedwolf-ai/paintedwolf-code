@@ -20,6 +20,7 @@ const releasedCorpus = "../../../testdata/upgrade-corpus"
 // invocation recorder that serves the session API after the store upgrades to
 // the current schema. TestListSessionInvocations covers the route itself.
 func TestReleasedInvocationReceiptsRenderAfterUpgrade(t *testing.T) {
+	t.Parallel()
 	entries, err := os.ReadDir(releasedCorpus)
 	testutil.FailErr(t, "list released corpus", err)
 	versions := 0
