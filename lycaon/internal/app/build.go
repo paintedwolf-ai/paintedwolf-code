@@ -79,7 +79,7 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 	resources := newRuntimeResources()
 	if cfg.TestChangeDebounce > 0 {
 		restore := repochange.UseDebounce(ctx, cfg.TestChangeDebounce)
-		resources.Track("change-debounce", 5, func(context.Context) error { restore(); return nil })
+		resources.Track("change-debounce", 95, func(context.Context) error { restore(); return nil })
 	}
 	b := &serveBuilder{startup: startupBootstrap{ctx: ctx, cfg: cfg, resources: resources, recovery: bootrecovery.New()},
 		storage: persistence.Runtime{}}
