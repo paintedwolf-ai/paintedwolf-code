@@ -21,7 +21,7 @@ func assertStructuredRejectCode(t *testing.T, err error, code string) {
 }
 
 // Summarize with a task but no material is refused by the served executor
-// with its typed code.
+// with a typed operand refusal before any work starts.
 func TestNativeSummarizeNoInputStructuredRejectE2E(t *testing.T) {
 	program := toolfixture.NewProgramFixture(t)
 	_, err := program.InvokeTool(t, "summarize", map[string]any{"task": "explain"}, tools.ToolContext{
@@ -29,5 +29,5 @@ func TestNativeSummarizeNoInputStructuredRejectE2E(t *testing.T) {
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
-	assertStructuredRejectCode(t, err, "SUMMARIZE_NO_INPUT")
+	assertStructuredRejectCode(t, err, "COMMAND_OPERAND_INVALID")
 }
