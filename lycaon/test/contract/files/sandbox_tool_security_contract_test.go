@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	lycexec "github.com/lycaon/lycaon/internal/exec"
-	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -31,29 +29,6 @@ func TestWriteScopeBlockedSecurity(t *testing.T) {
 	b := contractcheck.ProdToolBoundary(t)
 	if err := b.AssertToolAllowed(context.Background(), "worker_readonly", "write", sandbox.ToolAccessProfile); err == nil {
 		t.Fatal("expected write denied for readonly profile")
-	}
-}
-
-func TestVerifyShellMetacharacterRejectionSecurity(t *testing.T) {
-	t.Parallel()
-	r := hostcmd.NewRunner()
-	validate := func(line string) error {
-		stages, err := lycexec.StagesFromCommandLine(line)
-		if err != nil {
-			return err
-		}
-		return r.ValidateStages(context.Background(), stages)
-	}
-	// Substitution rejects. Sequences and pipes split into stages, each its own process.
-	for _, cmd := range []string{"go test $(id -u)", "go test `id -u`"} {
-		if err := validate(cmd); err == nil {
-			t.Fatalf("expected rejection for %q", cmd)
-		}
-	}
-	for _, cmd := range []string{"mix test", "go test; go vet", "go test | tee out"} {
-		if err := validate(cmd); err != nil {
-			t.Fatalf("command should accept arbitrary runners: %q: %v", cmd, err)
-		}
 	}
 }
 

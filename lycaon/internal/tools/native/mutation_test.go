@@ -69,6 +69,11 @@ func TestChmodToolRejects777(t *testing.T) {
 	if !errors.As(err, &reject) || reject.Code != "CHMOD_MODE_DENIED" {
 		t.Fatalf("err = %v want CHMOD_MODE_DENIED", err)
 	}
+	info, err := os.Stat(filepath.Join(tmpDir, "a.txt"))
+	testutil.FailErr(t, "stat refused file", err)
+	if info.Mode().Perm() != 0o644 {
+		t.Fatalf("refused chmod changed mode to %v", info.Mode().Perm())
+	}
 }
 
 func TestChmodToolRejectsSetuidOctal(t *testing.T) {
@@ -283,6 +288,11 @@ func TestDeleteToolRejectsGitPath(t *testing.T) {
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" || reject.Data["class"] != "metadata" {
 		t.Fatalf("err = %v want GIT_INTERNALS_WRITE_DENIED for repository metadata", err)
+	}
+	head, err := os.ReadFile(filepath.Join(tmpDir, ".git", "HEAD"))
+	testutil.FailErr(t, "read refused HEAD", err)
+	if string(head) != "ref: refs/heads/main\n" {
+		t.Fatalf("refused delete changed HEAD to %q", head)
 	}
 }
 

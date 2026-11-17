@@ -12,6 +12,8 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
+const stockPlatformPrefix = "painted-wolf/platform:"
+
 func TestEveryStockCommandIsReachable(t *testing.T) {
 	t.Parallel()
 	set := stockContributionSet(t)
@@ -25,18 +27,23 @@ func TestEveryStockCommandIsReachable(t *testing.T) {
 		placed[menu.Command] = true
 	}
 
+	checked := 0
 	for _, command := range set.Commands() {
-		if !strings.HasPrefix(command.ID, "painted-wolf/platform:") {
+		if !strings.HasPrefix(command.ID, stockPlatformPrefix) {
 			continue
 		}
+		checked++
 		if command.InPalette() || bound[command.ID] || placed[command.ID] || command.HostInvoked {
 			continue
 		}
 		t.Errorf("stock command %s is unreachable", command.ID)
 	}
+	if checked == 0 {
+		t.Fatalf("no stock commands under %s", stockPlatformPrefix)
+	}
 }
 
-func stockContributionSet(t *testing.T) *contribution.Set {
+func stockCatalogView(t *testing.T) *catalogview.View {
 	t.Helper()
 	stock, err := extpacks.DiscoverStockContent()
 	contractcheck.FailErr(t, "discover stock content", err)
@@ -47,7 +54,12 @@ func stockContributionSet(t *testing.T) *contribution.Set {
 	contractcheck.FailErr(t, "stock boot", eff.BootError())
 	view, err := catalogview.Build(t.Context(), filepath.Join(contractcheck.RepoRoot(t), "lycaon"), eff)
 	contractcheck.FailErr(t, "build stock view", err)
-	return view.Contributions
+	return view
+}
+
+func stockContributionSet(t *testing.T) *contribution.Set {
+	t.Helper()
+	return stockCatalogView(t).Contributions
 }
 
 // A keybinding declares its own stratum, and the dispatcher ranks strata to
@@ -61,7 +73,11 @@ func TestStockKeybindingScopesMatchTheirCommands(t *testing.T) {
 	for _, command := range set.Commands() {
 		scopes[command.ID] = command.Scope
 	}
-	for _, keybinding := range set.Keybindings() {
+	keybindings := set.Keybindings()
+	if len(keybindings) == 0 {
+		t.Fatal("no stock keybindings compiled")
+	}
+	for _, keybinding := range keybindings {
 		want, ok := scopes[keybinding.Command]
 		if !ok {
 			t.Errorf("keybinding %s names no compiled command", keybinding.ID)
@@ -83,14 +99,19 @@ func TestStockKeybindingsCoverEveryPlatform(t *testing.T) {
 	t.Parallel()
 	platforms := []string{"macos", "windows", "linux"}
 
+	checked := 0
 	for _, keybinding := range stockContributionSet(t).Keybindings() {
-		if !strings.HasPrefix(keybinding.ID, "painted-wolf/platform:") {
+		if !strings.HasPrefix(keybinding.ID, stockPlatformPrefix) {
 			continue
 		}
+		checked++
 		for _, platform := range platforms {
 			if len(keybinding.Bindings[platform]) == 0 && !slices.Contains(keybinding.SystemMenu, platform) {
 				t.Errorf("keybinding %s declares no %s chord", keybinding.ID, platform)
 			}
 		}
+	}
+	if checked == 0 {
+		t.Fatalf("no stock keybindings under %s", stockPlatformPrefix)
 	}
 }

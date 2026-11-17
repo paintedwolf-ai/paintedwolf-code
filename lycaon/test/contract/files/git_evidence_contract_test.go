@@ -13,10 +13,12 @@ func TestEveryNativeGitOperationProducesCitableOutcomeEvidence(t *testing.T) {
 	contractcheck.FailErr(t, "load native manifest", err)
 	binding, err := evidence.LoadBinding()
 	contractcheck.FailErr(t, "load evidence binding", err)
+	checked := 0
 	for tool, owner := range manifest.Owner {
 		if owner != "git" {
 			continue
 		}
+		checked++
 		kind := binding.ToolKind(tool)
 		if kind == "" || binding.KindShape(kind) != evidence.ShapeCommand {
 			t.Fatalf("%s has no citable Git outcome receipt", tool)
@@ -24,5 +26,8 @@ func TestEveryNativeGitOperationProducesCitableOutcomeEvidence(t *testing.T) {
 		if manifest.Lifecycle[tool] == nativemanifest.LifecycleEffectAttempt && binding.IsSurveyKind(kind) {
 			t.Fatalf("%s effect is represented only as a survey", tool)
 		}
+	}
+	if checked == 0 {
+		t.Fatal("the native manifest assigns no operation to git")
 	}
 }
