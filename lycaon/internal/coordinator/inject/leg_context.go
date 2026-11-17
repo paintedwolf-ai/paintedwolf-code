@@ -22,6 +22,11 @@ type WorkerLegContext struct {
 	ReservedPaths      []ReservedPath
 	AgentsMDMessage    api.Message
 	LayoutTopLevel     []string
+	// ReviewHandle names the sealed result a reviewer reads; ReviewWorker
+	// the worker that delivered it.
+	ReviewHandle string
+	ReviewWorker string
+	ViewKind     string
 }
 
 // SiblingNote is one cross-cutting finding from another worker, pushed into a
@@ -36,8 +41,9 @@ type SiblingNote struct {
 
 // ReservedPath is one path held by a sibling worker via handoff_reserve.
 type ReservedPath struct {
-	Path     string
-	JobID    string
+	Path string
+	// Worker names the sibling holding the path.
+	Worker   string
 	LegLabel string
 }
 

@@ -2,7 +2,7 @@
 
 **Entry check:** you can name at least two approaches that differ in structure, not just in detail, and you cannot pick between them from what you already know. If one option is clearly right, build it — a comparison you already know the answer to is wasted work.
 
-The dispatch steps below are coordinator-only: a worker leg applies the matching comparison guidance within its own assignment and reports dispatch needs to the parent.
+The dispatch steps below are coordinator-only: a worker applies the matching comparison guidance within its own assignment and reports dispatch needs to the parent.
 
 ## Workflow
 

@@ -10,8 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
-	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
-	"strings"
 )
 
 func TestWriteGitInternalsDenied(t *testing.T) {
@@ -77,7 +75,7 @@ func TestWriteGitIndexRequiresNativeGitRoute(t *testing.T) {
 	}
 }
 
-func TestWriteDeniesNestedSubmoduleAndGitMetadataWhileReadAllowsInspection(t *testing.T) {
+func TestWriteDeniesNestedSubmoduleAndGitMetadata(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FailErr(t, "mkdir .git/refs/heads", os.MkdirAll(filepath.Join(dir, ".git", "refs", "heads"), 0o755))
 	testutil.FailErr(t, "mkdir sub/.git", os.MkdirAll(filepath.Join(dir, "sub", ".git"), 0o755))
@@ -95,12 +93,5 @@ func TestWriteDeniesNestedSubmoduleAndGitMetadataWhileReadAllowsInspection(t *te
 		if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {
 			t.Fatalf("write %s: err = %v, want GIT_INTERNALS_WRITE_DENIED", rel, err)
 		}
-	}
-
-	readTool := &surveytools.ReadTool{Boundary: boundary}
-	out, err := readTool.Run(context.Background(), map[string]any{"path": ".git/HEAD"}, tctx)
-	testutil.FailErr(t, "read .git/HEAD", err)
-	if !strings.Contains(out, "refs/heads/main") {
-		t.Fatalf("expected .git/HEAD content in read output, got: %s", out)
 	}
 }

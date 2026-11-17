@@ -9,11 +9,11 @@ effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 message: Worker dispatch blocked — host obligations are pending
-what: Tried to dispatch a worker while workflow phase `{{ paintedwolf.phase }}` has unsettled host obligations ({{ paintedwolf.phase_obligation_kinds }}).
-cause: The obligation ledger still has pending work.
-why: Later-phase work requires this evidence.
-fix: Yield; the host advances when obligations settle.
-instead: Dispatch workers after the execution phase begins.
+what: Tried to start a worker while workflow phase `{{ paintedwolf.phase }}` has unsettled host obligations ({{ paintedwolf.phase_obligation_kinds }}).
+cause: The obligation ledger still has pending host work for this phase.
+why: Subsequent worker assignments depend on the settled phase obligation evidence.
+fix: Yield; the host advances once phase obligations settle.
+instead: Instruct waiting workers or start new workers after the phase obligations settle.
 x-paintedwolf-scenarios:
   - id: task_during_phase_obligation
     vars:

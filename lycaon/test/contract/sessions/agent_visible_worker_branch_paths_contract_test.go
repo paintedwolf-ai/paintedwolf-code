@@ -1,15 +1,11 @@
 package contract
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
-	"github.com/lycaon/lycaon/pkg/api"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 const leakedBranch = "/Users/me/.config/paintedwolf-dev/worker-branches/5d960b8f0a1ff696/582d661b-6b3c-4018-a646-0e1468aeb7e6"
@@ -61,26 +57,6 @@ func TestAgentVisibleWorkerCompletionEnvelope_omitsHostLedger(t *testing.T) {
 		if strings.Contains(out, banned) {
 			t.Fatalf("agent wire leaked %q: %s", banned, out)
 		}
-	}
-}
-
-func TestAgentVisibleWorkerBranchPaths_packBoardRoster(t *testing.T) {
-	t.Parallel()
-	roster := board.BuildWorkerRoster([]api.WorkerTask{{
-		ID:            "582d661b-6b3c-4018-a646-0e1468aeb7e6",
-		AgentType:     "implementer",
-		Status:        api.WorkerStatusComplete,
-		MergeStatus:   api.WorkerMergeStatusPending,
-		WorkspaceRoot: leakedBranch,
-	}}, api.BoardDetailLevelCompact)
-	raw, err := json.Marshal(roster)
-	contractcheck.FailErr(t, "marshal roster", err)
-	body := string(raw)
-	if strings.Contains(body, "workspace_root") {
-		t.Fatalf("roster JSON must not include workspace_root: %s", body)
-	}
-	if strings.Contains(body, "worker-branches") {
-		t.Fatalf("roster JSON leaked a worker-branch path: %s", body)
 	}
 }
 

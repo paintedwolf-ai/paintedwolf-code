@@ -2,7 +2,7 @@
 
 **Entry check:** the same acceptance criteria apply to every cell, and the cells differ only by configuration. If a cell needs different criteria, it is separate work, not a matrix row.
 
-The dispatch steps below are coordinator-only: a worker leg applies the matching cell guidance within its own assignment and reports dispatch needs to the parent.
+The dispatch steps below are coordinator-only: a worker applies the matching cell guidance within its own assignment and reports dispatch needs to the parent.
 
 ## Workflow
 
@@ -15,10 +15,10 @@ The dispatch steps below are coordinator-only: a worker leg applies the matching
    | node 20 · linux | `nvm use 20` | `npm test` | product failure | 3 failed, `date-fmt.test.ts` | — |
    | node 22 · windows | — | — | untested | — | no runner |
 
-3. Group cells into legs when setup dominates execution or one worker can run several without losing isolation. One worker per cell is a choice, not the default.
-4. Pick each leg's `agent_type` from the spawn roster in your prompt, matching the roster entry's capability to what the leg does: running builds and tests, editing product source, or writing configuration-specific tests. A leg that only runs commands must not get a write scope.
-5. Repeat the exact configuration in `brief.known_facts` and shared acceptance criteria in `brief.done_when`. Recommend the same platform or build skill when it applies to every leg.
-6. Keep outputs isolated. Do not dispatch concurrent write legs to shared paths unless they are intentionally producing alternatives for later selection.
+3. Group cells across workers when setup dominates execution or one worker can run several without losing isolation. One worker per cell is a choice, not the default.
+4. Pick each worker's `agent_type` from the spawn roster in your prompt, matching the roster entry's capability to what the worker does: running builds and tests, editing product source, or writing configuration-specific tests. A worker that only runs commands must not get a write scope.
+5. Repeat the exact configuration in `brief.known_facts` and shared acceptance criteria in `brief.done_when`. Recommend the same platform or build skill when it applies to every worker.
+6. Keep outputs isolated. Do not dispatch concurrent write workers to shared paths unless they are intentionally producing alternatives for later selection.
 7. Wait for every declared group and assemble the result matrix. Classify each cell as pass, product failure, environment failure, unsupported, or untested — five outcomes, never collapsed into pass/fail.
 8. Integrate only source changes that generalize under the acceptance contract, then rerun the smallest representative combined matrix that would catch integration drift.
 

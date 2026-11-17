@@ -135,9 +135,9 @@
       },
       "notes": "No paths or - reads stdin. -b overrides -n. -A combines -vET. Source-range maps survive only reversible numbering and literal windows.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "implementation": "lycaon/internal/tools/native/literal/cat.go",
         "tests": [
-          "lycaon/internal/tools/native/survey/read_handler_test.go"
+          "lycaon/internal/tools/native/literal/forms_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -269,9 +269,9 @@
       },
       "notes": "Default 10 LF-delimited lines. -COUNT is legacy line shorthand. -c accepts nonnegative bytes; last unterminated line counts as a displayed line. Multiple files label headers unless quiet.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "implementation": "lycaon/internal/tools/native/literal/window.go",
         "tests": [
-          "lycaon/internal/tools/native/survey/read_handler_test.go"
+          "lycaon/internal/tools/native/literal/forms_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -400,9 +400,9 @@
       },
       "notes": "Default last 10 lines. +N is one-based start; legacy -COUNT accepted. Follow modes -f/-F unsupported; use bounded jobs/output APIs.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "implementation": "lycaon/internal/tools/native/literal/window.go",
         "tests": [
-          "lycaon/internal/tools/native/survey/read_handler_test.go"
+          "lycaon/internal/tools/native/literal/tail_stream_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -530,9 +530,9 @@
       },
       "notes": "Default -bt, start1,width6,tab separator. -ba numbers all lines; -bt nonempty lines; numbering reversible with source mapping.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "implementation": "lycaon/internal/tools/native/literal/cat.go",
         "tests": [
-          "lycaon/internal/tools/native/survey/read_handler_test.go"
+          "lycaon/internal/tools/native/literal/forms_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -634,9 +634,9 @@
       },
       "notes": "Use versioned signature corpus in signatures.json, not only HTTP sniffing; unknown binary is application/octet-stream/data. -i emits MIME; default prefixes path unless -b.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "implementation": "lycaon/internal/tools/native/literal/file.go",
         "tests": [
-          "lycaon/internal/tools/native/survey/read_handler_test.go"
+          "lycaon/internal/tools/native/literal/forms_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -760,9 +760,9 @@
       },
       "notes": "Default16 bytes/row, group2; -g 1|2|4|8; offsets nonnegative or negative-from-end for seekable captured input only. -p lowercase hex,30 bytes/row. No reverse write mode.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "implementation": "lycaon/internal/tools/native/literal/hex.go",
         "tests": [
-          "lycaon/internal/tools/native/survey/read_handler_test.go"
+          "lycaon/internal/tools/native/literal/forms_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -876,9 +876,9 @@
       },
       "notes": "Canonical 16-byte rows, lowercase hex, printable ASCII gutter; final offset line; repeated identical rows use *; only -C style.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "implementation": "lycaon/internal/tools/native/literal/hex.go",
         "tests": [
-          "lycaon/internal/tools/native/survey/read_handler_test.go"
+          "lycaon/internal/tools/native/literal/od_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -980,9 +980,9 @@
       },
       "notes": "SHA-1 default; lowercase hex, two spaces, exact path, LF. stdin label -. Check manifests read as data with authorized path binding; mismatch status1, malformed manifest status2. Digests cover exactly captured source representation, never disk digest for accepted editor text.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "implementation": "lycaon/internal/tools/native/literal/checksum.go",
         "tests": [
-          "lycaon/internal/tools/native/survey/read_handler_test.go"
+          "lycaon/internal/tools/native/literal/forms_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -1071,9 +1071,9 @@
       },
       "notes": "SHA-256 default; lowercase hex, two spaces, exact path, LF. stdin label -. Check manifests read as data with authorized path binding; mismatch status1, malformed manifest status2. Digests cover exactly captured source representation, never disk digest for accepted editor text.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "implementation": "lycaon/internal/tools/native/literal/checksum.go",
         "tests": [
-          "lycaon/internal/tools/native/survey/read_handler_test.go"
+          "lycaon/internal/tools/native/literal/forms_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -1161,9 +1161,9 @@
       },
       "notes": "SHA-1 default; lowercase hex, two spaces, exact path, LF. stdin label -. Check manifests read as data with authorized path binding; mismatch status1, malformed manifest status2. Digests cover exactly captured source representation, never disk digest for accepted editor text.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "implementation": "lycaon/internal/tools/native/literal/checksum.go",
         "tests": [
-          "lycaon/internal/tools/native/survey/read_handler_test.go"
+          "lycaon/internal/tools/native/literal/forms_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -1251,9 +1251,9 @@
       },
       "notes": "SHA-512 default; lowercase hex, two spaces, exact path, LF. stdin label -. Check manifests read as data with authorized path binding; mismatch status1, malformed manifest status2. Digests cover exactly captured source representation, never disk digest for accepted editor text.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "implementation": "lycaon/internal/tools/native/literal/checksum.go",
         "tests": [
-          "lycaon/internal/tools/native/survey/read_handler_test.go"
+          "lycaon/internal/tools/native/literal/forms_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -1341,9 +1341,9 @@
       },
       "notes": "MD5 default; lowercase hex, two spaces, exact path, LF. stdin label -. Check manifests read as data with authorized path binding; mismatch status1, malformed manifest status2. Digests cover exactly captured source representation, never disk digest for accepted editor text.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "implementation": "lycaon/internal/tools/native/literal/checksum.go",
         "tests": [
-          "lycaon/internal/tools/native/survey/read_handler_test.go"
+          "lycaon/internal/tools/native/literal/forms_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -1457,9 +1457,9 @@
       },
       "notes": "Encode default76 columns and final LF; width0 disables wrapping and final LF. -w GNU and -b BSD same width. Decode ignores ASCII whitespace, rejects malformed padding/alphabet; complete binary bytes, no text conversion.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/survey/read.go",
+        "implementation": "lycaon/internal/tools/native/literal/base64.go",
         "tests": [
-          "lycaon/internal/tools/native/survey/read_handler_test.go"
+          "lycaon/internal/tools/native/literal/forms_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"

@@ -18,24 +18,18 @@ func noCriticalFindings(deps CoreDeps, ec EvalContext) (bool, error) {
 	if deps.SecurityScannersEnabled != nil && !deps.SecurityScannersEnabled() {
 		return true, nil
 	}
-	if deps.ScanLedger == nil {
+	sessionID := strings.TrimSpace(ec.SessionID)
+	if deps.ScanLedger == nil || sessionID == "" {
 		return false, nil
 	}
-	dep, depErr := loadDelegation(deps, ec)
-	if depErr != nil {
-		return false, depErr
+	scan, err := deps.ScanLedger.LatestRequiredScanForSession(ec.Ctx, sessionID)
+	if err != nil || scan == nil {
+		return scan == nil && err == nil, err
 	}
-	if dep != nil {
-		scan, err := deps.ScanLedger.LatestRequiredScanForDelegation(ec.Ctx, dep.ID)
-		if err != nil || scan == nil {
-			return scan == nil, err
-		}
-		if scan.Status != api.CodeScanStatusComplete {
-			return false, nil
-		}
-		return !scanHasFindingAtOrAboveLevel(scan, minLevelFromEvalContext(ec)), nil
+	if scan.Status != api.CodeScanStatusComplete {
+		return false, nil
 	}
-	return true, nil
+	return !scanHasFindingAtOrAboveLevel(scan, minLevelFromEvalContext(ec)), nil
 }
 
 func minLevelFromEvalContext(ec EvalContext) api.FindingLevel {
@@ -72,18 +66,15 @@ func scanHasFindingAtOrAboveLevel(scan *api.CodeScan, floor api.FindingLevel) bo
 }
 
 func latestProactiveCompleteScan(deps CoreDeps, ec EvalContext) (*api.CodeScan, string, error) {
-	if deps.ScanLedger == nil {
+	sessionID := strings.TrimSpace(ec.SessionID)
+	if deps.ScanLedger == nil || sessionID == "" {
 		return nil, "", nil
-	}
-	dep, err := loadDelegation(deps, ec)
-	if err != nil || dep == nil {
-		return nil, "", err
 	}
 	snapshotID, err := currentScanIdentity(deps, ec)
 	if err != nil {
 		return nil, "", err
 	}
-	scan, err := deps.ScanLedger.LatestCompleteForDelegationSnapshot(ec.Ctx, dep.ID, snapshotID, proactiveCategories(deps))
+	scan, err := deps.ScanLedger.LatestCompleteForSessionSnapshot(ec.Ctx, sessionID, snapshotID, proactiveCategories(deps))
 	if err != nil {
 		return nil, "", err
 	}

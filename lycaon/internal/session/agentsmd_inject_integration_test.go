@@ -11,13 +11,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -181,26 +179,6 @@ func TestManagerEffectiveLimitsUsesProjectOverlay(t *testing.T) {
 	limits := mgr.Limits.Effective(t.Context(), sess)
 	if limits.MaxIterations != 2 {
 		t.Fatalf("effective max_iterations = %d want 2 from project overlay", limits.MaxIterations)
-	}
-}
-
-func TestManagerEffectiveLimitsUsesHostWorkerMaxToolLoops(t *testing.T) {
-	mgr := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-
-	child := &api.Session{WorkspacePath: t.TempDir(), AgentType: orchestration.ProfilePathExplorer, ParentSessionID: "parent-1"}
-	limits := mgr.Limits.Effective(t.Context(), child)
-	if limits.MaxIterations != spawn.DefaultWorkerMaxToolLoops {
-		t.Fatalf("max_iterations = %d want default %d", limits.MaxIterations, spawn.DefaultWorkerMaxToolLoops)
-	}
-
-	child.MaxToolLoops = 5
-	if lim := mgr.Limits.Effective(t.Context(), child); lim.MaxIterations != 5 {
-		t.Fatalf("override max_iterations = %d want 5", lim.MaxIterations)
-	}
-
-	coord := &api.Session{WorkspacePath: child.WorkspacePath, AgentType: orchestration.ProfileCoordinator}
-	if lim := mgr.Limits.Effective(t.Context(), coord); lim.MaxIterations != settings.DefaultSessionLimits().MaxIterations {
-		t.Fatalf("coordinator max_iterations = %d want session default", lim.MaxIterations)
 	}
 }
 

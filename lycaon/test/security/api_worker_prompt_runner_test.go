@@ -7,7 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -35,34 +35,34 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 	mgr := h.Sessions.Manager
 	ctx := context.Background()
 	projectDir := t.TempDir()
-	testdbseed.InsertProjectRoot(t, h.DB, testdbseed.DefaultProjectID, projectDir)
+	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, projectDir)
+	testutil.FailErr(t, "CreateHarnessSession failed", err)
+	parentID := parent.ID
+	h.SeedProgress(t, ctx, parentID)
 
-	r, err := h.Delegations.Manager.Create(ctx, api.CreateDelegationRequest{
-		ProjectID: testdbseed.DefaultProjectID,
-		Task:      "implement feature",
-		Strategy:  api.HuntStrategyFileBased,
-	})
-	testutil.FailErr(t, "h.Delegations.Manager.Create failed", err)
-	dep, err := h.Delegations.Manager.GetStatus(ctx, r.ID)
-	testutil.FailErr(t, "h.Delegations.Manager.GetStatus failed", err)
-	parentID := dep.CoordinatorSessionID
-	legID := r.Legs[0].ID
-	dispatched, err := h.Delegations.Manager.DispatchLeg(ctx, r.ID, legID, "")
-	if err != nil {
-		testutil.FailErr(t, "h.Delegations.Manager.DispatchLeg failed", err)
-	}
+	_, err = h.ToolRegistry.Run(
+		ctx,
+		"task",
+		wiring.TaskToolArgs(orchestration.ProfileImplementer, "implement feature", "feature.go"),
+		h.CoordinatorToolContext(t, ctx, parent, projectDir),
+	)
+	testutil.FailErr(t, "task tool failed", err)
 
 	var approvalErr error
 	var approvalsResolved int
 	var childSessionID string
+	var jobID string
 	resolver, ok := h.Sessions.Checkpoints.(*hitl.Checkpoints)
 	if !ok {
 		t.Fatalf("checkpoint manager = %T, want approval option resolver", h.Sessions.Checkpoints)
 	}
 	testutil.WaitFor(t, "the worker summary is appended", func() bool {
-		if task, ok := h.Delegations.Queue.Get(dispatched.WorkerID); ok {
-			childSessionID = task.ChildSessionID
+		jobs, listErr := h.Workers.Queue.ListBySession(ctx, parent.ProjectID, parentID)
+		if listErr != nil || len(jobs) == 0 {
+			return false
 		}
+		jobID = jobs[0].ID
+		childSessionID = jobs[0].ChildSessionID
 		if childSessionID == "" {
 			return false
 		}
@@ -86,7 +86,7 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 			return false
 		}
 		for _, msg := range msgs {
-			if msg.Role != api.MessageRoleTool || msg.WorkerSummary == nil || msg.WorkerSummary.LegID != legID {
+			if msg.Role != api.MessageRoleTool || msg.WorkerSummary == nil || msg.WorkerSummary.WorkerID != jobID {
 				continue
 			}
 			if strings.Contains(msg.WorkerSummary.Envelope, `<task`) {
@@ -99,15 +99,15 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 	testutil.FailErr(t, "mgr.GetMessages failed", err)
 	var foundWorkerCard bool
 	for _, msg := range msgs {
-		if msg.Role != api.MessageRoleTool || msg.WorkerSummary == nil || msg.WorkerSummary.LegID != legID {
+		if msg.Role != api.MessageRoleTool || msg.WorkerSummary == nil || msg.WorkerSummary.WorkerID != jobID {
 			continue
 		}
 		foundWorkerCard = true
 		if !strings.Contains(msg.WorkerSummary.Envelope, `<task`) {
-			t.Fatalf("worker card for leg %s missing completion envelope: %q", legID, msg.WorkerSummary.Envelope)
+			t.Fatalf("worker card for job %s missing completion envelope: %q", jobID, msg.WorkerSummary.Envelope)
 		}
 	}
 	if !foundWorkerCard {
-		t.Fatalf("parent messages missing worker card for leg %s: msgs=%+v", legID, msgs)
+		t.Fatalf("parent messages missing worker card for job %s: msgs=%+v", jobID, msgs)
 	}
 }

@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
@@ -385,7 +386,7 @@ func restoreTargetFileMetadata(root *targetRoot, rel string, mode os.FileMode, x
 			return err
 		}
 	}
-	return syncFile(file)
+	return fssync.File(file)
 }
 
 func withWritableParent(root *targetRoot, rel string, fn func() error) error {
@@ -418,7 +419,7 @@ func withWritableParent(root *targetRoot, rel string, fn func() error) error {
 		for i := len(restore) - 1; i >= 0; i-- {
 			if f, openErr := root.Open(restore[i].dir); openErr == nil {
 				_ = f.Chmod(restore[i].mode)
-				_ = syncFile(f)
+				_ = fssync.File(f)
 				_ = f.Close()
 			}
 		}

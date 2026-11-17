@@ -130,7 +130,7 @@ func TestBuildPostureAllowsDelegationWithPlanManifestRules(t *testing.T) {
 	h.SeedProgress(t, ctx, sess.ID)
 	acceptPromptHTTP(t, srv, sess.ID, "spawn delegate")
 	testutil.WaitFor(t, "one worker task is pending", func() bool {
-		tasks, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
+		tasks, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(tasks) == 1
 	})
 

@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi, onTestFinished } from 
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { ProjectFilesView } from "./ProjectFilesView.tsx";
 import { createAppStore } from "../../store/app-state.ts";
-import { applyFilesBufferLoad, openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferLoad } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { selectedFileVersion, setSelectedFileVersion } from "../history/files-version-selection.ts";
 import { invokeCommand } from "../../shortcuts/dispatcher.ts";

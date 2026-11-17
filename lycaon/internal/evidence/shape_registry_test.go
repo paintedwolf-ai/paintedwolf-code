@@ -244,7 +244,7 @@ func TestVerificationAndOverlayOutcomesProduceCitableReceipts(t *testing.T) {
 // never a file observation.
 func TestDispatchToolsRecordTaskEvidence(t *testing.T) {
 	t.Parallel()
-	for _, tool := range []string{"task", "delegate_dispatch"} {
+	for _, tool := range []string{"task"} {
 		rec := evidence.BuildEvidenceRecord("", tool, map[string]any{"path": "ignored.go"}, `{"job_id":"w1","status":"enqueued"}`)
 		if rec.Kind != evidence.KindTask || rec.Shape != evidence.ShapeStructuredEvent || rec.Survey || rec.Path != "" {
 			t.Fatalf("%s record = %+v", tool, rec)

@@ -51,7 +51,7 @@ func ContextFromPromptError(err error) map[string]any {
 	var thinking *llm.ThinkingOverrideError
 	if errors.As(err, &thinking) {
 		out := providerModelContext(thinking.ProviderID, thinking.Model)
-		out["reason"] = trimContextString(thinking.Reason)
+		out["reason"] = strings.TrimSpace(thinking.Reason)
 		return out
 	}
 	var proseTurn proseTurnToolCallNotice
@@ -59,17 +59,17 @@ func ContextFromPromptError(err error) map[string]any {
 		tools, reason := proseTurn.NoticeProseTurnToolCalls()
 		out := map[string]any{}
 		if len(tools) > 0 {
-			out["tool"] = trimContextString(tools[0])
-			out["tools"] = trimContextString(strings.Join(tools, ", "))
+			out["tool"] = strings.TrimSpace(tools[0])
+			out["tools"] = strings.TrimSpace(strings.Join(tools, ", "))
 		}
-		if reason = trimContextString(reason); reason != "" {
+		if reason = strings.TrimSpace(reason); reason != "" {
 			out["closeout_reason"] = reason
 		}
 		return out
 	}
 	if e, ok := failure.AsProviderNotConfigured(err); ok && e != nil {
 		out := map[string]any{}
-		if id := trimContextString(e.ProviderID); id != "" {
+		if id := strings.TrimSpace(e.ProviderID); id != "" {
 			out["provider_id"] = id
 		}
 		return out
@@ -82,10 +82,10 @@ func ContextFromPromptError(err error) map[string]any {
 	}
 	if e, ok := failure.AsProviderContextTooSmall(err); ok && e != nil {
 		out := map[string]any{}
-		if id := trimContextString(e.ProviderID); id != "" {
+		if id := strings.TrimSpace(e.ProviderID); id != "" {
 			out["provider_id"] = id
 		}
-		if model := trimContextString(e.Model); model != "" {
+		if model := strings.TrimSpace(e.Model); model != "" {
 			out["model"] = model
 		}
 		if e.PromptTokens > 0 {
@@ -134,7 +134,7 @@ func ContextFromPromptError(err error) map[string]any {
 	}
 	if e, ok := providerretry.AsModelRefused(err); ok && e != nil {
 		out := providerModelContext(e.ProviderID, e.Model)
-		if code := trimContextString(e.Code); code != "" {
+		if code := strings.TrimSpace(e.Code); code != "" {
 			out["code"] = code
 		}
 		return out
@@ -148,13 +148,13 @@ func ContextFromPromptError(err error) map[string]any {
 	}
 	if nr, ok := runstate.IsNotRunnable(err); ok && nr != nil {
 		out := map[string]any{}
-		if reason := trimContextString(nr.Reason); reason != "" {
+		if reason := strings.TrimSpace(nr.Reason); reason != "" {
 			out["reason"] = reason
 		}
-		if status := trimContextString(string(nr.Status)); status != "" {
+		if status := strings.TrimSpace(string(nr.Status)); status != "" {
 			out["status"] = status
 		}
-		if runID := trimContextString(nr.RunID); runID != "" {
+		if runID := strings.TrimSpace(nr.RunID); runID != "" {
 			out["run_id"] = runID
 		}
 		return out
@@ -162,10 +162,10 @@ func ContextFromPromptError(err error) map[string]any {
 	var unavailable *runstate.WorkflowVersionUnavailableError
 	if errors.As(err, &unavailable) && unavailable != nil {
 		out := map[string]any{}
-		if id := trimContextString(unavailable.WorkflowID); id != "" {
+		if id := strings.TrimSpace(unavailable.WorkflowID); id != "" {
 			out["workflow_id"] = id
 		}
-		if version := trimContextString(unavailable.Version); version != "" {
+		if version := strings.TrimSpace(unavailable.Version); version != "" {
 			out["version"] = version
 		}
 		return out
@@ -174,7 +174,7 @@ func ContextFromPromptError(err error) map[string]any {
 	if errors.As(err, &fault) && fault != nil {
 		out := map[string]any{}
 		tool, callRan := fault.NoticeHostFault()
-		if tool = trimContextString(tool); tool != "" {
+		if tool = strings.TrimSpace(tool); tool != "" {
 			out["tool"] = tool
 		}
 		if callRan {
@@ -227,20 +227,16 @@ func SpendCeilingContext(err error) map[string]any {
 	return out
 }
 
-func trimContextString(s string) string {
-	return strings.TrimSpace(s)
-}
-
 func formatUSD(v float64) string {
 	return fmt.Sprintf("%.2f", v)
 }
 
 func providerModelContext(providerID, model string) map[string]any {
 	out := map[string]any{}
-	if id := trimContextString(providerID); id != "" {
+	if id := strings.TrimSpace(providerID); id != "" {
 		out["provider_id"] = id
 	}
-	if m := trimContextString(model); m != "" {
+	if m := strings.TrimSpace(model); m != "" {
 		out["model"] = m
 	}
 	return out
@@ -261,7 +257,7 @@ func outputTruncatedContext(e *failure.ProviderOutputTruncatedError) map[string]
 	out["recovery_attempted"] = e.RecoveryAttempted
 	if e.ToolCallTruncated {
 		out["tool_call_truncated"] = true
-		if tool := trimContextString(e.ToolName); tool != "" {
+		if tool := strings.TrimSpace(e.ToolName); tool != "" {
 			out["tool"] = tool
 		}
 		if e.ToolArgsBytes > 0 {

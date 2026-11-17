@@ -4,7 +4,7 @@ type InlineContent = { kind: "inline"; text: string; redaction?: HostSecretRedac
 /** A whole recorded program, or the executions one host activity selects. */
 export type CommandReceiptScope = { readonly programId: string; readonly activityId?: string };
 /** The host-written receipt of the scopes, in order. */
-export type CommandReceiptContent = { kind: "command_receipts"; scopes: CommandReceiptScope[] };
+type CommandReceiptContent = { kind: "command_receipts"; scopes: CommandReceiptScope[] };
 type Content = CommandReceiptContent | InlineContent | { kind: "retained"; reference: ChatContentReference } | { kind: "process"; handle: string };
 
 export type ChatContentDocument = {

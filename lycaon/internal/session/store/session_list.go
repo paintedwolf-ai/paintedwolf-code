@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"sort"
 	"strings"
 
@@ -289,12 +290,12 @@ func filterMemoryProjectSummaries(s *memoryCore, q SummaryQuery) []api.SessionSu
 }
 
 func summaryCursor(row api.SessionSummary, sortBy api.SessionListSort) SummaryCursor {
-	value := db.FormatTime(row.ActivityAt)
+	value := timelayout.Format(row.ActivityAt)
 	switch sortBy {
 	case api.SessionListSortTitle:
 		value = strings.ToLower(row.Title)
 	case api.SessionListSortCreated:
-		value = db.FormatTime(row.CreatedAt)
+		value = timelayout.Format(row.CreatedAt)
 	case api.SessionListSortPin:
 		if row.PinRank != nil {
 			value = pinRankCursorValue(*row.PinRank)

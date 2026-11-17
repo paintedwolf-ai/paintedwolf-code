@@ -17,19 +17,17 @@
     let
       systems = [ "x86_64-linux" "aarch64-linux" ];
       eachSystem = nixpkgs.lib.genAttrs systems;
-      hasNixOSModule = builtins.pathExists ./packaging/nix/nixos.nix;
-      hasNixOSVM = hasNixOSModule && builtins.pathExists ./packaging/nix/module-vm.nix;
       packagesFor = system: import nixpkgs {
         inherit system;
         overlays = [ rust-overlay.overlays.default ];
       };
     in {
-      nixosModules = nixpkgs.lib.optionalAttrs hasNixOSModule {
+      nixosModules = {
         default = import ./packaging/nix/nixos.nix {
           packageFor = system: self.packages.${system}.default;
         };
       };
-      checks = eachSystem (system: nixpkgs.lib.optionalAttrs hasNixOSModule {
+      checks = eachSystem (system: {
         nixos-module = (packagesFor system).callPackage ./packaging/nix/module-check.nix { inherit nixpkgs; };
       });
       packages = eachSystem (system:
@@ -132,7 +130,7 @@
             cp ${self}/lycaon-den/bun.lock bun.lock
             bun2nix -o "$out"
           '';
-        } // nixpkgs.lib.optionalAttrs hasNixOSVM {
+        } // {
           nixos-gnome-vm = import ./packaging/nix/module-vm.nix {
             inherit nixpkgs system;
             package = self.packages.${system}.default;

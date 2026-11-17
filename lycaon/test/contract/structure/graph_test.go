@@ -45,7 +45,7 @@ func TestBuildGraph(t *testing.T) {
 		"lycaon/config/runtime/scanners/rules/vendor/fixture.go": "not a Go package",
 		"lycaon/internal/db/testdata/fixture.go":                 "not a Go package",
 	}
-	graph, err := buildGraph(fakeTree(files))
+	graph, err := BuildGraph(fakeTree(files))
 	if err != nil {
 		t.Fatalf("build graph: %v", err)
 	}

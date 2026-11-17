@@ -3,7 +3,6 @@ package native
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -14,12 +13,11 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
-	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 )
 
 var implicitTextEncodings = testutil.SelfIdentifyingTextEncodings()
 
-func TestNativeReadAndAppendPreserveSelfIdentifyingEncodings(t *testing.T) {
+func TestNativeAppendPreservesSelfIdentifyingEncodings(t *testing.T) {
 	t.Parallel()
 	for _, encoding := range implicitTextEncodings {
 		t.Run(encoding, func(t *testing.T) {
@@ -32,15 +30,6 @@ func TestNativeReadAndAppendPreserveSelfIdentifyingEncodings(t *testing.T) {
 				t.Fatalf("write fixture: %v", err)
 			}
 			ctx := nativefixture.Context(dir)
-
-			out, err := (&surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{"path": "notes.txt"}, ctx)
-			if err != nil {
-				t.Fatalf("read %s: %v", encoding, err)
-			}
-			var read surveytools.ReadResponse
-			if err := json.Unmarshal([]byte(out), &read); err != nil || read.Content != "     1: alpha\n     2: beta" {
-				t.Fatalf("read output=%q err=%v", out, err)
-			}
 
 			if _, err := (&WriteTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{
 				"path": "notes.txt", "content": "tail\n", "append": true,

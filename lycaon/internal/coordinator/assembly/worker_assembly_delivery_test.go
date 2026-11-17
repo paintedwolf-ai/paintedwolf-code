@@ -45,12 +45,12 @@ func TestWorkerLegInjectRecordsDeliveredSiblingNotes(t *testing.T) {
 	boardEng.SetInjectRenderer(inj)
 
 	deps := AssemblyDeps{
-		Prompts:             pe,
-		Injects:             inj,
-		Limits:              func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-		WorkerContext:       placementWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", Checklist: []string{"step"}}},
-		SiblingNoteDelivery: spy,
-		Board:               boardEng,
+		Prompts:    pe,
+		Injects:    inj,
+		Limits:     func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+		Workers:    Workers{Leg: placementWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", Checklist: []string{"step"}}}},
+		Deliveries: Deliveries{SiblingNotes: spy},
+		Board:      boardEng,
 	}
 	sess := &api.Session{
 		ID: "delivery-worker", ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID,
@@ -93,11 +93,11 @@ func TestWorkerLegInjectRecordsDeliveredSiblingNotes(t *testing.T) {
 	if spy.called {
 		t.Fatal("assembly must not acknowledge delivery before a response")
 	}
-	if err := eng.CommitWorkerContext(context.Background(), sess.ID, "response-1"); err != nil {
+	if err := eng.CommitTurnContext(context.Background(), sess.ID, "response-1"); err != nil {
 		t.Fatalf("commit worker context: %v", err)
 	}
 	if !spy.called {
-		t.Fatal("SiblingNoteDelivery.CommitSiblingNotes was not called for the worker leg")
+		t.Fatal("Deliveries.SiblingNotes.CommitSiblingNotes was not called for the worker leg")
 	}
 	if len(spy.got) != 1 || spy.got[0].Agent != "job-2" || spy.got[0].Ref != "AGENTS.md:1" {
 		t.Fatalf("delivered notes = %+v want the single peer note", spy.got)
@@ -118,12 +118,12 @@ func TestWorkerLegInjectSkipsDeliveryWhenNoNotes(t *testing.T) {
 	boardEng.SetInjectRenderer(inj)
 
 	deps := AssemblyDeps{
-		Prompts:             pe,
-		Injects:             inj,
-		Limits:              func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-		WorkerContext:       placementWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", Checklist: []string{"step"}}},
-		SiblingNoteDelivery: spy,
-		Board:               boardEng,
+		Prompts:    pe,
+		Injects:    inj,
+		Limits:     func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+		Workers:    Workers{Leg: placementWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", Checklist: []string{"step"}}}},
+		Deliveries: Deliveries{SiblingNotes: spy},
+		Board:      boardEng,
 	}
 	sess := &api.Session{
 		ID: "delivery-worker-none", ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID,
@@ -156,7 +156,7 @@ func TestWorkerGuidanceAppearsOnceOnStartAndResume(t *testing.T) {
 		AgentsMDPolicies: func(context.Context, *api.Session, []api.Message) ([]api.Message, error) {
 			return []api.Message{policy}, nil
 		},
-		WorkerContext: placementWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg", AgentsMDMessage: policy}},
+		Workers: Workers{Leg: placementWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg", AgentsMDMessage: policy}}},
 	})
 	sess := &api.Session{ID: "policy-worker", ParentSessionID: "parent", ProjectID: testdbseed.DefaultProjectID, Posture: api.SessionPostureBuild, AgentType: "implementer", WorkspacePath: t.TempDir()}
 	for _, resume := range []bool{false, false, true} {

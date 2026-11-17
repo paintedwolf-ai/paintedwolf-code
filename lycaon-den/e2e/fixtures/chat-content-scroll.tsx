@@ -18,7 +18,7 @@ import { createSignal, onCleanup, Show } from "solid-js";
 import type { ChatContentRow, Message } from "../../src/api/types.ts";
 import type { LycaonClient } from "../../src/api/client.ts";
 import { ActivitySpanCard } from "../../src/components/tool/ActivitySpanCard.tsx";
-import { GenericToolCard } from "../../src/components/tool/GenericToolCard.tsx";
+import { ToolPartCard } from "../../src/components/tool/ToolPartCard.tsx";
 import { toolPartFromCall } from "../../src/chat/tool/tool-part-model.ts";
 import { createTranscriptDisclosureStore, TranscriptDisclosureProvider } from "../../src/chat/transcript/presentation/disclosure-state.tsx";
 import { setupThemedScrollbars } from "../../src/platform/scrolling/themed-scrollbars.ts";
@@ -79,7 +79,7 @@ function Fixture() {
    <button type="button" onClick={()=>setWidth(400)}>Narrow</button>{" "}<button type="button" onClick={()=>setWidth(640)}>Wide</button>
    <button type="button" onClick={()=>setApprovals(value=>!value)}>Show {approvals() ? "tools" : "approvals"}</button>
    <p>Content requests: <output data-testid="content-request-count">{requests()}</output></p>
-   <Show when={approvals()} fallback={<ActivitySpanCard label="Read files" entries={entries} layout="chat" sessionId="fixture" entryKey="fixture-actions" renderToolEntry={part=><GenericToolCard part={part()} layout="chat" sessionId="fixture" projectId="fixture" client={client} />} />}>
+   <Show when={approvals()} fallback={<ActivitySpanCard label="Read files" entries={entries} layout="chat" sessionId="fixture" entryKey="fixture-actions" renderToolEntry={part=><ToolPartCard part={part()} layout="chat" sessionId="fixture" projectId="fixture" client={client} />} />}>
     <output data-testid="approval-decision-count">{decisions()}</output>
     <ApprovalCard projectId="fixture" sessionId="fixture" checkpoint={{checkpointId:"approval-fixture",sessionId:"fixture",kind:"tool_approval",status:"pending",issuedAt:new Date().toISOString(),
       tool_approval:toolApprovalFixture({subject:{kind:"destination_set",title:"Allow network: 1000 configured endpoints",targets:Array.from({length:1000},(_,index)=>({kind:"destination",label:`host-${index}.example`}))},

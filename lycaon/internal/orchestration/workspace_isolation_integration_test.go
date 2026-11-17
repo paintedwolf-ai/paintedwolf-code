@@ -9,7 +9,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/session"
@@ -19,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,14 +26,14 @@ type dirWorkspaceBinder struct {
 	mu sync.Mutex
 }
 
-func (b *dirWorkspaceBinder) CreateWorkerWorkspace(_ context.Context, primaryDir, legID string) (*workspace.Binding, error) {
+func (b *dirWorkspaceBinder) CreateWorkerWorkspace(_ context.Context, primaryDir, unitID string) (*workspace.Binding, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	root := filepath.Join(primaryDir, settingsoverlay.DirName(), "mock-wt", legID)
+	root := filepath.Join(primaryDir, settingsoverlay.DirName(), "mock-wt", unitID)
 	if err := os.MkdirAll(root, 0o750); err != nil {
 		return nil, err
 	}
-	return &workspace.Binding{ID: legID, Root: root}, nil
+	return &workspace.Binding{ID: unitID, Root: root}, nil
 }
 
 func (b *dirWorkspaceBinder) DestroyWorkerWorkspace(_ context.Context, binding *workspace.Binding) error {
@@ -48,16 +46,13 @@ func (b *dirWorkspaceBinder) DestroyWorkerWorkspace(_ context.Context, binding *
 func TestPackIsolatedLegsNoCrossWrite(t *testing.T) {
 	ctx := context.Background()
 	binder := &dirWorkspaceBinder{}
-	delStore := delegation.NewMemoryStore()
+	mem := orchestration.NewMemoryTopologyWorkers()
 	sessStore := store.NewMemory()
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	queue := worker.NewInMemoryQueue(10)
-	delMgr := delegation.NewManager(delStore, queue, sessMgr, delegation.AllowGate{})
-	rec := &recordingDelegation{inner: delMgr, store: delStore, order: make([]string, 0, 4)}
+	rec := &recordingWorkers{TopologyWorkers: mem, order: make([]string, 0, 4)}
 	reg := orchestration.NewMemoryAgentRegistryForTest()
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
-		Delegation: rec,
-		Store:      delStore,
+		Workers:    rec,
 		Agents:     reg,
 		Workspaces: binder,
 	})
@@ -82,28 +77,29 @@ func TestPackIsolatedLegsNoCrossWrite(t *testing.T) {
 	})
 	testutil.FailErr(t, "orch.Run failed", err)
 
-	delegationID, ok := delStore.DelegationBySessionID(sess.ID)
+	batchID, ok, err := mem.BatchBySession(ctx, sess.ID)
+	testutil.FailErr(t, "BatchBySession failed", err)
 	if !ok {
-		t.Fatal("missing delegation")
+		t.Fatal("missing topology batch")
 	}
-	legs, err := delStore.ListLegs(ctx, delegationID)
-	testutil.FailErr(t, "store.ListLegs failed", err)
+	units, err := mem.ListUnits(ctx, batchID)
+	testutil.FailErr(t, "mem.ListUnits failed", err)
 	isolated := 0
-	for _, leg := range legs {
-		root := leg.WorkspaceRoot
+	for _, u := range units {
+		root := u.WorkspaceRoot
 		if root == "" {
 			continue
 		}
 		isolated++
-		marker := filepath.Join(root, leg.ID+".txt")
+		marker := filepath.Join(root, u.ID+".txt")
 		if err := os.WriteFile(marker, []byte("ok"), 0o644); err != nil {
 			testutil.FailErr(t, "write file", err)
 		}
-		if _, err := os.Stat(filepath.Join(projectDir, leg.ID+".txt")); !os.IsNotExist(err) {
-			t.Fatalf("primary tree polluted by leg %q", leg.ID)
+		if _, err := os.Stat(filepath.Join(projectDir, u.ID+".txt")); !os.IsNotExist(err) {
+			t.Fatalf("primary tree polluted by unit %q", u.ID)
 		}
 	}
 	if isolated != 2 {
-		t.Fatalf("isolated legs = %d want 2", isolated)
+		t.Fatalf("isolated units = %d want 2", isolated)
 	}
 }

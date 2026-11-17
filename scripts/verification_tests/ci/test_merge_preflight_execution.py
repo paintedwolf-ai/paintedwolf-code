@@ -88,7 +88,7 @@ class MergePreflightTests(unittest.TestCase):
         lane = hosted_plan.lanes()["lint"]
         commands = preflight.commands(lane, lane["targets"])
         self.assertEqual(commands[0], ["./task", "comments:check", "test:fail-messages:check"])
-        self.assertEqual(commands[1], ["./task", "lint:full"])
+        self.assertEqual(commands[1], ["./task", "lint:full", "arch-lint:changes"])
         self.assertEqual(sorted([target for command in commands for target in command[1:]]), sorted(lane["targets"]))
         with patch.object(preflight, "package_phases", return_value=[["contract"], ["behavior"]]):
             self.assertEqual(preflight.commands(hosted_plan.lanes()["behavior"], ["test:full"]),

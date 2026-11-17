@@ -39,9 +39,7 @@ type ObservationBindings struct {
 	svc               *Service
 	workspaceTrackers WorkspaceTrackerProvider
 	obsMu             sync.RWMutex
-	obsTrackers       map[string]*observation.Tracker
 	obsBindings       map[string]observation.VerificationBinding
-	obsCheckpoints    map[string]string
 }
 
 // Service binds terminal verification evidence to the current source revision.

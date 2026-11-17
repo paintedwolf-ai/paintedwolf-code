@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -124,9 +125,6 @@ func (q *sqlQueueClaims) PublishEnqueued(ctx context.Context, jobID string) {
 
 // ClaimNext claims the next pending job when under the running cap.
 func (q *sqlQueueClaims) ClaimNext(ctx context.Context, req ClaimRequest) (*api.WorkerTask, error) {
-	if _, err := q.recoverPrerequisites(ctx); err != nil {
-		return nil, err
-	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -195,7 +193,7 @@ func (q *sqlQueueClaims) RequestCancellation(ctx context.Context, jobID string) 
 	var n int64
 	err := q.retryOnFullDisk(func() (err error) {
 		n, err = q.store.queries.RequestWorkerCancellation(ctx, db.RequestWorkerCancellationParams{
-			ID: jobID, RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+			ID: jobID, RequestedAt: db.NullString(timelayout.Format(time.Now().UTC())),
 		})
 		return err
 	})
@@ -221,7 +219,7 @@ func (q *sqlQueueClaims) RequestClaimCancellation(ctx context.Context, claimed *
 				return nil
 			}
 			n, err := queries.RequestWorkerCancellation(ctx, db.RequestWorkerCancellationParams{
-				ID: claimed.ID, RequestedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+				ID: claimed.ID, RequestedAt: db.NullString(timelayout.Format(time.Now().UTC())),
 			})
 			won = n == 1
 			return err
@@ -242,6 +240,18 @@ func (q *sqlQueueClaims) FinishCanceled(ctx context.Context, jobID string, resul
 		result = cancellationResultForJob(ctx, q.self, jobID, deps)
 	}
 	return q.finalizeCanceled(ctx, jobID, result)
+}
+
+// ReleaseAdmitted makes a job enqueued held claimable once its worker round
+// is recorded. A job already released or canceled is left as it is.
+func (q *sqlQueueClaims) ReleaseAdmitted(ctx context.Context, jobID string) error {
+	released, err := q.store.ReleaseAdmittedJob(ctx, jobID)
+	if err != nil || !released {
+		return err
+	}
+	q.NotifyRunnable()
+	q.refreshBoardByID(ctx, jobID)
+	return nil
 }
 
 // Hold moves a pending job to held without terminating it.
@@ -272,9 +282,10 @@ func (q *sqlQueueClaims) finalizeCanceled(ctx context.Context, jobID string, res
 	if task.Status.IsTerminal() {
 		return nil
 	}
+	kept := q.keptCheckpoint(ctx, task)
 	var won bool
 	if err := q.retryOnFullDisk(func() (err error) {
-		won, err = q.store.CancelJob(ctx, jobID, result)
+		won, err = q.store.CancelJob(ctx, jobID, result, kept)
 		return err
 	}); err != nil {
 		return err
@@ -282,7 +293,9 @@ func (q *sqlQueueClaims) finalizeCanceled(ctx context.Context, jobID string, res
 	if !won {
 		return nil
 	}
-	q.destroyWorkerWorkspace(ctx, task)
+	if kept == "" {
+		q.destroyWorkerWorkspace(ctx, task)
+	}
 	q.refreshBoardByID(ctx, jobID)
 	return nil
 }

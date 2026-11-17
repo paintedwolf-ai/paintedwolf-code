@@ -19,18 +19,6 @@ func bindingsTestdata(t *testing.T) string {
 	return filepath.Join(filepath.Dir(file), "..", "mcp", "bindings", "testdata", "mcp_bindings")
 }
 
-func TestNeedsMCPSchemaFacts(t *testing.T) {
-	if NeedsMCPSchemaFacts(`tool == "read"`, nil) {
-		t.Fatal("expected false")
-	}
-	if !NeedsMCPSchemaFacts(`mcp_schema_matched && mcp_field_bool("is_started")`, nil) {
-		t.Fatal("expected true for schema refs")
-	}
-	if !NeedsMCPSchemaFacts(`mcp_result.issue_id != ""`, nil) {
-		t.Fatal("expected true for an mcp_result member")
-	}
-}
-
 func TestMCPFieldAccessors(t *testing.T) {
 	list, err := bindings.LoadDir(bindingsTestdata(t))
 	testutil.FailErr(t, "LoadDir", err)

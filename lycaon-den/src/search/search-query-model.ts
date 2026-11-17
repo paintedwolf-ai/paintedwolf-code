@@ -621,24 +621,6 @@ export function exploreCitationRowQuery(item: {
   return undefined;
 }
 
-/** Other calls to the same tool in this chat, excluding the current call. */
-export function exploreRelatedToolCallsQuery(opts: {
-  toolCallId: string;
-  sessionId: string;
-  tool: string;
-}): string | undefined {
-  const toolCallId = opts.toolCallId.trim();
-  const sessionId = opts.sessionId.trim();
-  const tool = opts.tool.trim();
-  if (!toolCallId || !sessionId || !tool) return undefined;
-  return [
-    exploreDslField("session", sessionId),
-    exploreDslField("tool", tool),
-    "kind:tool",
-    `NOT ${exploreDslField("ref", toolCallId)}`,
-  ].join(" ");
-}
-
 export type ProjectHitGroup = {
   projectId: string;
   projectName: string;

@@ -2,7 +2,6 @@ package contentblob
 
 import (
 	"fmt"
-	"os"
 	"sync"
 	"time"
 
@@ -41,15 +40,6 @@ func DefaultDensityConfig() DensityConfig {
 		panic(bundledDensityErr)
 	}
 	return bundledDensity
-}
-
-// LoadDensityOverlay applies a host overlay to the bundled defaults.
-func LoadDensityOverlay(path string) (DensityConfig, error) {
-	raw, err := os.ReadFile(path) // #nosec G304 -- caller-provided overlay path
-	if err != nil {
-		return DensityConfig{}, fmt.Errorf("read storage density overlay: %w", err)
-	}
-	return decodeDensityConfig(raw, DefaultDensityConfig())
 }
 
 func bundledDensityConfig() (DensityConfig, error) {

@@ -2,6 +2,7 @@ package contentblob_test
 
 import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"path/filepath"
 	"testing"
@@ -51,7 +52,7 @@ func TestRunGCBatchReclaimsUnreferencedBlob(t *testing.T) {
 	ctx := t.Context()
 	testutil.FailErr(t, "upsert content blob object", q.UpsertContentBlobObject(ctx, db.UpsertContentBlobObjectParams{
 		ProjectID: projectID, Sha256: sha, ByteSize: byteSize, StoredSize: storedSize,
-		CreatedAt: db.FormatTime(time.Now().UTC()),
+		CreatedAt: timelayout.Format(time.Now().UTC()),
 	}))
 	insertEvidenceRecord(t, database, sessionID, projectID, "read#1", sha)
 
@@ -106,7 +107,7 @@ func TestRunGCBatchSkipsStillReferencedBlob(t *testing.T) {
 	ctx := t.Context()
 	testutil.FailErr(t, "upsert content blob object", q.UpsertContentBlobObject(ctx, db.UpsertContentBlobObjectParams{
 		ProjectID: projectID, Sha256: sha, ByteSize: byteSize, StoredSize: storedSize,
-		CreatedAt: db.FormatTime(time.Now().UTC()),
+		CreatedAt: timelayout.Format(time.Now().UTC()),
 	}))
 	insertEvidenceRecord(t, database, sessionID, projectID, "read#1", sha)
 

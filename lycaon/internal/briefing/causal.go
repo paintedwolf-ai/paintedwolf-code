@@ -2,7 +2,6 @@ package briefing
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"unicode/utf8"
 
@@ -10,15 +9,20 @@ import (
 )
 
 // Read bounds for one action's causal evidence. Text bounds count characters,
-// as SQLite substr does; even four-byte characters keep a read under 48 KiB.
+// as SQLite substr does; even four-byte characters keep the text reads under
+// 48 KiB and the reasoning tail under 64 KiB.
 const (
 	ProseReadChars  = 2048
 	IntentReadChars = 2048
 	ResultReadChars = 1024
 	// ArgsReadChars bounds a call's own arguments.
-	ArgsReadChars      = 2048
-	ReasoningReadBytes = 16 << 10
-	reasoningRunes     = 600
+	ArgsReadChars = 2048
+	// ReasoningTailChars is the end of the reasoning text read for an excerpt.
+	// Every trace of up to 16 KiB is read whole.
+	ReasoningTailChars = 16384
+	// ReasoningCeilingBytes is the largest stored reasoning SQLite extracts from.
+	ReasoningCeilingBytes = 1 << 20
+	reasoningRunes        = 600
 )
 
 // ActionRef anchors evidence on one tool call in one session and worker scope.
@@ -39,17 +43,28 @@ const (
 	ReasoningMalformed   ReasoningState = "malformed"
 )
 
+// ReasoningRead is the bounded tail of one output's plaintext reasoning. Opaque
+// details are counted, never read.
+type ReasoningRead struct {
+	Present     bool
+	OverCeiling bool
+	// TextChars is the full text length; Tail is at most ReasoningTailChars of
+	// its end.
+	TextChars int64
+	Details   int64
+	Tail      string
+}
+
 // CausalRead is the bounded transcript material around one action.
 type CausalRead struct {
-	Found          bool
-	OutputID       string
-	Prose          string
-	ReasoningJSON  string
-	ReasoningBytes int64
-	CallsInOutput  int
-	IntentID       string
-	Intent         string
-	Results        []ResultExcerpt
+	Found         bool
+	OutputID      string
+	Prose         string
+	Reasoning     ReasoningRead
+	CallsInOutput int
+	IntentID      string
+	Intent        string
+	Results       []ResultExcerpt
 	// Call is the action's own name, bounded arguments and result.
 	Call CallExcerpt
 }
@@ -67,6 +82,28 @@ type CausalReader interface {
 	ReadActionCause(ctx context.Context, ref ActionRef) (CausalRead, error)
 }
 
+// WorkerFinalRead is the newest settled model output of one worker job.
+type WorkerFinalRead struct {
+	Found     bool
+	OutputID  string
+	Reasoning ReasoningRead
+}
+
+// WorkerFinalReader reads a worker job's final output in its own session
+// without loading the transcript.
+type WorkerFinalReader interface {
+	ReadWorkerFinal(ctx context.Context, sessionID, workerJobID string) (WorkerFinalRead, error)
+}
+
+// ReasoningInput is the final output's reasoning as a section input. A job
+// that never produced an output had no reasoning.
+func (r WorkerFinalRead) ReasoningInput() ReasoningInput {
+	if !r.Found {
+		return ReasoningInput{}
+	}
+	return ReasoningExcerpt(r.Reasoning, messageRef(r.OutputID), false).Input()
+}
+
 // ApplyCause fills the transcript-derived inputs of action evidence.
 func ApplyCause(ev *ActionEvidence, read CausalRead) {
 	if !read.Found {
@@ -77,46 +114,53 @@ func ApplyCause(ev *ActionEvidence, read CausalRead) {
 	ev.UserIntent = Excerpt{Text: read.Intent, Ref: messageRef(read.IntentID)}
 	ev.AssistantProse = Excerpt{Text: read.Prose, Ref: messageRef(read.OutputID)}
 	ev.Results = read.Results
-	reasoning, state := ReasoningExcerpt(read)
-	if state == ReasoningAvailable {
-		ev.Reasoning.Excerpt = reasoning
-	} else if state != ReasoningAbsent {
-		ev.Reasoning.Gap = string(state)
+	ev.Reasoning = ReasoningExcerpt(read.Reasoning, messageRef(read.OutputID), read.CallsInOutput > 1).Input()
+}
+
+// ReasoningResult is an excerpt and the state that produced it.
+type ReasoningResult struct {
+	Excerpt *Reasoning
+	State   ReasoningState
+}
+
+// Input is the section input: the excerpt, or the gap for a state that had
+// reasoning it could not use.
+func (r ReasoningResult) Input() ReasoningInput {
+	switch r.State {
+	case ReasoningAvailable:
+		return ReasoningInput{Excerpt: r.Excerpt}
+	case ReasoningAbsent:
+		return ReasoningInput{}
+	default:
+		return ReasoningInput{Gap: string(r.State)}
 	}
 }
 
-// ReasoningExcerpt redacts the whole plaintext before keeping its suffix, so a
-// secret crossing the cut is still redacted. Opaque details are never read.
-func ReasoningExcerpt(read CausalRead) (*Reasoning, ReasoningState) {
-	if read.ReasoningBytes == 0 {
-		return nil, ReasoningAbsent
+// ReasoningExcerpt redacts the whole tail before keeping its last runes, so a
+// secret crossing the cut is still redacted.
+func ReasoningExcerpt(read ReasoningRead, ref string, shared bool) ReasoningResult {
+	switch {
+	case !read.Present:
+		return ReasoningResult{State: ReasoningAbsent}
+	case read.OverCeiling:
+		return ReasoningResult{State: ReasoningOversized}
 	}
-	if read.ReasoningJSON == "" {
-		return nil, ReasoningOversized
-	}
-	var payload struct {
-		Text    string            `json:"text"`
-		Details []json.RawMessage `json:"details"`
-	}
-	if err := json.Unmarshal([]byte(read.ReasoningJSON), &payload); err != nil {
-		return nil, ReasoningMalformed
-	}
-	text := strings.TrimSpace(payload.Text)
+	text := strings.TrimSpace(read.Tail)
 	if text == "" {
-		if len(payload.Details) > 0 {
-			return nil, ReasoningDetailsOnly
+		if read.Details > 0 {
+			return ReasoningResult{State: ReasoningDetailsOnly}
 		}
-		return nil, ReasoningAbsent
+		return ReasoningResult{State: ReasoningAbsent}
 	}
+	cut := read.TextChars > int64(utf8.RuneCountInString(read.Tail))
 	text = observability.RedactCaptureText(text)
-	truncated := false
 	if runes := []rune(text); len(runes) > reasoningRunes {
-		text, truncated = string(runes[len(runes)-reasoningRunes:]), true
+		text, cut = string(runes[len(runes)-reasoningRunes:]), true
 	}
 	if !utf8.ValidString(text) {
-		return nil, ReasoningMalformed
+		return ReasoningResult{State: ReasoningMalformed}
 	}
-	return &Reasoning{Text: text, Ref: messageRef(read.OutputID), Shared: read.CallsInOutput > 1, Truncated: truncated}, ReasoningAvailable
+	return ReasoningResult{Excerpt: &Reasoning{Text: text, Ref: ref, Shared: shared, Truncated: cut}, State: ReasoningAvailable}
 }
 
 func messageRef(id string) string {

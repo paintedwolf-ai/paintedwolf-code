@@ -16,17 +16,13 @@ func newEnrichAccumulator(body string, raised ToolResultFacts) *enrichAccumulato
 	return &enrichAccumulator{body: body, facts: raised}
 }
 
-func (a *enrichAccumulator) raised(code string) bool {
-	return a.facts.HasCode(code)
-}
-
 // raise records a banner. Empty msg falls back to the code.
 func (a *enrichAccumulator) raise(code, msg string) bool {
 	code = strings.TrimSpace(code)
 	if code == "" {
 		return false
 	}
-	if a.raised(code) {
+	if a.facts.HasCode(code) {
 		return false
 	}
 	if strings.TrimSpace(msg) == "" {

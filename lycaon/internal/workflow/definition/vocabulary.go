@@ -25,7 +25,6 @@ var registeredCompleteWhenPredicates = map[string]struct{}{
 	"implement_workflow_ready":     {},
 	"plan_awaiting_approval":       {},
 	"research_required":            {},
-	"delegation_active":            {},
 	"delivery_gates_passed":        {},
 	"closeout_gates_passed":        {},
 	"orchestration_complete":       {},

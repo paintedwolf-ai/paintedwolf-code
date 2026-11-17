@@ -89,4 +89,64 @@ flex-shrink: 0;
   background: color-mix(in srgb, var(--den-accent-signal) 8%, transparent);
 }
 
+@utility den-worker-fact-badge {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  padding: 0.1rem 0.4rem;
+  border-radius: var(--den-radius-pill);
+  border: 1px solid var(--den-line);
+  color: var(--den-text-muted);
+  background: var(--den-tint-1);
+  white-space: nowrap;
+}
+
+@utility den-worker-collab-notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+  width: 100%;
+  min-width: 0;
+  min-height: 2rem;
+  padding: 0.4rem 0.65rem;
+  border-radius: var(--den-radius);
+  border: 1px solid var(--den-line);
+  background: var(--den-surface);
+  color: var(--den-text);
+  font-size: var(--text-den-body);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--den-duration) var(--den-ease);
+  &:hover {
+    background: var(--den-tint-1);
+  }
+}
+
+@utility den-worker-collab-notice-headline {
+  font-weight: 600;
+  color: var(--den-text);
+  min-width: 0;
+}
+
+@utility den-worker-collab-notice-detail {
+  flex: 1 1 12rem;
+  min-width: 0;
+  color: var(--den-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@utility den-worker-collab-notice-link {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: var(--text-den-body);
+  font-weight: 500;
+  color: var(--den-accent-text);
+}
+
+
 

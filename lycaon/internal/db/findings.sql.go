@@ -98,13 +98,14 @@ SELECT id, agent, summary, ref, body, created_at FROM findings
 WHERE session_id = ? AND id > ?
   AND (?3 = '' OR agent != ?3)
 ORDER BY id
-LIMIT 200
+LIMIT ?4
 `
 
 type ListFindingsAfterIDParams struct {
 	SessionID    string      `json:"session_id"`
 	ID           int64       `json:"id"`
 	ExcludeAgent interface{} `json:"exclude_agent"`
+	PageLimit    int64       `json:"page_limit"`
 }
 
 type ListFindingsAfterIDRow struct {
@@ -117,7 +118,12 @@ type ListFindingsAfterIDRow struct {
 }
 
 func (q *Queries) ListFindingsAfterID(ctx context.Context, arg ListFindingsAfterIDParams) ([]ListFindingsAfterIDRow, error) {
-	rows, err := q.db.QueryContext(ctx, listFindingsAfterID, arg.SessionID, arg.ID, arg.ExcludeAgent)
+	rows, err := q.db.QueryContext(ctx, listFindingsAfterID,
+		arg.SessionID,
+		arg.ID,
+		arg.ExcludeAgent,
+		arg.PageLimit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +157,7 @@ SELECT id, agent, summary, ref, body, created_at FROM findings
 WHERE session_id = ? AND created_at > ? AND id > ?
   AND (?4 = '' OR agent != ?4)
 ORDER BY id
-LIMIT 200
+LIMIT ?5
 `
 
 type ListFindingsSinceAfterIDParams struct {
@@ -159,6 +165,7 @@ type ListFindingsSinceAfterIDParams struct {
 	CreatedAt    string      `json:"created_at"`
 	ID           int64       `json:"id"`
 	ExcludeAgent interface{} `json:"exclude_agent"`
+	PageLimit    int64       `json:"page_limit"`
 }
 
 type ListFindingsSinceAfterIDRow struct {
@@ -176,6 +183,7 @@ func (q *Queries) ListFindingsSinceAfterID(ctx context.Context, arg ListFindings
 		arg.CreatedAt,
 		arg.ID,
 		arg.ExcludeAgent,
+		arg.PageLimit,
 	)
 	if err != nil {
 		return nil, err

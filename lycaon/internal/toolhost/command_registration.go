@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostos"
 	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -19,9 +20,9 @@ var formTools = []struct {
 	name string
 	argv func(map[string]any) []string
 }{
-	{"summarize", native.SummarizeArgv},
-	{"survey_repo", native.SurveyRepoArgv},
-	{"code_rewrite", native.CodeRewriteArgv},
+	{"summarize", toolreach.SummarizeArgv},
+	{"survey_repo", toolreach.SurveyRepoArgv},
+	{"code_rewrite", toolreach.CodeRewriteArgv},
 }
 
 func registerCommandTools(

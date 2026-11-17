@@ -299,6 +299,18 @@ func (q *Queries) FailWorkflowTeardownOperation(ctx context.Context, arg FailWor
 	return err
 }
 
+const getLatestWorkflowResumeAt = `-- name: GetLatestWorkflowResumeAt :one
+SELECT CAST(COALESCE(MAX(committed_at), '') AS TEXT) AS committed_at
+FROM workflow_commands WHERE run_id = ? AND kind = 'resume'
+`
+
+func (q *Queries) GetLatestWorkflowResumeAt(ctx context.Context, runID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getLatestWorkflowResumeAt, runID)
+	var committed_at string
+	err := row.Scan(&committed_at)
+	return committed_at, err
+}
+
 const getScaffoldVars = `-- name: GetScaffoldVars :one
 SELECT vars_json FROM workflow_runs WHERE id = ?
 `

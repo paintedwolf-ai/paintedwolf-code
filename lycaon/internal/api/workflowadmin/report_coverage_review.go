@@ -20,7 +20,7 @@ type coverageFactsSource interface {
 // appendCoverageReview projects acceptance from the final declared review
 // phase. A run that ended before its scans settled has no facts to check an
 // assessment against; the report records that as a gap rather than failing.
-func appendCoverageReview(ctx context.Context, input *report.ReportInput, runs coverageFactsSource, run *wire.WorkflowRun, manifest workflowdef.Manifest, phaseVerdicts []workflowpresentation.PhaseVerdict) error {
+func appendCoverageReview(ctx context.Context, input *report.ReportInput, runs coverageFactsSource, run *wire.WorkflowRun, manifest workflowdef.Manifest, phaseVerdicts []runstate.PhaseVerdict) error {
 	last := ""
 	for _, phase := range manifest.PhaseDefs {
 		if phase.ReviewLoop != nil && phase.ReviewLoop.CarriesCoverage() {

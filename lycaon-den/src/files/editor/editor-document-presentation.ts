@@ -1,6 +1,6 @@
 import { applyEditorEditingStyle } from "../../components/source/editor/editor-editing-style.ts";
 import { editorKeymapPref, editorTabMovesFocusPref } from "../../settings/editor/editor-prefs.ts";
-import { filesBufferText } from "../documents/project-files-buffers.ts";
+import { filesBufferText } from "../documents/files-buffer-state.ts";
 import type { SourceReaderHandle } from "../../components/source/reader/SourceReader.tsx";
 import { editorReplica } from "../documents/editor-document.ts";
 import { EditorView } from "@codemirror/view";

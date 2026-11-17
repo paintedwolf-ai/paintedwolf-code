@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/app/boards"
-	"github.com/lycaon/lycaon/internal/app/delegations"
 	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/clisocket"
 	"github.com/lycaon/lycaon/internal/configdir"
@@ -47,7 +47,7 @@ type ServeApp struct {
 	Server               *api.Server
 	Sessions             *sessions.Runtime
 	Workflows            *workflows.Runtime
-	Delegations          *delegations.Runtime
+	Workers              *workerruntime.Runtime
 	Boards               *boards.Runtime
 	ProjectLiveness      *projectliveness.Tracker
 	CoordinatorRuntime   *coordinator.Runtime

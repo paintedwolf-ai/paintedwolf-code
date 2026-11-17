@@ -11,7 +11,7 @@ import (
 
 func TestRetainedChunkInventoryUsesCappedMainWithoutTemporaryBTrees(t *testing.T) {
 	source, _ := seedLegacyManifestStore(t, t.TempDir(), map[string]int{"/work/a": 3, "/work/b": 1})
-	reader, err := openReader(t.Context(), source)
+	reader, err := OpenReadOnly(t.Context(), source)
 	testutil.FailErr(t, "open source", err)
 	plan, err := PlanUpgrade(t.Context(), reader)
 	testutil.FailErr(t, "plan source", err)

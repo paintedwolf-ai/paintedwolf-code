@@ -5,14 +5,9 @@ import { recordInventoryOpen } from "../tree/file-inventory.ts";
 import { LatestOperation } from "./files-buffer-request-tracking.ts";
 import { flushFilesDraftSyncFor } from "./files-draft-sync.ts";
 import { saveProjectFileDocument } from "./project-file-document-save.ts";
-import {
-  applyFilesBufferEditorDocument,
-  discardFilesBufferDraft,
-  markFilesBufferLoading,
-  openFilesBuffer,
-  setFilesActiveBuffer,
-  setFilesBufferEol,
-} from "./project-files-buffers.ts";
+import { applyFilesBufferEditorDocument, discardFilesBufferDraft, markFilesBufferLoading, setFilesBufferEol } from "./project-files-buffer-io.ts";
+import { openFilesBuffer } from "./project-files-buffer-lifecycle.ts";
+import { setFilesActiveBuffer } from "./project-files-buffers.ts";
 import type { EolKind } from "../../components/source/editor/eol.ts";
 import type { FileBuffer } from "./files-buffer-state.ts";
 import { pushProjectJump } from "../components/project-files-jump-bridge.ts";

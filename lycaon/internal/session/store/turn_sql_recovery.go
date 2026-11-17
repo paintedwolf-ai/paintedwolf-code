@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -25,7 +26,7 @@ func finishTurnSQL(ctx context.Context, s *sqlCore, turnID, attemptID string, st
 	}
 	defer func() { _ = tx.Rollback() }()
 	q := s.queries.WithTx(tx)
-	finishedAt := db.FormatTime(now)
+	finishedAt := timelayout.Format(now)
 	rows, err := q.FinishTurnAttempt(ctx, db.FinishTurnAttemptParams{
 		Status: string(status), Error: failure, UpdatedAt: finishedAt,
 		CompletedAt: db.NullString(finishedAt), ID: attemptID, TurnID: turnID,
@@ -74,7 +75,7 @@ func recoverTurnsSQL(ctx context.Context, s *sqlCore) ([]Turn, error) {
 	}
 	defer func() { _ = tx.Rollback() }()
 	q := s.queries.WithTx(tx)
-	recoveredAt := db.FormatTime(now)
+	recoveredAt := timelayout.Format(now)
 	timestamp := db.NullString(recoveredAt)
 	if err := q.CompleteFinalizingTurns(ctx, db.CompleteFinalizingTurnsParams{
 		UpdatedAt: recoveredAt, CompletedAt: timestamp,
@@ -97,9 +98,6 @@ func recoverTurnsSQL(ctx context.Context, s *sqlCore) ([]Turn, error) {
 	if err := q.RecoverRunningTurns(ctx, db.RecoverRunningTurnsParams{
 		UpdatedAt: recoveredAt, CompletedAt: timestamp,
 	}); err != nil {
-		return nil, err
-	}
-	if err := q.DeleteLiveModelOutputs(ctx); err != nil {
 		return nil, err
 	}
 	rows, err := q.ListRecoveringTurns(ctx)
@@ -136,7 +134,7 @@ func recoverTurnsForSessionSQL(ctx context.Context, s *sqlCore, sessionID string
 	}
 	defer func() { _ = tx.Rollback() }()
 	q := s.queries.WithTx(tx)
-	recoveredAt := db.FormatTime(now)
+	recoveredAt := timelayout.Format(now)
 	timestamp := db.NullString(recoveredAt)
 	if err := q.CompleteFinalizingTurnsForSession(ctx, db.CompleteFinalizingTurnsForSessionParams{
 		UpdatedAt: recoveredAt, CompletedAt: timestamp, SessionID: sessionID,
@@ -161,9 +159,6 @@ func recoverTurnsForSessionSQL(ctx context.Context, s *sqlCore, sessionID string
 	if err := q.RecoverRunningTurnsForSession(ctx, db.RecoverRunningTurnsForSessionParams{
 		UpdatedAt: recoveredAt, CompletedAt: timestamp, SessionID: sessionID,
 	}); err != nil {
-		return nil, err
-	}
-	if err := q.DeleteLiveModelOutputsForSession(ctx, sessionID); err != nil {
 		return nil, err
 	}
 	rows, err := q.ListRecoveringTurnsForSession(ctx, sessionID)

@@ -8,12 +8,12 @@ when: paintedwolf.tool_is_task && paintedwolf.profile_mutation_capable && painte
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-message: mutation-capable profiles require scope.mode write
-what: '**{{ paintedwolf.agent_type }}** uses a mutation-capable tool profile and must dispatch with **`scope.mode: write`** so changes land in an isolated overlay.'
-cause: You dispatched a mutation-capable worker with read scope or omitted scope (defaults to read).
-why: 'Read-scoped workers survey the primary tree; mutations require a write overlay.'
+message: Mutation-capable profiles require scope.mode write
+what: '**{{ paintedwolf.agent_type }}** uses a mutation-capable tool profile and must start with **`scope.mode: write`** so changes land in an isolated worker workspace.'
+cause: You started a mutation-capable worker with read scope or omitted scope (which defaults to read).
+why: 'Read-scoped workers inspect the primary tree without mutating it; file mutations require a write workspace and overlay.'
 fix: '{{ paintedwolf.next_steps }}'
-instead: 'Branch on Code: read-only profiles for survey; mutation-capable profiles only with write overlays.'
+instead: 'Branch on Code: read-only profiles for inspection; mutation-capable profiles only with write workspaces.'
 x-paintedwolf-scenarios:
   - id: default
     vars:

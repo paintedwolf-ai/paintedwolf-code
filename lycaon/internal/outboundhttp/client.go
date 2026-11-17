@@ -334,6 +334,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			}
 			transport.CloseIdleConnections()
 			ioCancel()
+			dispatch.finish()
 			return Response{}, err
 		}
 		if in.Jar != nil {
@@ -345,14 +346,17 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		observed := tracer.observation(begun, resolved, method, req.URL.RequestURI())
 		observed.TLS = extractTLSInfo(resp.TLS)
 		if !isRedirect(resp.StatusCode) || redirectMode == RedirectNone {
-			return in.finishResponse(resp, method, current, hops, limit, hopTiming, ioStarted, ioElapsed,
+			res, finishErr := in.finishResponse(resp, method, current, hops, limit, hopTiming, ioStarted, ioElapsed,
 				transport, ioCancel, wire, observed, begun, firstHopLocal, firstHopPeer)
+			dispatch.finish()
+			return res, finishErr
 		}
 		_ = resp.Body.Close()
 		ioElapsed += time.Since(ioStarted)
 		hopTiming.Total = time.Since(ioStarted).Milliseconds()
 		transport.CloseIdleConnections()
 		ioCancel()
+		dispatch.finish()
 		adv, err := in.processRedirect(resp, current, method, body, originHeaders, hostHeader, hop, redirectLimit, hops, hopTiming)
 		if err != nil {
 			return Response{}, err

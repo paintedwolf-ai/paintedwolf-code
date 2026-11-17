@@ -13,7 +13,7 @@ import (
 )
 
 func (o *OrchestratorImpl) runFanOut(ctx context.Context, req RunRequest, wf *workflowRunContext) (*RunResult, error) {
-	if o.delegation == nil || o.store == nil || o.agents == nil {
+	if o.workers == nil || o.agents == nil {
 		return nil, fmt.Errorf("orchestrator fan_out dependencies not configured")
 	}
 	if req.Topology.FanOut == nil {
@@ -39,12 +39,12 @@ func (o *OrchestratorImpl) runFanOut(ctx context.Context, req RunRequest, wf *wo
 
 	runID := uuid.NewString()
 	state := &runState{
-		runID:     runID,
-		completed: make(map[string]bool),
-		outputs:   make(map[string]string),
-		stageLegs: make(map[string]string, len(fanSpec.Subtasks)),
-		phase:     "fan_out",
-		active:    true,
+		runID:      runID,
+		completed:  make(map[string]bool),
+		outputs:    make(map[string]string),
+		stageUnits: make(map[string]string, len(fanSpec.Subtasks)),
+		phase:      "fan_out",
+		active:     true,
 	}
 	applyWorkflowContextToState(state, wf)
 	o.registerRun(runID, state)
@@ -63,37 +63,37 @@ func (o *OrchestratorImpl) runFanOut(ctx context.Context, req RunRequest, wf *wo
 		task = "fan_out run"
 	}
 
-	delegationID, legIDs, err := o.setupFanOutDelegation(ctx, req, wf, sessionID, projectDir, task, profileID, fanSpec, state)
+	batchID, unitIDs, err := o.setupFanOutBatch(ctx, req, wf, sessionID, projectDir, task, profileID, fanSpec, state)
 	if err != nil {
 		return nil, err
 	}
-	if err := o.bindRunDelegation(ctx, state, delegationID); err != nil {
+	if err := o.bindRunBatch(ctx, state, batchID); err != nil {
 		return nil, err
 	}
 
-	bindings, err := o.bindLegWorkspacesIfIsolated(ctx, req.Topology, projectDir, delegationID, legIDs)
+	bindings, err := o.bindUnitWorkspacesIfIsolated(ctx, req.Topology, projectDir, batchID, unitIDs)
 	if err != nil {
 		return nil, err
 	}
 	defer o.destroyBindings(ctx, bindings)
 
-	if err := o.dispatchFanOutLegsParallel(ctx, req, runID, delegationID, profileID, fanSpec, legIDs, state.workflowRunID); err != nil {
+	if err := o.dispatchFanOutUnitsParallel(ctx, batchID, fanSpec, unitIDs, state.workflowRunID); err != nil {
 		return nil, err
 	}
 
-	settled, err := o.settleLegs(ctx, delegationID, legIDs, TopologyBindStageFanOut)
+	settled, err := o.settleUnits(ctx, batchID, unitIDs)
 	if err != nil {
 		return nil, err
 	}
 	orderedOutputs := make([]string, len(fanSpec.Subtasks))
-	for i, leg := range settled {
+	for i, unit := range settled {
 		key := fanOutSubtaskKey(i)
-		if leg.Status == api.LegStatusFailed || leg.Status == api.LegStatusCanceled {
-			return nil, newRunFailure(RunFailureCodeStageFailed, TopologyBindStageFanOut, false, fmt.Errorf("fan_out leg %q failed", key))
+		if unit.Status == api.LegStatusFailed || unit.Status == api.LegStatusCanceled {
+			return nil, newRunFailure(RunFailureCodeStageFailed, TopologyBindStageFanOut, false, fmt.Errorf("fan_out unit %q failed", key))
 		}
 		output := key + " complete"
-		if leg.Result != nil && strings.TrimSpace(leg.Result.Summary) != "" {
-			output = leg.Result.Summary
+		if strings.TrimSpace(unit.Summary) != "" {
+			output = unit.Summary
 		}
 		state.outputs[key] = output
 		orderedOutputs[i] = output
@@ -110,7 +110,7 @@ func (o *OrchestratorImpl) runFanOut(ctx context.Context, req RunRequest, wf *wo
 	}, nil
 }
 
-func (o *OrchestratorImpl) setupFanOutDelegation(
+func (o *OrchestratorImpl) setupFanOutBatch(
 	ctx context.Context,
 	req RunRequest,
 	wf *workflowRunContext,
@@ -123,90 +123,89 @@ func (o *OrchestratorImpl) setupFanOutDelegation(
 	for i := range keys {
 		keys[i] = fanOutSubtaskKey(i)
 	}
-	restored, err := o.restoreWorkflowDelegation(ctx, wfRunID, keys, state)
+	restored, err := o.restoreWorkflowBatch(ctx, wfRunID, keys, state)
 	if err != nil {
 		return "", nil, err
 	}
 	if restored != nil {
-		return restored.ID, restored.LegIDs, nil
+		return restored.ID, restored.UnitIDs, nil
 	}
 	projectID, err := pipelineProjectID(req)
 	if err != nil {
 		return "", nil, err
 	}
-	delegation := api.Delegation{
+	batch := TopologyBatch{
+		SessionID:       sessionID,
 		ProjectID:       projectID,
 		WorkspacePath:   projectDir,
 		Task:            task,
-		Strategy:        api.HuntStrategyFileBased,
-		Status:          "active",
-		Phase:           api.DelegationPhaseSetup,
+		Pattern:         TopologyFanOut,
+		Status:          TopologyBatchActive,
 		WorkflowID:      wfID,
 		WorkflowVersion: wfVer,
 		WorkflowRunID:   wfRunID,
 	}
-	legIDs := make([]string, len(fanSpec.Subtasks))
-	legs := make([]api.Leg, len(fanSpec.Subtasks))
+	phase := boundPhaseForStage(state, TopologyBindStageFanOut)
+	units := make([]TopologyUnit, len(fanSpec.Subtasks))
 	for i := range fanSpec.Subtasks {
-		leg := buildFanOutLeg(profileID, fanSpec.Subtasks[i], task, i)
-		legs[i] = leg
-		legIDs[i] = leg.ID
-		state.stageLegs[fanOutSubtaskKey(i)] = leg.ID
+		units[i] = buildFanOutUnit(profileID, fanSpec.Subtasks[i], task, phase, i)
 	}
-	created, err := o.store.Create(ctx, delegation, sessionID, legs)
+	created, createdUnits, err := o.workers.CreateBatch(ctx, batch, units)
 	if err != nil {
 		return "", nil, err
 	}
-	return created.ID, legIDs, nil
+	unitIDs := make([]string, len(createdUnits))
+	for i := range createdUnits {
+		unitIDs[i] = createdUnits[i].ID
+		state.stageUnits[fanOutSubtaskKey(i)] = createdUnits[i].ID
+	}
+	return created.ID, unitIDs, nil
 }
 
-func buildFanOutLeg(profileID, subtask, task string, index int) api.Leg {
+func buildFanOutUnit(profileID, subtask, task, phase string, index int) TopologyUnit {
 	prompt := strings.TrimSpace(subtask)
 	if task != "" {
 		prompt = strings.TrimSpace(task) + "\n\n" + prompt
 	}
-	return api.Leg{
+	return TopologyUnit{
 		ID:        uuid.NewString(),
-		Title:     fanOutSubtaskKey(index),
+		WorkID:    fanOutSubtaskKey(index),
 		AgentType: profileID,
 		Prompt:    prompt,
-		Files:     []string{wholeProjectScopeGlob},
+		Phase:     phase,
 		Status:    api.LegStatusPending,
-		CreatedAt: time.Now().UTC(),
 	}
 }
 
-func (o *OrchestratorImpl) dispatchFanOutLegsParallel(
+func (o *OrchestratorImpl) dispatchFanOutUnitsParallel(
 	ctx context.Context,
-	req RunRequest,
-	runID, delegationID, profileID string,
+	batchID string,
 	fanSpec FanOutSpec,
-	legIDs []string,
+	unitIDs []string,
 	workflowRunID string,
 ) error {
 	maxWorkers := effectiveFanOutMaxWorkers(fanSpec)
 	sem := make(chan struct{}, maxWorkers)
 	var wg sync.WaitGroup
-	errCh := make(chan error, len(legIDs))
-	for i, legID := range legIDs {
+	errCh := make(chan error, len(unitIDs))
+	for _, unitID := range unitIDs {
 		wg.Add(1)
-		go func(index int, legID string) {
+		go func(unitID string) {
 			defer wg.Done()
-			// A panicking leg fails its own dispatch, not the engine.
 			defer func() {
 				r := recover()
 				if r == nil {
 					return
 				}
-				observability.LogRecoveredPanic("orchestration.fanout_leg", r, "leg_id", legID)
-				errCh <- fmt.Errorf("leg %s panicked: %v", legID, r)
+				observability.LogRecoveredPanic("orchestration.fanout_unit", r, "unit_id", unitID)
+				errCh <- fmt.Errorf("unit %s panicked: %v", unitID, r)
 			}()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			if err := o.dispatchFanOutLeg(ctx, req, runID, delegationID, legID, profileID, index, workflowRunID); err != nil {
+			if err := o.dispatchFanOutUnit(ctx, batchID, unitID, workflowRunID); err != nil {
 				errCh <- err
 			}
-		}(i, legID)
+		}(unitID)
 	}
 	wg.Wait()
 	close(errCh)
@@ -218,36 +217,20 @@ func (o *OrchestratorImpl) dispatchFanOutLegsParallel(
 	return nil
 }
 
-func (o *OrchestratorImpl) dispatchFanOutLeg(
+func (o *OrchestratorImpl) dispatchFanOutUnit(
 	ctx context.Context,
-	req RunRequest,
-	runID, delegationID, legID, profileID string,
-	index int,
-	workflowRunID string,
+	batchID, unitID, workflowRunID string,
 ) error {
-	leg, err := o.store.GetLeg(ctx, delegationID, legID)
+	unit, err := o.workers.GetUnit(ctx, batchID, unitID)
 	if err != nil {
 		return err
 	}
-	if leg.Status != api.LegStatusPending {
+	if unit.Status != api.LegStatusPending {
 		return nil
 	}
-
-	taskID := runID + ":fan_out:" + fanOutSubtaskKey(index)
-	if _, err := o.iterationCap.Track(ctx, profileID, taskID); err != nil {
+	if err := o.assertWorkflowRunnable(ctx, workflowRunID); err != nil {
 		return err
 	}
-	if err := o.checkIteration(ctx, req.Topology, profileID, taskID, TerminationContext{
-		AgentID: profileID,
-		TaskID:  taskID,
-	}); err != nil {
-		return err
-	}
-	if o.workflows != nil && strings.TrimSpace(workflowRunID) != "" {
-		if err := o.workflows.Policy.AssertRunnable(ctx, workflowRunID); err != nil {
-			return err
-		}
-	}
-	_, err = o.delegation.DispatchLeg(ctx, delegationID, legID, "")
+	_, err = o.workers.DispatchUnit(ctx, batchID, unitID)
 	return err
 }

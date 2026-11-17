@@ -2,6 +2,7 @@ package call_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"testing"
 	"time"
 
@@ -96,5 +97,44 @@ func TestListActiveReservations(t *testing.T) {
 	testutil.FailErr(t, "list", err)
 	if len(got) != 1 || got[0].Path != "pkg/registry.py" || got[0].Agent != "job-a" {
 		t.Fatalf("list = %+v", got)
+	}
+}
+
+// A worker's earlier round holds its paths for the worker: its next round
+// may write them, while another worker is still blocked.
+func TestReserveLetsAWorkerKeepItsPathsAcrossRounds(t *testing.T) {
+	ctx := context.Background()
+	sqlDB := openCallTestDB(t)
+	records := workerrecords.New(sqlDB)
+	coord := workerrecords.Actor{SessionID: "sess-a", Role: workerrecords.RoleCoordinator, PrincipalID: "sess-a"}
+	w, err := records.CreateWorker(ctx, coord, workerrecords.Op{ID: "create"}, workerrecords.WorkerSpec{Name: "fixer", AgentType: "implementer", ScopeMode: "write"})
+	testutil.FailErr(t, "create worker", err)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	for _, job := range []string{"job-1", "job-2", "job-other"} {
+		_, err := sqlDB.ExecContext(ctx, `INSERT INTO worker_jobs (id, project_id, parent_session_id, agent_type, status, prompt, brief, created_at)
+			VALUES (?, ?, 'sess-a', 'implementer', 'running', 'p', 'b', ?)`, job, testdbseed.DefaultProjectID, now)
+		testutil.FailErr(t, "insert job", err)
+	}
+	for _, job := range []string{"job-1", "job-2"} {
+		_, err := records.AdmitRound(ctx, coord, workerrecords.Op{ID: "admit-" + job}, w.WorkerID, workerrecords.RoundSpec{JobID: job, ExecutionTarget: "local"})
+		testutil.FailErr(t, "admit "+job, err)
+		if job == "job-1" {
+			_, err = db.New(sqlDB).SettleWorkerRoundByJob(ctx, db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(now), JobID: job})
+			testutil.FailErr(t, "settle", err)
+		}
+	}
+	lookup := call.StoreSessionLookup{Get: func(context.Context, string) (string, error) { return "/tmp/a", nil }}
+	mgr := call.NewSQLManager(sqlDB, lookup)
+	_, err = mgr.Reserve(ctx, "sess-a", []string{"src/main.go"}, "job-1")
+	testutil.FailErr(t, "reserve in round 1", err)
+	out, err := mgr.Reserve(ctx, "sess-a", []string{"src/main.go"}, "job-2")
+	testutil.FailErr(t, "reserve in round 2", err)
+	if len(out.Blocked) != 0 {
+		t.Fatalf("round 2 blocked by its own worker: %#v", out.Blocked)
+	}
+	out, err = mgr.Reserve(ctx, "sess-a", []string{"src/main.go"}, "job-other")
+	testutil.FailErr(t, "reserve another worker", err)
+	if len(out.Blocked) != 1 {
+		t.Fatalf("another worker was not blocked: %#v", out)
 	}
 }

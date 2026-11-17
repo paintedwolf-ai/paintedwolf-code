@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { loadSourceCorpus } from "../../test/source-corpus.ts";
-import { TASK_DISPATCH_TOOLS } from "./tool-presentation.generated.ts";
 
 const REPO_ROOT = join(import.meta.dirname, "../../../..");
 
@@ -44,18 +43,6 @@ export function toolOperationSchemaNames(): string[] {
 /** Catalog opt-in / coordinator profile tools from lycaon-tools.yaml. */
 export function lycaonCatalogToolNames(): string[] {
   return namesFromYamlList(readFileSync(CATALOG_PATH, "utf8"));
-}
-
-/** Catalog tools rendered through StructuredToolBody. */
-export function genericTranscriptToolNames(): string[] {
-  const names = new Set<string>([
-    ...toolSchemaNames(),
-    ...lycaonCatalogToolNames(),
-  ]);
-  for (const tool of TASK_DISPATCH_TOOLS) {
-    names.delete(tool);
-  }
-  return [...names].sort();
 }
 
 let cachedToolEvidenceKindMap: Readonly<Record<string, string>> | undefined;

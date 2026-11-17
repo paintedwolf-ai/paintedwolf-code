@@ -432,7 +432,7 @@ func TestProviderGDELT(t *testing.T) {
 
 func TestProviderOpenAlex(t *testing.T) {
 	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
-		if got := r.URL.Query().Get("mailto"); got != openAlexPoliteMailto {
+		if got := r.URL.Query().Get("mailto"); got != politeContactMailto {
 			t.Fatalf("mailto = %q", got)
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -444,7 +444,7 @@ func TestProviderOpenAlex(t *testing.T) {
 	})
 	spec := openalexRESTSpec()
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
-		return srv.URL + "/works?search=" + query + "&per_page=5&mailto=" + openAlexPoliteMailto, nil
+		return srv.URL + "/works?search=" + query + "&per_page=5&mailto=" + politeContactMailto, nil
 	}
 	out := NewRESTSearchProvider(spec, KindKeyless).Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"openalex": {"endpoint": srv.URL}},

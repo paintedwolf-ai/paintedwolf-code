@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/timelayout"
+
 	"github.com/lycaon/lycaon/internal/db"
 )
 
@@ -26,7 +28,7 @@ func (s *SQLStore) Append(ctx context.Context, sessionID, agent, summary, ref, b
 	if s == nil || s.queries == nil {
 		return false, fmt.Errorf("findings store not configured")
 	}
-	key := normalizeKey(sessionID)
+	key := strings.TrimSpace(sessionID)
 	agent, summary, ref = normalizeFindingFields(agent, summary, ref)
 	if key == "" || summary == "" {
 		return false, fmt.Errorf("finding identity is incomplete")
@@ -37,7 +39,7 @@ func (s *SQLStore) Append(ctx context.Context, sessionID, agent, summary, ref, b
 		Summary:   summary,
 		Body:      body,
 		Ref:       ref,
-		CreatedAt: db.FormatTime(time.Now().UTC()),
+		CreatedAt: timelayout.Format(time.Now().UTC()),
 	})
 	if err != nil {
 		return false, err
@@ -49,12 +51,16 @@ func (s *SQLStore) Recent(ctx context.Context, sessionID, excludeAgent string, a
 	if s == nil || s.queries == nil {
 		return nil, afterID, fmt.Errorf("findings store not configured")
 	}
-	key := normalizeKey(sessionID)
+	key := strings.TrimSpace(sessionID)
+	pageLimit := limit
+	if pageLimit <= 0 {
+		pageLimit = defaultHistoryLimit
+	}
 
 	var scanned []Finding
 	if since.IsZero() {
 		rows, err := s.queries.ListFindingsAfterID(ctx, db.ListFindingsAfterIDParams{
-			SessionID: key, ID: afterID, ExcludeAgent: strings.TrimSpace(excludeAgent),
+			SessionID: key, ID: afterID, ExcludeAgent: strings.TrimSpace(excludeAgent), PageLimit: int64(pageLimit),
 		})
 		if err != nil {
 			return nil, afterID, err
@@ -66,9 +72,10 @@ func (s *SQLStore) Recent(ctx context.Context, sessionID, excludeAgent string, a
 	} else {
 		rows, err := s.queries.ListFindingsSinceAfterID(ctx, db.ListFindingsSinceAfterIDParams{
 			SessionID:    key,
-			CreatedAt:    db.FormatTime(since.UTC()),
+			CreatedAt:    timelayout.Format(since.UTC()),
 			ExcludeAgent: strings.TrimSpace(excludeAgent),
 			ID:           afterID,
+			PageLimit:    int64(pageLimit),
 		})
 		if err != nil {
 			return nil, afterID, err
@@ -103,7 +110,7 @@ func (s *SQLStore) List(ctx context.Context, sessionID string, max int) ([]Findi
 		limit = defaultHistoryLimit
 	}
 	rows, err := s.queries.ListRecentFindings(ctx, db.ListRecentFindingsParams{
-		SessionID: normalizeKey(sessionID),
+		SessionID: strings.TrimSpace(sessionID),
 		Limit:     int64(limit),
 	})
 	if err != nil {
@@ -122,11 +129,11 @@ func findingFromRow(id int64, agent, summary, ref, body, createdAt string) Findi
 	if err != nil || ts.IsZero() {
 		ts, _ = time.Parse(time.RFC3339, createdAt)
 	}
-	return Finding{ID: id, Agent: agent, Summary: summary, Ref: ref, Body: body, TS: ts}
+	return Finding{ID: id, Agent: agent, Summary: summary, Ref: ref, Body: body, HasBody: body != "", TS: ts}
 }
 
 func (s *SQLStore) Get(ctx context.Context, sessionID string, id int64) (Finding, error) {
-	row, err := s.queries.GetFinding(ctx, db.GetFindingParams{SessionID: normalizeKey(sessionID), ID: id})
+	row, err := s.queries.GetFinding(ctx, db.GetFindingParams{SessionID: strings.TrimSpace(sessionID), ID: id})
 	if db.IsNoRows(err) {
 		return Finding{}, ErrNotFound
 	}

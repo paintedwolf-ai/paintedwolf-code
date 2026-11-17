@@ -114,9 +114,6 @@ func OverlaySourceProofWithWorkspaces(
 	)
 	declaredCommand = strings.TrimSpace(declaredCommand)
 	proof.DeclaredCommand = &declaredCommand
-	if workspaces == nil {
-		workspaces = workerworkspace.FromContext(ctx)
-	}
 	if workspaces != nil {
 		if tracker, binding, checkpointID, ok := workspaces.LatestBindingFor(
 			task.ID,
@@ -137,16 +134,4 @@ func OverlaySourceProofForWorkspaces(
 	return func(ctx context.Context, task *api.WorkerTask, childMessages []api.Message, declaredCommand string, current workercompletion.SourceRevision) workercompletion.WorkerCompletionProof {
 		return OverlaySourceProofWithWorkspaces(ctx, workspaces, task, childMessages, declaredCommand, current)
 	}
-}
-
-// OverlaySourceProof binds worker receipts to the overlay's current source content and
-// evaluates any scoped workspace tracker carried in ctx.
-func OverlaySourceProof(
-	ctx context.Context,
-	task *api.WorkerTask,
-	childMessages []api.Message,
-	declaredCommand string,
-	current workercompletion.SourceRevision,
-) workercompletion.WorkerCompletionProof {
-	return OverlaySourceProofWithWorkspaces(ctx, workerworkspace.FromContext(ctx), task, childMessages, declaredCommand, current)
 }

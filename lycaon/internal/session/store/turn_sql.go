@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/bloblifecycle"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/timelayout"
 )
 
 // BeginTurn creates a turn or adds an attempt to a recoverable turn.
@@ -68,14 +69,14 @@ func beginTurnSQL(ctx context.Context, s *sqlCore, in TurnStart) (TurnExecution,
 	if err := q.InsertTurn(ctx, db.InsertTurnParams{
 		ID: in.ID, SessionID: in.SessionID, ProjectID: in.ProjectID,
 		Origin: string(in.Origin), InputJson: in.InputJSON,
-		ActiveAttemptID: db.NullString(attemptID), CreatedAt: db.FormatTime(now), UpdatedAt: db.FormatTime(now),
-		ProgressedAt: db.FormatTime(now),
+		ActiveAttemptID: db.NullString(attemptID), CreatedAt: timelayout.Format(now), UpdatedAt: timelayout.Format(now),
+		ProgressedAt: timelayout.Format(now),
 	}); err != nil {
 		return TurnExecution{}, fmt.Errorf("insert turn: %w", err)
 	}
 	if err := q.InsertTurnAttempt(ctx, db.InsertTurnAttemptParams{
 		ID: attemptID, TurnID: in.ID, Attempt: 1,
-		StartedAt: db.FormatTime(now), UpdatedAt: db.FormatTime(now),
+		StartedAt: timelayout.Format(now), UpdatedAt: timelayout.Format(now),
 	}); err != nil {
 		return TurnExecution{}, fmt.Errorf("insert turn attempt: %w", err)
 	}
@@ -146,12 +147,12 @@ func resumeTurnTx(
 	}
 	if err := q.InsertTurnAttempt(ctx, db.InsertTurnAttemptParams{
 		ID: attemptID, TurnID: turnID, Attempt: nextAttempt,
-		StartedAt: db.FormatTime(now), UpdatedAt: db.FormatTime(now),
+		StartedAt: timelayout.Format(now), UpdatedAt: timelayout.Format(now),
 	}); err != nil {
 		return TurnExecution{}, err
 	}
 	rows, err := q.ResumeTurn(ctx, db.ResumeTurnParams{
-		ActiveAttemptID: db.NullString(attemptID), UpdatedAt: db.FormatTime(now), ID: turnID,
+		ActiveAttemptID: db.NullString(attemptID), UpdatedAt: timelayout.Format(now), ID: turnID,
 	})
 	if err != nil {
 		return TurnExecution{}, err
@@ -179,6 +180,13 @@ func resumeTurnTx(
 }
 
 // CheckpointTurn advances one active attempt at a restart-safe boundary.
+// TouchTurnProgress records durable progress of a running turn: a model
+// response or a tool result was accounted.
+func (t *sqlTurns) TouchTurnProgress(ctx context.Context, turnID string) error {
+	_, err := t.core.queries.TouchTurnProgress(ctx, db.TouchTurnProgressParams{ProgressedAt: timelayout.Format(time.Now().UTC()), ID: turnID})
+	return err
+}
+
 func (t *sqlTurns) CheckpointTurn(ctx context.Context, turnID, attemptID string, phase TurnPhase, checkpointJSON string) error {
 	s := t.core
 	if !validTurnPhase(phase) || phase == TurnPhaseComplete {
@@ -187,7 +195,7 @@ func (t *sqlTurns) CheckpointTurn(ctx context.Context, turnID, attemptID string,
 	if strings.TrimSpace(checkpointJSON) == "" {
 		checkpointJSON = "{}"
 	}
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -198,24 +206,6 @@ func (t *sqlTurns) CheckpointTurn(ctx context.Context, turnID, attemptID string,
 		return err
 	}
 	return tx.Commit()
-}
-
-// ProjectLiveModelOutput replaces the bounded stream projection.
-func (t *sqlTurns) ProjectLiveModelOutput(ctx context.Context, out LiveModelOutput) error {
-	s := t.core
-	if out.ID == "" || out.TurnAttemptID == "" || out.SessionID == "" || out.MessageID == "" || out.Iteration <= 0 {
-		return fmt.Errorf("live model output identity required")
-	}
-	now := time.Now().UTC()
-	if out.CreatedAt.IsZero() {
-		out.CreatedAt = now
-	}
-	return s.queries.UpsertLiveModelOutput(ctx, db.UpsertLiveModelOutputParams{
-		ID: out.ID, TurnAttemptID: out.TurnAttemptID, SessionID: out.SessionID,
-		Iteration: int64(out.Iteration), MessageID: out.MessageID, Content: out.Content,
-		ToolCallsJson: db.NullString(out.ToolCallsJSON), ReasoningJson: db.NullString(out.ReasoningJSON),
-		CreatedAt: db.FormatTime(out.CreatedAt), UpdatedAt: db.FormatTime(now),
-	})
 }
 
 // SettleModelOutput copies one live output into immutable storage exactly once.
@@ -282,9 +272,6 @@ func settleModelOutputSQL(ctx context.Context, s *sqlCore, out ModelOutput) (Mod
 	if err != nil {
 		return ModelOutput{}, err
 	}
-	if err := q.DeleteLiveModelOutput(ctx, out.ID); err != nil {
-		return ModelOutput{}, err
-	}
 	if err := tx.Commit(); err != nil {
 		return ModelOutput{}, err
 	}
@@ -296,7 +283,7 @@ func insertSettledModelOutput(ctx context.Context, q *db.Queries, out ModelOutpu
 		ID: out.ID, TurnAttemptID: out.TurnAttemptID, SessionID: out.SessionID, ProjectID: projectID,
 		Iteration: int64(out.Iteration), MessageID: out.MessageID, ProviderID: out.ProviderID,
 		Model: out.Model, ContentBlobSha256: sha, FinishReason: out.FinishReason, Scripted: boolInt(out.Scripted),
-		CreatedAt: db.FormatTime(out.CreatedAt), SettledAt: db.FormatTime(out.SettledAt),
+		CreatedAt: timelayout.Format(out.CreatedAt), SettledAt: timelayout.Format(out.SettledAt),
 	})
 	if err != nil && db.IsUniqueConstraint(err) {
 		return &ModelOutputIterationCollisionError{TurnAttemptID: out.TurnAttemptID, Iteration: out.Iteration}

@@ -24,7 +24,7 @@ func (l *Waits) enterSleep(ctx context.Context, sessionID string, arm sleepArm) 
 	}
 	triggers := arm.triggers
 	if triggers == nil {
-		triggers = DefaultCoordinatorWaitTriggers(l.Subscriptions.overlayPromoteDue(ctx, sessionID, anchor.Envelope{}))
+		triggers = DefaultCoordinatorWaitTriggers(l.Subscriptions.overlayPromoteDue(ctx, sessionID))
 	}
 	st := l.sleep.state(sessionID)
 	// Preserve context values for the later timer wake.

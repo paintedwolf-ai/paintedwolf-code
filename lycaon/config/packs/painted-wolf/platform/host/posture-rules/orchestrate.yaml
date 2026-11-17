@@ -4,7 +4,7 @@ rules:
   - id: orchestrate_posture_no_plan_writer
     when:
       posture_is: orchestrate
-      tool_is_task: true
+      tool_names_agent: true
       agent_is_plan_writer: true
     then:
       deny:
@@ -14,7 +14,7 @@ rules:
   - id: orchestrate_posture_disallowed_agent
     when:
       posture_is: orchestrate
-      tool_is_task: true
+      tool_names_agent: true
       disallowed_agent: true
     then:
       deny:

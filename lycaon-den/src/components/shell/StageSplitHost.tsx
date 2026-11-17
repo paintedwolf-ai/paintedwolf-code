@@ -1,5 +1,5 @@
 import { Show, onCleanup, type JSX } from "solid-js";
-import type { NarrowSplitSurvivor } from "../../../shared/app-state-types.ts";
+import type { SplitPane } from "../../../shared/app-state-types.ts";
 import { LAYOUT_BAND_SCALES, bindLayoutBand } from "../../layout/layout-bands.ts";
 
 export type StageSplitHostProps = {
@@ -18,7 +18,7 @@ export type StageSplitHostProps = {
    * Column the stylesheet keeps once the host band reports too little room for
    * both. Declared from preferences; the width that triggers it is measured.
    */
-  narrowSurvivor: NarrowSplitSurvivor;
+  narrowSurvivor: SplitPane;
   /** Effective conversation column width, including drag preview. */
   chatWidthPx: number;
   washed: boolean;

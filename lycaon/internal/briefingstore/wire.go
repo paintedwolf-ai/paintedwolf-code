@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strconv"
 
 	"github.com/lycaon/lycaon/internal/briefing"
-	"github.com/lycaon/lycaon/internal/db"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -45,9 +45,9 @@ func (s *Store) Snapshot(ctx context.Context, query SnapshotQuery) (wire.Briefin
 		out.Status = "canceled"
 	}
 	out.RegenerateOutcome, out.ErrorCode, out.ErrorMessage = string(target.Attempt.Regenerate), target.Attempt.ErrorCode, target.Attempt.Error
-	out.UpdatedAt = db.FormatTime(target.UpdatedAt)
+	out.UpdatedAt = timelayout.Format(target.UpdatedAt)
 	if target.Attempt.Status == "pending" {
-		out.ReconcileAfterAt = db.FormatTime(query.Policy.Deadline(target.Attempt.StartedAt))
+		out.ReconcileAfterAt = timelayout.Format(query.Policy.Deadline(target.Attempt.StartedAt))
 		for _, section := range target.Sections {
 			if !section.Resolved {
 				out.PendingSections = append(out.PendingSections, section.SectionID)
@@ -98,7 +98,7 @@ func summarySection(section briefing.SectionHash, result briefing.Result, reused
 	return wire.BriefingSummarySection{
 		SectionID: section.SectionID, Text: result.Text, ManifestHash: section.ManifestHash, Source: string(result.Source),
 		Reused: reused, ProviderID: result.Provider, Model: result.Model, EvidenceQuality: append([]string{}, result.Quality...),
-		CreatedAt: db.FormatTime(result.CreatedAt),
+		CreatedAt: timelayout.Format(result.CreatedAt),
 	}
 }
 
@@ -125,7 +125,7 @@ func (s *Store) Record(ctx context.Context, projectID, recordID string, readable
 		return wire.BriefingRecord{}, err
 	}
 	out := wire.BriefingRecord{RecordID: record.ID, ProfileID: record.ProfileID, ProfileVersion: record.Version, Method: record.Method,
-		AttemptTrigger: record.Origin.Trigger, CreatedAt: db.FormatTime(record.CreatedAt), Sections: []wire.BriefingRecordSection{}}
+		AttemptTrigger: record.Origin.Trigger, CreatedAt: timelayout.Format(record.CreatedAt), Sections: []wire.BriefingRecordSection{}}
 	for _, section := range record.Sections {
 		rendered, err := s.recordSection(ctx, projectID, section, readable)
 		if err != nil {

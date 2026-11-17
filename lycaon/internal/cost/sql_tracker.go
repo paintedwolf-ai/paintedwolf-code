@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"sync"
 	"time"
@@ -33,7 +34,7 @@ func (t *SQLTracker) RecoverStartedCalls(ctx context.Context) error {
 		UPDATE llm_calls
 		SET status = 'unknown', completed_at = ?
 		WHERE status = 'started'
-	`, db.FormatTime(time.Now().UTC()))
+	`, timelayout.Format(time.Now().UTC()))
 	return err
 }
 
@@ -55,7 +56,7 @@ func (t *SQLTracker) BeginCall(ctx context.Context, evt UsageEvent) error {
 		) VALUES (?, ?, ?, ?, ?, ?, ?, 'started', ?, ?)
 		ON CONFLICT(id) DO NOTHING
 	`, evt.ID, evt.SessionID, evt.ParentSessionID, evt.ProjectID, evt.ProviderID, evt.Model,
-		normalizeCaller(evt.Caller), db.FormatTime(started), boolInt(t.NoCharge(evt.ProviderID, evt.Model)))
+		normalizeCaller(evt.Caller), timelayout.Format(started), boolInt(t.NoCharge(evt.ProviderID, evt.Model)))
 	return err
 }
 
@@ -67,7 +68,7 @@ func (t *SQLTracker) MarkCallUnknown(ctx context.Context, callID string) error {
 		UPDATE llm_calls
 		SET status = 'unknown', completed_at = COALESCE(completed_at, ?)
 		WHERE id = ? AND status = 'started'
-	`, db.FormatTime(time.Now().UTC()), callID)
+	`, timelayout.Format(time.Now().UTC()), callID)
 	return err
 }
 
@@ -102,7 +103,7 @@ func (t *SQLTracker) ClaimSpendWarning(ctx context.Context, sessionID string, ce
 			ceiling_nano_usd = excluded.ceiling_nano_usd,
 			fired_at = excluded.fired_at
 		WHERE session_spend_warnings.ceiling_nano_usd != excluded.ceiling_nano_usd
-	`, sessionID, ceilingNanoUSD, db.FormatTime(time.Now().UTC()))
+	`, sessionID, ceilingNanoUSD, timelayout.Format(time.Now().UTC()))
 	if err != nil {
 		return false, err
 	}
@@ -182,7 +183,7 @@ func (t *SQLTracker) RecordUsage(ctx context.Context, evt UsageEvent) error {
 	}
 	var pricedAsOf any
 	if !evt.PricedAsOf.IsZero() {
-		pricedAsOf = db.FormatTime(evt.PricedAsOf.UTC())
+		pricedAsOf = timelayout.Format(evt.PricedAsOf.UTC())
 	}
 	unpriced := 0
 	if evt.Unpriced {
@@ -225,7 +226,7 @@ func (t *SQLTracker) RecordUsage(ctx context.Context, evt UsageEvent) error {
 	`, evt.ID, evt.SessionID, evt.ParentSessionID, evt.ProjectID, evt.ProviderID, evt.Model,
 		normalizeCaller(evt.Caller), evt.PromptTokens, evt.CompletionTokens,
 		evt.CacheReadInputTokens, evt.CacheCreationInputTokens, estimated, unpriced,
-		evt.PricingSource, pricedAsOf, db.FormatTime(started), db.FormatTime(time.Now().UTC()),
+		evt.PricingSource, pricedAsOf, timelayout.Format(started), timelayout.Format(time.Now().UTC()),
 		boolInt(t.NoCharge(evt.ProviderID, evt.Model)), string(source), evt.CacheCreation1HInputTokens, evt.UnpricedTokens, snapshot, evt.CacheSavingsNanoUSD, evt.UnpricedCacheTokens)
 	return err
 }

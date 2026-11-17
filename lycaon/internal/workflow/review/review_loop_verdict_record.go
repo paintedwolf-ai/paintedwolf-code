@@ -115,7 +115,7 @@ func (m *Verdicts) RecordReviewLoopVerdict(
 	op = *stored
 	projectDir := m.Resolver.ProjectDirForRun(ctx, active)
 	if err := m.Records.CommitVerdictOperation(ctx, op, active, projectDir, committedVars, out); err != nil {
-		if rejection := toolrejection.AsToolReject(err); rejection != nil && rejection.Code == ReviewContextChangedCode {
+		if rejection := toolrejection.AsToolReject(err); rejection != nil && rejection.Code == runstate.ReviewContextChangedCode {
 			if resolveErr := m.Records.ResolveVerdictOperationDiverged(ctx, operationID, rejection.Code); resolveErr != nil {
 				return out, resolveErr
 			}
