@@ -7028,6 +7028,10 @@ type SourceCommandWindow struct {
 	StartedAt time.Time `json:"started_at"`
 	// When the window ended; omitted while running.
 	EndedAt *time.Time `json:"ended_at,omitempty"`
+	// One entry per folder the window covered: its attached roots and the
+	// command's write roots beyond the project. A folder appears once its
+	// observation is decided.
+	Coverage []SourceWindowFolderCoverage `json:"coverage,omitempty"`
 }
 
 // SourceCommitComparison Current Git comparison addressed by root_id and path, independent of
@@ -8263,8 +8267,9 @@ type SourceWalkResponse struct {
 	// git_change_id; those references do not advance the page cursor.
 	GitChanges []SourceGitChange `json:"git_changes"`
 	// Every command observation window an effect on this page references
-	// by command_id, newest first. A window that observed nothing has no
-	// row, so there is no bare command to list.
+	// by command_id, and every window in the page's span that left a
+	// folder uncompared, newest first. A window that observed nothing and
+	// compared every folder has no row, so there is no bare command to list.
 	Commands []SourceCommandWindow `json:"commands"`
 	// Explanation target for each step on this page, keyed by the step's rail key (an effect id, git:<change id>, command:<window id> or outside:<first effect id>). Den reads targets from here rather than inventing them.
 	BriefingTargets map[string]SourceStepBriefingTarget `json:"briefing_targets,omitempty"`
@@ -8311,6 +8316,30 @@ type SourceWatchCoverage struct {
 	UnwatchedDirectories int `json:"unwatched_directories"`
 	// The kernel refused the latest registration because the per-user watch limit is reached (`fs.inotify.max_user_watches` on Linux); unwatched directories recover once the limit is raised or watches free up.
 	WatchLimitReached bool `json:"watch_limit_reached,omitempty"`
+}
+
+// SourceWindowBoundary One folder a partial observation did not enter.
+type SourceWindowBoundary struct {
+	// Slash-separated, relative to the covered folder; "." is the folder itself.
+	Path   string                     `json:"path"`
+	Reason SourceWindowBoundaryReason `json:"reason"`
+}
+
+// SourceWindowFolderCoverage How much of one folder the window compared. root_id is an attached
+// root, with an empty path for its whole tree, or the project's outside
+// namespace, where path is the folder's host path without its leading
+// slash and an empty path stands for every host folder beyond the
+// project. Partial and not observed never mean no changes.
+type SourceWindowFolderCoverage struct {
+	RootID   string               `json:"root_id"`
+	Path     string               `json:"path"`
+	Coverage SourceWindowCoverage `json:"coverage"`
+	// Why nothing can be said about the folder; present only when not observed.
+	Reason *SourceWindowGapReason `json:"reason,omitempty"`
+	// The folders a partial observation did not enter; empty otherwise.
+	Boundaries []SourceWindowBoundary `json:"boundaries,omitempty"`
+	// Boundaries past the listed ones; zero when the list is whole.
+	OmittedBoundaries int `json:"omitted_boundaries,omitempty"`
 }
 
 // SourceWorkspace

@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -17,8 +18,11 @@ import (
 // launching after that runs unobserved.
 type programWindow struct {
 	// due is false where commands are not observed, so launches never wait.
-	due    bool
-	open   func(context.Context) commandWindow
+	due  bool
+	open func(context.Context) commandWindow
+	// unobservedFolders lists what the window was due to cover, for a launch
+	// that ran with no window open.
+	unobservedFolders func() []hostcmd.FolderCoverage
 	clock  commandprogram.Clock
 	once   sync.Once
 	cancel context.CancelFunc
@@ -35,17 +39,22 @@ func newProgramWindow(tc tools.ToolContext, commandLine string, clock commandpro
 	return &programWindow{
 		due:   commandWindowDue(tc),
 		open:  func(ctx context.Context) commandWindow { return openCommandWindow(ctx, tc, "command", commandLine) },
+		unobservedFolders: func() []hostcmd.FolderCoverage {
+			return unobservedFolders(tc, outsideRootSpecs(tc))
+		},
 		clock: clock,
 		ready: make(chan struct{}),
 	}
 }
 
-// enter returns once the launch may start, holding the window until release. An
-// error means the launch's own context ended. Observation never takes time the
+// enter returns once the launch may start, holding the window until release. The
+// launch's write roots beyond the project join the window first, and an
+// unconfined launch leaves nothing beyond the project observed. An error means
+// the launch's own context ended. Observation never takes time the
 // program assigned to its command: a launch with a bound waits at most half of
 // what remains, then runs unobserved. The open outlives the launch that began it,
 // so a stage's bound does not cost later launches their window.
-func (w *programWindow) enter(ctx context.Context) (func(), error) {
+func (w *programWindow) enter(ctx context.Context, launch tools.ToolContext, boundary confine.Boundary) (func(), error) {
 	if w == nil || !w.due {
 		return func() {}, nil
 	}
@@ -69,6 +78,8 @@ func (w *programWindow) enter(ctx context.Context) (func(), error) {
 	if w.window.open == nil {
 		return w.unobserved(ctx)
 	}
+	w.window.open.AddOutsideRoots(waitCtx, outsideRootSpecs(launch))
+	w.window.noteBoundary(boundary)
 	release, err := w.window.open.Hold(waitCtx)
 	if err != nil {
 		return w.unobserved(ctx)
@@ -109,12 +120,19 @@ func (w *programWindow) settle(ctx context.Context) {
 		w.cancel()
 	}
 	<-w.ready
+	w.mu.Lock()
+	missed := w.missed
+	w.mu.Unlock()
+	if missed {
+		w.window.open.NoteMissedLaunch()
+	}
 	w.window.closeNow(ctx)
 }
 
 // fact states the window on the program's result. An open still in flight or one
-// that failed has nothing to state, unless a launch went ahead without it: a launch
-// stopped during the open started no process.
+// that failed has nothing to state, unless a launch went ahead without it, which
+// leaves every folder not observed: a launch stopped during the open started no
+// process.
 func (w *programWindow) fact() *hostcmd.SourceWindow {
 	var fact *hostcmd.SourceWindow
 	select {
@@ -130,8 +148,8 @@ func (w *programWindow) fact() *hostcmd.SourceWindow {
 		return fact
 	}
 	if fact == nil {
-		return &hostcmd.SourceWindow{Unobserved: true}
+		return &hostcmd.SourceWindow{Coverage: w.unobservedFolders()}
 	}
-	fact.Unobserved = true
-	return fact
+	w.window.open.NoteMissedLaunch()
+	return w.window.fact()
 }

@@ -114,3 +114,30 @@ func TestRevision6ClaimWithoutItsShapeIsRefusedWithoutMutation(t *testing.T) {
 		t.Fatal("refused store was mutated")
 	}
 }
+
+// An upgraded store keeps a window's coverage until the window goes, and
+// refuses a gap without its reason.
+func TestRevision6CommandWindowCoverageFollowsItsWindow(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "store.db")
+	releasedRevision5Store(t, path)
+	testutil.FailErr(t, "upgrade released source", UpgradeStaged(t.Context(), path))
+	store, err := sql.Open("sqlite", path)
+	testutil.FailErr(t, "open upgraded store", err)
+	defer store.Close()
+	_, err = store.Exec(`INSERT INTO projects(id,last_opened_at,created_at) VALUES('p6','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')`)
+	testutil.FailErr(t, "create project", err)
+	_, err = store.Exec(`INSERT INTO source_command_windows(id,project_id,session_id,tool_name,command_line,state,ordinal,started_ts) VALUES('w6','p6','s6','command','make','ended',1,'2026-01-01T00:00:00Z')`)
+	testutil.FailErr(t, "create window", err)
+	_, err = store.Exec(`INSERT INTO source_command_window_coverage(window_id,root_id,path,coverage,reason) VALUES('w6','outside','home/me','not_observed','time_budget')`)
+	testutil.FailErr(t, "record a gap", err)
+	if _, err := store.Exec(`INSERT INTO source_command_window_coverage(window_id,root_id,path,coverage) VALUES('w6','outside','srv','not_observed')`); err == nil {
+		t.Fatal("a gap without a reason was accepted")
+	}
+	_, err = store.Exec(`DELETE FROM source_command_windows WHERE id='w6'`)
+	testutil.FailErr(t, "delete window", err)
+	var left int
+	testutil.FailErr(t, "count coverage", store.QueryRow(`SELECT count(*) FROM source_command_window_coverage`).Scan(&left))
+	if left != 0 {
+		t.Fatalf("%d coverage rows outlived their window", left)
+	}
+}

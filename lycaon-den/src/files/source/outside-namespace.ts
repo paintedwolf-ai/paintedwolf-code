@@ -25,6 +25,12 @@ export function isOutsideRoot(projectId: string, rootId: string | undefined): bo
   return !!rootId && outsideRoots().get(projectId) === rootId;
 }
 
+/** Whether rootId is any known project's outside namespace. */
+export function isKnownOutsideRoot(rootId: string): boolean {
+  for (const id of outsideRoots().values()) if (id === rootId) return true;
+  return false;
+}
+
 /** The host path of an outside-namespace path. */
 export function outsideHostPath(path: string): string {
   return `/${path.replace(/^\/+/, "")}`;

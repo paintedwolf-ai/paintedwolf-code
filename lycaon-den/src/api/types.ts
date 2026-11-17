@@ -14335,6 +14335,37 @@ export interface components {
         };
         /** @enum {string} */
         SourceCommandWindowState: "running" | "ended" | "interrupted";
+        /** @enum {string} */
+        SourceWindowCoverage: "complete" | "partial" | "not_observed";
+        /** @enum {string} */
+        SourceWindowGapReason: "unconfined" | "baseline_incomplete" | "canceled" | "io_error" | "settlement_failed" | "time_budget";
+        /** @enum {string} */
+        SourceWindowBoundaryReason: "scope" | "directory_cap" | "subtree_cap" | "walk_budget" | "unreadable";
+        /** @description One folder a partial observation did not enter. */
+        SourceWindowBoundary: {
+            /** @description Slash-separated, relative to the covered folder; "." is the folder itself. */
+            path: string;
+            reason: components["schemas"]["SourceWindowBoundaryReason"];
+        };
+        /**
+         * @description How much of one folder the window compared. root_id is an attached
+         *     root, with an empty path for its whole tree, or the project's outside
+         *     namespace, where path is the folder's host path without its leading
+         *     slash and an empty path stands for every host folder beyond the
+         *     project. Partial and not observed never mean no changes.
+         */
+        SourceWindowFolderCoverage: {
+            /** Format: uuid */
+            root_id: string;
+            path: string;
+            coverage: components["schemas"]["SourceWindowCoverage"];
+            /** @description Why nothing can be said about the folder; present only when not observed. */
+            reason?: components["schemas"]["SourceWindowGapReason"];
+            /** @description The folders a partial observation did not enter; empty otherwise. */
+            boundaries?: components["schemas"]["SourceWindowBoundary"][];
+            /** @description Boundaries past the listed ones; zero when the list is whole. */
+            omitted_boundaries?: number;
+        };
         /**
          * @description One host-run command's observation window: the span of a command or
          *     verify tool call during which reconcile passes attribute the file
@@ -14373,6 +14404,12 @@ export interface components {
              * @description When the window ended; omitted while running.
              */
             ended_at?: string;
+            /**
+             * @description One entry per folder the window covered: its attached roots and the
+             *     command's write roots beyond the project. A folder appears once its
+             *     observation is decided.
+             */
+            coverage?: components["schemas"]["SourceWindowFolderCoverage"][];
         };
         SourceWalkResponse: {
             /**
@@ -14398,8 +14435,9 @@ export interface components {
             git_changes: components["schemas"]["SourceGitChange"][];
             /**
              * @description Every command observation window an effect on this page references
-             *     by command_id, newest first. A window that observed nothing has no
-             *     row, so there is no bare command to list.
+             *     by command_id, and every window in the page's span that left a
+             *     folder uncompared, newest first. A window that observed nothing and
+             *     compared every folder has no row, so there is no bare command to list.
              */
             commands: components["schemas"]["SourceCommandWindow"][];
             /** @description Explanation target for each step on this page, keyed by the step's rail key (an effect id, git:<change id>, command:<window id> or outside:<first effect id>). Den reads targets from here rather than inventing them. */
@@ -31435,6 +31473,11 @@ export type SourceContributor = components["schemas"]["SourceContributor"];
 export type SourceWalkEffect = components["schemas"]["SourceWalkEffect"];
 export type SourceWalkFile = components["schemas"]["SourceWalkFile"];
 export type SourceCommandWindowState = components["schemas"]["SourceCommandWindowState"];
+export type SourceWindowCoverage = components["schemas"]["SourceWindowCoverage"];
+export type SourceWindowGapReason = components["schemas"]["SourceWindowGapReason"];
+export type SourceWindowBoundaryReason = components["schemas"]["SourceWindowBoundaryReason"];
+export type SourceWindowBoundary = components["schemas"]["SourceWindowBoundary"];
+export type SourceWindowFolderCoverage = components["schemas"]["SourceWindowFolderCoverage"];
 export type SourceCommandWindow = components["schemas"]["SourceCommandWindow"];
 export type SourceWalkResponse = components["schemas"]["SourceWalkResponse"];
 export type SourceFileVersion = components["schemas"]["SourceFileVersion"];

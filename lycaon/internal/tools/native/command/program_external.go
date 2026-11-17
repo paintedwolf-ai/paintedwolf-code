@@ -106,7 +106,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 	}
 	// Open before the process starts, so earlier drift is not attributed to it,
 	// and stay held until it has exited, on every path out of this launch.
-	release, err := l.window.enter(ctx)
+	release, err := l.window.enter(ctx, tctx, boundary)
 	if err != nil {
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, err
 	}

@@ -2,6 +2,9 @@
 # Bundled directory-priority.yaml patterns apply independently of ignore_files.
 # Ongoing host discovery has no repository-size ceiling. Readers batch and spill
 # their working sets. Explicit device or trusted project scope budgets are optional.
+# Outside budgets bound a command's write roots beyond the project and must be
+# positive: a large repository is about 35,000 entries in 2,700 folders, so a
+# repository-sized root fits whole while a home-folder grant stops partial.
 version: 1
 budgets:
   capture:
@@ -12,6 +15,10 @@ budgets:
     directory_entries: 0
     subtree_entries: 0
     walk_entries: 0
+  outside:
+    directory_entries: 10000
+    subtree_entries: 50000
+    walk_entries: 100000
 ignore_files:
   capture: true
   catalog_priority: true

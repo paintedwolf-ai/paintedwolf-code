@@ -1742,6 +1742,16 @@ type SourceCheckpoints struct {
 	CreatedTs      string `json:"created_ts"`
 }
 
+type SourceCommandWindowCoverage struct {
+	WindowID          string `json:"window_id"`
+	RootID            string `json:"root_id"`
+	Path              string `json:"path"`
+	Coverage          string `json:"coverage"`
+	Reason            string `json:"reason"`
+	BoundariesJson    string `json:"boundaries_json"`
+	OmittedBoundaries int64  `json:"omitted_boundaries"`
+}
+
 type SourceCommandWindowObjects struct {
 	WindowID string `json:"window_id"`
 	Sha256   string `json:"sha256"`

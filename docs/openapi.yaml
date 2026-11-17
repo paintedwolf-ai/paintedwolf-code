@@ -36167,6 +36167,78 @@ components:
         - running
         - ended
         - interrupted
+    SourceWindowCoverage:
+      type: string
+      enum:
+        - complete
+        - partial
+        - not_observed
+    SourceWindowGapReason:
+      type: string
+      enum:
+        - unconfined
+        - baseline_incomplete
+        - canceled
+        - io_error
+        - settlement_failed
+        - time_budget
+    SourceWindowBoundaryReason:
+      type: string
+      enum:
+        - scope
+        - directory_cap
+        - subtree_cap
+        - walk_budget
+        - unreadable
+    SourceWindowBoundary:
+      x-go-generate: true
+      type: object
+      required:
+        - path
+        - reason
+      additionalProperties: false
+      description: One folder a partial observation did not enter.
+      properties:
+        path:
+          type: string
+          description: Slash-separated, relative to the covered folder; "." is the folder itself.
+        reason:
+          $ref: '#/components/schemas/SourceWindowBoundaryReason'
+    SourceWindowFolderCoverage:
+      x-go-generate: true
+      type: object
+      required:
+        - root_id
+        - path
+        - coverage
+      additionalProperties: false
+      description: |
+        How much of one folder the window compared. root_id is an attached
+        root, with an empty path for its whole tree, or the project's outside
+        namespace, where path is the folder's host path without its leading
+        slash and an empty path stands for every host folder beyond the
+        project. Partial and not observed never mean no changes.
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        coverage:
+          $ref: '#/components/schemas/SourceWindowCoverage'
+        reason:
+          x-go-pointer: true
+          $ref: '#/components/schemas/SourceWindowGapReason'
+          description: Why nothing can be said about the folder; present only when not observed.
+        boundaries:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceWindowBoundary'
+          description: The folders a partial observation did not enter; empty otherwise.
+        omitted_boundaries:
+          type: integer
+          minimum: 0
+          description: Boundaries past the listed ones; zero when the list is whole.
     SourceCommandWindow:
       x-go-generate: true
       type: object
@@ -36230,6 +36302,14 @@ components:
           type: string
           format: date-time
           description: When the window ended; omitted while running.
+        coverage:
+          type: array
+          items:
+            $ref: '#/components/schemas/SourceWindowFolderCoverage'
+          description: |
+            One entry per folder the window covered: its attached roots and the
+            command's write roots beyond the project. A folder appears once its
+            observation is decided.
     SourceWalkResponse:
       x-go-generate: true
       type: object
@@ -36281,8 +36361,9 @@ components:
             $ref: '#/components/schemas/SourceCommandWindow'
           description: |
             Every command observation window an effect on this page references
-            by command_id, newest first. A window that observed nothing has no
-            row, so there is no bare command to list.
+            by command_id, and every window in the page's span that left a
+            folder uncompared, newest first. A window that observed nothing and
+            compared every folder has no row, so there is no bare command to list.
         briefing_targets:
           type: object
           description: Explanation target for each step on this page, keyed by the step's rail key (an effect id, git:<change id>, command:<window id> or outside:<first effect id>). Den reads targets from here rather than inventing them.

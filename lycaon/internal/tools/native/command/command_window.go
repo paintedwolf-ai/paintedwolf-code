@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -20,8 +21,9 @@ const commandWindowCloseBudget = 45 * time.Second
 // every method a no-op.
 type commandWindow struct {
 	open *sourceledger.OpenCommandWindow
-	// unobserved means a window was due and could not open.
-	unobserved bool
+	// unobserved lists the folders a window was due to cover when it could not
+	// open; empty when one opened or none was due.
+	unobserved []hostcmd.FolderCoverage
 }
 
 // openCommandWindow opens the window for a primary-tree command. Worker
@@ -32,24 +34,69 @@ func openCommandWindow(ctx context.Context, tctx tools.ToolContext, toolName, co
 		return commandWindow{}
 	}
 	opener := tctx.Source.Commands
+	outside := outsideRootSpecs(tctx)
 	roots := make([]sourceledger.RootSpec, 0, len(tctx.Source.Roots))
 	for _, root := range tctx.Source.Roots {
 		branch, err := tctx.SourceBranch(root.ID)
 		if err != nil {
-			return commandWindow{unobserved: true}
+			return commandWindow{unobserved: unobservedFolders(tctx, outside)}
 		}
 		roots = append(roots, sourceledger.RootSpec{ID: root.ID, BranchID: branch, Path: root.Path})
 	}
 	open, err := opener.OpenCommandWindow(ctx, sourceledger.CommandWindowInput{
-		ProjectID: tctx.Identity.ProjectID, Roots: roots,
+		ProjectID: tctx.Identity.ProjectID, Roots: roots, Outside: outside,
 		SessionID: tctx.Identity.SessionID, Turn: tctx.Identity.UserTurn, ToolCallID: tctx.Identity.ToolCallID,
 		ToolName: toolName, CommandLine: commandLine,
 	})
 	if err != nil {
 		slog.WarnContext(ctx, "command window open", "tool", toolName, "session_id", tctx.Identity.SessionID, "err", err)
-		return commandWindow{unobserved: true}
+		return commandWindow{unobserved: unobservedFolders(tctx, outside)}
 	}
 	return commandWindow{open: open}
+}
+
+// outsideRootSpecs are the write roots beyond the project the window compares.
+func outsideRootSpecs(tctx tools.ToolContext) []sourceledger.OutsideRootSpec {
+	roots := tctx.OutsideWriteRoots()
+	out := make([]sourceledger.OutsideRootSpec, 0, len(roots))
+	for _, root := range roots {
+		out = append(out, sourceledger.OutsideRootSpec{Path: root.Path, Omit: root.Omit})
+	}
+	return out
+}
+
+// unobservedFolders states every folder a window was due to cover as not
+// observed: none had its starting state recorded before the command started.
+func unobservedFolders(tctx tools.ToolContext, outside []sourceledger.OutsideRootSpec) []hostcmd.FolderCoverage {
+	out := make([]hostcmd.FolderCoverage, 0, len(tctx.Source.Roots)+len(outside))
+	for _, root := range tctx.Source.Roots {
+		out = append(out, hostcmd.FolderCoverage{Folder: root.Path, Coverage: string(api.SourceWindowCoverageNotObserved), Reason: string(api.SourceWindowGapBaselineIncomplete)})
+	}
+	for _, root := range outside {
+		out = append(out, hostcmd.FolderCoverage{Folder: root.Path, Coverage: string(api.SourceWindowCoverageNotObserved), Reason: string(api.SourceWindowGapBaselineIncomplete)})
+	}
+	return out
+}
+
+// coverageFact projects the ledger's folder coverage onto the command result.
+func coverageFact(coverage []sourceledger.FolderCoverage) []hostcmd.FolderCoverage {
+	out := make([]hostcmd.FolderCoverage, 0, len(coverage))
+	for _, folder := range coverage {
+		fact := hostcmd.FolderCoverage{Folder: folder.Folder, Coverage: string(folder.State), Reason: string(folder.Reason), OmittedBoundaries: folder.OmittedBoundaries}
+		for _, boundary := range folder.Boundaries {
+			fact.Boundaries = append(fact.Boundaries, hostcmd.CoverageBoundary{Path: boundary.Path, Reason: string(boundary.Reason)})
+		}
+		out = append(out, fact)
+	}
+	return out
+}
+
+// noteBoundary records the confinement a process of the window ran under; an
+// unconfined one could write anywhere beyond the project.
+func (w commandWindow) noteBoundary(boundary confine.Boundary) {
+	if w.open != nil && !boundary.Applied {
+		w.open.MarkUnconfined()
+	}
 }
 
 // commandWindowDue reports whether commands in this context are observed at all.
@@ -76,12 +123,12 @@ func (w commandWindow) closeNow(ctx context.Context) {
 // fact states the window on a command result; nil when none was due.
 func (w commandWindow) fact() *hostcmd.SourceWindow {
 	if w.open == nil {
-		if w.unobserved {
-			return &hostcmd.SourceWindow{Unobserved: true}
+		if len(w.unobserved) > 0 {
+			return &hostcmd.SourceWindow{Coverage: w.unobserved}
 		}
 		return nil
 	}
-	return &hostcmd.SourceWindow{ID: w.open.ID, Settled: w.open.IsSettled()}
+	return &hostcmd.SourceWindow{ID: w.open.ID, Settled: w.open.IsSettled(), Coverage: coverageFact(w.open.Coverage())}
 }
 
 // closeOnExit ends the window when a promoted or background process exits.

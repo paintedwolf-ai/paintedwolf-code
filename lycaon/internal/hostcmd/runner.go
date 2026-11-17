@@ -91,20 +91,39 @@ func StagePlaceholders(stages []exec.Stage) []StageResult {
 }
 
 // SourceWindow is the command's source observation window. Until Settled, the
-// window may not have recorded all of the command's changes. Unobserved means a
-// process ran with no window watching it; with no ID, none ever opened.
+// window may not have recorded all of the command's changes. Coverage states
+// each folder the window covered once that folder is decided; with no ID, no
+// window opened and every folder it was due to cover is not observed.
 type SourceWindow struct {
-	ID         string `json:"id,omitempty"`
-	Settled    bool   `json:"settled"`
-	Unobserved bool   `json:"unobserved,omitempty"`
+	ID       string           `json:"id,omitempty"`
+	Settled  bool             `json:"settled"`
+	Coverage []FolderCoverage `json:"coverage,omitempty"`
+}
+
+// FolderCoverage is how much of one folder the window compared: complete,
+// partial with the folders it did not enter, or not observed with a reason.
+// Partial and not observed never mean the folder did not change.
+type FolderCoverage struct {
+	Folder            string             `json:"folder"`
+	Coverage          string             `json:"coverage"`
+	Reason            string             `json:"reason,omitempty"`
+	Boundaries        []CoverageBoundary `json:"boundaries,omitempty"`
+	OmittedBoundaries int                `json:"omitted_boundaries,omitempty"`
+}
+
+// CoverageBoundary is a folder, relative to the covered one, a partial
+// observation did not enter.
+type CoverageBoundary struct {
+	Path   string `json:"path"`
+	Reason string `json:"reason"`
 }
 
 // MarshalJSON states settlement only for a window that exists.
 func (w SourceWindow) MarshalJSON() ([]byte, error) {
 	if w.ID == "" {
 		return json.Marshal(struct {
-			Unobserved bool `json:"unobserved"`
-		}{w.Unobserved})
+			Coverage []FolderCoverage `json:"coverage"`
+		}{w.Coverage})
 	}
 	type plain SourceWindow
 	return json.Marshal(plain(w))

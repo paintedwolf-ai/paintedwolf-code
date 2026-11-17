@@ -253,6 +253,7 @@ func runCommandBackground(
 		return "", toolrejection.HeldHandOffReject(toolName, err)
 	}
 	window := openCommandWindow(ctx, tctx, toolName, commandLine)
+	window.noteBoundary(confine.BoundaryOf(confinement))
 	var sourceRevision, sourceRootDigest string
 	if tctx.Execution.VerificationCheck {
 		sourceRevision, sourceRootDigest = sourceledger.VerificationState(ctx, tctx.Source.Observations, tools.HostWriteRoot(tctx))

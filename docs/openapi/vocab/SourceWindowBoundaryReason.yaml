@@ -1,0 +1,15 @@
+# Why a partial observation did not enter a folder; the snapshot walk's
+# boundary reasons.
+name: SourceWindowBoundaryReason
+go_const_prefix: SourceWindowBoundary
+values:
+  - id: scope
+    comment: The source scope's exclusion floor leaves this folder out.
+  - id: directory_cap
+    comment: The folder lists more entries than one directory may.
+  - id: subtree_cap
+    comment: The folder's subtree holds more entries than one subtree may.
+  - id: walk_budget
+    comment: The walk reached its entry budget before this folder.
+  - id: unreadable
+    comment: The folder could not be read.
