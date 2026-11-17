@@ -7,6 +7,7 @@ import (
 	"maps"
 	"net/http"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -98,6 +99,9 @@ func compactJSON(raw []byte) json.RawMessage {
 func (s *conformanceSweep) checkCorpus(observed openapi.HostCorpus, committedPath string, refresh bool) {
 	if refresh {
 		raw, err := json.MarshalIndent(observed, "", " ")
+		if err == nil {
+			err = os.MkdirAll(filepath.Dir(committedPath), 0o755)
+		}
 		if err == nil {
 			err = os.WriteFile(committedPath, append(raw, '\n'), 0o644)
 		}
