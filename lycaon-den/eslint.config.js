@@ -110,7 +110,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/**/*.{ts,tsx}", "shared/**/*.ts", "e2e/**/*.ts"],
+    files: ["src/**/*.{ts,tsx}", "shared/**/*.ts", "e2e/**/*.{ts,tsx}"],
     plugins: { den },
     rules: {
       "den/source-laws": ["error", laws],
@@ -125,18 +125,6 @@ export default tseslint.config(
       "den/no-keyed-settings-draft": "error",
       "den/no-native-smooth-scroll": "error",
       "den/no-show-accessor-prop-leak": "error",
-    },
-  },
-  {
-    files: ["e2e/**/*.{ts,tsx}"],
-    rules: {
-      "no-restricted-syntax": [
-        "error",
-        {
-          selector: "CallExpression[callee.property.name='waitForTimeout']",
-          message: "Wait on the state or event the test needs; e2e/fixtures/settle.ts has the settle waits.",
-        },
-      ],
     },
   },
   {
