@@ -15,7 +15,7 @@ import (
 
 func TestConcurrentMutationsNoLostUpdate(t *testing.T) {
 	testutil.SkipIfShort(t, "concurrent full-catalog mutation stress")
-	owner := testOwner(t)
+	owner := shippedStockOwner(t)
 
 	const n = 6
 	var wg sync.WaitGroup
@@ -56,7 +56,7 @@ func TestConcurrentMutationsNoLostUpdate(t *testing.T) {
 
 // Project overlays retain only committed state files.
 func TestProjectMutationLeavesOnlyStateFilesInOverlay(t *testing.T) {
-	owner := testOwner(t)
+	owner := shippedStockOwner(t)
 	projectDir := t.TempDir()
 	result := apply(t, owner, projectScope(projectDir),
 		extensionstate.SetUnitDisabledOp{UnitID: "workflows/plan", Disabled: true})

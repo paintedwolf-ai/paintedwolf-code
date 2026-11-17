@@ -43,7 +43,15 @@ func (*checkpointFailingJournal) Recover(
 	return nil
 }
 
+// testOwner is an owner over the synthetic stock.
 func testOwner(t *testing.T) *extensionstate.Owner {
+	t.Helper()
+	useSyntheticStock(t)
+	return shippedStockOwner(t)
+}
+
+// shippedStockOwner is an owner over the shipped stock catalog.
+func shippedStockOwner(t *testing.T) *extensionstate.Owner {
 	t.Helper()
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	root := configlayout.FindModuleRoot()
