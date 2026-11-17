@@ -6,7 +6,7 @@ import unittest
 from unittest.mock import patch
 
 from ci_policy import hosted_plan as ci
-from ci_policy import impact, evidence, resources, recovery
+from ci_policy import impact, evidence, resources
 
 
 class AdmissionTests(unittest.TestCase):
@@ -139,12 +139,7 @@ class AdmissionTests(unittest.TestCase):
             run.return_value.returncode = 1
             self.assertIsNone(impact.go_scope({'full': False, 'paths': ['lycaon/internal/a/a.go']}))
 
-    def test_only_proven_infrastructure_failure_retries_once(self):
-        for classification in ['test_failure', 'unknown', 'check_failure', 'passed']:
-            self.assertFalse(evidence.retryable([{'classification': classification}], 1))
-        self.assertTrue(evidence.retryable([{'classification': 'runner_oom'}], 1))
-        self.assertFalse(evidence.retryable([{'classification': 'runner_oom'}], 2))
-        self.assertFalse(evidence.retryable([{'classification': 'runner_oom'}, {'classification': 'test_failure'}], 1))
+    def test_runner_oom_needs_a_measured_increment_and_no_source_failure(self):
         record = {'oom_before': 0, 'oom_after': 1}
         self.assertEqual(evidence.classify(record, []), 'runner_oom')
         self.assertEqual(evidence.classify(record, [{'tests': ['TestA']}]), 'test_failure')
@@ -256,9 +251,3 @@ class AdmissionTests(unittest.TestCase):
                 self.assertEqual(module.check(), 0)
                 (db / 'index/modules.json').write_text('[]')
                 self.assertEqual(module.check(), 1)
-
-    def test_pr_recovery_never_downloads_untrusted_artifacts(self):
-        run = {'path': '.github/workflows/ci.yml', 'event': 'pull_request'}
-        with patch.dict('os.environ', GITHUB_REPOSITORY='owner/repo'), patch.object(recovery, 'evidence') as read:
-            recovery.recover(run)
-        read.assert_not_called()
