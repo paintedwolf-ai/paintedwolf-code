@@ -179,6 +179,7 @@
       "packages": [
         "./test/contract/..."
       ],
+      "exclude": "/test/contract/(runner|hosted|release)(/|$)",
       "report_all_failures": true
     },
     "test:security": {

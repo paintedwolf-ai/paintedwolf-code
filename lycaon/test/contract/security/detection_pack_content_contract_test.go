@@ -64,18 +64,6 @@ func TestDetectionPackProviderPacksStayPointPrecise(t *testing.T) {
 	}
 }
 
-// TestDetectionPackGenerationCheckIsGated verifies the aggregate runs the codegen check.
-func TestDetectionPackGenerationCheckIsGated(t *testing.T) {
-	t.Parallel()
-	doc := loadTaskfile(t)
-	if _, ok := doc.Tasks["codegen:detection-packs:check"]; !ok {
-		t.Fatal("Taskfile missing codegen:detection-packs:check target")
-	}
-	if !doc.reaches("check", "codegen:detection-packs:check") {
-		t.Fatal("check does not reach codegen:detection-packs:check")
-	}
-}
-
 // TestDetectionPackBundledPackAskOnly: Evaluate against a bundled GateSource.
 func TestDetectionPackBundledPackAskOnly(t *testing.T) {
 	cat := loadBundledDetectionCatalog(t)

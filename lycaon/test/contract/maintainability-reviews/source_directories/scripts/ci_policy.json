@@ -18,7 +18,6 @@
     "scripts/verification_tests/ci/test_retry_evidence_execution.py": "0f65e345aae47f2afb2f338c2ec164e352f323024216a02d0144ddf338f00d5b",
     "scripts/verification_tests/ci/test_throughput_metrics_execution.py": "1bab3e2cb512ab7cb1684abf2ca71df73455a09c78c0ce43ab1adea302330bdc",
     "scripts/verification_tests/ci/test_cache_payload_execution.py": "06b161615190d65a8fcfc6a38deda03da9756f63d33721e7e6f352ba767596ab",
-    "lycaon/test/contract/hosted/hosted_cache_contract_test.go": "1121f8a392057d883923f9678277acf905e3dcae400e0b3abae73c3b1bd6a815",
     "lycaon/test/contract/hosted/cache_publication_contract_test.go": "326de5c13f3ce9c86e012ab1275515d29f3a5e2d4d5826126cda1d83d2381e9d"
   }
 }

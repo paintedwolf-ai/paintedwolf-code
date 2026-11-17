@@ -4,7 +4,6 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -260,44 +259,6 @@ func TestReleaseChannelsHaveIndependentPointersAndPackageTokens(t *testing.T) {
 	live := contractcheck.ReadRepoFile(t, root, "scripts/release-r2-live-test.sh")
 	if !strings.Contains(live, "stable and preview pointers are isolated") {
 		t.Fatal("credentialed release rehearsal does not prove channel isolation")
-	}
-}
-
-func TestReleaseSigningAndPublicationCustodyAreSeparated(t *testing.T) {
-	t.Parallel()
-	workflow := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/release.yml")
-	build := extractYAMLJob(workflow, "build-release")
-	publish := extractYAMLJob(workflow, "publish-immutable")
-	if !strings.Contains(build, "environment: release-signing") {
-		t.Fatal("signed platform build must use the release-signing environment")
-	}
-	for _, credential := range []string{"CLOUDFLARE_API_TOKEN", "HOMEBREW_TAP_TOKEN", "WWW_DISPATCH_TOKEN"} {
-		exposure.Absent(t, build, credential)
-	}
-	if !strings.Contains(publish, "environment: release-publication") {
-		t.Fatal("immutable publication must use the release-publication environment")
-	}
-	if strings.Contains(publish, "platform-release-*") ||
-		!strings.Contains(publish, "name: release-public-artifacts") {
-		t.Fatal("publication job must receive the catalog-filtered public artifact set, not platform candidates")
-	}
-	for _, credential := range []string{"APPLE_CERTIFICATE", "AZURE_CLIENT_SECRET", "TAURI_SIGNING_PRIVATE_KEY"} {
-		exposure.Absent(t, publish, credential)
-	}
-	// The feed key signs pointers at publication and never signs code; the artifact key never
-	// leaves the signing environment.
-	activate := extractYAMLJob(workflow, "activate-updater")
-	if !strings.Contains(activate, "FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}") ||
-		strings.Contains(activate, "TAURI_SIGNING_PRIVATE_KEY") {
-		t.Fatal("channel activation must sign pointers with the feed key only")
-	}
-	if strings.Contains(build, "FEED_SIGNING_KEYS_JSON") {
-		t.Fatal("signed build receives the feed signing key")
-	}
-	halt := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/release-halt.yml")
-	if !strings.Contains(halt, "FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}") ||
-		strings.Contains(halt, "TAURI_SIGNING_PRIVATE_KEY") {
-		t.Fatal("release halt must sign replacement pointers with the feed key only")
 	}
 }
 

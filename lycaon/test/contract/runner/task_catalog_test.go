@@ -1,7 +1,6 @@
 package contract
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,22 +41,4 @@ type verificationGoRecipe struct {
 	Options []string `json:"options"`
 	Exclude string   `json:"exclude"`
 	Bundled bool     `json:"bundled"`
-}
-
-type verificationCatalogData struct {
-	Groups map[string][]string             `json:"groups"`
-	Go     map[string]verificationGoRecipe `json:"go"`
-	CI     map[string]struct {
-		Targets  []string `json:"targets"`
-		Profiles []string `json:"profiles"`
-	} `json:"ci"`
-}
-
-func verificationCatalog(t *testing.T) verificationCatalogData {
-	t.Helper()
-	data, err := os.ReadFile(filepath.Join(contractcheck.RepoRoot(t), "scripts", "verification-plan.json"))
-	contractcheck.FailErr(t, "read verification plan", err)
-	var plan verificationCatalogData
-	contractcheck.FailErr(t, "decode verification plan", json.Unmarshal(data, &plan))
-	return plan
 }

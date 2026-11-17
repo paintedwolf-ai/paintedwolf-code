@@ -2,8 +2,9 @@
 
 Files in a Go package's tree, CI tooling, and documentation prose are narrowed.
 Generated contracts, configuration, dependencies, build inputs, and unknown paths
-widen the gate. Test imports participate in reverse reachability; contracts and
-smoke tests run unconditionally.
+widen the gate. Test imports participate in reverse reachability; repository contracts
+and smoke tests run unconditionally. The machinery's Go tests run when what they import
+changes or when CI tooling changes.
 """
 
 import json
@@ -16,8 +17,10 @@ from ci_policy.native_impact import dependencies as native_dependencies
 ROOT = Path(__file__).resolve().parents[2]
 SHARED = (".github/", "scripts/", "dependencies/", "schemas/", "docs/openapi",
           "lycaon/config/", "lycaon/pkg/", "lycaon/vulndb")
-# CI's own logic and tests: no product test reads them, and the repository contracts and runner lane check them.
+# CI's own logic and tests: no product test reads them, and the runner lane and machinery tests check them.
 TOOLING = (".github/workflows/", "scripts/ci_policy/", "scripts/verification_tests/")
+# Go tests of the verification and release machinery: they execute its scripts and read its workflows.
+MACHINERY = ("lycaon/test/contract/runner", "lycaon/test/contract/hosted", "lycaon/test/contract/release")
 # These decide how the lanes themselves run, so a change must exercise every lane.
 TOOLING_EXCEPTIONS = {".github/workflows/ci.yml", ".github/workflows/verification.yml",
                       "scripts/ci_policy/hosted_execution.py", "scripts/ci_policy/hosted_plan.py"}
@@ -63,6 +66,10 @@ def change():
 
 def prose(path):
     return path in PROSE or path.startswith("docs/") and path.endswith(".md") and not path.startswith(SHARED)
+
+
+def machinery(directory):
+    return directory in MACHINERY or directory.startswith(tuple(root + "/" for root in MACHINERY))
 
 
 def tooling(path):
@@ -182,6 +189,8 @@ def go_scope(scope):
     directories = {Path(r["Dir"]).relative_to(ROOT).as_posix(): r["ImportPath"] for r in records}
     seeds = set()
     for path in scope["paths"]:
+        if tooling(path):
+            seeds |= {name for directory, name in directories.items() if machinery(directory)}
         if not path.startswith("lycaon/") or prose(path):
             continue
         dependency = native_dependencies(path)
@@ -199,6 +208,7 @@ def go_scope(scope):
         seeds.add(package)
     reached = reverse_closure(graph, seeds)
     reached |= {name for directory, name in directories.items()
-                if directory.startswith(("lycaon/test/contract/", "lycaon/test/smoke"))}
+                if directory.startswith(("lycaon/test/contract/", "lycaon/test/smoke"))
+                and not machinery(directory)}
     return sorted("./" + directory.removeprefix("lycaon/") for directory, name in directories.items()
                   if name in reached)

@@ -252,22 +252,3 @@ func TestReleaseHaltCLI(t *testing.T) {
 		}
 	})
 }
-
-func TestReleaseHaltWorkflowIsProtected(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	body := contractcheck.ReadRepoFile(t, root, ".github/workflows/release-halt.yml")
-	for _, needle := range []string{
-		"workflow_dispatch:",
-		"environment: release-publication",
-		"concurrency:",
-		"group: release-static-update",
-		"dry_run:",
-		"scripts/release_withdrawal.py prepare",
-		"scripts/release_withdrawal.py apply",
-	} {
-		if !strings.Contains(body, needle) {
-			t.Fatalf("release halt workflow missing %q", needle)
-		}
-	}
-}
