@@ -197,11 +197,6 @@ func (d *Debouncer) flush(ctx context.Context, key string) {
 // flushForTestPasses bounds work from continuous producers.
 const flushForTestPasses = 8
 
-// ResetDebouncerForTest drains the global debouncer.
-func ResetDebouncerForTest(ctx context.Context) {
-	globalDebounce.FlushForTest(ctx)
-}
-
 // FlushForTest synchronously drains pending timers.
 func (d *Debouncer) FlushForTest(ctx context.Context) {
 	if d == nil {
@@ -224,4 +219,9 @@ func (d *Debouncer) FlushForTest(ctx context.Context) {
 			d.flush(ctx, k)
 		}
 	}
+}
+
+// ResetDebouncerForTest drains the global debouncer.
+func ResetDebouncerForTest(ctx context.Context) {
+	globalDebounce.FlushForTest(ctx)
 }
