@@ -5715,8 +5715,11 @@ export interface components {
         };
         BoardGitSlice: {
             available: boolean;
-            /** Format: uuid */
-            repo_id: string;
+            /**
+             * Format: uuid
+             * @description Absent when the active folder is not in a git repository.
+             */
+            repo_id?: string;
             label: string;
             branch?: string;
             head_short?: string;

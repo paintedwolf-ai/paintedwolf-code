@@ -866,8 +866,9 @@ type BoardGitRepoLine struct {
 
 // BoardGitSlice
 type BoardGitSlice struct {
-	Available       bool               `json:"available"`
-	RepoID          string             `json:"repo_id"`
+	Available bool `json:"available"`
+	// Absent when the active folder is not in a git repository.
+	RepoID          string             `json:"repo_id,omitempty"`
 	Label           string             `json:"label"`
 	Branch          string             `json:"branch,omitempty"`
 	HeadShort       string             `json:"head_short,omitempty"`
