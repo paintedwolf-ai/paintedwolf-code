@@ -59,4 +59,8 @@ var Family = laws.Family{Name: "forbidden-calls", Rules: slices.Concat(
 	hostSubprocess,
 	workerViews,
 	watchCoverage,
+	persistence,
+	serveWiring,
+	prompts,
+	promptInputs,
 )}
