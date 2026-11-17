@@ -5,7 +5,6 @@ package apitestdeps
 import (
 	"context"
 	"errors"
-	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"path/filepath"
 	"testing"
 	"time"
@@ -251,7 +250,11 @@ func fillHost(t *testing.T, d *Deps) {
 		d.Checkpoints = hitl.NewCheckpoints(hitl.NewSQLStore(d.Database), d.EventPublisher, authzcontext.SQLRecorder(d.Database))
 	}
 	if d.ProgressStore == nil {
-		d.ProgressStore = progress.NewSQLStore(d.Database, sessionstore.NewSQL(d.Database))
+		database, ok := d.Database.(db.ReadHandle)
+		if !ok {
+			t.Fatal("progress fixture requires a database with read transactions")
+		}
+		d.ProgressStore = progress.NewSQLStore(database, sessionstore.NewSQL(database))
 	}
 	if d.VisualStore == nil {
 		d.VisualStore = visual.NewMemoryStore()
