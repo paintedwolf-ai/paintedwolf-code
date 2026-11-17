@@ -9,30 +9,6 @@ import (
 	"context"
 )
 
-const getSessionProgressContent = `-- name: GetSessionProgressContent :one
-
-SELECT content FROM session_progress WHERE session_id = ?
-`
-
-// Coordinator-authored progress doc, keyed by root session.
-func (q *Queries) GetSessionProgressContent(ctx context.Context, sessionID string) (string, error) {
-	row := q.db.QueryRowContext(ctx, getSessionProgressContent, sessionID)
-	var content string
-	err := row.Scan(&content)
-	return content, err
-}
-
-const getSessionProgressRunID = `-- name: GetSessionProgressRunID :one
-SELECT workflow_run_id FROM session_progress WHERE session_id = ?
-`
-
-func (q *Queries) GetSessionProgressRunID(ctx context.Context, sessionID string) (string, error) {
-	row := q.db.QueryRowContext(ctx, getSessionProgressRunID, sessionID)
-	var workflow_run_id string
-	err := row.Scan(&workflow_run_id)
-	return workflow_run_id, err
-}
-
 const getSessionProgressSnapshot = `-- name: GetSessionProgressSnapshot :one
 SELECT content, workflow_run_id, updated_at, item_ids_json, document_version FROM session_progress WHERE session_id = ?
 `
@@ -59,6 +35,7 @@ func (q *Queries) GetSessionProgressSnapshot(ctx context.Context, sessionID stri
 }
 
 const upsertSessionProgressContent = `-- name: UpsertSessionProgressContent :exec
+
 INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at, item_ids_json, document_version)
 VALUES (?, ?, ?, ?, ?, 1)
 ON CONFLICT(session_id) DO UPDATE SET
@@ -77,6 +54,7 @@ type UpsertSessionProgressContentParams struct {
 	ItemIdsJson   string `json:"item_ids_json"`
 }
 
+// Coordinator-authored progress doc, keyed by root session.
 func (q *Queries) UpsertSessionProgressContent(ctx context.Context, arg UpsertSessionProgressContentParams) error {
 	_, err := q.db.ExecContext(ctx, upsertSessionProgressContent,
 		arg.SessionID,
