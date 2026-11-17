@@ -2,7 +2,10 @@ package sourceapi
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -156,7 +160,7 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 		s.responses.InvalidField(w, "path", "has no outside-project address on this platform")
 		return
 	}
-	content, err := os.ReadFile(abs)
+	observed, err := observeOutsideFile(abs)
 	if errors.Is(err, os.ErrNotExist) {
 		s.responses.Fail(w, wire.ApiErrorCodeSourceNotFound, "file not found")
 		return
@@ -165,9 +169,8 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 		s.writeSourceReadError(w, r, err)
 		return
 	}
-	tracked, err := s.SourceLedger.TrackChatFile(r.Context(), sourceledger.TrackInput{
-		ProjectID: p.ID, RootID: p.Outside.ID, Path: rel, Content: content, Size: int64(len(content)),
-	}, sess.ID, sourceledger.ChatFileOpened)
+	observed.ProjectID, observed.RootID, observed.Path = p.ID, p.Outside.ID, rel
+	tracked, err := s.SourceLedger.TrackChatFile(r.Context(), observed, sess.ID, sourceledger.ChatFileOpened)
 	if err != nil {
 		s.writeSourceReadError(w, r, err)
 		return
@@ -184,6 +187,36 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 	httpio.WriteJSON(w, http.StatusOK, wire.OpenedOutsideFile{RootID: p.Outside.ID, Path: rel, FileID: tracked.FileID, Location: chatLocationDTO(p, location)})
 }
 
+// observeOutsideFile hashes a picked file, keeping its bytes only when the
+// ledger retains content of that size.
+func observeOutsideFile(abs string) (sourceledger.TrackInput, error) {
+	f, err := os.Open(abs)
+	if err != nil {
+		return sourceledger.TrackInput{}, err
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil {
+		return sourceledger.TrackInput{}, err
+	}
+	if !info.Mode().IsRegular() {
+		return sourceledger.TrackInput{}, projectsource.ErrSourceIsDirectory
+	}
+	if info.Size() <= sourceledger.MaxRevisionContentBytes {
+		content, err := io.ReadAll(io.LimitReader(f, sourceledger.MaxRevisionContentBytes+1))
+		if err != nil {
+			return sourceledger.TrackInput{}, err
+		}
+		return sourceledger.TrackInput{Content: content, Size: int64(len(content))}, nil
+	}
+	hash := sha256.New()
+	size, err := io.Copy(hash, f)
+	if err != nil {
+		return sourceledger.TrackInput{}, err
+	}
+	return sourceledger.TrackInput{SHA256: hex.EncodeToString(hash.Sum(nil)), Size: size}, nil
+}
+
 // HandleUpdateSourceChatLocation hides or shows a location.
 func (s *Workspace) HandleUpdateSourceChatLocation(w http.ResponseWriter, r *http.Request) {
 	var req wire.UpdateSourceChatLocationRequest
@@ -196,14 +229,20 @@ func (s *Workspace) HandleUpdateSourceChatLocation(w http.ResponseWriter, r *htt
 		return
 	}
 	id := strings.TrimSpace(chi.URLParam(r, "location_id"))
-	if err := s.SourceLedger.HideChatLocation(r.Context(), p.ID, id, req.Hidden); errors.Is(err, sourceledger.ErrHistoryNotFound) {
-		s.responses.Fail(w, wire.ApiErrorCodeNotFound, "location not found")
-		return
-	} else if err != nil {
-		s.responses.InternalError(w, r, err)
-		return
+	if req.Hidden != nil {
+		if err := s.SourceLedger.HideChatLocation(r.Context(), p.ID, id, *req.Hidden); errors.Is(err, sourceledger.ErrHistoryNotFound) {
+			s.responses.Fail(w, wire.ApiErrorCodeNotFound, "location not found")
+			return
+		} else if err != nil {
+			s.responses.InternalError(w, r, err)
+			return
+		}
 	}
 	location, err := s.SourceLedger.ChatLocation(r.Context(), p.ID, id)
+	if errors.Is(err, sourceledger.ErrHistoryNotFound) {
+		s.responses.Fail(w, wire.ApiErrorCodeNotFound, "location not found")
+		return
+	}
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return

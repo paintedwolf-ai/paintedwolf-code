@@ -13192,7 +13192,8 @@ export interface components {
             location: components["schemas"]["SourceChatLocation"];
         };
         UpdateSourceChatLocationRequest: {
-            hidden: boolean;
+            /** @description Whether the chat's Files section hides the location; omitted keeps it. */
+            hidden?: boolean;
         };
         /**
          * @description What a running tool call is doing to its file target. `reading` is a read-family tool; `editing` is a write-family tool. Derived from the tool's catalog identity, never from arguments or prose.
@@ -21287,8 +21288,26 @@ export interface operations {
             };
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
-            /** @description Project */
+            /** @description Project, chat, or file not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The project has no outside namespace on this platform */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request or the chosen file is too large */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -21326,10 +21345,20 @@ export interface operations {
                     "application/json": components["schemas"]["SourceChatLocation"];
                 };
             };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             /** @description Project or location not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The request body is too large */
+            413: {
                 headers: {
                     [name: string]: unknown;
                 };

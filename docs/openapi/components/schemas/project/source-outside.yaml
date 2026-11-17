@@ -47,10 +47,11 @@ components:
       x-go-generate: true
       type: object
       additionalProperties: false
-      required: [hidden]
       properties:
         hidden:
           type: boolean
+          x-go-pointer: true
+          description: Whether the chat's Files section hides the location; omitted keeps it.
     OpenOutsideFileRequest:
       x-go-generate: true
       type: object

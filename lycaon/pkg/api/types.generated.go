@@ -9010,7 +9010,8 @@ type UpdateSessionRequest struct {
 
 // UpdateSourceChatLocationRequest
 type UpdateSourceChatLocationRequest struct {
-	Hidden bool `json:"hidden"`
+	// Whether the chat's Files section hides the location; omitted keeps it.
+	Hidden *bool `json:"hidden,omitempty"`
 }
 
 // UpdateTrustSettingsRequest

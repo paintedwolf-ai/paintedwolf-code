@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestAdmitNeedsAChatThatHoldsTheFile(t *testing.T) {
+func TestAdmitNeedsAHeldFileOrACoveringLocation(t *testing.T) {
 	ctx := t.Context()
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, database, "p1")
@@ -39,7 +39,12 @@ func TestAdmitNeedsAChatThatHoldsTheFile(t *testing.T) {
 	if len(p.Roots) != 0 {
 		t.Fatal("admission changed the project")
 	}
-	for _, rel := range []string{"etc/other.conf", "etc/../etc/app.conf", "/etc/app.conf", ""} {
+	sibling, err := Admit(ctx, ledger, p, outside, "etc/other.conf")
+	testutil.FailErr(t, "admit a sibling in the chat's location", err)
+	if sibling == nil {
+		t.Fatal("a file beside a held one was not admitted")
+	}
+	for _, rel := range []string{"var/other.conf", "etc/../etc/app.conf", "/etc/app.conf", ""} {
 		if _, err := Admit(ctx, ledger, p, outside, rel); !errors.Is(err, projectsource.ErrSourcePathDenied) {
 			t.Fatalf("Admit(%q) = %v, want denial", rel, err)
 		}

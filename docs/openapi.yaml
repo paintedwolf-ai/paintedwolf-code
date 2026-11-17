@@ -3745,9 +3745,19 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
-          description: Project
-          chat: null
-          or file not found: null
+          description: Project, chat, or file not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: The project has no outside namespace on this platform
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: The request or the chosen file is too large
           content:
             application/json:
               schema:
@@ -3787,12 +3797,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SourceChatLocation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
           $ref: '#/components/responses/Forbidden'
         '404':
           description: Project or location not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '413':
+          description: The request body is too large
           content:
             application/json:
               schema:
@@ -33504,11 +33522,11 @@ components:
       x-go-generate: true
       type: object
       additionalProperties: false
-      required:
-        - hidden
       properties:
         hidden:
           type: boolean
+          x-go-pointer: true
+          description: Whether the chat's Files section hides the location; omitted keeps it.
     AgentActivityKind:
       type: string
       enum:
