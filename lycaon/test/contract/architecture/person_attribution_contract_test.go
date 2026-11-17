@@ -66,6 +66,13 @@ func TestOwnerFallbackIsLimitedToAdmittedAuthorship(t *testing.T) {
 	contractcheck.FailViolations(t, "stale actingFallbacks entries", sortedKeys(unused))
 }
 
+// directRouteExemptions register state-changing routes outside the operation
+// catalog, so no person action is recorded for them.
+var directRouteExemptions = map[string]string{
+	"internal/api/harness_control.go":     "harness control plane for driven test stacks",
+	"internal/api/harness_preparation.go": "harness control plane for driven test stacks",
+}
+
 func TestStateChangingRoutesPassThePersonActionSeam(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
