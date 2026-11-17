@@ -330,13 +330,13 @@ func AssertScanPackPerEngine(t *testing.T, srv *api.Server, projectID string, pa
 		if !ok {
 			t.Fatalf("missing scan row for engine %q (scan_ids=%v)", scannerID, payload.ScanIDs)
 		}
-		AssertScanFindings(t, rec, expect.wantFile, expect.minFindings)
+		AssertScanFindings(t, rec, expect.WantFile, expect.MinFindings)
 	}
 }
 
 type EngineScanExpect struct {
-	minFindings int
-	wantFile    string
+	MinFindings int
+	WantFile    string
 }
 
 func AssertScanFindings(t *testing.T, got wire.CodeScan, wantFile string, minCount int) {

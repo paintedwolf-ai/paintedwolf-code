@@ -27,17 +27,17 @@ func TestIdempotencySweepE2E(t *testing.T) {
 	projectDir := t.TempDir()
 
 	t.Run("create project — duplicate root path on separate creates yields distinct projects", func(t *testing.T) {
-		first := createAPIProjectAtPath(t, base, projectDir)
-		second := createAPIProjectAtPath(t, base, projectDir)
+		first := security.CreateAPIProjectAtPath(t, base, projectDir)
+		second := security.CreateAPIProjectAtPath(t, base, projectDir)
 		if first.ID == second.ID {
 			t.Fatalf("expected distinct projects, got same id %q", first.ID)
 		}
-		if primaryRootPath(first) != primaryRootPath(second) {
-			t.Fatalf("root path drifted: %q → %q", primaryRootPath(first), primaryRootPath(second))
+		if security.PrimaryRootPath(first) != security.PrimaryRootPath(second) {
+			t.Fatalf("root path drifted: %q → %q", security.PrimaryRootPath(first), security.PrimaryRootPath(second))
 		}
 	})
 
-	project := createAPIProjectAtPath(t, base, projectDir)
+	project := security.CreateAPIProjectAtPath(t, base, projectDir)
 	testWorkflowCommandIdempotency(t, h, base, project.ID)
 
 	t.Run("PUT project source — identical content twice converges on the same sha", func(t *testing.T) {
@@ -45,15 +45,15 @@ func TestIdempotencySweepE2E(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "idem.txt"), []byte("v1\n"), 0o644); err != nil {
 			testutil.FailErr(t, "seed source", err)
 		}
-		proj := createAPIProjectAtPath(t, base, dir)
-		read := openAPIGetJSON[wire.ProjectSourceReadResponse](t, base,
+		proj := security.CreateAPIProjectAtPath(t, base, dir)
+		read := security.OpenAPIGetJSON[wire.ProjectSourceReadResponse](t, base,
 			"/v1/projects/"+proj.ID+"/source?path=idem.txt", nil, http.StatusOK)
 		body := `{"path":"idem.txt","content":"v2\n","encoding":"` + string(read.Encoding) + `","base_sha256":"` + read.SHA256 + `"}`
-		first := openAPIPutJSON[wire.ProjectSourceWriteResponse](t, base,
+		first := security.OpenAPIPutJSON[wire.ProjectSourceWriteResponse](t, base,
 			"/v1/projects/"+proj.ID+"/source", nil, body, http.StatusOK)
 		// The second save uses the stored content hash.
 		body2 := `{"path":"idem.txt","content":"v2\n","encoding":"` + string(read.Encoding) + `","base_sha256":"` + first.SHA256 + `"}`
-		second := openAPIPutJSON[wire.ProjectSourceWriteResponse](t, base,
+		second := security.OpenAPIPutJSON[wire.ProjectSourceWriteResponse](t, base,
 			"/v1/projects/"+proj.ID+"/source", nil, body2, http.StatusOK)
 		if first != second {
 			t.Fatalf("source write drifted: %+v → %+v", first, second)
@@ -62,9 +62,9 @@ func TestIdempotencySweepE2E(t *testing.T) {
 
 	t.Run("PATCH pricing settings — same body twice yields same response", func(t *testing.T) {
 		body := `{"cost_tracking_enabled":false,"sources":[]}`
-		first := settingsPatchJSON[wire.SettingsPricingResponse](t, base, "/v1/settings/pricing",
+		first := security.SettingsPatchJSON[wire.SettingsPricingResponse](t, base, "/v1/settings/pricing",
 			body, http.StatusOK)
-		second := settingsPatchJSON[wire.SettingsPricingResponse](t, base, "/v1/settings/pricing",
+		second := security.SettingsPatchJSON[wire.SettingsPricingResponse](t, base, "/v1/settings/pricing",
 			body, http.StatusOK)
 		if first.CostTrackingEnabled != second.CostTrackingEnabled ||
 			len(first.Sources) != len(second.Sources) {
@@ -74,11 +74,11 @@ func TestIdempotencySweepE2E(t *testing.T) {
 
 	t.Run("PATCH provider — same body twice yields same canonical response", func(t *testing.T) {
 		body := `{"base_url":"https://idem.example/v1","models":[{"id":"m1","input_per_1k_nano_usd":1000000}]}`
-		_ = openAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil,
+		_ = security.OpenAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil,
 			`{"id":"idem-test","base_url":"https://idem.example/v1"}`, http.StatusCreated)
-		first := settingsPatchJSON[wire.ProviderMeta](t, base, "/v1/providers/idem-test",
+		first := security.SettingsPatchJSON[wire.ProviderMeta](t, base, "/v1/providers/idem-test",
 			body, http.StatusOK)
-		second := settingsPatchJSON[wire.ProviderMeta](t, base, "/v1/providers/idem-test",
+		second := security.SettingsPatchJSON[wire.ProviderMeta](t, base, "/v1/providers/idem-test",
 			body, http.StatusOK)
 		if first.BaseURL != second.BaseURL {
 			t.Fatalf("base_url drifted: %q → %q", first.BaseURL, second.BaseURL)
@@ -94,15 +94,15 @@ func TestIdempotencySweepE2E(t *testing.T) {
 	})
 
 	t.Run("PATCH mcp provider — same enabled flag twice yields same response", func(t *testing.T) {
-		list := journeyGetJSON[wire.McpProviderListResponse](t, base, "/v1/mcp/providers", http.StatusOK).Providers
+		list := security.JourneyGetJSON[wire.McpProviderListResponse](t, base, "/v1/mcp/providers", http.StatusOK).Providers
 		if len(list) == 0 {
 			t.Fatal("expected a seeded MCP provider to toggle")
 		}
 		id := list[0].ID
 		body := `{"enabled":true}`
-		first := settingsPatchJSON[wire.McpProvider](t, base,
+		first := security.SettingsPatchJSON[wire.McpProvider](t, base,
 			"/v1/mcp/providers/"+id, body, http.StatusOK)
-		second := settingsPatchJSON[wire.McpProvider](t, base,
+		second := security.SettingsPatchJSON[wire.McpProvider](t, base,
 			"/v1/mcp/providers/"+id, body, http.StatusOK)
 		firstJSON, _ := json.Marshal(first)
 		secondJSON, _ := json.Marshal(second)
@@ -129,18 +129,18 @@ func testWorkflowCommandIdempotency(t *testing.T, h *wiring.Harness, base, proje
 	}
 	for _, tc := range cases {
 		t.Run("workflow "+tc.name, func(t *testing.T) {
-			sess := journeyPostJSON[wire.Session](t, base, "/v1/sessions",
+			sess := security.JourneyPostJSON[wire.Session](t, base, "/v1/sessions",
 				`{"project_id":"`+projectID+`","posture":"spec"}`, http.StatusAccepted)
-			run := journeyPostJSON[wire.WorkflowRun](t, base,
+			run := security.JourneyPostJSON[wire.WorkflowRun](t, base,
 				"/v1/sessions/"+sess.ID+"/workflow-runs",
-				workflowStartJSON(t, base, sess.ID, map[string]any{"workflow_id": "plan", "workflow_version": "1.0.1"}), http.StatusCreated)
+				security.WorkflowStartJSON(t, base, sess.ID, map[string]any{"workflow_id": "plan", "workflow_version": "1.0.1"}), http.StatusCreated)
 			if tc.seedPlan {
-				seedPlanStub(t, h.Workflows.Blueprints, run.ProjectID, run.BlueprintPath)
+				security.SeedPlanStub(t, h.Workflows.Blueprints, run.ProjectID, run.BlueprintPath)
 			}
 
 			path := "/v1/workflow-runs/" + run.ID + "/" + tc.command
-			first := journeyPostJSON[wire.WorkflowRun](t, base,
-				path, workflowCommandJSON(t, base, run.ID, nil), http.StatusOK)
+			first := security.JourneyPostJSON[wire.WorkflowRun](t, base,
+				path, security.WorkflowCommandJSON(t, base, run.ID, nil), http.StatusOK)
 			if first.Status != tc.wantStatus {
 				t.Fatalf("first %s status = %q, want %q", tc.command, first.Status, tc.wantStatus)
 			}
@@ -148,8 +148,8 @@ func testWorkflowCommandIdempotency(t *testing.T, h *wiring.Harness, base, proje
 				t.Fatal("first cancel must set completed_at")
 			}
 
-			second := journeyPostJSON[wire.WorkflowRun](t, base,
-				path, workflowCommandJSON(t, base, run.ID, nil), http.StatusOK)
+			second := security.JourneyPostJSON[wire.WorkflowRun](t, base,
+				path, security.WorkflowCommandJSON(t, base, run.ID, nil), http.StatusOK)
 			if !second.UpdatedAt.Equal(first.UpdatedAt) {
 				t.Fatalf("idempotent %s bumped updated_at: was %s now %s",
 					tc.command, first.UpdatedAt, second.UpdatedAt)
@@ -161,8 +161,8 @@ func testWorkflowCommandIdempotency(t *testing.T, h *wiring.Harness, base, proje
 				}
 				return
 			}
-			exitPath, exitBody := workflowExitCall(t, base, sess.ID, "")
-			_ = journeyPostJSON[wire.WorkflowRun](t, base, exitPath, exitBody, http.StatusOK)
+			exitPath, exitBody := security.WorkflowExitCall(t, base, sess.ID, "")
+			_ = security.JourneyPostJSON[wire.WorkflowRun](t, base, exitPath, exitBody, http.StatusOK)
 		})
 	}
 }
@@ -170,7 +170,7 @@ func testWorkflowCommandIdempotency(t *testing.T, h *wiring.Harness, base, proje
 // testSettingsWriteIdempotency replays each settings write and requires a stable answer.
 func testSettingsWriteIdempotency(t *testing.T, base, projectID string) {
 	t.Helper()
-	policyProvider, _ := seedTestProvider(t, base, false)
+	policyProvider, _ := security.SeedTestProvider(t, base, false)
 	modelRef := wire.ModelRefDTO{ProviderID: policyProvider, Model: testProviderModel}
 	modelPolicyBody, _ := json.Marshal(wire.ModelPolicy{
 		Coordinator: &modelRef,
@@ -285,11 +285,11 @@ func testSettingsWriteIdempotency(t *testing.T, base, projectID string) {
 // Extension mutations advance revisions, so idempotency compares desired state.
 func idempotentExtensionPatch(t *testing.T, base, path, body string) {
 	t.Helper()
-	revision := openAPIGetJSON[wire.ExtensionsCatalogView](t, base,
+	revision := security.OpenAPIGetJSON[wire.ExtensionsCatalogView](t, base,
 		"/v1/extensions", nil, http.StatusOK).Revision
-	first := settingsPatchJSON[wire.ExtensionMutationResponse](t, base,
+	first := security.SettingsPatchJSON[wire.ExtensionMutationResponse](t, base,
 		path, withExpectedRevision(t, body, revision), http.StatusOK)
-	second := settingsPatchJSON[wire.ExtensionMutationResponse](t, base,
+	second := security.SettingsPatchJSON[wire.ExtensionMutationResponse](t, base,
 		path, withExpectedRevision(t, body, first.View.Revision), http.StatusOK)
 	firstJSON, _ := json.Marshal(first.View.Desired)
 	secondJSON, _ := json.Marshal(second.View.Desired)
@@ -319,8 +319,8 @@ func withExpectedRevision(t *testing.T, body, revision string) string {
 // idempotentTypedPut requires byte-stable typed responses.
 func idempotentTypedPut[T any](t *testing.T, base, path, body string) {
 	t.Helper()
-	first := settingsPutJSON[T](t, base, path, body, http.StatusOK)
-	second := settingsPutJSON[T](t, base, path, body, http.StatusOK)
+	first := security.SettingsPutJSON[T](t, base, path, body, http.StatusOK)
+	second := security.SettingsPutJSON[T](t, base, path, body, http.StatusOK)
 	firstJSON, _ := json.Marshal(first)
 	secondJSON, _ := json.Marshal(second)
 	if string(firstJSON) != string(secondJSON) {
@@ -331,8 +331,8 @@ func idempotentTypedPut[T any](t *testing.T, base, path, body string) {
 // idempotentTypedPatch requires byte-stable typed responses.
 func idempotentTypedPatch[T any](t *testing.T, base, path, body string) {
 	t.Helper()
-	first := settingsPatchJSON[T](t, base, path, body, http.StatusOK)
-	second := settingsPatchJSON[T](t, base, path, body, http.StatusOK)
+	first := security.SettingsPatchJSON[T](t, base, path, body, http.StatusOK)
+	second := security.SettingsPatchJSON[T](t, base, path, body, http.StatusOK)
 	firstJSON, _ := json.Marshal(first)
 	secondJSON, _ := json.Marshal(second)
 	if string(firstJSON) != string(secondJSON) {
@@ -354,11 +354,11 @@ func TestOperationIDConflictSweepE2E(t *testing.T) {
 			testutil.FailErr(t, "seed source", err)
 		}
 	}
-	proj := createAPIProjectAtPath(t, base, projectDir)
-	sess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+	proj := security.CreateAPIProjectAtPath(t, base, projectDir)
+	sess := security.OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+proj.ID+`","posture":"spec"}`, http.StatusAccepted)
 
-	read := openAPIGetJSON[wire.ProjectSourceReadResponse](t, base,
+	read := security.OpenAPIGetJSON[wire.ProjectSourceReadResponse](t, base,
 		"/v1/projects/"+proj.ID+"/source?path=conflict.txt", nil, http.StatusOK)
 
 	t.Run("POST prompts", func(t *testing.T) {
@@ -370,19 +370,19 @@ func TestOperationIDConflictSweepE2E(t *testing.T) {
 	})
 
 	t.Run("POST workflow-runs", func(t *testing.T) {
-		workflowSession := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+		workflowSession := security.OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 			`{"project_id":"`+proj.ID+`","posture":"spec"}`, http.StatusAccepted)
 		op := uuid.NewString()
 		start := func(blueprintTitle string) string {
-			return workflowStartJSON(t, base, workflowSession.ID, map[string]any{
+			return security.WorkflowStartJSON(t, base, workflowSession.ID, map[string]any{
 				"operation_id": op, "workflow_id": "plan", "workflow_version": "1.0.1", "blueprint_title": blueprintTitle,
 			})
 		}
 		assertOperationConflict(t, base, http.MethodPost,
 			"/v1/sessions/"+workflowSession.ID+"/workflow-runs", http.StatusCreated,
 			start("first-plan"), start("second-plan"))
-		exitPath, exitBody := workflowExitCall(t, base, workflowSession.ID, "")
-		_ = journeyPostJSON[wire.WorkflowRun](t, base, exitPath, exitBody, http.StatusOK)
+		exitPath, exitBody := security.WorkflowExitCall(t, base, workflowSession.ID, "")
+		_ = security.JourneyPostJSON[wire.WorkflowRun](t, base, exitPath, exitBody, http.StatusOK)
 	})
 
 	t.Run("PUT source", func(t *testing.T) {
@@ -439,14 +439,14 @@ func TestOperationIDConflictSweepE2E(t *testing.T) {
 // replays the same operation identity with mutated input.
 func assertOperationConflict(t *testing.T, base, method, path string, firstStatus int, first, conflicting string) {
 	t.Helper()
-	openAPIDo(t, base, method, path, nil, first, firstStatus)
+	security.OpenAPIDo(t, base, method, path, nil, first, firstStatus)
 	assertConflictCode(t, base, method, path, conflicting)
 }
 
 // assertConflictCode requires the documented refusal for a conflicting replay.
 func assertConflictCode(t *testing.T, base, method, path, body string) {
 	t.Helper()
-	raw := openAPIDo(t, base, method, path, nil, body, http.StatusConflict)
+	raw := security.OpenAPIDo(t, base, method, path, nil, body, http.StatusConflict)
 	var errResp wire.ErrorResponse
 	if err := json.Unmarshal(raw, &errResp); err != nil {
 		testutil.FailErr(t, "decode conflict response", err)
@@ -459,7 +459,7 @@ func assertConflictCode(t *testing.T, base, method, path, body string) {
 // Source mutations may return a durable operation before verification finishes.
 func settleSourceRequest(t *testing.T, base, projectID, method, path, body string, wantStatus int) {
 	t.Helper()
-	res := validatedRequest(t, base, method, path, nil, body)
+	res := security.ValidatedRequest(t, base, method, path, nil, body)
 	AssertHTTPResponseMatchesOpenAPI(t, res.StatusCode, res.Header, res.Body, method, path, nil)
 	if res.StatusCode == wantStatus {
 		return
@@ -467,13 +467,13 @@ func settleSourceRequest(t *testing.T, base, projectID, method, path, body strin
 	if res.StatusCode != http.StatusAccepted {
 		t.Fatalf("source mutation status = %d, want %d or 202; body=%s", res.StatusCode, wantStatus, res.Body)
 	}
-	status := decodeOpenAPI[wire.SourceOperationStatus](t, method, path, res.Body)
+	status := security.DecodeOpenAPI[wire.SourceOperationStatus](t, method, path, res.Body)
 	if status.OperationID == "" {
 		t.Fatal("accepted source mutation lacks operation_id")
 	}
 	params := map[string]string{"id": projectID, "operation_id": status.OperationID}
 	testutil.WaitFor(t, func() bool {
-		status = openAPIGetJSON[wire.SourceOperationStatus](t, base, "/v1/projects/{id}/source/operations/{operation_id}", params, http.StatusOK)
+		status = security.OpenAPIGetJSON[wire.SourceOperationStatus](t, base, "/v1/projects/{id}/source/operations/{operation_id}", params, http.StatusOK)
 		return status.Complete
 	})
 	if wantStatus >= 400 {

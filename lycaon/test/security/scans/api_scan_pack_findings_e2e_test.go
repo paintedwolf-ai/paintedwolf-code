@@ -36,7 +36,7 @@ func TestAPIScanPackBundledFindingsE2E(t *testing.T) {
 		}
 		project := security.CreateProjectHTTP(t, h.Server, projectDir)
 		security.AssertScanPackPerEngine(t, h.Server, project.ID, payload, map[string]security.EngineScanExpect{
-			"lycaon-secrets": {minFindings: 1, wantFile: "secrets.env"},
+			"lycaon-secrets": {MinFindings: 1, WantFile: "secrets.env"},
 		})
 	})
 
@@ -61,9 +61,9 @@ func TestAPIScanPackBundledFindingsE2E(t *testing.T) {
 		}
 		project := security.CreateProjectHTTP(t, h.Server, projectDir)
 		security.AssertScanPackPerEngine(t, h.Server, project.ID, payload, map[string]security.EngineScanExpect{
-			"lycaon-secrets": {minFindings: 1, wantFile: "secrets.env"},
-			"lycaon-sca":     {minFindings: 1, wantFile: "package-lock.json"},
-			"lycaon-sast":    {minFindings: 1, wantFile: "vuln.go"},
+			"lycaon-secrets": {MinFindings: 1, WantFile: "secrets.env"},
+			"lycaon-sca":     {MinFindings: 1, WantFile: "package-lock.json"},
+			"lycaon-sast":    {MinFindings: 1, WantFile: "vuln.go"},
 		})
 	})
 }
