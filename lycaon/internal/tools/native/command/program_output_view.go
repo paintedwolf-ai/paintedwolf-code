@@ -133,9 +133,11 @@ func (c *countingStreamWriter) Write(p []byte) (int, error) {
 // countingMappedWriter counts a sink that keeps source mappings. Producers
 // batch output for any other sink, so only this form records mappings.
 type countingMappedWriter struct {
-	*countingStreamWriter
+	counter  *countingStreamWriter
 	mappings commandprogram.SourceMappingRecorder
 }
+
+func (c countingMappedWriter) Write(p []byte) (int, error) { return c.counter.Write(p) }
 
 func (c countingMappedWriter) RecordSourceMapping(mapping toolcontract.StreamSourceMapping) error {
 	return c.mappings.RecordSourceMapping(mapping)
@@ -145,7 +147,7 @@ func (c countingMappedWriter) RecordSourceMapping(mapping toolcontract.StreamSou
 func countProducerStream(sink io.Writer) (io.Writer, *countingStreamWriter) {
 	counter := &countingStreamWriter{w: nonNilWriter(sink)}
 	if mappings, ok := counter.w.(commandprogram.SourceMappingRecorder); ok {
-		return countingMappedWriter{countingStreamWriter: counter, mappings: mappings}, counter
+		return countingMappedWriter{counter: counter, mappings: mappings}, counter
 	}
 	return counter, counter
 }
@@ -178,7 +180,7 @@ func newChildStreamView(writer io.Writer) *childStreamView {
 	case *childStreamView:
 		return &childStreamView{target: source, ctx: source.ctx, memory: source.memory}
 	case countingMappedWriter:
-		return newChildStreamView(source.w)
+		return newChildStreamView(source.counter.w)
 	default:
 		return nil
 	}
