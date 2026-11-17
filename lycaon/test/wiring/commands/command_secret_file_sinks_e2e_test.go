@@ -129,10 +129,10 @@ func TestCommandFileSinksResolveAChatGeneratedReference(t *testing.T) {
 	reference := run.generatedReference(t, sess, secretcap.ScopeChat)
 	edited := run.seed(t, "edit.env", "TOKEN=old\nkeep\n")
 	lines := run.seed(t, "lines.env", "first\nkeep\n")
-	run.script.steps = []wiring.CitableStep{
-		{command: "edit --path edit.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "'"},
-		{command: "replace-lines --path lines.env --start 1 --end 1 --content 'TOKEN=" + reference + "'"},
-		{command: "edit --path edit.env --old-string 'TOKEN=" + reference + "' --new-string TOKEN=rotated"},
+	run.script.Steps = []wiring.CitableStep{
+		{Command: "edit --path edit.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "'"},
+		{Command: "replace-lines --path lines.env --start 1 --end 1 --content 'TOKEN=" + reference + "'"},
+		{Command: "edit --path edit.env --old-string 'TOKEN=" + reference + "' --new-string TOKEN=rotated"},
 	}
 	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write the token")
 	testutil.FailErr(t, "prompt", err)
@@ -157,7 +157,7 @@ func TestCommandFileSinkKeepsAHeldValueWithoutPresence(t *testing.T) {
 	run, sess := newSecretSinkRun(t)
 	reference := run.suppliedReference(t, sess)
 	target := run.seed(t, "config.env", "TOKEN=old\n")
-	run.script.steps = []wiring.CitableStep{{command: "edit --path config.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "'"}}
+	run.script.Steps = []wiring.CitableStep{{Command: "edit --path config.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "'"}}
 	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write the token")
 	testutil.FailErr(t, "prompt", err)
 	outcomes := run.outcomes(t)
@@ -182,7 +182,7 @@ func TestCommandFileSinkAsksBeforeWritingATrackedSecret(t *testing.T) {
 			run, sess := newSecretSinkRun(t)
 			reference := run.generatedReference(t, sess, secretcap.ScopeProject)
 			target := run.seed(t, "config.env", "TOKEN=old\n")
-			run.script.steps = []wiring.CitableStep{{command: "edit --path config.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "'"}}
+			run.script.Steps = []wiring.CitableStep{{Command: "edit --path config.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "'"}}
 			done := make(chan error, 1)
 			go func() {
 				_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write the token")
@@ -250,7 +250,7 @@ func TestCommandSecretReferenceOutsideDeclaredSinksIsRefused(t *testing.T) {
 		"edit --path '" + reference + "' --old-string keep --new-string changed",
 	}
 	for _, command := range commands {
-		run.script.steps = append(run.script.steps, wiring.CitableStep{command: command})
+		run.script.Steps = append(run.script.Steps, wiring.CitableStep{Command: command})
 	}
 	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write the token")
 	testutil.FailErr(t, "prompt", err)
@@ -280,7 +280,7 @@ func TestCommandSecretResolutionStaysWithItsOperation(t *testing.T) {
 	reference := run.generatedReference(t, sess, secretcap.ScopeChat)
 	first := run.seed(t, "first.env", "TOKEN=old\n")
 	second := run.seed(t, "second.env", "TOKEN=old\n")
-	run.script.steps = []wiring.CitableStep{{command: "edit --path first.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "' && edit --path second.env --old-string TOKEN=old --new-string TOKEN=plain"}}
+	run.script.Steps = []wiring.CitableStep{{Command: "edit --path first.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "' && edit --path second.env --old-string TOKEN=old --new-string TOKEN=plain"}}
 	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write both")
 	testutil.FailErr(t, "prompt", err)
 	run.outcomes(t)
@@ -306,12 +306,12 @@ func TestCommandJqEditArgCarriesAValueLineSinksRefuse(t *testing.T) {
 	reference := put.Metadata.Reference
 	lines := run.seed(t, "lines.env", "TOKEN=old\n")
 	document := run.seed(t, "settings.json", "{\"name\":\"svc\"}\n")
-	run.script.steps = []wiring.CitableStep{
-		{command: "edit --path lines.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "'"},
-		{command: "jq-edit --path settings.json --query '.token = $token' --arg token '" + reference + "'"},
-		{command: "jq-edit --path settings.json --query '.name = $name' --arg name renamed"},
-		{command: "jq-edit --path '" + reference + "' --query . --arg token value"},
-		{command: "jq-edit --path settings.json --query '.x = \"" + reference + "\"'"},
+	run.script.Steps = []wiring.CitableStep{
+		{Command: "edit --path lines.env --old-string TOKEN=old --new-string 'TOKEN=" + reference + "'"},
+		{Command: "jq-edit --path settings.json --query '.token = $token' --arg token '" + reference + "'"},
+		{Command: "jq-edit --path settings.json --query '.name = $name' --arg name renamed"},
+		{Command: "jq-edit --path '" + reference + "' --query . --arg token value"},
+		{Command: "jq-edit --path settings.json --query '.x = \"" + reference + "\"'"},
 	}
 	_, err = run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "write the token")
 	testutil.FailErr(t, "prompt", err)

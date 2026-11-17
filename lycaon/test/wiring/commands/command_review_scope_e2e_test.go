@@ -130,7 +130,7 @@ func newReviewScopeRun(t *testing.T, ruleTool, file, seed, command string) *revi
 	testutil.FailErr(t, "write review rule", os.WriteFile(filepath.Join(overlay, "review.yaml"), []byte(rule), 0o600))
 	path := filepath.Join(dir, file)
 	testutil.FailErr(t, "seed file", os.WriteFile(path, []byte(seed), 0o644))
-	script := &wiring.CitableScriptLLM{steps: []wiring.CitableStep{{command: command}}}
+	script := &wiring.CitableScriptLLM{Steps: []wiring.CitableStep{{Command: command}}}
 	h := wiring.BuildForTest(t, wiring.WithLLMClient(script))
 	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{Posture: wire.SessionPostureBuild}, dir)
 	testutil.FailErr(t, "create session", err)

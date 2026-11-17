@@ -48,9 +48,9 @@ func TestCommandCurlDeliversAReferenceOnlyInARequestPlacement(t *testing.T) {
 	run, sess := newSecretSinkRun(t)
 	reference := run.generatedReference(t, sess, secretcap.ScopeChat)
 	server, seen := requestRecorder(t, run)
-	run.script.steps = []wiring.CitableStep{
-		{command: "curl -s -H 'Authorization: Bearer " + reference + "' " + server.URL},
-		{command: "curl -s '" + server.URL + "/?token=" + reference + "'"},
+	run.script.Steps = []wiring.CitableStep{
+		{Command: "curl -s -H 'Authorization: Bearer " + reference + "' " + server.URL},
+		{Command: "curl -s '" + server.URL + "/?token=" + reference + "'"},
 	}
 	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "call the service")
 	testutil.FailErr(t, "prompt", err)
@@ -69,7 +69,7 @@ func TestCommandCurlDeliversAReferenceOnlyInARequestPlacement(t *testing.T) {
 func TestCommandCurlUnsupportedFormDoesNotLaunchInstalledCurl(t *testing.T) {
 	run, _ := newSecretSinkRun(t)
 	server, seen := requestRecorder(t, run)
-	run.script.steps = []wiring.CitableStep{{command: "curl -s --retry 2 " + server.URL}}
+	run.script.Steps = []wiring.CitableStep{{Command: "curl -s --retry 2 " + server.URL}}
 	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "call the service")
 	testutil.FailErr(t, "prompt", err)
 	outcomes := run.outcomes(t)
