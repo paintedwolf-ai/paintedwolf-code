@@ -1,56 +1,42 @@
-package contract
+package outbox
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"go/ast"
-	"go/importer"
-	"go/parser"
 	"go/token"
 	"go/types"
-	"io"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
-	"testing"
 
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/laws"
 )
 
-// outboxTree names one Go module whose production functions the outbox
-// contract scans: the repository's lycaon module, or a fixture module that
-// proves the scan's sensitivity.
+// outboxTree names the persistence layer of a module the outbox laws scan.
 type outboxTree struct {
-	// moduleDir holds go.mod; the scan covers moduleDir/internal/...
-	moduleDir string
-	// keyPrefix turns a module-relative path into the repo-relative key prefix.
-	keyPrefix string
+	// module is the module path; the scan covers module/internal/...
+	module string
 	// dbPackage is the import path of the sqlc Queries package.
 	dbPackage string
 	// queriesDir holds the sqlc query files that name each Queries method.
 	queriesDir string
 	// enqueue names the outbox methods, as types.Func.FullName reports them.
 	enqueue map[string]bool
-	// env overrides the go command environment (fixtures clear GOFLAGS).
-	env []string
+	// floor lists event tables no direct write discovers.
+	floor []string
 }
 
-func repoOutboxTree(root string) outboxTree {
-	const module = "github.com/lycaon/lycaon"
-	return outboxTree{
-		moduleDir:  filepath.Join(root, "lycaon"),
-		keyPrefix:  "lycaon/",
-		dbPackage:  module + "/internal/db",
-		queriesDir: filepath.Join(root, "lycaon", "internal", "db", "queries"),
-		enqueue: map[string]bool{
-			"(*" + module + "/internal/eventoutbox.Outbox).EnqueueTx":        true,
-			"(*" + module + "/internal/eventoutbox.Outbox).EnqueueProjectTx": true,
-		},
-	}
+const lycaonModule = "github.com/lycaon/lycaon"
+
+// lycaonOutbox is the host's persistence layer.
+var lycaonOutbox = outboxTree{
+	module:     lycaonModule,
+	dbPackage:  lycaonModule + "/internal/db",
+	queriesDir: "lycaon/internal/db/queries",
+	enqueue: map[string]bool{
+		"(*" + lycaonModule + "/internal/eventoutbox.Outbox).EnqueueTx":        true,
+		"(*" + lycaonModule + "/internal/eventoutbox.Outbox).EnqueueProjectTx": true,
+	},
+	floor: []string{"worker_jobs", "workflow_runs", "code_scans"},
 }
 
 type outboxFunc struct {
@@ -130,27 +116,18 @@ func (scan *outboxScan) describeTables(tables []string) string {
 			writers = append(writers[:2], "…")
 		}
 		if len(writers) == 0 {
-			writers = []string{"outboxTableFloor"}
+			writers = []string{"the event table floor"}
 		}
 		parts = append(parts, table+" announced by "+strings.Join(writers, ", "))
 	}
 	return strings.Join(parts, "; ")
 }
 
-var repoOutboxScan struct {
-	once sync.Once
-	scan *outboxScan
-	err  error
-}
-
-// scanOutboxStores type-checks the repository once for every outbox test.
-func scanOutboxStores(t *testing.T, root string) *outboxScan {
-	t.Helper()
-	repoOutboxScan.once.Do(func() {
-		repoOutboxScan.scan, repoOutboxScan.err = repoOutboxTree(root).scan(outboxTableFloor)
+// scanOf is the outbox call graph of a tree, built once per corpus.
+func scanOf(r *laws.Run, tree outboxTree) *outboxScan {
+	return laws.Part(r.Corpus, "outbox scan", func() (*outboxScan, error) {
+		return tree.scan(r)
 	})
-	contractcheck.FailErr(t, "scan the outbox call graph", repoOutboxScan.err)
-	return repoOutboxScan.scan
 }
 
 // scan resolves every call in the module's production functions through
@@ -158,38 +135,35 @@ func scanOutboxStores(t *testing.T, root string) *outboxScan {
 // interface methods to each implementation declared in the module. Global
 // name matching would let unrelated functions that share a name stand in
 // for each other.
-func (tree outboxTree) scan(floor []string) (*outboxScan, error) {
-	queries, err := mutatingQueryTables(tree.queriesDir)
+func (tree outboxTree) scan(r *laws.Run) (*outboxScan, error) {
+	queries, err := mutatingQueryTables(r.Tree(tree.queriesDir, ".sql"))
 	if err != nil {
 		return nil, err
 	}
-	prog, err := loadOutboxProgram(tree)
-	if err != nil {
-		return nil, err
-	}
+	prog := tree.program(r.Types())
 	scan := &outboxScan{
 		announces:       map[*outboxFunc]bool{},
 		callerAnnounces: map[*outboxFunc]bool{},
 		eventTables:     map[string]bool{},
 		writers:         map[string][]string{},
 	}
-	for _, table := range floor {
+	for _, table := range tree.floor {
 		scan.eventTables[table] = true
 	}
 	byObj := map[*types.Func]*outboxFunc{}
 	direct := map[*outboxFunc]bool{}
 	for _, pkg := range prog.scanned {
-		for i, file := range pkg.files {
-			rel := pkg.rels[i]
+		for _, file := range pkg.Files {
+			rel := file.Rel
 			if isOutboxTestSupport(rel) {
 				continue
 			}
-			for _, decl := range file.Decls {
+			for _, decl := range file.AST.Decls {
 				fn, ok := decl.(*ast.FuncDecl)
 				if !ok || fn.Body == nil {
 					continue
 				}
-				obj, _ := pkg.info.Defs[fn.Name].(*types.Func)
+				obj, _ := pkg.Info.Defs[fn.Name].(*types.Func)
 				if obj == nil {
 					return nil, fmt.Errorf("%s: %s has no function object", rel, fn.Name.Name)
 				}
@@ -205,7 +179,7 @@ func (tree outboxTree) scan(floor []string) (*outboxScan, error) {
 					if !ok {
 						return true
 					}
-					for _, target := range prog.callTargets(pkg.info, call) {
+					for _, target := range prog.callTargets(pkg.Info, call) {
 						info.targets = append(info.targets, target)
 						if tree.enqueue[target.FullName()] {
 							direct[info] = true
@@ -332,20 +306,13 @@ func isQueriesMethod(fn *types.Func) bool {
 	return ok && named.Obj().Name() == "Queries"
 }
 
-// outboxProgram is the module's production packages type-checked from
-// source, with the standard library and other modules read from export data.
+// outboxProgram indexes the type-checked module for call resolution.
 type outboxProgram struct {
 	fset    *token.FileSet
-	scanned []*outboxPackage
+	scanned []*laws.TypedPackage
 	// byMethod indexes the module's concrete named types by method name.
 	byMethod map[string][]*types.Named
 	impls    map[implKey][]*types.Func
-}
-
-type outboxPackage struct {
-	files []*ast.File
-	rels  []string
-	info  *types.Info
 }
 
 type implKey struct {
@@ -353,154 +320,21 @@ type implKey struct {
 	method string
 }
 
-type listedPackage struct {
-	ImportPath string
-	Dir        string
-	GoFiles    []string
-	CgoFiles   []string
-	Imports    []string
-	Export     string
-	Module     *struct{ Main bool }
-	Error      *struct{ Err string }
-}
-
-func loadOutboxProgram(tree outboxTree) (*outboxProgram, error) {
-	// The go command reports canonical directories; compare canonical paths.
-	moduleDir, err := filepath.EvalSymlinks(tree.moduleDir)
-	if err != nil {
-		return nil, err
-	}
-	tree.moduleDir = moduleDir
-	listed, err := tree.goList("-deps", "./internal/...")
-	if err != nil {
-		return nil, err
-	}
-	var local []listedPackage
-	isLocal := map[string]bool{}
-	for _, pkg := range listed {
-		if pkg.Error != nil {
-			return nil, fmt.Errorf("go list %s: %s", pkg.ImportPath, pkg.Error.Err)
+// program indexes the module's internal and pkg packages; the scan covers
+// internal.
+func (tree outboxTree) program(typed *laws.Program) *outboxProgram {
+	prog := &outboxProgram{fset: typed.Fset, byMethod: map[string][]*types.Named{}, impls: map[implKey][]*types.Func{}}
+	for _, path := range typed.Order {
+		pkg := typed.Packages[path]
+		if !strings.HasPrefix(path, tree.module+"/internal/") && !strings.HasPrefix(path, tree.module+"/pkg/") {
+			continue
 		}
-		if pkg.Module != nil && pkg.Module.Main {
-			local = append(local, pkg)
-			isLocal[pkg.ImportPath] = true
+		prog.indexMethods(pkg.Types)
+		if strings.HasPrefix(path, tree.module+"/internal/") {
+			prog.scanned = append(prog.scanned, pkg)
 		}
 	}
-	external := map[string]bool{}
-	for _, pkg := range local {
-		for _, path := range pkg.Imports {
-			if !isLocal[path] && path != "C" && path != "unsafe" {
-				external[path] = true
-			}
-		}
-	}
-	exports := map[string]string{}
-	if len(external) > 0 {
-		args := []string{"-deps", "-export"}
-		for path := range external {
-			args = append(args, path)
-		}
-		sort.Strings(args[2:])
-		deps, err := tree.goList(args...)
-		if err != nil {
-			return nil, err
-		}
-		for _, pkg := range deps {
-			exports[pkg.ImportPath] = pkg.Export
-		}
-	}
-
-	prog := &outboxProgram{fset: token.NewFileSet(), byMethod: map[string][]*types.Named{}, impls: map[implKey][]*types.Func{}}
-	imp := &outboxImporter{
-		local: map[string]*types.Package{},
-		export: importer.ForCompiler(prog.fset, "gc", func(path string) (io.ReadCloser, error) {
-			file := exports[path]
-			if file == "" {
-				return nil, fmt.Errorf("no export data for %s", path)
-			}
-			return os.Open(file)
-		}),
-	}
-	internalDir := filepath.Join(tree.moduleDir, "internal") + string(filepath.Separator)
-	for _, pkg := range local {
-		if pkg.Dir, err = filepath.EvalSymlinks(pkg.Dir); err != nil {
-			return nil, err
-		}
-		files := make([]*ast.File, 0, len(pkg.GoFiles)+len(pkg.CgoFiles))
-		rels := make([]string, 0, cap(files))
-		for _, name := range append(append([]string(nil), pkg.GoFiles...), pkg.CgoFiles...) {
-			path := filepath.Join(pkg.Dir, name)
-			file, err := parser.ParseFile(prog.fset, path, nil, parser.SkipObjectResolution)
-			if err != nil {
-				return nil, err
-			}
-			rel, err := filepath.Rel(tree.moduleDir, path)
-			if err != nil {
-				return nil, err
-			}
-			files = append(files, file)
-			rels = append(rels, tree.keyPrefix+filepath.ToSlash(rel))
-		}
-		info := &types.Info{
-			Defs:       map[*ast.Ident]types.Object{},
-			Uses:       map[*ast.Ident]types.Object{},
-			Selections: map[*ast.SelectorExpr]*types.Selection{},
-		}
-		var typeErrs []string
-		conf := types.Config{
-			Importer:    imp,
-			FakeImportC: len(pkg.CgoFiles) > 0,
-			Error:       func(err error) { typeErrs = append(typeErrs, err.Error()) },
-		}
-		checked, _ := conf.Check(pkg.ImportPath, prog.fset, files, info)
-		// FakeImportC leaves C values untyped, so cgo files report follow-on
-		// errors; the package's Go API still type-checks for its importers.
-		if len(typeErrs) > 0 && len(pkg.CgoFiles) == 0 {
-			if len(typeErrs) > 5 {
-				typeErrs = typeErrs[:5]
-			}
-			return nil, fmt.Errorf("type-check %s:\n  %s", pkg.ImportPath, strings.Join(typeErrs, "\n  "))
-		}
-		imp.local[pkg.ImportPath] = checked
-		prog.indexMethods(checked)
-		if strings.HasPrefix(pkg.Dir+string(filepath.Separator), internalDir) {
-			prog.scanned = append(prog.scanned, &outboxPackage{files: files, rels: rels, info: info})
-		}
-	}
-	return prog, nil
-}
-
-func (tree outboxTree) goList(args ...string) ([]listedPackage, error) {
-	cmd := exec.Command("go", append([]string{"list", "-e", "-json=ImportPath,Dir,GoFiles,CgoFiles,Imports,Export,Module,Error"}, args...)...)
-	cmd.Dir = tree.moduleDir
-	cmd.Env = append(append(os.Environ(), "PWD="+tree.moduleDir), tree.env...)
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
-	if err != nil {
-		return nil, fmt.Errorf("go list %s: %w\n%s", strings.Join(args, " "), err, stderr.String())
-	}
-	var pkgs []listedPackage
-	for dec := json.NewDecoder(bytes.NewReader(out)); dec.More(); {
-		var pkg listedPackage
-		if err := dec.Decode(&pkg); err != nil {
-			return nil, err
-		}
-		pkgs = append(pkgs, pkg)
-	}
-	return pkgs, nil
-}
-
-type outboxImporter struct {
-	local  map[string]*types.Package
-	export types.Importer
-}
-
-func (i *outboxImporter) Import(path string) (*types.Package, error) {
-	if pkg, ok := i.local[path]; ok {
-		return pkg, nil
-	}
-	return i.export.Import(path)
+	return prog
 }
 
 func (prog *outboxProgram) indexMethods(pkg *types.Package) {
@@ -671,7 +505,7 @@ func outboxCallName(call *ast.CallExpr) string {
 // isOutboxTestSupport drops fixture seeding, which writes the same tables to
 // build a test database and announces nothing.
 func isOutboxTestSupport(rel string) bool {
-	return strings.HasPrefix(rel, "lycaon/internal/testutil/") ||
-		strings.HasPrefix(rel, "lycaon/internal/testdbseed/") ||
+	return strings.HasPrefix(rel, "internal/testutil/") ||
+		strings.HasPrefix(rel, "internal/testdbseed/") ||
 		strings.HasSuffix(rel, "_testsupport.go")
 }

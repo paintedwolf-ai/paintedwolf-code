@@ -1,20 +1,18 @@
-package contract
+package laws_test
 
 import (
-	"os"
-	"path/filepath"
-	"slices"
+	"strings"
 	"testing"
 
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/laws"
+	"github.com/lycaon/lycaon/test/contract/laws/outbox"
 )
 
 // outboxFixture is a module shaped like the host's persistence: sqlc
 // queries, an outbox with EnqueueTx, stores that write through both, and
 // callers reaching them through interfaces.
 var outboxFixture = map[string]string{
-	"go.mod": "module example.com/outboxfixture\n\ngo 1.24\n",
-	"internal/db/queries/widgets.sql": `-- name: InsertWidget :exec
+	"lycaon/internal/db/queries/widgets.sql": `-- name: InsertWidget :exec
 -- Callers that insert into audits do so in their own query.
 INSERT INTO widgets (id) VALUES (?);
 
@@ -24,7 +22,7 @@ UPDATE widgets SET name = ? WHERE id = ?;
 -- name: InsertAudit :exec
 INSERT INTO audits (id) VALUES (?);
 `,
-	"internal/db/db.go": `package db
+	"lycaon/internal/db/db.go": `package db
 
 import (
 	"context"
@@ -39,7 +37,7 @@ func (q *Queries) InsertWidget(ctx context.Context) error { return nil }
 func (q *Queries) UpdateWidget(ctx context.Context) error { return nil }
 func (q *Queries) InsertAudit(ctx context.Context) error  { return nil }
 `,
-	"internal/eventoutbox/outbox.go": `package eventoutbox
+	"lycaon/internal/eventoutbox/outbox.go": `package eventoutbox
 
 import (
 	"context"
@@ -50,13 +48,13 @@ type Outbox struct{}
 
 func (o *Outbox) EnqueueTx(ctx context.Context, tx *sql.Tx, topic string) error { return nil }
 `,
-	"internal/store/store.go": `package store
+	"lycaon/internal/store/store.go": `package store
 
 import (
 	"context"
 	"database/sql"
 
-	"example.com/outboxfixture/internal/db"
+	"github.com/lycaon/lycaon/internal/db"
 )
 
 type enqueuer interface {
@@ -123,13 +121,13 @@ func (s *Store) RecordAudit(ctx context.Context, tx *sql.Tx) error {
 	return db.New(tx).InsertAudit(ctx)
 }
 `,
-	"internal/service/service.go": `package service
+	"lycaon/internal/service/service.go": `package service
 
 import (
 	"context"
 	"database/sql"
 
-	"example.com/outboxfixture/internal/store"
+	"github.com/lycaon/lycaon/internal/store"
 )
 
 // Touch reaches an announcing store method and an unrelated silent one; the
@@ -151,7 +149,7 @@ func Rebuild(ctx context.Context, tx *sql.Tx, w widgets) error {
 	return w.CreateWidget(ctx, tx)
 }
 `,
-	"internal/cache/cache.go": `package cache
+	"lycaon/internal/cache/cache.go": `package cache
 
 // Cache has a method named like a mutating query; it writes nothing.
 type Cache struct{ n int }
@@ -172,66 +170,54 @@ func Refresh() { CreateWidget(); RenameWidget() }
 `,
 }
 
+// The scan resolves calls by type: unannounced writes to an event-carrying
+// table are reported (one with no announcing caller, one whose caller's only
+// announce runs in another package's transaction, and a helper below an
+// announcing caller that is not handed its transaction). Helpers inside an
+// announcing transaction, look-alike names, interface dispatch to an
+// announcing store, and a table no announcing writer makes event-carrying
+// are not.
 func TestOutboxScanResolvesCallsByType(t *testing.T) {
 	t.Parallel()
-	dir := t.TempDir()
-	for rel, body := range outboxFixture {
-		path := filepath.Join(dir, filepath.FromSlash(rel))
-		contractcheck.FailErr(t, "mkdir "+rel, os.MkdirAll(filepath.Dir(path), 0o755))
-		contractcheck.FailErr(t, "write "+rel, os.WriteFile(path, []byte(body), 0o600))
-	}
-	const module = "example.com/outboxfixture"
-	tree := outboxTree{
-		moduleDir:  dir,
-		keyPrefix:  "fixture/",
-		dbPackage:  module + "/internal/db",
-		queriesDir: filepath.Join(dir, "internal", "db", "queries"),
-		enqueue:    map[string]bool{"(*" + module + "/internal/eventoutbox.Outbox).EnqueueTx": true},
-		env:        []string{"GOFLAGS=-mod=mod", "GOWORK=off"},
-	}
-	scan, err := tree.scan(nil)
-	contractcheck.FailErr(t, "scan the fixture module", err)
-
-	silent := scan.silentMutators()
-	keys := make([]string, 0, len(silent))
-	for key := range silent {
-		keys = append(keys, key)
-	}
-	// Unannounced writes to an event-carrying table are reported: one with no
-	// announcing caller, one whose caller's only announce happens in another
-	// package's transaction, and a helper below an announcing caller that is
-	// not handed its transaction. Helpers that write inside an announcing
-	// transaction, the look-alike names in cache, and the audits write (no
-	// announcing writer makes audits an event table) are not.
-	contractcheck.FailSetEqual(t, "silent mutators", []string{
-		"fixture/internal/store/store.go:MarkSeen",
-		"fixture/internal/store/store.go:RenameWidget",
-		"fixture/internal/store/store.go:auditWidget",
-	}, keys)
-	if got := silent["fixture/internal/store/store.go:RenameWidget"]; !slices.Equal(got, []string{"widgets"}) {
-		t.Fatalf("RenameWidget tables = %v, want [widgets]", got)
-	}
-	// InsertWidget's comment names audits in prose; comments write nothing.
-	if scan.eventTables["audits"] {
-		t.Fatal("audits became an event table without an announcing writer")
-	}
-	announces := map[string]bool{}
-	for _, fn := range scan.funcs {
-		announces[fn.key] = scan.announces[fn]
-	}
-	for key, want := range map[string]bool{
-		"fixture/internal/store/store.go:CreateWidget":        true,
-		"fixture/internal/service/service.go:Rebuild":         true, // interface dispatch to *store.Store
-		"fixture/internal/cache/cache.go:Refresh":             false,
-		"fixture/internal/cache/cache.go:Warm":                false,
-		"fixture/internal/service/service.go:Touch":           false, // reaches an enqueue in another transaction
-		"fixture/internal/store/store.go:CreateStampedWidget": true,
+	corpus := fixture(t, outboxFixture)
+	res := laws.Evaluate(corpus, bare(rule(t, outbox.Family, "mutators-announce-their-transition")))
+	expect(t, res, violates, 3)
+	for i, key := range []string{
+		"internal/store/store.go:MarkSeen",
+		"internal/store/store.go:RenameWidget",
+		"internal/store/store.go:auditWidget",
 	} {
-		if announces[key] != want {
-			t.Errorf("%s announces = %v, want %v", key, announces[key], want)
+		if !strings.HasPrefix(res.Violations[i], key+" writes widgets ") {
+			t.Errorf("violation %d = %q, want %s writing widgets", i, res.Violations[i], key)
 		}
 	}
-	if len(scan.enqueueSites) != 2 { // Log reaches CreateWidget's enqueue
-		t.Fatalf("enqueue sites = %+v, want the two store enqueues", scan.enqueueSites)
+	expect(t, laws.Evaluate(corpus, rule(t, outbox.Family, "enqueues-take-a-mutation-transaction")), passes, 0)
+}
+
+// The family fails on each kind of drift.
+func TestOutboxClosureFailsClosed(t *testing.T) {
+	t.Parallel()
+	mutators := bare(rule(t, outbox.Family, "mutators-announce-their-transition"))
+	exempted := mutators
+	exempted.Exempt = []laws.Exemption{{Key: "internal/store/store.go:CreateWidget", Reason: "fixture"}}
+	for name, tc := range map[string]struct {
+		rule  laws.Rule
+		files map[string]string
+		want  outcome
+	}{
+		"seeded violation": {rule: mutators, files: outboxFixture, want: violates},
+		"renamed anchor": {rule: mutators, files: with(outboxFixture, map[string]string{
+			"lycaon/internal/eventoutbox/outbox.go": strings.ReplaceAll(outboxFixture["lycaon/internal/eventoutbox/outbox.go"], "EnqueueTx", "Enqueue"),
+		}), want: missesAnchor},
+		"stale exemption": {rule: exempted, files: outboxFixture, want: staleExemption},
+		"empty corpus":    {rule: mutators, files: with(outboxFixture, map[string]string{"lycaon/internal/db/queries/widgets.sql": ""}), want: fails},
+		"unparsable file": {rule: mutators, files: with(outboxFixture, map[string]string{
+			"lycaon/internal/store/broken.go": "package store\n\nfunc broken( {\n",
+		}), want: fails},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			expect(t, laws.Evaluate(fixture(t, tc.files), tc.rule), tc.want, 0)
+		})
 	}
 }
