@@ -72,9 +72,10 @@ webE2e("agent commands read the person's unsaved text and edit it while they kee
     await page.keyboard.press("ControlOrMeta+End");
     await page.keyboard.insertText("Person after both agent changes\n");
     await page.getByRole("button", { name: "File version: Current", exact: true }).click();
-    const history = page.getByRole("group", { name: "Recent edits", exact: true });
-    await expect(history.getByRole("button", { name: "Undo", exact: true })).toHaveCount(2);
-    await history.getByRole("button", { name: "Undo", exact: true }).first().click();
+    const menu = page.getByRole("menu");
+    await menu.getByText("2 edits in the editor", { exact: true }).click();
+    await expect(menu.getByRole("button", { name: /^Undo edit / })).toHaveCount(2);
+    await menu.getByRole("button", { name: "Undo edit 2", exact: true }).click();
     await expect(editor).toContainText("Last line");
     await expect(editor).not.toContainText("Whole-file writer");
     await expect(editor).toContainText("Agent changed");
