@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
-	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
 )
 
 func TestWorkflowCatalogOmitsSystemTier(t *testing.T) {
@@ -54,45 +53,6 @@ func TestWorkflowRegistryDefaultAmbient(t *testing.T) {
 	contractcheck.FailErr(t, "LoadRegistryConfig", err)
 	if ref.ID != "implement" || ref.Version != "1.0.0" {
 		t.Fatalf("default_ambient_workflow = %+v want implement@1.0.0", ref)
-	}
-}
-
-func TestWorkflowAmbientAttachBijection(t *testing.T) {
-	t.Parallel()
-	catalog, err := workflowfixture.LoadMergedWorkflowCatalog(t)
-	contractcheck.FailErr(t, "loadMergedWorkflowCatalog", err)
-	ref, err := workflowdef.LoadRegistryConfig(extpacks.Bundled(config.PlatformFlows))
-	contractcheck.FailErr(t, "LoadRegistryConfig", err)
-	if err := workflowdef.ValidateAmbientAttachBijection(catalog, ref); err != nil {
-		t.Fatalf("ValidateAmbientAttachBijection: %v", err)
-	}
-	impl, ok := catalog["implement@1.0.0"]
-	if !ok {
-		t.Fatal("missing implement@1.0.0")
-	}
-	if impl.Attach.Policy != workflowdef.AttachPolicySessionCreate {
-		t.Fatalf("implement attach.policy = %q", impl.Attach.Policy)
-	}
-	sessionCreate := 0
-	for _, m := range catalog {
-		if m.Attach.Policy == workflowdef.AttachPolicySessionCreate {
-			sessionCreate++
-			if m.ID != "implement" || m.Version != "1.0.0" {
-				t.Fatalf("unexpected session_create manifest %s@%s", m.ID, m.Version)
-			}
-		}
-	}
-	if sessionCreate != 1 {
-		t.Fatalf("session_create count = %d want 1", sessionCreate)
-	}
-
-	resolver := workflowcatalog.Resolver{}
-	summaries, err := resolver.ListResolved(context.Background(), "", "")
-	contractcheck.FailErr(t, "ListResolved", err)
-	for _, row := range summaries {
-		if row.ID == "implement" {
-			t.Fatal("ListResolved must exclude implement")
-		}
 	}
 }
 

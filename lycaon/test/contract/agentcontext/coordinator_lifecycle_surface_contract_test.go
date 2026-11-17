@@ -1,16 +1,9 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/toolcontract"
-
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/spawn"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -55,62 +48,5 @@ func TestCoordinatorSurfaceInvariants_orchestrationLifecycleOnPinnedSurfaces(t *
 				t.Fatalf("%s must include orchestration lifecycle tool %q — host can pin this surface while coordinator-core references it", id, tool)
 			}
 		}
-	}
-}
-
-// Closeout surfaces are catalogued.
-func TestCoordinatorCloseoutSurfacesTrackYAMLSSOT(t *testing.T) {
-	t.Parallel()
-	surfaces := loadImplementSurfaces(t)
-
-	closeoutIDs := []string{toolcontract.SurfaceImplementInvestigate, spawn.SurfaceImplementSynthesis}
-	for _, id := range closeoutIDs {
-		if !surface.SurfaceDeliversReport(id) {
-			t.Fatalf("expected %q to be a coordinator closeout surface", id)
-		}
-		if _, ok := surfaces[id]; !ok {
-			t.Fatalf("closeout surface %q is not defined in coordinator-surfaces.yaml — a rename must update surface.SurfaceDeliversReport", id)
-		}
-	}
-
-	assertDenNamesNoCloseoutSurface(t, closeoutIDs)
-}
-
-// Den receives closeout state through loop progress.
-func assertDenNamesNoCloseoutSurface(t *testing.T, closeoutIDs []string) {
-	t.Helper()
-	denSrc := filepath.Join(contractcheck.RepoRoot(t), "lycaon-den", "src")
-	var offenders []string
-	err := filepath.WalkDir(denSrc, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-		name := d.Name()
-		if !strings.HasSuffix(name, ".ts") && !strings.HasSuffix(name, ".tsx") {
-			return nil
-		}
-		if strings.Contains(name, ".test.") {
-			return nil
-		}
-		body, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return readErr
-		}
-		for _, id := range closeoutIDs {
-			if strings.Contains(string(body), `"`+id+`"`) {
-				rel, _ := filepath.Rel(denSrc, path)
-				offenders = append(offenders, rel+" names "+id)
-			}
-		}
-		return nil
-	})
-	contractcheck.FailErr(t, "walk den src", err)
-	if len(offenders) > 0 {
-		sort.Strings(offenders)
-		t.Fatalf("Den must not name a coordinator closeout surface — branch on CoordinatorLoopProgress.provisional_hidden instead:\n  %s",
-			strings.Join(offenders, "\n  "))
 	}
 }

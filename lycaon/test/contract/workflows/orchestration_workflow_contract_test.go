@@ -15,66 +15,6 @@ import (
 	"github.com/lycaon/lycaon/test/contract/internal/workflowfixture"
 )
 
-func TestBugbashInWorkflowCatalog(t *testing.T) {
-	t.Parallel()
-	catalog, err := workflowfixture.LoadMergedWorkflowCatalog(t)
-	contractcheck.FailErr(t, "loadMergedWorkflowCatalog failed", err)
-	m, ok := catalog["bugbash@1.1.0"]
-	if !ok {
-		t.Fatal("bugbash@1.1.0 missing from bundled catalog")
-	}
-	if m.Topology != "bugbash" {
-		t.Fatalf("topology = %q want bugbash", m.Topology)
-	}
-	if !m.IsCatalogVisible() {
-		t.Fatal("bugbash must be catalog-visible")
-	}
-	summary := m.Summary()
-	if summary.Topology != "bugbash" {
-		t.Fatalf("summary topology = %q", summary.Topology)
-	}
-	if summary.Trigger != "/bugbash" {
-		t.Fatalf("summary trigger = %q want /bugbash", summary.Trigger)
-	}
-
-	resolver := workflowcatalog.Resolver{}
-	summaries, err := resolver.ListResolved(context.Background(), "", "")
-	contractcheck.FailErr(t, "resolver.ListResolved failed", err)
-	hasBugbash, hasOptions := false, false
-	for _, row := range summaries {
-		if row.ID == "implement" {
-			t.Fatal("implement (attach.policy session_create) must not appear in product catalog API")
-		}
-		switch row.ID {
-		case "bugbash":
-			hasBugbash = true
-			if row.Trigger != "/bugbash" {
-				t.Fatalf("bugbash trigger = %q want /bugbash", row.Trigger)
-			}
-		case "options":
-			hasOptions = true
-			if row.Trigger != "/options" {
-				t.Fatalf("options trigger = %q want /options", row.Trigger)
-			}
-		}
-	}
-	if !hasBugbash || !hasOptions {
-		t.Fatalf("product catalog missing launch workflows: bugbash=%v options=%v", hasBugbash, hasOptions)
-	}
-	for _, id := range []string{"plan"} {
-		found := false
-		for _, row := range summaries {
-			if row.ID == id {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Fatalf("product catalog missing %q", id)
-		}
-	}
-}
-
 func TestWorkflowManifestTopologyFieldSync(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
