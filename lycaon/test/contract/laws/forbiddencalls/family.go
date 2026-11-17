@@ -68,4 +68,8 @@ var Family = laws.Family{Name: "forbidden-calls", Rules: slices.Concat(
 	approvalMint,
 	programFloor,
 	runnerNeutrality,
+	sessions,
+	toolOutput,
+	wireQueries,
+	workflowVersion,
 )}

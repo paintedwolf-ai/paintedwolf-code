@@ -197,3 +197,21 @@ func (r *Run) FuncNamed(dir, name string) (*GoFile, *ast.FuncDecl) {
 	}
 	return file, found
 }
+
+// Named anchors on a production function or method named name at or below
+// a module directory, whatever its receiver.
+func Named(dir, name string) Anchor {
+	return AnchorFunc("func named "+name+" below "+dir, func(c *Corpus) error {
+		for _, f := range c.Go().files {
+			if f.IsTest || !Under(f, dir) {
+				continue
+			}
+			for _, decl := range f.AST.Decls {
+				if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == name {
+					return nil
+				}
+			}
+		}
+		return errors.New("not declared")
+	})
+}
