@@ -81,7 +81,7 @@ function sessionStates(seed: number, nextTool: () => string): Message[][] {
             progress_update: planCount === 1
               ? { initial: true, steps: [{ state: "pending", label: "Plan" }] }
               : { initial: false, changes: [{ kind: "done", label: "Plan", state: "done" }] },
-          };));
+          }));
         };
         const planBeforeResult = rand(2) === 0;
         if (planBeforeResult) appendPlan();

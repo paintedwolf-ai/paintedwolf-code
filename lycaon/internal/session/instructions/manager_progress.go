@@ -19,11 +19,17 @@ func (m *Service) BootstrapProgress(ctx context.Context, sessionID string, msg a
 	if sess == nil || sess.ParentSessionID != "" {
 		return nil
 	}
-	runID := m.ActiveWorkflowRunID(ctx, sessionID)
-	if runID == "" {
+	if m.workflows == nil || m.workflows.Runs == nil {
 		return nil
 	}
-	_, err = progress.EnsureBootstrap(ctx, m.progress, sessionID, runID, msg.Content)
+	run, err := m.workflows.Runs.ActiveBySession(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	if run == nil {
+		return nil
+	}
+	_, err = progress.EnsureBootstrap(ctx, m.progress, sessionID, run.ID, msg.Content)
 	return err
 }
 

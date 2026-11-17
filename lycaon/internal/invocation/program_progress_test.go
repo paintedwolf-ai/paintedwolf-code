@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolexecution"
@@ -65,7 +64,8 @@ func TestProgramActualParserProgressStoreAndReceiptRemainIndependent(t *testing.
 				return "", nil
 			}))
 			executor := toolexecution.NewExecutor(nil, registry, "fixture")
-			testdbseed.InsertWorkflowRun(t, f.database, "progress-run", f.session, testdbseed.DefaultProjectID)
+			_, err = f.database.ExecContext(t.Context(), `INSERT INTO workflow_runs (id,session_id,project_id,workflow_id,workflow_version,status,current_phase,created_at,updated_at) SELECT 'progress-run',id,project_id,'test','1','running','work',created_at,updated_at FROM sessions WHERE id=?`, f.session)
+			testutil.FailErr(t, "seed progress workflow", err)
 			store := progress.NewSQLStore(f.database, sessionstore.NewSQL(f.database))
 			inputs := f.capture(t)
 			observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: inputs}

@@ -9,51 +9,6 @@ import (
 	"context"
 )
 
-const bindSessionProgressRun = `-- name: BindSessionProgressRun :exec
-INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at, item_ids_json, document_version)
-VALUES (?, ?, '', ?, '[]', 1)
-ON CONFLICT(session_id) DO UPDATE SET workflow_run_id = excluded.workflow_run_id
-`
-
-type BindSessionProgressRunParams struct {
-	SessionID     string `json:"session_id"`
-	WorkflowRunID string `json:"workflow_run_id"`
-	UpdatedAt     string `json:"updated_at"`
-}
-
-func (q *Queries) BindSessionProgressRun(ctx context.Context, arg BindSessionProgressRunParams) error {
-	_, err := q.db.ExecContext(ctx, bindSessionProgressRun, arg.SessionID, arg.WorkflowRunID, arg.UpdatedAt)
-	return err
-}
-
-const ensureSessionProgressRun = `-- name: EnsureSessionProgressRun :exec
-INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at, item_ids_json, document_version)
-VALUES (?, ?, ?, ?, '[]', 1)
-ON CONFLICT(session_id) DO UPDATE SET
-    workflow_run_id = excluded.workflow_run_id,
-    content = excluded.content,
-    updated_at = excluded.updated_at,
-    item_ids_json = '[]',
-    document_version = session_progress.document_version + 1
-`
-
-type EnsureSessionProgressRunParams struct {
-	SessionID     string `json:"session_id"`
-	WorkflowRunID string `json:"workflow_run_id"`
-	Content       string `json:"content"`
-	UpdatedAt     string `json:"updated_at"`
-}
-
-func (q *Queries) EnsureSessionProgressRun(ctx context.Context, arg EnsureSessionProgressRunParams) error {
-	_, err := q.db.ExecContext(ctx, ensureSessionProgressRun,
-		arg.SessionID,
-		arg.WorkflowRunID,
-		arg.Content,
-		arg.UpdatedAt,
-	)
-	return err
-}
-
 const getSessionProgressContent = `-- name: GetSessionProgressContent :one
 
 SELECT content FROM session_progress WHERE session_id = ?
@@ -107,6 +62,7 @@ const upsertSessionProgressContent = `-- name: UpsertSessionProgressContent :exe
 INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at, item_ids_json, document_version)
 VALUES (?, ?, ?, ?, ?, 1)
 ON CONFLICT(session_id) DO UPDATE SET
+    workflow_run_id = excluded.workflow_run_id,
     content = excluded.content,
     updated_at = excluded.updated_at,
     item_ids_json = excluded.item_ids_json,

@@ -11099,7 +11099,6 @@ export interface components {
         ProgressState: "pending" | "done" | "na";
         ProgressCompleteMeta: {
             steps: components["schemas"]["ProgressStep"][];
-            seq: number;
         };
         /** @enum {string} */
         ProgressChangeKind: "created" | "updated" | "done" | "na" | "reopened" | "removed";
@@ -11124,7 +11123,6 @@ export interface components {
             steps?: components["schemas"]["ProgressStep"][];
             summary?: components["schemas"]["ProgressUpdateSummary"];
             initial?: boolean;
-            seq: number;
         };
         /** @enum {string} */
         FeedbackResponseType: "text" | "single_choice" | "multi_choice" | "secret";

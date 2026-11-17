@@ -43,10 +43,10 @@ func fixtureForKind(kind api.MessageKind) api.Message {
 		msg.DraftStatus = api.DraftStatusCommitted
 	case api.MessageKindProgressUpdate:
 		msg.Role = api.MessageRoleSystem
-		msg.ProgressUpdate = &api.ProgressUpdateMeta{Seq: 1, Initial: true}
+		msg.ProgressUpdate = &api.ProgressUpdateMeta{Initial: true}
 	case api.MessageKindProgressComplete:
 		msg.Role = api.MessageRoleSystem
-		msg.ProgressComplete = &api.ProgressCompleteMeta{Seq: 1}
+		msg.ProgressComplete = &api.ProgressCompleteMeta{}
 	case api.MessageKindIndexWarming:
 		msg.Role = api.MessageRoleSystem
 	case api.MessageKindWorkflowExplain:
