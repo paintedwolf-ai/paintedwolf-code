@@ -29,6 +29,11 @@ function Inline(props: { text: string }) {
   );
 }
 
+function ArrivingText(props: { text: string; fadeKey: string }) {
+  const fade = claimSummaryFade(props.fadeKey);
+  return <span class={fade ? SUMMARY_FADE_CLASS : undefined}><Inline text={props.text} /></span>;
+}
+
 /** Each section retains its reserved space until the person expands it. */
 function ActivitySummarySection(props: {
   id: "intent" | "outcome";
@@ -80,7 +85,7 @@ function ActivitySummarySection(props: {
               {props.missing ? briefingCopy.notArrived : props.waiting}
             </span>
           }>
-            {(text) => <span classList={{ [SUMMARY_FADE_CLASS]: claimSummaryFade(fadeKey()) }}><Inline text={text} /></span>}
+            {(text) => <ArrivingText text={text} fadeKey={fadeKey()} />}
           </Show>
         </p>
         <p class="den-activity-summary__measure" aria-hidden="true" ref={(el) => (measure = el)}>
