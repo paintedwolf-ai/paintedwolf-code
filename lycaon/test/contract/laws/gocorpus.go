@@ -280,6 +280,9 @@ func ReceiverType(fn *ast.FuncDecl) string {
 	return typeName(fn.Recv.List[0].Type)
 }
 
+// TypeName returns the bare name of a type expression: T, *T, pkg.T, T[P].
+func TypeName(expr ast.Expr) string { return typeName(expr) }
+
 func typeName(expr ast.Expr) string {
 	switch t := expr.(type) {
 	case *ast.StarExpr:

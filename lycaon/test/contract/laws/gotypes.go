@@ -239,7 +239,27 @@ func (i *programImporter) Import(path string) (*types.Package, error) {
 	return i.export.Import(path)
 }
 
-// Package returns a typed package by module-relative directory.
+// TypedPackages returns the typed packages at or below each module-relative
+// dir. Every dir must contribute a package.
+func (r *Run) TypedPackages(dirs ...string) []*TypedPackage {
+	prog := r.Types()
+	g := r.Go()
+	var out []*TypedPackage
+	for _, dir := range dirs {
+		n := 0
+		for _, path := range prog.Order {
+			pkg := prog.Packages[path]
+			if pkg != nil && len(pkg.Files) > 0 && (path == g.Pkg(dir) || strings.HasPrefix(path, g.Pkg(dir)+"/")) {
+				out = append(out, pkg)
+				n++
+			}
+		}
+		r.Expect(n, "typed packages below "+dir)
+	}
+	return out
+}
+
+// TypedPackage returns a typed package by module-relative directory.
 func (r *Run) TypedPackage(dir string) *TypedPackage {
 	prog := r.Types()
 	pkg, ok := prog.Packages[r.Go().Pkg(dir)]
