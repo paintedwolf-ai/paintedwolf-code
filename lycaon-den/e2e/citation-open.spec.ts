@@ -91,9 +91,12 @@ webE2e.describe("citation source opens in-app", () => {
           inset: parseFloat(getComputedStyle(row).paddingRight),
           headerWidth: header.getBoundingClientRect().width,
           headerHeight: header.getBoundingClientRect().height,
+          cardInner: element.clientWidth - parseFloat(getComputedStyle(element).paddingLeft) - parseFloat(getComputedStyle(element).paddingRight),
         };
       });
       expect(geometry.width).toBeCloseTo(geometry.expectedWidth, 0);
+      // The whole header toggles the disclosure, edge to edge.
+      expect(geometry.headerWidth).toBeCloseTo(geometry.cardInner, 0);
       expect(geometry.rightGap).toBeCloseTo(geometry.inset, 0);
       await summary.click({
         position: { x: geometry.headerWidth - 2, y: geometry.headerHeight / 2 },

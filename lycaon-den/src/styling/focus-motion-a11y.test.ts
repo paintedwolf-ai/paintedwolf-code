@@ -9,6 +9,20 @@ function read(rel: string): string {
   return readSourceText(join(denSrc, rel), "utf8");
 }
 
+describe("reduced motion", () => {
+  it("zeros tab chrome fade and drawer motion under prefers-reduced-motion", () => {
+    const globalCss = read("global.css");
+    const drawer = read("drawer-utilities.css");
+    expect(globalCss).toMatch(
+      /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*--den-tabs-chrome-fade:\s*0ms/,
+    );
+    expect(drawer).toMatch(
+      /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*\.den-context-drawer/,
+    );
+    // ComposerChromeSlot mounts and unmounts synchronously, so it has no transition to assert.
+  });
+});
+
 describe("control outline affordance", () => {
   function denCheckboxBody(): string {
     const tw = read("tailwind.css");

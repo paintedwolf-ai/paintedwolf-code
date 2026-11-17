@@ -130,3 +130,13 @@ describe("macOS a11y modal handling", () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe("macOS a11y reduced motion", () => {
+  it("honors prefers-reduced-motion for splash/drawer/scroll chrome", () => {
+    const globalCss = read("global.css");
+    const drawers = read("drawer-utilities.css");
+    expect(globalCss).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+    expect(globalCss).toMatch(/scroll-behavior:\s*auto/);
+    expect(drawers).toMatch(/@media\s*\(prefers-reduced-motion:\s*reduce\)/);
+  });
+});

@@ -139,6 +139,12 @@ webE2e.describe("independent split order", () => {
         await chat.getByTestId("conversation-collapse-btn").click();
         await expect(chat).toBeHidden();
         expect((await page.getByTestId("files-tree").boundingBox())!.y).toBeCloseTo(y, 0);
+        // Crossing the narrow band leaves an explicitly hidden pane hidden.
+        const viewport = page.viewportSize()!;
+        await page.setViewportSize({ width: 800, height: 900 });
+        await expect(stage).toBeVisible();
+        await expect(chat).toBeHidden();
+        await page.setViewportSize(viewport);
         await stage.getByTestId("conversation-expand-btn").click();
         await expect(chat).toBeVisible();
         expect((await page.getByTestId("files-tree").boundingBox())!.y).toBeCloseTo(y, 0);

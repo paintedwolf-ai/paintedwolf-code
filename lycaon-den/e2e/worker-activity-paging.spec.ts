@@ -157,6 +157,10 @@ webE2e.describe("worker activity paging", () => {
     await expect(page.getByRole("button", { name: /^(Earlier|Later|Latest) activity$/ })).toHaveCount(0);
     // Rows scroll with the drawer rather than inside a box of their own.
     await expect(activity.locator("[data-den-scrollport]")).toHaveCount(0);
+    // The drawer's sections scroll in a scrollport frame whose thumb sits outside the scrolled content.
+    expect(await drawerViewport(page).evaluate((viewport) =>
+      !!viewport.parentElement?.matches("[data-den-scrollport]") && !viewport.querySelector(".os-scrollbar")
+      && !!viewport.parentElement.querySelector(":scope > .os-scrollbar"))).toBe(true);
 
     // Reading forward loads pages below, and past the page budget evicts the oldest ones
     // above, without moving the reader.
