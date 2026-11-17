@@ -4,11 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/timelayout"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/authzledger"

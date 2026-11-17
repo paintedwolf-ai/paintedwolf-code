@@ -5,12 +5,11 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"log/slog"
 	"math"
 	"strings"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/timelayout"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/db"

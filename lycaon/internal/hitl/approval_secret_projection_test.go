@@ -2,10 +2,9 @@ package hitl
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"strings"
 	"testing"
-
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/observability"

@@ -3,15 +3,14 @@ package hitl
 import (
 	"context"
 	"errors"
-	"sync"
-	"testing"
-	"time"
-
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"sync"
+	"testing"
+	"time"
 )
 
 // Two holders of the same key must never overlap, and entries must be freed

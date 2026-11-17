@@ -1,9 +1,8 @@
 package hitl
 
 import (
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"testing"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
