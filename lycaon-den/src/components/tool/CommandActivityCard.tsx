@@ -1,10 +1,11 @@
-import { Show, createMemo, createResource, splitProps } from "solid-js";
+import { For, Show, createMemo, createResource, splitProps } from "solid-js";
 import type { ToolBriefingSlots } from "./tool-briefing-slots.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import type { ResolveProjectRoot } from "../../api/project-path.ts";
 import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-layout.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import { activityExceptions, activityOutput, activityResultLine } from "../../chat/tool/command-activity-details.ts";
+import { activityCoverageNotices } from "../../chat/tool/command-activity-coverage.ts";
 import type { CommandReceiptContent } from "../../chat/transcript/content/chat-content-document.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { ActivityCalls, ActivityCommand, ActivityExceptions, ActivityFooter, ActivityOutputRegion, ActivityResult, ActivitySteps } from "./CommandActivityRegions.tsx";
@@ -59,6 +60,9 @@ function CommandActivityDetails(props: Props & { activity: () => NonNullable<Too
     <Show when={props.slots?.purpose}>{(purpose) => <div class="den-activity-purpose" data-testid="activity-purpose">{purpose()}</div>}</Show>
     <ActivityResult line={activityResultLine(activity(), executions())}>{props.slots?.result}</ActivityResult>
     <ActivityOutputRegion output={activityOutput(activity(), executions())} />
+    <For each={activityCoverageNotices(activity().calls)}>
+      {(notice) => <p class="den-activity-note" data-testid="activity-coverage">{notice}</p>}
+    </For>
     <ActivitySteps activity={activity()} projectId={props.projectId} />
     <ActivityCalls activity={activity()} projectId={props.projectId} />
     <ActivityExceptions facts={exceptions()} />

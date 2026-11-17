@@ -56,7 +56,7 @@ export function effectObservedInCommand(effect: { cause: string }): boolean {
   return effect.cause === "command_window";
 }
 
-const GAP_REASONS: Record<GapReason, string> = {
+export const GAP_REASONS: Record<GapReason, string> = {
   unconfined: "the command ran without confinement, so it could have changed files anywhere",
   baseline_incomplete: "its starting state was not recorded before the command started",
   canceled: "the observation was canceled",
@@ -65,7 +65,7 @@ const GAP_REASONS: Record<GapReason, string> = {
   time_budget: "the observation ran out of time",
 };
 
-const BOUNDARY_REASONS: Record<BoundaryReason, string> = {
+export const BOUNDARY_REASONS: Record<BoundaryReason, string> = {
   scope: "outside the source scope",
   directory_cap: "too many entries in one folder",
   subtree_cap: "too many entries below it",

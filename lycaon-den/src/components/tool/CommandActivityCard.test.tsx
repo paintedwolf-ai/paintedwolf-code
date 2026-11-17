@@ -294,3 +294,24 @@ it("moves a late commandProgram arrival from the generic card and keeps disclosu
   expect(store.isOpen(key)).toBe(true);
   expect(get).toHaveBeenCalledOnce();
 });
+
+describe("activity coverage", () => {
+  it("shows which folder the command's observation could not see, without file rows", async () => {
+    const value = part({ phase: "mutate", execution_count: 1 });
+    const output = JSON.stringify({ source_window: { id: "w1", settled: true, coverage: [
+      { folder: "/project", coverage: "complete" },
+      { folder: "/srv/shared", coverage: "not_observed", reason: "baseline_incomplete" },
+    ] } });
+    const withWindow = { ...value, output, commandActivity: { ...value.commandActivity!, calls: [{ ...value.commandActivity!.calls[0]!, output }] } };
+    const { view } = await opened(withWindow);
+    const notices = view.container.querySelectorAll('[data-testid="activity-coverage"]');
+    expect([...notices].map((notice) => notice.textContent)).toEqual([
+      "/srv/shared was not observed: its starting state was not recorded before the command started.",
+    ]);
+  });
+
+  it("shows nothing when every folder was compared", async () => {
+    const { view } = await opened(part({ phase: "mutate", execution_count: 1 }));
+    expect(region(view.container, "activity-coverage")).toBeNull();
+  });
+});
