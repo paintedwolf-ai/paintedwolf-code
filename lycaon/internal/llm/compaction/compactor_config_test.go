@@ -1,7 +1,11 @@
 package compaction
 
 import (
+	"regexp"
 	"testing"
+
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/limits"
 )
 
 func TestDerivedTokenBudgetsFromWindow(t *testing.T) {
@@ -213,5 +217,30 @@ func TestDefaultCompactionConfigUsesYAMLWindow(t *testing.T) {
 	cfg := DefaultCompactionConfig()
 	if cfg.ModelContextWindow != 131072 {
 		t.Fatalf("DefaultCompactionConfig ModelContextWindow = %d want 131072 (YAML SSOT, not Go 200000 twin)", cfg.ModelContextWindow)
+	}
+}
+
+func TestCompactionConfigCarriesTheCitationRetryCeiling(t *testing.T) {
+	raw, err := config.Read(config.Compaction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	key := regexp.MustCompile(`(?m)^max_citation_grounding_retries:.*$`)
+	if !key.Match(raw) {
+		t.Fatal("bundled compaction config has no citation retry ceiling")
+	}
+	cfg, err := decodeCompactionConfig(key.ReplaceAll(raw, []byte("max_citation_grounding_retries: 7")), CompactionConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MaxCitationGroundingRetries != 7 {
+		t.Fatalf("MaxCitationGroundingRetries = %d, want 7", cfg.MaxCitationGroundingRetries)
+	}
+	cfg, err = decodeCompactionConfig(key.ReplaceAll(raw, nil), CompactionConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.MaxCitationGroundingRetries != limits.DefaultCitationGroundingRetries || cfg.MaxCitationGroundingRetries <= 0 {
+		t.Fatalf("omitted ceiling = %d, want the shared default %d", cfg.MaxCitationGroundingRetries, limits.DefaultCitationGroundingRetries)
 	}
 }

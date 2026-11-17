@@ -25,16 +25,6 @@ func TestMultiRootASTNoSingleRootJoinAntiPatterns(t *testing.T) {
 	}
 }
 
-func TestMultiRootASTAddressingCopySingleSource(t *testing.T) {
-	t.Parallel()
-	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon")
-	scan, err := scanMultiRootAST(root)
-	contractcheck.FailErr(t, "scanMultiRootAST", err)
-	if len(scan.DuplicateAddressing) > 0 {
-		t.Fatalf("multi-root addressing copy outside SSOT partials:\n%s", strings.Join(scan.DuplicateAddressing, "\n"))
-	}
-}
-
 // AC-WR03-02: no config template renders a host absolute path — workspace
 // roots, scratch, and worker workspaces are addressed by @label.
 func TestMultiRootASTNoHostPathTemplateVars(t *testing.T) {

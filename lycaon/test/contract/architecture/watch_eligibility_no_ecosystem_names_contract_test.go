@@ -2,6 +2,7 @@ package contract
 
 import (
 	"go/ast"
+	"go/printer"
 	"go/token"
 	"os"
 	"path/filepath"
@@ -169,4 +170,10 @@ func renderSubject(fset *token.FileSet, node ast.Node) string {
 		return ""
 	}
 	return renderNode(fset, node)
+}
+
+func renderNode(fset *token.FileSet, n ast.Node) string {
+	var sb strings.Builder
+	_ = printer.Fprint(&sb, fset, n)
+	return sb.String()
 }

@@ -2,12 +2,14 @@ package contract
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
@@ -215,11 +217,21 @@ func TestMultiRootExplicitAddressRejectsTraversal(t *testing.T) {
 	}
 }
 
+// A bare relative path names a file in the active root only: the secondary
+// root's file is not found from the primary, and is found once the secondary
+// root is active.
 func TestMultiRootBareRelativeUsesActiveRootOnly(t *testing.T) {
 	fix := newMultiRootFixture(t)
+	if out := assertRootProgramSuccess(t, rootProgram(t, "cat -- primary-sentinel.txt", fix.tctx("s1"))); out != "primary" {
+		t.Fatalf("active-root read = %q", out)
+	}
 	out := rootProgram(t, "cat -- secondary-sentinel.txt", fix.tctx("s1"))
-	if out.Status == 0 || out.Stdout != "" {
-		t.Fatalf("relative read escaped active root: %+v", out)
+	if out.Refusal != nil || out.Status != 1 || out.Stdout != "" {
+		t.Fatalf("relative read outside the active root = %+v, want cat's not-found status", out)
+	}
+	fix.activeID = "d"
+	if out := assertRootProgramSuccess(t, rootProgram(t, "cat -- secondary-sentinel.txt", fix.tctx("s1"))); out != "secondary" {
+		t.Fatalf("relative read in the secondary active root = %q", out)
 	}
 }
 
@@ -340,14 +352,19 @@ func TestMultiRootActiveFolderDisplayContract(t *testing.T) {
 
 }
 
+// One stat call takes operands in different roots and reports each at its
+// root-resolved path.
 func TestMultiRootPathsArrayToolStat(t *testing.T) {
 	fix := newMultiRootFixture(t)
-	out := assertRootProgramSuccess(t, rootProgram(t, "stat -- @lycaon-den/secondary-sentinel.txt", fix.tctx("s1")))
-	if !strings.Contains(out, "secondary-sentinel.txt") {
-		t.Fatalf("labeled stat=%q", out)
+	out := assertRootProgramSuccess(t, rootProgram(t, `stat -c '%n %s' -- @lycaon-den/secondary-sentinel.txt @lycaon/primary-sentinel.txt`, fix.tctx("s1")))
+	want := filepath.Join(fix.secondaryDir, "secondary-sentinel.txt") + " 9\n" + filepath.Join(fix.primaryDir, "primary-sentinel.txt") + " 7\n"
+	if out != want {
+		t.Fatalf("labeled stat = %q, want %q", out, want)
 	}
 }
 
+// Roots whose briefs exceed the budget are trimmed: each root fits its share
+// and the composition fits the total.
 func TestMultiRootAnalyzeRootsBudget(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -355,14 +372,16 @@ func TestMultiRootAnalyzeRootsBudget(t *testing.T) {
 	primary := filepath.Join(base, "a")
 	secondary := filepath.Join(base, "b")
 	for _, dir := range []string{primary, secondary} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			contractcheck.FailErr(t, "mkdir", err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "file.go"), []byte("package x\n"), 0o644); err != nil {
-			contractcheck.FailErr(t, "write", err)
+		for i := 0; i < 40; i++ {
+			sub := filepath.Join(dir, fmt.Sprintf("module-with-a-long-directory-name-%02d", i))
+			contractcheck.FailErr(t, "mkdir", os.MkdirAll(sub, 0o755))
+			for _, ext := range []string{"go", "ts", "py", "rs", "md"} {
+				name := filepath.Join(sub, fmt.Sprintf("source-file-with-a-long-name-%02d.%s", i, ext))
+				contractcheck.FailErr(t, "write", os.WriteFile(name, []byte("x\n"), 0o644))
+			}
 		}
 	}
-	budget := repoinfo.BriefBudget{TotalBytes: 2048, PrimaryShare: 0.6}
+	budget := repoinfo.BriefBudget{TotalBytes: 1024, PrimaryShare: 0.6}
 	provider := repotest.NewProvider(t)
 	defer func() { _ = provider.Close() }()
 	mrb, err := repoinfo.AnalyzeRoots(ctx, []projectroot.RootRef{
@@ -370,8 +389,22 @@ func TestMultiRootAnalyzeRootsBudget(t *testing.T) {
 		{Path: secondary, Label: "b"},
 	}, budget, provider)
 	contractcheck.FailErr(t, "AnalyzeRoots", err)
-	if mrb.RenderedBytes() > budget.TotalBytes+256 {
-		t.Fatalf("rendered %d exceeds budget %d", mrb.RenderedBytes(), budget.TotalBytes)
+	if len(mrb.Roots) != 2 {
+		t.Fatalf("composed %d roots, want 2", len(mrb.Roots))
+	}
+	primaryCap := int(float64(budget.TotalBytes) * budget.PrimaryShare)
+	for _, r := range mrb.Roots {
+		limit := budget.TotalBytes - primaryCap
+		if r.IsPrimary {
+			limit = primaryCap
+		}
+		size := len(strings.Join(packboard.RepoOrientationLines(repoinfo.WireBrief(r.Brief)), "\n"))
+		if !r.Truncated || size > limit {
+			t.Fatalf("root %s: %d bytes truncated=%v, want trimmed to at most %d", r.Label, size, r.Truncated, limit)
+		}
+	}
+	if mrb.RenderedBytes() > budget.TotalBytes {
+		t.Fatalf("rendered %d bytes exceeds the %d byte budget", mrb.RenderedBytes(), budget.TotalBytes)
 	}
 }
 

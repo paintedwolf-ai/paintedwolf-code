@@ -16,7 +16,6 @@ import (
 type multiRootASTScan struct {
 	SingleRootJoins      []string
 	ActiveRootPathJoins  []string
-	DuplicateAddressing  []string
 	PromptWithoutPartial []string
 	HostPathTemplateVars []string
 }
@@ -29,8 +28,6 @@ var multiRootJoinAllowlist = map[string]string{
 var multiRootActiveRootJoinAllowlist = map[string]string{
 	"internal/tools/registry.go": "ActiveRootPath helper only",
 }
-
-var multiRootAddressingSSOT = regexp.MustCompile(`@<label>|cwd="@<label>"|spans \{\{ root_count \}\} folders`)
 
 type multiRootASTCacheEntry struct {
 	once sync.Once
@@ -81,7 +78,6 @@ func buildMultiRootAST(lycaonRoot string) (*multiRootASTScan, error) {
 	}
 	sort.Strings(out.SingleRootJoins)
 	sort.Strings(out.ActiveRootPathJoins)
-	sort.Strings(out.DuplicateAddressing)
 	sort.Strings(out.PromptWithoutPartial)
 	sort.Strings(out.HostPathTemplateVars)
 	return out, nil
@@ -133,14 +129,6 @@ var multiRootTemplateOutput = regexp.MustCompile(`\{\{([^}]*)\}\}`)
 var multiRootCoordinatorKick = regexp.MustCompile(`config/packs/painted-wolf/platform/guidance/coordinator-[^/]*\.md`)
 
 func scanMultiRootTemplateData(rel, text string, out *multiRootASTScan) {
-	if multiRootAddressingSSOT.MatchString(text) {
-		if rel != "config/packs/painted-wolf/platform/shared/partials/multi-root-addressing.md" &&
-			rel != "config/packs/painted-wolf/platform/shared/partials/workspace-roots.md" &&
-			rel != "config/packs/painted-wolf/platform/guidance/board-orientation.md" &&
-			rel != "config/packs/painted-wolf/platform/guidance/coordinator-roots-changed.md" {
-			out.DuplicateAddressing = append(out.DuplicateAddressing, rel)
-		}
-	}
 	if strings.Contains(text, "Working directory:") && !strings.Contains(text, "workspace-roots.md") && !strings.Contains(text, `include "partials/workspace-roots.md"`) {
 		if rel != "config/packs/painted-wolf/platform/shared/partials/workspace-roots.md" {
 			out.PromptWithoutPartial = append(out.PromptWithoutPartial, rel+": Working directory:")

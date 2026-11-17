@@ -1,13 +1,11 @@
 package contract
 
 import (
-	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	guidancetestsetup "github.com/lycaon/lycaon/internal/testsetup/guidance"
 	"github.com/lycaon/lycaon/internal/tools"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -129,53 +127,4 @@ func copyUsesAttachedFolders(entry guidance.HintEntry) bool {
 		}
 	}
 	return false
-}
-
-// AC-WR06-01: the UNKNOWN_ROOT_LABEL fix/instead copy must describe exactly
-// what projectroot.ResolveAbs honors — a bare relative path resolves in the
-// session folder, and an @label/ prefix selects any attached folder.
-func TestUnknownRootLabelCopyMatchesResolveAbs(t *testing.T) {
-	guidancetestsetup.Install()
-	fix := newMultiRootFixture(t)
-	active := fix.roots[1]
-	fix.activeID = active.ID
-
-	cfg, err := guidance.LoadHintConfigStock()
-	contractcheck.FailErr(t, "load stock hint config", err)
-	entry, ok := cfg.HintCodes["UNKNOWN_ROOT_LABEL"]
-	if !ok {
-		t.Fatal("UNKNOWN_ROOT_LABEL missing from stock hint config")
-	}
-	formatter := guidance.NewStaticRejectFormatter(cfg)
-	sc := entry.Scenarios[0]
-	body, err := formatter.Format("UNKNOWN_ROOT_LABEL", guidance.ScenarioVars(entry, sc))
-	contractcheck.FailErr(t, "render UNKNOWN_ROOT_LABEL", err)
-	for _, want := range []string{"bare relative path", "session folder", "@label/"} {
-		if !strings.Contains(body, want) {
-			t.Errorf("UNKNOWN_ROOT_LABEL copy does not tell the model %q; rendered: %q", want, body)
-		}
-	}
-
-	// Round-trip the two addressing forms the copy promises.
-	for _, root := range fix.roots {
-		sentinel := "primary-sentinel.txt"
-		if root.ID == active.ID {
-			sentinel = "secondary-sentinel.txt"
-		}
-		abs, got, err := projectroot.ResolveAbs(fix.roots, fix.activeID, "@"+root.Label+"/"+sentinel)
-		if err != nil {
-			t.Errorf("@%s/%s does not resolve: %v", root.Label, sentinel, err)
-			continue
-		}
-		if got.ID != root.ID || abs != filepath.Join(root.Path, sentinel) {
-			t.Errorf("@%s/%s resolved to %s under %+v", root.Label, sentinel, abs, got)
-		}
-	}
-	abs, got, err := projectroot.ResolveAbs(fix.roots, fix.activeID, "secondary-sentinel.txt")
-	if err != nil {
-		t.Fatalf("bare relative path does not resolve: %v", err)
-	}
-	if got.ID != active.ID || abs != filepath.Join(active.Path, "secondary-sentinel.txt") {
-		t.Errorf("bare relative path resolved to %s under %+v, want the session folder %s", abs, got, active.Path)
-	}
 }

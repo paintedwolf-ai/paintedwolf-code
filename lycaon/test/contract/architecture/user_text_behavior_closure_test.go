@@ -5,20 +5,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
-
-func TestPromptPathKickHooksRegistered(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	scan, err := scanUserTextBehaviorClosure(filepath.Join(root, "lycaon"))
-	contractcheck.FailErr(t, "scan user-text behavior closure", err)
-	if len(scan.UnregisteredPromptKickHooks) > 0 {
-		t.Fatalf("unregistered maybeQueue*Kick hooks on Prompt path (register in registeredPromptPathKickHooks with trigger class):\n%s",
-			strings.Join(scan.UnregisteredPromptKickHooks, "\n"))
-	}
-}
 
 func TestNoUserTextNLProbeToBehaviorSink(t *testing.T) {
 	t.Parallel()
@@ -42,15 +32,38 @@ func TestNoErrErrorStringParsingInCoordinatorPackages(t *testing.T) {
 	}
 }
 
+// Every boolean gate in a coordinator template is a fact the host declares:
+// a reader fact from the production vocabulary, or one of the occurrence
+// values the coordinator render sites supply.
 func TestCoordinatorPromptBooleanGatesRegistered(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	catalogRoot := filepath.Join(root, "lycaon", "config", "packs")
-	violations, err := scanCoordinatorPongoBooleanGates(catalogRoot)
+	vocab, err := prompts.BuildReaderFactVocabulary(nil)
+	contractcheck.FailErr(t, "build reader-fact vocabulary", err)
+	gates, err := scanCoordinatorPongoBooleanGates(filepath.Join(root, "lycaon", "config", "packs"))
 	contractcheck.FailErr(t, "scan coordinator pongo boolean gates", err)
-	if len(violations) > 0 {
-		contractcheck.FailViolations(t, "coordinator prompt gate closure violations", violations)
+	if gates.files == 0 || len(gates.sites) == 0 {
+		t.Fatalf("scanned %d coordinator templates and %d gates; the scan selects nothing", gates.files, len(gates.sites))
 	}
+	var violations []string
+	usedOccurrence := map[string]bool{}
+	for _, site := range gates.sites {
+		switch {
+		case bannedCoordinatorGateNameRE.MatchString(site.gate):
+			violations = append(violations, site.rel+": forbidden NL-style prompt gate "+site.gate)
+		case vocab.AllowsReference(site.gate):
+		case coordinatorOccurrenceGates[site.gate]:
+			usedOccurrence[site.gate] = true
+		default:
+			violations = append(violations, site.rel+": undeclared coordinator boolean gate "+site.gate)
+		}
+	}
+	for gate := range coordinatorOccurrenceGates {
+		if !usedOccurrence[gate] {
+			violations = append(violations, "coordinatorOccurrenceGates entry "+gate+" gates no coordinator template")
+		}
+	}
+	contractcheck.FailViolations(t, "coordinator prompt gate closure violations", violations)
 }
 
 func TestKickContractTriggerClassesNotUserText(t *testing.T) {

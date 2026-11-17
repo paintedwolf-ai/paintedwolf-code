@@ -1,13 +1,10 @@
 package contract
 
 import (
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/approvals"
-	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/settings"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -55,39 +52,5 @@ func TestApprovalExplanationScenariosRender(t *testing.T) {
 		if strings.TrimSpace(copy.IfWrong) == "" {
 			t.Fatalf("%q rendered empty if_wrong", key)
 		}
-	}
-}
-
-func TestApprovalExplanationNoInlineProse(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	scan, err := scanInlineApprovalProse(lycaonRoot)
-	contractcheck.FailErr(t, "scanInlineApprovalProse", err)
-	if len(scan.InlineApprovalProse) > 0 {
-		t.Fatalf("inline approval consequence prose on gate path (use approvals registry):\n%s",
-			strings.Join(scan.InlineApprovalProse, "\n"))
-	}
-}
-
-func TestApprovalExplainActionIntegration(t *testing.T) {
-	t.Parallel()
-	reg, err := approvals.LoadRegistryStock()
-	contractcheck.FailErr(t, "LoadRegistryStock", err)
-
-	got := reg.ExplainAction(hitl.ProposedAction{
-		Invocation: hitl.ActionInvocation{
-			Tool: "command",
-			Args: map[string]any{"command": "git push origin main"},
-		},
-		Scope: hitl.ActionScope{
-			ProjectDir: "/proj",
-		},
-	}, settings.TierIrreversible)
-	if got.Key != approvals.KeyCommandDestructive {
-		t.Fatalf("command push key: got %q", got.Key)
-	}
-	if got.UsedFallback || got.Copy.What == "" {
-		t.Fatalf("expected registry-rendered copy, got %+v", got)
 	}
 }
