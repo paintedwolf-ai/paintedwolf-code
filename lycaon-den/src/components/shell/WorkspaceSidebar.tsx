@@ -263,8 +263,8 @@ export function WorkspaceSidebar(props: Props) {
   return (
       <aside
         class="den-shell-aside"
-        {...windowEdgeAttributes(windowEdgeClaims("nav")[0])}
         style={{ "--den-nav-slot-width": navSlotWidthCss() }}
+        {...windowEdgeAttributes(windowEdgeClaims("nav")[0])}
         {...chromeProps()}
         aria-hidden={windowNavCollapsed()}
         inert={windowNavCollapsed() ? true : undefined}
