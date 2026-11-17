@@ -165,6 +165,11 @@ func loadProject(ctx context.Context, q *db.Queries, id string) (*Project, error
 	if err != nil {
 		return nil, err
 	}
+	outsideID, err := q.GetProjectOutsideRootID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("project outside namespace: %w", err)
+	}
+	p.Outside = outsideRoot(p.ID, outsideID, p.CreatedAt)
 	if promotionRow, promotionErr := q.GetProjectPromotion(ctx, id); promotionErr == nil {
 		p.Promotion, err = promotionFromRow(promotionRow)
 		if err != nil {

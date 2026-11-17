@@ -179,19 +179,19 @@ func commitAgentMutation(ctx context.Context, tctx tools.ToolContext, m agentMut
 	return commitAgentMutationWithoutStore(ctx, tctx.Source.SourceLedger, in, change)
 }
 
-// Paths outside attached roots produce no durable mutation.
+// Scratch, caches and host state produce no durable mutation.
 func agentCommitInputs(tctx tools.ToolContext, m agentMutation) (sourceledger.RecordInput, sourcefeed.Change, bool) {
 	return agentCommitInputsWithWorkspace(tctx, m, "")
 }
 
 func agentCommitInputsWithWorkspace(tctx tools.ToolContext, m agentMutation, workspaceID string) (sourceledger.RecordInput, sourcefeed.Change, bool) {
-	root, path, located := tctx.SourceLocation(m.AbsPath)
+	root, path, located := tctx.RecordedLocation(m.AbsPath)
 	if tctx.Identity.ProjectID == "" || !located {
 		return sourceledger.RecordInput{}, sourcefeed.Change{}, false
 	}
 	fromPath := ""
 	if m.FromAbsPath != "" {
-		if _, from, ok := tctx.SourceLocation(m.FromAbsPath); ok {
+		if fromRoot, from, ok := tctx.RecordedLocation(m.FromAbsPath); ok && fromRoot.ID == root.ID {
 			fromPath = from
 		}
 	}

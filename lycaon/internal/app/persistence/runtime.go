@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostlock"
 	"github.com/lycaon/lycaon/internal/localdata"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/version"
@@ -112,11 +113,16 @@ func (b *Runtime) Open(ctx context.Context, dbPath string, startup startupprotoc
 // credential-store floors protect, so history keeps their identity only.
 func floorCatalogContent(queries *db.Queries) func(context.Context, string, string, string) bool {
 	return func(ctx context.Context, projectID, rootID, rel string) bool {
-		root, err := queries.GetProjectRootByID(ctx, db.GetProjectRootByIDParams{ID: rootID, ProjectID: projectID})
-		if err != nil {
-			return false
+		var abs string
+		if outside, err := queries.GetProjectOutsideRootID(ctx, projectID); err == nil && outside == rootID {
+			abs = projectroot.OutsideAbs(rel)
+		} else {
+			root, err := queries.GetProjectRootByID(ctx, db.GetProjectRootByIDParams{ID: rootID, ProjectID: projectID})
+			if err != nil {
+				return false
+			}
+			abs = filepath.Join(root.Path, filepath.FromSlash(rel))
 		}
-		abs := filepath.Join(root.Path, filepath.FromSlash(rel))
 		return confine.ClassifyBlockedWrite(abs).Kind != confine.WriteSubjectOrdinary
 	}
 }

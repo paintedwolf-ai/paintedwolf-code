@@ -107,6 +107,9 @@ func (s *Store) recordBatchIdentityTxWithCache(ctx context.Context, q *db.Querie
 		if err := s.recordEffectWithCache(ctx, q, operationID, in, &recorded, cache); err != nil {
 			return recorded, err
 		}
+		if err := s.referenceChatFile(ctx, q, in.ProjectID, in.RootID, in.SessionID, recorded.FileID, ChatFileChanged, in.TS); err != nil {
+			return recorded, err
+		}
 	}
 	return recorded, nil
 }
@@ -117,6 +120,10 @@ func (s *Store) bufferCreateEffect(ctx context.Context, q *db.Queries, in prepar
 		in.Origin != api.SourceChangeOriginAgent || in.TextBefore != nil || in.TextAfter != nil ||
 		in.AfterSHA256 == "" {
 		return TrackedFile{}, false, nil
+	}
+	// An outside file's chat reference needs its file row in place.
+	if outside, err := s.outsideRootID(ctx, q, in.ProjectID); err != nil || outside == in.RootID {
+		return TrackedFile{}, false, err
 	}
 	obj := in.objects[in.AfterSHA256]
 	if obj == nil {

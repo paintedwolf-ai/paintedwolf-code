@@ -60,6 +60,7 @@ type Store struct {
 	withheld       func(ctx context.Context, projectID, rootID, rel string) bool
 	people         *peoplestore.Store
 	recordMu       sync.Mutex
+	outsideRoots   sync.Map
 	mutationScopes MutationScopeProvider
 	Content        *sourceblob.Store
 	Baselines      *workspacebaseline.Store

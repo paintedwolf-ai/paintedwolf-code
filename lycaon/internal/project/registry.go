@@ -26,12 +26,14 @@ var (
 	ErrProjectBusy        = errors.New("project has active work")
 )
 
-// RootKind distinguishes the engine-managed draft workspace from attached folders.
+// RootKind distinguishes attached folders, the engine-managed draft workspace,
+// and the namespace for files beyond every folder.
 type RootKind string
 
 const (
 	RootKindAttached RootKind = "attached"
 	RootKindDraft    RootKind = "draft"
+	RootKindOutside  RootKind = "outside"
 )
 
 // Root is a folder attached to a project workspace.
@@ -85,11 +87,13 @@ type Promotion struct {
 
 // Project is a materialized chat workspace.
 type Project struct {
-	SourceBranch    sourcebranch.ID
-	RootBranches    map[string]sourcebranch.ID
-	ID              string
-	Name            string // empty when unset (wire null)
-	Roots           []Root
+	SourceBranch sourcebranch.ID
+	RootBranches map[string]sourcebranch.ID
+	ID           string
+	Name         string // empty when unset (wire null)
+	Roots        []Root
+	// Outside is the namespace for files beyond every root; it is never in Roots.
+	Outside         Root
 	RootsGeneration int
 	// TrustEnabled is surface id → enabled. Missing key means on.
 	TrustEnabled map[string]bool
@@ -226,8 +230,10 @@ func (r *MemoryRegistry) Create(ctx context.Context, params CreateParams) (*Proj
 		return nil, ErrDraftRootImmutable
 	}
 	now := time.Now().UTC()
+	id := uuid.NewString()
 	p := &Project{
-		ID:              uuid.NewString(),
+		ID:              id,
+		Outside:         outsideRoot(id, uuid.NewString(), now),
 		Name:            DefaultNameForCreate(params),
 		Roots:           nil,
 		RootsGeneration: 0,

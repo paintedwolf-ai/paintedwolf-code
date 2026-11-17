@@ -169,7 +169,7 @@ func SourceWorkspaceDTO(p *project.Project, sessionScoped bool, inventory wire.S
 			ID:       root.ID, Path: root.Path, Watch: SourceWatchCoverageDTO(repochange.Coverage(root.Path)),
 		})
 	}
-	return wire.SourceWorkspace{WorkspaceID: p.WorkspaceID(), SessionScoped: sessionScoped, Roots: roots, Inventory: inventory}
+	return wire.SourceWorkspace{WorkspaceID: p.WorkspaceID(), SessionScoped: sessionScoped, Roots: roots, OutsideRootID: p.Outside.ID, Inventory: inventory}
 }
 
 func SourceWatchCoverageDTO(coverage repochange.WatchCoverage) wire.SourceWatchCoverage {

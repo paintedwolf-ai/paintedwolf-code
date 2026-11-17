@@ -8319,6 +8319,8 @@ type SourceWorkspace struct {
 	SessionScoped bool `json:"session_scoped"`
 	// Ordered physical roots used by every Files read and path action.
 	Roots []SourceWorkspaceRoot `json:"roots"`
+	// The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
+	OutsideRootID string `json:"outside_root_id"`
 	// The ledger's pass over the tree. Outside edits to tracked files reach history by path before it completes; untracked files enter history when the pass, or an open command window, admits them.
 	Inventory SourceInventoryState `json:"inventory"`
 }

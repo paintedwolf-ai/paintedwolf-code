@@ -58,7 +58,7 @@ WHERE r.path = ?1 AND r.agent != ?2
   AND COALESCE(
     (SELECT pr.path FROM project_roots pr WHERE pr.id = sess.workspace_root_id),
     (SELECT pr.path FROM project_roots pr WHERE pr.project_id = sess.project_id AND pr.is_primary = 1 LIMIT 1),
-    (SELECT pr.path FROM project_roots pr WHERE pr.project_id = sess.project_id ORDER BY pr.added_at LIMIT 1)
+    (SELECT pr.path FROM project_roots pr WHERE pr.project_id = sess.project_id AND pr.kind != 'outside' ORDER BY pr.added_at LIMIT 1)
   ) = ?3
 LIMIT 1
 `

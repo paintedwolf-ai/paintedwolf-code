@@ -1712,6 +1712,16 @@ type SourceBranchHeads struct {
 	ObservedTs    string `json:"observed_ts"`
 }
 
+type SourceChatFiles struct {
+	SessionID string `json:"session_id"`
+	FileID    string `json:"file_id"`
+	Changed   int64  `json:"changed"`
+	Read      int64  `json:"read"`
+	Opened    int64  `json:"opened"`
+	FirstTs   string `json:"first_ts"`
+	LastTs    string `json:"last_ts"`
+}
+
 type SourceCheckpointGitStates struct {
 	CheckpointID string `json:"checkpoint_id"`
 	RootID       string `json:"root_id"`

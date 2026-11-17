@@ -15,7 +15,7 @@ WHERE r.path = sqlc.arg(path) AND r.agent != sqlc.arg(except_agent)
   AND COALESCE(
     (SELECT pr.path FROM project_roots pr WHERE pr.id = sess.workspace_root_id),
     (SELECT pr.path FROM project_roots pr WHERE pr.project_id = sess.project_id AND pr.is_primary = 1 LIMIT 1),
-    (SELECT pr.path FROM project_roots pr WHERE pr.project_id = sess.project_id ORDER BY pr.added_at LIMIT 1)
+    (SELECT pr.path FROM project_roots pr WHERE pr.project_id = sess.project_id AND pr.kind != 'outside' ORDER BY pr.added_at LIMIT 1)
   ) = sqlc.arg(project_dir)
 LIMIT 1;
 

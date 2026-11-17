@@ -63,7 +63,8 @@ CREATE TABLE IF NOT EXISTS project_trust_baselines (
     review_state TEXT NOT NULL CHECK (json_valid(review_state))
 ) STRICT, WITHOUT ROWID;
 
--- Folder roots attached to a project (path, label, primary flag).
+-- A project's source namespaces: attached folders, the draft workspace, and one
+-- outside namespace whose paths are host paths beyond every folder.
 CREATE TABLE IF NOT EXISTS project_roots (
     id TEXT PRIMARY KEY,
     project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
@@ -83,7 +84,9 @@ CREATE TABLE IF NOT EXISTS project_roots (
     is_primary INTEGER NOT NULL DEFAULT 0,
     git_remote_hash TEXT,
     added_at TEXT NOT NULL,
-    kind TEXT NOT NULL DEFAULT 'attached' CHECK (kind IN ('attached', 'draft')),
+    kind TEXT NOT NULL DEFAULT 'attached' CHECK (kind IN ('attached', 'draft', 'outside')),
+    CHECK ((kind = 'outside') = (path = '')),
+    CHECK (kind != 'outside' OR is_primary = 0),
     UNIQUE(project_id, path)
 ) STRICT;
 
@@ -91,9 +94,23 @@ CREATE INDEX IF NOT EXISTS idx_project_roots_project_id ON project_roots(project
 CREATE UNIQUE INDEX IF NOT EXISTS idx_project_roots_one_primary
     ON project_roots(project_id) WHERE is_primary = 1;
 CREATE UNIQUE INDEX IF NOT EXISTS idx_project_roots_label
-    ON project_roots(project_id, label COLLATE NOCASE);
+    ON project_roots(project_id, label COLLATE NOCASE) WHERE kind != 'outside';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_project_roots_one_draft
     ON project_roots(project_id) WHERE kind = 'draft';
+
+-- Every project has its outside namespace from creation.
+CREATE TRIGGER IF NOT EXISTS projects_outside_namespace
+AFTER INSERT ON projects
+BEGIN
+    INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
+    VALUES (
+        lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4'
+            || substr(lower(hex(randomblob(2))), 2) || '-'
+            || substr('89ab', 1 + abs(random()) % 4, 1) || substr(lower(hex(randomblob(2))), 2) || '-'
+            || lower(hex(randomblob(6))),
+        new.id, '', 'outside', 0, new.created_at, 'outside'
+    );
+END;
 
 -- Restart-safe draft-to-folder transitions.
 CREATE TABLE IF NOT EXISTS project_promotions (
@@ -3182,6 +3199,32 @@ CREATE TABLE IF NOT EXISTS source_files (
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_source_files_project ON source_files(project_id, created_ts, id);
 
+-- Outside files a chat touched. A reference keeps the file's history; deleting
+-- the chat releases it.
+CREATE TABLE IF NOT EXISTS source_chat_files (
+    session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    file_id TEXT NOT NULL REFERENCES source_files(id) ON DELETE CASCADE,
+    changed INTEGER NOT NULL DEFAULT 0 CHECK (changed IN (0, 1)),
+    read INTEGER NOT NULL DEFAULT 0 CHECK (read IN (0, 1)),
+    opened INTEGER NOT NULL DEFAULT 0 CHECK (opened IN (0, 1)),
+    first_ts TEXT NOT NULL,
+    last_ts TEXT NOT NULL,
+    CHECK (changed + read + opened > 0),
+    PRIMARY KEY (session_id, file_id)
+) STRICT, WITHOUT ROWID;
+CREATE INDEX IF NOT EXISTS idx_source_chat_files_file ON source_chat_files(file_id);
+
+-- A reference names a root chat and a file of the chat's project.
+CREATE TRIGGER IF NOT EXISTS source_chat_files_chat_insert
+BEFORE INSERT ON source_chat_files
+WHEN NOT EXISTS (
+    SELECT 1 FROM sessions s JOIN source_files f ON f.project_id = s.project_id
+    WHERE s.id = new.session_id AND f.id = new.file_id AND s.parent_session_id IS NULL
+)
+BEGIN
+    SELECT RAISE(ABORT, 'source_chat_files session_id is not a root chat of the file project');
+END;
+
 -- Last observed git position per attached root. A row states what was true at
 -- observed_ts; transitions are minted by comparing a fresh reading against it.
 -- A detached root has no position to state, so the row leaves with it.
@@ -3591,7 +3634,7 @@ CREATE INDEX IF NOT EXISTS idx_session_worktrees_project ON session_worktrees(pr
 CREATE TRIGGER IF NOT EXISTS sessions_workspace_root_project_insert
 BEFORE INSERT ON sessions
 WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id
+    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id AND kind != 'outside'
 )
 BEGIN
     SELECT RAISE(ABORT, 'sessions workspace_root_id outside project');
@@ -3600,7 +3643,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS sessions_workspace_root_project_update
 BEFORE UPDATE OF project_id, workspace_root_id ON sessions
 WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id
+    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id AND kind != 'outside'
 )
 BEGIN
     SELECT RAISE(ABORT, 'sessions workspace_root_id outside project');
@@ -3663,7 +3706,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS worker_jobs_workspace_root_project_insert
 BEFORE INSERT ON worker_jobs
 WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id
+    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id AND kind != 'outside'
 )
 BEGIN
     SELECT RAISE(ABORT, 'worker_jobs workspace_root_id outside project');
@@ -3672,7 +3715,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS worker_jobs_workspace_root_project_update
 BEFORE UPDATE OF project_id, workspace_root_id ON worker_jobs
 WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id
+    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id AND kind != 'outside'
 )
 BEGIN
     SELECT RAISE(ABORT, 'worker_jobs workspace_root_id outside project');
@@ -3681,7 +3724,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS delegations_workspace_root_project_insert
 BEFORE INSERT ON delegations
 WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id
+    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id AND kind != 'outside'
 )
 BEGIN
     SELECT RAISE(ABORT, 'delegations workspace_root_id outside project');
@@ -3690,7 +3733,7 @@ END;
 CREATE TRIGGER IF NOT EXISTS delegations_workspace_root_project_update
 BEFORE UPDATE OF project_id, workspace_root_id ON delegations
 WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id
+    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id AND kind != 'outside'
 )
 BEGIN
     SELECT RAISE(ABORT, 'delegations workspace_root_id outside project');

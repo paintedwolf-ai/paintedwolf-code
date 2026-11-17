@@ -21,6 +21,8 @@ type RootRef struct {
 	// External marks approved folders outside the attached roots (grants and
 	// host namespaces); they display as canonical absolute paths.
 	External bool
+	// Outside marks the project's namespace for files beyond every attached root.
+	Outside bool
 }
 
 // DisplayPath renders a ledger (root, relative path) pair in the canonical
@@ -29,6 +31,9 @@ type RootRef struct {
 // is unknown.
 func DisplayPath(roots []RootRef, activeRootID, rootID, rel string) string {
 	for _, root := range roots {
+		if root.ID == rootID && root.Outside {
+			return OutsideAbs(rel)
+		}
 		if root.ID != rootID {
 			continue
 		}

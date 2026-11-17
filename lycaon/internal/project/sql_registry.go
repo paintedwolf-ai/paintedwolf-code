@@ -111,6 +111,14 @@ func (r *SQLRegistry) List(ctx context.Context) ([]Project, error) {
 		return nil, err
 	}
 	rootsByProject := projectRootsByProjectID(allRoots)
+	outsideRows, err := r.queries.ListProjectOutsideRoots(ctx)
+	if err != nil {
+		return nil, err
+	}
+	outside := make(map[string]string, len(outsideRows))
+	for _, row := range outsideRows {
+		outside[row.ProjectID] = row.ID
+	}
 	promotionRows, err := r.queries.ListProjectPromotions(ctx)
 	if err != nil {
 		return nil, err
@@ -130,6 +138,7 @@ func (r *SQLRegistry) List(ctx context.Context) ([]Project, error) {
 			return nil, err
 		}
 		p.Promotion = promotions[p.ID]
+		p.Outside = outsideRoot(p.ID, outside[p.ID], p.CreatedAt)
 		if err := ValidateLifecycle(p); err != nil {
 			return nil, err
 		}
