@@ -41,7 +41,10 @@ func TestSmallMaterializedLifecyclePreservesSourceConflict(t *testing.T) {
 	runWorkerLifecycleAcrossProcessRestart(t, false, true)
 }
 
+// The source conflict on a mounted view runs in full mode; at PR the
+// materialized conflict and the mounted restart keep both axes covered.
 func TestSmallMountedLifecyclePreservesSourceConflict(t *testing.T) {
+	testutil.SkipIfShort(t, "the materialized conflict and mounted restart cover both axes in short mode")
 	runWorkerLifecycleAcrossProcessRestart(t, true, true)
 }
 

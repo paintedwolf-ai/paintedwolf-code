@@ -172,7 +172,9 @@ func branchJobSealed(status api.WorkerStatus, mergeStatus api.WorkerMergeStatus,
 	return false
 }
 
-// RecoverOrphanedMergeApplies repairs expired promotion leases.
+// RecoverOrphanedMergeApplies repairs expired promotion leases. It lists again
+// at once after a pass that repaired one and waits a lease interval only when
+// the remaining leases are still live.
 func (s *MergeService) RecoverOrphanedMergeApplies(ctx context.Context) error {
 	if s == nil || s.Store == nil || s.Queue == nil {
 		return fmt.Errorf("merge apply sweep requires queue and store")
@@ -187,6 +189,7 @@ func (s *MergeService) RecoverOrphanedMergeApplies(ctx context.Context) error {
 		if len(ids) == 0 {
 			return nil
 		}
+		repaired := false
 		for _, id := range ids {
 			task, ok := s.Queue.Get(id)
 			if !ok || task == nil || task.MergeStatus != api.WorkerMergeStatusApplying {
@@ -196,10 +199,15 @@ func (s *MergeService) RecoverOrphanedMergeApplies(ctx context.Context) error {
 			if lockErr != nil {
 				return lockErr
 			}
-			if _, err := eng.reclaimOrphanedApply(ctx, task, id); err != nil {
+			reclaimed, err := eng.reclaimOrphanedApply(ctx, task, id)
+			if err != nil {
 				slog.WarnContext(ctx, "orphaned merge apply repair deferred", "job_id", id, "err", err)
 			}
+			repaired = repaired || (reclaimed && err == nil)
 			lock.release()
+		}
+		if repaired {
+			continue
 		}
 		select {
 		case <-ctx.Done():

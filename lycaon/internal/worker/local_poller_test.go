@@ -472,6 +472,7 @@ func TestPollerTransitionsToRetryWhenCompletionCommitFailsWithAttemptsRemaining(
 
 	cfg := DefaultWorkersConfig()
 	poller := NewLocalWorkerPoller(queue, completeExecutor{}, cfg, discardOutcomeRecorder{})
+	poller.terminalRetryMin = time.Millisecond
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- poller.Run(ctx) }()
@@ -500,6 +501,7 @@ func TestPollerTransitionsToFailureWhenCompletionCommitFailsExhausted(t *testing
 
 	cfg := DefaultWorkersConfig()
 	poller := NewLocalWorkerPoller(queue, completeExecutor{}, cfg, discardOutcomeRecorder{})
+	poller.terminalRetryMin = time.Millisecond
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan error, 1)
 	go func() { done <- poller.Run(ctx) }()
