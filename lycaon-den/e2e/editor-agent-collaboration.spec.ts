@@ -40,20 +40,18 @@ webE2e("agent reads unsaved text and edits its pinned snapshot while the person 
     const prompt = await apiPostPrompt(request, sessionId, { text: "Read shared.txt and replace Agent target with Agent changed, preserving the person's edits." });
     expect(prompt.ok(), await prompt.text()).toBe(true);
     const driver = manualHarnessTools(request, sessionId);
-    await driver.loadTools("update_progress");
+    await driver.loadTools("read", "edit", "write", "update_progress");
     await driver.completed(await driver.invoke("update_progress", {
       content: "## Progress\n- [ ] Update shared.txt while preserving the person's edits\n- [ ] Verify the shared document\n",
     }));
-    // A command reads the saved file; the person's unsaved text stays in their editor.
-    const read = await driver.completed(await driver.invoke("command", { command: "cat shared.txt" }));
-    expect(read).toContain("Agent target");
-    expect(read).not.toContain("Unsaved person");
+    const read = await driver.completed(await driver.invoke("read", { path: "shared.txt" }));
+    expect(read).toContain("Unsaved person 🐺");
     await editor.click();
     await page.keyboard.press("ControlOrMeta+End");
     await page.keyboard.insertText("Typed after agent read 世界\n");
     await expect.poll(async () => documentText(await readDocument())).toContain("Typed after agent read 世界");
-    const edit = await driver.completed(await driver.invoke("command", {
-      command: "edit --path shared.txt --old-string 'Agent target' --new-string 'Agent changed'",
+    const edit = await driver.completed(await driver.invoke("edit", {
+      path: "shared.txt", old_string: "Agent target", new_string: "Agent changed",
     }));
     expect(edit).toContain("shared editor document");
     await expect(editor).toContainText("Agent changed", { timeout: 15_000 });
@@ -61,10 +59,10 @@ webE2e("agent reads unsaved text and edits its pinned snapshot while the person 
     await expect(editor).toContainText("Typed after agent read 世界");
     await expect.poll(() => readFileSync(path.join(root, "shared.txt"), "utf8"))
       .toBe("Unsaved person 🐺\nFirst line\nAgent changed\nLast line\nTyped after agent read 世界\n");
-    await driver.completed(await driver.invoke("command", { command: "cat shared.txt" }));
+    await driver.completed(await driver.invoke("read", { path: "shared.txt" }));
     const current = documentText(await readDocument());
-    await driver.completed(await driver.invoke("command", {
-      command: "cat > shared.txt", stdin: current.replace("Last line", "Whole-file writer"),
+    await driver.completed(await driver.invoke("write", {
+      path: "shared.txt", content: current.replace("Last line", "Whole-file writer"),
     }));
     await expect(editor).toContainText("Whole-file writer");
     await expect(editor).toContainText("Unsaved person 🐺");
