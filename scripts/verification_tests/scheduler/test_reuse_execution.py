@@ -224,6 +224,9 @@ if [ -n "$log" ]; then
 fi
 printf '=== RUN   TestFixture\\n'
 if [ "$FIXTURE_MODE" = fork ]; then /usr/bin/true; fi
+if [ "$FIXTURE_MODE" = orphan ]; then
+  python3 -c 'import subprocess; subprocess.Popen(["/bin/sleep", "300"], close_fds=False, start_new_session=True, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)'
+fi
 if [ "$FIXTURE_MODE" = fail ]; then printf -- '--- FAIL: TestFixture (0.00s)\\nFAIL\\n'; exit 1; fi
 printf -- '--- PASS: TestFixture (0.00s)\\nPASS %s\\n' "$value"
 printf 'GOMEMLIMIT %s RACE %s\\n' "$GOMEMLIMIT" "${PW_TEST_RACE:-unset}"
@@ -262,6 +265,14 @@ printf 'GOMEMLIMIT %s RACE %s\\n' "$GOMEMLIMIT" "${PW_TEST_RACE:-unset}"
         self.assertEqual(event["exit_code"], 1)
         self.assertEqual(event["tests"], ["TestFixture"])
         self.assertIn("--- FAIL: TestFixture", Path(event["output"]).read_text())
+        self.assertFalse(event["recorded"])
+
+    @unittest.skipUnless(sys.platform in {"darwin", "linux"}, "process custody requires a supported POSIX host")
+    def test_a_detached_child_fails_the_package(self):
+        result, event = self.run_wrapper("orphan")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(b"package left child processes: fixture/pkg: sleep (pid ", result.stdout)
+        self.assertEqual(event["exit_code"], 1)
         self.assertFalse(event["recorded"])
 
     @unittest.skipUnless(reuse.fork_observable(), "recording requires process fork observation")

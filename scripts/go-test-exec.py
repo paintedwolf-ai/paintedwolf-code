@@ -12,10 +12,12 @@ import re
 import select
 import signal
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import verification_reuse as reuse  # noqa: E402
+from verification_lifecycle import custody  # noqa: E402
 from ci_policy.resources import Monitor, budget, runtime_environment  # noqa: E402
 
 CONTROL_ENV = ("PW_TEST_STAGE_EVENTS", "PW_TEST_REUSE_STORE", "PW_TEST_ENVIRONMENT_IDENTITY", "PW_TEST_PACKAGE_IDENTITIES",
@@ -35,7 +37,7 @@ def write_all(data):
         view = view[os.write(1, view):]
 
 
-def execute(binary, arguments, env, observe_forks, resource_limit=None):
+def execute(binary, arguments, env, owner, observe_forks, resource_limit=None):
     """Run the binary with combined output streamed through; returns (wait status, output, forked, resource violation)."""
     output_read, output_write = os.pipe()
     ready_read, ready_write = os.pipe()
@@ -48,6 +50,8 @@ def execute(binary, arguments, env, observe_forks, resource_limit=None):
             os.read(ready_read, 1)
             os.dup2(output_write, 1)
             os.dup2(output_write, 2)
+            # An inherited file identifies descendants even after they leave the group.
+            os.set_inheritable(owner.fileno(), True)
             os.execve(binary, [binary, *arguments], env)
         finally:
             os._exit(127)
@@ -110,6 +114,16 @@ def execute(binary, arguments, env, observe_forks, resource_limit=None):
     return status, bytes(captured), (forked if watch is not None else None), monitor.violation if monitor else None
 
 
+def settle_package_children(owner):
+    holders = custody.lease_holders(owner.name) - {os.getpid()}
+    births = {pid: custody.birth(pid) for pid in holders}
+    names = custody.commands(holders)
+    stat = os.fstat(owner.fileno())
+    for pid, birth in births.items():
+        custody.signal_holder(pid, birth, owner.name, (stat.st_dev, stat.st_ino), signal.SIGKILL)
+    return {pid: names.get(pid, "unknown command") for pid, birth in births.items() if birth is not None}
+
+
 def failure_report(events, package, output):
     directory = Path(events).with_name(Path(events).name.removesuffix("-events.jsonl") + "-failures")
     directory.mkdir(exist_ok=True)
@@ -152,14 +166,23 @@ def main():
         log.parent.mkdir(exist_ok=True)
         arguments = [f"-test.testlogfile={log}", *arguments]
     limit = budget(package, race)
-    status, output, forked, resource_limit = execute(binary, arguments, runtime_environment(child_environment, limit),
-                                                     reuse.fork_observable(), limit)
+    with tempfile.NamedTemporaryFile(prefix="package-child-", dir=environment["PW_TEST_SCRATCH_ROOT"]) as owner:
+        status, output, forked, resource_limit = execute(binary, arguments,
+                                                         runtime_environment(child_environment, limit),
+                                                         owner, reuse.fork_observable(), limit)
+        leaked = settle_package_children(owner) if forked is not False else {}
     elapsed = time.monotonic() - started
     code = os.waitstatus_to_exitcode(status)
     if resource_limit:
         code = 1
         diagnostic = (f"\npackage resource budget exceeded: {package}: "
                       f"{resource_limit['measured_bytes']} bytes RSS > {resource_limit['limit_bytes']}\n").encode()
+        output += diagnostic
+        write_all(diagnostic)
+    if leaked:
+        code = 1
+        leaked_names = ", ".join(f"{name} (pid {pid})" for pid, name in leaked.items())
+        diagnostic = f"\npackage left child processes: {package}: {leaked_names}\n".encode()
         output += diagnostic
         write_all(diagnostic)
     event = {"package": package, "exit_code": code, "elapsed": round(elapsed, 3), "reused": False,
