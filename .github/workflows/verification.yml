@@ -166,7 +166,7 @@ jobs:
 
       - name: Run verification
         # The lane backstop needs time to report stacks, reap children and publish its digest.
-        timeout-minutes: ${{ matrix.minutes + 1 }}
+        timeout-minutes: ${{ matrix.step_minutes }}
         env:
           LANE: ${{ matrix.lane }}
           SHARD: ${{ matrix.shard }}
