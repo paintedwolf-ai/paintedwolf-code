@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/vocabulary"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 )
 
 func TestPersistedFixturePassesVocabularyLoad(t *testing.T) {

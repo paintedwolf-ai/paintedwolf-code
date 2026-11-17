@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 )
 
 func TestComposePolicyYAMLLoads(t *testing.T) {
