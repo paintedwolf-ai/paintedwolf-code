@@ -66,7 +66,7 @@ func checkpointSnapshot(ctx context.Context, path string) error {
 // manifest verifies hashes and shape. Migration activation checks structural
 // validity; exhaustive index correspondence is audited after serving begins.
 func installQuiescentSnapshot(ctx context.Context, path, destination string, version int) error {
-	snapshot, err := openReader(ctx, path)
+	snapshot, err := OpenReadOnly(ctx, path)
 	if err != nil {
 		return err
 	}

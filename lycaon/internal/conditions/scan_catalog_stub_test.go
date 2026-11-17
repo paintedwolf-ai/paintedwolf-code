@@ -12,7 +12,7 @@ import (
 
 func TestBaselineScanCompleteWhenLedgerComplete(t *testing.T) {
 	proactive := []api.ScanCategory{api.ScanCategorySecurity, api.ScanCategorySecret}
-	key := scanKey("dep-1", "head-1", proactive)
+	key := scanKey("sess-1", "head-1", proactive)
 	ledger := stubScanLedger{
 		complete: map[string]*api.CodeScan{
 			key: {ID: "sec-1", Status: api.CodeScanStatusComplete, HeadSHA: "head-1"},
@@ -42,7 +42,7 @@ func TestSecurityEvidenceRequiresSnapshotMatch(t *testing.T) {
 		latest: &api.CodeScan{ID: "sec-1", Status: api.CodeScanStatusComplete, SourceSnapshotID: "snapshot-1"},
 	}
 	freshEvidence := stubEvidence{
-		"dep-1/scan:sec-1/security": &evidence.Record{
+		"sess-1/scan:sec-1/security": &evidence.Record{
 			GateType: string(evidence.GateTypeSecurity), GateVerdict: string(evidence.GateVerdictPassed),
 			Artifacts: completeSecurityArtifacts("snapshot-1"),
 		},
@@ -58,7 +58,7 @@ func TestSecurityEvidenceRequiresSnapshotMatch(t *testing.T) {
 		latest: &api.CodeScan{ID: "sec-1", Status: api.CodeScanStatusComplete, SourceSnapshotID: "snapshot-1"},
 	}
 	staleEvidence := stubEvidence{
-		"dep-1/scan:sec-1/security": &evidence.Record{
+		"sess-1/scan:sec-1/security": &evidence.Record{
 			GateType: string(evidence.GateTypeSecurity), GateVerdict: string(evidence.GateVerdictPassed),
 			Artifacts: completeSecurityArtifacts("snapshot-old"),
 		},
@@ -122,7 +122,7 @@ func TestNoCriticalFindingsWhenSummaryClean(t *testing.T) {
 
 func TestShippedScanPredicatesNotAlwaysFalse(t *testing.T) {
 	proactive := []api.ScanCategory{api.ScanCategorySecurity, api.ScanCategorySecret}
-	key := scanKey("dep-1", "head-1", proactive)
+	key := scanKey("sess-1", "head-1", proactive)
 	ledger := stubScanLedger{
 		complete: map[string]*api.CodeScan{
 			key: {
@@ -137,7 +137,7 @@ func TestShippedScanPredicatesNotAlwaysFalse(t *testing.T) {
 		},
 	}
 	ev := stubEvidence{
-		"dep-1/scan:sec-1/security": &evidence.Record{
+		"sess-1/scan:sec-1/security": &evidence.Record{
 			GateType: string(evidence.GateTypeSecurity), GateVerdict: string(evidence.GateVerdictPassed),
 			Artifacts: completeSecurityArtifacts("head-1"),
 		},

@@ -357,7 +357,7 @@ func TestPhaseGuidanceIsDeliveredOnTheNextModelCall(t *testing.T) {
 	kicks := mgr.Coordinator.Runtime.Kicks()
 	staged := anchor.InformRender(anchor.ComposeDone)
 	kicks.QueueDeferred(sess.ID, staged)
-	if got := kicks.TakePendingKickID(sess.ID); got != staged {
+	if got := kicks.TakePendingKickIDUnless(sess.ID, nil); got != staged {
 		t.Fatalf("staged = %q", got)
 	}
 	kicks.QueueDeferredLatest(sess.ID, anchor.PhaseEntered.String(), "coordinator-security-claims")

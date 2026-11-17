@@ -11,18 +11,38 @@ import (
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 )
 
+const ReadReviewTool = "read_review"
+const ReadReviewInvalidCode = "READ_REVIEW_INVALID"
+
 func rejectReviewView(reason, field string) error {
-	return &toolrejection.ToolReject{Code: "WORKFLOW_REVIEW_VIEW_INVALID", Data: map[string]any{"reason": reason, "field": field}}
+	return &toolrejection.ToolReject{Code: ReadReviewInvalidCode, Data: map[string]any{"reason": reason, "field": field}}
 }
 
-// View exposes bounded review context through the coordination board.
+// RegisterReadReviewTool registers read_review on reg.
+func RegisterReadReviewTool(reg *tools.DefaultRegistry, view func(context.Context, map[string]any, tools.ToolContext) (string, error)) error {
+	if reg == nil {
+		return nil
+	}
+	return reg.Register(ReadReviewTool, func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
+		if view == nil {
+			return "", rejectReviewView("review_unavailable", "view")
+		}
+		return view(ctx, args, tctx)
+	})
+}
+
+// View exposes bounded workflow review context through read_review.
 func (m *Assignments) View(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 	if m == nil || m.Runs == nil || m.WorkerTasks == nil {
-		return "", rejectReviewView("review_unavailable", "review_view")
+		return "", rejectReviewView("review_unavailable", "view")
 	}
-	for _, key := range []string{"finding_id", "findings_after", "detail_level"} {
-		if args[key] != nil {
-			return "", rejectReviewView("exclusive_view", key)
+	for key := range args {
+		switch key {
+		case "view", "assignment_id", "cursor":
+		default:
+			if args[key] != nil {
+				return "", rejectReviewView("unknown_argument", key)
+			}
 		}
 	}
 	sessionID := tctx.Identity.SessionID
@@ -34,9 +54,9 @@ func (m *Assignments) View(ctx context.Context, args map[string]any, tctx tools.
 		return "", err
 	}
 	if run == nil {
-		return "", rejectReviewView("no_active_review", "review_view")
+		return "", rejectReviewView("no_active_review", "view")
 	}
-	view, _ := args["review_view"].(string)
+	view, _ := args["view"].(string)
 	id, _ := args["assignment_id"].(string)
 	cursor, _ := args["cursor"].(string)
 	if view == "subject" && id == "" || view != "subject" && id != "" {
@@ -47,7 +67,7 @@ func (m *Assignments) View(ctx context.Context, args map[string]any, tctx tools.
 	}
 	var out any
 	if tctx.Identity.WorkerJobID != "" {
-		if view != "subject" || id != tctx.Identity.WorkerJobID {
+		if view != "subject" || id == "" {
 			return "", rejectReviewView("assigned_subject_only", "assignment_id")
 		}
 		tasks, err := m.WorkerTasks(ctx, run.ID)
@@ -70,7 +90,7 @@ func (m *Assignments) View(ctx context.Context, args map[string]any, tctx tools.
 		}
 		phase, ok := manifest.PhaseByID(run.CurrentPhase)
 		if !ok || phase.ReviewLoop == nil {
-			return "", rejectReviewView("phase_not_review", "review_view")
+			return "", rejectReviewView("phase_not_review", "view")
 		}
 		vars, err := m.Runs.GetScaffoldVars(ctx, run.ID)
 		if err != nil {
@@ -147,7 +167,7 @@ func (m *Assignments) View(ctx context.Context, args map[string]any, tctx tools.
 		facts = append(facts, page.Facts.Gaps...)
 		out = map[string]any{"assignment_id": id, "purpose": binding.Purpose, "coverage_required": binding.CoverageRequired, "revision": binding.Subject.Facts.Revision, "facts": facts, "candidate": page.Candidate, "next_cursor": next}
 	default:
-		return "", rejectReviewView("unknown_view", "review_view")
+		return "", rejectReviewView("unknown_view", "view")
 	}
 	raw, err := json.Marshal(out)
 	return string(raw), err

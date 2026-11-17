@@ -115,11 +115,6 @@ func moveToRecoveryArea(path string, dest Destination) (Receipt, error) {
 	return Receipt{}, moveErr
 }
 
-// Restore consumes only the recorded identity and refuses an occupied destination.
-func Restore(ctx context.Context, receipt Receipt, destination fseffect.Location) error {
-	return RestoreWith(ctx, receipt, destination, nil)
-}
-
 // RestoreWith restores receipt to destination using relocate when provided.
 func RestoreWith(ctx context.Context, receipt Receipt, destination fseffect.Location, relocate func(fseffect.Location, fseffect.Location, string) error) error {
 	if err := ctx.Err(); err != nil {

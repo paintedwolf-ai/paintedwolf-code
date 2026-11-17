@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -58,7 +59,7 @@ func (s *SQLStore) ListPendingOutcomes(ctx context.Context) ([]api.WorkerTask, e
 func (s *SQLStore) MarkOutcomeDelivered(ctx context.Context, jobID string) error {
 	return s.queries.MarkWorkerOutcomeDelivered(ctx, db.MarkWorkerOutcomeDeliveredParams{
 		WorkerJobID: jobID,
-		DeliveredAt: db.FormatTime(time.Now().UTC()),
+		DeliveredAt: timelayout.Format(time.Now().UTC()),
 	})
 }
 

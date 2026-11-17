@@ -2,6 +2,7 @@ package db_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"testing"
 	"time"
@@ -153,7 +154,7 @@ func TestSearchSyncMessageWriteThroughUsesTriggers(t *testing.T) {
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO messages (id, entry_id, session_id, role, content, origin, authority, trust_tier, kind, ts)
 		VALUES (?, ?, ?, ?, ?, 'user', 'user', 'trusted', '', ?)
-	`, msg.ID, "entry-"+msg.ID, "s1", msg.Role, msg.Content, db.FormatTime(msg.CreatedAt))
+	`, msg.ID, "entry-"+msg.ID, "s1", msg.Role, msg.Content, timelayout.Format(msg.CreatedAt))
 	testutil.FailErr(t, "insert message", err)
 	testutil.FailErr(t, "SyncMessageWriteThrough", search.SyncMessageWriteThrough(ctx, tx, "p1", "s1", msg))
 	testutil.FailErr(t, "Commit", tx.Commit())

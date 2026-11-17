@@ -3,7 +3,6 @@ package git
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"strconv"
 	"strings"
 	"time"
@@ -188,29 +187,4 @@ func (m *gitCommitManager) Compare(ctx context.Context, projectDir, base, head s
 		result.MergeBases = strings.Fields(string(out))
 	}
 	return result, nil
-}
-
-// MarshalHistoryPage preserves an empty list and advertises further pages.
-func MarshalHistoryPage(commits []GitCommit, opts GitLogOpts, err error) (string, error) {
-	if err != nil {
-		return MarshalToolFailure(err)
-	}
-	next := (*int)(nil)
-	if len(commits) > opts.Limit {
-		commits = commits[:opts.Limit]
-		n := opts.Offset + len(commits)
-		next = &n
-	}
-	if commits == nil {
-		commits = []GitCommit{}
-	}
-	raw, err := surveyjson.Marshal(struct {
-		Available  bool        `json:"available"`
-		Ref        string      `json:"ref,omitempty"`
-		All        bool        `json:"all,omitempty"`
-		Commits    []GitCommit `json:"commits"`
-		Offset     int         `json:"offset"`
-		NextOffset *int        `json:"next_offset,omitempty"`
-	}{true, opts.Ref, opts.All, commits, opts.Offset, next})
-	return string(raw), err
 }

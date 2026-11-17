@@ -32,7 +32,7 @@ func TestBundledRulesResolveViaRegistry(t *testing.T) {
 				t.Fatalf("pack rule %q when %q: %v", rule.ID, whenStr, err)
 			}
 			_ = ok
-			out, err := engine.Evaluate(ctx, EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "delegate_dispatch"}})
+			out, err := engine.Evaluate(ctx, EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint"}})
 			if err != nil {
 				t.Fatalf("pack evaluate %q: %v", rule.ID, err)
 			}
@@ -49,7 +49,7 @@ func TestSpecRulesDenyDelegationViaRegistryEngine(t *testing.T) {
 		testutil.FailErr(t, "RegisterRuleConditions failed", err)
 	}
 	engine := NewSimpleEngine(cfg, reg)
-	out, err := engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "delegate_dispatch"}})
+	out, err := engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint"}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if out.Allowed {
 		t.Fatal("expected deny")

@@ -21,6 +21,7 @@ const (
 
 type copyPageEntry struct {
 	pair   FilePair
+	to     projectpaths.Resolved
 	source string
 	stage  *agentStreamStage
 	bytes  int64
@@ -92,7 +93,7 @@ func (p *copyPage) AddResolved(pair FilePair, from, to projectpaths.Resolved, ma
 		staged.Close()
 		return err
 	}
-	p.entries = append(p.entries, copyPageEntry{pair: pair, source: from.Abs, stage: staged, bytes: result.Bytes})
+	p.entries = append(p.entries, copyPageEntry{pair: pair, to: to, source: from.Abs, stage: staged, bytes: result.Bytes})
 	p.bytes += result.Bytes
 	if len(p.entries) == copyPageEntries || p.bytes >= 1<<20 {
 		return p.Flush()
@@ -144,7 +145,7 @@ func (p *copyPage) Flush() error {
 	if p.operation.input.Preserve || p.operation.pendingRecords >= copySettlementRecords || p.operation.pendingBytes >= copySettlementBytes || err != nil {
 		err = errors.Join(err, p.operation.settlePending(p.ctx, p.tc))
 	}
-	committedPaths := make([]string, 0, len(completions))
+	committed := make([]mutationLocation, 0, len(completions))
 	for i, completion := range completions {
 		if !completion.Result.Publication.Committed() {
 			continue
@@ -154,14 +155,14 @@ func (p *copyPage) Flush() error {
 		toSlash := filepath.ToSlash(entry.pair.To)
 		p.result.Copied = append(p.result.Copied, copyResult{From: filepath.ToSlash(entry.pair.From), To: toSlash, Bytes: entry.bytes})
 		p.operation.used.Bytes += entry.bytes
-		committedPaths = append(committedPaths, toSlash)
+		committed = append(committed, resolvedMutationLocation(entry.to))
 		if p.operation.input.Preserve {
 			preserveErr := preserveMetadata(p.ctx, p.tc, entry.source, entry.stage.request.Target)
 			err = errors.Join(err, preserveErr)
 		}
 	}
-	if len(committedPaths) > 0 {
-		afterSuccessfulMutation(p.ctx, p.tc, committedPaths...)
+	if len(committed) > 0 {
+		afterSuccessfulMutationLocations(p.ctx, p.tc, committed...)
 	}
 	return err
 }

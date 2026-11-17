@@ -16,18 +16,6 @@ func TestMaterialPrefersDefsThenFiles(t *testing.T) {
 	if material(unparsed) != 50 {
 		t.Fatalf("unparsed score = %d, want SourceFiles 50", material(unparsed))
 	}
-	// Bytes only tiebreaks when primary scores equal.
-	root := &SubtreeNode{
-		Path: "root", Kind: SubtreeKindDir,
-		Children: []*SubtreeNode{
-			{Path: "small", Material: Material{SourceFiles: 5, Bytes: 10}},
-			{Path: "big", Material: Material{SourceFiles: 5, Bytes: 1000}},
-		},
-	}
-	ranked := rankChildren(root)
-	if ranked[0].Path != "big" {
-		t.Fatalf("tiebreak order = %s then %s, want big first", ranked[0].Path, ranked[1].Path)
-	}
 }
 
 func TestSubtreeScaleInvariantRelocation(t *testing.T) {
@@ -88,7 +76,7 @@ func childPaths(n *SubtreeNode) []string {
 
 func childScores(n *SubtreeNode) []int {
 	var out []int
-	for _, c := range rankChildren(n) {
+	for _, c := range rankChildrenImportance(n, nil, "") {
 		out = append(out, material(c))
 	}
 	return out
@@ -115,7 +103,7 @@ func TestSubtreeShapesBalanced(t *testing.T) {
 		}
 	}
 	// Stable path order when material ties.
-	ranked := rankChildren(root)
+	ranked := rankChildrenImportance(root, nil, "")
 	if ranked[0].Path != "alpha" || ranked[2].Path != "charlie" {
 		t.Fatalf("stable order = %v", childPaths(&SubtreeNode{Children: ranked}))
 	}
@@ -137,7 +125,7 @@ func TestSubtreeShapeGiantChild(t *testing.T) {
 			}},
 		},
 	}, 6)
-	ranked := rankChildren(root)
+	ranked := rankChildrenImportance(root, nil, "")
 	if ranked[0].Path != "giant" {
 		t.Fatalf("first = %s, want giant", ranked[0].Path)
 	}

@@ -11,14 +11,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"gopkg.in/yaml.v3"
-)
 
-// DefaultDir is the platform policy directory, used when a caller loads one explicit
-// directory rather than the ListEffective union of pack policy/ dirs.
-const DefaultDir = config.PlatformPolicy
+	"github.com/lycaon/lycaon/internal/extpacks"
+)
 
 // Entry is one policy document, bundled or on a host overlay.
 type Entry struct {

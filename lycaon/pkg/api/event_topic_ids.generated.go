@@ -12,7 +12,6 @@ const (
 	EventTopicWorker     EventTopic = "worker"
 	EventTopicCheckpoint EventTopic = "checkpoint"
 	EventTopicBoard      EventTopic = "board"
-	EventTopicDelegation EventTopic = "delegation"
 	EventTopicCost       EventTopic = "cost"
 	EventTopicLLM        EventTopic = "llm"
 	// EventTopicActivity Session-scoped, host-observed work currently occupying a
@@ -106,7 +105,6 @@ var allEventTopicValues = []EventTopic{
 	EventTopicWorker,
 	EventTopicCheckpoint,
 	EventTopicBoard,
-	EventTopicDelegation,
 	EventTopicCost,
 	EventTopicLLM,
 	EventTopicActivity,

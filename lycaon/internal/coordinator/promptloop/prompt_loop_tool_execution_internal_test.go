@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
-	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
@@ -391,52 +390,6 @@ func TestPreExecutorRefusalsUseOneOccurrenceAndOfferedRecovery(t *testing.T) {
 				t.Fatalf("rejection occurrences = %d", count)
 			}
 		})
-	}
-	for _, offered := range [][]string{nil, {}, {"read"}, {"task"}, {"request_tools"}, {"task", "request_tools"}} {
-		for _, deferred := range [][]string{nil, {"task"}, {"command"}} {
-			for _, agents := range [][]string{nil, {}, {"repo-researcher"}} {
-				sess := &api.Session{ID: "dispatch-recovery", AgentType: "coordinator"}
-				ctx := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "coordinator"}, Turn: tools.InvocationTurn{TurnOfferedToolNames: offered, TurnToolPlan: toolsurface.Compile(offered, deferred)}}
-				requestCtx := t.Context()
-				if agents != nil {
-					requestCtx = toolpolicy.WithTaskSpawnAllowlist(requestCtx, agents)
-				}
-				reject := loop.Tools.rejectToolOccurrence(requestCtx, sess, api.ToolCall{Name: "delegate_dispatch"}, ctx, "COORDINATOR_DELEGATE_DISPATCH_USE_TASK", map[string]any{"task_loadable": true, "replacement_calls": "untrusted"})
-				if reject.Copy == nil {
-					t.Fatalf("missing dynamic copy: %+v", reject)
-				}
-				dispatchable := agents == nil || len(agents) > 0
-				canTask := dispatchable && slices.Contains(offered, "task")
-				loadable := dispatchable && !canTask && slices.Contains(offered, "request_tools") && slices.Contains(deferred, "task")
-				var want []string
-				if loadable {
-					want = append(want, "request_tools")
-				}
-				if canTask || loadable {
-					want = append(want, "task")
-				}
-				var got []string
-				for _, call := range refusalNextCalls(reject) {
-					got = append(got, call.Tool)
-				}
-				if !slices.Equal(got, want) {
-					t.Fatalf("next calls = %v, want %v, offered=%v deferred=%v agents=%v", got, want, offered, deferred, agents)
-				}
-			}
-		}
-
-	}
-}
-
-func TestDelegateDispatchOnImplementSurfaceRedirectsToTask(t *testing.T) {
-	if got := unofferedToolCode("delegate_dispatch", "implement_dispatch"); got != "COORDINATOR_DELEGATE_DISPATCH_USE_TASK" {
-		t.Fatalf("unofferedToolCode(delegate_dispatch, implement_dispatch) = %q, want COORDINATOR_DELEGATE_DISPATCH_USE_TASK", got)
-	}
-	if got := offSurfaceCode("delegate_dispatch", "implement_routing"); got != "COORDINATOR_DELEGATE_DISPATCH_USE_TASK" {
-		t.Fatalf("offSurfaceCode(delegate_dispatch, implement_routing) = %q, want COORDINATOR_DELEGATE_DISPATCH_USE_TASK", got)
-	}
-	if got := unofferedToolCode("delegate_dispatch", "plan_execute"); got != "TOOL_NOT_OFFERED" {
-		t.Fatalf("unofferedToolCode(delegate_dispatch, plan_execute) = %q, want TOOL_NOT_OFFERED", got)
 	}
 }
 

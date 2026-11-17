@@ -1,0 +1,12 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': worker.round.notice
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-worker-round-notice
+tier: builtin
+invariants:
+  trigger_class: wait_trigger
+  fires_in:
+  - a running worker round crossed a consumption or quiet threshold; any
+    coordinator wait on workers wakes for it, and a turn without a wait reads it

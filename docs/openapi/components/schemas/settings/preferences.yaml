@@ -46,21 +46,6 @@ components:
           minimum: 1000
           multipleOf: 1000
           description: Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds.
-        worker_tool_budget_default:
-          type: [integer, "null"]
-          minimum: 2
-          maximum: 120
-          description: Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget.
-        worker_tool_budget_min:
-          type: [integer, "null"]
-          minimum: 2
-          maximum: 120
-          description: Smallest worker tool-round ceiling the coordinator may set (host floor is 2).
-        worker_tool_budget_max:
-          type: [integer, "null"]
-          minimum: 2
-          maximum: 120
-          description: Largest worker tool-round ceiling the coordinator may set or grant.
         session_spend_ceiling_nano_usd:
           x-go-name: "SessionSpendCeilingNanoUSD"
           type: [integer, "null"]
@@ -91,9 +76,6 @@ components:
       - coordinator_host_turn_timeout_ms
       - coordinator_max_sleep_ms
       - await_parent_workers_timeout_ms
-      - worker_tool_budget_default
-      - worker_tool_budget_min
-      - worker_tool_budget_max
       - spend_soft_stop
       - merged_from
       additionalProperties: false
@@ -136,21 +118,6 @@ components:
           minimum: 1000
           multipleOf: 1000
           description: Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds.
-        worker_tool_budget_default:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget.
-        worker_tool_budget_min:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Smallest worker tool-round ceiling the coordinator may set (host floor is 2).
-        worker_tool_budget_max:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Largest worker tool-round ceiling the coordinator may set or grant.
         session_spend_ceiling_nano_usd:
           x-go-name: "SessionSpendCeilingNanoUSD"
           type: integer

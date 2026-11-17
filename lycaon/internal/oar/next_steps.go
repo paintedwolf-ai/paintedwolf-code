@@ -19,9 +19,6 @@ import (
 // it, so it can change what a reader is told but never what a rule decides.
 const NextStepsFact = "paintedwolf.next_steps"
 
-// NextCallsDataKey holds the calls behind the rendered steps in decision data.
-const NextCallsDataKey = api.ToolFeedbackNextCalls
-
 const stepCallBinding = "call"
 
 // NextSteps is the host catalog entry for one rule. It lives outside the rule
@@ -447,7 +444,7 @@ func firstListValue(v any) (any, bool) {
 
 // NextCallsDetails adds a decision's next calls to the details a refusal reports.
 func NextCallsDetails(details, decisionData map[string]any) map[string]any {
-	calls, present := decisionData[NextCallsDataKey]
+	calls, present := decisionData[api.ToolFeedbackNextCalls]
 	if !present {
 		return details
 	}
@@ -455,7 +452,7 @@ func NextCallsDetails(details, decisionData map[string]any) map[string]any {
 	for key, value := range details {
 		merged[key] = value
 	}
-	merged[NextCallsDataKey] = calls
+	merged[api.ToolFeedbackNextCalls] = calls
 	return merged
 }
 

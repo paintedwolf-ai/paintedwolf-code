@@ -2,7 +2,7 @@
 import { createSignal } from "solid-js";
 import { required } from "../../test/at.ts";
 import "../../test/document-outbox-fixture.ts";
-import { filesBufferText } from "./project-files-buffers.ts";
+import { filesBufferText } from "./files-buffer-state.ts";
 import { render, waitFor } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LycaonApiError } from "../../api/http.ts";
@@ -10,7 +10,9 @@ import { DocumentFixture } from "../../test/document-fixture.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { receiveOpenedEditorDocument, editorReplica, evictEditorDocument, resetEditorDocumentsForTests, resolveEditorDocument } from "./editor-document.ts";
 import { createFilesEditorSynchronization } from "../editor/files-editor-synchronization.ts";
-import { applyFilesBufferLoad, markFilesBufferLoading, openFilesBuffer, resetProjectFilesForTests, setFilesActiveBuffer } from "./project-files-buffers.ts";
+import { applyFilesBufferLoad, markFilesBufferLoading } from "./project-files-buffer-io.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "./project-files-buffer-lifecycle.ts";
+import { setFilesActiveBuffer } from "./project-files-buffers.ts";
 import { projectFilesState } from "./files-buffer-state.ts";
 
 beforeEach(() => { resetEditorDocumentsForTests(); resetProjectFilesForTests(); });

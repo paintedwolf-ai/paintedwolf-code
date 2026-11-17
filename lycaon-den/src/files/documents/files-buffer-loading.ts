@@ -13,7 +13,8 @@ import { presentOpenedDocument, receiveOpenedEditorDocument, releaseUnclaimedEdi
 import { openFileBufferSource } from "../source/files-source-read.ts";
 import { setSelectedFileVersion } from "../history/files-version-selection.ts";
 import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts";
-import { applyFilesBufferEditorDocument, applyFilesBufferLoad, applyFilesBufferLoadError, setFilesBufferCapacityError, closeFilesBuffer, finishFilesBufferLoad, markFilesBufferLoading } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferEditorDocument, applyFilesBufferLoad, applyFilesBufferLoadError, setFilesBufferCapacityError, finishFilesBufferLoad, markFilesBufferLoading } from "../documents/project-files-buffer-io.ts";
+import { closeFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import { filesBufferNeedsBody, projectFilesState, type FileBuffer } from "../documents/files-buffer-state.ts";
 import { applyProjectSourceLoadFailure } from "../components/project-files-load-error.ts";
 import { setProjectFilesRevealRequest } from "../tree/project-files-reveal.ts";

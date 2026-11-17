@@ -1,9 +1,12 @@
 package progressclosure_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
@@ -12,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/reporting"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 )
 
 func TestWorkerAcknowledgementDoesNotRequireClosingUnfinishedRows(t *testing.T) {
@@ -60,7 +64,7 @@ func TestStaleWorkerAcknowledgementRetainsNewFinishes(t *testing.T) {
 	closure.Arm(t.Context(), "session", "worker-one")
 	old := closure.Reconciliation("session")
 	closure.Arm(t.Context(), "session", "worker-two")
-	if closure.Acknowledge("session", old.Token) {
+	if closure.Acknowledge(t.Context(), "session", old.Token) {
 		t.Fatal("stale token acknowledged a new finish")
 	}
 	before, err := store.Snapshot(t.Context(), "session")
@@ -78,7 +82,7 @@ func TestStaleWorkerAcknowledgementRetainsNewFinishes(t *testing.T) {
 
 func TestReconciliationServiceRejectsTokensWithoutPendingFinishes(t *testing.T) {
 	closure := progressclosure.New()
-	if closure.Acknowledge("session", "invented") {
+	if closure.Acknowledge(t.Context(), "session", "invented") {
 		t.Fatal("empty reconciliation state accepted an arbitrary token")
 	}
 }
@@ -183,16 +187,101 @@ func TestReconciliationTokenBindsTheExactBaselineRevision(t *testing.T) {
 	closure.SetProgress(store)
 	closure.Arm(t.Context(), "session", "worker-one")
 	first := closure.Reconciliation("session")
-	if !closure.Acknowledge("session", first.Token) {
+	if !closure.Acknowledge(t.Context(), "session", first.Token) {
 		t.Fatal("current token rejected")
 	}
 	testutil.FailErr(t, "publish identical bytes in a new revision", store.Set("session", "- [ ] Deliver"))
 	closure.Arm(t.Context(), "session", "worker-one")
 	second := closure.Reconciliation("session")
-	if first.Token == second.Token || closure.Acknowledge("session", first.Token) {
+	if first.Token == second.Token || closure.Acknowledge(t.Context(), "session", first.Token) {
 		t.Fatal("old revision token acknowledged a newer baseline")
 	}
-	if !closure.Acknowledge("session", second.Token) {
+	if !closure.Acknowledge(t.Context(), "session", second.Token) {
 		t.Fatal("new baseline token rejected")
+	}
+}
+
+type recordedAccounts struct {
+	jobs [][]string
+	err  error
+}
+
+func (r *recordedAccounts) AccountJobs(_ context.Context, jobs []string) error {
+	r.jobs = append(r.jobs, jobs)
+	return r.err
+}
+
+// Acknowledgement accounts for exactly the listed finishes; a failed record
+// keeps the set armed so the next update can acknowledge it.
+func TestAcknowledgementAccountsForTheListedResults(t *testing.T) {
+	store := progress.NewMemoryStore()
+	testutil.FailErr(t, "seed pending document", store.Set("session", "- [ ] Deliver"))
+	accounts := &recordedAccounts{err: errors.New("database busy")}
+	closure := progressclosure.New()
+	closure.SetProgress(store)
+	closure.SetAccounts(accounts)
+	closure.Arm(t.Context(), "session", "worker-b")
+	closure.Arm(t.Context(), "session", "worker-a")
+	rec := closure.Reconciliation("session")
+	if closure.Acknowledge(t.Context(), "session", rec.Token) || closure.Reconciliation("session") == nil {
+		t.Fatal("failed accounting cleared the set")
+	}
+	accounts.err = nil
+	if !closure.Acknowledge(t.Context(), "session", rec.Token) || closure.Reconciliation("session") != nil {
+		t.Fatal("acknowledgement kept the set")
+	}
+	if len(accounts.jobs) != 2 || !slices.Equal(accounts.jobs[1], []string{"worker-a", "worker-b"}) {
+		t.Fatalf("accounted %v", accounts.jobs)
+	}
+}
+
+// An operation that accounts for one finish releases only that finish; the
+// latch clears with the last one.
+func TestReleaseDropsAccountedFinishes(t *testing.T) {
+	store := progress.NewMemoryStore()
+	testutil.FailErr(t, "seed pending document", store.Set("session", "- [ ] Deliver"))
+	closure := progressclosure.New()
+	closure.SetProgress(store)
+	closure.Arm(t.Context(), "session", "worker-a")
+	closure.Arm(t.Context(), "session", "worker-b")
+	closure.Release("session", []string{"worker-a"})
+	rec := closure.Reconciliation("session")
+	if rec == nil || !slices.Equal(rec.Jobs, []string{"worker-b"}) {
+		t.Fatalf("after one release = %+v", rec)
+	}
+	closure.Release("session", []string{"worker-b"})
+	if closure.Reconciliation("session") != nil {
+		t.Fatal("latch kept after its last finish was accounted for")
+	}
+}
+
+type finishNames map[string]string
+
+func (n finishNames) NamesByJob(_ context.Context, jobID string) (workerrecords.JobNames, bool, error) {
+	name, ok := n[jobID]
+	return workerrecords.JobNames{Worker: name}, ok, nil
+}
+
+// The reconciliation the coordinator reads names each finish by its worker;
+// the jobs behind the token stay host identity, and a release keeps the
+// remaining finishes named.
+func TestReconciliationNamesFinishesByWorker(t *testing.T) {
+	store := progress.NewMemoryStore()
+	testutil.FailErr(t, "seed checklist", store.Set("session", "- [ ] Implement"))
+	closure := progressclosure.New()
+	closure.SetProgress(store)
+	closure.SetNames(finishNames{"job-fixer": "fixer", "job-docs": "docs"})
+	closure.Arm(t.Context(), "session", "job-fixer")
+	closure.Arm(t.Context(), "session", "job-docs")
+	raw, err := json.Marshal(closure.Reconciliation("session"))
+	testutil.FailErr(t, "marshal", err)
+	var view map[string]any
+	testutil.FailErr(t, "decode", json.Unmarshal(raw, &view))
+	if bytes.Contains(raw, []byte("job-")) || len(view["settled_work"].([]any)) != 2 {
+		t.Fatalf("reconciliation = %s", raw)
+	}
+	closure.Release("session", []string{"job-fixer"})
+	if got := closure.Reconciliation("session").Settled; len(got) != 1 || !strings.Contains(got[0], "docs") {
+		t.Fatalf("after release = %v", got)
 	}
 }

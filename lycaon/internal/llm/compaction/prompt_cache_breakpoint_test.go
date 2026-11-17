@@ -29,7 +29,7 @@ func TestContextMessageRoundTripKeepsPromptCacheBreakpoint(t *testing.T) {
 func TestDeterministicFitKeepsPromptCacheBreakpointOnRetainedTail(t *testing.T) {
 	msgs := withCharter(fitRows(300))
 	msgs[len(msgs)-1].PromptCacheBreakpoint = api.PromptCacheTierHistory
-	out := DeterministicFit(fitCfg(), msgs, EstimateMessagesTokens(msgs)/4)
+	out := DeterministicFitWithReserve(fitCfg(), msgs, EstimateMessagesTokens(msgs)/4, 0)
 	if len(out) >= len(msgs) {
 		t.Fatalf("expected a trim, kept %d of %d rows", len(out), len(msgs))
 	}

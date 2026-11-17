@@ -20,7 +20,8 @@ import { createFilesEditorSynchronization } from "../editor/files-editor-synchro
 import { orderWithPinnedGroup } from "../tabs/files-tab-strip.ts";
 import type { createFilesWorkspace } from "../source/files-workspace.ts";
 import type { FilesScope } from "./files-scope.ts";
-import { focusedFilesBufferKey, openFilesBuffer } from "../documents/project-files-buffers.ts";
+import { focusedFilesBufferKey } from "../documents/project-files-buffers.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState, type FileBuffer } from "../documents/files-buffer-state.ts";
 
 function durationMs(value: string): number {

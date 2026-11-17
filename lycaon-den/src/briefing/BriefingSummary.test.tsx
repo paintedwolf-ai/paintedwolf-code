@@ -2,13 +2,13 @@ import { render } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BriefingSnapshot } from "../api/types.ts";
-import { clearLetterRevealOnceKeys, hasLetterRevealOnceKey } from "../components/primitives/RandomLetterReveal.tsx";
 import { registerOpenFilesSurfaceSink, resetOpenFilesSurfaceForTests } from "../platform/navigation/open-files-surface.ts";
 import { BriefingEvidenceLink, BriefingSummary, snapshotSections, type SummarySection } from "./BriefingSummary.tsx";
 import { briefingCopy } from "./briefing-copy.ts";
+import { SUMMARY_FADE_CLASS, clearSummaryFades } from "./summary-fade.ts";
 
 afterEach(() => {
-  clearLetterRevealOnceKeys();
+  clearSummaryFades();
   resetOpenFilesSurfaceForTests();
 });
 
@@ -31,13 +31,29 @@ describe("BriefingSummary", () => {
     expect(container.textContent).toContain(briefingCopy.disclaimer);
   });
 
-  it("reveals once for text that arrives while watched and at once for settled text", () => {
+  it("fades text in once when it arrives while watched, whole and styled from the first frame", () => {
+    const text = "Moves the `checkToken` call.";
     const [sections, setSections] = createSignal<SummarySection[]>([{ id: "purpose" }]);
-    render(() => <BriefingSummary recordId="r2" sections={sections()} />);
-    expect(hasLetterRevealOnceKey("r2\0purpose")).toBe(false);
-    setSections([{ id: "purpose", text: "Moves the token check.", source: "summarizer" }]);
-    render(() => <BriefingSummary recordId="r3" sections={[{ id: "purpose", text: "Already settled.", source: "summarizer" }]} />);
-    expect(hasLetterRevealOnceKey("r3\0purpose")).toBe(true);
+    const first = render(() => <BriefingSummary recordId="r2" sections={sections()} />);
+    setSections([{ id: "purpose", text, source: "summarizer" }]);
+    const arrived = first.container.querySelector('[data-section="purpose"]')!;
+    expect(arrived.textContent).toContain("Moves the checkToken call.");
+    expect(arrived.querySelector(".den-briefing-summary__code")?.textContent).toBe("checkToken");
+    expect(arrived.querySelectorAll(`.${SUMMARY_FADE_CLASS}`)).toHaveLength(1);
+    first.unmount();
+
+    const again = render(() => <BriefingSummary recordId="r2" sections={[{ id: "purpose", text, source: "summarizer" }]} />);
+    expect(again.container.querySelector(`.${SUMMARY_FADE_CLASS}`)).toBeNull();
+    again.unmount();
+
+    const settled = render(() => <BriefingSummary recordId="r3" sections={[{ id: "purpose", text: "Already settled.", source: "summarizer" }]} />);
+    expect(settled.container.querySelector(`.${SUMMARY_FADE_CLASS}`)).toBeNull();
+    settled.unmount();
+
+    const [next, setNext] = createSignal<SummarySection[]>([{ id: "purpose" }]);
+    const newer = render(() => <BriefingSummary recordId="r4" sections={next()} />);
+    setNext([{ id: "purpose", text, source: "summarizer" }]);
+    expect(newer.container.querySelectorAll(`.${SUMMARY_FADE_CLASS}`)).toHaveLength(1);
   });
 
   it("uses the surface's own disclaimer when given", () => {
@@ -47,11 +63,10 @@ describe("BriefingSummary", () => {
     expect(container.querySelector(".den-briefing-mark")?.getAttribute("data-tip")).toBe("Decision help");
   });
 
-  it("shows code spans as code once settled text has revealed", async () => {
+  it("shows code spans as code", () => {
     const { container } = render(() => (
       <BriefingSummary recordId="r" sections={[{ id: "change", text: "Reads `FIXTURE_LISTEN_ADDR` first.", source: "summarizer" }]} />
     ));
-    await new Promise((resolve) => setTimeout(resolve, 0));
     expect(container.querySelector(".den-briefing-summary__code")?.textContent).toBe("FIXTURE_LISTEN_ADDR");
     expect(container.textContent).not.toContain("`");
   });

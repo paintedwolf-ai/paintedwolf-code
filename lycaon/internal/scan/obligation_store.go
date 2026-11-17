@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -52,12 +53,12 @@ func (s *sqlRunStore) LandedChangeForScan(ctx context.Context, scanID string) (*
 	return landedChangeFromRow(row)
 }
 
-// LatestRequiredLandedChangeForDelegation returns the newest required generation.
-func (s *sqlRunStore) LatestRequiredLandedChangeForDelegation(ctx context.Context, delegationID string) (*LandedChange, error) {
-	if s == nil || s.db == nil || strings.TrimSpace(delegationID) == "" {
+// LatestRequiredLandedChangeForSession returns the newest required generation landed by sessionID's workers.
+func (s *sqlRunStore) LatestRequiredLandedChangeForSession(ctx context.Context, sessionID string) (*LandedChange, error) {
+	if s == nil || s.db == nil || strings.TrimSpace(sessionID) == "" {
 		return nil, nil
 	}
-	row, err := s.queries.LatestRequiredLandedChangeForDelegation(ctx, delegationID)
+	row, err := s.queries.LatestRequiredLandedChangeForSession(ctx, db.NullString(sessionID))
 	if db.IsNoRows(err) {
 		return nil, nil
 	}
@@ -67,9 +68,9 @@ func (s *sqlRunStore) LatestRequiredLandedChangeForDelegation(ctx context.Contex
 	return landedChangeFromRow(row)
 }
 
-// LatestRequiredScanForDelegation returns the cumulative landing scan.
-func (s *sqlRunStore) LatestRequiredScanForDelegation(ctx context.Context, delegationID string) (*api.CodeScan, error) {
-	landed, err := s.LatestRequiredLandedChangeForDelegation(ctx, delegationID)
+// LatestRequiredScanForSession returns the cumulative landing scan for sessionID.
+func (s *sqlRunStore) LatestRequiredScanForSession(ctx context.Context, sessionID string) (*api.CodeScan, error) {
+	landed, err := s.LatestRequiredLandedChangeForSession(ctx, sessionID)
 	if err != nil || landed == nil {
 		return nil, err
 	}
@@ -110,7 +111,7 @@ func (s *sqlRunStore) CancelPendingScans(ctx context.Context, reason string) ([]
 	var canceled []api.CodeScan
 	err := db.InTx(ctx, s.db, s.queries, s.notify, func(qtx *db.Queries, tx *sql.Tx) error {
 		ids, err := qtx.CancelPendingScans(ctx, db.CancelPendingScansParams{
-			Error: db.NullString(reason), CompletedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+			Error: db.NullString(reason), CompletedAt: db.NullString(timelayout.Format(time.Now().UTC())),
 		})
 		if err != nil {
 			return err

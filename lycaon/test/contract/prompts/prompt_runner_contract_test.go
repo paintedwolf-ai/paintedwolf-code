@@ -58,11 +58,23 @@ func TestWorkerPackageNoConcreteManager(t *testing.T) {
 func TestDelegationPackageNoConcreteManagerForSpawn(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	delegationDir := filepath.Join(root, "lycaon", "internal", "delegation")
-	data, err := os.ReadFile(filepath.Join(delegationDir, "manager_impl.go"))
-	contractcheck.FailErr(t, "read file", err)
-	src := string(data)
-	if strings.Contains(src, "SpawnChild") || strings.Contains(src, ".Prompt(") {
-		t.Fatalf("delegation should not call spawn/prompt on Sessions directly")
+	retiredDir := filepath.Join(root, "lycaon", "internal", "delegation")
+	if _, err := os.Stat(retiredDir); !os.IsNotExist(err) {
+		t.Fatalf("retired internal/delegation package still exists: err=%v", err)
+	}
+	for _, pkg := range []string{"workerplan", "workertopology"} {
+		files, err := filepath.Glob(filepath.Join(root, "lycaon", "internal", pkg, "*.go"))
+		contractcheck.FailErr(t, "glob "+pkg, err)
+		for _, path := range files {
+			if strings.HasSuffix(path, "_test.go") {
+				continue
+			}
+			data, err := os.ReadFile(path)
+			contractcheck.FailErr(t, "read "+pkg, err)
+			src := string(data)
+			if strings.Contains(src, "SpawnChild") || strings.Contains(src, ".Prompt(") {
+				t.Fatalf("%s must not call SpawnChild or Prompt on Sessions directly", filepath.Base(path))
+			}
+		}
 	}
 }

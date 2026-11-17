@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"database/sql"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -14,7 +15,7 @@ const ScanClaimLease = 45 * time.Second
 func (s *sqlRunStore) RenewClaim(ctx context.Context, scanID, claimToken string) (bool, error) {
 	now := time.Now().UTC()
 	rows, err := s.queries.RenewScanClaim(ctx, db.RenewScanClaimParams{
-		HeartbeatAt: db.NullString(db.FormatTime(now)), LeaseExpiresAt: db.NullString(db.FormatTime(now.Add(ScanClaimLease))),
+		HeartbeatAt: db.NullString(timelayout.Format(now)), LeaseExpiresAt: db.NullString(timelayout.Format(now.Add(ScanClaimLease))),
 		ID: scanID, ClaimToken: db.NullString(claimToken),
 	})
 	if err != nil {
@@ -25,7 +26,7 @@ func (s *sqlRunStore) RenewClaim(ctx context.Context, scanID, claimToken string)
 
 // RecoverExpiredClaims fails scans whose leases expired.
 func (s *sqlRunStore) RecoverExpiredClaims(ctx context.Context) ([]api.CodeScan, error) {
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	ids, err := s.queries.ListExpiredScanIDs(ctx, db.NullString(now))
 	if err != nil {
 		return nil, err

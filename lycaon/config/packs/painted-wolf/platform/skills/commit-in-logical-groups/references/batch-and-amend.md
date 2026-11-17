@@ -1,6 +1,6 @@
 # Batch the commits
 
-{% if has_git and not on_worker_branch %}Batch independent, path-scoped `git status --short` and `git diff --stat` inspections through `command`. Commit groups run in order: `git add -- PATHS && git commit -m MESSAGE -- PATHS`. Quote each path and message. Freeze the surveyed inventory for each group; do not stage every group first.{% else %}A write leg cannot stage or commit: express each group as overlay file edits in commit order and report each group's paths and message to the coordinator instead of staging.{% endif %}
+{% if has_git and not on_worker_branch %}Batch independent, path-scoped `git status --short` and `git diff --stat` inspections through `command`. Commit groups run in order: `git add -- PATHS && git commit -m MESSAGE -- PATHS`. Quote each path and message. Freeze the surveyed inventory for each group; do not stage every group first.{% else %}A write worker cannot stage or commit to trunk: express each group as overlay file edits in commit order and report each group's paths and message to the coordinator instead of staging.{% endif %}
 
 {% if has_git and not on_worker_branch %}The host reviews each Git operation and preserves unrelated staging. A program is not an atomic transaction: earlier commits remain applied when a later operation fails. Inspect the receipt and retry only the unfinished operation. External writers can still change the repository.
 

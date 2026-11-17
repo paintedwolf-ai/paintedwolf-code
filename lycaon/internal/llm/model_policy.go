@@ -3,19 +3,21 @@ package llm
 import (
 	"bytes"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
+
+	"gopkg.in/yaml.v3"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"gopkg.in/yaml.v3"
 )
 
 // PoolSelection is how single-agent dispatch picks from the pool.
@@ -404,10 +406,6 @@ func applyPolicyPatch(base ModelPolicy, patch ModelPolicyPatch) ModelPolicy {
 		out.AgentPool = *patch.AgentPool
 	}
 	return normalizePolicy(out)
-}
-
-func policyFromPatch(patch ModelPolicyPatch) ModelPolicy {
-	return applyPolicyPatch(ModelPolicy{}, patch)
 }
 
 // effectiveWithOverlay projects one prospective overlay without persisting it.

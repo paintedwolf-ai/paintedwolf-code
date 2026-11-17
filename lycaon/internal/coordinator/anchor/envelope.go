@@ -17,19 +17,17 @@ type Envelope struct {
 	EvidenceDigest          string
 	CommandCompletionDigest string
 	// CommandRefusalDigest reports what the kernel refused a running job.
-	CommandRefusalDigest      string
-	TopologyOutput            string
-	PendingOverlayPromoteJobs []string
-	PartialWorkerJobs         []string
-	PromotedPaths             []string
-	ScanID                    string
-	ScanStatus                string
-	ScanCategories            string
-	ScanFindingsCount         int
-	// WorkerBudget carries a worker's ceiling, open request, and exhaustion.
-	WorkerBudget *kick.WorkerBudgetFacts
-	BatchSeq     int
-	BatchSeqSet  bool
+	CommandRefusalDigest string
+	TopologyOutput       string
+	PromotedPaths        []string
+	ScanID               string
+	ScanStatus           string
+	ScanCategories       string
+	ScanFindingsCount    int
+	// WorkerRoundNotice carries a round notice's measurements.
+	WorkerRoundNotice *kick.WorkerRoundNoticeFacts
+	BatchSeq          int
+	BatchSeqSet       bool
 	// Vars carries anchor-specific catalog data.
 	// (roots-changed data, progress facts, phase-exit facts, …).
 	Vars                  map[string]any
@@ -72,20 +70,14 @@ func (e Envelope) KickOptions() []kick.KickOption {
 	if e.MaxFanoutLegs > 0 {
 		opts = append(opts, kick.WithMaxFanoutLegs(e.MaxFanoutLegs))
 	}
-	if len(e.PendingOverlayPromoteJobs) > 0 {
-		opts = append(opts, kick.WithPendingOverlayPromote(e.PendingOverlayPromoteJobs))
-	}
-	if len(e.PartialWorkerJobs) > 0 {
-		opts = append(opts, kick.WithPartialWorkerJobs(e.PartialWorkerJobs))
-	}
 	if len(e.PromotedPaths) > 0 {
 		opts = append(opts, kick.WithPromotedPaths(e.PromotedPaths))
 	}
 	if strings.TrimSpace(e.ScanID) != "" {
 		opts = append(opts, kick.WithScanFinished(e.ScanID, e.ScanStatus, e.ScanCategories, e.ScanFindingsCount))
 	}
-	if e.WorkerBudget != nil && strings.TrimSpace(e.WorkerBudget.JobID) != "" {
-		opts = append(opts, kick.WithWorkerBudget(*e.WorkerBudget))
+	if e.WorkerRoundNotice != nil && strings.TrimSpace(e.WorkerRoundNotice.JobID) != "" {
+		opts = append(opts, kick.WithWorkerRoundNotice(*e.WorkerRoundNotice))
 	}
 	if e.BatchSeqSet {
 		opts = append(opts, kick.WithBatchSeq(e.BatchSeq))
@@ -95,16 +87,12 @@ func (e Envelope) KickOptions() []kick.KickOption {
 	}
 	if len(e.WorkerDecisionRequest) > 0 {
 		req := workerDecisionFromMap(e.WorkerDecisionRequest)
+		worker, _ := e.WorkerDecisionRequest["worker"].(string)
 		if strings.TrimSpace(req.Question) != "" {
-			opts = append(opts, kick.WithWorkerDecisionRequest(req))
+			opts = append(opts, kick.WithWorkerDecisionRequest(req, worker))
 		}
 	}
 	return opts
-}
-
-// HasPendingOverlayPromote reports emit-time overlay-promote facts.
-func (e Envelope) HasPendingOverlayPromote() bool {
-	return len(e.PendingOverlayPromoteJobs) > 0
 }
 
 // HasWorkerDecision reports a structured worker decision.
@@ -117,11 +105,12 @@ func (e Envelope) HasWorkerDecision() bool {
 }
 
 // WithWorkerDecision sets structured worker decision facts on the Envelope.
-func (e *Envelope) WithWorkerDecision(req api.WorkerDecisionRequest) {
+func (e *Envelope) WithWorkerDecision(req api.WorkerDecisionRequest, worker string) {
 	if e == nil || strings.TrimSpace(req.Question) == "" {
 		return
 	}
 	e.WorkerDecisionRequest = map[string]any{
+		"worker":           strings.TrimSpace(worker),
 		"job_id":           strings.TrimSpace(req.WorkerID),
 		"child_session_id": strings.TrimSpace(req.ChildSessionID),
 		"question":         strings.TrimSpace(req.Question),

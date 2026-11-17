@@ -21,14 +21,6 @@ var sourceSearchPages = pagecursor.For[projectsource.SourceIndexEntry]("source_s
 
 var sourceSearchLimit = httpio.MustPageLimit(50, 1, 200)
 
-func sourceSearchScope(projectID, rootID, query string) string {
-	return pagecursor.Scope(projectID, rootID, query)
-}
-
-func encodeSourceSearchCursor(scope string, generation uint64, after projectsource.SourceIndexEntry) (string, error) {
-	return sourceSearchPages.EncodeAt(scope, generation, after)
-}
-
 // decodeSourceSearchCursor opens a continuation for the index generation the
 // request reads; a cursor from any other generation is pagecursor.ErrExpired.
 func decodeSourceSearchCursor(raw, scope string, generation uint64) (*projectsource.SourceIndexEntry, error) {

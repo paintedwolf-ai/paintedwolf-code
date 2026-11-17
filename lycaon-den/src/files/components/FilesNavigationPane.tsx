@@ -1,6 +1,6 @@
 import { Show, type ComponentProps } from "solid-js";
 import { editorRevealInTreePref } from "../../settings/editor/editor-prefs.ts";
-import { openFilesBuffer } from "../documents/project-files-buffers.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import { setSelectedFileVersion } from "../history/files-version-selection.ts";
 import { ReviewLens } from "../review/ReviewLens.tsx";
 import { FilesTree } from "../tree/FilesTree.tsx";

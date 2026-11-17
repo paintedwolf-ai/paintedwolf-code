@@ -7,6 +7,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+func UnitKindRoots() []string {
+	return append([]string(nil), inventoryKindRoots...)
+}
+
 func TestFixedPathHostYAMLIsNotAUnit(t *testing.T) {
 	eff, err := resolveWithDesired(t.Context(), EmptyDesired(), nil)
 	testutil.FailErr(t, "effective catalog resolve failed", err)

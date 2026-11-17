@@ -260,9 +260,6 @@ func (s *Lifecycle) prepareSessionWorkspace(
 	workspacePath string,
 ) error {
 	s.Git.WarmRepoBrief(workspacePath)
-	if s.FileAgeWarmer != nil {
-		s.FileAgeWarmer(ctx, workspacePath)
-	}
 	overlay, err := project.ResolveProjectOverlay(p, rootID)
 	if err != nil {
 		return err

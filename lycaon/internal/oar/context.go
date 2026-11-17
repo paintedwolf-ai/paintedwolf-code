@@ -258,14 +258,13 @@ func (gc *GuardContext) DeriveToolClassFacts() {
 	}
 	t := gc.Invocation.Tool
 	gc.Invocation.ToolIsTask = t == "task"
+	gc.Invocation.ToolIsDelegation = t == "plan_from_blueprint" || t == "instruct_worker"
 	if contract, ok := toolcontract.Lookup(t); ok {
 		gc.Invocation.ToolIsState = contract.Owner == "workflow_state"
-		gc.Invocation.ToolIsDelegation = contract.Owner == "delegation"
 		gc.Invocation.ToolIsHandoff = contract.Owner == "handoff"
 		gc.Invocation.ToolPayloadChunkable = contract.ChunkablePayload
 	} else {
 		gc.Invocation.ToolIsState = strings.HasPrefix(t, "state_")
-		gc.Invocation.ToolIsDelegation = strings.HasPrefix(t, "delegate_")
 		gc.Invocation.ToolIsHandoff = strings.HasPrefix(t, "handoff_")
 		gc.Invocation.ToolPayloadChunkable = false
 	}

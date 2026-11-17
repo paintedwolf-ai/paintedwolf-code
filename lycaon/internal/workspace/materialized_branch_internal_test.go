@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -55,12 +56,12 @@ func openMaterializedRecovery(t *testing.T, branches string) *recovery.Coordinat
 	return coordinator
 }
 
-func newMaterializedManager(t *testing.T, branches string) *Manager {
+func newMaterializedManager(t *testing.T, branches string, selector *adapter.Selector) *Manager {
 	t.Helper()
 	coordinator := openMaterializedRecovery(t, branches)
 	gitManager, err := OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	return NewManager(branches).WithRecovery(coordinator).WithPrivateGit(gitManager)
+	return NewManager(branches, selector).WithRecovery(coordinator).WithPrivateGit(gitManager)
 }
 
 func manifestByPath(t *testing.T, store *checkpoint.Store, checkpointID string) map[string]checkpoint.ManifestEntry {
@@ -77,7 +78,7 @@ func manifestByPath(t *testing.T, store *checkpoint.Store, checkpointID string) 
 func TestCompletionCheckpointTakesBaseBytesFromThePristineTree(t *testing.T) {
 	source := materializedSource(t)
 	branches := t.TempDir()
-	mgr := newMaterializedManager(t, branches)
+	mgr := newMaterializedManager(t, branches, platform.NewSelector(platform.Config{}))
 	binding, err := mgr.CreateWorkerWorkspace(t.Context(), source, "job-base")
 	testutil.FailErr(t, "create", err)
 	if binding.Selection.Selection.Reason != adapter.SelectionUnderBudget {
@@ -151,7 +152,7 @@ func TestACopyThatPassesItsBudgetMovesOnToTheMount(t *testing.T) {
 		return adapter.BudgetFact{Class: class, Limit: 30, EntryCost: 1}
 	}
 	branches := t.TempDir()
-	mgr := newMaterializedManager(t, branches).WithSelector(selector)
+	mgr := newMaterializedManager(t, branches, selector)
 	mgr.cloneProbe = func(context.Context, string) (bool, error) { return true, nil }
 	mgr.cloneFile = func(string, string) (bool, error) { return false, nil }
 
@@ -182,7 +183,7 @@ func TestTheCostIsDeclaredBeforeTheFirstCopy(t *testing.T) {
 	selector.BudgetFor = func(class adapter.BudgetClass) adapter.BudgetFact {
 		return adapter.BudgetFact{Class: class, Limit: 100_000, EntryCost: 1000}
 	}
-	mgr := newMaterializedManager(t, t.TempDir()).WithSelector(selector)
+	mgr := newMaterializedManager(t, t.TempDir(), selector)
 	mgr.cloneProbe = func(context.Context, string) (bool, error) { return false, nil }
 	var declaredBeforeCopy atomic.Bool
 	var declared atomic.Int64
@@ -220,7 +221,7 @@ func TestAWorkspaceTheDiskCannotHoldIsRefused(t *testing.T) {
 	saved := queryAvailableStorageBytes
 	t.Cleanup(func() { queryAvailableStorageBytes = saved })
 	queryAvailableStorageBytes = func(string) (uint64, bool, error) { return 16, true, nil }
-	mgr := NewManager(t.TempDir())
+	mgr := NewManager(t.TempDir(), platform.NewSelector(platform.Config{}))
 	_, err := mgr.CreateWorkerWorkspace(t.Context(), materializedSource(t), "job-full")
 	var capacity *adapter.WorkspaceCapacityError
 	if !errors.As(err, &capacity) || capacity.Available != 16 || !errors.Is(err, ErrWorkspaceStorageExhausted) {
@@ -232,7 +233,7 @@ func TestRestartReDerivesChangesAndRepositoryState(t *testing.T) {
 	source := materializedSource(t)
 	gittest.InitCommit(t, source, "initial")
 	branches := t.TempDir()
-	first := newMaterializedManager(t, branches)
+	first := newMaterializedManager(t, branches, platform.NewSelector(platform.Config{}))
 	binding, err := first.CreateWorkerWorkspace(t.Context(), source, "job-restart")
 	testutil.FailErr(t, "create", err)
 	root := binding.Root
@@ -244,7 +245,7 @@ func TestRestartReDerivesChangesAndRepositoryState(t *testing.T) {
 	// Nothing in memory crosses a restart.
 	releaseBranchClaimState(root)
 	sharedBranchViews.Delete(filepath.Clean(root))
-	next := newMaterializedManager(t, branches)
+	next := newMaterializedManager(t, branches, platform.NewSelector(platform.Config{}))
 	_, err = next.RecoverWorkerViews(t.Context())
 	testutil.FailErr(t, "startup recovery", err)
 
@@ -282,7 +283,7 @@ func TestRestartReDerivesChangesAndRepositoryState(t *testing.T) {
 
 func TestEvictedMaterializedBranchRebuildsFromItsCheckpoint(t *testing.T) {
 	source := materializedSource(t)
-	mgr := newMaterializedManager(t, t.TempDir())
+	mgr := newMaterializedManager(t, t.TempDir(), platform.NewSelector(platform.Config{}))
 	binding, err := mgr.CreateWorkerWorkspace(t.Context(), source, "job-evict")
 	testutil.FailErr(t, "create", err)
 	root := binding.Root
@@ -326,7 +327,7 @@ func TestEvictedMaterializedBranchRebuildsFromItsCheckpoint(t *testing.T) {
 
 func TestCanceledWorkKeepsOnlyWhatChanged(t *testing.T) {
 	source := materializedSource(t)
-	mgr := newMaterializedManager(t, t.TempDir())
+	mgr := newMaterializedManager(t, t.TempDir(), platform.NewSelector(platform.Config{}))
 	binding, err := mgr.CreateWorkerWorkspace(t.Context(), source, "job-cancel")
 	testutil.FailErr(t, "create", err)
 	testutil.FailErr(t, "edit", os.WriteFile(filepath.Join(binding.Root, "main.go"), []byte("package edited\n"), 0o644))
@@ -354,7 +355,7 @@ func TestOneMaterializedViewServesEveryRoot(t *testing.T) {
 		{ID: "p", Label: "primary", Path: primary, IsPrimary: true},
 		{ID: "s", Label: "secondary", Path: secondary},
 	}
-	mgr := newMaterializedManager(t, t.TempDir())
+	mgr := newMaterializedManager(t, t.TempDir(), platform.NewSelector(platform.Config{}))
 	binding, _, err := mgr.CreateWorkerWorkspaceFromSources(t.Context(), roots, roots, "p", "job-roots")
 	testutil.FailErr(t, "create", err)
 	if len(binding.View.Roots) != 2 {
@@ -420,7 +421,7 @@ func TestMaterializedBranchRecoveryFailsClosedOnMissingGitObjectsOrSymlinkEscape
 	source := materializedSource(t)
 	gittest.InitCommit(t, source, "initial")
 	branches := t.TempDir()
-	first := newMaterializedManager(t, branches)
+	first := newMaterializedManager(t, branches, platform.NewSelector(platform.Config{}))
 	binding, err := first.CreateWorkerWorkspace(t.Context(), source, "job-fail-closed")
 	testutil.FailErr(t, "create", err)
 	root := binding.Root
@@ -452,7 +453,7 @@ func TestMaterializedBranchRecoveryFailsClosedOnMissingGitObjectsOrSymlinkEscape
 
 	releaseBranchClaimState(root)
 	sharedBranchViews.Delete(filepath.Clean(root))
-	next := newMaterializedManager(t, branches)
+	next := newMaterializedManager(t, branches, platform.NewSelector(platform.Config{}))
 	_, err = next.RecoverWorkerViews(t.Context())
 	if !errors.Is(err, recovery.ErrIncompleteCheckpoint) {
 		t.Fatalf("RecoverWorkerViews with missing Git objects err = %v, want ErrIncompleteCheckpoint", err)
@@ -474,4 +475,50 @@ func TestMaterializedBranchRecoveryFailsClosedOnMissingGitObjectsOrSymlinkEscape
 	if _, _, _, err := resolveConfinedRepoGitDir(root, root, "../escape", "."); !errors.Is(err, recovery.ErrIncompleteCheckpoint) {
 		t.Fatalf("resolveConfinedRepoGitDir on escaping worktree_rel err = %v, want ErrIncompleteCheckpoint", err)
 	}
+}
+
+func TestSymlinkedBranchParentResolvesSameClaimAndCheckpointView(t *testing.T) {
+	source := materializedSource(t)
+	realBase, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve real base", err)
+	realBranches := filepath.Join(realBase, "worker-branches")
+	testutil.FailErr(t, "mkdir real branches", os.MkdirAll(realBranches, 0o755))
+
+	aliasParent := t.TempDir()
+	aliasBranches := filepath.Join(aliasParent, "worker-branches")
+	testutil.FailErr(t, "symlink branches", os.Symlink(realBranches, aliasBranches))
+
+	mgr := newMaterializedManager(t, aliasBranches, platform.NewSelector(platform.Config{}))
+	binding, err := mgr.CreateWorkerWorkspace(t.Context(), source, "job-symlink")
+	testutil.FailErr(t, "create via alias", err)
+
+	rel, err := filepath.Rel(aliasBranches, binding.Root)
+	testutil.FailErr(t, "rel from alias", err)
+	canonicalRoot := filepath.Join(realBranches, rel)
+
+	if _, ok := LookupBranchClaimedView(canonicalRoot); !ok {
+		t.Fatalf("LookupBranchClaimedView(%s) missed view recorded via %s", canonicalRoot, binding.Root)
+	}
+	if _, _, ok := BranchWorkspaceState(canonicalRoot); !ok {
+		t.Fatalf("BranchWorkspaceState(%s) missed state recorded via %s", canonicalRoot, binding.Root)
+	}
+	if _, _, ok := mgr.lookupBranchViews(canonicalRoot); !ok {
+		t.Fatalf("lookupBranchViews(%s) missed view recorded via %s", canonicalRoot, binding.Root)
+	}
+	_ = BranchViewBoundary(canonicalRoot)()
+	_ = BranchProcessRecorder(canonicalRoot)(os.Getpid())
+
+	testutil.FailErr(t, "edit main.go", os.WriteFile(filepath.Join(canonicalRoot, "main.go"), []byte("package canonical\n"), 0o644))
+	paths, handled, err := OverlayWorkspaceDivergencePaths(t.Context(), canonicalRoot)
+	testutil.FailErr(t, "divergence via canonical root", err)
+	if !handled || strings.Join(paths, ",") != "main.go" {
+		t.Fatalf("divergence handled=%v paths=%v, want [main.go]", handled, paths)
+	}
+
+	handled, err = PublishBranchCheckpoint(t.Context(), canonicalRoot)
+	testutil.FailErr(t, "publish via canonical root", err)
+	if !handled {
+		t.Fatal("PublishBranchCheckpoint via canonical root returned handled=false")
+	}
+	testutil.FailErr(t, "destroy via canonical root", mgr.DestroyWorkerWorkspace(t.Context(), &Binding{ID: "job-symlink", Root: canonicalRoot}))
 }

@@ -1,4 +1,4 @@
-import { StreamLanguage, type StreamParser } from "@codemirror/language";
+import type { StreamParser } from "@codemirror/language";
 
 /** Word-list syntax definitions for languages without a bundled grammar. */
 export type WordLangSpec = {
@@ -153,8 +153,4 @@ export function wordStreamParser(spec: WordLangSpec): StreamParser<WordLangState
   };
 
   return parser;
-}
-
-export function wordLanguage(spec: WordLangSpec) {
-  return StreamLanguage.define(wordStreamParser(spec));
 }

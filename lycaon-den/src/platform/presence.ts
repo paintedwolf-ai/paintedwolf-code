@@ -125,11 +125,3 @@ export function resolveCheckpointWithPresence(
   );
 }
 
-/** Reads the desktop step-away observer's current capability and session state. */
-export async function readVaultLockStatus(): Promise<unknown> {
-  if (!presenceAvailable()) {
-    return null;
-  }
-  const { invoke } = await import("@tauri-apps/api/core");
-  return invoke("vault_lock_status");
-}

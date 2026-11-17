@@ -17,11 +17,12 @@ const findings = {
 const board: BoardView = {
   summary: "ok",
   repo: { languages: [], file_count: 0, generated_at: "2026-01-01T00:00:00Z" },
-  roster: [
+  workers: [
     {
-      worker_id: "job-a",
+      name: "builtins",
       agent_type: "implementer",
-      status: "running",
+      state: "working",
+      latest_job_id: "job-a",
       reservations: ["shellsim/builtins.py"],
     },
   ],

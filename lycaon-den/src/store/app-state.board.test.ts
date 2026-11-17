@@ -15,7 +15,7 @@ describe("createAppStore", () => {
         id: "w1",
         agent_type: "implementer",
         status: "complete",
-        merge_status: "pending",
+        worker_name: "parser",
         created_at: "t",
       },
     ]);
@@ -31,14 +31,7 @@ describe("createAppStore", () => {
       truncated: false,
       generated_at: "t",
       now_line: "Now: t",
-      roster: [
-        {
-          worker_id: "w1",
-          agent_type: "implementer",
-          status: "complete",
-          merge_status: "pending",
-        },
-      ],
+      workers: [{ name: "parser", agent_type: "implementer", state: "idle", latest_job_id: "w1" }],
     });
     expect(store.state.workers).toBe(before);
   });
@@ -191,7 +184,7 @@ describe("createAppStore", () => {
     expect(store.state.board?.pack_content_hash).toBe("a");
   });
 
-  it("setBoard reconciles worker merge_status from snapshot", () => {
+  it("setBoard reconciles the latest round's result from board workers", () => {
     const store = createAppStore();
     store.actions.setWorkers([
       {
@@ -213,15 +206,21 @@ describe("createAppStore", () => {
       truncated: false,
       generated_at: "t",
       now_line: "Now: t",
-      roster: [
+      workers: [
         {
-          worker_id: "w1",
+          name: "parser",
           agent_type: "implementer",
-          status: "complete",
-          merge_status: "merged",
+          state: "delivered",
+          latest_job_id: "w1",
+          result_handle: "parser#1",
+          result_disposition: "landed",
         },
       ],
     });
-    expect(store.state.workers[0]?.merge_status).toBe("merged");
+    expect(store.state.workers[0]).toMatchObject({
+      worker_name: "parser",
+      result_handle: "parser#1",
+      result_disposition: "landed",
+    });
   });
 });

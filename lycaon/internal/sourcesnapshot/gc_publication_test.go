@@ -3,6 +3,7 @@ package sourcesnapshot
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
@@ -51,8 +52,8 @@ func TestSweepAdmissionAndCancellation(t *testing.T) {
 func TestSweepCandidatePagesIncludeRetainedRows(t *testing.T) {
 	s := openSnapshotStore(t)
 	ctx := t.Context()
-	old := db.FormatTime(time.Now().Add(-2 * Retention))
-	now := db.FormatTime(time.Now())
+	old := timelayout.Format(time.Now().Add(-2 * Retention))
+	now := timelayout.Format(time.Now())
 	_, err := s.db.ExecContext(ctx, `INSERT INTO source_snapshots
  (id,roots_key,merkle_sha256,file_count,total_bytes,created_ts) VALUES ('a','root','a',0,0,?)`, old)
 	testutil.FailErr(t, "seed retained snapshot", err)

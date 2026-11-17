@@ -37,10 +37,10 @@ func TestSpecPostureBlocksDelegateWithStubInvalid(t *testing.T) {
 		testutil.FailErr(t, "register rule conditions", err)
 	}
 	engine := rules.NewSimpleEngine(loadSpecRules(t), reg)
-	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "delegate_dispatch", PlanContent: ""}})
+	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint", PlanContent: ""}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if out.Allowed {
-		t.Fatal("expected deny for delegate_dispatch with invalid stub")
+		t.Fatal("expected deny for plan_from_blueprint with invalid stub")
 	}
 	if out.Code != "SPEC_POSTURE_DELEGATION_FORBIDDEN" {
 		t.Fatalf("code = %q", out.Code)

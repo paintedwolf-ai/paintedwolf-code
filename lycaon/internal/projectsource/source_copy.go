@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/contextio"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
 func (s *SourceEffects) applySourceCopy(ctx context.Context, row *sourceMutationRow) error {
@@ -223,9 +223,9 @@ func sourceHistoryEvidence(ctx context.Context, abs string) (sourceEvidence, err
 	hash := sha256.New()
 	var content []byte
 	reader := contextio.Reader{Context: ctx, Source: file}
-	if info.Size() <= sourceledger.MaxRevisionContentBytes {
-		content, err = io.ReadAll(io.TeeReader(io.LimitReader(reader, sourceledger.MaxRevisionContentBytes+1), hash))
-		if err == nil && len(content) > sourceledger.MaxRevisionContentBytes {
+	if info.Size() <= sourceblob.MaxRevisionContentBytes {
+		content, err = io.ReadAll(io.TeeReader(io.LimitReader(reader, sourceblob.MaxRevisionContentBytes+1), hash))
+		if err == nil && len(content) > sourceblob.MaxRevisionContentBytes {
 			content = nil
 			_, err = io.Copy(hash, reader)
 		}

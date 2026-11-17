@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"runtime"
 
@@ -106,7 +107,7 @@ func (s *Service) pruneOne(ctx context.Context, item candidate) (bool, error) {
 	if !ok {
 		return false, ErrPreviewChanged
 	}
-	now := db.FormatTime(s.Now().UTC())
+	now := timelayout.Format(s.Now().UTC())
 	members := item.Members
 	if len(members) == 0 {
 		members = []candidate{item}

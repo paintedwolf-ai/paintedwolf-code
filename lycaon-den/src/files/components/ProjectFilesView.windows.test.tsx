@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@solidjs/testing-library";
 import { ProjectFilesView } from "./ProjectFilesView.tsx";
 import { createAppStore } from "../../store/app-state.ts";
-import { resetProjectFilesForTests } from "../documents/project-files-buffers.ts";
+import { resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { fileBufferKey } from "./project-files-model.ts";
 import { resetAppStateSnapshotForTests, setAppStateSnapshot } from "../../store/app-state-snapshot.ts";

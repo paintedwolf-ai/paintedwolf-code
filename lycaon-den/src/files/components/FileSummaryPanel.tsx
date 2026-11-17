@@ -1,13 +1,13 @@
-import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo } from "solid-js";
 import type {
   FileBriefingLocation,
   FileBriefingSection,
 } from "../../api/types.ts";
 import { languageLabelForDetectedLanguage } from "../../components/source/editor/codemirror-lang.ts";
 import { MarkdownBody } from "../../components/transcript/MarkdownBody.tsx";
-import { RandomLetterReveal } from "../../components/primitives/RandomLetterReveal.tsx";
 import { BriefingEvidenceLink, BriefingMark, BriefingSummary } from "../../briefing/BriefingSummary.tsx";
-import { briefingRevealText, splitBriefingInline } from "../../briefing/briefing-inline.ts";
+import { splitBriefingInline } from "../../briefing/briefing-inline.ts";
+import { SUMMARY_FADE_CLASS, claimSummaryFade } from "../../briefing/summary-fade.ts";
 import type { LiveFileBriefing } from "./file-briefing-live.ts";
 import type { FileBriefingTarget } from "./file-briefing-target.ts";
 
@@ -55,32 +55,19 @@ type SummarySectionProps = {
   section: FileBriefingSection;
   locations: ReadonlyMap<string, FileBriefingLocation | null>;
   onOpen: (line: number) => void;
-  /** Reveal key when the section arrived while the panel was watching. */
-  revealKey?: string;
+  /** Fade key when the section arrived while the panel was watching. */
+  fadeKey?: string;
 };
 
-/**
- * A section that arrives while watched plays the shared reveal as plain
- * text, then becomes its navigable line.
- */
+/** A section that arrives while watched fades in once. */
 function FileSummarySectionLine(props: SummarySectionProps) {
-  const [revealed, setRevealed] = createSignal(!props.revealKey);
-  return (
-    <Show when={revealed()} fallback={
-      <p class="den-file-summary__section">
-        <BriefingMark /> <strong>{sectionLabel[props.section.kind]}:</strong>{" "}
-        <RandomLetterReveal text={briefingRevealText(props.section.text)} onceKey={props.revealKey} onRevealed={() => setRevealed(true)} />
-      </p>
-    }>
-      <NavigableSectionLine {...props} />
-    </Show>
-  );
+  return <NavigableSectionLine {...props} fade={claimSummaryFade(props.fadeKey)} />;
 }
 
-function NavigableSectionLine(props: SummarySectionProps) {
+function NavigableSectionLine(props: SummarySectionProps & { fade?: boolean }) {
   const parts = createMemo(() => splitBriefingInline(props.section.text));
   return (
-    <p class="den-file-summary__section">
+    <p class="den-file-summary__section" classList={{ [SUMMARY_FADE_CLASS]: props.fade === true }}>
       <BriefingMark /> <strong>{sectionLabel[props.section.kind]}:</strong>{" "}
       <For each={parts()}>
         {(part) => {
@@ -129,12 +116,12 @@ export function FileSummaryPanel(props: Props) {
     return "Summarize current file";
   };
   const summarizing = () => props.loading || props.summary?.status === "pending";
-  // Sections that arrive after the panel saw them pending reveal once.
+  // Sections that arrive after the panel saw them pending fade in once.
   let watchedPending = false;
   createEffect(() => {
     if (summarizing()) watchedPending = true;
   });
-  const revealKey = (kind: string) => {
+  const fadeKey = (kind: string) => {
     const record = props.summary?.evidence_ref?.record_id;
     return watchedPending && record ? `${record}\0${kind}` : undefined;
   };
@@ -195,7 +182,7 @@ export function FileSummaryPanel(props: Props) {
                   section={section}
                   locations={locations()}
                   onOpen={(line) => props.onOpenLocation(props.target, line)}
-                  revealKey={revealKey(section.kind)}
+                  fadeKey={fadeKey(section.kind)}
                 />
               )}
             </For>

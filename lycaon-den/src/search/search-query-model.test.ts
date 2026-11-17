@@ -11,7 +11,6 @@ import {
   DSL_FIELD_ALLOWLIST,
   exploreCitationRowQuery,
   exploreDslField,
-  exploreRelatedToolCallsQuery,
   queryFilterActive,
   fieldSuggestionsAtCursor,
   groupHitsByProject,
@@ -228,13 +227,6 @@ describe("search-query-model", () => {
       "handle:read#1",
     );
     expect(exploreCitationRowQuery({ path: "src/a.go" })).toBe("path:src/a.go");
-  });
-
-  it("finds other calls to the same tool within the originating chat", () => {
-    expect(
-      exploreRelatedToolCallsQuery({ toolCallId: "tc-1", sessionId: "sess-1", tool: "read" }),
-    ).toBe("session:sess-1 tool:read kind:tool NOT ref:tc-1");
-    expect(exploreRelatedToolCallsQuery({ toolCallId: "", sessionId: "sess-1", tool: "read" })).toBeUndefined();
   });
 });
 

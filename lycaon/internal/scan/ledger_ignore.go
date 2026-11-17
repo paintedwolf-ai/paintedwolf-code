@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -124,7 +125,7 @@ func (s *sqlIgnoreStore) applyIgnores(ctx context.Context, canonicalPath string,
 	if err := qtx.PutScanIgnoreDigest(ctx, db.PutScanIgnoreDigestParams{
 		CanonicalPath: canonicalPath,
 		Digest:        catalog.Digest,
-		AppliedAt:     db.FormatTime(time.Now().UTC()),
+		AppliedAt:     timelayout.Format(time.Now().UTC()),
 	}); err != nil {
 		return fmt.Errorf("record ignore digest: %w", err)
 	}
@@ -139,7 +140,7 @@ func (s *sqlIgnoreStore) InvalidateIgnoreDigest(ctx context.Context, canonicalPa
 	if err := s.queries.PutScanIgnoreDigest(ctx, db.PutScanIgnoreDigestParams{
 		CanonicalPath: canonicalPath,
 		Digest:        "",
-		AppliedAt:     db.FormatTime(time.Now().UTC()),
+		AppliedAt:     timelayout.Format(time.Now().UTC()),
 	}); err != nil {
 		return fmt.Errorf("invalidate ignore digest: %w", err)
 	}

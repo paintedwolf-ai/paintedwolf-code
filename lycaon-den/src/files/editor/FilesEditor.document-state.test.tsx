@@ -34,12 +34,8 @@ import { createNoticeStore, registerNoticePublisher } from "../../notices/notice
 import { selectProjectNoticeGroups } from "../../notices/notice-select.ts";
 import { FilesEditor } from "./FilesEditor.tsx";
 import { FilesInfoCard } from "../components/FilesInfoCard.tsx";
-import {
-  applyFilesBufferDraft,
-  applyFilesBufferLoad,
-  applyFilesBufferUnsupportedEncoding,
-  openFilesBuffer,
-} from "../documents/project-files-buffers.ts";
+import { applyFilesBufferDraft, applyFilesBufferLoad, applyFilesBufferUnsupportedEncoding } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import {
   projectFilesState,
   type FileBuffer,

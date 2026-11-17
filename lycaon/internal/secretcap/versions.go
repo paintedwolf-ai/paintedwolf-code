@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -67,7 +68,7 @@ func (s *serviceCore) replaceOnto(
 	if err := s.values.put(valueID, protectedValue{Custody: custody, Value: value}); err != nil {
 		return fmt.Errorf("store managed secret: %w", err)
 	}
-	stamp := db.FormatTime(s.now())
+	stamp := timelayout.Format(s.now())
 	err = s.inTx(ctx, func(q *db.Queries) error {
 		if hasCurrent {
 			if err := q.RetireManagedSecretVersion(ctx, db.RetireManagedSecretVersionParams{

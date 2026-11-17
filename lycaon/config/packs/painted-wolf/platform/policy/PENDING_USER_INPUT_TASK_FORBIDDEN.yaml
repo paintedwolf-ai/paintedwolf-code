@@ -11,10 +11,10 @@ effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 message: '`task()` is blocked while a user ask is pending'
-what: '`{{ tool }}` cannot dispatch workers while a question, workflow feedback, or HITL input is still open.'
+what: '`{{ tool }}` cannot start workers while a question, workflow feedback request, or decision is still open.'
 cause: The host has an unresolved user question, workflow feedback request, or decision.
-why: Dispatching past an unanswered human question races the card and wastes workers on the wrong fork.
-fix: 'Leave the existing request pending. When the host resumes with the answer or decision, apply it before dispatching any still-needed work. Do not create a duplicate question or assume that every response arrives the same way.'
+why: Starting work past an unanswered human question races the open card and wastes workers on the wrong fork.
+fix: 'Leave the existing request pending. When the host resumes with the answer or decision, apply it before instructing a waiting worker or starting new work. Do not create a duplicate question or assume that every response arrives the same way.'
 instead: Branch on Code PENDING_USER_INPUT_TASK_FORBIDDEN; wait for the pending ask to clear
 x-paintedwolf-scenarios:
   - id: default

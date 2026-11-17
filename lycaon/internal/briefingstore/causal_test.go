@@ -69,8 +69,8 @@ func assertActionCause(t *testing.T, sessions sessionWriter, reader briefing.Cau
 	if len(read.Results) != 3 || read.Results[0].Content != "result c1" || read.Results[2].Content != "result c3" {
 		t.Fatalf("results are not the last three after the goal, oldest first: %+v", read.Results)
 	}
-	if reasoning, state := briefing.ReasoningExcerpt(read); state != briefing.ReasoningAvailable || reasoning.Text != "push after tests" || !reasoning.Shared {
-		t.Fatalf("reasoning %s %+v", state, reasoning)
+	if got := briefing.ReasoningExcerpt(read.Reasoning, "message:anchor", read.CallsInOutput > 1); got.State != briefing.ReasoningAvailable || got.Excerpt.Text != "push after tests" || !got.Excerpt.Shared {
+		t.Fatalf("reasoning %+v", got)
 	}
 
 	testutil.FailErr(t, "settle target", sessions.AppendMessages(t.Context(), sessionID, result("r-target", "target", "pushed"), api.Message{ID: "later", Role: api.MessageRoleAssistant, Content: "after", ToolCalls: call("target-again")}))

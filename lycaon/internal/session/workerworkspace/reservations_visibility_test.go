@@ -38,9 +38,12 @@ func TestPeerReservationsHideOwnHoldsAndRetainSiblingLabels(t *testing.T) {
 	service := New(reservationSessions{}, nil, nil)
 	service.calls = rows
 	service.SetTasks(jobs)
+	service.SetWorkerNames(func(_ context.Context, jobID string) (string, bool, error) {
+		return map[string]string{"peer": "reviewer"}[jobID], jobID == "peer", nil
+	})
 	ctx := workercontext.WithJob(t.Context(), "own")
 	peers := service.PeerReservations(ctx, "child")
-	if rows.session != "parent" || len(peers) != 2 || peers[0].Path != "peer.txt" || peers[0].JobID != "peer" || peers[0].LegLabel != "review" || peers[1].LegLabel != "inspect changed bytes" {
+	if rows.session != "parent" || len(peers) != 2 || peers[0].Path != "peer.txt" || peers[0].Worker != "reviewer" || peers[0].LegLabel != "review" || peers[1].LegLabel != "inspect changed bytes" {
 		t.Fatalf("peer holds=%+v lookup=%q", peers, rows.session)
 	}
 	board := service.ReservationEntries(" parent ")

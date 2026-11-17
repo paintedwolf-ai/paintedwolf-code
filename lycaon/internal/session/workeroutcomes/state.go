@@ -54,7 +54,15 @@ type State struct {
 	verification   VerificationFacts
 	workspace      WorkspacePath
 	overlayChanges func(context.Context, *api.WorkerTask, []projectroot.RootRef) []string
+	delivered      DeliveredWorkers
 }
+
+// DeliveredWorkers counts a coordinator session's workers whose result awaits
+// the coordinator.
+type DeliveredWorkers func(ctx context.Context, sessionID string) (int, error)
+
+// SetDeliveredWorkers sets how delivered workers are counted.
+func (m *State) SetDeliveredWorkers(count DeliveredWorkers) { m.delivered = count }
 
 type StatePorts struct {
 	Workers        CycleLedger
@@ -264,6 +272,13 @@ func (m *State) ForSession(ctx context.Context, sess *api.Session) surface.Imple
 			}
 			state.PendingOverlayIDs = ids
 			state.PendingOverlayPaths = paths
+		}
+	}
+	if m.delivered != nil {
+		if n, err := m.delivered(ctx, sess.ID); err != nil {
+			workerCycleLog.Warn("delivered worker count failed", "session_id", sess.ID, "err", err)
+		} else {
+			state.WorkersDelivered = n
 		}
 	}
 	if m.workflows != nil {

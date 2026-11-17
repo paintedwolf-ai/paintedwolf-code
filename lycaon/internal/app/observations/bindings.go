@@ -17,7 +17,7 @@ import (
 
 type RepositoryChanges interface{ Changed(context.Context, string) }
 
-func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progress.RunScopedStore, runs runstate.RunsRepository, repository RepositoryChanges, invalidateAge func(string), service *llm.Service) func(context.Context) error {
+func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progress.RunScopedStore, runs runstate.RunsRepository, repository RepositoryChanges, service *llm.Service) func(context.Context) error {
 	var work workscope.Group
 	if service != nil {
 		service.Lifecycle = utilityLanePublisher{pub: publisher}
@@ -34,9 +34,6 @@ func Bind(publisher *events.Publisher, sessions *store.SQL, progressStore progre
 	releaseRepository := repochange.RegisterObserver(ownedObserver(&work, func(ctx context.Context, ev repochange.Event) {
 		if repository != nil {
 			repository.Changed(ctx, ev.ProjectDir)
-		}
-		if ev.Kind == repochange.HeadMoved {
-			invalidateAge(ev.ProjectDir)
 		}
 	}))
 	activeRun := activeRunIDFromWorkflow(runs)

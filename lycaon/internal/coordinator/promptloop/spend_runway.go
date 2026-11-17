@@ -2,12 +2,14 @@ package promptloop
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -37,7 +39,8 @@ type spendCeilingDecision struct {
 	Finished *PromptRunResult
 }
 
-// A spent session may receive one final tool round before closeout.
+// A spent coordinator may receive one final tool round before closeout; a
+// worker round is fenced with no further model call.
 func (l *turnNudges) applySpendCeiling(
 	ctx context.Context,
 	sess *api.Session,
@@ -55,10 +58,23 @@ func (l *turnNudges) applySpendCeiling(
 		out.Runway = check.Runway
 		return out, nil
 	}
-	if !l.spendCeilingReached(err) || strings.TrimSpace(st.lastAssistantID) == "" {
+	if !l.spendCeilingReached(err) {
 		return out, err
 	}
-	if sess != nil && !sess.IsWorkerChild() && !st.spendSoftStopGranted && check.SoftStop {
+	if sess != nil && sess.IsWorkerChild() {
+		st.turnEndedGuidanceReject = true
+		out.Finished = &PromptRunResult{
+			TurnTools:            st.turnTools,
+			Reach:                st.requestReach(),
+			TasksDispatchedCount: st.tasksDispatchedCount,
+			Outcome:              promptresult.OutcomeSpendLimit,
+		}
+		return out, nil
+	}
+	if strings.TrimSpace(st.lastAssistantID) == "" {
+		return out, err
+	}
+	if sess != nil && !st.spendSoftStopGranted && check.SoftStop {
 		st.spendSoftStopGranted = true
 		out.WindDown = true
 		return out, nil
@@ -103,13 +119,19 @@ func (l *turnNudges) maybeSpendSoftStopNudge(
 	return l.appendHostNudge(ctx, sessionID, history, nudge, "", st)
 }
 
+// windDownWithholds names the tools the spend wind-down round withholds:
+// every tool that starts or resumes a worker.
+func windDownWithholds(tool string) bool {
+	return guidance.StartsWorkerRound(tool) || strings.EqualFold(strings.TrimSpace(tool), "answer_decision")
+}
+
 func filterSpendSoftStopToolCalls(calls []api.ToolCall) []api.ToolCall {
 	if len(calls) == 0 {
 		return calls
 	}
 	out := make([]api.ToolCall, 0, len(calls))
 	for _, call := range calls {
-		if isTaskToolName(call.Name) {
+		if windDownWithholds(call.Name) {
 			continue
 		}
 		out = append(out, call)
@@ -123,7 +145,7 @@ func filterSpendSoftStopToolMetas(metas []tools.ToolMeta) []tools.ToolMeta {
 	}
 	out := make([]tools.ToolMeta, 0, len(metas))
 	for _, meta := range metas {
-		if isTaskToolName(meta.Name) {
+		if windDownWithholds(meta.Name) {
 			continue
 		}
 		out = append(out, meta)
