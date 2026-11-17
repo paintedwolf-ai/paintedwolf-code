@@ -116,7 +116,7 @@ func scanSurveyProbeTarget(
 		return grepRootStatErr(target.displayRoot, err)
 	}
 	if !info.IsDir() {
-		return scanSurveyProbeFile(ctx, target.fullRoot, target.displayRoot, grepFileIdentity{rootID: target.root.ID, scopeRel: projectroot.ScopeRel(target.root, target.fullRoot)}, info, searches, stats)
+		return scanSurveyProbeFile(ctx, reads, target.fullRoot, target.displayRoot, grepFileIdentity{rootID: target.root.ID, scopeRel: projectroot.ScopeRel(target.root, target.fullRoot)}, info, searches, stats)
 	}
 	if tctx.Source.WorkerBranchRoot != "" {
 		return scanSurveyProbeTree(ctx, tool, reads, tctx, target, searches, stats)
@@ -127,7 +127,7 @@ func scanSurveyProbeTarget(
 		if statErr != nil || info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 			return true
 		}
-		scanErr = scanSurveyProbeFile(ctx, job.abs, job.rel, grepFileIdentity{rootID: job.rootID, scopeRel: job.scopeRel}, info, searches, stats)
+		scanErr = scanSurveyProbeFile(ctx, reads, job.abs, job.rel, grepFileIdentity{rootID: job.rootID, scopeRel: job.scopeRel}, info, searches, stats)
 		return scanErr == nil
 	})
 	if err != nil {
@@ -161,7 +161,7 @@ func scanSurveyProbeTree(
 			return sandbox.SurveyContinue, nil
 		}
 		rel := projectpaths.QualifyAbs(tctx, target.root, entry.Abs)
-		if scanErr := scanSurveyProbeFile(ctx, entry.Abs, rel, grepFileIdentity{rootID: target.root.ID, scopeRel: projectroot.ScopeRel(target.root, entry.Abs)}, info, searches, stats); scanErr != nil {
+		if scanErr := scanSurveyProbeFile(ctx, reads, entry.Abs, rel, grepFileIdentity{rootID: target.root.ID, scopeRel: projectroot.ScopeRel(target.root, entry.Abs)}, info, searches, stats); scanErr != nil {
 			return sandbox.SurveyStop, scanErr
 		}
 		return sandbox.SurveyContinue, nil
@@ -170,6 +170,7 @@ func scanSurveyProbeTree(
 
 func scanSurveyProbeFile(
 	ctx context.Context,
+	reads *projectpaths.ReadSession,
 	abs, rel string,
 	ident grepFileIdentity,
 	info os.FileInfo,
@@ -179,8 +180,7 @@ func scanSurveyProbeFile(
 	if len(searches) == 0 {
 		return nil
 	}
-	// Every search shares one overlay, so the person's text is read once.
-	content, binary, bytesTruncated, err := searches[0].loadGrepFile(ctx, abs, info)
+	content, binary, bytesTruncated, err := readGrepInput(ctx, reads, searches[0].drafts, abs, info)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()
