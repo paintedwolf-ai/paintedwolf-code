@@ -148,6 +148,7 @@ type widgetFaults struct {
 	rowPerReplay     bool // renameWidget stores a row for every replay of a key
 	acceptsReuse     bool // renameWidget applies a different body under a used key
 	ignoresLimit     bool // listWidgets answers every row whatever the limit
+	labelsWidget     bool // getWidget answers a label the committed corpus never saw
 }
 
 // widgetAPI serves widgetSpec through the production responder.
@@ -213,6 +214,9 @@ func (a *widgetAPI) getWidget(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	widget := map[string]any{"id": fixtureWidgetID}
+	if a.faults.labelsWidget {
+		widget["label"] = "relabelled"
+	}
 	if a.faults.echoesSecret {
 		a.mu.Lock()
 		widget["label"] = base64.StdEncoding.EncodeToString([]byte("token=" + a.token))

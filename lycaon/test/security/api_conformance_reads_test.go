@@ -184,6 +184,9 @@ func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryH
 }
 
 func (e *hostEffects) mark(ctx context.Context) (int64, error) {
+	if _, err := os.Stat(e.projectDir); err != nil {
+		return 0, fmt.Errorf("the fixture project folder is gone: %w", err)
+	}
 	if err := e.awaitWatcherBarrier(ctx); err != nil {
 		return 0, err
 	}

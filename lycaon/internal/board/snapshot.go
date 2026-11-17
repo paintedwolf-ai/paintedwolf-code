@@ -309,6 +309,7 @@ func (b *SnapshotBuilder) loadGit(ctx context.Context, projectID, projectDir str
 			}
 			return &api.BoardGitSlice{
 				Available: false,
+				RepoID:    repo.ID,
 				Label:     repo.Label,
 				Others:    []api.BoardGitRepoLine{},
 			}, true, ""

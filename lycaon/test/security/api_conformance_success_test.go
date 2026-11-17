@@ -45,6 +45,7 @@ var successRecipes = map[string]successRecipe{
 	"resetStore":              {stage: stageHostWide},
 	"restoreRecoverySnapshot": {stage: stageHostWide},
 	"restoreBackup":           {stage: stageHostWide},
+	"createProjectRemoval":    {stage: stageHostWide},
 }
 
 // stageOf places op in the mutating phase.

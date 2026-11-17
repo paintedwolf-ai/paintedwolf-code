@@ -44,13 +44,14 @@ const (
 	ruleEventPayloadsMatchSchemas    conformanceRule = "event_payloads_match_their_schemas"
 	ruleOperationsSucceed            conformanceRule = "every_operation_succeeds"
 	ruleKeyedOperationsAreIdempotent conformanceRule = "keyed_operations_are_idempotent"
+	ruleCorpusIsCurrent              conformanceRule = "host_corpus_is_current"
 )
 
 var conformanceRules = []conformanceRule{
 	ruleResponsesConform, ruleUnknownResources, ruleRequestBodies, rulePagination,
 	ruleReadsHaveNoEffects, ruleNoSecretMaterial, ruleMessageIsNoticeCopy,
 	ruleDetailsAreDeclared, ruleEventScopesAreHostIDs, ruleEventPayloadsMatchSchemas,
-	ruleOperationsSucceed, ruleKeyedOperationsAreIdempotent,
+	ruleOperationsSucceed, ruleKeyedOperationsAreIdempotent, ruleCorpusIsCurrent,
 }
 
 // conformanceRequestBudget bounds one request so a handler that never returns
@@ -105,6 +106,7 @@ func TestAPIConformance(t *testing.T) {
 	events := capture.stop(t)
 	sweep.checkEventScopes(events, conformanceHostLookup(t, h))
 	sweep.checkEventPayloads(events)
+	sweep.checkCorpus(sweep.corpus.corpus(events), filepath.Join(root, hostCorpusPath), os.Getenv("UPDATE_HOST_CORPUS") == "1")
 	sweep.secrets.scanEvents(sweep.findings, events)
 	sweep.report(t)
 }
@@ -149,6 +151,7 @@ type conformanceSweep struct {
 	readObserved map[string]bool
 	secrets      *conformanceSecrets
 	eventSchemas *eventSchemas
+	corpus       *corpusRecorder
 	findings     *conformanceFindings
 	// children maps a collection path to the path parameters addressed below it.
 	children map[string][]string
@@ -168,7 +171,7 @@ func newConformanceSweep(doc *openapi3.T, validator *openapi.Validator, handler 
 		ops: conformanceOperations(doc), validator: validator, handler: handler, notices: notices,
 		values: newConformanceValues(), secrets: &conformanceSecrets{}, findings: newConformanceFindings(),
 		children: map[string][]string{}, readObserved: map[string]bool{},
-		succeeded: map[string]bool{}, lastAnswer: map[string]string{},
+		succeeded: map[string]bool{}, lastAnswer: map[string]string{}, corpus: newCorpusRecorder(),
 	}
 	seen := map[string]bool{}
 	for _, op := range s.ops {
@@ -404,6 +407,9 @@ func (s *conformanceSweep) recordOutcome(ex conformanceExchange, valid bool) {
 	s.outcomesMu.Lock()
 	defer s.outcomesMu.Unlock()
 	id := ex.req.op.ID
+	if valid {
+		s.corpus.record(ex)
+	}
 	if valid && ex.status/100 == 2 {
 		s.succeeded[id] = true
 		return

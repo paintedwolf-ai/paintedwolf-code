@@ -208,7 +208,6 @@ components:
       type: object
       required:
       - available
-      - repo_id
       - label
       - dirty
       - staged_count
@@ -220,6 +219,7 @@ components:
         available:
           type: boolean
         repo_id:
+          description: Absent when the active folder is not in a git repository.
           type: string
           format: uuid
         label:

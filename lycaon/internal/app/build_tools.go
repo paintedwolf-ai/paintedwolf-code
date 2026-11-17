@@ -216,6 +216,7 @@ func (b *serveBuilder) wireMCP() error {
 			if b.events.Hub != nil {
 				_ = b.events.Hub.Publish(b.startup.ctx, wire.EventTopicSettings, events.PublishKey{Facet: string(wire.SettingsAreaMcp)}, wire.SettingsEvent{
 					Area:   wire.SettingsAreaMcp,
+					Scope:  wire.SettingsScopeGlobal,
 					Action: "updated",
 				})
 			}
