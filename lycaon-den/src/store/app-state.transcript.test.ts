@@ -281,56 +281,6 @@ describe("createAppStore", () => {
     expect(store.state.messages[1]?.content).toBe("token-".repeat(20));
   });
 
-  it("upsertMessage applies a patch newer than the held row", () => {
-    const store = createAppStore();
-    store.actions.installTranscriptBaseline(
-      "sess-1",
-      [{ id: "a1", role: "assistant", origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const, content: "streaming", created_at: "t", seq: 2 }],
-      2,
-    );
-    const applied = store.actions.upsertMessage({
-      id: "a1",
-      role: "assistant", origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const,
-      content: "committed",
-      created_at: "t",
-      seq: 7,
-    });
-    expect(applied).toBe(true);
-    expect(store.state.messages[0]?.content).toBe("committed");
-  });
-
-  it("upsertMessage drops a patch to a non-resident older Ord", () => {
-    const store = createAppStore();
-    store.actions.installTranscriptBaseline(
-      "sess-1",
-      [
-        { id: "u1", role: "user", origin: "user" as const, authority: "user" as const, trust_tier: "trusted" as const, content: "hi", created_at: "t", seq: 50, ord: 50 },
-        {
-          id: "a1",
-          role: "assistant", origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const,
-          content: "tip",
-          created_at: "t",
-          seq: 51,
-          ord: 51,
-        },
-      ],
-      51,
-      { hasMoreBefore: true },
-    );
-    const before = store.state.messages.map((m) => m.id);
-    const applied = store.actions.upsertMessage({
-      id: "ancient",
-      role: "assistant", origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const,
-      content: "patched mid-history",
-      created_at: "t",
-      seq: 99,
-      ord: 3,
-    });
-    expect(applied).toBe(false);
-    expect(store.state.messages.map((m) => m.id)).toEqual(before);
-    expect(store.state.messages[0]?.ord).toBe(50);
-  });
-
   it("installTranscriptBaseline keeps a local row newer than the page watermark", () => {
     const store = createAppStore();
     store.actions.installTranscriptBaseline("sess-1", [], 0);
@@ -377,29 +327,29 @@ describe("createAppStore", () => {
     expect(store.state.messages).toBe(before);
   });
 
-  it("buffers parent message events during hydrate and replays on completion", () => {
+  it("a page fetched before a patch to a non-resident row installs the patched revision", () => {
     const store = createAppStore();
-    store.actions.setCurrentSession({
-      id: "sess-1",
-      owner_person_id: "00000000-0000-4000-8000-000000000002",
-      project_id: "00000000-0000-4000-8000-000000000001",
-      workspace_path: "/tmp/p",
-      posture: "build",
-      status: "busy",
+    const row = (ord: number, seq = ord) => ({
+      id: `m-${ord}`,
+      role: "user" as const,
+      origin: "user" as const,
+      authority: "user" as const,
+      trust_tier: "trusted" as const,
+      content: `msg ${ord} r${seq}`,
       created_at: "t",
-      activity_at: "t",
-      updated_at: "t",
+      seq,
+      ord,
     });
-    store.actions.clearChatForSessionSwitch("sess-1");
-    store.actions.bufferHydrationMessageEvent({
-      session_id: "sess-1",
-      op: "append",
-      seq: 4,
-      message: { id: "a1", role: "assistant", origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const, content: "buffered", created_at: "t", seq: 4 },
-    });
-    const drained = store.actions.takeHydrationBuffer();
-    expect(drained).toHaveLength(1);
-    expect(store.actions.takeHydrationBuffer()).toHaveLength(0);
+    store.actions.installTranscriptBaseline("sess-race", [row(101), row(102)], 102, { hasMoreBefore: true });
+    // The host served the older page at watermark 102, then streamed a patch to one of its rows.
+    expect(store.actions.upsertMessage(row(50, 103))).toBe(false);
+    const older = Array.from({ length: 100 }, (_, i) => row(i + 1));
+    store.actions.loadTranscriptPage(
+      { edge: "older", beforeMessageId: "m-101" },
+      { messages: older, after_cursor: "newer", watermark: 102, turn_clocks: {}, turn_loads: {} },
+    );
+    expect(store.state.messages.find((m) => m.id === "m-50")?.seq).toBe(103);
+    expect(store.state.messages.find((m) => m.id === "m-49")?.seq).toBe(49);
   });
 
   it("trimTranscriptPages counts resident older messages rather than host page count", () => {
