@@ -124,10 +124,10 @@ webE2e("managed service setup approval covers live requests until revoked", asyn
       "assert connection.getresponse().status == 204",
       'print("service configured")',
     ].join("; ");
+    // The reference sits in an environment value slot, which the host resolves for the process alone.
     const setup = await driver.invoke("command", {
-      command: "/usr/bin/python3 -", stdin: python, cwd: ".",
-      env: { SERVICE_PASSWORD: secret!.reference }, secret_use: { services: [service.origin] },
-      capability_request: capability,
+      command: `SERVICE_PASSWORD=${shellWord(secret!.reference)} /usr/bin/python3 -c ${shellWord(python)}`, cwd: ".",
+      secret_use: { services: [service.origin] }, capability_request: capability,
     });
     const cards = () => liveChatStage(page).getByTestId("tool-approval-card");
     await expect(cards()).toHaveCount(1, { timeout: 30_000 });
