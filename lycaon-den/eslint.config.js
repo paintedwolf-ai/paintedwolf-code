@@ -1,6 +1,8 @@
 import solid from "eslint-plugin-solid/configs/typescript";
 import tailwind from "eslint-plugin-tailwindcss";
 import tseslint from "typescript-eslint";
+import laws from "./eslint/laws/index.js";
+import den from "./eslint/plugin.js";
 
 export default tseslint.config(
   {
@@ -9,14 +11,19 @@ export default tseslint.config(
       "node_modules/**",
       "src-tauri/**",
       "src/api/mocks/**",
-      "src/styling/fixtures/**",
       "playwright-report/**",
       "test-results/**",
     ],
   },
-  ...tseslint.configs.recommended,
-  solid,
-  tailwind.configs.recommended,
+  {
+    files: ["src/**/*.{ts,tsx}", "shared/**/*.ts"],
+    extends: [...tseslint.configs.recommended, solid],
+  },
+  {
+    // Specs are held to the source laws only.
+    files: ["e2e/**/*.ts"],
+    languageOptions: { parser: tseslint.parser },
+  },
   {
     // Type information exposes unhandled promises.
     files: ["src/**/*.{ts,tsx}", "shared/**/*.ts"],
@@ -44,7 +51,8 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/**/*.{ts,tsx}", "e2e/**/*.{ts,tsx}"],
+    files: ["src/**/*.{ts,tsx}"],
+    extends: [tailwind.configs.recommended],
     settings: {
       tailwindcss: {
         cssConfigPath: "./src/tailwind.css",
@@ -102,7 +110,24 @@ export default tseslint.config(
     },
   },
   {
-    // A fixed wait passes or fails with the machine's speed.
+    files: ["src/**/*.{ts,tsx}", "shared/**/*.ts", "e2e/**/*.ts"],
+    plugins: { den },
+    rules: {
+      "den/source-laws": ["error", laws],
+    },
+  },
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/**/*.test.{ts,tsx}"],
+    rules: {
+      "den/no-computation-in-jsx-callback": "error",
+      "den/no-http-error-status-branching": "error",
+      "den/no-keyed-settings-draft": "error",
+      "den/no-native-smooth-scroll": "error",
+      "den/no-show-accessor-prop-leak": "error",
+    },
+  },
+  {
     files: ["e2e/**/*.{ts,tsx}"],
     rules: {
       "no-restricted-syntax": [

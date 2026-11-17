@@ -14,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -117,7 +116,7 @@ func forEachStockSkillRender(t *testing.T, check func(t *testing.T, sk skills.Sk
 					continue
 				}
 				t.Run(fmt.Sprintf("coordinator/%s/%d-roots/%s", id, rootCount, sk.Name), func(t *testing.T) {
-					vars := prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
+					vars := prompts.SkillVars(reader)
 					check(t, sk, fmt.Sprintf("surface %s at %d roots", id, rootCount), reader, vars, renderSkillParts(t, sk, vars))
 				})
 			}
@@ -154,7 +153,7 @@ func forEachStockSkillRender(t *testing.T, check func(t *testing.T, sk skills.Sk
 						continue
 					}
 					t.Run(fmt.Sprintf("worker/%s/on-branch=%t/has-git=%t/%s", agent.ToolProfile, onBranch, hasGit, sk.Name), func(t *testing.T) {
-						vars := prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
+						vars := prompts.SkillVars(reader)
 						check(t, sk, fmt.Sprintf("profile %s (on branch: %t, git: %t)", agent.ToolProfile, onBranch, hasGit), reader, vars, renderSkillParts(t, sk, vars))
 					})
 				}

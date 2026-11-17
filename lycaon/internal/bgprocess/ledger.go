@@ -2,6 +2,7 @@ package bgprocess
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/hostcmd"
 )
@@ -16,7 +17,7 @@ func (r *Registry) LedgerJobs(sessionID string) []JobSnapshot {
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
 	var out []JobSnapshot
-	for _, proc := range r.jobs.sessions[trim(sessionID)] {
+	for _, proc := range r.jobs.sessions[strings.TrimSpace(sessionID)] {
 		if (proc.kind != processKindPipeline && proc.kind != processKindProgram) || proc.silent {
 			continue
 		}

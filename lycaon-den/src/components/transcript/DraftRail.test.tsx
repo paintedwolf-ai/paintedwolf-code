@@ -54,13 +54,14 @@ describe("DraftRail", () => {
       <DraftRail
         sessionId="sess-1"
         slotId="slot-1"
-        body="live body"
+        body="**live** [a](http://x.test)"
         versionCount={1}
         live
         client={mockClient([])}
       />
     ));
-    expect(screen.getByTestId("draft-rail-live-body")).toBeTruthy();
+    expect(screen.getByTestId("draft-rail-live-body").textContent).toBe("**live** [a](http://x.test)");
+    expect(screen.getByTestId("draft-rail").querySelector("a, strong, .assistant-prose")).toBeNull();
     expect(screen.queryByTestId("draft-rail-toggle")).toBeNull();
     expect(screen.getByTestId("draft-rail").getAttribute("data-draft-variant")).toBe("a");
     expect(screen.queryByTestId("draft-rail-tabs")).toBeNull();
@@ -98,8 +99,8 @@ describe("DraftRail", () => {
     ));
     expandRail();
     const expanded = screen.getByTestId("draft-rail-expanded-body");
-    expect(expanded.querySelector(".den-draft-rail-plain")?.textContent).toContain("# Heading");
-    expect(expanded.querySelector(".assistant-prose")).toBeNull();
+    expect(expanded.textContent).toContain("# Heading");
+    expect(expanded.querySelector("h1, strong")).toBeNull();
   });
 
   it("shows raw citation syntax verbatim in provisional text, with nothing navigable", () => {
@@ -119,7 +120,6 @@ describe("DraftRail", () => {
     expect(screen.getByTestId("draft-rail-summary-body").textContent).toContain("[read#3:42-58]");
     expandRail();
     expect(screen.getByTestId("draft-rail-expanded-body").textContent).toBe(body);
-    expect(rail.querySelector(".den-source-path-link")).toBeNull();
     expect(rail.querySelector("a")).toBeNull();
     expect(screen.queryByTestId("citation-evidence-chicklet")).toBeNull();
   });

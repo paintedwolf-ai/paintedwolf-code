@@ -1,10 +1,5 @@
 package orchestration
 
-// DefaultIterationCap is the default max iterations per agent/task.
-const DefaultIterationCap = 8
-
-const wholeProjectScopeGlob = "**/*"
-
 // TeamStrategy controls how team members execute.
 type TeamStrategy string
 
@@ -24,10 +19,9 @@ type TaskResult struct {
 type TerminationReason string
 
 const (
-	TerminationReasonMaxIterations TerminationReason = "max_iterations"
-	TerminationReasonStuck         TerminationReason = "stuck"
-	TerminationReasonConvergence   TerminationReason = "convergence"
-	TerminationReasonHumanAbort    TerminationReason = "human_abort"
+	TerminationReasonStuck       TerminationReason = "stuck"
+	TerminationReasonConvergence TerminationReason = "convergence"
+	TerminationReasonHumanAbort  TerminationReason = "human_abort"
 )
 
 // AggregationMode controls fan-out result merging.

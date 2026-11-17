@@ -59,7 +59,6 @@ type memoryTurnState struct {
 	turns                 map[string]Turn
 	turnHeads             map[string]string
 	turnAttempts          map[string][]TurnAttempt
-	liveModelOutputs      map[string]LiveModelOutput
 	modelOutputs          map[string]ModelOutput
 	turnSubmissions       map[string]string
 	workerTurns           map[string][]string
@@ -164,7 +163,6 @@ func NewMemory() *Memory {
 			turns:                 make(map[string]Turn),
 			turnHeads:             make(map[string]string),
 			turnAttempts:          make(map[string][]TurnAttempt),
-			liveModelOutputs:      make(map[string]LiveModelOutput),
 			modelOutputs:          make(map[string]ModelOutput),
 			turnSubmissions:       make(map[string]string),
 			workerTurns:           make(map[string][]string),

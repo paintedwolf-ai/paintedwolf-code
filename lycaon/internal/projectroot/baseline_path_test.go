@@ -32,7 +32,9 @@ func TestParseBaselinePathLabelCaseInsensitive(t *testing.T) {
 	}
 }
 
-func TestParseBaselinePathBranchRelativeCompat(t *testing.T) {
+// A primary-relative file under a directory named like a branch directory
+// resolves as itself.
+func TestParseBaselinePathBranchNamedDirectoryIsPrimaryRelative(t *testing.T) {
 	roots := baselineParseRoots()
 	dir, err := BranchDirForID("secondary-id")
 	if err != nil {
@@ -40,10 +42,14 @@ func TestParseBaselinePathBranchRelativeCompat(t *testing.T) {
 	}
 	root, rel, ok := ParseBaselinePath(roots, dir+"/plan.md")
 	if !ok {
-		t.Fatalf("ParseBaselinePath branch-relative not ok")
+		t.Fatal("ParseBaselinePath not ok")
 	}
-	if root.ID != "secondary-id" || rel != "plan.md" {
-		t.Fatalf("got root=%q rel=%q want secondary-id plan.md", root.ID, rel)
+	primary, err := PrimaryRoot(roots)
+	if err != nil {
+		t.Fatalf("PrimaryRoot: %v", err)
+	}
+	if root.ID != primary.ID || rel != dir+"/plan.md" {
+		t.Fatalf("got root=%q rel=%q want %s %s/plan.md", root.ID, rel, primary.ID, dir)
 	}
 }
 

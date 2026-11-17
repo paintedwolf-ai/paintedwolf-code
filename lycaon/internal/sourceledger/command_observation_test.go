@@ -37,12 +37,10 @@ func TestCommandObservationDoesNotWaitIndefinitelyForOtherProjects(t *testing.T)
 			t.Cleanup(func() {
 				testutil.FailErr(t, "close snapshot store", ledger.store.Snapshots.Close())
 			})
-			// The proof is that the budget bounds the wait, whatever its length.
-			ledger.store.Inventory.observationBudget = testutil.Timeout(500 * time.Millisecond)
+			// The caller's context never ends here, so only the budget can end the wait.
+			ledger.store.Inventory.observationBudget = 500 * time.Millisecond
 			ledger.store.Commands.observationBudget = ledger.store.Inventory.observationBudget
-			budget := ledger.store.Inventory.observationBudget
-			ctx, cancel := context.WithTimeout(t.Context(), 3*budget)
-			defer cancel()
+			ctx := t.Context()
 			if operation == "verification" {
 				revision, root := VerificationState(ctx, ledger.store.Inventory, ledger.root)
 				if revision != "" || root != "" {
@@ -56,14 +54,11 @@ func TestCommandObservationDoesNotWaitIndefinitelyForOtherProjects(t *testing.T)
 					t.Fatalf("blocked observation = %v, %v; want no window and deadline", window, err)
 				}
 			}
-			if ctx.Err() != nil {
-				t.Fatal("optional observation consumed the caller's execution lifetime")
-			}
 			// Timing out one observation must leave the store usable. Recovery is a
 			// cold capture, so it runs under the production budget rather than the
 			// shortened one that only bounded the blocked wait.
 			release()
-			ledger.store.Inventory.observationBudget = testutil.Timeout(commandObservationBudget)
+			ledger.store.Inventory.observationBudget = commandObservationBudget
 			revision, root := VerificationState(t.Context(), ledger.store.Inventory, ledger.root)
 			if revision == "" || root == "" {
 				t.Fatal("source observation did not recover after capacity became available")

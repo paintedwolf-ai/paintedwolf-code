@@ -85,9 +85,7 @@ func TestCFTPlatformKnown(t *testing.T) {
 	_, err := cftPlatform()
 	switch runtime.GOOS + "/" + runtime.GOARCH {
 	case "darwin/arm64", "darwin/amd64", "linux/amd64", "linux/arm64", "windows/amd64", "windows/386":
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "resolve the browser download platform", err)
 	default:
 		if err == nil {
 			t.Fatal("expected unsupported platform error")

@@ -16,7 +16,6 @@ type generatedOperation struct {
 }
 
 var (
-	operationAbortDelegation                    = generatedOperation{ID: "abortDelegation", Method: "POST", Path: "/v1/delegations/{id}/abort", Params: []string{"id"}, RecordsPersonAction: true}
 	operationAbortSession                       = generatedOperation{ID: "abortSession", Method: "POST", Path: "/v1/sessions/{id}/abort", Params: []string{"id"}, RecordsPersonAction: true}
 	operationAcceptExtensionSuggestions         = generatedOperation{ID: "acceptExtensionSuggestions", Method: "POST", Path: "/v1/extensions/suggestions/accept", RecordsPersonAction: true}
 	operationAdvanceWorkflowRun                 = generatedOperation{ID: "advanceWorkflowRun", Method: "POST", Path: "/v1/workflow-runs/{id}/advance", Params: []string{"id"}, RecordsPersonAction: true}
@@ -53,7 +52,6 @@ var (
 	operationCreateApprovalGrant                = generatedOperation{ID: "createApprovalGrant", Method: "POST", Path: "/v1/approval-grants", RecordsPersonAction: true}
 	operationCreateBlueprint                    = generatedOperation{ID: "createBlueprint", Method: "POST", Path: "/v1/projects/{id}/blueprints", Params: []string{"id"}, RecordsPersonAction: true}
 	operationCreateComposerSecret               = generatedOperation{ID: "createComposerSecret", Method: "POST", Path: "/v1/sessions/{id}/composer-secrets", Params: []string{"id"}, RecordsPersonAction: true}
-	operationCreateDelegation                   = generatedOperation{ID: "createDelegation", Method: "POST", Path: "/v1/delegations", RecordsPersonAction: true}
 	operationCreateEditorDocumentSnapshot       = generatedOperation{ID: "createEditorDocumentSnapshot", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/snapshots", Params: []string{"id", "document_id"}}
 	operationCreateGitRepo                      = generatedOperation{ID: "createGitRepo", Method: "POST", Path: "/v1/projects/{id}/git/repos", Params: []string{"id"}, RecordsPersonAction: true}
 	operationCreateHistoryProtection            = generatedOperation{ID: "createHistoryProtection", Method: "POST", Path: "/v1/history-storage/protections", RecordsPersonAction: true}
@@ -94,7 +92,6 @@ var (
 	operationDiscardEditorDocument              = generatedOperation{ID: "discardEditorDocument", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/discard", Params: []string{"id", "document_id"}, RecordsPersonAction: true}
 	operationDiscardGit                         = generatedOperation{ID: "discardGit", Method: "POST", Path: "/v1/projects/{id}/git/repos/{repo_id}/discard", Params: []string{"id", "repo_id"}, RecordsPersonAction: true}
 	operationDismissVerifySettings              = generatedOperation{ID: "dismissVerifySettings", Method: "POST", Path: "/v1/settings/verify/dismiss", RecordsPersonAction: true}
-	operationDispatchDelegationLeg              = generatedOperation{ID: "dispatchDelegationLeg", Method: "POST", Path: "/v1/delegations/{id}/dispatch", Params: []string{"id"}, RecordsPersonAction: true}
 	operationDraftGitCommitMessage              = generatedOperation{ID: "draftGitCommitMessage", Method: "POST", Path: "/v1/projects/{id}/git/repos/{repo_id}/commit-message", Params: []string{"id", "repo_id"}}
 	operationExitWorkflowRun                    = generatedOperation{ID: "exitWorkflowRun", Method: "POST", Path: "/v1/workflow-runs/{id}/exit", Params: []string{"id"}, RecordsPersonAction: true}
 	operationExportBackup                       = generatedOperation{ID: "exportBackup", Method: "GET", Path: "/v1/backup"}
@@ -120,7 +117,6 @@ var (
 	operationGetContributions                   = generatedOperation{ID: "getContributions", Method: "GET", Path: "/v1/contributions"}
 	operationGetCoordinatorContext              = generatedOperation{ID: "getCoordinatorContext", Method: "GET", Path: "/v1/sessions/{id}/coordinator-context", Params: []string{"id"}}
 	operationGetCostSummary                     = generatedOperation{ID: "getCostSummary", Method: "GET", Path: "/v1/cost/summary"}
-	operationGetDelegation                      = generatedOperation{ID: "getDelegation", Method: "GET", Path: "/v1/delegations/{id}", Params: []string{"id"}}
 	operationGetElevatedAccess                  = generatedOperation{ID: "getElevatedAccess", Method: "GET", Path: "/v1/sessions/{id}/elevated-access", Params: []string{"id"}}
 	operationGetExtensionPackUpdate             = generatedOperation{ID: "getExtensionPackUpdate", Method: "GET", Path: "/v1/extensions/packs/{pack_id}/update", Params: []string{"pack_id"}}
 	operationGetExtensionSuggestions            = generatedOperation{ID: "getExtensionSuggestions", Method: "GET", Path: "/v1/extensions/suggestions"}
@@ -178,6 +174,7 @@ var (
 	operationGetWebResearchProviders            = generatedOperation{ID: "getWebResearchProviders", Method: "GET", Path: "/v1/web-research/providers"}
 	operationGetWebResearchSettings             = generatedOperation{ID: "getWebResearchSettings", Method: "GET", Path: "/v1/settings/web-research"}
 	operationGetWorkerChanges                   = generatedOperation{ID: "getWorkerChanges", Method: "GET", Path: "/v1/workers/{id}/changes", Params: []string{"id"}}
+	operationGetWorkerHistory                   = generatedOperation{ID: "getWorkerHistory", Method: "GET", Path: "/v1/workers/history"}
 	operationGetWorkflowRun                     = generatedOperation{ID: "getWorkflowRun", Method: "GET", Path: "/v1/workflow-runs/{id}", Params: []string{"id"}}
 	operationGetWorkflowRunReport               = generatedOperation{ID: "getWorkflowRunReport", Method: "GET", Path: "/v1/workflow-runs/{id}/report", Params: []string{"id"}}
 	operationHoldProjectManagedSecret           = generatedOperation{ID: "holdProjectManagedSecret", Method: "POST", Path: "/v1/projects/{id}/secrets/{secret_id}/hold", Params: []string{"id", "secret_id"}, RecordsPersonAction: true}
@@ -194,7 +191,6 @@ var (
 	operationListBlueprints                     = generatedOperation{ID: "listBlueprints", Method: "GET", Path: "/v1/projects/{id}/blueprints", Params: []string{"id"}}
 	operationListCheckpoints                    = generatedOperation{ID: "listCheckpoints", Method: "GET", Path: "/v1/sessions/{id}/checkpoints", Params: []string{"id"}}
 	operationListCodeScans                      = generatedOperation{ID: "listCodeScans", Method: "GET", Path: "/v1/projects/{id}/scans", Params: []string{"id"}}
-	operationListDelegationLegs                 = generatedOperation{ID: "listDelegationLegs", Method: "GET", Path: "/v1/delegations/{id}/legs", Params: []string{"id"}}
 	operationListDetectionPacks                 = generatedOperation{ID: "listDetectionPacks", Method: "GET", Path: "/v1/detection-packs"}
 	operationListDraftVersions                  = generatedOperation{ID: "listDraftVersions", Method: "GET", Path: "/v1/sessions/{id}/drafts/{slot_id}/versions", Params: []string{"id", "slot_id"}}
 	operationListEditorDocumentChanges          = generatedOperation{ID: "listEditorDocumentChanges", Method: "GET", Path: "/v1/projects/{id}/editor-documents/{document_id}/changes", Params: []string{"id", "document_id"}}
@@ -360,7 +356,6 @@ var (
 )
 
 var allGeneratedOperations = []generatedOperation{
-	operationAbortDelegation,
 	operationAbortSession,
 	operationAcceptExtensionSuggestions,
 	operationAdvanceWorkflowRun,
@@ -397,7 +392,6 @@ var allGeneratedOperations = []generatedOperation{
 	operationCreateApprovalGrant,
 	operationCreateBlueprint,
 	operationCreateComposerSecret,
-	operationCreateDelegation,
 	operationCreateEditorDocumentSnapshot,
 	operationCreateGitRepo,
 	operationCreateHistoryProtection,
@@ -438,7 +432,6 @@ var allGeneratedOperations = []generatedOperation{
 	operationDiscardEditorDocument,
 	operationDiscardGit,
 	operationDismissVerifySettings,
-	operationDispatchDelegationLeg,
 	operationDraftGitCommitMessage,
 	operationExitWorkflowRun,
 	operationExportBackup,
@@ -464,7 +457,6 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetContributions,
 	operationGetCoordinatorContext,
 	operationGetCostSummary,
-	operationGetDelegation,
 	operationGetElevatedAccess,
 	operationGetExtensionPackUpdate,
 	operationGetExtensionSuggestions,
@@ -522,6 +514,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetWebResearchProviders,
 	operationGetWebResearchSettings,
 	operationGetWorkerChanges,
+	operationGetWorkerHistory,
 	operationGetWorkflowRun,
 	operationGetWorkflowRunReport,
 	operationHoldProjectManagedSecret,
@@ -538,7 +531,6 @@ var allGeneratedOperations = []generatedOperation{
 	operationListBlueprints,
 	operationListCheckpoints,
 	operationListCodeScans,
-	operationListDelegationLegs,
 	operationListDetectionPacks,
 	operationListDraftVersions,
 	operationListEditorDocumentChanges,

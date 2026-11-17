@@ -11,13 +11,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/tsparse"
 	"github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
+
+	"github.com/lycaon/lycaon/internal/tsparse"
+	"github.com/lycaon/lycaon/test/contract/internal/sizebudget"
 )
 
 type inventory struct {
-	measured         measurements
+	measured         sizebudget.Measurements
 	dependencies     map[string][]string
 	directoryMembers map[string]map[string][]string
 	// sources lists the files declaring each Go type artifact.

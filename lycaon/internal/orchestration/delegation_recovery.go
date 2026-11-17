@@ -3,48 +3,65 @@ package orchestration
 import (
 	"context"
 	"fmt"
+	"strings"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type restoredDelegation struct {
-	ID     string
-	LegIDs []string
+type restoredBatch struct {
+	ID      string
+	UnitIDs []string
 }
 
-// restoreWorkflowDelegation preserves the work identities of a resumed topology.
-func (o *OrchestratorImpl) restoreWorkflowDelegation(ctx context.Context, runID string, keys []string, state *runState) (*restoredDelegation, error) {
+func (o *OrchestratorImpl) restoreWorkflowBatch(ctx context.Context, runID string, keys []string, state *runState) (*restoredBatch, error) {
 	if runID == "" {
 		return nil, nil
 	}
-	id, found, err := o.store.DelegationByWorkflowRunID(ctx, runID)
+	id, found, err := o.workers.BatchByWorkflowRun(ctx, runID)
 	if err != nil || !found {
 		return nil, err
 	}
-	return o.restoreDelegation(ctx, id, keys, state)
+	return o.restoreBatch(ctx, id, keys, state)
 }
 
-func (o *OrchestratorImpl) restoreDelegation(ctx context.Context, id string, keys []string, state *runState) (*restoredDelegation, error) {
-	legs, err := o.store.ListLegs(ctx, id)
+func (o *OrchestratorImpl) restoreBatch(ctx context.Context, id string, keys []string, state *runState) (*restoredBatch, error) {
+	units, err := o.workers.ListUnits(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	if len(legs) != len(keys) {
-		return nil, fmt.Errorf("stored delegation has %d legs; topology requires %d", len(legs), len(keys))
+	if len(units) != len(keys) {
+		return nil, fmt.Errorf("stored topology batch has %d units; topology requires %d", len(units), len(keys))
 	}
-	byKey := map[string]string{}
-	for _, leg := range legs {
-		if _, duplicate := byKey[leg.Title]; duplicate {
-			return nil, fmt.Errorf("stored delegation repeats work key %q", leg.Title)
+	byKey := make(map[string]string, len(units))
+	for _, u := range units {
+		if _, duplicate := byKey[u.WorkID]; duplicate {
+			return nil, fmt.Errorf("stored topology batch repeats work key %q", u.WorkID)
 		}
-		byKey[leg.Title] = leg.ID
+		byKey[u.WorkID] = u.ID
 	}
-	restored := &restoredDelegation{ID: id, LegIDs: make([]string, len(keys))}
+	restored := &restoredBatch{ID: id, UnitIDs: make([]string, len(keys))}
 	for i, key := range keys {
-		legID, ok := byKey[key]
+		unitID, ok := byKey[key]
 		if !ok {
-			return nil, fmt.Errorf("stored delegation lacks work key %q", key)
+			return nil, fmt.Errorf("stored topology batch lacks work key %q", key)
 		}
-		restored.LegIDs[i] = legID
+		restored.UnitIDs[i] = unitID
 	}
-	restoreRecordedLegs(state, legs)
+	restoreRecordedUnits(state, units)
 	return restored, nil
+}
+
+func restoreRecordedUnits(state *runState, units []TopologyUnit) {
+	for _, u := range units {
+		state.stageUnits[u.WorkID] = u.ID
+		if u.Status != api.LegStatusComplete {
+			continue
+		}
+		output := u.WorkID + " complete"
+		if strings.TrimSpace(u.Summary) != "" {
+			output = u.Summary
+		}
+		state.completed[u.WorkID] = true
+		state.outputs[u.WorkID] = output
+	}
 }

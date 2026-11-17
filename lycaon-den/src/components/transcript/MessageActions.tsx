@@ -60,7 +60,7 @@ export function copyMessageAction(onCopy: () => void): MessageActionItem {
   };
 }
 
-export type UserMessageActionOptions = {
+type UserMessageActionOptions = {
   onCopy?: () => void;
   onEdit?: () => void;
   onRewind?: () => void;

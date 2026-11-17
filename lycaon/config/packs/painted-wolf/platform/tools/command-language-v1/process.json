@@ -57,9 +57,9 @@
       },
       "notes": "Session-owned job identities and real registered listener observations only. -iTCP:PORT/-sTCP:LISTEN admitted as complete lsof option forms. kill accepts TERM/INT/KILL and matching numeric signals; no process-name or host-global PID authority. wait preserves per-job status/host stop. External argv literal through exec.Stage, never shell fallback; explicit interpreter launch remains external provenance. Output one LF row: HANDLE STATE STATUS; active status is -, completed ordinary status decimal. Rows use creation order.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "implementation": "lycaon/internal/tools/native/command/program_process_builtins.go",
         "tests": [
-          "lycaon/internal/tools/native/process_tools_test.go"
+          "lycaon/internal/tools/native/command/program_shell_expectations_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -135,9 +135,9 @@
       },
       "notes": "Session-owned job identities and real registered listener observations only. -iTCP:PORT/-sTCP:LISTEN admitted as complete lsof option forms. kill accepts TERM/INT/KILL and matching numeric signals; no process-name or host-global PID authority. wait preserves per-job status/host stop. External argv literal through exec.Stage, never shell fallback; explicit interpreter launch remains external provenance.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "implementation": "lycaon/internal/tools/native/command/program_process_builtins.go",
         "tests": [
-          "lycaon/internal/tools/native/process_tools_test.go"
+          "lycaon/internal/tools/native/command/program_shell_expectations_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -226,9 +226,9 @@
       },
       "notes": "Session-owned job identities and real registered listener observations only. -iTCP:PORT/-sTCP:LISTEN admitted as complete lsof option forms. kill accepts TERM/INT/KILL and matching numeric signals; no process-name or host-global PID authority. wait preserves per-job status/host stop. External argv literal through exec.Stage, never shell fallback; explicit interpreter launch remains external provenance.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "implementation": "lycaon/internal/tools/native/command/program_process_builtins.go",
         "tests": [
-          "lycaon/internal/tools/native/process_tools_test.go"
+          "lycaon/internal/tools/native/command/program_shell_expectations_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -368,9 +368,9 @@
       },
       "notes": "Read-only inspection of processes visible to the session, marking session-owned jobs.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "implementation": "lycaon/internal/tools/native/command/program_process_builtins.go",
         "tests": [
-          "lycaon/internal/tools/native/process_tools_test.go"
+          "lycaon/internal/tools/native/command/program_shell_expectations_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -512,9 +512,9 @@
       },
       "notes": "Read-only matching of processes visible to the session.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "implementation": "lycaon/internal/tools/native/command/program_process_builtins.go",
         "tests": [
-          "lycaon/internal/tools/native/process_tools_test.go"
+          "lycaon/internal/tools/native/command/program_shell_expectations_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -649,9 +649,9 @@
       },
       "notes": "Signals session-owned processes only; refuses unowned processes with PROCESS_NOT_OWNED.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "implementation": "lycaon/internal/tools/native/command/program_process_builtins.go",
         "tests": [
-          "lycaon/internal/tools/native/process_tools_test.go"
+          "lycaon/internal/tools/native/command/program_shell_expectations_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -1090,9 +1090,9 @@
       },
       "notes": "Session-owned job identities and real registered listener observations only. -iTCP:PORT/-sTCP:LISTEN admitted as complete lsof option forms. kill accepts TERM/INT/KILL and matching numeric signals; no process-name or host-global PID authority. wait preserves per-job status/host stop. External argv literal through exec.Stage, never shell fallback; explicit interpreter launch remains external provenance.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/process_tools.go",
+        "implementation": "lycaon/internal/tools/native/command/program_process_builtins.go",
         "tests": [
-          "lycaon/internal/tools/native/process_tools_test.go"
+          "lycaon/internal/tools/native/command/program_shell_expectations_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"

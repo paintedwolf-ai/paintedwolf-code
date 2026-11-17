@@ -143,15 +143,27 @@ function parentAnchorForChildCheckpoint(
   workers: readonly WorkerTask[],
   checkpoint: PendingCheckpoint,
 ): Message | undefined {
-  const worker = workers.find(
-    (candidate) =>
-      candidate.child_session_id?.trim() === checkpoint.sessionId.trim(),
-  );
-  if (!worker) return undefined;
-  const dispatchResult = messages.find(
-    (msg) => msg.tool_result?.dispatch?.worker_id.trim() === worker.id.trim(),
-  )?.tool_result;
-  const assistantId = dispatchResult?.assistant_message_id?.trim();
+  const childId = checkpoint.sessionId.trim();
+  if (!childId) return undefined;
+  const jobIds = new Set<string>();
+  for (const candidate of workers) {
+    if (candidate.child_session_id?.trim() === childId) {
+      jobIds.add(candidate.id.trim());
+    }
+  }
+  if (jobIds.size === 0) return undefined;
+  let assistantId: string | undefined;
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const dispatch = messages[i]?.tool_result?.dispatch;
+    if (!dispatch) continue;
+    if (
+      dispatch.child_session_id?.trim() === childId ||
+      jobIds.has(dispatch.worker_id.trim())
+    ) {
+      assistantId = messages[i]?.tool_result?.assistant_message_id?.trim();
+      if (assistantId) break;
+    }
+  }
   return assistantId
     ? messages.find((msg) => msg.id === assistantId)
     : undefined;
@@ -187,14 +199,15 @@ function pendingCheckpointItems(
       anchor = messages[messages.length - 1];
     }
     if (!anchor) continue;
-    const call =
-      toolCallId && anchor.tool_calls
-        ? anchor.tool_calls.find((c) => c.id?.trim() === toolCallId)
-        : undefined;
+    const index = toolCallId
+      ? (anchor.tool_calls ?? []).findIndex((c) => c.id?.trim() === toolCallId)
+      : -1;
+    const call = anchor.tool_calls?.[index];
     items.push({
       kind: "checkpoint",
       key: `checkpoint:${checkpoint.checkpointId}`,
       parentMessageId: anchor.id,
+      ...(call?.name ? { call: { tool: call.name, index } } : {}),
       meta: checkpointMetaFromPending(checkpoint, call),
     });
   }
@@ -206,6 +219,7 @@ function injectCheckpointItemsIntoSpanBlocks(
   messages: readonly Message[],
   workers: readonly WorkerTask[],
   checkpoints: readonly PendingCheckpoint[],
+  verboseMode: boolean,
 ): ChatSpanBlock[] {
   if (blocks.length === 0) return [...blocks];
   const existingKeys = new Set(
@@ -243,7 +257,7 @@ function injectCheckpointItemsIntoSpanBlocks(
     if (additions.length === 0) return block;
     return {
       ...block,
-      items: sortTranscriptItemsByOrd([...block.items, ...additions], messages),
+      items: sortTranscriptItemsByOrd([...block.items, ...additions], messages, { verboseMode, layout: "chat" }),
     };
   });
 }
@@ -271,6 +285,7 @@ export function buildChatTranscriptBlocks(
       messages,
       options.workers ?? [],
       options.pendingCheckpoints ?? [],
+      options.verboseMode ?? false,
     );
   }
   // Empty buckets have no span chrome.

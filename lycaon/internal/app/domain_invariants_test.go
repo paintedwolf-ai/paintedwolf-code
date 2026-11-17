@@ -7,10 +7,10 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/app/boards"
-	"github.com/lycaon/lycaon/internal/app/delegations"
 	"github.com/lycaon/lycaon/internal/app/scanning"
 	"github.com/lycaon/lycaon/internal/app/server"
 	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/resourcelifecycle"
 )
@@ -29,8 +29,8 @@ func TestDomainBuilderStructLimits(t *testing.T) {
 		{"sessions.Dependencies", sessions.Dependencies{}, 25},
 		{"workflows.Runtime", workflows.Runtime{}, 25},
 		{"workflows.Dependencies", workflows.Dependencies{}, 25},
-		{"delegations.Runtime", delegations.Runtime{}, 25},
-		{"delegations.Dependencies", delegations.Dependencies{}, 25},
+		{"workerruntime.Runtime", workerruntime.Runtime{}, 25},
+		{"workerruntime.Dependencies", workerruntime.Dependencies{}, 25},
 		{"boards.Runtime", boards.Runtime{}, 25},
 		{"boards.Dependencies", boards.Dependencies{}, 25},
 		{"scanning.Runtime", scanning.Runtime{}, 25},

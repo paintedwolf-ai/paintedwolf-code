@@ -85,13 +85,14 @@ observable behavior; they do not freeze prompt wording.
 - A suite that needs a provisioned host — applied Seatbelt, a staged scanner engine — derives its gated inventory from source and fails when the declared CI scope does not reach a member. Where a job promises the suite, its `*_REQUIRED` flag makes a missing dependency fatal instead of a skip.
   Applied Seatbelt recipes live in `scripts/verification-plan.json`: the complete confinement package, the exact packages owning gated consumers with their integration build tag, and the scanner stress suite. The existing source-derived inventory checks these declarations. Each stage enters through `./task test:seatbelt` and retains its own captured-source evidence.
 - A test belongs in the cheapest layer that can prove its promise. Unit/component tests exercise one domain boundary with in-process collaborators; repository contracts prove a durable cross-tree invariant; wiring tests prove assembled managers; HTTP and browser tiers prove a user-visible journey. Do not use a repository scan to stand in for behavior, or an end-to-end journey to prove a parser branch.
-- `test:short` is only the unit/component feedback loop. Repository contracts run beside it as their own `test:contract` stage of `check-fast`, because they are cheap and are the boundary changes most often cross. External integration, wiring, process smoke tests, and HTTP journeys remain mandatory but run as named closeout/release tiers, where their failure names the boundary rather than making every edit wait on a source-tree crawl.
+- `test:short` is only the unit/component feedback loop. Repository contracts run beside it as their own `test:contract` stage of `check-fast`, because they are cheap and are the boundary changes most often cross. `test:integration:changes` runs the integration-tagged tests of the packages a change edits directly; the merge queue runs the packages that import them. External integration, wiring, process smoke tests, and HTTP journeys remain mandatory but run as named closeout/release tiers, where their failure names the boundary rather than making every edit wait on a source-tree crawl.
 - Files classified as internal integration carry the `integration` build tag and stay out of `test:short`; `test:integration`, `test:full`, and `test:race` opt in explicitly and run without `-short`. Source-content limit journeys, document compaction/reload scenarios, full checkpoint-cap capture, and archive entry-limit extraction assemble real stores and filesystems, so they belong to this tier with their exact limit and editing-history fixtures intact. Randomized SQLite lifecycle properties in `test/property` use the same tag; pure in-memory properties remain in the normal suite.
 - Keep scale sweeps separate from boundary proofs. Routine source-tree tests exercise first and late pages and indexed edits at 1,000 and 4,096 rows; stress runs repeat the same assertions at 100,000, one million, and ten million rows. Do not shrink a fixture below a real page, spill, or byte-limit boundary merely to save time.
   Scanner output and contention checks use a declared Swift finding corpus: dense output returns 2,400 findings and exceeds the console capture size, while contention proves simultaneous engine work. These fixtures enforce host RSS of 256 MiB, aggregate RSS of 256 MiB plus 768 MiB per scan, and a 32 MiB dense-output budget. They do not impose a product report-size limit. Cancellation and shutdown retain their sustained mixed-language workloads.
 - A test must invoke the production transition it claims to prove. Test-local copies of draft settlement or retention deletion are not lifecycle coverage.
 - Use virtual clocks for in-process timers (`testing/synctest` in Go and Vitest fake timers in Den). Mutex-contention tests need real bounded deadlines: a mutex wait prevents Go virtual time from advancing. Synchronize queue tests on admission and completion; use a required barrier when the queue deliberately drops writes.
-- Den follows the same cadence: `den:test:fast` proves a representative model-and-DOM seam canary, while exhaustive model tests, component fixtures, accessibility checks, and repository scans run in full `den:test`. Browser journeys remain their own explicit tier.
+- A Go test never sleeps a fixed span to wait for something: it waits on the event, through `testutil.WaitFor`, `Receive` or `AwaitClosed`, or runs in a `synctest` bubble where `synctest.Wait` shows every goroutine is blocked. `test:fail-messages:check` refuses a `time.Sleep` statement in a `_test.go` file outside a loop, a bubble or a helper process that its parent test starts and kills.
+- Den runs its complete suite whenever its inputs change: model tests, component fixtures, accessibility checks, and repository scans run in `den:test`, which `den:coverage:changes` runs with the changed-coverage floor. Browser journeys remain their own explicit tier.
 
 ## Shared test infrastructure
 
@@ -566,8 +567,36 @@ touch never fails it, and floors live in
   runs a different interpreter is not measured; launch fixtures with
   `sys.executable` or `python3` from `PATH`.
 
-Aggregate floors (`check:coverage`, `den:coverage-check`) read the same policy
-and run nightly.
+Aggregate floors (`check:coverage`, `den:coverage-check`) read the same policy.
+They are local reports: no hosted tier runs them, and changed coverage is the
+gate.
+
+### Structural defects
+
+`arch-lint:changes` fails on structural defects a change adds or makes, which
+compile and pass tests yet leave code that never runs or a value that is
+silently lost. `lycaon/cmd/arch-lint` loads the shipped programs once per
+target GOOS without tests, so code only a test calls counts as unreachable; a
+function is reported only when no GOOS that compiles it reaches it. It also
+reports context keys read but never set, schema tables no reachable query
+reads, forwarders and aliases of another package, struct literals that copy
+several fields of one value but drop one both types share, production
+packages that import test-support packages, and commands and executable scripts
+no other file names. Findings are keyed by symbol, so the check runs on the working tree
+and on the change base and fails on findings the base lacks: deleting a
+function's last caller fails like adding a dead function. Unused parameters
+come from `unparam` on changed lines. `den:knip:changes` compares knip's
+production-mode report of unused Den files, exports and types
+(`lycaon-den/knip.json`) with the base the same way; it runs in the lanes that
+install Den's dependencies, and `arch-lint:changes` in the lanes that provision
+Go analysis tools. `arch-lint:report` lists every finding.
+The test-support package rule, the shipped roots and the target platforms
+each host type-checks are declared in `scripts/arch-lint-policy.json`. A Linux
+host cannot type-check the darwin build of cgo-only packages, so Linux judges
+the Linux build alone: code only darwin files call can look unreachable there,
+and belongs in a darwin file. Reachability cannot see reflection or
+`go:linkname`; code reached only that way is a defect to fix at its source. Functions in generated files are judged through their generator, so a
+generator's uniform surface does not fail the ratchet one enum at a time.
 
 ### The change base
 
@@ -723,8 +752,7 @@ that reservation and assigns unused package slots to `GOMAXPROCS` for small
 scopes; race runs default to two runtime workers per package. Parallel tests per
 package obey the same per-process share; Vitest uses at most four workers.
 Fuzzing and Rust builds share the same budget. Runners use the worker limits
-assigned at admission; host load only adjusts timeouts, and race runs scale
-scheduler-dependent waits at least 3×. Hosted CI sets
+assigned at admission. Hosted CI sets
 `PW_TEST_HOST=dedicated`: one lane owns the runner, so the budget is every CPU
 (still at most eight) and a shared operation reserves all of it.
 
@@ -750,9 +778,19 @@ Locks and worker reservations are inherited by child processes and remain held
 after a parent crash until its surviving children exit. Pause stops new batch
 and invocation admission; already admitted batches finish their stages.
 
-Scheduler-dependent waits and watchdogs scale 1×–4× with host
-load. `PW_TEST_TIMEOUT_SCALE` selects an explicit scale; production deadlines
-and polling intervals remain unchanged.
+No test, package or lane fails because time passed. `go test` runs with
+`-timeout 0` in every recipe, and tests wait on events through
+`testutil.WaitFor`, `Receive` and `AwaitClosed`, which list the test and step
+they wait on for as long as they wait. Each run has one time limit, which exists
+to end a hang and never judges a slow run: the minutes of the CI lane that
+declares the target in `scripts/verification-plan.json`, or of the longest lane
+for a target no lane names, with no host-load scale. A hosted lane counts those
+minutes once across its phases. When the limit passes, the watchdog signals the
+run's Go test binaries with `SIGUSR1`, which prints each pending wait as
+`pending wait: <test>: <step>`, then with `SIGQUIT`, which prints every
+goroutine stack, and then ends the run. Digests and CI annotations name the
+pending waits. Nothing scales with host load: a test bounds its waits by the
+test, and a timeout handed to product code is the literal the test is about.
 
 Compilation artifacts use the persistent Go cache across snapshots, tests,
 fuzzing, and lint. Snapshot worktrees reuse leased directory slots, preserving
@@ -785,10 +823,8 @@ history and three recovery captures. Its catalog recipe keeps packages and tests
 serial and allows 90 minutes per package before host-load scaling. The nightly
 workflow includes this tier. Active fuzz exploration runs through
 `./task test:fuzz` in nightly verification, separately from
-`check`; ordinary Go tests still execute saved fuzz seed cases. Transcript
-scale tests use the `.perf.test.ts` suffix and run through
-`./task den:test:transcript-scale` in nightly verification. Den suites assert
-memory, DOM and row bounds, never elapsed time. SQL query and OpenAPI bundle generation drift are
+`check`; ordinary Go tests still execute saved fuzz seed cases. Den suites,
+transcript scale included, assert memory, DOM and row bounds, never elapsed time. SQL query and OpenAPI bundle generation drift are
 checked once through `db:sqlc:check` and `openapi:bundle:check` in
 `check:drift`; Go contracts inspect the generated surfaces without launching the
 generators again.
@@ -816,7 +852,6 @@ Run every task from the repository root through `./task`.
 | `./task test:security` | Authenticated HTTP journeys |
 | `./task test:runner` | Verification runner tests in `scripts/verification_tests/` |
 | `./task den:test:digest -- src/path/file.test.ts` | Scoped Den iteration |
-| `./task den:test:fast` | Representative Den model and DOM seam canaries |
 | `./task den:test` | Full Den Vitest suite |
 | `./task e2e:den` | Browser user journeys |
 | `./task e2e:den:desktop` | Tauri desktop journeys |
@@ -825,7 +860,7 @@ Run every task from the repository root through `./task`.
 | `./task perf:soak` | Long mixed workload with graceful restart, task recovery, SSE cursor reset, and leak checks |
 | `./task budgets` | Prompt and code size budgets for what the change touches |
 | `./task coverage:changes` / `./task den:coverage:changes` / `./task scripts:coverage:changes` | Coverage of the Go, Den, and scripts Python statements a change adds or modifies |
-| `./task check-fast` | Local handoff gate: build, lint:full, size budgets, unit/component Go suite, repository contracts, Den typecheck, lint, den:test:fast, notices, comment and failure-message checks, and documentation links |
+| `./task check-fast` | Local handoff gate: build and cross-platform build, lint:full, size budgets, changed coverage, unit/component Go suite, integration tests of edited packages, repository contracts, Den typecheck, lint and complete suite, notices, comment and failure-message checks, and documentation links |
 | `./task check` | Full local and qualification gate: cross-compile, drift, complete Go and scanner suites, full Den and Rust correctness suites, size budgets, changed coverage, lint, and vulnerability checks |
 
 Each gate runs once per change. A pushed change runs affected-scope integration in CI and daily full nightly verification, so it runs neither local gate first; a change handed off without a push runs `./task check-fast`. Each gate uses one stable source snapshot. Digest runners keep failure captures under `last-run/` in the [artifact root](dev-tasks.md#build-outputs-caches-and-locks); `./task test:failed` replays the latest failed Go run from its retained source commit with the recorded arguments and timeouts, bounded by the current worker budget. A passing scoped run does not erase that failure.
@@ -845,8 +880,6 @@ allocation before claiming an end-to-end speedup.
 |------|-------|
 | `./task test:full` | Complete Go behavior, wiring, smoke, HTTP, and required bundled scanner suites |
 | `./task test:race` | Go race detector with integration scenarios and no `-short`; the dedicated `test/security` HTTP journeys remain in `test:full`, and so does `internal/launchguard`: its identity transitions use `syscall.AllThreadsSyscall`, which Go refuses in a binary that links cgo, as every race-instrumented binary does |
-| `./task check:coverage` | Go aggregate statement coverage floor |
-| `./task den:coverage-check` | Den aggregate coverage floors |
 | `./task den:test:rust` | Tauri Rust tests |
 | `./task upgrade:rehearse -- --bundle …` | Signed macOS automatic update discovery, staging, activation, startup confirmation, retained history, and another restart |
 | `./task test:scanners` | Bundled scanners against the committed corpus, with a staged engine |
@@ -868,12 +901,19 @@ A ready pull request runs the `fast` profile; the merge queue runs the
 the newest suite on the head, so the job deletes skipped CI runs a draft push left
 there; a failed deletion warns without failing `check`. A `static` job reports
 formatting, comment, failure-message and documentation-link errors within a minute
-while the rest keep running. The fast tier runs its other jobs side by side.
-`ready-lint` runs complete `lint:full` analysis on its own runner, whose compile output would otherwise share one disk with the rest.
-`ready-tests` splits repository contracts and affected short Go tests across two
-shards, balanced by measured package durations. `ready` runs size budgets and
-changed Go coverage first, plus script coverage when scripts or workflows changed, then compiles the host and runs Den typecheck,
-Den lint, and frontend seam canaries.
+while the rest keep running. A change of documentation prose alone runs nothing
+else. Otherwise the fast tier runs its other jobs side by side.
+`ready-lint` runs whole-module golangci-lint and workflow analysis on its own runner, whose compile output would otherwise share one disk with the rest;
+whole-program dead-code analysis needs the whole tree and runs nightly.
+`ready-tests` splits repository contracts, affected short Go tests, and the
+integration-tagged tests of directly edited packages across four shards,
+balanced by measured package durations. `ready` runs size budgets and changed Go
+coverage first, plus the script suites and their changed coverage when a path
+under `scripts/`, `.github/` or `packaging/`, `Taskfile.yml` or `task` changed,
+then compiles the host, and cross-compiles it when Go source or modules changed.
+`frontend` runs Den typecheck, lint, unused-export analysis, and the complete Den
+suite with its changed-coverage floor when a path under `lycaon-den/` or
+`docs/openapi/`, `CHANGELOG.md`, or a frontend runtime pin changed.
 Coverage executes eligible changed packages' own short tests, so `ready-tests`
 omits those packages from its identical short recipe. Test-only, generated,
 exempt, and untested packages keep their affected short selection. Unknown recipes
@@ -903,8 +943,7 @@ The merge queue measures changed coverage on its exact source and executes the
 complete affected integration selection. Frontend and scripts assertions execute
 once through their coverage stages; distinct short-covered and integration-tagged
 Go recipes retain their separate modes. Every lane runs to the end, so one failed group reports all its failures.
-The limits lane keeps its existing two-hour completion allowance, independent of
-the under-hour performance objective.
+Budgets and changed coverage are the first stages of the build lane.
 
 Pull requests no longer run the integration gate themselves. Running it for
 the pull request and again for its merge group doubled demand on the
@@ -957,21 +996,23 @@ the whole selected matrix to budgets until nightly measures its rows.
 Partial receipts from a cancelled run cannot
 mix short measured times with large timeout fallbacks. Shards share their lane's
 longest estimate because package balancing changes which packages each shard runs.
-The catalog orders lanes by explicit priority: `reject` for limits and lint,
+The catalog orders lanes by explicit priority: `reject` for build, lint and runner,
 `critical` for both behavior shards, and `normal` for remaining work, longest
 first. Timing estimates are advisory; the model is not a guarantee of hosted runtime.
 
 Lanes and shards are planned from measured durations. Each lane of main's
-nightly records setup plus execution time beside its receipts in `ci/timings.json`;
-a sharded lane also records its packages' durations. A job-start marker precedes
-checkout and provisioning. Measurements without that timing basis supply package
-weights only; they cannot mix execution-only times with setup-inclusive estimates.
-Evidence-upload time is accounted for separately by queue health. The plan job reads the
-newest valid measurement for each row and package from nightly
-receipts in at most 20 completed runs, filling gaps from older runs.
-History stops once the rows nightly actually runs have measurements. The
-job summary records the estimate basis, missing timing rows, source runs, and
-matrix order, including declared timing sources.
+nightly records setup plus execution time and its 50 slowest tests beside its
+receipts in `ci/timings.json`; a sharded lane also records its packages'
+durations. A job-start marker precedes checkout and provisioning. Measurements
+without that timing basis supply package weights only; they cannot mix
+execution-only times with setup-inclusive estimates. A lane supplies its
+duration whatever its verdict, unless a signal ended it part-way. Evidence-upload time is accounted for separately by queue
+health. Nightly's final job merges the lanes' records into one `timings.json`,
+bound to the run and to the source commit and tree it measured, and publishes
+it as the `nightly-timings` artifact. The plan job of every tier downloads that
+one artifact from the newest main nightly that published it, and plans from
+catalog budgets when there is none. The job summary records the estimate
+basis, missing timing rows, the source run, and matrix order.
 Every shard receives the same package durations, so the shards partition the
 selection identically:
 packages go longest first to the least loaded shard, so the longest package
@@ -1047,14 +1088,19 @@ that completed the aggregate. Candidate qualification holds at most three runner
 
 Nightly qualifies main daily with every check and release-platform catalog lane,
 platform confinement and upgrade corpus, and complete web and desktop journeys.
-It also runs race, fuzz, WebKit, stress, coverage, and performance checks, plus the
-prior-release upgrade rehearsal. The stages run in turn within its two-runner
-budget. Specific manual matrix selections stay scoped; scheduled and `all` runs cover the
-complete check tier. A release requires successful manual **Qualification** for its exact
+It also runs race, fuzz, WebKit, stress, and performance checks, every declared
+Python suite, plus the prior-release upgrade rehearsal. A first job binds the
+source: the scheduled commit, or the exact commit a dispatch names in
+`source-sha`, which must carry the dispatched commit's CI tooling. The catalog
+matrix, the platform jobs, the browser journeys, and the upgrade rehearsal
+then start together. Every job's evidence records the commit and tree it
+checked out in `ci/source.json`. Specific manual matrix selections stay scoped;
+scheduled and `all` runs cover the complete check tier. A release requires successful manual **Qualification** for its exact
 source on main; daily nightly and merge admission do not grant publication.
 
-Main's cache warmer publishes prepared Go, decision-engine, notices-tool, and
-analysis-tool caches after compiler preparation. Lint diagnostics publish their
+Main's cache warmer publishes prepared Go, decision-engine, generation-runtime,
+notices-tool, and analysis-tool caches after compiler preparation. The jobs
+that build the engine restore them and compile only the engine's own crates. Lint diagnostics publish their
 own result separately. WebKitGTK
 images also publish before diagnostics, so diagnostic cleanup cannot block
 their reuse. A failed or cancelled preparation cannot publish these caches;
@@ -1142,7 +1188,7 @@ retry. The one-retry limit remains in force.
 #### Automatic queue batching
 
 Use the merge queue normally. The hosted `Automatic queue batching` controller
-runs after CI, source changes, no-combine label changes, and every five minutes. It
+runs after CI, source changes, and no-combine label changes. It
 reserves the first two queue positions for existing cumulative groups, then
 combines up to four consecutive waiting entries in their existing priority
 order. Campaign exclusions live in `.github/queue-batching.json`; Linux and
@@ -1214,8 +1260,7 @@ toolchain, test options, and declared environment. Extending that reuse to
 hosted or native test results needs equally complete input accounting; compiler
 cache hits alone do not establish a test pass. Existing recovery retains first
 failures and retries only demonstrated infrastructure faults. Product assertions
-and races remain blocking; there is no new automatic quarantine or assertion
-retry policy.
+and races remain blocking; there is no assertion retry policy.
 
 ##### Admission and scale execution
 
@@ -1288,7 +1333,7 @@ Each Linux Go test process has a 3.5 GiB RSS ceiling, declared in
 16 GiB and run four packages at once, so the ceiling keeps one package from
 exhausting the runner while leaving room for the toolchain. A package that needs
 more declares its own ceiling with a tracking issue. A race build gets
-`race_scale` times its ceiling, the way its timeouts are scaled: the detector's
+`race_scale` times its ceiling: the detector's
 shadow memory and instrumented heap are overhead the ordinary ceiling does not
 describe, and the largest contract packages reach 1.1 times it under the detector.
 Unless a run sets `GOMEMLIMIT`, the test binary gets a soft limit at 80% of its
@@ -1324,12 +1369,8 @@ A missing or mismatched binary is rebuilt before analysis. Lint diagnostics are 
 through `./task setup-dev`; workspace verification enters through its ordinary
 managed targets.
 
-Quarantine is explicit reviewed policy in
-[`quarantine.json`](../scripts/ci_policy/quarantine.json), initially empty.
-Each entry names one package and exact top-level test, a GitHub issue, owner,
-and expiry date. Expiry fails planning. Quarantined tests run independently in
-nightly observation and remain visible without blocking admission. The system
-never labels an unexplained failure flaky or quarantines it automatically.
+No test is parked. A deterministic failure is fixed in the product or the
+test; the system never labels an unexplained failure flaky or excuses it.
 
 [`queue-health.yml`](../.github/workflows/queue-health.yml) reports the last
 24 hours every four hours: queue-to-merge time from structured timeline events,
@@ -1427,8 +1468,7 @@ The GitHub Free plan runs twenty hosted jobs at once across the organization,
 five of them on macOS, and starts waiting jobs first come, first served. The
 project uses no larger or self-hosted runners, so those limits are fixed.
 Concurrency is bounded by construction: each class of work holds a
-fixed number of runners, through one run at a time, capped matrices, and a
-run's stages in turn wherever running them side by side would widen it. The
+fixed number of runners, through one run at a time and capped matrices. The
 merge queue's own settings budget its class: groups built at once times the
 gate's cap. The `capacity` table in
 [`verification-plan.json`](../scripts/verification-plan.json) declares each
@@ -1443,14 +1483,20 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 |---|---|---|---|
 | Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs beside the `release` platform lanes one at a time, then two browser shards beside the desktop journey |
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
+<<<<<<< HEAD
 | Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then the two platform jobs, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
+| Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
+=======
+| Nightly | `nightly.yml` | `nightly` | 12 (4): the `nightly` profile capped at six, beside the two platform jobs, two browser shards with the desktop journey, and the upgrade rehearsal |
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
+>>>>>>> e4985d4fee
 | DCO certification | `dco.yml` | `dco-certification` | 1 |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
 | Queue batching | `queue-batching.yml` | `queue-batching` | 1 |
-| Maintenance | dispatch-only Linux desktop environment and installed rehearsals, Linux candidate requests, dependency inventory, release-system live test, queue health, issue staleness, the issue sweep, release secrets check | `maintenance`, shared | 1 |
+| Release rehearsals | release dry runs and replays, the weekly release-system live test, a dispatched release secrets check | one group per dry run or replay; `release-system-live-test`; none for the read-only secrets check | a dry run as a release; 1 otherwise |
+| Maintenance | dispatch-only Linux desktop environment and installed rehearsals, Linux candidate requests, dependency inventory, queue health, issue staleness, the issue sweep | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 12: two groups × the `integration` cap of six |
-| Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 3 per pull request, with a two-hour execution ceiling |
+| Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 6 per pull request beside the static job: the `fast` cap, with a two-hour execution ceiling |
 
 Nightly replaces its pending snapshot while a started run finishes. Qualification
 retains explicit release requests; both use one executor at a time. Maintenance
@@ -1480,8 +1526,10 @@ average occupancy does not change with it. Recorded occupancy averages about eig
 of the twenty runners, and jobs without a matrix cap start within seconds. Raising a
 cap is worthwhile while lanes wait on the cap rather than on a runner; check that
 before changing one. Caps do not establish queue latency guarantees.
-On macOS, qualification, warming, and nightly hold one runner each and a release
-two, five in all; the merge queue and the admission tier run on Linux.
+On macOS, qualification and warming hold one runner each, nightly four, and a
+release two. Nightly is scheduled outside the hours releases and qualification
+run; when they do overlap, macOS jobs wait for one of the five runners. The
+merge queue and the admission tier run on Linux.
 
 ### Upgrade rehearsal preparation and startup evidence
 

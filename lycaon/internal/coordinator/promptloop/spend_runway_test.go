@@ -158,13 +158,15 @@ func TestMaybeSpendSoftStopNudge(t *testing.T) {
 	}
 }
 
+// The wind-down round withholds every tool that starts or resumes a worker
+// and keeps the change tools.
 func TestSoftStopDropsWorkerDelegation(t *testing.T) {
-	calls := []api.ToolCall{{Name: "task", ID: "t1"}, {Name: "command", ID: "b1"}}
+	calls := []api.ToolCall{{Name: "task", ID: "t1"}, {Name: "instruct_worker", ID: "i1"}, {Name: "answer_decision", ID: "a1"}, {Name: "promote_overlay", ID: "p1"}}
 	got := filterSpendSoftStopToolCalls(calls)
-	if len(got) != 1 || got[0].Name != "command" {
+	if len(got) != 1 || got[0].Name != "promote_overlay" {
 		t.Fatalf("filtered calls = %+v", got)
 	}
-	metas := filterSpendSoftStopToolMetas([]tools.ToolMeta{{Name: "task"}, {Name: "read"}})
+	metas := filterSpendSoftStopToolMetas([]tools.ToolMeta{{Name: "task"}, {Name: "instruct_worker"}, {Name: "answer_decision"}, {Name: "read"}})
 	if len(metas) != 1 || metas[0].Name != "read" {
 		t.Fatalf("filtered metadata = %+v", metas)
 	}

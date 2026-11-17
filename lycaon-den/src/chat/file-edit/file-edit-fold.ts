@@ -87,21 +87,6 @@ export function fileEditFoldFingerprint(fold: FileEditFold): string {
   return parts.join("\0");
 }
 
-export function singleFileEditFold(
-  key: string,
-  snapshot: FileEditPreview,
-  tool = "write",
-): FileEditFold {
-  return foldFromSteps(snapshot.path, [{ key, snapshot, tool }]);
-}
-
-/** Preserve call order when collecting writes. */
-export function fileEditStepsFromParts(
-  parts: readonly ToolPartView[],
-): FileEditStep[] {
-  return parts.flatMap(fileEditStepsFromPart);
-}
-
 /** One step per file the call edited; a call that edits several files anchors several folds. */
 export function fileEditStepsFromPart(part: ToolPartView): FileEditStep[] {
   return fileEditsFromPart(part).map((snapshot, index) => ({

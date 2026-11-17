@@ -5,20 +5,16 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/promptresult"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	"sync"
 	"testing"
 	"time"
 )
 
-// budgetRequestEnvelope drives an asynchronous host turn for jobID.
-func budgetRequestEnvelope(jobID string) anchor.Envelope {
-	return anchor.Envelope{WorkerBudget: &kick.WorkerBudgetFacts{
-		JobID: jobID, Used: 16, Max: 20, HostMax: 120,
-		Request: &api.WorkerBudgetRequest{
-			Rounds: 12, RequestedMax: 32, RemainingWork: []string{"trace the remaining callers"}, ToolLoopsUsed: 16,
-		},
+// roundNoticeEnvelope drives an asynchronous host turn for jobID.
+func roundNoticeEnvelope(jobID string) anchor.Envelope {
+	return anchor.Envelope{WorkerRoundNotice: &kick.WorkerRoundNoticeFacts{
+		JobID: jobID, Worker: "worker-" + jobID, AgentType: "implementer", Kind: kick.RoundNoticeConsumption, ModelCalls: 40,
 	}}
 }
 
@@ -46,7 +42,7 @@ func TestWaitForAsyncTurnsForceCancelsAndBlocksUntilExit(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.Nudges.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
+	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-1", roundNoticeEnvelope("job-1"))
 
 	select {
 	case <-started:
@@ -106,7 +102,7 @@ func TestForgetSessionCancelsAndDrainsInFlightAsyncTurn(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.Nudges.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
+	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-1", roundNoticeEnvelope("job-1"))
 
 	select {
 	case <-started:
@@ -169,7 +165,7 @@ func TestSpawnAsyncTurnPanicDoesNotLeakRegistryOrWaitGroup(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.Nudges.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
+	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-1", roundNoticeEnvelope("job-1"))
 
 	select {
 	case <-started:
@@ -177,8 +173,7 @@ func TestSpawnAsyncTurnPanicDoesNotLeakRegistryOrWaitGroup(t *testing.T) {
 		t.Fatal("async turn never started")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	engine.Turns.WaitForAsyncTurns(ctx)
 	if ctx.Err() != nil {
 		t.Fatal("WaitForAsyncTurns timed out — a panicking turn leaked its WaitGroup slot")

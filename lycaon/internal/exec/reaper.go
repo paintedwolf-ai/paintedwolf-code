@@ -26,11 +26,6 @@ const (
 	reaperDir        byte = 'd'
 )
 
-// TrackProcessGroup records a started process group the engine owns, by its
-// leader's pid, so the group cannot outlive the engine. The returned func
-// forgets it once the caller has torn the group down.
-func TrackProcessGroup(leader int) (untrack func()) { return trackPID(reaperGroup, leader) }
-
 // TrackProcess records a started child that shares the engine's process group,
 // so that one process cannot outlive the engine. The returned func forgets it
 // once the child has exited.

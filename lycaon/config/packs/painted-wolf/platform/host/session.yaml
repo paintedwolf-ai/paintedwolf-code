@@ -25,13 +25,8 @@ llm_stream_stall_timeout_sec: 1800
 coordinator_host_turn_timeout_sec: 86400
 # Maximum wait() sleep.
 coordinator_max_sleep_sec: 10800
-# Parent wait exceeds a full worker budget; expiry does not stop the worker.
+# Expiry ends the parent's wait; it does not stop the worker.
 await_parent_workers_timeout_sec: 3600
-# Worker tool-round ceilings. Omitted task(max_tool_loops) selects the default;
-# explicit ceilings and granted requests stay within [min, max].
-worker_tool_budget_default: 20
-worker_tool_budget_min: 2
-worker_tool_budget_max: 120
 session_spend_ceiling_usd: 0 # should: 0 — no per-session USD ceiling by default; a positive value pauses the session at the cap
 spend_warning_ratio: 0.8 # should: 0.8 — warn once at this share of an armed session spend limit
 spend_ceiling_enabled: false # should: false — the ceiling only pauses when explicitly armed in Settings

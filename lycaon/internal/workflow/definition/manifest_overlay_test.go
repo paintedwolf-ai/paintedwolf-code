@@ -9,16 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestMergeManifestOverlayProjectWins(t *testing.T) {
-	bundled := map[string]Manifest{
-		ManifestKey("plan", "1.0.0"): {
-			ID:      "plan",
-			Version: "1.0.0",
-			Name:    "bundled",
-			Trigger: "/plan",
-			Request: &ManifestRequest{Cadence: RequestCadenceOnce, Question: "What should we plan?"},
-		},
-	}
+func TestProjectManifestOverlayWins(t *testing.T) {
 	projectDir := t.TempDir()
 	overlayDir := filepath.Join(projectDir, settingsoverlay.DirName(), "workflows", "plan")
 	if err := os.MkdirAll(overlayDir, 0o755); err != nil {
@@ -28,9 +19,9 @@ func TestMergeManifestOverlayProjectWins(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(overlayDir, "workflow.yaml"), []byte(overlayYAML), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
-	merged, err := MergeManifestOverlay(bundled, projectDir)
-	testutil.FailErr(t, "MergeManifestOverlay failed", err)
-	m := merged[ManifestKey("plan", "1.0.0")]
+	registry, _, err := RegistryFromDirsWithSources(projectDir)
+	testutil.FailErr(t, "load registry with project overlay", err)
+	m := registry.All()[ManifestKey("plan", "1.0.0")]
 	if m.Name != "project" {
 		t.Fatalf("name = %q want project", m.Name)
 	}

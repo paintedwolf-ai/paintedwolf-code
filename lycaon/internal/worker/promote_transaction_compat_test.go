@@ -71,7 +71,7 @@ func TestPromoteTransactionWithoutHardLinkSupport(t *testing.T) {
 		testutil.FailErr(t, "chmod primary", os.Chmod(primary, 0o640))
 		return task, primary, []promoteMutation{{path: "a.txt", original: []byte("old\n"), originalExists: true, originalMode: 0o640, target: []byte("new\n"), targetExists: true}}
 	}
-	settle := func(t *testing.T, dataDir string, task *api.WorkerTask, primary string, effects promoteTransactionEffects, plans []promoteMutation) {
+	settle := func(t *testing.T, dataDir string, task *api.WorkerTask, primary string, effects checkpoint.TransactionConfig, plans []promoteMutation) {
 		t.Helper()
 		effects.Reached = func(step checkpoint.TransactionStep, _ string) error {
 			if step == checkpoint.StepTargetMutated {
@@ -104,7 +104,7 @@ func TestPromoteTransactionWithoutHardLinkSupport(t *testing.T) {
 	t.Run("single name restores from journal content", func(t *testing.T) {
 		dataDir := t.TempDir()
 		task, primary, plans := seed(t)
-		settle(t, dataDir, task, primary, promoteTransactionEffects{RetainLink: unavailable}, plans)
+		settle(t, dataDir, task, primary, checkpoint.TransactionConfig{RetainLink: unavailable}, plans)
 	})
 	t.Run("distinct filesystem", func(t *testing.T) {
 		dataDir, err := os.MkdirTemp("/dev/shm", "promote-transaction-") //nolint:usetesting // The data must sit on a second filesystem.
@@ -116,13 +116,13 @@ func TestPromoteTransactionWithoutHardLinkSupport(t *testing.T) {
 		if same, err := fspath.SameFilesystem(dataDir, primary); err != nil || same {
 			t.Skip("no second filesystem available")
 		}
-		settle(t, dataDir, task, primary, promoteTransactionEffects{}, plans)
+		settle(t, dataDir, task, primary, checkpoint.TransactionConfig{}, plans)
 	})
 	t.Run("aliased original refuses before mutation", func(t *testing.T) {
 		dataDir := t.TempDir()
 		task, primary, plans := seed(t)
 		testutil.FailErr(t, "link alias", os.Link(primary, filepath.Join(t.TempDir(), "alias")))
-		tx, err := beginPromoteTransactionWith(dataDir, task.ID, plans, promoteTransactionEffects{RetainLink: unavailable})
+		tx, err := beginPromoteTransactionWith(dataDir, task.ID, plans, checkpoint.TransactionConfig{RetainLink: unavailable})
 		testutil.FailErr(t, "begin", err)
 		if err := tx.apply(t.Context(), PromoteRootsForTask(task, nil), task); !errors.Is(err, syscall.EXDEV) {
 			t.Fatalf("apply = %v, want cross-device refusal", err)
@@ -134,7 +134,7 @@ func TestPromoteTransactionWithoutHardLinkSupport(t *testing.T) {
 	t.Run("other link failures are not a capability", func(t *testing.T) {
 		dataDir := t.TempDir()
 		task, primary, plans := seed(t)
-		tx, err := beginPromoteTransactionWith(dataDir, task.ID, plans, promoteTransactionEffects{RetainLink: func(fseffect.HardLinkRequest) error { return syscall.EIO }})
+		tx, err := beginPromoteTransactionWith(dataDir, task.ID, plans, checkpoint.TransactionConfig{RetainLink: func(fseffect.HardLinkRequest) error { return syscall.EIO }})
 		testutil.FailErr(t, "begin", err)
 		if err := tx.apply(t.Context(), PromoteRootsForTask(task, nil), task); !errors.Is(err, syscall.EIO) {
 			t.Fatalf("apply = %v, want EIO", err)

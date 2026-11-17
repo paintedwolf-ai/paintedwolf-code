@@ -1,4 +1,7 @@
-import type { CitationGroundingView } from "../../chat/grounding/citation-grounding-model.ts";
+import {
+  citationGroundingIsGrounded,
+  type CitationGroundingView,
+} from "../../chat/grounding/citation-grounding-model.ts";
 import { Show } from "solid-js";
 import {
   GROUNDING_PROVENANCE_MARK,
@@ -13,8 +16,7 @@ type Props = {
 };
 
 export function CitationGroundingChicklet(props: Props) {
-  const positive = () =>
-    props.view.outcome === "traced" || props.view.hostAssembled;
+  const positive = () => citationGroundingIsGrounded(props.view);
   const label = () =>
     positive() ? GROUNDING_STATUS_GROUNDED : GROUNDING_STATUS_PARTIAL;
   return (

@@ -14,7 +14,9 @@ export function workerSummaryTaskStatus(
   if (status === "failed" || status === "held") {
     return "error";
   }
-  if (status === "needs_decision") return "needs_decision";
+  if (status === "needs_decision" || status === "needs_input") {
+    return "needs_decision";
+  }
   if (status === "partial") return "partial";
   if (status === "open") return "open";
   if (status === "complete") return "done";

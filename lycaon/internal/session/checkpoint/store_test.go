@@ -190,7 +190,7 @@ func projectTreeSnapshot(t *testing.T, root string) string {
 
 func TestCheckpointSkipsOversizeFileRatherThanMarkingItAbsent(t *testing.T) {
 	store, dir := newTestCheckpointStore(t)
-	writeProjectFile(t, dir, "big.bin", strings.Repeat("x", checkpointMaxFileBytes+1))
+	writeProjectFile(t, dir, "big.bin", strings.Repeat("x", sourceblob.MaxRevisionContentBytes+1))
 	_, err := store.Open(t.Context(), "sess", "anchor")
 	testutil.FailErr(t, "open checkpoint", err)
 	testutil.FailErr(t, "capture oversize", store.CapturePreImage(t.Context(), "sess", "anchor", "big.bin", ""))

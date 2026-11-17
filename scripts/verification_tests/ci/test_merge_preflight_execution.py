@@ -17,19 +17,47 @@ class MergePreflightTests(unittest.TestCase):
         scope.start()
         self.addCleanup(scope.stop)
 
-    def test_landing_frontend_and_script_assertions_run_without_changed_statements(self):
+    def test_landing_frontend_assertions_run_without_changed_statements(self):
         import coverage_changes as coverage
         for paths in (['docs/README.md'], ['lycaon/internal/example.go'], ['scripts/example.sh'],
                       ['lycaon-den/src/model.test.ts', 'lycaon-den/src/style.css']):
-            with self.subTest(paths=paths), patch.object(coverage.subprocess, 'call', return_value=0) as call, \
-                    patch.object(coverage.python_coverage, 'measure') as measure:
+            with self.subTest(paths=paths), patch.object(coverage.subprocess, 'call', return_value=0) as call:
                 scope = SimpleNamespace(paths=paths)
                 self.assertEqual(coverage.run_den(scope), ([], False, 'complete frontend tests; no changed source to measure'))
-                self.assertEqual(coverage.run_python(scope), ([], False, 'complete script tests; no changed source to measure'))
-                self.assertEqual(call.call_count, 2)
-                measure.assert_not_called()
+                self.assertEqual(call.call_count, 1)
                 self.assertNotIn('--changed', call.call_args_list[0].args[0])
-                self.assertIn('runner_tests.py', call.call_args_list[1].args[0][1])
+
+    def test_script_suites_run_only_for_a_change_to_what_they_read(self):
+        import coverage_changes as coverage
+        for paths in (['scripts/example.sh'], ['.github/workflows/nightly.yml'], ['packaging/nix/flake.nix'],
+                      ['Taskfile.yml'], ['task'], ['lycaon/internal/example.go', 'scripts/verification-plan.json']):
+            with self.subTest(paths=paths), patch.object(coverage.python_coverage, 'run', return_value=[]) as suites, \
+                    patch.object(coverage.python_coverage, 'measure') as measure:
+                self.assertEqual(coverage.run_python(SimpleNamespace(paths=paths)),
+                                 ([], False, 'the runner suite; no changed source to measure'))
+                measure.assert_not_called()
+                self.assertEqual(list(suites.call_args.args[1]), ['test:runner'])
+        for paths in (['docs/README.md'], ['lycaon/internal/example.go'], ['lycaon-den/src/model.ts']):
+            with self.subTest(paths=paths), patch.object(coverage.python_coverage, 'run') as suites, \
+                    patch.object(coverage.python_coverage, 'measure') as measure:
+                self.assertEqual(coverage.run_python(SimpleNamespace(paths=paths)),
+                                 ([], False, 'no change to scripts, workflows, packaging or the task runner'))
+                suites.assert_not_called()
+                measure.assert_not_called()
+
+    def test_a_commit_with_no_change_runs_every_declared_script_suite(self):
+        import coverage_changes as coverage
+        declared = coverage.coverage_policy.python_suites()
+        self.assertGreater(len(declared), 1)
+        with patch.object(coverage.python_coverage, 'run', return_value=[]) as suites:
+            self.assertEqual(coverage.run_python(SimpleNamespace(paths=[])),
+                             ([], False, 'every declared script suite; no changed source to measure'))
+        self.assertEqual(suites.call_args.args[1], declared)
+        with patch.object(coverage.python_coverage, 'run', return_value=['harness', 'test:runner']):
+            findings, failed, _ = coverage.run_python(SimpleNamespace(paths=[]))
+        self.assertTrue(failed)
+        self.assertEqual([finding.text for finding in findings],
+                         ['harness failed; inspect the unittest output', 'test:runner failed; inspect the unittest output'])
 
     def history_state(self, failed=()):
         return {"failed_targets": list(failed), "passed_targets": [], "native_failed": [],
@@ -37,9 +65,10 @@ class MergePreflightTests(unittest.TestCase):
 
     def test_landing_assertion_failures_block_even_without_changed_statements(self):
         import coverage_changes as coverage
-        with patch.object(coverage.subprocess, 'call', return_value=1):
+        with patch.object(coverage.subprocess, 'call', return_value=1), \
+                patch.object(coverage.python_coverage.python_tools, 'provision', side_effect=lambda requirements: requirements):
             for run in (coverage.run_den, coverage.run_python):
-                findings, failed, _ = run(SimpleNamespace(paths=[]))
+                findings, failed, _ = run(SimpleNamespace(paths=['lycaon-den/src/app.ts', '.github/workflows/nightly.yml']))
                 self.assertTrue(failed)
                 self.assertEqual(findings[0].level, 'error')
 
@@ -88,7 +117,7 @@ class MergePreflightTests(unittest.TestCase):
         lane = hosted_plan.lanes()["lint"]
         commands = preflight.commands(lane, lane["targets"])
         self.assertEqual(commands[0], ["./task", "comments:check", "test:fail-messages:check"])
-        self.assertEqual(commands[1], ["./task", "lint:full"])
+        self.assertEqual(commands[1], ["./task", "lint:full", "arch-lint:changes"])
         self.assertEqual(sorted([target for command in commands for target in command[1:]]), sorted(lane["targets"]))
         with patch.object(preflight, "package_phases", return_value=[["contract"], ["behavior"]]):
             self.assertEqual(preflight.commands(hosted_plan.lanes()["behavior"], ["test:full"]),
@@ -175,7 +204,7 @@ class MergePreflightTests(unittest.TestCase):
             if "/workflows/ci.yml/runs?" in path:
                 return iter(runs)
             return iter([{"id": int(path.split("/runs/")[1].split("/")[0]), "runner_id": 1,
-                          "name": "integration / limits", "conclusion": "success", "steps": [],
+                          "name": "integration / build", "conclusion": "success", "steps": [],
                           "created_at": stamp(8), "started_at": stamp(7), "completed_at": stamp(2)}])
         with tempfile.TemporaryDirectory() as directory, patch.object(health, "pages", side_effect=pages), \
                 patch.object(health, "repository", return_value="repos/o/r"), \

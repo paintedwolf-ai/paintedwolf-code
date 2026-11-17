@@ -15,7 +15,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestSourceVersionsGitLaneNamesWhyItCouldNotAnswer(t *testing.T) {
+func gitLaneNamesWhyItCouldNotAnswer(t *testing.T, f contractfixture.MergedHistoryFixture) {
 	cases := []struct {
 		name string
 		err  error
@@ -34,8 +34,10 @@ func TestSourceVersionsGitLaneNamesWhyItCouldNotAnswer(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			f := contractfixture.NewMergedHistoryFixture(t)
-			f.Srv.Admin.Project.Sandboxes.Board.Git = contractfixture.StubFileHistory{GitManager: f.Srv.Admin.Project.Sandboxes.Board.Git, Err: tc.err}
+			board := f.Srv.Admin.Project.Sandboxes.Board
+			original := board.Git
+			board.Git = contractfixture.StubFileHistory{GitManager: original, Err: tc.err}
+			t.Cleanup(func() { board.Git = original })
 
 			out := f.Listing(t)
 
@@ -72,8 +74,7 @@ func TestSourceVersionsGitLaneReportsAbsenceSeparatelyFromFailure(t *testing.T) 
 	}
 }
 
-func TestSourceVersionsGitLaneReportsAnUnaskedFileAsNotTracked(t *testing.T) {
-	f := contractfixture.NewMergedHistoryFixture(t)
+func gitLaneReportsAnUnaskedFileAsNotTracked(t *testing.T, f contractfixture.MergedHistoryFixture) {
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet,
 		"/v1/projects/"+f.ProjectID+"/source/versions?file_id=00000000-0000-4000-8000-000000000000",

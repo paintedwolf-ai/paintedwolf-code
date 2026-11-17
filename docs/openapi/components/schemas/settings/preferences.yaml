@@ -46,21 +46,6 @@ components:
           minimum: 1000
           multipleOf: 1000
           description: Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds.
-        worker_tool_budget_default:
-          type: [integer, "null"]
-          minimum: 2
-          maximum: 120
-          description: Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget.
-        worker_tool_budget_min:
-          type: [integer, "null"]
-          minimum: 2
-          maximum: 120
-          description: Smallest worker tool-round ceiling the coordinator may set (host floor is 2).
-        worker_tool_budget_max:
-          type: [integer, "null"]
-          minimum: 2
-          maximum: 120
-          description: Largest worker tool-round ceiling the coordinator may set or grant.
         session_spend_ceiling_nano_usd:
           x-go-name: "SessionSpendCeilingNanoUSD"
           type: [integer, "null"]
@@ -91,9 +76,6 @@ components:
       - coordinator_host_turn_timeout_ms
       - coordinator_max_sleep_ms
       - await_parent_workers_timeout_ms
-      - worker_tool_budget_default
-      - worker_tool_budget_min
-      - worker_tool_budget_max
       - spend_soft_stop
       - merged_from
       additionalProperties: false
@@ -136,21 +118,6 @@ components:
           minimum: 1000
           multipleOf: 1000
           description: Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds.
-        worker_tool_budget_default:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget.
-        worker_tool_budget_min:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Smallest worker tool-round ceiling the coordinator may set (host floor is 2).
-        worker_tool_budget_max:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Largest worker tool-round ceiling the coordinator may set or grant.
         session_spend_ceiling_nano_usd:
           x-go-name: "SessionSpendCeilingNanoUSD"
           type: integer
@@ -173,11 +140,36 @@ components:
           type: array
           items:
             type: string
+        rejected:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProjectSettingsRejectedRow"
+          description: >
+            Present on project scope when the project's limits.yaml could not be
+            applied. The limits shown are the device's, and the project's
+            limits cannot be saved until the file is fixed.
     SettingsScope:
       type: string
       enum:
       - global
       - project
+    ProjectSettingsRejectedRow:
+      x-go-generate: true
+      type: object
+      required: [code, detail]
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+          enum: [project_unreadable]
+          description: >
+            Why the project's file was not applied. project_unreadable means the
+            file could not be read or holds a key or value the host does not
+            accept, so none of it applied. Clients branch on this rather than
+            on detail.
+        detail:
+          type: string
+          description: What was wrong, naming the file.
     FileSummariesSettingsResponse:
       x-go-generate: true
       type: object

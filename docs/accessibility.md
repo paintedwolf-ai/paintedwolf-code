@@ -110,7 +110,7 @@ At the maximum text-size category (or the harness inject) and the Tauri minimum 
 - Text-bearing rows use `min-height` in `em`/`rem`, never a fixed `px` height.
 - A glyph sized from the type ladder sits in a `rem` box; a `px` box clips it.
 - Interactive controls have a hit target of at least 24×24 CSS px (WCAG 2.2 SC 2.5.8), growing with text via `em` when larger.
-- Tab chips, nav sessions, and tool card headers may grow vertically; prefer wrap or ellipsis over clip.
+- Tab chips, nav sessions, and action card headers may grow vertically; prefer wrap or ellipsis over clip. What ran clamps to three lines on the card; the Input record holds the full text.
 - The composer aligns `flex-end` with a textarea `min-height` in `em`.
 - Sticky shell and composer chrome must not obscure focused controls (WCAG 2.2 SC 2.4.11).
 - Forbidden fix: `overflow: hidden` on a row to hide clipped text instead of raising its min-height.
@@ -153,7 +153,7 @@ Speak selection and VoiceOver read the selectable transcript; there is no in-app
 
 Chrome roots stamp `data-den-chrome` via [`chromeProps()`](../lycaon-den/src/styling/ui-chrome.ts) (nav rail, tab rails, title rows, dismiss ×, drag bands); inheritance covers children, and form fields under a chrome root stay selectable. Transcript prose never takes the mark. Copy docked inside chrome (notice rail, header cards) spreads `{...proseProps()}`; a control inside a prose island takes `chromeProps()` back. Context menu handling: [`context-menu.ts`](../lycaon-den/src/platform/interaction/context-menu.ts).
 
-The chrome mark is `user-select: none`, so a stylesheet is one edit away from silencing the transcript. [`spoken-content-a11y.test.ts`](../lycaon-den/src/styling/spoken-content-a11y.test.ts) reads the shipped CSS and requires `user-select: text` on the user bubble, the assistant bubble, `.markdown-body`, and `.markdown-body pre`, and refuses a `none` on the prose body.
+The chrome mark is `user-select: none`, so a stylesheet is one edit away from silencing the transcript. [`e2e/a11y-macos.spec.ts`](../lycaon-den/e2e/a11y-macos.spec.ts) reads the computed style in the running app and requires `user-select: text` on the user bubble, the assistant bubble, `.markdown-body`, and `.markdown-body pre`; [`accessibility-macos-invariants.test.ts`](../lycaon-den/src/platform/accessibility-macos-invariants.test.ts) refuses a `none` on the prose body.
 
 ## Hover tips
 

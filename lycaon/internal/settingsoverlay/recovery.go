@@ -7,9 +7,8 @@ import (
 )
 
 const (
-	RecoveryDirName    = "recovery"
-	RecoveryRelPath    = ".paintedwolf/" + RecoveryDirName
-	RecoveryDirRelPath = RecoveryRelPath
+	RecoveryDirName = "recovery"
+	RecoveryRelPath = ".paintedwolf/" + RecoveryDirName
 )
 
 // RecoveryDir returns the host-owned move-aside directory under rootPath.

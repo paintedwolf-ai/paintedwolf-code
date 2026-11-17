@@ -55,7 +55,7 @@ export function WorkflowFeedbackChicklet(props: Props) {
     <TranscriptDisclosureShell
       disclosure={disclosure}
       ref={bindTranscriptEntry}
-      class="den-checkpoint-decision-chicklet den-checkpoint-decision-chicklet--expandable den-transcript-disclosure-card"
+      class="den-checkpoint-decision-chicklet den-checkpoint-decision-chicklet--expandable den-transcript-card den-transcript-disclosure-card"
       classList={statusClass()}
       data-testid="workflow-feedback-chicklet"
       data-card-state={props.view.kind}

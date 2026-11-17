@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -38,7 +39,7 @@ func (s *SQL) Put(ctx context.Context, decision api.WorkerDecisionRequest) error
 	}
 	return s.queries.UpsertWorkerDecision(ctx, db.UpsertWorkerDecisionParams{
 		ChildSessionID: decision.ChildSessionID, JobID: decision.WorkerID,
-		DecisionJson: string(raw), CreatedAt: db.FormatTime(time.Now().UTC()),
+		DecisionJson: string(raw), CreatedAt: timelayout.Format(time.Now().UTC()),
 	})
 }
 

@@ -147,7 +147,7 @@ func TestFeedbackKickQueuedOnPhaseEntry(t *testing.T) {
 	if _, err := wfMgr.Starts.StartHuman(context.Background(), sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "feedback-flow", WorkflowVersion: "1.0.0",
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "wfMgr.Starts.StartHuman failed", err)
 	}
 	if !kicked {
 		t.Fatal("OnFeedbackPending hook not invoked")

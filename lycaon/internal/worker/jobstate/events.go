@@ -18,11 +18,11 @@ type JobEventOutbox interface {
 }
 
 // EnqueueJobEventTx rereads the job and stages its event in the mutation transaction.
-func EnqueueJobEventTx(ctx context.Context, tx *sql.Tx, outbox JobEventOutbox, jobID string) error {
+func (reader Reader) EnqueueJobEventTx(ctx context.Context, tx *sql.Tx, outbox JobEventOutbox, jobID string) error {
 	if outbox == nil || tx == nil {
 		return nil
 	}
-	if err := enqueueSingleJobEventTx(ctx, tx, outbox, jobID); err != nil {
+	if err := reader.enqueueSingleJobEventTx(ctx, tx, outbox, jobID); err != nil {
 		return err
 	}
 	dependents, err := db.New(tx).ListWorkerDependents(ctx, jobID)
@@ -30,14 +30,14 @@ func EnqueueJobEventTx(ctx context.Context, tx *sql.Tx, outbox JobEventOutbox, j
 		return err
 	}
 	for _, id := range dependents {
-		if err := enqueueSingleJobEventTx(ctx, tx, outbox, id); err != nil {
+		if err := reader.enqueueSingleJobEventTx(ctx, tx, outbox, id); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func enqueueSingleJobEventTx(ctx context.Context, tx *sql.Tx, outbox JobEventOutbox, jobID string) error {
+func (reader Reader) enqueueSingleJobEventTx(ctx context.Context, tx *sql.Tx, outbox JobEventOutbox, jobID string) error {
 	row, err := db.New(tx).GetWorkerJob(ctx, jobID)
 	if db.IsNoRows(err) {
 		return nil
@@ -45,7 +45,7 @@ func enqueueSingleJobEventTx(ctx context.Context, tx *sql.Tx, outbox JobEventOut
 	if err != nil {
 		return err
 	}
-	task, err := FromRow(ctx, tx, row)
+	task, err := reader.FromRow(ctx, tx, row)
 	if err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func enqueueSingleJobEventTx(ctx context.Context, tx *sql.Tx, outbox JobEventOut
 
 // EnqueueRunJobEventsTx stages one event per job bound to a workflow run, for
 // the bulk hold, release, and cancel transitions a run drives.
-func EnqueueRunJobEventsTx(ctx context.Context, tx *sql.Tx, outbox JobEventOutbox, workflowRunID string) error {
+func (reader Reader) EnqueueRunJobEventsTx(ctx context.Context, tx *sql.Tx, outbox JobEventOutbox, workflowRunID string) error {
 	if outbox == nil || tx == nil {
 		return nil
 	}
@@ -63,7 +63,7 @@ func EnqueueRunJobEventsTx(ctx context.Context, tx *sql.Tx, outbox JobEventOutbo
 		return err
 	}
 	for _, row := range rows {
-		if err := EnqueueJobEventTx(ctx, tx, outbox, row.ID); err != nil {
+		if err := reader.EnqueueJobEventTx(ctx, tx, outbox, row.ID); err != nil {
 			return err
 		}
 	}
@@ -84,6 +84,9 @@ func EventKey(task api.WorkerTask) events.PublishKey {
 func JobEvent(task api.WorkerTask) api.WorkerEvent {
 	return api.WorkerEvent{
 		WorkerID:             task.ID,
+		WorkerRecordID:       task.WorkerRecordID,
+		WorkerName:           task.WorkerName,
+		Round:                task.Round,
 		Dependencies:         task.Dependencies,
 		Status:               task.Status,
 		AgentType:            task.AgentType,
@@ -91,8 +94,12 @@ func JobEvent(task api.WorkerTask) api.WorkerEvent {
 		ParentSessionID:      task.ParentSessionID,
 		Brief:                task.Brief,
 		MergeStatus:          task.MergeStatus,
-		MaxToolLoops:         task.MaxToolLoops,
-		BudgetRequest:        task.BudgetRequest,
+		ResultHandle:         task.ResultHandle,
+		ResultDisposition:    task.ResultDisposition,
+		ShelveReason:         task.ShelveReason,
+		ReviewOf:             task.ReviewOf,
+		ParkedReason:         task.ParkedReason,
+		ParkedUntilAt:        task.ParkedUntilAt,
 		ToolLoopsUsed:        task.ToolLoopsUsed,
 		ToolCallsUsed:        task.ToolCallsUsed,
 		ContextUsage:         task.ContextUsage,

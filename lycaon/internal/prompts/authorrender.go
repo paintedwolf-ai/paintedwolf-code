@@ -222,7 +222,7 @@ func skillPreviewReader(profileID, surfaceID string) (Reader, error) {
 // caller surface vars, the pack's effective configuration, and the explicit
 // preview vars on top.
 func skillPreviewVars(explicit map[string]any, reader Reader, sk skills.Skill) (map[string]any, error) {
-	vars := SkillVars(reader, spawn.DefaultWorkerToolBudget())
+	vars := SkillVars(reader)
 	configuration, err := packConfigurationVars(sk.PackID)
 	if err != nil {
 		return nil, err

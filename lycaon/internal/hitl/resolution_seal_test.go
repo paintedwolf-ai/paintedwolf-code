@@ -8,9 +8,9 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"runtime"
 	"sync"
 	"testing"
-	"time"
 )
 
 // Two holders of the same key must never overlap, and entries must be freed
@@ -31,7 +31,7 @@ func TestKeyedMutexSerializesAndCleansUp(t *testing.T) {
 			if inCritical != 1 {
 				observed.Store("overlap", true)
 			}
-			time.Sleep(time.Millisecond)
+			runtime.Gosched()
 			inCritical--
 			unlock()
 		}()

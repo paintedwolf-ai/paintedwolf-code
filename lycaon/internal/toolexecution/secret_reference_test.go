@@ -3,9 +3,11 @@ package toolexecution
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/tools"
 	"reflect"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/nativemanifest"
+	"github.com/lycaon/lycaon/internal/tools"
 
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -32,7 +34,7 @@ func invokedAs(contract toolcontract.Contract) tools.ToolContext {
 func TestSecretReferenceResolutionFollowsTheDeclaredSurface(t *testing.T) {
 	t.Parallel()
 	const reference = "{{paintedwolf-secret:9451ac87-2ef0-4647-b55d-92fda6921ec9}}"
-	accepting := toolcontract.SecretReferenceTools()
+	accepting := secretReferenceTools(t)
 	if len(accepting) == 0 {
 		t.Fatal("no catalog tool declares secret_reference_surface")
 	}
@@ -67,7 +69,7 @@ func TestSecretReferenceResolutionFollowsTheDeclaredSurface(t *testing.T) {
 func TestMalformedSecretReferenceIsRefusedWhereReferencesResolve(t *testing.T) {
 	t.Parallel()
 	const damaged = "{{paintedwolf-secret:[REDACTED]}}"
-	for _, tool := range toolcontract.SecretReferenceTools() {
+	for _, tool := range secretReferenceTools(t) {
 		contract := catalogContract(t, tool)
 		args := map[string]any{"env": map[string]any{"KEYCLOAK_CLIENT_SECRET": damaged}}
 		if len(contract.SecretReferenceArgs) > 0 {
@@ -143,7 +145,7 @@ func TestLiteralReferenceTextDoesNotNeedAResolver(t *testing.T) {
 	mcp := toolcontract.External("mcp:test")
 	mcp.SecretReferenceSurface = toolcontract.SecretSurfaceMCP
 	outbound := map[string]toolcontract.Contract{"mcp_test_post": mcp}
-	for _, tool := range toolcontract.SecretReferenceTools() {
+	for _, tool := range secretReferenceTools(t) {
 		outbound[tool] = catalogContract(t, tool)
 	}
 	for tool, contract := range outbound {
@@ -216,4 +218,24 @@ func TestOutboundReferenceResolutionKeepsPolicyAndExecutionCopiesSeparate(t *tes
 	if args["body"] != "Bearer "+reference {
 		t.Fatal("caller arguments changed")
 	}
+}
+
+// secretReferenceTools lists the catalog tools whose contracts resolve secret
+// references.
+func secretReferenceTools(t *testing.T) []string {
+	t.Helper()
+	manifest, err := nativemanifest.Load()
+	if err != nil {
+		t.Fatalf("load native manifest: %v", err)
+	}
+	var out []string
+	for _, row := range manifest.ToolContractRows() {
+		if contract, ok := toolcontract.Lookup(row.Tool); ok && contract.AcceptsSecretReferences() {
+			out = append(out, row.Tool)
+		}
+	}
+	if len(out) == 0 {
+		t.Fatal("no catalog tool resolves secret references")
+	}
+	return out
 }

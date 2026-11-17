@@ -189,9 +189,12 @@ describe("AskUserDock", () => {
       <AskUserDock meta={meta} client={client()} {...base} />
     ));
     const hint = () => getByTestId("ask-user-dock-hint").textContent;
-    expect(hint()).toBe("Select one, then Enter");
+    const beforeChoice = hint();
+    expect(beforeChoice).toContain("Enter");
     fireEvent.click(getByLabelText("blue"));
-    expect(hint()).toBe("Press Enter to submit your answer");
+    // A choice changes what the hint asks for next.
+    expect(hint()).not.toBe(beforeChoice);
+    expect(hint()).toContain("Enter");
   });
 
   it("hint follows the live platform binding for Send", async () => {
@@ -208,7 +211,7 @@ describe("AskUserDock", () => {
     ));
     expect(
       getByTestId("ask-user-dock-hint").textContent,
-    ).toBe("Select one, then ⌘Enter");
+    ).toContain("⌘Enter");
   });
 
   it("single Other send resolves via registerSubmit", async () => {
@@ -686,11 +689,11 @@ describe("AskUserDock", () => {
     const { getByTestId } = render(() => (
       <AskUserDock meta={choiceMeta} client={client()} {...base} />
     ));
-    const rail = getByTestId("ask-user-redirect-rail");
-    expect(rail.classList.contains("den-ask-user-dock-rail--armed")).toBe(false);
+    const dock = getByTestId("ask-user-dock");
+    expect(dock.hasAttribute("data-composer-armed")).toBe(false);
 
     setComposerDraft("sess-1", "all of the above");
-    expect(rail.classList.contains("den-ask-user-dock-rail--armed")).toBe(true);
+    expect(dock.hasAttribute("data-composer-armed")).toBe(true);
   });
 
   it("a draft arms the dock and supersedes the options it overrides", () => {

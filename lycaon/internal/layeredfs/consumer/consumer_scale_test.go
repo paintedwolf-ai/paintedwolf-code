@@ -92,10 +92,10 @@ func newTestLiveTracker(t *testing.T, viewID string, core *layeredfs.Core, roots
 	tr, err := observation.NewTracker(observation.TrackerConfig{
 		ViewID: viewID,
 		Facts: observation.VisibilityFacts{
-			AdapterName:          "fuselinux",
-			UntouchedVisibility:  observation.VisibilityLive,
-			SupportsInvalidation: true,
-			Completeness:         observation.CompletenessComplete,
+			AdapterName:             "fuselinux",
+			UntouchedVisibility:     observation.VisibilityLive,
+			SupportsInvalidation:    true,
+			AttributionCompleteness: observation.CompletenessComplete,
 		},
 		Core:  core,
 		Roots: roots,

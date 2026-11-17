@@ -7,82 +7,104 @@ components:
       - compact
       - full
       - forensic
-    BoardDelegationEntry:
+    BoardWorker:
       x-go-generate: true
       type: object
+      description: One worker as its coordinator sees it, with the state admission reads.
       required:
-      - id
-      - phase
-      additionalProperties: false
-      properties:
-        id:
-          type: string
-          format: uuid
-        phase:
-          $ref: delegation.yaml#/components/schemas/DelegationPhase
-        task:
-          type: string
-    BoardWorkerRosterEntry:
-      x-go-generate: true
-      type: object
-      required:
-      - worker_id
+      - name
       - agent_type
-      - status
+      - state
       additionalProperties: false
       properties:
-        dependencies:
-          type: array
-          items:
-            $ref: worker.yaml#/components/schemas/WorkerDependency
         worker_id:
           type: string
           format: uuid
+          description: Durable worker record identity across rounds.
+        name:
+          type: string
         agent_type:
           type: string
-        status:
-          $ref: worker.yaml#/components/schemas/WorkerStatus
-        merge_status:
-          $ref: worker.yaml#/components/schemas/WorkerMergeStatus
-        overlay_id:
+        child_session_id:
           type: string
-          pattern: '^[a-zA-Z0-9_.:/-]+$'
-        scope_summary:
+          format: uuid
+          description: Child session reused across rounds once spawned.
+        latest_job_id:
           type: string
+          format: uuid
+          description: Latest round job identity when at least one round exists.
+        round:
+          type: integer
+          minimum: 1
+          description: Latest 1-based round ordinal when at least one round exists.
+        scope_mode:
+          type: string
+        workspace_state:
+          type: string
+          description: Derived workspace state for this worker (shared, retained, preparing, refreshed, reset, recovering).
+        state:
+          $ref: worker.yaml#/components/schemas/WorkerState
+        reason:
+          $ref: worker.yaml#/components/schemas/WorkerStateReason
+        state_label:
+          type: string
+          description: Derived display label for state and reason.
+        about:
+          type: string
+          description: The worker's latest instruction, else its brief, clipped to one line.
+        question:
+          type: string
+          description: The pending decision an asking worker waits on.
+        parked_reason:
+          type: string
+          description: Active wait lease reason when the round is parked.
+        parked_until_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+          description: Active wait lease deadline when the round is parked.
+        result_handle:
+          type: string
+          description: Handle of the worker's latest result.
+        result_disposition:
+          $ref: worker.yaml#/components/schemas/WorkerResultDisposition
+        shelve_reason:
+          type: string
+          description: Coordinator reason recorded when the latest result is shelved.
+        disposition_label:
+          type: string
+          description: Derived display label for result_disposition.
+        workspace_label:
+          type: string
+          description: Derived display label for workspace_state.
+        unread_message_count:
+          type: integer
+          minimum: 0
+          description: Worker messages not yet delivered to a coordinator turn.
+        updated_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+          description: Most recent activity timestamp for recency ordering.
+        read_paths:
+          type: array
+          items:
+            type: string
+        read_omitted:
+          type: integer
+          minimum: 0
         changed_paths:
           type: array
           items:
             type: string
-        touched_paths:
-          type: array
-          items:
-            type: string
-        brief:
-          type: string
-          description: Worker assignment goal included in full board detail.
-        error:
-          type: string
-        max_tool_loops:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Effective worker tool-round ceiling when known (host default 20, maximum 120)
-        budget_request:
-          x-go-pointer: true
-          $ref: worker.yaml#/components/schemas/WorkerBudgetRequest
-          description: The worker's unanswered request for more tool rounds; grant it with extend_worker_budget
-        tool_loops_used:
+        changed_omitted:
           type: integer
           minimum: 0
-          description: Completed tool rounds this worker run
         reservations:
           type: array
           items:
             type: string
-          description: Repo-relative paths held by handoff_reserve for this worker
-        blocked_on_approval:
-          type: boolean
-          description: True when checkpoint SSE reports a pending human checkpoint for this worker child session
+          description: Repo-relative paths the worker's live round holds with handoff_reserve.
     BoardForensicWorkers:
       x-go-generate: true
       type: object
@@ -130,10 +152,19 @@ components:
         scans:
           x-go-pointer: true
           $ref: board.yaml#/components/schemas/BoardScansSlice
-        roster:
+        workers:
           type: array
+          description: Open workers in the session, needing the coordinator and most recent first.
           items:
-            $ref: board.yaml#/components/schemas/BoardWorkerRosterEntry
+            $ref: board.yaml#/components/schemas/BoardWorker
+        workers_next_cursor:
+          type: string
+          description: Opaque cursor for the next page of workers when workers_has_more is true.
+        workers_has_more:
+          type: boolean
+        workers_omitted:
+          type: integer
+          minimum: 0
         promote_paths:
           type: array
           items:
@@ -141,10 +172,6 @@ components:
         overlay_merge_plan:
           x-go-pointer: true
           $ref: board.yaml#/components/schemas/OverlayMergePlan
-        delegation:
-          type: array
-          items:
-            $ref: board.yaml#/components/schemas/BoardDelegationEntry
         active_workflow_run:
           x-go-pointer: true
           $ref: workflow.yaml#/components/schemas/WorkflowRun
@@ -469,27 +496,35 @@ components:
       type: object
       required:
       - path
-      - worker_ids
+      - overlay_ids
       additionalProperties: false
       properties:
         path:
           type: string
-        worker_ids:
-          x-go-name: "WorkerIDs"
+        overlay_ids:
+          x-go-name: "OverlayIDs"
+          description: Handles of the pending results that change this path.
           type: array
           items:
             type: string
             format: uuid
     OverlayMergePlanEntry:
       x-go-generate: true
+      description: One worker's latest pending result.
       type: object
       required:
-      - worker_id
+      - overlay_id
+      - worker
       additionalProperties: false
       properties:
-        worker_id:
+        overlay_id:
+          x-go-name: "OverlayID"
+          description: Handle of the result.
           type: string
           format: uuid
+        worker:
+          description: Name of the worker that delivered it.
+          type: string
         agent_type:
           type: string
         changed_paths:
@@ -507,11 +542,13 @@ components:
         promote_order:
           $ref: worker.yaml#/components/schemas/WorkerPromoteOrderKind
         promote_after:
+          description: Handles of results that must land before this one is clean.
           type: array
           items:
             type: string
             format: uuid
         blocked_by:
+          description: Handles of results this one must land before.
           type: array
           items:
             type: string
@@ -529,6 +566,7 @@ components:
           type: integer
           minimum: 0
         promote_sequence:
+          description: Result handles in landing order.
           type: array
           items:
             type: string

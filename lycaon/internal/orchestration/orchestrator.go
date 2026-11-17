@@ -1,7 +1,4 @@
-// Package orchestration defines multi-agent topology coordination. Run resolves
-// each stage's profile through AgentRegistry, dispatches legs through the
-// delegation manager, and checks the iteration cap and self-termination each
-// iteration.
+// Package orchestration coordinates multi-agent topologies over worker records and rounds.
 package orchestration
 
 import (
@@ -73,8 +70,7 @@ type RunStatus struct {
 	Active bool
 }
 
-// Orchestrator coordinates config-driven multi-agent topologies. Leg dispatch and
-// evidence gates run in the delegation manager.
+// Orchestrator coordinates config-driven multi-agent topologies over worker rounds.
 type Orchestrator interface {
 	LoadTopology(ctx context.Context, path extpacks.Source) (*TopologySpec, error)
 	Run(ctx context.Context, req RunRequest) (*RunResult, error)

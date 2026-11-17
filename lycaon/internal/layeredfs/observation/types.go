@@ -20,49 +20,37 @@ var (
 // a fixed materialized seed, or an unbound/unknown view.
 type UntouchedVisibilityMode string
 
-// VisibilityMode is an alias for UntouchedVisibilityMode.
-type VisibilityMode = UntouchedVisibilityMode
-
 const (
 	VisibilityLive    UntouchedVisibilityMode = "live"
 	VisibilityFixed   UntouchedVisibilityMode = "fixed"
 	VisibilityUnknown UntouchedVisibilityMode = "unknown"
-
-	VisibilityModeLiveMount        UntouchedVisibilityMode = VisibilityLive
-	VisibilityModeMaterializedSeed UntouchedVisibilityMode = VisibilityFixed
-	VisibilityModeUnknown          UntouchedVisibilityMode = VisibilityUnknown
 )
 
 // AttributionCompleteness declares whether server read observations capture all reads,
 // a kernel-cached partial subset, a materialized snapshot, or an unbound/unknown view.
 type AttributionCompleteness string
 
-// ObservationCompleteness is an alias for AttributionCompleteness for observation records.
-type ObservationCompleteness = AttributionCompleteness
-
 const (
 	CompletenessComplete             AttributionCompleteness = "exact"
 	CompletenessPartialKernelCached  AttributionCompleteness = "kernel_cached_partial"
-	CompletenessPartial              AttributionCompleteness = CompletenessPartialKernelCached
 	CompletenessMaterializedSnapshot AttributionCompleteness = "materialized_snapshot"
 	CompletenessUnknown              AttributionCompleteness = "unknown"
 )
 
-// VisibilityFacts declares adapter cache and revalidation capabilities as explicit typed facts.
-// Consumers must never infer visibility or cache behavior from runtime.GOOS or OS name strings.
+// VisibilityFacts declares a view's source visibility, cache invalidation and read attribution as
+// typed facts. Invalidation facts apply only to a live view.
 type VisibilityFacts struct {
 	AdapterName                        string                  `json:"adapter_name"`
-	Mode                               UntouchedVisibilityMode `json:"mode"`
 	UntouchedVisibility                UntouchedVisibilityMode `json:"untouched_visibility"`
-	LiveVisible                        bool                    `json:"live_visible"`
 	SupportsInvalidation               bool                    `json:"supports_invalidation"`
-	SupportsInvalidationUpcall         bool                    `json:"supports_invalidation_upcall"`
 	SupportsNegativeLookupInvalidation bool                    `json:"supports_negative_lookup_invalidation"`
 	SupportsDirCookieInvalidation      bool                    `json:"supports_dir_cookie_invalidation"`
 	InvalidationVerified               bool                    `json:"invalidation_verified"`
-	Completeness                       AttributionCompleteness `json:"completeness"`
 	AttributionCompleteness            AttributionCompleteness `json:"attribution_completeness"`
 }
+
+// Live reports whether untouched paths resolve against the live source.
+func (f VisibilityFacts) Live() bool { return f.UntouchedVisibility == VisibilityLive }
 
 // InvalidationKind identifies the target of an adapter cache invalidation event.
 type InvalidationKind string

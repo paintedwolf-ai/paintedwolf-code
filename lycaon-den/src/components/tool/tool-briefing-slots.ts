@@ -1,11 +1,9 @@
 import type { JSX } from "solid-js";
 
-/** Places an opened activity card gives its briefing. */
+/** Places an opened activity card gives its summary. */
 export type ToolBriefingSlots = {
-  /** Muted sentence stating why the activity ran. */
-  purpose?: JSX.Element;
-  /** Replaces the card's deterministic result line. */
-  result?: JSX.Element;
-  /** Link to the record behind purpose and result. */
+  /** The boxed summary region, placed after what ran. */
+  summary?: JSX.Element;
+  /** Link to the record behind the summary; present only beside its text. */
   evidence?: JSX.Element;
 };

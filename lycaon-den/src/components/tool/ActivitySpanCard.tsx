@@ -240,7 +240,7 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
         bindTranscriptEntry(el);
         setHostEl(el);
       }}
-      class="den-activity-span den-transcript-disclosure-card"
+      class="den-activity-span den-transcript-card den-transcript-disclosure-card"
       data-testid="activity-span-card"
       data-tool={props.label}
       data-count={count()}

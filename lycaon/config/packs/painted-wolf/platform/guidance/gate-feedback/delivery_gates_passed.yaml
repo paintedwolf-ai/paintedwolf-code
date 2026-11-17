@@ -1,12 +1,12 @@
 id: delivery_gates_passed
 kind: workflow-closeout
 purpose: |
-  Delivery requires an accepted phase closeout, completed delegation and required security evidence, not a test quota.
+  Delivery requires an accepted phase closeout, settled worker obligations (no worker working or asking, complete results accounted for, and changes promoted, rejected, or shelved), and required security evidence, not a test quota.
 missing_signals:
   - id: delivery_pending
     when: "true"
-    detail: "A phase closeout, delegation, or required security evidence is incomplete."
-    fix: "Resolve active work and required security findings, then finish with a phase closeout report describing delivered work. Report test outcomes separately."
+    detail: "A phase closeout, worker accounting or change resolution, or required security evidence is incomplete."
+    fix: "Account for complete worker results, resolve open changes (promote, reject, or shelve), and resolve required security findings, then finish with a phase closeout report describing delivered work. Report test outcomes separately."
 satisfy:
-  - "Resolve active delegation work and pending overlays."
+  - "Account for complete worker results and resolve open changes."
   - "Complete required security review; routine validation remains advisory."

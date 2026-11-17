@@ -69,13 +69,11 @@ export const TOPIC_STORE_INVALIDATION: Readonly<
 > = {
   session: ["session"],
   message: [],
-  // Board reconciliation controls merge_status.
+  // The topic handler applies worker events to their rows.
   worker: [],
   checkpoint: ["session"],
   // The coalescer applies board snapshots.
   board: [],
-  // A leg update moves the run's projected topology legs.
-  delegation: ["board", "workflows"],
   cost: ["cost"],
   llm: ["session"],
   // The topic handler replaces one chat's presence.

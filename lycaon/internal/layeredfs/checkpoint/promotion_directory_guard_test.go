@@ -33,7 +33,7 @@ func TestDirectoryDeletionRefusesUnreviewedTrunkChildren(t *testing.T) {
 				testutil.FailErr(t, "publisher", err)
 				_, err = publisher.Publish(t.Context(), PublishRequest{CheckpointID: "delete-directory", Trigger: TriggerWorkerCompletion})
 				testutil.FailErr(t, "publish", err)
-				promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}})
+				promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}, PrimaryRoot: "primary"})
 				testutil.FailErr(t, "promoter", err)
 				foreign := filepath.Join(primary, "directory/foreign.txt")
 				if when == "before preview" {

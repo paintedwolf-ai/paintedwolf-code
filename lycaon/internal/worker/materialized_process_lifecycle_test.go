@@ -41,37 +41,16 @@ func TestSmallMaterializedLifecyclePreservesSourceConflict(t *testing.T) {
 	runWorkerLifecycleAcrossProcessRestart(t, false, true)
 }
 
+// The source conflict on a mounted view runs in full mode; at PR the
+// materialized conflict and the mounted restart keep both axes covered.
 func TestSmallMountedLifecyclePreservesSourceConflict(t *testing.T) {
+	testutil.SkipIfShort(t, "the materialized conflict and mounted restart cover both axes in short mode")
 	runWorkerLifecycleAcrossProcessRestart(t, true, true)
-}
-
-// TestDiagnosticSmallMaterializedLifecycleCompletion10m is an opt-in diagnostic harness variant
-// that retains all lifecycle assertions and production safeguards while allowing up to 10 minutes
-// per child subprocess to measure full completion and phase timings. Not an acceptance gate.
-func TestDiagnosticSmallMaterializedLifecycleCompletion10m(t *testing.T) {
-	if os.Getenv("PW_M14_DIAGNOSTIC_COMPLETION_10M") != "1" {
-		t.Skip("diagnostic 10m completion harness requires PW_M14_DIAGNOSTIC_COMPLETION_10M=1")
-	}
-	runWorkerLifecycleAcrossProcessRestartWithChildTimeout(t, false, false, "10m", true)
 }
 
 // Separate processes prevent registries from substituting for durable recovery.
 // Process restart does not establish power-loss durability.
 func runWorkerLifecycleAcrossProcessRestart(t *testing.T, mounted, sourceConflict bool) {
-	t.Helper()
-	childTimeout := "2m"
-	wanProfile := false
-	if os.Getenv("PW_M14_WAN_NOAC_PROFILE") == "1" {
-		childTimeout = "10m"
-		wanProfile = true
-		if os.Getenv("PW_M14_LIFECYCLE_PHASE") == "" {
-			t.Logf("lifecycle qualification profile: PW_M14_WAN_NOAC_PROFILE=1 (childTimeout=%s, ordinary default=2m)", childTimeout)
-		}
-	}
-	runWorkerLifecycleAcrossProcessRestartWithChildTimeout(t, mounted, sourceConflict, childTimeout, wanProfile)
-}
-
-func runWorkerLifecycleAcrossProcessRestartWithChildTimeout(t *testing.T, mounted, sourceConflict bool, childTimeout string, logChildOutput bool) {
 	t.Helper()
 	if phase := os.Getenv("PW_M14_LIFECYCLE_PHASE"); phase != "" {
 		runWorkerLifecyclePhase(t, os.Getenv("PW_M14_LIFECYCLE_ROOT"), phase, mounted, sourceConflict)
@@ -97,15 +76,12 @@ func runWorkerLifecycleAcrossProcessRestartWithChildTimeout(t *testing.T, mounte
 		if phase == "recover-promote" && sourceConflict {
 			testutil.FailErr(t, "external source edit after worker exit", os.WriteFile(filepath.Join(source, "main.go"), []byte("package external\n"), 0o644))
 		}
-		phaseStart := time.Now()
-		cmd := osexec.CommandContext(t.Context(), executable, "-test.run=^"+t.Name()+"$", "-test.timeout="+childTimeout, "-test.v=true")
+		// The child runs inside this test; a hang in it is this test's hang.
+		cmd := osexec.CommandContext(t.Context(), executable, "-test.run=^"+t.Name()+"$", "-test.timeout=0", "-test.v=true")
 		cmd.Env = append(os.Environ(), "PW_M14_LIFECYCLE_PHASE="+phase, "PW_M14_LIFECYCLE_ROOT="+root, "PW_M14_LIFECYCLE_SOURCE="+source)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			t.Fatalf("%s process failed (elapsed=%s): %v\n%s", phase, time.Since(phaseStart), err, output)
-		}
-		if logChildOutput {
-			t.Logf("profile %s child completed in %s (childTimeout=%s):\n%s", phase, time.Since(phaseStart), childTimeout, output)
+			t.Fatalf("%s process failed: %v\n%s", phase, err, output)
 		}
 	}
 }
@@ -126,14 +102,14 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	branches := filepath.Join(testbaseline.DataDir(t, database), "worker-branches")
 	gitManager, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	selector := workspace.DefaultWorkspaceSelector()
+	selector := platform.NewSelector(platform.Config{})
 	selector.BudgetFor = func(class adapter.BudgetClass) adapter.BudgetFact {
 		return adapter.BudgetFact{Class: class, Limit: 1 << 20, EntryCost: 1}
 	}
 	if mounted {
 		confine.TestingSetAutoConfine(t)
 		t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(branches))
-		selector = workspace.EnforcedWorkspaceSelector()
+		selector = workspace.HostSelector()
 		selector.BudgetFor = adapter.ZeroBudget
 	}
 	recoveryRoot := filepath.Join(branches, ".adapter", "recovery")
@@ -150,7 +126,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 		MountReconciler: recovery.ConnectionReconciler{Recoveries: platform.ConnectionRecoveries()},
 	})
 	testutil.FailErr(t, "open recovery coordinator", err)
-	manager := workspace.NewManager(branches).WithPrivateGit(gitManager).WithSelector(selector).WithRecovery(coordinator)
+	manager := workspace.NewManager(branches, selector).WithPrivateGit(gitManager).WithRecovery(coordinator)
 	queue := NewSQLQueue(database, 4)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(root, "source-content")).Baselines)
 	queue.SetWorkerWorkspaceManager(manager)
@@ -252,7 +228,7 @@ func runPrepareLifecyclePhase(t *testing.T, fixture *layeredWorkerFixture, root 
 	trace("claim-start")
 	task := fixture.claim(t)
 	trace("claim-complete")
-	snap, _, ok := WorkerClaimWorkspaceState(task.ID)
+	snap, _, ok := workspace.BranchWorkspaceState(task.WorkspaceRoot)
 	expected := adapter.PreparationMaterialized
 	if mounted {
 		expected = adapter.PreparationMounted

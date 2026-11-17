@@ -4,8 +4,8 @@ import json
 from common import digest
 from admission import verify_file
 from contracts import check
+from jinja2 import TemplateError
 from jsonschema import Draft202012Validator
-from rendering import ordered_messages
 
 
 class EncodingExclusion(ValueError):
@@ -106,10 +106,11 @@ def encode(tokenizer, row, target, max_length):
     check_controls(capture.get("controls", {}))
     kwargs = {"tools": capture["tools"], "tokenize": False, "enable_thinking": False}
     messages = row["prompt"]
-    if getattr(tokenizer, "init_kwargs", {}).get("paintedwolf_conversation_format") == "gemma4-code-v1":
-        messages = ordered_messages(messages)
-    prompt = tokenizer.apply_chat_template(messages, add_generation_prompt=True, **kwargs)
-    full = tokenizer.apply_chat_template(messages + [assistant(target)], add_generation_prompt=False, **kwargs)
+    try:
+        prompt = tokenizer.apply_chat_template(messages, add_generation_prompt=True, **kwargs)
+        full = tokenizer.apply_chat_template(messages + [assistant(target)], add_generation_prompt=False, **kwargs)
+    except TemplateError as exc:
+        raise EncodingExclusion("template_rejected", "chat template refused the conversation: %s" % exc) from exc
     if not full.startswith(prompt):
         raise EncodingExclusion("generation_prefix_mismatch", "chat template does not preserve the exact generation prefix")
     if target["text"] and target["text"] not in full[len(prompt):]:

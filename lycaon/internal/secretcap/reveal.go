@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -114,7 +115,7 @@ func (s *secretAdminService) CompleteReveal(
 	if !ok {
 		return RevealResult{}, ErrValueMissing
 	}
-	revealedAt := db.FormatTime(s.now())
+	revealedAt := timelayout.Format(s.now())
 	if err := s.queries.CreateManagedSecretReveal(ctx, db.CreateManagedSecretRevealParams{
 		ID: verified.ChallengeID, SecretID: row.ID, Version: current.Version,
 		Authenticator: verified.Authenticator, WindowLabel: verified.WindowLabel, PersonID: verified.PersonID,

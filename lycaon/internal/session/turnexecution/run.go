@@ -259,7 +259,7 @@ func (m *Service) executePromptRun(
 		execution.CloseoutID = result.Closeout.ID
 	}
 	if strings.TrimSpace(result.LastAssistantID) == "" {
-		if result.Outcome == promptresult.OutcomeOutputTruncated {
+		if result.Outcome == promptresult.OutcomeOutputTruncated || result.Outcome == promptresult.OutcomeSpendLimit {
 			execution.Response = &promptresult.Result{
 				Outcome:         result.Outcome,
 				OutputTruncated: result.OutputTruncated,

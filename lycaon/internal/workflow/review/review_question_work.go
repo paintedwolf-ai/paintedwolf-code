@@ -67,12 +67,37 @@ func checkQuestionClosure(def workflowdef.ReviewLoopDef, claims []workflowvalida
 	return nil
 }
 
-func questionAttempts(tasks []api.WorkerTask, phase, id string) (int, bool) {
-	completed, active := 0, false
-	for _, task := range tasks {
+func questionLineageTasks(tasks []api.WorkerTask, phase, id string) []api.WorkerTask {
+	var order []string
+	latest := map[string]api.WorkerTask{}
+	for idx, task := range tasks {
 		if task.WorkflowPhase != phase || task.WorkflowWorkID != id {
 			continue
 		}
+		key := fmt.Sprintf("idx:%d", idx)
+		if child := strings.TrimSpace(task.ChildSessionID); child != "" {
+			key = "session:" + child
+		}
+		prior, exists := latest[key]
+		if !exists {
+			order = append(order, key)
+			latest[key] = task
+			continue
+		}
+		if !task.CreatedAt.Before(prior.CreatedAt) {
+			latest[key] = task
+		}
+	}
+	out := make([]api.WorkerTask, 0, len(order))
+	for _, key := range order {
+		out = append(out, latest[key])
+	}
+	return out
+}
+
+func questionAttempts(tasks []api.WorkerTask, phase, id string) (int, bool) {
+	completed, active := 0, false
+	for _, task := range questionLineageTasks(tasks, phase, id) {
 		switch task.Status {
 		case api.WorkerStatusComplete:
 			completed++
@@ -104,12 +129,18 @@ func (m *Questions) AssertTask(ctx context.Context, run *api.WorkflowRun, def wo
 	if err != nil {
 		return err
 	}
+	isContinuation := false
 	for _, prior := range tasks {
 		if prior.SourceToolCallID != "" && prior.SourceToolCallID == task.SourceToolCallID && prior.ParentSessionID == task.ParentSessionID {
 			return nil
 		}
-		if task.ChildSessionID != "" && prior.ChildSessionID == task.ChildSessionID && prior.WorkflowWorkID != task.WorkflowWorkID {
-			return toolguard.RejectFanoutTask("recovery_child_belongs_to_another_question", task)
+		if task.ChildSessionID != "" && prior.ChildSessionID == task.ChildSessionID {
+			if prior.WorkflowWorkID != task.WorkflowWorkID {
+				return toolguard.RejectFanoutTask("recovery_child_belongs_to_another_question", task)
+			}
+			if prior.WorkflowPhase == run.CurrentPhase {
+				isContinuation = true
+			}
 		}
 	}
 	if strings.HasSuffix(task.WorkflowWorkID, "/review") {
@@ -147,7 +178,7 @@ func (m *Questions) AssertTask(ctx context.Context, run *api.WorkflowRun, def wo
 	if active {
 		return toolguard.RejectFanoutTask("review_question_already_active", task)
 	}
-	if !strings.HasSuffix(task.WorkflowWorkID, "/review") && completed >= def.FollowupAttempts {
+	if !strings.HasSuffix(task.WorkflowWorkID, "/review") && !isContinuation && completed >= def.FollowupAttempts {
 		return toolguard.RejectFanoutTask("review_question_attempts_exhausted", task)
 	}
 	return nil
@@ -155,8 +186,8 @@ func (m *Questions) AssertTask(ctx context.Context, run *api.WorkflowRun, def wo
 
 func questionReviewed(tasks []api.WorkerTask, phase, id string, agents []string) bool {
 	var investigations []string
-	for _, task := range tasks {
-		if task.WorkflowPhase == phase && task.WorkflowWorkID == id && api.WorkerReviewSucceeded(task) {
+	for _, task := range questionLineageTasks(tasks, phase, id) {
+		if api.WorkerReviewSucceeded(task) {
 			investigations = append(investigations, task.ID)
 		}
 	}

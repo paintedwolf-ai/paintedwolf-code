@@ -104,7 +104,7 @@ func RenderPromptDump(
 	if err := capability.MergeForTurn(occ, reader, roster.Effective); err != nil {
 		return "", fmt.Errorf("merge fixture capabilities: %w", err)
 	}
-	for key, value := range spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget()) {
+	for key, value := range spawn.PolicyTemplateVars() {
 		occ[key] = value
 	}
 	if err := prompts.MergeCoordinatorPromptVars(

@@ -1,7 +1,6 @@
 package native
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -17,24 +16,19 @@ func TestGitCommitStagesHumanPolicyWithoutEditingIt(t *testing.T) {
 	gittest.Init(t, dir)
 	testutil.FailErr(t, "mkdir nested policy", os.MkdirAll(filepath.Join(dir, "src"), 0o755))
 	const content = "Human-authored project policy.\n"
-	paths := []any{"AGENTS.md", "src/AGENTS.md"}
+	paths := []string{"AGENTS.md", "src/AGENTS.md"}
 	for _, path := range paths {
-		testutil.FailErr(t, "write policy fixture", os.WriteFile(filepath.Join(dir, path.(string)), []byte(content), 0o644))
+		testutil.FailErr(t, "write policy fixture", os.WriteFile(filepath.Join(dir, path), []byte(content), 0o644))
 	}
 	boundary := nativefixture.Boundary(t)
 	tctx := nativefixture.Context(dir)
-	tool := &GitCommitTool{Git: git.NewManager(), Boundary: boundary}
-	out, err := tool.Run(t.Context(), map[string]any{"message": "Record project policy", "paths": paths}, tctx)
+	hash, _, err := GitMutations{Git: git.NewManager(), Boundary: boundary}.Commit(t.Context(), tctx, GitCommitRequest{Message: "Record project policy", Paths: paths})
 	testutil.FailErr(t, "commit human policy", err)
-	var receipt struct {
-		Available bool `json:"available"`
-	}
-	testutil.FailErr(t, "decode commit receipt", json.Unmarshal([]byte(out), &receipt))
-	if !receipt.Available {
-		t.Fatalf("policy commit unavailable: %s", out)
+	if hash == "" {
+		t.Fatal("policy commit returned no hash")
 	}
 	for _, path := range paths {
-		if got := gittest.Run(t, dir, "show", "HEAD:"+path.(string)); got != content {
+		if got := gittest.Run(t, dir, "show", "HEAD:"+path); got != content {
 			t.Errorf("committed policy = %q, want %q", got, content)
 		}
 		write := &WriteTool{Boundary: boundary}
@@ -42,7 +36,7 @@ func TestGitCommitStagesHumanPolicyWithoutEditingIt(t *testing.T) {
 		if err == nil {
 			t.Error("policy write succeeded without review")
 		}
-		current, err := os.ReadFile(filepath.Join(dir, path.(string)))
+		current, err := os.ReadFile(filepath.Join(dir, path))
 		testutil.FailErr(t, "read policy after denied write", err)
 		if string(current) != content {
 			t.Errorf("policy bytes changed: %q", current)

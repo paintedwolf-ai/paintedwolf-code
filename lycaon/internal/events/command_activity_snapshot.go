@@ -3,8 +3,27 @@ package events
 import (
 	"slices"
 
+	"github.com/lycaon/lycaon/internal/actioncard"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// describeActivityProgram attaches each running command activity's card. A
+// progress event carries no arguments, so activities show their subjects.
+func describeActivityProgram(ev api.ActivityEvent) api.ActivityEvent {
+	if ev.Progress == nil || ev.Progress.CommandProgram == nil {
+		return ev
+	}
+	progress := *ev.Progress
+	program := cloneCommandActivityProgram(progress.CommandProgram)
+	call := api.ToolResult{Tool: ev.ToolName, ToolCallID: ev.ToolCallID}
+	for i := range program.Activities {
+		action := actioncard.ForActivity(*program, program.Activities[i], call, nil)
+		program.Activities[i].Action = &action
+	}
+	progress.CommandProgram = program
+	ev.Progress = &progress
+	return ev
+}
 
 func cloneCommandActivityProgram(input *api.CommandProgramReceipt) *api.CommandProgramReceipt {
 	if input == nil {
@@ -18,6 +37,10 @@ func cloneCommandActivityProgram(input *api.CommandProgramReceipt) *api.CommandP
 		activity.Spans = slices.Clone(activity.Spans)
 		activity.Steps = slices.Clone(activity.Steps)
 		activity.StatusCode = cloneActivityStatus(activity.StatusCode)
+		if activity.Action != nil {
+			action := *activity.Action
+			activity.Action = &action
+		}
 	}
 	result.Outputs = slices.Clone(input.Outputs)
 	for i := range result.Outputs {

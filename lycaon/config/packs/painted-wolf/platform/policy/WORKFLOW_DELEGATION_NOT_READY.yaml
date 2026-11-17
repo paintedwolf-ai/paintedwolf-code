@@ -20,4 +20,4 @@ x-paintedwolf-scenarios:
       detail: bad args
       path: src/main.go
       profile: coordinator
-      tool: delegate_dispatch
+      tool: task

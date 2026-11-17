@@ -4,6 +4,7 @@ import { SourcePathLink } from "./SourcePathLink.tsx";
 import { SourceUrlLink } from "./SourceUrlLink.tsx";
 import { createSignal } from "solid-js";
 import { NoticeReporterProvider } from "../../notices/notice-reporter.tsx";
+import { SourceContextProvider } from "./annotations/source-context.ts";
 
 const openSourceLocation = vi.hoisted(() => vi.fn());
 const confirmAndOpenExternalLink = vi.hoisted(() => vi.fn());
@@ -37,6 +38,16 @@ describe("SourcePathLink", () => {
     </NoticeReporterProvider>);
     fireEvent.click(screen.getByTestId("source-path-link"));
     expect(openSourceLocation).not.toHaveBeenCalled();
+  });
+
+  it("opens where its surface says: project, root and job come from the source context", () => {
+    render(() => (
+      <SourceContextProvider value={{ projectId: "ctx", rootRefs: [{ id: "r", path: "/repo" }], jobId: "job-1" }}>
+        <SourcePathLink path="a.ts" />
+      </SourceContextProvider>
+    ));
+    fireEvent.click(screen.getByTestId("source-path-link"));
+    expect(openSourceLocation).toHaveBeenCalledWith(expect.objectContaining({ projectId: "ctx", rootId: "r", jobId: "job-1" }));
   });
 
   it("keeps the context menu bound to the source that opened it", () => {

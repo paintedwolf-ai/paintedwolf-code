@@ -166,10 +166,10 @@ func TestObservedDependencyAndIncompleteAttributionInvalidateVerificationChecks(
 		return "rev-1", "root-1"
 	})
 
-	facts := observation.LiveMountVisibilityFacts("fuse-linux", true, true, true, observation.CompletenessComplete)
+	facts := observation.VisibilityFacts{AdapterName: "fuse-linux", UntouchedVisibility: observation.VisibilityLive, SupportsInvalidation: true, SupportsNegativeLookupInvalidation: true, SupportsDirCookieInvalidation: true, AttributionCompleteness: observation.CompletenessComplete}
 	tracker, err := observation.NewTracker(observation.TrackerConfig{ViewID: "view-verify", Facts: facts})
 	testutil.FailErr(t, "NewTracker", err)
-	m.SetObservationTracker(sess.ID, tracker)
+	m.SetWorkspaceTrackers(oneTracker{tracker: tracker})
 
 	depPath := layeredfs.QualifiedPath{RootID: "other-root", Rel: "shared/schema.json"}
 	tracker.RecordServerFSObservation(layeredfs.ObservationEvent{
@@ -184,10 +184,7 @@ func TestObservedDependencyAndIncompleteAttributionInvalidateVerificationChecks(
 	rec := checkRecord("chk-cross-root", "rev-1", "root-1", when)
 	rec.RunID = sess.ID
 	testutil.FailErr(t, "append check", m.evidenceStore.Append(ctx, m.EvidenceRootFor(sess), rec))
-	_, boundOK := m.BindCheckObservation(sess.ID, "chk-cross-root", "ckpt-1", []string{"primary", "other-root"})
-	if !boundOK {
-		t.Fatal("expected BindCheckObservation to succeed")
-	}
+	m.RegisterCheckBinding("chk-cross-root", tracker.BindVerificationReceipt("chk-cross-root", "ckpt-1", []string{"primary", "other-root"}))
 
 	history := []api.Message{{Role: api.MessageRoleUser, Content: "Verify", CreatedAt: when.Add(-time.Second)}}
 
@@ -231,4 +228,19 @@ func TestObservedDependencyAndIncompleteAttributionInvalidateVerificationChecks(
 	if passedAfter || !repairAfter {
 		t.Fatalf("expected stale observed check to fail GateState (passed=%v repair=%v)", passedAfter, repairAfter)
 	}
+}
+
+// oneTracker serves a single observation tracker for every session.
+type oneTracker struct{ tracker *observation.Tracker }
+
+func (o oneTracker) TrackerForSession(string, string, string, string) (*observation.Tracker, string) {
+	return o.tracker, "ckpt-1"
+}
+
+func (oneTracker) BindingForCheck(string, string, string, string) (observation.VerificationBinding, bool) {
+	return observation.VerificationBinding{}, false
+}
+
+func (o oneTracker) BindVerificationReceipt(_, _, _, _, checkID, checkpointID string, scopeRoots []string) (observation.VerificationBinding, bool) {
+	return o.tracker.BindVerificationReceipt(checkID, checkpointID, scopeRoots), true
 }

@@ -1,4 +1,4 @@
-import type { Accessor } from "solid-js";
+import { createSignal, type Accessor } from "solid-js";
 import type { WorkflowRun, WorkflowSummary } from "../../api/types.ts";
 import type { GitScope } from "../../components/git-repo-scope.ts";
 import { createClaimable } from "../../platform/interaction/claimable.ts";
@@ -53,18 +53,17 @@ export type ChatTabGitBinding = {
 };
 
 export type ChatTabRailBindings = {
+  /** The session these actions act on. */
+  sessionId: string;
   workflows: ChatTabWorkflowsBinding;
   git: ChatTabGitBinding;
-  onOpenWorklog: () => void;
-  /** Called by the shell's Escape handler. */
-  onCloseWorklog: () => void;
-  worklogOpen: Accessor<boolean>;
   onCancelWorker: (workerId: string) => void;
   /** Worker awaiting cancellation acknowledgement. */
   cancellingWorkerId: Accessor<string | null>;
 };
 
 const bindings = createClaimable<ChatTabRailBindings>();
+const [boundSessionId, setBoundSessionId] = createSignal<string | null>(null);
 
 /** Only the owning resident chat can release its bindings. */
 export function setChatTabRailBindings(
@@ -73,6 +72,12 @@ export function setChatTabRailBindings(
 ): void {
   if (next !== null) bindings.claim(next, claimToken);
   else bindings.release(claimToken);
+  setBoundSessionId(bindings.get()?.sessionId ?? null);
+}
+
+/** The session whose chat view currently serves the tab rail; tracked. */
+export function chatTabRailSessionId(): string | null {
+  return boundSessionId();
 }
 
 export function chatTabRailBindings(): ChatTabRailBindings | null {

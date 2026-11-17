@@ -11,7 +11,7 @@ func ObservedKind(called []string) string {
 		set[name] = true
 	}
 	switch {
-	case set["task"] || set["delegate_dispatch"]:
+	case set["task"] || set["instruct_worker"]:
 		return KindDelegate
 	case set["write"] || set["edit"] || set["replace_lines"] || set["code_rewrite"] || set["jq_edit"] || set["delete"] || set["move"] || set["copy"]:
 		return KindChange

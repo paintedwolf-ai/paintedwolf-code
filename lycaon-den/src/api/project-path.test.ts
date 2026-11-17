@@ -3,7 +3,6 @@ import { wireProject } from "./mocks/project-fixture.ts";
 import {
   longestMatchingRoot,
   normalizeRepoRelativePath,
-  projectFileResolvable,
   resolveProjectFile,
 } from "./project-path.ts";
 
@@ -108,16 +107,25 @@ describe("resolveProjectFile", () => {
     // Legacy message part pinned to root-app: the pin scopes resolution even
     // when the session's active root is a different one.
     expect(
-      projectFileResolvable(twoRoots.roots, "/Users/me/app/src/a.ts", "root-app", "root-main"),
-    ).toBe(true);
+      "error" in resolveProjectFile(
+        { roots: twoRoots.roots.filter((r) => r.id === "root-app"), activeRootId: "root-main" },
+        "/Users/me/app/src/a.ts",
+      ),
+    ).toBe(false);
     // The same path is not resolvable when pinned to the primary root.
     expect(
-      projectFileResolvable(twoRoots.roots, "/Users/me/app/src/a.ts", "root-main", "root-app"),
-    ).toBe(false);
+      "error" in resolveProjectFile(
+        { roots: twoRoots.roots.filter((r) => r.id === "root-main"), activeRootId: "root-app" },
+        "/Users/me/app/src/a.ts",
+      ),
+    ).toBe(true);
     // Unpinned legacy part: the bare path resolves under the active root.
     expect(
-      projectFileResolvable(twoRoots.roots, "src/a.ts", undefined, "root-app"),
-    ).toBe(true);
+      "error" in resolveProjectFile(
+        { roots: twoRoots.roots, activeRootId: "root-app" },
+        "src/a.ts",
+      ),
+    ).toBe(false);
   });
 
   it("joins under the sole / primary root", () => {

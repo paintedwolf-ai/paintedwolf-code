@@ -1,6 +1,13 @@
 import { diffLines } from "diff";
 import type { FileEditPreview, FileEditSnapshot } from "../api/types.ts";
 import { sha256Hex } from "./sha256.ts";
+import {
+  type FileEditFold,
+  type FileEditStep,
+  fileEditStepsFromPart,
+  foldFileEdits,
+} from "../chat/file-edit/file-edit-fold.ts";
+import type { ToolPartView } from "../chat/tool/tool-part-model.ts";
 
 export const sourceTextHash = sha256Hex;
 
@@ -17,4 +24,14 @@ export function fileEditPreviewFixture(edit: FileEditSnapshot): FileEditPreview 
     added: changes.filter(change => change.added).reduce((sum,change) => sum + (change.count ?? 0),0),
     removed: changes.filter(change => change.removed).reduce((sum,change) => sum + (change.count ?? 0),0),
   };
+}
+
+/** One write folded as the transcript folds a single edit. */
+export function singleFileEditFold(key: string, snapshot: FileEditPreview, tool = "write"): FileEditFold {
+  return foldFileEdits([{ key, snapshot, tool }])[0]!;
+}
+
+/** The edit steps tool parts carry, in call order. */
+export function fileEditStepsFromParts(parts: readonly ToolPartView[]): FileEditStep[] {
+  return parts.flatMap(fileEditStepsFromPart);
 }

@@ -70,7 +70,7 @@ func TestBialyCancellationRetainsSharedAdmissionUntilReaped(t *testing.T) {
 		_, _, err := client.Rank(ctx, decide.HeadCodeRank, "hold", []string{"a", "b"})
 		finished <- err
 	}()
-	testutil.WaitFor(t, func() bool { return device.Snapshot().Active != nil })
+	testutil.WaitFor(t, "the device admits the request", func() bool { return device.Snapshot().Active != nil })
 	cancel()
 	if err := <-finished; !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled rank: %v", err)

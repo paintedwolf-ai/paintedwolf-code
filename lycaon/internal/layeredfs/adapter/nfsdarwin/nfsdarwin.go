@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/nfsserver"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
 const (
@@ -57,15 +58,18 @@ const (
 
 // Config configures the macOS NFSv3 loopback adapter.
 type Config struct {
-	HostOS        string
-	MountNFSBin   string
-	UmountBin     string
-	DiskutilBin   string
-	MountTimeout  time.Duration
-	MaxHandles    int
-	FaultInjector *nfsserver.FaultInjector
-	ClientSyncFn  func(path string) error
-	RemoveAllFn   func(path string) error
+	HostOS       string
+	MountNFSBin  string
+	UmountBin    string
+	DiskutilBin  string
+	MountTimeout time.Duration
+	// Retrans and Timeo are the soft mount's retransmissions and timeout in
+	// deciseconds; zero is DefaultRetrans and DefaultTimeo.
+	Retrans, Timeo int
+	MaxHandles     int
+	FaultInjector  *nfsserver.FaultInjector
+	ClientSyncFn   func(path string) error
+	RemoveAllFn    func(path string) error
 	// ConfinementCheckFn proves direct backing writes are denied in the worker's context. Without
 	// it Probe reports confinement unavailable rather than claiming a denial nothing established.
 	ConfinementCheckFn func(ctx context.Context, probeCfg adapter.ProbeConfig) error
@@ -143,6 +147,12 @@ func New(cfg Config) *Adapter {
 	if cfg.MountTimeout <= 0 {
 		cfg.MountTimeout = 10 * time.Second
 	}
+	if cfg.Retrans <= 0 {
+		cfg.Retrans = DefaultRetrans
+	}
+	if cfg.Timeo <= 0 {
+		cfg.Timeo = DefaultTimeo
+	}
 	return &Adapter{
 		cfg: cfg,
 		facts: adapter.AdapterFacts{
@@ -150,7 +160,7 @@ func New(cfg Config) *Adapter {
 			PreparationKind:           adapter.PreparationMounted,
 			UntouchedSourceVisibility: adapter.VisibilityLive,
 			CacheRevalidation: adapter.CacheRevalidation{
-				Mode:                 fmt.Sprintf("%s,rsize=%d,wsize=%d,retrans=%d,timeo=%d,soft", DefaultCachePolicy, DefaultRSize, DefaultWSize, DefaultRetrans, DefaultTimeo),
+				Mode:                 fmt.Sprintf("%s,rsize=%d,wsize=%d,retrans=%d,timeo=%d,soft", DefaultCachePolicy, DefaultRSize, DefaultWSize, cfg.Retrans, cfg.Timeo),
 				ExplicitInvalidation: false,
 				AttributeTTL:         DefaultAttributeTTL,
 			},
@@ -325,7 +335,7 @@ func (a *Adapter) Probe(ctx context.Context, probeCfg adapter.ProbeConfig) (adap
 	probeViewID := fmt.Sprintf("probe-nfsdarwin-%d", time.Now().UnixNano())
 	prep, pErr := a.Prepare(ctx, adapter.PrepareRequest{
 		ViewID: probeViewID, BackingDir: backingDir, RuntimeDir: runtimeDir,
-		Grants: []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunkDir, IsPrimary: true}},
+		Grants: []adapter.RootGrant{{RootID: projectroot.SingleRootID, Label: projectroot.SingleRootID, SourcePath: trunkDir, IsPrimary: true}},
 	})
 	if pErr != nil {
 		res.ReasonCode, res.Diagnostic = classifyProbeError(pErr), pErr.Error()

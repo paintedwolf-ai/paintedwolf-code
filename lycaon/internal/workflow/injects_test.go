@@ -77,7 +77,7 @@ func TestEffectiveAnchorRegistryIncludesWorkflowInjects(t *testing.T) {
 func TestReconPackProgressivePhaseShape(t *testing.T) {
 	reg, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "RegistryFromDirs", err)
-	manifest, err := reg.Get("recon-pack", "1.0.0")
+	manifest, err := reg.Get("recon-pack", "1.0.1")
 	testutil.FailErr(t, "Get recon-pack", err)
 
 	wantNext := map[string]string{

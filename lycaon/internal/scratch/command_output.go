@@ -26,26 +26,6 @@ func (o CommandOutput) Path() (string, error) {
 	return o.ProgramID + "." + o.Stream, nil
 }
 
-// ParseCommandOutput accepts only canonical relative output names.
-func ParseCommandOutput(path string) (CommandOutput, bool) {
-	var out CommandOutput
-	parts := strings.Split(path, "/")
-	if len(parts) < 1 || len(parts) > 2 {
-		return out, false
-	}
-	file := parts[len(parts)-1]
-	dot := strings.LastIndexByte(file, '.')
-	if dot < 1 {
-		return out, false
-	}
-	out.ProgramID, out.Stream = file[:dot], file[dot+1:]
-	if len(parts) == 2 {
-		out.ProgramID, out.ExecutionID = parts[0], file[:dot]
-	}
-	canonical, err := out.Path()
-	return out, err == nil && canonical == path
-}
-
 // PublishCommandOutput installs screened bytes in the session's read-only view.
 func PublishCommandOutput(outputDir string, output CommandOutput, content io.Reader) error {
 	path, err := output.Path()

@@ -1,6 +1,6 @@
 import { required } from "../../test/at.ts";
 import "../../test/document-outbox-fixture.ts";
-import { filesBufferBase, filesBufferText } from "../documents/project-files-buffers.ts";
+import { filesBufferBase, filesBufferText } from "../documents/files-buffer-state.ts";
 import { stubFilesClient } from "../../test/source-client-fixture.ts";
 import { PROJECT, ROOTS, loadedBuffer, resetProjectFilesViewTest, sourceWorkspace, PROJECT_SOURCE_IDENTITY, deferred, waitForFilesStageReady } from "./project-files-view-test-harness.ts";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
@@ -17,7 +17,9 @@ import { suspendFileDocument } from "../documents/files-residency.ts";
 import { PROJECT_WORKSPACE_LOADING_HINT } from "../../components/shell/ProjectLoadingStage.tsx";
 import { editorReplica } from "../documents/editor-document.ts";
 import { createAppStore } from "../../store/app-state.ts";
-import { applyFilesBufferDraft, openFilesBuffer, setFilesActiveBuffer } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferDraft } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
+import { setFilesActiveBuffer } from "../documents/project-files-buffers.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { fileBufferKey } from "./project-files-model.ts";
@@ -40,8 +42,7 @@ describe("ProjectFilesView stage chrome", () => {
     await waitFor(() => expect(editorReplica(current().documentId)).toBeDefined());
     setPresence("idle");
     expect(await suspendFileDocument(PROJECT, buffer.rootId, buffer.path, current().documentId ?? undefined)).toBe(true);
-    await new Promise(resolve => setTimeout(resolve, 20));
-    expect(current().content.state).toBe("suspended");
+    await waitFor(() => expect(current().content.state).toBe("suspended"));
     expect(current().loading).toBe(false);
     expect(editorReplica(current().documentId)).toBeUndefined();
     setPresence("active");
@@ -62,8 +63,7 @@ describe("ProjectFilesView stage chrome", () => {
     });
     await waitForFilesStageReady();
     expect(await suspendFileDocument(PROJECT, first.rootId, first.path, current(first.path).documentId ?? undefined)).toBe(true);
-    await new Promise(resolve => setTimeout(resolve, 20));
-    expect(current(first.path)).toMatchObject({ content: { state: "suspended" }, loading: false });
+    await waitFor(() => expect(current(first.path)).toMatchObject({ content: { state: "suspended" }, loading: false }));
     setFilesActiveBuffer(PROJECT, current(first.path).key);
     await waitFor(() => expect(current(first.path).content.state).toBe("document"));
   });

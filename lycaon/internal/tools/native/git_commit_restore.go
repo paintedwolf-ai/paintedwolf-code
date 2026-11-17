@@ -2,41 +2,17 @@ package native
 
 import (
 	"context"
-	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
-	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-// GitRestoreTool restores explicit paths in the index, worktree, or both.
-type GitRestoreTool struct {
-	Git      git.GitManager
-	Boundary *sandbox.Boundary
-}
-
-func (t *GitRestoreTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-	opts, err := parseGitRestoreOpts(args)
-	if err != nil {
-		return "", err
-	}
-	restored, err := GitMutations{Git: t.Git, Boundary: t.Boundary}.Restore(ctx, tctx, opts)
-	if err != nil {
-		var reject *toolrejection.ToolReject
-		if errors.As(err, &reject) || toolrejection.HostRefusal(err) != nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return "", err
-		}
-		return git.MarshalRestoreToolResponse(nil, err)
-	}
-	return git.MarshalRestoreToolResponse(restored, nil)
-}
 
 // Restore restores explicit active-root paths in the index, the work tree or
 // both after host review, returning the restored paths.
@@ -80,22 +56,6 @@ func (m GitMutations) Restore(ctx context.Context, tctx tools.ToolContext, opts 
 	return restored, nil
 }
 
-func parseGitRestoreOpts(args map[string]any) (git.GitRestoreOpts, error) {
-	paths, err := parseBoundedPaths(args, git.DefaultGitRestoreMaxPaths, func(max, got int) error {
-		return &toolrejection.ToolReject{
-			Code: "GIT_RESTORE_BULK_DENIED",
-			Data: map[string]any{"max_paths": max, "requested": got},
-		}
-	})
-	if err != nil {
-		return git.GitRestoreOpts{}, err
-	}
-	source, _ := args["source"].(string)
-	staged, _ := args["staged"].(bool)
-	worktree, _ := args["worktree"].(bool)
-	return git.GitRestoreOpts{Paths: paths, Source: source, Staged: staged, Worktree: worktree}, nil
-}
-
 func assertGitRestorePath(
 	ctx context.Context,
 	boundary *sandbox.Boundary,
@@ -118,34 +78,6 @@ func gitRelativeWritePath(hostRoot, resolvedAbs string) (string, bool) {
 		}
 	}
 	return "", false
-}
-
-// GitCommitTool stages paths and creates or amends a commit.
-type GitCommitTool struct {
-	Git      git.GitManager
-	Boundary *sandbox.Boundary
-}
-
-func (t *GitCommitTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-	message, _ := args["message"].(string)
-	message = strings.TrimSpace(message)
-	if message == "" {
-		return "", toolkit.MissingArg("message")
-	}
-	request := GitCommitRequest{Message: message}
-	request.Amend, _ = args["amend"].(bool)
-	if raw, ok := args["paths"].([]any); ok && len(raw) > 0 {
-		paths, err := parseBoundedPaths(args, git.DefaultGitCommitMaxPaths, commitBulkDenied)
-		if err != nil {
-			return "", err
-		}
-		request.Paths = paths
-	}
-	hash, staging, err := GitMutations{Git: t.Git, Boundary: t.Boundary}.Commit(ctx, tctx, request)
-	if hash == "" && staging.Paths == nil && err != nil {
-		return "", err
-	}
-	return git.MarshalCommitToolResponse(hash, staging, err)
 }
 
 // GitCommitRequest is one commit: explicit paths stay explicit; without

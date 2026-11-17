@@ -174,14 +174,14 @@ func (r *AuthorityServices) SetToolApprovalCoalesce(rt *approvalstate.ToolApprov
 	if r == nil || r.reviews == nil || rt == nil {
 		return
 	}
-	r.reviews.SetToolApprovalCoalesce(toolApprovalCoalesceAdapter{rt: rt})
+	r.reviews.SetToolApprovalCoalesce(rt)
 }
 
 func (r *AuthorityServices) SetGateRepeatLedger(rt *approvalstate.GateRepeatLedger) {
 	if r == nil || r.reviews == nil || rt == nil {
 		return
 	}
-	r.reviews.SetGateRepeatLedger(gateRepeatLedgerAdapter{rt: rt})
+	r.reviews.SetGateRepeatLedger(rt)
 }
 
 func (r *AuthorityServices) ApplyGuidanceRejects(formatter *guidance.StaticRejectFormatter) {

@@ -27,12 +27,6 @@ func FirstProgressGatedTool(turnTools []string) string {
 	return "task"
 }
 
-// ProgressGatedToolSinceBoundary reports whether a completed progress-gated tool call occurred since
-// sinceIdx in the transcript.
-func ProgressGatedToolSinceBoundary(history []api.Message, sinceIdx int) bool {
-	return progressGatedToolSinceBoundary(history, sinceIdx, true)
-}
-
 // ProgressGatedToolAttemptedSinceBoundary reports whether a progress-gated tool was attempted since
 // sinceIdx, including guard rejects from PROGRESS_MISSING.
 func ProgressGatedToolAttemptedSinceBoundary(history []api.Message, sinceIdx int) bool {

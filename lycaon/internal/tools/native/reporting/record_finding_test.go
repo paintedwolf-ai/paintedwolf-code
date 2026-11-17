@@ -3,12 +3,14 @@ package reporting_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/findings/findingstest"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -20,7 +22,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func recentMemoryFindings(t *testing.T, store *findings.MemoryStore, sessionID string) []findings.Finding {
+func recentFindings(t *testing.T, store findings.Store, sessionID string) []findings.Finding {
 	t.Helper()
 	rows, _, err := store.Recent(context.Background(), sessionID, "", 0, 10, time.Time{})
 	testutil.FailErr(t, "recent findings", err)
@@ -29,8 +31,8 @@ func recentMemoryFindings(t *testing.T, store *findings.MemoryStore, sessionID s
 
 func TestRecordFindingAppendsToStore(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
-	store := findings.NewMemoryStore()
 	dir := t.TempDir()
+	store := findingstest.New(t, dir)
 	scopeKey := testFindingsScopeKey(dir)
 	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, store, scopeKey))
 	tctx := findingContext(dir)
@@ -44,7 +46,7 @@ func TestRecordFindingAppendsToStore(t *testing.T) {
 	if !strings.Contains(out, "appended") {
 		t.Fatalf("out = %q", out)
 	}
-	found := recentMemoryFindings(t, store, dir)
+	found := recentFindings(t, store, dir)
 	if len(found) != 1 || found[0].Agent != "job-7" || found[0].Ref != "internal/config/resolve.go:40" {
 		t.Fatalf("findings = %+v", found)
 	}
@@ -52,8 +54,8 @@ func TestRecordFindingAppendsToStore(t *testing.T) {
 
 func TestRecordFindingDuplicateIsIdempotent(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
-	store := findings.NewMemoryStore()
 	dir := t.TempDir()
+	store := findingstest.New(t, dir)
 	scopeKey := testFindingsScopeKey(dir)
 	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, store, scopeKey))
 	tctx := findingContext(dir)
@@ -72,7 +74,7 @@ func TestRecordFindingDuplicateIsIdempotent(t *testing.T) {
 	if !strings.Contains(out, `"status":"unchanged"`) {
 		t.Fatalf("duplicate out = %q want unchanged", out)
 	}
-	found := recentMemoryFindings(t, store, dir)
+	found := recentFindings(t, store, dir)
 	if len(found) != 1 {
 		t.Fatalf("findings = %+v want 1 row", found)
 	}
@@ -81,7 +83,7 @@ func TestRecordFindingDuplicateIsIdempotent(t *testing.T) {
 func TestRecordFindingRequiresSummary(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	dir := t.TempDir()
-	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, findings.NewMemoryStore(), testFindingsScopeKey(dir)))
+	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, findingstest.New(t, dir), testFindingsScopeKey(dir)))
 	_, err := reg.Run(context.Background(), "record_finding", map[string]any{"summary": "  "},
 		findingContext(t.TempDir()))
 	if err == nil || !strings.Contains(err.Error(), "summary is required") {
@@ -92,7 +94,7 @@ func TestRecordFindingRequiresSummary(t *testing.T) {
 func TestRecordFindingRequiresReference(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	dir := t.TempDir()
-	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, findings.NewMemoryStore(), testFindingsScopeKey(dir)))
+	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, findingstest.New(t, dir), testFindingsScopeKey(dir)))
 	_, err := reg.Run(context.Background(), "record_finding", map[string]any{"summary": "A useful observation"}, findingContext(dir))
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "FINDING_UNGROUNDED" {
@@ -103,7 +105,7 @@ func TestRecordFindingRequiresReference(t *testing.T) {
 func TestRecordFindingRejectsOversizeSummary(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	dir := t.TempDir()
-	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, findings.NewMemoryStore(), testFindingsScopeKey(dir)))
+	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, findingstest.New(t, dir), testFindingsScopeKey(dir)))
 	_, err := reg.Run(context.Background(), "record_finding",
 		map[string]any{"summary": strings.Repeat("x", findings.SummaryMaxChars+1)},
 		findingContext(t.TempDir()))
@@ -115,8 +117,8 @@ func TestRecordFindingRejectsOversizeSummary(t *testing.T) {
 func TestRecordFindingGroundingBlockNotStored(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	gate := &fakeFindingGate{findingErr: &toolrejection.ToolReject{Code: "FINDING_UNGROUNDED"}}
-	store := findings.NewMemoryStore()
 	dir := t.TempDir()
+	store := findingstest.New(t, dir)
 	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{Grounding: gate}, store, testFindingsScopeKey(dir)))
 	tctx := findingContext(dir)
 	tctx.Identity.SessionID = "s1"
@@ -128,7 +130,7 @@ func TestRecordFindingGroundingBlockNotStored(t *testing.T) {
 	if !errors.As(err, &reject) || reject.Code != "FINDING_UNGROUNDED" {
 		t.Fatalf("err = %v", err)
 	}
-	if found := recentMemoryFindings(t, store, dir); len(found) != 0 {
+	if found := recentFindings(t, store, dir); len(found) != 0 {
 		t.Fatalf("blocked finding was stored: %+v", found)
 	}
 }
@@ -143,8 +145,8 @@ func (g *fakeFindingGate) AuditFinding(context.Context, string, string, tools.To
 
 func TestRecordFindingAppendUsesDelegationKeyNotOverlay(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
-	store := findings.NewMemoryStore()
 	delegationDir := t.TempDir()
+	store := findingstest.New(t, delegationDir)
 	overlay := filepath.Join(delegationDir, settingsoverlay.DirName(), "overlays", "job-a")
 	scopeKey := func(_ context.Context, _ string) string { return delegationDir }
 	testutil.FailErr(t, "register", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, store, scopeKey))
@@ -156,10 +158,10 @@ func TestRecordFindingAppendUsesDelegationKeyNotOverlay(t *testing.T) {
 		"ref":     "pkg/foo.go",
 	}, tctx)
 	testutil.FailErr(t, "run record_finding", err)
-	if found := recentMemoryFindings(t, store, delegationDir); len(found) != 1 {
+	if found := recentFindings(t, store, delegationDir); len(found) != 1 {
 		t.Fatalf("delegation findings = %+v want 1", found)
 	}
-	if found := recentMemoryFindings(t, store, overlay); len(found) != 0 {
+	if found := recentFindings(t, store, overlay); len(found) != 0 {
 		t.Fatalf("overlay findings = %+v want empty", found)
 	}
 }
@@ -170,7 +172,7 @@ func testFindingsScopeKey(dir string) reporttools.FindingsScopeKey {
 
 func TestRegisterRecordFindingToolRequiresScopeKey(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
-	err := native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, findings.NewMemoryStore(), nil)
+	err := native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, findingstest.New(t), nil)
 	if err == nil || !strings.Contains(err.Error(), "scope key required") {
 		t.Fatalf("err = %v", err)
 	}
@@ -192,15 +194,15 @@ func findingContext(dir string) tools.ToolContext {
 
 func TestRecordFindingUnicodeDetailAndCorrections(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
-	store := findings.NewMemoryStore()
 	dir := t.TempDir()
+	store := findingstest.New(t, dir)
 	testutil.FailErr(t, "register findings", native.RegisterRecordFindingTool(reg, reporttools.RecordFindingGates{}, store, testFindingsScopeKey(dir)))
 	ctx := findingContext(dir)
 	for _, summary := range []string{strings.Repeat("界", 320), "corrected signature at the same reference"} {
 		_, err := reg.Run(t.Context(), "record_finding", map[string]any{"summary": summary, "ref": "source.go:2", "body": "render(state: ViewState): void"}, ctx)
 		testutil.FailErr(t, "record correction", err)
 	}
-	rows := recentMemoryFindings(t, store, dir)
+	rows := recentFindings(t, store, dir)
 	if len(rows) != 2 || rows[0].Body != "render(state: ViewState): void" {
 		t.Fatalf("findings: %+v", rows)
 	}

@@ -4,19 +4,21 @@ package conditions_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/scan"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestScanStubPredicatesWithSQLiteLedger(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "scan_stub.db")
+	testdbseed.InsertWorkflowRun(t, sqlDB, "run-1", "sess-1", testdbseed.DefaultProjectID)
 
 	store := scan.NewSQLStore(sqlDB)
 	categories := []api.ScanCategory{api.ScanCategorySecurity, api.ScanCategorySecret}
@@ -26,7 +28,7 @@ func TestScanStubPredicatesWithSQLiteLedger(t *testing.T) {
 		CanonicalPath:    "/tmp/project",
 		Categories:       categories,
 		Status:           api.CodeScanStatusComplete,
-		DelegationID:     "dep-1",
+		SessionID:        "sess-1",
 		HeadSHA:          "head-sql",
 		SourceSnapshotID: "head-sql",
 		CreatedAt:        now,
@@ -40,7 +42,7 @@ func TestScanStubPredicatesWithSQLiteLedger(t *testing.T) {
 			"guidance": []api.ScanGuidanceSummary{{Severity: "medium", Message: "ok"}},
 		},
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.SaveIngest failed", err)
 	}
 
 	deps := scanDomainDeps(stubScanLedger{}, nil)

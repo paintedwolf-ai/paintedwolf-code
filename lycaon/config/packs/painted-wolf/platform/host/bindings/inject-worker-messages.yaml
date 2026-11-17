@@ -1,0 +1,10 @@
+# Inform Binding — assembly-only worker message page.
+'on': inject.worker_messages
+effect: inform
+render: worker-messages
+tier: builtin
+when: 'true'
+invariants:
+  trigger_class: assembly_inject
+  fires_in:
+  - coordinator or worker assembly while undelivered messages exist
