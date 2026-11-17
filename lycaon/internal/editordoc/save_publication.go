@@ -114,7 +114,7 @@ func (c savePublisher) prepareSaveMutation(ctx context.Context, d *Document, ope
 	if err != nil {
 		return nil, err
 	}
-	content := serializeEOL(d.Draft, d.EOL)
+	content := textfile.SerializeEOL(d.Draft, d.EOL)
 	after, err := textfile.EncodeBounded(content, d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
 	if err != nil {
 		return nil, err

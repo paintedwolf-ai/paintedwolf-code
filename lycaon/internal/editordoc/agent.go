@@ -23,7 +23,8 @@ type AgentEdit struct {
 	Turn             int
 	ToolCallID       string
 	ToolName         string
-	// Pin admits a program edit only at its captured state, without anchoring.
+	// Pin marks a program edit: anchored in its capture, refused when the file
+	// changed outside the document.
 	Pin *ExecutionPin `json:",omitempty"`
 }
 
@@ -94,7 +95,7 @@ func (a *AgentService) ApplyAgentEdit(ctx context.Context, in AgentEdit) (*Agent
 
 // prepareRetainedAgentEdit publishes accepted bytes before document commit.
 func (b agentBatchPlanner) prepareRetainedAgentEdit(ctx context.Context, d *Document, in AgentEdit) (sourceledger.PreparedHeldEdit, error) {
-	encoded, err := textfile.EncodeBounded(serializeEOL(d.Draft, d.EOL), d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
+	encoded, err := textfile.EncodeBounded(textfile.SerializeEOL(d.Draft, d.EOL), d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
 	if err != nil {
 		return nil, err
 	}

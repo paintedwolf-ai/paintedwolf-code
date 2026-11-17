@@ -142,7 +142,7 @@ func (w semanticRewinder) semanticRewindContent(ctx context.Context, d *Document
 			return nil, err
 		}
 	}
-	content, err := textfile.EncodeBounded(serializeEOL(snapshot.Text, d.EOL), d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
+	content, err := textfile.EncodeBounded(textfile.SerializeEOL(snapshot.Text, d.EOL), d.Encoding, textfile.LimitsForRaw(projectsource.SourceWriteMaxBytes))
 	if err != nil {
 		return nil, err
 	}
