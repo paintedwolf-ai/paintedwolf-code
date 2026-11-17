@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
-	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -153,20 +152,33 @@ func normalizeHost(host string) (string, error) {
 	if addr, err := netip.ParseAddr(host); err == nil {
 		return addr.Unmap().String(), nil
 	}
-	// One trailing dot roots a name; any other empty label names nothing.
 	host = strings.TrimSuffix(host, ".")
-	if host == "" || slices.Contains(strings.Split(host, "."), "") {
-		return "", fmt.Errorf("invalid host")
+	if host == "" {
+		return "", fmt.Errorf("empty host")
 	}
 	ascii, err := idna.Lookup.ToASCII(host)
 	if err != nil {
 		return "", fmt.Errorf("invalid host")
 	}
 	ascii = strings.ToLower(ascii)
-	if ascii == "" || strings.Contains(ascii, "/") {
+	if !dnsName(ascii) || strings.Contains(ascii, "/") {
 		return "", fmt.Errorf("invalid host")
 	}
 	return ascii, nil
+}
+
+// dnsName holds DNS's own limits: 1 to 63 bytes a label, 253 in all. One
+// trailing dot, which roots a name, is removed before this check.
+func dnsName(ascii string) bool {
+	if ascii == "" || len(ascii) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(ascii, ".") {
+		if label == "" || len(label) > 63 {
+			return false
+		}
+	}
+	return true
 }
 
 func parsePort(raw string) (uint16, error) {
