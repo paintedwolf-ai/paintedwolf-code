@@ -2,7 +2,9 @@ package forbiddencalls
 
 import (
 	"go/ast"
+	"go/build/constraint"
 	"go/token"
+	"strings"
 
 	"github.com/lycaon/lycaon/test/contract/laws"
 )
@@ -113,4 +115,181 @@ func ChildStdoutForwarding(path string, file *ast.File) map[*ast.SelectorExpr]bo
 // StdoutSelector reports owner.name on an identifier.
 func StdoutSelector(expr ast.Expr, owner, name string) bool {
 	return laws.SelectorName(expr) == owner+"."+name
+}
+
+const gotreesitterPkg = "github.com/odvcencio/gotreesitter"
+
+// parsingTaggerMethods parse internally and bypass the budget like a raw
+// parser. TagTree tags a tree the caller already parsed, so it is absent.
+var parsingTaggerMethods = []string{"Tag", "TagUTF16", "TagUTF16Bytes", "TagIncremental", "TagIncrementalUTF16", "TagIncrementalUTF16Bytes"}
+
+// timeoutClaims are functions whose callers rely on their own internal
+// deadline, as their contextcheck exemptions say.
+var timeoutClaims = []struct{ dir, name string }{
+	{"internal/project", "gitRemoteHash"},
+	{"internal/worker", "sqlQueueCore.Get"},
+	{"internal/llm", "fetchDiscoveredModels"},
+}
+
+var hostBounds = []laws.Rule{{
+	// Tree-sitter parses go through internal/tsparse, which applies the budget.
+	Name:    "parses-go-through-the-bounded-seam",
+	Anchors: []laws.Anchor{laws.Func("internal/tsparse", "Parse")},
+	Check: func(r *laws.Run) {
+		for _, f := range r.GoFiles(laws.Production, laws.Source...) {
+			if laws.Under(f, "internal/tsparse") || !f.Imports(gotreesitterPkg) {
+				continue
+			}
+			f.Calls(f.AST, func(call *ast.CallExpr, pkg, name string) {
+				sel, ok := call.Fun.(*ast.SelectorExpr)
+				switch {
+				case pkg == gotreesitterPkg && name == "NewParser":
+					r.ReportAt(call.Pos(), "gotreesitter.NewParser is unbounded; use tsparse.Parse")
+				case ok && contains(parsingTaggerMethods, sel.Sel.Name):
+					r.ReportAt(call.Pos(), "Tagger.%s parses unbounded; parse with tsparse.Parse and use TagTree", sel.Sel.Name)
+				}
+			})
+		}
+	},
+}, {
+	// A function its callers trust to bound itself constructs its deadline.
+	Name:    "bounded-timeout-claims-construct-a-deadline",
+	Anchors: timeoutClaimAnchors(),
+	Check: func(r *laws.Run) {
+		for _, claim := range timeoutClaims {
+			fn := r.FuncDecl(claim.dir, claim.name)
+			f := r.Declaration(claim.dir, claim.name).File
+			bounded := false
+			f.Calls(fn.Body, func(_ *ast.CallExpr, pkg, name string) {
+				bounded = bounded || pkg == "context" && (name == "WithTimeout" || name == "WithDeadline")
+			})
+			if !bounded {
+				r.ReportAt(fn.Pos(), "%s claims an internal timeout but constructs no deadline", claim.name)
+			}
+		}
+	},
+}, {
+	// Chrome stays in its launcher's process group, so a hard-killed parent's
+	// group sweep reaches it.
+	Name:    "browser-keeps-its-launcher-process-group",
+	Anchors: []laws.Anchor{laws.Package("internal/browser"), laws.Package("internal/browserengine")},
+	Check: func(r *laws.Run) {
+		for _, f := range r.GoFiles(laws.AnyGo, "internal/browser", "internal/browserengine") {
+			ast.Inspect(f.AST, func(n ast.Node) bool {
+				if sel, ok := n.(*ast.SelectorExpr); ok && contains([]string{"Setpgid", "Pdeathsig", "CREATE_NEW_PROCESS_GROUP"}, sel.Sel.Name) {
+					r.ReportAt(sel.Pos(), "sets %s; chrome stays in its launcher's group", sel.Sel.Name)
+				}
+				return true
+			})
+		}
+	},
+}, {
+	// The browser resolves from the environment, the bundle or the managed
+	// cache and refuses otherwise; it never searches PATH.
+	Name:    "browser-never-resolves-from-path",
+	Anchors: []laws.Anchor{laws.Package("internal/browser"), laws.Package("internal/browserengine")},
+	Check: func(r *laws.Run) {
+		for _, f := range r.GoFiles(laws.AnyGo, "internal/browser", "internal/browserengine") {
+			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+				if strings.HasSuffix(laws.CalleeName(call), "LookPath") {
+					r.ReportAt(call.Pos(), "%s searches PATH", laws.CalleeName(call))
+				}
+			})
+		}
+	},
+}}
+
+func timeoutClaimAnchors() []laws.Anchor {
+	out := make([]laws.Anchor, 0, len(timeoutClaims))
+	for _, claim := range timeoutClaims {
+		out = append(out, laws.Func(claim.dir, claim.name))
+	}
+	return out
+}
+
+var confineHelper = []laws.Rule{{
+	// The confinement helper dispatches from init in every build but the
+	// helper's own coverage main, is not exported, and refuses nesting.
+	Name:    "helper-dispatch-is-confine-init",
+	Anchors: []laws.Anchor{laws.Func("internal/confine", "runHelperIfInvoked"), laws.Func("internal/confine", "Command")},
+	Check: func(r *laws.Run) {
+		initDispatches := false
+		for _, f := range r.GoFiles(laws.Production, "internal/confine") {
+			if f.Dir != "internal/confine" || onlyInHelperMainBuild(f.AST) {
+				continue
+			}
+			f.Funcs(func(fn *ast.FuncDecl) {
+				switch {
+				case fn.Name.Name == "RunHelperIfInvoked":
+					r.ReportAt(fn.Pos(), "RunHelperIfInvoked is exported; dispatch stays inside confine's init")
+				case fn.Name.Name == "init" && fn.Recv == nil && mentions(fn.Body, "runHelperIfInvoked"):
+					initDispatches = true
+				}
+			})
+		}
+		if !initDispatches {
+			r.Report("no init in internal/confine calls runHelperIfInvoked")
+		}
+		command := r.FuncDecl("internal/confine", "Command")
+		if !mentions(command.Body, "IsHelperInvocation") || !mentions(command.Body, "ErrNestedHelper") {
+			r.ReportAt(command.Pos(), "Command must refuse IsHelperInvocation with ErrNestedHelper")
+		}
+	},
+}, {
+	// Automatic confinement is a production opt-in; tests confine explicitly.
+	Name:    "enable-auto-confine-is-production-opt-in",
+	Anchors: []laws.Anchor{laws.Func("internal/confine", "EnableAutoConfine")},
+	Check: func(r *laws.Run) {
+		production := 0
+		for _, f := range r.GoFiles(laws.AnyGo, "internal", "cmd", "pkg", "config", "test") {
+			f.Calls(f.AST, func(call *ast.CallExpr, _, _ string) {
+				if laws.CalleeName(call) != "EnableAutoConfine" {
+					return
+				}
+				if f.IsTest {
+					r.ReportAt(call.Pos(), "a test enables automatic confinement")
+				} else {
+					production++
+				}
+			})
+		}
+		r.Expect(production, "production EnableAutoConfine calls")
+	},
+}}
+
+// onlyInHelperMainBuild reports a file compiled only under confinehelpermain,
+// the helper's coverage build, which dispatches from its own main.
+func onlyInHelperMainBuild(f *ast.File) bool {
+	for _, group := range f.Comments {
+		if group.Pos() >= f.Package {
+			break
+		}
+		for _, c := range group.List {
+			if expr, err := constraint.Parse(c.Text); err == nil {
+				return requiresTag(expr, "confinehelpermain")
+			}
+		}
+	}
+	return false
+}
+
+func requiresTag(e constraint.Expr, tag string) bool {
+	switch x := e.(type) {
+	case *constraint.TagExpr:
+		return x.Tag == tag
+	case *constraint.AndExpr:
+		return requiresTag(x.X, tag) || requiresTag(x.Y, tag)
+	}
+	return false
+}
+
+// mentions reports an identifier named name below node.
+func mentions(node ast.Node, name string) bool {
+	found := false
+	ast.Inspect(node, func(n ast.Node) bool {
+		id, ok := n.(*ast.Ident)
+		found = found || ok && id.Name == name
+		return !found
+	})
+	return found
 }
