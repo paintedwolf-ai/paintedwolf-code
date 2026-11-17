@@ -33,6 +33,9 @@ type conformanceOp struct {
 	Streams bool
 	// JSONSuccess marks a 2xx application/json response.
 	JSONSuccess bool
+	// Authenticated marks an operation whose effective security requires a
+	// credential.
+	Authenticated bool
 }
 
 var templateParamRE = regexp.MustCompile(`\{([^}]+)\}`)
@@ -42,7 +45,13 @@ func conformanceOperations(doc *openapi3.T) []*conformanceOp {
 	var ops []*conformanceOp
 	for path, item := range doc.Paths.Map() {
 		for method, op := range item.Operations() {
-			ops = append(ops, newConformanceOp(path, strings.ToUpper(method), item.Parameters, op))
+			out := newConformanceOp(path, strings.ToUpper(method), item.Parameters, op)
+			security := doc.Security
+			if op.Security != nil {
+				security = *op.Security
+			}
+			out.Authenticated = len(security) > 0
+			ops = append(ops, out)
 		}
 	}
 	sort.Slice(ops, func(i, j int) bool { return ops[i].ID < ops[j].ID })
