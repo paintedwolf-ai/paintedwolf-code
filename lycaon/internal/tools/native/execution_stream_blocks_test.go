@@ -129,7 +129,7 @@ func TestExecutionStreamBlockAdmissionCancellationAndRelease(t *testing.T) {
 		t.Fatalf("close leak %+v", memory.InUse())
 	}
 	if _, err = stream.Reader.Read(make([]byte, 4)); !errors.Is(err, io.ErrClosedPipe) {
-		testutil.FailErr(t, "stream.Reader.Read failed", err)
+		t.Fatalf("read after close = %v, want io.ErrClosedPipe", err)
 	}
 }
 

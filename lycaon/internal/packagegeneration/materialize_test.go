@@ -135,7 +135,7 @@ func TestSelectionFailureAndSourceTamperNeverAdvanceOrRewriteRetainedBytes(t *te
 	testutil.FailErr(t, "l.materialize failed", err)
 	refused := errors.New("policy commit refused")
 	if err := l.selectGeneration(generation.ManifestSHA256, func(Generation) error { return refused }); !errors.Is(err, refused) {
-		testutil.FailErr(t, "l.selectGeneration failed", err)
+		t.Fatalf("select with a refusing commit = %v, want the commit's refusal", err)
 	}
 	if err := source.WriteFile("resource.data", []byte("tampered"), 0644); err != nil {
 		testutil.FailErr(t, "source.WriteFile failed", err)

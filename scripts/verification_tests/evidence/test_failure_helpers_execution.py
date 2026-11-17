@@ -101,6 +101,10 @@ func fixture(t *testing.T) {
                 "\tif _, err := queue.Enqueue(ctx, Job{\n\t\tID: id,\n\t}); err != nil {\n\t\tb.Fatal(err)\n\t}\n",
                 '\t\ttestutil.FailErr(b, "queue.Enqueue failed", err)\n',
             ),
+            "arguments spanning lines": (
+                "\tif err := queue.Append(ctx, id,\n\t\tJob{ID: id},\n\t); err != nil {\n\t\tt.Fatal(err)\n\t}\n",
+                '\t\ttestutil.FailErr(t, "queue.Append failed", err)\n',
+            ),
         }
         for name, (source, labeled) in sources.items():
             with self.subTest(form=name):
@@ -109,11 +113,17 @@ func fixture(t *testing.T) {
                 self.assertIn(labeled, result)
                 self.assertEqual(rewrite.bare_failures(result), [])
 
-    def test_rewrite_leaves_a_failure_it_cannot_label(self):
-        source = "\tswitch {\n\tcase failed:\n\t\tt.Fatal(err)\n\t}\n"
-        result, count = rewrite.transform(source, "testutil.FailErr")
-        self.assertEqual((result, count), (source, 0))
-        self.assertEqual(rewrite.bare_failures(result), [3])
+    def test_rewrite_leaves_a_failure_that_is_not_a_plain_err_check(self):
+        sources = {
+            "no err check": "\tswitch {\n\tcase failed:\n\t\tt.Fatal(err)\n\t}\n",
+            "assertion on the error": "\tif _, err := reader.Read(buffer); !errors.Is(err, io.EOF) {\n\t\tt.Fatal(err)\n\t}\n",
+            "assertion spanning lines": "\tif err := run(Options{\n\t\tID: id,\n\t}); !errors.Is(err, refused) {\n\t\tt.Fatal(err)\n\t}\n",
+        }
+        for name, source in sources.items():
+            with self.subTest(form=name):
+                result, count = rewrite.transform(source, "testutil.FailErr")
+                self.assertEqual((result, count), (source, 0))
+                self.assertEqual(len(rewrite.bare_failures(result)), 1)
 
     @staticmethod
     def check(root):

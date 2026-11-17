@@ -76,6 +76,7 @@ FATAL_RE = re.compile(r"^(\s*)t\.Fatal\(err\)\s*$")
 BARE_FATAL_RE = re.compile(r"(?<![\w.])((?:\w+\.)*\w+)\.Fatal\(\s*err\s*\)")
 # The first line of an init-if, whose call may span lines.
 INIT_IF_HEAD_RE = re.compile(r"^\s*if (?:[\w.*]+\s*,\s*)*err :?= (.+)$")
+ERR_CHECK_TAIL_RE = re.compile(r"; err != nil \{\s*$")
 BARE_FATAL_LINE_RE = re.compile(r"^(\s*)((?:\w+\.)*\w+)\.Fatal\(err\)\s*$")
 CLOSE_RE = re.compile(r"^(\s*)\}\s*$")
 
@@ -146,7 +147,15 @@ def enclosing_step(lines: list[str], fatal_idx: int) -> str:
     if BLOCK_IF_RE.match(lines[j]):
         return infer_step(lines, j)
     m = INIT_IF_HEAD_RE.match(lines[j])
-    return step_for_call(m.group(1)) if m else UNKNOWN_STEP
+    if not m:
+        return UNKNOWN_STEP
+    # Only a plain err check makes the failure a returned error; any other
+    # condition is an assertion, which a nil-tolerant helper would weaken.
+    k, depth = j, _nesting(lines[j])
+    while not (depth == -1 and lines[k].rstrip().endswith("{")) and k < fatal_idx - 1:
+        k += 1
+        depth += _nesting(lines[k])
+    return step_for_call(m.group(1)) if ERR_CHECK_TAIL_RE.search(lines[k]) else UNKNOWN_STEP
 
 
 def _nesting(line: str) -> int:
