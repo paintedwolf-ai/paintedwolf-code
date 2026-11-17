@@ -1,6 +1,7 @@
 package wiring
 
 import (
+	"encoding/base64"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -77,5 +78,26 @@ func TestCommandCurlUnsupportedFormDoesNotLaunchInstalledCurl(t *testing.T) {
 	}
 	if got := seen(); len(got) != 0 {
 		t.Fatalf("an unsupported form reached the service %d times", len(got))
+	}
+}
+
+// Basic credentials carry a reference in their password, a placement curl
+// declares, and the service receives the resolved value.
+func TestCommandCurlDeliversAReferenceInBasicCredentials(t *testing.T) {
+	run, sess := newSecretSinkRun(t)
+	reference := run.generatedReference(t, sess, secretcap.ScopeChat)
+	server, seen := requestRecorder(t, run)
+	run.script.steps = []citableStep{{command: "curl -sS -u 'user:" + reference + "' " + server.URL}}
+	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "call the service")
+	testutil.FailErr(t, "prompt", err)
+	outcomes := run.outcomes(t)
+	if len(outcomes) != 1 || outcomes[0].state != "completed" || outcomes[0].stopCode != "" {
+		run.logResults(t)
+		t.Fatalf("outcomes = %+v", outcomes)
+	}
+	want := "Basic " + base64.StdEncoding.EncodeToString([]byte("user:"+sinkSentinel))
+	if got := seen(); len(got) != 1 || got[0] != want {
+		run.logResults(t)
+		t.Fatalf("service saw %q", got)
 	}
 }
