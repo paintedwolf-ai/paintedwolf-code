@@ -208,7 +208,7 @@ export function createShellPaneVisibility({ windowSubject, splitLive, presentedS
   const navSide = () => order().navSide;
   const conversationSide = () => order().conversationSide;
   /** The layout facts every window edge decision reads. */
-  const windowEdgeLayout = createMemo((): WindowEdgeLayout => ({
+  const windowEdgeLayout = (): WindowEdgeLayout => ({
     navSide: windowNavCollapsed() ? null : navSide(),
     split: presentedSplitLive(),
     stageOccupied: stageColumnOccupied(),
@@ -217,7 +217,7 @@ export function createShellPaneVisibility({ windowSubject, splitLive, presentedS
     stageSide: order().stageOnLeft ? "left" : "right",
     narrowSurvivor: narrowSurvivorPref() === "stage" ? "stage" : "chat",
     drawerSide: sessionDrawerOpen() ? (workspaceOrientationPref() === "mirrored" ? "left" : "right") : null,
-  }));
+  });
   /** One surface's claims on the window edges that carry controls. */
   const windowEdgeClaims = (host: WindowEdgeHost) => claimWindowEdges(host, windowEdgeLayout());
 

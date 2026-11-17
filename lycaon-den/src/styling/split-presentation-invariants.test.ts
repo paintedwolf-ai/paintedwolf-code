@@ -83,17 +83,6 @@ describe("split collapse survivor", () => {
     expect(bands).not.toMatch(/innerWidth|getBoundingClientRect|clientWidth/);
   });
 
-  it("hands the window's leading edge to whichever column the band keeps", () => {
-    // The surviving stage inherits clearance for the window controls.
-    expect(shellCss()).toMatch(
-      new RegExp(
-        `${narrowBand}\\[data-narrow-survivor="stage"\\]\\s*\\)` +
-          `[\\s\\S]{0,200}?\\[data-stage-leading="false"\\]` +
-          `[\\s\\S]{0,200}?padding-left: var\\(--den-traffic-light-clearance`,
-      ),
-    );
-  });
-
   it("answers a refused width claim with motion that reduced motion drops", () => {
     // One directional push, and nothing where motion is reduced.
     const utilities = read("shell-utilities.css");

@@ -7,7 +7,7 @@
     [data-window-edge]:not([data-narrow-only], [data-narrow-hidden]),
     .den-shell-stage-host--split:where([data-host-band~="max-900"])
       [data-window-edge][data-narrow-only],
-    .den-shell-stage-host--split:not([data-host-band~="max-900"])
+    .den-shell-stage-host--split:where(:not([data-host-band~="max-900"]))
       [data-window-edge][data-narrow-hidden]
   ) {
   /* An open drawer starts its header below the title bar strip. */
