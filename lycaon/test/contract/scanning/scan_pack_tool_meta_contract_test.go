@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
+	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -38,9 +39,29 @@ func TestScanPackToolMetaMatchesBundledRegistry(t *testing.T) {
 		t.Fatal("scan_pack not registered")
 	}
 	enum := schemaCategoryEnum(t, meta.ArgsSchema)
-	for _, want := range []string{"all", "sca", "secret", "sast", "security"} {
-		if !enum[want] {
-			t.Fatalf("schema enum missing %q; got %v", want, enum)
+	if !enum[scan.CategoryAll] {
+		t.Fatalf("scan_pack categories enum %v lacks %q", enum, scan.CategoryAll)
+	}
+	scanners := reg.List()
+	if len(scanners) == 0 {
+		t.Fatal("bundled scan registry lists no scanners")
+	}
+	covered := map[string]bool{}
+	for _, scanner := range scanners {
+		for _, category := range scanner.Categories {
+			covered[string(category)] = true
+			if !enum[string(category)] {
+				t.Errorf("scanner %s category %q is not in the scan_pack categories enum %v", scanner.ID, category, enum)
+			}
+		}
+	}
+	// "security" is an umbrella request every security scanner answers.
+	for category := range enum {
+		if category == scan.CategoryAll || category == string(api.ScanCategorySecurity) {
+			continue
+		}
+		if !covered[category] {
+			t.Errorf("scan_pack offers category %q that no bundled scanner covers", category)
 		}
 	}
 }

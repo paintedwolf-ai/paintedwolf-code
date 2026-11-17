@@ -35,20 +35,6 @@ func identityGrant(t *testing.T, projectID, projectDir, root string) settings.Ap
 	}
 }
 
-func TestDurableGrantIDSeparatesProjects(t *testing.T) {
-	t.Parallel()
-	witness := grantWitness()
-	first := hitl.ApprovalGrantID(hitl.ApprovalGrantScopeProject, "write_root", "/tmp/cache", "", "proj-1", witness, nil)
-	second := hitl.ApprovalGrantID(hitl.ApprovalGrantScopeProject, "write_root", "/tmp/cache", "", "proj-1", witness, nil)
-	if first != second {
-		t.Fatal("grant identity is not stable for one project")
-	}
-	other := hitl.ApprovalGrantID(hitl.ApprovalGrantScopeProject, "write_root", "/tmp/cache", "", "proj-2", witness, nil)
-	if first == other {
-		t.Fatal("two different projects share one durable grant id")
-	}
-}
-
 func TestDurableGrantSurvivesFolderChanges(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()

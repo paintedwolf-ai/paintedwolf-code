@@ -18,10 +18,10 @@ export TMPDIR="$2/tmp"
 mkdir -p "$TMPDIR"
 
 golden=lycaon/internal/report/testdata/golden
-lock=lycaon/internal/db/schema.sql.lock.json
-mkdir -p "$fixture/$golden" "$(dirname "$fixture/$lock")"
+baseline=lycaon/internal/oar/testdata/corpus_baseline.json
+mkdir -p "$fixture/$golden" "$(dirname "$fixture/$baseline")"
 for name in a b c e; do printf "old-$name" > "$fixture/$golden/$name.pdf"; done
-printf old-lock > "$fixture/$lock"
+printf old-baseline > "$fixture/$baseline"
 git -C "$fixture" add lycaon
 git -C "$fixture" -c user.name=Test -c user.email=test@example.invalid commit -qm goldens
 commit="$(git -C "$fixture" rev-parse HEAD)"
@@ -36,7 +36,7 @@ refresh='
   printf new-d > '"$golden"'/d.pdf
   printf new-e > '"$golden"'/e.pdf
   rm '"$golden"'/c.pdf
-  printf new-lock > '"$lock"'
+  printf new-baseline > '"$baseline"'
   printf peer-b > "$1/'"$golden"'/b.pdf"
   rm -f "$1/'"$golden"'/e.pdf"
 '
@@ -46,7 +46,7 @@ bash "$fixture/scripts/test-source-snapshot.sh" run-commit "$commit" -- \
   bash -c "$refresh" refresh "$fixture" 2> "$2/plain.log"
 [[ "$(read_golden a)" == old-a ]]
 [[ "$(read_golden d)" == absent ]]
-[[ "$(cat "$fixture/$lock")" == old-lock ]]
+[[ "$(cat "$fixture/$baseline")" == old-baseline ]]
 printf old-b > "$fixture/$golden/b.pdf"
 
 # Changed and new files are copied; deletions and concurrently edited files are not.
@@ -60,12 +60,12 @@ cat "$2/refresh.log"
 [[ "$(read_golden e)" == absent ]]
 grep -q "golden/b.pdf changed in the checkout during the run; not overwriting" "$2/refresh.log"
 # Each variable copies only its own paths.
-[[ "$(cat "$fixture/$lock")" == old-lock ]]
+[[ "$(cat "$fixture/$baseline")" == old-baseline ]]
 
 
-UPDATE_SCHEMA_LOCK=1 bash "$fixture/scripts/test-source-snapshot.sh" run-commit "$commit" -- \
-  bash -c "$refresh" refresh "$fixture" 2> "$2/lock.log"
-[[ "$(cat "$fixture/$lock")" == new-lock ]]
+UPDATE_CORPUS_BASELINE=1 bash "$fixture/scripts/test-source-snapshot.sh" run-commit "$commit" -- \
+  bash -c "$refresh" refresh "$fixture" 2> "$2/baseline.log"
+[[ "$(cat "$fixture/$baseline")" == new-baseline ]]
 `
 	cmd := exec.CommandContext(t.Context(), "bash", "-c", script,
 		"fixture-refresh-test", contractcheck.RepoRoot(t), t.TempDir())

@@ -77,7 +77,8 @@ func TestLycaonGateRulesContract(t *testing.T) {
 	if _, err := rules.CollectRuleIDsFromDir(lycaonRulesRoot); err != nil {
 		t.Fatalf("duplicate rule ids in lycaon tree: %v", err)
 	}
-	_ = filepath.WalkDir(lycaonRulesRoot, func(path string, d os.DirEntry, err error) error {
+	var ruleFiles int
+	err = filepath.WalkDir(lycaonRulesRoot, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -91,6 +92,7 @@ func TestLycaonGateRulesContract(t *testing.T) {
 		if err != nil {
 			return err
 		}
+		ruleFiles++
 		for _, r := range rf.Rules {
 			if strings.EqualFold(r.Severity, "INFO") && (r.Metadata == nil || r.Metadata.Purpose != "coverage") {
 				t.Errorf("%s: rule %q uses forbidden INFO severity", path, r.ID)
@@ -98,24 +100,25 @@ func TestLycaonGateRulesContract(t *testing.T) {
 		}
 		return nil
 	})
-}
+	contractcheck.FailErr(t, "walk lycaon rule files", err)
+	if ruleFiles == 0 {
+		t.Fatalf("no rule files under %s", lycaonRulesRoot)
+	}
 
-func TestScannersYAMLReferencesOpengrepGates(t *testing.T) {
-	t.Parallel()
+	// Every bundled scanner's config names a shipped file.
 	cfg, err := scancatalog.LoadScannerConfig()
-	contractcheck.FailErr(t, "scan.LoadScannerConfig failed", err)
-	var sast *scancatalog.ScannerEntry
-	for i := range cfg.Scanners {
-		if cfg.Scanners[i].ID == "lycaon-sast" {
-			sast = &cfg.Scanners[i]
-			break
+	contractcheck.FailErr(t, "scancatalog.LoadScannerConfig failed", err)
+	var bundled int
+	for _, entry := range cfg.Scanners {
+		if entry.Driver != scancatalog.DriverBundled {
+			continue
+		}
+		bundled++
+		if _, err := os.Stat(rules.ResolveModulePath(lycaonRoot, entry.Config)); err != nil {
+			t.Errorf("bundled scanner %s config %q is not a shipped file: %v", entry.ID, entry.Config, err)
 		}
 	}
-	if sast == nil {
-		t.Fatal("missing lycaon-sast scanner")
-	}
-	want := "config/runtime/scanners/opengrep-gates.yaml"
-	if sast.Config != want {
-		t.Fatalf("lycaon-sast config = %q, want %q", sast.Config, want)
+	if bundled == 0 {
+		t.Fatal("scanner catalog has no bundled scanners")
 	}
 }

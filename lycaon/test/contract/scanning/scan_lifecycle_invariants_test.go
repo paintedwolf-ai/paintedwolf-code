@@ -2,7 +2,7 @@ package contract
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/timelayout"
+	"slices"
 	"testing"
 	"time"
 
@@ -11,21 +11,29 @@ import (
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// I12: visible scans ⊆ current roots' canonical paths; scan-once dedup; detach retains rows.
+// I12: visible scans are exactly the current roots' scans; scan-once dedup;
+// detaching a root hides its scans and retains their rows.
 func TestMultiRootScanLifecycleInvariantI12(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	sqlDB := testdbfixture.Open(t, "i12.db")
+	projects := project.NewSQLRegistry(sqlDB)
+	proj, err := projects.Create(ctx, project.CreateParams{
+		Roots: []project.AttachRootParams{{Path: t.TempDir()}, {Path: t.TempDir()}},
+	})
+	contractcheck.FailErr(t, "create two-root project", err)
+	if len(proj.Roots) != 2 {
+		t.Fatalf("project roots = %+v, want two", proj.Roots)
+	}
+	primary, secondary := proj.Roots[0].Path, proj.Roots[1].Path
 
-	primary := t.TempDir()
-	secondary := t.TempDir()
 	store := scan.NewSQLStore(sqlDB)
 	coord := scantest.Coordinator(t, store, nil)
-
 	insert := func(path, id, scanner string) {
 		t.Helper()
 		if err := store.Insert(ctx, api.CodeScan{
@@ -43,14 +51,12 @@ func TestMultiRootScanLifecycleInvariantI12(t *testing.T) {
 	insert(primary, "s1", "lycaon-sast")
 	insert(secondary, "s2", "lycaon-sast")
 	insert(secondary, "s2-dup", "lycaon-secrets")
+	insert(t.TempDir(), "outside", "lycaon-sast")
 
-	roots := []string{primary, secondary}
-	visible, err := coord.List(ctx, roots, 50)
+	visible, err := coord.List(ctx, project.RootPaths(proj), 50)
 	contractcheck.FailErr(t, "List visible", err)
-	for _, s := range visible {
-		if !pathInSet(s.CanonicalPath, roots) {
-			t.Fatalf("visible scan %q path %q not in roots %v", s.ID, s.CanonicalPath, roots)
-		}
+	if got, want := scanIDs(visible), []string{"s1", "s2", "s2-dup"}; !slices.Equal(got, want) {
+		t.Fatalf("visible scans = %v, want %v", got, want)
 	}
 
 	first, err := coord.Enqueue(ctx, scan.EnqueueRequest{
@@ -71,33 +77,36 @@ func TestMultiRootScanLifecycleInvariantI12(t *testing.T) {
 		t.Fatalf("scan-once: %s vs %s", first.ID, second.ID)
 	}
 
-	detachedRoots := []string{primary}
-	afterDetach, err := coord.List(ctx, detachedRoots, 50)
+	change, err := projects.DetachRoot(ctx, proj.ID, proj.Roots[1].ID)
+	contractcheck.FailErr(t, "detach secondary root", err)
+	afterDetach, err := coord.List(ctx, project.RootPaths(change.After), 50)
 	contractcheck.FailErr(t, "List after detach", err)
-	for _, s := range afterDetach {
-		if s.CanonicalPath == secondary {
-			t.Fatalf("detached root scan %q still visible", s.ID)
+	want := sortedIDs([]string{"s1", first.ID})
+	want = slices.Compact(want)
+	if got := scanIDs(afterDetach); !slices.Equal(got, want) {
+		t.Fatalf("scans after detach = %v, want %v", got, want)
+	}
+	for _, id := range []string{"s2", "s2-dup"} {
+		retained, err := store.Get(ctx, id)
+		contractcheck.FailErr(t, "Get retained "+id, err)
+		if retained == nil || retained.CanonicalPath != secondary {
+			t.Fatalf("detach must retain scan row %s, got %+v", id, retained)
 		}
 	}
-
-	retained, err := store.Get(ctx, "s2")
-	contractcheck.FailErr(t, "Get retained", err)
-	if retained == nil {
-		t.Fatal("detach must retain scan row")
-	}
-
-	_ = project.RootPaths(&project.Project{
-		Roots: []project.Root{{Path: primary}, {Path: secondary}},
-	})
 }
 
-func pathInSet(path string, set []string) bool {
-	for _, p := range set {
-		if p == path {
-			return true
-		}
+func scanIDs(scans []api.CodeScan) []string {
+	ids := make([]string, 0, len(scans))
+	for _, s := range scans {
+		ids = append(ids, s.ID)
 	}
-	return false
+	return sortedIDs(ids)
+}
+
+func sortedIDs(ids []string) []string {
+	out := slices.Clone(ids)
+	slices.Sort(out)
+	return out
 }
 
 func TestScanRetentionDefaultKeepsOrphanedRows(t *testing.T) {

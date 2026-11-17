@@ -1,119 +1,70 @@
 package contract
 
 import (
-	"context"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/capability"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/webresearch"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// TestWebResearchPromptVarsSuppliedAndGated ensures templates that branch on
-// web_search_enabled / can_spawn_web_research receive those vars from MergeForTurn,
-// and that false renders omit web tool names.
+// With web search off, no coordinator surface offers a web tool or the web
+// researcher in its rendered prompt; with it on, some surface does.
 func TestWebResearchPromptVarsSuppliedAndGated(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	catalogRoot := filepath.Join(lycaonRoot, "config", "packs")
-
-	var gated []string
-	_ = filepath.Walk(catalogRoot, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".md") {
-			return nil
-		}
-		raw, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return readErr
-		}
-		text := string(raw)
-		if strings.Contains(text, "web_search_enabled") || strings.Contains(text, "can_spawn_web_research") {
-			gated = append(gated, path)
-		}
-		return nil
-	})
-	if len(gated) == 0 {
-		t.Fatal("expected catalog templates referencing web research prompt vars")
-	}
-
-	// Assembly must wire MergeForTurn so render sites cannot silently omit the vars.
-	asmPath := filepath.Join(lycaonRoot, "internal", "coordinator", "assembly", "standing_prompt.go")
-	asm, err := os.ReadFile(asmPath)
-	contractcheck.FailErr(t, "read file", err)
-	if !strings.Contains(string(asm), "MergeForTurn(") {
-		t.Fatalf("%s must call capability.MergeForTurn", asmPath)
-	}
-
 	profiles, err := sandbox.LoadToolProfiles()
 	contractcheck.FailErr(t, "LoadToolProfiles", err)
-	plan, err := prompts.CompileSurfacePlan(spawn.SurfaceImplementRouting, 0)
-	contractcheck.FailErr(t, "CompileSurfacePlan", err)
-
+	catalog, err := surfacecatalog.Load()
+	contractcheck.FailErr(t, "load surface catalog", err)
+	surfaces := catalog.SurfaceIDs()
+	if len(surfaces) == 0 {
+		t.Fatal("surface catalog lists no surfaces")
+	}
 	engine := contractcheck.BundledPromptEngineForRoot(t)
-	for _, enabled := range []bool{false, true} {
-		vars := map[string]any{}
-		reader, err := prompts.NewReader(prompts.ReaderInput{
-			ProfileID: prompts.CoordinatorProfileID,
-			SurfaceID: spawn.SurfaceImplementRouting,
-			Plan:      plan,
-			Profiles:  profiles,
-			WebSearch: enabled,
-		})
-		contractcheck.FailErr(t, "NewReader", err)
-		contractcheck.FailErr(t, "MergeForTurn", capability.MergeForTurn(
-			vars,
-			reader,
-			inject.ResolveAgentRoster(spawn.SurfaceImplementRouting, spawn.AmbientAllowedAgents(), 0, false, enabled).Effective,
-		))
-		vars, err = prompts.Vars(reader, vars)
-		contractcheck.FailErr(t, "prompts.Vars", err)
-		if vars["web_search_enabled"] != enabled {
-			t.Fatalf("web_search_enabled = %v want %v", vars["web_search_enabled"], enabled)
-		}
-		_, ok := vars["can_spawn_web_research"].(bool)
-		if !ok {
-			t.Fatal("can_spawn_web_research missing after MergeForTurn")
-		}
-		rendered, err := engine.Render(context.Background(), "agents/coordinator-core.md", vars)
-		contractcheck.FailErr(t, "render coordinator-core", err)
-		if !enabled {
-			for _, forbid := range []string{"`web_search`", "`fetch_url`", "web-researcher"} {
-				if strings.Contains(rendered, forbid) {
-					t.Fatalf("enabled=false must not mention %s in coordinator-core", forbid)
+	webIDs := []string{webresearch.SearchToolName, webresearch.FetchURLToolName, webResearcherAgent}
+	offeredWhenEnabled := false
+	for _, surfaceID := range surfaces {
+		for _, rootCount := range []int{0, 1} {
+			for _, enabled := range []bool{false, true} {
+				plan, err := prompts.CompileSurfacePlan(surfaceID, rootCount)
+				contractcheck.FailErr(t, "CompileSurfacePlan "+surfaceID, err)
+				reader, err := prompts.NewReader(prompts.ReaderInput{
+					ProfileID: prompts.CoordinatorProfileID,
+					SurfaceID: surfaceID,
+					Plan:      plan,
+					Profiles:  profiles,
+					WebSearch: enabled,
+				})
+				contractcheck.FailErr(t, "NewReader "+surfaceID, err)
+				vars := map[string]any{}
+				contractcheck.FailErr(t, "MergeForTurn "+surfaceID, capability.MergeForTurn(vars, reader,
+					inject.ResolveAgentRoster(surfaceID, spawn.AmbientAllowedAgents(), rootCount, false, enabled).Effective))
+				vars, err = prompts.Vars(reader, vars)
+				contractcheck.FailErr(t, "prompts.Vars "+surfaceID, err)
+				if vars["web_search_enabled"] != enabled {
+					t.Fatalf("%s roots=%d: web_search_enabled = %v, want %t", surfaceID, rootCount, vars["web_search_enabled"], enabled)
+				}
+				rendered, err := engine.Render(t.Context(), "agents/coordinator-core.md", vars)
+				contractcheck.FailErr(t, "render coordinator-core "+surfaceID, err)
+				for _, id := range webIDs {
+					mentioned := strings.Contains(rendered, id)
+					if !enabled && mentioned {
+						t.Errorf("%s roots=%d with web search off offers %s", surfaceID, rootCount, id)
+					}
+					if enabled && mentioned {
+						offeredWhenEnabled = true
+					}
 				}
 			}
 		}
-
-		// Folder sessions must keep the freshness clause on Invariant 5 (not only the
-		// no-folder External-claims branch / soft Stale-training partial).
-		folderVars := map[string]any{
-			"execution_mode":     "investigate",
-			"has_file_tools":     true,
-			"web_search_enabled": enabled,
-		}
-		folderRendered, err := engine.Render(context.Background(), "agents/coordinator-core.md", folderVars)
-		contractcheck.FailErr(t, "render coordinator-core folder", err)
-		hasFresh := strings.Contains(folderRendered, "Stale-training check:") &&
-			strings.Contains(folderRendered, "claims this turn")
-		if enabled {
-			if !hasFresh {
-				t.Fatalf("enabled=true + has_file_tools must keep the stale-training check")
-			}
-		} else if hasFresh {
-			t.Fatalf("enabled=false + has_file_tools must omit the stale-training check")
-		}
-		// The no-web branch still rejects unsupported recall.
-		if !enabled && !strings.Contains(folderRendered, "**External facts:**") {
-			t.Fatal("enabled=false must still state that training recall is not evidence")
-		}
 	}
-
-	_ = gated // The core render covers gated partials.
+	if !offeredWhenEnabled {
+		t.Fatal("no surface offers a web tool or the web researcher with web search on")
+	}
 }

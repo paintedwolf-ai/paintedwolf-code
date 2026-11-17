@@ -188,3 +188,17 @@ func TestDeferredScanCatalogStubsNotRegistered(t *testing.T) {
 		}
 	}
 }
+
+func TestShippedScanDomainIDsRegistered(t *testing.T) {
+	shipped := conditions.ShippedScanDomainIDs()
+	if len(shipped) == 0 {
+		t.Fatal("no shipped scan domain ids")
+	}
+	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
+	testutil.FailErr(t, "build conditions registry", err)
+	for _, id := range shipped {
+		if !reg.Has(id) {
+			t.Errorf("shipped scan domain id %q is not registered", id)
+		}
+	}
+}
