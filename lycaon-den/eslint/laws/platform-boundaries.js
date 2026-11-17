@@ -164,8 +164,8 @@ export default [
     ],
     imports: [{ from: "src/api/project-path.ts", names: ["resolveProjectFile"] }],
     seed: {
-      file: "src/components/LogDigestOutline.tsx",
-      code: `import { resolveProjectFile } from "../api/project-path.ts"; export { resolveProjectFile };`,
+      file: "src/components/transcript/UserBubble.tsx",
+      code: `import { resolveProjectFile } from "../../api/project-path.ts"; export { resolveProjectFile };`,
     },
   },
   {
@@ -177,13 +177,6 @@ export default [
       { from: "src/**/external-open-prefs.ts", names: ["externalOpenPrefs"] },
     ],
     seed: { code: `import { openInExternalEditor } from "./external-source.ts"; export { openInExternalEditor };` },
-  },
-  {
-    name: "log-digest-links-through-source-path-link",
-    message: "Log digest anchors render SourcePathLink; they do not open source directly.",
-    files: ["src/components/LogDigestOutline.tsx"],
-    imports: [{ from: "src/platform/navigation/open-source.ts", names: ["openSourceLocation"] }],
-    seed: { code: `import { openSourceLocation } from "../platform/navigation/open-source.ts"; export { openSourceLocation };` },
   },
   {
     name: "path-link-density-is-closed",
