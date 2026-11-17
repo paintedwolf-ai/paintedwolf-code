@@ -2,7 +2,6 @@ package workflowdiag
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"sync"
 
@@ -99,19 +98,6 @@ func (c *Catalog) Has(code Code) bool {
 	}
 	_, ok := c.entries[code]
 	return ok
-}
-
-// Codes returns catalog keys sorted by string value.
-func (c *Catalog) Codes() []Code {
-	if c == nil {
-		return nil
-	}
-	out := make([]Code, 0, len(c.entries))
-	for code := range c.entries {
-		out = append(out, code)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
-	return out
 }
 
 // Emit renders one diagnostic. It panics if code ∉ Catalog — emission is only

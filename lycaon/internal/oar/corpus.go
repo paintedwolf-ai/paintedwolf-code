@@ -386,7 +386,7 @@ func fixtureDeclaration(host *EngineDeclaration, in FixtureInput) (*EngineDeclar
 	}
 	decl := &EngineDeclaration{
 		Host:               "fixture",
-		Profiles:           []string{ProfileFilesystem, ProfileContentSafety, ProfileMCP},
+		Profiles:           []string{oarcopy.ProfileFilesystem, oarcopy.ProfileContentSafety, oarcopy.ProfileMCP},
 		Window:             16,
 		Detectors:          []string{"detector://noop", "detector://error", "detector://fixture"},
 		ExpressionNodesMax: 256,

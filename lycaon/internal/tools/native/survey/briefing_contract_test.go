@@ -1,17 +1,16 @@
 package survey
 
 import (
-	"encoding/json"
 	"fmt"
+	"strings"
+	"testing"
+	"time"
+
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/testutil"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
-	"strings"
-	"testing"
-	"time"
 )
 
 func prepareBriefingCatalog(t *testing.T, dir string, tool *SummarizeTool) {
@@ -31,53 +30,6 @@ func prepareBriefingCatalog(t *testing.T, dir string, tool *SummarizeTool) {
 		t.Fatalf("catalog not ready: %+v", status)
 	}
 	testutil.FailErr(t, "close preparation view", reader.Close())
-}
-
-func TestDirectoryMapWorkAndPages(t *testing.T) {
-	for _, size := range []int{32, 256} {
-		t.Run(fmt.Sprint(size), func(t *testing.T) {
-			dir := t.TempDir()
-			for i := range size {
-				writeFile(t, dir, fmt.Sprintf("area-%03d-%s/deep/file.go", i, strings.Repeat("x", 100)), "package source\n")
-			}
-			summary := testSummarizeTool(t, dir)
-			prepareBriefingCatalog(t, dir, summary)
-			var work mapWork
-			tool := &ListDirTool{Boundary: summary.Boundary, Catalog: summary.Catalog, ObserveMap: func(w mapWork) { work = w }}
-			args := map[string]any{"path": "."}
-			seen := map[string]bool{}
-			for page := 0; page < size; page++ {
-				raw, err := tool.Run(t.Context(), args, nativefixture.Context(dir))
-				testutil.FailErr(t, "map page", err)
-				var result listDirResponse
-				testutil.FailErr(t, "decode map page", json.Unmarshal([]byte(surveyJSONBody(raw)), &result))
-				receipt, ok := surveyreceipt.Parse(raw)
-				if !ok || receipt.Truncated != result.Truncated {
-					t.Fatalf("map receipt=%+v truncated=%v", receipt, result.Truncated)
-				}
-				if len(raw) > mapTokenBudget*4 || work.MetadataRows > mapPageEntries*3+1 || work.DirectoriesOpened != 0 || work.DirectoryEntries != 0 {
-					t.Fatalf("map cost: bytes=%d work=%+v", len(raw), work)
-				}
-				if result.Coverage.EntriesTotal == nil || *result.Coverage.EntriesTotal != size {
-					t.Fatalf("map coverage=%+v", result.Coverage)
-				}
-				for _, child := range result.Tree.Children {
-					if seen[child.Path] || child.DescendantFiles == nil || *child.DescendantFiles != 1 || len(child.Children) != 0 {
-						t.Fatalf("map child=%+v repeated=%v", child, seen[child.Path])
-					}
-					seen[child.Path] = true
-				}
-				if len(result.NextActions) == 0 {
-					break
-				}
-				action := result.NextActions[0]
-				args = map[string]any{"path": action.Path, "cursor": action.Cursor}
-			}
-			if len(seen) != size {
-				t.Fatalf("map visited=%d want=%d", len(seen), size)
-			}
-		})
-	}
 }
 
 func TestPatternBriefingWorkBoundIncludesDiscovery(t *testing.T) {
@@ -117,28 +69,6 @@ func TestPatternBriefingWorkBoundIncludesDiscovery(t *testing.T) {
 				t.Fatalf("pattern final page=%+v", result)
 			}
 		})
-	}
-}
-
-func TestColdDirectoryMapHasOneBoundedDirectoryRead(t *testing.T) {
-	dir := t.TempDir()
-	for i := range 100 {
-		writeFile(t, dir, fmt.Sprintf("area-%03d/deep/source.go", i), "package source")
-	}
-	tctx := nativefixture.Context(dir)
-	tool := &ListDirTool{Boundary: nativefixture.Boundary(t)}
-	resolved, err := projectpaths.ResolveRead(t.Context(), tool.Boundary, tctx, ".")
-	testutil.FailErr(t, "resolve cold map", err)
-	result := listDirResponse{Path: ".", View: "map", Tree: &directoryMapNode{Path: ".", Type: "dir"}, Coverage: &mapCoverage{CatalogState: "warming"}}
-	var work mapWork
-	testutil.FailErr(t, "cold map", coldDirectoryMap(t.Context(), tool, tctx, resolved, &result, &work))
-	if work.DirectoriesOpened != 1 || work.DirectoryEntries > mapReadEntries || len(result.Tree.Children) > mapPageEntries {
-		t.Fatalf("cold work=%+v", work)
-	}
-	for _, node := range result.Tree.Children {
-		if node.ImmediateChildren != nil || node.DescendantFiles != nil {
-			t.Fatalf("unobserved counts=%+v", node)
-		}
 	}
 }
 

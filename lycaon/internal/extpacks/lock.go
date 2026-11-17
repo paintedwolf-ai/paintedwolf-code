@@ -279,7 +279,7 @@ func walkPackTree(root, packID string, captureUnits bool) (walkedPackTree, error
 				_, _ = h.Write(data)
 				units = append(units, InventoriedUnit{
 					ID:      unitID,
-					Kind:    kindRootForRel(rel),
+					Kind:    KindRootForUnitID(rel),
 					Path:    OnDisk(path),
 					Content: data,
 				})

@@ -12,6 +12,18 @@ const (
 	Deterministic
 )
 
+func (m SectionMode) String() string {
+	switch m {
+	case Generated:
+		return "generated"
+	case Lookup:
+		return "lookup"
+	case Deterministic:
+		return "deterministic"
+	}
+	return "unknown"
+}
+
 // SectionPlan is one resolved section of a target, built with bounded work
 // and no model call.
 type SectionPlan struct {
@@ -24,6 +36,9 @@ type SectionPlan struct {
 	Text string
 	// Fallback is factual text used when generation yields nothing usable.
 	Fallback string
+	// Quality is copied onto the section's generated or fallback result. It
+	// derives from the inputs and stays out of the manifest hash.
+	Quality []string
 }
 
 // Prompt is the rendered utility request for a generated section.

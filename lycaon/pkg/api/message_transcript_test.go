@@ -433,7 +433,7 @@ func TestPromptRecoveryConservesInterleavedConversation(t *testing.T) {
 				if !reflect.DeepEqual(rows[row.ID], row) {
 					t.Fatalf("row %s was altered", row.ID)
 				}
-				target := draftRecoveryTarget(row)
+				target := DraftRecoveryTarget(row)
 				pos := positions[row.ID]
 				if target == "" {
 					if pos <= lastOrdinary {

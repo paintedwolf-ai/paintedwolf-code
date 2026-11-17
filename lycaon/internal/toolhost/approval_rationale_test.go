@@ -163,7 +163,7 @@ func attachRequest(checkpointID string) toolapproval.AIRationaleAttachRequest {
 
 func cause() briefing.CausalRead {
 	return briefing.CausalRead{Found: true, OutputID: "out", Prose: "SUPPLIED_PROSE", IntentID: "u1", Intent: "SUPPLIED_INTENT",
-		ReasoningJSON: `{"text":"SUPPLIED_REASONING"}`, ReasoningBytes: 30, CallsInOutput: 1,
+		Reasoning: briefing.ReasoningRead{Present: true, TextChars: 18, Tail: "SUPPLIED_REASONING"}, CallsInOutput: 1,
 		Results: []briefing.ResultExcerpt{{Tool: "read", Outcome: "success", Content: "SUPPLIED_RESULT"}}}
 }
 

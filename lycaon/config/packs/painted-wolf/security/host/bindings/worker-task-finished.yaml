@@ -12,3 +12,4 @@ invariants:
   optional_vars:
   - evidence_digest
   - last_worker_decision_request
+  - worker_result

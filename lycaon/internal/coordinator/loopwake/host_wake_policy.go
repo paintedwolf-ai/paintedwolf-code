@@ -67,11 +67,11 @@ func (l *HostWakePolicy) hostWakeSkipReason(ctx context.Context, in HostWakeActi
 	// Always-wake facts bypass worker-idle gating.
 	// Dormant terminal transitions do not start another model turn.
 	if isAlwaysWakeInform(in.Inform) || (isAlwaysWakeNudge(in.Wake) && strings.TrimSpace(in.CompletingJobID) != "") {
-		if l.workflowRunFinished(ctx, in.SessionID) && !l.Subscriptions.overlayPromoteDue(ctx, in.SessionID, in.Env) && !in.Env.HasWorkerDecision() {
+		if l.workflowRunFinished(ctx, in.SessionID) && !l.Subscriptions.overlayPromoteDue(ctx, in.SessionID) && !in.Env.HasWorkerDecision() {
 			return "skip:workflow_terminal", true
 		}
 		if phaseAdvancedWake(in) &&
-			!l.Subscriptions.overlayPromoteDue(ctx, in.SessionID, in.Env) &&
+			!l.Subscriptions.overlayPromoteDue(ctx, in.SessionID) &&
 			!in.Env.HasWorkerDecision() &&
 			!l.hostWakeActionable(ctx, in) {
 			return "skip:non_actionable", true
@@ -91,7 +91,7 @@ func (l *HostWakePolicy) hostWakeSkipReason(ctx context.Context, in HostWakeActi
 		l.Waits.disarmTimerOnClosedBatch(ctx, in.SessionID, live)
 		return "skip:batch_closed", true
 	}
-	if l.Subscriptions.overlayPromoteDue(ctx, in.SessionID, in.Env) {
+	if l.Subscriptions.overlayPromoteDue(ctx, in.SessionID) {
 		return "", false
 	}
 	// A worker decision stays actionable during sibling work.

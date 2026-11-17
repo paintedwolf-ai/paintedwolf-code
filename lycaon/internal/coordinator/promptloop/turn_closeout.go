@@ -11,7 +11,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -110,7 +109,7 @@ type TurnCloseoutNudge func(ctx context.Context, sess *api.Session, profileID st
 type IterationRunwayNudge func(ctx context.Context, sess *api.Session, profileID string, remaining int) HostNudge
 
 // IterationRunwayThreshold reserves final iterations for handoff on longer
-// coordinator turns; a worker's runway follows spawn.WorkerRunway.
+// coordinator turns. A worker round has no iteration cap, so no runway.
 const IterationRunwayThreshold = 10
 
 func (l *turnCloseout) maybeTurnCloseout(
@@ -130,8 +129,7 @@ func (l *turnCloseout) maybeTurnCloseout(
 // iterationRunwayFires includes the current zero-based iteration in the remaining budget.
 func iterationRunwayFires(sess *api.Session, iterIndex, maxIter int) bool {
 	if sess.IsWorkerChild() {
-		runway := spawn.WorkerRunway(maxIter)
-		return runway > 0 && maxIter-iterIndex == runway
+		return false
 	}
 	if maxIter < 2*IterationRunwayThreshold {
 		return false
@@ -179,10 +177,6 @@ func (l *turnCloseout) applyLandingAdvisories(
 	}
 	st.history = updated
 
-	st.history, err = l.Nudges.maybeWorkerBudgetAnswerNudge(ctx, sess, sessionID, st.history, step, maxIter, st)
-	if err != nil {
-		return closeoutNudgeSent, err
-	}
 	st.history, err = l.maybeIterationRunwayNudge(ctx, sess, sessionID, profileID, st.history, step, maxIter, st)
 	if err != nil {
 		return closeoutNudgeSent, err

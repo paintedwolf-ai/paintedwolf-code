@@ -2,6 +2,7 @@ package persistence
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -30,12 +31,12 @@ func (s *Teardowns) PendingTeardowns(ctx context.Context) ([]runstate.TeardownIn
 
 func (s *Teardowns) CompleteTeardown(ctx context.Context, operationID string) error {
 	return s.transactions.queries.CompleteWorkflowTeardownOperation(ctx, db.CompleteWorkflowTeardownOperationParams{
-		UpdatedAt: db.FormatTime(time.Now().UTC()), ID: operationID,
+		UpdatedAt: timelayout.Format(time.Now().UTC()), ID: operationID,
 	})
 }
 
 func (s *Teardowns) FailTeardown(ctx context.Context, operationID, detail string) error {
 	return s.transactions.queries.FailWorkflowTeardownOperation(ctx, db.FailWorkflowTeardownOperationParams{
-		LastError: detail, UpdatedAt: db.FormatTime(time.Now().UTC()), ID: operationID,
+		LastError: detail, UpdatedAt: timelayout.Format(time.Now().UTC()), ID: operationID,
 	})
 }

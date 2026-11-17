@@ -14,7 +14,7 @@ func TestStaticRejectFormatterFormatParse(t *testing.T) {
 		HintCodes: map[string]HintEntry{
 			"COORDINATOR_UNGROUNDED_CLAIM": {
 				What: "claimed without a ledger job",
-				Fix:  "Call delegate_dispatch for the leg",
+				Fix:  "Call task for the work",
 			},
 		},
 	}
@@ -26,7 +26,7 @@ func TestStaticRejectFormatterFormatParse(t *testing.T) {
 	}
 	block, err := f.Parse(raw)
 	testutil.FailErr(t, "f.Parse failed", err)
-	if block.Code != "COORDINATOR_UNGROUNDED_CLAIM" || block.What != "claimed without a ledger job" || block.Fix != "Call delegate_dispatch for the leg" {
+	if block.Code != "COORDINATOR_UNGROUNDED_CLAIM" || block.What != "claimed without a ledger job" || block.Fix != "Call task for the work" {
 		t.Fatalf("parsed = %+v", block)
 	}
 }

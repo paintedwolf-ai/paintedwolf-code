@@ -4,11 +4,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"io"
 	"os"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/textfile"
 )
 
@@ -19,7 +19,7 @@ type previewCapture struct {
 
 func (c *previewCapture) Write(p []byte) (int, error) {
 	c.size += int64(len(p))
-	if c.size <= sourceledger.MaxRevisionContentBytes {
+	if c.size <= sourceblob.MaxRevisionContentBytes {
 		c.content = append(c.content, p...)
 	} else {
 		c.content = nil
@@ -28,13 +28,13 @@ func (c *previewCapture) Write(p []byte) (int, error) {
 }
 
 func (c *previewCapture) text() (string, string) {
-	if c.size > sourceledger.MaxRevisionContentBytes {
+	if c.size > sourceblob.MaxRevisionContentBytes {
 		return "", "This file is too large for a text preview."
 	}
 	if c.size == 0 {
 		return "", ""
 	}
-	value, _, err := textfile.Decode(c.content, textfile.LimitsForRaw(sourceledger.MaxRevisionContentBytes))
+	value, _, err := textfile.Decode(c.content, textfile.LimitsForRaw(sourceblob.MaxRevisionContentBytes))
 	if err != nil {
 		return "", "This file has no text preview."
 	}

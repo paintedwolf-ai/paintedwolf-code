@@ -1,8 +1,5 @@
 import { LycaonApiError } from "../../api/http.ts";
-import {
-  applyFilesBufferLoadError,
-  applyFilesBufferUnsupportedEncoding,
-} from "../documents/project-files-buffers.ts";
+import { applyFilesBufferLoadError, applyFilesBufferUnsupportedEncoding } from "../documents/project-files-buffer-io.ts";
 import type { FileBufferKey } from "./project-files-model.ts";
 
 /** Map a GET /source failure onto buffer state (info card vs load error). */

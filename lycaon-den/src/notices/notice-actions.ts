@@ -1,13 +1,11 @@
 import { createSignal } from "solid-js";
 import { invalidateContributionFrame } from "../contributions/contribution-store.ts";
-import type { NoticeAction as NoticeActionWire } from "../api/types.ts";
+import type { NoticeAction } from "../api/types.ts";
 import type { NoticeScope } from "./notice-scope.ts";
 
-/** Catalog-declared actions carried on the wire. */
-export type NoticeActionKind = NoticeActionWire;
-
-export type NoticeAction = {
-  id: NoticeActionKind;
+/** A catalog-declared action resolved to a button. */
+type NoticeActionButton = {
+  id: NoticeAction;
   label: string;
   variant?: "primary" | "secondary";
   run: () => void;
@@ -70,7 +68,7 @@ function promptActionsFor(scope: NoticeScope | undefined): SessionPromptActions 
   return stack?.[stack.length - 1] ?? null;
 }
 
-function isNoticeActionKind(value: string): value is NoticeActionKind {
+function isNoticeAction(value: string): value is NoticeAction {
   return (
     value === "open_ai_providers" ||
     value === "retry_contribution_frame" ||
@@ -81,9 +79,9 @@ function isNoticeActionKind(value: string): value is NoticeActionKind {
 }
 
 function actionFor(
-  kind: NoticeActionKind,
+  kind: NoticeAction,
   scope: NoticeScope | undefined,
-): NoticeAction | null {
+): NoticeActionButton | null {
   switch (kind) {
     case "open_ai_providers": {
       const open = shellSinks()?.openAIProviders;
@@ -129,15 +127,15 @@ type ActionableNotice = {
 };
 
 /** Returns all in-app actions for catalog-declared destinations on a notice. */
-export function noticeActions(notice: ActionableNotice): readonly NoticeAction[] {
+export function noticeActions(notice: ActionableNotice): readonly NoticeActionButton[] {
   if (!notice.actions || notice.actions.length === 0) {
     return [];
   }
 
-  const result: NoticeAction[] = [];
+  const result: NoticeActionButton[] = [];
   for (const a of notice.actions) {
     const kind = a.trim();
-    if (isNoticeActionKind(kind)) {
+    if (isNoticeAction(kind)) {
       const act = actionFor(kind, notice.scope);
       if (act) {
         result.push(act);
@@ -148,6 +146,6 @@ export function noticeActions(notice: ActionableNotice): readonly NoticeAction[]
 }
 
 /** Returns the primary in-app action for a catalog-declared destination. */
-export function noticeAction(notice: ActionableNotice): NoticeAction | null {
+export function noticeAction(notice: ActionableNotice): NoticeActionButton | null {
   return noticeActions(notice)[0] ?? null;
 }

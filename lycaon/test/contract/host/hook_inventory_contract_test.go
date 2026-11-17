@@ -106,7 +106,6 @@ func parseWireHookBindings(t *testing.T, path string) []wireHookBinding {
 		"workflowMgr.Feedback":    "workflow/inputs.Feedback",
 		"workflowMgr.Asks":        "workflow/inputs.Asks",
 		"workflowMgr.Verdicts":    "workflow/review.Verdicts",
-		"delegationMgr":           "delegation.Manager",
 	}
 
 	isHookField := func(name string) bool {
@@ -127,8 +126,6 @@ func parseWireHookBindings(t *testing.T, path string) []wireHookBinding {
 		managerVar = strings.ReplaceAll(managerVar, "deps.Workflows.Manager", "workflowMgr")
 		if strings.Contains(filepath.ToSlash(path), "/app/workflows/") {
 			managerVar = strings.ReplaceAll(managerVar, "r.Manager", "workflowMgr")
-		} else if strings.Contains(filepath.ToSlash(path), "/app/delegations/") {
-			managerVar = strings.ReplaceAll(managerVar, "r.Manager", "delegationMgr")
 		}
 		if !isHookField(sel.Sel.Name) {
 			return true

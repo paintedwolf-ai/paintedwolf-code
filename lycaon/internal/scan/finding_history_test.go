@@ -2,6 +2,7 @@ package scan
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
@@ -160,7 +161,7 @@ func TestBlobFindingsCacheRoundTrip(t *testing.T) {
 func TestBlobFindingsReportsCorruptCache(t *testing.T) {
 	store := authorityTestStore(t)
 	testutil.FailErr(t, "seed corrupt cache", store.queries.UpsertScanBlobFindings(t.Context(), db.UpsertScanBlobFindingsParams{
-		ExecutionFingerprint: "fp", ContentID: "sha", TargetPath: "a.go", FindingsJson: "{}", CreatedAt: db.FormatTime(time.Now()),
+		ExecutionFingerprint: "fp", ContentID: "sha", TargetPath: "a.go", FindingsJson: "{}", CreatedAt: timelayout.Format(time.Now()),
 	}))
 	findings, present, err := store.BlobFindings(t.Context(), "fp", "sha", "a.go")
 	if err == nil || present || len(findings) != 0 {

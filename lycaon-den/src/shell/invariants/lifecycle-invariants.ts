@@ -120,8 +120,3 @@ export const VIEW_FILES_INVARIANTS: InvariantEntry[] = [
     note: "Peer close is scoped; macOS main close hides instead of quitting",
   },
 ];
-
-export const LIFECYCLE_INVARIANTS: InvariantEntry[] = [
-  ...BOOT_OPEN_INVARIANTS,
-  ...VIEW_FILES_INVARIANTS,
-];

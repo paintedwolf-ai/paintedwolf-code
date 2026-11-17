@@ -20,9 +20,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/programtest"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tooloutput"
@@ -30,10 +28,8 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/mutation"
-	"github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/internal/tools/native/textutil"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // perfFixture is the command program entry composed exactly as the host
@@ -240,20 +236,6 @@ func BenchmarkCommandProgram(b *testing.B) {
 	}
 }
 
-// BenchmarkStructuredWc is the structured tool the native wc child replaces,
-// on the same file, for the per-child dispatch comparison.
-func BenchmarkStructuredWc(b *testing.B) {
-	f := newPerfFixture(b, nil)
-	writeLines(b, filepath.Join(f.Dir, "small.txt"), 100, func(i int) string { return fmt.Sprintf("line %d", i) })
-	tool := newStructuredWc(f)
-	b.ReportAllocs()
-	for b.Loop() {
-		if _, err := tool.run(b, []string{"small.txt"}); err != nil {
-			b.Fatal(err)
-		}
-	}
-}
-
 // BenchmarkCommandSearch measures grep over a 10,000-file tree, live and with
 // the source catalog's Bloom index warmed, and find over traversal_visits
 // entries.
@@ -313,26 +295,6 @@ func warmCatalog(tb testing.TB, catalog *sourcecatalog.Catalog, dir string) bool
 		observation.Close()
 	}
 	return observable
-}
-
-// structuredWc runs the structured wc tool in the fixture's root.
-type structuredWc struct {
-	tool *survey.WcTool
-	tc   tools.ToolContext
-}
-
-func newStructuredWc(f *perfFixture) structuredWc {
-	tc := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: f.Dir, IsPrimary: true}}, ActiveRootID: "r1", SourceWorkspaceKind: api.SourceWorkspaceKindProject}}
-	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.Session, "structured-wc"
-	return structuredWc{tool: &survey.WcTool{Boundary: f.Boundary}, tc: tc}
-}
-
-func (s structuredWc) run(tb testing.TB, paths []string) (string, error) {
-	args := []any{}
-	for _, p := range paths {
-		args = append(args, p)
-	}
-	return s.tool.Run(context.Background(), map[string]any{"paths": args}, s.tc)
 }
 
 func currentMaxRSSBytes() int64 {

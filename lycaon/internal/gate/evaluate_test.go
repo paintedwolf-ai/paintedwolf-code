@@ -394,7 +394,7 @@ func TestEveryGateHasAFixtureAndADefinition(t *testing.T) {
 	for _, f := range fixtures() {
 		covered[f.gate] = true
 	}
-	for _, g := range All() {
+	for _, g := range api.AllApprovalGateValues() {
 		if g == api.GateIncompleteFacts {
 			if defined[g] {
 				t.Errorf("%s must stay structural, not a predicate", g)
@@ -407,7 +407,7 @@ func TestEveryGateHasAFixtureAndADefinition(t *testing.T) {
 		if !covered[g] {
 			t.Errorf("%s has no fixture", g)
 		}
-		if rank(g) >= len(All()) {
+		if rank(g) >= len(api.AllApprovalGateValues()) {
 			t.Errorf("%s has no place in the citation order", g)
 		}
 	}
@@ -415,7 +415,7 @@ func TestEveryGateHasAFixtureAndADefinition(t *testing.T) {
 
 // Every gate is reachable from some posture or is structural.
 func TestEveryGateIsReachableFromAPosture(t *testing.T) {
-	for _, g := range All() {
+	for _, g := range api.AllApprovalGateValues() {
 		if g == api.GateIncompleteFacts {
 			for _, p := range []Posture{PostureLight, PostureBalanced, PostureStrict} {
 				if p.Enables(g) {
@@ -651,7 +651,7 @@ func sensitiveReasonSegment(reasonKey string) string {
 }
 
 func TestReuseShapeAndScopeAgreeOnNone(t *testing.T) {
-	for _, g := range All() {
+	for _, g := range api.AllApprovalGateValues() {
 		r := ReuseFor(g)
 		if (r.Shape == ReuseNone) != (r.Scope == ScopeNone) {
 			t.Fatalf("%s: shape %q and scope %q disagree on none", g, r.Shape, r.Scope)

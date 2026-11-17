@@ -10,6 +10,16 @@ from ci_policy import impact, evidence, resources, recovery
 
 
 class AdmissionTests(unittest.TestCase):
+    def test_a_pull_request_merge_is_measured_from_the_branch_it_merges_into(self):
+        event = {"pull_request": {"head": {"sha": "head"}, "base": {"sha": "stale"}}}
+        answers = {("rev-list", "--parents", "-n", "1", "HEAD"): "merge main head",
+                   ("merge-base", "HEAD", "stale"): "old"}
+        with patch.object(impact, "git", side_effect=lambda *args: answers[args]):
+            self.assertEqual(impact.event_base(event, "pull_request"), "main")
+        answers[("rev-list", "--parents", "-n", "1", "HEAD")] = "head parent"
+        with patch.object(impact, "git", side_effect=lambda *args: answers[args]):
+            self.assertEqual(impact.event_base(event, "pull_request"), "old")
+
     def test_shared_unknown_deleted_inputs_expand_not_skip(self):
         for paths in [['docs/openapi/api.yaml'], ['lycaon/go.mod'], ['scripts/x.py'], ['new-area/data.bin'],
                       ['lycaon/config/prompt.md']]:

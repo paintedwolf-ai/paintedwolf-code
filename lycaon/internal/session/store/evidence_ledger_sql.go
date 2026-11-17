@@ -250,10 +250,6 @@ func (s *sqlCore) projectUntrustedLedger(ctx context.Context, tx *sql.Tx, sessio
 	return tx.Commit()
 }
 
-func (ev *sqlEvidence) MarkSuperseded(ctx context.Context, sessionID, oldHandle, byHandle string) error {
-	return markSuperseded(ctx, ev.core.queries, sessionID, oldHandle, byHandle)
-}
-
 func markSuperseded(ctx context.Context, q *db.Queries, sessionID, oldHandle, byHandle string) error {
 	if err := ctx.Err(); err != nil {
 		return err

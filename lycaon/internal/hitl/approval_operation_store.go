@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -55,7 +56,7 @@ func (s *SQLStore) commitApprovalOperation(
 	qtx := s.queries.WithTx(tx)
 	checkpointRows, err := qtx.CommitApprovalCheckpoint(ctx, db.CommitApprovalCheckpointParams{
 		ResultJson:         resultJSON,
-		ResolvedAt:         db.NullString(db.FormatTime(resolvedAt)),
+		ResolvedAt:         db.NullString(timelayout.Format(resolvedAt)),
 		ResolvedBy:         db.NullString(resolution.By),
 		ResolvedByPersonID: db.NullString(resolution.PersonID),
 		ID:                 row.ID,
@@ -68,7 +69,7 @@ func (s *SQLStore) commitApprovalOperation(
 		return false, ErrCheckpointNotPending
 	}
 	operationRows, err := qtx.CommitApprovalOperation(ctx, db.CommitApprovalOperationParams{
-		CommittedAt:  db.NullString(db.FormatTime(resolvedAt)),
+		CommittedAt:  db.NullString(timelayout.Format(resolvedAt)),
 		CheckpointID: row.ID,
 	})
 	if err != nil {
@@ -123,7 +124,7 @@ func stageCheckpointDecisionTx(ctx context.Context, tx *sql.Tx, row StoredCheckp
 	}
 	return db.New(tx).UpsertCheckpointDecisionStamp(ctx, db.UpsertCheckpointDecisionStampParams{
 		SessionID: row.SessionID, ToolCallID: toolCallID,
-		DecisionJson: string(raw), CreatedAt: db.FormatTime(time.Now().UTC()),
+		DecisionJson: string(raw), CreatedAt: timelayout.Format(time.Now().UTC()),
 	})
 }
 
@@ -171,7 +172,7 @@ func patchCheckpointDecisionTx(ctx context.Context, tx *sql.Tx, row StoredCheckp
 
 func (s *SQLStore) rollbackApprovalOperation(ctx context.Context, checkpointID string) error {
 	return s.queries.RollbackApprovalOperation(ctx, db.RollbackApprovalOperationParams{
-		RolledBackAt: db.NullString(db.FormatTime(time.Now().UTC())), CheckpointID: checkpointID,
+		RolledBackAt: db.NullString(timelayout.Format(time.Now().UTC())), CheckpointID: checkpointID,
 	})
 }
 

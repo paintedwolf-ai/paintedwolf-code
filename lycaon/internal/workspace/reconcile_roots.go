@@ -13,14 +13,11 @@ import (
 )
 
 // ResolveDispatchWorkspaceSelection validates an explicit adapter.WorkspaceSelection against attached
-// project roots, narrowing the materialized/visible roots and subroots while keeping informational
-// taskPathHints separate.
+// project roots, narrowing the materialized and visible roots and subroots.
 func ResolveDispatchWorkspaceSelection(
 	attached []projectroot.RootRef,
 	selection adapter.WorkspaceSelection,
-	taskPathHints []string,
 ) ([]adapter.RootGrant, []projectroot.RootRef, error) {
-	_ = taskPathHints // Informational hints never change workspace authority or materialization.
 	grants := make([]adapter.RootGrant, 0, len(attached))
 	for _, r := range attached {
 		grants = append(grants, adapter.RootGrant{
@@ -44,28 +41,6 @@ func ResolveDispatchWorkspaceSelection(
 		})
 	}
 	return narrowedGrants, narrowedRefs, nil
-}
-
-// ReconcileSelectedSandboxRoots validates an explicit WorkspaceSelection against attached project roots
-// and reconciles branches against the narrowed root set while keeping taskPathHints separate.
-func ReconcileSelectedSandboxRoots(
-	ctx context.Context,
-	branchRoot string,
-	attached []projectroot.RootRef,
-	selection adapter.WorkspaceSelection,
-	taskPathHints []string,
-	settle SandboxSettler,
-	loadRetainedJobs func(context.Context) (map[string]struct{}, error),
-) (int, error) {
-	_, narrowedRefs, err := ResolveDispatchWorkspaceSelection(attached, selection, taskPathHints)
-	if err != nil {
-		return 0, err
-	}
-	liveDirs := make([]string, 0, len(narrowedRefs))
-	for _, r := range narrowedRefs {
-		liveDirs = append(liveDirs, r.Path)
-	}
-	return ReconcileSandboxRoots(ctx, branchRoot, liveDirs, settle, loadRetainedJobs)
 }
 
 // ReconcileSandboxRoots removes unreferenced branches of detached roots.

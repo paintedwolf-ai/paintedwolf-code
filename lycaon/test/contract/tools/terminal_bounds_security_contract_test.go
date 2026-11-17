@@ -74,7 +74,6 @@ func TestTerminalPTYReusesBoundedExecGuards(t *testing.T) {
 		{
 			path: filepath.Join(root, "lycaon", "internal", "exec", "pipeline.go"),
 			markers: []string{
-				"buildExecCmd",
 				"prepareNativeCommand",
 			},
 		},

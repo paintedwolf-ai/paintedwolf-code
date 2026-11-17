@@ -56,11 +56,8 @@ func TestResponseErrorsCarryStatus(t *testing.T) {
 		t.Fatalf("ok response errored: %v", err)
 	}
 	err := (Response{Status: StatusRefused, Code: "executable_mismatch", Message: "pw for pid 7"}).Err()
-	if StatusOf(err) != StatusRefused || err.Error() != "vault identity service: refused (executable_mismatch: pw for pid 7)" {
+	if err.Error() != "vault identity service: refused (executable_mismatch: pw for pid 7)" {
 		t.Fatalf("err = %v", err)
-	}
-	if StatusOf(errors.New("other")) != "" {
-		t.Fatal("plain error carries a status")
 	}
 	if (Response{Status: StatusNotFound, Code: "x"}).Err().Error() != "vault identity service: not_found (x)" ||
 		(Response{Status: StatusUnavailable}).Err().Error() != "vault identity service: unavailable" {

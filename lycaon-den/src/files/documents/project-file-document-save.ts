@@ -13,7 +13,7 @@ import {
   sourceSaveErrorMessage,
 } from "../../components/source/editor/source-editor-model.ts";
 import { LycaonApiError } from "../../api/http.ts";
-import { applyFilesBufferSaved } from "./project-files-buffers.ts";
+import { applyFilesBufferSaved } from "./project-files-buffer-io.ts";
 import { projectFilesState, type FileBuffer } from "./files-buffer-state.ts";
 import { flushFilesDraftSyncFor } from "./files-draft-sync.ts";
 import type { FileBufferKey } from "../components/project-files-model.ts";

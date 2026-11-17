@@ -4,7 +4,7 @@ import { createEffect, createSignal, on, onCleanup } from "solid-js";
 import type { SourceDefinitionCandidate } from "../../api/types.ts";
 import { clearSymbolPending, markSymbolPending } from "../../components/source/editor/codemirror-theme.ts";
 import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts";
-import { openFilesBuffer } from "../documents/project-files-buffers.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import type { FilesScope } from "../components/files-scope.ts";
 import { pushProjectJump } from "../components/project-files-jump-bridge.ts";
 import { DEFINITION_PENDING_NOTICE_DELAY_MS, definitionJumpOutcome, definitionMissCopy, definitionPendingCopy } from "./definition-jump.ts";

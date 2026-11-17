@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
-	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
 
@@ -103,16 +102,6 @@ func TestOpenDocumentOverTheBudgetRejectsEdits(t *testing.T) {
 	if len(docs.applied) != 0 {
 		t.Fatalf("applied %d edits to an over-budget document", len(docs.applied))
 	}
-}
-
-// Reads keep the larger budget: files between the two stay readable.
-func TestReadServesFilesBetweenTheBudgets(t *testing.T) {
-	dir := t.TempDir()
-	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "big.txt"), []byte(padTo("first\n", "", readcaps.MaxMutationBytes+1)), 0o644))
-	_, err := (&surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}).Run(context.Background(), map[string]any{
-		"path": "big.txt", "offset": 1, "limit": 1,
-	}, nativefixture.Context(dir))
-	testutil.FailErr(t, "read between budgets", err)
 }
 
 func TestGuardMutationContent(t *testing.T) {

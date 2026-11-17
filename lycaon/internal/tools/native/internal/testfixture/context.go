@@ -1,14 +1,13 @@
 package testfixture
 
 import (
-	"encoding/json"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -47,37 +46,4 @@ func AgentContext(dir, agent string) tools.ToolContext {
 	ctx := Context(dir)
 	ctx.Identity.Agent = agent
 	return ctx
-}
-
-func SurveyContent(t *testing.T, out string) string {
-	t.Helper()
-	var wrap struct {
-		Content string `json:"content"`
-	}
-	if err := json.Unmarshal([]byte(out), &wrap); err == nil && wrap.Content != "" {
-		return wrap.Content
-	}
-	return out
-}
-
-func GrepMatches(t *testing.T, out string) []map[string]any {
-	t.Helper()
-	body := SurveyContent(t, out)
-	var wrap struct {
-		Matches []map[string]any `json:"matches"`
-	}
-	if err := json.Unmarshal([]byte(body), &wrap); err != nil {
-		t.Fatalf("decode grep: %v", err)
-	}
-	if wrap.Matches == nil {
-		return []map[string]any{}
-	}
-	return wrap.Matches
-}
-
-func AssertReceipt(t *testing.T, out string) {
-	t.Helper()
-	if _, ok := surveyreceipt.Parse(out); !ok {
-		t.Fatalf("missing survey receipt in %q", out)
-	}
 }

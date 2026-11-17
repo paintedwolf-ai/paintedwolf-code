@@ -1,0 +1,28 @@
+spec_version: "1.0"
+id: WORKER_NAME_UNKNOWN
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - answer_decision
+    - instruct_worker
+    - task
+    - wait
+    - worker_cancel
+    - worker_history
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "WORKER_NAME_UNKNOWN"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:instruct_worker
+message: No worker in this session has that name.
+what: No worker in this session has that name.
+cause: The name matches no worker this session started.
+why: Workers are addressed by the name their task call returned, within the session that started them.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code WORKER_NAME_UNKNOWN; do not retry the same call
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      session_role: coordinator
+      tool: instruct_worker

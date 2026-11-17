@@ -1,3 +1,4 @@
+// Package toolscope classifies tools by the project roots they need.
 package toolscope
 
 import (

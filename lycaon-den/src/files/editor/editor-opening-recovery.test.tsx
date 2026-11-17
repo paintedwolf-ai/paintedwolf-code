@@ -2,7 +2,7 @@
 import { required } from "../../test/at.ts";
 import "../../test/document-outbox-fixture.ts";
 import { documentOutbox } from "../documents/document-outbox.ts";
-import { filesBufferText } from "../documents/project-files-buffers.ts";
+import { filesBufferText } from "../documents/files-buffer-state.ts";
 import { createSignal } from "solid-js";
 import { render, waitFor } from "@solidjs/testing-library";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -13,7 +13,8 @@ import { BackendTransportError } from "../../platform/connection/request-connect
 import { configureEditorDocuments, editorReplica, evictEditorDocument, preserveEditorDocumentDraft, resetEditorDocumentsForTests, resolveEditorDocument, subscribeEditorDocuments } from "../documents/editor-document.ts";
 import { flushFilesHotExitToDisk } from "../documents/files-hot-exit.ts";
 import { createFilesEditorSynchronization } from "./files-editor-synchronization.ts";
-import { applyFilesBufferEditorDocument, applyFilesBufferLoad, openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferEditorDocument, applyFilesBufferLoad } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 
 beforeEach(() => { resetEditorDocumentsForTests(); resetProjectFilesForTests(); });

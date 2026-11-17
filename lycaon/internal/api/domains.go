@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/api/gitadmin"
 	"github.com/lycaon/lycaon/internal/api/httpio"
@@ -14,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/browser/preview"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/extensionstate"
@@ -31,11 +31,14 @@ import (
 	"github.com/lycaon/lycaon/internal/promptattach"
 	scancadence "github.com/lycaon/lycaon/internal/scan/cadence"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/webindex"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
 )
 
@@ -143,11 +146,11 @@ type Storage struct {
 type Workers struct {
 	Git             *gitadmin.Handler
 	board           *board.SnapshotBuilder
-	delegations     *delegation.Manager
 	projectRegistry project.Registry
 	responses       *httpio.Responder
 	sessionStore    session.Store
 	workerCancel    *worker.CancelService
+	workerOps       *workerops.Service
 	workers         worker.WorkerQueue
 }
 
@@ -161,7 +164,17 @@ func composeDomains(s *Server, deps Dependencies) {
 	s.Routes.HarnessProviders = &HarnessProviders{costTracker: deps.Providers.CostTracker, llmSvc: deps.Providers.LLM, responses: &s.responses}
 	s.Routes.LocalData = &LocalData{extensionOwner: s.Admin.Extensions.Mutations.Owner, dataDir: s.dataDir, responses: &s.responses, sessions: s.sessions, sourceLedger: s.Sources.Workspace.SourceLedger, webIndex: deps.External.WebIndex, workerBranchRoot: s.workerBranchRoot, workers: deps.Workflow.Workers}
 	s.Routes.Storage = &Storage{dataDir: s.dataDir, database: deps.Core.Database, markRestorePending: s.markRestorePending, recovery: s.recovery, responses: &s.responses, storePath: s.storePath}
-	s.Routes.Workers = &Workers{Git: &s.Admin.Git, board: deps.Workflow.Board, delegations: deps.Workflow.Delegations, projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: s.sessionStore, workerCancel: deps.Workflow.WorkerCancel, workers: deps.Workflow.Workers}
+	s.Routes.Workers = &Workers{Git: &s.Admin.Git, board: deps.Workflow.Board, projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: s.sessionStore, workerCancel: deps.Workflow.WorkerCancel, workerOps: buildWorkerOps(deps), workers: deps.Workflow.Workers}
 	s.Routes.HarnessControl.HarnessPreparation = s.Routes.HarnessPreparation
 	s.Routes.HarnessControl.HarnessProviders = s.Routes.HarnessProviders
+}
+
+func buildWorkerOps(deps Dependencies) *workerops.Service {
+	if deps.Core.Database == nil {
+		return nil
+	}
+	return &workerops.Service{Reader: workerops.NewReader(
+		workerrecords.New(deps.Core.Database), deps.Workflow.Workers,
+		decisions.NewSQL(deps.Core.Database), deps.Approvals.Checkpoints,
+	)}
 }

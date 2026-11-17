@@ -1,9 +1,10 @@
 package oar
 
 import (
-	"github.com/lycaon/lycaon/internal/oarcore"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/oarcore"
 )
 
 // CurrentOARVersion is the revision this engine implements.
@@ -64,30 +65,6 @@ func (r *Rule) Tools() []string {
 // that name.
 func (r *Rule) Operations() []string {
 	return oarcore.ConjunctValues(r.When, "paintedwolf.operation")
-}
-
-// RequiresFor derives requires_facts: every fact a condition, flow and
-// selector reference beyond the core tier ([OAR-DOC-23], [OAR-PROF-5]).
-func RequiresFor(when string, flow []string, selector Selector) []string {
-	tiers := map[string]FactTier{}
-	for _, d := range factDecls {
-		tiers[publishedName(d.name, d.tier)] = d.tier
-	}
-	for _, f := range observationFns {
-		tiers[publishedName(f.name, f.tier)] = f.tier
-	}
-	names := FactsReferenced(when, flow)
-	names = append(names, selector.Clauses()...)
-	seen := map[string]bool{}
-	var out []string
-	for _, name := range names {
-		if t, declared := tiers[name]; declared && t != FactTierCore && !seen[name] {
-			seen[name] = true
-			out = append(out, name)
-		}
-	}
-	sort.Strings(out)
-	return out
 }
 
 // PortabilityReport lists the non-portable references in a rule.

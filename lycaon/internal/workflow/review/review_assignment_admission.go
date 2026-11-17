@@ -12,7 +12,6 @@ import (
 )
 
 const ReviewRequiredCode = "SUBMIT_VERDICT_REVIEW_REQUIRED"
-const ReviewContextChangedCode = runstate.ReviewContextChangedCode
 
 type assessedAssignment struct {
 	binding reviewcoverage.Binding

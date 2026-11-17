@@ -19,8 +19,8 @@ func TestImplementChildCompletesFromDeliveredWorkWithoutTests(t *testing.T) {
 	testutil.FailErr(t, "Get implement", err)
 
 	conditionRegistry, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		DelegationCloseout: func(context.Context, string) (bool, error) { return true, nil },
-		DeliveryReported:   func(context.Context, string, string, string) (bool, error) { return true, nil },
+		PlanCloseout:     func(context.Context, string) (bool, error) { return true, nil },
+		DeliveryReported: func(context.Context, string, string, string) (bool, error) { return true, nil },
 	})
 	testutil.FailErr(t, "NewDefaultRegistry", err)
 	parentID := "parent-run"

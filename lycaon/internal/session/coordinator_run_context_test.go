@@ -119,14 +119,14 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 	if msgs[1].WorkerSummary.WorkerID != jobID {
 		t.Fatalf("worker_summary.job_id = %q want %s", msgs[1].WorkerSummary.WorkerID, jobID)
 	}
-	if !strings.Contains(msgs[1].Content, `<task job_id="`+jobID+`"`) {
+	if !strings.Contains(msgs[1].Content, `<task `) || strings.Contains(msgs[1].Content, jobID) {
 		t.Fatalf("content = %q want the completion envelope as the model-facing body", msgs[1].Content)
 	}
 	toolEnvelope := ""
 	if msgs[1].WorkerSummary != nil {
 		toolEnvelope = msgs[1].WorkerSummary.Envelope
 	}
-	if !strings.Contains(toolEnvelope, `<task job_id="`+jobID+`"`) || !strings.Contains(toolEnvelope, `state="complete"`) {
+	if strings.Contains(toolEnvelope, jobID) || !strings.Contains(toolEnvelope, `state="complete"`) {
 		t.Fatalf("tool envelope = %q", toolEnvelope)
 	}
 }
@@ -179,7 +179,7 @@ func TestAppendWorkerSummaryFinalizesEnqueuedTaskTool(t *testing.T) {
 	if !strings.Contains(toolContent, `state="complete"`) {
 		t.Fatalf("prompt-visible tool content must carry the completion envelope, got %q", toolContent)
 	}
-	if !strings.Contains(envelope, `job_id="job-9"`) || !strings.Contains(envelope, `state="complete"`) {
-		t.Fatalf("worker_summary.envelope = %q want job-9 complete envelope", envelope)
+	if strings.Contains(envelope, "job-9") || !strings.Contains(envelope, `state="complete"`) {
+		t.Fatalf("worker_summary.envelope = %q want a complete envelope without the job", envelope)
 	}
 }

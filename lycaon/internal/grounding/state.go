@@ -1,5 +1,4 @@
-// Package grounding holds the per-session evidence-grounding circuit-breaker state
-// shared by the findings and delegation audit paths. It is storage-agnostic.
+// Package grounding holds session evidence-grounding policy, verdicts, and circuit-breaker state.
 package grounding
 
 import "sync"

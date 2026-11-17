@@ -31,7 +31,7 @@ func TestScanGatesRequireSourceSnapshotIdentity(t *testing.T) {
 				{api.ScanCategoryLint}, {api.ScanCategorySecurity, api.ScanCategorySecret},
 			} {
 				for _, id := range []string{"", "snapshot-1"} {
-					ledger.complete[scanKey("dep-1", id, categories)] = &api.CodeScan{
+					ledger.complete[scanKey("sess-1", id, categories)] = &api.CodeScan{
 						ID: "scan", Status: api.CodeScanStatusComplete, SourceSnapshotID: id,
 					}
 				}

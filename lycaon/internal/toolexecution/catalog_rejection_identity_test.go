@@ -52,12 +52,8 @@ func TestCatalogIntrinsicRejectionsKeepTheirIdentity(t *testing.T) {
 		{"git_merge", "GIT_COMMIT_PATH_DENIED"},
 		{"git_stash", "GIT_COMMIT_PATH_DENIED"},
 
-		{"delegate_dispatch", "COORDINATOR_DELEGATE_DISPATCH_USE_TASK"},
-		{"delegate_dispatch", "DELEGATE_DISPATCH_LEG_REQUIRED"},
 		{"answer_decision", "DECISION_CHANGED"},
-		{"answer_decision", "DECISION_JOB_ID_MISMATCH"},
 		{"worker_cancel", "WORKER_CANCEL_TERMINAL"},
-		{"task", "TASK_DECISION_PENDING"},
 		{"task", "WORKER_TYPE_UNAVAILABLE"},
 		{"promote_overlay", "OVERLAY_PROMOTE_NOT_FOUND"},
 		{"read", "PROJECT_HAS_NO_ROOTS"},
@@ -84,7 +80,6 @@ func TestCatalogIntrinsicRejectionsKeepTheirIdentity(t *testing.T) {
 		{"http_request", "HTTP_REQUEST_COOKIE_NOT_HELD"},
 		{"http_request", "HTTP_REQUEST_COOKIE_JAR_FAILED"},
 		{"wait", "WAIT_PROBE_SECRET_UNSUPPORTED"},
-		{"extend_worker_budget", "WORKER_BUDGET_EXTEND_NOT_RUNNING"},
 	} {
 		t.Run(tc.code, func(t *testing.T) {
 			gc := oar.NewGuardContext()

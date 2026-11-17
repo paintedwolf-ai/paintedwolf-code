@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -103,13 +104,13 @@ func (s *sqlRunStore) MarkWorkflowTerminalNotified(ctx context.Context, scanID, 
 		return fmt.Errorf("scan store not configured")
 	}
 	return s.queries.MarkWorkflowScanTerminalNotified(ctx, db.MarkWorkflowScanTerminalNotifiedParams{
-		TerminalNotifiedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+		TerminalNotifiedAt: db.NullString(timelayout.Format(time.Now().UTC())),
 		WorkflowRunID:      strings.TrimSpace(workflowRunID), ScanID: strings.TrimSpace(scanID),
 	})
 }
 
 func bindScanContextsTx(ctx context.Context, qtx *db.Queries, scanID, assessmentID, workflowRunID, sessionID string, at time.Time) (bool, error) {
-	createdAt := db.FormatTime(at)
+	createdAt := timelayout.Format(at)
 	changed := false
 	if assessmentID = strings.TrimSpace(assessmentID); assessmentID != "" {
 		rows, err := qtx.BindScanAssessment(ctx, db.BindScanAssessmentParams{

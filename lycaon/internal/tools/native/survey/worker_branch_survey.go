@@ -30,30 +30,6 @@ func branchRelUnderWorker(branchRoot, abs string) (string, bool) {
 	return rel, true
 }
 
-func workerBranchReadDir(
-	ctx context.Context,
-	tctx tools.ToolContext,
-	fullPath string,
-	opts sandbox.SurveyOptions,
-) ([]sandbox.SurveyEntry, bool, error) {
-	branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot)
-	if branch == "" {
-		return nil, false, nil
-	}
-	rel, ok := branchRelUnderWorker(branch, fullPath)
-	if !ok {
-		return nil, false, nil
-	}
-	if err := tools.RequireBranchWorkspace(tctx); err != nil {
-		return nil, true, err
-	}
-	if err := tctx.Source.BranchWorkspace.ValidateMeta(ctx); err != nil {
-		return nil, true, err
-	}
-	entries, err := workspace.OverlaySurveyReadDir(branch, rel, opts) //nolint:contextcheck // The view listing reads the core, which takes no context.
-	return entries, true, err
-}
-
 func workerBranchSurveyWalk(
 	ctx context.Context,
 	tctx tools.ToolContext,

@@ -3,9 +3,10 @@ package safecmd
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -30,16 +31,6 @@ func JQCaps() Caps {
 		Timeout:     JQTimeout,
 		ResultCount: JQMaxResults,
 	}
-}
-
-// StatCaps returns stat envelope limits.
-func StatCaps() Caps {
-	return Caps{ResultCount: StatMaxPaths}
-}
-
-// WCCaps returns wc envelope limits.
-func WCCaps() Caps {
-	return Caps{ResultCount: WCMaxFiles}
 }
 
 // MCPCaps returns MCP envelope limits.
@@ -107,24 +98,6 @@ func Reject(code string, data map[string]any) error {
 		data = map[string]any{}
 	}
 	return &toolrejection.ToolReject{Code: code, Data: data}
-}
-
-// EnforceInputBytes returns a structured reject when size exceeds Caps.InputBytes.
-// No-op when InputBytes is unset or size is within the cap.
-func (c Caps) EnforceInputBytes(size int64, code string, data map[string]any) error {
-	if c.InputBytes <= 0 || size <= c.InputBytes {
-		return nil
-	}
-	if data == nil {
-		data = map[string]any{}
-	}
-	if _, ok := data["bytes"]; !ok {
-		data["bytes"] = size
-	}
-	if _, ok := data["max_bytes"]; !ok {
-		data["max_bytes"] = c.InputBytes
-	}
-	return Reject(code, data)
 }
 
 // WithTimeout derives a child context canceled after Caps.Timeout.

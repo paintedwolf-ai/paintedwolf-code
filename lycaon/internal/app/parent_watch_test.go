@@ -10,7 +10,16 @@ import (
 	"testing/synctest"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/app/persistence"
+	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workerruntime"
+	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/coordinatorcontrol"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/worker"
 )
 
 func TestWatchParentExitUnarmedWithoutEnv(t *testing.T) {
@@ -91,5 +100,44 @@ func TestWatchParentExitStopsWithContext(t *testing.T) {
 	case <-gone:
 	case <-t.Context().Done():
 		t.Fatal("watchdog goroutine outlived its context")
+	}
+}
+
+func TestQuietRoundsWiring(t *testing.T) {
+	ctx := t.Context()
+	store := testdbfixture.Open(t, "quiet-rounds.db")
+	cfg := worker.DefaultWorkersConfig()
+	b := &serveBuilder{
+		storage:       persistence.Runtime{Database: store},
+		workerRuntime: workerruntime.New(store, nil, cfg),
+		sessions: &sessions.Runtime{
+			Manager:     &session.Host{Coordinator: &coordinatorcontrol.Service{Workers: &coordinatorcontrol.Workers{}}},
+			Checkpoints: &hitl.Checkpoints{Store: hitl.NewSQLStore(store)},
+		},
+		worker: workerCoordination{cfg: cfg},
+	}
+	quiet := b.quietRounds()
+	jobs, err := quiet.Jobs(ctx)
+	testutil.FailErr(t, "quiet.Jobs", err)
+	if len(jobs) != 0 {
+		t.Fatalf("len(jobs) = %d, want 0", len(jobs))
+	}
+	ts, err := quiet.Progress(ctx, "child-1")
+	testutil.FailErr(t, "quiet.Progress empty", err)
+	if !ts.IsZero() {
+		t.Fatalf("empty progress = %v, want zero", ts)
+	}
+	now := "2026-01-02T03:04:05Z"
+	testdbseed.InsertProject(t, store, "p1")
+	testdbseed.InsertSession(t, store, "child-1", "p1")
+	_, err = store.ExecContext(ctx, `INSERT INTO turns(id,session_id,project_id,origin,input_json,status,created_at,updated_at,progressed_at) VALUES('t1','child-1','p1','worker','','running',?,?,?)`, now, now, now)
+	testutil.FailErr(t, "insert turn", err)
+	ts, err = quiet.Progress(ctx, "child-1")
+	testutil.FailErr(t, "quiet.Progress populated", err)
+	if ts.UTC().Format(time.RFC3339) != now {
+		t.Fatalf("progress = %s, want %s", ts.UTC().Format(time.RFC3339), now)
+	}
+	if quiet.AwaitingApproval == nil || quiet.AwaitingApproval(ctx, "child-1") {
+		t.Fatalf("AwaitingApproval = true or nil, want false")
 	}
 }

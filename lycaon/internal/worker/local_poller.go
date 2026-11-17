@@ -41,16 +41,19 @@ type LocalWorkerPoller struct {
 	Queue               WorkerQueue
 	Executor            WorkerExecutor
 	Outcomes            OutcomeRecorder
-	ParentWaiter        *ParentWorkerWaiter
 	InstanceID          string
 	MaintenanceInterval time.Duration
-	sem                 chan struct{}
-	capacityWake        chan struct{}
-	inflight            sync.WaitGroup
-	outcomeLocks        promptstate.MutexRegistry
-	cancelMu            sync.Mutex
-	cancels             map[string]*pollerExecution
-	abortReasons        map[string]bgprocess.TerminationReason
+	// Quiet raises notices for working rounds without recent progress.
+	Quiet *QuietRounds
+	// Blocked raises notices for waiting jobs whose prerequisite cannot be met.
+	Blocked      *BlockedPrerequisites
+	sem          chan struct{}
+	capacityWake chan struct{}
+	inflight     sync.WaitGroup
+	outcomeLocks promptstate.MutexRegistry
+	cancelMu     sync.Mutex
+	cancels      map[string]*pollerExecution
+	abortReasons map[string]bgprocess.TerminationReason
 }
 
 type pollerExecution struct {
@@ -201,6 +204,8 @@ func (p *LocalWorkerPoller) maintain(ctx context.Context) error {
 	}
 	recovered, err := p.Queue.RecoverExpiredClaims(ctx)
 	p.fanOutRecovered(ctx, recovered)
+	p.Quiet.Check(ctx)
+	p.Blocked.Check(ctx)
 	return err
 }
 

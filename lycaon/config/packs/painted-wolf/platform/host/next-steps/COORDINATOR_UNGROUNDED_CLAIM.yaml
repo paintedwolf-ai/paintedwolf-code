@@ -1,0 +1,6 @@
+steps:
+  - tool: "instruct_worker"
+    args:
+      worker: "{{ paintedwolf.worker }}"
+    say: "Send the worker back with {{ call }} to complete the work and report."
+    otherwise: "The worker has to be sent back to complete the work and report."

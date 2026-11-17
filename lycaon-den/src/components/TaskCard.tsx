@@ -9,7 +9,15 @@ import {
   taskDescription,
   type TaskActivityContext,
 } from "../chat/task/task-card-model.ts";
-import type { CitationGrounding, WorkerTask } from "../api/types.ts";
+import type { BoardWorker, CitationGrounding, WorkerTask } from "../api/types.ts";
+import type { PendingWorkerApproval } from "../chat/worker/worker-approval-model.ts";
+import {
+  workerDispositionPresentation,
+  workerStateBadgeLabel,
+  workerUnreadPresentation,
+  type WorkerDispositionBadge,
+  type WorkerUnreadBadge,
+} from "../chat/worker/worker-state-presentation.ts";
 import { resolveCitationGrounding } from "../chat/worker/worker-evidence-model.ts";
 import { citationGroundingPresent } from "../chat/grounding/citation-grounding-model.ts";
 import { CitationGroundingBadge } from "./citation/CitationGroundingBadge.tsx";
@@ -20,7 +28,7 @@ import {
   workerCardProgress,
   type WorkerCardProgress,
 } from "../chat/worker/worker-progress.ts";
-import { WorkerBudgetChip } from "./worker/WorkerBudgetChip.tsx";
+import { WorkerTurnsChip } from "./worker/WorkerTurnsChip.tsx";
 import { WorkerToolCallsChip } from "./worker/WorkerToolCallsChip.tsx";
 import { ContextRing } from "./chatview/ContextRing.tsx";
 import { ContextMenu, type ContextMenuAnchor, type ContextMenuItem } from "./ContextMenu.tsx";
@@ -43,6 +51,10 @@ const MAX_WORKER_CARD_PATH_MENU = 5;
 type ShellProps = {
   agent: () => string;
   status: () => string;
+  stateLabel?: () => string | undefined;
+  disposition?: () => WorkerDispositionBadge | undefined;
+  unread?: () => WorkerUnreadBadge | undefined;
+  round?: () => number | undefined;
   body: () => string;
   activity: () => string;
   grounding: () => CitationGrounding | undefined;
@@ -261,10 +273,7 @@ export function TaskCardShell(props: ShellProps) {
       if (props.status() === "canceled") return "Worker canceled";
       return props.status() === "error" ? "Worker failed" : "Worker finished";
     }
-    const rounds = `Tool round ${value.used} of ${value.max}`;
-    return value.batch
-      ? `${rounds}, tool ${value.batch.done} of ${value.batch.total}`
-      : rounds;
+    return `Tool ${value.batch.done} of ${value.batch.total} in this turn`;
   };
 
   const percent = (fraction: number) =>
@@ -330,8 +339,35 @@ export function TaskCardShell(props: ShellProps) {
               classList={{ "den-task-card-status--live": running() }}
               data-testid="task-card-status"
             >
-              {formatSentenceCase(props.status())}
+              {props.stateLabel?.() ?? formatSentenceCase(props.status())}
             </span>
+            <Show when={(props.round?.() ?? 1) > 1}>
+              <span class="den-worker-fact-badge" data-testid="worker-round-badge">
+                Round {props.round?.()}
+              </span>
+            </Show>
+            <Show when={props.disposition?.()} keyed>
+              {(disp) => (
+                <span
+                  class="den-worker-fact-badge"
+                  data-testid="worker-disposition-badge"
+                  data-disposition={disp.disposition}
+                >
+                  {disp.label}
+                </span>
+              )}
+            </Show>
+            <Show when={props.unread?.()} keyed>
+              {(unread) => (
+                <span
+                  class="den-worker-fact-badge"
+                  data-testid="worker-unread-badge"
+                  data-unread-count={unread.count}
+                >
+                  {unread.label}
+                </span>
+              )}
+            </Show>
             <Show when={props.worker()} keyed>
               {(worker) => (
                 <>
@@ -342,7 +378,7 @@ export function TaskCardShell(props: ShellProps) {
                     compact
                     testId="worker-context-meter"
                   />
-                  <WorkerBudgetChip worker={() => worker} />
+                  <WorkerTurnsChip worker={() => worker} />
                   <WorkerToolCallsChip worker={() => worker} />
                 </>
               )}
@@ -356,30 +392,17 @@ export function TaskCardShell(props: ShellProps) {
               data-testid="task-card-progress"
               aria-label={progressAriaLabel(value())}
             >
-              <div class="den-task-card-progress-track">
+              <div
+                class="den-task-card-progress-track--batch den-task-card-progress-track"
+                data-testid="task-card-progress-batch"
+                data-batch-done={value().batch.done}
+                data-batch-total={value().batch.total}
+              >
                 <div
-                  class="den-task-card-progress-fill"
-                  style={{ width: percent(value().ratio) }}
+                  class="den-task-card-progress-fill den-task-card-progress-fill--batch"
+                  style={{ width: percent(value().batch.ratio) }}
                 />
               </div>
-              {/* The round's tools are most of its wall-clock, and the budget bar
-                  cannot show them: one round is a couple of pixels wide. This is
-                  the mark that moves while a round is being worked. */}
-              <Show when={value().batch} keyed>
-                {(batch) => (
-                  <div
-                    class="den-task-card-progress-track--batch den-task-card-progress-track"
-                    data-testid="task-card-progress-batch"
-                    data-batch-done={batch.done}
-                    data-batch-total={batch.total}
-                  >
-                    <div
-                      class="den-task-card-progress-fill den-task-card-progress-fill--batch"
-                      style={{ width: percent(batch.ratio) }}
-                    />
-                  </div>
-                )}
-              </Show>
             </div>
           )}
         </Show>
@@ -407,21 +430,60 @@ type TaskProps = {
   projectId?: string;
   rootRefs?: readonly ResolveProjectRoot[];
   worker?: () => WorkerTask | undefined;
+  boardWorker?: () => BoardWorker | undefined;
+  pendingApproval?: () => PendingWorkerApproval | undefined;
   activityContext?: () => TaskActivityContext | undefined;
   onOpenWorker?: () => void;
   onOpenWorkerEvidence?: () => void;
 };
 
-/** Coordinator task/delegate_dispatch — full worker card (no tool chicklet). */
+function hasCollaborationStateFacts(
+  worker?: WorkerTask,
+  boardWorker?: BoardWorker,
+  pendingApproval?: PendingWorkerApproval,
+): boolean {
+  return Boolean(
+    boardWorker ||
+      pendingApproval ||
+      worker?.worker_record_id ||
+      worker?.round ||
+      worker?.result_disposition ||
+      worker?.parked_reason ||
+      worker?.status === "waiting",
+  );
+}
+
+/** Coordinator worker card. */
 export function TaskCard(props: TaskProps) {
   const worker = () => props.worker?.();
-  const activityContext = () => props.activityContext?.();
+  const boardWorker = () => props.boardWorker?.();
+  const pendingApproval = () => props.pendingApproval?.();
+  const activityContext = () => {
+    const base = props.activityContext?.();
+    const bw = boardWorker();
+    const pa = pendingApproval();
+    if (!bw && !pa) return base;
+    return {
+      ...base,
+      worker: base?.worker ?? worker(),
+      boardWorker: base?.boardWorker ?? bw,
+      pendingApproval: base?.pendingApproval ?? pa,
+    };
+  };
 
   return (
     <TaskCardShell
       agent={() => taskAgentType(props.part, worker())}
-      status={() => taskCardStatus(props.part, worker())}
-      body={() => taskDescription(props.part)}
+      status={() => taskCardStatus(props.part, worker(), boardWorker())}
+      stateLabel={() =>
+        hasCollaborationStateFacts(worker(), boardWorker(), pendingApproval())
+          ? workerStateBadgeLabel(worker(), boardWorker(), pendingApproval())
+          : undefined
+      }
+      disposition={() => workerDispositionPresentation(worker(), boardWorker())}
+      unread={() => workerUnreadPresentation(boardWorker())}
+      round={() => boardWorker()?.round ?? worker()?.round ?? props.part.workerSummary?.round}
+      body={() => taskDescription(props.part, worker())}
       activity={() => taskActivityDisplay(props.part, activityContext())}
       grounding={() => resolveCitationGrounding(props.part.workerSummary, worker())}
       worker={worker}

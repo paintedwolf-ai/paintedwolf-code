@@ -76,7 +76,6 @@
     "checkpoint",
     "llm",
     "scan",
-    "delegation",
     "board"
   ],
   "forbidden_den_patterns": [
