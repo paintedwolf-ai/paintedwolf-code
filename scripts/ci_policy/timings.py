@@ -16,8 +16,6 @@ FILE = "timings.json"
 MAX_BYTES = 4 * 1024 * 1024
 PACKAGE_LANES = ("behavior",)
 SLOWEST_TESTS = 50
-# A lane that ran to a verdict; a torn-down job measured only where it stopped.
-FINISHED = {"passed", "failed"}
 
 
 def row_key(lane, shard):
@@ -69,6 +67,8 @@ def record(root, run):
     complete = valid_seconds(job_start, allow_zero=True) and job_start <= run['started_at']
     start = job_start if complete else run['started_at']
     measured = {"basis": "setup-and-execution" if complete else "execution", "lane": run["lane"], "shard": run["shard"], "status": run["status"],
+                # A signal tears the job down part-way, so its time measures only where it stopped.
+                "finished": type(run.get("exit_code")) is int and run["exit_code"] >= 0,
                 "seconds": round(run["finished_at"] - start, 1),
                 "packages": {name: round(seconds, 3) for name, seconds in sorted(packages.items())},
                 "tests": slowest(test_durations(root))}
@@ -76,12 +76,12 @@ def record(root, run):
 
 
 def merge(paths):
-    """Finished lanes' durations by matrix row, every package duration the uninstrumented lane
-    measured, and the slowest tests across lanes."""
+    """Durations of lanes that finished, whatever their verdict, by matrix row; every package duration the
+    uninstrumented lane measured; and the slowest tests across lanes."""
     lanes, packages, tests = {}, {}, {}
     for path in paths:
         measured = json.loads(path.read_text())
-        if (measured.get("basis") == "setup-and-execution" and measured["status"] in FINISHED
+        if (measured.get("basis") == "setup-and-execution" and measured.get("finished") is True
                 and valid_seconds(measured["seconds"])):
             lanes[row_key(measured["lane"], measured["shard"])] = measured["seconds"]
         if measured.get("lane") in PACKAGE_LANES:

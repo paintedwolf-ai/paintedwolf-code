@@ -962,9 +962,8 @@ nightly records setup plus execution time and its 50 slowest tests beside its
 receipts in `ci/timings.json`; a sharded lane also records its packages'
 durations. A job-start marker precedes checkout and provisioning. Measurements
 without that timing basis supply package weights only; they cannot mix
-execution-only times with setup-inclusive estimates. A lane that ran to a
-verdict supplies its duration whether it passed or failed; a torn-down job
-supplies none. Evidence-upload time is accounted for separately by queue
+execution-only times with setup-inclusive estimates. A lane supplies its
+duration whatever its verdict, unless a signal ended it part-way. Evidence-upload time is accounted for separately by queue
 health. Nightly's final job merges the lanes' records into one `timings.json`,
 bound to the run and to the source commit and tree it measured, and publishes
 it as the `nightly-timings` artifact. The plan job of every tier downloads that

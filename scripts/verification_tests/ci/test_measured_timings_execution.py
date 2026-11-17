@@ -27,11 +27,12 @@ class MeasuredTimingsTests(unittest.TestCase):
                                {"package": "p/two", "elapsed": 9.5, "reused": True},
                                {"package": "p/three", "exit_code": 1}])
             events(root, "b", [{"package": "p/one", "elapsed": 1.25, "reused": False}])
-            run = {"lane": "behavior", "shard": "1/2", "status": "passed", "job_started_at": 80.0, "started_at": 100.0, "finished_at": 160.0}
+            run = {"lane": "behavior", "shard": "1/2", "status": "passed", "exit_code": 0,
+                   "job_started_at": 80.0, "started_at": 100.0, "finished_at": 160.0}
             timings.record(root, run)
             measured = json.loads((root / "ci/timings.json").read_text())
-            self.assertEqual(measured, {"basis": "setup-and-execution", "lane": "behavior", "shard": "1/2", "status": "passed", "seconds": 80.0,
-                                        "packages": {"p/one": 5.25}, "tests": []})
+            self.assertEqual(measured, {"basis": "setup-and-execution", "lane": "behavior", "shard": "1/2", "status": "passed",
+                                        "finished": True, "seconds": 80.0, "packages": {"p/one": 5.25}, "tests": []})
             timings.record(root, {**run, "lane": "lint", "shard": ""})
             self.assertEqual(json.loads((root / "ci/timings.json").read_text())["packages"], {})
 
@@ -39,7 +40,7 @@ class MeasuredTimingsTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / 'ci').mkdir()
-            run = {'lane': 'native', 'shard': '', 'status': 'passed', 'started_at': 100, 'finished_at': 150}
+            run = {'lane': 'native', 'shard': '', 'status': 'passed', 'exit_code': 0, 'started_at': 100, 'finished_at': 150}
             timings.record(root, run)
             self.assertEqual(timings.merge([root / 'ci/timings.json']), {'lanes': {}, 'packages': {}, 'tests': []})
             timings.record(root, {**run, 'job_started_at': 200})
@@ -50,17 +51,28 @@ class MeasuredTimingsTests(unittest.TestCase):
     def test_merge_keeps_finished_lane_rows_and_every_measured_package(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            rows = [{"lane": "behavior", "shard": "1/2", "status": "passed", "seconds": 900, "packages": {"a": 1}},
-                    {"lane": "behavior", "shard": "2/2", "status": "failed", "seconds": 300, "packages": {"b": 2}},
-                    {"lane": "race", "shard": "1/3", "status": "unverified", "seconds": 1800, "packages": {"a": 25, "c": 40}},
+            rows = [{"lane": "behavior", "shard": "1/2", "status": "passed", "finished": True, "seconds": 900, "packages": {"a": 1}},
+                    {"lane": "behavior", "shard": "2/2", "status": "failed", "finished": True, "seconds": 300, "packages": {"b": 2}},
+                    {"lane": "benchmarks", "shard": "", "status": "unverified", "finished": True, "seconds": 1500, "packages": {}},
+                    {"lane": "race", "shard": "1/3", "status": "unverified", "finished": False, "seconds": 1800, "packages": {"a": 25}},
                     {"lane": "lint", "shard": "", "status": "passed", "seconds": 600, "packages": {}}]
             paths = []
             for index, row in enumerate(rows):
                 path = root / f"{index}.json"
                 path.write_text(json.dumps({"basis": "setup-and-execution", **row}))
                 paths.append(path)
-            self.assertEqual(timings.merge(paths), {"lanes": {"behavior 1/2": 900, "behavior 2/2": 300, "lint": 600},
+            self.assertEqual(timings.merge(paths), {"lanes": {"behavior 1/2": 900, "behavior 2/2": 300, "benchmarks": 1500},
                                                     "packages": {"a": 1, "b": 2}, "tests": []})
+
+    def test_a_lane_ended_by_a_signal_is_not_a_finished_measurement(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "ci").mkdir()
+            run = {"lane": "race", "shard": "1/3", "job_started_at": 0.0, "started_at": 10.0, "finished_at": 70.0}
+            for exit_code, finished in ((0, True), (1, True), (201, True), (-15, False), (None, False)):
+                with self.subTest(exit_code=exit_code):
+                    timings.record(root, {**run, "status": "failed", "exit_code": exit_code})
+                    self.assertIs(json.loads((root / "ci/timings.json").read_text())["finished"], finished)
 
     def test_invalid_durations_cannot_poison_history(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -68,7 +80,7 @@ class MeasuredTimingsTests(unittest.TestCase):
             for seconds in [True, 0, -1, float("nan"), float("inf"), "60", None]:
                 with self.subTest(seconds=seconds):
                     path.write_text(json.dumps({"basis": "setup-and-execution", "lane": "behavior", "shard": "1/2", "status": "passed",
-                                                "seconds": seconds,
+                                                "finished": True, "seconds": seconds,
                                                 "packages": {"valid": 2, "zero": 0, "negative": -1,
                                                              "infinite": float("inf"), "boolean": True},
                                                 "tests": [{"package": "p", "test": "TestSlow", "seconds": seconds}]}))
@@ -88,7 +100,8 @@ class MeasuredTimingsTests(unittest.TestCase):
                        {"Action": "pass", "Package": "p/one", "Elapsed": 950},
                        {"Action": "fail", "Package": "p/two", "Test": "TestBroken", "Elapsed": 0.0}]
             stream.write_text("not json\n[1]\n" + "".join(json.dumps(row) + "\n" for row in finished + ignored))
-            run = {"lane": "lint", "shard": "", "status": "failed", "job_started_at": 80.0, "started_at": 100.0, "finished_at": 160.0}
+            run = {"lane": "lint", "shard": "", "status": "failed", "exit_code": 1,
+                   "job_started_at": 80.0, "started_at": 100.0, "finished_at": 160.0}
             timings.record(root, run)
             tests = json.loads((root / "ci/timings.json").read_text())["tests"]
         self.assertEqual(len(tests), timings.SLOWEST_TESTS)
@@ -109,7 +122,7 @@ class MeasuredTimingsTests(unittest.TestCase):
                 # The artifact service may root a receipt at its common directory, `ci/`.
                 path = root / "receipts" / name / ("ci" if index else "") / "timings.json"
                 path.parent.mkdir(parents=True)
-                path.write_text(json.dumps({"basis": "setup-and-execution", **row}))
+                path.write_text(json.dumps({"basis": "setup-and-execution", "finished": True, **row}))
             environment = {"GITHUB_RUN_ID": "77", "SOURCE_SHA": "a" * 40, "SOURCE_TREE": "b" * 40}
             with patch.dict(timings.os.environ, environment), patch("builtins.print") as said:
                 self.assertEqual(timings.main([str(root / "receipts"), str(root / "timings.json")]), 0)
