@@ -14,9 +14,9 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// Loop-recovery copy rendered for a worker leg names only tools that leg is
-// offered: copy a leg cannot act on leaves it the next tool call, which is what
-// the unit fired to stop.
+// Loop-recovery copy rendered for a worker leg names, in code spans, only tools
+// that leg is offered: copy a leg cannot act on leaves it the next tool call,
+// which is what the unit fired to stop.
 func TestLoopRecoveryCopyIsReachableFromAWorkerLeg(t *testing.T) {
 	t.Parallel()
 	cfg, err := guidance.LoadHintConfigStock()
@@ -47,7 +47,7 @@ func TestLoopRecoveryCopyIsReachableFromAWorkerLeg(t *testing.T) {
 			facts := oarcopy.FactsFromData(vars)
 			rendered := oarcore.RenderCopy(entry.Fix, facts) + "\n" + oarcore.RenderCopy(entry.Instead, facts)
 			called, _ := vars["tool"].(string)
-			for _, name := range identifierTokens(rendered) {
+			for _, name := range codeSpanIdentifiers(rendered) {
 				if tools[name] && name != called && !profile.ToolAllowed(name) {
 					t.Errorf("%s/%s worker copy names %s, which profile %s does not offer", code, sc.ID, name, profileID)
 				}
@@ -81,8 +81,14 @@ func knownToolNames(t *testing.T, profiles []sandbox.ToolProfile) map[string]boo
 	return out
 }
 
-func identifierTokens(text string) []string {
-	return strings.FieldsFunc(text, func(r rune) bool {
-		return !(unicode.IsLower(r) || unicode.IsDigit(r) || r == '_')
-	})
+// codeSpanIdentifiers lists the identifier tokens inside markdown code spans.
+func codeSpanIdentifiers(text string) []string {
+	var out []string
+	spans := strings.Split(text, "`")
+	for i := 1; i < len(spans); i += 2 {
+		out = append(out, strings.FieldsFunc(spans[i], func(r rune) bool {
+			return !(unicode.IsLower(r) || unicode.IsDigit(r) || r == '_')
+		})...)
+	}
+	return out
 }

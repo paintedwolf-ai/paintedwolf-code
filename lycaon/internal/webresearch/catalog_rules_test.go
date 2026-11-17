@@ -98,3 +98,52 @@ func TestShippedCatalogLoads(t *testing.T) {
 		t.Fatal("shipped catalog has no providers")
 	}
 }
+
+// A keyed_extra provider is configured once its key and every extra field its
+// catalog entry declares are set.
+func TestKeyedExtraProviderRequiresItsCatalogExtraFields(t *testing.T) {
+	cat, err := LoadCatalog()
+	if err != nil {
+		t.Fatalf("shipped catalog: %v", err)
+	}
+	reg := NewRegistry(cat)
+	if err := RegisterCatalogProviders(t.Context(), reg); err != nil {
+		t.Fatalf("register catalog providers: %v", err)
+	}
+	checked := 0
+	for _, entry := range cat.Entries() {
+		if entry.Kind != KindKeyedExtra {
+			continue
+		}
+		if len(entry.ExtraFields) == 0 {
+			t.Fatalf("%s is keyed_extra with no extra fields", entry.ID)
+		}
+		provider := reg.Get(entry.ID)
+		if provider == nil {
+			t.Fatalf("registry missing %s", entry.ID)
+		}
+		full := map[string]string{}
+		for _, field := range entry.ExtraFields {
+			full[field.Name] = "value"
+		}
+		keys := map[string]string{entry.ID: "key"}
+		if !provider.Configured(Settings{Keys: keys, Config: map[string]map[string]string{entry.ID: full}}) {
+			t.Fatalf("%s with key and extra fields is not configured", entry.ID)
+		}
+		for _, field := range entry.ExtraFields {
+			partial := map[string]string{}
+			for name, value := range full {
+				if name != field.Name {
+					partial[name] = value
+				}
+			}
+			if provider.Configured(Settings{Keys: keys, Config: map[string]map[string]string{entry.ID: partial}}) {
+				t.Fatalf("%s is configured without %s", entry.ID, field.Name)
+			}
+		}
+		checked++
+	}
+	if checked == 0 {
+		t.Fatal("shipped catalog has no keyed_extra provider")
+	}
+}

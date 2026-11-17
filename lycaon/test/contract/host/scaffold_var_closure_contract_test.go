@@ -163,16 +163,14 @@ func hostVarKeyRead(key hostVarKey, literals, identifiers map[string]bool) bool 
 	if literals[key.value] {
 		return true
 	}
-	if !key.prefix {
-		return false
-	}
-	if literals[strings.TrimSuffix(key.value, ".")] {
-		return true
-	}
 	for literal := range literals {
-		if strings.HasPrefix(literal, key.value) {
+		// A reader completing a dotted prefix at run time reads every key under it.
+		if strings.HasSuffix(literal, ".") && strings.HasPrefix(key.value, literal) {
+			return true
+		}
+		if key.prefix && strings.HasPrefix(literal, key.value) {
 			return true
 		}
 	}
-	return false
+	return key.prefix && literals[strings.TrimSuffix(key.value, ".")]
 }
