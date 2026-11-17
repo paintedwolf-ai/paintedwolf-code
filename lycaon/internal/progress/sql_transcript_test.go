@@ -148,7 +148,7 @@ func TestDelayedNotificationsCannotReorderOrRelabelPlanRows(t *testing.T) {
 	testutil.FailErr(t, "intervening append", f.sessions.AppendMessages(t.Context(), "session", api.Message{ID: "intervening", Role: api.MessageRoleAssistant, Content: "Next", Visibility: api.MessageVisibilityTranscript}))
 	// The first operation has not returned; a later commit still keeps its own place.
 	applyPlan(t, f.plans, "- [x] First")
-	_, err := f.database.ExecContext(t.Context(), `INSERT INTO workflow_runs (id,session_id,project_id,workflow_id,workflow_version,status,current_phase,created_at,updated_at) SELECT 'child',session_id,project_id,workflow_id,workflow_version,status,current_phase,created_at,updated_at FROM workflow_runs WHERE id='run'`)
+	_, err := f.database.ExecContext(t.Context(), `INSERT INTO workflow_runs (id,session_id,project_id,workflow_id,workflow_version,status,current_phase,created_at,updated_at,parent_run_id) SELECT 'child',session_id,project_id,workflow_id,workflow_version,status,current_phase,created_at,updated_at,id FROM workflow_runs WHERE id='run'`)
 	testutil.FailErr(t, "insert child run", err)
 	_, err = progress.AdoptActiveRun(t.Context(), f.plans, "session", "child", "Next task")
 	testutil.FailErr(t, "adopt child run", err)

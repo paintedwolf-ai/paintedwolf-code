@@ -18,7 +18,7 @@ func TestRunRefreshUsesTransactionalPredecessor(t *testing.T) {
 			if kind == "adoption" {
 				target = "child"
 				refresh = progress.AdoptActiveRun
-				_, err := f.database.ExecContext(t.Context(), `INSERT INTO workflow_runs (id,session_id,project_id,workflow_id,workflow_version,status,current_phase,created_at,updated_at) SELECT 'child',session_id,project_id,workflow_id,workflow_version,status,current_phase,created_at,updated_at FROM workflow_runs WHERE id='run'`)
+				_, err := f.database.ExecContext(t.Context(), `INSERT INTO workflow_runs (id,session_id,project_id,workflow_id,workflow_version,status,current_phase,created_at,updated_at,parent_run_id) SELECT 'child',session_id,project_id,workflow_id,workflow_version,status,current_phase,created_at,updated_at,id FROM workflow_runs WHERE id='run'`)
 				testutil.FailErr(t, "insert next run", err)
 			}
 			_, err := f.database.ExecContext(t.Context(), `CREATE TRIGGER reject_reset BEFORE INSERT ON messages BEGIN SELECT RAISE(ABORT,'reset refused'); END`)

@@ -73,6 +73,9 @@ func writeTransition(ctx context.Context, q *db.Queries, key string, before Snap
 	if run.SessionID != key {
 		return Snapshot{}, fmt.Errorf("progress workflow run belongs to another session")
 	}
+	if ids == nil {
+		ids = []string{}
+	}
 	rawIDs, err := json.Marshal(ids)
 	if err != nil {
 		return Snapshot{}, err
