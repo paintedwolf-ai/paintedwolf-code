@@ -30,8 +30,8 @@ func TestConformanceSweepPassesAConformingAPI(t *testing.T) {
 			t.Errorf("%s: %s", rule, v)
 		}
 	}
-	if sweep.paged != 1 || sweep.replayed != 1 {
-		t.Fatalf("lists walked = %d, keyed operations replayed = %d; want listWidgets and renameWidget", sweep.paged, sweep.replayed)
+	if sweep.outcomes.paged != 1 || sweep.outcomes.replayed != 1 {
+		t.Fatalf("lists walked = %d, keyed operations replayed = %d; want listWidgets and renameWidget", sweep.outcomes.paged, sweep.outcomes.replayed)
 	}
 	if len(sweep.secrets.seeded) != 1 {
 		t.Fatalf("seeded secrets = %v, want createPart", sweep.secrets.seeded)

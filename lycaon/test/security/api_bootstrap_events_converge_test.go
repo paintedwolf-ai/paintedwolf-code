@@ -170,7 +170,7 @@ func (r *convergeRun) step(rt *rapid.T) {
 	case kind == "patch" && len(r.messages[chat]) > 0:
 		id := rapid.SampledFrom(r.messages[chat]).Draw(rt, "patched")
 		msg := wire.Message{ID: id, Role: wire.MessageRoleAssistant, Origin: wire.MessageOriginModel, Content: "patched " + uuid.NewString()}
-		_, err := r.world.h.Store.UpdateMessage(ctx, chat, id, msg)
+		_, err := r.world.h.Sessions.Store.UpdateMessage(ctx, chat, id, msg)
 		testutil.FailErr(t, "patch message", err)
 	case kind == "checkpoint":
 		before := "one\n"
@@ -200,7 +200,7 @@ func (r *convergeRun) step(rt *rapid.T) {
 		testutil.FailErr(t, "cancel worker", r.world.h.Delegations.Queue.Cancel(ctx, id, nil))
 	default:
 		msg := wire.Message{ID: uuid.NewString(), Role: wire.MessageRoleAssistant, Origin: wire.MessageOriginModel, Content: "appended " + uuid.NewString()}
-		testutil.FailErr(t, "append message", r.world.h.Store.AppendMessages(ctx, chat, msg))
+		testutil.FailErr(t, "append message", r.world.h.Sessions.Store.AppendMessages(ctx, chat, msg))
 		if r.appended[chat] == nil {
 			r.appended[chat] = map[string]bool{}
 		}

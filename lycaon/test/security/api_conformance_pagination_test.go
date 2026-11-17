@@ -137,7 +137,7 @@ func (s *conformanceSweep) walkPages(ctx context.Context) {
 			s.findings.add(rulePagination, op.ID, "walk", "holds %d rows; paging needs at least 2", len(members))
 			continue
 		}
-		s.paged++
+		s.outcomes.paged++
 		param := pages[0]
 		seen := map[string]bool{}
 		cursor := ""

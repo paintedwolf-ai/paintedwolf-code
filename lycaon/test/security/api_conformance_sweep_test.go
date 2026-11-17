@@ -110,6 +110,7 @@ func TestAPIConformance(t *testing.T) {
 	sweep.values.bind("/v1/web-research/providers/{provider_id}", "", string(wire.WebSearchProviderTavily))
 	sweep.host = h
 	sweep.fixture = conformanceFixture{t: t, presenceKey: presenceKey, projectDir: projectDir, project: project, session: sess}
+	sweep.runTerminal(t)
 	hostIDs := conformanceHostLookup(t, h)
 	sweep.beforeDeletes = hostIDs.remember
 	sweep.runAll(t.Context())
@@ -174,15 +175,20 @@ type conformanceSweep struct {
 	findings      *conformanceFindings
 	// children maps a collection path to the path parameters addressed below it.
 	children map[string][]string
-	// outcomes records, per operation, whether a validated success was seen
-	// and the last answer otherwise.
-	outcomesMu sync.Mutex
+	// outcomes is shared by every sweep of one run, terminal hosts included.
+	outcomes *conformanceOutcomes
+}
+
+// conformanceOutcomes records, per operation, whether a validated success
+// was seen and the last answer otherwise, and what the walks covered.
+type conformanceOutcomes struct {
+	mu         sync.Mutex
 	succeeded  map[string]bool
+	lastAnswer map[string]string
 	// replayed counts keyed operations whose success was replayed.
 	replayed int
 	// paged counts lists walked one row at a time.
-	paged      int
-	lastAnswer map[string]string
+	paged int
 }
 
 func newConformanceSweep(doc *openapi3.T, validator *openapi.Validator, handler http.Handler, notices *usernotice.Catalog) *conformanceSweep {
@@ -190,7 +196,7 @@ func newConformanceSweep(doc *openapi3.T, validator *openapi.Validator, handler 
 		ops: conformanceOperations(doc), validator: validator, handler: handler, notices: notices,
 		values: newConformanceValues(), secrets: &conformanceSecrets{}, findings: newConformanceFindings(),
 		children: map[string][]string{}, readObserved: map[string]bool{},
-		succeeded: map[string]bool{}, lastAnswer: map[string]string{}, corpus: newCorpusRecorder(),
+		outcomes: &conformanceOutcomes{succeeded: map[string]bool{}, lastAnswer: map[string]string{}}, corpus: newCorpusRecorder(),
 	}
 	seen := map[string]bool{}
 	for _, op := range s.ops {
@@ -426,17 +432,17 @@ func (f *conformanceFindings) notes() []string {
 }
 
 func (s *conformanceSweep) recordOutcome(ex conformanceExchange, valid bool) {
-	s.outcomesMu.Lock()
-	defer s.outcomesMu.Unlock()
+	s.outcomes.mu.Lock()
+	defer s.outcomes.mu.Unlock()
 	id := ex.req.op.ID
 	if valid {
 		s.corpus.record(ex)
 	}
 	if valid && ex.status/100 == 2 {
-		s.succeeded[id] = true
+		s.outcomes.succeeded[id] = true
 		return
 	}
-	s.lastAnswer[id] = ex.req.probe + " answered " + ex.outcome()
+	s.outcomes.lastAnswer[id] = ex.req.probe + " answered " + ex.outcome()
 }
 
 // conformanceFixture is the project and chat every sweep starts from, and

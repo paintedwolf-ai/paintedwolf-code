@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"math"
 	"net/http"
 	"slices"
 	"sort"
@@ -22,13 +23,18 @@ const (
 	stageChange
 	stageDelete
 	stageHostWide
+	// stageTerminal leaves its host refusing every later request until it
+	// restarts, so each such operation runs first on a host of its own.
+	stageTerminal
 )
 
 // successRecipe adapts one operation's success request where the schema alone
 // cannot name a valid one: prepare may create prerequisites through the API
 // and return path parameters and body fields to use.
 type successRecipe struct {
-	stage   successStage
+	stage successStage
+	// order places the operation within its stage, before the default.
+	order   int
 	prepare func(ctx context.Context, s *conformanceSweep, op *conformanceOp) (successInputs, error)
 	// seed adds rows to a paged list that holds fewer than two, for lists
 	// no create operation posts to.
@@ -48,16 +54,17 @@ type successInputs struct {
 
 // successRecipes holds the operations whose success needs more than fixture
 // ids and a schema-valid body, one map per domain.
-var successRecipes = mergeRecipes(hostWideRecipes, projectRecipes, sourceRecipes)
+var successRecipes = mergeRecipes(hostWideRecipes, projectRecipes, sourceRecipes, hostRecipes)
 
-// hostWideRecipes end the host's ordinary service, so they run last.
+// hostWideRecipes change state every other operation depends on, so they
+// run last, in this order, or end the host's service and run alone.
 var hostWideRecipes = map[string]successRecipe{
-	"lockVault":               {stage: stageHostWide},
-	"clearLocalData":          {stage: stageHostWide},
-	"resetStore":              {stage: stageHostWide},
-	"restoreRecoverySnapshot": {stage: stageHostWide},
-	"restoreBackup":           {stage: stageHostWide},
-	"createProjectRemoval":    {stage: stageHostWide},
+	"createProjectRemoval":    {stage: stageHostWide, order: 1, prepare: hostRecipeCreateProjectRemoval},
+	"clearLocalData":          {stage: stageHostWide, order: 2},
+	"lockVault":               {stage: stageHostWide, order: 3},
+	"resetStore":              {stage: stageTerminal},
+	"restoreBackup":           {stage: stageTerminal, prepare: hostRecipeRestoreBackup},
+	"restoreRecoverySnapshot": {stage: stageTerminal, prepare: terminalRecoverySnapshot},
 }
 
 func mergeRecipes(domains ...map[string]successRecipe) map[string]successRecipe {
@@ -87,6 +94,14 @@ func stageOf(op *conformanceOp) successStage {
 	return stageChange
 }
 
+// orderOf places an operation in its stage; an unordered one runs last.
+func orderOf(op *conformanceOp) int {
+	if order := successRecipes[op.ID].order; order > 0 {
+		return order
+	}
+	return math.MaxInt
+}
+
 func endsWithParam(path string) bool {
 	return strings.HasSuffix(path, "}")
 }
@@ -106,6 +121,9 @@ func (s *conformanceSweep) probeSuccessPaths(ctx context.Context, stages ...succ
 		if si != sj {
 			return si < sj
 		}
+		if oi, oj := orderOf(mutating[i]), orderOf(mutating[j]); oi != oj {
+			return oi < oj
+		}
 		return len(mutating[i].PathParams) < len(mutating[j].PathParams)
 	})
 	for _, op := range mutating {
@@ -120,7 +138,7 @@ func (s *conformanceSweep) probeSuccessPaths(ctx context.Context, stages ...succ
 		}
 		if op.keyed() {
 			s.checkIdempotent(ctx, ex)
-			s.replayed++
+			s.outcomes.replayed++
 		}
 		s.bindCreated(op, ex)
 	}
@@ -235,11 +253,11 @@ func (s *conformanceSweep) bindCreated(op *conformanceOp, ex conformanceExchange
 func (s *conformanceSweep) checkCoverage() {
 	covered := 0
 	for _, op := range s.ops {
-		if s.succeeded[op.ID] {
+		if s.outcomes.succeeded[op.ID] {
 			covered++
 			continue
 		}
-		s.findings.add(ruleOperationsSucceed, op.ID, "success", "never answered a success; last answer %s", s.lastAnswer[op.ID])
+		s.findings.add(ruleOperationsSucceed, op.ID, "success", "never answered a success; last answer %s", s.outcomes.lastAnswer[op.ID])
 	}
 	keyed := 0
 	for _, op := range s.ops {
@@ -248,6 +266,6 @@ func (s *conformanceSweep) checkCoverage() {
 		}
 	}
 	s.findings.note("success path: %d of %d operations answered a validated success", covered, len(s.ops))
-	s.findings.note("idempotency: %d of %d keyed operations replayed", s.replayed, keyed)
-	s.findings.note("pagination: %d lists walked one row at a time", s.paged)
+	s.findings.note("idempotency: %d of %d keyed operations replayed", s.outcomes.replayed, keyed)
+	s.findings.note("pagination: %d lists walked one row at a time", s.outcomes.paged)
 }
