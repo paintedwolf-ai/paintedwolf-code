@@ -9,7 +9,7 @@ import (
 // SkipIfRace skips tests that race instrumentation breaks, not merely slows.
 func SkipIfRace(t testing.TB, reason string) {
 	t.Helper()
-	if raceEnabled {
+	if RaceEnabled {
 		t.Skipf("skipped under -race: %s", reason)
 	}
 }
@@ -17,7 +17,7 @@ func SkipIfRace(t testing.TB, reason string) {
 
 // SelectRaceTests sets the default race tests without overriding a targeted run.
 func SelectRaceTests(names ...string) {
-	if !raceEnabled {
+	if !RaceEnabled {
 		return
 	}
 	if !flag.Parsed() {

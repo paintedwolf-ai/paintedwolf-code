@@ -78,7 +78,11 @@ func TestIncrementalBuildMatchesFullBuild(t *testing.T) {
 	if len(layout) < 8 {
 		t.Fatalf("base built %d chunks, want several", len(layout))
 	}
-	for round := range 12 {
+	rounds := 12
+	if testutil.RaceEnabled {
+		rounds = 4
+	}
+	for round := range rounds {
 		overrides := make(map[string]*Entry)
 		for range 1 + random.IntN(40) {
 			switch path := paths[random.IntN(len(paths))]; random.IntN(3) {
