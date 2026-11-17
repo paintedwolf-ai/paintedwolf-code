@@ -225,17 +225,10 @@ type releasedEntry struct {
 	size int64
 }
 
-// seedReleasedInventory copies a released store and adds one complete
-// inventory of files entries in that release's layout: 256 buckets keyed by
-// the first byte of each path's digest, one chunk per bucket.
-func seedReleasedInventory(ctx context.Context, released, path string, files int) error {
-	raw, err := os.ReadFile(released)
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
-		return err
-	}
+// seedReleasedInventory adds to a released store one complete inventory of
+// files entries in that release's layout: 256 buckets keyed by the first byte
+// of each path's digest, one chunk per bucket.
+func seedReleasedInventory(ctx context.Context, path string, files int) error {
 	var buckets [256][]releasedEntry
 	var totalBytes int64
 	for index := range files {

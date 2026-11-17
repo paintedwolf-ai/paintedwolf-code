@@ -146,7 +146,7 @@ func measureSize(ctx context.Context, cfg scaleConfig, size scaleSize) (scaleMea
 		name string
 		run  func(context.Context) error
 	}{
-		{"tree", f.writeTree}, {"populate", f.populate}, {"free_pages", f.freePages},
+		{"tree", f.writeTree}, {"populate", f.populate}, {"history", f.recordHistory}, {"free_pages", f.freePages},
 		{"boot_and_vacuum", f.bootAndVacuum}, {"delete", f.deleteProject}, {"upgrade", f.upgrade},
 	} {
 		started := time.Now()

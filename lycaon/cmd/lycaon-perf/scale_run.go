@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"os"
 	"path/filepath"
 	"time"
 
@@ -21,6 +20,7 @@ type scaleFixtureRun struct {
 	size      scaleSize
 	dir       string
 	projectID string
+	sessionID string
 	measured  scaleMeasurement
 }
 
@@ -55,6 +55,7 @@ func (f *scaleFixtureRun) populate(ctx context.Context) (err error) {
 	}, &session); err != nil {
 		return err
 	}
+	f.sessionID = session.ID
 	if err := engine.client.waitPrepared(ctx, session.ID); err != nil {
 		return err
 	}
@@ -85,6 +86,10 @@ func waitInventory(ctx context.Context, client *sidecarClient, projectID string)
 			return api.SourceInventoryState{}, err
 		}
 	}
+}
+
+func (f *scaleFixtureRun) recordHistory(ctx context.Context) error {
+	return recordProjectHistory(ctx, f.configDir(), f.projectID, f.sessionID, f.size.Files)
 }
 
 // freePages grows and then drops a table the store does not otherwise hold,
@@ -172,11 +177,11 @@ func (f *scaleFixtureRun) deleteProject(ctx context.Context) (err error) {
 // size in its layout, with the engine under test.
 func (f *scaleFixtureRun) upgrade(ctx context.Context) (err error) {
 	configDir := filepath.Join(f.dir, "upgrade")
-	if err := os.MkdirAll(configDir, 0o700); err != nil {
+	if err := materializeCorpus(f.cfg.corpus, configDir); err != nil {
 		return err
 	}
 	store := filepath.Join(configDir, "store.db")
-	if err := seedReleasedInventory(ctx, filepath.Join(f.cfg.corpus, "store.db"), store, f.size.Files); err != nil {
+	if err := seedReleasedInventory(ctx, store, f.size.Files); err != nil {
 		return err
 	}
 	shape, err := readStoreShape(ctx, store)

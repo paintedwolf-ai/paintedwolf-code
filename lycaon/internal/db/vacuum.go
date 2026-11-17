@@ -24,9 +24,11 @@ type VacuumPass struct {
 	Slices         int64
 	PagesRequested int64
 	PagesReclaimed int64
-	PageSize       int64
-	PageCount      int64
-	FreelistPages  int64
+	// FreelistTaken counts pages slices removed from the freelist.
+	FreelistTaken int64
+	PageSize      int64
+	PageCount     int64
+	FreelistPages int64
 	// Progressed distinguishes a working pass from one that found nothing to do.
 	// Foreground frees can grow the freelist while the file still shrinks.
 	Progressed bool
@@ -84,6 +86,7 @@ func runIncrementalVacuum(ctx context.Context, database Handle, minFreelistPages
 		}
 		reclaimed := pass.PageCount - pageCount
 		shrank := freelist < pass.FreelistPages
+		pass.FreelistTaken += max(pass.FreelistPages-freelist, 0)
 		pass.PageCount, pass.FreelistPages = pageCount, freelist
 		if reclaimed <= 0 && !shrank {
 			return pass, nil

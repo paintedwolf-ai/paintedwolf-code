@@ -279,7 +279,8 @@ func prepareStoreSchema(ctx context.Context, sqlDB *sql.DB, created bool) error 
 
 // referenceShape reads schema.sql into an in-memory store.
 func referenceShape(ctx context.Context) (Shape, error) {
-	ref, err := openCounted("file:schemaref?mode=memory&cache=private")
+	// The in-memory reference is not store work.
+	ref, err := sql.Open("sqlite", "file:schemaref?mode=memory&cache=private")
 	if err != nil {
 		return Shape{}, fmt.Errorf("open schema reference: %w", err)
 	}
