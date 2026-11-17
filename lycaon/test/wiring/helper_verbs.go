@@ -14,10 +14,7 @@ import (
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 )
 
-// Main is every host test package's TestMain body. The host re-executes the
-// test binary as its Git credential helper, its scan worker and the ssh a
-// test installs, so the binary serves those first; otherwise it runs the
-// package's tests on a prepared host process.
+// Main dispatches re-executed helper verbs before starting the test suite.
 func Main(m *testing.M) int {
 	switch {
 	case len(os.Args) == 3 && os.Args[1] == "git-credential-vault":
@@ -38,11 +35,10 @@ func Main(m *testing.M) int {
 	return runHostTests(m)
 }
 
-// SSHAgentProbeVerb runs the test binary as the ssh Git starts: it asks the
-// agent SSH_AUTH_SOCK names for identities and reports the answer.
+// SSHAgentProbeVerb selects the fixture's SSH agent probe.
 const SSHAgentProbeVerb = "pw-test-ssh-agent-probe"
 
-// SSHAgentAnswered is what the probe prints when the agent answered.
+// SSHAgentAnswered reports that the agent returned a valid reply.
 const SSHAgentAnswered = "ssh agent answered"
 
 func probeSSHAgent() int {
