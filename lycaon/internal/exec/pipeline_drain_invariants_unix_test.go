@@ -58,17 +58,9 @@ func (w *invariantTrackingWriter) Write(p []byte) (int, error) {
 
 func assertProcessGroupReaped(t *testing.T, pgid int) {
 	t.Helper()
-	for t.Context().Err() == nil {
-		err := syscall.Kill(-pgid, 0)
-		if errors.Is(err, syscall.ESRCH) {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	err := syscall.Kill(-pgid, 0)
-	if !errors.Is(err, syscall.ESRCH) {
-		t.Fatalf("process group %d not reaped: syscall.Kill(-pgid, 0) = %v, want ESRCH", pgid, err)
-	}
+	testutil.WaitFor(t, fmt.Sprintf("process group %d is reaped", pgid), func() bool {
+		return errors.Is(syscall.Kill(-pgid, 0), syscall.ESRCH)
+	})
 }
 
 func waitForPIDFileHelper(path string) {
@@ -225,9 +217,7 @@ func TestPipelineDrainInvariant_NormalExit(t *testing.T) {
 
 			assertProcessGroupReaped(t, pgid)
 			for _, pid := range []int{leaderPid, childPid, grandchildPid} {
-				if err := waitForProcessGone(t.Context(), pid); err != nil {
-					t.Fatalf("lingering process %d: %v", pid, err)
-				}
+				waitForProcessGone(t, pid)
 			}
 
 			// Invariant 3: Pipe handle closure and reader goroutine unblocking.
@@ -285,9 +275,7 @@ func TestPipelineDrainInvariant_ForegroundCancellation_SameProcessGroup(t *testi
 	// Invariant: Entire process group reaped and no lingering zombies.
 	assertProcessGroupReaped(t, pgid)
 	for _, pid := range []int{leaderPid, childPid, grandchildPid} {
-		if err := waitForProcessGone(t.Context(), pid); err != nil {
-			t.Fatalf("lingering process %d after cancellation: %v", pid, err)
-		}
+		waitForProcessGone(t, pid)
 	}
 
 	// Invariant: Pipe handles closed and reader unblocked cleanly.
@@ -335,9 +323,7 @@ func TestPipelineDrainInvariant_ForegroundCancellation_DetachedDrainCeiling(t *t
 	}
 
 	// Invariant: Leader reaped.
-	if err := waitForProcessGone(t.Context(), leaderPid); err != nil {
-		t.Fatalf("leader %d lingered after cancel: %v", leaderPid, err)
-	}
+	waitForProcessGone(t, leaderPid)
 
 	// Invariant: Pipe closed unblocking reader.
 	if tw.bytesWritten.Load() == 0 {

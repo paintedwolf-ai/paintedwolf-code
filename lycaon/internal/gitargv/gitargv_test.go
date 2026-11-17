@@ -71,10 +71,11 @@ func TestValidateRefArg(t *testing.T) {
 func TestLocalCloneSourcePathFollowsGitsOwnReadingOfTheString(t *testing.T) {
 	local := map[string]string{
 		"file:///srv/packs/acme":          "/srv/packs/acme",
-		"FILE:///srv/packs/acme":          "/srv/packs/acme",
 		"file://localhost/srv/packs/acme": "/srv/packs/acme",
 		"file://elsewhere/srv/packs/acme": "/srv/packs/acme",
 		"file:///srv/packs/two%20words":   "/srv/packs/two words",
+		"file:///srv/packs/bad%zz":        "/srv/packs/bad%zz",
+		"file:///srv/packs/100%":          "/srv/packs/100%",
 		"/srv/packs/acme":                 "/srv/packs/acme",
 		"./packs/acme":                    "./packs/acme",
 		"packs/acme":                      "packs/acme",
@@ -101,7 +102,7 @@ func TestLocalCloneSourcePathFollowsGitsOwnReadingOfTheString(t *testing.T) {
 		"--upload-pack=whoami",
 		"file://",
 		"file://localhost",
-		"file:///bad%zz",
+		"FILE:///srv/packs/acme",
 	}
 	for _, source := range remote {
 		if got, ok := gitargv.LocalCloneSourcePath(source); ok {

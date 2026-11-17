@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -48,20 +47,12 @@ func TestRecordedProgramRetainsUtilityUntilBackgroundSettlement(t *testing.T) {
 	}
 	_, err := f.call(t, t.Context(), "cat &")
 	testutil.FailErr(t, "start actual background utility", err)
-	select {
-	case <-entered:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("utility never started")
-	}
+	testutil.AwaitClosed(t, "the utility starts", entered)
 	if releases.Load() != 0 {
 		t.Fatal("utility released while background job owns it")
 	}
 	close(finish)
-	select {
-	case <-released:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("settled utility never released")
-	}
+	testutil.AwaitClosed(t, "the settled utility is released", released)
 	// A subsequent program exercises pruning and settlement without replaying
 	// the prior owner's release callback.
 	_, err = f.call(t, t.Context(), "true")

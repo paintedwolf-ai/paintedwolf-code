@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/osprocess"
+	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -185,48 +187,36 @@ func (l *pythonListener) waitReaped(t *testing.T) {
 
 func waitPortFile(t *testing.T, path string, stderr *strings.Builder) string {
 	t.Helper()
-	for t.Context().Err() == nil {
+	var port string
+	testutil.WaitFor(t, "the listener writes "+path, func() bool {
 		b, err := os.ReadFile(path)
-		if err == nil {
-			port := strings.TrimSpace(string(b))
-			if port != "" {
-				return port
-			}
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("listener never wrote %s\n%s", path, stderr.String())
-	return ""
+		port = strings.TrimSpace(string(b))
+		return err == nil && port != ""
+	})
+	return port
 }
 
 func waitListen(t *testing.T, port string, pid int) {
 	t.Helper()
 	needle := strconv.Itoa(pid)
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, fmt.Sprintf("pid %d listens on :%s", pid, port), func() bool {
 		out, err := exec.Command("lsof", "-ti", ":"+port, "-sTCP:LISTEN").Output()
-		if err == nil && strings.Contains(string(out), needle) {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("pid %d never listened on :%s", pid, port)
+		return err == nil && strings.Contains(string(out), needle)
+	})
 }
 
 func waitHTTPHealth(t *testing.T, addr string) {
 	t.Helper()
 	url := "http://" + addr + "/health"
 	client := &http.Client{Timeout: 200 * time.Millisecond}
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "GET "+url+" returns 200", func() bool {
 		resp, err := client.Get(url)
-		if err == nil {
-			_ = resp.Body.Close()
-			if resp.StatusCode == http.StatusOK {
-				return
-			}
+		if err != nil {
+			return false
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("GET %s never returned 200", url)
+		_ = resp.Body.Close()
+		return resp.StatusCode == http.StatusOK
+	})
 }
 
 func runEnsureEngineListenPort(t *testing.T, addr string, pid int) ([]byte, error) {

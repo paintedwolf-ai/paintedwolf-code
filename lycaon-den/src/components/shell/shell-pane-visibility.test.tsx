@@ -1,4 +1,4 @@
-import { createRoot } from "solid-js";
+import { createRoot, createSignal } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_APP_STATE_V1, type SplitOrder, type WorkspaceOrientation } from "../../../shared/app-state-types.ts";
 import { resetAppStateSnapshotForTests } from "../../store/app-state-snapshot.ts";
@@ -11,6 +11,11 @@ vi.mock("../../platform/windows/window-chrome.ts", async (importOriginal) => ({
   ...await importOriginal<typeof import("../../platform/windows/window-chrome.ts")>(),
   widenWindowBy: vi.fn(async () => "no-room" as const),
 }));
+// Both edges carry controls, so every claim shows.
+vi.mock("../../platform/windows/window-chrome-layout.ts", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../../platform/windows/window-chrome-layout.ts")>(),
+  windowEdgeChrome: (side: "left" | "right") => (side === "left" ? "native" : "drawn"),
+}));
 vi.mock("../../store/app-state-background-write.ts", () => ({
   persistAppStateInBackground: vi.fn(async () => {}),
 }));
@@ -19,7 +24,7 @@ afterEach(() => resetLayoutForTests());
 
 function panes(orientation: WorkspaceOrientation, splitOrder: SplitOrder, hidden: boolean, opts?: {
   navCollapsed?: boolean; splitLive?: boolean; stageOccupied?: boolean; hiddenPane?: "stage" | "conversation";
-  viewportWidth?: number; fileWindow?: boolean;
+  viewportWidth?: number; fileWindow?: boolean; drawerOpen?: boolean;
 }) {
   resetAppStateSnapshotForTests({ ...EMPTY_APP_STATE_V1,
     layout: { workspaceOrientation: orientation, splitOrder, navCollapsed: opts?.navCollapsed ?? true,
@@ -32,7 +37,8 @@ function panes(orientation: WorkspaceOrientation, splitOrder: SplitOrder, hidden
     return createShellPaneVisibility({ windowSubject: opts?.fileWindow
       ? { kind: "file", projectId: "project", rootId: "root", path: "file.txt", viewId: "view" } : null, splitLive: () => opts?.splitLive ?? true,
       presentedSplitLive: () => opts?.splitLive ?? true, presentedStageId: () => "files",
-      stageColumnOccupied: () => opts?.stageOccupied ?? true });
+      stageColumnOccupied: () => opts?.stageOccupied ?? true,
+      sessionDrawerOpen: () => opts?.drawerOpen ?? false });
   });
   return { value, dispose };
 }
@@ -46,8 +52,8 @@ describe("split chrome visibility", () => {
       expect(value.stageIsLeading()).toBe(stageLeft);
       expect(value.navTouchesChat()).toBe(chatFirst);
       expect(value.stageEdges(undefined).nav.onlyWhenNarrow).toBe(chatFirst);
-      expect(value.stageHeaderLeadsWindow()).toBe(stageLeft);
-      expect(value.chatHeaderLeadsWindow()).toBe(!stageLeft);
+      expect(value.windowEdgeClaims("stage").some((claim) => claim.side === "left" && claim.owner)).toBe(stageLeft);
+      expect(value.windowEdgeClaims("chat").some((claim) => claim.side === "left" && claim.owner)).toBe(!stageLeft);
       expect(value.conversationSeam()?.side).toBe(stageLeft ? "right" : "left");
       dispose();
     }
@@ -57,66 +63,36 @@ describe("split chrome visibility", () => {
     const { value, dispose } = panes(orientation, "chat-first", true);
     expect(value.stageEdges(undefined).nav.onlyWhenNarrow).toBe(false);
     expect(value.stageEdges(undefined).conversation.side).toBe(value.navSide());
-    expect(value.stageHeaderLeadsWindow()).toBe(true);
+    expect(value.windowEdgeClaims("stage").map((claim) => claim.side)).toEqual(["left", "right"]);
     expect(value.conversationSeam()).toBeUndefined();
     dispose();
   });
 });
 
-describe("window edge hosts", () => {
-  const hosts = (value: ReturnType<typeof createShellPaneVisibility>) =>
-    [value.windowEdgeHosts("left"), value.windowEdgeHosts("right")];
-
-  it("gives a visible sidebar its own window edge", () => {
-    const { value, dispose } = panes("standard", "context-first", false, { navCollapsed: false });
-    expect(hosts(value)).toEqual([{ owner: "nav", narrow: "nav" }, { owner: "chat", narrow: "chat" }]);
-    dispose();
-    const mirrored = panes("mirrored", "context-first", false, { navCollapsed: false });
-    expect(hosts(mirrored.value)).toEqual([{ owner: "chat", narrow: "chat" }, { owner: "nav", narrow: "nav" }]);
-    mirrored.dispose();
-  });
-
-  it("splits the edges between the stage and the chat once the sidebar collapses", () => {
-    const { value, dispose } = panes("standard", "context-first", false);
-    expect(hosts(value)).toEqual([{ owner: "stage", narrow: "chat" }, { owner: "chat", narrow: "chat" }]);
-    dispose();
-    const chatFirst = panes("standard", "chat-first", false);
-    expect(hosts(chatFirst.value)).toEqual([{ owner: "chat", narrow: "chat" }, { owner: "stage", narrow: "chat" }]);
-    chatFirst.dispose();
-  });
-
-  it("hands the dropped column's edge to the narrow survivor", () => {
+describe("window edge claims", () => {
+  it("reads the layout preferences and the open drawer", () => {
     resetAppStateSnapshotForTests({ ...EMPTY_APP_STATE_V1,
       layout: { workspaceOrientation: "standard", splitOrder: "context-first", navCollapsed: true, narrowSurvivor: "stage" } });
     syncLayoutFromSnapshot();
     setLayoutViewportWidth(2400);
+    const [drawerOpen, setDrawerOpen] = createSignal(false);
     const value = createRoot(() => createShellPaneVisibility({ windowSubject: null, splitLive: () => true,
-      presentedSplitLive: () => true, presentedStageId: () => "files", stageColumnOccupied: () => true }));
-    expect(hosts(value)).toEqual([{ owner: "stage", narrow: "stage" }, { owner: "chat", narrow: "stage" }]);
-    expect(value.windowEdgeClaims("chat")).toEqual([
-      { side: "left", owner: false, narrow: false }, { side: "right", owner: true, narrow: false },
-    ]);
+      presentedSplitLive: () => true, presentedStageId: () => "files", stageColumnOccupied: () => true,
+      sessionDrawerOpen: drawerOpen }));
     expect(value.windowEdgeClaims("stage")).toEqual([
-      { side: "left", owner: true, narrow: true }, { side: "right", owner: false, narrow: true },
+      { side: "left", chrome: "native", owner: true, narrow: true }, { side: "right", chrome: "drawn", owner: false, narrow: true },
     ]);
+    expect(value.windowEdgeClaims("chat")).toEqual([{ side: "right", chrome: "drawn", owner: true, narrow: false }]);
+    setDrawerOpen(true);
+    expect(value.windowEdgeClaims("drawer")).toEqual([{ side: "right", chrome: "drawn", owner: true, narrow: true }]);
+    expect(value.windowEdgeClaims("chat")).toEqual([]);
   });
 
-  it("gives the surviving column both edges when a split pane is hidden", () => {
-    const chatHidden = panes("standard", "context-first", true);
-    expect(hosts(chatHidden.value)).toEqual([{ owner: "stage", narrow: "stage" }, { owner: "stage", narrow: "stage" }]);
-    chatHidden.dispose();
-    const stageHidden = panes("standard", "context-first", false, { hiddenPane: "stage" });
-    expect(hosts(stageHidden.value)).toEqual([{ owner: "chat", narrow: "chat" }, { owner: "chat", narrow: "chat" }]);
-    stageHidden.dispose();
-  });
-
-  it("gives a lone column both edges outside a split", () => {
-    const stage = panes("standard", "context-first", false, { splitLive: false });
-    expect(hosts(stage.value)).toEqual([{ owner: "stage", narrow: "stage" }, { owner: "stage", narrow: "stage" }]);
-    stage.dispose();
-    const chat = panes("standard", "context-first", false, { splitLive: false, stageOccupied: false });
-    expect(hosts(chat.value)).toEqual([{ owner: "chat", narrow: "chat" }, { owner: "chat", narrow: "chat" }]);
-    chat.dispose();
+  it("puts an open drawer on the left in a mirrored workspace", () => {
+    const { value, dispose } = panes("mirrored", "context-first", false, { splitLive: false, drawerOpen: true });
+    expect(value.windowEdgeClaims("drawer")).toEqual([{ side: "left", chrome: "native", owner: true, narrow: true }]);
+    expect(value.windowEdgeClaims("stage")).toEqual([{ side: "right", chrome: "drawn", owner: true, narrow: true }]);
+    dispose();
   });
 });
 

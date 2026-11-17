@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/conditions"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestConditionRegistryRegisterAndEvaluate(t *testing.T) {
@@ -11,7 +12,7 @@ func TestConditionRegistryRegisterAndEvaluate(t *testing.T) {
 	if err := reg.Register("always_true", func(_ conditions.EvalContext) (bool, error) {
 		return true, nil
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "reg.Register failed", err)
 	}
 	ok, err := reg.Evaluate("always_true", conditions.EvalContext{})
 	if err != nil || !ok {
@@ -44,7 +45,7 @@ func TestConditionRegistryParameterized(t *testing.T) {
 	if err := reg.RegisterParameterized("evidence_passed:", func(ctx conditions.EvalContext) (bool, error) {
 		return ctx.Phase == "verify", nil
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "reg.RegisterParameterized failed", err)
 	}
 	if !reg.Has("evidence_passed:verify") {
 		t.Fatal("expected parameterized registration")

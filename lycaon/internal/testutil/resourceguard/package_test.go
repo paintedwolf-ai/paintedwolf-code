@@ -3,6 +3,7 @@ package resourceguard
 import (
 	"runtime"
 	"testing"
+	"time"
 )
 
 type suiteFunc func() int
@@ -33,7 +34,7 @@ func TestRunRejectsRetainedGoroutine(t *testing.T) {
 	stop, ready := make(chan struct{}), make(chan struct{})
 	defer close(stop)
 	suite := suiteFunc(func() int { go func() { close(ready); <-stop }(); <-ready; return 0 })
-	if got := Run(suite, Budget{HeapBytes: 1 << 20}); got != 1 {
+	if got := Run(suite, Budget{HeapBytes: 1 << 20, Settle: 100 * time.Millisecond}); got != 1 {
 		t.Fatalf("leaking suite exit = %d, want 1", got)
 	}
 }

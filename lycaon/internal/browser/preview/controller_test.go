@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/browser"
@@ -87,54 +88,52 @@ func TestPageWatchesRemainIndependent(t *testing.T) {
 }
 
 func TestFPSCoalesceDropsIntermediateFrames(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.MaxFPS = 2 // 500ms
-	var mu sync.Mutex
-	var frames int
-	c := NewController(cfg, func(_ context.Context, _, _ string, ev api.PreviewEvent) {
-		if ev.Op == api.PreviewEventOpFrame {
-			mu.Lock()
-			frames++
-			mu.Unlock()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.MaxFPS = 2 // 500ms
+		var mu sync.Mutex
+		var frames int
+		c := NewController(cfg, func(_ context.Context, _, _ string, ev api.PreviewEvent) {
+			if ev.Op == api.PreviewEventOpFrame {
+				mu.Lock()
+				frames++
+				mu.Unlock()
+			}
+		})
+		configurePreviewProjection(c)
+		h := &castHandle{cancel: func() {}, done: make(chan struct{})}
+		st := &stream{
+			projectID:   "p",
+			sessionID:   "s",
+			pageID:      "page-1",
+			cast:        h,
+			minInterval: time.Second / time.Duration(cfg.MaxFPS),
+			held:        &browser.HeldPage{Width: 100, Height: 80},
+		}
+		c.mu.Lock()
+		c.pages[streamKey("s", "page-1")] = st
+		c.mu.Unlock()
+
+		jpeg := []byte{0xff, 0xd8, 0xff, 0xd9} // minimal jpeg markers
+		c.offerFrame(context.Background(), st, h, jpeg, "", "", browser.PageRegions{})
+		c.offerFrame(context.Background(), st, h, jpeg, "", "", browser.PageRegions{})
+		c.offerFrame(context.Background(), st, h, jpeg, "", "", browser.PageRegions{})
+		mu.Lock()
+		first := frames
+		mu.Unlock()
+		if first != 1 {
+			t.Fatalf("first burst frames=%d want 1", first)
+		}
+		time.Sleep(st.minInterval + 20*time.Millisecond)
+		synctest.Wait()
+		c.flushPending(context.Background(), st, h)
+		mu.Lock()
+		second := frames
+		mu.Unlock()
+		if second != 2 {
+			t.Fatalf("after interval frames=%d want 2", second)
 		}
 	})
-	configurePreviewProjection(c)
-	h := &castHandle{cancel: func() {}, done: make(chan struct{})}
-	st := &stream{
-		projectID:   "p",
-		sessionID:   "s",
-		pageID:      "page-1",
-		cast:        h,
-		minInterval: time.Second / time.Duration(cfg.MaxFPS),
-		held:        &browser.HeldPage{Width: 100, Height: 80},
-	}
-	c.mu.Lock()
-	c.pages[streamKey("s", "page-1")] = st
-	c.mu.Unlock()
-
-	jpeg := []byte{0xff, 0xd8, 0xff, 0xd9} // minimal jpeg markers
-	c.offerFrame(context.Background(), st, h, jpeg, "", "", browser.PageRegions{})
-	c.offerFrame(context.Background(), st, h, jpeg, "", "", browser.PageRegions{})
-	c.offerFrame(context.Background(), st, h, jpeg, "", "", browser.PageRegions{})
-	mu.Lock()
-	first := frames
-	mu.Unlock()
-	if first != 1 {
-		t.Fatalf("first burst frames=%d want 1", first)
-	}
-	time.Sleep(st.minInterval + 20*time.Millisecond)
-	c.flushPending(context.Background(), st, h)
-	mu.Lock()
-	second := frames
-	mu.Unlock()
-	if second != 2 {
-		t.Fatalf("after interval frames=%d want 2", second)
-	}
-}
-
-func TestPublishActionWithoutStreamIsNoop(t *testing.T) {
-	c := NewController(DefaultConfig(), nil)
-	c.PublishAction(context.Background(), "s", "p", browser.CaptureAction{Type: "click"}, json.RawMessage(`{"ok":true}`))
 }
 
 func TestClaimEmitsAndSnapshotsInvocationAssociation(t *testing.T) {
@@ -264,55 +263,58 @@ func TestStopCastClearsPendingFrame(t *testing.T) {
 }
 
 func TestPendingFrameIsMaskedAgainstItsOwnPageState(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.MaxFPS = 2
-	c := NewController(cfg, func(context.Context, string, string, api.PreviewEvent) {})
-	c.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
-	var mu sync.Mutex
-	var seen []browser.PageRegions
-	c.projectFrame = func(
-		_ context.Context, _ *captureprojection.Projector, _ captureprojection.Scope,
-		regions browser.PageRegions, _ string, raw []byte,
-	) ([]byte, error) {
-		mu.Lock()
-		seen = append(seen, regions)
-		mu.Unlock()
-		return append([]byte(nil), raw...), nil
-	}
-	h := &castHandle{cancel: func() {}, done: make(chan struct{})}
-	st := &stream{
-		projectID: "p", sessionID: "s", pageID: "page-1", cast: h,
-		minInterval: time.Second / time.Duration(cfg.MaxFPS),
-		held:        &browser.HeldPage{Width: 100, Height: 80},
-		lastPublish: time.Now(),
-	}
-	c.mu.Lock()
-	c.pages[streamKey("s", "page-1")] = st
-	c.mu.Unlock()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.MaxFPS = 2
+		c := NewController(cfg, func(context.Context, string, string, api.PreviewEvent) {})
+		c.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+		var mu sync.Mutex
+		var seen []browser.PageRegions
+		c.projectFrame = func(
+			_ context.Context, _ *captureprojection.Projector, _ captureprojection.Scope,
+			regions browser.PageRegions, _ string, raw []byte,
+		) ([]byte, error) {
+			mu.Lock()
+			seen = append(seen, regions)
+			mu.Unlock()
+			return append([]byte(nil), raw...), nil
+		}
+		h := &castHandle{cancel: func() {}, done: make(chan struct{})}
+		st := &stream{
+			projectID: "p", sessionID: "s", pageID: "page-1", cast: h,
+			minInterval: time.Second / time.Duration(cfg.MaxFPS),
+			held:        &browser.HeldPage{Width: 100, Height: 80},
+			lastPublish: time.Now(),
+		}
+		c.mu.Lock()
+		c.pages[streamKey("s", "page-1")] = st
+		c.mu.Unlock()
 
-	captured := browser.PageRegions{
-		Regions: []captureprojection.Region{{
-			Text: "token", Spans: []captureprojection.TextSpan{{
-				Start: 0, End: 1, Rects: []captureprojection.Rect{{X: 1, Y: 2, Width: 3, Height: 4}},
+		captured := browser.PageRegions{
+			Regions: []captureprojection.Region{{
+				Text: "token", Spans: []captureprojection.TextSpan{{
+					Start: 0, End: 1, Rects: []captureprojection.Rect{{X: 1, Y: 2, Width: 3, Height: 4}},
+				}},
 			}},
-		}},
-		Complete: true, Width: 100, Height: 80,
-	}
-	c.offerFrame(context.Background(), st, h, []byte{0xff, 0xd8}, "", "", captured)
-	time.Sleep(st.minInterval + 20*time.Millisecond)
-	c.flushPending(context.Background(), st, h)
+			Complete: true, Width: 100, Height: 80,
+		}
+		c.offerFrame(context.Background(), st, h, []byte{0xff, 0xd8}, "", "", captured)
+		time.Sleep(st.minInterval + 20*time.Millisecond)
+		synctest.Wait()
+		c.flushPending(context.Background(), st, h)
 
-	mu.Lock()
-	defer mu.Unlock()
-	if len(seen) != 1 {
-		t.Fatalf("projected frames = %d, want 1", len(seen))
-	}
-	if len(seen[0].Regions) != 1 || seen[0].Regions[0].Text != "token" {
-		t.Fatalf("frame was masked against %+v, want the geometry captured with it", seen[0])
-	}
-	if seen[0].Width != captured.Width || seen[0].Height != captured.Height {
-		t.Fatalf("mask extent = %vx%v, want %vx%v", seen[0].Width, seen[0].Height, captured.Width, captured.Height)
-	}
+		mu.Lock()
+		defer mu.Unlock()
+		if len(seen) != 1 {
+			t.Fatalf("projected frames = %d, want 1", len(seen))
+		}
+		if len(seen[0].Regions) != 1 || seen[0].Regions[0].Text != "token" {
+			t.Fatalf("frame was masked against %+v, want the geometry captured with it", seen[0])
+		}
+		if seen[0].Width != captured.Width || seen[0].Height != captured.Height {
+			t.Fatalf("mask extent = %vx%v, want %vx%v", seen[0].Width, seen[0].Height, captured.Width, captured.Height)
+		}
+	})
 }
 
 func TestAcceptFrameBoundsGeometryReads(t *testing.T) {

@@ -135,32 +135,46 @@ type needle struct {
 // harvestNeedles spells the value, and each eligible line of a multi-line
 // value, in every form a serializer could give it.
 func harvestNeedles(secret string, floor int) []needle {
-	if utf8.RuneCountInString(secret) < floor {
-		return nil
-	}
 	seen := map[string]struct{}{}
 	var needles []needle
-	spell := func(plain string, whole bool) {
+	for i, plain := range needleSources(secret, floor) {
 		for _, text := range append([]string{plain}, EncodedForms(plain)...) {
 			if _, dup := seen[text]; dup {
 				continue
 			}
 			seen[text] = struct{}{}
-			needles = append(needles, needle{text: text, plain: plain, whole: whole})
+			needles = append(needles, needle{text: text, plain: plain, whole: i == 0})
 		}
-	}
-	spell(secret, true)
-	if !strings.ContainsAny(secret, "\r\n") {
-		return needles
-	}
-	for _, line := range strings.FieldsFunc(secret, func(r rune) bool { return r == '\n' || r == '\r' }) {
-		line = strings.TrimSpace(line)
-		if utf8.RuneCountInString(line) < floor {
-			continue
-		}
-		spell(line, false)
 	}
 	return needles
+}
+
+// needleSources is the value, then each line of a multi-line value that is
+// long enough to spell on its own; none when the value is too short.
+func needleSources(secret string, floor int) []string {
+	if utf8.RuneCountInString(secret) < floor {
+		return nil
+	}
+	sources := []string{secret}
+	if !strings.ContainsAny(secret, "\r\n") {
+		return sources
+	}
+	for _, line := range strings.FieldsFunc(secret, func(r rune) bool { return r == '\n' || r == '\r' }) {
+		if line = strings.TrimSpace(line); utf8.RuneCountInString(line) >= floor {
+			sources = append(sources, line)
+		}
+	}
+	return sources
+}
+
+// needleBound bounds what harvestNeedles retains, charging perNeedle for each
+// spelling plus its bytes, without running a serializer.
+func needleBound(secret string, floor int, perNeedle int64) int64 {
+	var bound int64
+	for _, plain := range needleSources(secret, floor) {
+		bound += (maxEncodedForms + 1) * (perNeedle + int64(len(plain))*maxEncodedExpansion + base64Padding)
+	}
+	return bound
 }
 
 // harvestMatches finds standalone occurrences of protected values.

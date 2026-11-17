@@ -23,7 +23,7 @@ func TestCadenceRunPreparesIndependentRootsAndDrainsOnCancel(t *testing.T) {
 	defer cancel()
 	done := make(chan error, 1)
 	go func() { done <- cadence.Run(ctx) }()
-	waitFor(t, func() bool { coord.mu.Lock(); defer coord.mu.Unlock(); return coord.waited == len(roots) })
+	testutil.WaitFor(t, "every root waits on the coordinator", func() bool { coord.mu.Lock(); defer coord.mu.Unlock(); return coord.waited == len(roots) })
 	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
 		t.Fatalf("stop cadence: %v", err)

@@ -131,7 +131,7 @@ func TestRequestedFrameRefreshesAfterRepositoryChange(t *testing.T) {
 	testutil.FailErr(t, "create file after frame", os.WriteFile(filepath.Join(root.Path, "new.txt"), []byte("source"), 0600))
 	view.catalog.InvalidateRoot(root.Path, "new.txt")
 	view.repositoryChanged(t.Context(), repochange.Event{ProjectDir: root.Path, Kind: repochange.WorktreeChanged, Paths: []string{"new.txt"}})
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the new file is visible", func() bool {
 		location, _, err := locateForTest(t, view, t.Context(), Address{Root: root.ID, Path: "new.txt"})
 		return err == nil && location.Visible
 	})
@@ -278,7 +278,7 @@ func TestRecursiveDisclosureKeepsCollapsedTreesClosed(t *testing.T) {
 	// command. A timeout reports what the catalog itself answers.
 	awaitBoundaries := func(want []string) {
 		t.Helper()
-		testutil.WaitFor(t, func() bool { return slices.Equal(derived(), want) })
+		testutil.WaitFor(t, "the derived rules match", func() bool { return slices.Equal(derived(), want) })
 	}
 
 	expandAll(".")
@@ -321,7 +321,7 @@ func TestRecursiveDisclosureConvergesWhateverTheCatalogTiming(t *testing.T) {
 		}
 		testutil.FailErr(t, "expand all", view.Disclose(t.Context(), nil,
 			IntentEntry{Address: Address{Root: root.ID, Path: "."}, Disclosure: Disclosure{Open: true, Recursive: true}}))
-		testutil.WaitFor(t, func() bool {
+		testutil.WaitFor(t, "only the build tree stays collapsed", func() bool {
 			view.mu.Lock()
 			defer view.mu.Unlock()
 			derived := view.rules.Derived()

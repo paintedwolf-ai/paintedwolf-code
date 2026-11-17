@@ -53,10 +53,8 @@ func TestProtectedLaunchBinariesBuildWithoutCgo(t *testing.T) {
 	if slices.Contains(strings.Fields(string(out)), "runtime/cgo") {
 		t.Fatalf("protected launch packages import runtime/cgo, which makes syscall.AllThreadsSyscall fail with ENOTSUP")
 	}
-	dir := t.TempDir()
 	for _, pkg := range pkgs {
-		bin := filepath.Join(dir, filepath.Base(pkg))
-		goBuild(t, bin, pkg, "")
+		bin := fixtureBinary(t, filepath.Base(pkg))
 		info, err := buildinfo.ReadFile(bin)
 		if err != nil {
 			t.Fatalf("read buildinfo for %s: %v", pkg, err)

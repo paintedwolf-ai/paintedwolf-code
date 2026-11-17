@@ -12,9 +12,8 @@ const DefaultCoalesceWindow = time.Second
 
 // FlushPayload is the coalesced delta handed to the emit callback: the snapshot at the start of
 // the window (Baseline) and the most recent snapshot (Latest), plus a per-session ordering Seq.
-// ChangedAt is when the write produced Latest, so the transcript row anchors
-// to when the plan actually changed rather than the debounced flush instant (which can trail the
-// coordinator's synthesis prose and sort the row to the bottom).
+// ChangedAt is when the write produced Latest. It dates the transcript row; the row's position
+// is its append ordinal.
 type FlushPayload struct {
 	SessionID string
 	Baseline  Snapshot

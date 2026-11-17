@@ -5,7 +5,8 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
-	"time"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestRunnerSingleFlight(t *testing.T) {
@@ -32,20 +33,19 @@ func TestRunnerSingleFlight(t *testing.T) {
 func TestRunnerSurvivesCallerCancel(t *testing.T) {
 	r := NewRunner()
 	ctx, cancel := context.WithCancel(context.Background())
+	canceled := make(chan struct{})
 	done := make(chan struct{})
 	r.Trigger(ctx, "s1", func(bg context.Context) {
 		defer close(done)
-		time.Sleep(20 * time.Millisecond)
+		// The pass inspects its context only after the caller's has ended.
+		<-canceled
 		if bg.Err() != nil {
 			t.Errorf("background ctx canceled: %v", bg.Err())
 		}
 	})
 	cancel()
-	select {
-	case <-done:
-	case <-t.Context().Done():
-		t.Fatal("background pass did not finish")
-	}
+	close(canceled)
+	testutil.AwaitClosed(t, "the background pass finishes", done)
 	r.Wait()
 }
 

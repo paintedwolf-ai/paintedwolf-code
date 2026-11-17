@@ -10,11 +10,8 @@ import (
 // are primary-relative and "@label/rel" addresses another attached root.
 
 // ParseBaselinePath maps a baseline-spelled display path to its root and
-// scope-relative path. Labels compare case-insensitively. Legacy
-// branch-relative "root-<hash>/rel" spellings are accepted so in-flight
-// callers keep resolving; they take precedence over a primary-relative file
-// that happens to live under a directory named like a branch directory.
-// Parent traversal and absolute paths are rejected.
+// scope-relative path. Labels compare case-insensitively. Parent traversal and
+// absolute paths are rejected.
 func ParseBaselinePath(roots []RootRef, raw string) (RootRef, string, bool) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -38,14 +35,6 @@ func ParseBaselinePath(roots []RootRef, raw string) (RootRef, string, bool) {
 		if rel == "" {
 			rel = "."
 		}
-		rel = filepath.ToSlash(filepath.Clean(rel))
-		if !baselineRelSafe(rel) {
-			return RootRef{}, "", false
-		}
-		return root, rel, true
-	}
-	if root, ok := RootForBranchRel(roots, slash); ok {
-		_, rel, _ := strings.Cut(slash, "/")
 		rel = filepath.ToSlash(filepath.Clean(rel))
 		if !baselineRelSafe(rel) {
 			return RootRef{}, "", false

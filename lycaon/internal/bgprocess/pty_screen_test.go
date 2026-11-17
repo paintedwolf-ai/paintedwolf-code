@@ -157,16 +157,11 @@ func TestPTYScreenDSRDoesNotBlockWrite(t *testing.T) {
 		t.Fatal("snapshot blocked after DSR writes")
 	}
 
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "a CPR reply is forwarded through onReply", func() bool {
 		got.Lock()
-		n := len(replies)
-		got.Unlock()
-		if n > 0 {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("expected CPR replies forwarded via onReply")
+		defer got.Unlock()
+		return len(replies) > 0
+	})
 }
 
 // TestPTYScreenWideCellsKeepRuneIndexOnItsColumn checks grid alignment.

@@ -1,0 +1,3 @@
+id: SELF_FIRING
+on: anchor.fired
+requires_facts: [paintedwolf.live_field]

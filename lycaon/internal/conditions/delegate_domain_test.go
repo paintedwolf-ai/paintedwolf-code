@@ -144,12 +144,3 @@ func TestChildRunCompleteAndFailed(t *testing.T) {
 		t.Fatal("expected vars child complete")
 	}
 }
-
-func TestDelegateLeavesRegisteredInDefaultRegistry(t *testing.T) {
-	reg := delegateTestRegistry(t, RegistryDeps{})
-	for _, id := range append(ShippedDelegateLeafIDs(), ShippedSubroutineLeafIDs()...) {
-		if !reg.Has(id) {
-			t.Fatalf("missing registered leaf %q", id)
-		}
-	}
-}

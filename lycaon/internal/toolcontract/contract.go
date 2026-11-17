@@ -31,20 +31,6 @@ func (p BatchPolicy) String() string {
 	}
 }
 
-// ParseBatchPolicy parses a catalog batch value.
-func ParseBatchPolicy(value string) (BatchPolicy, bool) {
-	switch value {
-	case nativemanifest.BatchSerial:
-		return BatchSerial, true
-	case nativemanifest.BatchShared:
-		return BatchShared, true
-	case nativemanifest.BatchSameTool:
-		return BatchSameTool, true
-	default:
-		return BatchSerial, false
-	}
-}
-
 // TurnOrder positions control tools in an assistant batch.
 type TurnOrder uint8
 
@@ -63,20 +49,6 @@ func (o TurnOrder) String() string {
 		return nativemanifest.TurnOrderTerminal
 	default:
 		return nativemanifest.TurnOrderNormal
-	}
-}
-
-// ParseTurnOrder parses a catalog order value.
-func ParseTurnOrder(value string) (TurnOrder, bool) {
-	switch value {
-	case nativemanifest.TurnOrderNormal, "":
-		return TurnOrderNormal, true
-	case nativemanifest.TurnOrderLate:
-		return TurnOrderLate, true
-	case nativemanifest.TurnOrderTerminal:
-		return TurnOrderTerminal, true
-	default:
-		return TurnOrderNormal, false
 	}
 }
 
@@ -110,26 +82,6 @@ func (l Lifecycle) String() string {
 	}
 }
 
-// ParseLifecycle parses a catalog lifecycle value.
-func ParseLifecycle(value string) (Lifecycle, bool) {
-	switch value {
-	case nativemanifest.LifecycleReadOnly:
-		return LifecycleReadOnly, true
-	case nativemanifest.LifecycleDBTransaction:
-		return LifecycleDBTransaction, true
-	case nativemanifest.LifecycleJournaledMutation:
-		return LifecycleJournaledMutation, true
-	case nativemanifest.LifecycleDurableJob:
-		return LifecycleDurableJob, true
-	case nativemanifest.LifecycleEffectAttempt:
-		return LifecycleEffectAttempt, true
-	case nativemanifest.LifecycleEphemeralControl:
-		return LifecycleEphemeralControl, true
-	default:
-		return LifecycleReadOnly, false
-	}
-}
-
 // Reversibility describes the recovery posture shown for an action.
 type Reversibility uint8
 
@@ -148,20 +100,6 @@ func (r Reversibility) String() string {
 		return nativemanifest.TierIrreversible
 	default:
 		return nativemanifest.TierReversible
-	}
-}
-
-// ParseReversibility parses a catalog reversibility value.
-func ParseReversibility(value string) (Reversibility, bool) {
-	switch value {
-	case nativemanifest.TierReversible:
-		return ReversibilityReversible, true
-	case nativemanifest.TierRecoverable:
-		return ReversibilityRecoverable, true
-	case nativemanifest.TierIrreversible:
-		return ReversibilityIrreversible, true
-	default:
-		return ReversibilityReversible, false
 	}
 }
 
@@ -207,42 +145,6 @@ const (
 	CapabilityCredentialStore
 	CapabilityHostExecution
 )
-
-// NamedCapability maps a catalog execution_capabilities token to its bit.
-func NamedCapability(name string) (Capability, bool) {
-	switch name {
-	case "host_resource":
-		return CapabilityHostResource, true
-	case "socket":
-		return CapabilitySocket, true
-	case "process_control":
-		return CapabilityProcessControl, true
-	case "credential_store":
-		return CapabilityCredentialStore, true
-	case "host_execution":
-		return CapabilityHostExecution, true
-	case "direct_ip":
-		return CapabilityDirectIP, true
-	case "local_listen":
-		return CapabilityLocalListen, true
-	case "loopback_connect":
-		return CapabilityLoopbackConnect, true
-	case "terminal_capture":
-		return CapabilityTerminalCapture, true
-	case "write_root":
-		return CapabilityWriteRoot, true
-	case "read_path":
-		return CapabilityReadPath, true
-	case "package_execution":
-		return CapabilityPackageExecution, true
-	case "file_change":
-		return CapabilityFileChange, true
-	case "held_terminal_input":
-		return CapabilityHeldTerminalInput, true
-	default:
-		return 0, false
-	}
-}
 
 // capabilityRequestFields is the closed capability_request object key set.
 var capabilityRequestFields = []string{

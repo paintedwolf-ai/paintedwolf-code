@@ -13,7 +13,8 @@
     ],
     "tools": [],
     "add_generation_prompt": true,
-    "expected": "<bos><|turn>system\n  guide\n<turn|>\n<|turn>user\n hi <turn|>\n<|turn>model\n"
+    "expected": "<bos><|turn>system\n  guide\n<turn|>\n<|turn>user\n hi <turn|>\n<|turn>model\n",
+    "wire": true
   },
   {
     "name": "adjacent result",
@@ -230,6 +231,257 @@
     "expected": "<bos><|turn>model\nFirst.<turn|>\n<|turn>model\nSecond.<turn|>\n"
   },
   {
+    "name": "result named by its call",
+    "wire": true,
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "Reading.",
+        "tool_calls": [
+          {
+            "id": "c1",
+            "type": "function",
+            "function": {
+              "name": "read",
+              "arguments": {
+                "path": "café.rs"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "source\n",
+        "tool_call_id": "c1"
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "expected": "<bos><|turn>model\nReading.<|tool_call>call:read{path:<|\"|>café.rs<|\"|>}<tool_call|><|tool_response>response:read{value:<|\"|>source\n<|\"|>}<tool_response|>"
+  },
+  {
+    "name": "interrupted result named by its call",
+    "wire": true,
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "Reading.",
+        "tool_calls": [
+          {
+            "id": "c1",
+            "type": "function",
+            "function": {
+              "name": "read",
+              "arguments": {
+                "path": "café.rs"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": "Wait."
+      },
+      {
+        "role": "tool",
+        "content": "source\n",
+        "tool_call_id": "c1"
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "expected": "<bos><|turn>model\nReading.<|tool_call>call:read{path:<|\"|>café.rs<|\"|>}<tool_call|><turn|>\n<|turn>user\nWait.<turn|>\n<|turn>model\n<|tool_response>response:read{value:<|\"|>source\n<|\"|>}<tool_response|>"
+  },
+  {
+    "name": "declared tools and parallel calls",
+    "wire": true,
+    "messages": [
+      {
+        "role": "system",
+        "content": "Guide."
+      },
+      {
+        "role": "user",
+        "content": "Check it."
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "c1",
+            "type": "function",
+            "function": {
+              "name": "read",
+              "arguments": {
+                "path": "a.rs",
+                "lines": [
+                  1,
+                  20
+                ]
+              }
+            }
+          },
+          {
+            "id": "c2",
+            "type": "function",
+            "function": {
+              "name": "run",
+              "arguments": {
+                "argv": [
+                  "make",
+                  "test"
+                ],
+                "mode": "check",
+                "options": {
+                  "dry": true
+                }
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "fn main() {}",
+        "tool_call_id": "c1"
+      },
+      {
+        "role": "tool",
+        "content": "{\"ok\": true}",
+        "tool_call_id": "c2"
+      }
+    ],
+    "tools": [
+      {
+        "type": "function",
+        "function": {
+          "name": "read",
+          "description": "Read a file.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string",
+                "description": "File path."
+              },
+              "lines": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        }
+      },
+      {
+        "type": "function",
+        "function": {
+          "name": "run",
+          "description": "Run a command.",
+          "parameters": {
+            "type": "object",
+            "properties": {
+              "argv": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "check",
+                  "apply"
+                ]
+              },
+              "options": {
+                "type": "object",
+                "properties": {
+                  "dry": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            },
+            "required": [
+              "argv"
+            ]
+          }
+        }
+      }
+    ],
+    "add_generation_prompt": true,
+    "expected": "<bos><|turn>system\nGuide.<|tool>declaration:read{description:<|\"|>Read a file.<|\"|>,parameters:{properties:{lines:{items:{type:<|\"|>INTEGER<|\"|>},type:<|\"|>ARRAY<|\"|>},path:{description:<|\"|>File path.<|\"|>,type:<|\"|>STRING<|\"|>}},required:[<|\"|>path<|\"|>],type:<|\"|>OBJECT<|\"|>}}<tool|><|tool>declaration:run{description:<|\"|>Run a command.<|\"|>,parameters:{properties:{argv:{items:{type:<|\"|>STRING<|\"|>},type:<|\"|>ARRAY<|\"|>},mode:{enum:[<|\"|>check<|\"|>,<|\"|>apply<|\"|>],type:<|\"|>STRING<|\"|>},options:{properties:{dry:{type:<|\"|>BOOLEAN<|\"|>}},type:<|\"|>OBJECT<|\"|>}},required:[<|\"|>argv<|\"|>],type:<|\"|>OBJECT<|\"|>}}<tool|><turn|>\n<|turn>user\nCheck it.<turn|>\n<|turn>model\n<|tool_call>call:read{lines:[1,20],path:<|\"|>a.rs<|\"|>}<tool_call|><|tool_call>call:run{argv:[<|\"|>make<|\"|>,<|\"|>test<|\"|>],mode:<|\"|>check<|\"|>,options:{dry:true}}<tool_call|><|tool_response>response:read{value:<|\"|>fn main() {}<|\"|>}<tool_response|><|tool_response>response:run{value:<|\"|>{\"ok\": true}<|\"|>}<tool_response|>"
+  },
+  {
+    "name": "later calls replace earlier ones",
+    "wire": true,
+    "messages": [
+      {
+        "role": "user",
+        "content": "Fix it."
+      },
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "c1",
+            "type": "function",
+            "function": {
+              "name": "read",
+              "arguments": {
+                "path": "a.rs"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "old",
+        "tool_call_id": "c1"
+      },
+      {
+        "role": "assistant",
+        "content": "Running.",
+        "tool_calls": [
+          {
+            "id": "c2",
+            "type": "function",
+            "function": {
+              "name": "run",
+              "arguments": {
+                "argv": [
+                  "make"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "done",
+        "tool_call_id": "c2"
+      },
+      {
+        "role": "user",
+        "content": "Thanks."
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "expected": "<bos><|turn>user\nFix it.<turn|>\n<|turn>model\n<|tool_call>call:read{path:<|\"|>a.rs<|\"|>}<tool_call|><|tool_response>response:read{value:<|\"|>old<|\"|>}<tool_response|>Running.<|tool_call>call:run{argv:[<|\"|>make<|\"|>]}<tool_call|><|tool_response>response:run{value:<|\"|>done<|\"|>}<tool_response|><turn|>\n<|turn>user\nThanks.<turn|>\n<|turn>model\n"
+  },
+  {
     "name": "unknown role",
     "messages": [
       {
@@ -326,6 +578,65 @@
             }
           }
         ]
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "rejected": true
+  },
+  {
+    "name": "result of an unknown call",
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "c1",
+            "type": "function",
+            "function": {
+              "name": "read",
+              "arguments": {
+                "path": "a.rs"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "old",
+        "tool_call_id": "c9"
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "rejected": true
+  },
+  {
+    "name": "result naming another tool than its call",
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "id": "c1",
+            "type": "function",
+            "function": {
+              "name": "read",
+              "arguments": {
+                "path": "a.rs"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "old",
+        "name": "run",
+        "tool_call_id": "c1"
       }
     ],
     "tools": [],
