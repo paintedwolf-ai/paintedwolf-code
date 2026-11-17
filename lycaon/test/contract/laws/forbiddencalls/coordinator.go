@@ -47,3 +47,34 @@ func setsField(lit *ast.CompositeLit, field string) bool {
 	}
 	return false
 }
+
+var transcriptPublish = []laws.Rule{{
+	// AppendMessages stamps ord and seq onto its variadic slice; publishing
+	// the pre-stamp value would pin the card at the top of the transcript.
+	Name:    "publish-message-append-uses-the-stamped-copy",
+	Anchors: []laws.Anchor{laws.Func("internal/events", "Publisher.PublishMessageAppend"), laws.Func("internal/session/store", "sqlTranscript.AppendMessages")},
+	Check: func(r *laws.Run) {
+		for _, f := range r.GoFiles(laws.Production, "internal") {
+			f.Funcs(func(fn *ast.FuncDecl) {
+				copied := map[string]bool{}
+				f.Calls(fn.Body, func(call *ast.CallExpr, _, _ string) {
+					switch laws.CalleeName(call) {
+					case "AppendMessages":
+						if len(call.Args) >= 3 && !call.Ellipsis.IsValid() {
+							if id, ok := call.Args[len(call.Args)-1].(*ast.Ident); ok {
+								copied[id.Name] = true
+							}
+						}
+					case "PublishMessageAppend":
+						if len(call.Args) < 4 {
+							return
+						}
+						if id, ok := call.Args[len(call.Args)-1].(*ast.Ident); ok && copied[id.Name] {
+							r.ReportAt(call.Pos(), "publishes %s after appending it by value; publish the stamped slice element", id.Name)
+						}
+					}
+				})
+			})
+		}
+	},
+}}

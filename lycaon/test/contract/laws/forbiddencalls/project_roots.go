@@ -62,3 +62,40 @@ func singleReturnOf(f *laws.GoFile, call *ast.CallExpr, name string) bool {
 	ret, ok := fn.Body.List[0].(*ast.ReturnStmt)
 	return ok && len(ret.Results) == 1 && ret.Results[0] == call
 }
+
+var evidenceSubstrate = []laws.Rule{{
+	// Runtime evidence has one record type: rows carrying observed handles
+	// or typed gate outcomes.
+	Name:    "one-runtime-evidence-record",
+	Anchors: []laws.Anchor{laws.Decl("internal/evidence", "Record"), laws.Func("internal/evidence", "Resolve")},
+	Check: func(r *laws.Run) {
+		for _, f := range r.GoFiles(laws.Production, "internal") {
+			if laws.Under(f, "internal/logoutline") || f.Rel == "internal/evidence/record.go" {
+				continue
+			}
+			ast.Inspect(f.AST, func(n ast.Node) bool {
+				if spec, ok := n.(*ast.TypeSpec); ok && RuntimeEvidenceRecord(spec) {
+					r.ReportAt(spec.Pos(), "a second runtime evidence Record; use internal/evidence")
+				}
+				return true
+			})
+		}
+	},
+}}
+
+// RuntimeEvidenceRecord reports a Record struct carrying an observed handle
+// or a typed gate outcome. A manifest persistence Record shares only the name.
+func RuntimeEvidenceRecord(spec *ast.TypeSpec) bool {
+	st, ok := spec.Type.(*ast.StructType)
+	if spec.Name.Name != "Record" || !ok {
+		return false
+	}
+	for _, field := range st.Fields.List {
+		for _, name := range field.Names {
+			if name.Name == "Handle" || name.Name == "GateType" {
+				return true
+			}
+		}
+	}
+	return false
+}

@@ -338,6 +338,9 @@ func (f *GoFile) Qualified(expr ast.Expr) (pkg, name string, ok bool) {
 	return p, sel.Sel.Name, true
 }
 
+// Files returns every parsed file.
+func (g *GoCorpus) Files() []*GoFile { return g.files }
+
 // Line returns the 1-based line of pos.
 func (g *GoCorpus) Line(pos token.Pos) int { return g.Fset.Position(pos).Line }
 

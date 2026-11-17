@@ -27,4 +27,13 @@ var Family = laws.Family{Name: "forbidden-calls", Rules: slices.Concat(
 	surveyTools,
 	toolIngest,
 	userText,
+	projectWalk,
+	confinement,
+	bootRecovery,
+	debugSwitch,
+	templates,
+	catalogReach,
+	coordinatorWaits,
+	transcriptPublish,
+	evidenceSubstrate,
 )}
