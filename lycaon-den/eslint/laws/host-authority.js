@@ -85,6 +85,29 @@ export default [
     },
   },
   {
+    name: "transcript-order-reads-no-clock-text",
+    message: "Transcript order follows the host's sequence fields; Den parses no timestamp text to order rows.",
+    files: ["src/chat/transcript/**/*.{ts,tsx}"],
+    syntax: ["MemberExpression[object.name='Date'][property.name='parse']"],
+    seed: {
+      file: "src/chat/transcript/projection/transcript-items.ts",
+      code: `export const before = (a: { at: string }, b: { at: string }) => Date.parse(a.at) < Date.parse(b.at);`,
+    },
+  },
+  {
+    name: "grounding-check-labels-come-from-the-wire",
+    message: "Grounding check labels come from EvidenceMeta.ui_label on the wire; Den keeps no check-code label map.",
+    files: [SRC],
+    syntax: [
+      "Property[key.name=/^(WORKER|SYNTH|INVEST)_[A-Z0-9_]+$/][value.type=/^(Literal|TemplateLiteral)$/]",
+      "Property[key.value=/^(WORKER|SYNTH|INVEST)_[A-Z0-9_]+$/][value.type=/^(Literal|TemplateLiteral)$/]",
+    ],
+    seed: {
+      file: "src/components/citation/CitationGroundingPanel.tsx",
+      code: `export const CHECK_LABELS = { WORKER_SCOPE_MATCH: "Scope matches" };`,
+    },
+  },
+  {
     name: "transcript-visibility-is-a-wire-field",
     message: "Transcript visibility comes from the wire field, not a content prefix.",
     files: ["src/chat/transcript/projection/transcript-items.ts"],
