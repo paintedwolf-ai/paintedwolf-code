@@ -1,7 +1,6 @@
 package contract
 
 import (
-	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
@@ -12,29 +11,6 @@ import (
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
-
-func argLooksLikeCommandOrArgv(expr ast.Expr) bool {
-	switch x := expr.(type) {
-	case *ast.Ident:
-		switch x.Name {
-		case "command", "cmd", "normalized", "argv", "token", "tok", "arg", "args":
-			return true
-		}
-	case *ast.SelectorExpr:
-		if x.Sel != nil {
-			switch x.Sel.Name {
-			case "Command", "Argv", "Args":
-				return true
-			}
-		}
-	case *ast.CallExpr:
-		// strings.Fields(command), strings.TrimSpace(command), etc.
-		if len(x.Args) > 0 {
-			return argLooksLikeCommandOrArgv(x.Args[0])
-		}
-	}
-	return false
-}
 
 // TestDetectionPackSettingsDoesNotImportDetectionpack guards import inversion.
 func TestDetectionPackSettingsDoesNotImportDetectionpack(t *testing.T) {

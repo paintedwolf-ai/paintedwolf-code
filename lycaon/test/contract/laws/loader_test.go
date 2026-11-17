@@ -93,6 +93,7 @@ func TestEvaluateRefusesMalformedRules(t *testing.T) {
 		}},
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			expect(t, laws.Evaluate(corpus, r), fails, 0)
 		})
 	}
@@ -118,6 +119,7 @@ func TestTextSelectionsFailClosed(t *testing.T) {
 		"empty Go selection": func(r *laws.Run) { r.GoFiles(laws.Production, "internal/none") },
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			res := laws.Evaluate(corpus, laws.Rule{Name: name, Anchors: []laws.Anchor{laws.Package("internal/x")}, Check: read})
 			expect(t, res, fails, 0)
 		})
