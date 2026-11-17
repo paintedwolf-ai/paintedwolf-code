@@ -186,7 +186,7 @@ func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryH
 		_ = conn.Close()
 		_ = database.Close()
 	})
-	return &hostEffects{conn: conn, hub: hub, events: ch, settle: h.Server.WaitForBackground, projectDir: projectDir}
+	return &hostEffects{conn: conn, hub: hub, events: ch, settle: hostSettle(h), projectDir: projectDir}
 }
 
 func (e *hostEffects) mark(ctx context.Context) (int64, error) {
@@ -480,4 +480,15 @@ func storeTextColumns(ctx context.Context, conn *sql.Conn) (map[string][]string,
 		return nil, errors.New("the store has no text columns")
 	}
 	return out, rows.Err()
+}
+
+// hostSettle waits for the server's detached work and for briefing
+// generations, which run on their own scheduler.
+func hostSettle(h *wiring.Harness) func(context.Context) {
+	return func(ctx context.Context) {
+		h.Server.WaitForBackground(ctx)
+		if briefings := h.Server.Sources.Briefings; briefings != nil && briefings.Engine != nil && briefings.Engine.Host() != nil {
+			briefings.Engine.Host().Scheduler.Wait(ctx)
+		}
+	}
 }
