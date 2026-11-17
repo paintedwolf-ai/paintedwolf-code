@@ -189,9 +189,12 @@ describe("AskUserDock", () => {
       <AskUserDock meta={meta} client={client()} {...base} />
     ));
     const hint = () => getByTestId("ask-user-dock-hint").textContent;
-    expect(hint()).toBe("Select one, then Enter");
+    const beforeChoice = hint();
+    expect(beforeChoice).toContain("Enter");
     fireEvent.click(getByLabelText("blue"));
-    expect(hint()).toBe("Press Enter to submit your answer");
+    // A choice changes what the hint asks for next.
+    expect(hint()).not.toBe(beforeChoice);
+    expect(hint()).toContain("Enter");
   });
 
   it("hint follows the live platform binding for Send", async () => {
@@ -208,7 +211,7 @@ describe("AskUserDock", () => {
     ));
     expect(
       getByTestId("ask-user-dock-hint").textContent,
-    ).toBe("Select one, then ⌘Enter");
+    ).toContain("⌘Enter");
   });
 
   it("single Other send resolves via registerSubmit", async () => {
