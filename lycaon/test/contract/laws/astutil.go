@@ -138,3 +138,39 @@ func CalleeName(call *ast.CallExpr) string {
 	}
 	return ""
 }
+
+// ConstString resolves a string literal, or a string constant declared in
+// the module and named by an identifier in f's package or a qualified
+// selector. It reads declarations, so it sees every platform's files.
+func (g *GoCorpus) ConstString(f *GoFile, expr ast.Expr) (string, bool) {
+	if value, ok := StringLit(expr); ok {
+		return value, true
+	}
+	var pkg, name string
+	switch e := ast.Unparen(expr).(type) {
+	case *ast.Ident:
+		pkg, name = f.Pkg, e.Name
+	case *ast.SelectorExpr:
+		p, n, ok := f.Qualified(e)
+		if !ok {
+			return "", false
+		}
+		pkg, name = p, n
+	default:
+		return "", false
+	}
+	d, ok := g.Decl(pkg, name)
+	if !ok {
+		return "", false
+	}
+	spec, ok := d.Node.(*ast.ValueSpec)
+	if !ok {
+		return "", false
+	}
+	for i, id := range spec.Names {
+		if id.Name == name && i < len(spec.Values) {
+			return StringLit(spec.Values[i])
+		}
+	}
+	return "", false
+}
