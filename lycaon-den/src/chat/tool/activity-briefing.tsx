@@ -1,5 +1,5 @@
 import { Show, createEffect, createMemo, createSignal, type Accessor } from "solid-js";
-import { ActivitySummary, type ActivitySummaryState } from "../../briefing/ActivitySummary.tsx";
+import { ActivitySummary, type ActivitySummaryState, type ActivitySummaryText } from "../../briefing/ActivitySummary.tsx";
 import { BriefingEvidenceLink } from "../../briefing/BriefingSummary.tsx";
 import { retryBriefing, useBriefing, type BriefingTarget, type BriefingView } from "../../briefing/briefing-live.ts";
 import { fileSummariesEnabled, fileSummariesSettingKnown } from "../../settings/editor/file-summary-settings.ts";
@@ -36,8 +36,8 @@ export function activityBriefingTarget(part: ToolPartView, sessionId: string | u
   };
 }
 
-function sectionText(view: BriefingView, id: string): string | undefined {
-  return view.snapshot?.result?.summary.find((section) => section.section_id === id)?.text || undefined;
+function summarySection(view: BriefingView, id: string): ActivitySummaryText | undefined {
+  return view.snapshot?.result?.summary.find((section) => section.section_id === id && section.text);
 }
 
 function summaryPending(view: BriefingView): boolean {
@@ -46,10 +46,10 @@ function summaryPending(view: BriefingView): boolean {
 }
 
 /** Maps the host's answer, and text held from an earlier revision, to what the region shows. */
-function activitySummaryState(view: BriefingView, heldPurpose: string | undefined): ActivitySummaryState {
+function activitySummaryState(view: BriefingView, heldPurpose: ActivitySummaryText | undefined): ActivitySummaryState {
   const snapshot = view.snapshot;
-  const purpose = sectionText(view, "purpose");
-  const change = sectionText(view, "change");
+  const purpose = summarySection(view, "purpose");
+  const change = summarySection(view, "change");
   // A settled answer with no summary text counts as not arrived.
   const ended = view.stalled || snapshot?.status === "failed" || snapshot?.status === "complete";
   const recordId = snapshot?.result?.evidence_ref.record_id;
@@ -76,9 +76,9 @@ export function useActivityBriefingSlots(args: Args): ToolBriefingSlots {
     return activityBriefingTarget(args.part(), args.sessionId());
   }, null, { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) });
   const view = useBriefing(args.projectId, target);
-  const [heldPurpose, setHeldPurpose] = createSignal<string>();
+  const [heldPurpose, setHeldPurpose] = createSignal<ActivitySummaryText>();
   createEffect(() => {
-    const purpose = sectionText(view(), "purpose");
+    const purpose = summarySection(view(), "purpose");
     if (purpose && !summaryPending(view())) setHeldPurpose(purpose);
   });
   const state = createMemo(() => activitySummaryState(view(), heldPurpose()));

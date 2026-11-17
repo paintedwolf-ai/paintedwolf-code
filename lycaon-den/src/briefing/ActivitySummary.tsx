@@ -1,13 +1,16 @@
+import type { BriefingSummarySection } from "../api/types.ts";
 import { Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { BriefingInline, BriefingMark } from "./BriefingSummary.tsx";
 import { briefingCopy } from "./briefing-copy.ts";
 import { SUMMARY_FADE_CLASS, createSummaryFade } from "./summary-fade.ts";
 
+export type ActivitySummaryText = Pick<BriefingSummarySection, "text" | "source">;
+
 /** What an opened activity's summary region shows. */
 export type ActivitySummaryState =
-  | { kind: "pending"; purpose?: string }
-  | { kind: "ready"; purpose?: string; change?: string; recordId: string }
-  | { kind: "missing"; purpose?: string };
+  | { kind: "pending"; purpose?: ActivitySummaryText }
+  | { kind: "ready"; purpose?: ActivitySummaryText; change?: ActivitySummaryText; recordId: string }
+  | { kind: "missing"; purpose?: ActivitySummaryText };
 
 type Props = {
   state: ActivitySummaryState;
@@ -20,19 +23,19 @@ type Props = {
 function ActivitySummarySection(props: {
   id: "intent" | "outcome";
   label: string;
-  text?: string;
+  summary?: ActivitySummaryText;
   waiting: string;
   missing: boolean;
   onRetry: () => void;
 }) {
-  const held = !props.text;
+  const held = !props.summary?.text;
   let section: HTMLDivElement | undefined;
   let measure: HTMLParagraphElement | undefined;
   const [clamped, setClamped] = createSignal(false);
   const [expanded, setExpanded] = createSignal(false);
   // Measure an unclamped copy because the visible text reports only its clipped height.
   createEffect(() => {
-    if (!props.text) {
+    if (!props.summary?.text) {
       setClamped(false);
       return;
     }
@@ -58,11 +61,11 @@ function ActivitySummarySection(props: {
       data-held={held && !expanded() ? "" : undefined}
       data-clamped={clamped() && !expanded() ? "" : undefined}
     >
-      <BriefingMark />
+      <Show when={!props.summary || props.summary.source === "summarizer"}><BriefingMark /></Show>
       <div class="den-activity-summary__body">
         <p class="den-activity-summary__text" data-expanded={expanded() ? "" : undefined}>
           <strong class="den-briefing-summary__label">{props.label}:</strong>{" "}
-          <Show when={props.text} keyed fallback={
+          <Show when={props.summary?.text} keyed fallback={
             <span class="den-briefing-summary__waiting">
               {props.missing ? briefingCopy.notArrived : props.waiting}
             </span>
@@ -71,9 +74,9 @@ function ActivitySummarySection(props: {
           </Show>
         </p>
         <p class="den-activity-summary__measure" aria-hidden="true" ref={(el) => (measure = el)}>
-          <strong class="den-briefing-summary__label">{props.label}:</strong>{" "}<BriefingInline text={props.text ?? ""} />
+          <strong class="den-briefing-summary__label">{props.label}:</strong>{" "}<BriefingInline text={props.summary?.text ?? ""} />
         </p>
-        <Show when={props.missing && !props.text}>
+        <Show when={props.missing && !props.summary?.text}>
           <button type="button" class="den-chat-content-link" data-testid="activity-summary-retry" aria-label={`Retry ${props.id} summary`} onClick={() => props.onRetry()}>{briefingCopy.retry}</button>
         </Show>
         <Show when={clamped() && !expanded()}>
@@ -95,13 +98,13 @@ export function ActivitySummary(props: Props) {
       <div class="den-activity-summary" data-testid="activity-summary" data-state={props.state.kind}>
         <div class="den-activity-summary__sections" classList={{ [SUMMARY_FADE_CLASS]: fade() }}>
           <ActivitySummarySection
-            id="intent" label="Intent" text={props.state.purpose}
+            id="intent" label="Intent" summary={props.state.purpose}
             waiting={briefingCopy.waiting}
             missing={props.state.kind === "missing" || (props.state.kind === "ready" && !props.state.purpose)}
             onRetry={props.onRetry}
           />
           <ActivitySummarySection
-            id="outcome" label="Outcome" text={ready()?.change}
+            id="outcome" label="Outcome" summary={ready()?.change}
             waiting={props.running ? briefingCopy.resultPending : briefingCopy.waiting}
             missing={!props.running && (props.state.kind === "missing" || (props.state.kind === "ready" && !props.state.change))}
             onRetry={props.onRetry}
