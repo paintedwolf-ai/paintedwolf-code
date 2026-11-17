@@ -96,6 +96,23 @@ describe("ActionCard", () => {
     expect([...body.children].map((child) => child.getAttribute("data-testid"))).toEqual(["action-ran", "action-facts", "action-links"]);
   });
 
+  it("keeps unobserved external access visible with no endpoints, distinct for each egress", () => {
+    const unobserved: ToolPartView = {
+      ...part(), tool: "command", kind: "command",
+      externalAccess: { modes: ["direct_ip"], visibility_summary: "unobserved", direct: { scope: "current_action", actual_destination_visibility: "unobserved" } },
+    };
+    const shown = (["direct", "local_only", "proxy_only"] as const).map((egress) => {
+      const action: CardAction = { ...descriptor, facts: [{ kind: "network", egress }], row: ["network"], preview: undefined };
+      const { container, unmount } = render(() => <ActionCard part={unobserved} action={action} layout="chat" />);
+      open(container);
+      const value = container.querySelector('[data-testid="action-facts"] > [data-kind="network"] dd')?.textContent?.trim() ?? "";
+      unmount();
+      return value;
+    });
+    for (const value of shown) expect(value).not.toBe("");
+    expect(new Set(shown).size).toBe(shown.length);
+  });
+
   it("shows a live process's own state and Stop in place of its recorded process fact", () => {
     const running: CardAction = { ...descriptor, facts: [{ kind: "process", state: "running", port: 5173 }], row: ["process"] };
     const live: ToolPartView = { ...part(), process: { handle: "job-1", running: true } };
