@@ -369,8 +369,6 @@ func TestCommandProgramResourceCeilings(t *testing.T) {
 // bounded, limit refusals fire at 1 past each bound, and cleanup leaves
 // nothing behind; then it runs more, if given, before the final leak checks.
 // Elapsed time is logged; the gates are deterministic resource counts.
-//
-//nolint:funlen // Table-driven resource ceiling verification across all catalog bounds.
 func checkResourceCeilings(t *testing.T, f *perfFixture, cases []resourceCeilingCase, more func(t *testing.T)) {
 	t.Helper()
 	runtime.GC()
