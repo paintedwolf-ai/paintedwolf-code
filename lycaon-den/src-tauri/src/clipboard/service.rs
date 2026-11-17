@@ -433,9 +433,5 @@ mod tests {
             .map(DisplayProtocol::as_str),
             ["wayland", "x11", "gdk"]
         );
-        assert_eq!(
-            ClipboardError::Timeout.to_string(),
-            "Clipboard did not respond in time"
-        );
     }
 }

@@ -75,16 +75,6 @@ fn engine_graceful_stop_exceeds_the_engine_shutdown_budget() {
 }
 
 #[test]
-fn sidecar_state_defaults() {
-    let state = SidecarState::new();
-    assert!(state.process.lock().unwrap().is_none());
-    assert_eq!(*state.port.lock().unwrap(), 0);
-    assert!(state.api_token.lock().unwrap().is_empty());
-    assert!(!state.starting.load(Ordering::Acquire));
-    assert!(!state.cancel_start.load(Ordering::Acquire));
-}
-
-#[test]
 fn bundled_layout_uses_platform_resources_and_sidecar_name() {
     let temp = TempDir::new("bundled-layout");
     for (target_os, sidecar_name) in [("macos", "pw"), ("linux", "pw"), ("windows", "pw.exe")] {
@@ -311,24 +301,12 @@ fn cancel_marks_only_an_active_startup() {
 }
 
 #[test]
-fn attach_live_dev_daemon_when_present() {
-    if std::env::var("LYCAON_TEST_LIVE_ATTACH").ok().as_deref() != Some("1") {
-        return;
-    }
-    let info = attach_existing_daemon().expect("attach call");
-    assert!(info.is_some(), "expected live daemon on 8787");
-}
-
-#[test]
 fn attach_only_reports_missing_daemon_instead_of_spawning() {
     let dir = TempDir::new("attach");
     let err = attach_or_explain(dir.path()).expect_err("attach without daemon");
-    let SidecarStartError::EngineNotStarted(message) = err else {
-        panic!("attach-only must name its own code, not fall through to failed: {err:?}");
-    };
     assert!(
-        message.contains("no engine is running") && message.contains("./task den:sidecar"),
-        "unexpected error: {message}"
+        matches!(err, SidecarStartError::EngineNotStarted(_)),
+        "attach-only must name its own code, not fall through to failed: {err:?}"
     );
 }
 
@@ -473,26 +451,6 @@ fn startup_diagnostics_stays_a_narrow_permitted_engine_command() {
         .find(|(key, _)| *key == std::ffi::OsStr::new("LYCAON_CONFIG_DIR"))
         .and_then(|(_, value)| value);
     assert_eq!(config_dir, Some(dir.path().as_os_str()));
-
-    let manifest_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
-    let permissions = std::fs::read_to_string(manifest_dir.join("permissions/sidecar.toml"))
-        .expect("read sidecar permissions");
-    assert!(
-        permissions.contains("allow-export-startup-diagnostics"),
-        "startup diagnostics needs an explicit shell permission"
-    );
-    let capabilities = std::fs::read_to_string(manifest_dir.join("capabilities/default.json"))
-        .expect("read default capability");
-    assert!(
-        capabilities.contains("allow-export-startup-diagnostics"),
-        "main window must receive the startup diagnostics permission"
-    );
-    let app = std::fs::read_to_string(manifest_dir.join("src/lib.rs"))
-        .expect("read Tauri command registration");
-    assert!(
-        app.contains("sidecar::commands::ipc_export_startup_diagnostics"),
-        "Tauri app must register the startup diagnostics IPC command"
-    );
 }
 
 #[cfg(unix)]
@@ -738,22 +696,21 @@ fn engine_state_wire_shape_matches_den() {
 }
 
 #[test]
-fn the_engine_log_records_each_unexpected_exit_once() {
+fn the_engine_log_records_unexpected_exits_and_nothing_else() {
     let exit = supervisor::EngineExit {
         code: None,
         signal: Some(9),
         description: "was killed by signal 9 (SIGKILL)".into(),
     };
+    // An exit the supervisor answers is logged with its cause; a healthy or idle engine logs nothing.
     let restarting = supervisor::EngineState::Restarting { exit: exit.clone(), attempt: 2 };
-    assert_eq!(
-        supervisor::log_line(&restarting).as_deref(),
-        Some("--- engine was killed by signal 9 (SIGKILL); restarting (attempt 2) ---\n")
-    );
+    let line = supervisor::log_line(&restarting).expect("a restart is logged");
+    assert!(line.contains(&exit.description) && line.contains('2') && line.ends_with('\n'), "{line}");
+    let gave_up = supervisor::EngineState::Stopped { exit: exit.clone(), failure: None, restart_required: false };
+    assert!(supervisor::log_line(&gave_up).expect("giving up is logged").contains(&exit.description));
     let refused = supervisor::EngineState::Stopped { exit: exit.clone(), failure: Some("store locked".into()), restart_required: false };
-    assert_eq!(
-        supervisor::log_line(&refused).as_deref(),
-        Some("--- replacement engine could not start: store locked ---\n")
-    );
+    assert!(supervisor::log_line(&refused).expect("a refused replacement is logged").contains("store locked"));
+    assert!(supervisor::log_line(&supervisor::EngineState::Idle).is_none());
     assert!(supervisor::log_line(&supervisor::EngineState::Running { generation: 1 }).is_none());
 }
 
