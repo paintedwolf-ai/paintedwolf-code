@@ -6,6 +6,105 @@ import (
 	"github.com/lycaon/lycaon/internal/oarcopy"
 )
 
+var engineCounterFacts = map[string]struct{}{
+	"fire_count": {}, "breaker_count": {}, "same_code_reject_run": {}, "same_call_run": {},
+	"paintedwolf.repeat_count": {}, "paintedwolf.fruitless_search_run": {},
+	"paintedwolf.code_reject_responses": {}, "paintedwolf.credential_decisions": {},
+}
+
+var detectorFacts = map[string]struct{}{
+	"secret_matches": {},
+}
+
+var expensiveFacts = map[string]struct{}{
+	"paintedwolf.unobserved_cited_paths": {}, "paintedwolf.unobserved_cited_urls": {},
+	"paintedwolf.unobserved_cited_handles": {},
+	"paintedwolf.claims_completion":        {}, "paintedwolf.has_matching_ledger_job": {},
+	"paintedwolf.worker_summary_present":  {},
+	"paintedwolf.worker_artifact_present": {},
+	"paintedwolf.worktree_stale_paths":    {}, "paintedwolf.worktree_leftover_paths": {},
+	"paintedwolf.worktree_conflict_paths":      {},
+	"paintedwolf.reproduced_source_lines":      {},
+	"paintedwolf.reproduced_source_file_lines": {},
+	"paintedwolf.reproduced_source_path":       {},
+	"paintedwolf.reproduced_source_start_line": {},
+	"paintedwolf.reproduced_source_end_line":   {},
+}
+
+type FactInfo struct {
+	Name          string
+	Type          string
+	Class         string
+	Tier          FactTier
+	Profile       string
+	PublishedName string
+}
+
+type FunctionInfo struct {
+	Name          string
+	Signature     string
+	Tier          FactTier
+	Profile       string
+	PublishedName string
+}
+
+func FactCatalogue() []FactInfo {
+	out := make([]FactInfo, 0, len(factDecls))
+	for _, d := range factDecls {
+		out = append(out, FactInfo{
+			Name:          d.name,
+			Type:          string(d.typ),
+			Class:         factClass(d.name),
+			Tier:          d.tier,
+			Profile:       d.profile,
+			PublishedName: publishedHostName(d.name, d.tier),
+		})
+	}
+	return out
+}
+
+func ObservationFunctionCatalogue() []FunctionInfo {
+	out := make([]FunctionInfo, 0, len(observationFns))
+	for _, f := range observationFns {
+		out = append(out, FunctionInfo{
+			Name:          f.name,
+			Signature:     "(string) -> " + string(f.ret),
+			Tier:          f.tier,
+			Profile:       f.profile,
+			PublishedName: publishedHostName(f.name, f.tier),
+		})
+	}
+	return out
+}
+
+func factClass(name string) string {
+	name = PublishedFactName(name)
+	if _, ok := engineCounterFacts[name]; ok {
+		return "engine_counter"
+	}
+	if _, ok := detectorFacts[name]; ok {
+		return "detector"
+	}
+	if _, ok := expensiveFacts[name]; ok {
+		return "derived"
+	}
+	return "structural"
+}
+
+func publishedHostName(name string, tier FactTier) string {
+	if tier != FactTierHost {
+		return ""
+	}
+	return oarcopy.HostFactNamespace + "." + name
+}
+
+func PublishedFactName(name string) string {
+	if published := publishedHostName(name, bareFactTiers[name]); published != "" {
+		return published
+	}
+	return name
+}
+
 func TestFactCatalogueMatchesConditionEnvironment(t *testing.T) {
 	for _, f := range FactCatalogue() {
 		var expr string

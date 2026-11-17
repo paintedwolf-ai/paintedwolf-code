@@ -150,19 +150,9 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		mgr.Catalog.SetCatalogViewCache(deps.Catalog.ViewCache)
 	}
 
-	workerToolBudgetFor := func(projectDir string) spawn.WorkerToolBudget {
-		if deps.Settings.Service == nil {
-			return deps.Settings.SessionLimits.WorkerToolBudget()
-		}
-		if !deps.Settings.ProjectSurfaceGate(projectcontrib.SurfaceProjectSettings, deps.Storage.Projects).AppliesPath(context.WithoutCancel(ctx), projectDir) {
-			projectDir = ""
-		}
-		return settings.ProjectLimitsAdapter{Store: deps.Settings.Service.Limits}.SessionLimits(projectDir).WorkerToolBudget()
-	}
+	wireSessionToolSources(mgr, deps.Execution.Host, deps.Settings.HostResources)
 
-	wireSessionToolSources(mgr, deps.Execution.Host, deps.Settings.HostResources, workerToolBudgetFor)
-
-	if err := deps.Security.BuildAuthorization(deps.Catalog.ModuleRoot, deps.Agents.ToolProfiles, deps.Settings.Service.Approvals, deps.Execution.Host.Authority.ApprovalGate, deps.Execution.Host.Registry.List, mgr.Profiles.ResolveToolAccess, workerToolBudgetFor); err != nil {
+	if err := deps.Security.BuildAuthorization(deps.Catalog.ModuleRoot, deps.Agents.ToolProfiles, deps.Settings.Service.Approvals, deps.Execution.Host.Authority.ApprovalGate, deps.Execution.Host.Registry.List, mgr.Profiles.ResolveToolAccess); err != nil {
 		return nil, err
 	}
 	mgr.Runner.Authorization.SetSealer(deps.Security.Authority.Sealer)
@@ -171,15 +161,14 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	}
 
 	return &Runtime{
-		Manager:             mgr,
-		Store:               deps.Storage.Sessions,
-		PromptEngine:        promptEngine,
-		Invocations:         invocations,
-		WorkerToolBudgetFor: workerToolBudgetFor,
+		Manager:      mgr,
+		Store:        deps.Storage.Sessions,
+		PromptEngine: promptEngine,
+		Invocations:  invocations,
 	}, nil
 }
 
-func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResources *hostresources.Service, workerToolBudgetFor func(string) spawn.WorkerToolBudget) {
+func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResources *hostresources.Service) {
 	if host != nil && host.Boundary != nil {
 		host.Boundary.SetProfileSource(func(ctx context.Context, sessionID string) []sandbox.ToolProfile {
 			view := mgr.Catalog.ViewForSessionID(ctx, sessionID)
@@ -229,15 +218,11 @@ func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResou
 			return reachable
 		})
 		host.Skills.SetSkillTemplateVars(func(ctx context.Context, tctx tools.ToolContext) map[string]any {
-			budget := spawn.DefaultWorkerToolBudget()
-			if workerToolBudgetFor != nil {
-				budget = workerToolBudgetFor(strings.TrimSpace(tctx.ActiveRootPath()))
-			}
 			reader, err := skillToolReader(ctx, mgr, tctx)
 			if err != nil {
-				return spawn.PolicyTemplateVars(budget)
+				return spawn.PolicyTemplateVars()
 			}
-			return prompts.SkillVars(reader, budget)
+			return prompts.SkillVars(reader)
 		})
 		host.Skills.SetSkillPackConfiguration(
 			func(ctx context.Context, tctx tools.ToolContext, packID string) map[string]any {

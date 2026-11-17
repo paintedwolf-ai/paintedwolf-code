@@ -12,6 +12,7 @@ const (
 	FactInvestigateDefaultEligible            = "investigate_default_eligible"
 	FactInvestigateHardBlock                  = "investigate_hard_block"
 	FactWorkersInFlight                       = "workers_in_flight"
+	FactWorkersDelivered                      = "workers_delivered"
 	FactHostCycleTurn                         = "host_cycle_turn"
 	FactWorkerTaskFinishedTurn                = "worker_task_finished_turn"
 	FactHostLoopWakeTurn                      = "host_loop_wake_turn"
@@ -44,6 +45,7 @@ var factKinds = map[string]surfaceFactKind{
 	FactInvestigateDefaultEligible:            surfaceFactKindBool,
 	FactInvestigateHardBlock:                  surfaceFactKindBool,
 	FactWorkersInFlight:                       surfaceFactKindCount,
+	FactWorkersDelivered:                      surfaceFactKindCount,
 	FactHostCycleTurn:                         surfaceFactKindBool,
 	FactWorkerTaskFinishedTurn:                surfaceFactKindBool,
 	FactHostLoopWakeTurn:                      surfaceFactKindBool,
@@ -69,6 +71,7 @@ var registeredSurfaceFactNames = []string{
 	FactInvestigateDefaultEligible,
 	FactInvestigateHardBlock,
 	FactWorkersInFlight,
+	FactWorkersDelivered,
 	FactHostCycleTurn,
 	FactWorkerTaskFinishedTurn,
 	FactHostLoopWakeTurn,

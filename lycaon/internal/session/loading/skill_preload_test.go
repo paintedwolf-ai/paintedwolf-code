@@ -14,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/skills"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	skilltools "github.com/lycaon/lycaon/internal/tools/native/skills"
@@ -163,7 +162,7 @@ func preloadRenderService(t *testing.T) *Service {
 				WebSearch: true,
 			})
 			testutil.FailErr(t, "new reader", err)
-			return prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
+			return prompts.SkillVars(reader)
 		},
 		PackConfiguration: func(context.Context, tools.ToolContext, string) map[string]any {
 			return map[string]any{"mode": "bounded"}

@@ -126,7 +126,10 @@ func populateCopiedWorktreeTestDouble(t *testing.T, trunkDir, worktreeDoubleDir 
 		if d.IsDir() {
 			return os.MkdirAll(dst, info.Mode().Perm()|0o700)
 		}
-		return copyWorkingTreeFile(path, dst, info.Mode())
+		if cErr := copyWorkingTreeFile(path, dst, info.Mode()); cErr != nil {
+			return cErr
+		}
+		return os.Chtimes(dst, info.ModTime(), info.ModTime())
 	})
 	testutil.FailErr(t, "populateCopiedWorktreeTestDouble", err)
 }

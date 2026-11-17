@@ -165,7 +165,7 @@ func surfaceVariableAgentView(agent agentdef.Profile, toolProfile string, surfac
 		CanEdit:         set["restore_version"] || (set["command"] && surface.CommandMutates),
 		CanCommand:      set["command"],
 		ReadsProject:    len(orderedEnabledTools(surveyToolDisplayOrder, set)) > 0,
-		Delegates:       set["task"] || set["delegate_dispatch"],
+		Delegates:       set["task"] || set["instruct_worker"],
 		SurfaceVariable: true,
 	}
 }

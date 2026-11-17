@@ -242,7 +242,7 @@ func TestPromptDoesNotQueueGreenfieldBuildKickForPlanReviewPolicyPrompt(t *testi
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	if id, ok := mgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID); ok && id != "" {
-		t.Fatalf("TakePendingKickID = %q want empty (greenfield-build kick must not queue)", id)
+		t.Fatalf("TakePendingKickIDUnless = %q want empty", id)
 	}
 	for _, msg := range rec.LastRequest().Messages {
 		if msg.Role == api.MessageRoleUser && strings.Contains(msg.Content, "Greenfield build — ship via plan") {

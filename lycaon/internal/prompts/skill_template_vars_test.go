@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -42,7 +41,7 @@ func TestSkillVarsCoordinatorSurface(t *testing.T) {
 		Loaded:    toolNameSet([]string{"command", "task", "ask_user"}),
 		RootCount: 2,
 	})
-	vars := SkillVars(reader, spawn.DefaultWorkerToolBudget())
+	vars := SkillVars(reader)
 	if vars["is_coordinator"] != true {
 		t.Fatalf("is_coordinator = %v", vars["is_coordinator"])
 	}
@@ -77,7 +76,7 @@ func TestSkillVarsWorkerProfile(t *testing.T) {
 		HasGit:         true,
 		RootCount:      1,
 	})
-	vars := SkillVars(reader, spawn.DefaultWorkerToolBudget())
+	vars := SkillVars(reader)
 	if vars["is_coordinator"] != false {
 		t.Fatalf("is_coordinator = %v", vars["is_coordinator"])
 	}
@@ -119,36 +118,13 @@ func TestSkillVarsCallerShapeSurvivesMerges(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			vars := SkillVars(skillTestReader(t, tc.input), spawn.DefaultWorkerToolBudget())
+			vars := SkillVars(skillTestReader(t, tc.input))
 			for k, want := range tc.shape {
 				if vars[k] != want {
 					t.Fatalf("%s = %v, want %v", k, vars[k], want)
 				}
 			}
 		})
-	}
-}
-
-func TestSkillVarsDefaultsZeroBudget(t *testing.T) {
-	offered := []string{"command", "summarize"}
-	reader := skillTestReader(t, ReaderInput{
-		ProfileID: "worker_readonly",
-		Visible:   offered,
-		Loaded:    toolNameSet(offered),
-		HasGit:    true,
-		RootCount: 1,
-	})
-	vars := SkillVars(reader, spawn.WorkerToolBudget{})
-	def := spawn.DefaultWorkerToolBudget()
-	for k, want := range map[string]int{
-		"worker_tool_budget_default": def.Default,
-		"worker_tool_budget_min":     def.Min,
-		"worker_tool_budget_max":     def.Max,
-	} {
-		got, _ := vars[k].(int)
-		if got != want {
-			t.Fatalf("%s = %d, want %d (zero budget must default to the host budget)", k, got, want)
-		}
 	}
 }
 
@@ -161,7 +137,7 @@ func TestSkillVarsWorkerOfferedMarksDeferredLoaded(t *testing.T) {
 		HasGit:    true,
 		RootCount: 1,
 	})
-	vars := SkillVars(reader, spawn.DefaultWorkerToolBudget())
+	vars := SkillVars(reader)
 	if vars["profile_has_held_result"] != true {
 		t.Fatalf("offered deferred tool must render as held: %v", vars["profile_has_held_result"])
 	}
@@ -180,7 +156,7 @@ func TestSkillVarsCoordinatorAddressableTools(t *testing.T) {
 		Loaded:    toolNameSet([]string{"command", "task", "ask_user"}),
 		RootCount: 1,
 	})
-	vars := SkillVars(reader, spawn.DefaultWorkerToolBudget())
+	vars := SkillVars(reader)
 	if vars["profile_has_scan_query"] != true {
 		t.Fatalf("floor tool outside Offered must render as addressable: %v", vars["profile_has_scan_query"])
 	}

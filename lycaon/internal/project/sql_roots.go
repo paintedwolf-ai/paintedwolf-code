@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -177,7 +178,7 @@ func (r *SQLRegistry) DetachRoot(ctx context.Context, id, rootID string) (*RootC
 	}
 	if err := q.ReassignSessionsWorkspaceRoot(ctx, db.ReassignSessionsWorkspaceRootParams{
 		WorkspaceRootID:   replacementID,
-		UpdatedAt:         db.FormatTime(time.Now().UTC()),
+		UpdatedAt:         timelayout.Format(time.Now().UTC()),
 		ProjectID:         id,
 		WorkspaceRootID_2: db.NullString(rootID),
 	}); err != nil {
@@ -382,7 +383,7 @@ func attachRootTx(ctx context.Context, q *db.Queries, p *Project, params AttachR
 		Label:         root.Label,
 		IsPrimary:     boolToInt64(root.IsPrimary),
 		GitRemoteHash: db.NullString(root.GitRemoteHash),
-		AddedAt:       db.FormatTime(root.AddedAt),
+		AddedAt:       timelayout.Format(root.AddedAt),
 		Kind:          string(root.Kind),
 	}); err != nil {
 		if db.IsUniqueConstraint(err) {

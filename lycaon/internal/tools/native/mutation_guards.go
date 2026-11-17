@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"math"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -174,38 +175,38 @@ func assertChmodTarget(
 	boundary *sandbox.Boundary,
 	tctx tools.ToolContext,
 	relPath, profileID string,
-) (target mutationTarget, modeBefore os.FileMode, err error) {
-	resolved, err := assertChmodWritePath(ctx, boundary, tctx, relPath, profileID)
+) (target mutationTarget, resolved projectpaths.Resolved, modeBefore os.FileMode, err error) {
+	resolved, err = assertChmodWritePath(ctx, boundary, tctx, relPath, profileID)
 	if err != nil {
-		return mutationTarget{}, 0, err
+		return mutationTarget{}, projectpaths.Resolved{}, 0, err
 	}
 	info, err := os.Lstat(resolved.Abs)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return mutationTarget{}, 0, &toolrejection.ToolReject{
+			return mutationTarget{}, projectpaths.Resolved{}, 0, &toolrejection.ToolReject{
 				Code: "CHMOD_NOT_FOUND",
 				Data: map[string]any{"path": filepath.ToSlash(relPath)},
 			}
 		}
-		return mutationTarget{}, 0, fmt.Errorf("chmod %s: %w", relPath, err)
+		return mutationTarget{}, projectpaths.Resolved{}, 0, fmt.Errorf("chmod %s: %w", relPath, err)
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
 		target, readErr := os.Readlink(resolved.Abs)
 		if readErr != nil {
-			return mutationTarget{}, 0, fmt.Errorf("chmod %s: read symlink: %w", relPath, readErr)
+			return mutationTarget{}, projectpaths.Resolved{}, 0, fmt.Errorf("chmod %s: read symlink: %w", relPath, readErr)
 		}
 		resolvedRel := sourceview.SymlinkTarget(resolved.Root.Path, resolved.ScopeRel, target)
 		if resolvedRel == "" {
-			return mutationTarget{}, 0, &toolrejection.ToolReject{
+			return mutationTarget{}, projectpaths.Resolved{}, 0, &toolrejection.ToolReject{
 				Code: "CHMOD_SYMLINK_ESCAPE",
 				Data: map[string]any{"path": filepath.ToSlash(relPath)},
 			}
 		}
 		if err := boundary.AssertWriteScope(ctx, resolved.Root.Path, resolvedRel, profileID); err != nil {
 			if reject := writeScopeReject(ctx, boundary, resolvedRel, profileID, "chmod", err); !errors.Is(reject, err) {
-				return mutationTarget{}, 0, reject
+				return mutationTarget{}, projectpaths.Resolved{}, 0, reject
 			}
-			return mutationTarget{}, 0, &toolrejection.ToolReject{
+			return mutationTarget{}, projectpaths.Resolved{}, 0, &toolrejection.ToolReject{
 				Code: "CHMOD_SYMLINK_ESCAPE",
 				Data: map[string]any{"path": filepath.ToSlash(relPath), "symlink_target": resolvedRel},
 			}
@@ -214,21 +215,21 @@ func assertChmodTarget(
 		// in-scope link destination the guard just approved.
 		fullPath, resolveErr := boundary.ResolveAbs(resolved.Root.Path, resolvedRel)
 		if resolveErr != nil {
-			return mutationTarget{}, 0, resolveErr
+			return mutationTarget{}, projectpaths.Resolved{}, 0, resolveErr
 		}
 		info, err = os.Lstat(fullPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return mutationTarget{}, 0, &toolrejection.ToolReject{
+				return mutationTarget{}, projectpaths.Resolved{}, 0, &toolrejection.ToolReject{
 					Code: "CHMOD_NOT_FOUND",
 					Data: map[string]any{"path": filepath.ToSlash(relPath)},
 				}
 			}
-			return mutationTarget{}, 0, fmt.Errorf("chmod %s: %w", relPath, err)
+			return mutationTarget{}, projectpaths.Resolved{}, 0, fmt.Errorf("chmod %s: %w", relPath, err)
 		}
 		resolved.Abs, resolved.ScopeRel = fullPath, resolvedRel
 	}
-	return resolvedMutationTarget(resolved), info.Mode(), nil
+	return resolvedMutationTarget(resolved), resolved, info.Mode(), nil
 }
 
 func assertChownTarget(

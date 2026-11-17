@@ -241,12 +241,9 @@ func TestEffectiveSkillsNoTaint(t *testing.T) {
 }
 
 func TestDiagSkillShadowedRegistered(t *testing.T) {
-	for _, c := range extpacks.AllDiagnosticCodes() {
-		if c == extpacks.DiagSkillShadowed {
-			return
-		}
+	if got := extpacks.SeverityForCode(extpacks.DiagSkillShadowed); got != extpacks.SeverityWarning {
+		t.Fatalf("SeverityForCode(DiagSkillShadowed) = %q, want warning", got)
 	}
-	t.Fatal("DiagSkillShadowed missing from registry")
 }
 
 func TestTerminalEmptyResponseRendersContextualOAR(t *testing.T) {

@@ -2,19 +2,19 @@
 
 **Entry check:** name one implementation decision you cannot make yet and the fact that would settle it. If you cannot name the decision, the research has no stopping condition and will wander.
 
-The dispatch steps below are coordinator-only: a worker leg applies the matching research guidance within its own assignment and reports dispatch needs to the parent.
+The dispatch steps below are coordinator-only: a worker applies the matching research guidance within its own assignment and reports dispatch needs to the parent.
 
 ## Workflow
 
 1. List the open decisions as questions with an assignee. Separate current external claims ("what does this API return in v3?") from repository questions ("where is this validated today?") — they need different researchers.
 2. Mark each question **blocking** or **supplemental**. Blocking means a dependent builder cannot start; supplemental means the builder has a safe default and can proceed while the answer arrives.
-3. Dispatch the narrowest matching researcher, choosing `agent_type` from the spawn roster in your prompt. Recommend `research-current-information` for external questions and {% if profile_has_summarize %}`summarize` or {% endif %}bounded search and line-inspection programs{% if profile_has_command and root_count %} in `command`{% endif %} for repository questions. When substantial blocking research informs a substantial build, use a researcher leg followed by a builder leg; the dependency makes them sequential, not one worker plus coordinator-only research.
+3. Dispatch the narrowest matching researcher, choosing `agent_type` from the spawn roster in your prompt. Recommend `research-current-information` for external questions and {% if profile_has_summarize %}`summarize` or {% endif %}bounded search and line-inspection programs{% if profile_has_command and root_count %} in `command`{% endif %} for repository questions. When substantial blocking research informs a substantial build in the same area, finish the research round first;{% if profile_has_instruct_worker %} the researcher can then become the implementer in one `instruct_worker` call with `agent_type` and `scope` updated, or{% endif %} separate builders can fan out once the packet is ready.
 4. Require each researcher to return facts with evidence handles or URLs, scope limits, conflicts found, and remaining uncertainty — not an implementation plan outside its assignment.
 5. Synthesize the answers into a decision packet, which is the artifact this skill exists to produce:
 
    ```text
    Verified: httpkit 0.8 needs the async runtime at 1.38+ (vendor docs, dated)
-   Decided:  upgrade the runtime first, in its own leg
+   Decided:  upgrade the runtime first, in its own worker round
    Rejected: pinning httpkit 0.7 — drops the tracing layer we need
    Bounds:   language baseline unchanged; no public API change
    Paths:    server/src/router.rs, server/manifest
@@ -31,7 +31,7 @@ Stop and report rather than proceeding when a blocking claim cannot be verified,
 
 ## Stopping rule
 
-Research ends when every blocking question is answered or explicitly escalated. Supplemental questions may remain open — record them in the packet and continue. One re-dispatch per unanswered blocking question; a second failure is an escalation, not a third search.
+Research ends when every blocking question is answered or explicitly escalated. Supplemental questions may remain open — record them in the packet and continue. Send a researcher back{% if profile_has_instruct_worker %} with `instruct_worker`{% endif %} at most once per unanswered blocking question; a second failure is an escalation, not a third search.
 
 ## Report
 

@@ -75,36 +75,6 @@ func loadManifestsRawWithSources(dir string, origin ManifestSourceOrigin) (map[s
 	return entries, sources, nil
 }
 
-// MergeManifestOverlay overlays project manifests onto bundled entries (project wins per id@version).
-func MergeManifestOverlay(bundled map[string]Manifest, projectDir string) (map[string]Manifest, error) {
-	mergedRaw := map[string]Manifest{}
-	for k, v := range bundled {
-		mergedRaw[k] = v
-	}
-	if strings.TrimSpace(projectDir) == "" {
-		return ResolveAllManifests(mergedRaw)
-	}
-	overlayDir := filepath.Join(projectDir, settingsoverlay.DirName(), "workflows")
-	info, err := os.Stat(overlayDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return ResolveAllManifests(mergedRaw)
-		}
-		return nil, err
-	}
-	if !info.IsDir() {
-		return ResolveAllManifests(mergedRaw)
-	}
-	overlayRaw, err := LoadManifestsRaw(overlayDir)
-	if err != nil {
-		return nil, err
-	}
-	for k, v := range overlayRaw {
-		mergedRaw[k] = v
-	}
-	return ResolveAllManifests(mergedRaw)
-}
-
 // ManifestSourceOrigin records where a resolved manifest was authored.
 type ManifestSourceOrigin int
 

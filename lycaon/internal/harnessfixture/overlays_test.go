@@ -2,6 +2,7 @@ package harnessfixture
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,7 +30,7 @@ func TestPreparedOverlaysUseRealQueueAndConflict(t *testing.T) {
 	parent, err := sessions.Create(t.Context(), api.CreateSessionRequest{WorkspaceRootID: project.Roots[0].ID}, project.ID)
 	testutil.FailErr(t, "create parent", err)
 	queue := &fixtureQueue{SQLQueue: worker.NewSQLQueue(database, 2)}
-	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"))
+	manager := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), platform.NewSelector(platform.Config{}))
 	ledger := sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
 	queue.SetBaselineStore(ledger.Baselines)
 	queue.SetProjectStore(projects)

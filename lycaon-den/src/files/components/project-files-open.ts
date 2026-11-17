@@ -1,6 +1,7 @@
 import { batch } from "solid-js";
 import type { OpenSourceRequest } from "../../platform/navigation/open-source.ts";
-import { markFilesBufferLoading, openFilesBuffer } from "../documents/project-files-buffers.ts";
+import { markFilesBufferLoading } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { pushProjectJump } from "./project-files-jump-bridge.ts";
 import { setSelectedFileVersion } from "../history/files-version-selection.ts";

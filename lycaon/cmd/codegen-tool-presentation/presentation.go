@@ -146,6 +146,8 @@ type ActivityPresentation struct {
 
 // Entry is one tool's transcript presentation metadata.
 type Entry struct {
+	// Label is the action card's verb-first name; worker cards keep their own.
+	Label         string               `yaml:"label"`
 	Kind          Kind                 `yaml:"kind"`
 	TitleKeys     []string             `yaml:"title_keys"`
 	TitleFallback string               `yaml:"title_fallback"`
@@ -233,6 +235,14 @@ func (c Config) Validate(schemas *toolschema.Config) error {
 			problems = append(problems, fmt.Sprintf(
 				"tool %q: kind task settles on ui_visibility, so it cannot be long_running — a refused dispatch would render and then vanish",
 				name))
+		}
+		switch {
+		case kind == KindTask && entry.Label != "":
+			problems = append(problems, fmt.Sprintf("tool %q: kind task keeps its worker card, so label is dead data — remove it", name))
+		case kind != KindTask && strings.TrimSpace(entry.Label) == "":
+			problems = append(problems, fmt.Sprintf("tool %q: label is required", name))
+		case entry.Label != strings.TrimSpace(entry.Label):
+			problems = append(problems, fmt.Sprintf("tool %q: label %q has surrounding whitespace", name, entry.Label))
 		}
 		if entry.RunningLabel != "" && strings.TrimSpace(entry.RunningLabel) == "" {
 			problems = append(problems, fmt.Sprintf("tool %q: blank running_label", name))
@@ -443,6 +453,17 @@ func (c Config) PathEntries() map[string]PathEntry {
 	for name, entry := range c.Tools {
 		if entry.PathEntry != "" {
 			out[name] = entry.PathEntry
+		}
+	}
+	return out
+}
+
+// Labels is tool → action card label for tools that declare one.
+func (c Config) Labels() map[string]string {
+	out := map[string]string{}
+	for name, entry := range c.Tools {
+		if entry.Label != "" {
+			out[name] = entry.Label
 		}
 	}
 	return out

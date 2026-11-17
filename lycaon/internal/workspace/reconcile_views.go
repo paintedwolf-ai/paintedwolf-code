@@ -288,9 +288,13 @@ func (m *Manager) releaseLiveJournaledViews(ctx context.Context, jobID, root str
 			WorkerID: jobID, Disposition: recovery.RuntimeRefused, Reason: recovery.ReasonInvalidMetadata, Err: err,
 		}}
 	}
-	key := filepath.Clean(root)
+	key := branchRootKey(root)
+	clean := filepath.Clean(root)
 	m.viewsMu.Lock()
 	state, live := m.views[key]
+	if !live && clean != key {
+		state, live = m.views[clean]
+	}
 	m.viewsMu.Unlock()
 	if !live || state.selection.Adapter == nil {
 		return nil
@@ -305,11 +309,8 @@ func (m *Manager) releaseLiveJournaledViews(ctx context.Context, jobID, root str
 			return err
 		}
 	}
-	m.viewsMu.Lock()
-	delete(m.views, key)
-	m.viewsMu.Unlock()
-	sharedBranchViews.Delete(key)
-	forgetSettledBranchClaim(key)
+	m.forgetBranchViews(root)
+	forgetSettledBranchClaim(root)
 	return nil
 }
 

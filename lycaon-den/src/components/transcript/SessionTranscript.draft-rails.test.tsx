@@ -464,6 +464,6 @@ describe("SessionTranscript draft rails", () => {
     expect(container.textContent).toContain(
       "Research the latest cutting-edge AI trends",
     );
-    expect(container.querySelector('[data-testid="tool-part-card"]')).toBeNull();
+    expect(container.querySelector('[data-testid="action-card"]')).toBeNull();
   });
 });

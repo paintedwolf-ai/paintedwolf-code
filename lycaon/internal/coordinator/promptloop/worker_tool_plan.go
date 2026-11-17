@@ -67,17 +67,11 @@ func surfaceAllowsTool(plan toolsurface.Plan, surfaceID, toolName string) bool {
 	return plan.Compiled() && plan.Addressable(toolName)
 }
 
-func unofferedToolCode(toolName, surfaceID string) string {
-	if strings.TrimSpace(toolName) == "delegate_dispatch" && strings.HasPrefix(strings.TrimSpace(surfaceID), "implement") {
-		return "COORDINATOR_DELEGATE_DISPATCH_USE_TASK"
-	}
+func unofferedToolCode(_, _ string) string {
 	return "TOOL_NOT_OFFERED"
 }
 
-func offSurfaceCode(toolName, surfaceID string) string {
-	if strings.TrimSpace(toolName) == "delegate_dispatch" && strings.HasPrefix(strings.TrimSpace(surfaceID), "implement") {
-		return "COORDINATOR_DELEGATE_DISPATCH_USE_TASK"
-	}
+func offSurfaceCode(toolName, _ string) string {
 	if toolcontract.MutatesContent(toolName) {
 		return "COORDINATOR_ORCHESTRATE_WRITE_DENIED"
 	}
@@ -186,11 +180,14 @@ func trimCoordinatorToolMetasForPlan(plan toolsurface.Plan, all []tools.ToolMeta
 			meta.ArgsSchema = verdictSchema
 		}
 		outMeta := tools.ProjectProviderToolMeta(meta)
-		if meta.Name == "task" {
+		switch meta.Name {
+		case "task":
 			if taskAllowlist != nil && len(taskAllowlist) == 0 {
 				continue
 			}
-			outMeta = guard.ApplyTaskSpawnAllowlistSchema(outMeta, taskAllowlist)
+			outMeta = guard.ApplySpawnAllowlistSchema(outMeta, taskAllowlist)
+		case "instruct_worker":
+			outMeta = guard.ApplySpawnAllowlistSchema(outMeta, taskAllowlist)
 		}
 		out = append(out, outMeta)
 	}

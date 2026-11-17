@@ -4,10 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/fileoutline"
@@ -149,7 +150,7 @@ func (t *SummarizeTool) Run(ctx context.Context, args map[string]any, tctx tools
 	// Only the conversational tool delivers its windows as agent reads.
 	reads := projectpaths.NewReadSession(t.Boundary, tctx)
 	defer reads.Close()
-	rememberSummaryReads(ctx, reads, tctx, substance)
+	rememberSummaryReads(ctx, tctx, substance)
 	return string(raw), nil
 }
 

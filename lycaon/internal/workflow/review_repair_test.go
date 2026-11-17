@@ -49,12 +49,12 @@ func TestReviewRepairBlocksOnceAndResumeRetainsWork(t *testing.T) {
 	}
 	got, err := mgr.Store.Runs.Get(t.Context(), run.ID)
 	testutil.FailErr(t, "get run", err)
-	if got.Status != api.WorkflowRunStatusPaused || got.PauseReason != ReviewBlockedReason {
+	if got.Status != api.WorkflowRunStatusPaused || got.PauseReason != runstate.ReviewBlockedReason {
 		t.Fatalf("run did not pause: %+v", got)
 	}
 	vars, err := mgr.Store.Runs.GetScaffoldVars(t.Context(), run.ID)
 	testutil.FailErr(t, "read vars", err)
-	repair, err := CurrentReviewRepair(vars, "judge")
+	repair, err := runstate.CurrentReviewRepair(vars, "judge")
 	testutil.FailErr(t, "read repair", err)
 	if repair == nil || len(repair.Responses) != 3 || repair.State != "blocked" {
 		t.Fatalf("repair: %+v", repair)
@@ -81,7 +81,7 @@ func TestReviewContractBlocksWithoutModelAttempts(t *testing.T) {
 	testutil.FailErr(t, "read blocked run", err)
 	vars, err := mgr.Store.Runs.GetScaffoldVars(t.Context(), run.ID)
 	testutil.FailErr(t, "read snapshot", err)
-	repair, err := CurrentReviewRepair(vars, run.CurrentPhase)
+	repair, err := runstate.CurrentReviewRepair(vars, run.CurrentPhase)
 	testutil.FailErr(t, "decode snapshot", err)
 	if got.Status != api.WorkflowRunStatusPaused || repair == nil || repair.Snapshot == nil || len(repair.Responses) != 0 {
 		t.Fatalf("contract not blocked atomically: run=%+v repair=%+v", got, repair)
@@ -103,7 +103,7 @@ func TestReviewRepairRecoveryCountsResponsesOnce(t *testing.T) {
 	testutil.FailErr(t, "repeat recovery", ReviewRepairs{mgr}.Recover(t.Context()))
 	vars, err := mgr.Store.Runs.GetScaffoldVars(t.Context(), run.ID)
 	testutil.FailErr(t, "read recovered episode", err)
-	repair, err := CurrentReviewRepair(vars, run.CurrentPhase)
+	repair, err := runstate.CurrentReviewRepair(vars, run.CurrentPhase)
 	testutil.FailErr(t, "decode recovered episode", err)
 	if repair == nil || len(repair.Responses) != 3 || repair.State != "blocked" {
 		t.Fatalf("recovery episode: %+v", repair)
@@ -118,7 +118,7 @@ func TestReviewRepairIgnoresResultsFromPriorPhase(t *testing.T) {
 	testutil.FailErr(t, "ignore old result", mgr.RecordReviewToolResult(t.Context(), run.SessionID, msg))
 	vars, err := mgr.Store.Runs.GetScaffoldVars(t.Context(), run.ID)
 	testutil.FailErr(t, "read current episode", err)
-	repair, err := CurrentReviewRepair(vars, run.CurrentPhase)
+	repair, err := runstate.CurrentReviewRepair(vars, run.CurrentPhase)
 	testutil.FailErr(t, "decode episode", err)
 	if repair != nil {
 		t.Fatal("prior phase refusal affected current repair budget")
@@ -126,10 +126,10 @@ func TestReviewRepairIgnoresResultsFromPriorPhase(t *testing.T) {
 }
 
 func TestAcceptedVerdictResolvesResumedBlockedEpisode(t *testing.T) {
-	vars := map[string]any{reviewRepairsKey: []ReviewRepair{{ID: "episode", Phase: "claims", State: "blocked", Snapshot: &ReviewSnapshot{Unavailable: []string{"worker ledger"}}}}}
-	updated, err := resolveReviewRepair(vars, "claims")
+	vars := map[string]any{runstate.ReviewRepairsKey: []runstate.ReviewRepair{{ID: "episode", Phase: "claims", State: "blocked", Snapshot: &runstate.ReviewSnapshot{Unavailable: []string{"worker ledger"}}}}}
+	updated, err := runstate.ResolveReviewRepair(vars, "claims")
 	testutil.FailErr(t, "resolve resumed episode", err)
-	repair, err := CurrentReviewRepair(updated, "claims")
+	repair, err := runstate.CurrentReviewRepair(updated, "claims")
 	testutil.FailErr(t, "read resolved episode", err)
 	if repair == nil || repair.State != "resolved" || repair.Snapshot == nil {
 		t.Fatalf("resolved repair lost historical snapshot: %+v", repair)
@@ -137,7 +137,7 @@ func TestAcceptedVerdictResolvesResumedBlockedEpisode(t *testing.T) {
 }
 
 func TestReviewRepairCountsOneResponseAndRetainsLatestCandidate(t *testing.T) {
-	episode := ReviewRepair{}
+	episode := runstate.ReviewRepair{}
 	if !episode.ObserveResponse("r1", "first", "a") || !episode.ObserveResponse("r1", "second", "b") {
 		t.Fatal("new results were not retained")
 	}
@@ -166,7 +166,7 @@ func TestReviewRepairTotalBudgetBoundsChangingDefects(t *testing.T) {
 		if i < 7 && got.Status != api.WorkflowRunStatusRunning {
 			t.Fatalf("repair stopped early at %d", i+1)
 		}
-		if i == 7 && (got.Status != api.WorkflowRunStatusPaused || got.PauseReason != ReviewBlockedReason) {
+		if i == 7 && (got.Status != api.WorkflowRunStatusPaused || got.PauseReason != runstate.ReviewBlockedReason) {
 			t.Fatal("changing defects exceeded the response allowance")
 		}
 	}
@@ -178,11 +178,11 @@ func TestReviewRepairFingerprintTracksAllRepairsAsASet(t *testing.T) {
 	}
 	first := runstate.VerdictRepair{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"field": "coverage"}}
 	second := runstate.VerdictRepair{Code: "TOOL_ARGS_INVALID", Details: map[string]any{"field": "claims"}}
-	before := reviewIssueFingerprint(feedback(first, second))
-	if before != reviewIssueFingerprint(feedback(second, first)) {
+	before := runstate.ReviewIssueFingerprint(feedback(first, second))
+	if before != runstate.ReviewIssueFingerprint(feedback(second, first)) {
 		t.Fatal("repair ordering changed defect identity")
 	}
-	if before == reviewIssueFingerprint(feedback(first)) {
+	if before == runstate.ReviewIssueFingerprint(feedback(first)) {
 		t.Fatal("fixing a secondary repair did not change defect identity")
 	}
 }
@@ -203,11 +203,11 @@ func TestReviewVerdictsDoesNotTreatUnreadableLedgerAsEmpty(t *testing.T) {
 }
 
 func TestReviewRepairDoesNotInferSameDefectFromCodeOrProse(t *testing.T) {
-	identity := reviewIssueFingerprint([]api.ToolFeedback{{Code: workflowvalidation.ReviewLoopVerdictInvalidCode, Details: map[string]any{"reason": "invalid claim"}}})
+	identity := runstate.ReviewIssueFingerprint([]api.ToolFeedback{{Code: workflowvalidation.ReviewLoopVerdictInvalidCode, Details: map[string]any{"reason": "invalid claim"}}})
 	if identity != "" {
 		t.Fatal("unstructured diagnostic treated as a proven repeated defect")
 	}
-	var episode ReviewRepair
+	var episode runstate.ReviewRepair
 	for i := 0; i < 3; i++ {
 		episode.ObserveResponse(fmt.Sprint(i), fmt.Sprint(i), identity)
 	}

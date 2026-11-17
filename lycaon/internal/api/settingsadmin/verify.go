@@ -26,7 +26,7 @@ func (s *Handler) HandleGetVerify(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Service.Verify.Get(scope, projectDir)
 	detect, hasDetect := s.Service.Verify.ProposalFor(projectDir)
 	httpio.WriteJSON(w, http.StatusOK, settings.VerifyToDTO(
-		settings.WireScope(string(scope)),
+		wire.SettingsScope(string(scope)),
 		projectDir,
 		cfg,
 		detect,
@@ -62,7 +62,7 @@ func (s *Handler) HandleUpdateVerify(w http.ResponseWriter, r *http.Request) {
 	projectview.PublishSettings(s.Events, s.Projects, r.Context(), wire.SettingsAreaVerify, string(scope), projectDir, "updated")
 	detect, hasDetect := s.Service.Verify.ProposalFor(projectDir)
 	httpio.WriteJSON(w, http.StatusOK, settings.VerifyToDTO(
-		settings.WireScope(string(scope)),
+		wire.SettingsScope(string(scope)),
 		projectDir,
 		s.Service.Verify.Get(scope, projectDir),
 		detect,
@@ -98,7 +98,7 @@ func (s *Handler) HandleDismissVerify(w http.ResponseWriter, r *http.Request) {
 	projectview.PublishSettings(s.Events, s.Projects, r.Context(), wire.SettingsAreaVerify, string(scope), projectDir, "updated")
 	detect, hasDetect := s.Service.Verify.ProposalFor(projectDir)
 	httpio.WriteJSON(w, http.StatusOK, settings.VerifyToDTO(
-		settings.WireScope(string(scope)),
+		wire.SettingsScope(string(scope)),
 		projectDir,
 		s.Service.Verify.Get(scope, projectDir),
 		detect,

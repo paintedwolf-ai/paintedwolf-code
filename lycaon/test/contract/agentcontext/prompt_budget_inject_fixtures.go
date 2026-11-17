@@ -23,7 +23,7 @@ var (
 var PromptBudgetInjectMatrix = []PromptBudgetInjectSpec{
 	{
 		ID: "turn_state", Hosts: coordinatorTurns, Template: "guidance/turn-state.md",
-		Fixture: "Dynamic coordinator turn state and gate conditions",
+		Fixture: "Dynamic coordinator turn state, gate conditions and a three-worker roster",
 		Advice:  "Turn-scoped dynamic gates — keep guidance concise and host-authoritative.",
 	},
 	{

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"path/filepath"
 	"sort"
@@ -243,7 +244,7 @@ func execFreshSchema(ctx context.Context, sqlDB *sql.DB) error {
 	if err := New(tx).InsertPerson(ctx, InsertPersonParams{
 		ID:        uuid.NewString(),
 		Role:      hostOwnerRole,
-		CreatedAt: FormatTime(time.Now()),
+		CreatedAt: timelayout.Format(time.Now()),
 	}); err != nil {
 		return fmt.Errorf("seed host owner: %w", err)
 	}

@@ -1,4 +1,3 @@
-import { fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
 import { describe, expect, it } from "vitest";
 import {
   collectSegmentFolds,
@@ -7,13 +6,12 @@ import {
   fileEditFoldIsNoop,
   fileEditLineStat,
   fileEditPathKey,
-  fileEditStepsFromParts,
-  foldFileEdits,
-  singleFileEditFold,
+  foldFileEdits
 } from "./file-edit-fold.ts";
 import type { FileEditStep } from "./file-edit-fold.ts";
 import type { ToolPartView } from "../tool/tool-part-model.ts";
 import type { RawTranscriptItem } from "../transcript/projection/transcript-item-model.ts";
+import { fileEditPreviewFixture, singleFileEditFold, fileEditStepsFromParts } from "../../test/file-edit-fixture.ts";
 
 function step(
   key: string,

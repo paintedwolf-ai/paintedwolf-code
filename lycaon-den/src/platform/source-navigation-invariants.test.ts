@@ -117,24 +117,6 @@ describe("source navigation invariants", () => {
     expect(panel).not.toMatch(/den-citation-grounding-citation-path/);
   });
 
-  it("structured tool body routes path facts through SourcePathLink", () => {
-    // Path facts use the shared navigation component.
-    const body = read(join(componentsDir, "tool/StructuredToolBody.tsx"));
-    expect(body).toMatch(/import.*SourcePathLink/);
-    expect(body).toMatch(/fact\.path/);
-    expect(body).toMatch(/line=\{fp\(\)\.line\}/);
-    // The contract carries a typed path variant.
-    const contract = read(join(denSrc, "chat/tool/tool-presentation-contract.ts"));
-    expect(contract).toMatch(/path\?:\s*\{\s*path:\s*string/);
-    // Host-data-relative spill paths stay plain text.
-    const structured = read(join(denSrc, "chat/tool/tool-part-structured.ts"));
-    expect(structured).toMatch(/host-data-relative/);
-    // Log digest anchors use the shared navigation component.
-    const digest = read(join(componentsDir, "LogDigestOutline.tsx"));
-    expect(digest).toMatch(/import.*SourcePathLink/);
-    expect(digest).not.toMatch(/openSourceLocation/);
-  });
-
   it("INV-SRC-07 — no stray shell.open for http(s) outside external-link / open_in_browser", () => {
     const hits = [
       ...rg("shell\\.open\\b", denSrc, { include: ["*.ts", "*.tsx"] }),

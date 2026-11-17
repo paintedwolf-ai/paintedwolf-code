@@ -69,7 +69,7 @@ func (s *Sandboxes) reconcileProjectSandboxes(ctx context.Context, projectID, wo
 	}
 	removed, err := worker.ReconcileProjectSandboxes(ctx, s.WorkerBranchRoot, workspacePath, s.SettleWorker, func(ctx context.Context) ([]wire.WorkerTask, error) {
 		return s.Workers.ListByWorkspacePath(ctx, workspacePath)
-	})
+	}, s.LaneRoots)
 	if err != nil {
 		slog.WarnContext(ctx, "reconcile worker sandboxes", "project_id", projectID, "workspace_path", workspacePath, "err", err)
 		return removed

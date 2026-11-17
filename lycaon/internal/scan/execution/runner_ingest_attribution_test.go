@@ -2,11 +2,11 @@ package execution
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/evidence"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
@@ -33,7 +33,7 @@ func TestRunnerIngestUsesExactLandingAttributionAndStablePaths(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
 	projectDir := t.TempDir()
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	_, err := sqlDB.ExecContext(t.Context(), `
 		INSERT INTO worker_jobs(id, project_id, workspace_path, agent_type, status, prompt, brief, created_at, merge_status)
 		VALUES ('job-1', ?, ?, 'implementer', 'complete', 'fixture', 'fixture', ?, 'merged')

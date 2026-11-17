@@ -48,8 +48,6 @@ components:
         - draft_root_immutable
         - project_busy
         - checkpoint_not_pending
-        - delegation_not_found
-        - delegation_leg_not_found
         - feedback_not_pending
         - feedback_response_required
         - briefing_disabled
@@ -261,7 +259,7 @@ components:
         - prompt_failed
         - turn_closeout_tool_call
         - host_fault
-        - worker_closeout_exhausted
+        - worker_model_timeout
         - worker_execute_failed
         - worker_workspace_disk_full
         - worker_owner_unsettled
@@ -277,7 +275,6 @@ components:
         - forbidden
         - worker_not_found
         - worker_not_cancelable
-        - leg_not_pending
         - decision_not_pending
         - workflow_active
         - workflow_revision_conflict

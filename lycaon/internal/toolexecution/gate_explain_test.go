@@ -11,7 +11,7 @@ import (
 )
 
 func TestEveryGateHasExplainCopy(t *testing.T) {
-	for _, g := range gate.All() {
+	for _, g := range api.AllApprovalGateValues() {
 		decision := &gate.Decision{
 			Primary: g,
 			Cited:   []gate.Fact{{Key: "detection.rule", Value: "a rule", Source: "test"}},

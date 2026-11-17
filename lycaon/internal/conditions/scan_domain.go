@@ -12,9 +12,9 @@ import (
 
 // ScanLedger reads async code scan rows for scan-domain predicates.
 type ScanLedger interface {
-	FindInFlightForDelegationSnapshot(ctx context.Context, delegationID, snapshotID string, categories []api.ScanCategory, paths []string) (*api.CodeScan, error)
-	LatestCompleteForDelegationSnapshot(ctx context.Context, delegationID, snapshotID string, categories []api.ScanCategory) (*api.CodeScan, error)
-	LatestRequiredScanForDelegation(ctx context.Context, delegationID string) (*api.CodeScan, error)
+	FindInFlightForSessionSnapshot(ctx context.Context, sessionID, snapshotID string, categories []api.ScanCategory, paths []string) (*api.CodeScan, error)
+	LatestCompleteForSessionSnapshot(ctx context.Context, sessionID, snapshotID string, categories []api.ScanCategory) (*api.CodeScan, error)
+	LatestRequiredScanForSession(ctx context.Context, sessionID string) (*api.CodeScan, error)
 }
 
 // ShippedScanDomainIDs returns the registered scan-domain predicates.
@@ -48,7 +48,7 @@ func RegisterScanDomain(reg *ConditionRegistry, deps RegistryDeps) error {
 		return nil
 	}
 	core := CoreDeps{
-		DelegationStore:         deps.DelegationStore,
+		SessionWorkIDs:          deps.SessionWorkIDs,
 		Evidence:                deps.Evidence,
 		ScanLedger:              deps.ScanLedger,
 		SourceSnapshots:         deps.SourceSnapshots,
@@ -93,14 +93,11 @@ func RegisterScanDomain(reg *ConditionRegistry, deps RegistryDeps) error {
 }
 
 func scanPending(deps CoreDeps, ec EvalContext) (bool, error) {
-	if deps.ScanLedger == nil {
+	sessionID := strings.TrimSpace(ec.SessionID)
+	if deps.ScanLedger == nil || sessionID == "" {
 		return false, nil
 	}
-	dep, err := loadDelegation(deps, ec)
-	if err != nil || dep == nil {
-		return false, err
-	}
-	scan, err := deps.ScanLedger.LatestRequiredScanForDelegation(ec.Ctx, dep.ID)
+	scan, err := deps.ScanLedger.LatestRequiredScanForSession(ec.Ctx, sessionID)
 	if err != nil || scan == nil {
 		return false, err
 	}
@@ -117,38 +114,32 @@ func scanStale(deps CoreDeps, ec EvalContext) (bool, error) {
 }
 
 func requiredScansEnqueued(deps CoreDeps, ec EvalContext) (bool, error) {
-	if deps.ScanLedger == nil {
+	sessionID := strings.TrimSpace(ec.SessionID)
+	if deps.ScanLedger == nil || sessionID == "" {
 		return false, nil
 	}
-	dep, err := loadDelegation(deps, ec)
-	if err != nil || dep == nil {
-		return false, err
-	}
-	_, err = deps.ScanLedger.LatestRequiredScanForDelegation(ec.Ctx, dep.ID)
+	_, err := deps.ScanLedger.LatestRequiredScanForSession(ec.Ctx, sessionID)
 	return err == nil, err
 }
 
 func lintGatePassed(deps CoreDeps, ec EvalContext) (bool, error) {
-	if deps.ScanLedger == nil {
+	sessionID := strings.TrimSpace(ec.SessionID)
+	if deps.ScanLedger == nil || sessionID == "" {
 		return false, nil
-	}
-	dep, err := loadDelegation(deps, ec)
-	if err != nil || dep == nil {
-		return false, err
 	}
 	snapshotID, err := currentScanIdentity(deps, ec)
 	if err != nil {
 		return false, err
 	}
 	lintCats := []api.ScanCategory{api.ScanCategoryLint}
-	inflight, err := deps.ScanLedger.FindInFlightForDelegationSnapshot(ec.Ctx, dep.ID, snapshotID, lintCats, nil)
+	inflight, err := deps.ScanLedger.FindInFlightForSessionSnapshot(ec.Ctx, sessionID, snapshotID, lintCats, nil)
 	if err != nil {
 		return false, err
 	}
 	if inflight != nil {
 		return false, nil
 	}
-	scan, err := deps.ScanLedger.LatestCompleteForDelegationSnapshot(ec.Ctx, dep.ID, snapshotID, lintCats)
+	scan, err := deps.ScanLedger.LatestCompleteForSessionSnapshot(ec.Ctx, sessionID, snapshotID, lintCats)
 	if err != nil || scan == nil {
 		return false, err
 	}
@@ -162,14 +153,11 @@ func securityEvidenceSatisfied(deps CoreDeps, ec EvalContext, requireAnchored bo
 	if deps.SecurityScannersEnabled != nil && !deps.SecurityScannersEnabled() {
 		return true, nil
 	}
-	if deps.ScanLedger == nil {
+	sessionID := strings.TrimSpace(ec.SessionID)
+	if deps.ScanLedger == nil || sessionID == "" {
 		return false, nil
 	}
-	dep, err := loadDelegation(deps, ec)
-	if err != nil || dep == nil {
-		return false, err
-	}
-	scan, err := deps.ScanLedger.LatestRequiredScanForDelegation(ec.Ctx, dep.ID)
+	scan, err := deps.ScanLedger.LatestRequiredScanForSession(ec.Ctx, sessionID)
 	if err != nil {
 		return false, err
 	}
@@ -180,9 +168,16 @@ func securityEvidenceSatisfied(deps CoreDeps, ec EvalContext, requireAnchored bo
 		return false, nil
 	}
 
-	rec, err := deps.Evidence.LatestEvidence(ec.Ctx, ec.ProjectDir, dep.ID, api.ScanTaskID(scan.ID), evidence.GateTypeSecurity, inspector.EvidenceScope{})
+	evidenceRun := strings.TrimSpace(scan.DelegationID)
+	rec, err := deps.Evidence.LatestEvidence(ec.Ctx, ec.ProjectDir, evidenceRun, api.ScanTaskID(scan.ID), evidence.GateTypeSecurity, inspector.EvidenceScope{})
 	if err != nil {
 		return false, err
+	}
+	if rec == nil && evidenceRun == "" {
+		rec, err = deps.Evidence.LatestEvidence(ec.Ctx, ec.ProjectDir, sessionID, api.ScanTaskID(scan.ID), evidence.GateTypeSecurity, inspector.EvidenceScope{})
+		if err != nil {
+			return false, err
+		}
 	}
 	if rec == nil {
 		return false, nil

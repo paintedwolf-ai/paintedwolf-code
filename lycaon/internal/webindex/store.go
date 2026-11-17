@@ -9,13 +9,11 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/observability"
 )
 
@@ -111,15 +109,6 @@ type Doc struct {
 	Verified    bool
 	// Origin is OriginEarned or OriginWarmed — the row's provenance.
 	Origin string
-}
-
-// DefaultPath returns the web index path alongside the app store (UserConfigDir).
-func DefaultPath() (string, error) {
-	dir, err := configdir.UserConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "web-index.db"), nil
 }
 
 // Close drains pending writes and closes both database handles.

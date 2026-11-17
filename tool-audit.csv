@@ -10,15 +10,9 @@ command_output,retain-domain-structured,processes,,retained,lycaon/config/packs/
 command_stop,retain-domain-structured,processes,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/command_stop.yaml
 complete_leg,retain-domain-structured,workers,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/complete_leg.yaml
 copy,replace-routine-schema,filesystem,cp,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/copy.yaml
-decline_worker_budget,retain-domain-structured,workers,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/decline_worker_budget.yaml
-delegate_decompose,retain-domain-structured,delegation,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/delegate_decompose.yaml
-delegate_dispatch,retain-domain-structured,delegation,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/delegate_dispatch.yaml
-delegate_init,retain-domain-structured,delegation,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/delegate_init.yaml
-delegate_status,retain-domain-structured,delegation,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/delegate_status.yaml
 delete,replace-routine-schema,filesystem,rm | rmdir,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/delete.yaml
 diff,replace-routine-schema,filesystem,diff,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/diff.yaml
 edit,retain-structured-and-command,filesystem,edit,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/edit.yaml
-extend_worker_budget,retain-domain-structured,workers,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/extend_worker_budget.yaml
 extract_archive,replace-routine-schema,filesystem,tar | unzip | zip | gzip | gunzip | zcat,operation-only,lycaon/config/packs/painted-wolf/platform/tools/schemas/extract_archive.yaml
 fanout_plan,retain-domain-structured,blueprints,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/fanout_plan.yaml
 fetch_url,retain-domain-structured,web_research,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/fetch_url.yaml
@@ -57,8 +51,6 @@ page_act,retain-domain-structured,browser,,retained,lycaon/config/packs/painted-
 page_close,retain-domain-structured,browser,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/page_close.yaml
 page_open,retain-domain-structured,browser,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/page_open.yaml
 page_snapshot,retain-domain-structured,browser,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/page_snapshot.yaml
-parse_decomposition,retain-domain-structured,parsing,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/parse_decomposition.yaml
-parse_delegation_plan,retain-domain-structured,parsing,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/parse_delegation_plan.yaml
 parse_evaluation,retain-domain-structured,parsing,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/parse_evaluation.yaml
 parse_extract_json,retain-domain-structured,parsing,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/parse_extract_json.yaml
 parse_validate,retain-domain-structured,parsing,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/parse_validate.yaml
@@ -73,7 +65,6 @@ record_finding,retain-domain-structured,findings,,retained,lycaon/config/packs/p
 reject_overlay,retain-domain-structured,worker_merge,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/reject_overlay.yaml
 render_view,retain-domain-structured,visual,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/render_view.yaml
 replace_lines,retain-structured-and-command,filesystem,replace-lines,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/replace_lines.yaml
-request_budget,retain-domain-structured,workers,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/request_budget.yaml
 request_decision,retain-domain-structured,checkpoints,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/request_decision.yaml
 request_tools,retain-domain-structured,tool_surface,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/request_tools.yaml
 restore_version,retain-domain-structured,filesystem,,retained,lycaon/config/packs/painted-wolf/platform/tools/schemas/restore_version.yaml

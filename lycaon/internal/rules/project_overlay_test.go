@@ -52,7 +52,7 @@ rules:
 		t.Fatalf("code = %q", allow.Code)
 	}
 
-	stillAllow, err := engine.Evaluate(ctx, rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureBuild, ToolName: "delegate_dispatch", ProjectDir: dir, ProjectID: "p1"}})
+	stillAllow, err := engine.Evaluate(ctx, rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureBuild, ToolName: "plan_from_blueprint", ProjectDir: dir, ProjectID: "p1"}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if !stillAllow.Allowed {
 		t.Fatalf("expected bundled allow for delegation, got %q", stillAllow.Code)

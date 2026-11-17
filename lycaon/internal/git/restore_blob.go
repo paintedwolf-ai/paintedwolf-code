@@ -5,13 +5,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"hash"
 	"os"
 	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/gitexec"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
 // Index previews use stored blobs, without checkout filters or line-ending conversion.
@@ -57,7 +57,7 @@ type restoreBlobCapture struct {
 func (w *restoreBlobCapture) Write(raw []byte) (int, error) {
 	w.size += int64(len(raw))
 	_, _ = w.hash.Write(raw)
-	if w.size <= sourceledger.MaxRevisionContentBytes {
+	if w.size <= sourceblob.MaxRevisionContentBytes {
 		w.raw = append(w.raw, raw...)
 	} else {
 		w.raw = nil

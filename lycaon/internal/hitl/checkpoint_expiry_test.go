@@ -2,11 +2,11 @@ package hitl_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -125,7 +125,7 @@ func TestRestorePendingExpiresFromOriginalCreationTime(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "create pending checkpoint", err)
-	_, err = sqlDB.ExecContext(ctx, "UPDATE checkpoints SET created_at = ? WHERE id = ?", db.FormatTime(time.Now().UTC().Add(-time.Hour)), resp.CheckpointID)
+	_, err = sqlDB.ExecContext(ctx, "UPDATE checkpoints SET created_at = ? WHERE id = ?", timelayout.Format(time.Now().UTC().Add(-time.Hour)), resp.CheckpointID)
 	testutil.FailErr(t, "age pending checkpoint", err)
 
 	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), nil, authzcontext.SQLRecorder(sqlDB))
@@ -206,7 +206,7 @@ func TestStoppedCheckpointsPreservePendingRowsForRestart(t *testing.T) {
 	if pending.Status != hitl.DecisionStatusPending {
 		t.Fatalf("shutdown status=%s, want pending", pending.Status)
 	}
-	_, err = database.ExecContext(ctx, "UPDATE checkpoints SET created_at = ? WHERE id = ?", db.FormatTime(time.Now().UTC().Add(-2*time.Hour)), response.CheckpointID)
+	_, err = database.ExecContext(ctx, "UPDATE checkpoints SET created_at = ? WHERE id = ?", timelayout.Format(time.Now().UTC().Add(-2*time.Hour)), response.CheckpointID)
 	testutil.FailErr(t, "age original deadline", err)
 	restarted := hitl.NewCheckpoints(hitl.NewSQLStore(database), nil, authzcontext.SQLRecorder(database))
 	t.Cleanup(func() {

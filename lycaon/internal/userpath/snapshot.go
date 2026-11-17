@@ -53,37 +53,6 @@ func (s Snapshot) Failure() Failure { return s.failure }
 // Reason explains a non-probe source. Empty when the login shell answered.
 func (s Snapshot) Reason() string { return s.reason }
 
-// Contains compares cleaned PATH entries.
-func (s Snapshot) Contains(dir string) bool {
-	dir = filepath.Clean(strings.TrimSpace(dir))
-	if dir == "" {
-		return false
-	}
-	for _, entry := range s.entries {
-		if filepath.Clean(entry) == dir {
-			return true
-		}
-	}
-	return false
-}
-
-// WithAppended adds unique directories after resolved entries.
-func (s Snapshot) WithAppended(extra ...string) Snapshot {
-	out := s
-	out.entries = append([]string(nil), s.entries...)
-	for _, dir := range extra {
-		dir = filepath.Clean(strings.TrimSpace(dir))
-		if dir == "" || dir == "." {
-			continue
-		}
-		if out.Contains(dir) {
-			continue
-		}
-		out.entries = append(out.entries, dir)
-	}
-	return out
-}
-
 // parseEntries keeps unique absolute paths within the configured cap.
 func parseEntries(raw string, max int) []string {
 	out := make([]string, 0, 8)

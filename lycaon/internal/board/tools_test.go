@@ -4,11 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/projectroot"
-	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
+	"fmt"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/delegation"
+	"github.com/lycaon/lycaon/internal/packboard"
+	"github.com/lycaon/lycaon/internal/projectroot"
+	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -19,9 +20,8 @@ import (
 func TestPackBoardToolReturnsSnapshot(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	builder := &SnapshotBuilder{
-		Delegations: delegation.NewMemoryStore(),
-		Workers:     worker.NewInMemoryQueue(10),
-		Repo:        repotest.NewProvider(t),
+		Workers: worker.NewInMemoryQueue(10),
+		Repo:    repotest.NewProvider(t),
 	}
 	if err := RegisterBoardTools(reg, ToolDeps{Builder: builder}); err != nil {
 		testutil.FailErr(t, "RegisterBoardTools failed", err)
@@ -44,29 +44,40 @@ func TestPackBoardToolReturnsSnapshot(t *testing.T) {
 	if env["detail_level"] != string(api.BoardDetailLevelFull) {
 		t.Fatalf("detail_level = %v", env["detail_level"])
 	}
+}
 
-	for _, field := range []string{"review_view", "assignment_id", "cursor"} {
-		t.Run(field, func(t *testing.T) {
-			reviews := tools.NewDefaultRegistry()
-			calls := 0
-			testutil.FailErr(t, "register review view", RegisterBoardTools(reviews, ToolDeps{
-				Builder: builder,
-				ReviewView: func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-					calls++
-					if args[field] != "selected" || tctx.Identity.SessionID != "review-session" || ctx != t.Context() {
-						t.Fatalf("review invocation lost its input or context: %v, %+v", args, tctx.Identity)
-					}
-					return "review result", nil
-				},
-			}))
-			raw, err := reviews.Run(t.Context(), "pack_board", map[string]any{field: "selected"}, tools.ToolContext{
-				Identity: tools.InvocationIdentity{SessionID: "review-session"},
-			})
-			testutil.FailErr(t, "read selected review view", err)
-			if raw != "review result" || calls != 1 {
-				t.Fatalf("review result = %q, calls = %d; want one selected review", raw, calls)
+func TestPackBoardToolFiltersWorkersByPlan(t *testing.T) {
+	reg := tools.NewDefaultRegistry()
+	builder := &SnapshotBuilder{
+		Workers: worker.NewInMemoryQueue(10),
+		Repo:    repotest.NewProvider(t),
+		NamedWorkers: func(_ context.Context, _ string) ([]api.BoardWorker, error) {
+			return []api.BoardWorker{
+				{Name: "leg-auth", AgentType: "implementer", State: api.WorkerStatePlanned},
+				{Name: "adhoc-1", AgentType: "explore", State: api.WorkerStateWorking},
+			}, nil
+		},
+	}
+	_ = packboard.NamedWorkersFromSnapshot
+	testutil.FailErr(t, "RegisterBoardTools", RegisterBoardTools(reg, ToolDeps{
+		Builder: builder,
+		PlanWorkers: func(_ context.Context, _, plan string) (map[string]bool, error) {
+			if plan == "plans/auth.md" {
+				return map[string]bool{"leg-auth": true}, nil
 			}
-		})
+			return nil, nil
+		},
+	}))
+	dir := t.TempDir()
+	raw, err := reg.Run(t.Context(), "pack_board", map[string]any{"plan": "plans/auth.md"}, tools.ToolContext{
+		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}, ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "sess-1"},
+	})
+	testutil.FailErr(t, "pack_board plan filter", err)
+	var view api.BoardView
+	testutil.FailErr(t, "decode board view", json.Unmarshal([]byte(raw), &view))
+	if len(view.Workers) != 1 || view.Workers[0].Name != "leg-auth" {
+		t.Fatalf("plan filter workers = %+v", view.Workers)
 	}
 }
 
@@ -83,14 +94,94 @@ func TestPackBoardToolRequiresProjectDir(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for missing project_dir")
 	}
-	for _, field := range []string{"review_view", "assignment_id", "cursor"} {
-		_, err := reg.Run(t.Context(), "pack_board", map[string]any{field: "selected"}, tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: "sess-1"},
-		})
-		var rejection *toolrejection.ToolReject
-		if !errors.As(err, &rejection) || rejection.Code != "WORKFLOW_REVIEW_VIEW_INVALID" ||
-			rejection.Data["reason"] != "review_unavailable" || rejection.Data["field"] != "review_view" {
-			t.Fatalf("unavailable %s returned %v; want structured review refusal", field, err)
+}
+
+func TestPackBoardToolRejectsRetiredFindingsArgs(t *testing.T) {
+	reg := tools.NewDefaultRegistry()
+	testutil.FailErr(t, "register board tools", RegisterBoardTools(reg, ToolDeps{
+		Builder: &SnapshotBuilder{Repo: repotest.NewProvider(t)},
+	}))
+	for _, field := range []string{"finding_id", "findings_after"} {
+		_, err := reg.Run(t.Context(), "pack_board", map[string]any{field: 1}, tools.ToolContext{})
+		var rej *toolrejection.ToolReject
+		if !errors.As(err, &rej) {
+			t.Fatalf("%s: err = %v, want ToolReject", field, err)
+		}
+		if rej.Code != "TOOL_ARGS_INVALID" || rej.Data["reason"] != "moved_to_read_findings" || rej.Data["replacement_tool"] != "read_findings" {
+			t.Fatalf("%s: reject = %+v", field, rej)
+		}
+	}
+}
+
+func TestPackBoardToolPagesFiftyWorkersAndFiltersBeforePaging(t *testing.T) {
+	all := make([]api.BoardWorker, 50)
+	planSet := map[string]bool{}
+	for i := range all {
+		name := fmt.Sprintf("worker-%02d", i+1)
+		all[i] = api.BoardWorker{Name: name, AgentType: "implementer", State: api.WorkerStateWorking}
+		if i%2 == 0 {
+			planSet[name] = true
+		}
+	}
+	reg := tools.NewDefaultRegistry()
+	testutil.FailErr(t, "register board tools", RegisterBoardTools(reg, ToolDeps{
+		Builder: &SnapshotBuilder{
+			Workers:      worker.NewInMemoryQueue(10),
+			Repo:         repotest.NewProvider(t),
+			NamedWorkers: func(_ context.Context, _ string) ([]api.BoardWorker, error) { return all, nil },
+		},
+		PlanWorkers: func(_ context.Context, _, plan string) (map[string]bool, error) {
+			if plan == "plans/even.md" {
+				return planSet, nil
+			}
+			return nil, nil
+		},
+	}))
+	dir := t.TempDir()
+	tctx := tools.ToolContext{
+		Source:   tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}, ActiveRootID: "r1"},
+		Identity: tools.InvocationIdentity{SessionID: "sess-scale"},
+	}
+
+	var seen []string
+	cursor := ""
+	pages := 0
+	for {
+		args := map[string]any{}
+		if cursor != "" {
+			args["cursor"] = cursor
+		}
+		raw, err := reg.Run(t.Context(), "pack_board", args, tctx)
+		testutil.FailErr(t, "pack_board page", err)
+		var view api.BoardView
+		testutil.FailErr(t, "decode page", json.Unmarshal([]byte(raw), &view))
+		if len(view.Workers) > MaxBoardWorkersPage {
+			t.Fatalf("page size = %d exceeds %d", len(view.Workers), MaxBoardWorkersPage)
+		}
+		for _, w := range view.Workers {
+			seen = append(seen, w.Name)
+		}
+		pages++
+		if !view.WorkersHasMore {
+			break
+		}
+		cursor = view.WorkersNextCursor
+	}
+	if pages != 3 || len(seen) != 50 {
+		t.Fatalf("pages=%d seen=%d, want 3 and 50", pages, len(seen))
+	}
+
+	raw, err := reg.Run(t.Context(), "pack_board", map[string]any{"plan": "plans/even.md"}, tctx)
+	testutil.FailErr(t, "pack_board filtered page 1", err)
+	var filtered api.BoardView
+	testutil.FailErr(t, "decode filtered", json.Unmarshal([]byte(raw), &filtered))
+	if len(filtered.Workers) != 20 || !filtered.WorkersHasMore || filtered.WorkersOmitted != 5 || filtered.WorkersNextCursor != "20" {
+		t.Fatalf("filtered page 1 = len:%d more:%v omitted:%d next:%q", len(filtered.Workers), filtered.WorkersHasMore, filtered.WorkersOmitted, filtered.WorkersNextCursor)
+	}
+
+	for _, bad := range []any{"-1", "abc", 12} {
+		if _, err := reg.Run(t.Context(), "pack_board", map[string]any{"cursor": bad}, tctx); err == nil {
+			t.Fatalf("cursor %v expected rejection", bad)
 		}
 	}
 }

@@ -7,7 +7,6 @@ package vaultidentity
 import (
 	"encoding/binary"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -98,15 +97,6 @@ func (e *StatusError) Error() string {
 	default:
 		return fmt.Sprintf("vault identity service: %s", e.Status)
 	}
-}
-
-// StatusOf returns the status err carries, or "" for other errors.
-func StatusOf(err error) Status {
-	var status *StatusError
-	if errors.As(err, &status) {
-		return status.Status
-	}
-	return ""
 }
 
 var accountPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$`)

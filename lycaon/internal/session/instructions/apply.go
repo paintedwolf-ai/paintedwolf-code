@@ -24,6 +24,11 @@ func (m *Service) Apply(ctx context.Context, id string, in promptinput.Input) (s
 		return "", err
 	}
 	if visibleContent == "" && len(in.ArtifactIDs) == 0 {
+		// A worker's first round runs on the assignment its session was
+		// created with; it still starts from a checkpoint.
+		if strings.TrimSpace(in.WorkerJobID) != "" {
+			m.turnStartCheckpoint(ctx, id)
+		}
 		return "", nil
 	}
 	if in.HostSignal == nil {

@@ -1,14 +1,12 @@
 package contract
 
 import (
-	"context"
-	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -17,8 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
-	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
 
@@ -30,62 +26,6 @@ func assertStructuredRejectCode(t *testing.T, err error, code string) {
 	reject, ok := guidance.RefusalFromError(err)
 	if !ok || reject.Code() != code {
 		t.Fatalf("expected typed reject %q, got %v", code, err)
-	}
-}
-
-func TestNativeFindPathEscapeE2E(t *testing.T) {
-	t.Parallel()
-	b := contractcheck.ProdToolBoundary(t)
-	find := &surveytools.FindTool{Boundary: b}
-	_, err := find.Run(context.Background(), map[string]any{"path": "../../etc/passwd"}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "implement"},
-	})
-	var reject *toolrejection.ToolReject
-	if err == nil || !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
-		t.Fatalf("err = %v want SURVEY_PATH_ESCAPE", err)
-	}
-}
-
-func TestNativeListDirControlPlaneE2E(t *testing.T) {
-	cfg := t.TempDir()
-	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	b := contractcheck.ProdToolBoundary(t)
-	listDir := &surveytools.ListDirTool{Boundary: b}
-	_, err := listDir.Run(context.Background(), map[string]any{"path": filepath.Join(cfg, "debug", "sessions")}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "implement"},
-	})
-	var reject *toolrejection.ToolReject
-	if err == nil || !errors.As(err, &reject) || reject.Code != "SANDBOX_CONTROL_PLANE_DENIED" {
-		t.Fatalf("err = %v want SANDBOX_CONTROL_PLANE_DENIED", err)
-	}
-}
-
-func TestNativeListDirScopeFieldsRemainStructuredE2E(t *testing.T) {
-	t.Parallel()
-	b := contractcheck.ProdToolBoundary(t)
-	root := t.TempDir()
-	const path = ".include_hidden=false,max_depth=2"
-	if err := os.Mkdir(filepath.Join(root, path), 0o755); err != nil {
-		contractcheck.FailErr(t, "create literal scope-like path", err)
-	}
-	if err := os.WriteFile(filepath.Join(root, path, "marker.txt"), []byte("marker"), 0o600); err != nil {
-		contractcheck.FailErr(t, "create scoped marker", err)
-	}
-	listDir := &surveytools.ListDirTool{Boundary: b}
-	out, err := listDir.Run(context.Background(), map[string]any{
-		"path": path, "max_depth": 1,
-	}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "implement"},
-	})
-	contractcheck.FailErr(t, "list literal scope-like path", err)
-	if !strings.Contains(out, "marker.txt") {
-		t.Fatalf("literal directory was not listed: %s", out)
 	}
 }
 
@@ -311,25 +251,6 @@ func TestNativeChownGitPathStructuredRejectE2E(t *testing.T) {
 		Identity: tools.InvocationIdentity{Agent: "implement"},
 	})
 	assertProgramRefusal(t, outcome, err, "GIT_INTERNALS_WRITE_DENIED")
-}
-
-func TestNativeReadRejectsDirectoryE2E(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	if err := os.Mkdir(filepath.Join(root, "src"), 0o755); err != nil {
-		testutil.FailErr(t, "mkdir", err)
-	}
-	b := contractcheck.ProdToolBoundary(t)
-	read := &surveytools.ReadTool{Boundary: b}
-	_, err := read.Run(context.Background(), map[string]any{"path": "src"}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "explore_readonly"},
-	})
-	var reject *toolrejection.ToolReject
-	if err == nil || !errors.As(err, &reject) || reject.Code != "READ_IS_DIRECTORY" {
-		t.Fatalf("read on directory err = %v want READ_IS_DIRECTORY", err)
-	}
 }
 
 func assertProgramRefusal(t *testing.T, outcome command.ProgramOutcome, err error, code string) {

@@ -30,6 +30,7 @@ func TestBundledCatalogDemoSKUs(t *testing.T) {
 		"plan@1.0.1",
 		"plan@1.0.0",
 		"security-survey@2.0.1",
+		"recon-pack@1.0.1",
 		"recon-pack@1.0.0",
 		"bugbash@1.1.0",
 		"options@1.0.0",

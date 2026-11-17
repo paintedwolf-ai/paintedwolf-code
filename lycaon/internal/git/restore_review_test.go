@@ -3,12 +3,12 @@ package git
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
@@ -17,7 +17,7 @@ func TestRestoreReviewBoundsCombinedText(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	gittest.Init(t, dir)
-	body := strings.Repeat("x", sourceledger.MaxRevisionContentBytes/2+1)
+	body := strings.Repeat("x", sourceblob.MaxRevisionContentBytes/2+1)
 	for _, path := range []string{"a.txt", "b.txt"} {
 		testutil.FailErr(t, "seed committed file", os.WriteFile(filepath.Join(dir, path), []byte(body), 0o644))
 	}
@@ -41,7 +41,7 @@ func TestRestoreReviewBoundsCombinedText(t *testing.T) {
 				t.Fatalf("review lost file identity: %s", file.Path)
 			}
 		}
-		if retained > sourceledger.MaxRevisionContentBytes || omitted != 1 {
+		if retained > sourceblob.MaxRevisionContentBytes || omitted != 1 {
 			t.Fatalf("unbounded review: %d retained bytes, %d omitted previews", retained, omitted)
 		}
 		return declined

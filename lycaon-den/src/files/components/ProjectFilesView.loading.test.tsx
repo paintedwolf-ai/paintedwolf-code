@@ -13,7 +13,7 @@ import { projectFilesState } from "../documents/files-buffer-state.ts";
 
 import { LycaonApiError } from "../../api/http.ts";
 import { BackendTransportError } from "../../platform/connection/request-connectivity.ts";
-import { filesBufferBase } from "../documents/project-files-buffers.ts";
+import { filesBufferBase } from "../documents/files-buffer-state.ts";
 
 describe("ProjectFilesView single buffer loader", () => {
   beforeEach(resetProjectFilesViewTest);

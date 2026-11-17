@@ -12,11 +12,10 @@ import {
   type ScanCursor,
   ScanState,
 } from "./pretty-scan-state.ts";
-import { enterScanRule, type PrettySnapshot, restoreSnapshot, snapshotsEqual, takeSnapshot } from "./pretty-snapshot.ts";
+import { enterScanRule, type PrettySnapshot, restoreSnapshot, takeSnapshot } from "./pretty-snapshot.ts";
 import { TextWindow } from "./pretty-text-window.ts";
 import { exceedsLineWidth } from "./pretty-width.ts";
 
-export { type PrettySnapshot, snapshotsEqual };
 
 const SPACE = 0x20;
 const TAB = 0x09;

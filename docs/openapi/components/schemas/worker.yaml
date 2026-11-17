@@ -37,8 +37,6 @@ components:
         policy_feedback:
           x-go-pointer: true
           $ref: worker.yaml#/components/schemas/WorkerPolicyFeedback
-        host_assembled:
-          type: boolean
     WorkerPolicyFeedback:
       x-go-generate: true
       description: Policy feedback frozen when the worker report was evaluated; retained through queue persistence and parent delivery.
@@ -100,6 +98,10 @@ components:
             $ref: worker.yaml#/components/schemas/WorkerCompletionFinding
         cited_urls:
           x-go-name: "CitedURLs"
+          type: array
+          items: { type: string }
+        cited_results:
+          description: Handles of the worker's own earlier results this report builds on, cited as historical evidence.
           type: array
           items: { type: string }
         evidence_obligations:
@@ -224,6 +226,43 @@ components:
       - failed
       - canceled
       - held
+    WorkerState:
+      type: string
+      description: A worker's derived state.
+      enum:
+      - planned
+      - waiting
+      - working
+      - asking
+      - delivered
+      - idle
+      - failed
+      - recovering
+      - closed
+    WorkerStateReason:
+      type: string
+      description: What qualifies a worker's state.
+      enum:
+      - queued
+      - parked
+      - approval_wait
+      - prerequisite
+      - result_unaccounted
+      - changes_unresolved
+      - no_report
+      - recovery_required
+      - withdrawn
+      - session_unusable
+    WorkerResultDisposition:
+      type: string
+      description: What became of a worker's latest result.
+      enum:
+      - unaccounted
+      - accounted
+      - open
+      - landed
+      - rejected
+      - shelved
     WorkerMergeStatus:
       type: string
       description: |
@@ -291,10 +330,12 @@ components:
         promote_order:
           $ref: worker.yaml#/components/schemas/WorkerPromoteOrderKind
         promote_after:
+          description: Handles of results that must land before this path is clean.
           type: array
           items:
             type: string
         blocked_by:
+          description: Handles of results this path must land before.
           type: array
           items:
             type: string
@@ -451,41 +492,6 @@ components:
           description: Source entries this user could not read, left out of the branch
         not_clonable_reason:
           $ref: worker.yaml#/components/schemas/WorkspaceNotClonableReason
-    WorkerBudgetRequest:
-      x-go-generate: true
-      type: object
-      description: A running worker's request that its coordinator raise its tool-round ceiling.
-      required:
-      - rounds
-      - requested_max
-      - remaining_work
-      - tool_loops_used
-      - requested_at
-      additionalProperties: false
-      properties:
-        rounds:
-          type: integer
-          minimum: 1
-          description: Additional tool rounds the worker asked for beyond its ceiling at request time
-        requested_max:
-          type: integer
-          minimum: 3
-          maximum: 120
-          description: Ceiling the worker asked for, bounded by the host maximum
-        remaining_work:
-          type: array
-          minItems: 1
-          maxItems: 6
-          items:
-            type: string
-          description: Worker-authored work the extra rounds would cover; data for the coordinator, not instructions
-        tool_loops_used:
-          type: integer
-          minimum: 0
-          description: Rounds the worker had completed when it asked
-        requested_at:
-          type: string
-          format: date-time
     WorkerDependency:
       x-go-generate: true
       type: object
@@ -519,6 +525,38 @@ components:
         id:
           type: string
           format: uuid
+        worker_record_id:
+          type: string
+          format: uuid
+          description: Durable worker record identity across rounds.
+        worker_name:
+          type: string
+          description: Canonical worker name on the session roster.
+        round:
+          type: integer
+          minimum: 1
+          description: 1-based round ordinal within the worker record.
+        result_handle:
+          type: string
+          format: uuid
+          description: Settled result handle recorded for this round.
+        result_disposition:
+          $ref: worker.yaml#/components/schemas/WorkerResultDisposition
+          description: Disposition of this round's settled result.
+        shelve_reason:
+          type: string
+          description: Coordinator reason recorded when this round's result is shelved.
+        review_of:
+          type: string
+          format: uuid
+          description: Sealed result handle reviewed by this round when it is a reviewer round.
+        parked_reason:
+          type: string
+          description: Active wait lease reason while this round is parked.
+        parked_until_at:
+          type: string
+          format: date-time
+          description: Active wait lease deadline while this round is parked.
         child_session_id:
           type: string
           format: uuid
@@ -557,14 +595,6 @@ components:
             Stable identifier for this write overlay; other dispatches may stack
             on it by setting scope.base_overlay_id to this value. Empty for read
             scopes.
-        max_tool_loops:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Worker tool-round ceiling (host default 20, range 2–120); raised only when the coordinator grants a request; final iteration is prose-only
-        budget_request:
-          $ref: worker.yaml#/components/schemas/WorkerBudgetRequest
-          description: The worker's unanswered request for more tool rounds; absent once granted or when none was made
         tool_loops_used:
           type: integer
           minimum: 0
@@ -581,6 +611,14 @@ components:
           type: integer
           minimum: 0
           description: Calls already settled in that in-flight batch; never exceeds turn_tool_calls
+        turn_tools:
+          type: array
+          items: { type: string }
+          description: Distinct tool names in the in-flight batch, in call order; empty between turns
+        turn_started_at:
+          type: string
+          format: date-time
+          description: When the in-flight batch began; absent between turns
         context_usage:
           $ref: worker.yaml#/components/schemas/WorkerContextUsage
           description: Live per-worker context occupancy for the Den worker-card ring; absent until the first turn completes
@@ -642,6 +680,148 @@ components:
           type: array
           items:
             $ref: worker.yaml#/components/schemas/WorkerTask
+    WorkerMessageSenderRole:
+      type: string
+      enum:
+      - coordinator
+      - worker
+      - person
+      - host
+    WorkerInstructionStatus:
+      type: string
+      enum:
+      - applied
+      - queued
+      - not_applied
+    WorkerHistoryRound:
+      x-go-generate: true
+      type: object
+      required:
+      - ordinal
+      - worker_id
+      - created_at
+      additionalProperties: false
+      properties:
+        ordinal:
+          type: integer
+          minimum: 1
+        worker_id:
+          type: string
+          format: uuid
+          description: Worker job identity for this round.
+        status:
+          $ref: worker.yaml#/components/schemas/WorkerStatus
+        instruction_first_seq:
+          type: integer
+          minimum: 1
+        instruction_last_seq:
+          type: integer
+          minimum: 1
+        result_handle:
+          type: string
+          format: uuid
+        result_disposition:
+          $ref: worker.yaml#/components/schemas/WorkerResultDisposition
+        shelve_reason:
+          type: string
+        checkpoint_id:
+          type: string
+          pattern: '^\S*$'
+        review_of:
+          type: string
+          format: uuid
+        result:
+          x-go-pointer: true
+          $ref: worker.yaml#/components/schemas/WorkerResult
+        failure:
+          x-go-pointer: true
+          $ref: worker.yaml#/components/schemas/WorkerFailure
+        created_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+        settled_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+    WorkerHistoryMessage:
+      x-go-generate: true
+      type: object
+      required:
+      - seq
+      - sender_role
+      - body
+      - delivered
+      - created_at
+      additionalProperties: false
+      properties:
+        seq:
+          type: integer
+          minimum: 1
+        sender_role:
+          $ref: worker.yaml#/components/schemas/WorkerMessageSenderRole
+        round_ordinal:
+          type: integer
+          minimum: 1
+        body:
+          type: string
+        artifact_ref:
+          type: string
+        needs_reply:
+          type: boolean
+        reply_to_seq:
+          type: integer
+          minimum: 1
+        delivered:
+          type: boolean
+        instruction_status:
+          $ref: worker.yaml#/components/schemas/WorkerInstructionStatus
+        created_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
+    WorkerHistoryResponse:
+      x-go-generate: true
+      type: object
+      required:
+      - worker_id
+      - name
+      - agent_type
+      - state
+      - rounds
+      - messages
+      additionalProperties: false
+      properties:
+        worker_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        agent_type:
+          type: string
+        brief:
+          type: string
+        child_session_id:
+          type: string
+          format: uuid
+        state:
+          $ref: worker.yaml#/components/schemas/WorkerState
+        reason:
+          $ref: worker.yaml#/components/schemas/WorkerStateReason
+        rounds:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerHistoryRound
+        messages:
+          type: array
+          items:
+            $ref: worker.yaml#/components/schemas/WorkerHistoryMessage
+        before:
+          type: integer
+          minimum: 0
+        before_round:
+          type: integer
+          minimum: 0
     WorkerPromoteResolutionAction:
       type: string
       description: |
@@ -805,13 +985,13 @@ components:
       description: The promote_overlay and preview_overlay tool result.
       type: object
       required:
-      - job_id
+      - result_handle
       - mode
       additionalProperties: false
       properties:
-        job_id:
+        result_handle:
           type: string
-          format: uuid
+          description: The result these changes belong to.
         mode:
           type: string
         merge_status:
@@ -838,17 +1018,19 @@ components:
           type: array
           items:
             $ref: worker.yaml#/components/schemas/WorkerPromotePathStatus
-        overlap_job_ids:
+        overlap_overlay_ids:
           type: array
           items:
             type: string
         promote_order:
           $ref: worker.yaml#/components/schemas/WorkerPromoteOrderKind
         promote_after:
+          description: Handles of results that must land before these changes are clean.
           type: array
           items:
             type: string
         blocked_by:
+          description: Handles of results these changes must land before.
           type: array
           items:
             type: string

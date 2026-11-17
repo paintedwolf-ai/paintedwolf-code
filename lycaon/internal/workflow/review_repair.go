@@ -25,27 +25,6 @@ func (m *RunManager) RecordReviewToolResult(ctx context.Context, sessionID strin
 	return ReviewRepairs{m}.RecordToolResult(ctx, sessionID, msg)
 }
 
-const (
-	reviewRepairsKey        = runstate.ReviewRepairsKey
-	ReviewBlockedReason     = runstate.ReviewBlockedReason
-	reviewRepairMaxAttempts = runstate.ReviewRepairMaxAttempts
-	reviewRepairMaxRepeated = runstate.ReviewRepairMaxRepeated
-)
-
-type (
-	ReviewRepairResponse = runstate.ReviewRepairResponse
-	ReviewRepair         = runstate.ReviewRepair
-	ReviewSnapshot       = runstate.ReviewSnapshot
-)
-
-var (
-	readReviewRepairs      = runstate.ReadReviewRepairs
-	CurrentReviewRepair    = runstate.CurrentReviewRepair
-	resolveReviewRepair    = runstate.ResolveReviewRepair
-	repairableVerdictCodes = runstate.RepairableVerdictCodes
-	reviewIssueFingerprint = runstate.ReviewIssueFingerprint
-)
-
 // RecordToolResult accounts for schema and semantic refusals alike, after the
 // screened result is durable. Transcript replay uses the same response id.
 func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, msg api.Message) error {
@@ -53,7 +32,7 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 	if result == nil || result.Tool != "submit_verdict" || result.Outcome != api.ToolResultOutcomeRejected {
 		return nil
 	}
-	if !repairableVerdictCodes(result.Codes) {
+	if !runstate.RepairableVerdictCodes(result.Codes) {
 		return nil
 	}
 	run, err := m.Store.Runs.ActiveBySession(ctx, sessionID)
@@ -97,7 +76,7 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 	if err != nil {
 		return err
 	}
-	rows, err := readReviewRepairs(vars)
+	rows, err := runstate.ReadReviewRepairs(vars)
 	if err != nil {
 		return err
 	}
@@ -109,22 +88,22 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 		return fmt.Errorf("review repair requires durable result and response identities")
 	}
 	for _, prior := range rows {
-		if slices.ContainsFunc(prior.Responses, func(r ReviewRepairResponse) bool { return r.ID == response }) && (prior.Phase != run.CurrentPhase || prior.State != "repairing") {
+		if slices.ContainsFunc(prior.Responses, func(r runstate.ReviewRepairResponse) bool { return r.ID == response }) && (prior.Phase != run.CurrentPhase || prior.State != "repairing") {
 			return nil
 		}
 	}
 	now := time.Now().UTC()
 	if len(rows) == 0 || rows[len(rows)-1].Phase != run.CurrentPhase || rows[len(rows)-1].State != "repairing" {
-		rows = append(rows, ReviewRepair{ID: uuid.NewString(), Phase: run.CurrentPhase, State: "repairing", CreatedAt: now})
+		rows = append(rows, runstate.ReviewRepair{ID: uuid.NewString(), Phase: run.CurrentPhase, State: "repairing", CreatedAt: now})
 	}
 	episode := &rows[len(rows)-1]
-	if !episode.ObserveResponse(response, msg.ID, reviewIssueFingerprint(result.Feedback)) {
+	if !episode.ObserveResponse(response, msg.ID, runstate.ReviewIssueFingerprint(result.Feedback)) {
 		return nil
 	}
 	episode.CandidateMessageID = msg.ID
 	episode.Diagnostics = result.Feedback
 	episode.UpdatedAt = now
-	blocked := episode.Repeated >= reviewRepairMaxRepeated || len(episode.Responses) >= reviewRepairMaxAttempts
+	blocked := episode.Repeated >= runstate.ReviewRepairMaxRepeated || len(episode.Responses) >= runstate.ReviewRepairMaxAttempts
 	var boundary *api.Message
 	if blocked {
 		episode.State = "blocked"
@@ -136,14 +115,14 @@ func (m ReviewRepairs) RecordToolResult(ctx context.Context, sessionID string, m
 		}
 
 		run.Status = api.WorkflowRunStatusPaused
-		run.PauseReason = ReviewBlockedReason
+		run.PauseReason = runstate.ReviewBlockedReason
 		run.PausedAt = &now
-		b := runstate.NewCommandBoundary(run, run.Revision, "paused", run.CurrentPhase, ReviewBlockedReason)
+		b := runstate.NewCommandBoundary(run, run.Revision, "paused", run.CurrentPhase, runstate.ReviewBlockedReason)
 		boundary = &b
 	}
 	run.UpdatedAt = now
 	vars = maps.Clone(vars)
-	vars[reviewRepairsKey] = rows
+	vars[runstate.ReviewRepairsKey] = rows
 	if err := m.Journal.Commit(ctx, run, "review_repair", struct{ MessageID string }{msg.ID}, vars, boundary, "", runstate.WorkerMutation{HoldPending: blocked}, nil); err != nil {
 		return err
 	}
@@ -224,8 +203,8 @@ func finalReviewResponseResult(messages []api.Message, candidate api.Message) (b
 }
 
 // CaptureSnapshot retains the inputs shared by review assignments and refusal accounting.
-func (m ReviewRepairs) CaptureSnapshot(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, vars map[string]any, candidate map[string]any) ReviewSnapshot {
-	snapshot := ReviewSnapshot{Vars: map[string]any{}, Candidate: jsonvalue.CloneMap(candidate)}
+func (m ReviewRepairs) CaptureSnapshot(ctx context.Context, run *api.WorkflowRun, manifest workflowdef.Manifest, vars map[string]any, candidate map[string]any) runstate.ReviewSnapshot {
+	snapshot := runstate.ReviewSnapshot{Vars: map[string]any{}, Candidate: jsonvalue.CloneMap(candidate)}
 	// Only report inputs are copied, excluding repair episodes themselves.
 	for _, key := range []string{"fanout_plans"} {
 		if value, ok := vars[key]; ok {
@@ -278,7 +257,7 @@ func (m ReviewRepairs) BlockContract(ctx context.Context, runID string, cause er
 	if err != nil {
 		return err
 	}
-	repairs, err := readReviewRepairs(vars)
+	repairs, err := runstate.ReadReviewRepairs(vars)
 	if err != nil {
 		return err
 	}
@@ -288,7 +267,7 @@ func (m ReviewRepairs) BlockContract(ctx context.Context, runID string, cause er
 	}
 	snapshot := m.CaptureSnapshot(ctx, run, manifest, vars, nil)
 	now := time.Now().UTC()
-	repair := ReviewRepair{Snapshot: &snapshot, ID: uuid.NewString(), Phase: run.CurrentPhase, State: "blocked", CreatedAt: now, UpdatedAt: now, Diagnostics: []api.ToolFeedback{{Code: reviewContractInvalidCode, Details: map[string]any{"reason": cause.Error()}}}}
+	repair := runstate.ReviewRepair{Snapshot: &snapshot, ID: uuid.NewString(), Phase: run.CurrentPhase, State: "blocked", CreatedAt: now, UpdatedAt: now, Diagnostics: []api.ToolFeedback{{Code: reviewContractInvalidCode, Details: map[string]any{"reason": cause.Error()}}}}
 	if len(snapshot.Unavailable) == 0 {
 		facts := workflowreview.BuildCoverageFacts(manifest, vars, snapshot.Workers, snapshot.Scans)
 		repair.CoverageFacts = &facts
@@ -296,12 +275,12 @@ func (m ReviewRepairs) BlockContract(ctx context.Context, runID string, cause er
 	repairs = append(repairs, repair)
 
 	vars = maps.Clone(vars)
-	vars[reviewRepairsKey] = repairs
+	vars[runstate.ReviewRepairsKey] = repairs
 	run.Status = api.WorkflowRunStatusPaused
-	run.PauseReason = ReviewBlockedReason
+	run.PauseReason = runstate.ReviewBlockedReason
 	run.PausedAt = &now
 	run.UpdatedAt = now
-	boundary := runstate.NewCommandBoundary(run, run.Revision, "paused", run.CurrentPhase, ReviewBlockedReason)
+	boundary := runstate.NewCommandBoundary(run, run.Revision, "paused", run.CurrentPhase, runstate.ReviewBlockedReason)
 	if err := m.Journal.Commit(ctx, run, "review_contract_blocked", struct{ Code string }{reviewContractInvalidCode}, vars, &boundary, "", runstate.WorkerMutation{HoldPending: true}, nil); err != nil {
 		return err
 	}

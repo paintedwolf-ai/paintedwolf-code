@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
@@ -72,7 +73,7 @@ func sweepCycle(t *testing.T, s *Store) (SweepReport, int) {
 func TestSweepFollowsGraphAndKeepsRetainedReferences_AC_DB_01(t *testing.T) {
 	s := openSnapshotStore(t)
 	ctx := t.Context()
-	old := db.FormatTime(time.Now().Add(-2 * Retention))
+	old := timelayout.Format(time.Now().Add(-2 * Retention))
 	seedChunk(t, s, "kept-chunk", 3)
 	seedChunk(t, s, "gone-chunk", 3)
 	seedManifest(t, s, "kept-manifest", "kept-chunk")
@@ -126,7 +127,7 @@ func TestSweepFollowsGraphAndKeepsRetainedReferences_AC_DB_01(t *testing.T) {
 
 func TestSweepKeepsSharedAndPinnedContentUntilFinalRelease_AC_DB_02(t *testing.T) {
 	s := openSnapshotStore(t)
-	old := db.FormatTime(time.Now().Add(-2 * Retention))
+	old := timelayout.Format(time.Now().Add(-2 * Retention))
 	seedChunk(t, s, "shared-chunk", 2)
 	seedChunk(t, s, "built-chunk", 2)
 	seedManifest(t, s, "shared", "shared-chunk")
@@ -181,7 +182,7 @@ func TestSweepKeepsSharedAndPinnedContentUntilFinalRelease_AC_DB_02(t *testing.T
 func TestSweepCursorPassesRetainedCandidates_AC_DB_04(t *testing.T) {
 	s := openSnapshotStore(t)
 	s.sweepLimits = sweepLimits{candidates: manifestSweepBatch, rows: sweepTxChildRows}
-	old := db.FormatTime(time.Now().Add(-2 * Retention))
+	old := timelayout.Format(time.Now().Add(-2 * Retention))
 	const retained = 3 * manifestSweepBatch
 	for i := range retained {
 		id := fmt.Sprintf("a-%04d", i)
@@ -340,7 +341,7 @@ func TestSweepResumesAfterCancellationAndRestart_AC_DB_04(t *testing.T) {
 		db:      failingSweepWriter{Handle: s.db, remaining: &remaining, failure: context.Canceled},
 		queries: s.queries, pins: s.pins, cursor: &s.sweepCursor, limits: defaultSweepLimits,
 	}
-	err := collector.sweep(t.Context(), db.FormatTime(time.Now().Add(-Retention)))
+	err := collector.sweep(t.Context(), timelayout.Format(time.Now().Add(-Retention)))
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("cut off sweep = %v", err)
 	}
@@ -361,7 +362,7 @@ func TestSweepResumesAfterCancellationAndRestart_AC_DB_04(t *testing.T) {
 
 func TestSweepReportsRetainedDataAsRetained_AC_DB_06(t *testing.T) {
 	s := openSnapshotStore(t)
-	old := db.FormatTime(time.Now().Add(-2 * Retention))
+	old := timelayout.Format(time.Now().Add(-2 * Retention))
 	seedChunk(t, s, "kept", 8)
 	seedManifest(t, s, "kept", "kept")
 	seedSnapshot(t, s, "kept", old, "kept")

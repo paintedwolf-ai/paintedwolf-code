@@ -29,12 +29,6 @@ var (
 	pinErr         error
 )
 
-// PinnedVersion returns the embedded engine version.
-func PinnedVersion() string {
-	v, _ := loadPinnedGitVersion()
-	return v
-}
-
 func loadPinnedGitVersion() (string, error) {
 	pinOnce.Do(func() {
 		data, err := config.Read(config.GitEnginePin)

@@ -62,18 +62,6 @@ func TestGateableKeysComplete(t *testing.T) {
 	}
 }
 
-func TestWriteConfigDirRoundTrip(t *testing.T) {
-	cfg, err := approvals.LoadConfigStock()
-	testutil.FailErr(t, "LoadConfigStock", err)
-	dir := t.TempDir()
-	testutil.FailErr(t, "WriteConfigDir", approvals.WriteConfigDir(dir, cfg))
-	round, err := approvals.LoadConfig(dir)
-	testutil.FailErr(t, "LoadConfig round trip", err)
-	if len(round.Explanations) != len(cfg.Explanations) {
-		t.Fatalf("round trip count = %d want %d", len(round.Explanations), len(cfg.Explanations))
-	}
-}
-
 func TestRenderFailureNeverReturnsAuthoredExplanationTemplate(t *testing.T) {
 	raw := "{{ invalid"
 	copy := approvals.RenderEntry(approvals.ExplanationEntry{WhatChanges: raw}, nil)

@@ -1,0 +1,160 @@
+id: recon-pack
+version: 1.0.0
+name: Recon
+description: Coordinated codebase orientation.
+trigger: /recon
+request:
+  question: What should the codebase reconnaissance focus on?
+  default: Build a practical orientation to the codebase, its architecture, important execution paths, and current risks.
+icon: radar
+featured: true
+requires_repo: true
+initial_posture: orchestrate
+agents:
+  - { id: coordinator, tools: all }
+  - { id: path-explorer, tools: profile }
+  - { id: repo-researcher, tools: profile }
+rules:
+  - config/packs/painted-wolf/platform/host/posture-rules/coordinator.yaml
+  - config/packs/painted-wolf/platform/host/posture-rules/orchestrate.yaml
+# Phase-entry guidance.
+injects:
+  - on: phase.entered
+    selector:
+      surface: phase
+      phase: plan
+      workflow: recon-pack
+    effect: inform
+    render: coordinator-recon-pack-plan
+    tier: workflow
+    when: 'paintedwolf.phase == "plan"'
+  - on: phase.entered
+    selector:
+      surface: phase
+      phase: execute
+      workflow: recon-pack
+    effect: inform
+    render: coordinator-fanout-execute
+    tier: workflow
+  - on: phase.entered
+    selector:
+      surface: phase
+      phase: reconcile
+      workflow: recon-pack
+    effect: inform
+    render: coordinator-recon-reconcile
+    tier: workflow
+  - on: phase.entered
+    selector:
+      surface: phase
+      phase: drill_plan
+      workflow: recon-pack
+    effect: inform
+    render: coordinator-recon-drill-plan
+    tier: workflow
+  - on: phase.entered
+    selector:
+      surface: phase
+      phase: drill
+      workflow: recon-pack
+    effect: inform
+    render: coordinator-fanout-execute
+    tier: workflow
+  - on: phase.entered
+    selector:
+      surface: phase
+      phase: report
+      workflow: recon-pack
+    effect: inform
+    render: coordinator-topology-synthesis
+    tier: workflow
+phases:
+  - id: plan
+    activity_label: Framing the exploration
+    coordinator_surface: orchestrate_plan
+    surface_template: agents/coordinator-surface-orchestrate.md
+    on_enter:
+      prompt_coordinator: true
+    complete_when: gates_satisfied
+    gates: [fanout_planned]
+    advance:
+      when_gate_met: coordinator
+    controls:
+      closeout: gated
+    next: execute
+  - id: execute
+    activity_label: Scouting the project
+    coordinator_surface: implement_routing
+    surface_template: agents/coordinator-surface-orchestrate.md
+    parallel_task:
+      max_workers: 4
+      max_read_workers: 4
+    on_enter:
+      prompt_coordinator: true
+    complete_when: gates_satisfied
+    gates: [worker_cycle_ready]
+    controls:
+      closeout: gated
+    next: reconcile
+  - id: reconcile
+    activity_label: Reconciling scout findings
+    coordinator_surface: recon_reconcile
+    surface_template: agents/coordinator-surface-orchestrate.md
+    on_enter:
+      prompt_coordinator: true
+    complete_when: gates_satisfied
+    gates: [choice_transition_required]
+    controls:
+      closeout: gated
+    next: report
+    transitions:
+      - id: deepen
+        to: drill_plan
+        actors: [coordinator]
+        label: Investigate the remaining gaps
+      - id: report
+        to: report
+        actors: [coordinator]
+        label: Write the recon report
+  - id: drill_plan
+    activity_label: Planning a targeted drill
+    coordinator_surface: orchestrate_plan
+    surface_template: agents/coordinator-surface-orchestrate.md
+    on_enter:
+      prompt_coordinator: true
+    complete_when: gates_satisfied
+    gates: [fanout_planned]
+    advance:
+      when_gate_met: coordinator
+    controls:
+      closeout: gated
+    next: drill
+  - id: drill
+    activity_label: Investigating the gaps
+    coordinator_surface: implement_routing
+    surface_template: agents/coordinator-surface-orchestrate.md
+    parallel_task:
+      max_workers: 4
+      max_read_workers: 4
+    on_enter:
+      prompt_coordinator: true
+    complete_when: gates_satisfied
+    gates: [worker_cycle_ready]
+    controls:
+      closeout: gated
+    next: report
+  - id: report
+    activity_label: Synthesizing the findings
+    coordinator_surface: implement_synthesis
+    surface_template: agents/coordinator-surface-orchestrate.md
+    on_enter:
+      prompt_coordinator: true
+    complete_when: gates_satisfied
+    gates: [topology_report_delivered]
+    next: done
+  - id: done
+    activity_label: Done
+    terminal: true
+    complete_when: orchestration_complete
+controls:
+  phase_advance: host

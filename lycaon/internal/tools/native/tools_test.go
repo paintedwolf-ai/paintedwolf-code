@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
-	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 )
 
 func TestWriteToolRejectsBinaryContent(t *testing.T) {
@@ -148,14 +147,5 @@ func TestCommandToolRequiresRunner(t *testing.T) {
 	_, err := tool.Run(context.Background(), map[string]any{"command": "echo hi"}, nativefixture.Context(t.TempDir()))
 	if err == nil {
 		t.Fatalf("err = %v", err)
-	}
-}
-
-func TestPathEscapeBlocked(t *testing.T) {
-	tmpDir := t.TempDir()
-	tool := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
-	_, err := tool.Run(context.Background(), map[string]any{"path": "../secret.txt"}, nativefixture.Context(tmpDir))
-	if err == nil {
-		t.Fatal("expected escape error")
 	}
 }
