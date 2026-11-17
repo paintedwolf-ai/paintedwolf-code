@@ -11,7 +11,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-// Entering a phase that sets an execution mode hands the coordinator's next
+// Entering a phase that sets an execution mode hands the coordinator's open
 // turn a phase-hook transition cause; a phase without one hands it none.
 func TestEnteringAWorkflowPhasePushesModeTransitionCause(t *testing.T) {
 	for _, tc := range []struct {
@@ -35,6 +35,11 @@ func TestEnteringAWorkflowPhasePushesModeTransitionCause(t *testing.T) {
 			h.RegisterManifest(m)
 			sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, t.TempDir())
 			testutil.FailErr(t, "create session", err)
+			// The open turn receives the cause; the phase entry's wake opens its own
+			// turn afterwards, so the test keeps a handle on this one.
+			rt := h.Sessions.Manager.Coordinator.Runtime
+			rt.BeginPromptTurn(sess.ID)
+			turn := rt.Assembly().Cache().LoadTurn(sess.ID)
 			run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
 				WorkflowID: "mode-probe", WorkflowVersion: "1.0.0", Request: "Probe the execution mode",
 			})
@@ -42,10 +47,7 @@ func TestEnteringAWorkflowPhasePushesModeTransitionCause(t *testing.T) {
 			if run.CurrentPhase != "work" {
 				t.Fatalf("phase = %q want work", run.CurrentPhase)
 			}
-			rt := h.Sessions.Manager.Coordinator.Runtime
-			rt.BeginPromptTurn(sess.ID)
-			t.Cleanup(func() { rt.EndPromptTurn(sess.ID) })
-			if got := rt.Assembly().Cache().LoadTurn(sess.ID).ModeTransitionCauses; !slices.Equal(got, tc.want) {
+			if got := turn.ModeTransitionCauses; !slices.Equal(got, tc.want) {
 				t.Fatalf("turn mode causes = %+v want %+v", got, tc.want)
 			}
 		})
