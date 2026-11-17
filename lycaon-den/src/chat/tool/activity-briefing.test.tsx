@@ -145,5 +145,13 @@ describe("useActivityBriefingSlots", () => {
       snapshot: snapshot({ target_key: "k2", status: "complete" }, { purpose: "Runs the suite.", change: "All passed." }),
     });
     await waitFor(() => expect(view.container.textContent).toContain("All passed."));
+    applyBriefingEvent("p", {
+      kind: "snapshot",
+      snapshot: snapshot({ target_key: "k2", status: "pending", pending_sections: ["purpose"] }, { change: "Outcome arrived first." }),
+    });
+    await waitFor(() => expect(view.container.textContent).toContain("Outcome arrived first."));
+    expect(view.container.querySelector('[data-section="intent"]')?.textContent).toContain("Intent: Runs the suite.");
+    expect(view.container.querySelector('[data-section="outcome"]')?.textContent).toContain("Outcome: Outcome arrived first.");
+
   });
 });
