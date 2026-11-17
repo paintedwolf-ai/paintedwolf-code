@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -47,7 +48,11 @@ func applyPlan(t *testing.T, store progress.Store, content string) progress.Snap
 	testutil.FailErr(t, "read predecessor", err)
 	update, err := progress.PrepareAuthorUpdate(content)
 	testutil.FailErr(t, "prepare plan", err)
-	result, err := update.ExpectRevision(before.Revision).ExpectItemIDs(before.ItemIDs...).Apply(t.Context(), store, "session", nil)
+	update = update.ExpectRevision(before.Revision)
+	if len(before.ItemIDs) > 0 {
+		update = update.ExpectItemIDs(before.ItemIDs...)
+	}
+	result, err := update.Apply(t.Context(), store, "session", nil)
 	testutil.FailErr(t, "commit plan", err)
 	return result.Snapshot
 }
@@ -119,6 +124,9 @@ func TestPlanRowsCommitWithTransitionsAndSurviveRestart(t *testing.T) {
 func TestDelayedNotificationsCannotReorderOrRelabelPlanRows(t *testing.T) {
 	f := newProgressFixture(t)
 	entered, release := make(chan struct{}), make(chan struct{})
+	var releaseOnce sync.Once
+	releaseObserver := func() { releaseOnce.Do(func() { close(release) }) }
+	defer releaseObserver()
 	detach := progress.RegisterWriteObserver(func(_ context.Context, event progress.WriteEvent) {
 		if event.SessionID == "session" && event.After.DocumentVersion() == 1 {
 			close(entered)
@@ -128,7 +136,11 @@ func TestDelayedNotificationsCannotReorderOrRelabelPlanRows(t *testing.T) {
 	defer detach()
 	done := make(chan error, 1)
 	go func() { done <- f.plans.Set("session", "- [ ] First") }()
-	<-entered
+	select {
+	case <-entered:
+	case err := <-done:
+		t.Fatalf("initial write failed: %v", err)
+	}
 	first := f.messages(t)
 	if len(first) != 1 || first[0].WorkflowRunID != "run" {
 		t.Fatalf("committed row missing before notification: %+v", first)
@@ -149,7 +161,7 @@ func TestDelayedNotificationsCannotReorderOrRelabelPlanRows(t *testing.T) {
 			t.Fatalf("ordinal %d=%d", i, row.Ord)
 		}
 	}
-	close(release)
+	releaseObserver()
 	testutil.FailErr(t, "finish delayed notification", <-done)
 	if len(f.messages(t)) != len(rows) {
 		t.Fatal("notification duplicated history")
