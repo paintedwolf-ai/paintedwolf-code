@@ -23,8 +23,8 @@ func assertStructuredRejectCode(t *testing.T, err error, code string) {
 // Summarize with a task but no material is refused by the served executor
 // with its typed code.
 func TestNativeSummarizeNoInputStructuredRejectE2E(t *testing.T) {
-	host := toolfixture.ContractToolRuntime(t)
-	_, err := host.Executor.Invoke(t.Context(), "summarize", map[string]any{"task": "explain"}, tools.ToolContext{
+	program := toolfixture.NewProgramFixture(t)
+	_, err := program.InvokeTool(t, "summarize", map[string]any{"task": "explain"}, tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},

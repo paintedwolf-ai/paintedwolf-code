@@ -41,12 +41,24 @@ func NewProgramFixture(t *testing.T) *ProgramFixture {
 // parent model receipt and session ownership required by the command entry.
 func (f *ProgramFixture) Invoke(t *testing.T, source string, tc tools.ToolContext) (command.ProgramOutcome, error) {
 	t.Helper()
+	var outcome command.ProgramOutcome
+	text, err := f.InvokeTool(t, "command", map[string]any{"command": source}, tc)
+	if err != nil {
+		return outcome, err
+	}
+	testutil.FailErr(t, "decode command contract outcome", json.Unmarshal([]byte(text), &outcome))
+	return outcome, nil
+}
+
+// InvokeTool calls one tool through the served executor with the seeded
+// session, project and parent model receipt.
+func (f *ProgramFixture) InvokeTool(t *testing.T, tool string, args map[string]any, tc tools.ToolContext) (string, error) {
+	t.Helper()
 	f.calls++
 	callID := fmt.Sprintf("contract-program-%d", f.calls)
-	args := map[string]any{"command": source}
-	contract, _ := toolcontract.Lookup("command")
-	parent, err := f.Seed.Recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.Seed.Session, ToolCallID: callID, ToolName: "command", Args: args, Contract: contract})
-	testutil.FailErr(t, "begin command contract receipt", err)
+	contract, _ := toolcontract.Lookup(tool)
+	parent, err := f.Seed.Recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.Seed.Session, ToolCallID: callID, ToolName: tool, Args: args, Contract: contract})
+	testutil.FailErr(t, "begin contract receipt", err)
 	tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = testdbseed.DefaultProjectID, f.Seed.Session, callID
 	if tc.Identity.Agent == "" {
 		tc.Identity.Agent = "implement"
@@ -54,11 +66,5 @@ func (f *ProgramFixture) Invoke(t *testing.T, source string, tc tools.ToolContex
 	tc.Invocation.ID = parent.ID
 	tc.Source.SourceWorkspaceKind = api.SourceWorkspaceKindProject
 	tc.Host.SessionScratchDir, tc.Host.SessionOutputDir = f.Seed.ScratchDir, f.Seed.OutputDir
-	text, err := f.Host.Executor.Invoke(t.Context(), "command", args, tc)
-	var outcome command.ProgramOutcome
-	if err != nil {
-		return outcome, err
-	}
-	testutil.FailErr(t, "decode command contract outcome", json.Unmarshal([]byte(text), &outcome))
-	return outcome, nil
+	return f.Host.Executor.Invoke(t.Context(), tool, args, tc)
 }
