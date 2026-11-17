@@ -23,8 +23,8 @@ func TestDistinctEvidenceFacetValues_discoversNovelShape(t *testing.T) {
 		t.Fatalf("shape facets = %v want sorted open set incl. custom_timeline", shapes)
 	}
 	kinds := guidance.DistinctEvidenceFacetValues(records, "kind")
-	if len(kinds) != 3 {
-		t.Fatalf("kind facets = %v want 3", kinds)
+	if len(kinds) != 3 || kinds[0] != "customfetch" || kinds[1] != "read" || kinds[2] != "timeline" {
+		t.Fatalf("kind facets = %v want the sorted open set", kinds)
 	}
 }
 

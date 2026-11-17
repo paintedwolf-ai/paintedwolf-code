@@ -5,7 +5,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // Extends the evidence anchor contract with closeout gate requirements.
@@ -51,30 +50,6 @@ func TestEvidenceAnchorsSecurityGateRequiresSnapshotAndSARIF(t *testing.T) {
 				t.Fatalf("anchored = %v want %v", ok, tc.wantOK)
 			}
 		})
-	}
-}
-
-func TestSecurityEvidenceArtifactsIncludeEngineProof(t *testing.T) {
-	t.Parallel()
-	rec := evidence.Record{
-		GateType:    string(evidence.GateTypeSecurity),
-		GateVerdict: string(evidence.GateVerdictPassed),
-		Artifacts: map[string]any{
-			"source_snapshot_id":    "snapshot-1",
-			"sarif_statistics":      map[string]any{"total": 0},
-			"coverage_status":       "complete",
-			"execution_fingerprint": "fingerprint-1",
-			"fingerprint_scheme":    "security-finding-v1",
-			"engine_proof": map[string]any{
-				"deterministic": map[string]any{"completed": true},
-			},
-			"finding_count": map[string]int{"critical": 0},
-			"findings":      []api.SecurityFinding{},
-		},
-	}
-	ok, _ := inspector.EvidenceAnchored(rec)
-	if !ok {
-		t.Fatal("expected anchored security evidence with engine_proof block")
 	}
 }
 

@@ -3,6 +3,7 @@ package contract
 import (
 	"go/ast"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -38,4 +39,36 @@ func TestProviderHTTPUsesEgressGuard(t *testing.T) {
 			return true
 		})
 	}
+}
+
+func findFuncDeclInDir(t *testing.T, dir, name string) *ast.FuncDecl {
+	t.Helper()
+	_, files := contractcheck.ParseNonTestGoTree(t, dir)
+	for _, file := range files {
+		for _, decl := range file.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if !ok || fn.Name == nil || fn.Name.Name != name || fn.Body == nil {
+				continue
+			}
+			return fn
+		}
+	}
+	t.Fatalf("function %s not found in %s", name, dir)
+	return nil
+}
+
+func funcCallsNamed(fn *ast.FuncDecl, name string) bool {
+	found := false
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		got := contractcheck.CallName(call)
+		if got == name || strings.HasSuffix(got, "."+name) {
+			found = true
+		}
+		return true
+	})
+	return found
 }

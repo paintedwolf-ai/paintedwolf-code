@@ -153,6 +153,28 @@ describe("CitationGroundingPanel render-by-shape", () => {
     expect(screen.getByText("+1 more")).toBeTruthy();
   });
 
+  it("renders an unregistered kind through its shape renderer", () => {
+    const view = {
+      ...baseView(),
+      evidenceRecords: [
+        {
+          handle: "unregistered_tool#1",
+          kind: "unregistered_tool",
+          shape: "file_region",
+          fidelity: "structured",
+          path: "pkg/handler.go",
+          line: 7,
+          urls: [],
+        },
+      ],
+    };
+    render(() => <CitationGroundingPanel view={view} />);
+    const record = screen.getByTestId("citation-grounding-record");
+    expect(record.getAttribute("data-shape")).toBe("file_region");
+    expect(screen.getByText("pkg/handler.go:7")).toBeTruthy();
+    expect(record.textContent).not.toContain("unregistered_tool");
+  });
+
   it("renders unknown shape via generic fallback", () => {
     const view = {
       ...baseView(),
