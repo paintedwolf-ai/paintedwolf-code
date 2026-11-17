@@ -18,7 +18,7 @@ import (
 func createAPISessionForProject(t *testing.T, serve http.Handler, projectDir, posture string) wire.Session {
 	t.Helper()
 	createBody := `{"roots":[{"path":"` + projectDir + `"}]}`
-	createReq := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(createBody))
+	createReq := AuthedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
 	createRec := httptest.NewRecorder()
 	serve.ServeHTTP(createRec, createReq)
@@ -81,7 +81,7 @@ postures:
 	}
 
 	createBody := `{"roots":[{"path":"` + projectDir + `"}]}`
-	createReq := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(createBody))
+	createReq := AuthedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
 	createRec := httptest.NewRecorder()
 	srv.ServeHTTP(createRec, createReq)
@@ -93,7 +93,7 @@ postures:
 		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
 	body := `{"project_id":"` + proj.ID + `","posture":"spec"}`
-	req := authedRequest(t, http.MethodPost, "/v1/sessions", strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -129,7 +129,7 @@ postures:
 	}
 
 	createBody := `{"roots":[{"path":"` + projectDir + `"}]}`
-	req := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(createBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(createBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

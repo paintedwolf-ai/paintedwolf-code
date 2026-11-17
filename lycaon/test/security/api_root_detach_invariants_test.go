@@ -32,10 +32,10 @@ func TestI13ForcedDetachLeavesNoRootDependents(t *testing.T) {
 		testutil.FailErr(t, "write fixture", err)
 	}
 
-	project := createAPIProjectAtPath(t, base, dir)
+	project := CreateAPIProjectAtPath(t, base, dir)
 	rootID := project.Roots[0].ID
 
-	sess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+	sess := OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 
 	_, err := h.Delegations.Queue.Enqueue(ctx, wire.WorkerTask{
@@ -52,7 +52,7 @@ func TestI13ForcedDetachLeavesNoRootDependents(t *testing.T) {
 	})
 	testutil.FailErr(t, "enqueue worker", err)
 
-	req := authedRequest(t, http.MethodDelete, "/v1/projects/"+project.ID+"/roots/"+rootID+"?force=true", nil)
+	req := AuthedRequest(t, http.MethodDelete, "/v1/projects/"+project.ID+"/roots/"+rootID+"?force=true", nil)
 	w := httptest.NewRecorder()
 	h.Server.ServeHTTP(w, req)
 	if w.Code != http.StatusNoContent {
@@ -71,7 +71,7 @@ func TestI13ForcedDetachLeavesNoRootDependents(t *testing.T) {
 	if len(inFlight) != 0 {
 		t.Fatalf("in-flight workers after force detach = %+v want none", inFlight)
 	}
-	updated := openAPIGetJSON[wire.Project](t, base, "/v1/projects/{id}",
+	updated := OpenAPIGetJSON[wire.Project](t, base, "/v1/projects/{id}",
 		map[string]string{"id": project.ID}, http.StatusOK)
 	if len(updated.Roots) != 0 {
 		t.Fatalf("roots = %d want 0 after detach", len(updated.Roots))
@@ -86,10 +86,10 @@ func TestGuardedDetachReturnsRootBusy(t *testing.T) {
 	ctx := t.Context()
 
 	dir := t.TempDir()
-	project := createAPIProjectAtPath(t, base, dir)
+	project := CreateAPIProjectAtPath(t, base, dir)
 	rootID := project.Roots[0].ID
 
-	sess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+	sess := OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 
 	_, err := h.Delegations.Queue.Enqueue(ctx, wire.WorkerTask{
@@ -105,7 +105,7 @@ func TestGuardedDetachReturnsRootBusy(t *testing.T) {
 	})
 	testutil.FailErr(t, "enqueue", err)
 
-	req := authedRequest(t, http.MethodDelete, "/v1/projects/"+project.ID+"/roots/"+rootID, nil)
+	req := AuthedRequest(t, http.MethodDelete, "/v1/projects/"+project.ID+"/roots/"+rootID, nil)
 	w := httptest.NewRecorder()
 	h.Server.ServeHTTP(w, req)
 	if w.Code != http.StatusConflict {
@@ -141,10 +141,10 @@ func TestRootDetachDirectAPIStopsIdleAndArchivedBackgroundCommandsUnderDetachedR
 	testutil.FailErr(t, "mkdir nestedA", os.MkdirAll(nestedADir, 0o755))
 	rootBDir := t.TempDir()
 
-	project := createAPIProjectAtPath(t, base, rootADir)
+	project := CreateAPIProjectAtPath(t, base, rootADir)
 	rootAID := project.Roots[0].ID
 
-	attachReq := authedRequest(t, http.MethodPost, "/v1/projects/"+project.ID+"/roots",
+	attachReq := AuthedRequest(t, http.MethodPost, "/v1/projects/"+project.ID+"/roots",
 		strings.NewReader(`{"path":`+strconvQuote(rootBDir)+`,"label":"secondary"}`))
 	attachReq.Header.Set("Content-Type", "application/json")
 	attachW := httptest.NewRecorder()
@@ -153,9 +153,9 @@ func TestRootDetachDirectAPIStopsIdleAndArchivedBackgroundCommandsUnderDetachedR
 		t.Fatalf("attach second root status = %d body = %s", attachW.Code, attachW.Body.String())
 	}
 
-	idleSess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+	idleSess := OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
-	archivedSess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+	archivedSess := OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 	now := time.Now().UTC()
 	testutil.FailErr(t, "archive session", h.Store.UpdateSession(ctx, archivedSess.ID, func(s *wire.Session) {
@@ -195,7 +195,7 @@ func TestRootDetachDirectAPIStopsIdleAndArchivedBackgroundCommandsUnderDetachedR
 	testutil.FailErr(t, "start idleHandleB", err)
 
 	// Guarded detach without ?force=true returns 409 root_busy even with no busy turn, worker, or overlay.
-	guardedReq := authedRequest(t, http.MethodDelete, "/v1/projects/"+project.ID+"/roots/"+rootAID, nil)
+	guardedReq := AuthedRequest(t, http.MethodDelete, "/v1/projects/"+project.ID+"/roots/"+rootAID, nil)
 	guardedW := httptest.NewRecorder()
 	h.Server.ServeHTTP(guardedW, guardedReq)
 	if guardedW.Code != http.StatusConflict {
@@ -203,7 +203,7 @@ func TestRootDetachDirectAPIStopsIdleAndArchivedBackgroundCommandsUnderDetachedR
 	}
 
 	// Forced detach stops background commands under rootA in both idle and archived chats while preserving rootB.
-	forceReq := authedRequest(t, http.MethodDelete, "/v1/projects/"+project.ID+"/roots/"+rootAID+"?force=true", nil)
+	forceReq := AuthedRequest(t, http.MethodDelete, "/v1/projects/"+project.ID+"/roots/"+rootAID+"?force=true", nil)
 	forceW := httptest.NewRecorder()
 	h.Server.ServeHTTP(forceW, forceReq)
 	if forceW.Code != http.StatusNoContent {

@@ -28,8 +28,8 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	base := httpSrv.URL
 
 	projectDir := t.TempDir()
-	project := createAPIProjectAtPath(t, base, projectDir)
-	sess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+	project := CreateAPIProjectAtPath(t, base, projectDir)
+	sess := OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 
 	subCtx, subCancel := context.WithCancel(t.Context())
@@ -62,7 +62,7 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	// Workflow event.
 	exitAmbientRunHTTP(t, h.Server, sess.ID)
 	hub.waitFor(t, wire.EventTopicWorkflow) // drain ambient exit envelope
-	run := journeyPostJSON[wire.WorkflowRun](t, base,
+	run := JourneyPostJSON[wire.WorkflowRun](t, base,
 		"/v1/sessions/"+sess.ID+"/workflow-runs",
 		`{"workflow_id":"plan","workflow_version":"1.0.1"}`, http.StatusCreated)
 
@@ -72,7 +72,7 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	assertField(t, wfEnv, "status", "")
 
 	// Provider events.
-	_ = openAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil,
+	_ = OpenAPIPostJSON[wire.ProviderMeta](t, base, "/v1/providers", nil,
 		`{"id":"sse-test","base_url":"https://x.example/v1","models":[{"id":"m1"}]}`, http.StatusCreated)
 	createdEnv := hub.waitFor(t, wire.EventTopicProviders)
 	assertField(t, createdEnv, "provider_id", "sse-test")
@@ -84,13 +84,13 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	assertField(t, provEnv, "action", "updated")
 
 	// Model policy event.
-	policyProvider, _ := seedTestProvider(t, base, false)
+	policyProvider, _ := SeedTestProvider(t, base, false)
 	policy := wire.ModelPolicy{
-		Coordinator: &wire.ModelRefDTO{ProviderID: policyProvider, Model: testProviderModel},
-		Lite:        &wire.ModelRefDTO{ProviderID: policyProvider, Model: testProviderModel},
+		Coordinator: &wire.ModelRefDTO{ProviderID: policyProvider, Model: TestProviderModel},
+		Lite:        &wire.ModelRefDTO{ProviderID: policyProvider, Model: TestProviderModel},
 		AgentPool: wire.AgentPoolDTO{
 			Selection: "round_robin",
-			Models:    []wire.ModelRefDTO{{ProviderID: policyProvider, Model: testProviderModel}},
+			Models:    []wire.ModelRefDTO{{ProviderID: policyProvider, Model: TestProviderModel}},
 		},
 	}
 	policyBody, err := json.Marshal(policy)
@@ -109,7 +109,7 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	assertField(t, setEnv, "action", "updated")
 
 	// Queue event.
-	queue := openAPIGetJSON[wire.QueueDraft](t, base, "/v1/sessions/{id}/queue", map[string]string{"id": sess.ID}, http.StatusOK)
+	queue := OpenAPIGetJSON[wire.QueueDraft](t, base, "/v1/sessions/{id}/queue", map[string]string{"id": sess.ID}, http.StatusOK)
 	hold := true
 	queueBody, err := json.Marshal(wire.QueueMutateRequest{Op: "hold", Hold: &hold, ExpectedRevision: queue.Revision})
 	testutil.FailErr(t, "encode queue hold", err)

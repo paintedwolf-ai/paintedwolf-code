@@ -19,8 +19,8 @@ func TestPromptWithoutProviderPublishesRenderedHostError(t *testing.T) {
 	t.Cleanup(httpSrv.Close)
 	base := httpSrv.URL
 
-	project := createAPIProjectAtPath(t, base, projectDir)
-	sess := openAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
+	project := CreateAPIProjectAtPath(t, base, projectDir)
+	sess := OpenAPIPostJSON[wire.Session](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 
 	subCtx, subCancel := context.WithCancel(t.Context())
@@ -64,7 +64,7 @@ func waitForSessionHostError(t *testing.T, hub *projectHub) wire.EventEnvelope {
 func waitPromptIdleHTTP(t *testing.T, base, sessionID string) {
 	t.Helper()
 	testutil.WaitFor(t, func() bool {
-		sess := openAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}",
+		sess := OpenAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}",
 			map[string]string{"id": sessionID}, http.StatusOK)
 		return sess.Status == wire.SessionStatusIdle
 	})

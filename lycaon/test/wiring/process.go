@@ -43,9 +43,9 @@ func PrepareHostProcess() {
 	hostProcessPrepared.Store(true)
 }
 
-// RunHostTests prepares the host process, runs the package's tests and then
+// runHostTests prepares the host process, runs the package's tests and then
 // fails the package when the hosts they closed stay reachable.
-func RunHostTests(m *testing.M) int {
+func runHostTests(m *testing.M) int {
 	PrepareHostProcess()
 	return runReleasingHosts(m)
 }
@@ -53,7 +53,7 @@ func RunHostTests(m *testing.M) int {
 func requirePreparedHostProcess(t *testing.T) {
 	t.Helper()
 	if !hostProcessPrepared.Load() {
-		t.Fatal("hosts need a prepared process: call wiring.RunHostTests or wiring.PrepareHostProcess from TestMain")
+		t.Fatal("hosts need a prepared process: call wiring.Main or wiring.PrepareHostProcess from TestMain")
 	}
 }
 

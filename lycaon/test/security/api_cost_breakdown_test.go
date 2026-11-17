@@ -109,7 +109,7 @@ func TestCostSummaryWorkerSplitAfterDelegation(t *testing.T) {
 		return st.Phase == wire.DelegationPhaseDone
 	})
 
-	req := authedRequest(t, http.MethodGet, "/v1/cost/summary?session_id="+parent.ID, nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/cost/summary?session_id="+parent.ID, nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

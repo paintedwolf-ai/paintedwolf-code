@@ -25,7 +25,7 @@ func uploadAttachment(t *testing.T, srv *api.Server, projectID, filename, mimeHi
 	if mimeHint != "" {
 		target += "&mime=" + url.QueryEscape(mimeHint)
 	}
-	req := authedRequest(t, http.MethodPost, target, bytes.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, target, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/octet-stream")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -48,7 +48,7 @@ func sendPromptWithBlobIDs(t *testing.T, srv *api.Server, sessionID string, blob
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sessionID+"/prompts", bytes.NewReader(payload))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sessionID+"/prompts", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -77,7 +77,7 @@ func TestPromptAttachmentUploadRejectsUnknownProject(t *testing.T) {
 	if up.Code != http.StatusNotFound {
 		t.Fatalf("status = %d body = %s", up.Code, up.Body.String())
 	}
-	if code := decodeAPIError(t, up).Code; code != "project_not_found" {
+	if code := DecodeAPIError(t, up).Code; code != "project_not_found" {
 		t.Fatalf("code = %q want project_not_found", code)
 	}
 }
@@ -99,14 +99,14 @@ func TestRejectedPromptDoesNotLeaveVisualArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal prompt: %v", err)
 	}
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/prompts", bytes.NewReader(payload))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/prompts", bytes.NewReader(payload))
 	req.Header.Set("Content-Type", "application/json")
 	rejected := httptest.NewRecorder()
 	srv.ServeHTTP(rejected, req)
 	if rejected.Code != http.StatusBadRequest {
 		t.Fatalf("prompt status = %d body = %s", rejected.Code, rejected.Body.String())
 	}
-	galleryReq := authedRequest(t, http.MethodGet, "/v1/projects/"+sess.ProjectID+"/artifacts", nil)
+	galleryReq := AuthedRequest(t, http.MethodGet, "/v1/projects/"+sess.ProjectID+"/artifacts", nil)
 	gallery := httptest.NewRecorder()
 	srv.ServeHTTP(gallery, galleryReq)
 	if gallery.Code != http.StatusOK {
@@ -130,7 +130,7 @@ func TestPromptTextAttachmentRejectsBinaryContent(t *testing.T) {
 	if up.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d body = %s", up.Code, up.Body.String())
 	}
-	if code := decodeAPIError(t, up).Code; code != "unsupported_attachment" {
+	if code := DecodeAPIError(t, up).Code; code != "unsupported_attachment" {
 		t.Fatalf("code = %q want unsupported_attachment", code)
 	}
 }
@@ -167,7 +167,7 @@ func TestPromptAttachmentTooMany(t *testing.T) {
 	if w.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	if code := decodeAPIError(t, w).Code; code != "attachment_too_large" {
+	if code := DecodeAPIError(t, w).Code; code != "attachment_too_large" {
 		t.Fatalf("code = %q want attachment_too_large", code)
 	}
 }
@@ -181,7 +181,7 @@ func TestPromptAttachmentUnknownBlobIDRejected(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	if code := decodeAPIError(t, w).Code; code != "attachment_not_found" {
+	if code := DecodeAPIError(t, w).Code; code != "attachment_not_found" {
 		t.Fatalf("code = %q want attachment_not_found", code)
 	}
 }

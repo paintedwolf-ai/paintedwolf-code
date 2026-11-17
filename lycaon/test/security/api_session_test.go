@@ -37,7 +37,7 @@ func TestSessionUnknownIDReturnsNotFound(t *testing.T) {
 			if ep.body != "" {
 				reqBody = strings.NewReader(ep.body)
 			}
-			req := authedRequest(t, ep.method, ep.path, reqBody)
+			req := AuthedRequest(t, ep.method, ep.path, reqBody)
 			if ep.body != "" {
 				req.Header.Set("Content-Type", "application/json")
 			}
@@ -47,7 +47,7 @@ func TestSessionUnknownIDReturnsNotFound(t *testing.T) {
 			if w.Code != http.StatusNotFound {
 				t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 			}
-			errResp := decodeAPIError(t, w)
+			errResp := DecodeAPIError(t, w)
 			if errResp.Code != "session_not_found" && errResp.Code != "message_not_found" {
 				t.Fatalf("code = %q, want session_not_found or message_not_found", errResp.Code)
 			}
@@ -61,7 +61,7 @@ func TestSessionKnownIDAccessible(t *testing.T) {
 	dir := t.TempDir()
 	sess := createSessionHTTP(t, srv, dir)
 
-	req := authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID, nil)
+	req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID, nil)
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {

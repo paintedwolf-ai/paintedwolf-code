@@ -24,7 +24,7 @@ func TestProjectSourceReadsLiveWorkerOverlay(t *testing.T) {
 	base := httpSrv.URL
 
 	projectDir := t.TempDir()
-	project := createAPIProjectAtPath(t, base, projectDir)
+	project := CreateAPIProjectAtPath(t, base, projectDir)
 
 	workerID, err := h.Delegations.Queue.Enqueue(t.Context(), wire.WorkerTask{
 		Prompt:        "fixture",

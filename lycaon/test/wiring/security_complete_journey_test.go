@@ -92,8 +92,8 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		}
 	}
 	testutil.FailErr(t, "settle scanner obligation", h.Workflows.Manager.Obligations.RecordObligationTerminal(ctx, run.ID, scan.WorkflowObligationKind))
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "plan")
-	call := wiringToolContext(sess.ID, dir)
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "plan")
+	call := WiringToolContext(sess.ID, dir)
 	call.Identity.ProjectID, call.Identity.Agent = sess.ProjectID, "coordinator"
 	testutil.FailErr(t, "resolve source root", h.DB.QueryRowContext(ctx, "SELECT id FROM project_roots WHERE project_id = ? AND is_primary = 1", sess.ProjectID).Scan(&call.Source.ActiveRootID))
 	call.Source.Roots[0].ID = call.Source.ActiveRootID
@@ -118,7 +118,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		invoke("task", map[string]any{"workflow_work_id": fmt.Sprintf("leg-%d", i), "prompt": "Review the assigned boundary."})
 	}
 	testutil.FailErr(t, "execute survey workers", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "claims")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "claims")
 	surveyTasks, err := h.Delegations.Queue.ListByWorkflowRunID(ctx, run.ID)
 	testutil.FailErr(t, "read survey workers", err)
 	if len(surveyTasks) != 5 {
@@ -151,7 +151,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		}
 	}
 	submit(map[string]any{"verdict": "CLAIMED", "threat_model": "Local application reading untrusted project content.", "claims": []any{}, "set_asides": []any{}, "coverage": coverage()}, nil)
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "challenge")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "challenge")
 	for _, agent := range []string{"skeptic", "web-researcher"} {
 		invoke("task", map[string]any{"workflow_work_id": "review/" + agent, "agent_type": agent, "brief": map[string]any{"goal": "Independently review coverage", "done_when": []any{"Account for the assigned boundary"}}, "prompt": "Independently review the assigned coverage and source evidence.", "scope": map[string]any{"mode": "read"}})
 	}
@@ -165,7 +165,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		}
 	}
 	submit(map[string]any{"verdict": "CHALLENGED", "challenges": []any{}, "set_asides": []any{}, "coverage": coverage()}, citations)
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "report")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "report")
 	manifest, err := h.Workflows.Manager.Resolver.ForRunID(ctx, run.ID)
 	testutil.FailErr(t, "load report brief", err)
 	levels := manifest.ReportBrief().LevelLabels()

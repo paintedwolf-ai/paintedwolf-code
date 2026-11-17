@@ -41,7 +41,7 @@ rules:
 `), 0o644))
 
 	openBody := `{"roots":[{"path":"` + projectDir + `"}]}`
-	req := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(openBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(openBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -54,7 +54,7 @@ rules:
 	}
 
 	ctx := context.Background()
-	parent := createSessionForProjectHTTP(t, srv, p.ID, wire.SessionPostureBuild)
+	parent := CreateSessionForProjectHTTP(t, srv, p.ID, wire.SessionPostureBuild)
 	task := wire.WorkerTask{
 		ParentSessionID: parent.ID,
 		AgentType:       "implementer",
@@ -116,7 +116,7 @@ func TestSessionPreparationRejectsInvalidProjectRules(t *testing.T) {
 	}
 
 	openBody := `{"roots":[{"path":"` + projectDir + `"}]}`
-	req := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(openBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(openBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -128,7 +128,7 @@ func TestSessionPreparationRejectsInvalidProjectRules(t *testing.T) {
 		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
 
-	req = authedRequest(t, http.MethodPost, "/v1/sessions", strings.NewReader(`{"project_id":"`+p.ID+`","posture":"build"}`))
+	req = AuthedRequest(t, http.MethodPost, "/v1/sessions", strings.NewReader(`{"project_id":"`+p.ID+`","posture":"build"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -138,7 +138,7 @@ func TestSessionPreparationRejectsInvalidProjectRules(t *testing.T) {
 	var sess wire.Session
 	testutil.FailErr(t, "decode preparing session", json.Unmarshal(w.Body.Bytes(), &sess))
 	for t.Context().Err() == nil {
-		req = authedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID, nil)
+		req = AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID, nil)
 		w = httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {

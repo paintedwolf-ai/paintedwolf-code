@@ -19,8 +19,8 @@ import (
 func TestWorkflowPersistE2E(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
-	proj := createProjectHTTP(t, srv, t.TempDir())
-	sess := createSessionForProjectHTTP(t, srv, proj.ID, wire.SessionPostureBuild)
+	proj := CreateProjectHTTP(t, srv, t.TempDir())
+	sess := CreateSessionForProjectHTTP(t, srv, proj.ID, wire.SessionPostureBuild)
 
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
@@ -30,7 +30,7 @@ func TestWorkflowPersistE2E(t *testing.T) {
 	manifestYAML, err := os.ReadFile(manifestPath)
 	testutil.FailErr(t, "read file", err)
 
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose", strings.NewReader(string(manifestYAML)))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/compose", strings.NewReader(string(manifestYAML)))
 	req.Header.Set("Content-Type", "application/yaml")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -39,7 +39,7 @@ func TestWorkflowPersistE2E(t *testing.T) {
 	}
 
 	body := `{"version":"1.0.0","confirm":false}`
-	req = authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/hotfix-session/persist", strings.NewReader(body))
+	req = AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/hotfix-session/persist", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -48,7 +48,7 @@ func TestWorkflowPersistE2E(t *testing.T) {
 	}
 
 	body = `{"version":"1.0.0","confirm":true,"trigger":"/hotfix-session-custom"}`
-	req = authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/hotfix-session/persist", strings.NewReader(body))
+	req = AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/hotfix-session/persist", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -63,7 +63,7 @@ func TestWorkflowPersistE2E(t *testing.T) {
 		t.Fatalf("scope = %q", persistResp.Summary.Scope)
 	}
 
-	req = authedRequest(t, http.MethodGet, "/v1/workflows?session_id="+sess.ID, nil)
+	req = AuthedRequest(t, http.MethodGet, "/v1/workflows?session_id="+sess.ID, nil)
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
@@ -85,7 +85,7 @@ func TestWorkflowPersistE2E(t *testing.T) {
 	}
 
 	startBody := `{"workflow_id":"hotfix-session","workflow_version":"1.0.0"}`
-	req = authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req = AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -127,7 +127,7 @@ phases:
 		testutil.FailErr(t, "sessionWFStore.Upsert failed", err)
 	}
 	body := `{"version":"1.0.0","confirm":true}`
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/hotfix/persist", strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/hotfix/persist", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -174,7 +174,7 @@ phases:
 		testutil.FailErr(t, "sessionWFStore.Upsert failed", err)
 	}
 	body := `{"version":"1.0.0","confirm":true,"trigger":"/plan"}`
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/hotfix/persist", strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflows/hotfix/persist", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -194,11 +194,11 @@ phases:
 func TestWorkflowPersistUnknownWorkflowNotFound(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
-	proj := createProjectHTTP(t, srv, t.TempDir())
-	sess := createSessionForProjectHTTP(t, srv, proj.ID, wire.SessionPostureBuild)
+	proj := CreateProjectHTTP(t, srv, t.TempDir())
+	sess := CreateSessionForProjectHTTP(t, srv, proj.ID, wire.SessionPostureBuild)
 
 	body := `{"version":"1.0.0","confirm":true,"trigger":"/never-composed"}`
-	req := authedRequest(t, http.MethodPost,
+	req := AuthedRequest(t, http.MethodPost,
 		"/v1/sessions/"+sess.ID+"/workflows/never-composed/persist", strings.NewReader(body))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

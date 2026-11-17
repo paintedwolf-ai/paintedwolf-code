@@ -54,8 +54,8 @@ func runAgentsMDWriteApproval(t *testing.T, call llm.MockToolCall, kind wire.Che
 	t.Cleanup(httpSrv.Close)
 	dir := t.TempDir()
 	testutil.FailErr(t, "seed draft", os.WriteFile(filepath.Join(dir, "draft.md"), []byte("# Agent draft\n"), 0o644))
-	project := createAPIProjectAtPath(t, httpSrv.URL, dir)
-	sess := openAPIPostJSON[wire.Session](t, httpSrv.URL, "/v1/sessions", nil,
+	project := CreateAPIProjectAtPath(t, httpSrv.URL, dir)
+	sess := OpenAPIPostJSON[wire.Session](t, httpSrv.URL, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 	ctx, cancel := context.WithTimeout(t.Context(), 45*time.Second)
 	defer cancel()
@@ -142,9 +142,9 @@ func TestHumanSourceEditorWritesAgentsMD(t *testing.T) {
 	agentsPath := filepath.Join(dir, "AGENTS.md")
 	testutil.FailErr(t, "seed AGENTS.md", os.WriteFile(agentsPath, []byte("# Baseline policy\n"), 0o644))
 
-	project := createAPIProjectAtPath(t, base, dir)
+	project := CreateAPIProjectAtPath(t, base, dir)
 
-	read := openAPIGetJSON[wire.ProjectSourceReadResponse](t, base, "/v1/projects/{id}/source?path=AGENTS.md",
+	read := OpenAPIGetJSON[wire.ProjectSourceReadResponse](t, base, "/v1/projects/{id}/source?path=AGENTS.md",
 		map[string]string{"id": project.ID}, http.StatusOK)
 	if read.SHA256 == "" {
 		t.Fatal("source read must report a base sha for editor saves")
@@ -153,7 +153,7 @@ func TestHumanSourceEditorWritesAgentsMD(t *testing.T) {
 	const updated = "# Human policy\n\nEdited in the app.\n"
 	body := `{"path":"AGENTS.md","content":` + strconv.Quote(updated) + `,"encoding":` +
 		strconv.Quote(string(read.Encoding)) + `,"base_sha256":"` + read.SHA256 + `"}`
-	openAPIPutJSON[wire.ProjectSourceWriteResponse](t, base, "/v1/projects/{id}/source",
+	OpenAPIPutJSON[wire.ProjectSourceWriteResponse](t, base, "/v1/projects/{id}/source",
 		map[string]string{"id": project.ID}, body, http.StatusOK)
 
 	got, err := os.ReadFile(agentsPath)

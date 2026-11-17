@@ -126,7 +126,7 @@ func TestHTTPCoordinatorBatchRosterAndPackBoardE2E(t *testing.T) {
 	_, err := h.Store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 
-	_, err = h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"detail_level": "compact"}, securityToolContext(sess.ID, sess.WorkspacePath, "coordinator"))
+	_, err = h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"detail_level": "compact"}, SecurityToolContext(sess.ID, sess.WorkspacePath, "coordinator"))
 	testutil.FailErr(t, "pack_board", err)
 }
 

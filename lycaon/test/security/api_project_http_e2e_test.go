@@ -20,11 +20,11 @@ func TestProjectRemovalCascadeAndSSE(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
 	dir := t.TempDir()
-	projectRow := createTestProjectHTTP(t, srv, dir)
+	projectRow := CreateTestProjectHTTP(t, srv, dir)
 
-	_ = createSessionForProjectHTTP(t, srv, projectRow.ID, wire.SessionPostureBuild)
+	_ = CreateSessionForProjectHTTP(t, srv, projectRow.ID, wire.SessionPostureBuild)
 
-	assessReq := authedRequest(t, http.MethodGet, "/v1/projects/"+projectRow.ID+"/removal-assessment", nil)
+	assessReq := AuthedRequest(t, http.MethodGet, "/v1/projects/"+projectRow.ID+"/removal-assessment", nil)
 	assessW := httptest.NewRecorder()
 	srv.ServeHTTP(assessW, assessReq)
 	if assessW.Code != http.StatusOK {
@@ -35,7 +35,7 @@ func TestProjectRemovalCascadeAndSSE(t *testing.T) {
 	operationID := uuid.NewString()
 	removal, err := json.Marshal(wire.ProjectRemovalRequest{OperationID: operationID, AssessmentToken: assessment.AssessmentToken})
 	testutil.FailErr(t, "encode removal request", err)
-	removeReq := authedRequest(t, http.MethodPost, "/v1/projects/"+projectRow.ID+"/removals", bytes.NewReader(removal))
+	removeReq := AuthedRequest(t, http.MethodPost, "/v1/projects/"+projectRow.ID+"/removals", bytes.NewReader(removal))
 	removeReq.Header.Set("Content-Type", "application/json")
 	removeW := httptest.NewRecorder()
 	srv.ServeHTTP(removeW, removeReq)
@@ -53,7 +53,7 @@ func TestProjectRemovalCascadeAndSSE(t *testing.T) {
 	srv.WaitForBackground(settleCtx)
 	testutil.FailErr(t, "settle project removal", settleCtx.Err())
 	resultW := httptest.NewRecorder()
-	srv.ServeHTTP(resultW, authedRequest(t, http.MethodGet, "/v1/projects/"+projectRow.ID+"/removals/"+operationID, nil))
+	srv.ServeHTTP(resultW, AuthedRequest(t, http.MethodGet, "/v1/projects/"+projectRow.ID+"/removals/"+operationID, nil))
 	if resultW.Code != http.StatusOK {
 		t.Fatalf("removal outcome status = %d body = %s", resultW.Code, resultW.Body.String())
 	}
@@ -63,7 +63,7 @@ func TestProjectRemovalCascadeAndSSE(t *testing.T) {
 		t.Fatalf("removal result = %+v", result)
 	}
 
-	getReq := authedRequest(t, http.MethodGet, "/v1/projects/"+projectRow.ID, nil)
+	getReq := AuthedRequest(t, http.MethodGet, "/v1/projects/"+projectRow.ID, nil)
 	getW := httptest.NewRecorder()
 	srv.ServeHTTP(getW, getReq)
 	if getW.Code != http.StatusNotFound {
@@ -75,10 +75,10 @@ func TestAttachProjectRootDuplicate409(t *testing.T) {
 	h := wiring.BuildForTest(t)
 	srv := h.Server
 	dir := t.TempDir()
-	projectRow := createTestProjectHTTP(t, srv, dir)
+	projectRow := CreateTestProjectHTTP(t, srv, dir)
 
 	body := `{"path":"` + dir + `"}`
-	req := authedRequest(t, http.MethodPost, "/v1/projects/"+projectRow.ID+"/roots", strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/projects/"+projectRow.ID+"/roots", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -101,10 +101,10 @@ func TestPatchProjectRootDuplicateLabel409(t *testing.T) {
 	srv := h.Server
 	dirA := t.TempDir()
 	dirB := t.TempDir()
-	projectRow := createTestProjectHTTP(t, srv, dirA)
+	projectRow := CreateTestProjectHTTP(t, srv, dirA)
 
 	attach := `{"path":"` + dirB + `"}`
-	attachReq := authedRequest(t, http.MethodPost, "/v1/projects/"+projectRow.ID+"/roots", strings.NewReader(attach))
+	attachReq := AuthedRequest(t, http.MethodPost, "/v1/projects/"+projectRow.ID+"/roots", strings.NewReader(attach))
 	attachReq.Header.Set("Content-Type", "application/json")
 	attachW := httptest.NewRecorder()
 	srv.ServeHTTP(attachW, attachReq)
@@ -131,7 +131,7 @@ func TestPatchProjectRootDuplicateLabel409(t *testing.T) {
 	}
 
 	patchBody := `{"label":"` + primaryLabel + `"}`
-	patchReq := authedRequest(t, http.MethodPatch, "/v1/projects/"+projectRow.ID+"/roots/"+otherID, strings.NewReader(patchBody))
+	patchReq := AuthedRequest(t, http.MethodPatch, "/v1/projects/"+projectRow.ID+"/roots/"+otherID, strings.NewReader(patchBody))
 	patchReq.Header.Set("Content-Type", "application/json")
 	patchW := httptest.NewRecorder()
 	srv.ServeHTTP(patchW, patchReq)
@@ -147,21 +147,4 @@ func TestPatchProjectRootDuplicateLabel409(t *testing.T) {
 	if errBody.Code != "duplicate_root_label" {
 		t.Fatalf("code = %q want duplicate_root_label", errBody.Code)
 	}
-}
-
-func createTestProjectHTTP(t *testing.T, srv http.Handler, dir string) wire.Project {
-	t.Helper()
-	body := `{"roots":[{"path":"` + dir + `"}]}`
-	req := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("create project status = %d body = %s", w.Code, w.Body.String())
-	}
-	var out wire.Project
-	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
-		t.Fatalf("decode project: %v", err)
-	}
-	return out
 }
