@@ -1,0 +1,8 @@
+go test fuzz v1
+[]byte("0000!000000000!000000!00000!00000000!0000000")
+[]byte("FFFFFFFF00000FF")
+[]byte("FFFFFFFF")
+[]byte("0")
+uint16(69)
+bool(true)
+bool(false)
