@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/findings"
+	"github.com/lycaon/lycaon/internal/findings/findingstest"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestFindingDeliveryRetriesRetainsAndPagesWithoutLoss(t *testing.T) {
-	store := findings.NewMemoryStore()
+	store := findingstest.New(t, "child")
 	ctx := workercontext.WithJob(t.Context(), "reader")
 	manager := NewNotes(nil, store, nil, nil)
 	for i := 0; i < 23; i++ {
