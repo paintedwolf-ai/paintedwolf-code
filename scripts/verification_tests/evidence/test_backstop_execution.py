@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest.mock import patch
 
 SCRIPTS = Path(__file__).resolve().parents[2]
 TESTUTIL = SCRIPTS.parent / "lycaon" / "internal" / "testutil"
@@ -118,6 +119,25 @@ class HungTestBackstopTests(unittest.TestCase):
 
 
 class FailureReportTests(unittest.TestCase):
+    def test_preparation_does_not_restart_the_hosted_backstop(self):
+        spec = importlib.util.spec_from_file_location("watchdog", SCRIPTS / "process-group-watchdog.py")
+        watchdog = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(watchdog)
+        with tempfile.TemporaryDirectory() as directory:
+            flag = Path(directory) / "timeout"
+            # Admission finished at 110 after the lane's deadline of 100.
+            with patch.object(sys, "argv", ["watchdog", "60", "123", str(flag), "fixture"]), \
+                    patch.dict(os.environ, {"PW_TEST_WATCHDOG_DEADLINE": "100"}), \
+                    patch.object(watchdog.time, "monotonic", side_effect=[110, 110, 171]), \
+                    patch.object(watchdog.time, "sleep") as sleep, \
+                    patch.object(watchdog.os, "killpg"), \
+                    patch.object(watchdog, "report_waits") as report:
+                self.assertEqual(watchdog.main(), 0)
+                report.assert_called_once_with(123)
+                # Only teardown sleeps; there is no new 60-second execution window.
+                sleep.assert_called_once_with(5)
+                self.assertTrue(flag.exists())
+
     def test_a_test_found_waiting_is_named_with_the_tests_that_failed(self):
         spec = importlib.util.spec_from_file_location("go_test_exec", SCRIPTS / "go-test-exec.py")
         wrapper = importlib.util.module_from_spec(spec)

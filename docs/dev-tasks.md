@@ -874,7 +874,9 @@ Declared grammars are checked against the tree before admission: Go package
 directories and `.go` files must exist under `lycaon/`; `-p`, `-parallel`,
 `-count`, `-cpu`, and `-shuffle` must hold values `go test` accepts; `-timeout`
 is refused, because every recipe runs with `-timeout 0` and the run's one limit
-is its lane's declared minutes;
+is its lane's declared minutes. Hosted phases share an absolute watchdog deadline,
+including admission and preparation. The outer CI step allows one additional
+minute for hang reports, process teardown and digest publication;
 each Vitest filter must match a test file under `lycaon-den/src`, and each
 Playwright filter a web-project spec under `lycaon-den/e2e`, by the same rules
 those tools apply. Arguments that passthrough targets and non-catalog targets

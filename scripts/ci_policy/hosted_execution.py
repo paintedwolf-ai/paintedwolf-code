@@ -94,6 +94,8 @@ def run_lane(name, shard="", merge_group=False, clock=time.monotonic):
     record["oom_before"] = oom_events()
     path.write_text(json.dumps(record, indent=2) + "\n")
     environment = dict(os.environ)
+    # Admission and preparation consume this same budget; a child must not restart it.
+    environment["PW_TEST_WATCHDOG_DEADLINE"] = str(deadline)
     if scope and scope["base"]:
         environment["PW_CHANGE_BASE"] = scope["base"]
     # Memory-heavy lanes cap process parallelism.
