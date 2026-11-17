@@ -122,6 +122,22 @@ func TestPlanRowsCommitWithTransitionsAndSurviveRestart(t *testing.T) {
 	}
 }
 
+func TestPendingPlanCompletesAfterRestart(t *testing.T) {
+	f := newProgressFixture(t)
+	applyPlan(t, f.plans, "- [ ] Deliver")
+	testutil.FailErr(t, "close pending plan", f.database.Close())
+	reopened := testdbfixture.OpenPath(t, f.path)
+	sessions := sessionstore.NewSQL(reopened)
+	plans := progress.NewSQLStore(reopened, sessions)
+	applyPlan(t, plans, "- [x] Deliver")
+	applyPlan(t, plans, "- [x] Deliver")
+	rows, err := sessions.GetMessages(t.Context(), "session")
+	testutil.FailErr(t, "read completed plan history", err)
+	if len(rows) != 2 || rows[1].Kind != api.MessageKindProgressComplete || rows[1].WorkflowRunID != "run" || rows[1].Ord != 2 {
+		t.Fatalf("completion after restart=%+v", rows)
+	}
+}
+
 func TestDelayedNotificationsCannotReorderOrRelabelPlanRows(t *testing.T) {
 	f := newProgressFixture(t)
 	entered, release := make(chan struct{}), make(chan struct{})
