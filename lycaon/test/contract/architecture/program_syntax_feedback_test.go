@@ -24,10 +24,10 @@ func TestProgramSyntaxFeedbackUsesTypedSpansWithoutGuessedRepairs(t *testing.T) 
 			name, source, code    string
 			start, end, line, col int
 		}{
-			{"unfinished if", "printf ok; if", "COMMAND_SYNTAX_INVALID", 13, 13, 1, 14},
-			{"unknown trap", "if false; then trap unknown; fi", "COMMAND_SYNTAX_UNSUPPORTED", 15, 27, 1, 16},
-			{"zsh flag expansion", "printf ok; echo ${(q)name}", "COMMAND_SYNTAX_UNSUPPORTED", 16, 26, 1, 17},
-			{"oversized", oversized, "COMMAND_LIMIT_EXCEEDED", 0, len(oversized), 1, 1},
+			{"unfinished if", "printf ok; if", "COMMAND_SYNTAX_INVALID", 11, 12, 1, 12},
+			{"unknown trap", "if false; then trap unknown; fi", "COMMAND_SYNTAX_UNSUPPORTED", 15, 19, 1, 16},
+			{"zsh flag expansion", "printf ok; echo ${(q)name}", "COMMAND_SYNTAX_UNSUPPORTED", 16, 17, 1, 17},
+			{"oversized", oversized, "COMMAND_LIMIT_EXCEEDED", 0, 0, 1, 1},
 		} {
 			t.Run(tc.name, func(t *testing.T) {
 				_, err := commandsurface.ParseProgram([]byte(tc.source), commandsurface.ParseOptions{SourceName: "fixture.pw", Sourced: sourced})

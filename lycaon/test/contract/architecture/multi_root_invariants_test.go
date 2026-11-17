@@ -2,7 +2,6 @@ package contract
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -16,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
@@ -363,50 +363,59 @@ func TestMultiRootPathsArrayToolStat(t *testing.T) {
 	}
 }
 
-// Roots whose briefs exceed the budget are trimmed: each root fits its share
-// and the composition fits the total.
+// The composed brief splits its budget by the primary share: a root whose
+// orientation fits its share keeps it whole, and one that exceeds its share is
+// trimmed to fit.
 func TestMultiRootAnalyzeRootsBudget(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
-	base := t.TempDir()
-	primary := filepath.Join(base, "a")
-	secondary := filepath.Join(base, "b")
-	for _, dir := range []string{primary, secondary} {
-		for i := 0; i < 40; i++ {
-			sub := filepath.Join(dir, fmt.Sprintf("module-with-a-long-directory-name-%02d", i))
-			contractcheck.FailErr(t, "mkdir", os.MkdirAll(sub, 0o755))
-			for _, ext := range []string{"go", "ts", "py", "rs", "md"} {
-				name := filepath.Join(sub, fmt.Sprintf("source-file-with-a-long-name-%02d.%s", i, ext))
-				contractcheck.FailErr(t, "write", os.WriteFile(name, []byte("x\n"), 0o644))
-			}
-		}
+	brief := &repoinfo.Brief{
+		Languages: []string{"Go", "TypeScript"}, FileCount: packboard.TinyMaxFiles + 1, Materialized: true,
+		Layout: api.RepoLayout{TopLevel: []string{"commands-and-entry-points/", "internal-service-packages/", "frontend-workspace/", "documentation/"}},
 	}
-	budget := repoinfo.BriefBudget{TotalBytes: 80, PrimaryShare: 0.5}
-	provider := repotest.NewProvider(t)
-	defer func() { _ = provider.Close() }()
-	mrb, err := repoinfo.AnalyzeRoots(ctx, []projectroot.RootRef{
-		{Path: primary, IsPrimary: true, Label: "a"},
-		{Path: secondary, Label: "b"},
+	lines := packboard.RepoOrientationLines(repoinfo.WireBrief(brief))
+	if len(lines) != 2 {
+		t.Fatalf("fixture brief renders %d orientation lines, want repo and layout", len(lines))
+	}
+	full := len(strings.Join(lines, "\n"))
+	budget := repoinfo.BriefBudget{TotalBytes: full*5/3 + 2, PrimaryShare: 0.6}
+	primaryCap := int(float64(budget.TotalBytes) * budget.PrimaryShare)
+	secondaryCap := budget.TotalBytes - primaryCap
+	if primaryCap < full || secondaryCap >= full || secondaryCap < len(lines[0]) {
+		t.Fatalf("budget %d does not separate the shares for a %d byte brief", budget.TotalBytes, full)
+	}
+	provider := fixedBriefProvider{"/roots/a": brief, "/roots/b": brief}
+	mrb, err := repoinfo.AnalyzeRoots(context.Background(), []projectroot.RootRef{
+		{Path: "/roots/a", IsPrimary: true, Label: "a"},
+		{Path: "/roots/b", Label: "b"},
 	}, budget, provider)
 	contractcheck.FailErr(t, "AnalyzeRoots", err)
 	if len(mrb.Roots) != 2 {
 		t.Fatalf("composed %d roots, want 2", len(mrb.Roots))
 	}
-	primaryCap := int(float64(budget.TotalBytes) * budget.PrimaryShare)
-	for _, r := range mrb.Roots {
-		limit := budget.TotalBytes - primaryCap
-		if r.IsPrimary {
-			limit = primaryCap
-		}
-		size := len(strings.Join(packboard.RepoOrientationLines(repoinfo.WireBrief(r.Brief)), "\n"))
-		if !r.Truncated || size > limit {
-			t.Fatalf("root %s: %d bytes truncated=%v, want trimmed to at most %d", r.Label, size, r.Truncated, limit)
-		}
+	size := func(r repoinfo.RootBrief) int {
+		return len(strings.Join(packboard.RepoOrientationLines(repoinfo.WireBrief(r.Brief)), "\n"))
 	}
-	if mrb.RenderedBytes() > budget.TotalBytes {
-		t.Fatalf("rendered %d bytes exceeds the %d byte budget", mrb.RenderedBytes(), budget.TotalBytes)
+	if primary := mrb.Roots[0]; primary.Truncated || size(primary) != full {
+		t.Fatalf("primary = %d bytes truncated=%v, want its whole %d byte brief", size(primary), primary.Truncated, full)
+	}
+	if secondary := mrb.Roots[1]; !secondary.Truncated || size(secondary) > secondaryCap {
+		t.Fatalf("secondary = %d bytes truncated=%v, want trimmed to at most %d", size(secondary), secondary.Truncated, secondaryCap)
 	}
 }
+
+// fixedBriefProvider answers each root with a fixed brief.
+type fixedBriefProvider map[string]*repoinfo.Brief
+
+func (p fixedBriefProvider) Brief(_ context.Context, dir string) (*repoinfo.Brief, error) {
+	return p[dir], nil
+}
+func (fixedBriefProvider) KnownEmpty(context.Context, string) (bool, error) { return false, nil }
+func (fixedBriefProvider) Warm(string)                                      {}
+func (fixedBriefProvider) Changed(context.Context, string)                  {}
+func (fixedBriefProvider) SetOnSettled(func(string))                        {}
+func (fixedBriefProvider) Wait(context.Context) error                       { return nil }
+func (fixedBriefProvider) Stop()                                            {}
+func (fixedBriefProvider) Close() error                                     { return nil }
 
 func TestMultiRootUnattachedAtWordRemainsLiteral(t *testing.T) {
 	fix := newMultiRootFixture(t)
