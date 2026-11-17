@@ -162,7 +162,7 @@ class HealthTests(unittest.TestCase):
 from pathlib import Path
 from types import SimpleNamespace
 import verification_health as health
-queue = SimpleNamespace(root=Path({temporary!r}), locked=contextlib.nullcontext)
+queue = SimpleNamespace(root=Path({temporary!r}), history=Path({temporary!r}), locked=contextlib.nullcontext)
 health.process_snapshot = lambda: {self.processes!r}
 health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
 '''
@@ -201,7 +201,7 @@ health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
     def test_declared_progress_signal_keeps_zero_cpu_daemon_job_active_until_signal_stops(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            queue = execution.Queue(root / "queue")
+            queue = execution.Queue(root / "queue", root / "history")
             ready = root / "ready"
             done = root / "done"
             script = (
@@ -257,7 +257,7 @@ health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
     def test_ordinary_target_ignores_undeclared_progress_and_stalls_on_schedule(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            queue = execution.Queue(root / "queue")
+            queue = execution.Queue(root / "queue", root / "history")
             ready = root / "ready"
             done = root / "done"
             fake_progress = root / "undeclared.progress"
@@ -318,7 +318,7 @@ health.annotate(queue, {{"runs": [{self.entry!r}], "operations": []}})
         self.assertNotIn("progress", planning.invocation_profile(["test:digest"], ["./internal/api"]))
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
-            queue = execution.Queue(root / "queue")
+            queue = execution.Queue(root / "queue", root / "history")
             batch_dir = root / "batch"
             batch_dir.mkdir()
             plan = {"batch": {"ticket": "00000000000000000001-batch", "workers": 1, "source": str(root),

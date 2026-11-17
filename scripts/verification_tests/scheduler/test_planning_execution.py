@@ -23,7 +23,7 @@ SCRIPT = support.SCRIPT
 class PlanningTests(unittest.TestCase):
     def test_subscriber_reports_state_changes_without_repeated_wait_notices(self):
         with tempfile.TemporaryDirectory() as root:
-            queue = execution.Queue(Path(root) / "queue")
+            queue = execution.Queue(Path(root) / "queue", Path(root) / "history")
             queue.pause("fixture")
             sleeps = 0
 
@@ -175,7 +175,7 @@ class PlanningTests(unittest.TestCase):
                        "compatibility": "same", "admission": {"locks": [], "workers": 1}}
             operation = {"ticket": "operation-1", "name": "Go digest", "state": "running", "locks": ["go"],
                          "workers": 1, "order": 0}
-            queue = execution.Queue(Path(root) / "queue")
+            queue = execution.Queue(Path(root) / "queue", Path(root) / "history")
             snapshot = {"paused": None, "runs": [active, invocation, request], "operations": [operation, waiting]}
             with patch.object(queue, "status", return_value=snapshot):
                 result = batch.status_details(queue)
@@ -472,7 +472,7 @@ class PlanningTests(unittest.TestCase):
     @unittest.skipIf(os.name == "nt", "requires POSIX file descriptions")
     def test_opening_the_active_lease_does_not_inherit_its_admission(self):
         with tempfile.TemporaryDirectory() as directory:
-            queue = execution.Queue(directory)
+            queue = execution.Queue(directory, Path(directory) / "history")
             with execution.Lease(queue, "ownership fixture", 1) as lease:
                 lease.entry.update(state="running", pid=987654321, lease_fd=200)
                 lease.write()
@@ -481,6 +481,7 @@ class PlanningTests(unittest.TestCase):
                         f"os.execv(sys.executable,[sys.executable,{str(SCRIPT)!r},'holding'])")
                 result = subprocess.run([sys.executable, "-c", body], capture_output=True, timeout=5,
                                         env={**os.environ, "PW_TEST_EXECUTION_ROOT": directory,
+                                             "XDG_CACHE_HOME": str(Path(directory) / "user-cache"),
                                              "PW_TEST_EXECUTION_TICKET": lease.entry["ticket"]})
                 self.assertEqual(result.returncode, 1, result.stderr.decode())
 
@@ -488,7 +489,7 @@ class PlanningTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary) / "batch"
             directory.mkdir()
-            queue = execution.Queue(Path(temporary) / "queue")
+            queue = execution.Queue(Path(temporary) / "queue", Path(temporary) / "history")
             request = {"ticket": "request", "source": temporary,
                        "plan": {"names": ["gate"], "stages": [{"name": "obsolete"}]}}
             entry = {"ticket": "batch", "kind": "batch", "directory": str(directory)}

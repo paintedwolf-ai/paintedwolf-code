@@ -432,6 +432,11 @@ def compatibility(root, binary, environment):
                                  for p in files}})
 
 
+def unscoped(stage):
+    """Whether a stage runs its whole catalog recipe, not a selection from it."""
+    return expand([stage["name"]]) == [stage]
+
+
 def stage_key(stage):
     if stage["kind"] == "task":
         return identity({"kind": "task", "arguments": stage["arguments"]})

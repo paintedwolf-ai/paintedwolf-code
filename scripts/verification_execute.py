@@ -14,7 +14,7 @@ import threading
 import verification_reuse as reuse
 from verification_batch import active_members, child_options, stop_child, write_lease
 from verification_history import estimate, read_history, record_duration
-from verification_plan import catalog, digest_command, expand, resolve_request, stage_key
+from verification_plan import catalog, digest_command, expand, resolve_request, stage_key, unscoped
 from verification_resources import (Reservation, blocked_reason, bounded_environment, capacity, demand, entries,
                                     order_of, profile)
 from verification_health import identity
@@ -613,7 +613,7 @@ class Executor:
         for request, index, _, _ in job["needs"]:
             self.running[request["ticket"]].discard(index)
         print(log.read_text(errors="replace"), end="", flush=True)
-        if code not in {130, 143} and 'started_at' in job['reservation'].entry:
+        if code == 0 and unscoped(first) and 'started_at' in job['reservation'].entry:
             record_duration(self.queue, result["names"], result["finished_at"] - result["started_at"])
         if code == 130 and all(c in self.finished for c in consumers):
             self.stages.append(result)

@@ -17,6 +17,7 @@ import uuid
 
 from verification_advisories import admission_notice
 from verification_lifecycle.terminal import TerminalSettlement, retained
+from artifact_paths import user_cache_base
 from verification_history import record_duration
 from verification_resources import (EXCLUSIVE, Reservation, blocked_reason, bounded_environment,
                                     foreground_git_environment, order_of, worker_budget)
@@ -221,8 +222,11 @@ def is_descendant(pid, ancestor, parents):
 class Queue:
     lock_file = staticmethod(lock_file)
 
-    def __init__(self, root):
+    def __init__(self, root, history):
+        """`root` holds admission state; `history` holds the durations of passing whole-target runs."""
         self.root = Path(root)
+        self.history = Path(history)
+        self.history.mkdir(mode=0o700, parents=True, exist_ok=True)
         self.root.mkdir(mode=0o700, parents=True, exist_ok=True)
         if os.name != "nt" and self.root.stat().st_uid != os.getuid():
             raise ValueError("test execution directory belongs to another user")
@@ -393,8 +397,9 @@ def bounded_go_arguments(arguments, environment):
     return env, result
 
 
-def run(queue, name, command, spec=EXCLUSIVE):
-    """Run outside a shared batch, holding `spec` for the whole command; nested requests inherit it."""
+def run(queue, name, command, spec=EXCLUSIVE, record=False):
+    """Run outside a shared batch, holding `spec` for the whole command; nested requests inherit it.
+    `record` keeps the duration of a passing run under `name`."""
     if queue.inherited():
         os.execvpe(command[0], command, os.environ)
     ceiling = worker_budget(os.environ)
@@ -451,7 +456,7 @@ def run(queue, name, command, spec=EXCLUSIVE):
                 except subprocess.TimeoutExpired:
                     report(queue, lease.entry["ticket"])
                     continue
-                if code not in {130, 143}:
+                if code == 0 and record:
                     record_duration(queue, [name], time.time() - started)
                 break
         finally:
@@ -498,7 +503,7 @@ def main():
         return 0
     task_request = None
     default_root = Path(tempfile.gettempdir()) / "test-execution" if os.name == "nt" else Path(f"/tmp/test-execution-{os.getuid()}")
-    queue = Queue(os.environ.get("PW_TEST_EXECUTION_ROOT", default_root))
+    queue = Queue(os.environ.get("PW_TEST_EXECUTION_ROOT", default_root), user_cache_base() / "verification")
     if args.action == "task":
         binary, root, *arguments = command
         if arguments and arguments[0] in {"--background", "--wait"}:
@@ -581,15 +586,18 @@ def main():
         spec = invocation_profile(task_names(arguments), cli)
     if not command:
         parser.error("a command is required after --")
-    return reported_run(queue, args.name, command, spec) if task_request else run(queue, args.name, command, spec)
+    if task_request:
+        # A selection measures part of a target, so only a whole-target run joins its history.
+        return reported_run(queue, args.name, command, spec, record="--" not in task_request[2])
+    return run(queue, args.name, command, spec)
 
 
-def reported_run(queue, name, command, spec):
+def reported_run(queue, name, command, spec, record):
     """A requested target outside a shared batch ends with the same block; a nested one execs away in run."""
     from verification_lifecycle.digest import deliver, invocation_digest
     from verification_plan import EXIT_UNVERIFIED, outcome_exit
     try:
-        code = run(queue, name, command, spec)
+        code = run(queue, name, command, spec, record)
     except KeyboardInterrupt:
         deliver(invocation_digest(name, 130, status="unverified", reason="Interrupted before a result"))
         raise

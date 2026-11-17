@@ -37,7 +37,7 @@ class AdvisoryTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        self.queue = SimpleNamespace(root=self.root, locked=contextlib.nullcontext)
+        self.queue = SimpleNamespace(root=self.root, history=self.root, locked=contextlib.nullcontext)
         advisories._announced.clear()
 
     def status(self, runs=(), operations=(), **fields):

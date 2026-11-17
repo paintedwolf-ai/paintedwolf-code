@@ -31,7 +31,7 @@ class TerminalFixture(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        self.queue = execution.Queue(self.root / "queue")
+        self.queue = execution.Queue(self.root / "queue", self.root / "history")
         self.sequence = 0
 
     def capability(self, suffix="resource", batch="shared"):

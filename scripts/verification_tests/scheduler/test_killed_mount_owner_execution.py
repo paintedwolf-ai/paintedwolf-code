@@ -64,7 +64,7 @@ class KilledMountOwnerTests(unittest.TestCase):
         run_lease.RUN_ROOT.mkdir(mode=0o700, exist_ok=True)
         self.state = tempfile.TemporaryDirectory()
         self.addCleanup(self.state.cleanup)
-        self.queue = execution.Queue(Path(self.state.name) / "queue")
+        self.queue = execution.Queue(Path(self.state.name) / "queue", Path(self.state.name) / "history")
         self.sequence = 0
 
     def run_directory(self):
