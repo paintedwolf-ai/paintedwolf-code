@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/bundledhint"
 	"github.com/lycaon/lycaon/internal/gitrepo"

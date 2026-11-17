@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/decide"
-	"github.com/lycaon/lycaon/internal/filekind"
 	"github.com/lycaon/lycaon/internal/tsparse"
 	"github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
