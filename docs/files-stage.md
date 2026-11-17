@@ -41,7 +41,7 @@ The host shares immutable comparison plans within the authenticated project, pre
 
 ## Stage identity
 
-A full-stage Context surface: `Nav` value `files`, a context-zone entry, and a Crossbar go-to target. It reuses the same `/source` jail as every other source read; the stage adds no new path authority.
+A full-stage Context surface: `Nav` value `files`, a context-zone entry, and a Crossbar go-to target. It reuses the same `/source` jail as every other source read. Beyond the project's folders, a read is admitted only for a file a chat holds or a chat location covers ([Outside the project](#outside-the-project)).
 
 The Files view composes workspace resolution (`source/files-workspace.ts`), host document synchronization (`editor/files-editor-synchronization.ts`), and version history (`history/files-version-history.ts`). Document transport consumes the narrow `EditorDraftSource` port; only the synchronization composition imports both transport and the concrete buffer store. Attribution uses the editor's project, root, and session; findings refresh with the host's scan identity and status. Neither is cached by content hash, because identical bytes can have different provenance and findings.
 
@@ -83,6 +83,12 @@ Every folder row carries **new-file** and **new-folder** affordances, mounted on
 - A name containing slashes creates the missing folders on the way.
 - Escape cancels; blur abandons only an empty row.
 - A refused name (leaves the folder, names the wrong kind, already taken) reports under the row **without discarding what was typed**.
+
+### Outside the project
+
+The selected chat's locations follow the project's folders, each a root tagged **Outside project** with its host path as its tooltip. The tree view lists them because Den creates it with the chat's `chat_id`, and they are roots of that view only, so switching chats changes this part of the tree and nothing above it. A location root is an on-demand catalog root (`sourcecatalog.Root.OnDemand`): no warm-up, inventory, or watcher starts for it, and only the folders the person opens are read. A protected file's location is its folder listing that one file (`Only`). Outside changes the host records refresh the opened folders they land in; a change no location covers lists the chat again.
+
+Rows under a location open, mark, and reveal by the file's outside-namespace address, translated in `chat-locations.ts`, so tabs, Review, and history treat outside files like any other source file. Editor documents open and save them with the person's own authority, and an agent read or write of an open outside file goes through its document. Their menus open, copy the host path, open in another app, and hide the location; creating, renaming, moving, deleting, and restoring stay with the project's folders. **Open file outside the project…** (`files.openOutsideFile`) picks a file with the native picker into the selected chat.
 
 ### File lifecycle
 
