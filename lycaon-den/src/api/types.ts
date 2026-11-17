@@ -16430,7 +16430,7 @@ export interface components {
          */
         HostResourcePromptMode: "omit" | "advertise" | "avoid";
         UpdateHostResourceRequest: {
-            access?: components["schemas"]["HostResourceAccessSetting"];
+            access: components["schemas"]["HostResourceAccessSetting"];
         };
         SourceTreeAddress: {
             /** Format: uuid */
