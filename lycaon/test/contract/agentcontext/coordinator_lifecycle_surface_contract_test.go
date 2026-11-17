@@ -23,22 +23,6 @@ func TestCoordinatorSurfaceInvariants_overlayPromoteIncludesWait(t *testing.T) {
 	}
 }
 
-func TestCoordinatorSurfaceInvariants_overlayPromoteResolveWorkflow(t *testing.T) {
-	t.Parallel()
-	surfaces := loadImplementSurfaces(t)
-	promote := surfaces[surfaceImplementOverlayPromote]
-	for _, required := range []string{"promote_overlay", "reject_overlay", "preview_overlay", "answer_decision", "update_progress", "task", "wait", "command"} {
-		if !contractcheck.ContainsString(promote, required) {
-			t.Fatalf("%s must include %q", surfaceImplementOverlayPromote, required)
-		}
-	}
-	for _, forbidden := range []string{"edit", "replace_lines", "delegate_dispatch"} {
-		if contractcheck.ContainsString(promote, forbidden) {
-			t.Fatalf("%s must not expose %q — integrate via promote_overlay/reject_overlay or task() for partial legs", surfaceImplementOverlayPromote, forbidden)
-		}
-	}
-}
-
 func TestCoordinatorSurfaceInvariants_taskIncludesWorkerLifecycle(t *testing.T) {
 	t.Parallel()
 	plans, err := surface.CompileToolPlans(1)
@@ -71,55 +55,6 @@ func TestCoordinatorSurfaceInvariants_orchestrationLifecycleOnPinnedSurfaces(t *
 				t.Fatalf("%s must include orchestration lifecycle tool %q — host can pin this surface while coordinator-core references it", id, tool)
 			}
 		}
-	}
-}
-
-func TestCoordinatorSurfaceInvariants_parkSurfaceOrchestrationLifecycle(t *testing.T) {
-	t.Parallel()
-	surfaces := loadImplementSurfaces(t)
-	park := surfaces[surfaceImplementPark]
-	for _, tool := range []string{"task", "pack_board"} {
-		if !contractcheck.ContainsString(park, tool) {
-			t.Fatalf("implement_park must expose %q for partial dispatch repair", tool)
-		}
-	}
-	if len(park) == 0 {
-		t.Fatalf("%s missing from coordinator-surfaces.yaml", surfaceImplementPark)
-	}
-	for _, tool := range orchestrationLifecycleTools {
-		if !contractcheck.ContainsString(park, tool) {
-			t.Fatalf("%s must include %q", surfaceImplementPark, tool)
-		}
-	}
-	for _, forbidden := range []string{"read", "grep", "promote_overlay", "delegate_dispatch"} {
-		if contractcheck.ContainsString(park, forbidden) {
-			t.Fatalf("%s must stay lean — unexpected tool %q", surfaceImplementPark, forbidden)
-		}
-	}
-}
-
-func TestCoordinatorSurfaceInvariants_synthesisNotRoutingSuperset(t *testing.T) {
-	t.Parallel()
-	surfaces := loadImplementSurfaces(t)
-	routing := surfaces[surfaceImplementRouting]
-	synthesis := surfaces[surfaceImplementSynthesis]
-	for _, orchestrationTool := range []string{"task", "wait", "pack_board"} {
-		if contractcheck.ContainsString(synthesis, orchestrationTool) {
-			t.Fatalf("implement_synthesis must not expose %q — wrapup is read-only", orchestrationTool)
-		}
-	}
-	if !contractcheck.ContainsString(synthesis, "update_progress") {
-		t.Fatal("implement_synthesis must expose update_progress for checklist reconciliation")
-	}
-	// Synthesis cannot contain the full routing surface.
-	var routingOnly []string
-	for _, routingTool := range routing {
-		if !contractcheck.ContainsString(synthesis, routingTool) {
-			routingOnly = append(routingOnly, routingTool)
-		}
-	}
-	if len(routingOnly) == 0 {
-		t.Fatalf("implement_synthesis (%d tools) is a superset of implement_routing (%d tools) — read-only wrapup must not contain every routing tool", len(synthesis), len(routing))
 	}
 }
 

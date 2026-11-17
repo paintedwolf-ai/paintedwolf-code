@@ -8,18 +8,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-var implementNativeToolkit = []string{
-	"restore_version",
-	"source_history",
-	"command",
-}
-
-var coordinatorNativeCeiling = []string{
-	"restore_version",
-	"source_history",
-	"command",
-}
-
 var readOnlyNativeSurvey = []string{
 	"source_history",
 	"command",
@@ -55,16 +43,6 @@ func profileGrants(prof sandbox.ToolProfile, tool string) bool {
 	return false
 }
 
-func TestProfileToolTier_implementHasFullNativeToolkit(t *testing.T) {
-	t.Parallel()
-	prof := loadToolProfileByID(t, "implement")
-	for _, tool := range implementNativeToolkit {
-		if !prof.Tools[tool] {
-			t.Fatalf("implement profile missing full-toolkit native %q", tool)
-		}
-	}
-}
-
 func TestProfileToolTier_implementHasVerify(t *testing.T) {
 	t.Parallel()
 	prof := loadToolProfileByID(t, "implement")
@@ -73,16 +51,6 @@ func TestProfileToolTier_implementHasVerify(t *testing.T) {
 	}
 	if !prof.Tools["command"] {
 		t.Fatal("implement must include command")
-	}
-}
-
-func TestProfileToolTier_implementHasScanDrillDown(t *testing.T) {
-	t.Parallel()
-	prof := loadToolProfileByID(t, "implement")
-	for _, tool := range []string{"scan_list", "scan_summary", "scan_query", "scan_pack", "scan_compare"} {
-		if !prof.Tools[tool] {
-			t.Fatalf("implement profile missing scan tool %q", tool)
-		}
 	}
 }
 
@@ -109,33 +77,6 @@ func TestProfileToolTier_readOnlyProfilesDenyMutations(t *testing.T) {
 			if !prof.Tools[tool] {
 				t.Fatalf("%s missing read-only survey tool %q", id, tool)
 			}
-		}
-	}
-}
-
-func TestProfileToolTier_coordinatorCeilingIncludesInvestigateNativeTools(t *testing.T) {
-	t.Parallel()
-	prof := loadToolProfileByID(t, "coordinator")
-	for _, tool := range coordinatorNativeCeiling {
-		if !prof.Tools[tool] {
-			t.Fatalf("coordinator profile missing native ceiling tool %q", tool)
-		}
-	}
-}
-
-// repoFacingProfiles lists tool profiles that survey the product repo.
-// web_research is excluded — external URLs only, no repo material.
-var repoFacingProfiles = []string{
-	"implement", "explore_readonly", "coordinator", "worker_readonly",
-	"plan_review_readonly", "plan_write_only",
-}
-
-func TestProfileToolTier_repoFacingProfilesHaveCommand(t *testing.T) {
-	t.Parallel()
-	for _, id := range repoFacingProfiles {
-		prof := loadToolProfileByID(t, id)
-		if !prof.Tools["command"] {
-			t.Fatalf("%s must include command", id)
 		}
 	}
 }

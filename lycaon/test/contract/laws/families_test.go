@@ -5,8 +5,10 @@ import (
 	"github.com/lycaon/lycaon/test/contract/laws/catalogload"
 	"github.com/lycaon/lycaon/test/contract/laws/forbiddencalls"
 	"github.com/lycaon/lycaon/test/contract/laws/outbox"
+	"github.com/lycaon/lycaon/test/contract/laws/promptrender"
 	"github.com/lycaon/lycaon/test/contract/laws/specsync"
 	"github.com/lycaon/lycaon/test/contract/laws/sqlschema"
+	"github.com/lycaon/lycaon/test/contract/laws/surfacematrix"
 )
 
 var families = []laws.Family{
@@ -15,4 +17,6 @@ var families = []laws.Family{
 	specsync.Family,
 	sqlschema.Family,
 	outbox.Family,
+	surfacematrix.Family,
+	promptrender.Family,
 }
