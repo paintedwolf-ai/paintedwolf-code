@@ -132,7 +132,7 @@ source "$1/test-run-isolation.sh"
 TEST_RUN_ROOT="$2/runs"
 test_run_create_isolation snapshot-cache
 printf '%s\n' "$TEST_RUN_DIR" > "$2/cache"
-bash -c 'printf ready > "$1/ready"; read -r line < "$1/release"' child "$2" &
+bash -c 'printf "ready\\n" > "$1/ready"; read -r line < "$1/release"' child "$2" &
 child=$!
 read -r line < "$2/ready"
 exec 8>&-
