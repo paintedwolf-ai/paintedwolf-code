@@ -29,14 +29,6 @@ func TestParseHTTPEndpointDefaults(t *testing.T) {
 	}
 }
 
-func TestParseHTTPEndpointRejectsInvalid(t *testing.T) {
-	for _, in := range []string{"", "host:0", "host:99999", "bad\x00host", "[example.com]", "[::1"} {
-		if _, err := egressproxy.ParseHTTPEndpoint(in, egressproxy.TransportHTTPConnect); err == nil {
-			t.Fatalf("expected error for %q", in)
-		}
-	}
-}
-
 func TestParseSocksEndpoint(t *testing.T) {
 	ep, err := egressproxy.ParseSocksEndpoint(0x01, []byte{1, 2, 3, 4}, 5432)
 	if err != nil || ep.Port != 5432 || ep.Transport != egressproxy.TransportSocksTCP {

@@ -57,7 +57,7 @@ func (l *pinLog) AppendRevisionPin(_ context.Context, execution string, pin tool
 }
 
 type harness struct {
-	t       *testing.T
+	t       testing.TB
 	db      *db.Store
 	root    string
 	tc      tools.ToolContext
@@ -75,7 +75,7 @@ type harness struct {
 // newHarness wires the shared owners to a real attached root, its source
 // ledger and the Files history service, with a system Trash that must never
 // be reached, and a real session scratch directory.
-func newHarness(t *testing.T, files map[string]string) *harness {
+func newHarness(t testing.TB, files map[string]string) *harness {
 	t.Helper()
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	raw := t.TempDir()
@@ -96,8 +96,9 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 	testutil.FailErr(t, "insert root", err)
 	ledger := sourceledger.New(sqlDB, t.TempDir())
 	service := projectsource.NewSourceMutationService(ledger.LedgerDB(), ledger)
+	var h *harness
 	service.Effects.SetTrashMover(func(context.Context, string) (desktoptrash.Receipt, error) {
-		t.Fatal("a command mutation reached the system Trash")
+		h.t.Fatal("a command mutation reached the system Trash")
 		return desktoptrash.Receipt{}, nil
 	})
 	tc := nativefixture.Context(root)
@@ -125,7 +126,8 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 	memory, memoryErr := toolcontract.NewProgramMemory(limits)
 	testutil.FailErr(t, "create program memory", memoryErr)
 	owners.Revisions.Memory = memory
-	return &harness{t: t, db: sqlDB, root: root, tc: tc, owners: owners, quota: quota, pins: pins, program: Program{Paths: paths}, service: service, walk: ledger.Walk, project: p}
+	h = &harness{t: t, db: sqlDB, root: root, tc: tc, owners: owners, quota: quota, pins: pins, program: Program{Paths: paths}, service: service, walk: ledger.Walk, project: p}
+	return h
 }
 
 // mutationBoundary admits every operation the frontend reaches for the default
