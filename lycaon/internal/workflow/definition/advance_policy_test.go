@@ -1,7 +1,11 @@
 package definition_test
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -46,57 +50,115 @@ phases:
 		t.Fatalf("work loop exit = %q", work.LoopExit)
 	}
 }
-func TestParsePhaseAdvanceRejectsNever(t *testing.T) {
-	_, err := workflowdef.ParseManifestYAML([]byte(`
-id: bad
-version: 1.0.0
-phases:
-  - id: x
-    activity_label: Test phase
-    advance:
-      when_gate_met: never
-`))
-	if err == nil {
-		t.Fatal("expected error for never")
-	}
-}
-func TestEffectiveAdvancePolicyShippedManifestParity(t *testing.T) {
-	reg, err := workflowdef.RegistryFromDirs("")
-	testutil.FailErr(t, "RegistryFromDirs", err)
 
-	hostWorkflows := map[string]struct{}{
-		"implement@1.0.0":       {},
-		"plan@1.0.1":            {},
-		"plan@1.0.0":            {},
-		"recon-pack@1.0.1":      {},
-		"recon-pack@1.0.0":      {},
-		"security-survey@2.0.1": {},
-		"security-survey@2.0.0": {},
-		"security-survey@1.0.0": {},
-		"options@1.0.0":         {},
-		"bugbash@1.1.0":         {},
-		"bugbash@1.0.0":         {},
+// Each enum field accepts exactly its declared values; the same manifest with
+// a declared value parses, so a rejection is the value and nothing else.
+func TestParsePhaseAdvanceEnumsAcceptOnlyDeclaredValues(t *testing.T) {
+	manifest := func(block string) []byte {
+		return []byte("id: enums\nversion: 1.0.0\nphases:\n  - id: x\n    activity_label: Test phase\n" + block)
 	}
-
-	for key, m := range reg.All() {
-		want := workflowdef.AdvanceWhenGateMetCoordinator
-		if _, ok := hostWorkflows[key]; ok {
-			want = workflowdef.AdvanceWhenGateMetAuto
-		}
-		for _, phase := range m.PhaseDefs {
-			if phase.AdvanceWhenGateMet != "" {
-				if m.ID == "plan" && (phase.ID == "research" || phase.ID == "intake") && phase.AdvanceWhenGateMet != workflowdef.AdvanceWhenGateMetCoordinator {
-					t.Fatalf("plan %s advance = %q want coordinator", phase.ID, phase.AdvanceWhenGateMet)
-				}
-				continue // other explicit overrides validated in manifest YAML tests
+	for _, tc := range []struct {
+		name  string
+		block func(string) string
+		valid map[string]func(workflowdef.PhaseDef) bool
+	}{
+		{
+			name:  "advance.when_gate_met",
+			block: func(v string) string { return "    advance:\n      when_gate_met: " + v + "\n" },
+			valid: map[string]func(workflowdef.PhaseDef) bool{
+				"auto": func(p workflowdef.PhaseDef) bool { return p.AdvanceWhenGateMet == workflowdef.AdvanceWhenGateMetAuto },
+				"coordinator": func(p workflowdef.PhaseDef) bool {
+					return p.AdvanceWhenGateMet == workflowdef.AdvanceWhenGateMetCoordinator
+				},
+			},
+		},
+		{
+			name:  "loop.exit",
+			block: func(v string) string { return "    loop:\n      exit: " + v + "\n" },
+			valid: map[string]func(workflowdef.PhaseDef) bool{
+				"next": func(p workflowdef.PhaseDef) bool { return p.LoopExit == workflowdef.LoopExitNext },
+				"self": func(p workflowdef.PhaseDef) bool { return p.LoopExit == workflowdef.LoopExitSelf },
+			},
+		},
+	} {
+		for value, typed := range tc.valid {
+			m, err := workflowdef.ParseManifestYAML(manifest(tc.block(value)))
+			testutil.FailErr(t, tc.name+" "+value, err)
+			phase, ok := m.PhaseByID("x")
+			if !ok || !typed(phase) {
+				t.Errorf("%s %q: parsed phase = %+v", tc.name, value, phase)
 			}
-			got := workflowdef.EffectiveAdvancePolicy(m, phase)
-			if got != want {
-				t.Fatalf("%s phase %q: effective policy = %q want %q", key, phase.ID, got, want)
+		}
+		for _, value := range []string{"never", "host", "Auto"} {
+			if _, err := workflowdef.ParseManifestYAML(manifest(tc.block(value))); err == nil {
+				t.Errorf("%s %q parsed; want a rejection", tc.name, value)
 			}
 		}
 	}
 }
+
+func TestEffectiveAdvancePolicy(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		controls string
+		advance  string
+		want     workflowdef.AdvanceWhenGateMet
+	}{
+		{name: "default is the coordinator", want: workflowdef.AdvanceWhenGateMetCoordinator},
+		{name: "host phase advance defaults to auto", controls: "host", want: workflowdef.AdvanceWhenGateMetAuto},
+		{name: "phase auto wins over the default", advance: "auto", want: workflowdef.AdvanceWhenGateMetAuto},
+		{name: "phase coordinator wins over host", controls: "host", advance: "coordinator", want: workflowdef.AdvanceWhenGateMetCoordinator},
+		{name: "phase auto under host", controls: "host", advance: "auto", want: workflowdef.AdvanceWhenGateMetAuto},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			src := "id: policy\nversion: 1.0.0\n"
+			if tc.controls != "" {
+				src += "controls:\n  phase_advance: " + tc.controls + "\n"
+			}
+			src += "phases:\n  - id: x\n    activity_label: Test phase\n"
+			if tc.advance != "" {
+				src += "    advance:\n      when_gate_met: " + tc.advance + "\n"
+			}
+			m, err := workflowdef.ParseManifestYAML([]byte(src))
+			testutil.FailErr(t, "ParseManifestYAML", err)
+			phase, ok := m.PhaseByID("x")
+			if !ok {
+				t.Fatal("missing phase x")
+			}
+			if got := workflowdef.EffectiveAdvancePolicy(m, phase); got != tc.want {
+				t.Fatalf("EffectiveAdvancePolicy = %q want %q", got, tc.want)
+			}
+			if got := workflowdef.PhaseHostPhaseAdvance(m, "x"); got != (tc.want == workflowdef.AdvanceWhenGateMetAuto) {
+				t.Fatalf("PhaseHostPhaseAdvance = %v for policy %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// A project overlay with an undeclared advance value stops the registry load;
+// the same overlay with a declared value loads and carries it.
+func TestRegistryLoadRejectsInvalidAdvanceValue(t *testing.T) {
+	load := func(value string) (*workflowdef.Registry, error) {
+		projectDir := t.TempDir()
+		dir := filepath.Join(projectDir, settingsoverlay.DirName(), "workflows", "advance-probe")
+		testutil.FailErr(t, "create overlay directory", os.MkdirAll(dir, 0o755))
+		src := "id: advance-probe\nversion: 1.0.0\nname: probe\ntrigger: /advance-probe\nrequest:\n  question: What?\n" +
+			"phases:\n  - id: x\n    activity_label: Probe phase\n    advance:\n      when_gate_met: " + value + "\n"
+		testutil.FailErr(t, "write overlay", os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(src), 0o644))
+		return workflowdef.RegistryFromDirs(projectDir)
+	}
+	reg, err := load("auto")
+	testutil.FailErr(t, "load registry with a valid overlay", err)
+	m, err := reg.Get("advance-probe", "1.0.0")
+	testutil.FailErr(t, "Get advance-probe", err)
+	if phase, _ := m.PhaseByID("x"); phase.AdvanceWhenGateMet != workflowdef.AdvanceWhenGateMetAuto {
+		t.Fatalf("overlay advance = %q want auto", phase.AdvanceWhenGateMet)
+	}
+	if _, err := load("never"); err == nil {
+		t.Fatal("registry loaded an overlay with advance.when_gate_met never")
+	}
+}
+
 func TestResolveAdvanceTargetLoopExitSelf(t *testing.T) {
 	m := workflowdef.FinalizeManifest(workflowdef.Manifest{
 		ID:      "self-loop",

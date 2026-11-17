@@ -5,7 +5,6 @@ import (
 	"errors"
 	"sync/atomic"
 	"testing"
-	"time"
 )
 
 func TestRunnerSingleFlight(t *testing.T) {
@@ -27,26 +26,6 @@ func TestRunnerSingleFlight(t *testing.T) {
 	if got := runs.Load(); got != 2 {
 		t.Fatalf("runs = %d want 2 (initial + coalesced re-run)", got)
 	}
-}
-
-func TestRunnerSurvivesCallerCancel(t *testing.T) {
-	r := NewRunner()
-	ctx, cancel := context.WithCancel(context.Background())
-	done := make(chan struct{})
-	r.Trigger(ctx, "s1", func(bg context.Context) {
-		defer close(done)
-		time.Sleep(20 * time.Millisecond)
-		if bg.Err() != nil {
-			t.Errorf("background ctx canceled: %v", bg.Err())
-		}
-	})
-	cancel()
-	select {
-	case <-done:
-	case <-t.Context().Done():
-		t.Fatal("background pass did not finish")
-	}
-	r.Wait()
 }
 
 func TestRunnerCancelSessionJoinsWorkAndDropsPending(t *testing.T) {

@@ -31,15 +31,18 @@ import (
 // Invariant: a denied capability ask leaves no authority, leases, or cached grants across broker entry points.
 const denialInvariantChat = "chat-denial-invariant"
 
-// denialInvariantCheckpoints denies every ask and counts how many were raised.
+// denialInvariantCheckpoints denies every ask, counts how many were raised and
+// keeps the approval plan each one minted.
 type denialInvariantCheckpoints struct {
 	*hitl.Checkpoints
 	asks     int
 	guidance string
+	plans    []*hitl.ApprovalPlan
 }
 
 func (c *denialInvariantCheckpoints) RequestCheckpoint(ctx context.Context, req hitl.CheckpointRequest) (*hitl.CheckpointResponse, error) {
 	c.asks++
+	c.plans = append(c.plans, req.ApprovalPlan)
 	response, err := c.Checkpoints.RequestCheckpoint(ctx, req)
 	if err != nil {
 		return nil, err
@@ -232,6 +235,37 @@ func TestSandboxBrokerDenialLeavesNoAuthority(t *testing.T) {
 			}
 			if held := s.authority(); len(held) > 0 {
 				t.Fatalf("%s recorded authority on a denied re-ask: %v; record authority only after an approving decision", tc.name, held)
+			}
+		})
+	}
+}
+
+// Every sandbox capability ask offers a quiet rung, except a protected read
+// path, which is an exact-path floor approval.
+func TestSandboxBrokerAsksOfferQuiet(t *testing.T) {
+	t.Parallel()
+	for _, tc := range denialInvariantCases(t) {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newDenialInvariantStores(t)
+			_, err := tc.request(s.ctx, s, "call-quiet")
+			testutil.FailErr(t, tc.name+" request", err)
+			if len(s.checkpoints.plans) != 1 || s.checkpoints.plans[0] == nil {
+				t.Fatalf("%s minted %d approval plans, want one", tc.name, len(s.checkpoints.plans))
+			}
+			plan := s.checkpoints.plans[0]
+			quiet := 0
+			for _, option := range plan.Options {
+				if option.Kind == hitl.ApprovalOptionQuiet {
+					quiet++
+				}
+			}
+			want := 1
+			if plan.Subject.Kind == hitl.ApprovalSubjectReadPathSet {
+				want = 0
+			}
+			if quiet != want {
+				t.Fatalf("%s plan (subject %s) offers %d quiet options, want %d", tc.name, plan.Subject.Kind, quiet, want)
 			}
 		})
 	}

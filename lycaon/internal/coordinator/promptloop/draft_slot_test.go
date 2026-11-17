@@ -77,14 +77,22 @@ func TestRejectEmitsNoDeleteForCoordinatorDraftSlot(t *testing.T) {
 		{ID: "u1", Role: api.MessageRoleUser, Content: "go"},
 		{ID: "slot-1", Role: api.MessageRoleAssistant, Content: "bad synthesis", Visibility: api.MessageVisibilityInternal},
 	}
-	_, err := loop.Tools.rejectBlockedAssistantTurn(
+	out, err := loop.Tools.rejectBlockedAssistantTurn(
 		context.Background(), "s1", history, "slot-1", "slot-1",
 		refusalForTest("Rejected: test\nCode: SYNTH_HANDLE_NOT_IN_LEGS"),
 		st,
 	)
 	testutil.FailErr(t, "rejectBlockedAssistantTurn", err)
+	for _, msg := range out {
+		if msg.Role == api.MessageRoleAssistant {
+			t.Fatalf("rejected assistant turn survives in history: %+v", out)
+		}
+	}
 	if len(recovered) != 1 || recovered[0].Kind != api.MessageKindCoordinatorGuidance || recovered[0].HostSignalID != api.DraftRecoverySignal("slot-1", "guidance:SYNTH_HANDLE_NOT_IN_LEGS") {
 		t.Fatalf("recovery lost its draft identity: %+v", recovered)
+	}
+	if recovered[0].Visibility != api.MessageVisibilityInternal {
+		t.Fatalf("guard nudge visibility = %q, want internal", recovered[0].Visibility)
 	}
 	if snapshotted != 1 {
 		t.Fatalf("snapshotted = %d want 1", snapshotted)

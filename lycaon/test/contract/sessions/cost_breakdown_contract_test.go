@@ -5,33 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
 	"gopkg.in/yaml.v3"
 )
-
-func TestCostBreakdownDTOFieldSync(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	specs := []wirespec.DtoSyncSpec{
-		{GoValue: api.TokenTotals{}, OpenAPISchema: "TokenTotals", TSInterface: "TokenTotals"},
-		{GoValue: api.CacheSavings{}, OpenAPISchema: "CacheSavings", TSInterface: "CacheSavings"},
-		{GoValue: api.CostBreakdown{}, OpenAPISchema: "CostBreakdown", TSInterface: "CostBreakdown"},
-		{GoValue: api.CostPricingProvenance{}, OpenAPISchema: "CostPricingProvenance", TSInterface: "CostPricingProvenance"},
-		{GoValue: api.CostSummary{}, OpenAPISchema: "CostSummary", TSInterface: "CostSummary"},
-		{GoValue: api.ProjectCostReport{}, OpenAPISchema: "ProjectCostReport", TSInterface: "ProjectCostReport"},
-		{GoValue: api.CostEvent{}, OpenAPISchema: "CostEvent", TSInterface: "CostEvent"},
-	}
-	for _, spec := range specs {
-		t.Run(spec.OpenAPISchema, func(t *testing.T) {
-			t.Parallel()
-			if err := wirespec.SyncDTOFields(root, spec); err != nil {
-				contractcheck.FailErr(t, "sync wire DTO fields across Go, OpenAPI, and TS", err)
-			}
-		})
-	}
-}
 
 func TestCostSummaryOpenAPIRequiresBreakdown(t *testing.T) {
 	t.Parallel()

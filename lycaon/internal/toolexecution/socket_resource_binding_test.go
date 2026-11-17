@@ -24,10 +24,18 @@ type resourceSocketReview struct {
 	hitl.CheckpointManager
 	runtime *approvalstate.SocketCapabilityRuntime
 	calls   int
+	// quiet counts the quiet rungs on the latest plan.
+	quiet int
 }
 
 func (r *resourceSocketReview) RequestCheckpoint(_ context.Context, req hitl.CheckpointRequest) (*hitl.CheckpointResponse, error) {
 	r.calls++
+	r.quiet = 0
+	for _, option := range req.ApprovalPlan.Options {
+		if option.Kind == hitl.ApprovalOptionQuiet {
+			r.quiet++
+		}
+	}
 	for _, option := range req.ApprovalPlan.Options {
 		if option.Rung != hitl.ApprovalRungOnce {
 			continue
@@ -88,6 +96,9 @@ func assertHostResourceSocketBinding(t *testing.T, operation string) {
 	if review.calls != 1 || first.AuthorizationSource != authzledger.AuthorizationSourceHuman {
 		t.Fatalf("pathname lease covered retained request: calls=%d, source=%s", review.calls, first.AuthorizationSource)
 	}
+	if review.quiet != 1 {
+		t.Fatalf("socket approval plan offers %d quiet rungs, want 1", review.quiet)
+	}
 	assertSocketLedgerSource(t, recorder.records, authzledger.ActionCapabilityGranted, authzledger.AuthorizationSourceHuman)
 	grant := first.SocketGrants[0]
 	if !runtime.GrantChat(tc.ChatSessionID(), grant, "reviewed-chat", "human-review", first.ActionDigest, nil) {
@@ -135,6 +146,32 @@ func assertSocketLedgerSource(t *testing.T, records []authzledger.CapabilityReco
 		}
 	}
 	t.Fatalf("ledger lacks %s", action)
+}
+
+// The direct-network card offers the same quiet rung as every other approval.
+func TestDirectIPApprovalOffersQuiet(t *testing.T) {
+	ctx := socketInvocationContext(t)
+	executor := NewExecutor(nil, nil, "")
+	review := &resourceSocketReview{}
+	executor.Approvals.SetCheckpointManager(ctx, review, resourceSocketGate{})
+	declared := []string{"https://rates.example.test:443"}
+	tc := httpRequestSocketContext(t, shortTempDir(t))
+	contract, ok := toolcontract.Lookup("command")
+	if !ok {
+		t.Fatal("command contract is unavailable")
+	}
+	tc.Invocation.Contract = contract
+	args := map[string]any{
+		"command":            "python3 rates.py",
+		"capability_request": map[string]any{"direct_ip": map[string]any{"declared_destinations": []any{declared[0]}}},
+	}
+	action, lease := DirectIPReview("command", args, tc, declared, nil)
+	approval, err := resourceSocketGate{}.Evaluate(ctx, action)
+	testutil.FailErr(t, "evaluate the explicit approval request", err)
+	testutil.FailErr(t, "direct-network approval", executor.Capabilities.awaitDirectIPCapability(ctx, action, lease, tc, approval))
+	if review.calls != 1 || review.quiet != 1 {
+		t.Fatalf("direct-network asks = %d with %d quiet rungs, want one ask with one quiet rung", review.calls, review.quiet)
+	}
 }
 
 type resourceSocketGate struct{ coveringHostResourceGate }
