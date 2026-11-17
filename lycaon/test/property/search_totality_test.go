@@ -70,7 +70,7 @@ func fixtureForKind(kind api.MessageKind) api.Message {
 }
 
 func TestSearchProjectionTotalOverMessageKinds(t *testing.T) {
-	for _, kind := range api.AllMessageKinds() {
+	for _, kind := range api.AllMessageKindValues() {
 		t.Run(string(kind), func(t *testing.T) {
 			if kindProjectionExempt[kind] {
 				return

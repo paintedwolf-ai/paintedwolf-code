@@ -1,0 +1,12 @@
+name: CompletionReportFindingDisposition
+description: What a finding asks for. `act` needs work; `accept` is a risk kept on purpose; `held` is a surface examined and found sound; `unresolved` is an unanswered review question.
+go_const_prefix: CompletionReportFindingDisposition
+values:
+  - id: act
+    comment: "needs work."
+  - id: accept
+    comment: "is an accepted risk."
+  - id: held
+    comment: "is a surface found sound."
+  - id: unresolved
+    comment: "is an unanswered review question."

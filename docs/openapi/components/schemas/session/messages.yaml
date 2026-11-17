@@ -458,18 +458,9 @@ components:
           minimum: 1
           description: Inclusive 1-based last line of a path_file reference's scope.
     MessageLiveStatus:
-      type: string
-      enum:
-      - streaming
-      - complete
-      description: Runtime-derived streaming affordance stamped at query/SSE time; not persisted
+      $ref: ../message-live-status.generated.yaml#/components/schemas/MessageLiveStatus
     DraftStatus:
-      type: string
-      enum:
-      - live
-      - committed
-      - withdrawn
-      - rejected
+      $ref: ../draft-status.generated.yaml#/components/schemas/DraftStatus
     DraftVersion:
       x-go-generate: true
       type: object
@@ -571,10 +562,7 @@ components:
           type: integer
           format: int64
     MessageVisibility:
-      type: string
-      enum:
-      - transcript
-      - internal
+      $ref: ../message-visibility.generated.yaml#/components/schemas/MessageVisibility
     PromptCacheTier:
       type: string
       description: >-
@@ -649,26 +637,7 @@ components:
         show_actions:
           type: boolean
     MessageKind:
-      type: string
-      enum:
-      - workflow_boundary
-      - progress_complete
-      - progress_update
-      - workflow_feedback
-      - workflow_explain
-      - draft
-      - index_warming
-      - superseded
-      - blueprint
-      - agent_note
-      - completion_report
-      - iteration_cap_closeout
-      - host_kick
-      - coordinator_guidance
-      - host_nudge
-      - host_loop_wake
-      - host_secret_redaction_notice
-      - user_continuation
+      $ref: ../message-kind.generated.yaml#/components/schemas/MessageKind
     RedactionKind:
       type: string
       description: >

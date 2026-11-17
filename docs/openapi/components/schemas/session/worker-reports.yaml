@@ -1,15 +1,7 @@
 components:
   schemas:
     WorkerSummaryStatus:
-      type: string
-      enum:
-        - complete
-        - partial
-        - failed
-        - canceled
-        - held
-        - open
-        - needs_decision
+      $ref: ../worker-summary-status.generated.yaml#/components/schemas/WorkerSummaryStatus
     WorkerBlockerClass:
       type: string
       description: Machine class on worker request_decision — never inferred from stderr prose
@@ -347,17 +339,7 @@ components:
           items:
             type: string
     CompletionReportScope:
-      type: string
-      description: >
-        What a grounded completion report is a report of. `session` covers a
-        chat session's own work; `phase` covers one workflow phase; `run` is the
-        run's declared deliverable, produced in the phase gated on
-        topology_report_delivered. Stated on the record, never re-derived from
-        live run state.
-      enum:
-      - session
-      - phase
-      - run
+      $ref: ../completion-report-scope.generated.yaml#/components/schemas/CompletionReportScope
     CompletionReportMeta:
       x-go-generate: true
       type: object
@@ -501,12 +483,7 @@ components:
           type: string
           description: One line saying what decided the level.
     CompletionReportAskEffort:
-      type: string
-      description: How much work saying yes commits the team to.
-      enum:
-      - small
-      - medium
-      - large
+      $ref: ../completion-report-ask-effort.generated.yaml#/components/schemas/CompletionReportAskEffort
     CompletionReportSetAside:
       x-go-generate: true
       type: object
@@ -532,15 +509,7 @@ components:
           type: string
           description: Why these groups need no assessment of their own.
     CompletionReportFindingDisposition:
-      type: string
-      description: >
-        What a finding asks for. `act` needs work; `accept` is a risk kept on
-        purpose; `held` is a surface examined and found sound; `unresolved` is an unanswered review question.
-      enum:
-      - act
-      - accept
-      - held
-      - unresolved
+      $ref: ../completion-report-finding-disposition.generated.yaml#/components/schemas/CompletionReportFindingDisposition
     CompletionReportFinding:
       x-go-generate: true
       type: object

@@ -14,7 +14,7 @@ import (
 
 func TestWorkerSummariesPreserveEveryUnfinishedStatus(t *testing.T) {
 	complete := &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}}
-	statuses := append(api.AllWorkerStatuses(), api.WorkerStatus("unknown"))
+	statuses := append(api.AllWorkerStatusValues(), api.WorkerStatus("unknown"))
 	for _, status := range statuses {
 		t.Run(string(status), func(t *testing.T) {
 			tasks := []api.WorkerTask{
@@ -77,7 +77,7 @@ func TestWorkerSummariesPreserveGradedDelivery(t *testing.T) {
 // Delivery, lifecycle, and overlay integration are independent axes. A stale
 // report or a clean merge must never turn an unfinished run into delivered work.
 func TestWorkerOutcomeConservationAcrossStateProduct(t *testing.T) {
-	statuses := append(api.AllWorkerStatuses(), api.WorkerStatus("future-state"))
+	statuses := append(api.AllWorkerStatusValues(), api.WorkerStatus("future-state"))
 	grades := []string{"complete", "partial", "blocked", "", "future-grade"}
 	merges := []api.WorkerMergeStatus{"", api.WorkerMergeStatusPending, api.WorkerMergeStatusMerged, api.WorkerMergeStatusRejected}
 	var corpus []api.WorkerTask

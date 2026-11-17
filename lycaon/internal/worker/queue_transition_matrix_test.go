@@ -195,7 +195,7 @@ func matrixTask(t *testing.T, queue worker.WorkerQueue, jobID string) *api.Worke
 
 func TestTerminalWorkerStatusesRejectEveryTransition(t *testing.T) {
 	for backend := range matrixQueueBackends {
-		for _, status := range api.AllWorkerStatuses() {
+		for _, status := range api.AllWorkerStatusValues() {
 			if !status.IsTerminal() {
 				continue
 			}
@@ -217,7 +217,7 @@ func TestTerminalWorkerStatusesRejectEveryTransition(t *testing.T) {
 
 func TestNonTerminalWorkerStatusesCancel(t *testing.T) {
 	for backend := range matrixQueueBackends {
-		for _, status := range api.AllWorkerStatuses() {
+		for _, status := range api.AllWorkerStatusValues() {
 			if status.IsTerminal() {
 				continue
 			}

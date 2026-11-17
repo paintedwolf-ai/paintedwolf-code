@@ -20651,10 +20651,10 @@ components:
         - system
     MessageLiveStatus:
       type: string
+      description: Runtime-derived streaming affordance stamped at query/SSE time; not persisted
       enum:
         - streaming
         - complete
-      description: Runtime-derived streaming affordance stamped at query/SSE time; not persisted
     DraftStatus:
       type: string
       enum:
@@ -28920,8 +28920,7 @@ components:
           type: boolean
     CompletionReportScope:
       type: string
-      description: |
-        What a grounded completion report is a report of. `session` covers a chat session's own work; `phase` covers one workflow phase; `run` is the run's declared deliverable, produced in the phase gated on topology_report_delivered. Stated on the record, never re-derived from live run state.
+      description: What a grounded completion report is a report of. `session` covers a chat session's own work; `phase` covers one workflow phase; `run` is the run's declared deliverable, produced in the phase gated on topology_report_delivered. Stated on the record, never re-derived from live run state.
       enum:
         - session
         - phase
@@ -28944,8 +28943,7 @@ components:
           minimum: 0
     CompletionReportFindingDisposition:
       type: string
-      description: |
-        What a finding asks for. `act` needs work; `accept` is a risk kept on purpose; `held` is a surface examined and found sound; `unresolved` is an unanswered review question.
+      description: What a finding asks for. `act` needs work; `accept` is a risk kept on purpose; `held` is a surface examined and found sound; `unresolved` is an unanswered review question.
       enum:
         - act
         - accept

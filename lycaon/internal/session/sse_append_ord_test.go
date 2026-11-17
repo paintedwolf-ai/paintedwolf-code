@@ -99,7 +99,7 @@ func appendSSEOrdCases() []sseOrdCase {
 			ToolResult: &wire.ToolResult{Content: `{"ok":true}`, Outcome: wire.ToolResultOutcomeCompleted},
 		}},
 	}
-	for _, kind := range wire.AllMessageKinds() {
+	for _, kind := range wire.AllMessageKindValues() {
 		msg := wire.Message{
 			Role:       wire.MessageRoleSystem,
 			Kind:       kind,

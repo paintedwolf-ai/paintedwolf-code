@@ -1,0 +1,5 @@
+name: MessageVisibility
+go_const_prefix: MessageVisibility
+values:
+  - id: transcript
+  - id: internal
