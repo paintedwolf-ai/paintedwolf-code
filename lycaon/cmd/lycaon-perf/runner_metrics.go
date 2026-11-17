@@ -35,32 +35,33 @@ func (s *runState) buildReport(resources resourceSummary) (report, error) {
 	return value, nil
 }
 
+// measuredScenarios must each report at least one latency sample.
+var measuredScenarios = []string{
+	"prompt.accept", "prompt.settle", "prompt.stream_replay", "project.create", "restart.ready",
+	"session.accept", "session.bootstrap.cold", "session.bootstrap.concurrent", "session.bootstrap.warm",
+	"session.prepare", "source.tree", "source.tree.first_page", "startup.ready",
+}
+
 func evaluateBudgets(value report) []string {
 	var violations []string
-	for _, name := range sortedMapKeys(value.Budgets.LatencyP95MS) {
-		limit := value.Budgets.LatencyP95MS[name]
-		metric, ok := value.Metrics[name]
-		if !ok {
-			if name == "restart.ready" && value.SoakSeconds == 0 {
-				continue
-			}
-			// An installed engine has no mock provider, so prompts are another run's scope.
-			if value.Mode == "installed" && strings.HasPrefix(name, "prompt.") {
-				continue
-			}
-			violations = append(violations, fmt.Sprintf("%s was not measured", name))
+	for _, name := range measuredScenarios {
+		if _, ok := value.Metrics[name]; ok {
 			continue
 		}
-		if metric.P95MS > limit {
-			violations = append(violations, fmt.Sprintf("%s p95 %.2fms > %.2fms", name, metric.P95MS, limit))
+		if name == "restart.ready" && value.SoakSeconds == 0 {
+			continue
 		}
+		// An installed engine has no mock provider, so prompts are another run's scope.
+		if value.Mode == "installed" && strings.HasPrefix(name, "prompt.") {
+			continue
+		}
+		violations = append(violations, fmt.Sprintf("%s was not measured", name))
 	}
 	actual := map[string]float64{
 		"peak_rss_bytes": float64(value.Resources.PeakRSSBytes), "rss_growth_bytes": float64(value.Resources.RSSGrowthBytes),
 		"peak_heap_bytes": float64(value.Resources.PeakHeapBytes), "heap_growth_bytes": float64(value.Resources.HeapGrowthBytes),
 		"peak_goroutines": float64(value.Resources.PeakGoroutines), "goroutine_growth": float64(value.Resources.GoroutineGrowth),
 		"peak_fds": float64(value.Resources.PeakFDs), "fd_growth": float64(value.Resources.FDGrowth),
-		"db_reader_mean_wait_ms": value.Resources.DBReaderMeanWaitMS, "db_writer_mean_wait_ms": value.Resources.DBWriterMeanWaitMS,
 		"peak_db_reader_open":   float64(value.Resources.PeakDBReaderOpen),
 		"peak_db_reader_in_use": float64(value.Resources.PeakDBReaderInUse),
 		"peak_db_writer_open":   float64(value.Resources.PeakDBWriterOpen),
@@ -116,10 +117,6 @@ func sortedMapKeys(values map[string]float64) []string {
 	}
 	slices.Sort(keys)
 	return keys
-}
-
-func harnessRunTimeout(soak time.Duration) time.Duration {
-	return soak + harnessCompletionGrace
 }
 
 func freePort(ctx context.Context) (int, error) {

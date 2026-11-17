@@ -2,7 +2,6 @@ package sourcecatalog
 
 import (
 	"context"
-	"os"
 	"runtime"
 	"testing"
 	"time"
@@ -10,14 +9,11 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// BenchmarkIndexRepository measures cold discovery over a real repository:
+// BenchmarkIndexRepository measures cold discovery over the benchmark tree:
 // how long until the index covers the tree, how long until it answers at all,
 // and what the generation costs in memory and on disk.
 func BenchmarkIndexRepository(b *testing.B) {
-	root := os.Getenv("PW_INDEX_BENCH_ROOT")
-	if root == "" {
-		b.Skip("set PW_INDEX_BENCH_ROOT to a repository")
-	}
+	root := testutil.BenchRoot(b)
 	b.Setenv("LYCAON_CONFIG_DIR", b.TempDir())
 	c := New()
 	b.Cleanup(func() {

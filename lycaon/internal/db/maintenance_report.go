@@ -28,8 +28,9 @@ const (
 const maintenanceRebuildAction = "free pages return when an upgrade or backup restore rebuilds the store"
 
 type maintenanceCounters struct {
-	wakes, drains, turns, busyTicks, forcedAdmissions     int64
-	passes, rowRounds, rowsDeleted                        int64
+	wakes, drains, drainsDone, turns, busyTicks           int64
+	forcedAdmissions                                      int64
+	passes, rowRounds, rowsDeleted, peakPassPages         int64
 	vacuumSlices, pagesRequested, pagesReclaimed          int64
 	checkpoints, checkpointFrames, checkpointPinnedFrames int64
 	turnWait, rowAndVacuumWork, checkpointWork            time.Duration
@@ -71,6 +72,7 @@ func (m *maintenanceState) notePass(report RetentionReport, rowsRan bool, turnWa
 		c.vacuumSlices += report.Vacuum.Slices
 		c.pagesRequested += report.Vacuum.PagesRequested
 		c.pagesReclaimed += report.Vacuum.PagesReclaimed
+		c.peakPassPages = max(c.peakPassPages, report.Vacuum.PagesReclaimed)
 		c.turnWait += turnWait
 		c.rowAndVacuumWork += work
 	})
@@ -83,6 +85,19 @@ func (m *maintenanceState) noteCheckpoint(result WALCheckpoint, work time.Durati
 		c.checkpointPinnedFrames += int64(result.PinnedFrames())
 		c.checkpointWork += work
 	})
+}
+
+// MaintenanceWork counts this process's maintenance without reading the store.
+func (s *Store) MaintenanceWork() map[string]int64 {
+	s.maintenanceState.mu.Lock()
+	defer s.maintenanceState.mu.Unlock()
+	c := s.maintenanceState.counters
+	return map[string]int64{
+		"maintenance_drains": c.drains, "maintenance_drains_done": c.drainsDone,
+		"maintenance_turns": c.turns, "maintenance_passes": c.passes,
+		"maintenance_vacuum_slices": c.vacuumSlices, "maintenance_pages_reclaimed": c.pagesReclaimed,
+		"maintenance_peak_pass_pages": c.peakPassPages,
+	}
 }
 
 // MaintenanceProgress separates this process's work from the store's current

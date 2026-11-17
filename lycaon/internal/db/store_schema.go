@@ -192,7 +192,7 @@ func snapshotConnectionDB(database DBTX) (*sql.DB, error) {
 }
 
 func verifySnapshot(ctx context.Context, path string, expectedVersion int) error {
-	db, err := sql.Open("sqlite", path)
+	db, err := openCounted(path)
 	if err != nil {
 		return fmt.Errorf("create snapshot: open verification database: %w", err)
 	}
@@ -279,7 +279,7 @@ func prepareStoreSchema(ctx context.Context, sqlDB *sql.DB, created bool) error 
 
 // referenceShape reads schema.sql into an in-memory store.
 func referenceShape(ctx context.Context) (Shape, error) {
-	ref, err := sql.Open("sqlite", "file:schemaref?mode=memory&cache=private")
+	ref, err := openCounted("file:schemaref?mode=memory&cache=private")
 	if err != nil {
 		return Shape{}, fmt.Errorf("open schema reference: %w", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/observability"
 )
 
@@ -117,6 +118,8 @@ func (a *ServeApp) startRunners(ctx context.Context) error {
 		}
 		return fmt.Errorf("background startup runner %s: %w", r.name, err)
 	}
+	// Boot is the store work done before background runners start.
+	observability.RecordWork("app.boot", db.ProcessWork().Counters())
 	for i := range a.runners.runners {
 		if a.runners.runners[i].mode == runnerStartupOnce {
 			continue

@@ -2,27 +2,17 @@ package projectsource
 
 import (
 	"context"
-	"fmt"
-	"os"
-	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func BenchmarkSourceIndexSearch(b *testing.B) {
 	b.Setenv("LYCAON_CONFIG_DIR", b.TempDir())
-	root := os.Getenv("PW_SEARCH_BENCH_ROOT")
-	if root == "" {
-		root = b.TempDir()
-		for i := range 4096 {
-			if err := os.WriteFile(filepath.Join(root, fmt.Sprintf("file-%04d.sql", i)), []byte("source"), 0o600); err != nil {
-				b.Fatalf("write fixture: %v", err)
-			}
-		}
-	}
+	root := testutil.BenchRoot(b)
 	catalog := sourcecatalog.New()
 	b.Cleanup(func() {
 		if err := catalog.Drain(context.Background()); err != nil {

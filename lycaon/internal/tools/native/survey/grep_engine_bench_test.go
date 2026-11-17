@@ -2,12 +2,13 @@ package survey
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"os"
 	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 
 	"github.com/lycaon/lycaon/internal/litprefilter"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -56,19 +57,17 @@ func BenchmarkGrepEngine_PrefilterDominatedTree(b *testing.B) {
 	}
 }
 
-// BenchmarkGrepEngine_ArtifactRepository uses PW_GREP_BENCH_ROOT for read-only replay.
+// BenchmarkGrepEngine_ArtifactRepository searches a tree of build artifacts
+// that the glob and binary detection must skip.
 func BenchmarkGrepEngine_ArtifactRepository(b *testing.B) {
-	dir := os.Getenv("PW_GREP_BENCH_ROOT")
-	if dir == "" {
-		dir = b.TempDir()
-		for i := range 1000 {
-			if err := os.WriteFile(filepath.Join(dir, "artifact_"+strconv.Itoa(i)+".o"), make([]byte, 4096), 0o644); err != nil {
-				b.Fatalf("write artifact: %v", err)
-			}
+	dir := b.TempDir()
+	for i := range 1000 {
+		if err := os.WriteFile(filepath.Join(dir, "artifact_"+strconv.Itoa(i)+".o"), make([]byte, 4096), 0o644); err != nil {
+			b.Fatalf("write artifact: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, "generated.ts"), []byte("RELEASE_BUILD\n"), 0o644); err != nil {
-			b.Fatalf("write text: %v", err)
-		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, "generated.ts"), []byte("RELEASE_BUILD\n"), 0o644); err != nil {
+		b.Fatalf("write text: %v", err)
 	}
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{
 		ID: toolprofiles.DefaultToolProfileID, Tools: map[string]bool{"grep": true, "read": true},
@@ -109,16 +108,10 @@ func BenchmarkGrepEngine_ArtifactRepository(b *testing.B) {
 
 // BenchmarkGrepFileCost splits one searched file's cost into the host read
 // through a call's read session, the session's path resolution alone, the
-// resolution a one-off read pays, and a plain read of the same bytes. It
-// replays PW_GREP_BENCH_ROOT read-only when set.
+// resolution a one-off read pays, and a plain read of the same bytes, over the
+// benchmark tree.
 func BenchmarkGrepFileCost(b *testing.B) {
-	dir := os.Getenv("PW_GREP_BENCH_ROOT")
-	if dir == "" {
-		dir = b.TempDir()
-		for i := range 500 {
-			testutil.FailErr(b, "write text fixture", os.WriteFile(filepath.Join(dir, "file_"+strconv.Itoa(i)+".go"), make([]byte, 6000), 0o644))
-		}
-	}
+	dir := testutil.BenchRoot(b)
 	var files []string
 	testutil.FailErr(b, "list fixture", filepath.WalkDir(dir, func(p string, d os.DirEntry, err error) error {
 		if err != nil || (d.IsDir() && p != dir && d.Name()[0] == '.') {

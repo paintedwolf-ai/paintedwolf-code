@@ -177,7 +177,7 @@ func OpenReadOnly(ctx context.Context, dbPath string) (*sql.DB, error) {
 
 func openReader(ctx context.Context, dbPath string) (*sql.DB, error) {
 	dsn := fileDSN(dbPath, readerDSNQuery)
-	sqlDB, err := sql.Open("sqlite", dsn)
+	sqlDB, err := openCounted(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open read-only database: %w", err)
 	}
@@ -227,7 +227,7 @@ func openWriter(ctx context.Context, dbPath string, opts StoreOptions) (*sql.DB,
 		query = "_txlock=immediate&_pragma=foreign_keys(on)&_pragma=busy_timeout(10000)&_pragma=synchronous(normal)&_pragma=temp_store(memory)&_pragma=cache_size(-2000)"
 	}
 	dsn := fileDSN(dbPath, query)
-	sqlDB, err := sql.Open("sqlite", dsn)
+	sqlDB, err := openCounted(dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}

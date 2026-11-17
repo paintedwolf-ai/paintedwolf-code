@@ -68,6 +68,7 @@ func drainMaintenance(ctx context.Context, sqlDB *Store, cfg RetentionConfig, tu
 			sqlDB.maintenanceState.noteCheckpoint(result, time.Since(passDone))
 		}
 		if report.TotalDeleted() == 0 && !report.IncrementalVacuumed {
+			sqlDB.maintenanceState.add(func(c *maintenanceCounters) { c.drainsDone++ })
 			return nil
 		}
 		if report.TotalDeleted() > 0 {

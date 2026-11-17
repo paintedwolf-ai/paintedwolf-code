@@ -11,7 +11,9 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/extensionstate"
+	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/project"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -144,11 +146,13 @@ func (o *Owner) accept(ctx context.Context, projectID string, req wire.ProjectRe
 func (o *Owner) execute(ctx context.Context, projectID string, req wire.ProjectRemovalRequest, assessment wire.ProjectRemovalAssessment, result wire.ProjectRemovalResult) (wire.ProjectRemovalResult, error) {
 	// Receipts outlive runner cancellation: a run stopped by shutdown still records the observed state.
 	receiptCtx := context.WithoutCancel(ctx)
-	if err := o.Delete(ctx, projectID, req.Force, func(progress wire.ProjectRemovalProgress) { o.progress(req.OperationID, progress) }); err != nil {
+	var work db.WorkTally
+	if err := o.Delete(db.WithWorkTally(ctx, &work), projectID, req.Force, func(progress wire.ProjectRemovalProgress) { o.progress(req.OperationID, progress) }); err != nil {
 		slog.WarnContext(ctx, "project removal did not complete", "project_id", projectID, "operation_id", req.OperationID, "err", err)
 		result = o.deletionFailure(receiptCtx, result, err)
 		return result, o.Store.save(receiptCtx, result, true)
 	}
+	observability.RecordWork("project.remove", work.Work().Counters())
 	result.ProjectState = "deleted"
 	if len(req.RemoveExtensions) == 0 {
 		return result, o.Store.save(receiptCtx, result, true)

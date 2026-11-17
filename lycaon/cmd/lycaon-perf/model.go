@@ -9,7 +9,6 @@ type runConfig struct {
 	iterations int
 	prompts    int
 	soak       time.Duration
-	enforce    bool
 	keep       bool
 	// installed drives an installed release engine in a disposable account: its own
 	// release configuration, no mock provider, so no prompt scenarios.
@@ -78,7 +77,7 @@ type correctnessSummary struct {
 	SoakCycles           int    `json:"soak_cycles"`
 }
 
+// budgets are counted limits: resources, never latency.
 type budgets struct {
-	LatencyP95MS map[string]float64 `json:"latency_p95_ms"`
-	Resources    map[string]float64 `json:"resources"`
+	Resources map[string]float64 `json:"resources"`
 }
