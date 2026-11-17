@@ -22,6 +22,7 @@ var Family = laws.Family{Name: "catalog-load", Rules: slices.Concat(
 	phaseGraph,
 	rulesConfig,
 	noticeClosure,
+	surfaces,
 )}
 
 var errNotRegistered = errors.New("not registered")
