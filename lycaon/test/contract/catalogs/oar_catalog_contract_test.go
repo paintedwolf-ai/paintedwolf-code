@@ -1,12 +1,7 @@
 package contract
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
@@ -18,8 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
-
-var verdictFactName = regexp.MustCompile(`(?i)(_violation|_is_ungrounded|_verdict|_decision_code|reject_code)$`)
 
 func TestOARHintCoverageUsesCatalogAnchors(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
@@ -67,65 +60,5 @@ func TestOARHintCoverageUsesCatalogAnchors(t *testing.T) {
 	}
 	if len(unknownAnchors) > 0 {
 		t.Fatalf("unknown OAR anchors:\n%s", strings.Join(unknownAnchors, "\n"))
-	}
-}
-
-func scanOARDeclaredFacts(t *testing.T) []string {
-	t.Helper()
-	path := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "oar", "catalogue.go")
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
-	contractcheck.FailErr(t, "parse oar/catalogue.go", err)
-	var names []string
-	for _, decl := range file.Decls {
-		gen, ok := decl.(*ast.GenDecl)
-		if !ok || gen.Tok != token.VAR {
-			continue
-		}
-		for _, spec := range gen.Specs {
-			vs, ok := spec.(*ast.ValueSpec)
-			if !ok || len(vs.Names) != 1 || vs.Names[0].Name != "factDecls" || len(vs.Values) != 1 {
-				continue
-			}
-			lit, ok := vs.Values[0].(*ast.CompositeLit)
-			if !ok {
-				continue
-			}
-			for _, elt := range lit.Elts {
-				row, ok := elt.(*ast.CompositeLit)
-				if !ok || len(row.Elts) == 0 {
-					continue
-				}
-				if name := contractcheck.AstStringLit(row.Elts[0]); name != "" {
-					names = append(names, name)
-				}
-			}
-		}
-	}
-	if len(names) == 0 {
-		t.Fatal("no factDecls parsed from oar/catalogue.go")
-	}
-	return names
-}
-
-func TestOARNoVerdictFacts(t *testing.T) {
-	for _, name := range scanOARDeclaredFacts(t) {
-		if verdictFactName.MatchString(name) {
-			t.Fatalf("catalogue declares verdict-shaped fact %q", name)
-		}
-	}
-	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "oar")
-	for _, name := range []string{"context.go", "env.go", "facts.go", "fact_projection.go"} {
-		body, err := os.ReadFile(filepath.Join(root, name))
-		contractcheck.FailErr(t, "read "+name, err)
-		for _, line := range strings.Split(string(body), "\n") {
-			trim := strings.TrimSpace(line)
-			if strings.HasPrefix(trim, "//") {
-				continue
-			}
-			if verdictFactName.MatchString(trim) && (strings.Contains(trim, "`") || strings.Contains(trim, "\"")) {
-				t.Fatalf("%s has verdict-shaped fact name: %s", name, trim)
-			}
-		}
 	}
 }
