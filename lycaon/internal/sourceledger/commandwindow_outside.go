@@ -163,7 +163,8 @@ func (s *Commands) outsideNamespace(ctx context.Context, projectID string) (stri
 func (s *Commands) snapshotOutside(ctx context.Context, spec OutsideRootSpec) (sourcesnapshot.Snapshot, error) {
 	return s.outsideSnapshots.Ensure(ctx, sourcesnapshot.Request{
 		Roots: []sourcesnapshot.Root{{Path: spec.Path}},
-		Scope: s.outsideSnapshots.OutsideScope(spec.Path, spec.Omit),
+		Scope:     s.outsideSnapshots.OutsideScope(spec.Path, spec.Omit),
+		Unwatched: true,
 	})
 }
 

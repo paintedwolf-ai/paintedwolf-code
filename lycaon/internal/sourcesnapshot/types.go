@@ -237,4 +237,7 @@ type Request struct {
 	// this request. Tests and single-purpose captures use it; the host's
 	// publications leave it nil.
 	Scope *sourcescope.Scope
+	// Unwatched surveys every root in full and binds no watcher, for a folder
+	// observed only around one command.
+	Unwatched bool
 }

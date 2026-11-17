@@ -28,8 +28,10 @@ type rootCapture struct {
 }
 
 func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
-	for _, root := range req.Roots {
-		repochange.EnsureRoot(ctx, root.Path)
+	if !req.Unwatched {
+		for _, root := range req.Roots {
+			repochange.EnsureRoot(ctx, root.Path)
+		}
 	}
 	rootRelease, err := s.acquireRootStorage(ctx, req.Roots, true)
 	if err != nil {
@@ -47,7 +49,7 @@ func (s *Store) converge(ctx context.Context, req Request) (Snapshot, error) {
 	for _, root := range req.Roots {
 		var plan deltaPlan
 		// Content verification reads every file; incremental capture waits for events.
-		if req.Verify == VerifyContent {
+		if req.Verify == VerifyContent || req.Unwatched {
 			plan = deltaPlan{upTo: s.deltas.sequence()}
 		} else {
 			repochange.WaitQuiet(ctx, root.Path, deltaQuietGrace, deltaQuietWait)

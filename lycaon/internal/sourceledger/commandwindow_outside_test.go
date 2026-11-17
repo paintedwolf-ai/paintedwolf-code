@@ -301,13 +301,20 @@ func settledOutsideCoverage(t *testing.T, dir string, scope func(string, []strin
 		if n != 2 {
 			return sourcesnapshot.Snapshot{}, nil, false
 		}
-		snapshot, err := fault.outsideSnapshotPort.Ensure(ctx, sourcesnapshot.Request{Roots: []sourcesnapshot.Root{{Path: folder}}, Scope: scope(folder, nil)})
+		snapshot, err := fault.outsideSnapshotPort.Ensure(ctx, sourcesnapshot.Request{Roots: []sourcesnapshot.Root{{Path: folder}}, Scope: scope(folder, nil), Unwatched: true})
 		captured = snapshot.FileCount
 		return snapshot, err, true
 	}
 	window := openOutsideWindow(t, store, ctx, root, dir)
 	closeAndSettle(t, ctx, window)
-	return storedCoverage(t, store, ctx, window.ID)[outsideKey(outside, outsideRel(t, dir))], captured
+	// A window that compared everything and saw no change keeps no row.
+	for _, folder := range window.Coverage() {
+		if folder.RootID == outside && folder.Path == outsideRel(t, dir) {
+			return folder, captured
+		}
+	}
+	t.Fatalf("window coverage %+v lacks %s", window.Coverage(), dir)
+	return FolderCoverage{}, 0
 }
 
 func TestEntryBudgetsBoundOutsideObservationACFL19(t *testing.T) {
