@@ -43,6 +43,11 @@ function sectionText(view: BriefingView, id: string): string | undefined {
   return view.snapshot?.result?.summary.find((section) => section.section_id === id)?.text || undefined;
 }
 
+function summaryPending(view: BriefingView): boolean {
+  return view.snapshot?.status === "pending" && !view.stalled &&
+    view.snapshot.pending_sections.some((id) => id === "purpose" || id === "change");
+}
+
 /** Maps the host's answer, and text held from an earlier revision, to what the region shows. */
 function activitySummaryState(view: BriefingView, held: HeldSummaryText | null): ActivitySummaryState {
   const snapshot = view.snapshot;
@@ -51,10 +56,8 @@ function activitySummaryState(view: BriefingView, held: HeldSummaryText | null):
   // A settled answer with no summary text counts as not arrived.
   const ended = view.stalled || snapshot?.status === "failed" || snapshot?.status === "complete";
   const recordId = snapshot?.result?.evidence_ref.record_id;
-  if ((purpose || change) && recordId) {
-    const changePending = snapshot?.status === "pending" && !view.stalled && snapshot.pending_sections.includes("change");
-    const purposePending = snapshot?.status === "pending" && !view.stalled && snapshot.pending_sections.includes("purpose");
-    return { kind: "ready", purpose: purpose ?? held?.purpose, change, recordId, changePending, purposePending };
+  if ((purpose || change) && recordId && !summaryPending(view)) {
+    return { kind: "ready", purpose: purpose ?? held?.purpose, change, recordId };
   }
   const earlier = held?.purpose;
   return ended ? { kind: "missing", purpose: earlier } : { kind: "pending", purpose: earlier };
@@ -80,7 +83,7 @@ export function useActivityBriefingSlots(args: Args): ToolBriefingSlots {
   const [held, setHeld] = createSignal<HeldSummaryText | null>(null);
   createEffect(() => {
     const purpose = sectionText(view(), "purpose");
-    if (purpose) setHeld({ purpose, recordId: view().snapshot?.result?.evidence_ref.record_id });
+    if (purpose && !summaryPending(view())) setHeld({ purpose, recordId: view().snapshot?.result?.evidence_ref.record_id });
   });
   const state = createMemo(() => activitySummaryState(view(), held()));
   const running = () => {

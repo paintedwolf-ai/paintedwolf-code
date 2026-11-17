@@ -173,7 +173,8 @@ An expanded activity is an action card: its descriptor comes from the activity's
 
 Activity summaries have two labelled sections: **Intent** explains why the
 activity ran; **Outcome** explains what happened. Each section keeps its own
-pending space, AI mark, inline code, and **Show all** control. A running activity
+pending space, AI mark, inline code, and **Show all** control. The sections
+reveal together with one fade when summary generation settles. A running activity
 says its outcome comes after settlement; unavailable sections offer a retry
 without hiding available text. Intent remains visible while settlement requests
 a new summary. **Summary evidence** opens the supporting record in Files.

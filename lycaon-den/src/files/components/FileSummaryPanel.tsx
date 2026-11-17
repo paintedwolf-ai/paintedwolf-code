@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo } from "solid-js";
+import { For, Show, createMemo } from "solid-js";
 import type {
   FileBriefingLocation,
   FileBriefingSection,
@@ -7,7 +7,7 @@ import { languageLabelForDetectedLanguage } from "../../components/source/editor
 import { MarkdownBody } from "../../components/transcript/MarkdownBody.tsx";
 import { BriefingEvidenceLink, BriefingMark, BriefingSummary } from "../../briefing/BriefingSummary.tsx";
 import { splitBriefingInline } from "../../briefing/briefing-inline.ts";
-import { SUMMARY_FADE_CLASS, claimSummaryFade } from "../../briefing/summary-fade.ts";
+import { SUMMARY_FADE_CLASS, createSummaryFade } from "../../briefing/summary-fade.ts";
 import type { LiveFileBriefing } from "./file-briefing-live.ts";
 import type { FileBriefingTarget } from "./file-briefing-target.ts";
 
@@ -55,19 +55,12 @@ type SummarySectionProps = {
   section: FileBriefingSection;
   locations: ReadonlyMap<string, FileBriefingLocation | null>;
   onOpen: (line: number) => void;
-  /** Fade key when the section arrived while the panel was watching. */
-  fadeKey?: string;
 };
 
-/** A section that arrives while watched fades in once. */
 function FileSummarySectionLine(props: SummarySectionProps) {
-  return <NavigableSectionLine {...props} fade={claimSummaryFade(props.fadeKey)} />;
-}
-
-function NavigableSectionLine(props: SummarySectionProps & { fade?: boolean }) {
   const parts = createMemo(() => splitBriefingInline(props.section.text));
   return (
-    <p class="den-file-summary__section" classList={{ [SUMMARY_FADE_CLASS]: props.fade === true }}>
+    <p class="den-file-summary__section">
       <BriefingMark /> <strong>{sectionLabel[props.section.kind]}:</strong>{" "}
       <For each={parts()}>
         {(part) => {
@@ -102,7 +95,7 @@ export function FileSummaryPanel(props: Props) {
   const locations = createMemo(() =>
     fileSummaryLocationsByName(props.summary?.locations ?? []),
   );
-  const hasSections = () => (props.summary?.sections.length ?? 0) > 0;
+  const hasSections = () => props.summary?.status !== "pending" && (props.summary?.sections.length ?? 0) > 0;
   const hasExplanation = () => hasSections() || Boolean(fallbackMarkdown());
   const languageLabel = createMemo(() =>
     languageLabelForDetectedLanguage(
@@ -116,15 +109,9 @@ export function FileSummaryPanel(props: Props) {
     return "Summarize current file";
   };
   const summarizing = () => props.loading || props.summary?.status === "pending";
-  // Sections that arrive after the panel saw them pending fade in once.
-  let watchedPending = false;
-  createEffect(() => {
-    if (summarizing()) watchedPending = true;
-  });
-  const fadeKey = (kind: string) => {
-    const record = props.summary?.evidence_ref?.record_id;
-    return watchedPending && record ? `${record}\0${kind}` : undefined;
-  };
+  const fade = createSummaryFade(() => hasExplanation() && props.summary
+    ? `${props.summary.evidence_ref?.record_id ?? props.summary.attempt_id}\0file-summary`
+    : undefined);
 
   return (
     <section
@@ -170,19 +157,18 @@ export function FileSummaryPanel(props: Props) {
         <Show
           when={hasSections()}
           fallback={
-            <div class="den-file-summary__markdown" data-testid="file-summary-fallback">
+            <div class="den-file-summary__markdown" classList={{ [SUMMARY_FADE_CLASS]: fade() }} data-testid="file-summary-fallback">
               <MarkdownBody untrusted source={fallbackMarkdown()} />
             </div>
           }
         >
-          <div class="den-file-summary__sections" data-testid="file-summary-sections">
+          <div class="den-file-summary__sections" classList={{ [SUMMARY_FADE_CLASS]: fade() }} data-testid="file-summary-sections">
             <For each={props.summary?.sections ?? []}>
               {(section) => (
                 <FileSummarySectionLine
                   section={section}
                   locations={locations()}
                   onOpen={(line) => props.onOpenLocation(props.target, line)}
-                  fadeKey={fadeKey(section.kind)}
                 />
               )}
             </For>

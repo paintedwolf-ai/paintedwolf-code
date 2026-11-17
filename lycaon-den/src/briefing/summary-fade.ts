@@ -1,9 +1,11 @@
+import { createMemo, type Accessor } from "solid-js";
+
 /** Den's entry fade; reduced motion collapses it globally. */
 export const SUMMARY_FADE_CLASS = "den-enter-fade";
 
 const FADE_LIMIT = 256;
 
-/** Summary sections already shown, so remounts and reopens skip the fade. */
+/** Summaries and sections already shown, so remounts and reopens skip the fade. */
 const shown = new Set<string>();
 
 function normalize(key: string | undefined): string {
@@ -31,4 +33,11 @@ export function markSummaryShown(key: string | undefined): void {
 
 export function clearSummaryFades(): void {
   shown.clear();
+}
+
+/** A completed summary fades as one group, once, only if it arrives while open. */
+export function createSummaryFade(key: Accessor<string | undefined>): Accessor<boolean> {
+  const identity = createMemo(key);
+  markSummaryShown(identity());
+  return createMemo(() => claimSummaryFade(identity()));
 }

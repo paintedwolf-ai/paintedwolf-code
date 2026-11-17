@@ -2,12 +2,12 @@ import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import { BriefingMark } from "./BriefingSummary.tsx";
 import { briefingCopy } from "./briefing-copy.ts";
 import { splitBriefingInline } from "./briefing-inline.ts";
-import { SUMMARY_FADE_CLASS, claimSummaryFade, markSummaryShown } from "./summary-fade.ts";
+import { SUMMARY_FADE_CLASS, createSummaryFade } from "./summary-fade.ts";
 
 /** What an opened activity's summary region shows. */
 export type ActivitySummaryState =
   | { kind: "pending"; purpose?: string }
-  | { kind: "ready"; purpose?: string; change?: string; recordId: string; changePending: boolean; purposePending?: boolean }
+  | { kind: "ready"; purpose?: string; change?: string; recordId: string }
   | { kind: "missing"; purpose?: string };
 
 type Props = {
@@ -29,24 +29,16 @@ function Inline(props: { text: string }) {
   );
 }
 
-function ArrivingText(props: { text: string; fadeKey: string }) {
-  const fade = claimSummaryFade(props.fadeKey);
-  return <span class={fade ? SUMMARY_FADE_CLASS : undefined}><Inline text={props.text} /></span>;
-}
-
 /** Each section retains its reserved space until the person expands it. */
 function ActivitySummarySection(props: {
   id: "intent" | "outcome";
   label: string;
   text?: string;
-  recordId?: string;
   waiting: string;
   missing: boolean;
   onRetry: () => void;
 }) {
   const held = !props.text;
-  const fadeKey = () => `${props.recordId ?? ""}\0activity-${props.id}`;
-  if (props.text) markSummaryShown(fadeKey());
   let section: HTMLDivElement | undefined;
   let measure: HTMLParagraphElement | undefined;
   const [clamped, setClamped] = createSignal(false);
@@ -85,7 +77,7 @@ function ActivitySummarySection(props: {
               {props.missing ? briefingCopy.notArrived : props.waiting}
             </span>
           }>
-            {(text) => <ArrivingText text={text} fadeKey={fadeKey()} />}
+            {(text) => <Inline text={text} />}
           </Show>
         </p>
         <p class="den-activity-summary__measure" aria-hidden="true" ref={(el) => (measure = el)}>
@@ -104,21 +96,24 @@ function ActivitySummarySection(props: {
 
 export function ActivitySummary(props: Props) {
   const ready = () => props.state.kind === "ready" ? props.state : undefined;
+  const fade = createSummaryFade(() => ready() ? `${ready()!.recordId}\0activity` : undefined);
   return (
     <div class="den-activity-summary-frame">
       <div class="den-activity-summary" data-testid="activity-summary" data-state={props.state.kind}>
+        <div class="den-activity-summary__sections" classList={{ [SUMMARY_FADE_CLASS]: fade() }}>
         <ActivitySummarySection
-          id="intent" label="Intent" text={props.state.purpose} recordId={ready()?.recordId}
+          id="intent" label="Intent" text={props.state.purpose}
           waiting={briefingCopy.waiting}
-          missing={props.state.kind === "missing" || (props.state.kind === "ready" && !props.state.purpose && !props.state.purposePending)}
+          missing={props.state.kind === "missing" || (props.state.kind === "ready" && !props.state.purpose)}
           onRetry={props.onRetry}
         />
         <ActivitySummarySection
-          id="outcome" label="Outcome" text={ready()?.change} recordId={ready()?.recordId}
+          id="outcome" label="Outcome" text={ready()?.change}
           waiting={props.running ? briefingCopy.resultPending : briefingCopy.waiting}
-          missing={!props.running && (props.state.kind === "missing" || (props.state.kind === "ready" && !props.state.change && !props.state.changePending))}
+          missing={!props.running && (props.state.kind === "missing" || (props.state.kind === "ready" && !props.state.change))}
           onRetry={props.onRetry}
         />
+        </div>
       </div>
     </div>
   );

@@ -146,8 +146,6 @@
 /* Each section reserves space independently while its summary arrives. */
 @utility den-activity-summary {
   --den-activity-summary-lines: 3;
-  display: grid;
-  gap: 8px;
   min-width: 0;
   padding: 6px 10px;
   border-radius: 6px;
@@ -158,6 +156,12 @@
   & .den-briefing-mark {
     line-height: 1.5;
   }
+}
+
+@utility den-activity-summary__sections {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
 }
 
 @utility den-activity-summary__section {

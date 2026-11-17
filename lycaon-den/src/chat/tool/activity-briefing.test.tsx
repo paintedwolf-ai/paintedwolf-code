@@ -133,6 +133,12 @@ describe("useActivityBriefingSlots", () => {
       kind: "snapshot",
       snapshot: snapshot({ target_key: "k1", status: "pending", pending_sections: ["change"] }, { purpose: "Runs the suite." }),
     });
+    await waitFor(() => expect(view.container.textContent).toContain(briefingCopy.resultPending));
+    expect(view.container.textContent).not.toContain("Runs the suite.");
+    applyBriefingEvent("p", {
+      kind: "snapshot",
+      snapshot: snapshot({ target_key: "k1", status: "complete" }, { purpose: "Runs the suite." }),
+    });
     await waitFor(() => expect(view.container.textContent).toContain("Runs the suite."));
 
     nextReply = snapshot({ target_key: "k2", status: "complete" }, { outcome: "Completed" });
@@ -149,9 +155,14 @@ describe("useActivityBriefingSlots", () => {
       kind: "snapshot",
       snapshot: snapshot({ target_key: "k2", status: "pending", pending_sections: ["purpose"] }, { change: "Outcome arrived first." }),
     });
-    await waitFor(() => expect(view.container.textContent).toContain("Outcome arrived first."));
+    await waitFor(() => expect(view.container.textContent).toContain(briefingCopy.waiting));
+    expect(view.container.textContent).not.toContain("Outcome arrived first.");
     expect(view.container.querySelector('[data-section="intent"]')?.textContent).toContain("Intent: Runs the suite.");
-    expect(view.container.querySelector('[data-section="outcome"]')?.textContent).toContain("Outcome: Outcome arrived first.");
+    applyBriefingEvent("p", {
+      kind: "snapshot",
+      snapshot: snapshot({ target_key: "k2", status: "complete" }, { purpose: "Runs the suite.", change: "Outcome arrived first." }),
+    });
+    await waitFor(() => expect(view.container.querySelector('[data-section="outcome"]')?.textContent).toContain("Outcome: Outcome arrived first."));
 
   });
 });
