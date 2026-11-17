@@ -17,7 +17,7 @@ func TestDeclaredNativeEvidenceToolsCaptureContent(t *testing.T) {
 		"path": "pkg/main.go", "paths": []any{"pkg/main.go"}, "path_a": "pkg/a.go", "path_b": "pkg/b.go",
 		"dest": "pkg/out.json", "url": "https://docs.example.test/page",
 	}
-	content := `{"path":"pkg/main.go","url":"https://docs.example.test/page","results":[{"url":"https://docs.example.test/page"}],"outcome":"accepted"}`
+	content := `{"path":"pkg/main.go","url":"https://docs.example.test/page","results":[{"url":"https://docs.example.test/page"}],"anchors":[{"path":"pkg/main.go","line":3,"content":"func main() {}"}],"outcome":"accepted"}`
 	native := 0
 	for _, tool := range binding.DeclaredToolNames() {
 		if ingestion.IsMCPToolName(tool) {

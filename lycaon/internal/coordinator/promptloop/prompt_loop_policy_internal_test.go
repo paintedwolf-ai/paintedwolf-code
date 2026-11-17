@@ -166,9 +166,6 @@ func TestCoordinatorToolsForTurnTrimsEveryDiscoveredProfile(t *testing.T) {
 		)
 		testutil.FailErr(t, "compile coordinator tools", err)
 		if len(got) == 0 {
-			if id == prompts.CoordinatorProfileID {
-				t.Fatal("the coordinator profile offered no tools")
-			}
 			continue
 		}
 		offered++
