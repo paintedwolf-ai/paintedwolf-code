@@ -11,19 +11,18 @@ import (
 )
 
 type QueuedWorkerScripts struct {
-	mu      sync.Mutex
-	queues  map[string][][]api.ToolCall
-	active  map[string][]api.ToolCall
-	step    map[string]int
-	results map[string]string
+	mu               sync.Mutex
+	queues           map[string][][]api.ToolCall
+	active           map[string][]api.ToolCall
+	step             map[string]int
+	coordinatorReply string
 }
 
 func NewQueuedWorkerScripts() *QueuedWorkerScripts {
 	return &QueuedWorkerScripts{
-		queues:  map[string][][]api.ToolCall{},
-		active:  map[string][]api.ToolCall{},
-		step:    map[string]int{},
-		results: map[string]string{},
+		queues: map[string][][]api.ToolCall{},
+		active: map[string][]api.ToolCall{},
+		step:   map[string]int{},
 	}
 }
 
@@ -31,6 +30,12 @@ func (q *QueuedWorkerScripts) Push(agentType string, script ...api.ToolCall) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.queues[agentType] = append(q.queues[agentType], script)
+}
+
+func (q *QueuedWorkerScripts) SetCoordinatorReply(reply string) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.coordinatorReply = reply
 }
 
 func (q *QueuedWorkerScripts) Mock(h **Harness) *llm.KickDrivenMock {
@@ -49,7 +54,7 @@ func (q *QueuedWorkerScripts) Mock(h **Harness) *llm.KickDrivenMock {
 					}
 					q.queues["coordinator"] = list[1:]
 					q.step["coordinator"] = 0
-					if reply := q.results["coordinator"]; reply != "" {
+					if reply := q.coordinatorReply; reply != "" {
 						return modelcall.Completion{Content: reply}
 					}
 				}

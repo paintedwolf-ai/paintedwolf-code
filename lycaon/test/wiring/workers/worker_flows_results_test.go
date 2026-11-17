@@ -196,14 +196,13 @@ func TestFlowSurveyorIsReusedAsImplementer(t *testing.T) {
 	f.wantPrimary("token.go", fixed)
 }
 
-// Flow 14. The coordinator makes a small edit itself; no worker exists.
 func TestFlowSmallEditNeedsNoWorker(t *testing.T) {
 	f := newWorkerFlow(t, "flow-small-edit")
 	f.seed("direct.go", "package auth\n")
 	const edited = "package auth\n\nvar Direct = 1\n"
 
 	wiring.AttachDefaultAmbient(t, f.h, f.ctx, f.sess.ID)
-	f.scripts.results["coordinator"] = "Set Direct in direct.go. [command#1]\n[verify: inspection - edit applied]"
+	f.scripts.SetCoordinatorReply("Set Direct in direct.go. [command#1]\n[verify: inspection - edit applied]")
 	f.scripts.Push("coordinator", writes("direct.go", edited),
 		api.ToolCall{ID: "progress", Name: "update_progress", Args: f.h.ProgressUpdateArgs(t, f.ctx, f.sess.ID, "## Progress\n- [x] direct edit\n")})
 	_, err := f.h.Sessions.Manager.Submissions.Prompt(f.ctx, f.sess.ID, "Set Direct to 1 in direct.go.")
