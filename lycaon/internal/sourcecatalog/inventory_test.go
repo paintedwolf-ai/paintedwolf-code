@@ -74,8 +74,7 @@ func TestIndexPublishesBeforeYieldingToInitialInventory(t *testing.T) {
 		t.Fatalf("index continued before structural coverage: %v", err)
 	default:
 	}
-	writerContext := ctx
-	unwrite, err := store.writer.Write(writerContext, store.writable)
+	unwrite, err := store.writer.Write(ctx, store.writable)
 	testutil.FailErr(t, "acquire writer during inventory wait", err)
 	unwrite()
 	var revision int64

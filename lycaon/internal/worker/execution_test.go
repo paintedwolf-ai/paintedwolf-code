@@ -143,8 +143,10 @@ func TestConcurrencyCapEnforced(t *testing.T) {
 		})
 	}
 
-	pollCtx := ctx
-	go poller.Run(pollCtx)
+	pollCtx, stopPolling := context.WithCancel(ctx)
+	polled := make(chan struct{})
+	go func() { poller.Run(pollCtx); close(polled) }()
+	t.Cleanup(func() { stopPolling(); <-polled })
 
 	testutil.WaitFor(t, "two tasks run at once", func() bool {
 		return atomic.LoadInt32(&running) >= 2

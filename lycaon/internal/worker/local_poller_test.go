@@ -212,8 +212,10 @@ func TestPollerRecoversExecutorPanic(t *testing.T) {
 	})
 	testutil.FailErr(t, "EnqueueWithProjectID", err)
 
-	pollCtx := ctx
-	go poller.Run(pollCtx)
+	pollCtx, stopPolling := context.WithCancel(ctx)
+	polled := make(chan struct{})
+	go func() { poller.Run(pollCtx); close(polled) }()
+	t.Cleanup(func() { stopPolling(); <-polled })
 
 	testutil.WaitFor(t, "the task fails", func() bool {
 		got, ok := queue.Get(id)
