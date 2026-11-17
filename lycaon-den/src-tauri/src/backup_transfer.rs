@@ -593,8 +593,7 @@ mod tests {
         std::fs::write(&target, b"previous").expect("seed previous");
         let (release, hold) = std::sync::mpsc::channel();
         let response = response(1024, vec![0; 1024], Some(hold)).await;
-        let receiving = receive_archive(response, &target, &dir, |_, _, _| {});
-        tokio::pin!(receiving);
+        let mut receiving = Box::pin(receive_archive(response, &target, &dir, |_, _, _| {}));
         // The body is held, so the download is in flight once its partial file exists.
         let partial = async {
             while !std::fs::read_dir(&dir).expect("directory").any(|entry| {
@@ -609,6 +608,7 @@ mod tests {
             result = &mut receiving => panic!("completed before cancellation: {result:?}"),
             _ = partial => {},
         }
+        // Dropping the download is its cancellation.
         drop(receiving);
         drop(release);
         assert_eq!(std::fs::read(&target).expect("prior intact"), b"previous");
