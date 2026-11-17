@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -18,23 +19,25 @@ import (
 )
 
 func TestCaptureLLMCompleteWritesTiming(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "complete.jsonl")
-	t.Setenv("LYCAON_LLM_DEBUG", "1")
-	t.Setenv("LYCAON_LLM_DEBUG_FILE", logPath)
-	observability.CloseLLMDebug()
+	synctest.Test(t, func(t *testing.T) {
+		dir := t.TempDir()
+		logPath := filepath.Join(dir, "complete.jsonl")
+		t.Setenv("LYCAON_LLM_DEBUG", "1")
+		t.Setenv("LYCAON_LLM_DEBUG_FILE", logPath)
+		observability.CloseLLMDebug()
 
-	req := modelcall.CompletionRequest{Model: "mock", Messages: []api.Message{{Role: api.MessageRoleUser, Content: "hi"}}}
-	if _, err := captureLLMComplete("mock", providerprofile.Default(), req, func() (*modelcall.Completion, error) {
-		time.Sleep(5 * time.Millisecond)
-		return &modelcall.Completion{Content: "ok"}, nil
-	}); err != nil {
-		t.Fatalf("captureLLMComplete: %v", err)
-	}
-	data, err := os.ReadFile(logPath)
-	if err != nil || len(data) == 0 {
-		t.Fatalf("read log: %v len=%d", err, len(data))
-	}
+		req := modelcall.CompletionRequest{Model: "mock", Messages: []api.Message{{Role: api.MessageRoleUser, Content: "hi"}}}
+		if _, err := captureLLMComplete("mock", providerprofile.Default(), req, func() (*modelcall.Completion, error) {
+			time.Sleep(5 * time.Millisecond)
+			return &modelcall.Completion{Content: "ok"}, nil
+		}); err != nil {
+			t.Fatalf("captureLLMComplete: %v", err)
+		}
+		data, err := os.ReadFile(logPath)
+		if err != nil || len(data) == 0 {
+			t.Fatalf("read log: %v len=%d", err, len(data))
+		}
+	})
 }
 
 // A utility complete with a Purpose label logs one self-attributing row under
@@ -87,55 +90,57 @@ func TestCaptureLLMCompletePurposeLabel(t *testing.T) {
 }
 
 func TestCaptureLLMStreamWritesTimingAfterCollect(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "stream.jsonl")
-	t.Setenv("LYCAON_LLM_DEBUG", "1")
-	t.Setenv("LYCAON_LLM_DEBUG_FILE", logPath)
-	observability.CloseLLMDebug()
+	synctest.Test(t, func(t *testing.T) {
+		dir := t.TempDir()
+		logPath := filepath.Join(dir, "stream.jsonl")
+		t.Setenv("LYCAON_LLM_DEBUG", "1")
+		t.Setenv("LYCAON_LLM_DEBUG_FILE", logPath)
+		observability.CloseLLMDebug()
 
-	req := modelcall.CompletionRequest{
-		Model: "mock",
-		Messages: []api.Message{{
-			Role:    api.MessageRoleUser,
-			Content: "hello",
-		}},
-	}
-	ch, err := captureLLMStream(t.Context(), "mock", providerprofile.Default(), req, func() (<-chan modelcall.StreamChunk, error) {
-		inner := make(chan modelcall.StreamChunk, 2)
-		go func() {
-			defer close(inner)
-			time.Sleep(20 * time.Millisecond)
-			inner <- modelcall.StreamChunk{Content: "tok"}
-			time.Sleep(15 * time.Millisecond)
-			inner <- modelcall.StreamChunk{Done: true}
-		}()
-		return inner, nil
-	})
-	if err != nil {
-		t.Fatalf("captureLLMStream: %v", err)
-	}
-	_, _, _ = modelcall.CollectStream(ch)
+		req := modelcall.CompletionRequest{
+			Model: "mock",
+			Messages: []api.Message{{
+				Role:    api.MessageRoleUser,
+				Content: "hello",
+			}},
+		}
+		ch, err := captureLLMStream(t.Context(), "mock", providerprofile.Default(), req, func() (<-chan modelcall.StreamChunk, error) {
+			inner := make(chan modelcall.StreamChunk, 2)
+			go func() {
+				defer close(inner)
+				time.Sleep(20 * time.Millisecond)
+				inner <- modelcall.StreamChunk{Content: "tok"}
+				time.Sleep(15 * time.Millisecond)
+				inner <- modelcall.StreamChunk{Done: true}
+			}()
+			return inner, nil
+		})
+		if err != nil {
+			t.Fatalf("captureLLMStream: %v", err)
+		}
+		_, _, _ = modelcall.CollectStream(ch)
 
-	var data []byte
-	testutil.WaitFor(t, "the capture log is written", func() bool {
-		var err error
-		data, err = os.ReadFile(logPath)
-		return err == nil && len(data) > 0
+		var data []byte
+		testutil.WaitFor(t, "the capture log is written", func() bool {
+			var err error
+			data, err = os.ReadFile(logPath)
+			return err == nil && len(data) > 0
+		})
+		var entry struct {
+			Call       string `json:"call"`
+			DurationMs int64  `json:"duration_ms"`
+			TTFTMs     int64  `json:"ttft_ms"`
+		}
+		if err := json.Unmarshal(data[:len(data)-1], &entry); err != nil {
+			t.Fatalf("unmarshal: %v", err)
+		}
+		if entry.Call != "stream" {
+			t.Fatalf("call = %q", entry.Call)
+		}
+		if entry.TTFTMs <= 0 || entry.DurationMs <= entry.TTFTMs {
+			t.Fatalf("timing = duration %d ttft %d", entry.DurationMs, entry.TTFTMs)
+		}
 	})
-	var entry struct {
-		Call       string `json:"call"`
-		DurationMs int64  `json:"duration_ms"`
-		TTFTMs     int64  `json:"ttft_ms"`
-	}
-	if err := json.Unmarshal(data[:len(data)-1], &entry); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if entry.Call != "stream" {
-		t.Fatalf("call = %q", entry.Call)
-	}
-	if entry.TTFTMs <= 0 || entry.DurationMs <= entry.TTFTMs {
-		t.Fatalf("timing = duration %d ttft %d", entry.DurationMs, entry.TTFTMs)
-	}
 }
 
 // A stream that never opens (provider HTTP/dial error) must still leave a capture entry.
@@ -304,58 +309,60 @@ func TestCaptureEmptyCompletionRetainsProtocolFacts(t *testing.T) {
 }
 
 func TestCaptureLLMStreamPostDrainCancelDoesNotMarkPromptCacheFailed(t *testing.T) {
-	dir := t.TempDir()
-	logPath := filepath.Join(dir, "requests.jsonl")
-	cachePath := filepath.Join(dir, "prompt-cache-observability.jsonl")
-	t.Setenv("LYCAON_LLM_DEBUG", "1")
-	t.Setenv("LYCAON_LLM_DEBUG_FILE", logPath)
-	observability.CloseLLMDebug()
-	t.Cleanup(observability.CloseLLMDebug)
+	synctest.Test(t, func(t *testing.T) {
+		dir := t.TempDir()
+		logPath := filepath.Join(dir, "requests.jsonl")
+		cachePath := filepath.Join(dir, "prompt-cache-observability.jsonl")
+		t.Setenv("LYCAON_LLM_DEBUG", "1")
+		t.Setenv("LYCAON_LLM_DEBUG_FILE", logPath)
+		observability.CloseLLMDebug()
+		t.Cleanup(observability.CloseLLMDebug)
 
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
-	req := modelcall.CompletionRequest{
-		Model: "mock",
-		Messages: []api.Message{
-			{Role: api.MessageRoleSystem, Content: "standing", PromptCacheBreakpoint: api.PromptCacheTierStanding},
-			{Role: api.MessageRoleUser, Content: "hello", PromptCacheBreakpoint: api.PromptCacheTierHistory},
-		},
-		Debug: modelcall.RequestDebug{SessionID: "stream-cancel-after-done"},
-	}
-	profile := providerprofile.Together()
-	ch, err := captureLLMStream(ctx, "together", profile, req, func() (<-chan modelcall.StreamChunk, error) {
-		inner := make(chan modelcall.StreamChunk)
-		go func() {
-			inner <- modelcall.StreamChunk{
-				Content: "ok",
-				Usage:   modelcall.TokenUsage{Present: true, PromptTokens: 1000, CompletionTokens: 10, CacheReadInputTokens: 800},
-				Done:    true,
-			}
-			time.Sleep(25 * time.Millisecond)
-			close(inner)
-		}()
-		return inner, nil
-	})
-	testutil.FailErr(t, "captureLLMStream", err)
-	for chunk := range ch {
-		if chunk.Done {
-			// Callers cancel the stream context as soon as the terminal chunk arrives.
-			cancel()
-			break
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		req := modelcall.CompletionRequest{
+			Model: "mock",
+			Messages: []api.Message{
+				{Role: api.MessageRoleSystem, Content: "standing", PromptCacheBreakpoint: api.PromptCacheTierStanding},
+				{Role: api.MessageRoleUser, Content: "hello", PromptCacheBreakpoint: api.PromptCacheTierHistory},
+			},
+			Debug: modelcall.RequestDebug{SessionID: "stream-cancel-after-done"},
 		}
-	}
+		profile := providerprofile.Together()
+		ch, err := captureLLMStream(ctx, "together", profile, req, func() (<-chan modelcall.StreamChunk, error) {
+			inner := make(chan modelcall.StreamChunk)
+			go func() {
+				inner <- modelcall.StreamChunk{
+					Content: "ok",
+					Usage:   modelcall.TokenUsage{Present: true, PromptTokens: 1000, CompletionTokens: 10, CacheReadInputTokens: 800},
+					Done:    true,
+				}
+				time.Sleep(25 * time.Millisecond)
+				close(inner)
+			}()
+			return inner, nil
+		})
+		testutil.FailErr(t, "captureLLMStream", err)
+		for chunk := range ch {
+			if chunk.Done {
+				// Callers cancel the stream context as soon as the terminal chunk arrives.
+				cancel()
+				break
+			}
+		}
 
-	var data []byte
-	testutil.WaitFor(t, "the prompt cache record is written", func() bool {
-		var readErr error
-		data, readErr = os.ReadFile(cachePath)
-		return readErr == nil && len(data) > 0
+		var data []byte
+		testutil.WaitFor(t, "the prompt cache record is written", func() bool {
+			var readErr error
+			data, readErr = os.ReadFile(cachePath)
+			return readErr == nil && len(data) > 0
+		})
+		var obs observability.PromptCacheObservation
+		testutil.FailErr(t, "decode cache observation", json.Unmarshal(data[:len(data)-1], &obs))
+		if obs.Comparison == "request_failed" {
+			t.Fatalf("completed stream marked request_failed after consumer cancel: %+v", obs)
+		}
 	})
-	var obs observability.PromptCacheObservation
-	testutil.FailErr(t, "decode cache observation", json.Unmarshal(data[:len(data)-1], &obs))
-	if obs.Comparison == "request_failed" {
-		t.Fatalf("completed stream marked request_failed after consumer cancel: %+v", obs)
-	}
 }
 
 func TestCaptureLLMStreamAbandonedMidStreamMarksPromptCacheFailed(t *testing.T) {

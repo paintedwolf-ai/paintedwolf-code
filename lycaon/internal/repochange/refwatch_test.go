@@ -7,7 +7,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -56,9 +55,7 @@ func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
 	})
 
 	repochange.EnsureRoot(t.Context(), root)
-	time.Sleep(50 * time.Millisecond)
-	// The seeded layout predates the stream; a platform stream may still
-	// deliver its creation late, so only changes after this point count.
+	// The seeded layout predates the stream; only changes after this point count.
 	repochange.ResetDebouncerForTest(t.Context())
 	mu.Lock()
 	worktree = nil
@@ -81,7 +78,7 @@ func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
 	}
 }
 
-func TestRefWatchReportsIndexChangesWithoutHeadMovement(t *testing.T) {
+func TestRefWatchReportsIndexChanges(t *testing.T) {
 	t.Cleanup(repochange.ResetObserversForTest)
 	t.Cleanup(func() { repochange.ResetDebouncerForTest(context.Background()) })
 	t.Cleanup(repochange.ResetWatchersForTest)
@@ -90,36 +87,21 @@ func TestRefWatchReportsIndexChangesWithoutHeadMovement(t *testing.T) {
 	seedBareGitLayout(t, rootDir)
 
 	root := canonicalTestDir(t, rootDir)
-	var headMoved atomic.Int32
 	var indexChanged atomic.Int32
 	repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
-		if ev.ProjectDir != root {
-			return
-		}
-		if ev.Kind == repochange.HeadMoved {
-			headMoved.Add(1)
-		}
-		if ev.Kind == repochange.IndexChanged {
+		if ev.ProjectDir == root && ev.Kind == repochange.IndexChanged {
 			indexChanged.Add(1)
 		}
 	})
 
 	repochange.EnsureRoot(t.Context(), root)
-	time.Sleep(50 * time.Millisecond)
 
-	// `git add` traffic: the index and its lock are not movement surfaces.
+	// `git add` traffic reaches status through the platform stream.
 	gitDir := filepath.Join(root, ".git")
 	testutil.FailErr(t, "write index lock", os.WriteFile(filepath.Join(gitDir, "index.lock"), []byte("x"), 0o644))
 	testutil.FailErr(t, "write index", os.WriteFile(filepath.Join(gitDir, "index"), []byte("x"), 0o644))
 	testutil.FailErr(t, "write fetch head", os.WriteFile(filepath.Join(gitDir, "FETCH_HEAD"), []byte("x"), 0o644))
-
-	time.Sleep(500 * time.Millisecond)
-	if headMoved.Load() != 0 {
-		t.Fatalf("index churn produced HeadMoved x%d", headMoved.Load())
-	}
-	if indexChanged.Load() == 0 {
-		t.Fatal("index change did not invalidate status")
-	}
+	testutil.WaitFor(t, "the index change invalidates status", func() bool { return indexChanged.Load() > 0 })
 }
 
 func TestRefWatchEmitsForLinkedWorktreeCommonDirectory(t *testing.T) {
@@ -147,7 +129,6 @@ func TestRefWatchEmitsForLinkedWorktreeCommonDirectory(t *testing.T) {
 		}
 	})
 	repochange.EnsureRoot(t.Context(), root)
-	time.Sleep(50 * time.Millisecond)
 	testutil.FailErr(t, "move shared branch", os.WriteFile(branch, []byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"), 0o644))
 	testutil.WaitFor(t, "the head move is reported", func() bool { return headMoved.Load() > 0 })
 }

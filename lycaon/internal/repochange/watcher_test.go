@@ -7,7 +7,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -45,19 +44,11 @@ func TestWatcher_EmitsWorktreeChanged(t *testing.T) {
 	})
 
 	repochange.EnsureRoot(t.Context(), dir)
-	time.Sleep(50 * time.Millisecond)
 	testutil.FailErr(t, "write file", os.WriteFile(filepath.Join(dir, "watched.txt"), []byte("hi"), 0o644))
-
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the watcher reports WorktreeChanged", func() bool {
 		repochange.ResetDebouncerForTest(t.Context())
-		if n.Load() > 0 {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if n.Load() == 0 {
-		t.Fatal("expected watcher WorktreeChanged")
-	}
+		return n.Load() > 0
+	})
 	if src != repochange.SourceWatcher {
 		t.Fatalf("source=%q", src)
 	}
@@ -88,7 +79,6 @@ func TestWatcherEmitsForFilesNamedLikeDirectories(t *testing.T) {
 	})
 
 	repochange.EnsureRoot(t.Context(), dir)
-	time.Sleep(50 * time.Millisecond)
 
 	want := []string{"build", "vendor", "target", "out", "coverage", "dist", ".git", ".paintedwolf"}
 	for _, name := range want {
@@ -107,16 +97,10 @@ func TestWatcherEmitsForFilesNamedLikeDirectories(t *testing.T) {
 		}
 		return missing
 	}
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the watcher reports every source-file write", func() bool {
 		repochange.ResetDebouncerForTest(t.Context())
-		if len(missingNames()) == 0 {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if missing := missingNames(); len(missing) > 0 {
-		t.Fatalf("watcher dropped source-file writes: %v", missing)
-	}
+		return len(missingNames()) == 0
+	})
 }
 
 func TestEnsureRootAcceptsRootWithNestedJunk(t *testing.T) {
@@ -154,25 +138,16 @@ func TestWatcherObservesHiddenAndMetadataChildren(t *testing.T) {
 	})
 	repochange.EnsureRoot(t.Context(), dir)
 	repochange.SeedWatch(t.Context(), dir, directories)
-	time.Sleep(50 * time.Millisecond)
 	for _, name := range []string{".hidden/new.txt", ".paintedwolf/new.txt", ".git/objects/new.txt", ".git/config"} {
 		testutil.FailErr(t, "write metadata child", os.WriteFile(filepath.Join(dir, name), nil, 0600))
 	}
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the hidden and tool-metadata writes are reported", func() bool {
 		repochange.ResetDebouncerForTest(t.Context())
 		mu.Lock()
-		complete := seen[".hidden/new.txt"] && seen[".paintedwolf/new.txt"]
-		lazyMetadata := seen[".git/objects/new.txt"] || seen[".git/config"]
-		mu.Unlock()
-		if lazyMetadata {
+		defer mu.Unlock()
+		if seen[".git/objects/new.txt"] || seen[".git/config"] {
 			t.Fatal("lazy Git metadata triggered source reconciliation")
 		}
-		if complete {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	mu.Lock()
-	defer mu.Unlock()
-	t.Fatalf("missing metadata events: %+v", seen)
+		return seen[".hidden/new.txt"] && seen[".paintedwolf/new.txt"]
+	})
 }
