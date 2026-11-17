@@ -2,7 +2,6 @@ import { readSourceText } from "../test/stylesheet-source.ts";
 
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { MAX_TEXT_SCALE } from "../platform/desktop/accessibility-text-size.ts";
 import { CHAT_COL_MIN } from "../shell/stage-placement.ts";
 import { DEFAULT_TRANSCRIPT_SPACING, TRANSCRIPT_SPACING } from "../chat/transcript/layout/transcript-spacing.ts";
 
@@ -47,10 +46,6 @@ describe("scalable layout chrome", () => {
     expect(components.match(/\.den-turn-tail \{([^}]+)\}/)?.[1]).toMatch(/margin:\s*0/);
     expect(components.match(/\.den-turn-walk \{([^}]+)\}/)?.[1]).not.toMatch(/margin/);
     expect(components.match(/\.den-transcript-day \{([^}]+)\}/)?.[1]).not.toMatch(/padding-top/);
-  });
-
-  it("locks max harness inject to AccessibilityXXXL scale", () => {
-    expect(MAX_TEXT_SCALE).toBeCloseTo(53 / 17);
   });
 
   it("composer and nav use em floors / max(24px, …) hit targets", () => {

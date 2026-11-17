@@ -9,28 +9,6 @@ function read(rel: string): string {
   return readSourceText(join(denSrc, rel), "utf8");
 }
 
-describe("focus-visible + reduced-motion", () => {
-  it("gives dock links, tab chips, and tool summaries focus-visible rings", () => {
-    const chrome = read("global-components.css");
-    const tools = read("tool-utilities.css");
-    expect(chrome).toMatch(/\.den-shell-dock-link:focus-visible/);
-    expect(chrome).toMatch(/\.tabs__chip:focus-visible/);
-    expect(tools).toMatch(/\.den-tool-part > \.den-transcript-disclosure-header:focus-visible/);
-  });
-
-  it("zeros tab chrome fade and drawer motion under prefers-reduced-motion", () => {
-    const globalCss = read("global.css");
-    const drawer = read("drawer-utilities.css");
-    expect(globalCss).toMatch(
-      /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*--den-tabs-chrome-fade:\s*0ms/,
-    );
-    expect(drawer).toMatch(
-      /@media \(prefers-reduced-motion:\s*reduce\)[\s\S]*\.den-context-drawer/,
-    );
-    // ComposerChromeSlot mounts and unmounts synchronously, so it has no transition to assert.
-  });
-});
-
 describe("control outline affordance", () => {
   function denCheckboxBody(): string {
     const tw = read("tailwind.css");

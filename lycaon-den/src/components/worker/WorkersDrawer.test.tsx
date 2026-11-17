@@ -58,6 +58,9 @@ describe("WorkersDrawer", () => {
         onClose={onClose}
       />
     ));
+    // A press outside the drawer leaves it open: it is a pane, not an overlay.
+    fireEvent.pointerDown(document.body);
+    expect(onClose).not.toHaveBeenCalled();
     fireEvent.click(assertNamedControl(screen.getByTestId("workers-drawer-close"), "button"));
     expect(onClose).toHaveBeenCalledOnce();
   });
