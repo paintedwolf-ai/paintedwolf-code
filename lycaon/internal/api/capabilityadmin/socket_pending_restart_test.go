@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/httpaction"
+	"github.com/lycaon/lycaon/internal/httpaction/httpactiontest"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
@@ -115,7 +116,7 @@ func TestUnixSocketPendingRestartWithdrawsStaleCardAndFreshApprovalExecutes(t *t
 	freshOwner.Close()
 	registry := tools.NewDefaultRegistry()
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "implement", Tools: map[string]bool{"http_request": true}}})
-	testutil.FailErr(t, "register restarted native owner", httpaction.Register(registry, httpaction.Deps{Boundary: boundary}))
+	testutil.FailErr(t, "register restarted native owner", httpactiontest.Register(registry, httpaction.Deps{Boundary: boundary}))
 	operation, scope := socketref.WithScope(ctx)
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "root-1", ProjectID: testdbseed.DefaultProjectID, ToolCallID: "call", Agent: "implement"}, Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: workspace, IsPrimary: true}}, ActiveRootID: "root"}, Socket: tools.InvocationSocket{SocketGrants: []confine.SocketGrant{freshGrant}, SocketActionDigest: hitl.GrantKey(action), SocketCapabilityRuntime: runtime}}
 	_, err = registry.Run(operation, "http_request", action.Invocation.Args, tc)

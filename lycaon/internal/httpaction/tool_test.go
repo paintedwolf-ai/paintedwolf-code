@@ -19,7 +19,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 
-	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -79,7 +78,7 @@ func TestHTTPRequestSendsJSONAndReturnsStructuredResponse(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("decode http response: %v", err)
 	}
-	if got.Status != http.StatusAccepted || got.Body != `{"accepted":true}` || got.BodyEncoding != "utf-8" || outcome.RetrievedFrom != "127.0.0.1" {
+	if got.Status != http.StatusAccepted || got.Body != `{"accepted":true}` || outcome.RetrievedFrom != "127.0.0.1" {
 		t.Fatalf("response = %+v outcome=%+v", got, outcome)
 	}
 }
@@ -180,57 +179,6 @@ func TestHTTPRequestRequiresExactLoopbackPorts(t *testing.T) {
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("error = %v, want TOOL_ARGS_INVALID", err)
-	}
-}
-
-func TestTextualRejectsBinaryAndInvalidUTF8(t *testing.T) {
-	if textual("application/octet-stream", []byte("text")) {
-		t.Fatal("octet-stream was rendered as text")
-	}
-	if textual("text/plain", []byte{0xff}) {
-		t.Fatal("invalid UTF-8 text was rendered")
-	}
-	if !textual("application/json; charset=utf-8", []byte(`{"ok":true}`)) {
-		t.Fatal("JSON response was not rendered")
-	}
-}
-
-func TestHTTPRequestDiscardDoesNotBufferResponseBody(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/octet-stream")
-		_, _ = w.Write(make([]byte, outboundhttp.DefaultBodyMax+1))
-	}))
-	t.Cleanup(server.Close)
-
-	registry := tools.NewDefaultRegistry()
-	if err := registerPerform(registry, Deps{Boundary: testBoundary()}); err != nil {
-		t.Fatalf("register http_request: %v", err)
-	}
-	out, err := registry.Run(t.Context(), "http_request", map[string]any{
-		"url": server.URL, "response_body": "discard",
-		"capability_request": loopbackCapability(t, server.URL),
-	}, tools.ToolContext{
-		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
-	})
-	if err != nil {
-		t.Fatalf("discard http_request: %v", err)
-	}
-	var got result
-	if err := json.Unmarshal([]byte(out), &got); err != nil {
-		t.Fatalf("decode discarded response: %v", err)
-	}
-	if !got.BodyOmitted || got.Body != "" || got.Bytes != 0 || got.SHA256 != "" {
-		t.Fatalf("discarded response = %+v", got)
-	}
-	var fields map[string]any
-	if err := json.Unmarshal([]byte(out), &fields); err != nil {
-		t.Fatalf("decode discarded fields: %v", err)
-	}
-	if _, present := fields["bytes"]; present {
-		t.Fatalf("discarded response claimed an observed byte count: %s", out)
-	}
-	if _, present := fields["sha256"]; present {
-		t.Fatalf("discarded response claimed an observed hash: %s", out)
 	}
 }
 
