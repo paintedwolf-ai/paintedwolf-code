@@ -1,4 +1,4 @@
-import { Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup, type JSX } from "solid-js";
+import { Match, Show, Switch, createEffect, createSignal, onCleanup, type JSX } from "solid-js";
 import {
   activitySpanEnterFadeKey,
   useTranscriptEntry,
@@ -18,10 +18,8 @@ import {
 } from "../../chat/tool/activity-span-accordion.ts";
 import {
   activitySpanFailureCount,
-  activitySpanHint,
   activitySpanStatus,
 } from "../../chat/tool/activity-span-model.ts";
-import { commandActivityGroups } from "../../chat/tool/command-activity-model.ts";
 import type { ActivitySpanEntry } from "../../chat/transcript/projection/transcript-item-model.ts";
 import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-layout.ts";
 import { bindFindRevealHost } from "../../find/use-findable-view.ts";
@@ -212,14 +210,6 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
     return activitySpanFailureCount(entries(), props.sessionId);
   };
 
-  const detail = createMemo(() => {
-    const groups = commandActivityGroups(entries());
-    const path = groups.join(" → ");
-    const directory = commandActivityDirectory(entries());
-    return groups.length > 1
-      ? directory ? `${directory} · ${path}` : path
-      : directory || activitySpanHint(entries(), props.label, props.sessionId) || path;
-  });
   const singletonToolKey = () => {
     const entry = entries()[0];
     return count() === 1 && entry?.kind === "tool" ? entry.part.id : null;
@@ -268,7 +258,6 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
             <ActivityFailureChip failed={failed()} />
           </span>
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
-          <span class="den-activity-span-hint" data-tip={detail()} data-tip-when-clipped="">{detail()}</span>
         </span>
       </TranscriptDisclosureToggle>
       <TranscriptDisclosurePanel disclosure={disclosure} class="den-activity-span-items">
@@ -296,11 +285,4 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
       </TranscriptDisclosurePanel>
     </TranscriptDisclosureShell>
   );
-}
-
-function commandActivityDirectory(entries: readonly ActivitySpanEntry[]): string {
- const tools = entries.filter(entry => entry.kind === "tool");
- if (tools.some(entry => entry.kind === "tool" && !entry.part.commandActivity?.fact.directory)) return "";
- const directories = [...new Set(tools.flatMap(entry => entry.kind === "tool" && entry.part.commandActivity?.fact.directory ? [entry.part.commandActivity.fact.directory] : []))];
- return directories.length === 1 ? directories[0] ?? "" : "";
 }

@@ -202,11 +202,6 @@ export function commandActivityHeadline(entries: readonly ActivitySpanEntry[], f
  return headline;
 }
 
-/** Activity groups in first-appearance order. */
-export function commandActivityGroups(entries: readonly ActivitySpanEntry[]): string[] {
-  return [...new Set(activityFacts(entries).map(fact => fact.group))];
-}
-
 /** Receipts without an activity snapshot use the same card and retain all operations. */
 export function commandActivityPart(part: ToolPartView): ToolPartView {
  if (part.commandActivity || !part.commandProgram) return part;

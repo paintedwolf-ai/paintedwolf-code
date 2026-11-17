@@ -125,7 +125,7 @@ describe("scalable layout chrome", () => {
     );
   });
 
-  it("keeps activity summaries on two responsive lines", () => {
+  it("keeps activity headers responsive and reserves two lines for summaries with a hint", () => {
     const tools = read("tool-utilities.css");
     const workers = read("worker-utilities.css");
 
@@ -133,7 +133,7 @@ describe("scalable layout chrome", () => {
       /@utility den-activity-span\s*\{[\s\S]*?container-name:\s*den-activity-span/,
     );
     expect(tools).toMatch(
-      /@utility den-activity-span-chicklet\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\) auto;[\s\S]*?min-height:\s*max\(48px,\s*calc\(var\(--text-den-compact\) \* 2\.7 \+ 1em\)\)/,
+      /@utility den-activity-span-chicklet\s*\{[\s\S]*?display:\s*grid;[\s\S]*?grid-template-columns:\s*minmax\(0,\s*1fr\) auto;[\s\S]*?&:has\(> \.den-activity-span-hint\)\s*\{\s*min-height:\s*max\(48px,\s*calc\(var\(--text-den-compact\) \* 2\.7 \+ 1em\)\)/,
     );
     expect(tools).toMatch(
       /@utility den-activity-span-name\s*\{[\s\S]*?text-overflow:\s*ellipsis/,
