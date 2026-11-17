@@ -6,13 +6,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/findings/findingstest"
+	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestFindingDeliveryRetriesRetainsAndPagesWithoutLoss(t *testing.T) {
-	store := findingstest.New(t, "child")
+	database := testdbfixture.Open(t, "findings.db")
+	testdbseed.InsertSession(t, database, "child", testdbseed.DefaultProjectID)
+	testdbseed.InsertWorkerJob(t, database, "reader", "reader-child")
+	store := findings.NewSQLStore(database)
 	ctx := workercontext.WithJob(t.Context(), "reader")
 	manager := NewNotes(nil, store, nil, nil)
 	for i := 0; i < 23; i++ {
