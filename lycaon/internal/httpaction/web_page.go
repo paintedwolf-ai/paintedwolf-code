@@ -1,46 +1,21 @@
 package httpaction
 
 import (
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"mime"
-	"net/url"
-	"strconv"
+	"net/http"
 
 	"github.com/lycaon/lycaon/internal/outboundhttp"
-	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
-const fetchURLTool = "fetch_url"
-
-// webPage is a successful remote GET that delivered an HTML document to the
-// model. Loopback and socket targets are services under test, not pages to read.
-func webPage(spec requestSpec, resp outboundhttp.Response, placement bodyPlacement) bool {
-	if spec.method != "GET" || spec.socket != "" || spec.dialsLoopback() {
+// remotePage is a successful remote GET that returned an HTML document.
+// Loopback and socket targets are services under test, not pages to read.
+func remotePage(spec requestSpec, resp outboundhttp.Response) bool {
+	if spec.method != http.MethodGet || spec.socket != "" || spec.dialsLoopback() {
 		return false
 	}
 	if resp.Status < 200 || resp.Status > 299 {
 		return false
 	}
-	if placement.inline == "" && placement.spillPath == "" {
-		return false
-	}
 	mediaType, _, err := mime.ParseMediaType(resp.ContentType)
 	return err == nil && (mediaType == "text/html" || mediaType == "application/xhtml+xml")
-}
-
-// reportWebPage states a delivered web page when fetch_url could read it this turn.
-func reportWebPage(tctx tools.ToolContext, spec requestSpec, resp outboundhttp.Response, placement bodyPlacement, finalURL string) {
-	if tctx.Effects.Out == nil || !tctx.Turn.TurnToolPlan.Addressable(fetchURLTool) || !webPage(spec, resp, placement) {
-		return
-	}
-	host := spec.target.Hostname()
-	if final, err := url.Parse(finalURL); err == nil && final.Hostname() != "" {
-		host = final.Hostname()
-	}
-	tctx.Effects.Out.Facts = tctx.Effects.Out.Facts.WithFeedback(toolrejection.HTTPRequestWebPageCode, map[string]any{
-		"host":         host,
-		"bytes":        strconv.FormatInt(resp.Bytes, 10),
-		"content_type": resp.ContentType,
-	}, &api.FeedbackSubject{Kind: "host", ID: host})
 }

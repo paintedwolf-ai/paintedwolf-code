@@ -3,13 +3,14 @@ package httpaction
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolexecution"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolexecution"
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"

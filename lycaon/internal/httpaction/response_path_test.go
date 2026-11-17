@@ -3,9 +3,6 @@ package httpaction
 import (
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -14,6 +11,10 @@ import (
 	"slices"
 	"strconv"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/tools"

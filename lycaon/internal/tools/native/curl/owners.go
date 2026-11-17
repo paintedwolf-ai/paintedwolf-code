@@ -12,13 +12,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"net/netip"
 	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/projectroot"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/httpaction"
@@ -288,6 +289,13 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		*p.transfer = inv.transfer
 	}
 	if inv.exchange != nil {
+		if listener := inv.exchange.Listener; listener != nil && tc.Effects.Out != nil {
+			tc.Effects.Out.WithLock(func(out *tools.ToolInvocationOut) {
+				reported := tc
+				reported.Effects.Out = out
+				httpaction.ReportLoopbackListener(reported, listener)
+			})
+		}
 		evidence.ReportExchangeProvenance(ctx, inv.provenance)
 	}
 	return res, settleErr

@@ -3,11 +3,6 @@ package httpaction
 import (
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/capabilityrequest"
-	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/isolation"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -17,6 +12,12 @@ import (
 	"strconv"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
+	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/projectroot"

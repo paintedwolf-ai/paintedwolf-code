@@ -6,12 +6,16 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type programHTTPProvenanceStore interface {
@@ -28,6 +32,8 @@ type programProvenanceState struct {
 	custodyTrees         map[string][]string
 	clearedFiles         map[string]bool
 	activeTrackers       []*opProvenanceTracker
+	// printedPages are remote HTML documents an op wrote to the program's own stdout.
+	printedPages []evidence.DeliveredPage
 }
 
 type opProvenanceTracker struct {
@@ -218,6 +224,11 @@ func (r *programRun) finishOpTracker(ctx context.Context, tracker *opProvenanceT
 
 	var opExternalURLs []string
 	for _, ex := range exchanges {
+		if ex.Page != nil && outClass.topLevel {
+			r.provenance.mu.Lock()
+			r.provenance.printedPages = append(r.provenance.printedPages, *ex.Page)
+			r.provenance.mu.Unlock()
+		}
 		if !ex.External || len(ex.ObservedURLs) == 0 {
 			for _, f := range ex.WrittenFiles {
 				r.clearCustodyFile(r.normalizeProvenancePath("", f))
@@ -531,4 +542,25 @@ func appendUniqueProvenanceStrings(dst []string, values ...string) []string {
 		dst = append(dst, v)
 	}
 	return dst
+}
+
+// statePrintedPages states each remote HTML document the program printed as raw
+// markup when fetch_url could read it this turn.
+func (r *programRun) statePrintedPages() {
+	r.provenance.mu.Lock()
+	pages := append([]evidence.DeliveredPage(nil), r.provenance.printedPages...)
+	r.provenance.mu.Unlock()
+	out := r.tc.Effects.Out
+	if len(pages) == 0 || out == nil || !r.tc.Turn.TurnToolPlan.Addressable("fetch_url") {
+		return
+	}
+	out.WithLock(func(out *tools.ToolInvocationOut) {
+		for _, page := range pages {
+			out.Facts = out.Facts.WithFeedback(toolrejection.HTTPRequestWebPageCode, map[string]any{
+				"host":         page.Host,
+				"bytes":        strconv.FormatInt(page.Bytes, 10),
+				"content_type": page.ContentType,
+			}, &api.FeedbackSubject{Kind: "host", ID: page.Host})
+		}
+	})
 }

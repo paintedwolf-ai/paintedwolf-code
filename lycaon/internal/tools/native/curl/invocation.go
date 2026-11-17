@@ -6,11 +6,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/evidence"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/evidence"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
@@ -227,6 +229,9 @@ func (inv *invocation) run() error {
 		if ex.External && body.Len() > 0 {
 			inv.provenance.WroteStdout = true
 		}
+		if ex.RemotePage && len(received) > 0 {
+			inv.provenance.Page = &evidence.DeliveredPage{Host: finalHost(ex), Bytes: int64(len(received)), ContentType: resp.ContentType}
+		}
 	}
 	if jarFile != nil {
 		if err := inv.dests.Publish(inv.ctx, *jarFile, jar.netscape()); err != nil {
@@ -268,3 +273,11 @@ func headerBlock(statusLine string, headers []outboundhttp.Header) string {
 }
 
 var _ http.CookieJar = (*cookieJar)(nil)
+
+// finalHost is the host that served the final response.
+func finalHost(ex httpaction.Exchange) string {
+	if final, err := url.Parse(ex.FinalURL); err == nil {
+		return final.Hostname()
+	}
+	return ""
+}

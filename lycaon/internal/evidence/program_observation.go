@@ -3,8 +3,9 @@ package evidence
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -19,6 +20,15 @@ type ExchangeProvenance struct {
 	WrittenFiles []string
 	// WrittenTrees are directories whose whole contents the read placed.
 	WrittenTrees []string
+	// Page is the remote HTML document the read wrote to its stdout.
+	Page *DeliveredPage
+}
+
+// DeliveredPage is a remote HTML document an exchange delivered.
+type DeliveredPage struct {
+	Host        string
+	Bytes       int64
+	ContentType string
 }
 
 type exchangeProvenanceObserverKey struct{}

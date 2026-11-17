@@ -1,12 +1,13 @@
 package httpaction
 
 import (
+	"net/url"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolrejection"
-	"net/url"
-	"strings"
 )
 
 // tokenPlacement is one {{token:name}} reference in the request and the

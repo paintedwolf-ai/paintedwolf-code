@@ -1,13 +1,14 @@
 package httpaction
 
 import (
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/isolation"

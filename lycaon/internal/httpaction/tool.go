@@ -3,7 +3,6 @@ package httpaction
 
 import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
-	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/socketref"
 
 	"context"
@@ -11,7 +10,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"net"
 	"net/http"
@@ -22,6 +20,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egress"
@@ -34,7 +34,6 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/inboundwrite"
-	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -44,42 +43,6 @@ type Deps struct {
 	SecretAsk     secretmatch.AskFunc
 	// Named cookie and token jars require the managed secret store.
 	Secrets *secretcap.Service
-}
-
-type result struct {
-	Status       int                     `json:"status"`
-	FinalURL     string                  `json:"final_url"`
-	Headers      []outboundhttp.Header   `json:"headers,omitempty"`
-	SentHeaders  []outboundhttp.Header   `json:"sent_headers,omitempty"`
-	Redirects    []outboundhttp.Hop      `json:"redirects,omitempty"`
-	DurationMS   int64                   `json:"duration_ms"`
-	TimingMS     *outboundhttp.HopTiming `json:"timing_ms,omitempty"`
-	TLS          *outboundhttp.TLSInfo   `json:"tls,omitempty"`
-	Bytes        int64                   `json:"bytes,omitempty"`
-	SHA256       string                  `json:"sha256,omitempty"`
-	ContentType  string                  `json:"content_type,omitempty"`
-	Body         string                  `json:"body,omitempty"`
-	BodyEncoding string                  `json:"body_encoding,omitempty"`
-	BodyOmitted  bool                    `json:"body_omitted,omitempty"`
-	// BodySpillPath names the full response body covered by SHA256.
-	BodySpillPath string `json:"body_spill_path,omitempty"`
-	// BodyUnavailable reports a body that was neither inlined nor kept.
-	BodyUnavailable bool `json:"body_unavailable,omitempty"`
-	// BodyRedacted reports that the response echoed a protected value, so the
-	// placed, landed, or spilled bytes carry references where the received
-	// bytes covered by SHA256 carried the value.
-	BodyRedacted bool `json:"body_redacted,omitempty"`
-	// Written confirms ResponsePath contains the bytes covered by SHA256.
-	ResponsePath string         `json:"response_path,omitempty"`
-	Written      bool           `json:"written,omitempty"`
-	Cookies      *cookieReceipt `json:"cookies,omitempty"`
-	Tokens       *tokenReceipt  `json:"tokens,omitempty"`
-	Redacted     bool           `json:"redacted,omitempty"`
-	ReceiptToken string         `json:"redaction_receipt,omitempty"`
-	// UnixSocket is the reviewed socket the request reached; the URL host
-	// then names no network destination.
-	UnixSocket string                    `json:"unix_socket,omitempty"`
-	Listener   *api.LoopbackListenerFact `json:"listener,omitempty"`
 }
 
 type requestSpec struct {
@@ -103,59 +66,6 @@ type requestSpec struct {
 	resolve       []outboundhttp.ResolveMapping
 	tokenJar      string
 	captureTokens []captureTokenRule
-}
-
-func Register(reg *tools.DefaultRegistry, deps Deps) error {
-	if reg == nil || deps.Boundary == nil {
-		return fmt.Errorf("registry and sandbox boundary required")
-	}
-	return reg.Register("http_request", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		ex, err := exchange(ctx, deps, args, tctx, ExchangeOptions{}, modelResponse)
-		var transport *TransportFailure
-		if errors.As(err, &transport) {
-			return "", transport.Reject
-		}
-		if err != nil {
-			return "", err
-		}
-		resp := ex.resp
-		out := result{
-			Status: resp.Status, FinalURL: ex.finalURL, Headers: resp.Headers, Redirects: ex.redirects,
-			SentHeaders: ex.sentHeaders,
-			DurationMS:  resp.DurationMS, TimingMS: resp.Timing, TLS: resp.TLS,
-			Bytes: resp.Bytes, SHA256: resp.SHA256, ContentType: resp.ContentType,
-			Redacted: ex.outbound.redacted, ReceiptToken: ex.outbound.receipt, UnixSocket: ex.spec.socket,
-			Tokens: ex.tokens, BodyRedacted: ex.bodyRedacted, Listener: ex.listener,
-		}
-		placement := placeResponseBody(ctx, resp, tctx, ex.landed != nil, ex.spec.disposition.discard)
-		out.Body, out.BodyEncoding = placement.inline, placement.encoding
-		out.BodyOmitted, out.BodySpillPath = placement.omitted, placement.spillPath
-		out.BodyUnavailable = placement.spillFailed
-		if ex.landed != nil {
-			out.ResponsePath, out.Written = ex.landed.Path, true
-		}
-		out.Cookies = ex.cookies
-		reportWebPage(tctx, ex.spec, resp, placement, ex.finalURL)
-		reportLoopbackListener(tctx, ex.listener)
-		extURLs := externalObservedURLs(tctx.Effects.Secrets, ex.spec, ex.finalURL, ex.redirects)
-		var writtenFiles []string
-		if out.Written && out.ResponsePath != "" {
-			writtenFiles = []string{out.ResponsePath}
-		} else if out.BodySpillPath != "" {
-			writtenFiles = []string{out.BodySpillPath}
-		}
-		evidence.ReportExchangeProvenance(ctx, evidence.ExchangeProvenance{
-			External:     len(extURLs) > 0,
-			ObservedURLs: extURLs,
-			WroteStdout:  out.ResponsePath == "" && !ex.spec.disposition.discard && !out.BodyUnavailable,
-			WrittenFiles: writtenFiles,
-		})
-		if tctx.Effects.Out != nil {
-			tctx.Effects.Out.RetrievedFrom = retrievedFrom(ex.spec, resp.FinalURL)
-		}
-		encoded, err := surveyjson.MarshalIndent(out, "", "  ")
-		return string(encoded), err
-	})
 }
 
 // ExchangeOptions select a typed frontend's response handling. Jar replaces
@@ -189,6 +99,10 @@ type Exchange struct {
 	SentBodySHA256 string
 	External       bool
 	ObservedURLs   []string
+	// Listener is the loopback listener the request reached.
+	Listener *api.LoopbackListenerFact
+	// RemotePage reports a successful remote GET that returned an HTML document.
+	RemotePage bool
 }
 
 // Perform runs one request with the same screening, approval, secret,
@@ -207,7 +121,7 @@ func Perform(ctx context.Context, deps Deps, args map[string]any, tctx tools.Too
 	if _, present := args["resolve"]; present && len(opts.Dial) > 0 {
 		return Exchange{}, invalid(fmt.Errorf("frontend dial overrides replace resolve"))
 	}
-	ex, err := exchange(ctx, deps, args, tctx, opts, commandResponse)
+	ex, err := exchange(ctx, deps, args, tctx, opts)
 	if err != nil {
 		return Exchange{}, err
 	}
@@ -222,6 +136,8 @@ func Perform(ctx context.Context, deps Deps, args map[string]any, tctx tools.Too
 		SentBodySHA256: hex.EncodeToString(sum[:]),
 		External:       len(extURLs) > 0,
 		ObservedURLs:   extURLs,
+		Listener:       ex.listener,
+		RemotePage:     remotePage(ex.spec, ex.resp),
 	}, nil
 }
 
@@ -238,28 +154,18 @@ func (f *TransportFailure) Error() string   { return f.Reject.Error() }
 func (f *TransportFailure) Unwrap() []error { return []error{f.Reject, f.Cause} }
 
 type exchanged struct {
-	spec         requestSpec
-	outbound     outboundRequest
-	resp         outboundhttp.Response
-	landed       *inboundwrite.Receipt
-	finalURL     string
-	redirects    []outboundhttp.Hop
-	sentHeaders  []outboundhttp.Header
-	tokens       *tokenReceipt
-	cookies      *cookieReceipt
-	bodyRedacted bool
-	listener     *api.LoopbackListenerFact
+	spec        requestSpec
+	outbound    outboundRequest
+	resp        outboundhttp.Response
+	landed      *inboundwrite.Receipt
+	finalURL    string
+	redirects   []outboundhttp.Hop
+	sentHeaders []outboundhttp.Header
+	listener    *api.LoopbackListenerFact
 }
 
-type responseUse uint8
-
-const (
-	modelResponse responseUse = iota
-	commandResponse
-)
-
 // exchange is the owner's complete request lifecycle up to presentation.
-func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.ToolContext, opts ExchangeOptions, use responseUse) (exchanged, error) {
+func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.ToolContext, opts ExchangeOptions) (exchanged, error) {
 	ctx = withRequestFiles(ctx)
 	spec, err := parseRequestSpec(ctx, deps.Boundary, tctx, args)
 	if err != nil {
@@ -370,16 +276,11 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		resp.Body = bufferedBody
 	}
 	issuerID, issuerLabel := responseIssuer(spec, resp)
-	tokenRec, tokenReject := captureResponseTokens(ctx, deps, tokenJar, tokenJarReq, spec.captureTokens, resp, issuerID, issuerLabel)
+	_, tokenReject := captureResponseTokens(ctx, deps, tokenJar, tokenJarReq, spec.captureTokens, resp, issuerID, issuerLabel)
 	if tokenReject != nil {
 		return exchanged{}, tokenReject
 	}
-	bodyRedacted := false
 	finalURL, redirects := resp.FinalURL, resp.Redirects
-	if use == modelResponse {
-		resp, bodyRedacted = scrubResponse(resp, tokenJar, tctx.Effects.Secrets)
-		finalURL, redirects = observedURLs(tctx.Effects.Secrets, resp.FinalURL, resp.Redirects)
-	}
 	if bufferedBody != nil {
 		receipt, err := inboundwrite.Write(ctx, deps.Boundary, tctx, spec.disposition.path, resp.Body, "HTTP_REQUEST_RESPONSE_PATH_DENIED")
 		if err != nil {
@@ -387,9 +288,10 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		}
 		landed = &receipt
 	}
+	saveCookieJar(ctx, deps, jarReq, jar)
 	return exchanged{spec: spec, outbound: outbound, resp: resp, landed: landed, finalURL: finalURL, redirects: redirects,
-		sentHeaders: sentHeaders(spec, statedHeaders(tctx, args, screened)), tokens: tokenRec,
-		cookies: saveCookieJar(ctx, deps, jarReq, jar), bodyRedacted: bodyRedacted, listener: listenerFact}, nil
+		sentHeaders: sentHeaders(spec, statedHeaders(tctx, args, screened)),
+		listener:    listenerFact}, nil
 }
 
 // parseRequestSpec validates declared fields before screening or transport.
@@ -715,17 +617,6 @@ func redirectFacts(hops []outboundhttp.Hop) []any {
 		out = append(out, item)
 	}
 	return out
-}
-
-// retrievedFrom labels where response content came from.
-func retrievedFrom(spec requestSpec, finalURL string) string {
-	if spec.socket != "" {
-		return "unix:" + spec.socket
-	}
-	if target, err := outboundhttp.NormalizeURL(finalURL); err == nil {
-		return target.Hostname()
-	}
-	return ""
 }
 
 // hopLoopbackTarget is the loopback address and port a hop dials; ok is

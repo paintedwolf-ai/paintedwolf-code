@@ -2,13 +2,14 @@ package httpaction
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"

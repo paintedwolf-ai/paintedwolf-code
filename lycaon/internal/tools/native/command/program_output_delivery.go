@@ -114,6 +114,7 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 		run.tc.Effects.Out.CommandProgram.Outputs = append([]api.CommandProgramOutputWindow(nil), out.Outputs...)
 	}
 	r.commitProgramHTTPProvenance(ctx, run, out.Stdout != "" || out.Stderr != "")
+	run.statePrintedPages()
 	return out, nil
 }
 

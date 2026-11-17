@@ -2,11 +2,12 @@ package httpaction
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/url"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretcap"
