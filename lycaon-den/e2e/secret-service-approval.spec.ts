@@ -145,9 +145,9 @@ webE2e("managed service setup approval covers live requests until revoked", asyn
       await cards().getByTestId("approval-approve-primary").click();
     }
     const setupOutput = await driver.completed(setup);
-    const setupResult = JSON.parse(setupOutput.slice(setupOutput.indexOf("{"))) as { ok: boolean; tail: string };
-    expect(setupResult.ok, setupResult.tail).toBe(true);
-    expect(setupResult.tail).toContain("service configured");
+    const setupResult = JSON.parse(setupOutput.slice(setupOutput.indexOf("{"))) as { status: number; stdout: string; stderr?: string };
+    expect(setupResult.status, setupResult.stderr).toBe(0);
+    expect(setupResult.stdout).toContain("service configured");
     expect(service.configured()).toBe(true);
     await expect(cards()).toHaveCount(0);
     await expect(page.locator("body")).not.toContainText(service.password());
