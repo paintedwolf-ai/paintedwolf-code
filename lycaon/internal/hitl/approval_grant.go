@@ -2,9 +2,10 @@ package hitl
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/socketref"
 	"strings"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/socketref"
 
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/gate"

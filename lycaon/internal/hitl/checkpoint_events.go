@@ -3,9 +3,10 @@ package hitl
 import (
 	"context"
 	"database/sql"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/authzledger"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/pkg/api"

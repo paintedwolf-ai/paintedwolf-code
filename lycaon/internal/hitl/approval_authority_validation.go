@@ -2,10 +2,11 @@ package hitl
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/confine"
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/confine"
 )
 
 func (o ApprovalOption) validateGrantIdentities() error {

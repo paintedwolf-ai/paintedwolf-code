@@ -5,8 +5,9 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/socketref"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/socketref"
 
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/pkg/api"

@@ -2,9 +2,10 @@ package hitl_test
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/timelayout"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/hitl"

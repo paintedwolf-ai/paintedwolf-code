@@ -5,9 +5,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/timelayout"
 	"math"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/timelayout"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/toolcontract"

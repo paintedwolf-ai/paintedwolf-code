@@ -3,9 +3,10 @@ package hitl_test
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/authzledger"
