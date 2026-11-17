@@ -90,3 +90,27 @@ remaining=("$TMPDIR"/paintedwolf-capture.* "$TMPDIR"/paintedwolf-index.*)
 		})
 	}
 }
+
+func TestSnapshotIsolatesPreparedShellNotices(t *testing.T) {
+	script := snapshotCacheFixture + `
+resource=lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md
+mkdir -p "$fixture/lycaon-den/src-tauri"
+touch "$fixture/lycaon-den/src-tauri/manifest"
+git -C "$fixture" add lycaon-den/src-tauri/manifest
+git -C "$fixture" -c user.name=Test -c user.email=test@example.invalid commit -qm manifest
+commit="$(git -C "$fixture" rev-parse HEAD)"
+bash "$fixture/scripts/test-source-snapshot.sh" run-commit "$commit" -- test ! -e "$resource"
+printf 'prepared' > "$fixture/$resource"
+bash "$fixture/scripts/test-source-snapshot.sh" run-commit "$commit" -- bash -eu -c '
+  [[ -f "$1" && ! -L "$1" ]]
+  printf "regenerated" > "$PW_SOURCE_ROOT_ORIGINAL/$1"
+  [[ "$(cat "$1")" == prepared ]]
+  printf "snapshot" > "$1"
+' shell-notices "$resource"
+[[ "$(cat "$fixture/$resource")" == regenerated ]]
+`
+	cmd := exec.CommandContext(t.Context(), "bash", "-c", script, "notices-test", contractcheck.RepoRoot(t), t.TempDir())
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("snapshot shell notices: %v\n%s", err, out)
+	}
+}
