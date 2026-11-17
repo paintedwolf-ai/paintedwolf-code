@@ -160,8 +160,15 @@ func (s *conformanceSweep) walkPages(ctx context.Context) {
 	}
 }
 
-// seedCollection repeats the create that adds members to op's collection.
+// seedCollection runs op's seed recipe, or repeats the create that adds
+// members to op's collection.
 func (s *conformanceSweep) seedCollection(ctx context.Context, op *conformanceOp) {
+	if seed := successRecipes[op.ID].seed; seed != nil {
+		if err := seed(ctx, s); err != nil {
+			s.findings.add(rulePagination, op.ID, "seed", "%v", err)
+		}
+		return
+	}
 	for _, create := range s.ops {
 		if create.Method != http.MethodPost || create.Path != op.Path {
 			continue

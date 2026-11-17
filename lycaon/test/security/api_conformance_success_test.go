@@ -30,6 +30,9 @@ const (
 type successRecipe struct {
 	stage   successStage
 	prepare func(ctx context.Context, s *conformanceSweep, op *conformanceOp) (successInputs, error)
+	// seed adds rows to a paged list that holds fewer than two, for lists
+	// no create operation posts to.
+	seed func(ctx context.Context, s *conformanceSweep) error
 }
 
 // successInputs override what the value generator would send.
