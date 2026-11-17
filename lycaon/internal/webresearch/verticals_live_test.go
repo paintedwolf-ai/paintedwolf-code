@@ -4,7 +4,6 @@ package webresearch
 
 import (
 	"context"
-	"os"
 	"testing"
 )
 

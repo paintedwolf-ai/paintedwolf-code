@@ -7,16 +7,16 @@ type capabilityVerdict struct {
 	failed, skipped bool
 }
 
-func (v *capabilityVerdict) Helper()             {}
+func (v *capabilityVerdict) Helper()               {}
 func (v *capabilityVerdict) Fatalf(string, ...any) { v.failed = true }
 func (v *capabilityVerdict) Skipf(string, ...any)  { v.skipped = true }
 
 func TestRequiredCapabilityFailsAndOptionalSkipsWhereAbsent(t *testing.T) {
 	for _, require := range []func(testing.TB, bool){RequireConfinement, RequireLineage} {
 		for _, tc := range []struct {
-			present          bool
-			promise          string
-			failed, skipped  bool
+			present         bool
+			promise         string
+			failed, skipped bool
 		}{
 			{present: true, promise: "1"},
 			{present: true},

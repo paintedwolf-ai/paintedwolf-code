@@ -14,6 +14,8 @@ EVENTS = {"pull_request", "merge_group", "schedule", "push"}
 QUALIFICATION = "qualification.yml"
 RUNNERS = {"macos": ("darwin", "arm64"), "ubuntu-24.04-arm": ("linux", "arm64"), "ubuntu": ("linux", "amd64"),
            "windows": ("windows", "amd64")}
+# A shell expansion, or an element a list literal computes; regex anchors stay literal.
+DYNAMIC = re.compile(r"\$[{(A-Za-z_]")
 # The bundled-scanner wrapper sets these inside the stage, after the scheduler's environment filter.
 BUNDLED_ENVIRONMENT = {"LYCAON_SCANNER_SUITE_REQUIRED": "1", "LYCAON_ENGINE_ROOT": None}
 
@@ -201,7 +203,7 @@ def interpret(assigned, words, bundled):
     options, rest = (words[:words.index("--")], words[words.index("--") + 1:]) if "--" in words else (words, [])
     tags = {t for i, w in enumerate(options) if w == "--tags" for t in options[i + 1].split(",")}
     packages, run, index = [], None, 0
-    dynamic = any("$" in w or "{" in w for w in rest)
+    dynamic = any(DYNAMIC.search(w) for w in rest)
     while index < len(rest):
         word = rest[index]
         name, _, value = word.partition("=")
@@ -209,13 +211,13 @@ def interpret(assigned, words, bundled):
             index += 1
             value = rest[index]
         if name == "-run":
-            run = None if "$" in value or "{" in value else value
+            run = None if DYNAMIC.search(value) else value
         elif name == "-tags":
             tags.update(value.split(","))
         elif word.startswith("./"):
             packages.append(word)
         index += 1
-    environment = {k: (None if "$" in v else v) for k, v in assigned.items()}
+    environment = {k: (None if DYNAMIC.search(v) else v) for k, v in assigned.items()}
     if bundled:
         environment.update(BUNDLED_ENVIRONMENT)
     return frozenset(tags), "--full" not in options, environment, packages or (["./..."] if dynamic or not rest else []), run

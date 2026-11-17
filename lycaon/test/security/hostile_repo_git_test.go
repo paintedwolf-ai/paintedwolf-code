@@ -30,8 +30,9 @@ func TestHostileRepoGitJourney(t *testing.T) {
 		t.Skip("security: skipped under -short")
 	}
 	gittestsetup.Enable()
-	_, err := gitengine.BinaryPath()
-	testutil.FailErr(t, "bundled git (./task gitengine:fetch)", err)
+	if _, err := gitengine.BinaryPath(); err != nil {
+		t.Fatalf("bundled git missing (./task gitengine:fetch): %v", err)
+	}
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 
@@ -192,8 +193,9 @@ func TestHostileRepoDeclaredFilterIsRefused(t *testing.T) {
 		t.Skip("security: skipped under -short")
 	}
 	gittestsetup.Enable()
-	_, err := gitengine.BinaryPath()
-	testutil.FailErr(t, "bundled git (./task gitengine:fetch)", err)
+	if _, err := gitengine.BinaryPath(); err != nil {
+		t.Fatalf("bundled git missing (./task gitengine:fetch): %v", err)
+	}
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 
@@ -234,8 +236,9 @@ func TestHostileRepoFilterIsRefusedFromASubdirectoryRoot(t *testing.T) {
 		t.Skip("security: skipped under -short")
 	}
 	gittestsetup.Enable()
-	_, err := gitengine.BinaryPath()
-	testutil.FailErr(t, "bundled git (./task gitengine:fetch)", err)
+	if _, err := gitengine.BinaryPath(); err != nil {
+		t.Fatalf("bundled git missing (./task gitengine:fetch): %v", err)
+	}
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 
