@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -300,7 +301,7 @@ func pinnedAbs(tctx tools.ToolContext, pin toolcontract.ExecutionRevision) (stri
 	if pin.RootID == "" {
 		return pin.Path, filepath.IsAbs(pin.Path)
 	}
-	if pin.RootID == "worker-branch" && tctx.Source.WorkerBranchRoot != "" {
+	if pin.RootID == projectroot.WorkerBranchRootID && tctx.Source.WorkerBranchRoot != "" {
 		return filepath.Join(tctx.Source.WorkerBranchRoot, filepath.FromSlash(pin.Path)), true
 	}
 	for _, root := range tctx.Source.Roots {

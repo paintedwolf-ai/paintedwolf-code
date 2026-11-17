@@ -1,13 +1,10 @@
-import {
-  SKILL_CHICKLET_NAME,
-  isSkillToolPart,
-} from "../skill/skill-card-model.ts";
 import { partHasFileEdits } from "../file-edit/file-edit-model.ts";
 import { collectSegmentFolds } from "../file-edit/file-edit-fold.ts";
 import { indexWarmingChickletTitle } from "../transcript/projection/index-warming-copy.ts";
 import {
   isLoopbackTarget,
   isTaskToolName,
+  toolDrawsWhileRunning,
   toolPartDisplayStatus,
   toolPartSummaryTitle,
 } from "./tool-part-model.ts";
@@ -34,10 +31,13 @@ export type ActivityCandidate = {
   headline: string;
   weight: number;
   role?: ToolActivityRole;
+  /** The row was on screen before its result said whether it edits files. */
+  drawnBeforeResult?: boolean;
 };
 
 type ActivitySpanProjectionOptions = {
   layout?: TranscriptLayout;
+  verboseMode?: boolean;
 };
 
 export function activitySpanToolParts(
@@ -59,7 +59,7 @@ export function omitIndexWarmingFromTranscript(
 function entryCommandLabel(entry: ActivitySpanEntry): string {
   if (entry.kind === "index_warming") return "index warming";
   if (entry.kind === "turn_load") return LOCAL_AI_LABEL;
-  if (isSkillToolPart(entry.part)) return SKILL_CHICKLET_NAME;
+  if (entry.part.tool === "skills_read") return "skill";
   return entry.part.commandActivity?.fact.label ?? (entry.part.tool.trim().toLowerCase() || "tool activity");
 }
 
@@ -128,6 +128,10 @@ function activityCandidate(
     headline,
     weight,
     role,
+    drawnBeforeResult: toolDrawsWhileRunning(toolName, {
+      verboseMode: opts?.verboseMode ?? false,
+      layout: opts?.layout,
+    }),
   };
 }
 
@@ -283,9 +287,14 @@ function emitWorkerRun(
   return [group];
 }
 
-function candidateIsFileEdit(candidate: ActivityCandidate): boolean {
+/**
+ * A write may join the run above its diff card only if its row first appears already
+ * settled. A row drawn while running started below the card and stays there.
+ */
+function candidateJoinsDiffRun(candidate: ActivityCandidate): boolean {
   return (
     candidate.entry.kind === "tool" &&
+    !candidate.drawnBeforeResult &&
     partHasFileEdits(candidate.entry.part)
   );
 }
@@ -324,15 +333,9 @@ export function projectActivitySpans(
     });
   };
 
-  let deferredAfterRun: DisplayTranscriptItem[] = [];
-
   const flushRun = () => {
     if (run.length > 0 && runHasWork(run)) out.push(emitActivitySpan(run));
     emitAnchoredFolds();
-    if (deferredAfterRun.length > 0) {
-      out.push(...deferredAfterRun);
-      deferredAfterRun = [];
-    }
     scope = null;
     run = [];
     runAnchors = [];
@@ -350,11 +353,16 @@ export function projectActivitySpans(
       continue;
     }
     flushWorkerRun();
+    if (
+      opts?.layout !== "worker" &&
+      item.kind === "tool" &&
+      item.part.tool === "instruct_worker"
+    ) {
+      flushRun();
+      out.push(item);
+      continue;
+    }
     if (item.kind !== "tool" && item.kind !== "index_warming" && item.kind !== "turn_load") {
-      if (item.kind === "progress_update" && !item.initial && run.length > 0) {
-        deferredAfterRun.push(item);
-        continue;
-      }
       flushRun();
       // Flush pending folds before the next user segment.
       if (item.kind === "user") {
@@ -372,7 +380,7 @@ export function projectActivitySpans(
     if (
       scope !== null &&
       ((scope !== candidate.scope && !commandRun) ||
-        (runAnchors.length > 0 && !candidateIsFileEdit(candidate)))
+        (runAnchors.length > 0 && !candidateJoinsDiffRun(candidate)))
     ) {
       flushRun();
     }

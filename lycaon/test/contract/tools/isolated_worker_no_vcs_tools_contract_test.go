@@ -52,7 +52,7 @@ func TestMutationCapableWorkersAreAlwaysIsolated(t *testing.T) {
 			continue
 		}
 		checked++
-		code := workeradmission.ValidateTaskScopeForAgent(agent.ID, api.TaskScope{Mode: api.TaskScopeModeRead})
+		code := workeradmission.ValidateTaskScopeForProfile(true, true, api.TaskScope{Mode: api.TaskScopeModeRead})
 		if code != workeradmission.TaskScopeWriteRequiredCode {
 			t.Errorf("mutation-capable worker %q accepts scope.mode read (code %q) — it is no "+
 				"longer guaranteed an isolated branch", agent.ID, code)

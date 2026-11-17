@@ -44,23 +44,3 @@ var (
 	messagesFTSColumns          = []string{"content", "kind"}
 	evidenceFTSColumns          = []string{"snippet", "path", "url"}
 )
-
-func EvidenceIndexColumns() []string {
-	return append([]string(nil), evidenceIndexColumns...)
-}
-
-func EvidenceIndexNotNullColumns() []string {
-	return append([]string(nil), evidenceIndexNotNullColumns...)
-}
-
-func EvidenceIndexCompositeIndex() []string {
-	return append([]string(nil), evidenceIndexCompositeIndex...)
-}
-
-func MessagesFTSColumns() []string {
-	return append([]string(nil), messagesFTSColumns...)
-}
-
-func EvidenceFTSColumns() []string {
-	return append([]string(nil), evidenceFTSColumns...)
-}

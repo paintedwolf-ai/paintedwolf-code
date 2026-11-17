@@ -95,7 +95,6 @@ func (m *Manager) openLayeredServices() (*layeredServices, error) {
 	if strings.TrimSpace(m.branchRoot) == "" {
 		return nil, fmt.Errorf("worker branch root is unavailable")
 	}
-	stateDir := filepath.Join(m.branchRoot, adapterRuntimeDirName)
 	gitManager := m.privateGit
 	if gitManager == nil {
 		var err error
@@ -106,7 +105,7 @@ func (m *Manager) openLayeredServices() (*layeredServices, error) {
 	}
 	claims := m.recovery
 	if claims == nil {
-		recoveryDir := filepath.Join(stateDir, "recovery")
+		recoveryDir := filepath.Join(m.branchRoot, adapterRuntimeDirName, "recovery")
 		store, err := checkpoint.NewStore(filepath.Join(recoveryDir, "checkpoints"))
 		if err != nil {
 			return nil, err
@@ -119,14 +118,9 @@ func (m *Manager) openLayeredServices() (*layeredServices, error) {
 			return nil, err
 		}
 	}
-	selector := m.selector
-	if selector == nil {
-		selector = DefaultWorkspaceSelector()
-		m.selector = selector
-	}
 	return &layeredServices{
 		privateGit: gitManager, recovery: claims, retention: durableRetention{claims: claims},
-		coordinator: claim.NewCoordinator(selector),
+		coordinator: claim.NewCoordinator(m.selector),
 	}, nil
 }
 
@@ -318,15 +312,22 @@ func checkpointManifestExists(storeDir, checkpointID string) bool {
 	if strings.TrimSpace(storeDir) == "" || strings.TrimSpace(checkpointID) == "" {
 		return false
 	}
-	for _, p := range []string{
-		filepath.Join(storeDir, "checkpoints", checkpointID, "manifest.json"),
-		filepath.Join(storeDir, "checkpoints", checkpointID+".json"),
-	} {
-		if info, err := os.Stat(p); err == nil && info.Mode().IsRegular() {
-			return true
-		}
+	info, err := os.Stat(filepath.Join(storeDir, "checkpoints", checkpointID, "manifest.json"))
+	return err == nil && info.Mode().IsRegular()
+}
+
+// branchCheckpointStoreDir names the store holding checkpointID for branchRoot: the store the branch
+// recorded, or the recovery store beside its worker branches when a restore moved the data folder.
+func branchCheckpointStoreDir(branchRoot string, meta JobMeta, checkpointID string) string {
+	if checkpointManifestExists(meta.CheckpointStoreDir, checkpointID) {
+		return meta.CheckpointStoreDir
 	}
-	return false
+	stateRoot := filepath.Dir(filepath.Dir(filepath.Dir(filepath.Clean(branchRoot))))
+	beside := filepath.Join(enginepaths.WorkerRecoveryRootUnder(stateRoot), "checkpoints")
+	if checkpointManifestExists(beside, checkpointID) {
+		return beside
+	}
+	return ""
 }
 
 // BranchCheckpoint names the store and checkpoint a branch last published.
@@ -340,25 +341,12 @@ func BranchCheckpoint(branchRoot string) (storeDir, checkpointID string, ok bool
 	if err != nil || meta.LastPublishedCheckpointID == "" {
 		return "", "", false
 	}
-	cid := meta.LastPublishedCheckpointID
-	if checkpointManifestExists(meta.CheckpointStoreDir, cid) {
-		return meta.CheckpointStoreDir, cid, true
+	storeDir = branchCheckpointStoreDir(clean, meta, meta.LastPublishedCheckpointID)
+	if storeDir == "" {
+		// A recorded checkpoint that is gone stays named, so loading it fails instead of finding none.
+		storeDir = meta.CheckpointStoreDir
 	}
-	workerBranchesDir := filepath.Dir(filepath.Dir(clean))
-	configDir := filepath.Dir(workerBranchesDir)
-	for _, cand := range []string{
-		filepath.Join(configDir, enginepaths.WorkerRecoveryDirName, "checkpoints"),
-		filepath.Join(workerBranchesDir, adapterRuntimeDirName, "recovery", "checkpoints"),
-		filepath.Join(configDir, enginepaths.WorkerBaselinesDirName, ".task-checkpoints"),
-	} {
-		if checkpointManifestExists(cand, cid) {
-			return cand, cid, true
-		}
-	}
-	if meta.CheckpointStoreDir != "" {
-		return meta.CheckpointStoreDir, cid, true
-	}
-	return "", "", false
+	return storeDir, meta.LastPublishedCheckpointID, storeDir != ""
 }
 
 // privateGitSnapshot captures each root's private refs and exports the objects those refs add, beside

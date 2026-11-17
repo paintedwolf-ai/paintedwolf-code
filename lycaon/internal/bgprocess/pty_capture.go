@@ -3,6 +3,7 @@ package bgprocess
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -35,7 +36,7 @@ func (r *Terminal) RunPTYCapture(
 	if err != nil {
 		return PTYCaptureResult{}, err
 	}
-	defer r.jobs.remove(trim(sessionID), trim(handle))
+	defer r.jobs.remove(strings.TrimSpace(sessionID), strings.TrimSpace(handle))
 	finished, err := r.Lifecycle.Await(ctx, sessionID, handle, timeout)
 	if err != nil {
 		if proc, lookupErr := r.jobs.lookup(sessionID, handle); lookupErr == nil {

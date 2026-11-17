@@ -40,7 +40,6 @@ const (
 	Providers           = PlatformHost + "/providers.yaml"
 	CredentialStoreRead = PlatformHost + "/credential-store-read.yaml"
 	PricingSources      = PlatformHost + "/pricing-sources.yaml"
-	ToolsScope          = PlatformHost + "/tools-scope.yaml"
 	ModelPolicy         = PlatformHost + "/model-policy.yaml"
 	Compaction          = PlatformHost + "/compaction.yaml"
 	ComposePolicy       = PlatformHost + "/compose-policy.yaml"
@@ -174,7 +173,6 @@ var consumedPackYAMLFiles = map[Rel]struct{}{
 	PlatformFlows + "/" + WorkflowRegistryFile: {},
 	Providers:                {},
 	PricingSources:           {},
-	ToolsScope:               {},
 	ModelPolicy:              {},
 	Compaction:               {},
 	ComposePolicy:            {},

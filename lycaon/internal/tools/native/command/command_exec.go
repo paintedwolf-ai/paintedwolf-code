@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/indexwatch"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/runnerbudget"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -64,10 +63,6 @@ type RunOutcome struct {
 
 // CanonicalToolArgs returns reference-bearing arguments when available.
 func CanonicalToolArgs(tctx tools.ToolContext, args map[string]any) map[string]any {
-	return canonicalToolArgs(tctx, args)
-}
-
-func canonicalToolArgs(tctx tools.ToolContext, args map[string]any) map[string]any {
 	if tctx.Effects.CanonicalArgs != nil {
 		return tctx.Effects.CanonicalArgs
 	}
@@ -76,11 +71,7 @@ func canonicalToolArgs(tctx tools.ToolContext, args map[string]any) map[string]a
 
 // CanonicalCommandKey returns the reference-bearing command identity.
 func CanonicalCommandKey(tctx tools.ToolContext, args map[string]any) string {
-	return commandsurface.PrimaryCommandLine(canonicalToolArgs(tctx, args), nil)
-}
-
-func canonicalCommandKey(tctx tools.ToolContext, args map[string]any) string {
-	return CanonicalCommandKey(tctx, args)
+	return commandsurface.PrimaryCommandLine(CanonicalToolArgs(tctx, args), nil)
 }
 
 // commandEgressIdentity supplies the shared subject for posture, leases, and attribution.
@@ -111,14 +102,6 @@ func commandNetworkPosture(tctx tools.ToolContext, toolName, commandLine string)
 // WaitBudget resolves the inline wait budget from wait_ms (clamped to MaxCommandWait),
 // falling back to DefaultCommandWait.
 func WaitBudget(args map[string]any) time.Duration {
-	return commandWaitBudget(args)
-}
-
-// commandWaitBudget resolves the inline wait budget from wait_ms (clamped to MaxCommandWait),
-// falling back to DefaultCommandWait. Verification runners scale the resolved budget
-// with the scheduler's timeout allowance, so race instrumentation does not promote
-// commands that would finish inline uninstrumented.
-func commandWaitBudget(args map[string]any) time.Duration {
 	budget := exec.DefaultCommandWait
 	if v, ok := args["wait_ms"].(float64); ok && v > 0 {
 		d := time.Duration(v) * time.Millisecond
@@ -128,7 +111,7 @@ func commandWaitBudget(args map[string]any) time.Duration {
 			budget = d
 		}
 	}
-	return budget * time.Duration(runnerbudget.TimeoutScale())
+	return budget
 }
 
 func commandTimeout(args map[string]any, toolName string) time.Duration {
@@ -195,11 +178,11 @@ func runCommandForeground(
 	if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
 		return RunOutcome{}, err
 	}
-	if tr := rejectPwdEnvMismatch(tctx, args, canonicalCommandKey(tctx, args), cwd, cwdDisplay); tr != nil {
+	if tr := rejectPwdEnvMismatch(tctx, args, CanonicalCommandKey(tctx, args), cwd, cwdDisplay); tr != nil {
 		return RunOutcome{}, tr
 	}
-	cmdKey := canonicalCommandKey(tctx, args)
-	approach := commandFailureApproachKey(canonicalToolArgs(tctx, args))
+	cmdKey := CanonicalCommandKey(tctx, args)
+	approach := commandFailureApproachKey(CanonicalToolArgs(tctx, args))
 	observeSource, verificationSource := commandSourceReaders(ctx, tctx, cwd)
 	failureAttempt, tr := ft.begin(tctx.Identity.SessionID, approach, cmdKey, observeSource)
 	if tr != nil {

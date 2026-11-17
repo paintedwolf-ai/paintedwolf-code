@@ -80,7 +80,7 @@ func (txn *Transaction) applyCheckpoint(ctx context.Context, pr *Promoter, req A
 	if txID == "" {
 		txID = "tx-" + m.CheckpointID
 	}
-	existing, found, err := pr.loadPromotionRecord(txID)
+	existing, found, err := pr.cfg.Store.LoadPromotionRecord(txID)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func (txn *Transaction) applyCheckpoint(ctx context.Context, pr *Promoter, req A
 	refStatus := EffectSkipped
 	if req.ImportGitRefs && m.PrivateGit.HasRefs() {
 		refStatus = EffectCompleted
-		if txn.journal.Refs, err = txn.prepareRefs(m, pr.cfg.TargetRoots); err != nil {
+		if txn.journal.Refs, err = txn.prepareRefs(m, pr.cfg.TargetRoots, pr.cfg.PrimaryRoot); err != nil {
 			return nil, err
 		}
 	}
@@ -140,7 +140,7 @@ func (txn *Transaction) applyCheckpoint(ctx context.Context, pr *Promoter, req A
 		rec.AppliedPaths = append(rec.AppliedPaths, change.Path)
 	}
 	if refStatus == EffectCompleted {
-		rec.ImportedRefs, err = ImportAndValidateCheckpointGitRefs(ctx, GitObjectSources{StoreDir: pr.cfg.Store.RootDir(), Retained: pr.cfg.RetainedGitObjects}, m.CheckpointID, m.WorkerID, m.PrivateGit, pr.cfg.TargetRoots, txn.cfg.AuthorizedGitDirs...)
+		rec.ImportedRefs, err = ImportAndValidateCheckpointGitRefs(ctx, GitObjectSources{StoreDir: pr.cfg.Store.RootDir(), Retained: pr.cfg.RetainedGitObjects}, m.CheckpointID, m.WorkerID, m.PrivateGit, pr.cfg.TargetRoots, pr.cfg.PrimaryRoot, txn.cfg.AuthorizedGitDirs...)
 		if err != nil {
 			return nil, err
 		}

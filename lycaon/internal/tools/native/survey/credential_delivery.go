@@ -2,7 +2,6 @@ package survey
 
 import (
 	"context"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/summarize"
@@ -19,21 +18,6 @@ func deliverCredentialText(ctx context.Context, reads *projectpaths.ReadSession,
 		return err
 	}
 	return tc.ObserveCredentialDelivery(ctx, resolved.Abs, resolved.DisplayPath, text)
-}
-
-func deliverGrepCredentials(ctx context.Context, search *grepSearch, response grepResponse) error {
-	for _, match := range response.Matches {
-		text := strings.Join(append(append(append([]string(nil), match.ContextBefore...), match.Content), match.ContextAfter...), "\n")
-		if err := deliverCredentialText(ctx, search.reads, search.tctx, match.Path, text); err != nil {
-			return err
-		}
-	}
-	for _, highlight := range response.Highlights {
-		if err := deliverCredentialText(ctx, search.reads, search.tctx, highlight.Path, highlight.Content); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func deliverSummaryCredentials(ctx context.Context, reads *projectpaths.ReadSession, tc tools.ToolContext, result summarize.Result) error {

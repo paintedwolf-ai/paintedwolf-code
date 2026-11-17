@@ -1,6 +1,7 @@
 package upgradefixture
 
 import (
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
@@ -30,7 +31,7 @@ func TestWorkerFixtureReconstructsAfterOriginalWorkspaceRemoval(t *testing.T) {
 	queue := worker.NewSQLQueue(database, 2)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
 	queue.SetProjectStore(projects)
-	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(dataDir, "worker-branches")))
+	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{})))
 	prepared, err := harnessfixture.Prepare(t.Context(), queue, sessions, parent, attached.Roots[0], harnessfixture.Setup{
 		Overlays: []harnessfixture.Overlay{{Label: "Retained history", Files: map[string]string{"README.md": "changed\n", "new.txt": "new\n"}}},
 	}, nil)
@@ -45,9 +46,9 @@ func TestWorkerFixtureReconstructsAfterOriginalWorkspaceRemoval(t *testing.T) {
 	readOnly, err := db.OpenReadOnly(t.Context(), filepath.Join(dataDir, "store.db"))
 	testutil.FailErr(t, "open read-only verification database", err)
 	defer func() { _ = readOnly.Close() }()
-	testutil.FailErr(t, "reconstruct retained worker", VerifyWorkerHistory(t.Context(), readOnly, attached.ID, evidence))
+	testutil.FailErr(t, "reconstruct retained worker", VerifyWorkerHistory(t.Context(), readOnly, dataDir, attached.ID, evidence))
 	evidence.Overlay["new.txt"] = digest([]byte("wrong\n"))
-	if err := VerifyWorkerHistory(t.Context(), readOnly, attached.ID, evidence); err == nil {
+	if err := VerifyWorkerHistory(t.Context(), readOnly, dataDir, attached.ID, evidence); err == nil {
 		t.Fatal("changed semantic expectation passed")
 	}
 }

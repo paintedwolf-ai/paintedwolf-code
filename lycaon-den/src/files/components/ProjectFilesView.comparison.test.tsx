@@ -17,7 +17,7 @@ import { EditorView } from "@codemirror/view";
 import { createSignal } from "solid-js";
 import type { FileVersionView } from "../history/file-version.ts";
 import { FilesEditor } from "../editor/FilesEditor.tsx";
-import { openFilesBuffer } from "../documents/project-files-buffers.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { setSidebarScope } from "../review/review-pane.ts";
 import { editorScopeDiffOriginal } from "../../components/source/diff/scope-diff.ts";

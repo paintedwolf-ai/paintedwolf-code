@@ -76,13 +76,11 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 		Visibility: api.MessageVisibilityInternal,
 		CreatedAt:  time.Now().UTC(),
 	}))
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the event outbox drains", func() bool {
 		var count int
-		if err := sqlDB.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM event_outbox`).Scan(&count); err == nil && count == 0 {
-			break
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
+		err := sqlDB.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM event_outbox`).Scan(&count)
+		return err == nil && count == 0
+	})
 	_ = drain()
 
 	liveCh, liveUnsub := mgr.Runner.Transcript.Streams.Subscribe(childMsg)

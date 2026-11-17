@@ -12,6 +12,9 @@ import { DenButton } from "../../primitives/DenButton.tsx";
 import { DenInput } from "../../primitives/DenInput.tsx";
 import { SettingsEditorTitle, EditReviewIcon } from "../SettingsEditorTitle.tsx";
 import { chromeProps } from "../../../styling/ui-chrome.ts";
+import { ProjectSettingsRejected } from "../ProjectSettingsRejected.tsx";
+import { SettingsGovernedGroup } from "../SettingsGovernedGroup.tsx";
+import { PROJECT_SETTINGS_REJECTED_COPY } from "../../../settings/project-settings-rejected-copy.ts";
 
 type ProjectsStore = ReturnType<typeof createProjectsStore>;
 
@@ -32,9 +35,10 @@ export function EditReviewSettingsPanel(props: Props) {
   const draftState = createSettingsDraft<ContentReviewRule[]>([]);
   const rules = draftState.value;
   const setRules = draftState.set;
+  const rejected = () => props.settingsStore.state.review?.rejected ?? [];
 
   const autoSave = createSettingsAutoSave({
-    isReady: () => props.settingsStore.state.review != null,
+    isReady: () => props.settingsStore.state.review != null && rejected().length === 0,
     isDirty: () => {
       const review = props.settingsStore.state.review;
       if (!review) return false;
@@ -90,7 +94,13 @@ export function EditReviewSettingsPanel(props: Props) {
         Edits whose path matches a rule below pause for review before they land on
         disk. Everything else applies directly.
       </p>
+      <ProjectSettingsRejected
+        rows={rejected()}
+        consequence={PROJECT_SETTINGS_REJECTED_COPY.review}
+        testId="edit-review-rejected"
+      />
 
+      <SettingsGovernedGroup label="Review these paths" active={rejected().length === 0} inset={false}>
       <section class="den-settings-section">
         <h3 class="den-settings-subhead" {...chromeProps()}>Review these paths</h3>
         <p class="den-settings-hint">
@@ -145,6 +155,7 @@ export function EditReviewSettingsPanel(props: Props) {
           </DenButton>
         </div>
       </section>
+      </SettingsGovernedGroup>
 
       <Show when={props.settingsStore.state.review?.merged_from}>
         {(mergedFrom) => (

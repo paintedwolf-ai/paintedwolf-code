@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/visual"
 )
 
 func ensureEvidenceSession(s *memoryCore, sessionID string) map[string]memoryEvidenceRow {
@@ -101,28 +100,6 @@ func upsertEvidenceRecordMemory(ctx context.Context, s *memoryCore, sessionID st
 	return nil
 }
 
-func (ev *memoryEvidence) MarkSuperseded(ctx context.Context, sessionID, oldHandle, byHandle string) error {
-	s := ev.core
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	oldHandle = strings.TrimSpace(oldHandle)
-	byHandle = strings.TrimSpace(byHandle)
-	if oldHandle == "" || byHandle == "" || oldHandle == byHandle {
-		return nil
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	ledger := s.evidence[sessionID]
-	row, ok := ledger[oldHandle]
-	if !ok || row.supersededBy != "" {
-		return nil
-	}
-	row.supersededBy = byHandle
-	ledger[oldHandle] = row
-	return nil
-}
-
 func nextEvidenceOrdinalLocked(s *memoryCore, sessionID, kind string) int {
 	max := 0
 	for handle := range s.evidence[sessionID] {
@@ -142,13 +119,6 @@ func (ev *memoryEvidence) CommitEvidenceToolResult(ctx context.Context, sessionI
 // result's stored artifact before the ledger row becomes visible.
 func (ev *memoryEvidence) CommitVisualEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content, artifactID string) (string, string, error) {
 	return commitEvidenceToolResultMemory(ctx, ev.core, sessionID, projectDir, toolName, args, content, strings.TrimSpace(artifactID))
-}
-
-// SetArtifactHandleBinder lets evidence commits stamp handles onto artifacts.
-func (s *Memory) SetArtifactHandleBinder(binder visual.HandleBinder) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.artifactHandles = binder
 }
 
 func commitEvidenceToolResultMemory(ctx context.Context, s *memoryCore, sessionID, projectDir, toolName string, args map[string]any, content, artifactID string) (string, string, error) {

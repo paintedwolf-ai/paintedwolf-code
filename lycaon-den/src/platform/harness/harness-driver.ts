@@ -421,7 +421,8 @@ export function installHarnessDriver(): void {
     },
 
     async openTab(tabId) {
-      const tab = liveByTestid(`tab-${tabId}`);
+      // The stage title bar carries the tabs while the conversation is off screen.
+      const tab = byTestid(`stage-tab-${tabId}`) ?? liveByTestid(`tab-${tabId}`);
       if (!tab) return { ok: false, error: `no tab "${tabId}"`, available: readState().tabs, state: readState() };
       tab.click();
       return { ok: true, state: readState() };

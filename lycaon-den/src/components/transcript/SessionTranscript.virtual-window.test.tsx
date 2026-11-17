@@ -19,12 +19,8 @@ import {
 } from "../../chat/transcript/presentation/transcript-entry.ts";
 import { TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 import { requireScrollportMotionForViewport } from "../../platform/scrolling/scrollport-motion.ts";
-import {
-  clearTranscriptRowHeightsForTests,
-  seedTranscriptRowHeightsForTests as seedHeights,
-  transcriptRowContentRevision,
-  transcriptRowHeightForScope as readHeight,
-} from "../../chat/transcript/layout/transcript-row-heights-persist.ts";
+import { clearTranscriptRowHeightsForTests, seedTranscriptRowHeightsForTests as seedHeights, transcriptRowHeightForScope as readHeight } from "../../chat/transcript/layout/transcript-row-heights-persist.ts";
+import { transcriptRowContentRevision } from "../../chat/transcript/layout/transcript-row-revision.ts";
 
 const geometry = vi.hoisted(() => ({ width: 0 }));
 vi.mock("../../layout/shared-resize-observer.ts", async (original) => {
@@ -656,8 +652,6 @@ describe("SessionTranscript virtual window", () => {
 
       grown = true;
       setText("a response that grew after its first row measurement");
-      await Promise.resolve();
-      await new Promise((resolve) => setTimeout(resolve, 30));
       await Promise.resolve();
 
       await waitFor(() => expect(Number(following!.dataset.virtualStart) - before).toBe(228));

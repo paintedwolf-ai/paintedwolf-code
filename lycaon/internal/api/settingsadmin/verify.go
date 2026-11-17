@@ -26,11 +26,12 @@ func (s *Handler) HandleGetVerify(w http.ResponseWriter, r *http.Request) {
 	cfg := s.Service.Verify.Get(scope, projectDir)
 	detect, hasDetect := s.Service.Verify.ProposalFor(projectDir)
 	httpio.WriteJSON(w, http.StatusOK, settings.VerifyToDTO(
-		settings.WireScope(string(scope)),
+		wire.SettingsScope(string(scope)),
 		projectDir,
 		cfg,
 		detect,
 		hasDetect,
+		s.Service.Verify.ProjectRejected(projectDir),
 	))
 }
 
@@ -56,17 +57,20 @@ func (s *Handler) HandleUpdateVerify(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg := settings.VerifyFromDTO(req)
 	if err := s.Service.Verify.PutProject(projectDir, cfg); err != nil {
-		s.responses.InternalError(w, r, err)
+		if !ProjectSettingsWriteError(s.responses, w, err) {
+			s.responses.InternalError(w, r, err)
+		}
 		return
 	}
 	projectview.PublishSettings(s.Events, s.Projects, r.Context(), wire.SettingsAreaVerify, string(scope), projectDir, "updated")
 	detect, hasDetect := s.Service.Verify.ProposalFor(projectDir)
 	httpio.WriteJSON(w, http.StatusOK, settings.VerifyToDTO(
-		settings.WireScope(string(scope)),
+		wire.SettingsScope(string(scope)),
 		projectDir,
 		s.Service.Verify.Get(scope, projectDir),
 		detect,
 		hasDetect,
+		s.Service.Verify.ProjectRejected(projectDir),
 	))
 }
 
@@ -98,10 +102,11 @@ func (s *Handler) HandleDismissVerify(w http.ResponseWriter, r *http.Request) {
 	projectview.PublishSettings(s.Events, s.Projects, r.Context(), wire.SettingsAreaVerify, string(scope), projectDir, "updated")
 	detect, hasDetect := s.Service.Verify.ProposalFor(projectDir)
 	httpio.WriteJSON(w, http.StatusOK, settings.VerifyToDTO(
-		settings.WireScope(string(scope)),
+		wire.SettingsScope(string(scope)),
 		projectDir,
 		s.Service.Verify.Get(scope, projectDir),
 		detect,
 		hasDetect,
+		s.Service.Verify.ProjectRejected(projectDir),
 	))
 }

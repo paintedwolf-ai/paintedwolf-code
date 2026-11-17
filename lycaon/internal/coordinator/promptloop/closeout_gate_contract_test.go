@@ -231,7 +231,7 @@ var pongoIdentifierRE = regexp.MustCompile(`"[^"]*"|\|\s*\w+(?::\s*"[^"]*")?|[A-
 // a member of one are not context names.
 func kickVariables(t *testing.T, ref string) map[string]bool {
 	t.Helper()
-	raw, _, err := prompts.DefaultBundledLayout().ReadBundled(ref)
+	raw, _, err := (prompts.BundledLayout{}).ReadBundled(ref)
 	testutil.FailErr(t, "read "+ref, err)
 	out := map[string]bool{}
 	locals := map[string]bool{"forloop": true}

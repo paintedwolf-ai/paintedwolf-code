@@ -5,6 +5,7 @@ package workspace_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"strings"
@@ -37,7 +38,7 @@ func TestFirstGitStatusOfAMaterializedBranchReadsNoContent(t *testing.T) {
 	gittest.InitCommit(t, source, "initial")
 	state, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve state", err)
-	mgr := workspace.NewManager(enginepaths.WorkerBranchesRootUnder(state))
+	mgr := workspace.NewManager(enginepaths.WorkerBranchesRootUnder(state), platform.NewSelector(platform.Config{}))
 	binding, err := mgr.CreateWorkerWorkspace(context.Background(), source, "job-first-status")
 	testutil.FailErr(t, "create branch", err)
 	t.Cleanup(func() { _ = mgr.DestroyWorkerWorkspace(context.Background(), binding) })

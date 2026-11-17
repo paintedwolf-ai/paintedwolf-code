@@ -1,8 +1,5 @@
 import type { ApprovalOption, ApprovalOptionRung } from "../../api/types.ts";
 
-/** The ladder has four keyboard slots, one per rung, on every card. */
-export const APPROVAL_SLOT_COUNT = 4;
-
 // A secret card's Send redacted row follows the four slots and has no digit.
 const SLOT_BY_RUNG: Partial<Record<ApprovalOptionRung, number>> = {
   once: 1,

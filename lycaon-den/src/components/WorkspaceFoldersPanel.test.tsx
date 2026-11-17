@@ -41,7 +41,7 @@ describe("WorkspaceFoldersPanel", () => {
         admission_code: "write_root_contains_control_plane",
       },
     ];
-    const { queryByTestId } = render(() => (
+    const { queryByTestId, getByTestId } = render(() => (
       <WorkspaceFoldersPanel
         open
         projectId="proj-1"
@@ -53,6 +53,11 @@ describe("WorkspaceFoldersPanel", () => {
         onRenameLabel={vi.fn()}
       />
     ));
+    // The folders panel is a modal dialog named by its own heading.
+    const panel = getByTestId("workspace-folders-panel");
+    expect(panel.getAttribute("role")).toBe("dialog");
+    expect(panel.getAttribute("aria-modal")).toBe("true");
+    expect(panel.querySelector(`#${panel.getAttribute("aria-labelledby")}`)).not.toBeNull();
     expect(queryByTestId("workspace-folder-editor-only-root-home")).not.toBeNull();
     expect(queryByTestId("workspace-folder-editor-only-root-a")).toBeNull();
     expect(queryByTestId("workspace-folder-editor-only-root-b")).toBeNull();

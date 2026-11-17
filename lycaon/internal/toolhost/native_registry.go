@@ -2,6 +2,7 @@ package toolhost
 
 import (
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/internal/tools/native/mutation"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/fileage"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	skilltools "github.com/lycaon/lycaon/internal/tools/native/skills"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
@@ -26,17 +26,14 @@ type buildDeps struct {
 	boundary      *sandbox.Boundary
 	git           *git.Manager
 	privateGit    *privategit.Manager
-	statusCache   *statusCacheBinding
 	command       *hostcmd.Runner
 	nativeConfig  nativemanifest.Config
 	toolSchemas   *toolschema.Config
 	surveyCatalog *survey.Catalog
-	fileAge       *fileage.Provider
 	rerank        decide.Reranker
 }
 
 type nativeToolServices struct {
-	Survey    *SurveyServices
 	Mutations *MutationServices
 	Commands  *CommandServices
 	Skills    *SkillServices
@@ -110,7 +107,6 @@ func buildNativeRegistry(deps buildDeps) (*tools.DefaultRegistry, *nativeToolSer
 		return nil, nil, fmt.Errorf("no native tools registered")
 	}
 	return reg, &nativeToolServices{
-		Survey:    &SurveyServices{summarizeTool: summarizeTool, fileAge: deps.fileAge, gitStatusCache: deps.statusCache},
 		Mutations: &MutationServices{writeTool: write, restoreVersionTool: restoreVersion},
 		Commands: &CommandServices{commandTool: commandTool, verifyTool: verifyTool, commandOutputTool: commandOutputTool, commandStopTool: commandStopTool,
 			owners: programOwnerTools{boundary: boundary, summarize: summarizeTool, repo: surveyRepo, catalog: catalog, git: deps.git, privateGit: deps.privateGit, registry: reg,

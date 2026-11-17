@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -12,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
@@ -322,43 +320,6 @@ func TestShouldNudgeCoordinatorLoopAfterWorkerTaskPerJobWakeWhileSiblingsInFligh
 
 	if !mgr.Workers.State.ShouldNudge(ctx, parent, testdbseed.DefaultProjectID, jobA) {
 		t.Fatal("expected true for per-job wake while sibling job still pending")
-	}
-}
-
-func TestFormatCoordinatorInFlightRoster(t *testing.T) {
-	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	roster, err := guidance.RenderWorkerInFlightRoster(context.Background(), guidance.BuildWorkerRosterLines([]api.WorkerTask{
-		{ID: "8a3f12ab-cdef", AgentType: "implementer", Status: api.WorkerStatusPending, Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"internal/auth/**"}}},
-		{ID: "9c12dead-beef", AgentType: "path-explorer", Status: api.WorkerStatusRunning},
-	}))
-	if err != nil {
-		t.Fatalf("RenderWorkerInFlightRoster: %v", err)
-	}
-	if !strings.Contains(roster, "8a3f") || !strings.Contains(roster, "implementer") {
-		t.Fatalf("roster = %q", roster)
-	}
-	if !strings.Contains(roster, "9c12") || !strings.Contains(roster, "path-explorer") {
-		t.Fatalf("roster = %q", roster)
-	}
-	if !strings.Contains(roster, "write · focus: internal/auth/**") {
-		t.Fatalf("roster = %q", roster)
-	}
-}
-
-func TestFormatTaskEnqueuedBannerMentionsParallelCap(t *testing.T) {
-	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	banner, err := guidance.RenderTaskQueuedBanner(context.Background(), guidance.TaskQueuedBannerOpts{
-		AgentType: "implementer", JobID: "job-1", MaxInFlight: spawn.MaxInFlightTaskWorkers,
-	})
-	if err != nil {
-		t.Fatalf("RenderTaskQueuedBanner: %v", err)
-	}
-	want := strconv.Itoa(spawn.MaxInFlightTaskWorkers)
-	if !strings.Contains(banner, want) {
-		t.Fatalf("expected parallel cap %s in banner: %q", want, banner)
-	}
-	if !strings.Contains(banner, "BANNER_TASK_QUEUED") {
-		t.Fatalf("expected banner code: %q", banner)
 	}
 }
 

@@ -23,8 +23,10 @@ on:
 permissions:
   contents: read
 
+# A publishing run takes turns with halts. A replay or an empty-tag dry run publishes
+# nothing, so each runs in a group of its own and never holds or waits for that turn.
 concurrency:
-  group: release-static-update
+  group: ${{ inputs.rehearsal_run_id == '' && (github.event_name == 'push' || inputs.release_tag != '') && 'release-static-update' || format('release-rehearsal-{0}', github.run_id) }}
   cancel-in-progress: false
 
 env:
@@ -167,6 +169,17 @@ jobs:
           ref: ${{ steps.source.outputs.source_sha }}
           fetch-depth: 0
 
+      - uses: actions/setup-go@b2a9ab24f04885adb52faf6bdccb0bb7dfb3c187 # v7.0.0
+        with:
+          go-version-file: lycaon/go.mod
+          cache: false
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: .bun-version
+          no-cache: true
+      - name: Check static release metadata
+        run: ./task release:preflight -- --static
+
       - name: Classify release
         id: release
         env:
@@ -187,37 +200,16 @@ jobs:
           echo "matrix=$(jq -c '{include: [.platforms[] | select(.publication == "public")]}' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
           echo "linux_public=$(jq -r 'any(.platforms[]; .goos == "linux" and .publication == "public")' packaging/release-platforms.json)" >> "${GITHUB_OUTPUT}"
 
-  publication-credentials:
-    # Signing completes before feed credentials and any publication write.
-    # Earlier channel selection reads authenticated controls without signing material.
-    needs: [classify, ship-gates, aggregate-release, linux-pacman-repositories]
-    if: ${{ needs.classify.outputs.publish == 'true' }}
-    runs-on: ubuntu-latest
-    environment: release-publication
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ needs.classify.outputs.source_sha }}
-          persist-credentials: false
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: .bun-version
-          no-cache: true
-      - name: Install the pinned Tauri CLI for credential validation
-        run: bun install --frozen-lockfile
-        working-directory: lycaon-den
-      - name: Install minisign for cryptographic feed verification
-        uses: ./.github/actions/setup-apt
-        with:
-          packages: minisign
-      - name: Prove all retained feed credentials before publication
-        env:
-          FEED_SIGNING_KEYS_JSON: ${{ secrets.FEED_SIGNING_KEYS_JSON }}
-        run: python3 scripts/feed_signing.py --check-credentials
+  # Every credential and both protected environments are proven before any build starts.
+  credentials:
+    needs: classify
+    uses: ./.github/workflows/release-secrets-check.yml
+    secrets: inherit
+    with:
+      source_sha: ${{ needs.classify.outputs.source_sha }}
 
   compatibility:
-    needs: classify
+    needs: [classify, credentials]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -277,17 +269,10 @@ jobs:
       - uses: ./.github/actions/setup-verification
       - uses: ./.github/actions/cache-decide
       - uses: ./.github/actions/setup-bialy
-      - name: Validate release inputs
+      - name: Verify the candidate upgrade corpus
+        if: ${{ needs.classify.outputs.publish == 'true' }}
         timeout-minutes: 60
-        env:
-          PUBLISH: ${{ needs.classify.outputs.publish }}
-          BASELINE_SHA: ${{ needs.classify.outputs.baseline_sha }}
-        run: |
-          if [[ "${PUBLISH}" == true ]]; then
-            ./task release:preflight -- --require-corpus --baseline-ref "${BASELINE_SHA}"
-          else
-            ./task release:preflight -- --baseline-ref "${BASELINE_SHA}"
-          fi
+        run: ./task release:preflight -- --require-corpus
       - uses: ./.github/actions/verification-evidence
         if: always()
         timeout-minutes: 5
@@ -397,29 +382,7 @@ jobs:
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
           APPLE_ENGINE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_ENGINE_PROVISIONING_PROFILE_BASE64 }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        run: |
-          set -euo pipefail
-          : "${APPLE_CERTIFICATE:?missing APPLE_CERTIFICATE}"
-          : "${APPLE_CERTIFICATE_PASSWORD:?missing APPLE_CERTIFICATE_PASSWORD}"
-          : "${APPLE_API_KEY_P8:?missing APPLE_API_KEY_P8}"
-          : "${APPLE_ENGINE_PROVISIONING_PROFILE_BASE64:?missing APPLE_ENGINE_PROVISIONING_PROFILE_BASE64}"
-          : "${APPLE_SIGNING_IDENTITY:?missing APPLE_SIGNING_IDENTITY}"
-          KEYCHAIN="${RUNNER_TEMP}/app-signing.keychain-db"
-          KEYCHAIN_PW="$(openssl rand -base64 24)"
-          echo "${APPLE_CERTIFICATE}" | openssl base64 -d -A -out "${RUNNER_TEMP}/cert.p12"
-          security create-keychain -p "${KEYCHAIN_PW}" "${KEYCHAIN}"
-          security set-keychain-settings -lut 21600 "${KEYCHAIN}"
-          security unlock-keychain -p "${KEYCHAIN_PW}" "${KEYCHAIN}"
-          security import "${RUNNER_TEMP}/cert.p12" -P "${APPLE_CERTIFICATE_PASSWORD}" \
-            -A -t cert -f pkcs12 -k "${KEYCHAIN}"
-          security set-key-partition-list -S apple-tool:,apple:,codesign: \
-            -s -k "${KEYCHAIN_PW}" "${KEYCHAIN}" >/dev/null
-          security list-keychain -d user -s "${KEYCHAIN}" login.keychain-db
-          rm -f "${RUNNER_TEMP}/cert.p12"
-          echo "${APPLE_API_KEY_P8}" | openssl base64 -d -A -out "${RUNNER_TEMP}/AuthKey.p8"
-          echo "APPLE_API_KEY_PATH=${RUNNER_TEMP}/AuthKey.p8" >> "${GITHUB_ENV}"
-          echo "${APPLE_ENGINE_PROVISIONING_PROFILE_BASE64}" | openssl base64 -d -A -out "${RUNNER_TEMP}/engine.provisionprofile"
-          echo "APPLE_ENGINE_PROVISIONING_PROFILE=${RUNNER_TEMP}/engine.provisionprofile" >> "${GITHUB_ENV}"
+        run: bash scripts/macos-notary-tools/signing.sh import
 
       - name: Restore the decision engine build
         if: ${{ matrix.goos == 'darwin' }}
@@ -768,8 +731,7 @@ jobs:
     outputs:
       fixture_name: bundle-upgrade-fixtures-${{ github.run_attempt }}
       matrix: ${{ steps.prepare.outputs.matrix }}
-    needs: [classify, ship-gates, aggregate-release, publication-credentials]
-    if: ${{ !cancelled() && needs.aggregate-release.result == 'success' && (needs.publication-credentials.result == 'success' || needs.classify.outputs.publish == 'false') }}
+    needs: [classify, ship-gates, aggregate-release, linux-pacman-repositories]
     runs-on: ubuntu-latest
     environment: release-publication
     timeout-minutes: 45
@@ -887,7 +849,7 @@ jobs:
           status: ${{ job.status }}
 
   publish-artifacts:
-    needs: [classify, publication-credentials, ship-gates, build-release, aggregate-release, bundle-upgrade]
+    needs: [classify, ship-gates, build-release, aggregate-release, linux-pacman-repositories, bundle-upgrade]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     environment: release-publication

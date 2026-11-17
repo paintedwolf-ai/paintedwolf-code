@@ -25,6 +25,9 @@ webE2e.describe("presentation stability", () => {
         await page.getByTestId("layout-dock-btn").click();
         const host = page.getByTestId("shell-stage-host");
         await expect(host).toHaveAttribute("data-stage-leading", String(orientation === "standard"));
+        // Mirroring moves the navigation to the other side of the stage.
+        const [navBox, hostBox] = [(await page.getByTestId("focused-project-nav").boundingBox())!, (await host.boundingBox())!];
+        expect(navBox.x < hostBox.x).toBe(orientation === "standard");
         await expect(page.getByTestId("chat-view")).toBeVisible();
 
         for (const visit of ["cold", "prepared"]) {

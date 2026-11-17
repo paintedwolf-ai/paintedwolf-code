@@ -43,14 +43,8 @@ import {
 
 import { FilesEditor } from "./FilesEditor.tsx";
 
-import {
-  applyFilesBufferDraft,
-  applyFilesBufferEditorDocument,
-  applyFilesBufferLoad,
-  discardFilesBufferDraft,
-  markFilesBufferLoading,
-  openFilesBuffer,
-} from "../documents/project-files-buffers.ts";
+import { applyFilesBufferDraft, applyFilesBufferEditorDocument, applyFilesBufferLoad, discardFilesBufferDraft, markFilesBufferLoading } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import {
   projectFilesState,
   type FileBuffer,

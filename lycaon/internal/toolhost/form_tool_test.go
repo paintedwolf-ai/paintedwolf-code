@@ -9,6 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
@@ -30,7 +31,7 @@ func TestCodeRewriteToolKeepsPatternsLiteral(t *testing.T) {
 	source := "package main\n\nfunc a() string { return wrap(\"it's\") }\n"
 	testutil.FailErr(t, "seed source", os.WriteFile(path, []byte(source), 0o644))
 
-	outcome := runFormTool(t, f, "code_rewrite", native.CodeRewriteArgv, map[string]any{
+	outcome := runFormTool(t, f, "code_rewrite", toolreach.CodeRewriteArgv, map[string]any{
 		"path": "main.go", "pattern": "wrap($A)", "rewrite": "unwrap($A)",
 	})
 	if outcome.State != "completed" || outcome.Status != 0 {
@@ -48,7 +49,7 @@ func TestFormToolRunsTheCommandFormsProgram(t *testing.T) {
 	f := newComposedProgramFixture(t)
 	path := filepath.Join(f.Dir, "main.go")
 	testutil.FailErr(t, "seed source", os.WriteFile(path, []byte("package main\n\nvar x = wrap(1)\n"), 0o644))
-	runFormTool(t, f, "code_rewrite", native.CodeRewriteArgv, map[string]any{
+	runFormTool(t, f, "code_rewrite", toolreach.CodeRewriteArgv, map[string]any{
 		"path": "main.go", "pattern": "wrap($A)", "rewrite": "unwrap($A)", "dry_run": true,
 	})
 	programs := f.Programs(t)

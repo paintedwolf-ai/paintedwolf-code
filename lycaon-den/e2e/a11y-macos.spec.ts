@@ -30,12 +30,37 @@ webE2e.describe("macOS accessibility", () => {
     await expect(log).toHaveAttribute("role", "log");
     await expect(log).toHaveAttribute("aria-label", "Conversation");
 
+    // Speak selection reads what can be selected: both bubbles and the rendered reply stay selectable.
+    const stage = liveChatStage(page);
+    await expect(stage.locator(".bubble--assistant .markdown-body").first()).toBeVisible({ timeout: 30_000 });
+    for (const selector of [".bubble--user", ".bubble--assistant", ".markdown-body"]) {
+      expect(await stage.locator(selector).first().evaluate((element) => getComputedStyle(element).userSelect), selector).toBe("text");
+    }
+
+    // Keyboard focus shows a ring on dock links and tab chips.
+    await page.keyboard.press("Tab");
+    for (const control of [page.locator(".den-shell-dock-link").first(), stage.locator(".tabs__chip").first()]) {
+      await control.focus();
+      expect(await control.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return style.outlineStyle !== "none" || style.boxShadow !== "none";
+      })).toBe(true);
+    }
+
+    // At the default scale a quiet icon button already meets the 24px floor.
+    const defaultSendBox = await liveChatStage(page).getByTestId("composer-send").boundingBox();
+    expect(defaultSendBox!.width).toBeGreaterThanOrEqual(24);
+    expect(defaultSendBox!.height).toBeGreaterThanOrEqual(24);
+
     await page.setViewportSize({ width: 720, height: 480 });
     const textScale = await page.evaluate(() => {
       const h = (window as unknown as HarnessWindow).__harness;
       return h?.setTextScale?.().textScale ?? 53 / 17;
     });
     expect(textScale).toBeCloseTo(53 / 17, 3);
+    // The root font size carries the scale, so every rem follows it.
+    expect(await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize)))
+      .toBeCloseTo(14 * 53 / 17, 1);
 
     const sendBox = await liveChatStage(page).getByTestId("composer-send").boundingBox();
     expect(sendBox!.width).toBeGreaterThanOrEqual(24);
@@ -85,6 +110,7 @@ webE2e.describe("macOS accessibility", () => {
     await expect(page.getByTestId("search-query-input")).toBeFocused();
     await expect(search).not.toHaveAttribute("role", "dialog");
     await expect(search).not.toHaveAttribute("aria-modal", "true");
+    await expect(search).toHaveAccessibleName("Search");
     await expect(opener).toHaveClass(/project-context-zone__entry--active/);
 
     // Pane, not overlay: sidebar stays clickable (aside is not inert).

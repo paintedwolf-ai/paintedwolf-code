@@ -1,11 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { fileBufferKey } from "./project-files-model.ts";
-import {
-  applyFilesBufferLoad,
-  closeFilesBuffer,
-  openFilesBuffer,
-  resetProjectFilesForTests,
-} from "../documents/project-files-buffers.ts";
+import { applyFilesBufferLoad } from "../documents/project-files-buffer-io.ts";
+import { closeFilesBuffer, openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 import {
   navigateProjectJumpBack,
   pushProjectJump,

@@ -10,7 +10,7 @@ import (
 )
 
 func TestBuildProgressUpdate(t *testing.T) {
-	t.Run("initial 0 to N carries full plan", func(t *testing.T) {
+	t.Run("initial 0 to N carries the full plan and its counts", func(t *testing.T) {
 		before, after := snapshotPair("", "- [ ] a\n- [ ] b\n")
 		meta, ok := buildProgressUpdate(before, after, 1)
 		if !ok {
@@ -25,9 +25,12 @@ func TestBuildProgressUpdate(t *testing.T) {
 		if len(meta.Changes) != 0 {
 			t.Errorf("Changes should be empty on initial, got %d", len(meta.Changes))
 		}
+		if meta.Summary == nil || meta.Summary.TotalSteps != 2 || meta.Summary.Pending != 2 || meta.Summary.Done != 0 {
+			t.Errorf("Summary = %+v, want two pending of two", meta.Summary)
+		}
 	})
 
-	t.Run("mid-run delta carries changes only", func(t *testing.T) {
+	t.Run("mid-run delta carries its changes and the plan counts", func(t *testing.T) {
 		before, after := snapshotPair("- [ ] a\n- [ ] b\n", "- [x] a\n- [ ] b\n")
 		meta, ok := buildProgressUpdate(before, after, 2)
 		if !ok {
@@ -39,9 +42,12 @@ func TestBuildProgressUpdate(t *testing.T) {
 		if len(meta.Changes) != 1 || meta.Changes[0].Kind != wire.ProgressChangeDone {
 			t.Errorf("Changes = %+v, want one done", meta.Changes)
 		}
+		if meta.Summary == nil || meta.Summary.ChangeCount != 1 || meta.Summary.TotalSteps != 2 || meta.Summary.Done != 1 || meta.Summary.Pending != 1 {
+			t.Errorf("Summary = %+v, want one change leaving one done of two", meta.Summary)
+		}
 	})
 
-	t.Run("large initial plan carries summary", func(t *testing.T) {
+	t.Run("large initial plan carries only its counts", func(t *testing.T) {
 		latest := checklistRows(progress.MaxDetailedProgressUpdateRows + 1)
 		before, after := snapshotPair("", latest)
 		meta, ok := buildProgressUpdate(before, after, 2)
@@ -59,7 +65,7 @@ func TestBuildProgressUpdate(t *testing.T) {
 		}
 	})
 
-	t.Run("large mid-run delta carries summary", func(t *testing.T) {
+	t.Run("large mid-run delta carries only the plan counts", func(t *testing.T) {
 		const changed = progress.MaxDetailedProgressUpdateRows + 2
 		baseline := checklistRows(changed + 1)
 		latest := strings.Replace(baseline, "- [ ]", "- [x]", changed)
@@ -73,6 +79,9 @@ func TestBuildProgressUpdate(t *testing.T) {
 		}
 		if meta.Summary.ChangeCount != changed || meta.Summary.Done != changed || meta.Summary.Pending != 1 {
 			t.Fatalf("Summary = %+v, want 14 completed and one pending row", meta.Summary)
+		}
+		if len(meta.Changes) != 0 {
+			t.Fatalf("large delta listed %d changes", len(meta.Changes))
 		}
 	})
 

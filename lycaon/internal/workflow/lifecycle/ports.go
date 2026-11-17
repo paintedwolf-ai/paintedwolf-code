@@ -40,7 +40,7 @@ type WorkerStop interface {
 	CancelWorkersByRunID(context.Context, string, string) error
 	SettleWorkerCancellationsByRunID(context.Context, string, string) error
 	HoldPendingWorkersByRunID(context.Context, string) error
-	CancelDelegationsByRunID(context.Context, string) error
+	WithdrawPlannedWorkersByRunID(context.Context, string) error
 }
 
 type StartBarrier interface {

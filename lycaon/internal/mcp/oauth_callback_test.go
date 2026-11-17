@@ -111,15 +111,14 @@ func TestCallbackListenerStopsAfterFirstRedirect(t *testing.T) {
 	testutil.FailErr(t, "http.Get failed", err)
 	_ = resp.Body.Close()
 
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the listener stops accepting redirects after the first one", func() bool {
 		resp2, err := http.Get(redirect + "?code=two&state=st")
 		if err != nil {
-			return // listener is down, which is the assertion
+			return true
 		}
 		_ = resp2.Body.Close()
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Fatal("listener still accepting redirects after the first one completed")
+		return false
+	})
 }
 
 // A redirect that does not carry the state this authorization issued is not this

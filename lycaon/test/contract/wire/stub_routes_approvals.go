@@ -66,9 +66,6 @@ func registerStubPolicyApprovalRoutes(mux *http.ServeMux, writeJSON stubJSONWrit
 		CoordinatorHostTurnTimeoutMs: 10800000,
 		CoordinatorMaxSleepMs:        10800000,
 		AwaitParentWorkersTimeoutMs:  10800000,
-		WorkerToolBudgetDefault:      20,
-		WorkerToolBudgetMin:          2,
-		WorkerToolBudgetMax:          120,
 		MergedFrom:                   []string{"bundled"},
 	}
 

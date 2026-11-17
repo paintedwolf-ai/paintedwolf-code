@@ -1,18 +1,9 @@
 package toolapproval
 
-// GateRepeatLedger records reason-keyed repeat counts for approval cards.
-// Implemented by session.GateRepeatLedger via a thin adapter.
-type GateRepeatLedger interface {
-	NoteAsk(chatSessionID, reasonKey, subject string) GateRepeatSnapshot
-	NoteSuppressed(chatSessionID, reasonKey, subject string)
-}
+import "github.com/lycaon/lycaon/internal/session/approvalstate"
 
-// GateRepeatSnapshot is the outcome of recording a minted ask.
-type GateRepeatSnapshot struct {
-	ReasonKey         string
-	Count             int
-	Asks              int
-	Subjects          []string
-	SubjectsTruncated bool
-	Suppressed        int
+// GateRepeatLedger records reason-keyed repeat counts for approval cards.
+type GateRepeatLedger interface {
+	NoteAsk(chatSessionID, reasonKey, subject string) approvalstate.RepeatSnapshot
+	NoteSuppressed(chatSessionID, reasonKey, subject string)
 }

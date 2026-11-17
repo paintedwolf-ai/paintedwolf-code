@@ -310,33 +310,6 @@ func TestProgramSupervisorLossInterruptsWithoutReplay(t *testing.T) {
 	}
 }
 
-func TestProgramEntryDisableStopsOwnedWorkAndRefusesNewPrograms(t *testing.T) {
-	f := newProgramFixture(t)
-	_, err := f.call(t, t.Context(), "external -- /bin/sleep 30 &")
-	testutil.FailErr(t, "launch owned job", err)
-	_ = f.jobHandle(t)
-	registryHandle := f.registryHandle(t)
-	if stopped := f.Runtime.SetDisabled(true); len(stopped) != 1 {
-		t.Fatalf("disable stopped %v", stopped)
-	}
-	ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-	defer cancel()
-	if _, stopped, err := f.Background.Lifecycle.Wait(ctx, f.Session, registryHandle); err != nil || !stopped {
-		t.Fatalf("owned job after disable stopped=%v err=%v", stopped, err)
-	}
-	_, err = f.call(t, t.Context(), "external -- /bin/echo after")
-	if rejected := toolrejection.AsToolReject(err); rejected == nil || rejected.Code != "COMMAND_PROGRAMS_DISABLED" {
-		t.Fatalf("disabled entry admitted a program: %v", err)
-	}
-	if programs := f.programRows(t); len(programs) != 2 || programs[0] != "interrupted" || programs[1] != "completed" {
-		t.Fatalf("programs after disable %v", programs)
-	}
-	f.Runtime.SetDisabled(false)
-	if out, err := f.call(t, t.Context(), "external -- /bin/echo again"); err != nil || !strings.Contains(out, `"stdout":"again\n"`) {
-		t.Fatalf("re-enabled entry %s %v", out, err)
-	}
-}
-
 func TestProgramEntryClassifiesExternalProducerStoppedByConsumer(t *testing.T) {
 	f := newProgramFixture(t)
 	out, err := f.call(t, t.Context(), "external -- /usr/bin/yes | head")
@@ -377,6 +350,9 @@ func TestProgramEntryLargeLoopsKeepTheSessionUsable(t *testing.T) {
 
 func TestProgramEntryChildLimitKeepsPartialResultsAndSessionUsable(t *testing.T) {
 	f := newProgramFixture(t)
+	// Seeding 65,535 receipts takes as long as the host needs; a held clock keeps the
+	// program in the foreground until it ends, so each form reports its terminal state.
+	f.Runtime.Clock = programtest.NewManualClock()
 	seeded := 0
 	f.Runtime.Evaluate = func(ctx context.Context, plan commandsurface.ProgramSnapshot, ports commandprogram.EvaluationPorts) (commandprogram.ProgramOutcome, error) {
 		if seeded < 2 {

@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/coordinator/kick"
+	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/turnnudges"
@@ -64,5 +67,80 @@ func TestNudgesClassifiesActualSpendCeilingAndRetainsRunway(t *testing.T) {
 	}
 	if deps.IsSpendCeiling(errors.New(err.Error())) {
 		t.Fatal("diagnostic prose was mistaken for a structured spend refusal")
+	}
+}
+
+type stubCycleLedger struct {
+	tasks map[string]*api.WorkerTask
+}
+
+func (s stubCycleLedger) ListBySession(context.Context, string, string, ...api.WorkerStatus) ([]api.WorkerTask, error) {
+	return nil, nil
+}
+
+func (s stubCycleLedger) ListPendingOutcomes(context.Context) ([]api.WorkerTask, error) {
+	return nil, nil
+}
+
+func (s stubCycleLedger) Get(id string) (*api.WorkerTask, bool) {
+	task, ok := s.tasks[id]
+	return task, ok
+}
+
+type stubRoundUsage struct {
+	usage cost.SessionUsage
+	err   error
+	since time.Time
+}
+
+func (s *stubRoundUsage) SessionUsageSince(_ context.Context, _ string, since time.Time) (cost.SessionUsage, error) {
+	s.since = since
+	return s.usage, s.err
+}
+
+func TestWorkerRoundConsumptionReportsMeasuredAndFallbackFacts(t *testing.T) {
+	created := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
+	started := created.Add(2 * time.Minute)
+	ledger := stubCycleLedger{
+		tasks: map[string]*api.WorkerTask{
+			"job-started": {ID: "job-started", AgentType: "implementer", CreatedAt: created, StartedAt: &started},
+			"job-created": {ID: "job-created", AgentType: "repo-researcher", CreatedAt: created},
+		},
+	}
+	usage := &stubRoundUsage{
+		usage: cost.SessionUsage{Tokens: 4200, SpendNanoUSD: 85_000_000, Priced: true},
+	}
+	var gotParent string
+	var gotFacts []kick.WorkerRoundNoticeFacts
+	nudges := &Nudges{
+		Nudges:     &turnnudges.Service{},
+		Workers:    ledger,
+		RoundUsage: usage,
+		RoundNotice: func(_ context.Context, parentID string, facts kick.WorkerRoundNoticeFacts) {
+			gotParent = parentID
+			gotFacts = append(gotFacts, facts)
+		},
+	}
+	deps := nudges.Build()
+	child := &api.Session{ID: "child-1", ParentSessionID: "parent-1"}
+
+	deps.WorkerRoundConsumption(t.Context(), nil, "job-started", 25)
+	deps.WorkerRoundConsumption(t.Context(), child, "missing-job", 25)
+	if len(gotFacts) != 0 {
+		t.Fatalf("unexpected notice for nil session or unknown job: %+v", gotFacts)
+	}
+
+	deps.WorkerRoundConsumption(t.Context(), child, "job-started", 25)
+	if gotParent != "parent-1" || len(gotFacts) != 1 || !usage.since.Equal(started) {
+		t.Fatalf("started job notice = %q %+v since=%v", gotParent, gotFacts, usage.since)
+	}
+	if gotFacts[0].Tokens != 4200 || gotFacts[0].SpendNanoUSD != 85_000_000 || !gotFacts[0].SpendPriced || gotFacts[0].ModelCalls != 25 {
+		t.Fatalf("measured notice facts = %+v", gotFacts[0])
+	}
+
+	usage.err = errors.New("ledger busy")
+	deps.WorkerRoundConsumption(t.Context(), child, "job-created", 50)
+	if len(gotFacts) != 2 || !usage.since.Equal(created) || gotFacts[1].Tokens != 0 || gotFacts[1].ModelCalls != 50 {
+		t.Fatalf("fallback notice facts = %+v since=%v", gotFacts, usage.since)
 	}
 }

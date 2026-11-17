@@ -16,8 +16,8 @@ func TestChannelDirNameProdByDefault(t *testing.T) {
 	if got := configdir.ChannelDirName(); got != configdir.DirNameProd {
 		t.Fatalf("ChannelDirName() = %q want %q", got, configdir.DirNameProd)
 	}
-	if got := configdir.Label(); got != configdir.LabelProd() {
-		t.Fatalf("Label() = %q want %q", got, configdir.LabelProd())
+	if got, want := configdir.Label(), "~/.config/"+configdir.DirNameProd; got != want {
+		t.Fatalf("Label() = %q want %q", got, want)
 	}
 }
 

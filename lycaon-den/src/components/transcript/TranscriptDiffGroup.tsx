@@ -11,7 +11,6 @@ import {
 import {
   TranscriptDisclosurePanel,
   TranscriptDisclosureShell,
-  TranscriptDisclosureToggle,
   useTranscriptDisclosure,
 } from "../../chat/transcript/presentation/transcript-disclosure.tsx";
 import { useTranscriptDisclosureStore } from "../../chat/transcript/presentation/disclosure-state.tsx";
@@ -22,6 +21,7 @@ import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-l
 import { bindFindRevealHost } from "../../find/use-findable-view.ts";
 import { heightToggleDirectionFor } from "../../ui/height-toggle-motion.ts";
 import { KeyedIndex } from "../keyed-index.tsx";
+import { TranscriptLinkSummary } from "./TranscriptLinkSummary.tsx";
 import { FileEditDiff } from "../FileEditDiff.tsx";
 import { createFoldNetStats } from "../../chat/file-edit/file-edit-net-stats.ts";
 import { observeSurfaceFailure } from "../../notices/surface-failure.ts";
@@ -136,25 +136,23 @@ export function TranscriptDiffGroup(props: Props) {
         bindTranscriptEntry(el);
         setHostEl(el);
       }}
-      class="den-diff-group den-transcript-disclosure-card"
+      class="den-diff-group den-transcript-card den-transcript-disclosure-card den-transcript-disclosure-link"
       data-testid="diff-group"
       data-files={summary().files}
       data-layout={props.layout}
     >
-      <TranscriptDisclosureToggle
+      <TranscriptLinkSummary
         disclosure={disclosure}
+        label={fileLabel()}
+        labelTestId="diff-group-files"
         onClick={handleSummaryClick}
         aria-label={`${fileLabel()}, ${summary().stat?.added ?? "pending"} added, ${
           summary().stat?.removed ?? "pending"
         } removed, ${writeLabel()}`}
       >
-        <span class="den-diff-group-summary">
-          <span class="den-diff-group-files" data-testid="diff-group-files">{fileLabel()}</span>
-          <Show keyed when={summary().stat}>{stat => <LineStat added={stat.added} removed={stat.removed} />}</Show>
-          <span class="den-diff-group-writes" data-testid="diff-group-writes">{writeLabel()}</span>
-          <span class="den-tool-chicklet-caret" aria-hidden="true" />
-        </span>
-      </TranscriptDisclosureToggle>
+        <Show keyed when={summary().stat}>{stat => <LineStat added={stat.added} removed={stat.removed} />}</Show>
+        <span class="den-diff-group-writes" data-testid="diff-group-writes">{writeLabel()}</span>
+      </TranscriptLinkSummary>
       <TranscriptDisclosurePanel disclosure={disclosure} class="den-diff-group-list">
         <RowAccordionProvider value={accordion}>
           <KeyedIndex each={props.folds} keyOf={(fold) => fold.key}>

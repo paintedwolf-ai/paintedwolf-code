@@ -15,7 +15,7 @@ import type { createFileDocumentCommands } from "../documents/file-document-comm
 import type { createFileMergeCommands } from "../documents/file-merge-commands.ts";
 import { filesBufferNeedsBody, projectFilesState, type FileBuffer } from "../documents/files-buffer-state.ts";
 import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts";
-import { openFilesBuffer } from "../documents/project-files-buffers.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import { BufferMergeView } from "../editor/BufferMergeView.tsx";
 import type { createDefinitionNavigation } from "../editor/definition-navigation.ts";
 import type { createFilesEditorActions } from "../editor/files-editor-actions.ts";

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -134,7 +135,7 @@ func (s *ApprovalStore) endGrant(ctx context.Context, projectID, path string, en
 		UPDATE blueprint_approvals
 		SET status = ?, revoked_at = ?, revoked_cause = ?
 		WHERE project_id = ? AND path = ?`,
-		end.status, db.FormatTime(time.Now().UTC()), end.cause, projectID, path); err != nil {
+		end.status, timelayout.Format(time.Now().UTC()), end.cause, projectID, path); err != nil {
 		return err
 	}
 	if err := s.authz.AppendHumanGateTx(ctx, tx, authzledger.HumanGateRecord{

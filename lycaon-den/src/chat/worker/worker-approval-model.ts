@@ -1,10 +1,11 @@
 import type {
   BoardView,
-  BoardWorkerRosterEntry,
+  BoardWorker,
   CheckpointKind,
   WorkerTask,
 } from "../../api/types.ts";
 import type { PendingCheckpoint } from "../checkpoint/checkpoint-model.ts";
+import { collapseWorkersByIdentity } from "./worker-identity.ts";
 
 const WORKER_APPROVAL_KINDS = new Set<CheckpointKind>([
   "tool_approval",
@@ -28,13 +29,13 @@ function commandSummary(checkpoint: PendingCheckpoint): string {
   );
 }
 
-/** Join authoritative checkpoint SSE rows to worker child sessions. */
+/** Join authoritative checkpoint SSE rows to canonical worker child sessions. */
 export function pendingWorkerApprovals(
   workers: readonly WorkerTask[],
   checkpoints: readonly PendingCheckpoint[],
 ): PendingWorkerApproval[] {
   const workerByChildSession = new Map<string, WorkerTask>();
-  for (const worker of workers) {
+  for (const worker of collapseWorkersByIdentity(workers)) {
     const child = worker.child_session_id?.trim();
     if (child) workerByChildSession.set(child, worker);
   }
@@ -70,19 +71,31 @@ export function pendingWorkerApprovalByJob(
   );
 }
 
-/** Project the SSE join onto the board roster without mutating the sidecar snapshot. */
+/** Project the SSE join onto the board workers without mutating the sidecar snapshot. */
 export function boardWithWorkerApprovalState(
   board: BoardView | undefined,
   workers: readonly WorkerTask[],
   checkpoints: readonly PendingCheckpoint[],
 ): BoardView | undefined {
-  if (!board?.roster) return board;
-  const blocked = new Set(
-    pendingWorkerApprovals(workers, checkpoints).map((approval) => approval.jobId),
+  if (!board?.workers) return board;
+  const approvals = pendingWorkerApprovals(workers, checkpoints);
+  const blockedJobs = new Set(approvals.map((approval) => approval.jobId));
+  const blockedChildren = new Set(
+    approvals.map((approval) => approval.childSessionId),
   );
-  const roster: BoardWorkerRosterEntry[] = board.roster.map((row) => ({
-    ...row,
-    blocked_on_approval: blocked.has(row.worker_id) || undefined,
-  }));
-  return { ...board, roster };
+  const boardWorkers: BoardWorker[] = board.workers.map((bw) => {
+    const child = bw.child_session_id?.trim() ?? "";
+    const latestJob = bw.latest_job_id?.trim() ?? "";
+    const waitingForApproval =
+      bw.state === "working" &&
+      ((child && blockedChildren.has(child)) ||
+        (latestJob && blockedJobs.has(latestJob)));
+    if (!waitingForApproval) return bw;
+    return {
+      ...bw,
+      reason: "approval_wait",
+      state_label: "Waiting for approval",
+    };
+  });
+  return { ...board, workers: boardWorkers };
 }

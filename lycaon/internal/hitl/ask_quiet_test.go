@@ -416,7 +416,7 @@ func TestDiscretionaryGatesCarryAQuietRung(t *testing.T) {
 			Command: "curl https://example.com",
 		},
 	}
-	for _, g := range gate.All() {
+	for _, g := range api.AllApprovalGateValues() {
 		decision := &gate.Decision{
 			Primary:   g,
 			ReasonKey: string(g) + ":subject",
@@ -562,7 +562,7 @@ func TestOrdinaryCardHasNoOptionNote(t *testing.T) {
 
 func TestGateReuseCeilings(t *testing.T) {
 	t.Parallel()
-	for _, g := range gate.All() {
+	for _, g := range api.AllApprovalGateValues() {
 		scope := gate.ReuseFor(g).Scope
 		if g == api.GateCapabilityWidening || g == api.GateAgentPolicyChange {
 			if scope != gate.ScopeChat {

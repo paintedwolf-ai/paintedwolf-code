@@ -1,6 +1,7 @@
 package packboard_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -313,66 +314,6 @@ func TestFormatScansDetailLinesIncludesTopNewStubs(t *testing.T) {
 	}
 }
 
-func TestFormatBranchMergeLine(t *testing.T) {
-	line := packboard.FormatBranchMergeLine([]api.WorkerTask{
-		{ID: "job-pending", WorkspaceRoot: "/tmp/w1", MergeStatus: api.WorkerMergeStatusPending},
-		{ID: "job-merged", WorkspaceRoot: "/tmp/w2", MergeStatus: api.WorkerMergeStatusMerged},
-		{ID: "job-rejected", WorkspaceRoot: "/tmp/w3", MergeStatus: api.WorkerMergeStatusRejected},
-		{ID: "job-orphan", WorkspaceRoot: "/tmp/w4", MergeStatus: api.WorkerMergeStatusOrphaned},
-		{ID: "job-rebase", WorkspaceRoot: "/tmp/w5", MergeStatus: api.WorkerMergeStatusRebasing},
-	})
-	if !strings.Contains(line, "Merge:") {
-		t.Fatalf("line = %q", line)
-	}
-	for _, want := range []string{"pending", "merged", "rejected", "orphaned", "rebasing"} {
-		if !strings.Contains(line, want) {
-			t.Fatalf("line = %q missing %q", line, want)
-		}
-	}
-}
-
-func TestFormatPromotePathStatusLine(t *testing.T) {
-	line := packboard.FormatPromotePathStatusLine([]api.WorkerPromoteJobPathStatus{
-		{
-			WorkerID: "job-abc12345",
-			Paths: []api.WorkerPromotePathStatus{
-				{Path: "safe.go", Status: api.WorkerPromotePathOutcomeApplied},
-				{Path: "conflict.go", Status: api.WorkerPromotePathOutcomeConflict, HunkCount: 2},
-			},
-		},
-	})
-	if !strings.Contains(line, "Merge paths:") {
-		t.Fatalf("line = %q", line)
-	}
-	if !strings.Contains(line, "safe.go:applied") || !strings.Contains(line, "conflict.go:conflict(2)") {
-		t.Fatalf("line = %q", line)
-	}
-}
-
-func TestBuildOrientationLinesIncludesPromotePathStatus(t *testing.T) {
-	workers := api.BoardWorkersSlice{
-		"promote_paths": []api.WorkerPromoteJobPathStatus{
-			{
-				WorkerID: "job-xyz",
-				Paths:    []api.WorkerPromotePathStatus{{Path: "a.go", Status: api.WorkerPromotePathOutcomeConflict, HunkCount: 1}},
-			},
-		},
-	}
-	lines := packboard.BuildOrientationLines(api.BoardSnapshot{
-		Workers: &workers,
-	}, packboard.OrientOpts{Now: time.Date(2026, 6, 2, 12, 0, 0, 0, time.UTC)})
-	found := false
-	for _, line := range lines {
-		if strings.HasPrefix(line, "Merge paths:") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("lines = %v", lines)
-	}
-}
-
 func TestBuildOrientationLinesOmitsEmptyRepo(t *testing.T) {
 	lines := packboard.BuildOrientationLines(api.BoardSnapshot{
 		Repo: api.RepoBrief{},
@@ -384,17 +325,83 @@ func TestBuildOrientationLinesOmitsEmptyRepo(t *testing.T) {
 	}
 }
 
-func TestFormatOverlayMergePlanLine(t *testing.T) {
-	line := packboard.FormatOverlayMergePlanLine(&api.OverlayMergePlan{
-		PendingCount:    3,
-		PromoteSequence: []string{"job-themes", "job-timing", "job-alias"},
-		SharedPaths: []api.OverlayMergeSharedPath{
-			{Path: "prompt.py", WorkerIDs: []string{"job-timing", "job-alias"}},
-		},
-	})
-	for _, want := range []string{"Overlay plan:", "3 pending", "job-…", "shared", "prompt.py"} {
-		if !strings.Contains(line, want) {
-			t.Fatalf("line = %q missing %q", line, want)
+// The coordinator addresses workers by name and results by handle, so no
+// board line, in any scope, carries a job id or a prefix of one.
+func TestBoardOrientationNamesNoJob(t *testing.T) {
+	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+	job := func(n int) string { return fmt.Sprintf("%08x-1111-4111-8111-111111111111", 0xabc00000+n) }
+	var tasks []api.WorkerTask
+	for i, status := range []api.WorkerMergeStatus{api.WorkerMergeStatusPending, api.WorkerMergeStatusMerged, api.WorkerMergeStatusRejected, api.WorkerMergeStatusOrphaned, api.WorkerMergeStatusRebasing} {
+		tasks = append(tasks, api.WorkerTask{ID: job(i), AgentType: "implementer", Status: api.WorkerStatusComplete, MergeStatus: status, WorkspaceRoot: "/tmp/w", ChildSessionID: "child",
+			CreatedAt: now, Result: &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: "partial"}}})
+	}
+	tasks = append(tasks, api.WorkerTask{ID: job(9), AgentType: "repo-researcher", Status: api.WorkerStatusRunning, Brief: "read it", Scope: &api.TaskScope{Mode: api.TaskScopeModeRead}})
+	workers := api.BoardWorkersSlice{
+		"tasks":         tasks,
+		"promote_paths": []api.WorkerPromoteJobPathStatus{{WorkerID: job(0), Paths: []api.WorkerPromotePathStatus{{Path: "a.go", Status: api.WorkerPromotePathOutcomeConflict, HunkCount: 1}}}},
+		"overlay_merge_plan": &api.OverlayMergePlan{PendingCount: 2, PromoteSequence: []string{"r-docs", "r-fixer"},
+			SharedPaths: []api.OverlayMergeSharedPath{{Path: "a.go", OverlayIDs: []string{"r-docs", "r-fixer"}}},
+			Entries:     []api.OverlayMergePlanEntry{{OverlayID: "r-docs", Worker: "docs"}, {OverlayID: "r-fixer", Worker: "fixer"}}},
+	}
+	snap := api.BoardSnapshot{Workers: &workers}
+	lines := packboard.BuildOrientationLines(snap, packboard.OrientOpts{Now: now})
+	for _, scope := range []packboard.InjectScope{packboard.InjectScopeFull, packboard.InjectScopePulse} {
+		body, _ := packboard.FormatInjectBodyScoped(snap, scope, false, now, api.MaxBoardInjectChars)
+		lines = append(lines, body...)
+	}
+	lines = append(lines, packboard.FormatReservedPathsLines([]api.BoardReservationEntry{{Path: "a.go", JobID: job(0), LegLabel: "fix"}})...)
+	if len(lines) == 0 {
+		t.Fatal("no board lines")
+	}
+	for _, line := range lines {
+		for _, task := range tasks {
+			if strings.Contains(line, task.ID[:4]) {
+				t.Fatalf("line names job %s: %q", task.ID, line)
+			}
 		}
+	}
+}
+
+func TestNamedWorkerOrientationAndPulseFingerprint(t *testing.T) {
+	now := time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
+	workers := []api.BoardWorker{
+		{
+			Name: "asker", AgentType: "implementer", ScopeMode: "write",
+			WorkspaceState: "retained", State: api.WorkerStateAsking,
+			Reason: "pending_decision", Question: "Which schema?",
+		},
+		{
+			Name: "fixer", AgentType: "implementer", ScopeMode: "write",
+			WorkspaceState: "refreshed", State: api.WorkerStateDelivered,
+			ResultHandle: "res-1", ResultDisposition: api.WorkerResultOpen,
+			ChangedPaths: []string{"pkg/a.go"}, ChangedOmitted: 1, About: "fix parser",
+		},
+	}
+	for i := range 12 {
+		workers = append(workers, api.BoardWorker{
+			Name: fmt.Sprintf("scout-%02d", i), State: api.WorkerStateWorking, WorkspaceState: "shared",
+		})
+	}
+	snap := api.BoardSnapshot{
+		Workers: &api.BoardWorkersSlice{"workers": workers},
+	}
+	lines := packboard.BuildOrientationLines(snap, packboard.OrientOpts{Now: now, IncludeDetail: true})
+	joined := strings.Join(lines, "\n")
+	for _, want := range []string{"Worker: asker · implementer · asking:pending_decision · retained · ask: Which schema?", "Worker: fixer · implementer · delivered · refreshed · res-1:open · changed: pkg/a.go (+1) · fix parser"} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("orientation missing %q in:\n%s", want, joined)
+		}
+	}
+	injectLines := packboard.BuildInjectLines(snap, packboard.InjectScopeFull, packboard.OrientOpts{Now: now, IncludeDetail: true})
+	if len(injectLines) == 0 {
+		t.Fatal("inject lines empty")
+	}
+	fp1 := packboard.PulseFingerprint(snap, now)
+	workers[1].WorkspaceState = "reset"
+	fp2 := packboard.PulseFingerprint(api.BoardSnapshot{
+		Workers: &api.BoardWorkersSlice{"workers": workers},
+	}, now)
+	if fp1 == fp2 || !strings.Contains(packboard.NamedWorkerPulseSig(workers), "omitted:2") {
+		t.Fatalf("pulse fingerprint did not track workspace_state or omitted count: %s vs %s", fp1, fp2)
 	}
 }

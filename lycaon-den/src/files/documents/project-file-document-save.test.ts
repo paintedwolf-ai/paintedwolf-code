@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { required } from "../../test/at.ts";
 import "../../test/document-outbox-fixture.ts";
-import { filesBufferBase } from "./project-files-buffers.ts";
-import { filesBufferText } from "./project-files-buffers.ts";
+import { filesBufferBase } from "./files-buffer-state.ts";
+import { filesBufferText } from "./files-buffer-state.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Transaction } from "@codemirror/state";
 import * as Y from "yjs";
@@ -14,7 +14,8 @@ import { connectFilesEditorDocuments } from "../editor/files-editor-synchronizat
 import { editorReplica, resetEditorDocumentsForTests, resolveEditorDocument, subscribeEditorDocuments } from "./editor-document.ts";
 import { suspendFileDocument } from "./files-residency.ts";
 import { saveProjectFileDocument } from "./project-file-document-save.ts";
-import { applyFilesBufferDraft, applyFilesBufferEditorDocument, applyFilesBufferLoad, openFilesBuffer, resetProjectFilesForTests, setFilesBufferFormatSettings } from "./project-files-buffers.ts";
+import { applyFilesBufferDraft, applyFilesBufferEditorDocument, applyFilesBufferLoad, setFilesBufferFormatSettings } from "./project-files-buffer-io.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "./project-files-buffer-lifecycle.ts";
 import type { FileBufferKey } from "../components/project-files-model.ts";
 import { projectFilesState } from "./files-buffer-state.ts";
 

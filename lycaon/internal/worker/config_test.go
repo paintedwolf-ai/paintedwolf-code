@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
-	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -152,44 +151,5 @@ func TestWorkerPolicyFeedbackSurvivesQueueReopen(t *testing.T) {
 	testutil.FailErr(t, "load pending projection", err)
 	if len(pending) != 1 || !reflect.DeepEqual(pending[0].Result.PolicyFeedback, feedback) {
 		t.Fatalf("pending delivery lost feedback: %+v", pending)
-	}
-}
-
-// notifyDuringCheckQueue fires during the first active-job check.
-type notifyDuringCheckQueue struct {
-	WorkerQueue
-	waiter          *ParentWorkerWaiter
-	parentSessionID string
-	calls           int
-}
-
-func (q *notifyDuringCheckQueue) ListBySession(_ context.Context, _, _ string, _ ...api.WorkerStatus) ([]api.WorkerTask, error) {
-	q.calls++
-	if q.calls == 1 {
-		// Complete while the waiter is registered.
-		q.waiter.NotifyParent(q.parentSessionID)
-		return []api.WorkerTask{{ID: "job-1", Status: api.WorkerStatusRunning}}, nil
-	}
-	return nil, nil
-}
-
-func (*notifyDuringCheckQueue) ListPendingOutcomes(context.Context) ([]api.WorkerTask, error) {
-	return nil, nil
-}
-
-func TestAwaitParentSessionWorkersDoesNotMissWakeupBetweenCheckAndRegister(t *testing.T) {
-	waiter := NewParentWorkerWaiter()
-	queue := &notifyDuringCheckQueue{waiter: waiter, parentSessionID: "parent-1"}
-	lim := settings.DefaultSessionLimits()
-	lim.AwaitParentWorkersTimeoutSec = 1
-
-	err := AwaitParentSessionWorkers(t.Context(), queue, waiter, testdbseed.DefaultProjectID, "parent-1", lim)
-	testutil.FailErr(t, "await parent session workers", err)
-
-	if queue.calls != 2 {
-		t.Fatalf("ListBySession calls = %d, want 2 (initial check + recheck after wake)", queue.calls)
-	}
-	if len(waiter.waiters) != 0 {
-		t.Fatalf("waiters remaining = %d, want 0 after settlement", len(waiter.waiters))
 	}
 }

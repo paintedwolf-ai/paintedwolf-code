@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/contactsheet"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/browser"
@@ -183,7 +185,7 @@ func CaptureHandler(pool *browser.Pool, bg *bgprocess.Registry, live LivePreview
 
 func captureMode(mime string) string {
 	switch mime {
-	case browser.FilmstripMime:
+	case contactsheet.FilmstripMime:
 		return browser.CaptureModeFilmstrip
 	case timelinearchive.Mime:
 		return browser.CaptureModeTimeline

@@ -5,6 +5,6 @@ triggers:
   topology_patterns: ["pipeline", "default-pipeline", "*"]
   phase_ids: ["review_test", "closeout"]
 checklist:
-  - "Run verify legs with command"
+  - "Run verification commands with command"
   - "Capture exit_code and head_sha in evidence anchors"
   - "Report failures with Code lookup — do not reinterpret reject prose"

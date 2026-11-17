@@ -2,6 +2,7 @@ package review
 
 import (
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"testing"
@@ -78,7 +79,7 @@ func TestEmptySetAsidesNameSelectorsThatMatchNothing(t *testing.T) {
 func TestRunSetAsidesAccountForGroupsInTheReportDocument(t *testing.T) {
 	claimsDef, _ := surveyPhases()
 	challenge := challengeWithSetAsides()
-	verdicts := []workflowpresentation.PhaseVerdict{
+	verdicts := []runstate.PhaseVerdict{
 		phaseVerdict("claims", claimsDef, "claims", `[{"id":"open","title":"Open","status":"claimed","statement":"s"}]`),
 		phaseVerdict("challenge", challenge, "set_asides", `[{"scanner":"secrets","paths":["**/*_test.go"],"reason":"test fixtures"}]`),
 	}

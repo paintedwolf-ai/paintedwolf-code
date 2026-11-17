@@ -178,7 +178,7 @@ func TestDetectionPackApiActionFromArgvAST(t *testing.T) {
 	}
 }
 
-// TestDetectionPackConnectHoldComposition exercises exported confine setters + DecideAttributedHost.
+// TestDetectionPackConnectHoldComposition exercises exported confine setters and attributed-host decisions.
 // Not parallel: mutates process-wide egress broker state.
 func TestDetectionPackConnectHoldComposition(t *testing.T) {
 	confine.SetEgressPosture(confine.PostureObserve)
@@ -214,7 +214,7 @@ func TestDetectionPackConnectHoldComposition(t *testing.T) {
 		return ep.Host == "iam.amazonaws.com"
 	})
 	t.Cleanup(func() { confine.SetEgressResolver(nil) })
-	if !confine.DecideAttributedHost(context.Background(), cmd, "iam.amazonaws.com") {
+	if !confine.DecideAttributedHTTPRequest(context.Background(), cmd, "iam.amazonaws.com", "", "") {
 		t.Fatal("detection hold should park then allow")
 	}
 	if asked != 1 {
@@ -229,7 +229,7 @@ func TestDetectionPackConnectHoldComposition(t *testing.T) {
 		}
 		return confine.EgressRuleResult{}
 	})
-	if confine.DecideAttributedHost(context.Background(), confine.EgressCommand{SessionID: "connect-hold-s2"}, "evil.example") {
+	if confine.DecideAttributedHTTPRequest(context.Background(), confine.EgressCommand{SessionID: "connect-hold-s2"}, "evil.example", "", "") {
 		t.Fatal("host deny must win")
 	}
 	if asked != 0 {
@@ -248,7 +248,7 @@ func TestDetectionPackConnectHoldComposition(t *testing.T) {
 		asked++
 		return true
 	})
-	if !confine.DecideAttributedHost(context.Background(), confine.EgressCommand{SessionID: "connect-hold-s3"}, "ok.example") {
+	if !confine.DecideAttributedHTTPRequest(context.Background(), confine.EgressCommand{SessionID: "connect-hold-s3"}, "ok.example", "", "") {
 		t.Fatal("approved detection hold should proceed")
 	}
 	if asked != 1 {
@@ -264,13 +264,13 @@ func TestDetectionPackConnectHoldComposition(t *testing.T) {
 		asked++
 		return true
 	})
-	if !confine.DecideAttributedHost(context.Background(), confine.EgressCommand{SessionID: "connect-hold-s4"}, "registry.example") {
+	if !confine.DecideAttributedHTTPRequest(context.Background(), confine.EgressCommand{SessionID: "connect-hold-s4"}, "registry.example", "", "") {
 		t.Fatal("first CONNECT should allow after card")
 	}
 	if asked != 1 {
 		t.Fatalf("asked=%d", asked)
 	}
-	if !confine.DecideAttributedHost(context.Background(), confine.EgressCommand{SessionID: "connect-hold-s5"}, "registry.example") {
+	if !confine.DecideAttributedHTTPRequest(context.Background(), confine.EgressCommand{SessionID: "connect-hold-s5"}, "registry.example", "", "") {
 		t.Fatal("second approved detection hold should proceed")
 	}
 	if asked != 2 {

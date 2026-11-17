@@ -41,7 +41,7 @@ func completionWaitFixture(t *testing.T) (*LoopEngine, *awaitstore.Store, *tools
 	}
 	loop.SetDeps(deps)
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register completion wait", RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
+	testutil.FailErr(t, "register completion wait", RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context(), WorkerKnown: func(context.Context, string, string) bool { return true }}))
 	return loop, store, reg
 }
 
@@ -80,7 +80,7 @@ func TestCompletionWaitTimerBackstopSettlesHungProcess(t *testing.T) {
 	})
 	testutil.FailErr(t, "arm completion wait with short deadline", err)
 	testutil.FailErr(t, "recover completion wait", RecoverWaitLeases(t.Context(), loop.Subscriptions, store))
-	testutil.WaitFor(t, func() bool { return timedOut.Load() == 1 })
+	testutil.WaitFor(t, "the wait timer settles the process", func() bool { return timedOut.Load() == 1 })
 	loop.Turns.WaitForAsyncTurns(t.Context())
 	if loop.Waits.IsSleeping("s1") {
 		t.Fatal("timer backstop left hung completion wait sleeping")
@@ -164,7 +164,7 @@ func TestBoundedCompletionWaitResumesFromDurableLease(t *testing.T) {
 	t.Cleanup(func() { restarted.ForgetSession(context.Background(), "s1") })
 	restarted.SetDeps(loopDepsSnapshotForTest(loop))
 	restartedReg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register restarted wait", RegisterWaitTool(restartedReg, restarted.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
+	testutil.FailErr(t, "register restarted wait", RegisterWaitTool(restartedReg, restarted.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context(), WorkerKnown: func(context.Context, string, string) bool { return true }}))
 	out, err := restartedReg.Run(t.Context(), "wait", map[string]any{"resume": true}, tctx)
 	testutil.FailErr(t, "resume bounded completion wait", err)
 	var result WaitToolResult
@@ -316,7 +316,7 @@ func TestCompletionWaitDeliversTerminalOrLostProcessOnce(t *testing.T) {
 				loop.SetDeps(deps)
 				testutil.FailErr(t, "recover lost process wait", RecoverWaitLeases(t.Context(), loop.Subscriptions, store))
 			}
-			testutil.WaitFor(t, func() bool { return deliveries.Load() == 1 })
+			testutil.WaitFor(t, "the wait is delivered once", func() bool { return deliveries.Load() == 1 })
 			loop.Turns.WaitForAsyncTurns(t.Context())
 			if loop.Waits.IsSleeping("s1") {
 				t.Fatal("terminal process left agent sleeping")

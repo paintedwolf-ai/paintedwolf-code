@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -239,7 +240,8 @@ func TestCurlExitStatusesAndUnknownOutcomes(t *testing.T) {
 		hits.Add(1)
 		switch r.URL.Path {
 		case "/slow":
-			time.Sleep(2 * time.Second)
+			// Outlives the client's --max-time; returns once the client gives up.
+			<-r.Context().Done()
 		case "/drop":
 			conn, _, _ := w.(http.Hijacker).Hijack()
 			_ = conn.Close()
@@ -537,9 +539,9 @@ func TestCurlExchangeProvenanceReporting(t *testing.T) {
 	extBase := "http://api.external.example:" + port
 	h := newHarness(t)
 
-	runObserved := func(args ...string) (run, []httpaction.ExchangeProvenance) {
-		var observed []httpaction.ExchangeProvenance
-		ctx := httpaction.WithExchangeProvenanceObserver(t.Context(), func(prov httpaction.ExchangeProvenance) {
+	runObserved := func(args ...string) (run, []evidence.ExchangeProvenance) {
+		var observed []evidence.ExchangeProvenance
+		ctx := evidence.WithExchangeProvenanceObserver(t.Context(), func(prov evidence.ExchangeProvenance) {
 			observed = append(observed, prov)
 		})
 		res := h.curl(ctx, args...)

@@ -19,6 +19,8 @@ import { DenNumberInput } from "../../primitives/DenNumberInput.tsx";
 import { SettingsEditorTitle, BudgetsIcon } from "../SettingsEditorTitle.tsx";
 import { SettingsGovernedGroup } from "../SettingsGovernedGroup.tsx";
 import { chromeProps } from "../../../styling/ui-chrome.ts";
+import { ProjectSettingsRejected } from "../ProjectSettingsRejected.tsx";
+import { PROJECT_SETTINGS_REJECTED_COPY } from "../../../settings/project-settings-rejected-copy.ts";
 
 type NumericLimitKey = { [K in keyof SettingsLimitsPatch]-?: NonNullable<SettingsLimitsPatch[K]> extends number ? K : never }[keyof SettingsLimitsPatch];
 
@@ -32,9 +34,10 @@ type Props = {
 export function BudgetsEditor(props: Props) {
   const draftState = createLimitsDraft(() => props.settingsStore.state.limits);
   const draft = draftState.value;
+  const rejected = () => props.settingsStore.state.limits?.rejected ?? [];
 
   const autoSave = createSettingsAutoSave({
-    isReady: () => draft() != null,
+    isReady: () => draft() != null && rejected().length === 0,
     isDirty: draftState.dirty,
     save: async () => {
       const body = draftState.beginSave();
@@ -96,9 +99,14 @@ export function BudgetsEditor(props: Props) {
       <Show when={!props.embedded}>
         <SettingsEditorTitle icon={<BudgetsIcon />}>Budgets</SettingsEditorTitle>
       </Show>
+      <ProjectSettingsRejected
+        rows={rejected()}
+        consequence={PROJECT_SETTINGS_REJECTED_COPY.limits}
+        testId="budgets-rejected"
+      />
       <ShowLatest when={draft()}>
         {(limitsSnap) => (
-          <>
+          <SettingsGovernedGroup label="Budgets" active={rejected().length === 0} inset={false}>
             <section
               class="den-settings-section"
               data-testid="spend-ceiling-section"
@@ -207,7 +215,7 @@ export function BudgetsEditor(props: Props) {
                   patchBool("coordinator_loop", e.currentTarget.checked)
                 }
               >
-                Host auto-prompt after worker legs
+                Host auto-prompt after workers
               </DenCheckbox>
               <SettingsGovernedGroup
                 label="Coordinator loop cap"
@@ -225,37 +233,6 @@ export function BudgetsEditor(props: Props) {
                 Per workflow run cap on coordinator loop wake cycles.
               </p>
               </SettingsGovernedGroup>
-            </section>
-
-            <section class="den-settings-section">
-              <h3 class="den-settings-subhead" {...chromeProps()}>Worker tool budget</h3>
-              <DenField label={settingLabel("worker-budget-default")} {...settingAnchor("worker-budget-default")}>
-                <DenNumberInput
-                  min={limitsSnap().worker_tool_budget_min}
-                  max={limitsSnap().worker_tool_budget_max}
-                  value={limitsSnap().worker_tool_budget_default ?? undefined}
-                  onNumber={(n) => patchNumber("worker_tool_budget_default", n)}
-                />
-              </DenField>
-              <DenField label={settingLabel("worker-budget-min")} {...settingAnchor("worker-budget-min")}>
-                <DenNumberInput
-                  min={2}
-                  value={limitsSnap().worker_tool_budget_min ?? undefined}
-                  onNumber={(n) => patchNumber("worker_tool_budget_min", n)}
-                />
-              </DenField>
-              <DenField label={settingLabel("worker-budget-max")} {...settingAnchor("worker-budget-max")}>
-                <DenNumberInput
-                  min={limitsSnap().worker_tool_budget_min}
-                  value={limitsSnap().worker_tool_budget_max ?? undefined}
-                  onNumber={(n) => patchNumber("worker_tool_budget_max", n)}
-                />
-              </DenField>
-              <p class="den-settings-hint">
-                Every worker starts at the default unless its task or planned
-                leg sets a ceiling. A worker that needs more rounds asks its
-                coordinator, which can raise the ceiling up to the maximum.
-              </p>
             </section>
 
             <section class="den-settings-section">
@@ -305,7 +282,7 @@ export function BudgetsEditor(props: Props) {
                 />
               </DenField>
             </section>
-          </>
+          </SettingsGovernedGroup>
         )}
       </ShowLatest>
       <Show when={autoSave.saving()}>

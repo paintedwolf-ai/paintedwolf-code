@@ -43,10 +43,9 @@ func (m *Matcher) streamEvidence(ctx context.Context, memory *streamMemory) ([]s
 		if len(v.Secret) > MaxSecretBytes {
 			return nil, &StreamLimitError{"secret_bytes", MaxSecretBytes, int64(len(v.Secret))}
 		}
-		// All serializer forms plus eligible line spellings are linear in source
-		// bytes. Reserve their temporary backing capacities before using the existing
-		// serializer; duplicates can only reduce the retained index.
-		allowance := int64(len(v.Secret))*384 + 4096
+		// Reserve the bound on every spelling before using the serializers;
+		// duplicates can only reduce the retained index.
+		allowance := needleBound(v.Secret, MinNeedleRunes(v.NonDisclosable), 512)
 		if err := memory.take(allowance); err != nil {
 			return nil, err
 		}

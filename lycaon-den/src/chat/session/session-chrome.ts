@@ -100,17 +100,6 @@ export function applySessionBootstrapAuxiliaryChrome(
   hydrationFor(appStore, session.id).hydrated = ok;
 }
 
-/** Apply bootstrap-supplied session views. */
-export function applySessionBootstrapChrome(
-  appStore: AppStore,
-  bootstrap: SessionBootstrap,
-  session = bootstrap.session,
-): number {
-  const epoch = installSessionBootstrapChrome(appStore, bootstrap, session);
-  applySessionBootstrapAuxiliaryChrome(appStore, bootstrap, session);
-  return epoch;
-}
-
 /** Hydrates session views once per epoch. */
 export function ensureSessionChrome(
   appStore: AppStore,

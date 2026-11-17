@@ -1,10 +1,9 @@
 import { createSignal, untrack } from "solid-js";
 import type {
   ContextNavItemId,
-  NarrowSplitSurvivor,
+  SplitPane,
   StagePlacement,
   SplitOrder,
-  SplitPane,
   WorkspaceOrientation,
 } from "../../shared/app-state-types.ts";
 import type { ResizeSession } from "../layout/resize-session.ts";
@@ -150,7 +149,7 @@ export async function saveStartupCompanion(
 }
 
 /** Column a split keeps once the host is too narrow for both. */
-export function narrowSurvivorPref(): NarrowSplitSurvivor {
+export function narrowSurvivorPref(): SplitPane {
   return resolveNarrowSurvivor(currentPreferences());
 }
 
@@ -161,7 +160,7 @@ export function narrowSurvivorFollowsLaunchPref(): boolean {
 
 /** No settle: nothing moves until a host crosses the seam. */
 export async function saveNarrowSurvivor(
-  survivor: NarrowSplitSurvivor | null,
+  survivor: SplitPane | null,
 ): Promise<void> {
   await commitPreferences(withNarrowSurvivor(currentPreferences(), survivor));
 }

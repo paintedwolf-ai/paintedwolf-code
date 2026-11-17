@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   denRoot,
   denSourceRoot,
+  loadSourceCorpus,
   loadTypeScriptCorpus,
   type TypeScriptSourceFile,
 } from "../../test/source-corpus.ts";
@@ -47,6 +48,35 @@ function registeredCommands(): Set<string> {
     commands.add(name);
   }
   return commands;
+}
+
+/** Commands some capability grants, through a permission file or the generated allow-<command> permission. */
+function permittedCommands(): Set<string> {
+  const tauriRoot = join(denRoot, "src-tauri");
+  const granted = new Set<string>();
+  const capabilities = loadSourceCorpus(join(tauriRoot, "capabilities"), { extensions: [".json"] });
+  for (const file of capabilities.files) {
+    const capability = JSON.parse(file.text) as {
+      permissions?: (string | { identifier: string })[];
+    };
+    for (const entry of capability.permissions ?? []) {
+      granted.add(typeof entry === "string" ? entry : entry.identifier);
+    }
+  }
+  const permitted = new Set<string>();
+  const permissions = loadSourceCorpus(join(tauriRoot, "permissions"), { extensions: [".toml"] });
+  for (const file of permissions.files) {
+    for (const block of file.text.split("[[permission]]")) {
+      const id = block.match(/^\s*identifier\s*=\s*"([^"]+)"/m)?.[1];
+      const allow = block.match(/^\s*commands\.allow\s*=\s*\[([^\]]*)\]/m)?.[1];
+      if (!id || !allow || !granted.has(id)) continue;
+      for (const [, name] of allow.matchAll(/"([^"]+)"/g)) permitted.add(name!);
+    }
+  }
+  for (const id of granted) {
+    if (id.startsWith("allow-")) permitted.add(id.slice("allow-".length).replaceAll("-", "_"));
+  }
+  return permitted;
 }
 
 type Forwarder = { name: string; index: number };
@@ -122,6 +152,11 @@ describe("Tauri IPC parity", { timeout: VITEST_REPOSITORY_SCAN_TIMEOUT_MS }, () 
     expect(unresolved).toEqual([]);
     expect(commands.size).toBeGreaterThan(0);
     expect([...commands].sort()).toEqual([...registeredCommands()].sort());
+  });
+
+  it("a capability permits every registered command", () => {
+    const permitted = permittedCommands();
+    expect([...registeredCommands()].filter((name) => !permitted.has(name))).toEqual([]);
   });
 
   it("every coded SidecarStartError variant is a SidecarStartFailure", () => {

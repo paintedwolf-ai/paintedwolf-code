@@ -1,12 +1,12 @@
 import { disclosureToggle, isDisclosureOpen, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
-import { fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
+
 import { createSignal, type ComponentProps } from "solid-js";
 import { afterEach, describe, expect, it } from "vitest";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { ActivitySpanCard as ActivitySpanCardView } from "./ActivitySpanCard.tsx";
 import { ToolPartCard } from "./ToolPartCard.tsx";
 import { TranscriptDiffGroup } from "../transcript/TranscriptDiffGroup.tsx";
-import { fileEditStepsFromParts, foldFileEdits } from "../../chat/file-edit/file-edit-fold.ts";
+import { foldFileEdits  } from "../../chat/file-edit/file-edit-fold.ts";
 import {
   createTranscriptDisclosureStore,
   TranscriptDisclosureProvider,
@@ -20,6 +20,7 @@ import {
   rememberTranscriptEntry,
   activitySpanEnterFadeKey,
 } from "../../chat/transcript/presentation/transcript-entry.ts";
+import { fileEditPreviewFixture, fileEditStepsFromParts } from "../../test/file-edit-fixture.ts";
 
 function ActivitySpanCard(
   props: Omit<ComponentProps<typeof ActivitySpanCardView>, "renderToolEntry">,
@@ -84,10 +85,10 @@ describe("ActivitySpanCard live layout", () => {
     ));
     fireEvent.click(container.querySelector(".den-activity-span > .den-transcript-disclosure-header")!);
     fireEvent.click(container.querySelector(".den-tool-part > .den-transcript-disclosure-header")!);
-    const output = container.querySelector('[data-testid="tool-content-link"]');
+    const output = container.querySelector('[data-testid="action-link-output"]');
     expect(output).not.toBeNull();
     setCurrent(parts.map((part) => ({ kind: "tool", part: { ...part } })));
-    expect(container.querySelector('[data-testid="tool-content-link"]')).toBe(output);
+    expect(container.querySelector('[data-testid="action-link-output"]')).toBe(output);
   });
 });
 
@@ -544,7 +545,7 @@ describe("ActivitySpanCard", () => {
     const { container } = render(() => (
       <ActivitySpanCard label="web research" entries={webEntries} layout="chat" sessionId="s1" entryKey="iw-span" />
     ));
-    const tool = container.querySelector<HTMLElement>(".den-activity-span-items [data-testid='tool-part-card']")!;
+    const tool = container.querySelector<HTMLElement>(".den-activity-span-items [data-testid='action-card']")!;
     const warming = container.querySelector<HTMLElement>("[data-testid='index-warming-chicklet']")!;
     expect(warming.querySelector(".den-row-mark")).toBeTruthy();
     expect(warming.querySelector(".den-tool-chicklet-caret")).toBeNull();

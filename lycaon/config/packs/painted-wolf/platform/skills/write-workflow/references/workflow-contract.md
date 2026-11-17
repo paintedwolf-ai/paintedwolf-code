@@ -29,7 +29,7 @@ Static leaves: `gates_satisfied`, `orchestration_complete`, `child_run_complete`
 
 Parameterized prefixes (non-empty suffix required): `var_equals:`, `var_truthy:`, `user_decision_received:`, `user_feedback_received:`, `user_decision:`, `hitl_consulted:`, `evidence_passed:`, `phase_is:`, `phase_skipped:`, `gate_passed:`, `obligation_settled:`.
 
-`PublicGateKit` in `internal/workflow/gate_kit.go` is the enforcing source; `schemas/workflow_vocabulary.json` carries the generated per-identifier layer and domain.
+`IsGenericGateKitLeaf` in `internal/workflow/gate_kit.go` is the enforcing source; `schemas/workflow_vocabulary.json` carries the generated per-identifier layer and domain.
 
 `complete_when` accepts `gates_satisfied` (which requires a non-empty `gates: […]` — the one form the validator refuses when the list is empty), `gate_satisfied:<leaf>`, a bare leaf from the kit above, or a boolean expression over those identifiers. A terminal phase must use `complete_when: orchestration_complete`. Terminal entry is an atomic host completion sink: do not bind coordinator work, feedback, obligations, or invocation to it.
 
@@ -43,7 +43,7 @@ Every `invoke_workflow:` block must declare `blueprint: inherit | own | none`. `
 
 An approval that enters an invocation phase wakes the current active leaf after the child start commits. Do not add a second parent wake or model-authored handoff; terminal root approval emits no coordinator wake.
 
-Topology workers produce findings and evidence. The coordinator writes protected workflow-control artifacts such as Blueprints; pipeline stages do not promote worker overlays into those paths.
+Topology workers run under the session worker lifecycle and produce findings and evidence. The coordinator writes protected workflow-control artifacts such as Blueprints; pipeline stages do not promote worker overlays into those paths. The `delegation_closeout_complete` leaf keeps its identifier and evaluates planned worker settlement and typed criteria.
 
 ## Forbidden on project overlays
 

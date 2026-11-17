@@ -24,7 +24,7 @@ func openFreelistStore(t *testing.T, freeRows int) *Store {
 	_, err = writer.ExecContext(ctx, `PRAGMA page_size=512; PRAGMA auto_vacuum=INCREMENTAL; PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL`)
 	testutil.FailErr(t, "configure fixture", err)
 	testutil.FailErr(t, "create fixture schema", prepareStoreSchema(ctx, writer, true))
-	reader, err := openReader(ctx, path)
+	reader, err := OpenReadOnly(ctx, path)
 	testutil.FailErr(t, "open fixture reader", err)
 	store := newStore(writer, reader)
 	t.Cleanup(func() { _ = store.Close() })

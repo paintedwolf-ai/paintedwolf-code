@@ -1,11 +1,8 @@
-"""Plan idempotent cleanup-issue transitions from one complete main snapshot."""
-import html
+"""Read artifact-scoped cleanup issues that workstream issues supersede."""
 import json
 import re
-from urllib.parse import quote
 
 from .budget_snapshot import CATEGORIES, key, relative
-from .budget_review import retained
 
 START = '<!-- paintedwolf-maintainability:v1 -->'
 END = '<!-- /paintedwolf-maintainability -->'
@@ -41,44 +38,6 @@ def legacy(issue, artifacts):
         if issue['title'] == f"Maintainability debt: {row['category']} {row['id']}":
             return {**row, 'key': identity}
     return None
-
-
-def block(row, observation, active, previous=None):
-    state = {**{k: v for k, v in row.items() if k != 'spans'}, 'sources': row['sources'][:20], **observation, 'key': key(row['category'], row['id']), 'active': active}
-    state['measurement_source'] = observation['source_sha'] if active else (previous or {}).get('measurement_source', (previous or {}).get('source_sha', observation['source_sha']))
-    if previous is not None and active:
-        prior = previous.get('prior_observation') if previous.get('source_sha') == observation['source_sha'] else {
-            'measured': previous['measured'], 'source_sha': previous.get('measurement_source', previous['source_sha'])}
-        if prior:
-            state['prior_observation'] = prior
-    encoded = json.dumps(state, sort_keys=True, separators=(',', ':')).replace('<', '\\u003c').replace('>', '\\u003e')
-    status = ('Retained by bounded architectural review' if retained(row) else 'Review required') if active else 'Within the cleanup threshold or removed'
-    measurement_label = 'Latest measurement' if active else 'Last above-threshold measurement'
-    lines = [START, '<!-- state:' + encoded + ' -->',
-             f"**{status}**: `{html.escape(row['category'])}` / `{html.escape(row['id'])}`.", '',
-             f"{measurement_label}: **{row['measured']}**. Warning threshold: **{row['warn']}**. "
-             f"Hard limit: **{row['limit']}**. Effective cap: **{row['effective_cap']}**.", '',
-             f"[Main observation]({observation['run_url']}) at `{observation['source_sha']}`."]
-    prior = state.get('prior_observation')
-    if prior:
-        lines += ['', f"Previous observation: **{prior['measured']}** at `{prior['source_sha']}`; delta **{row['measured'] - prior['measured']:+d}**."]
-    review = row.get('review')
-    if review:
-        lines += ['', f"Workstream: `{review['workstream']}`. Classification: `{review['kind']}`.",
-                  f"Design decision: **{review['disposition']}**; review state: **{review['state']}**.",
-                  html.escape(review['reason']), f"Reviewed source: `{review['reviewed_commit']}`."]
-        if review['disposition'] == 'retain':
-            lines += [f"Review ceiling: **{review['ceiling']}**. Boundary changes or growth renew review; hard limits remain unchanged."]
-    if row['exception_reason']:
-        lines += ['', 'Exception: ' + html.escape(row['exception_reason'])]
-    links = [f"[{html.escape(path)}](https://github.com/{observation['repository']}/blob/"
-             f"{observation['source_sha']}/{quote(path, safe='/')})" for path in row['sources'][:20]]
-    lines += ['', 'Sources: ' + ', '.join(links)]
-    if len(row['sources']) > 20:
-        lines += [f"The report lists {len(row['sources'])} source paths."]
-    lines += ['', 'Review cohesion, dependencies, and lifecycle before choosing a refactor or a bounded design decision. '
-              'Preserve operation contracts and verify through the repository task runner.', END]
-    return '\n'.join(lines)
 
 
 def expected(issue):

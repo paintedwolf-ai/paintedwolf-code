@@ -4,7 +4,7 @@ rules:
   - id: build_posture_disallowed_agent
     when:
       posture_is: build
-      tool_is_task: true
+      tool_names_agent: true
       disallowed_agent: true
     then:
       deny:

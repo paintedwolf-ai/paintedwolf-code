@@ -6,9 +6,9 @@ import (
 	"strings"
 )
 
-// diagnostics is the structural evidence for one declared directory. The
+// Diagnostics is the structural evidence for one declared directory. The
 // facts describe how the graph uses the members; they do not decide cohesion.
-type diagnostics struct {
+type Diagnostics struct {
 	Kind        character
 	Members     []string
 	EntryPoints []string            // declared, for subsystems
@@ -17,9 +17,9 @@ type diagnostics struct {
 	Groups      [][]string          // internally disconnected member groups
 }
 
-// analyze computes the diagnostics for one declared directory. The key is the
+// Analyze computes the diagnostics for one declared directory. The key is the
 // declaration's directory: "internal" itself, or one direct child of it.
-func analyze(graph *Graph, key string, d declaration) (*diagnostics, error) {
+func Analyze(graph *Graph, key string, d Declaration) (*Diagnostics, error) {
 	if err := validateBoundary(graph, key, d); err != nil {
 		return nil, err
 	}
@@ -27,7 +27,7 @@ func analyze(graph *Graph, key string, d declaration) (*diagnostics, error) {
 	if len(members) == 0 {
 		return nil, fmt.Errorf("declared directory %s has no production packages", key)
 	}
-	out := &diagnostics{Kind: d.Kind, Members: members, External: map[string][]string{}}
+	out := &Diagnostics{Kind: d.Kind, Members: members, External: map[string][]string{}}
 	for _, member := range members {
 		out.External[member] = graph.outsideConsumers(key, member)
 	}
@@ -116,7 +116,7 @@ func disconnectedGroups(graph *Graph, members []string) [][]string {
 }
 
 // describe renders the diagnostics as report lines.
-func (d *diagnostics) describe() []string {
+func (d *Diagnostics) describe() []string {
 	var lines []string
 	lines = append(lines, "kind: "+string(d.Kind))
 	if len(d.Groups) > 1 {

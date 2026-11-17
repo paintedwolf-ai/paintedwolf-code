@@ -297,18 +297,6 @@ func TestParseEntriesHonoursTheEntryCap(t *testing.T) {
 	}
 }
 
-func TestWithAppendedNeverDuplicatesOrReorders(t *testing.T) {
-	base := Snapshot{entries: []string{"/usr/bin", "/bin"}, source: SourceProbe}
-	got := base.WithAppended("/usr/bin/", "/opt/vendor", "", "/opt/vendor")
-
-	if strings.Join(got.Entries(), ":") != "/usr/bin:/bin:/opt/vendor" {
-		t.Fatalf("entries = %v, want one appended directory and no reordering", got.Entries())
-	}
-	if strings.Join(base.Entries(), ":") != "/usr/bin:/bin" {
-		t.Fatal("WithAppended mutated the receiver; the snapshot has to stay a value")
-	}
-}
-
 func TestBundledCatalogLoads(t *testing.T) {
 	cfg, err := LoadConfig()
 	testutil.FailErr(t, "LoadConfig", err)

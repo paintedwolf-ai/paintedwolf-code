@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/zricethezav/gitleaks/v8/config"
 	"github.com/zricethezav/gitleaks/v8/detect"
 	"github.com/zricethezav/gitleaks/v8/regexp"
@@ -55,5 +56,25 @@ func TestScreenBytesRejectsNilContextBeforeReadingOrWriting(t *testing.T) {
 	result, err := m.ScreenBytes(nil, input, &output, "", StreamPolicy{}, StreamBounds{InputBytes: 1024, OutputBytes: 1024, MemoryBytes: 8192, DetectorWork: 1024}, nil, nil, nil) //nolint:staticcheck // SA1012: nil is the deliberately malformed context this contract rejects.
 	if err == nil || input.String() != "untouched source" || output.Len() != 0 || result.InputBytes != 0 || result.OutputBytes != 0 {
 		t.Fatalf("nil context admitted screening: err=%v input=%q output=%q result=%+v", err, input.String(), output.String(), result)
+	}
+}
+
+// A match ending past a window's harvest stop must not let the next window
+// rescan the bytes it covered, or the stream finds overlapping occurrences the
+// whole-field screen does not.
+func TestStreamCursorStaysPastAMatchCrossingTheWindowStop(t *testing.T) {
+	secret := "FFFF"
+	raw := "0" + secret + "F" + strings.Repeat("0", 68)
+	m := NewInertMatcher()
+	m.SetScreenWindow(72, 71)
+	m.SetHarvestSource(func(context.Context) []HarvestedValue {
+		return []HarvestedValue{managedValue(secret, testReference)}
+	})
+	want := m.RedactString(t.Context(), raw)
+	var out bytes.Buffer
+	_, err := m.ScreenBytes(t.Context(), strings.NewReader(raw), &out, "", StreamPolicy{}, StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 36}, nil, nil, nil)
+	testutil.FailErr(t, "screen", err)
+	if out.String() != want {
+		t.Fatalf("stream %q, whole field %q", out.String(), want)
 	}
 }

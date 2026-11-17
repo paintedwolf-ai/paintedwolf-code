@@ -35,7 +35,7 @@ func (r Assignments) retainAccepted(ctx context.Context, active *api.WorkflowRun
 	}
 	if review == nil || review.Revision != facts.Revision {
 		validated.Outcome.Valid = false
-		validated.Outcome.CoverageIssue = &toolrejection.ToolReject{Code: ReviewContextChangedCode, Data: map[string]any{"action": "refresh_context", "revision": facts.Revision}}
+		validated.Outcome.CoverageIssue = &toolrejection.ToolReject{Code: runstate.ReviewContextChangedCode, Data: map[string]any{"action": "refresh_context", "revision": facts.Revision}}
 	} else {
 		accepted := runstate.AcceptedReviewInputs{Facts: facts, Snapshot: snapshot}
 		for _, task := range snapshot.Workers {

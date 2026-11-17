@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"testing"
 	"time"
@@ -29,16 +30,6 @@ func TestLedger_appendGateFailClosed(t *testing.T) {
 	if err == nil || !errors.Is(err, authzledger.ErrSealFailed) {
 		t.Fatalf("want ErrSealFailed, got %v", err)
 	}
-}
-
-func TestLedger_appendRecordBestEffort(t *testing.T) {
-	ledger := &authzcontext.Ledger{Store: authzcontext.FailStore{}}
-	ledger.AppendRecord(context.Background(), authzcontext.RecordInput{
-		SessionID:  "sess",
-		Action:     authzcontext.EventActionToolDenied,
-		Outcome:    authzcontext.EventOutcomeDenied,
-		ResolvedBy: authzcontext.ResolvedBySystemDeny,
-	})
 }
 
 func TestLedgerApprovalDecisionCarriesApprovalRuleProvenance(t *testing.T) {
@@ -187,7 +178,7 @@ func appendDecision(t *testing.T, sqlDB db.Handle, sessionID string) {
 
 func insertSession(t *testing.T, sqlDB db.Handle, id string, createdAt time.Time) {
 	t.Helper()
-	stamp := db.FormatTime(createdAt)
+	stamp := timelayout.Format(createdAt)
 	_, err := sqlDB.ExecContext(t.Context(),
 		`INSERT OR IGNORE INTO projects (id, last_opened_at, created_at) VALUES (?, ?, ?)`,
 		"proj", stamp, stamp,
@@ -195,7 +186,7 @@ func insertSession(t *testing.T, sqlDB db.Handle, id string, createdAt time.Time
 	testutil.FailErr(t, "insert project", err)
 	_, err = sqlDB.ExecContext(t.Context(),
 		`INSERT INTO sessions (id, project_id, owner_person_id, posture, created_at, activity_at, updated_at) VALUES (?, ?, (SELECT id FROM people WHERE role = 'owner'), ?, ?, ?, ?)`,
-		id, "proj", "build", db.FormatTime(createdAt), db.FormatTime(createdAt), db.FormatTime(createdAt),
+		id, "proj", "build", timelayout.Format(createdAt), timelayout.Format(createdAt), timelayout.Format(createdAt),
 	)
 	testutil.FailErr(t, "insert session", err)
 }

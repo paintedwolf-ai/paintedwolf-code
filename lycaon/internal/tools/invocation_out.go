@@ -85,6 +85,23 @@ func (o *ToolInvocationOut) TakeCommitted() *ToolInvocationOut {
 	return taken
 }
 
+// StateCardFact records a fact for the call's action card, replacing an
+// earlier one of the same kind.
+func (o *ToolInvocationOut) StateCardFact(fact api.ActionFact) {
+	if o == nil {
+		return
+	}
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for i := range o.CardFacts {
+		if o.CardFacts[i].Kind == fact.Kind {
+			o.CardFacts[i] = fact
+			return
+		}
+	}
+	o.CardFacts = append(o.CardFacts, fact)
+}
+
 // WithLock runs write while no merge or take can observe o. Writers that share
 // o across goroutines use it; a stage's own outputs have one writer.
 func (o *ToolInvocationOut) WithLock(write func(*ToolInvocationOut)) {

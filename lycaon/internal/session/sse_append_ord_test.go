@@ -3,11 +3,11 @@ package session
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -39,7 +39,7 @@ func TestAppendMessagesSSECarriesOrdForEveryMessageKind(t *testing.T) {
 		INSERT INTO workflow_runs (
 			id, session_id, project_id, workflow_id, workflow_version, status, current_phase, created_at, updated_at
 		) VALUES (?, ?, ?, 'plan', '1.0.0', 'running', 'stub', ?, ?)
-	`, runID, sess.ID, sess.ProjectID, db.FormatTime(now), db.FormatTime(now))
+	`, runID, sess.ID, sess.ProjectID, timelayout.Format(now), timelayout.Format(now))
 	testutil.FailErr(t, "seed workflow run", err)
 
 	ch, unsub, err := hub.Subscribe(ctx, events.Subscription{Project: sess.ProjectID, Viewer: testutil.HostOwner()})

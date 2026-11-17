@@ -74,6 +74,7 @@ func NewProjectOverlayTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Serve
 		opt(&deps)
 	}
 	srv := hostapi.NewServer(RequiredTestDeps(t, deps), nil, hostapi.TestAPIToken)
+	StopBackgroundOnCleanup(t, srv)
 	mgr.Admission.SetPromotion(srv.Admin.Project.Promotion.TryRunPromotion)
 	return srv, projects
 }

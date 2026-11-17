@@ -129,6 +129,8 @@ export type TranscriptItem =
       kind: "checkpoint";
       key: string;
       parentMessageId: string;
+      /** The call it decides for, when this transcript holds it; the row follows that call's. */
+      call?: { tool: string; index: number; resultMessageId?: string };
       meta: CheckpointDecisionMeta;
     }
   | {

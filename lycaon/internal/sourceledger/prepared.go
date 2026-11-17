@@ -406,7 +406,7 @@ func (s *Store) prepareWithCache(ctx context.Context, inputs []RecordInput, shar
 			sha   string
 			bytes []byte
 		}{{in.BeforeSHA256, in.Before}, {in.AfterSHA256, in.After}} {
-			if sharedObjects != nil && content.sha != "" && content.bytes != nil && in.EntryKind != EntryKindDirectory && len(content.bytes) <= MaxRevisionContentBytes {
+			if sharedObjects != nil && content.sha != "" && content.bytes != nil && in.EntryKind != EntryKindDirectory && len(content.bytes) <= sourceblob.MaxRevisionContentBytes {
 				if cached, ok := sharedObjects[content.sha]; ok && cached.Size == int64(len(content.bytes)) && sourceblob.ContentSHA(content.bytes) == strings.ToLower(strings.TrimSpace(content.sha)) {
 					in.objects[content.sha] = cached
 					continue
@@ -442,7 +442,7 @@ func prepareContent(ctx context.Context, objects *sourceblob.Store, sha string, 
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if kind == EntryKindDirectory || content == nil || len(content) > MaxRevisionContentBytes {
+	if kind == EntryKindDirectory || content == nil || len(content) > sourceblob.MaxRevisionContentBytes {
 		return nil, nil
 	}
 	rel, stored, oids, err := objects.Put(ctx, sha, content)
@@ -468,7 +468,7 @@ func (p *preparedRecording) CommitTxWithCache(ctx context.Context, tx *sql.Tx, c
 	if len(p.inputs) == 0 {
 		return TrackedFile{}, nil
 	}
-	return p.store.recordBatchIdentityTxWithCache(ctx, p.store.queries.WithTx(tx), p.inputs, cache)
+	return p.store.recordBatchIdentityTx(ctx, p.store.queries.WithTx(tx), p.inputs, cache)
 }
 
 func (p *preparedRecording) Close() {
@@ -502,7 +502,7 @@ func (p *preparedRecording) commitObserved(ctx context.Context, tx *sql.Tx, scop
 	if len(admitted) == 0 {
 		return 0, nil
 	}
-	_, err := p.store.recordBatchIdentityTx(ctx, p.store.queries.WithTx(tx), admitted)
+	_, err := p.store.recordBatchIdentityTx(ctx, p.store.queries.WithTx(tx), admitted, nil)
 	return len(admitted), err
 }
 

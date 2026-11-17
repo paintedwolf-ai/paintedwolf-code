@@ -3,6 +3,7 @@ package scan
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	"testing"
@@ -14,6 +15,8 @@ import (
 func newScanStore(t *testing.T) (*SQLStore, context.Context) {
 	t.Helper()
 	sqlDB := testdbfixture.Open(t, "store.db")
+	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, sqlDB, "sess-1", testdbseed.DefaultProjectID)
 	return NewSQLStore(sqlDB), context.Background()
 }
 
@@ -75,7 +78,7 @@ func TestSQLStoreLatestCompleteForDelegationSnapshotTieBreaks(t *testing.T) {
 	}
 }
 
-func TestSQLStoreLatestForDelegationSurvivesMultiTie(t *testing.T) {
+func TestSQLStoreLatestCompleteForSessionSnapshotSurvivesMultiTie(t *testing.T) {
 	store, ctx := newScanStore(t)
 	stamp := time.Date(2026, 6, 7, 12, 0, 0, 0, time.UTC)
 	cats := []api.ScanCategory{api.ScanCategorySecurity}
@@ -83,19 +86,20 @@ func TestSQLStoreLatestForDelegationSurvivesMultiTie(t *testing.T) {
 	// Four equal timestamps exercise repeated tie breaks.
 	for _, id := range []string{"a", "b", "c", "d"} {
 		insertScan(t, store, ctx, api.CodeScan{
-			ID:            "scan-" + id,
-			CanonicalPath: "/tmp/p",
-			Categories:    cats,
-			Status:        api.CodeScanStatusPending,
-			CreatedAt:     stamp,
-			DelegationID:  "dep-1",
-			Trigger:       api.ScanTriggerManual,
+			ID:               "scan-" + id,
+			CanonicalPath:    "/tmp/p",
+			Categories:       cats,
+			Status:           api.CodeScanStatusComplete,
+			CreatedAt:        stamp,
+			SessionID:        "sess-1",
+			SourceSnapshotID: "snapshot-1",
+			Trigger:          api.ScanTriggerManual,
 		})
 	}
-	got, err := store.LatestForDelegation(ctx, "dep-1", cats)
-	testutil.FailErr(t, "LatestForDelegation", err)
-	if got.ID != "scan-d" {
-		t.Fatalf("LatestForDelegation got=%s want scan-d (last insert wins)", got.ID)
+	got, err := store.LatestCompleteForSessionSnapshot(ctx, "sess-1", "snapshot-1", cats)
+	testutil.FailErr(t, "LatestCompleteForSessionSnapshot", err)
+	if got == nil || got.ID != "scan-d" {
+		t.Fatalf("LatestCompleteForSessionSnapshot got=%v want scan-d (last insert wins)", got)
 	}
 }
 

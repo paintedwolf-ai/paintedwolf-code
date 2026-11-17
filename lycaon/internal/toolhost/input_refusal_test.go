@@ -65,9 +65,7 @@ func TestCommandInputResourceRefusalPreservesActualStopAndPriorEffects(t *testin
 						} else {
 							release, err = pool.ReserveProgramState(ctx, limits.State-usage.State-255)
 						}
-						if err != nil {
-							t.Fatal(err)
-						}
+						testutil.FailErr(t, "reserve "+account+" memory", err)
 						defer release()
 						reader, err := input.OpenInput(ctx, d)
 						observed = toolrejection.AsToolReject(err)

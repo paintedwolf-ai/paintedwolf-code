@@ -8,7 +8,7 @@ import { ShowLatest } from "../../components/primitives/ShowLatest.tsx";
 import { Scrollport } from "../../components/primitives/Scrollport.tsx";
 import { createResidentActivity } from "../../ui/resident-activity.ts";
 import { ThemeIcon } from "../../components/primitives/ThemeIcon.tsx";
-import { setWalkGitSelection } from "../documents/project-files-buffers.ts";
+import { setWalkGitSelection } from "../documents/project-files-buffer-lifecycle.ts";
 import { type FileBuffer } from "../documents/files-buffer-state.ts";
 import { countLabel, fileBasename, fileDirname, opGlyph } from "../review/review-model.ts";
 import { wholeFileOpChange } from "../../components/source/reader/source-reader-change.ts";

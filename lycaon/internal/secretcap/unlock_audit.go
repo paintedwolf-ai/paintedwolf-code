@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"log/slog"
 	"time"
 
@@ -17,7 +18,7 @@ func RecordUnlock(ctx context.Context, tx *sql.Tx, projectID string, unlock pres
 	if err := db.New(tx).CreateVaultUnlock(ctx, db.CreateVaultUnlockParams{
 		ID: unlock.ID, ProjectID: projectID, ChatSessionID: unlock.ChatSessionID, PersonID: unlock.PersonID,
 		Authenticator: unlock.Authenticator, WindowLabel: unlock.WindowLabel,
-		UnlockedAt: db.FormatTime(unlock.UnlockedAt),
+		UnlockedAt: timelayout.Format(unlock.UnlockedAt),
 	}); err != nil {
 		return fmt.Errorf("record vault unlock: %w", err)
 	}
@@ -30,7 +31,7 @@ func (s *secretAdminService) RecordUnlockEnd(ctx context.Context, unlock presenc
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 	defer cancel()
 	if err := s.queries.EndVaultUnlock(ctx, db.EndVaultUnlockParams{
-		EndedAt: nullable(db.FormatTime(at)), EndReason: nullable(string(reason)), ID: unlock.ID,
+		EndedAt: nullable(timelayout.Format(at)), EndReason: nullable(string(reason)), ID: unlock.ID,
 	}); err != nil {
 		slog.WarnContext(ctx, "vault unlock end write failed", "unlock_id", unlock.ID, "reason", reason)
 	}
@@ -39,7 +40,7 @@ func (s *secretAdminService) RecordUnlockEnd(ctx context.Context, unlock presenc
 // CloseUnlocksLeftOpen ends the unlocks a stopped engine left open. Unlocks
 // live only in memory, so at boot none is open; run it before any can be.
 func (s *secretAdminService) CloseUnlocksLeftOpen(ctx context.Context) error {
-	if _, err := s.queries.EndOpenVaultUnlocks(ctx, nullable(db.FormatTime(s.now()))); err != nil {
+	if _, err := s.queries.EndOpenVaultUnlocks(ctx, nullable(timelayout.Format(s.now()))); err != nil {
 		return fmt.Errorf("close vault unlocks left open: %w", err)
 	}
 	return nil

@@ -49,7 +49,7 @@ tasks:
     internal: true
     dir: scripts/commentlint
     cmds:
-      - go test ./...
+      - go test -timeout 0 ./...
 
   comments:check:
     desc: Test the source comment scanner and scan the repository
@@ -151,7 +151,6 @@ tasks:
     sources:
       - '**/*.go'
       - .golangci.yml
-      - .deadcode-exclude
       - '{{.ROOT_DIR}}/.github/workflows/*.yml'
       - '{{.ROOT_DIR}}/.github/workflows/*.yaml'
       - '{{.SCRIPTS_DIR}}/workflow_lint/**/*.py'
@@ -160,12 +159,11 @@ tasks:
       - '{{.SCRIPTS_DIR}}/toolchain/python_tools.py'
       - '{{.SCRIPTS_DIR}}/analysis_tools.py'
       - '{{.SCRIPTS_DIR}}/lint-go.sh'
-      - '{{.SCRIPTS_DIR}}/deadcode-check.sh'
     cmds:
       - bash {{.SCRIPTS_DIR}}/lint-go.sh fast {{.CLI_ARGS}}
 
   lint:full:
-    desc: GitHub workflows + full golangci-lint + deadcode
+    desc: GitHub workflows + full golangci-lint
     dir: '{{.GO_DIR}}'
     sources:
       - '**/*.go'
@@ -178,9 +176,13 @@ tasks:
       - '{{.SCRIPTS_DIR}}/toolchain/python_tools.py'
       - '{{.SCRIPTS_DIR}}/analysis_tools.py'
       - '{{.SCRIPTS_DIR}}/lint-go.sh'
-      - '{{.SCRIPTS_DIR}}/deadcode-check.sh'
     cmds:
       - bash {{.SCRIPTS_DIR}}/lint-go.sh full {{.CLI_ARGS}}
+
+  lint:deadcode:
+    desc: Whole-program deadcode over the module's command and test roots (exclusions in lycaon/.deadcode-exclude)
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/deadcode-check.sh
 
   lint:vuln:
     desc: Offline govulncheck symbol scan against the vendored database (required in check; allowlist in lycaon/govulncheck-allowlist.yaml)
@@ -266,6 +268,21 @@ tasks:
     cmds:
       - python3 {{.SCRIPTS_DIR}}/coverage_changes.py go
 
+  arch-lint:changes:
+    desc: Structural defects the change adds or makes — unreachable code, unset context keys, unread tables, forwarders, dropped fields, test-support imports, unreferenced commands and scripts, unwired Tauri commands, unused parameters (scripts/arch-lint-policy.json)
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/arch_lint_changes.py
+
+  den:knip:changes:
+    desc: Den files, exports and types a change leaves unused by production code (knip, compared with the change base)
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/arch_lint_changes.py --den
+
+  arch-lint:report:
+    desc: List every arch-lint finding at the working tree
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/arch_lint_changes.py --all
+
   scripts:coverage:changes:
     desc: Scripts Python statements the change adds or modifies must be tested, subprocesses included (floors and suites in scripts/coverage-policy.json)
     cmds:
@@ -342,6 +359,11 @@ tasks:
     desc: Assembled Go component tests and randomized SQLite lifecycle properties
     cmds:
       - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:integration -- {{.CLI_ARGS}}
+
+  test:integration:changes:
+    desc: Integration-tagged tests of the Go packages the change edits directly
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/integration_changes.py
 
   test:full:
     desc: Full Go behavior and required bundled scanner tests (mock LLM)
@@ -426,9 +448,11 @@ tasks:
       - python3 {{.SCRIPTS_DIR}}/rewrite-fail-messages.py
 
   test:fail-messages:check:
-    desc: CI guard — fail if any bare t.Fatal(err) patterns remain in test files
+    desc: CI guard — fail on bare t.Fatal(err) patterns or fixed real-clock sleeps in test files
     cmds:
       - python3 {{.SCRIPTS_DIR}}/rewrite-fail-messages.py --check
+      - go -C {{.SCRIPTS_DIR}}/testsleep test -timeout 0 ./...
+      - go -C {{.SCRIPTS_DIR}}/testsleep run . --root ../../lycaon
 
   check:digest:
     desc: 'Lighter summarized pass (build + lint:fast + Go + Den + harness canary); not the ship gate. FULL=1 for full Go tests'
@@ -567,10 +591,13 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bun run typecheck
 
   den:lint:
-    desc: 'Frontend ESLint (errors only): typescript-eslint + eslint-plugin-solid'
+    desc: 'Frontend ESLint (errors only) and its canary: typescript-eslint, eslint-plugin-solid, Den source laws'
     dir: lycaon-den
     sources:
       - 'src/**/*.{ts,tsx}'
+      - 'shared/**/*.ts'
+      - 'e2e/**/*.ts'
+      - 'eslint/**/*.js'
       - eslint.config.js
       - package.json
     env:
@@ -581,6 +608,7 @@ tasks:
         msg: bun required — install from https://bun.sh
     cmds:
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bun run lint
+      - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bun run lint:canary
 
   den:lint:full:
     desc: Frontend ESLint with warnings visible (full report)
@@ -608,16 +636,6 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test
 
-  den:test:fast:
-    desc: Vitest seam canaries (model + DOM; exhaustive suite runs at closeout)
-    preconditions:
-      - sh: command -v bun
-        msg: bun required — install from https://bun.sh
-    env:
-      LYCAON_VITEST_FAST: '1'
-    cmds:
-      - bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test:fast
-
   den:test:digest:
     desc: 'Vitest with failure digest (e.g. task den:test:digest -- src/**/*.test.ts)'
     preconditions:
@@ -625,14 +643,6 @@ tasks:
         msg: bun required — install from https://bun.sh
     cmds:
       - bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test:digest -- {{.CLI_ARGS}}
-
-  den:test:transcript-scale:
-    desc: 'Transcript hydration at 5000 and 10000 messages'
-    preconditions:
-      - sh: command -v bun
-        msg: bun required — install from https://bun.sh
-    cmds:
-      - LYCAON_VITEST_PERF=1 bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test:transcript-scale -- src/chat/transcript/layout/transcript-scale.perf.test.ts
 
   den:test:rust:
     desc: Den Rust workspace tests and operational examples (shell, wheel glide, WebKit harness)
@@ -935,7 +945,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs {{.CLI_ARGS}}
 
   logs:tui:
     desc: 'Force the interactive log browser (LLM/HTTP/SSE/sessions, expand & follow)'
@@ -943,7 +953,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs tui {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs tui {{.CLI_ARGS}}
 
   logs:prompt:
     desc: 'Pretty-print one LLM call transcript — `./task logs:prompt -- [N] [--no-system] [--tools]` (default: last call)'
@@ -951,7 +961,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs prompt {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs prompt {{.CLI_ARGS}}
 
   logs:llm:
     desc: 'Compact list of captured LLM calls — `./task logs:llm -- [--agent NAME] [--surface NAME] [-n N]`'
@@ -959,7 +969,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs llm {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs llm {{.CLI_ARGS}}
 
   logs:http:
     desc: 'Status-colored HTTP request log — `./task logs:http -- [--errors] [-n N]`'
@@ -967,7 +977,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs http {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs http {{.CLI_ARGS}}
 
   logs:den-perf:
     desc: 'Den main-thread stall/perf log — `./task logs:den-perf -- [-f] [--json]`'
@@ -975,7 +985,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs den-perf {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs den-perf {{.CLI_ARGS}}
 
   logs:sse:
     desc: 'SSE event stream by topic — `./task logs:sse -- [--topic NAME] [-n N]`'
@@ -983,7 +993,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs sse {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs sse {{.CLI_ARGS}}
 
   logs:sessions:
     desc: 'Coordinator/worker session topology tree'
@@ -991,7 +1001,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs sessions {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs sessions {{.CLI_ARGS}}
 
   logs:dump:
     desc: 'Annotated synthetic coordinator prompt — `./task logs:dump -- --fixture implement_investigate_idle [--previous-family orchestrate]`'
@@ -999,7 +1009,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs dump {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs dump {{.CLI_ARGS}}
 
   logs:config:
     desc: 'View or change logs viewer settings — `./task logs:config -- [get KEY | set KEY VALUE | path]`'
@@ -1007,7 +1017,7 @@ tasks:
     env:
       LYCAON_DEV: '1'
     cmds:
-      - go run ./cmd/lycaon-debug logs config {{.CLI_ARGS}}
+      - go run ./cmd/pw-logs config {{.CLI_ARGS}}
 
   eval:tool-usage:
     desc: 'Agent outcomes: tool-usage driver or BENCHMARK=prepare|test|run|service|report|analyze|smoke|providers'
@@ -1713,12 +1723,6 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- bash {{.SCRIPTS_DIR}}/codegen-den-wire.sh check
 
-  oar:import-invariant:
-    desc: Convert an Invariant-subset rule file into OAR hint YAML
-    dir: '{{.GO_DIR}}'
-    cmds:
-      - go run ./cmd/oar-import-invariant {{.CLI_ARGS}}
-
   oar:verify:
     desc: Verify OAR semantics, shipped catalog startup, recovery vocabulary, and rejection delivery
     cmds:
@@ -1842,7 +1846,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/upgrade-corpus-prepare.sh
 
   release:preflight:
-    desc: 'Validate version, updater, brand, and optional corpus identity and integrity against the current engine'
+    desc: 'Release inputs: --static checks version, changelog, update keys, platforms and URLs without a build; --require-corpus builds the engine and verifies the versioned upgrade corpus'
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-preflight.sh {{.CLI_ARGS}}
 
@@ -1919,11 +1923,18 @@ tasks:
       - python3 -m scripts.linux_release.package_probe {{.CLI_ARGS}}
 
   release:rehearse:rpm-metadata:
-    desc: 'Build and rpmlint production RPM metadata around a tiny nonapplication payload on native Linux (-- --receipt PATH [--container])'
+    desc: 'Build and rpmlint production RPM metadata around a tiny nonapplication payload on native Linux; a misspelled summary must fail (-- [--receipt PATH] [--container])'
     env:
       PYTHONPATH: '{{.SCRIPTS_DIR}}'
     cmds:
       - python3 -m scripts.linux_release.rpm_metadata_rehearsal {{.CLI_ARGS}}
+
+  release:rehearse:deb-metadata:
+    desc: 'Build and lintian the production Debian control data, conffiles and maintainer scripts around a tiny nonapplication payload on native Linux; an unmarked /etc file must fail (-- [--receipt PATH] [--container])'
+    env:
+      PYTHONPATH: '{{.SCRIPTS_DIR}}'
+    cmds:
+      - python3 -m scripts.linux_release.deb_metadata_rehearsal {{.CLI_ARGS}}
 
   release:rehearse:pacman-construction:
     desc: 'Build and admit a sealed tiny pacman fixture with native makepkg in the pinned official substrate (-- --receipt PATH)'

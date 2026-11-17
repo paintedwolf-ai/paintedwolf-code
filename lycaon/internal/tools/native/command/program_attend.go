@@ -81,7 +81,7 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	lifetime := &programLifetime{release: e.release}
 	e.release = lifetime.settled
 	defer lifetime.callerDone()
-	budget := newForegroundBudget(r.clock(), ProgramInlineWait())
+	budget := newForegroundBudget(r.clock(), ProgramInlineWait)
 	defer budget.Close()
 	expired := budget.Expired()
 	e.waits = &programWaits{budget: budget}

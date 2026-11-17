@@ -92,14 +92,12 @@ func callDocumentProgram(t *testing.T, f *programtest.Fixture, source string) co
 	return result
 }
 
-func TestProgramPublishesOwnAgentDraftBeforeNativeReadAndGoTest(t *testing.T) {
+func TestProgramPublishesOwnAgentDraftBeforeNativeAndExternalReads(t *testing.T) {
 	f, service, p := documentProgram(t)
 	testutil.FailErr(t, "mkdir", os.Mkdir(filepath.Join(f.Dir, "pkg"), 0o755))
 	initial := "package pkg\nconst Value=0\n"
 	accepted := "package pkg\nconst Value=42\n"
 	testutil.FailErr(t, "source", os.WriteFile(filepath.Join(f.Dir, "pkg", "value.go"), []byte(initial), 0o644))
-	testutil.FailErr(t, "module", os.WriteFile(filepath.Join(f.Dir, "go.mod"), []byte("module example/probe\ngo 1.23\n"), 0o644))
-	testutil.FailErr(t, "test fixture", os.WriteFile(filepath.Join(f.Dir, "pkg", "value_test.go"), []byte("package pkg\nimport \"testing\"\nfunc TestValue(t *testing.T){if Value!=42{t.Fatal(Value)}}\n"), 0o644))
 	doc, err := service.Open(t.Context(), p, "pkg/value.go", "r1", "", "window", nil)
 	testutil.FailErr(t, "open", err)
 	dir := filepath.Join(f.Dir, "pkg")
@@ -111,8 +109,8 @@ func TestProgramPublishesOwnAgentDraftBeforeNativeReadAndGoTest(t *testing.T) {
 		t.Fatalf("edit=%+v", applied)
 	}
 	testutil.FailErr(t, "permit save", os.Chmod(dir, 0o755))
-	result := callDocumentProgram(t, f, fmt.Sprintf("cat pkg/value.go; GOCACHE=%q GOMODCACHE=%q GOPROXY=off go test ./pkg", filepath.Join(f.Dir, "cache"), filepath.Join(f.Dir, "modcache")))
-	if result.Status != 0 || !strings.HasPrefix(result.Stdout, accepted) || result.Stderr != "" {
+	result := callDocumentProgram(t, f, `cat pkg/value.go; python3 -c 'import sys; sys.exit("Value=42" not in open("pkg/value.go").read())'`)
+	if result.Status != 0 || result.Stdout != accepted || result.Stderr != "" {
 		t.Fatalf("program=%+v", result)
 	}
 	saved, err := os.ReadFile(filepath.Join(dir, "value.go"))

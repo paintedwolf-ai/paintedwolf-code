@@ -21,7 +21,7 @@ func refuseUnownable(desired DesiredState, kindByID map[string]string) (DesiredS
 	for _, id := range ids {
 		kind := kindByID[id]
 		if kind == "" {
-			kind = kindRootForRel(id)
+			kind = KindRootForUnitID(id)
 		}
 		if !ProviderScoped(kind) {
 			kept[id] = desired.Own[id]
@@ -71,7 +71,7 @@ func filterAdditiveDesired(
 		if k := kindByID[id]; k != "" {
 			return k
 		}
-		return kindRootForRel(id)
+		return KindRootForUnitID(id)
 	}
 
 	disabled := make([]string, 0, len(desired.Disabled))

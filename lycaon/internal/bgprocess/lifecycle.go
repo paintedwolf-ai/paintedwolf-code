@@ -134,7 +134,7 @@ func (r *ProcessLifecycle) TakeIndexWatch(sessionID, handle string) indexwatch.S
 
 // Discard removes a finished inline await job.
 func (r *ProcessLifecycle) Discard(sessionID, handle string) {
-	r.jobs.remove(trim(sessionID), trim(handle))
+	r.jobs.remove(strings.TrimSpace(sessionID), strings.TrimSpace(handle))
 }
 
 // Stop requests process-tree termination and returns the currently observed exit state.
@@ -201,7 +201,7 @@ func (r *ProcessLifecycle) DisposeAwaitedSession(ctx context.Context, sessionID 
 	if reason == "" {
 		reason = TerminationReasonFromContext(ctx, TerminationStoppedByUser)
 	}
-	sessionID = trim(sessionID)
+	sessionID = strings.TrimSpace(sessionID)
 	r.jobs.mu.Lock()
 	sessionProcs := r.jobs.sessions[sessionID]
 	var awaited []*Process
@@ -244,8 +244,8 @@ func (r *ProcessLifecycle) StopUnderRoot(
 	if reason == "" {
 		reason = TerminationReasonFromContext(ctx, TerminationRootDetached)
 	}
-	projectID = trim(projectID)
-	rootPath = trim(rootPath)
+	projectID = strings.TrimSpace(projectID)
+	rootPath = strings.TrimSpace(rootPath)
 	seen := make(map[string]*Process)
 	r.jobs.mu.Lock()
 	if projectID != "" {
@@ -266,8 +266,8 @@ func (r *ProcessLifecycle) StopUnderRoot(
 		}()
 	}
 	for _, item := range handles {
-		sid := trim(item.SessionID)
-		hid := trim(item.Handle)
+		sid := strings.TrimSpace(item.SessionID)
+		hid := strings.TrimSpace(item.Handle)
 		if procs := r.jobs.sessions[sid]; procs != nil {
 			if proc := procs[hid]; proc != nil && proc.running {
 				seen[sid+"/"+hid] = proc
@@ -317,7 +317,7 @@ func (r *ProcessLifecycle) OnExit(sessionID, handle string, fn func()) {
 		return
 	}
 	r.jobs.mu.Lock()
-	proc := r.jobs.ownedProcessesLocked(trim(sessionID))[trim(handle)]
+	proc := r.jobs.ownedProcessesLocked(strings.TrimSpace(sessionID))[strings.TrimSpace(handle)]
 	r.jobs.mu.Unlock()
 	if proc == nil {
 		fn()
@@ -396,8 +396,4 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		return
 	}
 	owned.release()
-}
-
-func trim(s string) string {
-	return strings.TrimSpace(s)
 }

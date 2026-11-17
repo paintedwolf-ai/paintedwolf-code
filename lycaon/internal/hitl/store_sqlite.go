@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -104,7 +105,7 @@ func checkpointInsertParams(row StoredCheckpoint) (db.InsertCheckpointParams, er
 		FilesJson:          filesJSON,
 		PayloadJson:        payloadJSON,
 		ResultJson:         resultJSON,
-		CreatedAt:          db.FormatTime(row.CreatedAt),
+		CreatedAt:          timelayout.Format(row.CreatedAt),
 		ResolvedAt:         db.NullTimePtr(row.ResolvedAt),
 		ResolvedBy:         db.NullString(resolutionBy(row.Resolution)),
 		ResolvedByPersonID: db.NullString(resolutionPersonID(row.Resolution)),
@@ -152,7 +153,7 @@ func (s *SQLStore) resolveCheckpoint(ctx context.Context, row StoredCheckpoint, 
 	rows, err := qtx.ResolveCheckpointForSession(ctx, db.ResolveCheckpointForSessionParams{
 		NewStatus:          string(status),
 		ResultJson:         resultJSON,
-		ResolvedAt:         db.NullString(db.FormatTime(resolvedAt)),
+		ResolvedAt:         db.NullString(timelayout.Format(resolvedAt)),
 		ResolvedBy:         db.NullString(resolution.By),
 		ResolvedByPersonID: db.NullString(resolution.PersonID),
 		ID:                 row.ID,

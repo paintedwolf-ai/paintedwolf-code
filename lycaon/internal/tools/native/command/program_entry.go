@@ -6,9 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/pkg/api"
 	"io"
 	"slices"
 	"strings"
@@ -16,7 +13,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
+	"github.com/lycaon/lycaon/pkg/api"
+
 	"github.com/google/uuid"
+
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
@@ -77,18 +79,6 @@ type ProgramRuntime struct {
 	outputs   map[string]*invocation.ProgramOutputRetention
 	resources map[string]*sessionOutputResources
 	disabled  atomic.Bool
-}
-
-// SetDisabled turns the command program control off or on. Turning it off
-// refuses new programs and stops every supervised program and its owned jobs,
-// which settle with their actual outcomes; nothing is rerouted to a shell.
-// It returns the programs whose stop was requested.
-func (r *ProgramRuntime) SetDisabled(disabled bool) []string {
-	r.disabled.Store(disabled)
-	if !disabled || r.Supervisor == nil {
-		return nil
-	}
-	return r.Supervisor.StopAll()
 }
 
 func (r *ProgramRuntime) clock() commandprogram.Clock {

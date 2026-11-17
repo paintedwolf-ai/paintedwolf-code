@@ -3,13 +3,14 @@ package prompts
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/skills"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/skills"
 )
 
 func TestAuthorRender_BundledPartial(t *testing.T) {
@@ -249,7 +250,7 @@ func TestAuthorRender_SkillVarOverlay(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AuthorRender: %v", err)
 	}
-	if !strings.Contains(res.Output, "at most **2** legs") {
+	if !strings.Contains(res.Output, "at most **2** workers") {
 		t.Fatalf("--var did not overlay the sizing var:\n%s", res.Output)
 	}
 }

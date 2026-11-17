@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -41,33 +42,35 @@ func TestPoliteAcquirePacesRequestStarts(t *testing.T) {
 }
 
 func TestPoliteAcquireBoundsInFlight(t *testing.T) {
-	resetPoliteness(time.Millisecond)
-	var inFlight, peak int64
-	var wg sync.WaitGroup
-	for i := 0; i < 8; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			release, err := politeAcquire(t.Context(), "bounded.example")
-			if err != nil {
-				return
-			}
-			n := atomic.AddInt64(&inFlight, 1)
-			for {
-				p := atomic.LoadInt64(&peak)
-				if n <= p || atomic.CompareAndSwapInt64(&peak, p, n) {
-					break
+	synctest.Test(t, func(t *testing.T) {
+		resetPoliteness(time.Millisecond)
+		var inFlight, peak int64
+		var wg sync.WaitGroup
+		for i := 0; i < 8; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				release, err := politeAcquire(t.Context(), "bounded.example")
+				if err != nil {
+					return
 				}
-			}
-			time.Sleep(5 * time.Millisecond)
-			atomic.AddInt64(&inFlight, -1)
-			release()
-		}()
-	}
-	wg.Wait()
-	if peak > politeHostMaxInFlight {
-		t.Fatalf("peak in-flight = %d want <= %d", peak, politeHostMaxInFlight)
-	}
+				n := atomic.AddInt64(&inFlight, 1)
+				for {
+					p := atomic.LoadInt64(&peak)
+					if n <= p || atomic.CompareAndSwapInt64(&peak, p, n) {
+						break
+					}
+				}
+				time.Sleep(5 * time.Millisecond)
+				atomic.AddInt64(&inFlight, -1)
+				release()
+			}()
+		}
+		wg.Wait()
+		if peak > politeHostMaxInFlight {
+			t.Fatalf("peak in-flight = %d want <= %d", peak, politeHostMaxInFlight)
+		}
+	})
 }
 
 func TestPoliteRecordCooldownOn429(t *testing.T) {

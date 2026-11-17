@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerstate"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -16,12 +18,24 @@ import (
 // OverlayToolDeps provides overlay merge operations.
 type OverlayToolDeps struct {
 	Merge *MergeService
+	// Results resolves the result handles the tools are addressed by.
+	Results *workerops.Service
+}
+
+// overlayJob resolves a result handle to the job holding its changes while
+// keeping the worker's lifecycle lock held for the caller.
+func overlayJob(ctx context.Context, deps OverlayToolDeps, tool string, tctx tools.ToolContext, handle string, op workerstate.Operation) (jobID, resultHandle string, unlock func(), err error) {
+	ref, unlock, err := deps.Results.Result(ctx, coordinatorActor(tctx), handle, op)
+	if err != nil {
+		return "", "", nil, workerToolReject(tool, "", "", err, handle)
+	}
+	return ref.JobID, handle, unlock, nil
 }
 
 // RegisterOverlayTools registers coordinator overlay tools.
 func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) error {
-	if reg == nil || deps.Merge == nil {
-		return fmt.Errorf("registry and overlay merge service required")
+	if reg == nil || deps.Merge == nil || deps.Results == nil {
+		return fmt.Errorf("registry, overlay merge service and worker results required")
 	}
 	if err := reg.Register("promote_overlay", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		var overrideErr error
@@ -29,10 +43,15 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 		if overrideErr != nil {
 			return "", overrideErr
 		}
-		overlayID := strings.TrimSpace(stringArg(args["overlay_id"]))
-		if overlayID == "" {
+		handle := strings.TrimSpace(stringArg(args["overlay_id"]))
+		if handle == "" {
 			return "", fmt.Errorf("overlay_id is required")
 		}
+		overlayID, resultHandle, unlock, err := overlayJob(ctx, deps, "promote_overlay", tctx, handle, workerstate.OpPromote)
+		if err != nil {
+			return "", err
+		}
+		defer unlock()
 		captureWorkerSubject(tctx, deps.Merge.Queue, overlayID)
 		resolutions := parsePromoteResolutions(args["resolutions"])
 		// A folder drop applies to every changed file below it.
@@ -51,6 +70,7 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 			UserTurn:    tctx.Identity.UserTurn,
 		}
 		out, err := deps.Merge.PromoteOverlay(ctx, tctx.Identity.SessionID, overlayID, in)
+		out.ResultHandle = resultHandle
 		if err == nil {
 			tools.ReportSyntaxOverride(ctx, tctx, out.Applied...)
 		}
@@ -59,15 +79,20 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 			tctx.Effects.Out.Completion = overlayCompletion("overlay_promotion", out, "promoted")
 			tctx.Effects.Out.OverlayPromotion = out.OverlayPromotion
 		}
-		return formatOverlayPromoteHostContent(ctx, overlayID, out, err)
+		return formatOverlayPromoteHostContent(ctx, handle, out, err)
 	}); err != nil {
 		return err
 	}
 	if err := reg.Register("reject_overlay", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		overlayID := strings.TrimSpace(stringArg(args["overlay_id"]))
-		if overlayID == "" {
+		handle := strings.TrimSpace(stringArg(args["overlay_id"]))
+		if handle == "" {
 			return "", fmt.Errorf("overlay_id is required")
 		}
+		overlayID, _, unlock, err := overlayJob(ctx, deps, "reject_overlay", tctx, handle, workerstate.OpReject)
+		if err != nil {
+			return "", err
+		}
+		defer unlock()
 		captureWorkerSubject(tctx, deps.Merge.Queue, overlayID)
 		reason := strings.TrimSpace(stringArg(args["reason"]))
 		out, err := deps.Merge.RejectOverlay(ctx, tctx.Identity.SessionID, overlayID, reason)
@@ -77,15 +102,26 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 				Operation: "overlay_rejection", State: "rejected", ResourceKind: "overlay", ResourceID: strings.TrimSpace(out.OverlayID),
 			}
 		}
-		return formatOverlayRejectHostContent(ctx, overlayID, out, err)
+		// The coordinator addresses results by handle, never by job.
+		if strings.TrimSpace(out.OverlayID) != "" {
+			out.OverlayID = handle
+		}
+		out.Later = overlayHandles(ctx, deps.Merge.Names, out.Later)
+		out.Orphaned = overlayHandles(ctx, deps.Merge.Names, out.Orphaned)
+		return formatOverlayRejectHostContent(ctx, handle, out, err)
 	}); err != nil {
 		return err
 	}
 	if err := reg.Register("preview_overlay", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		overlayID := strings.TrimSpace(stringArg(args["overlay_id"]))
-		if overlayID == "" {
+		handle := strings.TrimSpace(stringArg(args["overlay_id"]))
+		if handle == "" {
 			return "", fmt.Errorf("overlay_id is required")
 		}
+		overlayID, resultHandle, unlock, err := overlayJob(ctx, deps, "preview_overlay", tctx, handle, workerstate.OpPreview)
+		if err != nil {
+			return "", err
+		}
+		unlock()
 		captureWorkerSubject(tctx, deps.Merge.Queue, overlayID)
 		detail := parsePromoteDetailArg(args["detail"])
 		paths := parseOverlayPathFilter(args["path"])
@@ -93,6 +129,7 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 		if err != nil {
 			return "", err
 		}
+		out.ResultHandle = resultHandle
 		if tctx.Effects.Out != nil {
 			tctx.Effects.Out.OwnerRef = strings.TrimSpace(out.JobID)
 			tctx.Effects.Out.Completion = overlayCompletion("overlay_preview", out, "previewed")

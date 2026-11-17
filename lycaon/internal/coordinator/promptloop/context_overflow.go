@@ -125,7 +125,7 @@ func (l *modelTurn) compactHistoryToWindow(
 		if fitCfg.KeepRecentMessages <= 0 || fitCfg.KeepRecentMessages >= len(ctxMsgs) {
 			fitCfg.KeepRecentMessages = max(1, len(ctxMsgs)/2)
 		}
-		fitted := compaction.DeterministicFit(fitCfg, ctxMsgs, maxTokens)
+		fitted := compaction.DeterministicFitWithReserve(fitCfg, ctxMsgs, maxTokens, 0)
 		if len(fitted) > 0 {
 			ctxMsgs = fitted
 		}

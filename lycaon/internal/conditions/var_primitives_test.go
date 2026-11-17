@@ -30,14 +30,6 @@ func TestVarTruthyDotPath(t *testing.T) {
 	}
 }
 
-func TestHumanApprovalIsRegistered(t *testing.T) {
-	reg, err := NewDefaultRegistry(RegistryDeps{})
-	testutil.FailErr(t, "NewDefaultRegistry failed", err)
-	if !reg.Has("human_approval") {
-		t.Fatal("human_approval must be registered")
-	}
-}
-
 func TestIsHostOnlyCondition(t *testing.T) {
 	if !IsHostOnlyCondition("var_set:plan.status") {
 		t.Fatal("var_set must be host-only")

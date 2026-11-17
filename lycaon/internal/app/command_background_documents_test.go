@@ -12,8 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// A background read serves the person's unsaved text, as a foreground read
-// does, and a read never saves it.
 func TestProgramBackgroundReadServesThePersonsDraft(t *testing.T) {
 	f, service, p := documentProgram(t)
 	path := filepath.Join(f.Dir, "a.txt")
@@ -31,7 +29,7 @@ func TestProgramBackgroundReadServesThePersonsDraft(t *testing.T) {
 	if outcome.Status != 0 || outcome.CompletedEffects != 0 {
 		t.Fatalf("initial=%+v", outcome)
 	}
-	completion := <-completed
+	completion := testutil.Receive(t, "background program completes", completed)
 	if completion.ExitCode != 0 || completion.SessionID != f.Session {
 		t.Fatalf("completion=%+v", completion)
 	}
@@ -39,12 +37,13 @@ func TestProgramBackgroundReadServesThePersonsDraft(t *testing.T) {
 	testutil.FailErr(t, "background bytes", err)
 	bytes := ""
 	for _, chunk := range snapshot.Output.Chunks {
-		if chunk.Stream == "stdout" {
-			bytes += chunk.Text
+		if chunk.Stream != "stdout" {
+			t.Fatalf("unexpected background stream: %+v", chunk)
 		}
+		bytes += chunk.Text
 	}
-	if bytes != "human draft\nhuman draft\n" {
-		t.Fatalf("background bytes=%q", bytes)
+	if bytes != "human draft\nhuman draft\n" || snapshot.Output.Running || snapshot.Output.ExitCode == nil || *snapshot.Output.ExitCode != 0 {
+		t.Fatalf("background bytes=%q snapshot=%+v", bytes, snapshot)
 	}
 	current, err := service.CurrentSnapshot(t.Context(), p.ID, doc.ID)
 	testutil.FailErr(t, "draft", err)

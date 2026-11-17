@@ -11,10 +11,11 @@ import (
 	"time"
 
 	readability "codeberg.org/readeck/go-readability/v2"
+	"golang.org/x/net/html"
+
 	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretmatch"
-	"golang.org/x/net/html"
 )
 
 const (
@@ -144,15 +145,6 @@ func appendSuffix(suffix string, minSegs int) func(*url.URL) string {
 		}
 		return "https://" + u.Host + "/" + p + "/" + suffix
 	}
-}
-
-// FetchURL pins public-IP requests and revalidates redirects before extracting readable text.
-func FetchURL(ctx context.Context, opts FetchOptions) (FetchURLResult, error) {
-	raw, err := fetchBytes(ctx, opts)
-	if err != nil {
-		return FetchURLResult{}, err
-	}
-	return fetchTextResult(raw), nil
 }
 
 // fetchTextResult converts a fetched body to its text view. Image bodies never

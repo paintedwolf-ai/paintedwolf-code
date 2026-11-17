@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/app/boards"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/app/decisions"
-	"github.com/lycaon/lycaon/internal/app/delegations"
 	"github.com/lycaon/lycaon/internal/app/deviceidentity"
 	"github.com/lycaon/lycaon/internal/app/eventing"
 	"github.com/lycaon/lycaon/internal/app/execution"
@@ -20,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/security"
 	"github.com/lycaon/lycaon/internal/app/server"
 	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/bootrecovery"
 	"github.com/lycaon/lycaon/internal/db"
@@ -45,28 +45,28 @@ type workerCoordination struct {
 }
 
 type serveBuilder struct {
-	execution    execution.Runtime
-	identity     deviceidentity.Credentials
-	interactions interactions.Runtime
-	providers    providers.Runtime
-	catalog      configuration.Catalog
-	settings     configuration.Runtime
-	startup      startupBootstrap
-	storage      persistence.Runtime
-	decisions    decisions.Runtime
-	localModels  localmodels.Startup
-	agents       configuration.Agents
-	workflows    *workflows.Runtime
-	scanning     *scanning.Runtime
-	sessions     *sessions.Runtime
-	delegations  *delegations.Runtime
-	boards       *boards.Runtime
-	security     *security.Runtime
-	events       *eventing.Runtime
-	processes    *processes.Runtime
-	git          gitRuntime
-	worker       workerCoordination
-	server       server.Runtime
+	execution     execution.Runtime
+	identity      deviceidentity.Credentials
+	interactions  interactions.Runtime
+	providers     providers.Runtime
+	catalog       configuration.Catalog
+	settings      configuration.Runtime
+	startup       startupBootstrap
+	storage       persistence.Runtime
+	decisions     decisions.Runtime
+	localModels   localmodels.Startup
+	agents        configuration.Agents
+	workflows     *workflows.Runtime
+	scanning      *scanning.Runtime
+	sessions      *sessions.Runtime
+	workerRuntime *workerruntime.Runtime
+	boards        *boards.Runtime
+	security      *security.Runtime
+	events        *eventing.Runtime
+	processes     *processes.Runtime
+	git           gitRuntime
+	worker        workerCoordination
+	server        server.Runtime
 }
 
 // Build wires all serve subsystems and validates boot configuration.
@@ -118,7 +118,7 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 		{"events", startupprotocol.PhaseEvents, b.wireEvents},
 		{"authz-capturer", startupprotocol.PhasePolicy, b.assertAuthzCapturer},
 		{"workflows", startupprotocol.PhaseWorkflows, b.wireWorkflows},
-		{"delegation-workers", startupprotocol.PhaseWorkers, b.wireDelegationWorkers},
+		{"workers", startupprotocol.PhaseWorkers, b.wireWorkers},
 		{"scan", startupprotocol.PhaseScan, b.wireScan},
 		{"board-research", startupprotocol.PhaseResearch, b.wireBoardAndResearch},
 		{"grounding-findings", startupprotocol.PhaseGrounding, b.wireGroundingAndFindings},

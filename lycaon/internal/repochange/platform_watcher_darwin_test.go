@@ -43,17 +43,15 @@ func TestFSEventsWatcherExtendsToExternalGitMetadata(t *testing.T) {
 	common := t.TempDir()
 	refs := filepath.Join(common, "refs", "heads")
 	testutil.FailErr(t, "mkdir refs", os.MkdirAll(refs, 0o755))
-	target := filepath.Join(refs, "main")
-	testutil.FailErr(t, "seed external ref", os.WriteFile(target, []byte("cafebabe\n"), 0o644))
+	testutil.FailErr(t, "seed external ref", os.WriteFile(filepath.Join(refs, "main"), []byte("cafebabe\n"), 0o644))
 	w, err := newPlatformWatcher(root)
 	testutil.FailErr(t, "new watcher", err)
 	t.Cleanup(func() { _ = w.Close() })
 	testutil.FailErr(t, "add root", w.Add(root))
 	testutil.FailErr(t, "add external refs", w.Add(refs))
 
-	// Restarting an FSEvents stream is synchronous, but leave one latency window
-	// before the mutation so this test exercises only post-registration events.
-	time.Sleep(2 * fseventsLatency)
+	// The ref is created after registration, so any event for it is a post-registration event.
+	target := filepath.Join(refs, "topic")
 	testutil.FailErr(t, "write external ref", os.WriteFile(target, []byte("deadbeef\n"), 0o644))
 	wantWatcherEvent(t, w, target)
 }
@@ -67,17 +65,18 @@ func TestFSEventsWatcherCloseDoesNotDependOnConsumerDrain(t *testing.T) {
 		name := filepath.Join(root, time.Unix(int64(i), 0).Format("150405.000000000"))
 		testutil.FailErr(t, "write burst", os.WriteFile(name, []byte("x"), 0o644))
 	}
-	time.Sleep(2 * fseventsLatency)
+	stream := w.(*fseventsPlatformWatcher)
+	testutil.WaitFor(t, "the burst waits behind the undrained consumer", func() bool {
+		stream.mu.Lock()
+		defer stream.mu.Unlock()
+		return len(stream.queue) > 0 || stream.collapsed
+	})
 	closed := make(chan struct{})
 	go func() {
 		_ = w.Close()
 		close(closed)
 	}()
-	select {
-	case <-closed:
-	case <-t.Context().Done():
-		t.Fatal("Close blocked behind an undrained event consumer")
-	}
+	testutil.AwaitClosed(t, "Close returns with the consumer undrained", closed)
 }
 
 func wantWatcherEvent(t *testing.T, w platformWatcher, target string) {

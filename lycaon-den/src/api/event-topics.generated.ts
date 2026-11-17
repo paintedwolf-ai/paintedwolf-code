@@ -10,7 +10,6 @@ export const ALL_EVENT_TOPICS = [
   "worker",
   "checkpoint",
   "board",
-  "delegation",
   "cost",
   "llm",
   "activity",

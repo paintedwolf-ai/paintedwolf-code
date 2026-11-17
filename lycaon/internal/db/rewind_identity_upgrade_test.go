@@ -30,7 +30,7 @@ func TestReleasedRewindUpgradePreservesIdentityWithoutInstallationPaths(t *testi
 			testutil.FailErr(t, "close released store", source.Close())
 			for boot := 0; boot < 2; boot++ {
 				testutil.FailErr(t, "upgrade released rewind receipts", UpgradeStaged(t.Context(), path))
-				reader, err := openReader(t.Context(), path)
+				reader, err := OpenReadOnly(t.Context(), path)
 				testutil.FailErr(t, "open upgraded store", err)
 				rows, err := reader.Query("SELECT " + columns + " FROM rewind_operations")
 				testutil.FailErr(t, "read upgraded receipts", err)

@@ -1,6 +1,6 @@
 ## Collaboration
 
-Critique the plan and leg context in a read-only posture. Output is advisory only — do not edit plan files or claim gates are satisfied.
+Critique the plan and worker context in a read-only posture. Output is advisory only — do not edit plan files or claim gates are satisfied.
 
 ## Output (required headings)
 

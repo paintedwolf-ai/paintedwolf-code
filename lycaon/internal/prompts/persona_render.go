@@ -38,12 +38,6 @@ func RenderPersona(ctx context.Context, engine *FileTemplateEngine, agentID stri
 	return body, nil
 }
 
-// PersonaVars builds the variable map RenderPersona hands the template engine.
-func PersonaVars(ctx context.Context, engine *FileTemplateEngine, agentID string, reader Reader, occurrence map[string]any) (map[string]any, error) {
-	_, _, _, data, err := personaVars(ctx, engine, agentID, reader, occurrence)
-	return data, err
-}
-
 func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string, reader Reader, occurrence map[string]any) (*FileTemplateEngine, string, string, map[string]any, error) {
 	if engine == nil {
 		return nil, "", "", nil, fmt.Errorf("prompt engine not configured")
@@ -68,6 +62,9 @@ func personaVars(ctx context.Context, engine *FileTemplateEngine, agentID string
 	def, ok := cfg.Agents[id]
 	if !ok {
 		return nil, "", "", nil, fmt.Errorf("%w: persona contract: agent %q not in contract", ErrUnknownAgent, id)
+	}
+	if err := requireArchetypePartials(engine.Layers(), def.Archetype, cfg.Archetypes[def.Archetype]); err != nil {
+		return nil, "", "", nil, err
 	}
 	ref, err := TemplateRefForAgent(id)
 	if err != nil {

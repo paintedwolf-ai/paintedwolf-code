@@ -42,7 +42,7 @@ func TestReleasedVerdictPublicationUpgrade(t *testing.T) {
 			testutil.FailErr(t, "close released store", source.Close())
 			for boot := 0; boot < 2; boot++ {
 				testutil.FailErr(t, "upgrade staged store", UpgradeStaged(t.Context(), path))
-				reader, err := openReader(t.Context(), path)
+				reader, err := OpenReadOnly(t.Context(), path)
 				testutil.FailErr(t, "open upgraded store", err)
 				rows, err := reader.Query(`SELECT tool_call_id,run_id,source_revision,phase,input_digest,evidence_record_id,evidence_json,status,response_json,error,created_at,updated_at FROM workflow_verdict_operations`)
 				testutil.FailErr(t, "read retained receipts", err)
