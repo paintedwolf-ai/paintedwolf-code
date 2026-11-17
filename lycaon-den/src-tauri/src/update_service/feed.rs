@@ -1,7 +1,7 @@
 //! Channel pointers are authenticated and replay-checked before their offers are accepted.
 use super::{
-    persistence, verification, Candidate, Failure, RolloutEligibility, UpdateChannel, UpdateError,
-    CHECK_REQUEST_TIMEOUT, DOWNLOAD_ORIGIN,
+    persistence, verification, Candidate, Failure, RolloutEligibility, Trust, UpdateChannel,
+    UpdateError, CHECK_REQUEST_TIMEOUT,
 };
 use futures_util::StreamExt;
 use serde::Deserialize;
@@ -10,39 +10,6 @@ use std::collections::BTreeMap;
 const MAX_MANIFEST_BYTES: u64 = 1024 * 1024;
 const MAX_SIGNATURE_BYTES: u64 = 16 * 1024;
 
-/// The artifact key generation this build trusts and its public key.
-pub(super) fn embedded_key() -> (u64, String) {
-    let generation = embedded_generation();
-    (
-        generation["generation"].as_u64().expect("key generation"),
-        generation["public_key"]
-            .as_str()
-            .expect("public key string")
-            .into(),
-    )
-}
-/// The feed key that signs this generation's channel pointers.
-pub(super) fn feed_key() -> String {
-    embedded_generation()["feed_public_key"]
-        .as_str()
-        .expect("feed public key string")
-        .into()
-}
-fn embedded_generation() -> serde_json::Value {
-    let registry: serde_json::Value =
-        serde_json::from_str(include_str!("../../../../packaging/update-keys.json"))
-            .expect("compiled updater key registry");
-    let number = registry["embedded_generation"]
-        .as_u64()
-        .expect("embedded key generation");
-    registry["generations"]
-        .as_array()
-        .expect("key generations")
-        .iter()
-        .find(|row| row["generation"].as_u64() == Some(number))
-        .expect("embedded key generation row")
-        .clone()
-}
 /// The updater platform key of this build, matching `packaging/release-platforms.json`.
 pub fn target() -> &'static str {
     match (std::env::consts::OS, std::env::consts::ARCH) {
@@ -117,19 +84,21 @@ impl From<UpdateError> for FeedFailure {
 pub async fn fetch(
     channel: UpdateChannel,
     running_version: &str,
+    trust: &Trust,
 ) -> Result<Option<Offer>, FeedFailure> {
-    fetch_with_deadline(channel, running_version, CHECK_REQUEST_TIMEOUT).await
+    fetch_with_deadline(channel, running_version, trust, CHECK_REQUEST_TIMEOUT).await
 }
 
 pub async fn fetch_with_deadline(
     channel: UpdateChannel,
     running_version: &str,
+    trust: &Trust,
     deadline: std::time::Duration,
 ) -> Result<Option<Offer>, FeedFailure> {
     let deadline = tokio::time::Instant::now() + deadline;
     let running = semver::Version::parse(running_version)
         .map_err(|e| UpdateError::new(Failure::InvalidVersion, e))?;
-    let endpoint = channel.endpoint();
+    let endpoint = trust.endpoint(channel);
     let (manifest, signature) = tokio::time::timeout_at(deadline, async {
         let manifest = fetch_bytes(&endpoint, MAX_MANIFEST_BYTES).await?;
         let signature = fetch_bytes(&format!("{endpoint}.sig"), MAX_SIGNATURE_BYTES).await?;
@@ -142,29 +111,40 @@ pub async fn fetch_with_deadline(
             "The update feed did not respond in time",
         )
     })??;
-    let signature =
-        String::from_utf8(signature).map_err(|e| UpdateError::new(Failure::InvalidRelease, e))?;
-    let (generation, _) = embedded_key();
-    let feed_name = channel.feed_name();
-    let comment = verification::verify_feed(&manifest, &signature, &feed_key(), &feed_name)
-        .map_err(|e| UpdateError::new(Failure::InvalidRelease, e))?;
+    let state = persistence::preferences_dir()?;
     tokio::time::timeout_at(
         deadline,
-        super::feed_state::accept(
-            &persistence::preferences_dir()?,
-            &feed_name,
-            comment.timestamp,
-        ),
+        accept_pointer(&manifest, &signature, channel, trust, &state, &running, super::now()),
     )
     .await
-    .map_err(|_| UpdateError::new(Failure::StateUnavailable, "The update feed record is busy"))??;
+    .map_err(|_| UpdateError::new(Failure::StateUnavailable, "The update feed record is busy"))?
+}
+
+/// Verifies a fetched channel pointer against `trust`, records its timestamp in the replay
+/// watermark under `state`, and interprets it for this build. A pointer that fails
+/// verification never reaches the watermark.
+pub async fn accept_pointer(
+    manifest: &[u8],
+    signature: &[u8],
+    channel: UpdateChannel,
+    trust: &Trust,
+    state: &std::path::Path,
+    running: &semver::Version,
+    now: u64,
+) -> Result<Option<Offer>, FeedFailure> {
+    let signature = std::str::from_utf8(signature)
+        .map_err(|e| UpdateError::new(Failure::InvalidRelease, e))?;
+    let feed_name = trust.feed_name(channel);
+    let comment = verification::verify_feed(manifest, signature, &trust.feed_key, &feed_name)
+        .map_err(|e| UpdateError::new(Failure::InvalidRelease, e))?;
+    super::feed_state::accept(state, &feed_name, comment.timestamp).await?;
     offer(
-        &manifest,
+        manifest,
         &comment.version,
         channel,
-        generation,
-        &running,
-        super::now(),
+        trust,
+        running,
+        now,
         super::installer::CHECK_ONLY,
     )
     .map_err(Into::into)
@@ -218,11 +198,12 @@ fn offer(
     manifest: &[u8],
     signed_version: &str,
     channel: UpdateChannel,
-    generation: u64,
+    trust: &Trust,
     running: &semver::Version,
     now: u64,
     check_only: bool,
 ) -> Result<Option<Offer>, UpdateError> {
+    let generation = trust.generation;
     let manifest: Manifest = serde_json::from_slice(manifest)
         .map_err(|e| UpdateError::new(Failure::InvalidRelease, e))?;
     if manifest.version != signed_version {
@@ -281,7 +262,7 @@ fn offer(
         Some(entry) => {
             if !entry
                 .url
-                .strip_prefix(DOWNLOAD_ORIGIN)
+                .strip_prefix(trust.origin.as_str())
                 .is_some_and(|path| path.starts_with('/'))
             {
                 return Err(UpdateError::new(
@@ -366,6 +347,13 @@ pub(super) fn parse_rfc3339(value: &str) -> Option<i64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::update_service::DOWNLOAD_ORIGIN;
+    fn trust(generation: u64) -> Trust {
+        Trust {
+            generation,
+            ..Trust::embedded()
+        }
+    }
     fn manifest(version: &str, extra: &str) -> Vec<u8> {
         format!(
             r#"{{"version":"{version}","notes":"Notes.","pub_date":"2026-02-01T00:00:00Z",
@@ -388,7 +376,7 @@ mod tests {
             &manifest("1.1.0", ""),
             "1.1.0",
             UpdateChannel::Stable,
-            1,
+            &trust(1),
             &running(),
             published + 3_600,
                 false,
@@ -407,7 +395,7 @@ mod tests {
                 &manifest("1.1.0", ""),
                 "1.1.1",
                 UpdateChannel::Stable,
-                1,
+                &trust(1),
                 &running(),
                 0,
                 false,
@@ -420,7 +408,7 @@ mod tests {
             &manifest("1.0.0", ""),
             "1.0.0",
             UpdateChannel::Stable,
-            1,
+            &trust(1),
             &running(),
             0,
                 false,
@@ -431,7 +419,7 @@ mod tests {
             &manifest("0.9.0", ""),
             "0.9.0",
             UpdateChannel::Stable,
-            1,
+            &trust(1),
             &running(),
             0,
                 false,
@@ -445,7 +433,7 @@ mod tests {
             &manifest("1.1.0", r#","withdrawn":true"#),
             "1.1.0",
             UpdateChannel::Stable,
-            1,
+            &trust(1),
             &running(),
             0,
                 false,
@@ -461,7 +449,7 @@ mod tests {
                     &manifest(version, ""),
                     version,
                     channel,
-                    generation,
+                    &trust(generation),
                     &running(),
                     0,
                 false,
@@ -475,7 +463,7 @@ mod tests {
             &manifest("1.1.0-rc.1", ""),
             "1.1.0-rc.1",
             UpdateChannel::Preview,
-            1,
+            &trust(1),
             &running(),
             0,
                 false,
@@ -490,7 +478,7 @@ mod tests {
                 foreign.as_bytes(),
                 "1.1.0",
                 UpdateChannel::Stable,
-                1,
+                &trust(1),
                 &running(),
                 0,
                 false,
@@ -507,12 +495,12 @@ mod tests {
             .replace(target(), "other-platform");
         let stable = UpdateChannel::Stable;
         assert_eq!(
-            offer(foreign.as_bytes(), "1.1.0", stable, 1, &running(), 0, false)
+            offer(foreign.as_bytes(), "1.1.0", stable, &trust(1), &running(), 0, false)
                 .unwrap_err()
                 .code,
             Failure::InvalidRelease
         );
-        let offered = offer(foreign.as_bytes(), "1.1.0", stable, 1, &running(), 0, true)
+        let offered = offer(foreign.as_bytes(), "1.1.0", stable, &trust(1), &running(), 0, true)
             .unwrap()
             .unwrap();
         assert_eq!(offered.candidate.version, "1.1.0");
@@ -523,8 +511,8 @@ mod tests {
         let bad_origin = String::from_utf8(manifest("1.1.0", ""))
             .unwrap()
             .replace(DOWNLOAD_ORIGIN, "https://example.test");
-        assert!(offer(bad_origin.as_bytes(), "1.1.0", stable, 1, &running(), 0, true).is_err());
-        assert!(offer(&manifest("1.0.0", ""), "1.0.0", stable, 1, &running(), 0, true)
+        assert!(offer(bad_origin.as_bytes(), "1.1.0", stable, &trust(1), &running(), 0, true).is_err());
+        assert!(offer(&manifest("1.0.0", ""), "1.0.0", stable, &trust(1), &running(), 0, true)
             .unwrap()
             .is_none());
     }

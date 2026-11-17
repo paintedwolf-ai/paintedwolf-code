@@ -1,10 +1,10 @@
 //! Preparation: stream the signed artifact, verify it, and build the replacement bundle.
 use super::{
-    emit, staging, Candidate, Failure, Installation, NativeUpdateState, UpdateError, UpdateService,
-    DOWNLOAD_ORIGIN, DOWNLOAD_REQUEST_TIMEOUT,
+    emit, staging, Candidate, Failure, Installation, NativeUpdateState, Trust, UpdateError,
+    UpdateService, DOWNLOAD_REQUEST_TIMEOUT,
 };
 use futures_util::StreamExt;
-use std::{sync::atomic::Ordering, time::Duration};
+use std::{future::Future, path::Path, sync::atomic::Ordering, time::Duration};
 use tauri::{AppHandle, Manager};
 use tokio::io::AsyncWriteExt;
 
@@ -116,8 +116,18 @@ async fn prepare(
         )
     };
     let mut wake = service.wake.subscribe();
+    let progress = AppProgress {
+        app,
+        generation,
+        emitted: std::sync::Mutex::new(std::time::Instant::now()),
+    };
     let result = tokio::select! {
-        result = transfer(app, &candidate, generation) => result,
+        result = async {
+            let permit = acquire(app).await?;
+            let target = super::installer::bundle()?;
+            let identity = transfer(&progress, &target, &candidate, &Trust::embedded()).await?;
+            Ok::<_, UpdateError>((target, identity, permit))
+        } => result,
         _ = wake.wait_for(|_| service.preparation_generation.load(Ordering::Acquire) != generation) => Err(Failure::Cancelled.into()),
     };
     let mut inner = service.inner.lock().await;
@@ -125,8 +135,8 @@ async fn prepare(
         return Ok(inner.state.clone());
     }
     let confirmed_at = inner.state.offer_confirmed_at;
-    match result.and_then(|(identity, permit)| {
-        staging::publish(&candidate, identity, confirmed_at).map(|()| permit)
+    match result.and_then(|(target, identity, permit)| {
+        staging::publish(&target, &candidate, identity, confirmed_at).map(|()| permit)
     }) {
         Ok(permit) => {
             inner.state.staged_release_id = Some(candidate.release_id.clone());
@@ -176,11 +186,52 @@ async fn prepare(
         }
     }
 }
-async fn transfer(
-    app: &AppHandle,
-    candidate: &Candidate,
+/// What a running preparation reports, and whether it is still wanted.
+pub trait Progress {
+    /// False once a cancellation or a newer preparation replaced this one.
+    fn current(&self) -> bool;
+    fn phase(&self, phase: Installation) -> impl Future<Output = Result<(), UpdateError>> + Send;
+    fn downloaded(&self, bytes: u64, total: Option<u64>) -> impl Future<Output = ()> + Send;
+}
+struct AppProgress<'a> {
+    app: &'a AppHandle,
     generation: u64,
-) -> Result<(super::installer::PreparedIdentity, PreparationPermit), UpdateError> {
+    emitted: std::sync::Mutex<std::time::Instant>,
+}
+impl Progress for AppProgress<'_> {
+    fn current(&self) -> bool {
+        let service = self.app.state::<UpdateService>();
+        service.preparation_generation.load(Ordering::Acquire) == self.generation
+    }
+    async fn phase(&self, phase: Installation) -> Result<(), UpdateError> {
+        let service = self.app.state::<UpdateService>();
+        let mut inner = service.inner.lock().await;
+        if !self.current() {
+            return Err(Failure::Cancelled.into());
+        }
+        inner.state.installation = phase;
+        emit(self.app, &mut inner.state);
+        Ok(())
+    }
+    async fn downloaded(&self, bytes: u64, total: Option<u64>) {
+        let service = self.app.state::<UpdateService>();
+        let mut inner = service.inner.lock().await;
+        inner.state.downloaded_bytes = bytes;
+        inner.state.total_bytes = total;
+        let due = {
+            let mut emitted = self.emitted.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+            let due = emitted.elapsed() >= Duration::from_millis(100);
+            if due {
+                *emitted = std::time::Instant::now();
+            }
+            due
+        };
+        if due {
+            emit(self.app, &mut inner.state);
+        }
+    }
+}
+async fn acquire(app: &AppHandle) -> Result<PreparationPermit, UpdateError> {
     let service = app.state::<UpdateService>();
     let permit = service.preparation.clone().lock_owned().await;
     #[cfg(target_os = "macos")]
@@ -190,29 +241,34 @@ async fn transfer(
             .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))??;
         (permit, lease)
     };
-    if service.preparation_generation.load(Ordering::Acquire) != generation {
+    Ok(permit)
+}
+/// Downloads the candidate's artifact from the trusted origin into staging and prepares
+/// the replacement bundle beside `target`. Nothing is published here.
+pub async fn transfer(
+    progress: &impl Progress,
+    target: &Path,
+    candidate: &Candidate,
+    trust: &Trust,
+) -> Result<super::installer::PreparedIdentity, UpdateError> {
+    if !progress.current() {
         return Err(Failure::Cancelled.into());
     }
-    super::installer::probe_destination()?;
+    super::installer::probe_destination(target)?;
     let dir = staging::root(candidate)?;
     crate::config_dir::ensure_private_dir(&dir)
         .map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
     staging::clean_partials(candidate)?;
     if dir.join("artifact").is_file() {
-        phase(app, generation, Installation::Preparing).await?;
-        let release = candidate.clone();
-        return tauri::async_runtime::spawn_blocking(move || {
-            // Preparation verifies the cached archive before using any of its bytes.
-            super::installer::prepare(&release).map(|identity| (identity, permit))
-        })
-        .await
-        .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?;
+        progress.phase(Installation::Preparing).await?;
+        // Preparation verifies the cached archive before using any of its bytes.
+        return prepare(target, candidate, trust).await;
     }
     let partial = dir.join(format!("{}.partial", uuid::Uuid::new_v4()));
     let cleanup = Partial(partial.clone());
     let url = tauri::Url::parse(&candidate.artifact_url)
         .map_err(|e| UpdateError::new(Failure::InvalidRelease, e))?;
-    if url.origin().ascii_serialization() != DOWNLOAD_ORIGIN {
+    if url.origin().ascii_serialization() != trust.origin {
         return Err(Failure::InvalidRelease.into());
     }
     let client = crate::http_transport::client_builder()
@@ -244,7 +300,6 @@ async fn transfer(
         .map_err(|e| UpdateError::new(Failure::DownloadFailed, e))?;
     let mut stream = response.bytes_stream();
     let mut downloaded = 0u64;
-    let mut last_progress = std::time::Instant::now();
     while let Some(chunk) = stream.next().await {
         let chunk = chunk.map_err(|e| UpdateError::new(Failure::DownloadFailed, e))?;
         downloaded += chunk.len() as u64;
@@ -254,43 +309,33 @@ async fn transfer(
         file.write_all(&chunk)
             .await
             .map_err(|e| UpdateError::new(Failure::DownloadFailed, e))?;
-        let service = app.state::<UpdateService>();
-        if service.preparation_generation.load(Ordering::Acquire) != generation {
+        if !progress.current() {
             return Err(Failure::Cancelled.into());
         }
-        let mut inner = service.inner.lock().await;
-        inner.state.downloaded_bytes = downloaded;
-        inner.state.total_bytes = total;
-        if last_progress.elapsed() >= Duration::from_millis(100) {
-            emit(app, &mut inner.state);
-            last_progress = std::time::Instant::now();
-        }
+        progress.downloaded(downloaded, total).await;
     }
     file.sync_all()
         .await
         .map_err(|e| UpdateError::new(Failure::DownloadFailed, e))?;
     drop(file);
-    phase(app, generation, Installation::Verifying).await?;
+    progress.phase(Installation::Verifying).await?;
     crate::atomic_file::replace(&partial, &dir.join("artifact"), true)
         .map_err(|e| UpdateError::new(Failure::DownloadFailed, e))?;
     drop(cleanup);
-    phase(app, generation, Installation::Preparing).await?;
-    let release = candidate.clone();
+    progress.phase(Installation::Preparing).await?;
+    prepare(target, candidate, trust).await
+}
+async fn prepare(
+    target: &Path,
+    candidate: &Candidate,
+    trust: &Trust,
+) -> Result<super::installer::PreparedIdentity, UpdateError> {
+    let (target, release, trust) = (target.to_path_buf(), candidate.clone(), trust.clone());
     tauri::async_runtime::spawn_blocking(move || {
-        super::installer::prepare(&release).map(|identity| (identity, permit))
+        super::installer::prepare_at(&target, &release, &trust)
     })
     .await
     .map_err(|e| UpdateError::new(Failure::InstallFailed, e))?
-}
-async fn phase(app: &AppHandle, generation: u64, phase: Installation) -> Result<(), UpdateError> {
-    let service = app.state::<UpdateService>();
-    let mut inner = service.inner.lock().await;
-    if service.preparation_generation.load(Ordering::Acquire) != generation {
-        return Err(Failure::Cancelled.into());
-    }
-    inner.state.installation = phase;
-    emit(app, &mut inner.state);
-    Ok(())
 }
 struct Partial(std::path::PathBuf);
 impl Drop for Partial {

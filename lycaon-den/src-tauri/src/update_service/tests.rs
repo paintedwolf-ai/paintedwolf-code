@@ -177,17 +177,17 @@ fn maturity_selects_initial_channel_without_overriding_preferences() {
     );
 }
 #[test]
-fn feed_endpoints_derive_from_the_embedded_key_generation() {
-    let (generation, _) = feed::embedded_key();
+fn feed_endpoints_bind_the_trusted_origin_channel_and_key_generation() {
+    let trust = Trust {
+        generation: 7,
+        origin: "https://origin.test".into(),
+        ..Trust::embedded()
+    };
     assert_eq!(
-        UpdateChannel::Stable.endpoint(),
-        format!("{DOWNLOAD_ORIGIN}/updates/stable/key-{generation}/latest.json")
+        trust.endpoint(UpdateChannel::Stable),
+        "https://origin.test/updates/stable/key-7/latest.json"
     );
-    assert_eq!(
-        UpdateChannel::Preview.feed_name(),
-        format!("latest-preview-key-{generation}.json")
-    );
-    assert!(!feed::feed_key().is_empty());
+    assert_eq!(trust.feed_name(UpdateChannel::Preview), "latest-preview-key-7.json");
 }
 #[test]
 fn automatic_retry_is_bounded() {

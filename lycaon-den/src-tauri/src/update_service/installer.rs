@@ -159,28 +159,28 @@ pub fn check_space(path: &Path, required: u64) -> Result<(), UpdateError> {
     #[allow(unreachable_code)]
     Ok(())
 }
-pub fn probe_destination() -> Result<(), UpdateError> {
-    let target = bundle()?;
+pub fn probe_destination(target: &Path) -> Result<(), UpdateError> {
     let parent = target.parent().ok_or(Failure::UnsupportedInstallation)?;
     let probe = parent.join(format!(
         "{}probe-{}",
-        prepared_prefix(&target),
+        prepared_prefix(target),
         uuid::Uuid::new_v4()
     ));
     fs::create_dir(&probe).map_err(|e| UpdateError::new(Failure::UnsupportedInstallation, e))?;
     fs::remove_dir(probe).map_err(|e| UpdateError::new(Failure::UnsupportedInstallation, e))
 }
-pub fn prepare(candidate: &Candidate) -> Result<PreparedIdentity, UpdateError> {
-    prepare_at(&bundle()?, candidate)
-}
-pub fn prepare_at(target: &Path, candidate: &Candidate) -> Result<PreparedIdentity, UpdateError> {
+pub fn prepare_at(
+    target: &Path,
+    candidate: &Candidate,
+    trust: &super::Trust,
+) -> Result<PreparedIdentity, UpdateError> {
     let artifact = staging::root(candidate)?.join("artifact");
     let mut archive =
         fs::File::open(&artifact).map_err(|e| UpdateError::new(Failure::StateUnavailable, e))?;
     let verified = verification::verify_file(
         &mut archive,
         &candidate.artifact_signature,
-        &super::feed::embedded_key().1,
+        &trust.artifact_key,
         &candidate.version,
     )
     .map_err(|e| UpdateError::new(Failure::VerificationFailed, e));

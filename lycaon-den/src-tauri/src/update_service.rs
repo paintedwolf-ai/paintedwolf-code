@@ -1,17 +1,17 @@
 //! The native host runs update discovery, preparation, and lifecycle activation.
 pub(crate) mod check;
 mod diagnostics;
-pub(crate) mod download;
+pub mod download;
 mod error;
-pub(crate) mod feed;
+pub mod feed;
 mod feed_state;
-mod installer;
+pub mod installer;
 mod model;
 mod persistence;
 pub(crate) mod preferences;
 mod record_lock;
 mod scheduler;
-mod staging;
+pub mod staging;
 pub(crate) mod startup;
 #[cfg(test)]
 mod tests;
