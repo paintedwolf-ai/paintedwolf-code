@@ -5,6 +5,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -56,4 +58,17 @@ func goList(t *testing.T, root, goos string, args ...string) string {
 		t.Fatalf("go list release dependencies for %s: %v\n%s", goos, err, stderr.String())
 	}
 	return string(out)
+}
+
+var stagedGoPackagePattern = regexp.MustCompile(`go build\b[^\n]*\s(\./cmd/[\w.-]+)`)
+
+// stagedGoPackages lists the command packages the engine staging script builds.
+func stagedGoPackages(t *testing.T, script string) []string {
+	t.Helper()
+	var out []string
+	for _, m := range stagedGoPackagePattern.FindAllStringSubmatch(script, -1) {
+		out = append(out, m[1])
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"gopkg.in/yaml.v3"
 )
 
 func TestReleasePublicationBoundaryExcludesCandidateBytes(t *testing.T) {
@@ -165,19 +166,30 @@ func TestReleasePublicationCollectsEveryCurrentPublicPackage(t *testing.T) {
 
 func TestReleaseMirrorRefusesWithdrawnIntentBeforeProviderAccess(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
-	job := parseLane(t, ".github/workflows/release.yml").Jobs["publish-github-release"]
+	var release struct {
+		Jobs map[string]struct {
+			Environment string
+			Steps       []struct {
+				Run string
+				Env map[string]string
+			}
+		}
+	}
+	contractcheck.FailErr(t, "decode release workflow",
+		yaml.Unmarshal([]byte(contractcheck.ReadRepoFile(t, root, ".github/workflows/release.yml")), &release))
+	job := release.Jobs["publish-github-release"]
 	var body string
-	var mirror laneStep
+	var mirror map[string]string
 	for _, step := range job.Steps {
 		if strings.Contains(step.Run, "gh release create") {
-			body, mirror = step.Run, step
+			body, mirror = step.Run, step.Env
 		}
 	}
 	if body == "" || job.Environment != "release-publication" {
 		t.Fatal("mirror must use its shared protected publication owner")
 	}
 	for _, name := range []string{"CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN", "R2_BUCKET"} {
-		if mirror.Env[name] != "${{ secrets."+name+" }}" {
+		if mirror[name] != "${{ secrets."+name+" }}" {
 			t.Fatalf("mirror ledger read requires the existing protected %s credential", name)
 		}
 	}
