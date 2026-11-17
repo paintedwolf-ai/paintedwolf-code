@@ -96,23 +96,26 @@ function ActivitySummarySection(props: {
 
 export function ActivitySummary(props: Props) {
   const ready = () => props.state.kind === "ready" ? props.state : undefined;
-  const fade = createSummaryFade(() => ready() ? `${ready()!.recordId}\0activity` : undefined);
+  const fade = createSummaryFade(() => {
+    const summary = ready();
+    return summary ? `${summary.recordId}\0activity` : undefined;
+  });
   return (
     <div class="den-activity-summary-frame">
       <div class="den-activity-summary" data-testid="activity-summary" data-state={props.state.kind}>
         <div class="den-activity-summary__sections" classList={{ [SUMMARY_FADE_CLASS]: fade() }}>
-        <ActivitySummarySection
-          id="intent" label="Intent" text={props.state.purpose}
-          waiting={briefingCopy.waiting}
-          missing={props.state.kind === "missing" || (props.state.kind === "ready" && !props.state.purpose)}
-          onRetry={props.onRetry}
-        />
-        <ActivitySummarySection
-          id="outcome" label="Outcome" text={ready()?.change}
-          waiting={props.running ? briefingCopy.resultPending : briefingCopy.waiting}
-          missing={!props.running && (props.state.kind === "missing" || (props.state.kind === "ready" && !props.state.change))}
-          onRetry={props.onRetry}
-        />
+          <ActivitySummarySection
+            id="intent" label="Intent" text={props.state.purpose}
+            waiting={briefingCopy.waiting}
+            missing={props.state.kind === "missing" || (props.state.kind === "ready" && !props.state.purpose)}
+            onRetry={props.onRetry}
+          />
+          <ActivitySummarySection
+            id="outcome" label="Outcome" text={ready()?.change}
+            waiting={props.running ? briefingCopy.resultPending : briefingCopy.waiting}
+            missing={!props.running && (props.state.kind === "missing" || (props.state.kind === "ready" && !props.state.change))}
+            onRetry={props.onRetry}
+          />
         </div>
       </div>
     </div>
