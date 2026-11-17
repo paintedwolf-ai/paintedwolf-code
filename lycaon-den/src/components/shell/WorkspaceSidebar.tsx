@@ -51,6 +51,7 @@ import { type ShellPeerWindows } from "./shell-peer-windows.ts";
 import { type ShellSearchState } from "./shell-search-state.ts";
 import { type ShellStagePlacement } from "./shell-stage-placement.ts";
 import { WindowControls } from "./WindowControls.tsx";
+import { windowEdgeAttributes } from "./window-edges.ts";
 
 /** Entering the sidebar lands on the current chat, then any chat, then any rail control. */
 const SIDEBAR_ENTRY_PRIORITY = [
@@ -262,6 +263,7 @@ export function WorkspaceSidebar(props: Props) {
   return (
       <aside
         class="den-shell-aside"
+        {...windowEdgeAttributes(windowEdgeClaims("nav")[0])}
         style={{ "--den-nav-slot-width": navSlotWidthCss() }}
         {...chromeProps()}
         aria-hidden={windowNavCollapsed()}
