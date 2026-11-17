@@ -32,7 +32,7 @@ USERLANDS_TARGET = "test:userlands"
 LAUNCH_PACKAGE = "./internal/launchguard"
 # Go runs that select their packages in their own scripts, outside the catalog's `go` recipes,
 # and reach the protected launch leg.
-LAUNCH_SCRIPT_TARGETS = {"test:confine:linux", "coverage:changes"}
+LAUNCH_SCRIPT_TARGETS = {"test:confine:linux", "coverage:changes", "test:integration:changes"}
 
 
 def supplemental(lane):
@@ -85,8 +85,8 @@ def lanes():
                 "den:typecheck", "den:lint", "den:test", "den:coverage:changes", "den:knip:changes"}):
             raise ValueError(f"CI lane {name} requires toolchains outside frontend setup")
         if lane["setup"] == "analysis" and not set(lane["targets"]).issubset({
-                "lint:fast", "lint:full", "lint:vuln", "lint:vuln:fresh", "comments:check", "test:fail-messages:check",
-                "arch-lint:changes"}):
+                "lint:fast", "lint:full", "lint:deadcode", "lint:vuln", "lint:vuln:fresh", "comments:check",
+                "test:fail-messages:check", "arch-lint:changes"}):
             raise ValueError(f"CI lane {name} requires inputs outside Go analysis setup")
         # Only a platform lane runs on its platform's other runners.
         if lane.get("runner", "macos-15") not in {"macos-15", "ubuntu-24.04"} | PLATFORMS.get(lane.get("platform"), set()):
@@ -160,7 +160,7 @@ def selects_package(pattern, package):
 
 
 def analysis_set(targets):
-    lint = bool(set(targets) & {"lint:fast", "lint:full", "arch-lint:changes"})
+    lint = bool(set(targets) & {"lint:fast", "lint:full", "lint:deadcode", "arch-lint:changes"})
     vulnerabilities = bool(set(targets) & {"lint:vuln", "lint:vuln:fresh"})
     return "all" if lint and vulnerabilities else "lint" if lint else "vulnerabilities" if vulnerabilities else "none"
 

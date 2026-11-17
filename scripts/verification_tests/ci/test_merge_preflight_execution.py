@@ -68,7 +68,7 @@ class MergePreflightTests(unittest.TestCase):
         with patch.object(coverage.subprocess, 'call', return_value=1), \
                 patch.object(coverage.python_coverage.python_tools, 'provision', side_effect=lambda requirements: requirements):
             for run in (coverage.run_den, coverage.run_python):
-                findings, failed, _ = run(SimpleNamespace(paths=['docs/README.md']))
+                findings, failed, _ = run(SimpleNamespace(paths=['lycaon-den/src/app.ts', '.github/workflows/nightly.yml']))
                 self.assertTrue(failed)
                 self.assertEqual(findings[0].level, 'error')
 

@@ -125,7 +125,7 @@ def run_lane(name, shard="", merge_group=False):
                 command += ["--", *packages]
                 record["packages"] = packages
         # Admission reports every failure, so repairs need not rediscover them one run at a time.
-        complete = merge_group or name in {"ready", "ready-tests"}
+        complete = merge_group or name in {"ready", "ready-tests", "frontend"}
         commands = [command]
         if complete:
             environment["PW_TEST_KEEP_GOING"] = "1"

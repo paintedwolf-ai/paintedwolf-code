@@ -285,12 +285,23 @@ class HostedExecutionTests(unittest.TestCase):
                         patch(f'ci_policy.ready_scope.{target}', return_value=value), \
                         patch.object(ci, 'artifact_root', return_value=Path(directory)), \
                         patch.object(ci.subprocess, 'call', side_effect=verdicts) as run:
-                    self.assertEqual(ci.run_lane(name, '1/2' if name == 'ready-tests' else ''), expected)
+                    self.assertEqual(ci.run_lane(name, '1/4' if name == 'ready-tests' else ''), expected)
                     self.assertEqual(run.call_count, 3)
                     self.assertEqual(run.call_args.kwargs['env']['PW_TEST_KEEP_GOING'], '1')
                     record = json.loads((Path(directory) / 'ci/run.json').read_text())
                     self.assertEqual([phase['exit_code'] for phase in record['phases']], verdicts)
                     self.assertEqual(record['status'], {0: 'passed', 1: 'failed', 2: 'unverified'}[expected])
+
+    def test_the_den_lane_reports_every_failing_stage(self):
+        scope = dict(base='b' * 40, head='a' * 40, paths=['lycaon-den/src/app.ts'], full=False)
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.dict('os.environ', PW_CI_AFFECTED='1'), \
+                patch('ci_policy.impact.change', return_value=scope), \
+                patch.object(ci, 'artifact_root', return_value=Path(directory)), \
+                patch.object(ci.subprocess, 'call', return_value=1) as run:
+            self.assertEqual(ci.run_lane('frontend'), 1)
+        self.assertEqual(run.call_args.args[0][1:], ['den:typecheck', 'den:lint', 'den:knip:changes', 'den:coverage:changes'])
+        self.assertEqual(run.call_args.kwargs['env']['PW_TEST_KEEP_GOING'], '1')
 
     def test_fast_lane_stops_when_a_phase_is_interrupted(self):
         scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
