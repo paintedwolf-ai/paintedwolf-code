@@ -60,3 +60,12 @@ func TestIPv4MappedLiteralIsTheIPv4Host(t *testing.T) {
 		}
 	}
 }
+
+// One trailing dot roots a name; an empty label anywhere else names no host.
+func TestParseHTTPEndpointRefusesEmptyLabels(t *testing.T) {
+	for _, in := range []string{".", "..", "..:443", "a..b", ".example.com", "example.com.."} {
+		if ep, err := egressproxy.ParseHTTPEndpoint(in, egressproxy.TransportHTTPConnect); err == nil {
+			t.Fatalf("ParseHTTPEndpoint(%q) = %+v, want refusal", in, ep)
+		}
+	}
+}

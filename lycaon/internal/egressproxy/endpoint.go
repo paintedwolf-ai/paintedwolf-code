@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -152,9 +153,10 @@ func normalizeHost(host string) (string, error) {
 	if addr, err := netip.ParseAddr(host); err == nil {
 		return addr.Unmap().String(), nil
 	}
+	// One trailing dot roots a name; any other empty label names nothing.
 	host = strings.TrimSuffix(host, ".")
-	if host == "" {
-		return "", fmt.Errorf("empty host")
+	if host == "" || slices.Contains(strings.Split(host, "."), "") {
+		return "", fmt.Errorf("invalid host")
 	}
 	ascii, err := idna.Lookup.ToASCII(host)
 	if err != nil {
