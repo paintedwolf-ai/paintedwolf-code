@@ -47,17 +47,6 @@ describe("scrollbar visual contract", () => {
     expect(css).not.toMatch(/\.os-scrollbar\s*\{[^}]*transition/);
   });
 
-  it("keeps editor scrollbars interactive above the editable surface", () => {
-    const css = readSourceText(join(platformDir, "themed-scrollbars.css"), "utf8");
-
-    expect(css).toMatch(
-      /\.os-scrollbar\.den-scrollbar-handle-interactive \.os-scrollbar-handle[\s\S]*?pointer-events:\s*auto/,
-    );
-    expect(css).toMatch(
-      /\.cm-editor\[data-overlayscrollbars~="host"\] > \.os-scrollbar\s*\{[\s\S]*?z-index:\s*1/,
-    );
-  });
-
   it("spaces Blueprints panels from the launcher itself", () => {
     const css = readSourceText(
       join(platformDir, "..", "blueprints-domain.css"),

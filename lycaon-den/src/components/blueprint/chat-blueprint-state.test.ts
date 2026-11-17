@@ -168,13 +168,18 @@ describe("createChatBlueprintState", () => {
   });
 
   it("cannot approve when host is not awaiting approval", () => {
+    // Transcript text that reads like an approval decides nothing.
     const { state, dispose } = createBlueprintState({
       catalogRun: () =>
         ({
           ...planRun,
           ui: { human_approval_awaiting: false },
         }) as WorkflowRun,
+      appStore: minimalStore({
+        messages: [{ id: "m1", role: "assistant", content: "Plan approved. plan_approved" }] as never,
+      }),
     });
+    expect(state.awaitingApproval()).toBe(false);
     expect(state.canApprove()).toBe(false);
     dispose();
   });

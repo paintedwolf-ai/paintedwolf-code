@@ -88,7 +88,10 @@ describe("chat workspace composition", () => {
   });
 
   it("routes notices, recovery limits, and project nudges to their owning scope", async () => {
-    const { notices, settingsStore, callbacks, actions } = mountChat();
+    const { appStore, notices, settingsStore, callbacks, actions } = mountChat();
+    expect(seams.notices.announceLive).toBe(true);
+    appStore.actions.setLLMCallStatus({ call_id: "c1", session_id: "session", provider: "mock", model: "mock", status: "active", tokens: {} } as never);
+    expect(seams.notices.announceLive).toBe(false);
     seams.notices.onDismiss?.("notice");
     expect(notices.dismiss).toHaveBeenCalledWith("notice");
     await seams.reached.onResume?.(); expect(actions.resumeSpendLimitedChat).toHaveBeenCalledWith({ projectId: "project", sessionId: "session" });

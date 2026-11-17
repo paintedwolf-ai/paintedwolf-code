@@ -432,7 +432,8 @@ describe("workers-model", () => {
   });
 
   it("matchWorkerForTask returns undefined without wire job_id or child_session_id", () => {
-    const w1 = worker("job-1", "running");
+    // The only worker matches the card by agent type, brief and envelope text: none of it binds.
+    const w1 = { ...worker("job-1", "running"), agent_type: "repo-researcher", brief: "map repo" };
     const part: ToolPartView = {
       id: "tc1",
       toolCallId: "tc1",
@@ -445,7 +446,7 @@ describe("workers-model", () => {
         agent_type: "repo-researcher",
         brief: { goal: "map repo", done_when: ["Return results."] },
       },
-      output: null,
+      output: '<task job_id="job-1" state="open"/>',
       error: null,
     };
     expect(

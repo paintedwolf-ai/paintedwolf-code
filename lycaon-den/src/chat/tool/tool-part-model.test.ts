@@ -217,6 +217,21 @@ describe("tool-part-model", () => {
       "msg-asst",
     );
     expect(rejected.status).toBe("error");
+
+    // Where the text and the outcome disagree, the outcome decides.
+    const disagreeing = (content: string, outcome: "completed" | "rejected") => toolPartFromCall(
+      { id: "tc-read", name: "read", args: { path: "x" } },
+      {
+        id: "msg-tool",
+        role: "tool", origin: "tool" as const, authority: "none" as const, trust_tier: "untrusted" as const,
+        content,
+        tool_result: { content, outcome },
+        created_at: "t",
+      },
+      "msg-asst",
+    );
+    expect(disagreeing("Rejected: X\nCode: X", "completed").status).toBe("completed");
+    expect(disagreeing("ok", "rejected").status).toBe("error");
   });
 
   it("uses invocation receipts as the result authority", () => {
