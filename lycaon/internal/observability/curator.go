@@ -13,8 +13,3 @@ type CuratorEvent struct {
 	CacheHit  bool
 	SessionID string
 }
-
-// LogCurator emits a structured slog row for curator coverage and failures.
-func LogCurator(ev CuratorEvent) {
-	logCurator(ev)
-}

@@ -62,43 +62,6 @@ func registerStubExecutionRoutes(mux *http.ServeMux, now time.Time, writeJSON st
 		})
 	})
 
-	delegation := api.Delegation{
-		ID:        fixtureDelegationID,
-		ProjectID: fixtureProjectID,
-		Task:      "fixture task",
-		Strategy:  api.HuntStrategyFileBased,
-		Status:    "active",
-		Phase:     api.DelegationPhaseSetup,
-		CreatedAt: now,
-	}
-	leg := api.Leg{
-		ID:           fixtureLegID,
-		DelegationID: fixtureDelegationID,
-		Title:        "leg-1",
-		Status:       api.LegStatusPending,
-		CreatedAt:    now,
-	}
-
-	mux.HandleFunc("POST /v1/delegations", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusCreated, delegation)
-	})
-	mux.HandleFunc("GET /v1/delegations/{id}", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, delegation)
-	})
-	mux.HandleFunc("GET /v1/delegations/{id}/legs", func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, http.StatusOK, api.DelegationLegListResponse{Legs: []api.Leg{leg}})
-	})
-	mux.HandleFunc("POST /v1/delegations/{id}/dispatch", func(w http.ResponseWriter, r *http.Request) {
-		dispatched := leg
-		dispatched.Status = api.LegStatusDispatched
-		writeJSON(w, http.StatusOK, dispatched)
-	})
-	mux.HandleFunc("POST /v1/delegations/{id}/abort", func(w http.ResponseWriter, r *http.Request) {
-		aborted := delegation
-		aborted.Status = "aborted"
-		writeJSON(w, http.StatusOK, aborted)
-	})
-
 	worker := api.WorkerTask{
 		ID:        fixtureWorkerID,
 		AgentType: "implementer",
@@ -108,6 +71,21 @@ func registerStubExecutionRoutes(mux *http.ServeMux, now time.Time, writeJSON st
 
 	mux.HandleFunc("GET /v1/workers", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.WorkerListResponse{Workers: []api.WorkerTask{worker}})
+	})
+	mux.HandleFunc("GET /v1/workers/history", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.WorkerHistoryResponse{
+			WorkerID:  fixtureWorkerID,
+			Name:      "implementer-1",
+			AgentType: "implementer",
+			State:     api.WorkerStateWorking,
+			Rounds: []api.WorkerHistoryRound{{
+				Ordinal:   1,
+				WorkerID:  fixtureWorkerID,
+				Status:    api.WorkerStatusRunning,
+				CreatedAt: now.Format("2006-01-02T15:04:05Z07:00"),
+			}},
+			Messages: []api.WorkerHistoryMessage{},
+		})
 	})
 	mux.HandleFunc("POST /v1/workers/{id}/cancel", func(w http.ResponseWriter, r *http.Request) {
 		wt := worker

@@ -60,9 +60,15 @@ func TestSecretCapabilityToolsExposeReferencesAndLifecycleOnly(t *testing.T) {
 		t.Fatalf("unsafe generate response: %s", generated)
 	}
 
-	listed := invokeSecretTool(t, reg, native.SecretListTool, map[string]any{}, tctx)
+	listOut := &tools.ToolInvocationOut{}
+	listCtx := tctx
+	listCtx.Effects = tools.InvocationEffects{Out: listOut}
+	listed := invokeSecretTool(t, reg, native.SecretListTool, map[string]any{}, listCtx)
 	if !strings.Contains(listed, created.Secret.Reference) || strings.Contains(listed, value.Value()) {
 		t.Fatalf("unsafe list response: %s", listed)
+	}
+	if len(listOut.CardFacts) != 1 || listOut.CardFacts[0].Count != 1 || listOut.CardFacts[0].Noun != "secrets" {
+		t.Fatalf("list card facts %+v", listOut.CardFacts)
 	}
 
 	revoked := invokeSecretTool(t, reg, native.SecretRevokeTool, map[string]any{

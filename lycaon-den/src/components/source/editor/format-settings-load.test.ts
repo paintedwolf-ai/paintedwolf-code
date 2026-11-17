@@ -7,7 +7,8 @@ import {
   loadFormatSettingsForBuffer,
   refreshOpenFormatSettings,
 } from "./format-settings-load.ts";
-import { applyFilesBufferLoad, openFilesBuffer, resetProjectFilesForTests, setFilesBufferFormatSettings } from "../../../files/documents/project-files-buffers.ts";
+import { applyFilesBufferLoad, setFilesBufferFormatSettings } from "../../../files/documents/project-files-buffer-io.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../../../files/documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../../../files/documents/files-buffer-state.ts";
 
 function openLoaded(path: string) {

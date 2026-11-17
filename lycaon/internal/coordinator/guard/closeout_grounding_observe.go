@@ -1,33 +1,11 @@
 package guard
 
 import (
-	"context"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
-	"github.com/lycaon/lycaon/pkg/api"
 )
-
-// ObserveCoordinatorCloseoutGrounding publishes closeout citation facts for OAR.
-func ObserveCoordinatorCloseoutGrounding(
-	ctx context.Context,
-	ledger guidance.CloseoutEvidenceReader,
-	sess *api.Session,
-	history []api.Message,
-	surfaceID string,
-	draft guidance.CloseoutDraft,
-	roots evidence.CitationRoots,
-	gc *oar.GuardContext,
-) (CloseoutGroundingVerdict, error) {
-	verdict, err := EvaluateCoordinatorCloseoutGrounding(ctx, ledger, sess, history, surfaceID, draft, roots)
-	if err != nil {
-		return verdict, err
-	}
-	PublishCloseoutGrounding(gc, surfaceID, draft, verdict)
-	return verdict, nil
-}
 
 // PublishCloseoutGrounding publishes a verdict's facts for OAR.
 func PublishCloseoutGrounding(gc *oar.GuardContext, surfaceID string, draft guidance.CloseoutDraft, verdict CloseoutGroundingVerdict) {

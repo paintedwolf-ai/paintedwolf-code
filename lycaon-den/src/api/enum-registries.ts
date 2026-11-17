@@ -9,6 +9,11 @@ import type {
   CheckpointStatus,
   MessageKind,
   ApprovalGrantCategory,
+  WorkerInstructionStatus,
+  WorkerMessageSenderRole,
+  WorkerResultDisposition,
+  WorkerState,
+  WorkerStateReason,
   WorkerStatus,
   WorkerSummaryStatus,
   WorkflowBoundaryKind,
@@ -65,6 +70,31 @@ export function allWorkerStatuses(): readonly WorkerStatus[] {
   return wireEnumValues<WorkerStatus>("WorkerStatus");
 }
 
+/** Every WorkerState on the wire. */
+export function allWorkerStates(): readonly WorkerState[] {
+  return wireEnumValues<WorkerState>("WorkerState");
+}
+
+/** Every WorkerStateReason on the wire. */
+export function allWorkerStateReasons(): readonly WorkerStateReason[] {
+  return wireEnumValues<WorkerStateReason>("WorkerStateReason");
+}
+
+/** Every WorkerResultDisposition on the wire. */
+export function allWorkerResultDispositions(): readonly WorkerResultDisposition[] {
+  return wireEnumValues<WorkerResultDisposition>("WorkerResultDisposition");
+}
+
+/** Every WorkerInstructionStatus on the wire. */
+export function allWorkerInstructionStatuses(): readonly WorkerInstructionStatus[] {
+  return wireEnumValues<WorkerInstructionStatus>("WorkerInstructionStatus");
+}
+
+/** Every WorkerMessageSenderRole on the wire. */
+export function allWorkerMessageSenderRoles(): readonly WorkerMessageSenderRole[] {
+  return wireEnumValues<WorkerMessageSenderRole>("WorkerMessageSenderRole");
+}
+
 /** Every WorkerSummaryStatus on the wire (canonical task-row patch). */
 export function allWorkerSummaryStatuses(): readonly WorkerSummaryStatus[] {
   return wireEnumValues<WorkerSummaryStatus>("WorkerSummaryStatus");
@@ -91,6 +121,11 @@ export const WIRE_ENUM_REGISTRY_NAMES = [
   "MessageKind",
   "ApprovalGrantCategory",
   "WorkerStatus",
+  "WorkerState",
+  "WorkerStateReason",
+  "WorkerResultDisposition",
+  "WorkerInstructionStatus",
+  "WorkerMessageSenderRole",
   "WorkerSummaryStatus",
   "WorkflowRunStatus",
   "WorkflowBoundaryKind",

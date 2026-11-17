@@ -1,5 +1,5 @@
 post_turn:
-  # Delegation post-turn carries the circuit-breaker escalation gate only. Completion
+  # Post-turn carries the circuit-breaker escalation gate only. Completion
   # grounding is enforced at closeout via the worker ledger + CompletionCriteria —
   # never by reading claim wording.
   mode: warn

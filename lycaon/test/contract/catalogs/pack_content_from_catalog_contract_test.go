@@ -33,8 +33,6 @@ var packRootWalkAllowlist = map[string]string{
 	// Persona contracts are definitions rather than contribution units.
 	"lycaon/internal/prompts/persona_contract.go": "reserved persona-contract definition",
 	// Website code generation reads the checkout.
-	"lycaon/internal/website/customization.go": "website codegen projection",
-	"lycaon/internal/website/sdk.go":           "website codegen projection",
 	// Compose validation checks declared references.
 	"lycaon/internal/workflowvalidate/checks_closure.go": "author-ref existence probe",
 	// Test staging produces a resolved catalog.

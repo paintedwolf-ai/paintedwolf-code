@@ -1,36 +1,55 @@
-import type { BoardView, BoardWorkerRosterEntry, WorkerTask } from "../api/types.ts";
+import type { BoardView, BoardWorker, WorkerTask } from "../api/types.ts";
 import { workerStoreFingerprint } from "../chat/worker/workers-model.ts";
 
-function boardRosterRows(board?: BoardView): BoardWorkerRosterEntry[] {
-  const raw = board?.roster;
+function boardWorkerRows(board?: BoardView): BoardWorker[] {
+  const raw = board?.workers;
   if (!Array.isArray(raw)) return [];
   return raw;
 }
 
-/** Settled; a worker never leaves one of these once reached. */
-const TERMINAL_WORKER_STATUSES = new Set<WorkerTask["status"]>([
-  "complete",
-  "failed",
-  "canceled",
-]);
+/** Match the board's canonical worker view to a session worker row. */
+export function boardWorkerForTask(
+  board: BoardView | undefined,
+  worker: WorkerTask | undefined,
+): BoardWorker | undefined {
+  if (!worker) return undefined;
+  const rows = boardWorkerRows(board);
+  if (rows.length === 0) return undefined;
+  const jobId = worker.id?.trim();
+  const recordId = worker.worker_record_id?.trim();
+  const childId = worker.child_session_id?.trim();
+  const name = worker.worker_name?.trim();
+  return rows.find(
+    (bw) =>
+      (jobId && bw.latest_job_id?.trim() === jobId) ||
+      (recordId && bw.worker_id?.trim() === recordId) ||
+      (childId && bw.child_session_id?.trim() === childId) ||
+      (name && bw.name.trim() === name),
+  );
+}
 
-function reconcileWorkerRow(
-  row: WorkerTask,
-  snap: BoardWorkerRosterEntry,
-): WorkerTask {
-  const mergeStatus = snap.merge_status ?? row.merge_status;
-  // The host's publish debounce can deliver a board built before this worker
-  // settled after a fresher one, and a settled worker emits no further events.
-  // A terminal row never moves back.
-  const status =
-    TERMINAL_WORKER_STATUSES.has(row.status) && !TERMINAL_WORKER_STATUSES.has(snap.status)
-      ? row.status
-      : snap.status;
+function reconcileWorkerRow(row: WorkerTask, bw: BoardWorker): WorkerTask {
+  const isLatestRound =
+    !bw.latest_job_id?.trim() || bw.latest_job_id.trim() === row.id;
   const next: WorkerTask = {
     ...row,
-    status,
-    merge_status: mergeStatus,
-    dependencies: snap.dependencies ?? row.dependencies,
+    worker_record_id: bw.worker_id?.trim() || row.worker_record_id,
+    worker_name: bw.name?.trim() || row.worker_name,
+    child_session_id: bw.child_session_id?.trim() || row.child_session_id,
+    ...(isLatestRound
+      ? {
+          round: bw.round ?? row.round,
+          result_handle: bw.result_handle?.trim() || row.result_handle,
+          result_disposition: bw.result_disposition ?? row.result_disposition,
+          shelve_reason: bw.shelve_reason?.trim() || row.shelve_reason,
+          parked_reason:
+            bw.parked_reason?.trim() ||
+            (bw.reason === "parked" ? row.parked_reason : undefined),
+          parked_until_at:
+            bw.parked_until_at?.trim() ||
+            (bw.reason === "parked" ? row.parked_until_at : undefined),
+        }
+      : {}),
   };
   if (workerStoreFingerprint(row) === workerStoreFingerprint(next)) return row;
   return next;
@@ -40,14 +59,12 @@ export function reconcileWorkersFromBoard(
   workers: readonly WorkerTask[],
   board?: BoardView,
 ): WorkerTask[] {
-  const rows = boardRosterRows(board);
-  if (rows.length === 0) return workers as WorkerTask[];
-  const byId = new Map(rows.map((t) => [t.worker_id, t]));
+  if (boardWorkerRows(board).length === 0) return workers as WorkerTask[];
   let changed = false;
   const next = workers.map((row) => {
-    const snap = byId.get(row.id);
-    if (!snap) return row;
-    const reconciled = reconcileWorkerRow(row, snap);
+    const bw = boardWorkerForTask(board, row);
+    if (!bw) return row;
+    const reconciled = reconcileWorkerRow(row, bw);
     if (reconciled !== row) changed = true;
     return reconciled;
   });

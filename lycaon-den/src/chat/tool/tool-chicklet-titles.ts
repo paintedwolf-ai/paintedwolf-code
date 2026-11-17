@@ -9,7 +9,8 @@ import {
   TOOL_TITLE_FALLBACKS,
 } from "./tool-presentation.generated.ts";
 
-const TASK_TOOL_NAMES = new Set<string>(TASK_DISPATCH_TOOLS);
+// Saved transcripts carry delegate_dispatch calls.
+const TASK_TOOL_NAMES = new Set<string>([...TASK_DISPATCH_TOOLS, "delegate_dispatch"]);
 
 const RECALL_TOOL = "recall";
 const PAGE_ACT_TOOL = "page_act";

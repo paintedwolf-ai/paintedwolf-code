@@ -29,7 +29,7 @@ func (s *Handler) HandleGetApprovals(w http.ResponseWriter, r *http.Request) {
 func (s *Handler) approvalConfigResponse(ctx context.Context, scope llm.SettingsScope, ref settings.ProjectRef, cfg settings.ApprovalConfig) wire.ApprovalConfigResponse {
 	projectDir := ref.Dir
 	resp := settings.ApprovalConfigToDTO(
-		settings.WireScope(string(scope)),
+		wire.SettingsScope(string(scope)),
 		cfg,
 		s.Service.Approvals.MergedFrom(scope, projectDir),
 	)

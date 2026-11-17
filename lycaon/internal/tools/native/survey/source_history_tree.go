@@ -16,7 +16,6 @@ import (
 )
 
 const (
-	sourceTreeBudget              = tools.WindowSettleBudget
 	overviewTreeUnknownNote       = "your tree could not be compared with its baseline, so this list holds only recorded changes and other files may have changed"
 	treeDiffNoTextNote            = "this file changed, but its baseline or live side has no text to compare"
 	treeDiffTouchedNote           = "this file's timestamp changed; its text did not"
@@ -101,7 +100,7 @@ func (t *SourceHistoryTool) addTreeChanges(
 func (t *SourceHistoryTool) treeContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	budget := t.treeBudget
 	if budget == 0 {
-		budget = sourceTreeBudget
+		budget = tools.WindowSettleBudget
 	}
 	return context.WithTimeout(ctx, budget)
 }

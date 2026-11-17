@@ -2,7 +2,9 @@ package findings_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -156,5 +158,60 @@ func TestSQLDeliverySurvivesStoreRecreationAndResponseReplay(t *testing.T) {
 	testutil.FailErr(t, "recover delivery", err)
 	if recovered.Cursor != 11 || len(recovered.Notes) != 1 || recovered.Notes[0].Summary != "retained contract" {
 		t.Fatalf("recovered: %+v", recovered)
+	}
+}
+
+func TestSQLStore_RecentCursorPagesFiftyFindingsAndReadsByID(t *testing.T) {
+	store := newFindingsStore(t, "/proj")
+	spawnAt := time.Now().UTC().Add(-time.Minute)
+	for i := range 50 {
+		detail := ""
+		if i == 0 {
+			detail = strings.Repeat("d", 1024)
+		}
+		ok, err := store.Append(t.Context(), "/proj", fmt.Sprintf("worker-%d", i%3), fmt.Sprintf("sum-%02d", i+1), "pkg/f.go", detail)
+		testutil.FailErr(t, "append finding", err)
+		if !ok {
+			t.Fatalf("finding %d not inserted", i)
+		}
+	}
+
+	cursor := int64(0)
+	var seen []int64
+	for {
+		rows, next, err := store.Recent(t.Context(), "/proj", "", cursor, 9, time.Time{})
+		testutil.FailErr(t, "recent page", err)
+		if len(rows) == 0 {
+			break
+		}
+		more := len(rows) > 8
+		if more {
+			rows = rows[:8]
+			next = rows[len(rows)-1].ID
+		}
+		for _, r := range rows {
+			seen = append(seen, r.ID)
+		}
+		cursor = next
+		if !more {
+			break
+		}
+	}
+	if len(seen) != 50 || seen[0] != 1 || seen[49] != 50 {
+		t.Fatalf("paged %d findings, first/last=%v", len(seen), seen)
+	}
+
+	sinceRows, sinceNext := recentFindings(t, store, "/proj", "worker-0", 0, 10, spawnAt)
+	if len(sinceRows) != 10 || sinceNext <= 10 {
+		t.Fatalf("since recent = %d next=%d", len(sinceRows), sinceNext)
+	}
+
+	item, err := store.Get(t.Context(), "/proj", 1)
+	testutil.FailErr(t, "get finding 1", err)
+	if !item.HasBody || len(item.Body) != 1024 {
+		t.Fatalf("finding 1 body len=%d hasBody=%v", len(item.Body), item.HasBody)
+	}
+	if _, err := store.Get(t.Context(), "/proj", 999); !errors.Is(err, findings.ErrNotFound) {
+		t.Fatalf("get missing finding err=%v, want ErrNotFound", err)
 	}
 }

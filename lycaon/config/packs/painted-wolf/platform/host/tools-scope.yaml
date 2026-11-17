@@ -1,4 +1,0 @@
-# Root-scope tool guards.
-version: 1
-# Broad root calls switch to structural views at this file count.
-root_structural_file_count: 50000

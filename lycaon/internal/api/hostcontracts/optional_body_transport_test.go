@@ -28,7 +28,7 @@ func TestOptionalCommandBodiesHonorTransportFraming(t *testing.T) {
 	testutil.FailErr(t, "create blueprint", err)
 	server := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Projects: projects}, Workflow: hostapi.WorkflowDependencies{Blueprints: blueprints}}), nil, hostapi.TestAPIToken)
 	for _, endpoint := range []struct{ name, path, invalidBody string }{
-		{"abort delegation", "/v1/delegations/" + uuid.NewString() + "/abort", `{"reason":42}`},
+		{"abort session", "/v1/sessions/" + uuid.NewString() + "/abort", `{"reason":42}`},
 		{"launch blueprint", fmt.Sprintf("/v1/projects/%s/blueprints/%s/launch", p.ID, bp.ID), `{"defer_start":"yes"}`},
 	} {
 		t.Run(endpoint.name, func(t *testing.T) {

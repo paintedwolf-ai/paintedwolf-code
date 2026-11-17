@@ -142,10 +142,6 @@ func historyTransitionStates(transition string) (string, string) {
 }
 
 func (s *SourceHistory) State(ctx context.Context, projectID string) (SourceHistoryState, error) {
-	return s.readSourceHistory(ctx, projectID)
-}
-
-func (s *SourceHistory) readSourceHistory(ctx context.Context, projectID string) (SourceHistoryState, error) {
 	undo, err := s.historyEntry(ctx, projectID, "applied", "DESC")
 	if err != nil {
 		return SourceHistoryState{}, err

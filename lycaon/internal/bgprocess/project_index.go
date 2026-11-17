@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/captureprojection"
@@ -331,7 +332,7 @@ func (r *Registry) ListProjectBackground(ctx context.Context, projectID string) 
 	if r == nil || r.jobs == nil {
 		return nil, 0
 	}
-	projectID = trim(projectID)
+	projectID = strings.TrimSpace(projectID)
 	r.jobs.mu.Lock()
 	rev := r.jobs.projectRevisions[projectID]
 	procs := r.jobs.projectProcs[projectID]
@@ -377,8 +378,8 @@ func (r *Registry) ProjectProcessesUnderRoot(
 	if r == nil || r.jobs == nil {
 		return nil
 	}
-	projectID = trim(projectID)
-	rootPath = trim(rootPath)
+	projectID = strings.TrimSpace(projectID)
+	rootPath = strings.TrimSpace(rootPath)
 	r.jobs.mu.Lock()
 	var pending []pendingProjectRow
 	for sessionID, procs := range r.jobs.sessions {
@@ -413,7 +414,7 @@ func (r *Registry) SessionBackgroundRunningCounts(projectID string) map[string]i
 	if r == nil || r.jobs == nil {
 		return nil
 	}
-	projectID = trim(projectID)
+	projectID = strings.TrimSpace(projectID)
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
 	procs := r.jobs.projectProcs[projectID]
@@ -444,7 +445,7 @@ func (r *Registry) SessionBackgroundRunningCount(sessionID string) int {
 	if r == nil || r.jobs == nil {
 		return 0
 	}
-	sessionID = trim(sessionID)
+	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return 0
 	}
@@ -472,8 +473,8 @@ func (r *ProcessLifecycle) StopProjectProcess(
 	if r == nil || r.jobs == nil {
 		return nil, ErrProcessNotFound
 	}
-	projectID = trim(projectID)
-	handle = trim(handle)
+	projectID = strings.TrimSpace(projectID)
+	handle = strings.TrimSpace(handle)
 	if projectID == "" || handle == "" {
 		return nil, ErrProcessNotFound
 	}
@@ -506,7 +507,7 @@ func (r *ProcessLifecycle) DisposeProject(ctx context.Context, projectID string,
 	if r == nil || r.jobs == nil {
 		return nil
 	}
-	projectID = trim(projectID)
+	projectID = strings.TrimSpace(projectID)
 	if projectID == "" {
 		return nil
 	}

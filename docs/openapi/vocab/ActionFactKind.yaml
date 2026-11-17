@@ -1,0 +1,30 @@
+# ActionFactKind — the fixed vocabulary of facts an action card shows.
+name: ActionFactKind
+go_const_prefix: ActionFact
+values:
+  - id: result
+    comment: How the action ended.
+  - id: changed
+    comment: Files and lines the action changed.
+  - id: found
+    comment: What the action found or listed.
+  - id: took
+    comment: How long the action ran.
+  - id: steps
+    comment: The members of a folded action.
+  - id: stopped_by
+    comment: What stopped or approved the action.
+  - id: network
+    comment: Hosts the action reached.
+  - id: worker
+    comment: The worker a delegation call acted on.
+  - id: budget
+    comment: A worker's budget use.
+  - id: process
+    comment: A background process the action started.
+  - id: captured
+    comment: An artifact the action captured.
+  - id: containment
+    comment: How the action was confined, when not the default.
+  - id: loaded_by
+    comment: How a tool or skill was resolved.

@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -32,6 +33,7 @@ func (l *toolBatch) persistClassifiedToolOutcome(
 	if err != nil {
 		return history, err
 	}
+	l.Projection.touchProgress(ctx, st)
 	st.noteDeliveryCoverage(out.deliveries)
 	return l.enrichCommittedToolRow(ctx, sessionID, sess, history, out.toolName, out.toolArgs, stored.ID, out.handleEligible, st)
 }
@@ -131,9 +133,7 @@ type parallelBatchCommit struct {
 	reserved             []time.Time
 	lastToolTS           *time.Time
 	turnTools            []string
-	anyTaskEnqueued      bool
 	taskEnqueuedThisTurn int
-	lastTaskMessageID    string
 	st                   *promptLoopTurnState
 	sess                 *api.Session
 	sessionID            string
@@ -154,9 +154,7 @@ func newParallelBatchCommit(
 	run []api.ToolCall,
 	lastToolTS *time.Time,
 	turnTools []string,
-	anyTaskEnqueued bool,
 	taskEnqueuedThisTurn int,
-	lastTaskMessageID string,
 	st *promptLoopTurnState,
 	sess *api.Session,
 	sessionID string,
@@ -166,9 +164,7 @@ func newParallelBatchCommit(
 		reserved:             reserveCommitTimestamps(len(run), lastToolTS),
 		lastToolTS:           lastToolTS,
 		turnTools:            turnTools,
-		anyTaskEnqueued:      anyTaskEnqueued,
 		taskEnqueuedThisTurn: taskEnqueuedThisTurn,
-		lastTaskMessageID:    lastTaskMessageID,
 		st:                   st,
 		sess:                 sess,
 		sessionID:            sessionID,
@@ -210,15 +206,14 @@ func (l *toolBatch) appendParallelOutcomeLocked(
 	if err := l.Projection.persistStorageSafeMessages(ctx, commit.sessionID, rows); err != nil {
 		return err
 	}
+	l.Projection.touchProgress(ctx, commit.st)
 	out.committed = true
 	out.storedID = stored.ID
 	out.persistedStored = rows
 	out.persistedTransient = transients
 	commit.turnTools = l.settleToolRow(ctx, commit.sess, commit.sessionID, out.toolName, commit.turnTools, commit.st)
 	if out.taskCommitted {
-		commit.anyTaskEnqueued = true
 		commit.taskEnqueuedThisTurn++
-		commit.lastTaskMessageID = out.taskMessageID
 	}
 	return nil
 }
@@ -367,4 +362,15 @@ func retrievalSourceLabel(tool, observed string) string {
 		return label
 	}
 	return label + " · " + detail
+}
+
+// touchProgress records that the running turn accounted a model response or
+// a tool result, so its worker reads as progressing, not quiet.
+func (p *turnProjection) touchProgress(ctx context.Context, st *promptLoopTurnState) {
+	if p == nil || p.Deps.TouchTurnProgress == nil || st == nil || st.turnID == "" {
+		return
+	}
+	if err := p.Deps.TouchTurnProgress(ctx, st.turnID); err != nil {
+		slog.WarnContext(ctx, "record turn progress", "turn_id", st.turnID, "error", err)
+	}
 }

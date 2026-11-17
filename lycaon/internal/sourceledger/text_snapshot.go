@@ -2,6 +2,7 @@ package sourceledger
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"math"
 	"strings"
 
@@ -11,7 +12,7 @@ import (
 func attributionText(text string) string { return strings.ReplaceAll(text, "\r\n", "\n") }
 
 func decodeTextSnapshot(raw []byte) (string, bool) {
-	doc, _, err := textfile.Open(raw, textfile.LimitsForRaw(MaxRevisionContentBytes))
+	doc, _, err := textfile.Open(raw, textfile.LimitsForRaw(sourceblob.MaxRevisionContentBytes))
 	if err != nil {
 		return "", false
 	}

@@ -3,18 +3,18 @@ id: OVERLAY_PROMOTE_NOT_FOUND
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.job_id, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.overlay_id, paintedwolf.rejection_code, paintedwolf.worker]
 when: paintedwolf.rejection_code == "OVERLAY_PROMOTE_NOT_FOUND"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-message: No overlay with overlay_id={{ paintedwolf.job_id }} exists on this session
-what: No overlay {{ paintedwolf.job_id }} on this session — promote/reject targets must match the live pulse roster
-cause: Either the overlay_id is stale (an older transcript reference), was already promoted/rejected, or was mistyped
-why: There is no overlay to act on; retrying with the same id will keep failing
-fix: Re-read the pulse roster's pending write list; pick a current overlay_id; or accept that this work is already terminal
-instead: Branch on Code; verify overlay_id against the live pulse roster
+message: '{% if paintedwolf.overlay_id %}No pending changes for result `{{ paintedwolf.overlay_id }}`{% else %}No pending changes for this result{% endif %} in this session'
+what: '{% if paintedwolf.overlay_id %}Result `{{ paintedwolf.overlay_id }}`{% else %}This result{% endif %} has no changes in this session to act on.'
+cause: 'The handle is from an earlier result, its changes were already landed or rejected, or it was mistyped.'
+why: 'There are no changes to act on; repeating the call will keep failing.'
+fix: 'Use the result handle the roster shows for the worker, or treat the work as finished.'
+instead: 'Branch on Code; check the handle against the roster'
 x-paintedwolf-scenarios:
   - id: default
     vars:
-      job_id: ov-missing
+      overlay_id: result-missing

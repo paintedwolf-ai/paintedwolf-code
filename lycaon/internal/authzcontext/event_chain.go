@@ -5,9 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strconv"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 )
 
@@ -66,7 +66,7 @@ func eventChainTimestamp(e Event) string {
 	if e.RecordedAt.IsZero() {
 		return ""
 	}
-	return db.FormatTime(e.RecordedAt)
+	return timelayout.Format(e.RecordedAt)
 }
 
 func marshalEventDetail(d EventDetail) (string, error) {

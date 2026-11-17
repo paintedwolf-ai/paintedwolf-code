@@ -125,9 +125,10 @@ func TestClassifyTierCommandUsesContainmentFact(t *testing.T) {
 func TestCoordinatorInternalToolsNeverGate(t *testing.T) {
 	internal := []string{
 		"update_progress", "record_finding", "request_decision", "answer_decision",
-		"extend_worker_budget", "worker_cancel",
-		"preview_overlay", "promote_overlay", "reject_overlay",
-		"delegate_dispatch", "delegate_init", "delegate_status", "delegate_decompose",
+		"worker_cancel",
+		"preview_overlay", "promote_overlay", "reject_overlay", "shelve_overlay",
+		"instruct_worker", "worker_history",
+		"plan_from_blueprint", "read_findings", "read_review",
 		"state_start", "state_close", "state_query", "state_update",
 		"workflow_catalog_summaries", "pack_board", "wait",
 		"scan_pack", "scan_list", "scan_summary", "scan_query", "scan_compare",

@@ -895,16 +895,6 @@ describe("subscribeEvents topic dispatch", () => {
     invalidateApprovalGrantsCache();
   });
 
-  it("delegation event refreshes the board and the run's topology legs", async () => {
-    const got = await driveTopic("delegation", {
-      delegation_id: "d1",
-      status: "active",
-      leg_id: "l1",
-      phase: "worker",
-    });
-    expect(got[0]).toEqual(["board", "workflows"]);
-  });
-
   it("workflow event fires workflows + session invalidation", async () => {
     const got = await driveTopic("workflow", { session_id: "s1" });
     expect(got[0]).toEqual(["workflows", "session"]);

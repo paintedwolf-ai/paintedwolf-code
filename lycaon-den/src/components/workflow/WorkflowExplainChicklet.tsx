@@ -31,7 +31,7 @@ type Props = {
   meta: WorkflowExplainMeta;
   runId?: string;
   sessionId?: string | null;
-  entryKey?: string;
+  entryKey: string;
   client?: ProjectSecuritySource["client"] | null;
   appStore?: AppStore | null;
 };
@@ -39,10 +39,10 @@ type Props = {
 /** The host's note for a phase it holds, with the progress of the record it names. */
 export function WorkflowExplainChicklet(props: Props) {
   const { bindTranscriptEntry } = useTranscriptEntry(() =>
-    props.entryKey ? { sessionId: props.sessionId ?? undefined, entryKey: props.entryKey } : undefined,
+    ({ sessionId: props.sessionId ?? undefined, entryKey: props.entryKey }),
   );
   const disclosure = useTranscriptDisclosure(() =>
-    props.entryKey ? transcriptDisclosureKey.workflowExplain(props.entryKey) : undefined,
+    transcriptDisclosureKey.workflowExplain(props.entryKey),
   );
   const { open, revealTemporarily } = disclosure;
   const [hostEl, setHostEl] = createSignal<HTMLElement | null>(null);
@@ -88,7 +88,7 @@ export function WorkflowExplainChicklet(props: Props) {
   );
 
   bindFindRevealHost({
-    id: `workflow-explain:${props.entryKey ?? props.meta.phase_id}`,
+    id: `workflow-explain:${props.entryKey}`,
     hostEl,
     isCollapsed: () => !open(),
     revealForFind: revealTemporarily,

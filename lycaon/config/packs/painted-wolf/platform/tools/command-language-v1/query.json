@@ -320,8 +320,7 @@
       "reuse": {
         "implementation": "lycaon/internal/tools/native/query/jq.go",
         "tests": [
-          "lycaon/internal/tools/native/query/forms_test.go",
-          "lycaon/internal/tools/native/jq/jq_test.go"
+          "lycaon/internal/tools/native/query/forms_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"

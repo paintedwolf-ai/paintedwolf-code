@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"os"
 	"path/filepath"
 	"testing"
@@ -47,7 +48,7 @@ func refuseTrash(t *testing.T, service *SourceMutationService) {
 func TestAgentRemovalKeepsWhatHistoryCannotAndSkipsTrash(t *testing.T) {
 	service, p, root, _ := sourceMutationFixture(t)
 	refuseTrash(t, service)
-	body := bytes.Repeat([]byte{0, 1, 2, 255}, sourceledger.MaxRevisionContentBytes/2)
+	body := bytes.Repeat([]byte{0, 1, 2, 255}, sourceblob.MaxRevisionContentBytes/2)
 	testutil.FailErr(t, "seed large executable", os.WriteFile(filepath.Join(root, "tool.bin"), body, 0o750))
 
 	id, err := service.RemoveEntry(t.Context(), agentRemoval(t, p, "tool.bin", textfile.SHA256(body)))

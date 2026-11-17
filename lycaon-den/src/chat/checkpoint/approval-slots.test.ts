@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { approvalOptionFixture } from "./approval-test-fixtures.ts";
-import { APPROVAL_SLOT_COUNT, approvalSlot, optionForSlot } from "./approval-slots.ts";
+import { approvalSlot, optionForSlot } from "./approval-slots.ts";
 
 describe("approval slots", () => {
   it("assigns each rung its fixed digit and grouped options none", () => {
-    expect(APPROVAL_SLOT_COUNT).toBe(4);
     expect(approvalSlot({ rung: "once" })).toBe(1);
     expect(approvalSlot({ rung: "unchanged" })).toBe(1);
     expect(approvalSlot({ rung: "tracked" })).toBe(1);

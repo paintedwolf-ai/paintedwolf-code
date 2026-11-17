@@ -149,6 +149,9 @@ func LeaseExistingBranch(ctx context.Context, task *api.WorkerTask) (*BranchLeas
 type BranchJob struct {
 	ID        string
 	ProjectID string
+	// Branch names the job's branch directory: the job's own, or the lane
+	// of the worker whose round it ran.
+	Branch string
 	// Sealed reports a completed overlay whose changes are on record, so its
 	// tree can be reclaimed and rebuilt.
 	Sealed bool
@@ -240,7 +243,7 @@ func (s *MergeService) beginMergeClaim(ctx context.Context, jobID string) (*merg
 		return nil, nil, err
 	}
 	if !claimed {
-		return nil, nil, s.reject(OverlayPromoteNotPendingCode, map[string]any{"job_id": jobID})
+		return nil, nil, s.reject(ctx, OverlayPromoteNotPendingCode, map[string]any{"job_id": jobID})
 	}
 	claimCtx, cancel := context.WithCancelCause(ctx)
 	claim := &mergeApplyClaim{jobID: jobID, token: token, cancel: cancel}
@@ -303,7 +306,7 @@ func (s mergeEngine) releaseMergeClaim(ctx context.Context, claim *mergeApplyCla
 }
 
 func (s mergeEngine) teardownBranch(ctx context.Context, task *api.WorkerTask) error {
-	if s.MergeService == nil || s.Workspace == nil || task == nil {
+	if s.MergeService == nil || s.Workspace == nil || task == nil || s.Lanes.Holds(ctx, task) {
 		return nil
 	}
 	cleanupCtx, cancel := promoteCleanupContext(ctx)
@@ -330,7 +333,7 @@ func (s mergeEngine) holdBranch(ctx context.Context, jobID string) (*BranchLease
 			if checkpointed {
 				return LeaseExistingBranch(ctx, task)
 			}
-			return nil, s.reject(OverlayPromoteNotPendingCode, map[string]any{
+			return nil, s.reject(ctx, OverlayPromoteNotPendingCode, map[string]any{
 				"job_id": jobID, "reason": "overlay workspace unavailable",
 			})
 		}

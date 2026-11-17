@@ -1,4 +1,5 @@
-import type { Message, WorkerTask } from "../../api/types.ts";
+import type { BoardWorker, Message, WorkerTask } from "../../api/types.ts";
+import type { PendingWorkerApproval } from "../worker/worker-approval-model.ts";
 import { workerBranchActivityLine } from "../worker/worker-branch-model.ts";
 import type { ToolPartView } from "../tool/tool-part-model.ts";
 import { isTaskToolName } from "../tool/tool-part-model.ts";
@@ -8,12 +9,15 @@ import {
   liveGeneratingTokensFromMessages,
 } from "../transcript/projection/generating-tokens.ts";
 import { workerFailureDisplay } from "../worker/worker-failure-model.ts";
+import { workerFactActivityLine } from "../worker/worker-state-presentation.ts";
 import { workerRowStatus } from "../worker/workers-model.ts";
 import { workerSummaryTaskStatus } from "../worker/worker-summary-model.ts";
 import { formatBytes } from "../../format/format-bytes.ts";
 
 export type TaskActivityContext = {
   worker?: WorkerTask;
+  boardWorker?: BoardWorker;
+  pendingApproval?: PendingWorkerApproval;
   workerStatus?: string | null;
   lastActivity?: string | null;
   workerMessages?: readonly Message[];
@@ -66,23 +70,43 @@ export function taskStatus(part: ToolPartView): string {
   return "done";
 }
 
-/** Current terminal and merge facts supersede an earlier transcript projection. */
+/** Current terminal, merge, and later-round facts supersede an earlier projection. */
 export function taskCardStatus(
   part: ToolPartView,
   worker?: WorkerTask,
+  boardWorker?: BoardWorker,
 ): string {
-  if (worker?.status === "canceled" || worker?.status === "failed") {
-    return workerRowStatus(worker);
+  if (boardWorker?.state === "asking") return "needs_decision";
+  if (boardWorker?.state === "failed" || boardWorker?.state === "recovering") {
+    return "error";
   }
-  if (worker?.status === "complete" && worker.merge_status) {
-    return workerRowStatus(worker);
+  if (worker) {
+    const summaryJob = part.workerSummary?.worker_id?.trim();
+    const newerRound =
+      (worker.round ?? 1) > (part.workerSummary?.round ?? 1) ||
+      Boolean(summaryJob && worker.id !== summaryJob);
+    if (newerRound) return workerRowStatus(worker);
+    if (worker.status === "canceled" || worker.status === "failed") {
+      return workerRowStatus(worker);
+    }
+    if (
+      worker.status === "complete" &&
+      (worker.merge_status || worker.result_disposition)
+    ) {
+      return workerRowStatus(worker);
+    }
   }
   if (part.workerSummary) return workerSummaryTaskStatus(part.workerSummary);
   if (worker && workerRowStatus(worker) === "running") return "running";
   return taskStatus(part);
 }
 
-export function taskDescription(part: ToolPartView): string {
+export function taskDescription(part: ToolPartView, worker?: WorkerTask): string {
+  const briefGoal = worker?.brief
+    ?.split("\n")
+    .find((line) => line.trim())
+    ?.trim();
+  if (briefGoal) return briefGoal;
   const args = part.args ?? {};
   const brief = args.brief;
   const goal =
@@ -109,6 +133,10 @@ export function subagentType(part: ToolPartView): string {
 /** Card title agent from the worker roster or the immutable call snapshot. */
 export function taskAgentType(part: ToolPartView, worker?: WorkerTask): string {
   const fromWorker = worker?.agent_type?.trim();
+  const workerName = worker?.worker_name?.trim();
+  if (fromWorker && workerName && workerName !== fromWorker) {
+    return `${workerName} · ${fromWorker}`;
+  }
   if (fromWorker) return fromWorker;
   const fromArgs = subagentType(part);
   if (fromArgs !== "worker") return fromArgs;
@@ -136,14 +164,22 @@ export function taskActivityDisplay(
         : "Cloning isolated workspace";
     return `${action}${amount ? ` · ${amount}` : ""}`;
   }
-  const branchLine = ctx?.worker ? workerBranchActivityLine(ctx.worker) : null;
-  if (branchLine) return branchLine;
 
   // Live token activity takes priority while the worker is generating.
   const generating = generatingTokensLabel(
     liveGeneratingTokensFromMessages(ctx?.workerMessages),
   );
   if (generating) return generating;
+
+  const factLine = workerFactActivityLine(
+    ctx?.worker,
+    ctx?.boardWorker,
+    ctx?.pendingApproval,
+  );
+  if (factLine && !duplicatesTaskDescription(part, factLine)) return factLine;
+
+  const branchLine = ctx?.worker ? workerBranchActivityLine(ctx.worker) : null;
+  if (branchLine) return branchLine;
 
   const fromCtx = firstUsefulActivity(part, [ctx?.lastActivity]);
   if (fromCtx) return fromCtx;

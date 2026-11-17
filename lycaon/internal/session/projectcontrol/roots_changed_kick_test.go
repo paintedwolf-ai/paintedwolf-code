@@ -77,7 +77,7 @@ func TestEnqueueRootsChangedKickExtendsPendingNoticeBeforeNextTurn(t *testing.T)
 	svc.EnqueueRootsChangedKick(ctx, created.ID, project.RootRefsFrom(detachedDocs.Before), project.RootRefsFrom(detachedDocs.After))
 
 	// Exactly one notice is delivered at the turn boundary, naming both changes.
-	kickID := kicks.TakePendingKickID("sess-1")
+	kickID := kicks.TakePendingKickIDUnless("sess-1", nil)
 	if kickID != "coordinator-roots-changed" {
 		t.Fatalf("pending kick = %q want coordinator-roots-changed", kickID)
 	}
@@ -87,7 +87,7 @@ func TestEnqueueRootsChangedKickExtendsPendingNoticeBeforeNextTurn(t *testing.T)
 		t.Fatal("expected rendered roots changed nudge")
 	}
 	kicks.AckPendingNudge("sess-1", lease)
-	if next := kicks.TakePendingKickID("sess-1"); next != "" {
+	if next := kicks.TakePendingKickIDUnless("sess-1", nil); next != "" {
 		t.Fatalf("second roots changed kick queued: %q", next)
 	}
 	for _, want := range []string{"added @extra;", "renamed @web → @site", "• @api", "• @site", "• @extra"} {
@@ -112,7 +112,7 @@ func TestEnqueueRootsChangedKickExtendsPendingNoticeBeforeNextTurn(t *testing.T)
 	detachedExtra, err := reg.DetachRoot(ctx, created.ID, attachedExtra.Added.ID)
 	testutil.FailErr(t, "detach extra", err)
 	svc.EnqueueRootsChangedKick(ctx, created.ID, project.RootRefsFrom(detachedExtra.Before), project.RootRefsFrom(detachedExtra.After))
-	if got := kicks.TakePendingKickID("sess-1"); got != "coordinator-roots-changed" {
+	if got := kicks.TakePendingKickIDUnless("sess-1", nil); got != "coordinator-roots-changed" {
 		t.Fatalf("next turn kick = %q", got)
 	}
 	text2, lease2, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
@@ -167,7 +167,7 @@ func TestEnqueuePostureChangedKickCoalescesAndDropsNoOp(t *testing.T) {
 	if _, ok := kicks.PeekPendingKickID("other"); ok {
 		t.Fatal("foreign project session received posture kick")
 	}
-	if got := kicks.TakePendingKickID("sess-1"); got != "coordinator-posture-changed" {
+	if got := kicks.TakePendingKickIDUnless("sess-1", nil); got != "coordinator-posture-changed" {
 		t.Fatalf("pending kick = %q want coordinator-posture-changed", got)
 	}
 	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
@@ -180,7 +180,7 @@ func TestEnqueuePostureChangedKickCoalescesAndDropsNoOp(t *testing.T) {
 	// Repeated changes before the next turn coalesce; strict -> balanced -> light delivers one non-strict notice.
 	svc.EnqueuePostureChangedKick(ctx, "proj-1", gate.PostureStrict, gate.PostureBalanced)
 	svc.EnqueuePostureChangedKick(ctx, "proj-1", gate.PostureBalanced, gate.PostureLight)
-	if got := kicks.TakePendingKickID("sess-1"); got != "coordinator-posture-changed" {
+	if got := kicks.TakePendingKickIDUnless("sess-1", nil); got != "coordinator-posture-changed" {
 		t.Fatalf("coalesced pending kick = %q want coordinator-posture-changed", got)
 	}
 	text2, lease2, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
@@ -189,7 +189,7 @@ func TestEnqueuePostureChangedKickCoalescesAndDropsNoOp(t *testing.T) {
 		t.Fatalf("non-strict nudge = %q (ok=%v)", text2, ok)
 	}
 	kicks.AckPendingNudge("sess-1", lease2)
-	if extra := kicks.TakePendingKickID("sess-1"); extra != "" {
+	if extra := kicks.TakePendingKickIDUnless("sess-1", nil); extra != "" {
 		t.Fatalf("duplicate posture kick queued: %q", extra)
 	}
 
@@ -277,7 +277,7 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 	if strings.Contains(prompt2, "except temporary and cache folders") {
 		t.Fatalf("turn 2 prompt kept non-strict copy:\n%s", prompt2)
 	}
-	if got := kicks.TakePendingKickID(sess.ID); got != "coordinator-posture-changed" {
+	if got := kicks.TakePendingKickIDUnless(sess.ID, nil); got != "coordinator-posture-changed" {
 		t.Fatalf("pending kick after overlay tightening = %q want coordinator-posture-changed", got)
 	}
 	notice, lease, ok, err := kicks.RenderPendingNudge(ctx, sess.ID, kick.CoordinatorKickRenderContext{})
@@ -290,7 +290,7 @@ func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *t
 	// Turn 3: hiding the external selector queues project.posture.changed; reverting before consumption drops it.
 	externalHidden = true
 	_ = prof.PromptSurface(ctx, sess, nil, hostresources.Snapshot{}, nil, true)
-	if got := kicks.TakePendingKickID(sess.ID); got != "coordinator-posture-changed" {
+	if got := kicks.TakePendingKickIDUnless(sess.ID, nil); got != "coordinator-posture-changed" {
 		t.Fatalf("pending kick after external hidden = %q want coordinator-posture-changed", got)
 	}
 	extNotice, extLease, ok, err := kicks.RenderPendingNudge(ctx, sess.ID, kick.CoordinatorKickRenderContext{})
@@ -381,7 +381,7 @@ func TestEnqueueRootsChangedKickNamesSessionFolderRename(t *testing.T) {
 	testutil.FailErr(t, "rename web", err)
 	svc.EnqueueRootsChangedKick(ctx, created.ID, project.RootRefsFrom(renamed.Before), project.RootRefsFrom(renamed.After))
 
-	if got := kicks.TakePendingKickID("sess-1"); got != "coordinator-roots-changed" {
+	if got := kicks.TakePendingKickIDUnless("sess-1", nil); got != "coordinator-roots-changed" {
 		t.Fatalf("rename pending kick = %q", got)
 	}
 	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
@@ -420,7 +420,7 @@ func TestEnqueueRootsChangedKickSessionFolderFallsBackAfterDetach(t *testing.T) 
 	testutil.FailErr(t, "detach web", err)
 	svc.EnqueueRootsChangedKick(ctx, created.ID, project.RootRefsFrom(detached.Before), project.RootRefsFrom(detached.After))
 
-	if got := kicks.TakePendingKickID("sess-1"); got != "coordinator-roots-changed" {
+	if got := kicks.TakePendingKickIDUnless("sess-1", nil); got != "coordinator-roots-changed" {
 		t.Fatalf("detach pending kick = %q", got)
 	}
 	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})
@@ -458,7 +458,7 @@ func TestPromotionCommitEnqueuesRootsChangedKick(t *testing.T) {
 		testutil.FailErr(t, "run promotion", err)
 	}
 
-	if got := kicks.TakePendingKickID("sess-1"); got != "coordinator-roots-changed" {
+	if got := kicks.TakePendingKickIDUnless("sess-1", nil); got != "coordinator-roots-changed" {
 		t.Fatalf("promotion pending kick = %q", got)
 	}
 	text, lease, ok, err := kicks.RenderPendingNudge(ctx, "sess-1", kick.CoordinatorKickRenderContext{})

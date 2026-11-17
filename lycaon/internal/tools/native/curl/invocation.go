@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"io"
 	"net/http"
 	"strings"
@@ -55,7 +56,7 @@ type invocation struct {
 	exchange   *httpaction.Exchange
 	headers    string
 	transfer   Transfer
-	provenance httpaction.ExchangeProvenance
+	provenance evidence.ExchangeProvenance
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
@@ -157,7 +158,7 @@ func (inv *invocation) run() error {
 		Status: resp.Status, FinalURL: ex.FinalURL, SentBytes: ex.SentBodyBytes, SentSHA256: ex.SentBodySHA256,
 		ReceivedBytes: resp.Bytes, ReceivedSHA256: resp.SHA256,
 	}
-	inv.provenance = httpaction.ExchangeProvenance{
+	inv.provenance = evidence.ExchangeProvenance{
 		External:     ex.External,
 		ObservedURLs: append([]string(nil), ex.ObservedURLs...),
 	}

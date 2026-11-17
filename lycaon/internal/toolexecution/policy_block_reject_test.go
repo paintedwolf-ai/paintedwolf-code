@@ -131,7 +131,7 @@ func TestExecutorPreservesHandlerCancellationAndPartialOutput(t *testing.T) {
 func TestExecutorPreservesStructuredFailurePartialOutput(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	const partial = `{"changed_paths":["retained.txt"],"completed":false}`
-	cause := &toolrejection.ToolReject{Code: "GIT_OPERATION_FAILED", Data: map[string]any{"attempted": true}}
+	cause := &toolrejection.ToolReject{Code: toolrejection.ToolOwnerFailedCode, Data: map[string]any{"attempted": true}}
 	if err := reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) { return partial, cause }); err != nil {
 		t.Fatalf("register fixture: %v", err)
 	}

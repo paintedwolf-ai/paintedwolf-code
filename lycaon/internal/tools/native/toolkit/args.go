@@ -3,8 +3,9 @@ package toolkit
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // BoundedInt is the effective value of an integer tool argument after defaults
@@ -52,15 +53,6 @@ func ClampIntArg(args map[string]any, key string, defaultVal, min, max int) int 
 	return BoundedIntArg(args, key, defaultVal, min, max).Effective
 }
 
-// AppendClampBanner appends a "capped at N (requested M)" line when the caller's
-// value was clamped, so the response tells the agent its argument was rewritten.
-func AppendClampBanner(parts []string, label string, arg BoundedInt) []string {
-	if !arg.Clamped || arg.Requested == nil {
-		return parts
-	}
-	return append(parts, fmt.Sprintf("%s capped at %d (requested %d)", label, arg.Effective, *arg.Requested))
-}
-
 // BoolArg reads a boolean tool argument, falling back to defaultVal when the key
 // is absent or not a JSON boolean.
 func BoolArg(args map[string]any, key string, defaultVal bool) bool {
@@ -68,27 +60,6 @@ func BoolArg(args map[string]any, key string, defaultVal bool) bool {
 		return v
 	}
 	return defaultVal
-}
-
-// ParseStringSliceArg reads a []string tool argument, trimming entries and
-// capping the result at maxItems.
-func ParseStringSliceArg(args map[string]any, key string, maxItems int) ([]string, error) {
-	raw, ok := args[key].([]any)
-	if !ok || len(raw) == 0 {
-		return nil, MissingArg(key)
-	}
-	out := make([]string, 0, len(raw))
-	for _, item := range raw {
-		s, ok := item.(string)
-		if !ok || strings.TrimSpace(s) == "" {
-			return nil, fmt.Errorf("invalid %q entry", key)
-		}
-		out = append(out, strings.TrimSpace(s))
-	}
-	if len(out) > maxItems {
-		out = out[:maxItems]
-	}
-	return out, nil
 }
 
 // MissingArg is the fail-closed last line when a catalog schema should have

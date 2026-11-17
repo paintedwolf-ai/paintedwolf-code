@@ -179,10 +179,10 @@ webE2e.describe("agent mid-turn note", () => {
       ).toBeVisible();
 
       await stream.getByTestId("activity-span-card").locator(":scope > .den-transcript-disclosure-header").click();
-      const toolCard = stream.getByTestId("tool-part-card").first();
+      const toolCard = stream.getByTestId("action-card").first();
       await expect(toolCard).toBeVisible();
       const order = await page.evaluate(() => {
-        const tool = document.querySelector('[data-testid="tool-part-card"]');
+        const tool = document.querySelector('[data-testid="action-card"]');
         const note = document.querySelector(
           '[data-testid="transcript-article-assistant"][data-kind="agent_note"]',
         );

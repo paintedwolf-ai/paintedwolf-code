@@ -11,26 +11,21 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type stubRunLegStore struct {
-	delegationID string
-	legs         []api.Leg
+type stubRunWorkerStore struct {
+	statuses map[string]api.LegStatus
 }
 
-func (s stubRunLegStore) DelegationByWorkflowRunID(context.Context, string) (string, bool, error) {
-	return s.delegationID, s.delegationID != "", nil
-}
-
-func (s stubRunLegStore) ListLegs(context.Context, string) ([]api.Leg, error) {
-	return s.legs, nil
+func (s stubRunWorkerStore) WorkflowWorkStatuses(context.Context, string) (map[string]api.LegStatus, error) {
+	return s.statuses, nil
 }
 
 // The plan comes from the topology: bound stages in order, labelled, with the
 // status of whichever legs were dispatched and pending for the rest.
 func TestRunTopologyLegsProjectsPipelinePlan(t *testing.T) {
 	view := TopologyLegView{
-		Store: stubRunLegStore{delegationID: "dep-1", legs: []api.Leg{
-			{Title: "hunt_correctness", Status: api.LegStatusComplete},
-			{Title: "hunt_edges", Status: api.LegStatusRetryPending},
+		Workers: stubRunWorkerStore{statuses: map[string]api.LegStatus{
+			"hunt_correctness": api.LegStatusComplete,
+			"hunt_edges":       api.LegStatusRunning,
 		}},
 		Catalog: extpacks.CatalogForConsumers,
 	}
@@ -39,7 +34,7 @@ func TestRunTopologyLegsProjectsPipelinePlan(t *testing.T) {
 	testutil.FailErr(t, "project bugbash legs", err)
 	want := []api.WorkflowTopologyLeg{
 		{ID: "hunt_correctness", Stage: "hunt_correctness", PhaseID: "hunt", Label: "Correctness hunt", Status: api.LegStatusComplete},
-		{ID: "hunt_edges", Stage: "hunt_edges", PhaseID: "hunt", Label: "Edge case hunt", Status: api.LegStatusRetryPending},
+		{ID: "hunt_edges", Stage: "hunt_edges", PhaseID: "hunt", Label: "Edge case hunt", Status: api.LegStatusRunning},
 		{ID: "hunt_races", Stage: "hunt_races", PhaseID: "hunt", Label: "Concurrency hunt", Status: api.LegStatusPending},
 		{ID: "triage", Stage: "triage", PhaseID: "triage", Label: "Triage", Status: api.LegStatusPending, WaitsFor: []string{"hunt_correctness", "hunt_edges", "hunt_races"}},
 	}

@@ -2,6 +2,7 @@ import type { WorkerTask } from "../../api/types.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { pendingCheckpointsForSessionView } from "../checkpoint/checkpoint-session-scope.ts";
 import {
+  collapseWorkersByIdentity,
   dedupeWorkersById,
   failedDispatchWorkersFromMessages,
   sortWorkerTasks,
@@ -12,10 +13,12 @@ import {
 /** Session roster plus derived failed-dispatch rows for tab/drawer/card binding. */
 export function sessionWorkers(appStore: AppStore, sessionId: string) {
   const rows = sortWorkerTasks(
-    dedupeWorkersById([
-      ...workersForSession(appStore.state.workers, sessionId),
-      ...failedDispatchWorkersFromMessages(sessionId, appStore.state.messages),
-    ]),
+    collapseWorkersByIdentity(
+      dedupeWorkersById([
+        ...workersForSession(appStore.state.workers, sessionId),
+        ...failedDispatchWorkersFromMessages(sessionId, appStore.state.messages),
+      ]),
+    ),
   );
   // Fingerprint reads card fields so store patches to them invalidate callers.
   for (const row of rows) {

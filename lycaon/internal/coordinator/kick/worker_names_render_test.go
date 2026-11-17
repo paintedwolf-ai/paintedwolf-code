@@ -1,0 +1,85 @@
+package kick_test
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/testutil"
+)
+
+// Kick copy about workers renders with and without worker names and with and
+// without the tools it names: supplied names and counts appear, a tool is named
+// only when offered.
+func TestWorkerKickCopyRendersEveryState(t *testing.T) {
+	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configRoot(t)})
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "LoadToolProfiles", err)
+	named := []string{"preview_overlay", "instruct_worker", "pack_board", "read_findings", "worker_history", "worker_cancel", "wait"}
+	namedLoaded := map[string]bool{}
+	for _, tool := range named {
+		namedLoaded[tool] = true
+	}
+	withNamed, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		Profiles:  profiles,
+		Visible:   named,
+		Loaded:    namedLoaded,
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader withNamed", err)
+	withoutNamed, err := prompts.NewReader(prompts.ReaderInput{
+		ProfileID: prompts.CoordinatorProfileID,
+		Profiles:  profiles,
+		Visible:   []string{"recall"},
+		Loaded:    map[string]bool{"recall": true},
+		RootCount: 1,
+		WebSearch: true,
+	})
+	testutil.FailErr(t, "NewReader withoutNamed", err)
+	cases := []struct {
+		kick string
+		data map[string]any
+		want []string
+	}{
+		{"coordinator-scheduled", map[string]any{"pending_overlays": 2, "batch_phase": "open"}, []string{"2"}},
+		{"coordinator-scheduled", map[string]any{"batch_phase": "open"}, nil},
+		{"coordinator-worker-task-finished", map[string]any{"pending_overlays": 1}, []string{"1"}},
+		{"coordinator-worker-task-finished", map[string]any{"partial_workers": 3}, []string{"3"}},
+		{"coordinator-worker-round-notice", map[string]any{"notice_kind": "consumption", "worker": "parser-fix", "agent_type": "implementer", "round_ordinal": int64(3), "workflow_work_id": "leg-parse", "model_calls": 7, "tokens": 0}, []string{"`parser-fix`", "round 3", "`leg-parse`", "7"}},
+		{"coordinator-worker-round-notice", map[string]any{"notice_kind": "quiet", "agent_type": "implementer", "quiet_minutes": 12, "model_calls": 1, "tokens": 0}, []string{"12"}},
+		{"coordinator-worker-round-notice", map[string]any{"notice_kind": "quiet", "agent_type": "implementer", "quiet_minutes": 12, "model_calls": 1, "tokens": 0, "in_flight": "tools", "tool_calls": 3, "tools_done": 1, "tools": []string{"command", "read"}, "tools_minutes": 9, "latest_message_seq": int64(4)}, []string{"1 of 3", "`command`, `read`", "9 minutes", "#4"}},
+		{"coordinator-worker-round-notice", map[string]any{"notice_kind": "consumption", "agent_type": "implementer", "model_calls": 7, "tokens": 0, "latest_message_seq": int64(2)}, []string{"7", "#2"}},
+		{"coordinator-root-detach-canceled", map[string]any{"path": "/r", "workers": []map[string]any{{"worker": "parser-fix", "agent_type": "implementer", "reason": "root detached"}}, "overlays": []map[string]any{{}}}, []string{"`parser-fix`", "root detached"}},
+		{"coordinator-root-detach-canceled", map[string]any{"path": "/r", "workers": []map[string]any{{"agent_type": "implementer", "reason": "root detached"}}}, []string{"implementer", "root detached"}},
+	}
+	for _, tc := range cases {
+		for _, offered := range []bool{true, false} {
+			reader := withoutNamed
+			if offered {
+				reader = withNamed
+			}
+			data := map[string]any{}
+			for k, v := range tc.data {
+				data[k] = v
+			}
+			prompts.MergeCoordinatorKickVarsForTools(data, reader)
+			out, err := engine.RenderKick(t.Context(), tc.kick, data)
+			testutil.FailErr(t, tc.kick, err)
+			for _, want := range tc.want {
+				if !strings.Contains(out, want) {
+					t.Fatalf("%s offered=%v: missing %q\n%s", tc.kick, offered, want, out)
+				}
+			}
+			if !offered {
+				for _, tool := range named {
+					if strings.Contains(out, "`"+tool+"`") || strings.Contains(out, "`"+tool+"(") {
+						t.Fatalf("%s names %s without offering it\n%s", tc.kick, tool, out)
+					}
+				}
+			}
+		}
+	}
+}

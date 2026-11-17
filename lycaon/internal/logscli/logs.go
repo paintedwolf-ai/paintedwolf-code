@@ -1,4 +1,4 @@
-// Package logscli is the shared capture log viewer for pw-logs and lycaon-debug logs.
+// Package logscli is the capture log viewer pw-logs runs.
 package logscli
 
 import (

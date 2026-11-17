@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"github.com/lycaon/lycaon/internal/desktoptrash"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,7 +12,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
@@ -41,7 +41,7 @@ func recoverableToolFixture(t *testing.T) (tools.ToolContext, *projectsource.Sou
 }
 
 func unversionedBody() []byte {
-	return bytes.Repeat([]byte("large\n"), sourceledger.MaxRevisionContentBytes/4)
+	return bytes.Repeat([]byte("large\n"), sourceblob.MaxRevisionContentBytes/4)
 }
 
 func undoLatest(t *testing.T, service *projectsource.SourceMutationService, p *project.Project, wantKind string) {

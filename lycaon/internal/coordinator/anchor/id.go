@@ -23,16 +23,15 @@ const (
 	FeedbackPending               ID = "feedback.pending"
 	FeedbackReceived              ID = "feedback.received"
 	WorkerTaskStarted             ID = "worker.task.started"
-	WorkerLegStarted              ID = "worker.leg.started"
 	WaitTimerFired                ID = "wait.timer.fired"
 	OverlayPromoteComplete        ID = "overlay.promote.complete"
 	ScanFinished                  ID = "scan.finished"
 	ScanDelta                     ID = "scan.delta"
 	ProcessFinished               ID = "process.finished"
 	ProcessRefused                ID = "process.refused"
-	WorkerBudgetRequested         ID = "worker.budget.requested"
-	WorkerBudgetRaised            ID = "worker.budget.raised"
-	WorkerBudgetDeclined          ID = "worker.budget.declined"
+	WorkerRoundNotice             ID = "worker.round.notice"
+	WorkerMessageReceived         ID = "worker.message.received"
+	WorkerPrerequisiteBlocked     ID = "worker.prerequisite.blocked"
 	EditFollowUpRepeat            ID = "edit.follow_up.repeat"
 	CoordinatorCloseout           ID = "coordinator.closeout"
 	CoordinatorCitationGrounding  ID = "coordinator.citation.grounding"
@@ -42,7 +41,6 @@ const (
 	ProjectPostureChanged         ID = "project.posture.changed"
 	ProjectRootDetachCanceled     ID = "project.root.detach_canceled"
 	WorkerCloseout                ID = "worker.closeout"
-	WorkerIterationsLow           ID = "worker.iterations.low"
 	WorkerCancelCloseout          ID = "worker.cancel.closeout"
 	WorkerCitationGrounding       ID = "worker.citation.grounding"
 	ProgressMissing               ID = "progress.missing"
@@ -66,6 +64,8 @@ const (
 	InjectExecutionState          ID = "inject.execution_state"
 	InjectTurnState               ID = "inject.turn_state"
 	InjectCommandJobs             ID = "inject.command_jobs"
+	InjectWorkerMessages          ID = "inject.worker_messages"
+	InjectWorkerRound             ID = "inject.worker_round"
 	InjectToolProcedures          ID = "inject.tool_procedures"
 	InjectSkillProcedure          ID = "inject.skill_procedure"
 	InjectSkillPointer            ID = "inject.skill_pointer"
@@ -130,3 +130,10 @@ func SameInform(kickID string, id ID) bool {
 
 // String returns the catalog id.
 func (id ID) String() string { return string(id) }
+
+// AboutRunningWorker reports a wake that concerns a worker job that is still
+// running: it is actionable before the job settles and resumes a wait on
+// that job without satisfying it.
+func AboutRunningWorker(id ID) bool {
+	return id == WorkerRoundNotice || id == WorkerMessageReceived
+}

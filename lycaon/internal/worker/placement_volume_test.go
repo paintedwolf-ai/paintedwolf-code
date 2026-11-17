@@ -4,6 +4,7 @@ package worker
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"strings"
@@ -38,7 +39,7 @@ func TestPlacedWorkerSurvivesEjectAndRelocatesThroughBackup(t *testing.T) {
 	dataDir := testbaseline.DataDir(t, database)
 	queue := NewSQLQueue(database, 1)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
-	queue.SetWorkerWorkspaceManager(workspace.NewManager(enginepaths.WorkerBranchesRootUnder(dataDir)))
+	queue.SetWorkerWorkspaceManager(workspace.NewManager(enginepaths.WorkerBranchesRootUnder(dataDir), platform.NewSelector(platform.Config{})))
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})
 	testutil.FailErr(t, "enqueue", err)
 	_, err = queue.ClaimNext(ctx, ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})

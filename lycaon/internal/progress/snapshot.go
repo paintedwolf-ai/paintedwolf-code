@@ -1,6 +1,7 @@
 package progress
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
@@ -128,8 +129,10 @@ func ClassifyTransitions(before, after Snapshot) Transitions {
 
 // Reconciliation identifies the worker finishes awaiting acknowledgement.
 type Reconciliation struct {
-	Token string   `json:"token"`
-	Jobs  []string `json:"jobs"`
+	Token string `json:"token"`
+	// Jobs are host identity behind the token; Settled names them by worker.
+	Jobs    []string `json:"-"`
+	Settled []string `json:"settled_work"`
 }
 
 func snapshotVersion(runID, content string, itemIDs []string, version string, docVersion uint64) Snapshot {
@@ -186,5 +189,5 @@ func resolveDocumentItemIDs(current Snapshot, next Document) []string {
 // Reconciler tracks pending worker finishes independently of the document.
 type Reconciler interface {
 	Reconciliation(string) *Reconciliation
-	Acknowledge(string, string) bool
+	Acknowledge(ctx context.Context, root, token string) bool
 }

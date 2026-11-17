@@ -214,7 +214,7 @@ func WireStructCatalog(repoRoot string) (wireStructCatalogResult, error) {
 		ifName := oapiName
 
 		_, hasOpenAPI := openAPISchemas[oapiName]
-		hasTS := tsInterfaceExists(tsContent, ifName)
+		hasTS := tsGeneratedSchemaExists(tsContent, ifName)
 		if !hasOpenAPI || !hasTS {
 			out.Gaps = append(out.Gaps, wireStructGap{
 				GoName:        goName,
@@ -235,10 +235,6 @@ func WireStructCatalog(repoRoot string) (wireStructCatalogResult, error) {
 	sort.Slice(out.Specs, func(i, j int) bool { return out.Specs[i].GoName < out.Specs[j].GoName })
 	sort.Slice(out.Gaps, func(i, j int) bool { return out.Gaps[i].GoName < out.Gaps[j].GoName })
 	return out, nil
-}
-
-func tsInterfaceExists(content, name string) bool {
-	return tsGeneratedSchemaExists(content, name)
 }
 
 func SyncWireStructFields(root string, spec wireStructSpec) error {
@@ -265,7 +261,7 @@ func SyncWireStructFields(root string, spec wireStructSpec) error {
 }
 
 func loadOpenAPISchemaFieldSpecs(repoRoot, schema string) ([]wireField, error) {
-	props, err := loadOpenAPISchemaPropertySpecs(repoRoot, schema)
+	props, err := CachedOpenAPIPropertySpecs(repoRoot, schema)
 	if err != nil {
 		return nil, err
 	}
@@ -275,10 +271,6 @@ func loadOpenAPISchemaFieldSpecs(repoRoot, schema string) ([]wireField, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
-}
-
-func loadOpenAPISchemaPropertySpecs(repoRoot, schema string) (map[string]bool, error) {
-	return CachedOpenAPIPropertySpecs(repoRoot, schema)
 }
 
 func parseTSInterfaceFieldSpecs(repoRoot, name string) ([]wireField, error) {
@@ -356,11 +348,8 @@ var StructGoInternal = map[string]string{
 	"BoardOrientationRoot":  "BoardSnapshot member; not carried by BoardView",
 	"BoardReservationEntry": "BoardSnapshot member; rendered into pack_board text, never serialized",
 
-	"ParseResult":              "LLM structured-output landing shape",
-	"ExtractResult":            "LLM structured-output landing shape",
-	"DelegationPlan":           "LLM structured-output landing shape",
-	"DelegationLegPlan":        "DelegationPlan member",
-	"DecompositionConstraints": "DelegationPlan member",
+	"ParseResult":   "LLM structured-output landing shape",
+	"ExtractResult": "LLM structured-output landing shape",
 
 	"SpawnChildRequest":         "session store CreateChild argument; tools spawn child sessions, not an endpoint",
 	"TranscriptPageQuery":       "query-string carrier; parameters are declared in docs/openapi/components/parameters.yaml",

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/conditions"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -28,7 +27,8 @@ import (
 // ConditionDependencies declares dependencies needed to construct condition and rule engines.
 type ConditionDependencies struct {
 	ModuleRoot              string
-	DelegationStore         *delegation.SQLStore
+	PlanCloseout            func(ctx context.Context, sessionID string) (bool, error)
+	PlanWorkIDs             func(ctx context.Context, sessionID string) ([]string, error)
 	ScanStore               *scan.SQLStore
 	ScanObligation          *scan.WorkflowObligation
 	Snapshots               *sourcesnapshot.Store
@@ -53,15 +53,15 @@ func (r *Runtime) BuildConditions(ctx context.Context, deps ConditionDependencie
 	}
 
 	condReg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{
-		DelegationStore: deps.DelegationStore,
-		Evidence:        conditions.StoreEvidenceReader{Store: r.Evidence},
+		SessionWorkIDs: deps.PlanWorkIDs,
+		Evidence:       conditions.StoreEvidenceReader{Store: r.Evidence},
 		ObligationResolvers: map[string]conditions.ObligationStatusReader{
 			scan.WorkflowObligationKind: deps.ScanObligation,
 		},
 		BlueprintContent: func(_ context.Context, projectDir, relPath string) (string, error) {
 			return workflowblueprintfiles.ReadBlueprintFile(projectDir, relPath)
 		},
-		DelegationCloseout:      delegation.CloseoutComplete(deps.DelegationStore),
+		PlanCloseout:            deps.PlanCloseout,
 		SourceVerifyPassed:      deps.SourceVerifyPassed,
 		DeliveryReported:        deps.DeliveryReported,
 		ScanLedger:              deps.ScanStore,

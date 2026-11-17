@@ -165,11 +165,11 @@ func TestPromptCacheBreakpointPlacementTable(t *testing.T) {
 				boardEng := NewBoardEngine(placementStubBoardBuilder{hash: "worker-board"}, nil, nil)
 				boardEng.SetInjectRenderer(inj)
 				return AssemblyDeps{
-					Prompts:       pe,
-					Injects:       inj,
-					Limits:        func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-					WorkerContext: placementWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", Checklist: []string{"step"}}},
-					Board:         boardEng,
+					Prompts: pe,
+					Injects: inj,
+					Limits:  func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+					Workers: Workers{Leg: placementWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", Checklist: []string{"step"}}}},
+					Board:   boardEng,
 				}
 			}(),
 			sess: &api.Session{

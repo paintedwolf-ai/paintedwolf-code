@@ -112,7 +112,7 @@ Policy files retain every declared entry, package rating, rationale, and verific
 | Bundled engines and hermetic binaries | 5 | [Policy](../../dependencies/sections/engines.yaml) | Declared pin sources in policy |
 | Development, build, and verification tools | 10 | [Policy](../../dependencies/sections/tools.yaml) | Declared pin sources in policy |
 | Vendored catalogs, datasets, and specifications | 7 | [Policy](../../dependencies/sections/vendored.yaml) | Declared pin sources in policy |
-| Frontend packages (`lycaon-den`) | 67 | [Policy](../../dependencies/sections/frontend.yaml) | [Manifest](../../lycaon-den/package.json) · [Lockfile](../../lycaon-den/bun.lock) |
+| Frontend packages (`lycaon-den`) | 68 | [Policy](../../dependencies/sections/frontend.yaml) | [Manifest](../../lycaon-den/package.json) · [Lockfile](../../lycaon-den/bun.lock) |
 | Backend Go modules (`lycaon`) | 82 | [Policy](../../dependencies/sections/backend-go.yaml) | [Manifest](../../lycaon/go.mod) |
 | Tauri shell crates (`lycaon-den/src-tauri`) | 47 | [Policy](../../dependencies/sections/tauri.yaml) | [Manifest](../../lycaon-den/src-tauri/Cargo.toml) · [Lockfile](../../lycaon-den/src-tauri/Cargo.lock) |
 | Bialy decision engine crates (`lycaon/internal/decide/native`) | 10 | [Policy](../../dependencies/sections/decision-engine.yaml) | [Manifest](../../lycaon/internal/decide/native/Cargo.toml) · [Lockfile](../../lycaon/internal/decide/native/Cargo.lock) |

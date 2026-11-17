@@ -15,7 +15,7 @@ import (
 )
 
 func TestWorkflowRetiredRefusal_StartHumanRefusesRetiredVersion(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "security-survey")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
@@ -45,7 +45,7 @@ func TestWorkflowRetiredRefusal_StartHumanRefusesRetiredVersion(t *testing.T) {
 }
 
 func TestWorkflowRetiredRefusal_AdvanceRefusesMissingVersion(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "security-survey")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
@@ -84,7 +84,7 @@ func TestWorkflowRetiredRefusal_AdvanceRefusesMissingVersion(t *testing.T) {
 }
 
 func TestWorkflowRetiredRefusal_ResumeRefusesMissingVersion(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "security-survey-resume")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
@@ -130,7 +130,7 @@ func TestWorkflowRetiredRefusal_ResumeRefusesMissingVersion(t *testing.T) {
 }
 
 func TestWorkflowRetiredRefusal_ResolveFeedbackAndDecisionRefuseMissingVersion(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := people.WithCaller(context.Background(), people.Person{ID: "tester-1", Role: api.PersonRoleOwner})
 	dir := h.ProjectDir(t, "security-survey-missing")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
@@ -174,7 +174,7 @@ func TestWorkflowRetiredRefusal_ResolveFeedbackAndDecisionRefuseMissingVersion(t
 }
 
 func TestWorkflowRetiredRefusal_AutoAdvanceRefusesMissingVersion(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "security-survey-autoadvance")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
@@ -211,7 +211,7 @@ func TestWorkflowRetiredRefusal_AutoAdvanceRefusesMissingVersion(t *testing.T) {
 }
 
 func TestWorkflowRetiredRefusal_AssertRunnableRefusesMissingVersion(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "security-survey-assert-runnable")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)

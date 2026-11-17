@@ -90,32 +90,6 @@ func AgentWireSpillScopeRel(hostDataDir, modelPath string) (scopeRel string, ok 
 	return scopeRel, true
 }
 
-// IsAgentWireSpillReadArg reports whether a tool path targets an allowlisted spill.
-func IsAgentWireSpillReadArg(modelPath string) bool {
-	modelPath = strings.TrimSpace(modelPath)
-	if modelPath == "" {
-		return false
-	}
-	slash := filepath.ToSlash(modelPath)
-	if IsAgentWireSpillRel(slash) {
-		return true
-	}
-	if !filepath.IsAbs(modelPath) {
-		return false
-	}
-	lower := strings.ToLower(slash)
-	for _, prefix := range []string{
-		"/" + ToolOutputSpillDir + "/",
-		"/" + PromoteSpillDir + "/",
-		"/" + AttachmentSpillDir + "/",
-	} {
-		if i := strings.Index(lower, prefix); i >= 0 {
-			return IsAgentWireSpillRel(slash[i+1:])
-		}
-	}
-	return false
-}
-
 // EffectiveMaxSpillFileBytes returns maxSpillBytes when positive, else DefaultMaxSpillFileBytes.
 func EffectiveMaxSpillFileBytes(maxSpillBytes int) int {
 	if maxSpillBytes > 0 {

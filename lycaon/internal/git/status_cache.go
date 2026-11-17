@@ -9,10 +9,11 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/repochange"
-	"golang.org/x/sync/singleflight"
 )
 
 // DefaultStatusCacheTTL bounds board and client git staleness.
@@ -75,15 +76,6 @@ var errStatusLoadSuperseded = errors.New("git status load superseded by invalida
 
 // StatusCacheOption configures a StatusCache at construction.
 type StatusCacheOption func(*StatusCache)
-
-// WithStatusCacheClock sets the TTL clock.
-func WithStatusCacheClock(now func() time.Time) StatusCacheOption {
-	return func(c *StatusCache) {
-		if now != nil {
-			c.now = now
-		}
-	}
-}
 
 // NewStatusCache wraps loader (usually *Manager) with TTL + singleflight.
 func NewStatusCache(loader statusLoader, opts ...StatusCacheOption) *StatusCache {
@@ -421,4 +413,13 @@ func cloneStatus(st *GitStatus) *GitStatus {
 		cp.RecentCommits = append([]string(nil), st.RecentCommits...)
 	}
 	return &cp
+}
+
+// WithStatusCacheClock sets the TTL clock.
+func WithStatusCacheClock(now func() time.Time) StatusCacheOption {
+	return func(c *StatusCache) {
+		if now != nil {
+			c.now = now
+		}
+	}
 }

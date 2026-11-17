@@ -17,12 +17,12 @@ import type { AttentionIndex } from "../../attention/attention-model.ts";
 import { attentionReasonLabel } from "../../attention/attention-model.ts";
 import {
   getLycaonClient,
-  onProjectBackgroundEvent,
   onSessionEvent,
 } from "../../platform/connection/app-connection.ts";
 import {
   backgroundRunningLabel,
   sessionRunningBackgroundCount,
+  onProjectBackgroundEvent,
 } from "../../project/project-background-store.ts";
 import { confirmChatDelete } from "../../session/confirm-chat-delete.ts";
 import { exportSessionTranscript } from "../../settings/storage/data-backup-actions.ts";

@@ -59,7 +59,7 @@ func TestCoordinatorContextDietSurfaceToolsSSOT(t *testing.T) {
 	if !contractcheck.ContainsString(surfaces["implement_routing"], "promote_overlay") {
 		t.Fatal("implement_routing must expose promote_overlay for pending overlay promotion")
 	}
-	for _, tool := range []string{"task", "worker_cancel", "answer_decision", "extend_worker_budget", "decline_worker_budget", "update_progress", "promote_overlay", "reject_overlay", "wait", "ask_user"} {
+	for _, tool := range []string{"task", "worker_cancel", "answer_decision", "update_progress", "promote_overlay", "reject_overlay", "wait", "ask_user"} {
 		if !contractcheck.ContainsString(surfaces["implement_dispatch"], tool) {
 			t.Fatalf("implement_dispatch missing %q", tool)
 		}
@@ -70,7 +70,7 @@ func TestCoordinatorContextDietSurfaceToolsSSOT(t *testing.T) {
 		}
 	}
 	promote := surfaces["implement_overlay_promote"]
-	for _, tool := range []string{"promote_overlay", "reject_overlay", "preview_overlay", "worker_cancel", "answer_decision", "extend_worker_budget", "decline_worker_budget", "update_progress", "task", "wait", "ask_user"} {
+	for _, tool := range []string{"promote_overlay", "reject_overlay", "preview_overlay", "worker_cancel", "answer_decision", "update_progress", "task", "wait", "ask_user"} {
 		if !contractcheck.ContainsString(promote, tool) {
 			t.Fatalf("implement_overlay_promote missing %q", tool)
 		}

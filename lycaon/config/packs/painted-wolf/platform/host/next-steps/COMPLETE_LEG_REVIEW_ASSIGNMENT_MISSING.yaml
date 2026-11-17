@@ -1,4 +1,9 @@
 steps:
-  - tool: "request_decision"
-    say: "Use {{ call }} to ask the coordinator to dispatch the supplied work_id as a new review assignment."
-    otherwise: "Report that the supplied work_id needs a new review assignment."
+  - when: "paintedwolf.workflow_work_id != ''"
+    tool: "request_decision"
+    say: "Use {{ call }} to ask the coordinator to start {{ paintedwolf.workflow_work_id }} as a new review assignment."
+    otherwise: "Report that {{ paintedwolf.workflow_work_id }} needs a new review assignment."
+  - when: "paintedwolf.workflow_work_id == ''"
+    tool: "request_decision"
+    say: "Use {{ call }} to ask the coordinator to start the review assignment with its work identity."
+    otherwise: "Report that the review assignment needs to be started with its work identity."

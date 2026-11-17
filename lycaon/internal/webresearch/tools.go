@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"time"
 
@@ -150,6 +151,7 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 				Data: map[string]any{"reason": result.Error},
 			}
 		}
+		tctx.Effects.Out.StateCardFact(api.ActionFact{Kind: api.ActionFactFound, Count: len(result.Results), Noun: "results"})
 		hitURLs := make([]string, 0, len(result.Results))
 		for _, h := range result.Results {
 			if u := strings.TrimSpace(h.URL); u != "" {

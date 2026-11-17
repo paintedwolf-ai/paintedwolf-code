@@ -3,8 +3,6 @@ package sourceview
 import (
 	"fmt"
 	"strings"
-
-	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 )
 
 func SplitLines(s string) []string {
@@ -71,15 +69,6 @@ func DiffHunks(ops []DiffOp, context int, changed func(index int) bool) []DiffHu
 		hunks = append(hunks, h)
 	}
 	return hunks
-}
-
-// UnifiedDiff renders the structured tools' unified preview.
-func UnifiedDiff(fromName, toName string, oldLines, newLines []string, context int) string {
-	if len(oldLines) == 0 && len(newLines) == 0 {
-		return ""
-	}
-	ops, _ := DiffScript(oldLines, newLines, nil, 0)
-	return renderUnified(fromName, toName, ops, oldLines, newLines, context)
 }
 
 // lineTableCells is one line's string header in DiffScript's four-byte cells, and
@@ -168,17 +157,4 @@ func renderUnified(fromName, toName string, ops []DiffOp, oldLines, newLines []s
 		}
 	}
 	return b.String()
-}
-
-func TruncateDiffOutput(s string, maxBytes int) (string, bool) {
-	if len(s) <= maxBytes {
-		return s, false
-	}
-	cut := s[:maxBytes]
-	if idx := strings.LastIndex(cut, "\n"); idx > maxBytes/2 {
-		cut = cut[:idx+1]
-		return cut, true
-	}
-	// No newline to cut on, so the byte cap can land mid-rune.
-	return string(toolkit.TrimPartialTrailingRune([]byte(cut))), true
 }

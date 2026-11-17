@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/blueprint"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -22,6 +21,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerrecords"
+	"github.com/lycaon/lycaon/internal/workertopology"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowblueprintfiles "github.com/lycaon/lycaon/internal/workflow/blueprintfiles"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -52,7 +53,7 @@ func (s *spyWorkflowRuns) AssertWorkerTask(ctx context.Context, task *api.Worker
 	return s.inner.Fanout.AssertWorkerTask(ctx, task)
 }
 
-func newWorkflowOrchestrator(t *testing.T, rec *recordingDelegation, spy *spyWorkflowRuns) (*orchestration.OrchestratorImpl, *workflow.RunManager, *session.Host, *delegation.MemoryStore, db.Handle, string) {
+func newWorkflowOrchestrator(t *testing.T, rec *recordingWorkers, spy *spyWorkflowRuns) (*orchestration.OrchestratorImpl, *workflow.RunManager, *session.Host, *workerrecords.Store, db.Handle, string) {
 	t.Helper()
 	mockCfg, err := llm.LoadMockConfig()
 	testutil.FailErr(t, "llm.LoadMockConfig failed", err)
@@ -61,8 +62,8 @@ func newWorkflowOrchestrator(t *testing.T, rec *recordingDelegation, spy *spyWor
 
 	sessStore := store.NewSQL(sqlDB)
 	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	delStore := delegation.NewMemoryStore()
-	queue := worker.NewInMemoryQueue(10)
+	records := workerrecords.New(sqlDB)
+	queue := worker.NewSQLQueue(sqlDB, 10)
 
 	manifests, err := workflowdef.RegistryFromDirs("")
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
@@ -87,29 +88,22 @@ func newWorkflowOrchestrator(t *testing.T, rec *recordingDelegation, spy *spyWor
 	}
 	queue.SetWorkflowDomains(&worker.WorkflowDomains{Runs: spy, Tasks: spy})
 
-	gate := delegation.WorkflowDispatchGate{
-		Inner: delegation.AllowGate{},
-		Store: delStore,
-		Runs:  spy,
-	}
-	delMgr := delegation.NewManager(delStore, queue, sessMgr, gate)
+	topoRuntime := workertopology.New(records, queue)
 	if rec == nil {
-		rec = &recordingDelegation{inner: delMgr, store: delStore, order: make([]string, 0, 8)}
+		rec = &recordingWorkers{TopologyWorkers: topoRuntime, order: make([]string, 0, 8)}
 	} else {
-		rec.inner = delMgr
-		rec.store = delStore
+		rec.TopologyWorkers = topoRuntime
 	}
 
 	regAgents := loadAgentRegistryFromConfig(t)
 	stock := extpackstest.StockCatalog(t)
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
-		Delegation: rec,
-		Store:      delStore,
-		Agents:     regAgents,
-		Workflows:  &orchestration.WorkflowRunLifecycle{Runs: wfMgr.Store.Runs, Starts: wfMgr.Starts, Controls: wfMgr.Controls, Policy: wfMgr.Policy, Topology: spy},
-		Catalog:    func() (*extpacks.EffectiveCatalog, error) { return stock, nil },
+		Workers:   rec,
+		Agents:    regAgents,
+		Workflows: &orchestration.WorkflowRunLifecycle{Runs: wfMgr.Store.Runs, Starts: wfMgr.Starts, Controls: wfMgr.Controls, Policy: wfMgr.Policy, Topology: spy},
+		Catalog:   func() (*extpacks.EffectiveCatalog, error) { return stock, nil },
 	})
-	return orch, wfMgr, sessMgr, delStore, sqlDB, projectDir
+	return orch, wfMgr, sessMgr, records, sqlDB, projectDir
 }
 
 func createOrchestrateSession(t *testing.T, sqlDB db.Handle, sessMgr *session.Host, dir string) *api.Session {
@@ -146,8 +140,8 @@ func runBugbashToExpand(
 
 func TestOrchestratorRunCreatesWorkflowRun(t *testing.T) {
 	ctx := context.Background()
-	rec := &recordingDelegation{order: make([]string, 0, 8)}
-	orch, wfMgr, sessMgr, store, sqlDB, dir := newWorkflowOrchestrator(t, rec, nil)
+	rec := &recordingWorkers{order: make([]string, 0, 8)}
+	orch, wfMgr, sessMgr, records, sqlDB, dir := newWorkflowOrchestrator(t, rec, nil)
 	sess := createOrchestrateSession(t, sqlDB, sessMgr, dir)
 
 	result := runBugbashToExpand(t, ctx, orch, wfMgr, sess, dir)
@@ -158,20 +152,15 @@ func TestOrchestratorRunCreatesWorkflowRun(t *testing.T) {
 		t.Fatal("expected active workflow run")
 	}
 
-	delegationID, ok := store.DelegationBySessionID(sess.ID)
-	if !ok {
-		t.Fatal("missing delegation for session")
+	workers, err := records.ByWorkflowRun(ctx, active.ID)
+	testutil.FailErr(t, "records.ByWorkflowRun failed", err)
+	if len(workers) != 4 {
+		t.Fatalf("bound workers = %d want 4", len(workers))
 	}
-	del, err := store.Get(ctx, delegationID)
-	testutil.FailErr(t, "store.Get failed", err)
-	if del.WorkflowID != "bugbash" {
-		t.Fatalf("workflow_id = %q", del.WorkflowID)
-	}
-	if del.WorkflowVersion != "1.1.0" {
-		t.Fatalf("workflow_version = %q", del.WorkflowVersion)
-	}
-	if del.WorkflowRunID != active.ID {
-		t.Fatalf("workflow_run_id = %q want %q", del.WorkflowRunID, active.ID)
+	for _, w := range workers {
+		if w.WorkflowRunID != active.ID || w.WorkflowWorkID == "" {
+			t.Fatalf("worker binding = %+v", w)
+		}
 	}
 	if result == nil || len(result.StageOutputs) != 4 {
 		t.Fatalf("stage outputs = %d", len(result.StageOutputs))
@@ -180,7 +169,7 @@ func TestOrchestratorRunCreatesWorkflowRun(t *testing.T) {
 
 func TestOrchestratorFailureSettlesWorkflowRun(t *testing.T) {
 	ctx := t.Context()
-	rec := &recordingDelegation{order: make([]string, 0, 8), failStage: "hunt_edges"}
+	rec := &recordingWorkers{order: make([]string, 0, 8), failStage: "hunt_edges"}
 	spy := &spyWorkflowRuns{}
 	orch, wfMgr, sessMgr, _, sqlDB, dir := newWorkflowOrchestrator(t, rec, spy)
 	sess := createOrchestrateSession(t, sqlDB, sessMgr, dir)
@@ -204,7 +193,7 @@ func TestOrchestratorFailureSettlesWorkflowRun(t *testing.T) {
 
 func TestOrchestratorMarkStageOnPipelineComplete(t *testing.T) {
 	ctx := context.Background()
-	rec := &recordingDelegation{order: make([]string, 0, 2)}
+	rec := &recordingWorkers{order: make([]string, 0, 2)}
 	spy := &spyWorkflowRuns{}
 	orch, wfMgr, sessMgr, _, sqlDB, dir := newWorkflowOrchestrator(t, rec, spy)
 	sess := createOrchestrateSession(t, sqlDB, sessMgr, dir)
@@ -217,13 +206,13 @@ func TestOrchestratorMarkStageOnPipelineComplete(t *testing.T) {
 
 	var marked bool
 	spy.afterMark = func(ctx context.Context, runID, stage, output string) {
-		if stage != "research" || runID != wfRun.ID {
+		if stage != "hunt_correctness" || runID != wfRun.ID {
 			return
 		}
 		vars, err := wfMgr.Store.Runs.GetScaffoldVars(ctx, runID)
 		testutil.FailErr(t, "wfMgr.Store.Runs.GetScaffoldVars failed", err)
 		stages, _ := vars["topology_stages"].(map[string]any)
-		entry, _ := stages["research"].(map[string]any)
+		entry, _ := stages["hunt_correctness"].(map[string]any)
 		if entry == nil || entry["complete"] != true {
 			t.Fatalf("topology_stages = %v", vars["topology_stages"])
 		}
@@ -235,7 +224,7 @@ func TestOrchestratorMarkStageOnPipelineComplete(t *testing.T) {
 		Task:    "partial",
 		Pipeline: &orchestration.PipelineSpec{
 			Stages: []orchestration.PipelineStage{
-				{Name: "research", AgentProfile: orchestration.ProfileRepoResearcher},
+				{Name: "hunt_correctness", AgentProfile: orchestration.ProfileCodeReviewer},
 			},
 		},
 	}
@@ -252,13 +241,13 @@ func TestOrchestratorMarkStageOnPipelineComplete(t *testing.T) {
 	})
 	testutil.FailErr(t, "orch.Run failed", err)
 	if !marked {
-		t.Fatal("expected research stage marked in workflow scaffold vars")
+		t.Fatal("expected hunt_correctness stage marked in workflow scaffold vars")
 	}
 }
 
 func TestOrchestratorPauseRespectsAssertRunnable(t *testing.T) {
 	ctx := context.Background()
-	rec := &recordingDelegation{order: make([]string, 0, 8)}
+	rec := &recordingWorkers{order: make([]string, 0, 8)}
 	spy := &spyWorkflowRuns{}
 	orch, wfMgr, sessMgr, _, sqlDB, dir := newWorkflowOrchestrator(t, rec, spy)
 	sess := createOrchestrateSession(t, sqlDB, sessMgr, dir)
@@ -270,7 +259,7 @@ func TestOrchestratorPauseRespectsAssertRunnable(t *testing.T) {
 	testutil.FailErr(t, "wfMgr.Starts.StartHuman failed", err)
 
 	spy.afterMark = func(ctx context.Context, runID, stage, output string) {
-		if stage != "research" {
+		if stage != "hunt_correctness" {
 			return
 		}
 		if _, err := wfMgr.Controls.Pause(ctx, runID, "test_pause"); err != nil {
@@ -283,8 +272,8 @@ func TestOrchestratorPauseRespectsAssertRunnable(t *testing.T) {
 		Task:    "pause test",
 		Pipeline: &orchestration.PipelineSpec{
 			Stages: []orchestration.PipelineStage{
-				{Name: "research", AgentProfile: orchestration.ProfileRepoResearcher},
-				{Name: "plan", AgentProfile: orchestration.ProfileCoordinator, InputFrom: []string{"research"}},
+				{Name: "hunt_correctness", AgentProfile: orchestration.ProfileCodeReviewer},
+				{Name: "hunt_edges", AgentProfile: orchestration.ProfilePathExplorer, InputFrom: []string{"hunt_correctness"}},
 			},
 		},
 	}
@@ -309,7 +298,7 @@ func TestOrchestratorPauseRespectsAssertRunnable(t *testing.T) {
 
 func TestOrchestratorStatusReflectsPhase(t *testing.T) {
 	ctx := context.Background()
-	rec := &recordingDelegation{order: make([]string, 0, 8)}
+	rec := &recordingWorkers{order: make([]string, 0, 8)}
 	orch, wfMgr, sessMgr, _, sqlDB, dir := newWorkflowOrchestrator(t, rec, nil)
 	sess := createOrchestrateSession(t, sqlDB, sessMgr, dir)
 
@@ -327,7 +316,7 @@ func TestOrchestratorStatusReflectsPhase(t *testing.T) {
 
 func TestOrchestratorCancelPropagatesWorkflowRun(t *testing.T) {
 	ctx := context.Background()
-	rec := &recordingDelegation{order: make([]string, 0, 8)}
+	rec := &recordingWorkers{order: make([]string, 0, 8)}
 	orch, wfMgr, sessMgr, _, sqlDB, dir := newWorkflowOrchestrator(t, rec, nil)
 	sess := createOrchestrateSession(t, sqlDB, sessMgr, dir)
 

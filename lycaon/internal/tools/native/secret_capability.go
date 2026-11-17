@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
 	"time"
 
@@ -140,6 +141,7 @@ func ListHandler(service *secretcap.Service) tools.ToolHandler {
 		if err != nil {
 			return "", secretCapabilityFailure(err)
 		}
+		tctx.Effects.Out.StateCardFact(api.ActionFact{Kind: api.ActionFactFound, Count: len(items), Noun: "secrets"})
 		encoded, err := surveyjson.Marshal(map[string]any{"items": items, "count": len(items), "values_disclosed": false})
 		return string(encoded), err
 	}

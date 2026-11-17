@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -44,7 +43,13 @@ type Results struct {
 	digests        *Digests
 	sessions       SessionReader
 	limits         SessionLimits
+	workerNames    workercompletion.WorkerNames
+	resultNotices  ResultNotices
 }
+
+// ResultNotices describes a settled worker round for its coordinator's
+// notice; ok is false for a job that runs no worker round.
+type ResultNotices func(ctx context.Context, jobID string) (notice map[string]any, ok bool, err error)
 
 type ResultPorts struct {
 	Tasks          TaskReader
@@ -66,6 +71,14 @@ func (m *Results) SetWorkers(tasks TaskReader)              { m.tasks = tasks }
 func (m *Results) SetProofs(proofs TerminalProofs)          { m.proofs = proofs }
 func (m *Results) SetDecisions(decisions WorkerDecisions)   { m.decisions = decisions }
 func (m *Results) SetWorkflowSource(source ActiveWorkflow)  { m.workflowSource = source }
+
+// SetWorkerNames names the worker a job's round belongs to in its facts.
+func (m *Results) SetWorkerNames(names workercompletion.WorkerNames) {
+	m.workerNames = names
+}
+
+// SetResultNotices sets how a settled round is described to its coordinator.
+func (m *Results) SetResultNotices(notices ResultNotices) { m.resultNotices = notices }
 
 // ValidateWorkflow rejects incomplete worker-to-workflow composition.
 func (m *Results) ValidateWorkflow() error {
@@ -125,20 +138,23 @@ func (m *Results) EnvelopeForTerminal(ctx context.Context, sessionID, completing
 	if digest := m.digests.Take(jobID); digest != "" {
 		env.WorkerDigest = digest
 	}
+	if m.resultNotices != nil {
+		notice, ok, err := m.resultNotices(ctx, jobID)
+		if err != nil {
+			slog.WarnContext(ctx, "describe worker result for coordinator envelope", "job_id", jobID, "error", err)
+		} else if ok {
+			if env.Vars == nil {
+				env.Vars = map[string]any{}
+			}
+			env.Vars["worker_result"] = notice
+		}
+	}
 	if m.decisions != nil {
 		req, ok, err := m.decisions.GetByJob(ctx, jobID)
 		if err != nil {
 			slog.WarnContext(ctx, "load worker decision for coordinator envelope", "job_id", jobID, "error", err)
 		} else if ok {
-			env.WithWorkerDecision(req)
-		}
-	}
-	if m.tasks != nil {
-		if task, ok := m.tasks.Get(jobID); ok && task != nil {
-			facts := BudgetFacts(task, m.BudgetForTask(ctx, task))
-			if facts.Exhausted || facts.Request != nil {
-				env.WorkerBudget = &facts
-			}
+			env.WithWorkerDecision(req, m.workerName(ctx, jobID))
 		}
 	}
 	return env
@@ -229,28 +245,30 @@ func (m *Results) ProjectFailure(ctx context.Context, task SummaryInput, failure
 	return err
 }
 
-// BudgetForTask resolves ceiling bounds from the worker's parent session.
-func (m *Results) BudgetForTask(ctx context.Context, task *api.WorkerTask) spawn.WorkerToolBudget {
-	budget := spawn.DefaultWorkerToolBudget()
-	if m == nil || task == nil || m.sessions == nil || m.limits == nil {
-		return budget
-	}
-	if parent, err := m.sessions.Get(ctx, strings.TrimSpace(task.ParentSessionID)); err == nil && parent != nil {
-		budget = m.limits.Effective(ctx, parent).WorkerToolBudget()
-	}
-	return budget
-}
-
-// BudgetRequestOpen reports a live job still carrying an unanswered
-// request; a job's finish wake reports any request it ended with.
-func (m *Results) BudgetRequestOpen(jobID string) bool {
+// RoundRunning reports whether a job's round is still running, which keeps
+// its round notices actionable.
+func (m *Results) RoundRunning(jobID string) bool {
 	jobID = strings.TrimSpace(jobID)
 	if m == nil || m.tasks == nil || jobID == "" {
 		return true
 	}
 	task, ok := m.tasks.Get(jobID)
-	if !ok || task == nil || task.BudgetRequest == nil {
+	if !ok || task == nil {
 		return false
 	}
 	return task.Status == api.WorkerStatusPending || task.Status == api.WorkerStatusRunning
+}
+
+func (m *Results) workerName(ctx context.Context, jobID string) string {
+	if m.workerNames == nil {
+		return ""
+	}
+	name, ok, err := m.workerNames(ctx, jobID)
+	if err != nil {
+		slog.WarnContext(ctx, "name worker for coordinator envelope", "job_id", jobID, "error", err)
+	}
+	if !ok {
+		return ""
+	}
+	return name
 }

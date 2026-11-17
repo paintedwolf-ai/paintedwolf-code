@@ -3,11 +3,11 @@ package projectsource
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"io"
 	"os"
 
 	"github.com/lycaon/lycaon/internal/fspath"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
 // Release watcher suppression only when the failed effect left its input intact.
@@ -27,8 +27,8 @@ func sourceFailureLeavesInput(plan *sourceMutationPlan) bool {
 		}
 		defer func() { _ = file.Close() }()
 		digest := sha256.New()
-		n, err := io.Copy(digest, io.LimitReader(file, sourceledger.MaxRevisionContentBytes+1))
-		return err == nil && n <= sourceledger.MaxRevisionContentBytes && hex.EncodeToString(digest.Sum(nil)) == plan.BaseSHA256
+		n, err := io.Copy(digest, io.LimitReader(file, sourceblob.MaxRevisionContentBytes+1))
+		return err == nil && n <= sourceblob.MaxRevisionContentBytes && hex.EncodeToString(digest.Sum(nil)) == plan.BaseSHA256
 	case "batch_write":
 		for i := range plan.Writes {
 			if !sourceFailureLeavesInput(&plan.Writes[i]) {

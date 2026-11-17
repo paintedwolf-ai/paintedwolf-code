@@ -41,9 +41,12 @@ type LocalWorkerPoller struct {
 	Queue               WorkerQueue
 	Executor            WorkerExecutor
 	Outcomes            OutcomeRecorder
-	ParentWaiter        *ParentWorkerWaiter
 	InstanceID          string
 	MaintenanceInterval time.Duration
+	// Quiet raises notices for working rounds without recent progress.
+	Quiet *QuietRounds
+	// Blocked raises notices for waiting jobs whose prerequisite cannot be met.
+	Blocked *BlockedPrerequisites
 	// terminalRetryMin is the first wait before a terminal write retries.
 	terminalRetryMin time.Duration
 	sem              chan struct{}
@@ -204,6 +207,8 @@ func (p *LocalWorkerPoller) maintain(ctx context.Context) error {
 	}
 	recovered, err := p.Queue.RecoverExpiredClaims(ctx)
 	p.fanOutRecovered(ctx, recovered)
+	p.Quiet.Check(ctx)
+	p.Blocked.Check(ctx)
 	return err
 }
 

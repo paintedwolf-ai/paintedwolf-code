@@ -3,6 +3,7 @@ package sessions
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"log/slog"
 	"time"
 
@@ -77,7 +78,7 @@ func (c *credentialFiles) Authored(ctx context.Context, written tools.AuthoredCr
 		return nil
 	}
 	managed := c.managedFingerprints(written.ProjectID)
-	now := db.FormatTime(time.Now())
+	now := timelayout.Format(time.Now())
 	for _, value := range written.Values {
 		fp := c.fp.Fingerprint(value)
 		if managed[fp] || c.harvest.Has(written.RootSessionID, fp) || c.harvest.HasFileValue(written.ProjectID, fp) {

@@ -33,8 +33,8 @@ func TestToolResultsRequireSuccessfulStructuredDispatchForEnqueueFeedback(t *tes
 			if got != output || !out.Facts.HasCode("PRODUCER_FACT") {
 				t.Fatalf("producer result changed: %q %+v", got, out.Facts)
 			}
-			if out.Facts.HasCode("BANNER_TASK_QUEUED") != tc.wantQueued {
-				t.Fatalf("enqueue feedback=%+v", out.Facts)
+			if out.Facts.HasCode("BANNER_TASK_QUEUED") {
+				t.Fatalf("retired enqueue banner raised: %+v", out.Facts)
 			}
 			if !tc.wantQueued {
 				if out.Completion != nil {
@@ -45,10 +45,6 @@ func TestToolResultsRequireSuccessfulStructuredDispatchForEnqueueFeedback(t *tes
 			want := &api.ToolCompletion{Operation: "worker_dispatch", State: "enqueued", ResourceKind: "worker", ResourceID: "worker-1"}
 			if !reflect.DeepEqual(out.Completion, want) {
 				t.Fatalf("completion=%+v, want %+v", out.Completion, want)
-			}
-			feedback := out.Facts.Feedback[len(out.Facts.Feedback)-1]
-			if feedback.Subject == nil || feedback.Subject.Kind != "worker" || feedback.Subject.ID != "worker-1" || feedback.Details["agent_type"] != "implementer" || feedback.Details["job_id"] != "worker-1" {
-				t.Fatalf("feedback lost dispatch coordinates: %+v", feedback)
 			}
 		})
 	}

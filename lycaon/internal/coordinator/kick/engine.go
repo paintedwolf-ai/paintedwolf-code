@@ -172,11 +172,6 @@ func (k *KickEngine) PeekPendingKickID(sessionID string) (string, bool) {
 	return item.kickID, ok && item.kickID != ""
 }
 
-// TakePendingKickID stages the next queued kick.
-func (k *KickEngine) TakePendingKickID(sessionID string) string {
-	return k.TakePendingKickIDUnless(sessionID, nil)
-}
-
 // TakePendingKickIDUnless stages the next kick skip does not drop.
 func (k *KickEngine) TakePendingKickIDUnless(sessionID string, skip KickSkip) string {
 	if k == nil {

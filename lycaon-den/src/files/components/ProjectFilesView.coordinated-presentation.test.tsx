@@ -11,7 +11,8 @@ import { ProjectFilesView } from "./ProjectFilesView.tsx";
 import { resetEditorPrefsForTests } from "../../settings/editor/editor-prefs.ts";
 import { getAppStateSnapshot, setAppStateSnapshot } from "../../store/app-state-snapshot.ts";
 import { setProjectFilesRevealRequest } from "../tree/project-files-reveal.ts";
-import { openFilesBuffer, setFilesActiveBuffer, closeFilesBuffer } from "../documents/project-files-buffers.ts";
+import { openFilesBuffer, closeFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
+import { setFilesActiveBuffer } from "../documents/project-files-buffers.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { applyOpenFilesSurfaceRequest } from "../../platform/navigation/open-files-surface.ts";
 

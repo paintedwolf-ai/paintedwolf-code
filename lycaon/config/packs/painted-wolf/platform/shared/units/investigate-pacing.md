@@ -1,7 +1,7 @@
 ---
 description: >-
-  Dispatching parallel worker legs: batch sizes, in-flight limits, tool
-  budgets, and which work stays inline.
+  Dispatching parallel workers: batch sizes, in-flight limits, and which work
+  stays inline.
 slot: execution
 order: 20
 attaches: [task]
