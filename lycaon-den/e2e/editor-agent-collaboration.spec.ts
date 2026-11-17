@@ -6,6 +6,8 @@ import type { EditorDocument } from "../src/api/types.ts";
 import { apiJson, apiPostPrompt, openProjectFilesFixture, webE2e } from "./helpers.ts";
 
 /** The accepted text a wire document carries inside its CRDT state. */
+import { manualHarnessTools, shellWord } from "./manual-harness-tools.ts";
+
 function documentText(document: EditorDocument): string {
   const state = new Y.Doc();
   Y.applyUpdate(state, new Uint8Array(Buffer.from(document.crdt_update, "base64")));
@@ -13,7 +15,6 @@ function documentText(document: EditorDocument): string {
   state.destroy();
   return text;
 }
-import { manualHarnessTools, shellWord } from "./manual-harness-tools.ts";
 
 webE2e("agent commands read the person's unsaved text and edit it while they keep typing", async ({ page, request }) => {
   const { project, root } = await openProjectFilesFixture(page, request, {
@@ -44,7 +45,6 @@ webE2e("agent commands read the person's unsaved text and edit it while they kee
     await driver.completed(await driver.invoke("update_progress", {
       content: "## Progress\n- [ ] Update shared.txt while preserving the person's edits\n- [ ] Verify the shared document\n",
     }));
-    // The agent reads what the person sees, not the saved file.
     const read = await driver.completed(await driver.invoke("command", { command: "cat shared.txt" }));
     expect(read).toContain("Unsaved person 🐺");
     await editor.click();
