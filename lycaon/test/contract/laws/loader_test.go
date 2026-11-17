@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/laws"
 )
 
@@ -72,7 +73,7 @@ func TestEvaluateFailsOnAnUnreadableFile(t *testing.T) {
 	t.Parallel()
 	corpus := fixture(t, probeTree)
 	if err := os.Symlink(filepath.Join(corpus.Root(), "missing.go"), filepath.Join(corpus.Root(), "lycaon/internal/app/dangling.go")); err != nil {
-		t.Fatal(err)
+		contractcheck.FailErr(t, "os.Symlink failed", err)
 	}
 	expect(t, laws.Evaluate(corpus, probeRule), fails, 0)
 }

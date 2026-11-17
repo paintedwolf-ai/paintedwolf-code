@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/laws"
 	"github.com/lycaon/lycaon/test/contract/laws/forbiddencalls"
 )
@@ -235,10 +236,9 @@ func TestChildStdoutForwardingIsExact(t *testing.T) {
 		{"wrong assignment", "internal/exec/supervisor_linux.go", `func (t supervisorTarget) command() { other.Stdin, other.Stdout, other.Stderr = os.Stdin, os.Stdout, os.Stderr }`, 0, 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			file, err := parser.ParseFile(token.NewFileSet(), "fixture.go", "package fixture\n"+tc.source, 0)
-			if err != nil {
-				t.Fatal(err)
-			}
+			contractcheck.FailErr(t, "parse Go source file", err)
 			allowed := forbiddencalls.ChildStdoutForwarding(tc.path, file)
 			blocked := 0
 			ast.Inspect(file, func(node ast.Node) bool {
@@ -265,9 +265,7 @@ func TestRuntimeEvidenceRecordClassification(t *testing.T) {
 		"package shadow; type Record struct {GateType string}":                            true,
 	} {
 		file, err := parser.ParseFile(token.NewFileSet(), "fixture.go", source, 0)
-		if err != nil {
-			t.Fatal(err)
-		}
+		contractcheck.FailErr(t, "parse Go source file", err)
 		spec := file.Decls[0].(*ast.GenDecl).Specs[0].(*ast.TypeSpec)
 		if got := forbiddencalls.RuntimeEvidenceRecord(spec); got != evidence {
 			t.Fatalf("classification = %v, want %v for %s", got, evidence, source)
