@@ -148,3 +148,45 @@ func TestPublishedViewRetainsCanonicalActiveWorkingSet(t *testing.T) {
 		t.Fatal("repeated view application duplicated active exchanges")
 	}
 }
+
+// Background and forced compaction read the model-history projection:
+// transcript chrome in the canonical page never reaches the published view.
+func TestCompactionViewExcludesTranscriptChrome(t *testing.T) {
+	for _, background := range []bool{false, true} {
+		t.Run(map[bool]string{false: "forced", true: "background"}[background], func(t *testing.T) {
+			cfg := compaction.DefaultCompactionConfig()
+			cfg.KeepRecentMessages = 1
+			cfg.ChunkTokenThreshold = 100
+			cfg.ChunkTargetTokens = 40
+			cfg.ChunkMinSavingsTokens = 20
+			cfg.ChunkStrategyDefault = "truncate"
+			cfg.TargetTokens = 100
+			mgr, st := newCompactionManager(t, cfg)
+			sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+			testutil.FailErr(t, "create session", err)
+			testutil.FailErr(t, "append history", st.AppendMessages(t.Context(), sess.ID,
+				api.Message{ID: "request", Role: api.MessageRoleUser, Content: "Plan the change"},
+				api.Message{ID: "boundary", Role: api.MessageRoleSystem, Kind: api.MessageKindWorkflowBoundary, WorkflowBoundary: &api.WorkflowBoundaryMeta{Event: "started", Phase: "research"}},
+				api.Message{ID: "evidence", Role: api.MessageRoleAssistant, Content: strings.Repeat("Prior evidence\n", 1000)},
+				api.Message{ID: "recent", Role: api.MessageRoleAssistant, Content: "Continue"}))
+			if background {
+				mgr.runBackgroundCompactionPage(t.Context(), sess.ID, mgr.Compactor.(*compaction.SimpleCompactor))
+			} else {
+				_, err = mgr.ForceCompact(t.Context(), sess.ID)
+				testutil.FailErr(t, "compact session", err)
+			}
+			published, ok, err := st.GetCompactionView(t.Context(), sess.ID)
+			testutil.FailErr(t, "read published view", err)
+			if !ok {
+				t.Fatal("compaction did not publish a view")
+			}
+			var ids []string
+			for _, msg := range published.Messages {
+				ids = append(ids, msg.ID)
+			}
+			if slices.Contains(ids, "boundary") || !slices.Contains(ids, "request") || !slices.Contains(ids, "recent") {
+				t.Fatalf("published view ids = %v want request and recent without the boundary row", ids)
+			}
+		})
+	}
+}

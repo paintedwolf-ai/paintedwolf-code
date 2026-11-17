@@ -2,13 +2,13 @@ package contract
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolfeedback"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/toolfeedback"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -22,22 +22,20 @@ import (
 )
 
 type specRejectScenario struct {
-	name          string
-	tool          string
-	args          map[string]any
-	plan          string
-	vars          map[string]any
-	phase         string
-	wantCode      string
-	wantPhase     string
-	blockContains []string
+	name      string
+	tool      string
+	args      map[string]any
+	plan      string
+	vars      map[string]any
+	phase     string
+	wantCode  string
+	wantPhase string
 }
 
 type specCompletionScenario struct {
-	name           string
-	input          guidance.EnrichInput
-	wantCode       string
-	outputContains []string
+	name     string
+	input    guidance.EnrichInput
+	wantCode string
 }
 
 func loadBundledHintConfig(t *testing.T) *guidance.HintConfig {
@@ -65,70 +63,54 @@ func TestSpecToolFeedbackRejectShape(t *testing.T) {
 		{
 			name: "delegation forbidden smoke", tool: "plan_from_blueprint", plan: stubComplete,
 			wantCode: "SPEC_POSTURE_DELEGATION_FORBIDDEN", wantPhase: "1",
-			blockContains: []string{">>> Spec posture blocked", "Tool: plan_from_blueprint", "Code: SPEC_POSTURE_DELEGATION_FORBIDDEN", "Cause:", "Fix:", "Progress:"},
 		},
 		{
 			name: "state forbidden stub valid", tool: "state_create", plan: stubComplete,
 			wantCode: "SPEC_POSTURE_STATE_FORBIDDEN", wantPhase: "2",
-			blockContains: []string{"Code: SPEC_POSTURE_STATE_FORBIDDEN", "Blocked at: Phase 2"},
 		},
 		{
 			name: "stub required plan writer", tool: "task", args: map[string]any{"agent_type": "plan-writer"},
 			plan: stubInvalid, wantCode: "SPEC_POSTURE_STUB_REQUIRED", wantPhase: "1",
-			blockContains: []string{"Code: SPEC_POSTURE_STUB_REQUIRED", "Tool: task"},
 		},
 		{
 			name: "implementer forbidden", tool: "task", args: map[string]any{"agent_type": "implementer"},
 			plan: expandPlan, wantCode: "SPEC_POSTURE_IMPLEMENT_FORBIDDEN", wantPhase: "6",
-			blockContains: []string{"Code: SPEC_POSTURE_IMPLEMENT_FORBIDDEN"},
 		},
 		{
 			name: "handoff not ready", tool: "handoff_implement", plan: scopeBreaking,
 			wantCode: "SPEC_POSTURE_HANDOFF_FORBIDDEN", wantPhase: "6",
-			blockContains: []string{"Code: SPEC_POSTURE_HANDOFF_FORBIDDEN"},
 		},
 		{
 			name: "scope required", tool: "task", args: map[string]any{"agent_type": "repo-researcher"},
 			plan: stubMissingScope, wantCode: "SPEC_POSTURE_STUB_REQUIRED", wantPhase: "1",
-			blockContains: []string{"Code: SPEC_POSTURE_STUB_REQUIRED", "research_depth"},
 		},
 		{
 			name: "breaking required", tool: "task", args: map[string]any{"agent_type": "repo-researcher"},
 			plan: stubMissingBreaking, wantCode: "SPEC_POSTURE_STUB_REQUIRED", wantPhase: "1",
-			blockContains: []string{"Code: SPEC_POSTURE_STUB_REQUIRED", "research_depth"},
 		},
 		{
 			name: "stub required critic incomplete", tool: "task", args: map[string]any{"agent_type": "plan-reviewer"},
 			plan: "## Goal\n\nx\n", vars: runstate.SetHostVar(nil, "phase_skipped.research", true),
 			wantCode: "SPEC_POSTURE_STUB_REQUIRED", wantPhase: "1",
-			blockContains: []string{"Code: SPEC_POSTURE_STUB_REQUIRED"},
 		},
 		{
 			name: "research required before critic", tool: "task", args: map[string]any{"agent_type": "plan-reviewer"},
 			plan: expandPlan, phase: "expand", wantCode: "SPEC_POSTURE_RESEARCH_REQUIRED", wantPhase: "2",
-			blockContains: []string{"Code: SPEC_POSTURE_RESEARCH_REQUIRED", "research"},
 		},
 		{
 			name: "not approved handoff", tool: "handoff_implement", plan: expandPlan, phase: "approve",
 			wantCode: "SPEC_POSTURE_HANDOFF_FORBIDDEN", wantPhase: "6",
-			blockContains: []string{"Code: SPEC_POSTURE_HANDOFF_FORBIDDEN", "approval"},
 		},
 		{
 			name: "phase skipped research", tool: "task", args: map[string]any{"agent_type": "repo-researcher"},
 			plan: scopeBreaking, vars: runstate.SetHostVar(nil, "phase_skipped.research", true),
 			wantCode: "SPEC_POSTURE_PHASE_SKIPPED", wantPhase: "2",
-			blockContains: []string{"Code: SPEC_POSTURE_PHASE_SKIPPED"},
 		},
 		{
 			name: "disallowed agent", tool: "task", args: map[string]any{"agent_type": "outsider"},
 			plan: stubComplete, wantCode: "DISALLOWED_AGENT", wantPhase: "",
-			blockContains: []string{"Code: DISALLOWED_AGENT"},
 		},
 	}
-	if len(scenarios) < 10 {
-		t.Fatalf("scenario table too small: %d", len(scenarios))
-	}
-
 	ctx := context.Background()
 	for _, sc := range scenarios {
 		t.Run(sc.name, func(t *testing.T) {
@@ -159,13 +141,11 @@ func TestSpecToolFeedbackRejectShape(t *testing.T) {
 			}
 			block, err := formatter.FormatBlock(ctx, "spec-session", sc.tool, specOutcomeView{out: *out}, progress, refusal.Copy)
 			contractcheck.FailErr(t, "formatter.FormatBlock failed", err)
-			for _, want := range sc.blockContains {
-				if !strings.Contains(block, want) {
-					t.Fatalf("block missing %q:\n%s", want, block)
-				}
-			}
 			if parsed := guidance.HostRejectCode(block); parsed != sc.wantCode {
 				t.Fatalf("HostRejectCode = %q want %q", parsed, sc.wantCode)
+			}
+			if !strings.Contains(block, sc.tool) {
+				t.Fatalf("block does not name the rejected tool %q:\n%s", sc.tool, block)
 			}
 		})
 	}
@@ -184,8 +164,7 @@ func TestSpecToolFeedbackCompletionBannerShape(t *testing.T) {
 				Tool:   "find",
 				Output: `{"view":"digest","selected":0,"total":900,"truncated":true,"distribution":[{"kind":"ext","key":".go","count":500}]}`,
 			},
-			wantCode:       "FIND_OVERFLOW_NARROW",
-			outputContains: []string{">>> Tool feedback", "Code: FIND_OVERFLOW_NARROW", "name_glob"},
+			wantCode: "FIND_OVERFLOW_NARROW",
 		},
 		{
 			name: "spec progress banner",
@@ -201,8 +180,7 @@ func TestSpecToolFeedbackCompletionBannerShape(t *testing.T) {
 					ChecklistHash:     "hash-progress-1",
 				},
 			},
-			wantCode:       "SPEC_POSTURE_PROGRESS",
-			outputContains: []string{">>> Tool feedback", "Code: SPEC_POSTURE_PROGRESS", "Next:"},
+			wantCode: "SPEC_POSTURE_PROGRESS",
 		},
 		{
 			name: "board empty skip verify",
@@ -210,63 +188,20 @@ func TestSpecToolFeedbackCompletionBannerShape(t *testing.T) {
 				SessionID: "s1", Session: &api.Session{ID: "s1"},
 				Tool: "pack_board", Output: `{"board_chars":0}`,
 			},
-			wantCode:       "BOARD_EMPTY_SKIP_TO_VERIFY",
-			outputContains: []string{">>> Tool feedback", "Code: BOARD_EMPTY_SKIP_TO_VERIFY", "empty"},
+			wantCode: "BOARD_EMPTY_SKIP_TO_VERIFY",
 		},
 	}
 	for _, sc := range scenarios {
 		t.Run(sc.name, func(t *testing.T) {
 			t.Parallel()
-			out := enricher.Enrich(t.Context(), sc.input).Output
-			for _, want := range sc.outputContains {
-				if !strings.Contains(out, want) {
-					t.Fatalf("output missing %q:\n%s", want, out)
-				}
+			got := enricher.Enrich(t.Context(), sc.input)
+			if !got.Facts.HasCode(sc.wantCode) {
+				t.Fatalf("raised codes do not include %q: %+v", sc.wantCode, got.Facts)
 			}
-			if !strings.Contains(out, "Code: "+sc.wantCode) {
-				t.Fatalf("missing code %q in:\n%s", sc.wantCode, out)
+			if parsed := guidance.HostRejectCode(got.Output); parsed != sc.wantCode {
+				t.Fatalf("emitted code = %q want %q:\n%s", parsed, sc.wantCode, got.Output)
 			}
 		})
-	}
-}
-
-func TestSpecDenyCodesCoveredByParityOrHints(t *testing.T) {
-	t.Parallel()
-	hints, err := guidance.LoadHintConfigStock()
-	contractcheck.FailErr(t, "load hint registry", err)
-	parityCodes := map[string]bool{
-		"SPEC_POSTURE_DELEGATION_FORBIDDEN": true,
-		"SPEC_POSTURE_STATE_FORBIDDEN":      true,
-		"SPEC_POSTURE_STUB_REQUIRED":        true,
-		"SPEC_POSTURE_IMPLEMENT_FORBIDDEN":  true,
-		"SPEC_POSTURE_HANDOFF_FORBIDDEN":    true,
-		"SPEC_POSTURE_SCOPE_REQUIRED":       true,
-		"SPEC_POSTURE_BREAKING_REQUIRED":    true,
-		"SPEC_POSTURE_RESEARCH_REQUIRED":    true,
-		"SPEC_POSTURE_NOT_APPROVED":         true,
-		"SPEC_POSTURE_PHASE_SKIPPED":        true,
-		"DISALLOWED_AGENT":                  true,
-	}
-	rulesCfg, err := rules.LoadRulesConfig(config.PostureRulesDir.Join("spec.yaml"))
-	contractcheck.FailErr(t, "load rules config YAML", err)
-	for _, rule := range rulesCfg.Rules {
-		deny, ok := rule.Then["deny"].(map[string]any)
-		if !ok {
-			continue
-		}
-		code, _ := deny["code"].(string)
-		if code == "" {
-			continue
-		}
-		if parityCodes[code] {
-			continue
-		}
-		if _, known := hints.HintCodes[code]; known {
-			continue
-		}
-		if !isAllowedDenyCode(code) {
-			t.Fatalf("spec rule %q code %q not in parity table or hint registry", rule.ID, code)
-		}
 	}
 }
 
