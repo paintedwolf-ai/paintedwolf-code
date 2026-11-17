@@ -29,11 +29,17 @@ func TestBackgroundLaunchSettlesFastExitWithoutLiveIndicator(t *testing.T) {
 	testutil.FailErr(t, "launch background command", err)
 	var start hostcmd.BackgroundStartResult
 	testutil.FailErr(t, "decode launch", json.Unmarshal([]byte(raw), &start))
-	if !start.Background || !start.ExitedEarly || start.ExitCode == nil || *start.ExitCode != 0 || !strings.Contains(start.Tail, "background-complete") {
-		t.Fatalf("completed launch = %+v", start)
+	if !start.Background || captured.Process == nil || captured.Process.Handle != start.Handle {
+		t.Fatalf("background launch = %+v / %+v", start, captured.Process)
 	}
-	if captured.Process == nil || captured.Process.Handle != start.Handle || captured.Process.Running || reg.HasRunning(ctx.Identity.SessionID) {
-		t.Fatalf("completed launch retained live status: %+v", captured.Process)
+	// Whether the launch saw the exit depends on host speed; what it reports must match what it saw.
+	if start.ExitedEarly && (start.ExitCode == nil || *start.ExitCode != 0 || !strings.Contains(start.Tail, "background-complete") || captured.Process.Running) {
+		t.Fatalf("launch that saw the exit = %+v / %+v", start, captured.Process)
+	}
+	finished, err := reg.Lifecycle.Await(t.Context(), ctx.Identity.SessionID, start.Handle, 0)
+	testutil.FailErr(t, "await background settlement", err)
+	if !finished || reg.HasRunning(ctx.Identity.SessionID) {
+		t.Fatal("settled background command retained live status")
 	}
 	output := &command.CommandOutputTool{Registry: reg}
 	raw, err = output.Run(t.Context(), map[string]any{"handle": start.Handle}, ctx)
