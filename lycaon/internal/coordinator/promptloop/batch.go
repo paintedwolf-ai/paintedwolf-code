@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
-	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -508,32 +507,10 @@ func (l *toolBatch) executeOneToolCall(
 		out := l.refusePreInvokeReject(ctx, sess, sessionID, tc, assistantMessageID, settled.reject)
 		return attachRejectReceipt(out, settled.receipt)
 	}
-	maxBytes, maxSpillBytes := l.toolResultLimits(ctx, sess)
-	if run.succeeded() {
-		if code, data := tooloutput.ClassifyEmitReject(tc.Name, tc.Args, run.content, maxSpillBytes); code != "" {
-			spillWireLog.Info("tool emit rejected",
-				"code", code,
-				"tool", tc.Name,
-				"bytes", data["bytes"],
-				"cap", data["cap"])
-			run = l.Tools.refuseOutputDelivery(ctx, sess, tc, toolCtx, run, code, data)
-		}
-	}
 	if run.facts.Resolution() == api.ToolResultOutcomeRejected {
 		return l.settleRejectedInvocation(ctx, sess, sessionID, tc, assistantMessageID, run)
 	}
-
-	// Compact only after stamping evidence handles.
-	storageProjection := l.Projection.projectToolResultForStorage(ctx, run.content, tc.Args)
-	projected := l.Tools.truncateToolResultForSession(
-		ctx,
-		tc.Name,
-		storageProjection,
-		run.content,
-		maxBytes,
-		maxSpillBytes,
-		sess,
-	)
+	projected := l.fitToolOutput(ctx, sess, tc.Name, tc.Args, run.content, run.succeeded())
 	if projected.reject != nil {
 		run = l.Tools.refuseOutputDelivery(ctx, sess, tc, toolCtx, run, projected.reject.Code, projected.reject.Data)
 		return l.settleRejectedInvocation(ctx, sess, sessionID, tc, assistantMessageID, run)
