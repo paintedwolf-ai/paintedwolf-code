@@ -277,6 +277,7 @@ func (s *conformanceSweep) send(ctx context.Context, req conformanceRequest) con
 		r.Header.Set("Authorization", api.TestAuthHeader())
 	case credentialWrong:
 		r.Header.Set("Authorization", "Bearer not-"+api.TestAPIToken)
+	case credentialNone:
 	}
 	if req.announcedLength > 0 {
 		r.ContentLength = req.announcedLength
