@@ -62,6 +62,8 @@ func TestScanCompletedByRunnerReadsThroughServer(t *testing.T) {
 		},
 	}}
 	reg := &scan.MockRegistry{Scanner: mock}
+	// The host's coordinator selects the scanner's contract for the execution manifest.
+	coord.Registry = reg
 	ing := &scan.IngesterImpl{
 		Module:                  scancfg.DefaultModuleConfig(),
 		Budget:                  scancfg.NewFindingBudget(scancfg.DefaultAgentBudget()),
