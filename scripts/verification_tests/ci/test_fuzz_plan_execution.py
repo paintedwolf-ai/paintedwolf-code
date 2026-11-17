@@ -54,8 +54,17 @@ class FuzzPlanTests(unittest.TestCase):
 
     def run_main(self, *argv):
         stderr = io.StringIO()
-        with contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(io.StringIO()):
-            code = fuzz_plan.main(list(argv))
+        # go test writes to the inherited descriptors; keep its deliberate
+        # failure lines out of this runner's own output.
+        saved = os.dup(1)
+        self.addCleanup(os.close, saved)
+        with open(os.devnull, "w") as devnull:
+            os.dup2(devnull.fileno(), 1)
+            try:
+                with contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(io.StringIO()):
+                    code = fuzz_plan.main(list(argv))
+            finally:
+                os.dup2(saved, 1)
         return code, stderr.getvalue()
 
     def test_listing_reads_tagged_files_the_plan_declares(self):

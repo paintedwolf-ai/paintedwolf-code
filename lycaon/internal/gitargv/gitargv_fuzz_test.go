@@ -49,7 +49,7 @@ func FuzzGitArgvWordsStayOperands(f *testing.F) {
 			if strings.HasPrefix(trimmed, "-") {
 				t.Fatalf("ValidateCloneURL admitted option %q", word)
 			}
-			if helper := gitHelper.FindStringSubmatch(trimmed); helper != nil && (strings.EqualFold(helper[1], "ext") || strings.EqualFold(helper[1], "fd")) {
+			if helper := gitHelper.FindStringSubmatch(trimmed); len(helper) > 1 && (strings.EqualFold(helper[1], "ext") || strings.EqualFold(helper[1], "fd")) {
 				t.Fatalf("ValidateCloneURL admitted command helper %q", word)
 			}
 		}
