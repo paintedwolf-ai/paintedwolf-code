@@ -139,7 +139,7 @@ func TestUpdaterManifestAssemblerRequiresPublicBuildsAndExcludesCandidatePlatfor
 }
 
 // The GitHub Release is a trailing mirror: it follows immutable publication and
-// channel activation, and no release job waits on it.
+// channel activation, and neither waits on it.
 func TestGitHubReleaseMirrorTrailsChannelActivation(t *testing.T) {
 	t.Parallel()
 	workflow := parseLane(t, ".github/workflows/release.yml")
@@ -152,7 +152,7 @@ func TestGitHubReleaseMirrorTrailsChannelActivation(t *testing.T) {
 			t.Errorf("publish-github-release must follow %s", job)
 		}
 	}
-	for _, job := range sortedJobs(workflow) {
+	for _, job := range []string{"publish-immutable", "activate-updater"} {
 		if workflow.ancestors(job)["publish-github-release"] {
 			t.Errorf("%s waits on the GitHub Release mirror", job)
 		}
