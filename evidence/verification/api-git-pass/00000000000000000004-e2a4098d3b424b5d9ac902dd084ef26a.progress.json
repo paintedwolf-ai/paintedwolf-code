@@ -1,0 +1,56 @@
+{
+  "completed": [
+    0
+  ],
+  "evidence": [
+    {
+      "excluded_tests": {
+        "github.com/lycaon/lycaon/internal/api/hostcontracts": {
+          "files": [
+            "catalog_handler_integration_test.go",
+            "catalog_session_integration_test.go",
+            "compose_handler_integration_test.go",
+            "events_integration_test.go",
+            "git_handlers_integration_test.go",
+            "mcp_handlers_integration_test.go",
+            "persist_handler_integration_test.go",
+            "project_agent_context_integration_test.go",
+            "project_clone_integration_test.go"
+          ],
+          "tags": [
+            "integration"
+          ]
+        },
+        "github.com/lycaon/lycaon/internal/api/sourcecontracts": {
+          "files": [
+            "source_content_limits_integration_test.go"
+          ],
+          "tags": [
+            "integration"
+          ]
+        }
+      },
+      "packages": [
+        "github.com/lycaon/lycaon/internal/api/hostcontracts",
+        "github.com/lycaon/lycaon/internal/api/sourcecontracts"
+      ],
+      "results": {
+        "github.com/lycaon/lycaon/internal/api/hostcontracts": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/c24b7e98443f40129256eb4ebee42860/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/c24b7e98443f40129256eb4ebee42860/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/sourcecontracts": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/c24b7e98443f40129256eb4ebee42860/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/c24b7e98443f40129256eb4ebee42860/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        }
+      },
+      "stage": "test:short"
+    }
+  ]
+}

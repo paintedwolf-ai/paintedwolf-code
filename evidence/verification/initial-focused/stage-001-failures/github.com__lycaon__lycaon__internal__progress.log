@@ -1,0 +1,359 @@
+=== RUN   TestPreparedAuthorUpdateHasNoEffectUntilApply
+--- PASS: TestPreparedAuthorUpdateHasNoEffectUntilApply (0.00s)
+=== NAME  
+=== RUN   TestPreparedAuthorUpdateRejectsWithoutWrites
+--- PASS: TestPreparedAuthorUpdateRejectsWithoutWrites (0.00s)
+=== NAME  
+=== RUN   TestPreparedAuthorUpdateUsesTheAppliedSessionHistory
+--- PASS: TestPreparedAuthorUpdateUsesTheAppliedSessionHistory (0.00s)
+=== NAME  
+=== RUN   TestAuthorUpdateRequiresAndPreservesStableItemIDs
+--- PASS: TestAuthorUpdateRequiresAndPreservesStableItemIDs (0.00s)
+=== NAME  
+=== RUN   TestAuthorUpdateTreatsBootstrappedEmptyProgressAsFirstCreation
+--- PASS: TestAuthorUpdateTreatsBootstrappedEmptyProgressAsFirstCreation (0.00s)
+=== NAME  
+=== RUN   TestOpenTurnForgetsThePreviousTurn
+--- PASS: TestOpenTurnForgetsThePreviousTurn (0.00s)
+=== NAME  
+=== RUN   TestWorkClockPausesWhileAnExecutionWaitsOnAPerson
+--- PASS: TestWorkClockPausesWhileAnExecutionWaitsOnAPerson (0.00s)
+=== NAME  
+=== RUN   TestAuthorUpdatePublishesOnlySettledStoreOutcomes
+=== RUN   TestAuthorUpdatePublishesOnlySettledStoreOutcomes/store_failure
+--- PASS: TestAuthorUpdatePublishesOnlySettledStoreOutcomes/store_failure (0.00s)
+=== NAME  TestAuthorUpdatePublishesOnlySettledStoreOutcomes
+=== RUN   TestAuthorUpdatePublishesOnlySettledStoreOutcomes/callback_cancellation
+--- PASS: TestAuthorUpdatePublishesOnlySettledStoreOutcomes/callback_cancellation (0.00s)
+=== NAME  TestAuthorUpdatePublishesOnlySettledStoreOutcomes
+--- PASS: TestAuthorUpdatePublishesOnlySettledStoreOutcomes (0.00s)
+=== NAME  
+=== RUN   TestTurnClockWirePreservesLiveSpanPrecision
+--- PASS: TestTurnClockWirePreservesLiveSpanPrecision (0.00s)
+=== NAME  
+=== RUN   TestWriteObserverReleaseStopsDelivery
+--- PASS: TestWriteObserverReleaseStopsDelivery (0.00s)
+=== NAME  
+=== RUN   TestTurnHasProgressGatedTool
+--- PASS: TestTurnHasProgressGatedTool (0.00s)
+=== NAME  
+=== RUN   TestFirstProgressGatedTool
+--- PASS: TestFirstProgressGatedTool (0.00s)
+=== NAME  
+=== RUN   TestProgressGatedToolAttemptedSinceBoundary_countsRejectedTask
+--- PASS: TestProgressGatedToolAttemptedSinceBoundary_countsRejectedTask (0.00s)
+=== NAME  
+=== RUN   TestInitProgressGatedTools_loadsCatalog
+--- PASS: TestInitProgressGatedTools_loadsCatalog (0.00s)
+=== NAME  
+=== RUN   TestSynthesisReconcileOnly_allowsClosePending
+--- PASS: TestSynthesisReconcileOnly_allowsClosePending (0.00s)
+=== NAME  
+=== RUN   TestSynthesisReconcileOnly_rejectsNewPending
+--- PASS: TestSynthesisReconcileOnly_rejectsNewPending (0.00s)
+=== NAME  
+=== RUN   TestSynthesisReconcileOnly_rejectsMissingPlan
+--- PASS: TestSynthesisReconcileOnly_rejectsMissingPlan (0.00s)
+=== NAME  
+=== RUN   TestSynthesisReconcileOnly_rejectsReopen
+--- PASS: TestSynthesisReconcileOnly_rejectsReopen (0.00s)
+=== NAME  
+=== RUN   TestSynthesisReconcileOnly_allowsNA
+--- PASS: TestSynthesisReconcileOnly_allowsNA (0.00s)
+=== NAME  
+=== RUN   TestSeedChecklistAppendsValidPendingRows
+--- PASS: TestSeedChecklistAppendsValidPendingRows (0.00s)
+=== NAME  
+=== RUN   TestAuthorUpdateRevisionAdmitsOneConcurrentReplacement
+--- PASS: TestAuthorUpdateRevisionAdmitsOneConcurrentReplacement (0.00s)
+=== NAME  
+=== RUN   TestAuthorUpdateSeparatesDocumentAndDeliverableChanges
+--- PASS: TestAuthorUpdateSeparatesDocumentAndDeliverableChanges (0.00s)
+=== NAME  
+=== RUN   TestSnapshotRevisionIncludesBoundRun
+--- PASS: TestSnapshotRevisionIncludesBoundRun (0.00s)
+=== NAME  
+=== RUN   TestAuthorUpdateRejectsOversizeWithoutTruncatingState
+--- PASS: TestAuthorUpdateRejectsOversizeWithoutTruncatingState (0.00s)
+=== NAME  
+=== RUN   TestDeliverableTransitionsAreInvariantUnderRowPermutation
+--- PASS: TestDeliverableTransitionsAreInvariantUnderRowPermutation (0.00s)
+=== NAME  
+=== RUN   TestSnapshotMaxLegalChecklistAndItemIDsBudget
+--- PASS: TestSnapshotMaxLegalChecklistAndItemIDsBudget (0.00s)
+=== NAME  
+=== RUN   TestProgressSummarySeparatesTerminalAndCompleted
+=== RUN   TestProgressSummarySeparatesTerminalAndCompleted/empty
+--- PASS: TestProgressSummarySeparatesTerminalAndCompleted/empty (0.00s)
+=== NAME  TestProgressSummarySeparatesTerminalAndCompleted
+=== RUN   TestProgressSummarySeparatesTerminalAndCompleted/partial
+--- PASS: TestProgressSummarySeparatesTerminalAndCompleted/partial (0.00s)
+=== NAME  TestProgressSummarySeparatesTerminalAndCompleted
+=== RUN   TestProgressSummarySeparatesTerminalAndCompleted/complete
+--- PASS: TestProgressSummarySeparatesTerminalAndCompleted/complete (0.00s)
+=== NAME  TestProgressSummarySeparatesTerminalAndCompleted
+=== RUN   TestProgressSummarySeparatesTerminalAndCompleted/not_pursued
+--- PASS: TestProgressSummarySeparatesTerminalAndCompleted/not_pursued (0.00s)
+=== NAME  TestProgressSummarySeparatesTerminalAndCompleted
+=== RUN   TestProgressSummarySeparatesTerminalAndCompleted/optional_only
+--- PASS: TestProgressSummarySeparatesTerminalAndCompleted/optional_only (0.00s)
+=== NAME  TestProgressSummarySeparatesTerminalAndCompleted
+=== RUN   TestProgressSummarySeparatesTerminalAndCompleted/optional_remaining
+--- PASS: TestProgressSummarySeparatesTerminalAndCompleted/optional_remaining (0.00s)
+=== NAME  TestProgressSummarySeparatesTerminalAndCompleted
+--- PASS: TestProgressSummarySeparatesTerminalAndCompleted (0.00s)
+=== NAME  
+=== RUN   TestBuildProgressUpdate
+=== RUN   TestBuildProgressUpdate/initial_0_to_N_carries_the_full_plan_and_its_counts
+--- PASS: TestBuildProgressUpdate/initial_0_to_N_carries_the_full_plan_and_its_counts (0.00s)
+=== NAME  TestBuildProgressUpdate
+=== RUN   TestBuildProgressUpdate/mid-run_delta_carries_its_changes_and_the_plan_counts
+--- PASS: TestBuildProgressUpdate/mid-run_delta_carries_its_changes_and_the_plan_counts (0.00s)
+=== NAME  TestBuildProgressUpdate
+=== RUN   TestBuildProgressUpdate/large_initial_plan_carries_only_its_counts
+--- PASS: TestBuildProgressUpdate/large_initial_plan_carries_only_its_counts (0.00s)
+=== NAME  TestBuildProgressUpdate
+=== RUN   TestBuildProgressUpdate/large_mid-run_delta_carries_only_the_plan_counts
+--- PASS: TestBuildProgressUpdate/large_mid-run_delta_carries_only_the_plan_counts (0.00s)
+=== NAME  TestBuildProgressUpdate
+=== RUN   TestBuildProgressUpdate/completing_write_is_superseded_by_completion_bar
+--- PASS: TestBuildProgressUpdate/completing_write_is_superseded_by_completion_bar (0.00s)
+=== NAME  TestBuildProgressUpdate
+=== RUN   TestBuildProgressUpdate/no_change_is_silent
+--- PASS: TestBuildProgressUpdate/no_change_is_silent (0.00s)
+=== NAME  TestBuildProgressUpdate
+=== RUN   TestBuildProgressUpdate/already-complete_baseline_still_emits_non-completing_delta
+--- PASS: TestBuildProgressUpdate/already-complete_baseline_still_emits_non-completing_delta (0.00s)
+=== NAME  TestBuildProgressUpdate
+--- PASS: TestBuildProgressUpdate (0.00s)
+=== NAME  
+=== RUN   TestEnsureBootstrap_staleRunRefreshesGoalAndPlan
+--- PASS: TestEnsureBootstrap_staleRunRefreshesGoalAndPlan (0.00s)
+=== NAME  
+=== RUN   TestEnsureBootstrap_sameRunOpenPlanNoOp
+--- PASS: TestEnsureBootstrap_sameRunOpenPlanNoOp (0.00s)
+=== NAME  
+=== RUN   TestEnsureBootstrap_sameRunTerminalPlanStartsFreshRun
+--- PASS: TestEnsureBootstrap_sameRunTerminalPlanStartsFreshRun (0.00s)
+=== NAME  
+=== RUN   TestEnsureBootstrap_sameRunEmptyPlanNoOp
+--- PASS: TestEnsureBootstrap_sameRunEmptyPlanNoOp (0.00s)
+=== NAME  
+=== RUN   TestAdoptActiveRun_unboundBindsWithoutWipe
+--- PASS: TestAdoptActiveRun_unboundBindsWithoutWipe (0.00s)
+=== NAME  
+=== RUN   TestAdoptActiveRun_distinctRunResets
+--- PASS: TestAdoptActiveRun_distinctRunResets (0.00s)
+=== NAME  
+=== RUN   TestAdoptActiveRun_sameRunNoOp
+--- PASS: TestAdoptActiveRun_sameRunNoOp (0.00s)
+=== NAME  
+=== RUN   TestEnsureBootstrap_unboundDocBindsWithoutWipe
+--- PASS: TestEnsureBootstrap_unboundDocBindsWithoutWipe (0.00s)
+=== NAME  
+=== RUN   TestEnsureBootstrap_setPreservesBoundRun
+--- PASS: TestEnsureBootstrap_setPreservesBoundRun (0.00s)
+=== NAME  
+=== RUN   TestClockBanksActiveTimeAcrossRefcount
+--- PASS: TestClockBanksActiveTimeAcrossRefcount (0.00s)
+=== NAME  
+=== RUN   TestWaitsBankActiveButNotWorkTime
+--- PASS: TestWaitsBankActiveButNotWorkTime (0.00s)
+=== NAME  
+=== RUN   TestOpenTurnZeroesAccrualButKeepsRunning
+--- PASS: TestOpenTurnZeroesAccrualButKeepsRunning (0.00s)
+=== NAME  
+=== RUN   TestRestoreTurnClockOnlySeedsAnUnclockedRoot
+--- PASS: TestRestoreTurnClockOnlySeedsAnUnclockedRoot (0.00s)
+=== NAME  
+=== RUN   TestClockUnknownRootIsZero
+--- PASS: TestClockUnknownRootIsZero (0.00s)
+=== NAME  
+=== RUN   TestDiffSteps
+=== RUN   TestDiffSteps/no_change
+--- PASS: TestDiffSteps/no_change (0.00s)
+=== NAME  TestDiffSteps
+=== RUN   TestDiffSteps/create_from_empty
+--- PASS: TestDiffSteps/create_from_empty (0.00s)
+=== NAME  TestDiffSteps
+=== RUN   TestDiffSteps/mark_done
+--- PASS: TestDiffSteps/mark_done (0.00s)
+=== NAME  TestDiffSteps
+=== RUN   TestDiffSteps/mark_na
+--- PASS: TestDiffSteps/mark_na (0.00s)
+=== NAME  TestDiffSteps
+=== RUN   TestDiffSteps/reopened
+--- PASS: TestDiffSteps/reopened (0.00s)
+=== NAME  TestDiffSteps
+=== RUN   TestDiffSteps/label_edit_pairs_into_updated
+--- PASS: TestDiffSteps/label_edit_pairs_into_updated (0.00s)
+=== NAME  TestDiffSteps
+=== RUN   TestDiffSteps/relabel_and_reorder_preserves_identity
+--- PASS: TestDiffSteps/relabel_and_reorder_preserves_identity (0.00s)
+=== NAME  TestDiffSteps
+=== RUN   TestDiffSteps/duplicate_labels_track_distinct_item_IDs
+--- PASS: TestDiffSteps/duplicate_labels_track_distinct_item_IDs (0.00s)
+=== NAME  TestDiffSteps
+=== RUN   TestDiffSteps/removed
+--- PASS: TestDiffSteps/removed (0.00s)
+=== NAME  TestDiffSteps
+=== RUN   TestDiffSteps/reorder_is_no_change
+--- PASS: TestDiffSteps/reorder_is_no_change (0.00s)
+=== NAME  TestDiffSteps
+=== RUN   TestDiffSteps/add_and_complete_in_one_diff
+--- PASS: TestDiffSteps/add_and_complete_in_one_diff (0.00s)
+=== NAME  TestDiffSteps
+--- PASS: TestDiffSteps (0.00s)
+=== NAME  
+=== RUN   TestDeriveProgress_parsesChecklist
+--- PASS: TestDeriveProgress_parsesChecklist (0.00s)
+=== NAME  
+=== RUN   TestProgressMissing
+--- PASS: TestProgressMissing (0.00s)
+=== NAME  
+=== RUN   TestDeriveProgress_clampsOverlongLabel
+--- PASS: TestDeriveProgress_clampsOverlongLabel (0.00s)
+=== NAME  
+=== RUN   TestDeriveProgress_supportsFortyEightRows
+--- PASS: TestDeriveProgress_supportsFortyEightRows (0.00s)
+=== NAME  
+=== RUN   TestSummarizeUpdate_countsCurrentStates
+--- PASS: TestSummarizeUpdate_countsCurrentStates (0.00s)
+=== NAME  
+=== RUN   TestDeriveProgress_parsesNA
+--- PASS: TestDeriveProgress_parsesNA (0.00s)
+=== NAME  
+=== RUN   TestAllTerminal_naCountsTerminal
+--- PASS: TestAllTerminal_naCountsTerminal (0.00s)
+=== NAME  
+=== RUN   TestHasOpenSteps
+--- PASS: TestHasOpenSteps (0.00s)
+=== NAME  
+=== RUN   TestOpenStepCount
+=== RUN   TestOpenStepCount/missing_plan
+--- PASS: TestOpenStepCount/missing_plan (0.00s)
+=== NAME  TestOpenStepCount
+=== RUN   TestOpenStepCount/all_terminal
+--- PASS: TestOpenStepCount/all_terminal (0.00s)
+=== NAME  TestOpenStepCount
+=== RUN   TestOpenStepCount/one_open_row
+--- PASS: TestOpenStepCount/one_open_row (0.00s)
+=== NAME  TestOpenStepCount
+=== RUN   TestOpenStepCount/open_rows_are_the_dispatch_width
+--- PASS: TestOpenStepCount/open_rows_are_the_dispatch_width (0.00s)
+=== NAME  TestOpenStepCount
+=== RUN   TestOpenStepCount/optional_rows_are_not_open_work
+--- PASS: TestOpenStepCount/optional_rows_are_not_open_work (0.00s)
+=== NAME  TestOpenStepCount
+=== RUN   TestOpenStepCount/done_and_n/a_both_close_a_row
+--- PASS: TestOpenStepCount/done_and_n/a_both_close_a_row (0.00s)
+=== NAME  TestOpenStepCount
+--- PASS: TestOpenStepCount (0.00s)
+=== NAME  
+=== RUN   TestDeriveProgress_inlinePlanHeader
+--- PASS: TestDeriveProgress_inlinePlanHeader (0.00s)
+=== NAME  
+=== RUN   TestOptionalState
+--- PASS: TestOptionalState (0.00s)
+=== NAME  
+=== RUN   TestCloseCounts
+--- PASS: TestCloseCounts (0.00s)
+=== NAME  
+=== RUN   TestMemoryStore_roundtrip
+--- PASS: TestMemoryStore_roundtrip (0.00s)
+=== NAME  
+=== RUN   TestBumpRevision_monotonic
+--- PASS: TestBumpRevision_monotonic (0.00s)
+=== NAME  
+=== RUN   TestValidateAuthorProgress_acceptsOverlongLabel
+--- PASS: TestValidateAuthorProgress_acceptsOverlongLabel (0.00s)
+=== NAME  
+=== RUN   TestPlanChecklistLineCount
+--- PASS: TestPlanChecklistLineCount (0.00s)
+=== NAME  
+=== RUN   TestValidateAuthorProgress_noOpenStep
+--- PASS: TestValidateAuthorProgress_noOpenStep (0.00s)
+=== NAME  
+=== RUN   TestFirstNestedChecklistLine
+--- PASS: TestFirstNestedChecklistLine (0.00s)
+=== NAME  
+=== RUN   TestFirstPendingAfterOptional
+--- PASS: TestFirstPendingAfterOptional (0.00s)
+=== NAME  
+=== RUN   TestProgressCreationCannotBlindlyReplaceAnExistingDocument
+=== RUN   TestProgressCreationCannotBlindlyReplaceAnExistingDocument/memory
+--- PASS: TestProgressCreationCannotBlindlyReplaceAnExistingDocument/memory (0.00s)
+=== NAME  TestProgressCreationCannotBlindlyReplaceAnExistingDocument
+=== RUN   TestProgressCreationCannotBlindlyReplaceAnExistingDocument/sql
+2026/11/17 07:23:12 WARN event outbox not wired: dropping events topic=message
+--- PASS: TestProgressCreationCannotBlindlyReplaceAnExistingDocument/sql (0.21s)
+=== NAME  TestProgressCreationCannotBlindlyReplaceAnExistingDocument
+--- PASS: TestProgressCreationCannotBlindlyReplaceAnExistingDocument (0.21s)
+=== NAME  
+=== RUN   TestSQLProgressRevisionSurvivesReopenAndRejectsStaleABA
+--- PASS: TestSQLProgressRevisionSurvivesReopenAndRejectsStaleABA (0.10s)
+=== NAME  
+=== RUN   TestProgressStoresKeepAtomicSnapshotOnRejectedOrCanceledUpdates
+=== RUN   TestProgressStoresKeepAtomicSnapshotOnRejectedOrCanceledUpdates/memory
+--- PASS: TestProgressStoresKeepAtomicSnapshotOnRejectedOrCanceledUpdates/memory (0.00s)
+=== NAME  TestProgressStoresKeepAtomicSnapshotOnRejectedOrCanceledUpdates
+=== RUN   TestProgressStoresKeepAtomicSnapshotOnRejectedOrCanceledUpdates/sql
+--- PASS: TestProgressStoresKeepAtomicSnapshotOnRejectedOrCanceledUpdates/sql (0.10s)
+=== NAME  TestProgressStoresKeepAtomicSnapshotOnRejectedOrCanceledUpdates
+--- PASS: TestProgressStoresKeepAtomicSnapshotOnRejectedOrCanceledUpdates (0.10s)
+=== NAME  
+=== RUN   TestRunRefreshUsesTransactionalPredecessor
+=== RUN   TestRunRefreshUsesTransactionalPredecessor/bootstrap
+    sql_run_transition_test.go:38: refresh plan: constraint failed: CHECK constraint failed: json_valid(item_ids_json) AND json_type(item_ids_json) = 'array' (275)
+--- FAIL: TestRunRefreshUsesTransactionalPredecessor/bootstrap (0.11s)
+=== NAME  TestRunRefreshUsesTransactionalPredecessor
+=== RUN   TestRunRefreshUsesTransactionalPredecessor/adoption
+    sql_run_transition_test.go:22: insert next run: constraint failed: UNIQUE constraint failed: workflow_runs.session_id (2067)
+--- FAIL: TestRunRefreshUsesTransactionalPredecessor/adoption (0.10s)
+=== NAME  TestRunRefreshUsesTransactionalPredecessor
+--- FAIL: TestRunRefreshUsesTransactionalPredecessor (0.20s)
+=== NAME  
+=== RUN   TestUnboundPlanAdoptionPreservesContentAndItemIdentity
+--- PASS: TestUnboundPlanAdoptionPreservesContentAndItemIdentity (0.10s)
+=== NAME  
+=== RUN   TestVisiblePlanWithoutWorkflowRunIsRefused
+--- PASS: TestVisiblePlanWithoutWorkflowRunIsRefused (0.09s)
+=== NAME  
+=== RUN   TestPlanRowsCommitWithTransitionsAndSurviveRestart
+--- PASS: TestPlanRowsCommitWithTransitionsAndSurviveRestart (0.20s)
+=== NAME  
+=== RUN   TestDelayedNotificationsCannotReorderOrRelabelPlanRows
+    sql_transcript_test.go:152: insert child run: constraint failed: UNIQUE constraint failed: workflow_runs.session_id (2067)
+--- FAIL: TestDelayedNotificationsCannotReorderOrRelabelPlanRows (0.10s)
+=== NAME  
+=== RUN   TestPlanAndTranscriptRollbackTogether
+=== RUN   TestPlanAndTranscriptRollbackTogether/plan_insertion
+--- PASS: TestPlanAndTranscriptRollbackTogether/plan_insertion (0.11s)
+=== NAME  TestPlanAndTranscriptRollbackTogether
+=== RUN   TestPlanAndTranscriptRollbackTogether/message_insertion
+--- PASS: TestPlanAndTranscriptRollbackTogether/message_insertion (0.10s)
+=== NAME  TestPlanAndTranscriptRollbackTogether
+=== RUN   TestPlanAndTranscriptRollbackTogether/outbox_insertion
+--- PASS: TestPlanAndTranscriptRollbackTogether/outbox_insertion (0.11s)
+=== NAME  TestPlanAndTranscriptRollbackTogether
+=== RUN   TestPlanAndTranscriptRollbackTogether/before_commit
+--- PASS: TestPlanAndTranscriptRollbackTogether/before_commit (0.10s)
+=== NAME  TestPlanAndTranscriptRollbackTogether
+=== RUN   TestPlanAndTranscriptRollbackTogether/commit_constraint
+--- PASS: TestPlanAndTranscriptRollbackTogether/commit_constraint (0.11s)
+=== NAME  TestPlanAndTranscriptRollbackTogether
+=== RUN   TestPlanAndTranscriptRollbackTogether/cancellation
+--- PASS: TestPlanAndTranscriptRollbackTogether/cancellation (0.10s)
+=== NAME  TestPlanAndTranscriptRollbackTogether
+--- PASS: TestPlanAndTranscriptRollbackTogether (0.64s)
+=== NAME  
+=== RUN   TestPlanRunIdentityIsValidatedBeforeMutation
+=== RUN   TestPlanRunIdentityIsValidatedBeforeMutation/missing
+--- PASS: TestPlanRunIdentityIsValidatedBeforeMutation/missing (0.10s)
+=== NAME  TestPlanRunIdentityIsValidatedBeforeMutation
+=== RUN   TestPlanRunIdentityIsValidatedBeforeMutation/foreign
+--- PASS: TestPlanRunIdentityIsValidatedBeforeMutation/foreign (0.10s)
+=== NAME  TestPlanRunIdentityIsValidatedBeforeMutation
+--- PASS: TestPlanRunIdentityIsValidatedBeforeMutation (0.19s)
+=== NAME  
+FAIL

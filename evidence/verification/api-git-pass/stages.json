@@ -1,0 +1,37 @@
+[
+  {
+    "command": [
+      "bash",
+      "scripts/go-test-digest.sh",
+      "--name",
+      "test:short",
+      "--",
+      "github.com/lycaon/lycaon/internal/api/hostcontracts",
+      "github.com/lycaon/lycaon/internal/api/sourcecontracts"
+    ],
+    "consumers": [
+      "00000000000000000004-e2a4098d3b424b5d9ac902dd084ef26a"
+    ],
+    "exit_code": 0,
+    "finished_at": 1794931383.3725696,
+    "locks": [
+      "go"
+    ],
+    "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/c24b7e98443f40129256eb4ebee42860/stage-001.log",
+    "names": [
+      "test:short"
+    ],
+    "packages": [
+      "github.com/lycaon/lycaon/internal/api/hostcontracts",
+      "github.com/lycaon/lycaon/internal/api/sourcecontracts"
+    ],
+    "queued_at": 1794931226.2174726,
+    "reused_packages": 0,
+    "shared_locks": [
+      "go"
+    ],
+    "stage_id": "stage-001",
+    "started_at": 1794931226.2179084,
+    "workers": 4
+  }
+]

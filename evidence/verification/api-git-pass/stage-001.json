@@ -1,0 +1,57 @@
+{
+  "completed": true,
+  "digest_exit_code": 0,
+  "invocation": {
+    "created_at": "2026-11-17T16:00:33.907120+00:00",
+    "effective_go_argv": [
+      "-json",
+      "-p=2",
+      "-parallel=2",
+      "-timeout",
+      "0",
+      "-short",
+      "github.com/lycaon/lycaon/internal/api/hostcontracts",
+      "github.com/lycaon/lycaon/internal/api/sourcecontracts"
+    ],
+    "environment": {
+      "CGO_ENABLED": null,
+      "CI": null,
+      "GOARCH": null,
+      "GODEBUG": null,
+      "GOEXPERIMENT": null,
+      "GOFLAGS": "-p=2",
+      "GOMAXPROCS": "2",
+      "GOOS": null,
+      "GO_TEST_P": "2",
+      "GO_TEST_PARALLEL": "2",
+      "LANG": "en_US.UTF-8",
+      "LC_ALL": "C.UTF-8",
+      "LYCAON_LLM_MOCK": "1",
+      "LYCAON_OPENGREP_CANDIDATE": null,
+      "LYCAON_SCANNER_SUITE_REQUIRED": null,
+      "OPENGREP_STAGE_DIR": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/bin/opengrep-bundle",
+      "PATH": "/home/cdbeckman/.cache/paintedwolf/bin:/home/cdbeckman/go/bin:/usr/local/go/bin:/home/cdbeckman/.local/bin:/home/cdbeckman/.bun/bin:/home/cdbeckman/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+      "PW_GO_TEST_TIMEOUT_SECONDS": "7200",
+      "TZ": null
+    },
+    "failed_packages": [],
+    "id": "20261117T080033-1348037-22946",
+    "name": "test:short",
+    "runner_argv": [
+      "--name",
+      "test:short",
+      "--",
+      "github.com/lycaon/lycaon/internal/api/hostcontracts",
+      "github.com/lycaon/lycaon/internal/api/sourcecontracts"
+    ],
+    "source_commit": "fc7444f19990204c2abc3d4aefb92542f54a2d4e",
+    "source_ref": "refs/painted-wolf/test-failures/20261117T080033-1348037-22946",
+    "source_root": "/tmp/paintedwolf-source-snapshots-1000/08681b479e98-1",
+    "version": 1
+  },
+  "packages": {
+    "github.com/lycaon/lycaon/internal/api/hostcontracts": "pass",
+    "github.com/lycaon/lycaon/internal/api/sourcecontracts": "pass"
+  },
+  "process_exit_code": 0
+}

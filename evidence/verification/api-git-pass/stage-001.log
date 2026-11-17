@@ -1,0 +1,15 @@
+   Compiling document-core v0.1.0 (/tmp/paintedwolf-source-snapshots-1000/08681b479e98-1/lycaon/internal/documentcore/native)
+    Finished `release` profile [optimized] target(s) in 7.37s
+
+  ✓ test:short — 2 packages, no failures
+    test and subtest results: 518 passed, 0 failed, 1 skipped
+    0 packages with no captured test results
+    slowest packages (elapsed, not additive):
+      146.19s  github.com/lycaon/lycaon/internal/api/hostcontracts
+      94.43s  github.com/lycaon/lycaon/internal/api/sourcecontracts
+    slowest tests (elapsed, not additive):
+      4.49s  github.com/lycaon/lycaon/internal/api/hostcontracts TestWorktreeReach_realProductWorkflow
+      4.20s  github.com/lycaon/lycaon/internal/api/hostcontracts TestStreamReplayRequiresTranscriptMembership
+      3.93s  github.com/lycaon/lycaon/internal/api/hostcontracts TestGitWorktreeLandHappyAndNothingToLand
+      3.89s  github.com/lycaon/lycaon/internal/api/hostcontracts TestGitWorktreeRemoveHappyDirtyStale
+      3.37s  github.com/lycaon/lycaon/internal/api/sourcecontracts TestSourceVersionsMergedHistoryReads

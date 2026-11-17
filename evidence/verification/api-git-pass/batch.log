@@ -1,0 +1,19 @@
+test execution: admitted batch c24b7e98443f40129256eb4ebee42860 (1 requests, worker budget 8)
+test execution: stage-001: test:short (1 requests); log /home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/c24b7e98443f40129256eb4ebee42860/stage-001.log
+   Compiling document-core v0.1.0 (/tmp/paintedwolf-source-snapshots-1000/08681b479e98-1/lycaon/internal/documentcore/native)
+    Finished `release` profile [optimized] target(s) in 7.37s
+
+  ✓ test:short — 2 packages, no failures
+    test and subtest results: 518 passed, 0 failed, 1 skipped
+    0 packages with no captured test results
+    slowest packages (elapsed, not additive):
+      146.19s  github.com/lycaon/lycaon/internal/api/hostcontracts
+      94.43s  github.com/lycaon/lycaon/internal/api/sourcecontracts
+    slowest tests (elapsed, not additive):
+      4.49s  github.com/lycaon/lycaon/internal/api/hostcontracts TestWorktreeReach_realProductWorkflow
+      4.20s  github.com/lycaon/lycaon/internal/api/hostcontracts TestStreamReplayRequiresTranscriptMembership
+      3.93s  github.com/lycaon/lycaon/internal/api/hostcontracts TestGitWorktreeLandHappyAndNothingToLand
+      3.89s  github.com/lycaon/lycaon/internal/api/hostcontracts TestGitWorktreeRemoveHappyDirtyStale
+      3.37s  github.com/lycaon/lycaon/internal/api/sourcecontracts TestSourceVersionsMergedHistoryReads
+test execution: test:short: passed; receipt /home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/c24b7e98443f40129256eb4ebee42860/00000000000000000004-e2a4098d3b424b5d9ac902dd084ef26a.json
+test execution: test:short: 10 test files in 2 packages need build tags integration and did not run; seatbelt:gated, test:full, test:integration, test:race, test:security run them

@@ -1,0 +1,10 @@
+{
+  "executions": 1,
+  "finished_at": 1794928998.4356456,
+  "requested_stages": 1,
+  "requests": 1,
+  "reused_packages": 0,
+  "source_commit": "286a2f546dc999d5b936ef911fe38eb8cbea7174",
+  "source_tree": "47677fdfe0605a7695cfae595e1dafcfb736dcd2",
+  "started_at": 1794928948.1733482
+}

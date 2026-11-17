@@ -1,0 +1,5 @@
+{"package":"github.com/lycaon/lycaon/internal/session/store","exit_code":0,"elapsed":16.729,"reused":false,"forked":null,"recorded":false}
+{"package":"github.com/lycaon/lycaon/internal/workflow/phases","exit_code":0,"elapsed":4.07,"reused":false,"forked":null,"recorded":false}
+{"package":"github.com/lycaon/lycaon/internal/session/instructions","exit_code":0,"elapsed":0.062,"reused":false,"forked":null,"recorded":false}
+{"package":"github.com/lycaon/lycaon/internal/progress","exit_code":1,"elapsed":1.966,"reused":false,"forked":null,"recorded":false,"output":"/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/b5ab10abc4dc46319962ec2affadbc7f/stage-001-failures/github.com__lycaon__lycaon__internal__progress.log","tests":["TestRunRefreshUsesTransactionalPredecessor/bootstrap","TestRunRefreshUsesTransactionalPredecessor/adoption","TestRunRefreshUsesTransactionalPredecessor","TestDelayedNotificationsCannotReorderOrRelabelPlanRows"]}
+{"package":"github.com/lycaon/lycaon/internal/workflow","exit_code":0,"elapsed":15.439,"reused":false,"forked":null,"recorded":false}

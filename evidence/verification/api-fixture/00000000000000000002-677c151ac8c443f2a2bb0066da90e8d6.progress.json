@@ -1,0 +1,363 @@
+{
+  "completed": [],
+  "evidence": [
+    {
+      "excluded_tests": {
+        "github.com/lycaon/lycaon/internal/api": {
+          "files": [
+            "backup_policy_validation_test.go",
+            "backup_restore_pending_test.go"
+          ],
+          "tags": [
+            "integration"
+          ]
+        },
+        "github.com/lycaon/lycaon/internal/api/gitadmin": {
+          "files": [
+            "source_scan_test.go"
+          ],
+          "tags": [
+            "integration"
+          ]
+        },
+        "github.com/lycaon/lycaon/internal/api/hostcontracts": {
+          "files": [
+            "catalog_handler_integration_test.go",
+            "catalog_session_integration_test.go",
+            "compose_handler_integration_test.go",
+            "events_integration_test.go",
+            "git_handlers_integration_test.go",
+            "mcp_handlers_integration_test.go",
+            "persist_handler_integration_test.go",
+            "project_agent_context_integration_test.go",
+            "project_clone_integration_test.go"
+          ],
+          "tags": [
+            "integration"
+          ]
+        },
+        "github.com/lycaon/lycaon/internal/api/searchcontracts": {
+          "files": [
+            "search_export_integration_test.go",
+            "search_integration_test.go"
+          ],
+          "tags": [
+            "integration"
+          ]
+        },
+        "github.com/lycaon/lycaon/internal/api/sessioncontracts": {
+          "files": [
+            "ambient_session_attach_integration_test.go",
+            "checkpoint_handlers_integration_test.go",
+            "cost_integration_test.go",
+            "llm_integration_test.go",
+            "prompt_integration_test.go",
+            "session_lifecycle_integration_test.go"
+          ],
+          "tags": [
+            "integration"
+          ]
+        },
+        "github.com/lycaon/lycaon/internal/api/sourcecontracts": {
+          "files": [
+            "source_content_limits_integration_test.go"
+          ],
+          "tags": [
+            "integration"
+          ]
+        }
+      },
+      "packages": [
+        "github.com/lycaon/lycaon/internal/api",
+        "github.com/lycaon/lycaon/internal/api/apitest",
+        "github.com/lycaon/lycaon/internal/api/briefingadmin",
+        "github.com/lycaon/lycaon/internal/api/capabilityadmin",
+        "github.com/lycaon/lycaon/internal/api/contractfixture",
+        "github.com/lycaon/lycaon/internal/api/editoradmin",
+        "github.com/lycaon/lycaon/internal/api/extensionadmin",
+        "github.com/lycaon/lycaon/internal/api/gitadmin",
+        "github.com/lycaon/lycaon/internal/api/historyadmin",
+        "github.com/lycaon/lycaon/internal/api/hostcontracts",
+        "github.com/lycaon/lycaon/internal/api/httpio",
+        "github.com/lycaon/lycaon/internal/api/mcpadmin",
+        "github.com/lycaon/lycaon/internal/api/modeladmin",
+        "github.com/lycaon/lycaon/internal/api/projectadmin",
+        "github.com/lycaon/lycaon/internal/api/projectview",
+        "github.com/lycaon/lycaon/internal/api/promptadmin",
+        "github.com/lycaon/lycaon/internal/api/requestscope",
+        "github.com/lycaon/lycaon/internal/api/researchadmin",
+        "github.com/lycaon/lycaon/internal/api/scanadmin",
+        "github.com/lycaon/lycaon/internal/api/searchadmin",
+        "github.com/lycaon/lycaon/internal/api/searchcontracts",
+        "github.com/lycaon/lycaon/internal/api/secretview",
+        "github.com/lycaon/lycaon/internal/api/sessionadmin",
+        "github.com/lycaon/lycaon/internal/api/sessioncontracts",
+        "github.com/lycaon/lycaon/internal/api/sessionview",
+        "github.com/lycaon/lycaon/internal/api/settingsadmin",
+        "github.com/lycaon/lycaon/internal/api/sourceapi",
+        "github.com/lycaon/lycaon/internal/api/sourcecontracts",
+        "github.com/lycaon/lycaon/internal/api/taskgroup",
+        "github.com/lycaon/lycaon/internal/api/workflowadmin"
+      ],
+      "results": {
+        "github.com/lycaon/lycaon/internal/api": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/apitest": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/briefingadmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/capabilityadmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/contractfixture": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/editoradmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/extensionadmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/gitadmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/historyadmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/hostcontracts": {
+          "exit_code": 1,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "output": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001-failures/github.com__lycaon__lycaon__internal__api__hostcontracts.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "failed",
+          "tests": [
+            "TestGitWorktreeBindHappyPath",
+            "TestSourceWorkspaceDeclaresProjectCheckoutForUnboundChats",
+            "TestGitWorktreeBindDerivesBranch",
+            "TestGitWorktreeBindRejectsTakenBranch",
+            "TestGitWorktreeBindRejectsSecondBinding",
+            "TestGitWorktreeBindRejectsBusySession",
+            "TestGitWorktreeBindRejectsUnavailableRepo",
+            "TestGitWorktreeBindRejectsDetachedHead",
+            "TestGitWorktreeBindLeavesConfigUntouched",
+            "TestGitWorktreeBindRollsBack",
+            "TestGitWorktreeViewUnbound",
+            "TestGitWorktreeViewStaleAndReady",
+            "TestGitWorktreeLandHappyAndNothingToLand",
+            "TestGitWorktreeLandConflict",
+            "TestGitWorktreeLandNotBound",
+            "TestGitWorktreeRemoveNotBound",
+            "TestGitWorktreeLandBusy",
+            "TestGitWorktreeLandRefusalsKeepTheirCodes",
+            "TestGitWorktreeRemoveHappyDirtyStale",
+            "TestDeleteSessionMappedWhenWorktreeBound"
+          ]
+        },
+        "github.com/lycaon/lycaon/internal/api/httpio": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/mcpadmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/modeladmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/projectadmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/projectview": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/promptadmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/requestscope": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/researchadmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/scanadmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/searchadmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/searchcontracts": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/secretview": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/sessionadmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/sessioncontracts": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/sessionview": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/settingsadmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/sourceapi": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/sourcecontracts": {
+          "exit_code": 1,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "output": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001-failures/github.com__lycaon__lycaon__internal__api__sourcecontracts.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "failed",
+          "tests": [
+            "TestCommitBaselineReadsTheNestedRootsOwnFile",
+            "TestRestoreGitCausedVersionUsesGitObjectStore",
+            "TestRestoreGitCausedVersionRefusesDriftedGitBytes",
+            "TestSourceVersionsMergedHistoryReads",
+            "TestCommitStatePreviewsAndRestoresFromTheObjectStore",
+            "TestCommitRestoreRefusesADriftedObject",
+            "TestCommitBaselineTreatsADirectoryInHeadAsAbsent",
+            "TestCommitBaselineReportsAnUncommittedFileAsAbsent",
+            "TestCommitReviewKeepsIndexOnlyAndUnavailableChanges",
+            "TestCommitReviewIncludesUnobservedGitChangesWithoutCreatingHistory",
+            "TestCommitReviewBeforeFirstCommitAndChangedHead",
+            "TestCommitReviewHistoryEnrichesLiveContentsAndPreservesPresentation",
+            "TestCommitReviewRejectsPaginationAcrossMembershipChanges",
+            "TestSourceVersionsGitLaneReportsAbsenceSeparatelyFromFailure",
+            "TestGitMovementReviewReadsCommitWithoutFileEffects",
+            "TestGitAmendReviewSeparatesCommitFromMovement",
+            "TestGitReviewSpecialFileComparisons",
+            "TestGitMergeReviewSelectsEachParent",
+            "TestCachedGitHistoryRefreshesRetainedVersionMatches",
+            "TestSourceRevisionsResolveTypedSpecsPerRoot"
+          ]
+        },
+        "github.com/lycaon/lycaon/internal/api/taskgroup": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/workflowadmin": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        }
+      },
+      "stage": "test:short"
+    }
+  ]
+}

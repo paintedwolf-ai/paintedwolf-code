@@ -1,0 +1,22 @@
+{
+  "completed": [
+    0
+  ],
+  "evidence": [
+    {
+      "packages": [
+        "github.com/lycaon/lycaon/internal/progress"
+      ],
+      "results": {
+        "github.com/lycaon/lycaon/internal/progress": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/71337301299f46eca966a659bab3e7f2/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/71337301299f46eca966a659bab3e7f2/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        }
+      },
+      "stage": "test:short"
+    }
+  ]
+}

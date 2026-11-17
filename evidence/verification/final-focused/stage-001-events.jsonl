@@ -1,0 +1,4 @@
+{"package":"github.com/lycaon/lycaon/internal/session/instructions","exit_code":0,"elapsed":0.33,"reused":false,"forked":null,"recorded":false}
+{"package":"github.com/lycaon/lycaon/internal/progress","exit_code":0,"elapsed":2.553,"reused":false,"forked":null,"recorded":false}
+{"package":"github.com/lycaon/lycaon/internal/workflow","exit_code":0,"elapsed":15.456,"reused":false,"forked":null,"recorded":false}
+{"package":"github.com/lycaon/lycaon/internal/app","exit_code":0,"elapsed":30.897,"reused":false,"forked":null,"recorded":false}

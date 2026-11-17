@@ -1,0 +1,68 @@
+{
+  "completed": true,
+  "digest_exit_code": 1,
+  "invocation": {
+    "created_at": "2026-11-17T15:22:36.231232+00:00",
+    "effective_go_argv": [
+      "-json",
+      "-p=4",
+      "-parallel=1",
+      "-timeout",
+      "0",
+      "-short",
+      "github.com/lycaon/lycaon/internal/session/store",
+      "github.com/lycaon/lycaon/internal/workflow",
+      "github.com/lycaon/lycaon/internal/workflow/phases",
+      "github.com/lycaon/lycaon/internal/progress",
+      "github.com/lycaon/lycaon/internal/session/instructions"
+    ],
+    "environment": {
+      "CGO_ENABLED": null,
+      "CI": null,
+      "GOARCH": null,
+      "GODEBUG": null,
+      "GOEXPERIMENT": null,
+      "GOFLAGS": "-p=4",
+      "GOMAXPROCS": "1",
+      "GOOS": null,
+      "GO_TEST_P": "4",
+      "GO_TEST_PARALLEL": "1",
+      "LANG": "en_US.UTF-8",
+      "LC_ALL": "C.UTF-8",
+      "LYCAON_LLM_MOCK": "1",
+      "LYCAON_OPENGREP_CANDIDATE": null,
+      "LYCAON_SCANNER_SUITE_REQUIRED": null,
+      "OPENGREP_STAGE_DIR": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/bin/opengrep-bundle",
+      "PATH": "/home/cdbeckman/.cache/paintedwolf/bin:/home/cdbeckman/go/bin:/usr/local/go/bin:/home/cdbeckman/.local/bin:/home/cdbeckman/.bun/bin:/home/cdbeckman/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+      "PW_GO_TEST_TIMEOUT_SECONDS": "7200",
+      "TZ": null
+    },
+    "failed_packages": [
+      "github.com/lycaon/lycaon/internal/progress"
+    ],
+    "id": "20261117T072236-1269905-20733",
+    "name": "test:short",
+    "runner_argv": [
+      "--name",
+      "test:short",
+      "--",
+      "github.com/lycaon/lycaon/internal/session/store",
+      "github.com/lycaon/lycaon/internal/workflow",
+      "github.com/lycaon/lycaon/internal/workflow/phases",
+      "github.com/lycaon/lycaon/internal/progress",
+      "github.com/lycaon/lycaon/internal/session/instructions"
+    ],
+    "source_commit": "286a2f546dc999d5b936ef911fe38eb8cbea7174",
+    "source_ref": "refs/painted-wolf/test-failures/20261117T072236-1269905-20733",
+    "source_root": "/tmp/paintedwolf-source-snapshots-1000/08681b479e98-0",
+    "version": 1
+  },
+  "packages": {
+    "github.com/lycaon/lycaon/internal/progress": "fail",
+    "github.com/lycaon/lycaon/internal/session/instructions": "pass",
+    "github.com/lycaon/lycaon/internal/session/store": "pass",
+    "github.com/lycaon/lycaon/internal/workflow": "pass",
+    "github.com/lycaon/lycaon/internal/workflow/phases": "pass"
+  },
+  "process_exit_code": 1
+}

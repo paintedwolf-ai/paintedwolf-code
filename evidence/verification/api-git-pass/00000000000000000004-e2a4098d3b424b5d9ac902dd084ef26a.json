@@ -1,0 +1,68 @@
+{
+  "batch_id": "c24b7e98443f40129256eb4ebee42860",
+  "compatibility": "5ccc1260431272344bbf3360718a2563cc840fc391b6d98238a535e2821f9748",
+  "evidence": [
+    {
+      "excluded_tests": {
+        "github.com/lycaon/lycaon/internal/api/hostcontracts": {
+          "files": [
+            "catalog_handler_integration_test.go",
+            "catalog_session_integration_test.go",
+            "compose_handler_integration_test.go",
+            "events_integration_test.go",
+            "git_handlers_integration_test.go",
+            "mcp_handlers_integration_test.go",
+            "persist_handler_integration_test.go",
+            "project_agent_context_integration_test.go",
+            "project_clone_integration_test.go"
+          ],
+          "tags": [
+            "integration"
+          ]
+        },
+        "github.com/lycaon/lycaon/internal/api/sourcecontracts": {
+          "files": [
+            "source_content_limits_integration_test.go"
+          ],
+          "tags": [
+            "integration"
+          ]
+        }
+      },
+      "packages": [
+        "github.com/lycaon/lycaon/internal/api/hostcontracts",
+        "github.com/lycaon/lycaon/internal/api/sourcecontracts"
+      ],
+      "results": {
+        "github.com/lycaon/lycaon/internal/api/hostcontracts": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/c24b7e98443f40129256eb4ebee42860/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/c24b7e98443f40129256eb4ebee42860/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/api/sourcecontracts": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/c24b7e98443f40129256eb4ebee42860/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/c24b7e98443f40129256eb4ebee42860/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        }
+      },
+      "stage": "test:short"
+    }
+  ],
+  "exit_code": 0,
+  "finished_at": 1794931383.3784328,
+  "names": [
+    "test:short"
+  ],
+  "queued_at": 1794931223.8842566,
+  "request": "00000000000000000004-e2a4098d3b424b5d9ac902dd084ef26a",
+  "source_commit": "fc7444f19990204c2abc3d4aefb92542f54a2d4e",
+  "source_root": "/home/cdbeckman/plan-transcript-transactions",
+  "source_tree": "5e776bf2692764b4677b78b578d316d4066c32a2",
+  "started_at": 1794931226.0021746,
+  "status": "passed",
+  "unverified_stages": []
+}

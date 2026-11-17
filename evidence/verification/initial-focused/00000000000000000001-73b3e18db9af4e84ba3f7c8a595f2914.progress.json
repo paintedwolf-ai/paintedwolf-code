@@ -1,0 +1,96 @@
+{
+  "completed": [],
+  "evidence": [
+    {
+      "excluded_tests": {
+        "github.com/lycaon/lycaon/internal/session/store": {
+          "files": [
+            "maintenance_scope_stress_test.go"
+          ],
+          "tags": [
+            "stress"
+          ]
+        },
+        "github.com/lycaon/lycaon/internal/workflow": {
+          "files": [
+            "build_loop_integration_test.go",
+            "chat_gate_integration_test.go",
+            "compose_policy_integration_test.go",
+            "compose_start_integration_test.go",
+            "coordinator_workflow_tools_integration_test.go",
+            "persist_reload_integration_test.go",
+            "plan_rules_integration_test.go",
+            "recon_progressive_integration_test.go",
+            "subworkflow_invoke_integration_test.go",
+            "workflow_posture_integration_test.go",
+            "workflow_start_session_integration_test.go"
+          ],
+          "tags": [
+            "integration"
+          ]
+        },
+        "github.com/lycaon/lycaon/internal/workflow/phases": {
+          "files": [
+            "advance_compound_integration_test.go",
+            "plan_advance_integration_test.go"
+          ],
+          "tags": [
+            "integration"
+          ]
+        }
+      },
+      "packages": [
+        "github.com/lycaon/lycaon/internal/progress",
+        "github.com/lycaon/lycaon/internal/session/instructions",
+        "github.com/lycaon/lycaon/internal/session/store",
+        "github.com/lycaon/lycaon/internal/workflow",
+        "github.com/lycaon/lycaon/internal/workflow/phases"
+      ],
+      "results": {
+        "github.com/lycaon/lycaon/internal/progress": {
+          "exit_code": 1,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/b5ab10abc4dc46319962ec2affadbc7f/stage-001.log",
+          "output": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/b5ab10abc4dc46319962ec2affadbc7f/stage-001-failures/github.com__lycaon__lycaon__internal__progress.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/b5ab10abc4dc46319962ec2affadbc7f/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "failed",
+          "tests": [
+            "TestRunRefreshUsesTransactionalPredecessor/bootstrap",
+            "TestRunRefreshUsesTransactionalPredecessor/adoption",
+            "TestRunRefreshUsesTransactionalPredecessor",
+            "TestDelayedNotificationsCannotReorderOrRelabelPlanRows"
+          ]
+        },
+        "github.com/lycaon/lycaon/internal/session/instructions": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/b5ab10abc4dc46319962ec2affadbc7f/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/b5ab10abc4dc46319962ec2affadbc7f/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/session/store": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/b5ab10abc4dc46319962ec2affadbc7f/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/b5ab10abc4dc46319962ec2affadbc7f/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/workflow": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/b5ab10abc4dc46319962ec2affadbc7f/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/b5ab10abc4dc46319962ec2affadbc7f/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        },
+        "github.com/lycaon/lycaon/internal/workflow/phases": {
+          "exit_code": 0,
+          "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/b5ab10abc4dc46319962ec2affadbc7f/stage-001.log",
+          "report": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/b5ab10abc4dc46319962ec2affadbc7f/stage-001.json",
+          "stage_id": "stage-001",
+          "status": "passed"
+        }
+      },
+      "stage": "test:short"
+    }
+  ]
+}

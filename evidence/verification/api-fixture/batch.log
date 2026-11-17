@@ -1,0 +1,177 @@
+test execution: admitted batch d371650bdaf545b488c95c9b14c1c22e (1 requests, worker budget 8)
+test execution: stage-001: test:short (1 requests); log /home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log
+test execution: stage-001: github.com/lycaon/lycaon/internal/api/sourcecontracts failed
+test execution: stage-001: github.com/lycaon/lycaon/internal/api/hostcontracts failed
+   Compiling document-core v0.1.0 (/tmp/paintedwolf-source-snapshots-1000/08681b479e98-1/lycaon/internal/documentcore/native)
+    Finished `release` profile [optimized] target(s) in 6.74s
+
+  ✗ test:short
+    test and subtest results: 1938 passed, 48 failed, 1 skipped
+    9 packages with no captured test results
+    build/setup errors:
+      Go exited with status 1
+    github.com/lycaon/lycaon/internal/api/hostcontracts
+      TestDeleteSessionMappedWhenWorktreeBound
+        worktree_handlers_test.go:486: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestDeleteSessionMappedWhenWorktreeBound2844078169/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestDeleteSessionMappedWhenWorktreeBound (0.00s)
+      TestGitWorktreeBindDerivesBranch
+        worktree_handlers_test.go:68: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeBindDerivesBranch2750473137/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeBindDerivesBranch (0.00s)
+      TestGitWorktreeBindHappyPath
+        worktree_handlers_test.go:28: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeBindHappyPath1207978527/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeBindHappyPath (0.00s)
+      TestGitWorktreeBindLeavesConfigUntouched
+        worktree_handlers_test.go:174: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeBindLeavesConfigUntouched1332824699/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeBindLeavesConfigUntouched (0.00s)
+      TestGitWorktreeBindRejectsBusySession
+        worktree_handlers_test.go:113: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeBindRejectsBusySession3196877146/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeBindRejectsBusySession (0.00s)
+      TestGitWorktreeBindRejectsDetachedHead
+        worktree_handlers_test.go:149: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeBindRejectsDetachedHead4211820588/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeBindRejectsDetachedHead (0.00s)
+      TestGitWorktreeBindRejectsSecondBinding
+        worktree_handlers_test.go:104: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeBindRejectsSecondBinding2301299971/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeBindRejectsSecondBinding (0.00s)
+      TestGitWorktreeBindRejectsTakenBranch
+        worktree_handlers_test.go:76: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeBindRejectsTakenBranch2109384925/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeBindRejectsTakenBranch (0.00s)
+      TestGitWorktreeBindRejectsUnavailableRepo
+        worktree_handlers_test.go:134: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeBindRejectsUnavailableRepo3938779057/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeBindRejectsUnavailableRepo (0.00s)
+      TestGitWorktreeBindRollsBack
+        worktree_handlers_test.go:200: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeBindRollsBack1844024693/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeBindRollsBack (0.00s)
+      TestGitWorktreeLandBusy
+        worktree_handlers_test.go:376: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeLandBusy3986223702/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeLandBusy (0.00s)
+      TestGitWorktreeLandConflict
+        worktree_handlers_test.go:311: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeLandConflict3141701273/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeLandConflict (0.00s)
+      TestGitWorktreeLandHappyAndNothingToLand
+        worktree_handlers_test.go:273: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeLandHappyAndNothingToLand3202517558/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeLandHappyAndNothingToLand (0.00s)
+      TestGitWorktreeLandNotBound
+        worktree_handlers_test.go:346: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeLandNotBound277941225/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeLandNotBound (0.00s)
+      TestGitWorktreeLandRefusalsKeepTheirCodes
+        worktree_handlers_test.go:392: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeLandRefusalsKeepTheirCodes1294416354/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeLandRefusalsKeepTheirCodes (0.00s)
+      TestGitWorktreeRemoveHappyDirtyStale
+        worktree_handlers_test.go:417: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeRemoveHappyDirtyStale656046226/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeRemoveHappyDirtyStale (0.00s)
+      TestGitWorktreeRemoveNotBound
+        worktree_handlers_test.go:361: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeRemoveNotBound3657736930/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeRemoveNotBound (0.00s)
+      TestGitWorktreeViewStaleAndReady
+        worktree_handlers_test.go:250: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeViewStaleAndReady2856338774/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeViewStaleAndReady (0.00s)
+      TestGitWorktreeViewUnbound
+        worktree_handlers_test.go:235: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitWorktreeViewUnbound378714267/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitWorktreeViewUnbound (0.00s)
+      TestSourceWorkspaceDeclaresProjectCheckoutForUnboundChats
+        worktree_handlers_test.go:56: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestSourceWorkspaceDeclaresProjectCheckoutForUnboundChats2542085690/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestSourceWorkspaceDeclaresProjectCheckoutForUnboundChats (0.00s)
+      TestWorktreeReachSourceHistoryCannotChangeGitRepositoryIdentity
+        worktree_reach_test.go:296: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestWorktreeReachSourceHistoryCannotChangeGitRepositoryIdentity3549434431/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestWorktreeReachSourceHistoryCannotChangeGitRepositoryIdentity (0.00s)
+      TestWorktreeReach_boardLineAbsentWhenUnbound
+        worktree_reach_test.go:266: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestWorktreeReach_boardLineAbsentWhenUnbound2666637624/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestWorktreeReach_boardLineAbsentWhenUnbound (0.00s)
+      TestWorktreeReach_realProductWorkflow
+        worktree_reach_test.go:28: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestWorktreeReach_realProductWorkflow934155856/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestWorktreeReach_realProductWorkflow (0.00s)
+      TestWorktreeReach_stalePromptHTTP409
+        worktree_reach_test.go:216: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestWorktreeReach_stalePromptHTTP4092657903187/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestWorktreeReach_stalePromptHTTP409 (0.00s)
+      TestWorktreeReach_tabAndBoardAgree
+        worktree_reach_test.go:128: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestWorktreeReach_tabAndBoardAgree2120321727/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestWorktreeReach_tabAndBoardAgree (0.00s)
+      TestWorktreeReach_tabWithoutSessionUnsubstituted
+        worktree_reach_test.go:186: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestWorktreeReach_tabWithoutSessionUnsubstituted2220466312/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestWorktreeReach_tabWithoutSessionUnsubstituted (0.00s)
+      TestWorktreeReach_unknownSessionNeverFallsBackToBaseCheckout
+        worktree_reach_test.go:253: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestWorktreeReach_unknownSessionNeverFallsBackToBaseCheckout3121416366/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestWorktreeReach_unknownSessionNeverFallsBackToBaseCheckout (0.00s)
+    github.com/lycaon/lycaon/internal/api/sourcecontracts
+      TestCachedGitHistoryRefreshesRetainedVersionMatches
+        project_source_history_cache_test.go:13: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestCachedGitHistoryRefreshesRetainedVersionMatches3683449799/017: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestCachedGitHistoryRefreshesRetainedVersionMatches (0.21s)
+      TestCommitBaselineReadsTheNestedRootsOwnFile
+        project_source_commit_baseline_test.go:31: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestCommitBaselineReadsTheNestedRootsOwnFile3713450779/018: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestCommitBaselineReadsTheNestedRootsOwnFile (0.36s)
+      TestCommitBaselineReportsAnUncommittedFileAsAbsent
+        project_source_commit_baseline_test.go:479: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestCommitBaselineReportsAnUncommittedFileAsAbsent223905160/018: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestCommitBaselineReportsAnUncommittedFileAsAbsent (0.29s)
+      TestCommitBaselineTreatsADirectoryInHeadAsAbsent
+        project_source_commit_baseline_test.go:436: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestCommitBaselineTreatsADirectoryInHeadAsAbsent2824065194/018: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestCommitBaselineTreatsADirectoryInHeadAsAbsent (0.32s)
+      TestCommitRestoreRefusesADriftedObject
+        project_source_commit_baseline_test.go:389: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestCommitRestoreRefusesADriftedObject1514331539/018: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestCommitRestoreRefusesADriftedObject (0.29s)
+      TestCommitReviewBeforeFirstCommitAndChangedHead
+        project_source_commit_review_test.go:146: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestCommitReviewBeforeFirstCommitAndChangedHead1011275886/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestCommitReviewBeforeFirstCommitAndChangedHead (0.00s)
+      TestCommitReviewHistoryEnrichesLiveContentsAndPreservesPresentation
+        project_source_commit_review_test.go:174: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestCommitReviewHistoryEnrichesLiveContentsAndPreservesPresentat2740281684/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestCommitReviewHistoryEnrichesLiveContentsAndPreservesPresentation (0.00s)
+      TestCommitReviewIncludesUnobservedGitChangesWithoutCreatingHistory
+        project_source_commit_review_test.go:50: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestCommitReviewIncludesUnobservedGitChangesWithoutCreatingHisto2755081471/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestCommitReviewIncludesUnobservedGitChangesWithoutCreatingHistory (0.00s)
+      TestCommitReviewKeepsIndexOnlyAndUnavailableChanges
+        project_source_commit_review_test.go:19: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestCommitReviewKeepsIndexOnlyAndUnavailableChanges845194458/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestCommitReviewKeepsIndexOnlyAndUnavailableChanges (0.00s)
+      TestCommitReviewRejectsPaginationAcrossMembershipChanges
+        project_source_commit_review_test.go:213: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestCommitReviewRejectsPaginationAcrossMembershipChanges2868235168/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestCommitReviewRejectsPaginationAcrossMembershipChanges (0.00s)
+      TestCommitStatePreviewsAndRestoresFromTheObjectStore
+        project_source_commit_baseline_test.go:306: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestCommitStatePreviewsAndRestoresFromTheObjectStore3674139998/017: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestCommitStatePreviewsAndRestoresFromTheObjectStore (0.17s)
+      TestGitAmendReviewSeparatesCommitFromMovement
+        project_source_git_review_test.go:64: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitAmendReviewSeparatesCommitFromMovement603542133/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitAmendReviewSeparatesCommitFromMovement (0.00s)
+      TestGitMergeReviewSelectsEachParent
+        project_source_git_review_test.go:135: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitMergeReviewSelectsEachParent4118860428/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitMergeReviewSelectsEachParent (0.00s)
+      TestGitMovementReviewReadsCommitWithoutFileEffects
+        project_source_git_review_test.go:18: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitMovementReviewReadsCommitWithoutFileEffects1390224397/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitMovementReviewReadsCommitWithoutFileEffects (0.00s)
+      TestGitReviewSpecialFileComparisons
+        project_source_git_review_test.go:104: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestGitReviewSpecialFileComparisons4201198251/001: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestGitReviewSpecialFileComparisons (0.00s)
+      TestRestoreGitCausedVersionRefusesDriftedGitBytes
+        project_source_commit_baseline_test.go:170: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestRestoreGitCausedVersionRefusesDriftedGitBytes1351648130/018: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestRestoreGitCausedVersionRefusesDriftedGitBytes (0.29s)
+      TestRestoreGitCausedVersionUsesGitObjectStore
+        project_source_commit_baseline_test.go:77: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestRestoreGitCausedVersionUsesGitObjectStore2846877995/017: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestRestoreGitCausedVersionUsesGitObjectStore (0.15s)
+      TestSourceRevisionReviewPagesRootScopedFilesAndComparesEachSide
+        project_source_revisions_test.go:64: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestSourceRevisionReviewPagesRootScopedFilesAndComparesEachSide3005982749/018: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestSourceRevisionReviewPagesRootScopedFilesAndComparesEachSide (0.33s)
+      TestSourceRevisionsResolveTypedSpecsPerRoot
+        project_source_revisions_test.go:18: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestSourceRevisionsResolveTypedSpecsPerRoot3719992545/017: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestSourceRevisionsResolveTypedSpecsPerRoot (0.17s)
+      TestSourceVersionsGitLaneReportsAbsenceSeparatelyFromFailure
+        project_source_git_lane_state_test.go:63: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestSourceVersionsGitLaneReportsAbsenceSeparatelyFromFailure1130028725/017: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestSourceVersionsGitLaneReportsAbsenceSeparatelyFromFailure (0.19s)
+      TestSourceVersionsMergedHistoryReads
+        project_source_commit_baseline_test.go:226: git [init] in /tmp/paintedwolf-test-runs-1000/go-test.lease.MfH5ff/tmp/TestSourceVersionsMergedHistoryReads1931520651/017: exit -1: gitengine: bundled git unavailable:
+        --- FAIL: TestSourceVersionsMergedHistoryReads (0.30s)
+    → 48 failing tests across 2 packages
+    full log: last-run/go-test.json
+    re-run failures: ./task test:failed
+    slowest packages (elapsed, not additive):
+      91.38s  github.com/lycaon/lycaon/internal/api/hostcontracts
+      42.76s  github.com/lycaon/lycaon/internal/api/sourcecontracts
+      29.22s  github.com/lycaon/lycaon/internal/api
+      24.15s  github.com/lycaon/lycaon/internal/api/sessioncontracts
+      13.74s  github.com/lycaon/lycaon/internal/api/capabilityadmin
+    slowest tests (elapsed, not additive):
+      7.41s  github.com/lycaon/lycaon/internal/api/capabilityadmin TestUnixSocketCookieIssuerReplacementNeedsFreshDisclosureAuthority
+      3.28s  github.com/lycaon/lycaon/internal/api/hostcontracts TestStreamReplayRequiresTranscriptMembership
+      2.59s  github.com/lycaon/lycaon/internal/api/hostcontracts TestProjectRemovalAssessmentAndRecordedOutcome
+      2.37s  github.com/lycaon/lycaon/internal/api/hostcontracts TestExtensionsMetaPackDisableEnable
+      2.28s  github.com/lycaon/lycaon/internal/api/sourcecontracts TestEditorActionsPreserveInstructionAndUntrustedSource
+    retained: last-run/failures/go-test-20261117T075720-1332996-7744
+test execution: test:short: failed; receipt /home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/00000000000000000002-677c151ac8c443f2a2bb0066da90e8d6.json
+test execution: test:short: 21 test files in 6 packages need build tags integration and did not run; seatbelt:gated, test:full, test:integration, test:race, test:security run them
+go cache: 17.20 → 17.20 GiB; reclaimed 0.00 GiB (0 entries); budget 20 GiB; /home/cdbeckman/.cache/go-build

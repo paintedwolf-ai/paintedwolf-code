@@ -1,0 +1,93 @@
+[
+  {
+    "command": [
+      "bash",
+      "scripts/go-test-digest.sh",
+      "--name",
+      "test:short",
+      "--",
+      "github.com/lycaon/lycaon/internal/api/apitest",
+      "github.com/lycaon/lycaon/internal/api/contractfixture",
+      "github.com/lycaon/lycaon/internal/api/historyadmin",
+      "github.com/lycaon/lycaon/internal/api/projectview",
+      "github.com/lycaon/lycaon/internal/api/requestscope",
+      "github.com/lycaon/lycaon/internal/api/researchadmin",
+      "github.com/lycaon/lycaon/internal/api/scanadmin",
+      "github.com/lycaon/lycaon/internal/api/secretview",
+      "github.com/lycaon/lycaon/internal/api/sessionview",
+      "github.com/lycaon/lycaon/internal/api/hostcontracts",
+      "github.com/lycaon/lycaon/internal/api/sourcecontracts",
+      "github.com/lycaon/lycaon/internal/api",
+      "github.com/lycaon/lycaon/internal/api/sessioncontracts",
+      "github.com/lycaon/lycaon/internal/api/sourceapi",
+      "github.com/lycaon/lycaon/internal/api/capabilityadmin",
+      "github.com/lycaon/lycaon/internal/api/searchadmin",
+      "github.com/lycaon/lycaon/internal/api/editoradmin",
+      "github.com/lycaon/lycaon/internal/api/searchcontracts",
+      "github.com/lycaon/lycaon/internal/api/workflowadmin",
+      "github.com/lycaon/lycaon/internal/api/briefingadmin",
+      "github.com/lycaon/lycaon/internal/api/promptadmin",
+      "github.com/lycaon/lycaon/internal/api/mcpadmin",
+      "github.com/lycaon/lycaon/internal/api/sessionadmin",
+      "github.com/lycaon/lycaon/internal/api/settingsadmin",
+      "github.com/lycaon/lycaon/internal/api/extensionadmin",
+      "github.com/lycaon/lycaon/internal/api/projectadmin",
+      "github.com/lycaon/lycaon/internal/api/gitadmin",
+      "github.com/lycaon/lycaon/internal/api/modeladmin",
+      "github.com/lycaon/lycaon/internal/api/httpio",
+      "github.com/lycaon/lycaon/internal/api/taskgroup"
+    ],
+    "consumers": [
+      "00000000000000000002-677c151ac8c443f2a2bb0066da90e8d6"
+    ],
+    "exit_code": 1,
+    "finished_at": 1794931189.1160831,
+    "locks": [
+      "go"
+    ],
+    "log": "/home/cdbeckman/.cache/paintedwolf/artifacts/plan-transcript-transactions-10d27e6bb72c/verification/d371650bdaf545b488c95c9b14c1c22e/stage-001.log",
+    "names": [
+      "test:short"
+    ],
+    "packages": [
+      "github.com/lycaon/lycaon/internal/api",
+      "github.com/lycaon/lycaon/internal/api/apitest",
+      "github.com/lycaon/lycaon/internal/api/briefingadmin",
+      "github.com/lycaon/lycaon/internal/api/capabilityadmin",
+      "github.com/lycaon/lycaon/internal/api/contractfixture",
+      "github.com/lycaon/lycaon/internal/api/editoradmin",
+      "github.com/lycaon/lycaon/internal/api/extensionadmin",
+      "github.com/lycaon/lycaon/internal/api/gitadmin",
+      "github.com/lycaon/lycaon/internal/api/historyadmin",
+      "github.com/lycaon/lycaon/internal/api/hostcontracts",
+      "github.com/lycaon/lycaon/internal/api/httpio",
+      "github.com/lycaon/lycaon/internal/api/mcpadmin",
+      "github.com/lycaon/lycaon/internal/api/modeladmin",
+      "github.com/lycaon/lycaon/internal/api/projectadmin",
+      "github.com/lycaon/lycaon/internal/api/projectview",
+      "github.com/lycaon/lycaon/internal/api/promptadmin",
+      "github.com/lycaon/lycaon/internal/api/requestscope",
+      "github.com/lycaon/lycaon/internal/api/researchadmin",
+      "github.com/lycaon/lycaon/internal/api/scanadmin",
+      "github.com/lycaon/lycaon/internal/api/searchadmin",
+      "github.com/lycaon/lycaon/internal/api/searchcontracts",
+      "github.com/lycaon/lycaon/internal/api/secretview",
+      "github.com/lycaon/lycaon/internal/api/sessionadmin",
+      "github.com/lycaon/lycaon/internal/api/sessioncontracts",
+      "github.com/lycaon/lycaon/internal/api/sessionview",
+      "github.com/lycaon/lycaon/internal/api/settingsadmin",
+      "github.com/lycaon/lycaon/internal/api/sourceapi",
+      "github.com/lycaon/lycaon/internal/api/sourcecontracts",
+      "github.com/lycaon/lycaon/internal/api/taskgroup",
+      "github.com/lycaon/lycaon/internal/api/workflowadmin"
+    ],
+    "queued_at": 1794931033.4895182,
+    "reused_packages": 0,
+    "shared_locks": [
+      "go"
+    ],
+    "stage_id": "stage-001",
+    "started_at": 1794931033.4900687,
+    "workers": 4
+  }
+]
