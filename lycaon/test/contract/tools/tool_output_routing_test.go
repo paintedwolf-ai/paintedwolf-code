@@ -72,13 +72,3 @@ func TestNoContentSubstringToolRouting(t *testing.T) {
 		_ = f.Close()
 	}
 }
-
-func TestToolOutputRoutingScanFilesExist(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	for _, rel := range toolOutputRoutingScanFiles {
-		if _, err := os.Stat(filepath.Join(root, rel)); err != nil {
-			t.Fatalf("missing routing scan file %s: %v", rel, err)
-		}
-	}
-}

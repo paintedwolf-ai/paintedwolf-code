@@ -87,10 +87,12 @@ func TestCommandFreeToolProfilesExcludeCommandSurface(t *testing.T) {
 
 	profiles, err := sandbox.LoadToolProfiles()
 	contractcheck.FailErr(t, "LoadToolProfiles", err)
+	commandFree := 0
 	for _, profile := range profiles {
 		if profile.Tools["command"] {
 			continue
 		}
+		commandFree++
 		t.Run(profile.ID, func(t *testing.T) {
 			t.Parallel()
 			reader, err := prompts.NewReader(prompts.ReaderInput{
@@ -102,11 +104,18 @@ func TestCommandFreeToolProfilesExcludeCommandSurface(t *testing.T) {
 			})
 			contractcheck.FailErr(t, "NewReader", err)
 			vars := reader.Facts()
-			if offered, _ := vars["profile_has_command"].(bool); offered {
+			offered, ok := vars["profile_has_command"].(bool)
+			if !ok {
+				t.Fatalf("profile_has_command = %#v, want a bool fact", vars["profile_has_command"])
+			}
+			if offered {
 				t.Fatalf("profile %q offers command without granting it", profile.ID)
 			}
 			_, err = engine.Render(context.Background(), prompts.AgentToolSurfacePartialRef, vars)
 			contractcheck.FailErr(t, "Render agent-tool-surface", err)
 		})
+	}
+	if commandFree == 0 {
+		t.Fatal("no command-free tool profile loaded")
 	}
 }
