@@ -1,13 +1,13 @@
 package security
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"maps"
 	"net/http"
 	"slices"
+	"strings"
 	"sync"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -31,9 +31,10 @@ func (op *conformanceOp) keyed() bool {
 }
 
 // checkIdempotent replays a keyed request that succeeded: twice in turn, then
-// from idempotentReplays goroutines at once. Every replay answers what the
-// first answered and stores nothing more; the same key with a different body
-// answers 409 idempotency_conflict.
+// from idempotentReplays goroutines at once. Every replay answers the first
+// answer's status and names the same resource, and stores nothing more; the
+// same key with a different body answers 409 idempotency_conflict. A replay
+// may report the resource's current state, so only identifiers must match.
 func (s *conformanceSweep) checkIdempotent(ctx context.Context, first conformanceExchange) {
 	op := first.req.op
 	key := bodyKey(first.req.body)
@@ -79,10 +80,31 @@ func (s *conformanceSweep) checkIdempotent(ctx context.Context, first conformanc
 }
 
 func (s *conformanceSweep) compareReplay(first, replay conformanceExchange) {
-	if replay.status != first.status || !bytes.Equal(replay.body, first.body) {
-		s.findings.add(ruleKeyedOperationsAreIdempotent, first.req.op.ID, replay.req.probe,
-			"answered %s %s, first answer was %s %s", replay.outcome(), firstLine(string(replay.body)), first.outcome(), firstLine(string(first.body)))
+	if replay.status != first.status {
+		s.findings.add(ruleKeyedOperationsAreIdempotent, first.req.op.ID, replay.req.probe, "answered %s, first answer was %s", replay.outcome(), first.outcome())
+		return
 	}
+	was, now := answerIdentifiers(first.body), answerIdentifiers(replay.body)
+	for _, name := range slices.Sorted(maps.Keys(was)) {
+		if now[name] != was[name] {
+			s.findings.add(ruleKeyedOperationsAreIdempotent, first.req.op.ID, replay.req.probe, "answered %s %q, first answer named %q", name, now[name], was[name])
+		}
+	}
+}
+
+// answerIdentifiers is every top-level id the answer names.
+func answerIdentifiers(body []byte) map[string]string {
+	var fields map[string]any
+	if json.Unmarshal(body, &fields) != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for name, value := range fields {
+		if id, ok := value.(string); ok && (name == "id" || strings.HasSuffix(name, "_id")) {
+			out[name] = id
+		}
+	}
+	return out
 }
 
 func (s *conformanceSweep) rowsNaming(ctx context.Context, key string) (map[string]int, error) {

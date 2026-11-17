@@ -420,8 +420,10 @@ func sourceChangeNamed(published <-chan wire.EventEnvelope, path string) bool {
 	}
 }
 
-// keyRows counts, per table, the rows any text column of which equals key.
+// keyRows counts, per table, the rows any text column of which equals key,
+// once the work earlier requests started has settled.
 func (e *hostEffects) keyRows(ctx context.Context, key string) (map[string]int, error) {
+	e.quiesce(ctx)
 	if e.textColumns == nil {
 		columns, err := storeTextColumns(ctx, e.conn)
 		if err != nil {

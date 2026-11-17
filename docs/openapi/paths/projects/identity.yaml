@@ -310,7 +310,7 @@ paths:
               schema:
                 $ref: ../../components/schemas/project/identity.yaml#/components/schemas/Project
         '409':
-          description: The chosen folder is not empty (FOLDER_NOT_EMPTY)
+          description: The chosen folder is not empty (FOLDER_NOT_EMPTY), or the project is not a draft (PROJECT_NOT_DRAFT)
           content:
             application/json:
               schema:

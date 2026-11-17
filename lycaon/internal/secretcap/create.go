@@ -103,6 +103,13 @@ func (s *secretVersionService) Put(ctx context.Context, req PutRequest) (PutResu
 	if existing, ok, err := s.existingByOperation(ctx, req); err != nil {
 		return PutResult{}, err
 	} else if ok {
+		same, err := s.sameOperationInput(ctx, existing, req)
+		if err != nil {
+			return PutResult{}, err
+		}
+		if !same {
+			return PutResult{}, ErrOperationReused
+		}
 		meta, metaErr := s.metadataRow(ctx, existing)
 		return PutResult{Metadata: meta}, metaErr
 	}
@@ -200,6 +207,33 @@ func (s *secretVersionService) existingByOperation(ctx context.Context, req PutR
 	default:
 		return db.ManagedSecrets{}, false, err
 	}
+}
+
+// sameOperationInput reports whether req repeats the request that created
+// existing. A generated value is minted per call, so only a supplied value
+// is compared, against the first version the operation stored.
+func (s *secretVersionService) sameOperationInput(ctx context.Context, existing db.ManagedSecrets, req PutRequest) (bool, error) {
+	if existing.Name != req.Name || existing.Purpose != req.Purpose || existing.Scope != req.Scope || existing.Origin != req.Origin {
+		return false, nil
+	}
+	if req.Scope == ScopeChat && existing.ChatSessionID.String != req.ChatSessionID {
+		return false, nil
+	}
+	if req.Origin == OriginGenerated {
+		return true, nil
+	}
+	versions, err := s.queries.ListProjectManagedSecretVersions(ctx, existing.ProjectID)
+	if err != nil {
+		return false, err
+	}
+	for _, version := range versions {
+		if version.SecretID != existing.ID || version.Version != 1 {
+			continue
+		}
+		stored, ok := s.values.get(version.ID)
+		return ok && stored.Value == req.Value, nil
+	}
+	return false, nil
 }
 
 // inTx commits one metadata mutation. Vault writes are reconciled separately.

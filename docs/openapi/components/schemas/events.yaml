@@ -263,7 +263,6 @@ components:
       required:
       - delegation_id
       - status
-      - leg_id
       - phase
       additionalProperties: false
       properties:
@@ -273,6 +272,7 @@ components:
         status:
           $ref: delegation.yaml#/components/schemas/DelegationStatus
         leg_id:
+          description: The leg whose transition this is; absent for the delegation's own.
           type: string
           format: uuid
         phase:
