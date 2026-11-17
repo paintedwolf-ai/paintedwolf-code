@@ -20,8 +20,9 @@ const HostCorpusRefresh = "UPDATE_HOST_CORPUS=1 ./task test:digest -- ./test/sec
 // publish.
 type HostCorpus struct {
 	Generated string `json:"generated"`
-	// Exchanges holds each operation's first validated success, then the
-	// first answer of each error code.
+	// Exchanges holds each operation's first validated success, followed for
+	// a read by its last when that differs, then the first answer of each
+	// error code.
 	Exchanges []CorpusExchange `json:"exchanges"`
 	// Events is every envelope the host published, in delivery order.
 	Events []wire.EventEnvelope `json:"events"`

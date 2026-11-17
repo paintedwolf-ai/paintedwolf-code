@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"maps"
+	"net/http"
 	"os"
 	"slices"
 	"sort"
@@ -19,11 +20,14 @@ import (
 type corpusRecorder struct {
 	mu        sync.Mutex
 	successes map[string]openapi.CorpusExchange
-	failures  map[string]openapi.CorpusExchange
+	// latest is each operation's most recent success, so a read answered
+	// before and after the mutations shows both states.
+	latest   map[string]openapi.CorpusExchange
+	failures map[string]openapi.CorpusExchange
 }
 
 func newCorpusRecorder() *corpusRecorder {
-	return &corpusRecorder{successes: map[string]openapi.CorpusExchange{}, failures: map[string]openapi.CorpusExchange{}}
+	return &corpusRecorder{successes: map[string]openapi.CorpusExchange{}, latest: map[string]openapi.CorpusExchange{}, failures: map[string]openapi.CorpusExchange{}}
 }
 
 // record keeps a validated answer when it is the first of its kind.
@@ -51,6 +55,7 @@ func (c *corpusRecorder) record(ex conformanceExchange) {
 		if _, ok := c.successes[entry.Operation]; !ok {
 			c.successes[entry.Operation] = entry
 		}
+		c.latest[entry.Operation] = entry
 	case ex.apiErr != nil:
 		if _, ok := c.failures[ex.code()]; !ok {
 			c.failures[ex.code()] = entry
@@ -67,7 +72,11 @@ func (c *corpusRecorder) corpus(events []wire.EventEnvelope) openapi.HostCorpus 
 		Events:    events,
 	}
 	for _, id := range slices.Sorted(maps.Keys(c.successes)) {
-		out.Exchanges = append(out.Exchanges, c.successes[id])
+		first, last := c.successes[id], c.latest[id]
+		out.Exchanges = append(out.Exchanges, first)
+		if !bytes.Equal(first.Body, last.Body) && first.Method == http.MethodGet {
+			out.Exchanges = append(out.Exchanges, last)
+		}
 	}
 	for _, code := range slices.Sorted(maps.Keys(c.failures)) {
 		out.Exchanges = append(out.Exchanges, c.failures[code])
@@ -155,7 +164,10 @@ func exchangeShapes(c openapi.HostCorpus) map[string]map[string]string {
 	out := map[string]map[string]string{}
 	for _, ex := range c.Exchanges {
 		key := fmt.Sprintf("%s %d", ex.Operation, ex.Status)
-		out[key] = jsonShape(ex.Body)
+		if out[key] == nil {
+			out[key] = map[string]string{}
+		}
+		maps.Copy(out[key], jsonShape(ex.Body))
 	}
 	return out
 }
