@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -62,29 +61,6 @@ func TestHTTPRequestUnixSocketRequiresReviewedAuthority(t *testing.T) {
 	}
 	if hit {
 		t.Fatal("an unreviewed socket was dialed")
-	}
-}
-
-func TestHTTPRequestUnixSocketIsTheRecordedDestination(t *testing.T) {
-	var seen string
-	path := serveUnixSocket(t, func(w http.ResponseWriter, r *http.Request) {
-		seen = r.Host + r.URL.Path
-		_, _ = w.Write([]byte("daemon"))
-	})
-	tctx := reviewedSocket(t, t.TempDir(), path)
-	got, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
-		"url": "http://docker.invalid/v1.41/info", "unix_socket": path,
-	}, tctx)
-	testutil.FailErr(t, "socket request", err)
-	if got.Status != http.StatusOK || got.Body != "daemon" || seen != "docker.invalid/v1.41/info" {
-		t.Fatalf("got = %+v seen %q", got, seen)
-	}
-	want := tctx.Socket.SocketGrants[0].ResolvedPath
-	if got.UnixSocket != want {
-		t.Fatalf("unix_socket = %q, want the reviewed socket %q", got.UnixSocket, want)
-	}
-	if tctx.Effects.Out.RetrievedFrom != "unix:"+want || strings.Contains(tctx.Effects.Out.RetrievedFrom, "docker.invalid") {
-		t.Fatalf("retrieved from = %q, want the socket rather than the URL host", tctx.Effects.Out.RetrievedFrom)
 	}
 }
 

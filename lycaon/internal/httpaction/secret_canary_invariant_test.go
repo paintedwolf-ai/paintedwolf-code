@@ -190,7 +190,7 @@ func TestSecretCanaryNeverEchoedByHTTPRequestResult(t *testing.T) {
 	executor.Secrets.SetSecretMatcher(matcher)
 	executor.Capabilities.SetLoopbackConnectGate(review)
 	executor.Boundary.SetSessionLoopbackGrant(review.SessionLoopbackGrant)
-	testutil.FailErr(t, "register http_request", Register(registry, Deps{
+	testutil.FailErr(t, "register http_request", registerPerform(registry, Deps{
 		Boundary: testBoundary(), SecretMatcher: matcher, SecretAsk: executor.Secrets.AskSecretScreen, Secrets: service,
 	}))
 	root := t.TempDir()

@@ -59,7 +59,7 @@ func TestHeldValueLeavesOnlyWhileItsChatIsUnlocked(t *testing.T) {
 				"capability_request": loopbackCapability(t, server.URL),
 			}
 			registry := tools.NewDefaultRegistry()
-			testutil.FailErr(t, "register HTTP", Register(registry, Deps{Boundary: testBoundary(), SecretMatcher: testSecretMatcher(t),
+			testutil.FailErr(t, "register HTTP", registerPerform(registry, Deps{Boundary: testBoundary(), SecretMatcher: testSecretMatcher(t),
 				SecretAsk: func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 					secretcap.ResolutionFrom(ctx).ApproveRelease(secretcap.Release{Fingerprints: alert.Fingerprints})
 					return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil

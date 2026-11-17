@@ -47,7 +47,7 @@ func echoTokenServer(t *testing.T, seen *string) *httptest.Server {
 func runTokenRequest(t *testing.T, deps Deps, serverURL string) (result, error) {
 	t.Helper()
 	registry := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register http_request", Register(registry, deps))
+	testutil.FailErr(t, "register http_request", registerPerform(registry, deps))
 	out, err := registry.Run(t.Context(), "http_request", map[string]any{
 		"url":                serverURL + "/res/v1/web/search?q=test",
 		"headers":            []any{map[string]any{"name": "X-Subscription-Token", "value": plantedBraveKey}},

@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/pkg/api"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/credentialstore"
@@ -83,13 +84,21 @@ type result struct {
 	SHA256      string
 	ContentType string
 	Body        string
+	Listener    *api.LoopbackListenerFact
 }
 
 func runRequest(t *testing.T, deps Deps, args map[string]any, tctx tools.ToolContext) (result, error) {
 	t.Helper()
+	return runRequestWith(t, deps, args, tctx, ExchangeOptions{})
+}
+
+// runRequestWith runs Perform with frontend options, keeping the whole body.
+func runRequestWith(t *testing.T, deps Deps, args map[string]any, tctx tools.ToolContext, opts ExchangeOptions) (result, error) {
+	t.Helper()
 	ctx, scope := socketref.WithScope(t.Context())
 	defer scope.Close()
-	ex, err := Perform(ctx, deps, args, tctx, ExchangeOptions{MaxBodyBytes: 4 << 20})
+	opts.MaxBodyBytes = 4 << 20
+	ex, err := Perform(ctx, deps, args, tctx, opts)
 	var transport *TransportFailure
 	if errors.As(err, &transport) {
 		return result{}, transport.Reject
@@ -97,85 +106,33 @@ func runRequest(t *testing.T, deps Deps, args map[string]any, tctx tools.ToolCon
 	if err != nil {
 		return result{}, err
 	}
+	return resultOf(ex), nil
+}
+
+func resultOf(ex Exchange) result {
 	resp := ex.Response
 	return result{
 		Status: resp.Status, FinalURL: ex.FinalURL, Headers: resp.Headers, SentHeaders: ex.SentHeaders,
 		Redirects: ex.Redirects, Bytes: resp.Bytes, SHA256: resp.SHA256, ContentType: resp.ContentType,
-		Body: string(resp.Body),
-	}, nil
+		Body: string(resp.Body), Listener: ex.Listener,
+	}
 }
 
-func TestHTTPRequestCookieJarPersistsALoginSessionWithoutDisclosingValues(t *testing.T) {
-	approveDials(t)
-	secrets, remembered := testSecrets(t)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/login":
-			http.SetCookie(w, &http.Cookie{Name: "session", Value: "session-value-1", Path: "/", HttpOnly: true})
-			w.WriteHeader(http.StatusNoContent)
-		case "/me":
-			cookie, err := r.Cookie("session")
-			if err != nil || cookie.Value != "session-value-1" {
-				w.WriteHeader(http.StatusUnauthorized)
-				return
-			}
-			_, _ = w.Write([]byte(`{"user":"admin"}`))
-		default:
-			w.WriteHeader(http.StatusNotFound)
+// registerPerform serves http_request through Perform in a test registry, so
+// executor-level tests reach the exchange core curl uses.
+func registerPerform(registry *tools.DefaultRegistry, deps Deps) error {
+	return registry.Register("http_request", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
+		ex, err := Perform(ctx, deps, args, tctx, ExchangeOptions{MaxBodyBytes: 4 << 20})
+		var transport *TransportFailure
+		if errors.As(err, &transport) {
+			return "", transport.Reject
 		}
-	}))
-	t.Cleanup(server.Close)
-	deps := Deps{Boundary: testBoundary(), Secrets: secrets}
-	capability := loopbackCapability(t, server.URL)
-
-	login, err := runRequest(t, deps, map[string]any{
-		"url": server.URL + "/login", "method": "POST", "cookie_jar": "registry", "capability_request": capability,
-	}, sessionContext(t.TempDir(), "call-1"))
-	testutil.FailErr(t, "login request", err)
-	if login.Cookies == nil || login.Cookies.Stored != 1 || login.Cookies.Sent != 0 || login.Cookies.Reference == "" {
-		t.Fatalf("login cookies = %+v", login.Cookies)
-	}
-	for _, header := range login.Headers {
-		if strings.EqualFold(header.Name, "Set-Cookie") {
-			t.Fatalf("Set-Cookie leaked into the result: %+v", login.Headers)
+		if err != nil {
+			return "", err
 		}
-	}
-	if strings.Contains(fmtResult(t, login), "session-value-1") {
-		t.Fatal("cookie value leaked into the result")
-	}
-	found := false
-	for _, item := range *remembered {
-		if item.Secret == "session-value-1" {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatal("cookie value was not admitted to screening")
-	}
-
-	me, err := runRequest(t, deps, map[string]any{
-		"url": server.URL + "/me", "cookie_jar": "registry", "capability_request": capability,
-	}, sessionContext(t.TempDir(), "call-2"))
-	testutil.FailErr(t, "authenticated request", err)
-	if me.Status != http.StatusOK || me.Cookies == nil || me.Cookies.Sent != 1 || me.Cookies.Reference != login.Cookies.Reference {
-		t.Fatalf("authenticated response = %+v cookies=%+v", me, me.Cookies)
-	}
-
-	anonymous, err := runRequest(t, deps, map[string]any{
-		"url": server.URL + "/me", "capability_request": capability,
-	}, sessionContext(t.TempDir(), "call-3"))
-	testutil.FailErr(t, "anonymous request", err)
-	if anonymous.Status != http.StatusUnauthorized || anonymous.Cookies != nil {
-		t.Fatalf("a request without a jar carried cookies: %+v", anonymous)
-	}
-
-	_, err = runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
-		"url": server.URL + "/me", "cookie_jar": "registry", "capability_request": capability,
-	}, sessionContext(t.TempDir(), "call-4"))
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != CookieJarFailedCode {
-		t.Fatalf("jar without a secret store = %v, want %s", err, CookieJarFailedCode)
-	}
+		out, err := json.Marshal(resultOf(ex))
+		return string(out), err
+	})
 }
 
 func fmtResult(t *testing.T, got result) string {
@@ -185,7 +142,7 @@ func fmtResult(t *testing.T, got result) string {
 	return string(encoded)
 }
 
-func TestHTTPRequestAuthQueryAndFormReachTheServer(t *testing.T) {
+func TestHTTPRequestAuthAndFormReachTheServer(t *testing.T) {
 	approveDials(t)
 	var seen struct {
 		auth, query, contentType, field, filename, fileBody string
@@ -209,7 +166,6 @@ func TestHTTPRequestAuthQueryAndFormReachTheServer(t *testing.T) {
 
 	got, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
 		"url": server.URL + "/api/v1/crates/new?existing=1", "method": "PUT",
-		"query":              []any{map[string]any{"name": "dry run", "value": "yes&no"}},
 		"auth":               map[string]any{"scheme": "basic", "username": "admin", "password": "pass:word"},
 		"form":               []any{map[string]any{"name": "version", "value": "1.2.3"}, map[string]any{"name": "package", "path": "dist.crate", "content_type": "application/gzip"}},
 		"capability_request": loopbackCapability(t, server.URL),
@@ -221,9 +177,7 @@ func TestHTTPRequestAuthQueryAndFormReachTheServer(t *testing.T) {
 	if seen.auth != "Basic YWRtaW46cGFzczp3b3Jk" {
 		t.Fatalf("authorization = %q", seen.auth)
 	}
-	// The URL keeps its own query bytes, and declared parameters follow in the
-	// order they were given.
-	if seen.query != "existing=1&dry+run=yes%26no" {
+	if seen.query != "existing=1" {
 		t.Fatalf("query = %q", seen.query)
 	}
 	if !strings.HasPrefix(seen.contentType, "multipart/form-data") || seen.field != "1.2.3" || seen.filename != "dist.crate" || seen.fileBody != "crate-bytes" {
@@ -245,9 +199,6 @@ func TestHTTPRequestAuthQueryAndFormReachTheServer(t *testing.T) {
 		{"url": server.URL, "auth": map[string]any{"scheme": "bearer", "token": "t"}, "headers": []any{map[string]any{"name": "Authorization", "value": "x"}}},
 		{"url": server.URL, "method": "POST", "form": []any{map[string]any{"name": "a", "value": "1", "path": "b"}}},
 		{"url": server.URL, "method": "POST", "form": []any{map[string]any{"name": "a", "value": "1"}}, "body_text": "x"},
-		{"url": server.URL, "method": "POST", "body_form": []any{map[string]any{"name": "a", "value": "1"}}, "body_text": "x"},
-		{"url": server.URL, "method": "POST", "body_form": []any{map[string]any{"name": "a", "value": "1"}}, "form": []any{map[string]any{"name": "b", "value": "2"}}},
-		{"url": server.URL, "query": []any{map[string]any{"name": "", "value": "1"}}},
 	} {
 		_, err := runRequest(t, Deps{Boundary: testBoundary()}, args, sessionContext(root, "call-3"))
 		var reject *toolrejection.ToolReject
@@ -257,42 +208,7 @@ func TestHTTPRequestAuthQueryAndFormReachTheServer(t *testing.T) {
 	}
 }
 
-func TestHTTPRequestResponsePathStreamsPastTheInlineCap(t *testing.T) {
-	approveDials(t)
-	size := int64(outboundhttp.DefaultBodyMax + 4096)
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/octet-stream")
-		chunk := make([]byte, 64<<10)
-		for i := range chunk {
-			chunk[i] = byte(i)
-		}
-		remaining := size
-		for remaining > 0 {
-			n := int64(len(chunk))
-			if n > remaining {
-				n = remaining
-			}
-			_, _ = w.Write(chunk[:n])
-			remaining -= n
-		}
-	}))
-	t.Cleanup(server.Close)
-	root := t.TempDir()
-	got, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
-		"url": server.URL + "/artifact.bin", "response_path": "dist/artifact.bin",
-		"capability_request": loopbackCapability(t, server.URL),
-	}, sessionContext(root, "call-1"))
-	testutil.FailErr(t, "streamed download", err)
-	if !got.Written || got.Bytes != size || got.SHA256 == "" || got.Body != "" {
-		t.Fatalf("download receipt = %+v", got)
-	}
-	info, err := os.Stat(filepath.Join(root, "dist", "artifact.bin"))
-	if err != nil || info.Size() != size {
-		t.Fatalf("landed file = %v err=%v", info, err)
-	}
-}
-
-func TestHTTPRequestSupportsBodyFormAndSentHeaders(t *testing.T) {
+func TestHTTPRequestSentHeadersIncludeTheHostAddedContentType(t *testing.T) {
 	approveDials(t)
 	var seen struct {
 		method, contentType, body string
@@ -310,27 +226,21 @@ func TestHTTPRequestSupportsBodyFormAndSentHeaders(t *testing.T) {
 	root := t.TempDir()
 
 	got, err := runRequest(t, Deps{Boundary: testBoundary()}, map[string]any{
-		"url":    server.URL + "/oauth/token",
-		"method": "POST",
-		"body_form": []any{
-			map[string]any{"name": "grant_type", "value": "client_credentials"},
-			map[string]any{"name": "scope", "value": "read write & admin"},
-		},
+		"url":                server.URL + "/oauth/token",
+		"method":             "POST",
+		"form":               []any{map[string]any{"name": "grant_type", "value": "client_credentials"}},
 		"capability_request": loopbackCapability(t, server.URL),
 	}, sessionContext(root, "call-1"))
-	testutil.FailErr(t, "body_form request", err)
+	testutil.FailErr(t, "form request", err)
 	if got.Status != http.StatusOK {
 		t.Fatalf("status = %d", got.Status)
 	}
-	if seen.contentType != "application/x-www-form-urlencoded" {
-		t.Fatalf("content-type = %q, want application/x-www-form-urlencoded", seen.contentType)
-	}
-	if seen.body != "grant_type=client_credentials&scope=read+write+%26+admin" {
-		t.Fatalf("body = %q", seen.body)
+	if !strings.HasPrefix(seen.contentType, "multipart/form-data; boundary=") || !strings.Contains(seen.body, "client_credentials") {
+		t.Fatalf("content-type = %q body = %q", seen.contentType, seen.body)
 	}
 	foundContentType := false
 	for _, h := range got.SentHeaders {
-		if strings.EqualFold(h.Name, "Content-Type") && h.Value == "application/x-www-form-urlencoded" {
+		if strings.EqualFold(h.Name, "Content-Type") && h.Value == seen.contentType {
 			foundContentType = true
 		}
 	}

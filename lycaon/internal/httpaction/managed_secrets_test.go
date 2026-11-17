@@ -78,7 +78,7 @@ func TestRedactionReusesReviewedUploadBytes(t *testing.T) {
 	}))
 	defer server.Close()
 	registry := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register upload", Register(registry, Deps{Boundary: testBoundary(), SecretMatcher: testSecretMatcher(t),
+	testutil.FailErr(t, "register upload", registerPerform(registry, Deps{Boundary: testBoundary(), SecretMatcher: testSecretMatcher(t),
 		SecretAsk: func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
 			testutil.FailErr(t, "change upload during review", os.WriteFile(path, []byte("unreviewed replacement"), 0o600))
 			return secretmatch.Resolution{Decision: secretmatch.SendRedacted}, nil
@@ -182,7 +182,7 @@ func TestManagedSecretPolicySurvivesHTTPEncoding(t *testing.T) {
 			testutil.FailErr(t, "derive expected identity", err)
 			asks := 0
 			registry := tools.NewDefaultRegistry()
-			testutil.FailErr(t, "register HTTP", Register(registry, Deps{Boundary: testBoundary(), SecretMatcher: matcher,
+			testutil.FailErr(t, "register HTTP", registerPerform(registry, Deps{Boundary: testBoundary(), SecretMatcher: matcher,
 				SecretAsk: func(_ context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
 					asks++
 					if len(alert.Fingerprints) != 1 || alert.Fingerprints[0] != expected.Fingerprint {
@@ -839,22 +839,17 @@ func TestCookieWithholdContinuesWhileHeaderWithholdRefuses(t *testing.T) {
 func TestRotationDuringWaitKeepsFrozenBytes(t *testing.T) {
 	service, _, meta, matcher, unlocks, opened, now := newHeldSetup(t)
 	*now = opened.Add(time.Minute)
-	issuer := issuerServer(t)
 	var hits atomic.Int32
-	var seenAuth, seenToken atomic.Value
+	var seenAuth atomic.Value
 	seenAuth.Store("")
-	seenToken.Store("")
 	relying := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
 		seenAuth.Store(r.Header.Get("Authorization"))
-		seenToken.Store(r.Header.Get("X-Service-Token"))
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer relying.Close()
 
 	root := t.TempDir()
-	captureDeps := Deps{Boundary: testBoundary(), Secrets: service, SecretMatcher: matcher}
-	captureIssuedToken(t, captureDeps, issuer, root)
 
 	t.Cleanup(func() {
 		confine.SetEgressPostureResolver(nil)
@@ -868,24 +863,12 @@ func TestRotationDuringWaitKeepsFrozenBytes(t *testing.T) {
 			ProjectID: testdbseed.DefaultProjectID, Reference: meta.Reference, Value: "rotated-deploy-token-v2-0000",
 		})
 		testutil.FailErr(t, "rotate secret during wait", rotErr)
-		jarReq := secretcap.TokenJarRequest{
-			ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "rot-session", OperationID: "rot-op", Name: "jar",
-		}
-		openedJar, openErr := service.OpenTokenJar(t.Context(), jarReq)
-		testutil.FailErr(t, "open token jar for rotation", openErr)
-		openedJar.Set("api", secretcap.Token{Value: "rotated-issued-token-v2", Origin: issuer.URL, OriginLabel: issuer.URL})
-		_, saveErr := service.SaveTokenJar(t.Context(), jarReq, openedJar)
-		testutil.FailErr(t, "rotate token jar during wait", saveErr)
 		return true
 	})
 
 	args := map[string]any{
-		"url":       relying.URL + "/api",
-		"token_jar": "jar",
-		"auth":      map[string]any{"scheme": "bearer", "token": meta.Reference},
-		"headers": []any{
-			map[string]any{"name": "X-Service-Token", "value": "{{token:api}}"},
-		},
+		"url":                relying.URL + "/api",
+		"auth":               map[string]any{"scheme": "bearer", "token": meta.Reference},
 		"capability_request": loopbackCapability(t, relying.URL),
 	}
 	asks := 0
@@ -915,11 +898,11 @@ func TestRotationDuringWaitKeepsFrozenBytes(t *testing.T) {
 	resolved.Finish(t.Context())
 	testutil.FailErr(t, "perform after rotation", runErr)
 
-	if hits.Load() != 1 || seenAuth.Load().(string) != "Bearer "+heldSecretVal || seenToken.Load().(string) != "issued-token-4411" {
-		t.Fatalf("hits=%d auth=%q token=%q, want frozen v1 values", hits.Load(), seenAuth.Load(), seenToken.Load())
+	if hits.Load() != 1 || seenAuth.Load().(string) != "Bearer "+heldSecretVal {
+		t.Fatalf("hits=%d auth=%q, want the frozen v1 value", hits.Load(), seenAuth.Load())
 	}
-	if asks != 2 {
-		t.Fatalf("asks = %d, want 2 (1 for request secret, 1 for foreign token, no repeat after wait)", asks)
+	if asks != 1 {
+		t.Fatalf("asks = %d, want 1 and no repeat after the wait", asks)
 	}
 	history, err := service.Uses(t.Context(), testdbseed.DefaultProjectID, meta.Reference, 0)
 	testutil.FailErr(t, "read use history", err)
@@ -934,11 +917,10 @@ func TestRotationDuringWaitKeepsFrozenBytes(t *testing.T) {
 
 // Revocation or withdrawn classification during the wait refuses.
 func TestRevocationDuringWaitFailsClosed(t *testing.T) {
-	for _, mode := range []string{"secret_revoked", "token_jar_revoked", "classification_withdrawn"} {
+	for _, mode := range []string{"secret_revoked", "classification_withdrawn"} {
 		t.Run(mode, func(t *testing.T) {
 			service, owner, meta, matcher, unlocks, opened, now := newHeldSetup(t)
 			*now = opened.Add(time.Minute)
-			issuer := issuerServer(t)
 			var hits atomic.Int32
 			relying := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 				hits.Add(1)
@@ -947,12 +929,6 @@ func TestRevocationDuringWaitFailsClosed(t *testing.T) {
 			defer relying.Close()
 
 			root := t.TempDir()
-			captureDeps := Deps{Boundary: testBoundary(), Secrets: service, SecretMatcher: matcher}
-			captureIssuedToken(t, captureDeps, issuer, root)
-			openedJar, err := service.OpenTokenJar(t.Context(), secretcap.TokenJarRequest{
-				ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "lookup", OperationID: "lookup-op", Name: "jar",
-			})
-			testutil.FailErr(t, "open seeded token jar", err)
 
 			var ignoreActive atomic.Bool
 			ignoreActive.Store(true)
@@ -980,22 +956,18 @@ func TestRevocationDuringWaitFailsClosed(t *testing.T) {
 				case "secret_revoked":
 					_, revErr := service.RevokeProject(t.Context(), testdbseed.DefaultProjectID, meta.Reference, owner)
 					testutil.FailErr(t, "revoke secret during wait", revErr)
-				case "token_jar_revoked":
-					_, revErr := service.RevokeByAgent(t.Context(), testdbseed.DefaultProjectID, "root-1", openedJar.Reference)
-					testutil.FailErr(t, "revoke token jar during wait", revErr)
 				case "classification_withdrawn":
 					ignoreActive.Store(false)
 				}
 				return true
 			})
 
-			headers := []any{map[string]any{"name": "X-Service-Token", "value": "{{token:api}}"}}
+			var headers []any
 			if mode == "classification_withdrawn" {
 				headers = append(headers, map[string]any{"name": "X-Subscription-Token", "value": plantedBraveKey})
 			}
 			args := map[string]any{
 				"url":                relying.URL + "/api",
-				"token_jar":          "jar",
 				"auth":               map[string]any{"scheme": "bearer", "token": meta.Reference},
 				"headers":            headers,
 				"capability_request": loopbackCapability(t, relying.URL),
@@ -1029,10 +1001,6 @@ func TestRevocationDuringWaitFailsClosed(t *testing.T) {
 			case "secret_revoked":
 				if reject == nil || reject.Code != "SECRET_REFERENCE_REVOKED" {
 					t.Fatalf("secret_revoked err = %v (reject=%+v), want SECRET_REFERENCE_REVOKED", runErr, reject)
-				}
-			case "token_jar_revoked":
-				if reject == nil || reject.Code != TokenJarFailedCode {
-					t.Fatalf("token_jar_revoked err = %v (reject=%+v), want %s", runErr, reject, TokenJarFailedCode)
 				}
 			case "classification_withdrawn":
 				if reject == nil || reject.Code != toolrejection.OutboundSecretScreenFailedCode || reject.Data["fault_stage"] != secretmatch.FaultStageRaise {

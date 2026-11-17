@@ -60,7 +60,7 @@ func TestHTTPRequestSendsJSONAndReturnsStructuredResponse(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	registry := tools.NewDefaultRegistry()
-	if err := Register(registry, Deps{Boundary: testBoundary()}); err != nil {
+	if err := registerPerform(registry, Deps{Boundary: testBoundary()}); err != nil {
 		t.Fatalf("register http_request: %v", err)
 	}
 	outcome := &tools.ToolInvocationOut{}
@@ -134,7 +134,7 @@ func TestRequestBodyAcceptsJSONArray(t *testing.T) {
 
 func TestHTTPRequestRejectsImplicitGETBodyAsInvalidArguments(t *testing.T) {
 	registry := tools.NewDefaultRegistry()
-	if err := Register(registry, Deps{Boundary: testBoundary()}); err != nil {
+	if err := registerPerform(registry, Deps{Boundary: testBoundary()}); err != nil {
 		t.Fatalf("register http_request: %v", err)
 	}
 	_, err := registry.Run(t.Context(), "http_request", map[string]any{
@@ -150,7 +150,7 @@ func TestHTTPRequestRejectsImplicitGETBodyAsInvalidArguments(t *testing.T) {
 
 func TestHTTPRequestRejectsInvalidHeaderAsInvalidArguments(t *testing.T) {
 	registry := tools.NewDefaultRegistry()
-	if err := Register(registry, Deps{Boundary: testBoundary()}); err != nil {
+	if err := registerPerform(registry, Deps{Boundary: testBoundary()}); err != nil {
 		t.Fatalf("register http_request: %v", err)
 	}
 	_, err := registry.Run(t.Context(), "http_request", map[string]any{
@@ -166,7 +166,7 @@ func TestHTTPRequestRejectsInvalidHeaderAsInvalidArguments(t *testing.T) {
 
 func TestHTTPRequestRequiresExactLoopbackPorts(t *testing.T) {
 	registry := tools.NewDefaultRegistry()
-	if err := Register(registry, Deps{Boundary: testBoundary()}); err != nil {
+	if err := registerPerform(registry, Deps{Boundary: testBoundary()}); err != nil {
 		t.Fatalf("register http_request: %v", err)
 	}
 	_, err := registry.Run(t.Context(), "http_request", map[string]any{
@@ -203,7 +203,7 @@ func TestHTTPRequestDiscardDoesNotBufferResponseBody(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	registry := tools.NewDefaultRegistry()
-	if err := Register(registry, Deps{Boundary: testBoundary()}); err != nil {
+	if err := registerPerform(registry, Deps{Boundary: testBoundary()}); err != nil {
 		t.Fatalf("register http_request: %v", err)
 	}
 	out, err := registry.Run(t.Context(), "http_request", map[string]any{
@@ -304,7 +304,7 @@ func TestHTTPRequestDirectIPConsumesPermitAndRejectsReplay(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	registry := tools.NewDefaultRegistry()
-	if err := Register(registry, Deps{Boundary: testBoundary()}); err != nil {
+	if err := registerPerform(registry, Deps{Boundary: testBoundary()}); err != nil {
 		t.Fatalf("register http_request: %v", err)
 	}
 	rt := &stubDirectIPRuntime{}

@@ -38,7 +38,7 @@ func TestCookieApprovalConsentsToItsConnection(t *testing.T) {
 			return secretmatch.Resolution{Decision: decision}, nil
 		})}
 		ctx := hitl.WithStopContext(egressgate.WithReviewedRecipients(t.Context()), t.Context())
-		beforeHop, err := prepareRequestCookieDelivery(ctx, deps, spec, tools.ToolContext{}, jar, secretcap.CookieJarRequest{}, nil, true)
+		beforeHop, err := frontendJarCookieDelivery(ctx, deps, spec, tools.ToolContext{}, testFrontendJar{jar.Store})
 		testutil.FailErr(t, "prepare cookies", err)
 		testutil.FailErr(t, "cookie review", beforeHop(ctx, hop))
 

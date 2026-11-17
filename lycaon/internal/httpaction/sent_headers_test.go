@@ -46,7 +46,7 @@ func TestSentHeadersStateReferencesAndSchemeNotCredentials(t *testing.T) {
 				"capability_request": loopbackCapability(t, server.URL),
 			}
 			registry := tools.NewDefaultRegistry()
-			testutil.FailErr(t, "register HTTP", Register(registry, Deps{Boundary: testBoundary(), SecretMatcher: testSecretMatcher(t),
+			testutil.FailErr(t, "register HTTP", registerPerform(registry, Deps{Boundary: testBoundary(), SecretMatcher: testSecretMatcher(t),
 				SecretAsk: func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
 					return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
 				},
@@ -98,7 +98,7 @@ func TestFinalURLStatesSecretReferencesAndKeepsTheRedirectChain(t *testing.T) {
 		"capability_request": loopbackCapability(t, server.URL),
 	}
 	registry := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register HTTP", Register(registry, Deps{Boundary: testBoundary(), SecretMatcher: testSecretMatcher(t),
+	testutil.FailErr(t, "register HTTP", registerPerform(registry, Deps{Boundary: testBoundary(), SecretMatcher: testSecretMatcher(t),
 		SecretAsk: func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
 			return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
 		},
