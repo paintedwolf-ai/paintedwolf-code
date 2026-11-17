@@ -30,7 +30,7 @@ func TestPhaseEntryStopsWhenProgressCannotCommit(t *testing.T) {
 	testutil.FailErr(t, "refuse phase plan row", err)
 	host := session.NewHost(records, session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry())
 	runtime := workerruntime.New(database, nil, worker.WorkersConfig{})
-	runtime.SetDependencies(workerruntime.Dependencies{Sessions: &sessions.Runtime{Manager: host}, Progress: func() progress.RunScopedStore { return plans }})
+	runtime.SetDependencies(workerruntime.Dependencies{Sessions: &sessions.Runtime{Manager: host}, Progress: func() progress.Store { return plans }})
 	err = runtime.OnWorkflowPhaseEnter(t.Context(), &workflowphases.RunContext{SessionID: "session", RunID: "child", Phase: "work"}, workflowdef.PhaseDef{ID: "work"})
 	if err == nil {
 		t.Fatal("phase entry continued after failed plan persistence")

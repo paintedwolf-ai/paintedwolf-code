@@ -17,7 +17,7 @@ type SQLStore struct {
 	transcript TranscriptTransactions
 }
 
-var _ RunScopedStore = (*SQLStore)(nil)
+var _ Store = (*SQLStore)(nil)
 
 func NewSQLStore(database db.Handle, transcript TranscriptTransactions) *SQLStore {
 	return &SQLStore{queries: db.New(database), transcript: transcript}
@@ -36,12 +36,4 @@ func (s *SQLStore) Get(ctx context.Context, sessionID string) string {
 		return ""
 	}
 	return snapshot.Content
-}
-
-func (s *SQLStore) BoundRunID(sessionID string) string {
-	snapshot, err := s.Snapshot(context.Background(), sessionID)
-	if err != nil {
-		return ""
-	}
-	return snapshot.RunID
 }

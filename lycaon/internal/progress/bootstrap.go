@@ -8,11 +8,6 @@ import (
 
 const bootstrapGoalMaxRunes = 2000
 
-type RunScopedStore interface {
-	Store
-	BoundRunID(sessionID string) string
-}
-
 // AdoptActiveRun preserves an unbound plan and resets a plan from another run.
 func AdoptActiveRun(ctx context.Context, store Store, sessionID, runID, goal string) (bool, error) {
 	return refreshRun(ctx, store, sessionID, runID, goal, false)

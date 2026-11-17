@@ -111,7 +111,7 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *Fanout) error {
 
 // seedFanoutProgress gives a coordinator with no checklist one pending row per
 // planned leg, so the progress gate opens on the plan it just stamped.
-func seedFanoutProgress(ctx context.Context, store progress.RunScopedStore, sessionID, runID string, plan runstate.FanoutPlan) error {
+func seedFanoutProgress(ctx context.Context, store progress.Store, sessionID, runID string, plan runstate.FanoutPlan) error {
 	if store == nil {
 		return nil
 	}

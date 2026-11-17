@@ -1,11 +1,5 @@
 -- Coordinator-authored progress doc, keyed by root session.
 
--- name: GetSessionProgressContent :one
-SELECT content FROM session_progress WHERE session_id = ?;
-
--- name: GetSessionProgressRunID :one
-SELECT workflow_run_id FROM session_progress WHERE session_id = ?;
-
 -- name: UpsertSessionProgressContent :exec
 INSERT INTO session_progress (session_id, workflow_run_id, content, updated_at, item_ids_json, document_version)
 VALUES (?, ?, ?, ?, ?, 1)

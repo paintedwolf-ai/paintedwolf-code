@@ -20,7 +20,9 @@ func TestFanoutPlanSeedsAnEmptyChecklistOnly(t *testing.T) {
 	if _, pending, _ := progress.CloseCounts(content); pending != 2 || !strings.Contains(content, "- [ ] leg-1 Auth boundary") {
 		t.Fatalf("seeded checklist = %q", content)
 	}
-	if store.BoundRunID("sess") != "run" {
+	snapshot, err := store.Snapshot(t.Context(), "sess")
+	testutil.FailErr(t, "read seeded run", err)
+	if snapshot.RunID != "run" {
 		t.Fatal("seeding left the document unbound")
 	}
 	authored := "# Goal\n\nOwn plan\n\n## Progress\n- [x] done already\n"

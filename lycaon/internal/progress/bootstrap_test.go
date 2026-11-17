@@ -34,8 +34,8 @@ func TestEnsureBootstrap_staleRunRefreshesGoalAndPlan(t *testing.T) {
 	if !progress.ProgressMissing(got) {
 		t.Fatalf("expected empty ## Progress after refresh, got %q", got)
 	}
-	if store.BoundRunID(sessionID) != newRun {
-		t.Fatalf("run id = %q want %q", store.BoundRunID(sessionID), newRun)
+	if boundRun(t, store, sessionID) != newRun {
+		t.Fatalf("run id = %q want %q", boundRun(t, store, sessionID), newRun)
 	}
 }
 
@@ -89,8 +89,8 @@ func TestEnsureBootstrap_sameRunTerminalPlanStartsFreshRun(t *testing.T) {
 	if !progress.ProgressMissing(got) {
 		t.Fatalf("expected empty ## Progress after refresh, got %q", got)
 	}
-	if store.BoundRunID(sessionID) != runID {
-		t.Fatalf("run id = %q want %q", store.BoundRunID(sessionID), runID)
+	if boundRun(t, store, sessionID) != runID {
+		t.Fatalf("run id = %q want %q", boundRun(t, store, sessionID), runID)
 	}
 }
 
@@ -132,8 +132,8 @@ func TestAdoptActiveRun_unboundBindsWithoutWipe(t *testing.T) {
 	if got := store.Get(t.Context(), sessionID); got != seeded {
 		t.Fatalf("content wiped on first adopt: got %q want %q", got, seeded)
 	}
-	if store.BoundRunID(sessionID) != runID {
-		t.Fatalf("run id = %q want %q", store.BoundRunID(sessionID), runID)
+	if boundRun(t, store, sessionID) != runID {
+		t.Fatalf("run id = %q want %q", boundRun(t, store, sessionID), runID)
 	}
 }
 
@@ -161,8 +161,8 @@ func TestAdoptActiveRun_distinctRunResets(t *testing.T) {
 	if !strings.Contains(got, "Build from blueprint") {
 		t.Fatalf("Goal not refreshed: %q", got)
 	}
-	if store.BoundRunID(sessionID) != childRun {
-		t.Fatalf("run id = %q want %q", store.BoundRunID(sessionID), childRun)
+	if boundRun(t, store, sessionID) != childRun {
+		t.Fatalf("run id = %q want %q", boundRun(t, store, sessionID), childRun)
 	}
 }
 
@@ -203,8 +203,8 @@ func TestEnsureBootstrap_unboundDocBindsWithoutWipe(t *testing.T) {
 	if got := store.Get(t.Context(), sessionID); got != seeded {
 		t.Fatalf("content wiped on first bind: got %q want %q", got, seeded)
 	}
-	if store.BoundRunID(sessionID) != runID {
-		t.Fatalf("run id = %q want %q", store.BoundRunID(sessionID), runID)
+	if boundRun(t, store, sessionID) != runID {
+		t.Fatalf("run id = %q want %q", boundRun(t, store, sessionID), runID)
 	}
 }
 
@@ -220,7 +220,16 @@ func TestEnsureBootstrap_setPreservesBoundRun(t *testing.T) {
 		t.Fatalf("seed progress run: %v", err)
 	}
 	store.Set(sessionID, "# Goal\n\nGoal text\n\n## Progress\n- [ ] authored\n")
-	if store.BoundRunID(sessionID) != runID {
-		t.Fatalf("bound run after Set = %q want %q", store.BoundRunID(sessionID), runID)
+	if boundRun(t, store, sessionID) != runID {
+		t.Fatalf("bound run after Set = %q want %q", boundRun(t, store, sessionID), runID)
 	}
+}
+
+func boundRun(t *testing.T, store progress.Store, sessionID string) string {
+	t.Helper()
+	snapshot, err := store.Snapshot(t.Context(), sessionID)
+	if err != nil {
+		t.Fatalf("read bound run: %v", err)
+	}
+	return snapshot.RunID
 }

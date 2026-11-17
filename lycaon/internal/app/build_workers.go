@@ -28,7 +28,7 @@ func (b *serveBuilder) wireWorkers() error {
 				b.server.Server.Admin.Workflow.Topology.StartOrchestratedTopologyForRun(ctx, sessionID, run)
 			}
 		},
-		Progress: func() progress.RunScopedStore {
+		Progress: func() progress.Store {
 			if b.boards != nil {
 				return b.boards.Progress
 			}

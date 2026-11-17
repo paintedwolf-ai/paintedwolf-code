@@ -3,7 +3,7 @@ package session
 import "github.com/lycaon/lycaon/internal/progress"
 
 // SetProgressStore connects the session progress store.
-func (m *Host) SetProgressStore(store progress.RunScopedStore) {
+func (m *Host) SetProgressStore(store progress.Store) {
 	if m == nil {
 		return
 	}
