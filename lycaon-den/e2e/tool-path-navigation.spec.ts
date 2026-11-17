@@ -138,7 +138,7 @@ modelIndependentWebE2e(`command activities contain long text at narrow card widt
  const facts: CommandActivity[] = groups.map((group, index) => {
   const id = `action-${index}`;
   return { id, group, label: "Run process", subject: `${id}-${"x".repeat(256)}`, directory: `/${"directory/".repeat(24)}`, state: "completed", outcome: "Exited 0", status_code: 0, execution_ids: [id], spans: [], steps: [{id, command: id, count: 1, running: 0, waiting: 0, failed: 0, refused: 0, interrupted: 0, state: "completed", outcome: "Finished"}] };
- } );
+ });
  const program: CommandProgramReceipt = { id: crypto.randomUUID(), parent_receipt_id: crypto.randomUUID(), language_version: 1, catalog_digest: "catalog", source_digest: "source", source_ref: "source", state: "completed", detail_ref: "detail", progress_state: "unchanged", started_at: "2026-10-30T10:00:00Z", activities: facts };
  await page.route("**/program-receipts/**", route => route.fulfill({ json: { program, executions: [], nodes: [], executions_omitted: 0, nodes_omitted: 0 } }));
  await apiSeedSessionTranscript(request, session, transcriptMessages([
@@ -155,10 +155,10 @@ modelIndependentWebE2e(`command activities contain long text at narrow card widt
  } else {
   await expect(sequence).toHaveCount(0);
  }
- for (const width of [220, 680]) {
-  await group.evaluate((element, width) => { element.style.width = `${width}px`; }, width);
+ for (const width of ["12rem", "48rem"]) {
+  await group.evaluate((element, width) => { element.style.width = width; element.style.maxWidth = width; }, width);
   const count = header.locator(".den-activity-span-count");
-  if (width === 220) await expect(count).toBeHidden();
+  if (width === "12rem") await expect(count).toBeHidden();
   else await expect(count).toBeVisible();
   const title = await header.locator(".den-activity-span-name").boundingBox();
   const bounds = await header.boundingBox();
@@ -166,7 +166,7 @@ modelIndependentWebE2e(`command activities contain long text at narrow card widt
    const line = await sequence.boundingBox();
    expect(line!.y).toBeGreaterThanOrEqual(title!.y + title!.height);
    expect(line!.x + line!.width).toBeLessThanOrEqual(bounds!.x + bounds!.width);
-   expect(await sequence.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(width === 220);
+   expect(await sequence.evaluate(el => el.scrollWidth > el.clientWidth)).toBe(width === "12rem");
   } else {
    expect(bounds!.height).toBeLessThan(title!.height * 2 + 16);
   }
