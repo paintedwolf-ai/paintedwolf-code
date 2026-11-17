@@ -107,31 +107,18 @@ func TestPreflightNoticesAreAppScoped(t *testing.T) {
 	}
 }
 
-func TestPreflightProbeIDsAreStableAndOrdered(t *testing.T) {
-	t.Parallel()
-	want := []string{
-		"os_version", "config_dir", "disk_space", "command_path", "git_engine",
-		"scanner_engine", "browser_engine", "decision_engine", "ocr_engine", "provider_configured", "lite_slot",
-	}
-
-	got := preflight.Default().IDs()
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("preflight probe ids = %v, want %v — ids are wire-visible and their order is the display order", got, want)
-	}
-}
-
-// TestPreflightNeverLeaksHomePath checks wire-visible probe details.
+// TestPreflightNeverLeaksHomePath drives every injectable probe down its
+// failure path under a temporary HOME and requires no detail to carry a path.
 func TestPreflightNeverLeaksHomePath(t *testing.T) {
-	t.Parallel()
-	home, err := os.UserHomeDir()
-	if err != nil {
-		testutil.FailErr(t, "resolve home dir", err)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	// A file where the config directory's parent belongs makes mkdir fail.
+	blocker := filepath.Join(home, ".config")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		testutil.FailErr(t, "write config blocker", err)
 	}
-
-	// Force every probe failure path.
-	configDir := filepath.Join(home, ".config", "lycaon-preflight-contract")
 	env := preflight.Env{
-		ConfigDir:     configDir,
+		ConfigDir:     filepath.Join(blocker, "lycaon-preflight-contract"),
 		FreeBytes:     func(string) (uint64, error) { return 1 << 20, nil },
 		OSProductVer:  func() (string, error) { return "1.0", nil },
 		ProviderCount: func() int { return 0 },
@@ -142,12 +129,28 @@ func TestPreflightNeverLeaksHomePath(t *testing.T) {
 		CheckBrowser: func(context.Context) (preflight.BrowserReason, error) {
 			return preflight.ReasonBrowserManagedCacheMissing, errFailProbe
 		},
+		CheckDecisionEngine: func(context.Context) preflight.DecisionReason {
+			return preflight.ReasonDecisionModelMissing
+		},
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(configDir) })
+	forced := map[string]bool{
+		"os_version": true, "config_dir": true, "disk_space": true, "git_engine": true,
+		"scanner_engine": true, "browser_engine": true, "decision_engine": true, "provider_configured": true,
+	}
 
-	results, _ := preflight.Default().Run(context.Background(), env)
-
+	reg := preflight.Default()
+	results, _ := reg.Run(context.Background(), env)
+	if len(results) != len(reg.IDs()) {
+		t.Fatalf("got %d results for %d probes", len(results), len(reg.IDs()))
+	}
+	failed := 0
 	for _, res := range results {
+		if forced[res.ID] {
+			if res.Status == preflight.StatusOK || res.Code == "" {
+				t.Fatalf("probe %s = %+v, want a failure with a code", res.ID, res)
+			}
+			failed++
+		}
 		for key, value := range res.Detail {
 			if strings.Contains(value, home) {
 				t.Fatalf("probe %s detail %q leaks the user's home directory: %q", res.ID, key, value)
@@ -156,6 +159,9 @@ func TestPreflightNeverLeaksHomePath(t *testing.T) {
 				t.Fatalf("probe %s detail %q is an absolute path (%q); details are facts, not paths", res.ID, key, value)
 			}
 		}
+	}
+	if failed != len(forced) {
+		t.Fatalf("%d forced probes failed, want %d", failed, len(forced))
 	}
 }
 

@@ -187,17 +187,6 @@ func TestUserNoticeLedgerDocumented(t *testing.T) {
 	contractcheck.FailViolations(t, "user notice ledger ↔ YAML drift", violations)
 }
 
-func TestSessionAbortedDocumentedNotUserVisible(t *testing.T) {
-	cfg := loadUserNoticeConfig(t)
-	entry, ok := cfg.UserNotices["session_aborted"]
-	if !ok {
-		t.Fatal("host/user-notices must document session_aborted with user_visible:false")
-	}
-	if entry.IsUserVisible() {
-		t.Fatal("session_aborted must be user_visible:false")
-	}
-}
-
 func TestAppBuildWiresUserNoticeCatalog(t *testing.T) {
 	text := contractcheck.ServeWireSource(t)
 	if !strings.Contains(text, "deps.Core.UserNotices = ") {

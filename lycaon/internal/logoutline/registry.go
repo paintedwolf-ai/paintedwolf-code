@@ -3,6 +3,8 @@
 // matcher; BuildDigest folds parsed records into a Digest.
 package logoutline
 
+import "slices"
+
 type lineMatcher func(line []byte) bool
 
 type classifierEntry struct {
@@ -35,6 +37,16 @@ func RegisterClassifierMatcher(format LogFormat, floor float64, specificity int,
 		specificity: specificity,
 		match:       match,
 	})
+}
+
+// Formats lists the formats with a registered parser, sorted.
+func Formats() []LogFormat {
+	out := make([]LogFormat, 0, len(parsers))
+	for format := range parsers {
+		out = append(out, format)
+	}
+	slices.Sort(out)
+	return out
 }
 
 func ParserFor(format LogFormat) (RecordParser, bool) {

@@ -1,93 +1,88 @@
 package contract
 
 import (
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode"
 
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/oarcopy"
+	"github.com/lycaon/lycaon/internal/oarcore"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
 )
 
-// coordinatorOnlyReferents name machinery that exists on the coordinator surface
-// and nowhere else. A delegated leg has no workflow run, no phase, no progress
-// checklist, and no user to ask.
-var coordinatorOnlyReferents = []string{
-	"Phase exit",
-	"workflow Phase",
-	"update_progress",
-	"## Progress",
-	"ask the user",
-}
-
-// workerExits are the moves a worker can actually make when a tool arc is dead.
-// The completion report is the only one that ends the leg.
-var workerExits = []string{
-	"leg_status",
-	"request_decision",
-}
-
-type loopPolicyCopy struct {
-	ID      string `yaml:"id"`
-	Fix     string `yaml:"fix"`
-	Instead string `yaml:"instead"`
-}
-
-// TestLoopRecoveryCopyIsReachableFromAWorkerLeg requires any loop-recovery unit
-// naming coordinator-only machinery to also name, on its worker branch, an exit a
-// leg can take alone. Recovery copy a leg cannot act on leaves it one move — the
-// next tool call, which is what the unit fired to stop.
+// Loop-recovery copy rendered for a worker leg names only tools that leg is
+// offered: copy a leg cannot act on leaves it the next tool call, which is what
+// the unit fired to stop.
 func TestLoopRecoveryCopyIsReachableFromAWorkerLeg(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	dir := filepath.Join(root, doomLoopPolicyDir)
-	entries, err := os.ReadDir(dir)
-	contractcheck.FailErr(t, "read policy dir", err)
+	cfg, err := guidance.LoadHintConfigStock()
+	contractcheck.FailErr(t, "load policy units", err)
+	profiles, err := sandbox.LoadToolProfiles()
+	contractcheck.FailErr(t, "load tool profiles", err)
+	byID := map[string]sandbox.ToolProfile{}
+	for _, p := range profiles {
+		byID[p.ID] = p
+	}
+	tools := knownToolNames(t, profiles)
 
 	checked := 0
-	for _, entry := range entries {
-		if !strings.HasPrefix(entry.Name(), "DOOM_LOOP_") {
+	for code, entry := range cfg.HintCodes {
+		if entry.Emit != "guard:doom_loop" {
 			continue
 		}
-		raw, err := os.ReadFile(filepath.Join(dir, entry.Name()))
-		contractcheck.FailErr(t, "read "+entry.Name(), err)
-		var unit loopPolicyCopy
-		contractcheck.FailErr(t, "parse "+entry.Name(), yaml.Unmarshal(raw, &unit))
-		copyText := unit.Fix + "\n" + unit.Instead
-		// Calls live in the host catalog beside the policy.
-		if steps, err := os.ReadFile(filepath.Join(dir, "..", "host", "next-steps", entry.Name())); err == nil {
-			copyText += "\n" + string(steps)
-		}
-		named := namedReferents(copyText, coordinatorOnlyReferents)
-		if len(named) == 0 {
-			continue
-		}
-		checked++
-		if !strings.Contains(copyText, "worker_leg") {
-			t.Errorf("%s names coordinator-only machinery %v with no worker branch: "+
-				"a delegated leg reading this has nothing to act on",
-				entry.Name(), named)
-			continue
-		}
-		if len(namedReferents(copyText, workerExits)) == 0 {
-			t.Errorf("%s branches on worker_leg but never names a worker exit (%v): "+
-				"the branch has to end somewhere the leg can go",
-				entry.Name(), workerExits)
+		for _, sc := range entry.Scenarios {
+			vars := guidance.ScenarioVars(entry, sc)
+			if leg, _ := vars["worker_leg"].(bool); !leg {
+				continue
+			}
+			profileID, _ := vars["profile"].(string)
+			profile, ok := byID[profileID]
+			if !ok {
+				t.Fatalf("%s/%s names unknown tool profile %q", code, sc.ID, profileID)
+			}
+			facts := oarcopy.FactsFromData(vars)
+			rendered := oarcore.RenderCopy(entry.Fix, facts) + "\n" + oarcore.RenderCopy(entry.Instead, facts)
+			called, _ := vars["tool"].(string)
+			for _, name := range identifierTokens(rendered) {
+				if tools[name] && name != called && !profile.ToolAllowed(name) {
+					t.Errorf("%s/%s worker copy names %s, which profile %s does not offer", code, sc.ID, name, profileID)
+				}
+			}
+			checked++
 		}
 	}
 	if checked == 0 {
-		t.Fatal("no loop-recovery unit named coordinator machinery — this test has " +
-			"stopped watching anything; re-point it or delete it")
+		t.Fatal("no loop-recovery unit has a worker-leg scenario")
 	}
 }
 
-func namedReferents(text string, needles []string) []string {
-	var out []string
-	for _, needle := range needles {
-		if strings.Contains(text, needle) {
-			out = append(out, needle)
+// knownToolNames is every tool and operation a schema or profile declares.
+func knownToolNames(t *testing.T, profiles []sandbox.ToolProfile) map[string]bool {
+	t.Helper()
+	dir := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas")
+	schemas, err := toolschema.LoadSchemaDirWithOperations(dir)
+	contractcheck.FailErr(t, "load tool schemas", err)
+	out := map[string]bool{}
+	for name := range schemas.Tools {
+		out[name] = true
+	}
+	for _, p := range profiles {
+		for name := range p.Tools {
+			out[name] = true
 		}
 	}
+	if len(out) == 0 {
+		t.Fatal("no tool names declared")
+	}
 	return out
+}
+
+func identifierTokens(text string) []string {
+	return strings.FieldsFunc(text, func(r rune) bool {
+		return !(unicode.IsLower(r) || unicode.IsDigit(r) || r == '_')
+	})
 }

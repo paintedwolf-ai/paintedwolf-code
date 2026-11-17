@@ -111,6 +111,37 @@ func (r *Registry) Track(scope Scope, name string, order int, cleanup Cleanup) e
 	return nil
 }
 
+// Tracked lists the resources tracked on scope, in release order.
+func (r *Registry) Tracked(scope Scope) []string {
+	if r == nil {
+		return nil
+	}
+	state := r.acquireScope(scope)
+	state.gate.Lock()
+	entries := make([]entry, 0, len(state.tracked))
+	for _, candidate := range state.tracked {
+		entries = append(entries, candidate)
+	}
+	removable := state.forgotten || (!state.disposed && len(state.tracked) == 0)
+	state.gate.Unlock()
+	r.releaseScope(scope, state, removable)
+	sortEntries(entries)
+	names := make([]string, 0, len(entries))
+	for _, candidate := range entries {
+		names = append(names, candidate.name)
+	}
+	return names
+}
+
+func sortEntries(entries []entry) {
+	sort.SliceStable(entries, func(i, j int) bool {
+		if entries[i].order == entries[j].order {
+			return entries[i].name < entries[j].name
+		}
+		return entries[i].order < entries[j].order
+	})
+}
+
 // Release runs cleanup rules while leaving the scope reusable.
 func (r *Registry) Release(ctx context.Context, scope Scope) error {
 	return r.release(ctx, scope, false)
@@ -168,12 +199,7 @@ func (r *Registry) release(ctx context.Context, scope Scope, terminal bool) erro
 	}
 	state.tracked = nil
 
-	sort.SliceStable(entries, func(i, j int) bool {
-		if entries[i].order == entries[j].order {
-			return entries[i].name < entries[j].name
-		}
-		return entries[i].order < entries[j].order
-	})
+	sortEntries(entries)
 	var errs []error
 	failedTracked := make([]entry, 0)
 	for index, candidate := range entries {

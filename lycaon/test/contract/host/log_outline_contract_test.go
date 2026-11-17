@@ -26,26 +26,19 @@ func TestLogOutlineWireTypesRegistered(t *testing.T) {
 	}
 }
 
+// Every format the outline can report is a wire LogFormat value, and back.
 func TestLogFormatInternalMatchesWire(t *testing.T) {
 	t.Parallel()
-	pairs := []struct {
-		internal logoutline.LogFormat
-		wire     api.LogFormat
-	}{
-		{logoutline.FormatJSONLines, api.LogFormatJSONLines},
-		{logoutline.FormatLogfmt, api.LogFormatLogfmt},
-		{logoutline.FormatSyslogRFC5424, api.LogFormatSyslogRFC5424},
-		{logoutline.FormatSyslogRFC3164, api.LogFormatSyslogRFC3164},
-		{logoutline.FormatCEF, api.LogFormatCEF},
-		{logoutline.FormatLEEF, api.LogFormatLEEF},
-		{logoutline.FormatCLF, api.LogFormatCLF},
-		{logoutline.FormatCombined, api.LogFormatCombined},
+	enums, err := wirespec.DiscoverAPIStringEnums(contractcheck.RepoRoot(t))
+	contractcheck.FailErr(t, "discover API string enums", err)
+	if len(enums["LogFormat"]) == 0 {
+		t.Fatal("wire LogFormat enum not found")
 	}
-	for _, p := range pairs {
-		if string(p.internal) != string(p.wire) {
-			t.Fatalf("log format drift: internal %q wire %q", p.internal, p.wire)
-		}
+	var internal []string
+	for _, format := range logoutline.Formats() {
+		internal = append(internal, string(format))
 	}
+	contractcheck.FailSetEqual(t, "logoutline formats vs wire LogFormat", internal, enums["LogFormat"])
 }
 
 func TestLogDigestInternalJSONMatchesWire(t *testing.T) {
