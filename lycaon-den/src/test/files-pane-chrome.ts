@@ -1,6 +1,6 @@
 import { expect } from "vitest";
-import type { FileBufferKind } from "../documents/project-files-buffer-kind.ts";
-import { filesPaneChrome } from "./files-pane-chrome.ts";
+import type { FileBufferKind } from "../files/documents/project-files-buffer-kind.ts";
+import { filesPaneChrome } from "../files/components/files-pane-chrome.ts";
 
 /** Asserts a rendered pane carries exactly the chrome its buffer kind answers for. */
 export function expectPaneChrome(pane: ParentNode, kind: FileBufferKind): void {

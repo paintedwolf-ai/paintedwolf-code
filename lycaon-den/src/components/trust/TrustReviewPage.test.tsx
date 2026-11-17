@@ -1,4 +1,4 @@
-import { expectPaneChrome } from "../../files/components/files-pane-chrome-test.ts";
+import { expectPaneChrome } from "../../test/files-pane-chrome.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";

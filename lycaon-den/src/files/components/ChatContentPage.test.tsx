@@ -1,4 +1,4 @@
-import { expectPaneChrome } from "./files-pane-chrome-test.ts";
+import { expectPaneChrome } from "../../test/files-pane-chrome.ts";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import type { ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";

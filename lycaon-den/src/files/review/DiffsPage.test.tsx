@@ -1,4 +1,4 @@
-import { expectPaneChrome } from "../components/files-pane-chrome-test.ts";
+import { expectPaneChrome } from "../../test/files-pane-chrome.ts";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";
 import { invokeCommand } from "../../shortcuts/dispatcher.ts";

@@ -1,4 +1,4 @@
-import { expectPaneChrome } from "../components/files-pane-chrome-test.ts";
+import { expectPaneChrome } from "../../test/files-pane-chrome.ts";
 import { sourceEffectFixture } from "../source/source-effect-fixture.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createNoticeStore, registerNoticePublisher } from "../../notices/notice-store.ts";
