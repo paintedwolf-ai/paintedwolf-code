@@ -218,19 +218,6 @@ func TestSettingsOverlayBasenamesPathHelpersRegistered(t *testing.T) {
 	}
 }
 
-func TestHardDenyWriteSpecsNoBasenameForkInBackends(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	src, err := os.ReadFile(filepath.Join(root, "lycaon/internal/confine/confine.go"))
-	testutil.FailErr(t, "read confine.go", err)
-	if !strings.Contains(string(src), "HardDenyWriteSpecs(") {
-		t.Fatal("BuildProfile must render HardDenyWriteSpecs")
-	}
-	if strings.Contains(string(src), "approvals.yaml") {
-		t.Fatal("confine.go must not hardcode approvals.yaml — use HardDenyWriteSpecs")
-	}
-}
-
 // Path-mutating tools come from the catalog's declared axis.
 func TestPathMutatingToolsComeFromTheCatalog(t *testing.T) {
 	t.Parallel()

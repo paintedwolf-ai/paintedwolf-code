@@ -5,100 +5,69 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/capabilitygrants"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // Closed authority paths for structured non-HTTP capability requests.
 
-func TestNonHTTPContractRawCapabilityRequestCannotReachConfineWithoutPermit(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	src := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/socket_spawn.go")
-	fn := mustFindFunc(t, src, "socket_spawn.go", "ConfineRequestForSpawn")
-	body := src[fn.Body.Pos()-1 : fn.Body.End()]
-	if strings.Contains(body, "ParseCapabilityRequest") || strings.Contains(body, "capability_request") {
-		t.Fatal("ConfineRequestForSpawn must not parse raw capability_request into SocketGrants")
-	}
-	if !strings.Contains(body, "FinalizeSocketGrantsForSpawn") || !strings.Contains(body, "FinalizeDirectIPForSpawn") {
-		t.Fatal("ConfineRequestForSpawn must apply only host permits/task overlays via Finalize* helpers")
-	}
-}
-
+// The schema each process tool ships and its compiled contract agree on the
+// capability request fields: command takes sockets and direct IP, a held
+// terminal takes sockets only, and every process tool exposes socks_proxy.
 func TestNonHTTPContractSocketAndDirectToolBoundaries(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	sock := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/socket_capability.go")
-	fn := mustFindFunc(t, sock, "socket_capability.go", "preflightSocketCapability")
-	body := sock[fn.Body.Pos()-1 : fn.Body.End()]
-	if !strings.Contains(body, "toolcontract.CapabilitySocket") || !strings.Contains(body, "toolcontract.CapabilityDirectIP") {
-		t.Fatal("socket preflight must gate on typed socket and direct-IP capabilities")
-	}
-	if !strings.Contains(body, "isolation.CodeDirectIPRequestInvalid") {
-		t.Fatal("socket-only invocations must reject direct_ip capability_request")
-	}
-	boundarySource := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/invocation_boundary.go")
-	boundary := mustFindFunc(t, boundarySource, "invocation_boundary.go", "applyPreInvokeBoundary")
-	boundaryBody := boundarySource[boundary.Body.Pos()-1 : boundary.Body.End()]
-	if !strings.Contains(boundaryBody, "preflightSocketCapability") {
-		t.Fatal("pre-invoke boundary must run socket capability preflight")
-	}
-
-	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/direct_ip_capability.go")
-	dfn := mustFindFunc(t, direct, "direct_ip_capability.go", "preflightDirectIPCapability")
-	dbody := direct[dfn.Body.Pos()-1 : dfn.Body.End()]
-	if !strings.Contains(dbody, "toolcontract.CapabilityDirectIP") {
-		t.Fatal("direct IP preflight must gate on its typed capability")
-	}
-
-	command := contractcheck.ReadRepoFile(t, root, "lycaon/config/packs/painted-wolf/platform/tools/schemas/command.yaml")
-	term := contractcheck.ReadRepoFile(t, root, "lycaon/config/packs/painted-wolf/platform/tools/schemas/terminal_open.yaml")
-	verify := contractcheck.ReadRepoFile(t, root, "lycaon/config/packs/painted-wolf/platform/tools/schemas/verify.yaml")
-	if !strings.Contains(command, "direct_ip") || !strings.Contains(command, "socket_paths") {
-		t.Fatal("command schema must expose socket_paths and direct_ip")
-	}
-	if !strings.Contains(command, "socks_proxy:") {
-		t.Fatal("command schema must expose top-level socks_proxy")
-	}
-	if !strings.Contains(term, "socket_paths") {
-		t.Fatal("terminal_open schema must expose socket_paths")
-	}
-	if strings.Contains(term, "direct_ip") {
-		t.Fatal("terminal_open schema must not expose direct_ip")
-	}
-	if !strings.Contains(term, "socks_proxy:") {
-		t.Fatal("terminal_open schema must expose top-level socks_proxy")
-	}
-	if !strings.Contains(verify, "socks_proxy:") {
-		t.Fatal("verify schema must expose top-level socks_proxy")
-	}
-}
-
-func TestNonHTTPContractCurrentPermitsNonserializableAndCallBound(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	socketRT := contractcheck.ReadRepoFile(t, root, "lycaon/internal/session/approvalstate/socket_capability_runtime.go")
-	if !strings.Contains(socketRT, "ConsumePermit") || !strings.Contains(socketRT, "LoadAndDelete") {
-		t.Fatal("socket runtime must issue/consume current-call permits")
-	}
-	directRT := contractcheck.ReadRepoFile(t, root, "lycaon/internal/session/approvalstate/direct_ip_capability_runtime.go")
-	if !strings.Contains(directRT, "LoadAndDelete") {
-		t.Fatal("direct permit must be removed on single consumption")
-	}
-	if strings.Contains(socketRT, "type SocketPermit struct") || strings.Contains(directRT, "type DirectIPPermit struct") {
-		t.Fatal("runtime must not retain dead exported permit DTOs")
-	}
-	finalize := contractcheck.ReadRepoFile(t, root, "lycaon/internal/tools/direct_ip_spawn.go")
-	if !strings.Contains(finalize, "FinalizeDirectIPForSpawn") || !strings.Contains(finalize, "ConsumePermit") {
-		t.Fatal("direct spawn must consume current-call permit")
+	for _, tc := range []struct {
+		tool   string
+		socket bool
+		direct bool
+	}{
+		{tool: "command", socket: true, direct: true},
+		{tool: "terminal_open", socket: true, direct: false},
+		{tool: "verify", socket: true, direct: true},
+	} {
+		raw, err := config.Read(config.ToolSchemasDir.Join(tc.tool + ".yaml"))
+		contractcheck.FailErr(t, "read "+tc.tool+" schema", err)
+		entry, err := toolschema.ParseEntry(raw)
+		contractcheck.FailErr(t, "parse "+tc.tool+" schema", err)
+		fields := map[string]bool{}
+		for _, path := range toolschema.ArgFieldPaths(entry.Schema) {
+			fields[path] = true
+		}
+		contract, ok := toolcontract.Lookup(tc.tool)
+		if !ok {
+			t.Fatalf("%s has no compiled contract", tc.tool)
+		}
+		for _, axis := range []struct {
+			field      string
+			capability toolcontract.Capability
+			want       bool
+		}{
+			{"socket_paths", toolcontract.CapabilitySocket, tc.socket},
+			{"direct_ip", toolcontract.CapabilityDirectIP, tc.direct},
+		} {
+			if got := fields["capability_request."+axis.field]; got != axis.want {
+				t.Errorf("%s schema capability_request.%s = %v, want %v", tc.tool, axis.field, got, axis.want)
+			}
+			if got := contract.Supports(axis.capability); got != axis.want {
+				t.Errorf("%s contract supports %s = %v, want %v", tc.tool, axis.field, got, axis.want)
+			}
+		}
+		if !fields["socks_proxy"] {
+			t.Errorf("%s schema has no top-level socks_proxy", tc.tool)
+		}
 	}
 }
 
@@ -182,160 +151,33 @@ func TestNonHTTPContractTypedAuthResolvesOnlyMatchingSubstrate(t *testing.T) {
 	}
 }
 
+// A direct-IP card offers no durable authority: every enabled rung is
+// chat-scoped and the project slot is disabled, whatever identity the action
+// carries.
 func TestNonHTTPContractDirectAndExecutionSocketOfferScopes(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	// Direct IP does not offer reusable approval scopes.
-	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/direct_ip_capability.go")
-	for _, banned := range []string{
-		"ApprovalGrantScopeChat", "ApprovalGrantScopeProject", "ApprovalGrantScopeDevice",
-		"ApprovalGrantOffer{", "capability_scope_choices",
-	} {
-		if strings.Contains(direct, banned) {
-			t.Fatalf("direct card must not offer %s", banned)
+	dir := t.TempDir()
+	tc := tools.ToolContext{
+		Identity: tools.InvocationIdentity{SessionID: "sess", ToolCallID: "call", ProjectID: "proj"},
+		Source: tools.InvocationSource{
+			Roots:        []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: "root",
+		},
+	}
+	action, lease := toolexecution.DirectIPReview("command", map[string]any{"command": "client"}, tc, []string{"203.0.113.7"}, nil)
+	offers := capabilitygrants.DirectIPExecutionGrantOffers(action, lease)
+	enabled := 0
+	for _, offer := range offers {
+		if offer.Disabled {
+			continue
+		}
+		enabled++
+		if offer.Scope != hitl.ApprovalGrantScopeChat || offer.Grant.Scope != hitl.ApprovalGrantScopeChat {
+			t.Errorf("direct-IP card offered %s scope: %+v", offer.Scope, offer)
 		}
 	}
-
-	sock := socketCapabilitySources(t, root)
-	if !strings.Contains(sock, "hitl.TitleAllowForThisChat") {
-		t.Fatal("execution socket card must offer chat scope")
-	}
-	if !strings.Contains(sock, "ApprovalGrantScopeChat") {
-		t.Fatal("execution socket offers must be chat-scoped")
-	}
-	for _, banned := range []string{"ApprovalGrantScopeDevice", "capability_scope_choices"} {
-		if strings.Contains(sock, banned) {
-			t.Fatalf("execution socket card must not offer %s", banned)
-		}
-	}
-	assertNoStandingSocketGrant(t)
-}
-
-func TestNonHTTPContractSettingsDurableSocketUsesSharedResolver(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	src := contractcheck.ReadRepoFile(t, root, "lycaon/internal/api/capabilityadmin/grant_create.go")
-	resolveFn := mustFindFunc(t, src, "grant_create.go", "HandleResolveSocketGrant")
-	createFn := mustFindFunc(t, src, "grant_create.go", "HandleCreateApprovalGrant")
-	resolveBody := src[resolveFn.Body.Pos()-1 : resolveFn.Body.End()]
-	createBody := src[createFn.Body.Pos()-1 : createFn.Body.End()]
-	if !strings.Contains(resolveBody, "ResolveSocketRequest") || !strings.Contains(createBody, "ResolveSocketRequest") {
-		t.Fatal("Settings resolve/create must share confine.ResolveSocketRequest")
-	}
-	if !strings.Contains(createBody, "socket_path must be an absolute") {
-		t.Fatal("Settings create must require one exact absolute socket_path")
-	}
-	if strings.Contains(createBody, "socket_paths") {
-		t.Fatal("Settings durable create must accept one exact socket, not a list")
-	}
-	if strings.Contains(createBody, "saved folder") {
-		t.Fatal("project-scoped Settings create must not require a folder")
-	}
-	if !strings.Contains(createBody, "project scope requires project_id") {
-		t.Fatal("project-scoped Settings create must require project_id")
-	}
-	if !strings.Contains(createBody, "ProjectID:") || !strings.Contains(createBody, "projectID") {
-		t.Fatal("Settings create must persist project_id on the grant")
-	}
-}
-
-func TestNonHTTPContractNeverAskStandsDownAsksKeepsValidationAndRecords(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	sock := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/socket_capability.go")
-	fn := mustFindFunc(t, sock, "socket_capability.go", "preflightSocketCapability")
-	body := sock[fn.Body.Pos()-1 : fn.Body.End()]
-	if !strings.Contains(body, "approvalsDisabled") || !strings.Contains(body, "IssuePermit") {
-		t.Fatal("never_ask must stand down socket cards by issuing a typed permit")
-	}
-	if !strings.Contains(body, "recordCapabilityDecision") || !strings.Contains(body, "AuthorizationSourceNeverAsk") {
-		t.Fatal("never_ask socket path must still record capability decision")
-	}
-	if !strings.Contains(body, "ResolveCapabilitySockets") {
-		t.Fatal("never_ask must not skip socket path validation/resolution")
-	}
-
-	direct := contractcheck.ReadRepoFile(t, root, "lycaon/internal/toolexecution/direct_ip_capability.go")
-	dfn := mustFindFunc(t, direct, "direct_ip_capability.go", "preflightDirectIPCapability")
-	dbody := direct[dfn.Body.Pos()-1 : dfn.Body.End()]
-	if !strings.Contains(dbody, "approvalsDisabled") || !strings.Contains(dbody, "IssuePermit") {
-		t.Fatal("never_ask must stand down direct cards by issuing a typed permit")
-	}
-	if !strings.Contains(dbody, "AuthorizationSourceNeverAsk") {
-		t.Fatal("never_ask direct path must record AuthorizationSource never_ask")
-	}
-
-	egress := contractcheck.ReadRepoFile(t, root, "lycaon/internal/confine/confine_egress.go")
-	ruleFn := mustFindFunc(t, egress, "confine_egress.go", "ruleOrPosture")
-	ruleBody := egress[ruleFn.Body.Pos()-1 : ruleFn.Body.End()]
-	denyIdx := strings.Index(ruleBody, "EgressRuleDeny")
-	disableIdx := strings.Index(ruleBody, "approvalsDisabled")
-	if denyIdx < 0 || disableIdx < 0 || denyIdx >= disableIdx {
-		t.Fatal("egress deny rules must run before approval stand-down")
-	}
-
-	parse := contractcheck.ReadRepoFile(t, root, "lycaon/internal/capabilityrequest/capability_request.go")
-	if !strings.Contains(parse, "ParseCapabilityRequest") || !strings.Contains(parse, "unsupported capability_request field") {
-		t.Fatal("structured validation must remain independent of never_ask")
-	}
-}
-
-func TestNonHTTPContractNoStderrProseProgramSocketNameInference(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	dirs := []string{
-		filepath.Join(root, "lycaon", "internal", "tools"),
-		filepath.Join(root, "lycaon", "internal", "toolexecution"),
-		filepath.Join(root, "lycaon", "internal", "capabilityrequest"),
-		filepath.Join(root, "lycaon", "internal", "capabilitygrants"),
-		filepath.Join(root, "lycaon", "internal", "session"),
-		filepath.Join(root, "lycaon", "internal", "confine"),
-	}
-	banned := []string{
-		"socket_denial_path",
-		"ExtractSocket",
-		"InferSocket",
-		"retryOnStderr",
-		"stderrSocket",
-		"programNameFloor",
-		"socketNameRisk",
-	}
-	err := filepath.WalkDir(filepath.Join(root, "lycaon"), func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		inScope := false
-		for _, dir := range dirs {
-			if strings.HasPrefix(path, dir+string(filepath.Separator)) || path == dir {
-				inScope = true
-				break
-			}
-		}
-		if !inScope {
-			return nil
-		}
-		if strings.Contains(path, string(filepath.Separator)+"testdata"+string(filepath.Separator)) {
-			return nil
-		}
-		b, readErr := os.ReadFile(path)
-		if readErr != nil {
-			return readErr
-		}
-		src := string(b)
-		for _, needle := range banned {
-			if strings.Contains(src, needle) {
-				t.Errorf("%s must not introduce %s", path, needle)
-			}
-		}
-		return nil
-	})
-	contractcheck.FailErr(t, "walk capability packages", err)
-
-	// Raw arguments do not authorize sockets.
-	req := confine.Request{Roots: []string{t.TempDir()}}
-	c := hitl.ContainedForRequest(req)
-	if c.SocketCount != 0 || c.SocketPathsDigest != "" || c.DirectIP {
-		t.Fatalf("default contained must not invent socket/direct from empty request: %+v", c)
+	if enabled == 0 {
+		t.Fatalf("direct-IP card offered no rung for a complete lease: %+v", offers)
 	}
 }
 

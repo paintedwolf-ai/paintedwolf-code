@@ -10,7 +10,7 @@ const fakeKey = "sk-live-0123456789abcdefghijklmnopqrstuv"
 
 func TestIsSecretFieldName(t *testing.T) {
 	secret := []string{
-		"api_key", "apiKey", "API_KEY", "X-Api-Key", "access_token", "refresh_token",
+		"api_key", "apiKey", "API_KEY", "API-KEY", "X-Api-Key", "access_token", "refresh_token",
 		"client_secret", "Authorization", "password", "user_password",
 		"token", "credential", "private_key",
 	}
@@ -20,7 +20,7 @@ func TestIsSecretFieldName(t *testing.T) {
 		}
 	}
 
-	notSecret := []string{"", "provider_id", "model", "base_url", "status", "version"}
+	notSecret := []string{"", "provider_id", "model", "base_url", "status", "version", "id"}
 	for _, name := range notSecret {
 		if IsSecretFieldName(name) {
 			t.Fatalf("IsSecretFieldName(%q) = true, want false", name)
@@ -93,7 +93,7 @@ func TestScrubValueRedactsByKeyAtEveryDepth(t *testing.T) {
 }
 
 func TestScrubJSONKeepsShapeAndDropsSecrets(t *testing.T) {
-	raw := []byte(`{"provider_id":"openai","api_key":"` + fakeKey + `","models":["a","b"]}`)
+	raw := []byte(`{"provider_id":"openai","api_key":"` + fakeKey + `","models":["a","b"],"nested":{"access_token":"` + fakeKey + `","model":"m"}}`)
 
 	got := ScrubJSON(raw)
 	if strings.Contains(string(got), fakeKey) {
@@ -109,6 +109,13 @@ func TestScrubJSONKeepsShapeAndDropsSecrets(t *testing.T) {
 	}
 	if len(decoded["models"].([]any)) != 2 {
 		t.Fatalf("array not preserved: %v", decoded["models"])
+	}
+	if decoded["api_key"] != redacted {
+		t.Fatalf("api_key = %v, want %q", decoded["api_key"], redacted)
+	}
+	nested, ok := decoded["nested"].(map[string]any)
+	if !ok || nested["access_token"] != redacted || nested["model"] != "m" {
+		t.Fatalf("nested object = %v, want access_token redacted and model kept", decoded["nested"])
 	}
 }
 

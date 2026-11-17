@@ -13,6 +13,33 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+// The credentials command lists every vault namespace that holds a managed
+// secret, so where and purge reach each one.
+func TestCredentialSlotsRegisterEveryManagedNamespace(t *testing.T) {
+	t.Setenv(configdir.EnvConfigDir, t.TempDir())
+	slots, err := allCredentialSlots()
+	testutil.FailErr(t, "resolve credential slots", err)
+	got := map[string]bool{}
+	for _, slot := range slots {
+		got[slot.Namespace] = true
+	}
+	for _, namespace := range []string{
+		credentialstore.NamespaceProviders,
+		credentialstore.NamespaceWebResearch,
+		credentialstore.NamespaceMCPOAuth,
+		credentialstore.NamespaceMCPCredentials,
+		credentialstore.NamespaceSecretFingerprint,
+		credentialstore.NamespaceManagedSecrets,
+		credentialstore.NamespaceGitCredentials,
+		credentialstore.NamespaceHostIdentity,
+		credentialstore.NamespaceDaemonToken,
+	} {
+		if !got[namespace] {
+			t.Errorf("credentials command does not register namespace %q (have %v)", namespace, got)
+		}
+	}
+}
+
 func TestCredentialsPurgeRequiresConfirmationAndClearsEveryNamespace(t *testing.T) {
 	t.Setenv(configdir.EnvConfigDir, t.TempDir())
 	slots, err := allCredentialSlots()

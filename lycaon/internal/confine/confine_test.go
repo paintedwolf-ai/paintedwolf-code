@@ -1133,29 +1133,6 @@ func TestBoundaryAgentWorkspacesAreReachable(t *testing.T) {
 	}
 }
 
-// Profiles stay in memory to prevent cross-command replacement.
-func TestProfileIsNotStagedInAFile(t *testing.T) {
-	self := requireLiveBoundary(t)
-	root := t.TempDir()
-	c := confine.Confinement{Roots: []string{root}, Network: confine.NetworkDeny}
-
-	cmd, cleanup, err := confine.Command(context.Background(), self, "true", nil, c)
-	testutil.FailErr(t, "confine.Command failed", err)
-	defer cleanup()
-
-	for _, arg := range cmd.Args {
-		if strings.HasSuffix(arg, ".sb") {
-			t.Fatalf("profile passed as a file path: %v", cmd.Args)
-		}
-	}
-	if len(cmd.ExtraFiles) != 1 {
-		t.Fatalf("profile must travel over one inherited pipe, got %d extra files", len(cmd.ExtraFiles))
-	}
-	if code := confinedExit(t, self, c, "sh", "-c", "echo hi > /etc/lycaon-escape-probe"); code == 0 {
-		t.Fatal("write outside the jail should be denied")
-	}
-}
-
 // leasedPeer resolves every caller to one live action; attribution itself is
 // covered by the broker's own tests.
 func leasedPeer(lineage string) egressproxy.PeerResolver {

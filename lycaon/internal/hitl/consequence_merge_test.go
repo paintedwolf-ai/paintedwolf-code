@@ -32,3 +32,13 @@ func TestMaxConsequenceRaisesBandAndPrefersSecretCode(t *testing.T) {
 		t.Fatalf("MaxConsequence detection+secret = (%q, %q) want (high_risk, secret)", band, code)
 	}
 }
+
+func TestMaxConsequencePrefersDetectionOverWriteRoot(t *testing.T) {
+	band, code := MaxConsequence(
+		api.ConsequenceBandHighRisk, api.ConsequenceCodeWriteRoot,
+		api.ConsequenceBandHighRisk, api.ConsequenceCodeDetection,
+	)
+	if band != api.ConsequenceBandHighRisk || code != api.ConsequenceCodeDetection {
+		t.Fatalf("MaxConsequence write_root+detection = (%q, %q) want (high_risk, detection)", band, code)
+	}
+}

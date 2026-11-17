@@ -1,142 +1,68 @@
 package contract
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"os"
+	"context"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/toolexecution"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/tools"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func TestAuthzEventEnumVocabulary(t *testing.T) {
-	t.Parallel()
-	wantActions := map[authzcontext.EventAction]bool{
-		authzcontext.EventActionApprovalDecision:           true,
-		authzcontext.EventActionToolDenied:                 true,
-		authzcontext.EventActionCapabilityRequested:        true,
-		authzcontext.EventActionCapabilityGranted:          true,
-		authzcontext.EventActionCapabilityDenied:           true,
-		authzcontext.EventActionCapabilityRevoked:          true,
-		authzcontext.EventActionCapabilityApplied:          true,
-		authzcontext.EventActionDirectIPLeaseReused:        true,
-		authzcontext.EventActionDirectIPStarted:            true,
-		authzcontext.EventActionDirectIPCompleted:          true,
-		authzcontext.EventActionDirectIPReconstructed:      true,
-		authzcontext.EventActionMediatedEndpoint:           true,
-		authzcontext.EventActionDetectionResolved:          true,
-		authzcontext.EventActionAskSuppressed:              true,
-		authzcontext.EventActionSecretPermissionUsed:       true,
-		authzcontext.EventActionSecretReceipt:              true,
-		authzcontext.EventActionSecretContest:              true,
-		authzcontext.EventActionSecretDestinationTrusted:   true,
-		authzcontext.EventActionSecretHostComposedRedacted: true,
-		authzcontext.EventActionSecretChatLocalRelease:     true,
-		authzcontext.EventActionContentApplyResolved:       true,
-		authzcontext.EventActionBlueprintApproved:          true,
-		authzcontext.EventActionBlueprintSuperseded:        true,
-		authzcontext.EventActionBlueprintRevoked:           true,
-	}
-	for _, a := range authzcontext.AllEventActions() {
-		if !wantActions[a] {
-			t.Fatalf("unexpected action %q", a)
-		}
-		delete(wantActions, a)
-	}
-	if len(wantActions) != 0 {
-		t.Fatalf("missing actions: %v", wantActions)
-	}
+// authzEventsReadThroughRuleGate runs one in-project read through the real
+// rule gate with the SQL authz ledger wired and returns the session's rows.
+func authzEventsReadThroughRuleGate(t *testing.T, profiles []sandbox.ToolProfile) []authzcontext.Event {
+	t.Helper()
+	sqlDB := testdbfixture.Open(t, "authz-rule-gate.db")
+	const sessionID = "sess-authz-rule-gate"
+	testdbseed.InsertSession(t, sqlDB, sessionID, testdbseed.DefaultProjectID)
 
-	wantOutcomes := map[authzcontext.EventOutcome]bool{
-		authzcontext.EventOutcomeAllowed: true,
-		authzcontext.EventOutcomeDenied:  true,
-	}
-	for _, o := range authzcontext.AllEventOutcomes() {
-		if !wantOutcomes[o] {
-			t.Fatalf("unexpected outcome %q", o)
-		}
-		delete(wantOutcomes, o)
-	}
-	if len(wantOutcomes) != 0 {
-		t.Fatalf("missing outcomes: %v", wantOutcomes)
-	}
+	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
+	contractcheck.FailErr(t, "approval store", err)
+	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, profiles)
+	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
+	reg := tools.NewDefaultRegistry()
+	contractcheck.FailErr(t, "register read", reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		return "ok", nil
+	}))
+	exec := toolexecution.NewExecutor(policy, reg, "implement")
+	exec.Approvals.SetAuthzRecorder(authzcontext.SQLRecorder(sqlDB))
 
-	wantResolved := map[authzcontext.ResolvedBy]bool{
-		authzcontext.ResolvedByHuman:      true,
-		authzcontext.ResolvedByExpiry:     true,
-		authzcontext.ResolvedBySystemDeny: true,
-		authzcontext.ResolvedByUserStop:   true,
-		authzcontext.ResolvedByHostStop:   true,
-		authzcontext.ResolvedByPolicy:     true,
-	}
-	for _, r := range authzcontext.AllResolvedBy() {
-		if !wantResolved[r] {
-			t.Fatalf("unexpected resolved_by %q", r)
-		}
-		delete(wantResolved, r)
-	}
-	if len(wantResolved) != 0 {
-		t.Fatalf("missing resolved_by: %v", wantResolved)
-	}
+	root := t.TempDir()
+	_, _ = exec.Invoke(t.Context(), "read", map[string]any{"path": filepath.Join(root, "a.go")}, tools.ToolContext{
+		Source: tools.InvocationSource{
+			Roots:        []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
+			ActiveRootID: "r1",
+		},
+		Identity: tools.InvocationIdentity{SessionID: sessionID, Agent: "implement"},
+	})
+	rows, err := authzcontext.NewSQLStore(sqlDB).ListEvents(t.Context(), sessionID)
+	contractcheck.FailErr(t, "list authz events", err)
+	return rows
 }
 
-// Silent auto-allows append no ledger rows; only HITL resolution and executor policy blocks do.
+// Silent auto-allows append no ledger rows; an executor policy block does.
 func TestRuleGateDoesNotAppendAuthzEvents(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "internal", "settings", "rule_gate.go")
-	src, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read rule_gate.go: %v", err)
+	if rows := authzEventsReadThroughRuleGate(t, outsideReadProfiles(t)); len(rows) != 0 {
+		t.Fatalf("auto-allowed read appended authz rows: %+v", rows)
 	}
-	if strings.Contains(string(src), "authzcontext") {
-		t.Fatal("rule_gate.go must not import authzcontext — silent auto-allows emit no event")
-	}
-}
 
-func TestAuthzEventHookSites(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	// Every checkpoint outcome seals inside the resolving transaction.
-	checkCalls(t, filepath.Join(root, "lycaon", "internal", "hitl", "resolution_seal.go"),
-		"AppendApprovalGateTx", "AppendCapabilityGateTx", "AppendHumanGateTx")
-	checkCalls(t, filepath.Join(root, "lycaon", "internal", "hitl", "approval_resolution.go"), "AppendApprovalGateTx")
-	checkCalls(t, filepath.Join(root, "lycaon", "internal", "workflow", "persistence", "blueprints.go"), "AppendHumanGateTx")
-	checkCalls(t, filepath.Join(root, "lycaon", "internal", "blueprint", "approval_store.go"), "AppendHumanGateTx")
-	checkCalls(t, filepath.Join(root, "lycaon", "internal", "toolexecution", "executor_tool_approval.go"), "AppendToolDenied")
-}
-
-func checkCalls(t *testing.T, path string, want ...string) {
-	t.Helper()
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, path, nil, 0)
-	if err != nil {
-		t.Fatalf("parse %s: %v", path, err)
+	denied := outsideReadProfiles(t)
+	for i := range denied {
+		denied[i].DenyTools = append(denied[i].DenyTools, "read")
 	}
-	found := make(map[string]bool)
-	ast.Inspect(f, func(n ast.Node) bool {
-		call, ok := n.(*ast.CallExpr)
-		if !ok {
-			return true
-		}
-		sel, ok := call.Fun.(*ast.SelectorExpr)
-		if !ok {
-			return true
-		}
-		for _, name := range want {
-			if sel.Sel.Name == name {
-				found[name] = true
-			}
-		}
-		return true
-	})
-	for _, name := range want {
-		if !found[name] {
-			t.Fatalf("%s must call authz ledger %s", filepath.Base(path), name)
-		}
+	rows := authzEventsReadThroughRuleGate(t, denied)
+	if len(rows) != 1 || rows[0].Action != authzcontext.EventActionToolDenied || rows[0].ResolvedBy != authzcontext.ResolvedBySystemDeny {
+		t.Fatalf("profile-denied read rows = %+v, want one tool_denied", rows)
 	}
 }

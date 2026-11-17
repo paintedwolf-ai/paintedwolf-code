@@ -1,11 +1,13 @@
 package contract
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	appsecurity "github.com/lycaon/lycaon/internal/app/security"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/detectionpack"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -71,37 +73,41 @@ func TestToolCredentialsAreWriteDeniedButReadable(t *testing.T) {
 	}
 }
 
-// The key-material floor is pack data, not a Go list: confine holds the seam,
-// the shipped pack holds the names, and clearing the seam leaves nothing behind.
+// The key-material floor is pack data, not a Go list: with no source installed
+// confine answers nothing, and the boot installer hands it exactly the shipped
+// catalogue, normalised to home-relative paths.
 func TestKeyMaterialFloorIsPackDerived(t *testing.T) {
 	catalogued, err := detectionpack.BundledKeyMaterialPaths()
 	contractcheck.FailErr(t, "BundledKeyMaterialPaths", err)
 	if len(catalogued) == 0 {
 		t.Fatal("the shipped key-material pack names no paths; the floor would be empty")
 	}
+	want := map[string]bool{}
 	for _, p := range catalogued {
 		if !strings.HasPrefix(p, "~/") {
 			t.Errorf("key-material path %q is not home-relative; the pack is shared across machines", p)
 		}
+		want[filepath.Clean(strings.TrimSuffix(strings.TrimPrefix(p, "~/"), "/"))] = true
 	}
 
-	// Not parallel and restored below: the source is process-wide, and the check
-	// is that nothing answers when it is absent.
-	restore := func() []string { return catalogued }
-	confine.SetKeyMaterialPathsSource(nil)
-	residue := confine.KeyMaterialHomeRelPaths()
-	confine.SetKeyMaterialPathsSource(restore)
-	if len(residue) != 0 {
+	// Not parallel: the sources are process-wide and restored on cleanup.
+	previousKeys := confine.SetKeyMaterialPathsSource(nil)
+	previousStores := confine.SetCredentialStorePathsSource(nil)
+	t.Cleanup(func() {
+		confine.SetKeyMaterialPathsSource(previousKeys)
+		confine.SetCredentialStorePathsSource(previousStores)
+	})
+	if residue := confine.KeyMaterialHomeRelPaths(); len(residue) != 0 {
 		t.Fatalf("confine answers %v with no catalogue installed; the list must come from the catalogue", residue)
 	}
 
+	contractcheck.FailErr(t, "install boot floors", (&appsecurity.Detections{}).LoadFloors())
 	installed := confine.KeyMaterialHomeRelPaths()
-	if len(installed) != len(catalogued) {
-		t.Fatalf("installed floor = %v, catalogue = %v", installed, catalogued)
-	}
+	got := map[string]bool{}
 	for _, rel := range installed {
-		if strings.HasPrefix(rel, "~") || strings.HasSuffix(rel, "/") {
-			t.Errorf("home-relative floor entry %q still carries catalogue syntax", rel)
-		}
+		got[rel] = true
+	}
+	if len(installed) != len(want) || !maps.Equal(got, want) {
+		t.Fatalf("installed floor = %v, want the catalogue %v", installed, catalogued)
 	}
 }

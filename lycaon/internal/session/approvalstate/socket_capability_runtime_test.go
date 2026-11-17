@@ -2,12 +2,14 @@ package approvalstate_test
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/hitl"
 	"net"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/scopedstore"
 
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
@@ -162,9 +164,36 @@ func TestSocketCapabilityRuntimePermitOnce(t *testing.T) {
 	if !ok {
 		t.Fatal("first consume must succeed")
 	}
+	if got := rt.AuthorizedGrants("sess-1", hitl.EffectPermitIdentity{SessionID: "sess-1", ToolCallID: "tc-1"}, "digest-1", []confine.SocketGrant{g}); len(got) != 0 {
+		t.Fatalf("consumed permit still authorizes: %+v", got)
+	}
 	ok, err = rt.ConsumePermit(hitl.EffectPermitIdentity{SessionID: "sess-1", ToolCallID: "tc-1"}, "digest-1", g)
 	if ok || err != nil {
 		t.Fatalf("second consume must fail: ok=%v err=%v", ok, err)
+	}
+}
+
+// Unconsumed permits are bounded: past the store capacity the oldest is
+// evicted while the newest still consumes once.
+func TestSocketCapabilityRuntimePermitsAreBounded(t *testing.T) {
+	rt := approvalstate.NewSocketCapabilityRuntime()
+	t.Cleanup(rt.Close)
+	g := confine.SocketGrant{ApprovedPath: "/fixture/service.sock", ResolvedPath: "/fixture/service.sock", Binding: socketref.Binding{Enforcement: socketref.KernelPathname}}
+	identity := func(i int) hitl.EffectPermitIdentity {
+		return hitl.EffectPermitIdentity{SessionID: "sess-1", ToolCallID: fmt.Sprintf("tc-%d", i)}
+	}
+	for i := 0; i <= scopedstore.DefaultEntries; i++ {
+		rt.IssuePermit("sess-1", identity(i), "digest", g)
+	}
+	if ok, err := rt.ConsumePermit(identity(0), "digest", g); ok || err != nil {
+		t.Fatalf("oldest permit survived past capacity: ok=%v err=%v", ok, err)
+	}
+	newest := identity(scopedstore.DefaultEntries)
+	if ok, err := rt.ConsumePermit(newest, "digest", g); !ok || err != nil {
+		t.Fatalf("newest permit lost: ok=%v err=%v", ok, err)
+	}
+	if ok, _ := rt.ConsumePermit(newest, "digest", g); ok {
+		t.Fatal("consumed permit authorized a second time")
 	}
 }
 

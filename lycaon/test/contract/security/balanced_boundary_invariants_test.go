@@ -1,70 +1,64 @@
 package contract
 
 import (
-	"os"
 	"path/filepath"
-	"strings"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-// WriteRootsForBoundary and BuildProfile share the same write-root union.
+// One write-root union decides the applied profile's write verdicts and the
+// gate's write authority: paths under a granted root or the session scratch
+// root are writable and run without a card, a path outside every root is
+// refused by the profile and gated.
 func TestInvariantWriteRootSSOTSharedByGateAndConfine(t *testing.T) {
-	t.Setenv("LYCAON_CONFIG_DIR", "/opt/paintedwolf-fixture-state")
-	proj := t.TempDir()
-	writeRoots, err := confine.WriteRootsForBoundary("", []string{proj}, nil, "")
+	confine.TestingSetAutoConfine(t)
+	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
+	t.Setenv("LYCAON_SANDBOX", "")
+	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
+	requireNonHTTPConfinement(t)
+	proj, granted, scratch := t.TempDir(), t.TempDir(), t.TempDir()
+	writeRoots, err := confine.WriteRootsForBoundary("", []string{proj}, []string{granted}, scratch)
 	contractcheck.FailErr(t, "admit write roots", err)
-	if len(writeRoots) == 0 {
-		t.Fatal("WriteRootsForBoundary returned no roots")
+	conf, ok := confine.DefaultConfinement(confine.Request{
+		Roots: []string{proj}, GrantedWriteRoots: []string{granted}, SessionScratchRoot: scratch,
+	})
+	if !ok || conf == nil {
+		t.Fatal("no confinement for the project root")
 	}
-
-	// /tmp survives EvalSymlinks (→ /private/tmp on darwin) and is in the union.
-	if !confine.PathWithinRoots("/tmp/scratch", writeRoots) {
-		t.Fatalf("/tmp/scratch must be within write roots: %v", writeRoots)
+	contained := hitl.ContainedFromConfinement(conf, ok)
+	if !slices.Equal(contained.WriteRoots, writeRoots) {
+		t.Fatalf("gate write roots %v differ from the boundary union %v", contained.WriteRoots, writeRoots)
 	}
-	// A path outside every write root is not.
-	if confine.PathWithinRoots("/etc/lycaon-probe", writeRoots) {
-		t.Fatalf("/etc must not be within write roots: %v", writeRoots)
+	boundary := confine.BoundaryOf(conf)
+	if !boundary.Applied {
+		t.Fatal("the confinement projects no applied boundary")
 	}
-
-}
-
-// Contained is stamped from DefaultConfinement onto ProposedAction.
-func TestInvariantProductionGateWiresContainment(t *testing.T) {
-	t.Parallel()
-	policyPath := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "toolexecution", "approval_policy.go")
-	policyRaw, err := os.ReadFile(policyPath)
-	contractcheck.FailErr(t, "read approval_policy.go", err)
-	policySrc := string(policyRaw)
-	// The stamp reads the executor's own confine.Request rather than rebuilding one
-	// field by field, so the guard pins that identity plus the roots backfill — not a
-	// field order, which would fail on an unrelated field being added.
-	if !strings.Contains(policySrc, "hitl.ContainedForRequest(confReq)") {
-		t.Fatal("approval_policy.go must stamp Contained via hitl.ContainedForRequest")
-	}
-	if !strings.Contains(policySrc, "confReq := eval.ConfineRequest") {
-		t.Fatal("Contained must be stamped from the same confine.Request the executor applies, not a rebuilt one")
-	}
-	if !strings.Contains(policySrc, "confReq.Roots = []string{eval.ProjectDir}") {
-		t.Fatal("Contained must carry the project roots the executor applies when the request has none")
-	}
-	runtimePath := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "toolhost", "runtime.go")
-	runtimeRaw, err := os.ReadFile(runtimePath)
-	contractcheck.FailErr(t, "read toolhost/runtime.go", err)
-	runtimeSrc := string(runtimeRaw)
-	// The gate is built through the deferred builder, not inline: its producers do
-	// not all exist at this point in boot, and a gate constructed before them
-	// reads an unwired producer as silence.
-	if !strings.Contains(runtimeSrc, "settings.NewGateBuilder(") {
-		t.Fatal("toolhost/runtime.go must construct the approval gate through NewGateBuilder")
-	}
-	authority := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/toolhost/authority_services.go")
-	if !strings.Contains(authority, "func (r *AuthorityServices) SealApprovalGate()") {
-		t.Fatal("toolhost authority service must expose SealApprovalGate so boot can install the built gate")
+	rules := boundary.Filesystem
+	for path, inside := range map[string]bool{
+		filepath.Join(granted, "out.txt"):      true,
+		filepath.Join(scratch, "out.txt"):      true,
+		"/etc/lycaon-write-root-probe/out.txt": false,
+	} {
+		if got := confine.PathWithinRoots(path, writeRoots); got != inside {
+			t.Errorf("%s within write roots = %v, want %v", path, got, inside)
+		}
+		if got := rules.Verdict(confine.AccessWrite, path); got.Allowed != inside {
+			t.Errorf("%s profile write verdict = %+v, want allowed=%v", path, got, inside)
+		}
+		res := evalBundled(t, hitl.ProposedAction{
+			Invocation: hitl.ActionInvocation{Tool: "write", Files: []string{path}},
+			Scope:      hitl.ActionScope{ProjectDir: proj, SessionScratchRoot: scratch},
+			Execution:  hitl.ActionExecution{Contained: contained},
+		})
+		if res.AutoApproved() != inside {
+			t.Errorf("%s gate auto-approved = %v, want %v: %+v", path, res.AutoApproved(), inside, res)
+		}
 	}
 }
 
