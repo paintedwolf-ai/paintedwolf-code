@@ -14,7 +14,7 @@ import (
 const HostCorpusPath = "lycaon-den/src/api/testdata/host-corpus.json"
 
 // HostCorpusRefresh is the command that rewrites the corpus.
-const HostCorpusRefresh = "UPDATE_HOST_CORPUS=1 ./task test:digest -- ./test/security/ -run TestAPIConformance"
+const HostCorpusRefresh = "UPDATE_HOST_CORPUS=1 ./task test:digest -- ./test/security/sweeps -run TestAPIConformance"
 
 // HostCorpus is what the conformance sweep observed the host answer and
 // publish.
