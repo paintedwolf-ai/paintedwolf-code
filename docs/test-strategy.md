@@ -590,6 +590,12 @@ production-mode report of unused Den files, exports and types
 (`lycaon-den/knip.json`) with the base the same way; it runs in the lanes that
 install Den's dependencies, and `arch-lint:changes` in the lanes that provision
 Go analysis tools. `arch-lint:report` lists every finding.
+The copy check compares shared fields across differently named types too, including adapters.
+It reports mostly copied shapes; deliberate partial seeds and projections without matching destination
+fields remain outside its scope. Findings require review of the intended value contract.
+Baseline findings are cached by source, scope, analyzer implementation, policy, host/build settings and
+frontend configuration, dependency lock and installed Knip identity when applicable. Removing the head's
+Knip configuration also removes the copied configuration in the scratch base tree.
 The test-support package rule, the shipped roots and the target platforms
 each host type-checks are declared in `scripts/arch-lint-policy.json`. A Linux
 host cannot type-check the darwin build of cgo-only packages, so Linux judges

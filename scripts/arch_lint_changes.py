@@ -18,6 +18,7 @@ import argparse
 import hashlib
 import json
 import os
+import platform
 from pathlib import Path
 import shutil
 import subprocess
@@ -60,6 +61,8 @@ def knip(tree, policy):
         config = ROOT / den["dir"] / "knip.json"
         if config.exists():
             shutil.copyfile(config, den_dir / "knip.json")
+        else:
+            (den_dir / "knip.json").unlink(missing_ok=True)
     # Node can cut piped output short when it exits; a file receives all of it.
     with tempfile.TemporaryFile(mode="w+") as out:
         result = subprocess.run(den["command"], cwd=den_dir, stdout=out, stderr=subprocess.PIPE, text=True)
@@ -137,9 +140,25 @@ def checks(binary, tree, policy, go=True, den=False, refs=True):
     return found
 
 
+def analysis_fingerprint(root, binary, policy, den):
+    """Bind reusable findings to the effective analyzer and its external inputs."""
+    files = {"driver": hashlib.sha256(Path(__file__).read_bytes()).hexdigest()}
+    if binary:
+        files["binary"] = hashlib.sha256(binary.read_bytes()).hexdigest()
+    if den:
+        for name in ("knip.json", "package.json", "bun.lock", "bun.lockb",
+                     "node_modules/knip/package.json"):
+            path = root / policy["den"]["dir"] / name
+            files[name] = hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
+    inputs = {"files": files, "policy": policy, "host": [sys.platform, platform.machine()],
+              "python": sys.version, "environment": {key: os.environ.get(key) for key in
+              ("GOOS", "GOARCH", "CGO_ENABLED", "GOFLAGS", "GOEXPERIMENT", "GOTOOLCHAIN", "GOENV")}}
+    return hashlib.sha256(json.dumps(inputs, sort_keys=True).encode()).hexdigest()[:24]
+
+
 def base_checks(root, base, binary, policy, cache, go=True, den=False, refs=True):
-    """Findings at the base, cached by base commit, scope and the binary that judged it."""
-    digest = hashlib.sha256(binary.read_bytes()).hexdigest()[:16] if binary else "knip"
+    """Findings at the base, cached by source, scope and effective analysis inputs."""
+    digest = analysis_fingerprint(root, binary, policy, den)
     parts = ('' if go else '-nogo') + ('' if refs else '-norefs') + ('-den' if den else '')
     cached = cache / f"base-{base}-{digest}{parts}.json"
     if cached.exists():
