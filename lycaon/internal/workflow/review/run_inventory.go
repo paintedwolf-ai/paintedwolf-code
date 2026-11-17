@@ -200,13 +200,13 @@ func (m *Coverage) checkReviewInventory(ctx context.Context, run *api.WorkflowRu
 	if err != nil {
 		return nil, err
 	}
-	var phases []workflowpresentation.PhaseVerdict
+	var phases []runstate.PhaseVerdict
 	for _, prior := range priors {
 		if prior.Phase != run.CurrentPhase {
 			phases = append(phases, prior)
 		}
 	}
-	phases = append(phases, workflowpresentation.PhaseVerdict{
+	phases = append(phases, runstate.PhaseVerdict{
 		Phase: run.CurrentPhase, Def: def,
 		Record: evidence.Record{Artifacts: verdictArtifacts(verdict, nil, nil)},
 	})

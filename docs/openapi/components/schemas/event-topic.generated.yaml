@@ -10,7 +10,6 @@ components:
         - worker
         - checkpoint
         - board
-        - delegation
         - cost
         - llm
         - activity

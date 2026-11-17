@@ -8,7 +8,10 @@ import {
   workersColdCacheRevision,
   workersNeedingTranscriptHydrate,
 } from "../../chat/worker/worker-transcript.ts";
-import { type WorkerDrawerFocus } from "../../chat/worker/workers-model.ts";
+import {
+  findSessionWorker,
+  type WorkerDrawerFocus,
+} from "../../chat/worker/workers-model.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { createCoalescedAsyncScheduler } from "../../store/coalesced-async.ts";
 import type { Project } from "../../api/types.ts";
@@ -70,12 +73,15 @@ export function SessionWorkersDrawer(props: Props) {
   const selectedWorkerStillCold = (): boolean => {
     const id = props.selectedId?.trim();
     if (!id || !open()) return false;
+    const list = workers();
+    const resolvedId =
+      findSessionWorker(list, id, props.appStore.state.workers)?.id ?? id;
     return workersNeedingTranscriptHydrate(
       props.appStore.state.messages,
-      workers(),
+      list,
       props.appStore.state.workerTranscripts,
-      { selectedWorkerId: id },
-    ).some((row) => row.id === id);
+      { selectedWorkerId: resolvedId },
+    ).some((row) => row.id === resolvedId);
   };
 
   const scheduleEmptyRetryIfNeeded = () => {

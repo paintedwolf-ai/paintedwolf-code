@@ -1,7 +1,8 @@
 import { vi } from "vitest";
 import { stubClient } from "./client-fixture.ts";
 import type { ProjectRoot, ProjectSourceReadResponse } from "../api/types.ts";
-import { openFilesBuffer, applyFilesBufferLoad } from "../files/documents/project-files-buffers.ts";
+import { openFilesBuffer } from "../files/documents/project-files-buffer-lifecycle.ts";
+import { applyFilesBufferLoad } from "../files/documents/project-files-buffer-io.ts";
 import { projectFilesState } from "../files/documents/files-buffer-state.ts";
 
 export function controllerSource(content = "original", partial: Partial<ProjectSourceReadResponse> = {}): ProjectSourceReadResponse {

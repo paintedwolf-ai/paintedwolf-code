@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/configlayout"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/project"
@@ -50,7 +50,7 @@ func composedMutationEntry(t *testing.T) (*programtest.Fixture, *projectsource.S
 	testutil.FailErr(t, "compose production program services", runtime.Commands.SetProgramServices(ProgramServices{Recorder: fixture.Recorder, Blobs: original.Blobs, Projector: original.Projector, Progress: original.Progress, Sessions: original.Sessions}))
 	runtime.Commands.SetBackgroundRegistry(fixture.Background)
 	fixture.Runtime = runtime.Commands.programs()
-	_, err = fixture.Database.ExecContext(t.Context(), `INSERT INTO project_roots (id,project_id,path,label,is_primary,added_at) VALUES ('r1',?,?,'root',1,?)`, testdbseed.DefaultProjectID, root, db.FormatTime(time.Now().UTC()))
+	_, err = fixture.Database.ExecContext(t.Context(), `INSERT INTO project_roots (id,project_id,path,label,is_primary,added_at) VALUES ('r1',?,?,'root',1,?)`, testdbseed.DefaultProjectID, root, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "attach durable root", err)
 	ledger := sourceledger.New(fixture.Database, t.TempDir())
 	service := projectsource.NewSourceMutationService(fixture.Database, ledger)

@@ -34,10 +34,8 @@ import { createSignal } from "solid-js";
 
 import { FilesEditor } from "./FilesEditor.tsx";
 import { FilesInfoCard } from "../components/FilesInfoCard.tsx";
-import {
-  applyFilesBufferLoad,
-  openFilesBuffer,
-} from "../documents/project-files-buffers.ts";
+import { applyFilesBufferLoad } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 
 import { resetSourceSymbolsCacheForTests } from "../source/source-symbols-cache.ts";

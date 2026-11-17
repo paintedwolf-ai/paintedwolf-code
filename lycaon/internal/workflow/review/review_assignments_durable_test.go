@@ -11,6 +11,7 @@ import (
 	tools "github.com/lycaon/lycaon/internal/tools"
 	workflow "github.com/lycaon/lycaon/internal/workflow"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 	api "github.com/lycaon/lycaon/pkg/api"
 	testing "testing"
@@ -24,7 +25,7 @@ func reviewAssignmentFixture(t *testing.T) (*workflow.RunManager, *api.WorkflowR
 
 func assertReviewApplicable(t *testing.T, mgr *workflow.RunManager, run *api.WorkflowRun) {
 	t.Helper()
-	raw, err := mgr.Assignments.View(t.Context(), map[string]any{"review_view": "summary"}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: run.SessionID}})
+	raw, err := mgr.Assignments.View(t.Context(), map[string]any{"view": "summary"}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: run.SessionID}})
 	testutil.FailErr(t, "read public review applicability", err)
 	var view map[string]json.RawMessage
 	testutil.FailErr(t, "decode public applicability", json.Unmarshal([]byte(raw), &view))
@@ -122,7 +123,7 @@ func TestReviewAssignmentViewsFenceChildrenAndPageCandidate(t *testing.T) {
 	setReviewWorkerTasks(mgr, func(context.Context, string) ([]api.WorkerTask, error) {
 		return []api.WorkerTask{{ID: "job", ChildSessionID: "child"}}, nil
 	})
-	args := map[string]any{"review_view": "subject", "assignment_id": "job"}
+	args := map[string]any{"view": "subject", "assignment_id": "job"}
 	child := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "child", ParentSessionID: run.SessionID, WorkerJobID: "job"}}
 	raw, err := mgr.Assignments.View(t.Context(), args, child)
 	testutil.FailErr(t, "read child subject", err)
@@ -147,7 +148,7 @@ func TestReviewAssignmentViewsFenceChildrenAndPageCandidate(t *testing.T) {
 		t.Fatal("another child read the assignment")
 	}
 	child.Identity.SessionID = "child"
-	args["review_view"] = "summary"
+	args["view"] = "summary"
 	if _, err := mgr.Assignments.View(t.Context(), args, child); err == nil {
 		t.Fatal("worker read coordinator review state")
 	}
@@ -220,7 +221,7 @@ func TestReviewViewValidatesSelectorsAndMarksReservations(t *testing.T) {
 	task := api.WorkerTask{ID: "reserved", WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, AgentType: "auditor"}
 	testutil.FailErr(t, "reserve review", mgr.Assignments.Bind(t.Context(), run, &task))
 	tctx := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: run.SessionID}}
-	raw, err := mgr.Assignments.View(t.Context(), map[string]any{"review_view": "assignments"}, tctx)
+	raw, err := mgr.Assignments.View(t.Context(), map[string]any{"view": "assignments"}, tctx)
 	testutil.FailErr(t, "list reservations", err)
 	var page struct {
 		Assignments []struct {
@@ -231,15 +232,54 @@ func TestReviewViewValidatesSelectorsAndMarksReservations(t *testing.T) {
 	if len(page.Assignments) != 1 || page.Assignments[0].Status != "reserved" {
 		t.Fatalf("orphan reservation shown as job: %s", raw)
 	}
-	for _, args := range []map[string]any{{"cursor": "50"}, {"review_view": "subject"}, {"review_view": "summary", "assignment_id": "reserved"}, {"review_view": "summary", "cursor": "50"}, {"review_view": "subject", "assignment_id": "reserved", "cursor": "999"}, {"review_view": "assignments", "finding_id": 1}} {
+	for _, args := range []map[string]any{{"cursor": "50"}, {"view": "subject"}, {"view": "summary", "assignment_id": "reserved"}, {"view": "summary", "cursor": "50"}, {"view": "subject", "assignment_id": "reserved", "cursor": "999"}, {"view": "assignments", "finding_id": 1}} {
 		_, err := mgr.Assignments.View(t.Context(), args, tctx)
-		if rejected := toolrejection.AsToolReject(err); rejected == nil || rejected.Code != "WORKFLOW_REVIEW_VIEW_INVALID" {
+		if rejected := toolrejection.AsToolReject(err); rejected == nil || rejected.Code != "READ_REVIEW_INVALID" {
 			t.Fatalf("selector refusal not registered: %v", err)
 		}
 	}
 	mgr.Assignments.WorkerTasks = nil
-	_, err = mgr.Assignments.View(t.Context(), map[string]any{"review_view": "summary"}, tctx)
+	_, err = mgr.Assignments.View(t.Context(), map[string]any{"view": "summary"}, tctx)
 	if toolrejection.AsToolReject(err) == nil {
 		t.Fatalf("missing ledger not refused: %v", err)
 	}
+}
+
+func TestRegisterReadReviewToolAndPriorRoundCoverageCarryForward(t *testing.T) {
+	testutil.FailErr(t, "nil registry", workflowreview.RegisterReadReviewTool(nil, nil))
+	reg := tools.NewDefaultRegistry()
+	testutil.FailErr(t, "register unavailable view", workflowreview.RegisterReadReviewTool(reg, nil))
+	_, err := reg.Run(t.Context(), workflowreview.ReadReviewTool, map[string]any{"view": "summary"}, tools.ToolContext{})
+	if rej := toolrejection.AsToolReject(err); rej == nil || rej.Code != workflowreview.ReadReviewInvalidCode {
+		t.Fatalf("nil view not rejected: %v", err)
+	}
+
+	mgr, run, _ := reviewAssignmentFixture(t)
+	reg = tools.NewDefaultRegistry()
+	testutil.FailErr(t, "register view", workflowreview.RegisterReadReviewTool(reg, mgr.Assignments.View))
+	if _, err := reg.Run(t.Context(), workflowreview.ReadReviewTool, map[string]any{"view": "summary"}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "no-active-run"}}); toolrejection.AsToolReject(err) == nil {
+		t.Fatal("missing active run accepted")
+	}
+
+	unbound := api.WorkerTask{ID: "unbound-auditor", WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, AgentType: "auditor"}
+	if err := mgr.Assignments.ValidateCoverageCompletion(t.Context(), &unbound, nil); toolrejection.AsToolReject(err) == nil {
+		t.Fatal("unbound coverage reviewer accepted without assignment")
+	}
+
+	round1 := api.WorkerTask{ID: "round-1", ChildSessionID: "reviewer-child", WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, AgentType: "auditor"}
+	testutil.FailErr(t, "bind round 1", mgr.Assignments.Bind(t.Context(), run, &round1))
+	b1, err := mgr.Assignments.TaskCoverageAssignment(t.Context(), &round1)
+	testutil.FailErr(t, "read round 1 binding", err)
+	round1.Status = api.WorkerStatusComplete
+	round1.Result = &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{
+		LegStatus:      "complete",
+		CoverageReview: &api.CoverageReview{Revision: b1.Subject.Facts.Revision, Assessments: []api.CoverageAssessment{}},
+	}}
+
+	round2 := api.WorkerTask{ID: "round-2", ChildSessionID: "reviewer-child", WorkflowRunID: run.ID, WorkflowPhase: run.CurrentPhase, AgentType: "auditor"}
+	setReviewWorkerTasks(mgr, func(context.Context, string) ([]api.WorkerTask, error) {
+		return []api.WorkerTask{round1, round2}, nil
+	})
+	testutil.FailErr(t, "bind round 2", mgr.Assignments.Bind(t.Context(), run, &round2))
+	testutil.FailErr(t, "prior round coverage satisfies follow-up round", mgr.Assignments.ValidateCoverageCompletion(t.Context(), &round2, nil))
 }

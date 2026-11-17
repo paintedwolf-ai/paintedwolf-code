@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workerops"
 	"os"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/api"
@@ -64,8 +66,8 @@ func (b *serveBuilder) wireRuntimeServices() error {
 
 func (b *serveBuilder) wireRuntimeObservers() error {
 	b.sessions.Manager.SetEventPublisher(b.events.Publisher)
-	b.delegations.Queue.SetEventPublisher(b.events.Publisher)
-	releaseObservers := observations.Bind(b.events.Publisher, b.storage.Sessions, b.boards.Progress, b.workflows.Store.Runs, b.boards.RepoProvider, b.execution.Host.Survey.InvalidateFileAge, b.providers.Service)
+	b.workerRuntime.Queue.SetEventPublisher(b.events.Publisher)
+	releaseObservers := observations.Bind(b.events.Publisher, b.storage.Sessions, b.boards.Progress, b.workflows.Store.Runs, b.boards.RepoProvider, b.providers.Service)
 	b.startup.resources.Track("runtime-observers", 22, releaseObservers)
 	return nil
 }
@@ -80,7 +82,7 @@ func (b *serveBuilder) wireServer() error {
 		Events: b.events.Hub, EventPublisher: b.events.Publisher, Presence: b.events.Presence, HostIdentity: b.identity.Host,
 		HostResources: b.settings.HostResources, HostPower: b.settings.Power, Pricing: b.providers.Pricing, Preview: b.interactions.Preview,
 		PreflightEnv: readiness.New(b.providers.Service, b.decisions.Decider, b.processes.Path).Environment()}, Storage: api.StorageDependencies{
-		DataDir: b.storage.Directory, StorePath: b.storage.Path, WorkerBranchRoot: b.delegations.BranchRoot,
+		DataDir: b.storage.Directory, StorePath: b.storage.Path, WorkerBranchRoot: b.workerRuntime.BranchRoot,
 		ModuleRoot: b.catalog.ModuleRoot, StoreRevision: b.storage.Revision, MinDenVersion: os.Getenv("LYCAON_MIN_DEN_VERSION")}, Approvals: api.ApprovalsDependencies{
 		SecretIgnores: b.security.Ignores, ManagedSecrets: b.security.Capabilities, SecretSpans: b.security.Spans,
 		Checkpoints: b.sessions.Checkpoints, ApprovalGate: b.execution.Host.Authority.ApprovalGate(),
@@ -93,10 +95,10 @@ func (b *serveBuilder) wireServer() error {
 		GateRepeatLedger: b.sessions.GateRepeat, PublishDetections: b.security.Detections.Publish}, Workflow: api.WorkflowDependencies{
 		Workflows: b.workflows.Manager, WorkflowCatalog: b.workflows.Resolver,
 		WorkflowRuns: b.workflows.Store, WorkflowComposer: b.workflows.Composer, WorkflowPersister: b.workflows.Persister,
-		Blueprints: b.workflows.Blueprints, Orchestrator: b.server.Orchestrator, Delegations: b.delegations.Manager, Workers: b.delegations.Queue,
-		WorkerCancel: b.delegations.Cancel, Board: b.boards.Snapshot, RepoSetCache: b.git.repoSets}, Source: api.SourceDependencies{
+		Blueprints: b.workflows.Blueprints, Orchestrator: b.server.Orchestrator, Workers: b.workerRuntime.Queue,
+		WorkerCancel: b.workerRuntime.Cancel, Board: b.boards.Snapshot, RepoSetCache: b.git.repoSets}, Source: api.SourceDependencies{
 		AgentPresence: b.events.Agents, ProjectRules: b.workflows.ProjectRules, HintConfig: b.execution.Hints, RepoProvider: b.boards.RepoProvider,
-		FileAgeWarmer: b.execution.Host.Survey.WarmFileAge, VisualStore: b.boards.Visual, ProgressStore: b.boards.Progress,
+		VisualStore: b.boards.Visual, ProgressStore: b.boards.Progress,
 		Video: videoDecoder(b)}, Extensions: api.ExtensionsDependencies{
 		ExtensionViews: b.catalog.ViewCache, ExtensionJournal: extensionJournal}, External: api.ExternalDependencies{
 		MCP: b.server.MCP, WebResearch: b.boards.WebRuntime, WebDiscoverer: b.boards.WebDiscoverer, WebIndex: b.storage.WebIndex}, Harness: api.HarnessDependencies{ManualLLM: b.providers.Manual, HarnessWorkers: b.worker.harnessWorkers}}
@@ -139,7 +141,7 @@ func (b *serveBuilder) wireServer() error {
 	}
 	b.server.UserNotices = usernotice.NewCatalog(userNoticeCfg)
 	deps.Core.UserNotices = b.server.UserNotices
-	b.delegations.Queue.SetFailureRenderer(workernotice.NewRenderer(b.server.UserNotices))
+	b.workerRuntime.Queue.SetFailureRenderer(workernotice.NewRenderer(b.server.UserNotices))
 	homeDir, err := configdir.UserConfigDir()
 	if err != nil {
 		return fmt.Errorf("extension subsystem owner: %w", err)
@@ -206,11 +208,12 @@ func registerServerHooks(b *serveBuilder, extensionJournal *extensionstate.SQLJo
 	}); err != nil {
 		return err
 	}
-	if b.delegations != nil {
-		b.server.Server.Admin.Project.Sandboxes.SettleWorker = b.delegations.SandboxSettler()
+	if b.workerRuntime != nil {
+		b.server.Server.Admin.Project.Sandboxes.SettleWorker = b.workerRuntime.SandboxSettler()
+		b.server.Server.Admin.Project.Sandboxes.LaneRoots = b.workerRuntime.LaneRoots
 		if err := b.registerRecovery(bootrecovery.Entry{
 			Name: "worker-views", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
-			Run: b.delegations.RecoverWorkerViews,
+			Run: b.workerRuntime.RecoverWorkerViews,
 		}); err != nil {
 			return err
 		}
@@ -299,10 +302,10 @@ func wireSourceEditing(b *serveBuilder, deps *api.Dependencies) error {
 	b.events.Agents.SetAnchors(presenceAnchors{service: editorDocuments})
 	b.events.Agents.SetDrafts(presenceDrafts{projects: b.storage.Projects, documents: editorDocuments,
 		tasks: func(jobID string) (*wire.WorkerTask, bool) {
-			if b.delegations == nil || b.delegations.Queue == nil {
+			if b.workerRuntime == nil || b.workerRuntime.Queue == nil {
 				return nil, false
 			}
-			return b.delegations.Queue.Get(jobID)
+			return b.workerRuntime.Queue.Get(jobID)
 		}})
 	if err := b.registerRecovery(bootrecovery.Entry{
 		// Presence starts empty; drafts awaiting promotion outlive it.
@@ -357,38 +360,96 @@ func wireSourceEditing(b *serveBuilder, deps *api.Dependencies) error {
 }
 
 func (b *serveBuilder) wireOrchestrator() error {
-	b.delegations.Manager.ToolBudget = b.sessions.WorkerToolBudgetFor
 	orchDeps := orchestration.OrchestratorDeps{
-		Delegation: b.delegations.Manager,
-		Store:      b.delegations.Store,
-		Agents:     b.agents.Registry,
-		Workflows:  &orchestration.WorkflowRunLifecycle{Runs: b.workflows.Store.Runs, Starts: b.workflows.Manager.Starts, Controls: b.workflows.Manager.Controls, Policy: b.workflows.Manager.Policy, Topology: b.workflows.Manager.Phases},
-		Catalog:    extpacks.CatalogForConsumers,
+		Workers:   b.workerRuntime.Topology,
+		Agents:    b.agents.Registry,
+		Workflows: &orchestration.WorkflowRunLifecycle{Runs: b.workflows.Store.Runs, Starts: b.workflows.Manager.Starts, Controls: b.workflows.Manager.Controls, Policy: b.workflows.Manager.Policy, Topology: b.workflows.Manager.Phases},
+		Catalog:   extpacks.CatalogForConsumers,
 	}
 	if b.startup.cfg.TestOrchestrator != nil {
 		b.server.Orchestrator = b.startup.cfg.TestOrchestrator(orchDeps)
 	} else {
 		b.server.Orchestrator = orchestration.NewOrchestratorImpl(orchDeps)
 	}
-	b.workflows.Manager.Presentation.TopologyLegs = orchestration.TopologyLegView{Store: b.delegations.Store, Catalog: extpacks.CatalogForConsumers}
+	b.workflows.Manager.Presentation.TopologyLegs = orchestration.TopologyLegView{Workers: b.workerRuntime.Topology, Catalog: extpacks.CatalogForConsumers}
 
 	if err := b.sessions.Manager.Workers.Results.ValidateWorkflow(); err != nil {
 		return err
 	}
-	workerOutcomes := &worker.SessionOutcomeBridge{Workers: b.sessions.Manager.Coordinator.Workers, Loop: b.sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges, Results: b.sessions.Manager.Workers.Results, State: b.sessions.Manager.Workers.State, Closure: b.sessions.Manager.Coordinator.ProgressClosure, Inner: b.delegations.Manager}
-	var executor worker.WorkerExecutor = b.delegations.Executor
+	workerOutcomes := &worker.SessionOutcomeBridge{Workers: b.sessions.Manager.Coordinator.Workers, Loop: b.sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges, Results: b.sessions.Manager.Workers.Results, State: b.sessions.Manager.Workers.State, Closure: b.sessions.Manager.Coordinator.ProgressClosure}
+	var executor worker.WorkerExecutor = b.workerRuntime.Executor
 	if configdir.IsHarnessChannel() {
-		scripted, err := harnessfixture.NewWorkers(b.storage.Directory, b.storage.Sessions, b.delegations.Queue, b.sessions.Manager.Workers.Harness.Verify, b.sessions.Manager.Workers.Harness.Read, b.sessions.Decisions, b.delegations.Executor)
+		scripted, err := harnessfixture.NewWorkers(b.storage.Directory, b.storage.Sessions, b.workerRuntime.Queue, b.sessions.Manager.Workers.Harness.Verify, b.sessions.Manager.Workers.Harness.Read, b.sessions.Decisions, b.workerRuntime.Executor)
 		if err != nil {
 			return err
 		}
 		b.worker.harnessWorkers = scripted
 		executor = scripted
 	}
-	b.worker.poller = worker.NewLocalWorkerPoller(b.delegations.Queue, executor, b.worker.cfg, workerOutcomes)
-	b.delegations.Queue.SetRunningCancel(b.worker.poller.Abort)
-	b.worker.poller.ParentWaiter = b.boards.ParentWaiter
+	b.worker.poller = worker.NewLocalWorkerPoller(b.workerRuntime.Queue, executor, b.worker.cfg, workerOutcomes)
+	b.workerRuntime.Queue.SetRunningCancel(b.worker.poller.Abort)
+	b.worker.poller.Quiet = b.quietRounds()
+	b.worker.poller.Blocked = b.blockedPrerequisites()
 	return nil
+}
+
+// blockedPrerequisites lists waiting jobs whose prerequisite can no longer be
+// met, for their coordinators' attention.
+func (b *serveBuilder) blockedPrerequisites() *worker.BlockedPrerequisites {
+	queries := db.New(b.storage.Database)
+	return &worker.BlockedPrerequisites{
+		List: func(ctx context.Context) ([]worker.BlockedPrerequisite, error) {
+			rows, err := queries.ListBlockedWorkerPrerequisites(ctx)
+			out := make([]worker.BlockedPrerequisite, 0, len(rows))
+			for _, r := range rows {
+				out = append(out, worker.BlockedPrerequisite{ConsumerJobID: r.ConsumerID, ProducerJobID: r.ProducerJobID, Reason: r.Reason})
+			}
+			return out, err
+		},
+		Jobs:   b.workerRuntime.Queue,
+		Notify: b.sessions.Manager.Coordinator.Workers.PrerequisiteBlocked,
+	}
+}
+
+// quietRounds measures working rounds against their turns' durable progress.
+func (b *serveBuilder) quietRounds() *worker.QuietRounds {
+	queries := db.New(b.storage.Database)
+	quiet := &worker.QuietRounds{
+		Jobs: func(ctx context.Context) ([]wire.WorkerTask, error) {
+			return b.workerRuntime.Queue.List(ctx, "", wire.WorkerStatusPending, wire.WorkerStatusRunning)
+		},
+		Progress: func(ctx context.Context, childSessionID string) (time.Time, error) {
+			raw, err := queries.GetLatestTurnProgressForSession(ctx, childSessionID)
+			if err != nil || raw == "" {
+				return time.Time{}, err
+			}
+			return db.ParseTime(raw)
+		},
+		PauseEnded: func(ctx context.Context, runID string) time.Time {
+			raw, err := queries.GetLatestWorkflowResumeAt(ctx, runID)
+			if err != nil || raw == "" {
+				return time.Time{}
+			}
+			at, err := db.ParseTime(raw)
+			if err != nil {
+				return time.Time{}
+			}
+			return at
+		},
+		Notify: b.sessions.Manager.Coordinator.Workers.RoundNotice,
+		After:  b.worker.cfg.RoundPolicy().QuietNoticeAfter,
+		Waiting: func(ctx context.Context, task *wire.WorkerTask) bool {
+			pending, err := workerops.PrerequisitePending(ctx, queries.LatestRoundJobForJob, b.workerRuntime.Queue, *task)
+			return err == nil && pending
+		},
+	}
+	if checkpoints, ok := b.sessions.Checkpoints.(*hitl.Checkpoints); ok {
+		quiet.AwaitingApproval = func(ctx context.Context, childSessionID string) bool {
+			pending, err := checkpoints.ListPending(ctx, childSessionID, nil)
+			return err == nil && len(pending) > 0
+		}
+	}
+	return quiet
 }
 
 func (b *serveBuilder) serveApp() *ServeApp {
@@ -396,7 +457,7 @@ func (b *serveBuilder) serveApp() *ServeApp {
 		Server:               b.server.Server,
 		Sessions:             b.sessions,
 		Workflows:            b.workflows,
-		Delegations:          b.delegations,
+		Workers:              b.workerRuntime,
 		Boards:               b.boards,
 		ProjectLiveness:      b.server.ProjectLiveness,
 		CoordinatorRuntime:   b.server.Coordinator,
@@ -463,10 +524,10 @@ func wireDestinationConfig(b *serveBuilder) error {
 }
 
 func restoreWorkerDrafts(b *serveBuilder, ctx context.Context) error {
-	if b.delegations == nil || b.delegations.Queue == nil {
+	if b.workerRuntime == nil || b.workerRuntime.Queue == nil {
 		return nil
 	}
-	pending, err := b.delegations.Queue.ListPendingOverlays(ctx)
+	pending, err := b.workerRuntime.Queue.ListPendingOverlays(ctx)
 	if err != nil {
 		return err
 	}

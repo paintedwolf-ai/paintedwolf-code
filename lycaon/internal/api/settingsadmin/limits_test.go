@@ -115,8 +115,8 @@ func TestValidateLimitsPatch(t *testing.T) {
 }
 
 func TestLimitsPatchPreservesOmissionsAndResetsToInheritedValues(t *testing.T) {
-	current := settings.SessionLimits{MaxIterations: 9, MaxCoordinatorLoopCycles: 6, WorkerToolBudgetDefault: 12}
-	inherited := settings.SessionLimits{MaxIterations: 17, MaxCoordinatorLoopCycles: 3, WorkerToolBudgetDefault: 24}
+	current := settings.SessionLimits{MaxIterations: 9, MaxCoordinatorLoopCycles: 6, MaxToolResultBytes: 12}
+	inherited := settings.SessionLimits{MaxIterations: 17, MaxCoordinatorLoopCycles: 3, MaxToolResultBytes: 24}
 	body := []byte(`{"max_iterations":null,"max_coordinator_loop_cycles":0}`)
 	var raw map[string]any
 	var patch wire.SettingsLimitsPatch
@@ -127,7 +127,7 @@ func TestLimitsPatchPreservesOmissionsAndResetsToInheritedValues(t *testing.T) {
 		t.Fatalf("valid reset and zero patch rejected: %s %s", field, message)
 	}
 	got := applyLimitsPatch(current, inherited, raw, patch)
-	if got.MaxIterations != inherited.MaxIterations || got.MaxCoordinatorLoopCycles != 0 || got.WorkerToolBudgetDefault != current.WorkerToolBudgetDefault {
+	if got.MaxIterations != inherited.MaxIterations || got.MaxCoordinatorLoopCycles != 0 || got.MaxToolResultBytes != current.MaxToolResultBytes {
 		t.Fatalf("merged limits = %+v", got)
 	}
 }

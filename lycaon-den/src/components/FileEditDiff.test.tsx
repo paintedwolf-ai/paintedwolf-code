@@ -1,4 +1,3 @@
-import { fileEditPreviewFixture } from "../test/file-edit-fixture.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 import { render, screen, waitFor, cleanup } from "@solidjs/testing-library";
@@ -6,8 +5,8 @@ import { stubFilesClient } from "../test/source-client-fixture.ts";
 import { FileEditDiff } from "./FileEditDiff.tsx";
 import { assertNamedControl } from "../test/controls.ts";
 import {
-  foldFileEdits,
-  singleFileEditFold,
+  foldFileEdits
+
 } from "../chat/file-edit/file-edit-fold.ts";
 import type { FileEditStep } from "../chat/file-edit/file-edit-fold.ts";
 import { resetFindControllerForTests } from "../find/find-controller.ts";
@@ -24,6 +23,7 @@ import {
   RowAccordionProvider,
   createRowAccordion,
 } from "../chat/transcript/presentation/row-accordion.ts";
+import { fileEditPreviewFixture, singleFileEditFold } from "../test/file-edit-fixture.ts";
 
 const client = stubFilesClient();
 vi.mock("../platform/connection/app-connection.ts", async original => ({

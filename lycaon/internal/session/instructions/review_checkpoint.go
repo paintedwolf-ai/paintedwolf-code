@@ -17,6 +17,12 @@ func (m *Service) ReviewCheckpoint(ctx context.Context, sessionID string, msg ap
 	if !api.IsUserIntentMessage(msg) {
 		return
 	}
+	m.turnStartCheckpoint(ctx, sessionID)
+}
+
+// turnStartCheckpoint records the source state a turn starts from, before
+// its first tool call.
+func (m *Service) turnStartCheckpoint(ctx context.Context, sessionID string) {
 	checkpointer := m.review
 	if checkpointer == nil {
 		return

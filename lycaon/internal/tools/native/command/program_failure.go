@@ -8,7 +8,7 @@ import (
 
 func beginProgramAttempt(ctx context.Context, ft *CommandFailureTracker, tc tools.ToolContext, args map[string]any, cwd string) (*commandFailureAttempt, func() commandSourceIdentity, error) {
 	observeSource, reader := commandSourceReaders(ctx, tc, cwd)
-	attempt, reject := ft.begin(tc.Identity.SessionID, commandFailureApproachKey(canonicalToolArgs(tc, args)), CanonicalCommandKey(tc, args), observeSource)
+	attempt, reject := ft.begin(tc.Identity.SessionID, commandFailureApproachKey(CanonicalToolArgs(tc, args)), CanonicalCommandKey(tc, args), observeSource)
 	if reject != nil {
 		return nil, nil, reject
 	}

@@ -5,19 +5,19 @@ on: tool.rejected
 selector:
   tools:
     - answer_decision
-requires_facts: [paintedwolf.job_id, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.status]
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.status, paintedwolf.worker]
 when: paintedwolf.rejection_code == "DECISION_NOT_SUSPENDED"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-message: Worker {{ paintedwolf.job_id }} is {{ paintedwolf.status }} and cannot resume from a decision.
-what: Worker {{ paintedwolf.job_id }} is {{ paintedwolf.status }} and cannot resume from a decision.
-cause: The decision is unchanged, but the job has not entered the suspended state.
+message: Worker {{ paintedwolf.worker }} is {{ paintedwolf.status }} and cannot resume from a decision.
+what: Worker {{ paintedwolf.worker }} is {{ paintedwolf.status }} and cannot resume from a decision.
+cause: The decision is unchanged, but the worker has not stopped to wait for the answer yet.
 why: A decision answer must resume the same suspended worker and answer the current question.
-fix: '{{ paintedwolf.next_steps }} If it is running, wait for its decision envelope before answering. If it is terminal, report the inconsistent state instead of repeatedly answering.'
+fix: '{{ paintedwolf.next_steps }} Answer only after the worker asks; do not answer the same question repeatedly.'
 instead: Inspect the current worker state before retrying.
 x-paintedwolf-scenarios:
   - id: default
     vars:
-      job_id: worker-1
+      worker: parser-fix
       status: complete

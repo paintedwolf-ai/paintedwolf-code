@@ -10,9 +10,10 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/singleflight"
+
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"golang.org/x/sync/singleflight"
 )
 
 // RepoSetCache separates project and session root sets before applying generation and TTL.
@@ -52,24 +53,6 @@ type repoSetCacheEntry struct {
 
 // RepoSetCacheOption configures a RepoSetCache at construction.
 type RepoSetCacheOption func(*RepoSetCache)
-
-// WithRepoSetCacheClock overrides the time source used for TTL freshness.
-func WithRepoSetCacheClock(now func() time.Time) RepoSetCacheOption {
-	return func(c *RepoSetCache) {
-		if now != nil {
-			c.now = now
-		}
-	}
-}
-
-// WithRepoSetDiscover supplies repository discovery.
-func WithRepoSetDiscover(fn func(context.Context, []projectroot.RootRef) []RepoRef) RepoSetCacheOption {
-	return func(c *RepoSetCache) {
-		if fn != nil {
-			c.discover = fn
-		}
-	}
-}
 
 // NewRepoSetCache uses DefaultStatusCacheTTL for non-positive durations.
 func NewRepoSetCache(ttl time.Duration, opts ...RepoSetCacheOption) *RepoSetCache {

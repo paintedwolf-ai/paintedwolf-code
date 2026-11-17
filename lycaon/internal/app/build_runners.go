@@ -105,9 +105,9 @@ func registerBackgroundRunners(b *serveBuilder, app *ServeApp) {
 			return debugretention.Run(ctx, b.storage.Directory, debugretention.DefaultConfig())
 		}}
 	}
-	if b.delegations != nil && b.delegations.Queue != nil && b.delegations.BranchRoot != "" {
+	if b.workerRuntime != nil && b.workerRuntime.Queue != nil && b.workerRuntime.BranchRoot != "" {
 		byName["worker-branch-retention"] = registration{run: func(ctx context.Context) error {
-			return branchretention.Run(ctx, b.delegations.BranchRetentionDeps(), branchretention.DefaultConfig())
+			return branchretention.Run(ctx, b.workerRuntime.BranchRetentionDeps(), branchretention.DefaultConfig())
 		}}
 	}
 	for _, name := range serveRunnerOrder {
@@ -153,8 +153,8 @@ func reconcileStoreCoupledStorage(b *serveBuilder, ctx context.Context) error {
 	removedCatalogs, catalogErr := sourcecatalog.Process().Trees.ReconcileTreeStores(ctx)
 	var removedSandboxes int
 	var sandboxErr error
-	if b.delegations != nil {
-		removedSandboxes, sandboxErr = b.delegations.ReconcileWorkerSandboxes(ctx, roots)
+	if b.workerRuntime != nil {
+		removedSandboxes, sandboxErr = b.workerRuntime.ReconcileWorkerSandboxes(ctx, roots)
 	}
 	removedSpills, spillErr := scan.ReconcileSpills(ctx, b.storage.Directory, b.scanning.Store)
 	if removedHost+removedCheckpoints+removedCatalogs+removedSandboxes+removedSpills > 0 {

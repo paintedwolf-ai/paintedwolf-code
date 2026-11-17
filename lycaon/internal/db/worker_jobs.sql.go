@@ -44,19 +44,27 @@ UPDATE worker_jobs
 SET status = 'canceled', result_json = ?1, error = NULL, failure_json = NULL,
     completed_at = COALESCE(completed_at, ?2),
     claim_token = NULL, heartbeat_at = NULL, lease_expires_at = NULL,
-    merge_status = 'aborted', workspace_relpath = NULL,
+    merge_status = CASE WHEN CAST(?3 AS TEXT) != '' THEN 'pending' ELSE 'aborted' END,
+    workspace_relpath = CASE WHEN CAST(?3 AS TEXT) != '' THEN workspace_relpath ELSE NULL END,
     merge_claim_token = NULL, merge_heartbeat_at = NULL, merge_lease_expires_at = NULL
-WHERE id = ?3 AND status IN ('pending', 'running', 'waiting', 'held')
+WHERE id = ?4 AND status IN ('pending', 'running', 'waiting', 'held')
 `
 
 type CancelWorkerJobParams struct {
-	ResultJson  sql.NullString `json:"result_json"`
-	CompletedAt sql.NullString `json:"completed_at"`
-	ID          string         `json:"id"`
+	ResultJson     sql.NullString `json:"result_json"`
+	CompletedAt    sql.NullString `json:"completed_at"`
+	KeptCheckpoint string         `json:"kept_checkpoint"`
+	ID             string         `json:"id"`
 }
 
+// A stopped write round with changes keeps them pending on its branch.
 func (q *Queries) CancelWorkerJob(ctx context.Context, arg CancelWorkerJobParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, cancelWorkerJob, arg.ResultJson, arg.CompletedAt, arg.ID)
+	result, err := q.db.ExecContext(ctx, cancelWorkerJob,
+		arg.ResultJson,
+		arg.CompletedAt,
+		arg.KeptCheckpoint,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -86,13 +94,16 @@ func (q *Queries) CancelWorkerWaitLeases(ctx context.Context, arg CancelWorkerWa
 
 const claimWorkerJob = `-- name: ClaimWorkerJob :one
 UPDATE worker_jobs
-SET status = 'running', started_at = ?1, claimed_by = ?2,
+SET status = 'running', started_at = COALESCE(started_at, ?1), claimed_by = ?2,
     claim_token = ?3, attempt = attempt + 1,
     heartbeat_at = ?4, lease_expires_at = ?5
 WHERE worker_jobs.id = ?6 AND status = 'pending' AND cancel_requested_at IS NULL
   AND NOT EXISTS (
     SELECT 1 FROM worker_prerequisites dependency
-    JOIN worker_jobs upstream ON upstream.id = dependency.prerequisite_id
+    -- A long-lived producer is ready on its latest round, not the one named.
+    JOIN worker_jobs upstream ON upstream.id = COALESCE((SELECT latest.job_id FROM worker_rounds origin
+        JOIN worker_rounds latest ON latest.worker_id = origin.worker_id
+        WHERE origin.job_id = dependency.prerequisite_id ORDER BY latest.ordinal DESC LIMIT 1), dependency.prerequisite_id)
     WHERE dependency.worker_job_id = worker_jobs.id
       AND (upstream.status != 'complete'
         OR COALESCE(json_extract(upstream.result_json, '$.status'), '') NOT IN ('complete', 'open')
@@ -223,20 +234,6 @@ func (q *Queries) CountRunningWorkerJobs(ctx context.Context, executionTarget st
 	return count, err
 }
 
-const declineWorkerJobBudget = `-- name: DeclineWorkerJobBudget :execrows
-UPDATE worker_jobs SET budget_request_json = ''
-WHERE id = ? AND status IN ('pending', 'running') AND budget_request_json != ''
-`
-
-// A decline closes a live job's open request and leaves its ceiling.
-func (q *Queries) DeclineWorkerJobBudget(ctx context.Context, id string) (int64, error) {
-	result, err := q.db.ExecContext(ctx, declineWorkerJobBudget, id)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const expireWorkerWaitLeases = `-- name: ExpireWorkerWaitLeases :execrows
 UPDATE wait_leases
 SET status = 'timed_out', winner_json = '{"kind":"timer"}',
@@ -264,25 +261,29 @@ UPDATE worker_jobs
 SET status = 'failed', error = ?1, failure_json = ?2,
     completed_at = COALESCE(completed_at, ?3),
     claim_token = NULL, heartbeat_at = NULL, lease_expires_at = NULL,
-    merge_status = 'aborted', workspace_relpath = NULL,
+    merge_status = CASE WHEN CAST(?4 AS TEXT) != '' THEN 'pending' ELSE 'aborted' END,
+    workspace_relpath = CASE WHEN CAST(?4 AS TEXT) != '' THEN workspace_relpath ELSE NULL END,
     merge_claim_token = NULL, merge_heartbeat_at = NULL, merge_lease_expires_at = NULL
-WHERE id = ?4 AND status = 'running'
-  AND claim_token = ?5 AND cancel_requested_at IS NULL
+WHERE id = ?5 AND status = 'running'
+  AND claim_token = ?6 AND cancel_requested_at IS NULL
 `
 
 type FailWorkerJobParams struct {
-	Error       sql.NullString `json:"error"`
-	FailureJson sql.NullString `json:"failure_json"`
-	CompletedAt sql.NullString `json:"completed_at"`
-	ID          string         `json:"id"`
-	ClaimToken  sql.NullString `json:"claim_token"`
+	Error          sql.NullString `json:"error"`
+	FailureJson    sql.NullString `json:"failure_json"`
+	CompletedAt    sql.NullString `json:"completed_at"`
+	KeptCheckpoint string         `json:"kept_checkpoint"`
+	ID             string         `json:"id"`
+	ClaimToken     sql.NullString `json:"claim_token"`
 }
 
+// A failed write round with changes keeps them pending on its branch.
 func (q *Queries) FailWorkerJob(ctx context.Context, arg FailWorkerJobParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, failWorkerJob,
 		arg.Error,
 		arg.FailureJson,
 		arg.CompletedAt,
+		arg.KeptCheckpoint,
 		arg.ID,
 		arg.ClaimToken,
 	)
@@ -509,25 +510,6 @@ func (q *Queries) GetWorkerJobBySourceToolCall(ctx context.Context, arg GetWorke
 	return i, err
 }
 
-const grantWorkerJobBudget = `-- name: GrantWorkerJobBudget :execrows
-UPDATE worker_jobs SET max_tool_loops = ?, budget_request_json = ''
-WHERE id = ? AND status IN ('pending', 'running')
-`
-
-type GrantWorkerJobBudgetParams struct {
-	MaxToolLoops sql.NullInt64 `json:"max_tool_loops"`
-	ID           string        `json:"id"`
-}
-
-// A grant raises the ceiling and answers any open request.
-func (q *Queries) GrantWorkerJobBudget(ctx context.Context, arg GrantWorkerJobBudgetParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, grantWorkerJobBudget, arg.MaxToolLoops, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
 const holdWorkerJob = `-- name: HoldWorkerJob :execrows
 UPDATE worker_jobs SET status = 'held' WHERE id = ? AND status = 'pending' AND cancel_requested_at IS NULL
 `
@@ -646,8 +628,8 @@ INSERT INTO worker_jobs (
     execution_target, runner_id, claimed_by, claim_token, attempt, heartbeat_at, lease_expires_at,
     agent_type, status, spawn_reason,
     prompt, brief, files_json, scope_json, result_json, error, failure_json, created_at, started_at, completed_at,
-    overlay_id, max_tool_loops, tool_loops_used, tool_calls_used
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    overlay_id, tool_loops_used, tool_calls_used
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertWorkerJobParams struct {
@@ -686,7 +668,6 @@ type InsertWorkerJobParams struct {
 	StartedAt        sql.NullString `json:"started_at"`
 	CompletedAt      sql.NullString `json:"completed_at"`
 	OverlayID        sql.NullString `json:"overlay_id"`
-	MaxToolLoops     sql.NullInt64  `json:"max_tool_loops"`
 	ToolLoopsUsed    sql.NullInt64  `json:"tool_loops_used"`
 	ToolCallsUsed    sql.NullInt64  `json:"tool_calls_used"`
 }
@@ -733,7 +714,6 @@ func (q *Queries) InsertWorkerJob(ctx context.Context, arg InsertWorkerJobParams
 		arg.StartedAt,
 		arg.CompletedAt,
 		arg.OverlayID,
-		arg.MaxToolLoops,
 		arg.ToolLoopsUsed,
 		arg.ToolCallsUsed,
 	)
@@ -794,32 +774,60 @@ func (q *Queries) InsertWorkerResult(ctx context.Context, arg InsertWorkerResult
 }
 
 const listBlockedWorkerPrerequisites = `-- name: ListBlockedWorkerPrerequisites :many
-SELECT DISTINCT consumer.id FROM worker_prerequisites dependency
+SELECT DISTINCT consumer.id AS consumer_id, dependency.prerequisite_id AS producer_job_id,
+    CAST(CASE
+        WHEN origin.job_id IS NOT NULL AND producer.closed_at IS NOT NULL THEN 'closed'
+        WHEN origin.job_id IS NULL AND upstream.status IN ('failed', 'canceled') THEN 'failed'
+        ELSE 'rejected'
+    END AS TEXT) AS reason
+FROM worker_prerequisites dependency
 JOIN worker_jobs consumer ON consumer.id = dependency.worker_job_id
 JOIN worker_jobs upstream ON upstream.id = dependency.prerequisite_id
+LEFT JOIN worker_rounds origin ON origin.job_id = dependency.prerequisite_id
+LEFT JOIN workers producer ON producer.id = origin.worker_id
 WHERE consumer.status = 'pending' AND (
-  upstream.status IN ('failed', 'canceled') OR
-  (upstream.status = 'complete' AND (
-    COALESCE(json_extract(upstream.result_json, '$.status'), '') NOT IN ('complete', 'open') OR
-    (json_extract(upstream.scope_json, '$.mode') = 'write' AND upstream.merge_status IN ('rejected', 'aborted', 'orphaned'))
+  (origin.job_id IS NULL AND (
+    upstream.status IN ('failed', 'canceled') OR
+    (upstream.status = 'complete' AND (
+      COALESCE(json_extract(upstream.result_json, '$.status'), '') NOT IN ('complete', 'open') OR
+      (json_extract(upstream.scope_json, '$.mode') = 'write' AND upstream.merge_status IN ('rejected', 'aborted', 'orphaned'))
+    ))
+  )) OR
+  (origin.job_id IS NOT NULL AND (
+    producer.closed_at IS NOT NULL OR
+    EXISTS (
+      SELECT 1 FROM worker_rounds latest JOIN worker_jobs latest_job ON latest_job.id = latest.job_id
+      WHERE latest.worker_id = origin.worker_id AND latest.settled_at IS NOT NULL
+        AND latest.ordinal = (SELECT MAX(ordinal) FROM worker_rounds WHERE worker_id = origin.worker_id)
+        AND latest_job.merge_status IN ('rejected', 'orphaned')
+    )
   ))
 )
 ORDER BY consumer.id
 `
 
-func (q *Queries) ListBlockedWorkerPrerequisites(ctx context.Context) ([]string, error) {
+type ListBlockedWorkerPrerequisitesRow struct {
+	ConsumerID    string `json:"consumer_id"`
+	ProducerJobID string `json:"producer_job_id"`
+	Reason        string `json:"reason"`
+}
+
+// A job-only producer that failed, or whose changes are gone, can never be
+// met. A long-lived producer can be instructed again, so only closing it, or
+// a rejection of its latest round's changes with no round after, ends it.
+func (q *Queries) ListBlockedWorkerPrerequisites(ctx context.Context) ([]ListBlockedWorkerPrerequisitesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listBlockedWorkerPrerequisites)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListBlockedWorkerPrerequisitesRow
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var i ListBlockedWorkerPrerequisitesRow
+		if err := rows.Scan(&i.ConsumerID, &i.ProducerJobID, &i.Reason); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -917,6 +925,47 @@ func (q *Queries) ListLandedPathDeltas(ctx context.Context, arg ListLandedPathDe
 	var items []ListLandedPathDeltasRow
 	for rows.Next() {
 		var i ListLandedPathDeltasRow
+		if err := rows.Scan(&i.ChangedPathsJson, &i.DeletedPathsJson); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLandedPathDeltasForSession = `-- name: ListLandedPathDeltasForSession :many
+SELECT lc.changed_paths_json, lc.deleted_paths_json
+FROM landed_changes AS lc
+JOIN worker_jobs AS wj ON wj.id = lc.worker_job_id
+WHERE wj.parent_session_id = ?1 AND lc.canonical_path = ?2
+ORDER BY lc.rowid
+`
+
+type ListLandedPathDeltasForSessionParams struct {
+	ParentSessionID sql.NullString `json:"parent_session_id"`
+	CanonicalPath   string         `json:"canonical_path"`
+}
+
+type ListLandedPathDeltasForSessionRow struct {
+	ChangedPathsJson string `json:"changed_paths_json"`
+	DeletedPathsJson string `json:"deleted_paths_json"`
+}
+
+func (q *Queries) ListLandedPathDeltasForSession(ctx context.Context, arg ListLandedPathDeltasForSessionParams) ([]ListLandedPathDeltasForSessionRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLandedPathDeltasForSession, arg.ParentSessionID, arg.CanonicalPath)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListLandedPathDeltasForSessionRow
+	for rows.Next() {
+		var i ListLandedPathDeltasForSessionRow
 		if err := rows.Scan(&i.ChangedPathsJson, &i.DeletedPathsJson); err != nil {
 			return nil, err
 		}
@@ -1462,7 +1511,7 @@ func (q *Queries) ListWorkerJobs(ctx context.Context, statusesJson string) ([]Wo
 }
 
 const listWorkerJobsForBranchRetention = `-- name: ListWorkerJobsForBranchRetention :many
-SELECT id, project_id, status, merge_status, workspace_overlay_id
+SELECT id, project_id, status, merge_status, workspace_overlay_id, workspace_relpath
 FROM worker_jobs
 ORDER BY created_at, id
 `
@@ -1473,6 +1522,7 @@ type ListWorkerJobsForBranchRetentionRow struct {
 	Status             string         `json:"status"`
 	MergeStatus        sql.NullString `json:"merge_status"`
 	WorkspaceOverlayID sql.NullString `json:"workspace_overlay_id"`
+	WorkspaceRelpath   sql.NullString `json:"workspace_relpath"`
 }
 
 // Jobs own provisioning before their branch path and baseline are published.
@@ -1491,6 +1541,7 @@ func (q *Queries) ListWorkerJobsForBranchRetention(ctx context.Context) ([]ListW
 			&i.Status,
 			&i.MergeStatus,
 			&i.WorkspaceOverlayID,
+			&i.WorkspaceRelpath,
 		); err != nil {
 			return nil, err
 		}
@@ -1706,7 +1757,10 @@ SELECT id, parent_session_id FROM worker_jobs
 WHERE status = 'pending' AND cancel_requested_at IS NULL
   AND NOT EXISTS (
     SELECT 1 FROM worker_prerequisites dependency
-    JOIN worker_jobs upstream ON upstream.id = dependency.prerequisite_id
+    -- A long-lived producer is ready on its latest round, not the one named.
+    JOIN worker_jobs upstream ON upstream.id = COALESCE((SELECT latest.job_id FROM worker_rounds origin
+        JOIN worker_rounds latest ON latest.worker_id = origin.worker_id
+        WHERE origin.job_id = dependency.prerequisite_id ORDER BY latest.ordinal DESC LIMIT 1), dependency.prerequisite_id)
     WHERE dependency.worker_job_id = worker_jobs.id
       AND (upstream.status != 'complete'
         OR COALESCE(json_extract(upstream.result_json, '$.status'), '') NOT IN ('complete', 'open')
@@ -1783,6 +1837,20 @@ func (q *Queries) ReclaimExpiredWorkerJobMergeApply(ctx context.Context, arg Rec
 		arg.ID,
 		arg.ExpiredBefore,
 	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const releaseAdmittedWorkerJob = `-- name: ReleaseAdmittedWorkerJob :execrows
+UPDATE worker_jobs SET status = 'pending' WHERE id = ? AND status = 'held' AND cancel_requested_at IS NULL
+`
+
+// ReleaseAdmittedWorkerJob makes a job claimable once its worker round is
+// recorded; until then it is held so no executor runs it without one.
+func (q *Queries) ReleaseAdmittedWorkerJob(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, releaseAdmittedWorkerJob, id)
 	if err != nil {
 		return 0, err
 	}
@@ -1874,25 +1942,6 @@ type RequestWorkerCancellationParams struct {
 // Cancellation intent fences execution outcomes before runtime interruption.
 func (q *Queries) RequestWorkerCancellation(ctx context.Context, arg RequestWorkerCancellationParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, requestWorkerCancellation, arg.RequestedAt, arg.ID)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const requestWorkerJobBudget = `-- name: RequestWorkerJobBudget :execrows
-UPDATE worker_jobs SET budget_request_json = ?1
-WHERE id = ?2 AND status IN ('pending', 'running') AND budget_request_json = ''
-`
-
-type RequestWorkerJobBudgetParams struct {
-	BudgetRequestJson string `json:"budget_request_json"`
-	ID                string `json:"id"`
-}
-
-// A live job holds at most one open request.
-func (q *Queries) RequestWorkerJobBudget(ctx context.Context, arg RequestWorkerJobBudgetParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, requestWorkerJobBudget, arg.BudgetRequestJson, arg.ID)
 	if err != nil {
 		return 0, err
 	}
@@ -2075,8 +2124,7 @@ type SetWorkerJobProgressParams struct {
 	ID            string        `json:"id"`
 }
 
-// SetWorkerJobProgress stores counters at a round boundary. The ceiling is
-// written only at creation and by a grant, so a round never overwrites one.
+// SetWorkerJobProgress stores usage counters at a model-turn boundary.
 func (q *Queries) SetWorkerJobProgress(ctx context.Context, arg SetWorkerJobProgressParams) error {
 	_, err := q.db.ExecContext(ctx, setWorkerJobProgress, arg.ToolLoopsUsed, arg.ToolCallsUsed, arg.ID)
 	return err
@@ -2158,10 +2206,12 @@ func (q *Queries) SuspendWorkerJobForDecision(ctx context.Context, arg SuspendWo
 }
 
 const workerPrerequisiteStates = `-- name: WorkerPrerequisiteStates :many
-SELECT upstream.id, upstream.status, upstream.scope_json, upstream.result_json, upstream.merge_status
+SELECT dependency.prerequisite_id AS id, upstream.status, upstream.scope_json, upstream.result_json, upstream.merge_status
 FROM worker_prerequisites dependency
-JOIN worker_jobs upstream ON upstream.id = dependency.prerequisite_id
-WHERE dependency.worker_job_id = ? ORDER BY upstream.id
+JOIN worker_jobs upstream ON upstream.id = COALESCE((SELECT latest.job_id FROM worker_rounds origin
+    JOIN worker_rounds latest ON latest.worker_id = origin.worker_id
+    WHERE origin.job_id = dependency.prerequisite_id ORDER BY latest.ordinal DESC LIMIT 1), dependency.prerequisite_id)
+WHERE dependency.worker_job_id = ? ORDER BY dependency.prerequisite_id
 `
 
 type WorkerPrerequisiteStatesRow struct {

@@ -56,12 +56,43 @@ func measureCoordinatorInjectBlock(
 	ctx := context.Background()
 	switch spec.ID {
 	case "turn_state":
+		profiles, err := sandbox.LoadToolProfiles()
+		contractcheck.FailErr(t, "load tool profiles", err)
+		turnStateTools := []string{
+			"update_progress", "answer_decision", "preview_overlay",
+			"promote_overlay", "reject_overlay", "shelve_overlay", "instruct_worker",
+		}
+		loaded := map[string]bool{}
+		for _, name := range turnStateTools {
+			loaded[name] = true
+		}
+		plan, err := prompts.CompileSurfacePlan("implement_investigate", 1)
+		contractcheck.FailErr(t, "CompileSurfacePlan turn_state", err)
+		reader, err := prompts.NewReader(prompts.ReaderInput{
+			ProfileID: prompts.CoordinatorProfileID,
+			SurfaceID: "implement_investigate",
+			Plan:      plan,
+			Profiles:  profiles,
+			Visible:   turnStateTools,
+			Loaded:    loaded,
+			RootCount: 1,
+			WebSearch: true,
+		})
+		contractcheck.FailErr(t, "NewReader turn_state", err)
 		block, err := inject.RenderTurnStateBlock(ctx, renderer, "sess-inject-test", inject.TurnStateInjectInput{
-			ProgressMissing:    true,
-			Reader:             coordinatorTestReader(t, "implement_investigate", 1),
-			VerifyRequired:     true,
-			PendingOverlayJobs: []string{"job-overlay-1", "job-overlay-2"},
-			PartialWorkerJobs:  []string{"job-partial-1"},
+			ProgressMissing: true,
+			Reader:          reader,
+			VerifyRequired:  true,
+			Workers: []map[string]any{
+				{"name": "parser-fix", "agent": "implementer", "scope_mode": "write", "state": "delivered",
+					"about": "Fix the empty-input crash in the parser and add coverage", "result_handle": "result-1",
+					"result_disposition": "open", "changed": []string{"src/parser.go", "src/parser_test.go"},
+					"read": []string{"src/parser.go", "src/lexer.go", "docs/grammar.md"}},
+				{"name": "api-survey", "agent": "explore", "scope_mode": "read", "state": "asking",
+					"about": "Survey the public API for breaking changes", "question": "Is the v1 client still supported?"},
+				{"name": "docs", "agent": "implementer", "scope_mode": "write", "state": "working",
+					"about": "Update the changelog for the parser fix"},
+			},
 		})
 		contractcheck.FailErr(t, "RenderTurnStateBlock", err)
 		return block
@@ -175,10 +206,9 @@ func measureCoordinatorInjectBlock(
 			Charter: api.WorkerTaskCharter{
 				Goal: "Implement login fix", DoneWhen: []string{"The scoped auth behavior is corrected."},
 			},
-			AgentType:    "implementer",
-			WorkerJobID:  "job-budget-fixture",
-			Scope:        api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"internal/auth/**"}},
-			MaxToolLoops: 8,
+			AgentType:   "implementer",
+			WorkerJobID: "job-budget-fixture",
+			Scope:       api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"internal/auth/**"}},
 		}
 		block, err := inject.RenderWorkerTaskAssignment(ctx, renderer, input)
 		contractcheck.FailErr(t, "RenderWorkerTaskAssignment", err)

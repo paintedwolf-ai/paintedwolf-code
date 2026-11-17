@@ -6,9 +6,14 @@ import { revealChicklet } from "../../chat/transcript/presentation/transcript-re
 import type { TranscriptRevealTarget } from "../../chat/transcript/presentation/transcript-reveal-target.ts";
 import { flushWorkerTranscriptCoalesce } from "../../chat/worker/worker-transcript-coalesce.ts";
 import { latestWorkerForChildSession } from "../../chat/worker/worker-transcript.ts";
-import type { OpenWorkerOptions, WorkerDrawerFocus } from "../../chat/worker/workers-model.ts";
+import {
+  findSessionWorker,
+  type OpenWorkerOptions,
+  type WorkerDrawerFocus,
+} from "../../chat/worker/workers-model.ts";
 import { sessionScope } from "../../notices/notice-scope.ts";
 import { noticeReporterFor } from "../../platform/connection/app-connection.ts";
+import { scrollportMotionContaining } from "../../platform/scrolling/scrollport-motion.ts";
 import type { SessionNavigation } from "./session-navigation.ts";
 import type { ShellPaneVisibility } from "./shell-pane-visibility.ts";
 import type { ShellScope } from "./shell-scope.ts";
@@ -20,6 +25,18 @@ type WorkerDrawerDependencies = Pick<ShellScope, "appStore" | "recents" | "activ
 
 export type ShellWorkerDrawer = ReturnType<typeof createShellWorkerDrawer>;
 
+function drawerFocusFromOptions(opts?: OpenWorkerOptions): WorkerDrawerFocus {
+  if (opts?.scrollTo === "evidence") return "evidence";
+  if (opts?.scrollTo === "history") {
+    return {
+      section: "history",
+      messageSeq: opts.messageSeq,
+      roundOrdinal: opts.roundOrdinal,
+    };
+  }
+  return null;
+}
+
 export function createShellWorkerDrawer({ appStore, recents, activeChat,
   revealConversation, resumeSession, navigateFromSearch, revealFromSearch }: WorkerDrawerDependencies) {
   const [workersOpen, setWorkersOpen] = createSignal(false);
@@ -28,9 +45,28 @@ export function createShellWorkerDrawer({ appStore, recents, activeChat,
   );
   const [workerDrawerFocus, setWorkerDrawerFocus] =
     createSignal<WorkerDrawerFocus>(null);
+  let returnFocusEl: HTMLElement | null = null;
+  let returnScrollTop: number | null = null;
+
+  const clearReturnAnchor = () => {
+    returnFocusEl = null;
+    returnScrollTop = null;
+  };
+
+  const captureReturnAnchor = () => {
+    if (typeof document === "undefined") return;
+    const active = document.activeElement;
+    const stream = document.querySelector<HTMLElement>(".den-chat-stream");
+    if (!workersOpen() || (active instanceof HTMLElement && stream?.contains(active))) {
+      returnFocusEl = active instanceof HTMLElement ? active : returnFocusEl;
+      returnScrollTop = stream ? stream.scrollTop : returnScrollTop;
+    }
+  };
+
   const observeActiveChat = () => createEffect(() => {
     activeChat()?.sessionId;
     flushWorkerTranscriptCoalesce(appStore);
+    clearReturnAnchor();
     setWorkersOpen(false);
     setSelectedWorkerId(null);
     setWorkerDrawerFocus(null);
@@ -39,14 +75,17 @@ export function createShellWorkerDrawer({ appStore, recents, activeChat,
   const openWorkers = (workerId?: string, opts?: OpenWorkerOptions) => {
     const chat = activeChat();
     if (!chat) return;
+    captureReturnAnchor();
     setWorkersOpen(true);
-    setWorkerDrawerFocus(opts?.scrollTo === "evidence" ? "evidence" : null);
+    setWorkerDrawerFocus(drawerFocusFromOptions(opts));
+    const list = sessionWorkers(appStore, chat.sessionId);
     if (workerId) {
-      setSelectedWorkerId(workerId);
+      const resolved = findSessionWorker(list, workerId, appStore.state.workers);
+      setSelectedWorkerId(resolved?.id ?? workerId);
       return;
     }
     if (!selectedWorkerId()) {
-      const first = sessionWorkers(appStore, chat.sessionId)[0];
+      const first = list[0];
       if (first) setSelectedWorkerId(first.id);
     }
   };
@@ -91,6 +130,27 @@ export function createShellWorkerDrawer({ appStore, recents, activeChat,
 
   const closeWorkers = () => {
     setWorkersOpen(false);
+    const savedFocus = returnFocusEl;
+    const savedScroll = returnScrollTop;
+    clearReturnAnchor();
+    queueMicrotask(() => {
+      if (typeof document === "undefined") return;
+      if (savedScroll !== null) {
+        const stream = document.querySelector<HTMLElement>(".den-chat-stream");
+        if (stream) {
+          const motion = scrollportMotionContaining(stream);
+          if (motion) {
+            motion.cancelApplicationMotion();
+            motion.commit(savedScroll, "jump");
+          } else {
+            stream.scrollTop = savedScroll;
+          }
+        }
+      }
+      if (savedFocus?.isConnected) {
+        savedFocus.focus({ preventScroll: true });
+      }
+    });
   };
 
   const revealInTranscript = (projectId: string | null, target: TranscriptRevealTarget) => {
@@ -110,12 +170,19 @@ export function createShellWorkerDrawer({ appStore, recents, activeChat,
       if (target.checkpointId && !target.workerId && target.anchor) revealFromSearch(target.anchor, projectId, target.sessionId);
       if (!target.workerId || activeChat()?.sessionId !== target.sessionId) return;
       openWorkers(target.workerId);
-      const worker = sessionWorkers(appStore, target.sessionId).find(row => row.id === target.workerId);
+      const worker = findSessionWorker(
+        sessionWorkers(appStore, target.sessionId),
+        target.workerId,
+        appStore.state.workers,
+      );
       if (target.anchor && worker?.child_session_id) {
         await revealChicklet(() => document.querySelector<HTMLElement>(".den-worker-transcript-pane"),
           { sessionId: worker.child_session_id, anchor: target.anchor }, {
             waitForMount: true,
-          isCurrent: () => workersOpen() && selectedWorkerId() === target.workerId && activeChat()?.sessionId === target.sessionId
+          isCurrent: () =>
+            workersOpen() &&
+            selectedWorkerId() === (worker?.id ?? target.workerId) &&
+            activeChat()?.sessionId === target.sessionId
         });
       }
     })().catch((error) => {

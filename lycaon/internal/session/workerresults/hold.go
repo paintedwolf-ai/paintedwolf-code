@@ -45,6 +45,7 @@ func (m *Cards) Hold(ctx context.Context, parentID string, in HoldInput) error {
 		agent = "worker"
 	}
 	envelope := workercompletion.FormatWorkerCompletionEnvelope(workercompletion.WorkerCompletionEnvelope{
+		Worker:         m.names.Name(ctx, in.JobID),
 		JobID:          in.JobID,
 		ChildSessionID: in.ChildSessionID,
 		AgentType:      in.AgentType,

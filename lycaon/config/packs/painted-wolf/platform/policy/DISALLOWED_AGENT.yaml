@@ -10,12 +10,12 @@ x-paintedwolf-audience:
   - coordinator
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: rule:spec
-message: agent_type is not in the workflow allowed_agents allowlist
-what: Agent_type is not in the workflow allowed_agents allowlist
-cause: agent_type is not in the workflow allowed_agents allowlist
-why: Pick an allowed agent id from the active workflow manifest
-fix: '{% if paintedwolf.workflow_allowed_agents %}Choose an agent from the current dispatch roster: {{ paintedwolf.workflow_allowed_agents }}.{% else %}The current workflow does not offer the requested agent. Inspect the current roster and workflow phase before dispatching; do not substitute an unoffered worker.{% endif %}'
-instead: 'Use only workflow-allowed functional agent ids.'
+message: Agent type is not in the workflow allowed_agents allowlist
+what: The requested agent_type is not in the workflow allowed_agents allowlist.
+cause: The active workflow restricts which worker profiles can start in this phase, and agent_type is outside that allowlist.
+why: Workflow phases bind allowed worker profiles to preserve phase posture and review boundaries.
+fix: '{% if paintedwolf.workflow_allowed_agents %}Choose an agent from the current dispatch roster: {{ paintedwolf.workflow_allowed_agents }}.{% else %}The current workflow does not offer the requested agent. Inspect the current worker roster and workflow phase before starting work, or instruct an eligible waiting worker; do not substitute an unoffered worker.{% endif %}'
+instead: 'Use only workflow-allowed agent ids.'
 x-paintedwolf-scenarios:
   - id: default
     vars:

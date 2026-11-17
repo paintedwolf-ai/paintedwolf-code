@@ -4,10 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
 
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -126,7 +127,7 @@ func (e *ToolOutputEnricher) appendFindOverflowNarrowIfNeeded(ctx context.Contex
 	if strings.TrimSpace(in.Tool) != "find" {
 		return false
 	}
-	if acc.raised("FIND_OVERFLOW_NARROW") {
+	if acc.facts.HasCode("FIND_OVERFLOW_NARROW") {
 		return true
 	}
 	body, ok := toolOutputJSONBody(acc.body)
@@ -150,7 +151,7 @@ func (e *ToolOutputEnricher) appendTUINotDrivenIfNeeded(ctx context.Context, in 
 	if !toolcontract.ProgramResultTool(strings.TrimSpace(in.Tool)) {
 		return false
 	}
-	if acc.raised("TUI_NOT_DRIVEN") {
+	if acc.facts.HasCode("TUI_NOT_DRIVEN") {
 		return true
 	}
 	if !outputLooksLikePipedTUI(acc.body) {

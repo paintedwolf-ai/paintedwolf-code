@@ -96,6 +96,9 @@ func (m Manifest) Canonical() ([]byte, error) {
 		if strings.TrimSpace(item.Key) == "" || item.Role == "" || item.SourceKind == "" || item.Inclusion == "" {
 			return nil, fmt.Errorf("briefing manifest item %q is incomplete", item.Key)
 		}
+		if item.SourceKind == SourceReasoning && !reasoningQuestions[sealed.Template.ID] {
+			return nil, fmt.Errorf("briefing template %q does not admit reasoning", sealed.Template.ID)
+		}
 	}
 	return json.Marshal(sealed)
 }

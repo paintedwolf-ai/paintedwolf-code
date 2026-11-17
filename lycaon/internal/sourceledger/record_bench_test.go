@@ -3,12 +3,12 @@ package sourceledger
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -23,7 +23,7 @@ func BenchmarkRecordBatchPromoteScale(b *testing.B) {
 	for _, files := range []int{10, 100, 500} {
 		b.Run(fmt.Sprintf("files-%d", files), func(b *testing.B) {
 			sqlDB := testdbfixture.Open(b, "store.db")
-			now := db.FormatTime(time.Now().UTC())
+			now := timelayout.Format(time.Now().UTC())
 			if _, err := sqlDB.ExecContext(context.Background(), `
 				INSERT INTO projects (id, name, last_opened_at, created_at, roots_generation)
 				VALUES ('p1', NULL, ?, ?, 0)
@@ -100,7 +100,7 @@ func benchmarkOpenCommandWindow(b *testing.B, files int, committed, watched bool
 		gittest.CommitAll(b, root, "Tree")
 	}
 	if _, err := sqlDB.ExecContext(b.Context(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
-		VALUES ('r1', 'p1', ?, 'root', 1, ?, 'attached')`, root, db.FormatTime(time.Now().UTC())); err != nil {
+		VALUES ('r1', 'p1', ?, 'root', 1, ?, 'attached')`, root, timelayout.Format(time.Now().UTC())); err != nil {
 		b.Fatalf("insert root: %v", err)
 	}
 	store := New(sqlDB, b.TempDir())

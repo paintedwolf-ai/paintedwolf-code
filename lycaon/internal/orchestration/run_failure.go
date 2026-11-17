@@ -9,12 +9,10 @@ import (
 )
 
 const (
-	RunFailureCodeExecution        = "TOPOLOGY_EXECUTION_FAILED"
-	RunFailureCodePipelineStalled  = "TOPOLOGY_PIPELINE_STALLED"
-	RunFailureCodeStageMissing     = "TOPOLOGY_STAGE_MISSING"
-	RunFailureCodeStageFailed      = "TOPOLOGY_STAGE_FAILED"
-	RunFailureCodeRetryUnavailable = "TOPOLOGY_STAGE_RETRY_UNAVAILABLE"
-	RunFailureCodeRetryExhausted   = "TOPOLOGY_STAGE_RETRY_EXHAUSTED"
+	RunFailureCodeExecution       = "TOPOLOGY_EXECUTION_FAILED"
+	RunFailureCodePipelineStalled = "TOPOLOGY_PIPELINE_STALLED"
+	RunFailureCodeStageMissing    = "TOPOLOGY_STAGE_MISSING"
+	RunFailureCodeStageFailed     = "TOPOLOGY_STAGE_FAILED"
 )
 
 // RunFailure describes why topology settlement could not reach completion.

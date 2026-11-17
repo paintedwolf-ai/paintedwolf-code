@@ -9,7 +9,6 @@ import unittest
 from unittest.mock import patch
 
 import feed_signing
-import feed_credentials_migrate as migration
 from verification_tests.distribution.test_feed_signing_execution import public_key, signature
 
 
@@ -54,23 +53,3 @@ class FeedVerificationTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "^feed signature verification (failed|could not complete)$"):
                         feed_signing.verify(pointer, signature(1, pointer.name, "2.0.0"), public_key(1))
 
-    def test_invalid_crypto_never_exports_a_migrated_credential(self):
-        registry = {"generations": [{"generation": 1, "feed_public_key": public_key(1)}]}
-        def run(command, **kwargs):
-            if command[0] == "minisign":
-                return subprocess.CompletedProcess(command, 1, stderr=b"private diagnostic")
-            pointer = Path(command[-1])
-            Path(str(pointer) + ".sig").write_text(signature(1, pointer.name, "0.0.0"))
-            return subprocess.CompletedProcess(command, 0)
-        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
-                "RUNNER_TEMP": directory, "FEED_CREDENTIAL_MODE": "migrate", "FEED_SIGNING_KEYS_JSON": "",
-                "FEED_SIGNING_PRIVATE_KEY": "private"}, clear=True), \
-                patch.object(migration, "load_registry", return_value=registry), \
-                patch.object(feed_signing.subprocess, "run", side_effect=run), \
-                patch.object(migration, "sealed_request") as encrypt, patch("sys.stderr") as stderr:
-            with self.assertRaises(SystemExit):
-                migration.main()
-            encrypt.assert_not_called()
-            self.assertEqual(list(Path(directory).iterdir()), [])
-            self.assertEqual(os.environ["FEED_SIGNING_KEYS_JSON"], "")
-            self.assertNotIn("private", str(stderr.write.call_args_list))

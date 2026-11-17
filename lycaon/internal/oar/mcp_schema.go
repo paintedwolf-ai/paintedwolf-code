@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/mcp/bindings"
 )
@@ -94,25 +93,6 @@ func rulesNeedMCPSchema(rules []*Rule) bool {
 		}
 	}
 	return false
-}
-
-// NeedsMCPSchemaFacts reports whether when/flow reads the schema match,
-// mcp_result or one of its members, or an mcp_result accessor.
-func NeedsMCPSchemaFacts(when string, flow []string) bool {
-	needed := false
-	add := func(name string) {
-		switch {
-		case name == "mcp_schema_matched", name == "mcp_result", name == "mcp_field_bool", name == "mcp_field_int":
-			needed = true
-		case strings.HasPrefix(name, "mcp_result."):
-			needed = true
-		}
-	}
-	scanIdents(when, add)
-	for _, step := range flow {
-		scanIdents(step, add)
-	}
-	return needed
 }
 
 // mcpResult is the mcp_result fact: the value an occurrence published, else

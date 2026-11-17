@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
@@ -66,8 +68,7 @@ func TestUnchangedNoReductionSkipsScanAndSummarizerAC_COMP_01(t *testing.T) {
 		f.appendRows(t, 2*attemptResumeRows)
 		rows, err := f.mem.GetMessages(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read rows", err)
-		_, err = f.mem.TruncateMessagesFrom(t.Context(), f.sess.ID, rows[len(rows)-2*attemptResumeRows].ID)
-		testutil.FailErr(t, "remove appended rows", err)
+		rewindFrom(t, f.mem, f.sess.ID, rows[len(rows)-2*attemptResumeRows].ID)
 		f.appendRows(t, 3)
 		rows, err = f.mem.GetMessages(t.Context(), f.sess.ID)
 		testutil.FailErr(t, "read rows after gap", err)
@@ -599,4 +600,18 @@ func TestAttemptControlFailsOpenOnStoreFaults(t *testing.T) {
 			t.Fatalf("pass = %+v", pass)
 		}
 	})
+}
+
+// rewindFrom truncates a session from anchor through the committed rewind path.
+func rewindFrom(t *testing.T, st interface {
+	PrepareRewind(context.Context, store.RewindOperation) error
+	SetRewindPhase(context.Context, string, string, string) error
+	CommitRewind(context.Context, string, string, string, api.RewindSessionResponse) (int, error)
+}, sessionID, anchor string) {
+	t.Helper()
+	id := uuid.NewString()
+	testutil.FailErr(t, "prepare rewind", st.PrepareRewind(t.Context(), store.RewindOperation{ID: id, SessionID: sessionID, AnchorMessageID: anchor, InputDigest: "test"}))
+	testutil.FailErr(t, "apply rewind files", st.SetRewindPhase(t.Context(), id, "files_applied", ""))
+	_, err := st.CommitRewind(t.Context(), id, sessionID, anchor, api.RewindSessionResponse{})
+	testutil.FailErr(t, "commit rewind", err)
 }

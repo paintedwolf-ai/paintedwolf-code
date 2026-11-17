@@ -10,6 +10,8 @@ import (
 	"image/png"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/contactsheet"
+
 	"github.com/lycaon/lycaon/internal/browser"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/timelinearchive"
@@ -65,7 +67,7 @@ func TestFilmstripArtifactHandleViewsContactSheetPNG(t *testing.T) {
 	testutil.FailErr(t, "PackFilmstripZip", err)
 	artifact, err := store.Put(t.Context(), "root", visual.Entry{
 		Meta: wire.VisualArtifact{
-			Mime:     browser.FilmstripMime,
+			Mime:     contactsheet.FilmstripMime,
 			Source:   wire.VisualArtifactSourceCapture,
 			Caption:  "multi-step flow",
 			Perceive: true,
@@ -94,7 +96,7 @@ func TestFilmstripArtifactHandleViewsContactSheetPNG(t *testing.T) {
 
 	// Unperceived filmstrip artifact and corrupt filmstrip/timeline artifacts.
 	unperceived, err := store.Put(t.Context(), "root", visual.Entry{
-		Meta:  wire.VisualArtifact{Mime: browser.FilmstripMime, Source: wire.VisualArtifactSourceCapture, Perceive: false},
+		Meta:  wire.VisualArtifact{Mime: contactsheet.FilmstripMime, Source: wire.VisualArtifactSourceCapture, Perceive: false},
 		Bytes: zipBytes,
 	})
 	testutil.FailErr(t, "store unperceived filmstrip", err)
@@ -104,7 +106,7 @@ func TestFilmstripArtifactHandleViewsContactSheetPNG(t *testing.T) {
 	}
 
 	corruptFilm, err := store.Put(t.Context(), "root", visual.Entry{
-		Meta:  wire.VisualArtifact{Mime: browser.FilmstripMime, Source: wire.VisualArtifactSourceCapture, Perceive: true},
+		Meta:  wire.VisualArtifact{Mime: contactsheet.FilmstripMime, Source: wire.VisualArtifactSourceCapture, Perceive: true},
 		Bytes: []byte("corrupt-zip"),
 	})
 	testutil.FailErr(t, "store corrupt filmstrip", err)

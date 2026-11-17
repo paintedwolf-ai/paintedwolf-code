@@ -19,8 +19,3 @@ export function splitBriefingInline(text: string): BriefingInlinePart[] {
   if (cursor < text.length) parts.push({ kind: "text", text: text.slice(cursor) });
   return parts.length > 0 ? parts : [{ kind: "text", text }];
 }
-
-/** The characters a reveal animates: code spans without their backticks. */
-export function briefingRevealText(text: string): string {
-  return splitBriefingInline(text).map((part) => part.text).join("");
-}

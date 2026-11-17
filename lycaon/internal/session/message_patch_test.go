@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -79,7 +79,7 @@ func TestUpdateMessagePatchPublishesStoredRow(t *testing.T) {
 		INSERT INTO workflow_runs (
 			id, session_id, project_id, workflow_id, workflow_version, status, current_phase, created_at, updated_at
 		) VALUES (?, ?, ?, 'plan', '1.0.0', 'running', 'stub', ?, ?)
-	`, runID, sess.ID, sess.ProjectID, db.FormatTime(now), db.FormatTime(now)); err != nil {
+	`, runID, sess.ID, sess.ProjectID, timelayout.Format(now), timelayout.Format(now)); err != nil {
 		testutil.FailErr(t, "insert workflow run failed", err)
 	}
 	if err := store.AppendMessages(ctx, sess.ID, wire.Message{
@@ -224,7 +224,7 @@ func TestUpdateMessagePatchPersistsRunCompletionReportScope(t *testing.T) {
 		INSERT INTO workflow_runs (
 			id, session_id, project_id, workflow_id, workflow_version, status, current_phase, created_at, updated_at
 		) VALUES (?, ?, ?, 'security-survey', '1.0.0', 'running', 'report', ?, ?)
-	`, runID, sess.ID, sess.ProjectID, db.FormatTime(now), db.FormatTime(now)); err != nil {
+	`, runID, sess.ID, sess.ProjectID, timelayout.Format(now), timelayout.Format(now)); err != nil {
 		testutil.FailErr(t, "insert workflow run", err)
 	}
 	testutil.FailErr(t, "append report draft", messageStore.AppendMessages(ctx, sess.ID, wire.Message{

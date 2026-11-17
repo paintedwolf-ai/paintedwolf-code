@@ -29,11 +29,7 @@ type NativeRecoveryBinding struct {
 	Restore bool
 }
 
-func directoryPath(ctx context.Context, q *db.Queries, project, branch, root, rel string) (db.SourceDirectories, error) {
-	return directoryPathWithCache(ctx, q, project, branch, root, rel, nil)
-}
-
-func directoryPathWithCache(ctx context.Context, q *db.Queries, project, branch, root, rel string, cache *TxBatchCache) (db.SourceDirectories, error) {
+func directoryPath(ctx context.Context, q *db.Queries, project, branch, root, rel string, cache *TxBatchCache) (db.SourceDirectories, error) {
 	if path.IsAbs(rel) || path.Clean(rel) != rel || rel == ".." || strings.HasPrefix(rel, "../") || strings.ContainsRune(rel, 0) {
 		return db.SourceDirectories{}, fmt.Errorf("invalid source directory %q", rel)
 	}
@@ -105,12 +101,8 @@ func insertDirectory(ctx context.Context, q *db.Queries, dir db.SourceDirectorie
 	return q.InsertSourceDirectory(ctx, db.InsertSourceDirectoryParams{ID: dir.ID, ProjectID: dir.ProjectID, BranchID: dir.BranchID, RootID: dir.RootID, ParentID: dir.ParentID, Name: dir.Name})
 }
 
-func upsertSourceHead(ctx context.Context, q *db.Queries, head db.SourceBranchHeads) error {
-	return upsertSourceHeadWithCache(ctx, q, head, nil)
-}
-
-func upsertSourceHeadWithCache(ctx context.Context, q *db.Queries, head db.SourceBranchHeads, cache *TxBatchCache) error {
-	parent, err := directoryPathWithCache(ctx, q, head.ProjectID, head.BranchID, head.RootID, path.Dir(head.Path), cache)
+func upsertSourceHead(ctx context.Context, q *db.Queries, head db.SourceBranchHeads, cache *TxBatchCache) error {
+	parent, err := directoryPath(ctx, q, head.ProjectID, head.BranchID, head.RootID, path.Dir(head.Path), cache)
 	if err != nil {
 		return err
 	}
@@ -165,7 +157,7 @@ func upsertSourceHeadWithCache(ctx context.Context, q *db.Queries, head db.Sourc
 		}
 	}
 	if head.State == "directory" {
-		if _, err := directoryPathWithCache(ctx, q, head.ProjectID, head.BranchID, head.RootID, head.Path, cache); err != nil {
+		if _, err := directoryPath(ctx, q, head.ProjectID, head.BranchID, head.RootID, head.Path, cache); err != nil {
 			return err
 		}
 	}
@@ -200,7 +192,7 @@ func transitionDirectoryWithCache(ctx context.Context, q *db.Queries, in RecordI
 	if rel == "." {
 		return fmt.Errorf("cannot transition the source root")
 	}
-	parent, err := directoryPathWithCache(ctx, q, in.ProjectID, in.BranchID.String(), in.RootID, path.Dir(in.Path), cache)
+	parent, err := directoryPath(ctx, q, in.ProjectID, in.BranchID.String(), in.RootID, path.Dir(in.Path), cache)
 	if err != nil {
 		return err
 	}
@@ -244,7 +236,7 @@ func transitionDirectoryWithCache(ctx context.Context, q *db.Queries, in RecordI
 			cache.loadedDirs[dir.ID] = true
 		}
 	} else if dir.ID == "" {
-		dir, err = directoryPath(ctx, q, in.ProjectID, in.BranchID.String(), in.RootID, rel)
+		dir, err = directoryPath(ctx, q, in.ProjectID, in.BranchID.String(), in.RootID, rel, nil)
 		if err != nil {
 			return err
 		}

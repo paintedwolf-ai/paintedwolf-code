@@ -2,12 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SourceChange, SourceDirListing } from "../../api/types.ts";
 import { applySourceChangesEvent, requestSourceProjectionResync } from "./source-events.ts";
 import { setBufferLiveHandlers } from "../documents/buffer-live.ts";
-import {
-  applyFilesBufferLoad,
-  applyFilesBufferDraft,
-  openFilesBuffer,
-  resetProjectFilesForTests,
-} from "../documents/project-files-buffers.ts";
+import { applyFilesBufferLoad, applyFilesBufferDraft } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 import { setSourceRefresh, SOURCE_REFRESH_IDLE_MS } from "./source-refresh.ts";
 import {
   connectSourceTreeWorkspace,

@@ -19,13 +19,3 @@ func ParseCommand(text string) (trigger string, ok bool) {
 	}
 	return "/" + m[1], true
 }
-
-// Remainder is the text after a leading /trigger, or empty.
-func Remainder(text string) string {
-	trimmed := strings.TrimSpace(text)
-	trigger, ok := ParseCommand(trimmed)
-	if !ok {
-		return ""
-	}
-	return strings.TrimSpace(trimmed[len(trigger):])
-}

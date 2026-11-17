@@ -204,7 +204,7 @@ func openReadOnlyStream(c *Core, res resolvedLayerEntry) (ReadSeekCloser, error)
 		return nil, os.ErrNotExist
 	}
 	r, _, err := prov.OpenRead(res.qpath.Rel)
-	if err == nil && !isGitComponentPath(res.qpath.Rel) {
+	if err == nil && !IsGitMetadataPath(res.qpath.Rel) {
 		c.counters.lowerContentReads.Add(1)
 	}
 	return r, err

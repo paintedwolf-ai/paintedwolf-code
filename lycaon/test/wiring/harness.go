@@ -12,16 +12,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/cost"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/scan"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
@@ -128,7 +129,7 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 	if !o.productionCostPricer {
 		cfg.TestCostPricer = testCostPricer{}
 	}
-	if o.autoCompleteDelegation {
+	if o.autoCompleteLegs {
 		cfg.TestOrchestrator = autoCompleteOrchestrator
 	}
 	var recording *llm.RecordingClient
@@ -149,8 +150,6 @@ func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 	if o.replaceManifests != nil {
 		sa.Workflows.Manager.Resolver.Overlay = workflowdef.NewRegistry(o.replaceManifests)
 	}
-
-	applyTestHarnessRelaxations(sa)
 
 	trackHost(t.Name(), sa)
 
@@ -226,6 +225,33 @@ func (h *Harness) CreateHarnessSession(t *testing.T, req wire.CreateSessionReque
 func (h *Harness) OwnerCtx(t testing.TB, ctx context.Context) context.Context {
 	t.Helper()
 	return testdbseed.OwnerCaller(t, ctx, h.DB)
+}
+
+// CoordinatorToolContext builds a coordinator ToolContext bound to sess and dir.
+func (h *Harness) CoordinatorToolContext(t *testing.T, ctx context.Context, sess *wire.Session, dir string) tools.ToolContext {
+	t.Helper()
+	var activeRootID string
+	testutil.FailErr(t, "resolve primary root", h.DB.QueryRowContext(
+		ctx,
+		"SELECT id FROM project_roots WHERE project_id = ? AND is_primary = 1",
+		sess.ProjectID,
+	).Scan(&activeRootID))
+	return tools.ToolContext{
+		Identity: tools.InvocationIdentity{
+			SessionID:  sess.ID,
+			ProjectID:  sess.ProjectID,
+			Agent:      "coordinator",
+			ToolCallID: uuid.NewString(),
+		},
+		Source: tools.InvocationSource{
+			Roots:        []projectroot.RootRef{{ID: activeRootID, Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: activeRootID,
+		},
+		Host: tools.InvocationHost{
+			SessionOutputDir:  t.TempDir(),
+			SessionScratchDir: t.TempDir(),
+		},
+	}
 }
 
 // SeedProgress supplies a pending checklist that survives turn bootstrap.
@@ -325,20 +351,9 @@ func (testCostPricer) EstimateCost(_, _ string, usage cost.TokenUsage) (cost.Cos
 	}, nil
 }
 
-func applyTestHarnessRelaxations(sa *app.ServeApp) {
-	if sa == nil || sa.Delegations.Manager == nil {
-		return
-	}
-	if g := sa.Delegations.Manager.Grounding; g != nil {
-		cfg := g.Config
-		cfg.Closeout.Mode = "off"
-		g.Config = cfg
-	}
-}
-
 // autoCompleteOrchestrator dispatches legs that complete immediately in mock workspaces.
 func autoCompleteOrchestrator(deps orchestration.OrchestratorDeps) orchestration.Orchestrator {
-	deps.Delegation = &autoCompleteDelegation{inner: deps.Delegation.(delegation.DelegationManager), store: deps.Store}
+	deps.Workers = &autoCompleteTopologyWorkers{TopologyWorkers: deps.Workers}
 	deps.Workspaces = &mockWorkspaceBinder{}
 	return orchestration.NewOrchestratorImpl(deps)
 }

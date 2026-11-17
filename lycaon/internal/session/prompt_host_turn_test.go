@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -218,7 +219,7 @@ func newPostHookManager(t *testing.T) *Host {
 }
 
 func pendingProgressMissingNudge(mgr *Host, sessionID string) bool {
-	return anchor.SameInform(mgr.Coordinator.Runtime.Kicks().TakePendingKickID(sessionID), anchor.ProgressMissing)
+	return anchor.SameInform(mgr.Coordinator.Runtime.Kicks().TakePendingKickIDUnless(sessionID, nil), anchor.ProgressMissing)
 }
 
 type postHookWorkflowContext struct {
@@ -326,7 +327,7 @@ func TestWorkflowPhaseExitNudgesAfterUnrelatedToolArc(t *testing.T) {
 	if !mgr.Runner.PostTurn.WorkflowExit(t.Context(), sess.ID, orchestration.ProfileCoordinator, []string{"read"}) {
 		t.Fatal("expected phase-exit nudge")
 	}
-	if id := mgr.Coordinator.Runtime.Kicks().TakePendingKickID(sess.ID); !anchor.SameInform(id, anchor.PhaseExitRequired) {
+	if id := mgr.Coordinator.Runtime.Kicks().TakePendingKickIDUnless(sess.ID, nil); !anchor.SameInform(id, anchor.PhaseExitRequired) {
 		t.Fatalf("kick id = %q", id)
 	}
 }

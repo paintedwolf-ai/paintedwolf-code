@@ -86,20 +86,6 @@ func (m *Service) assignWorkerModel(ctx context.Context, parent, child *api.Sess
 	return nil
 }
 
-// SetWorkerMaxToolLoops stores the child worker loop cap.
-func (m *Service) SetWorkerMaxToolLoops(ctx context.Context, childSessionID string, maxToolLoops int) error {
-	if m == nil || maxToolLoops <= 0 {
-		return nil
-	}
-	childSessionID = strings.TrimSpace(childSessionID)
-	if childSessionID == "" {
-		return fmt.Errorf("child session id required")
-	}
-	return m.store.UpdateSession(ctx, childSessionID, func(s *api.Session) {
-		s.MaxToolLoops = maxToolLoops
-	})
-}
-
 func (m *Service) injectWorkerKickOnSpawn(ctx context.Context, child *api.Session) {
 	if m == nil || child == nil || m.prompts == nil {
 		return
@@ -116,14 +102,7 @@ func (m *Service) injectWorkerKickOnSpawn(ctx context.Context, child *api.Sessio
 			data["phase_id"] = strings.TrimSpace(legCtx.PhaseID)
 		}
 	}
-	m.guidance.EmitEager(ctx, child.ID, workerSpawnAnchor(data["leg_id"]), data)
-}
-
-func workerSpawnAnchor(legID string) anchor.ID {
-	if strings.TrimSpace(legID) != "" {
-		return anchor.WorkerLegStarted
-	}
-	return anchor.WorkerTaskStarted
+	m.guidance.EmitEager(ctx, child.ID, anchor.WorkerTaskStarted, data)
 }
 
 // WorkerSummaryFinalizeOpts returns host limits for worker survey bounding after child runs.

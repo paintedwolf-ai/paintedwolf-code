@@ -2,7 +2,6 @@ package native
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"sync"
@@ -15,9 +14,9 @@ import (
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 )
 
-// TestGitCommitToolEmitsHeadMoved confirms a successful commit fans a HeadMoved
+// TestGitCommitEmitsHeadMoved confirms a successful commit fans a HeadMoved
 // signal (scoped to its repo) so history caches can refresh reactively.
-func TestGitCommitToolEmitsHeadMoved(t *testing.T) {
+func TestGitCommitEmitsHeadMoved(t *testing.T) {
 	dir := t.TempDir()
 	gittest.Init(t, dir)
 	gittest.Run(t, dir, "config", "user.email", "test@example.com")
@@ -39,23 +38,16 @@ func TestGitCommitToolEmitsHeadMoved(t *testing.T) {
 		mu.Unlock()
 	})
 
-	tool := &GitCommitTool{Git: git.NewManager(), Boundary: nativefixture.Boundary(t)}
-	_, err = tool.Run(context.Background(),
-		map[string]any{"message": "init", "paths": []any{"a.txt"}}, nativefixture.Context(dir))
-	testutil.FailErr(t, "commit tool run", err)
+	mutations := GitMutations{Git: git.NewManager(), Boundary: nativefixture.Boundary(t)}
+	_, _, err = mutations.Commit(context.Background(), nativefixture.Context(dir), GitCommitRequest{Message: "init", Paths: []string{"a.txt"}})
+	testutil.FailErr(t, "commit", err)
 	testutil.FailErr(t, "write new regression", os.WriteFile(filepath.Join(dir, "new_test.txt"), []byte("test\n"), 0o644))
-	out, err := tool.Run(context.Background(), map[string]any{
-		"message": "init with regression", "paths": []any{"new_test.txt"}, "amend": true,
-	}, nativefixture.Context(dir))
-	testutil.FailErr(t, "amend tool run", err)
-	var receipt struct {
-		Available bool     `json:"available"`
-		Hash      string   `json:"hash"`
-		Paths     []string `json:"paths"`
-	}
-	testutil.FailErr(t, "decode amend receipt", json.Unmarshal([]byte(out), &receipt))
-	if !receipt.Available || receipt.Hash == "" || len(receipt.Paths) != 1 || receipt.Paths[0] != "new_test.txt" {
-		t.Fatalf("amend receipt = %s", out)
+	hash, staging, err := mutations.Commit(context.Background(), nativefixture.Context(dir), GitCommitRequest{
+		Message: "init with regression", Paths: []string{"new_test.txt"}, Amend: true,
+	})
+	testutil.FailErr(t, "amend", err)
+	if hash == "" || len(staging.Paths) != 1 || staging.Paths[0] != "new_test.txt" {
+		t.Fatalf("amend = %q %+v", hash, staging)
 	}
 	if count := gittest.Run(t, dir, "rev-list", "--count", "HEAD"); count != "1\n" {
 		t.Fatalf("amend created an extra commit: count = %q", count)

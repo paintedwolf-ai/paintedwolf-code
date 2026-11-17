@@ -1,15 +1,16 @@
 package guidance
 
 import (
-	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/hintregistry"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/extpacks"
 )
 
 func TestDraftVersionOutcomeLabelFromCatalog(t *testing.T) {
 	t.Helper()
-	cfg, err := LoadHintConfig(extpacks.Bundled(hintregistry.DefaultDir))
+	cfg, err := LoadHintConfig(extpacks.Bundled(config.PlatformPolicy))
 	if err != nil {
 		t.Fatalf("LoadHintConfig: %v", err)
 	}

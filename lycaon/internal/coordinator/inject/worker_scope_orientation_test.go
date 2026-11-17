@@ -38,13 +38,12 @@ func TestRenderWorkerTaskAssignmentIncludesFileOrientation(t *testing.T) {
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "game.py"), []byte(body), 0o644))
 
 	out, err := RenderWorkerTaskAssignment(ctx, testInjectRenderer(t), WorkerTaskAssignmentInput{
-		SessionID:    "sess-inject-test",
-		ProjectDir:   dir,
-		Charter:      testWorkerCharter("Tune velocity integration in game.py"),
-		AgentType:    "implementer",
-		WorkerJobID:  "job-game-1",
-		Scope:        api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py"}},
-		MaxToolLoops: 8,
+		SessionID:   "sess-inject-test",
+		ProjectDir:  dir,
+		Charter:     testWorkerCharter("Tune velocity integration in game.py"),
+		AgentType:   "implementer",
+		WorkerJobID: "job-game-1",
+		Scope:       api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"game.py"}},
 	})
 	testutil.FailErr(t, "RenderWorkerTaskAssignment", err)
 	if !strings.Contains(out, "game.py") {
@@ -84,13 +83,12 @@ func TestRenderWorkerTaskAssignmentSurvivesSymbolRichScopeFile(t *testing.T) {
 	}
 
 	out, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), WorkerTaskAssignmentInput{
-		SessionID:    "sess-bounded",
-		ProjectDir:   dir,
-		Charter:      testWorkerCharter("Audit the lockfile"),
-		AgentType:    "security-reviewer",
-		WorkerJobID:  "job-bounded-1",
-		Scope:        api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"package-lock.json"}},
-		MaxToolLoops: 60,
+		SessionID:   "sess-bounded",
+		ProjectDir:  dir,
+		Charter:     testWorkerCharter("Audit the lockfile"),
+		AgentType:   "security-reviewer",
+		WorkerJobID: "job-bounded-1",
+		Scope:       api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"package-lock.json"}},
 	})
 	testutil.FailErr(t, "RenderWorkerTaskAssignment", err)
 	if !strings.Contains(out, "outline symbols for `package-lock.json`") {
@@ -127,19 +125,6 @@ func TestBuildWorkerTaskAssignmentDataBoundsModelAuthoredLists(t *testing.T) {
 	}
 }
 
-// Every budget must stay under the ceiling it exists to avoid.
-func TestRenderBudgetsStayUnderTheRenderCeiling(t *testing.T) {
-	for name, budget := range renderBudgets() {
-		if budget <= 0 {
-			t.Fatalf("%s = %d: a budget must bound something", name, budget)
-		}
-		if budget >= renderCeiling {
-			t.Fatalf("%s = %d exceeds the render ceiling %d — the template would error, not truncate",
-				name, budget, renderCeiling)
-		}
-	}
-}
-
 // The leg must be able to read the record its brief names.
 func TestRenderWorkerTaskAssignmentCarriesRecordedVerdicts(t *testing.T) {
 	out, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), WorkerTaskAssignmentInput{
@@ -157,7 +142,6 @@ func TestRenderWorkerTaskAssignmentCarriesRecordedVerdicts(t *testing.T) {
 				{Name: "claims", Value: `[{"id":"C1","statement":"loader imports arbitrary modules"}]`},
 			},
 		}},
-		MaxToolLoops: 60,
 	})
 	testutil.FailErr(t, "RenderWorkerTaskAssignment", err)
 	for _, want := range []string{"survey_claims", "CLAIMED", "loader imports arbitrary modules", "phase `claims`"} {
@@ -170,13 +154,12 @@ func TestRenderWorkerTaskAssignmentCarriesRecordedVerdicts(t *testing.T) {
 // An early-phase leg has no stamped verdict; the block stays out entirely.
 func TestRenderWorkerTaskAssignmentOmitsTheVerdictBlockWhenNoneRecorded(t *testing.T) {
 	_, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), WorkerTaskAssignmentInput{
-		SessionID:    "sess-no-verdicts",
-		ProjectDir:   t.TempDir(),
-		Charter:      testWorkerCharter("Survey the attack surface"),
-		AgentType:    "security-reviewer",
-		WorkerJobID:  "job-survey-1",
-		Scope:        api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"src"}},
-		MaxToolLoops: 60,
+		SessionID:   "sess-no-verdicts",
+		ProjectDir:  t.TempDir(),
+		Charter:     testWorkerCharter("Survey the attack surface"),
+		AgentType:   "security-reviewer",
+		WorkerJobID: "job-survey-1",
+		Scope:       api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"src"}},
 	})
 	testutil.FailErr(t, "RenderWorkerTaskAssignment", err)
 }

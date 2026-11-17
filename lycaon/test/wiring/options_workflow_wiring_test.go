@@ -14,7 +14,7 @@ import (
 )
 
 func TestOptionsSlashRequestStartsFanOut(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "options-slash")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureOrchestrate}, dir)
@@ -38,7 +38,7 @@ func TestOptionsSlashRequestStartsFanOut(t *testing.T) {
 }
 
 func TestOptionsWorkflowEndToEnd(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := h.OwnerCtx(t, context.Background())
 	dir := h.ProjectDir(t, "options")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureOrchestrate}, dir)
@@ -61,7 +61,9 @@ func TestOptionsWorkflowEndToEnd(t *testing.T) {
 		t.Fatalf("pending topology background work did not settle: %v", err)
 	}
 
-	if _, ok := h.Delegations.Store.DelegationBySessionID(sess.ID); ok {
+	preWorkers, err := h.Workers.Records.ByWorkflowRun(ctx, run.ID)
+	testutil.FailErr(t, "ByWorkflowRun before request", err)
+	if len(preWorkers) != 0 {
 		t.Fatal("research fan-out started before the request was answered")
 	}
 
@@ -82,8 +84,8 @@ func TestOptionsWorkflowEndToEnd(t *testing.T) {
 
 	assertManifestBoundSurface(t, h, ctx, sess, surface.HostLoopWakeSentinel, "decision_adjudicate")
 
-	legs := fanOutLegsForSession(t, h, sess.ID)
-	assertFanOutWorkersMatchTopology(t, h, run.ID, legs)
+	workers := fanOutWorkersForRun(t, h, run.ID)
+	assertFanOutWorkersMatchTopology(t, h, run.ID, workers)
 	scaffoldTopologyOutput(t, h.Workflows.Manager, run.ID, orchestration.TopologyBindStageFanOut)
 
 	vars, err := h.Workflows.Manager.Store.Runs.GetScaffoldVars(ctx, run.ID)

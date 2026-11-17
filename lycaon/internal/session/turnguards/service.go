@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workerplan"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -74,6 +75,9 @@ type WorkflowBlueprints interface {
 type WorkflowRuns interface {
 	ActiveBySession(context.Context, string) (*api.WorkflowRun, error)
 }
+type PlanCloseoutChecker interface {
+	CheckSessionCloseout(ctx context.Context, sessionID, workspacePath string) (workerplan.CloseoutVerdict, error)
+}
 
 type Service struct {
 	store               Sessions
@@ -101,6 +105,10 @@ type Service struct {
 	coordinatorFrame    inject.CoordinatorTurnFrameSource
 	workerQueue         workeroutcomes.CycleLedger
 	taskIdentities      workeradmission.TaskIdentityResolver
+	latestResultJob     LatestResultJobs
+	resultJob           ResultJobs
+	jobNames            JobNames
+	planCloseout        PlanCloseoutChecker
 }
 
 func New(store Sessions, policy *policyfacts.Service, verification *sessionverification.Service, feedback *policyfeedback.Service, state State, decisions Decisions, workspace Workspace, batch *batchcontrol.Service, closure *progressclosure.Service, closeouts *closeouts.Service, profiles *profiles.Service, limits *sessionlimits.Service) *Service {
@@ -108,6 +116,7 @@ func New(store Sessions, policy *policyfacts.Service, verification *sessionverif
 }
 func (m *Service) SetSurface(surface Surface)                    { m.surface = surface }
 func (m *Service) SetWorkflow(workflow *WorkflowDomains)         { m.workflows = workflow }
+func (m *Service) SetPlanCloseout(checker PlanCloseoutChecker)   { m.planCloseout = checker }
 func (m *Service) SetWorkers(workers workeroutcomes.CycleLedger) { m.workerQueue = workers }
 func (m *Service) SetProgress(progress Progress)                 { m.progress = progress }
 func (m *Service) SetWorkspaceCheck(check workercompletion.WorkspaceChangeChecker) {

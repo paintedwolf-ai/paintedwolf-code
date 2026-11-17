@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -117,7 +118,7 @@ func (s *sqlCore) EnsureAssessment(ctx context.Context, draft AssessmentDraft) (
 			RequiredScannersJson: string(scannersJSON),
 			TargetKind:           string(draft.Target.Kind), TargetPathsJson: string(pathsJSON),
 			DeletedPathsJson: string(deletedJSON), Trigger: string(draft.Trigger),
-			CreatedAt: db.FormatTime(draft.CreatedAt),
+			CreatedAt: timelayout.Format(draft.CreatedAt),
 		}); err != nil {
 			return err
 		}
@@ -360,7 +361,7 @@ func (s *sqlCore) FinalizeCompleteJSON(ctx context.Context, claimed *api.CodeSca
 	err := s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		changed, err := qtx.MarkScanComplete(ctx, db.MarkScanCompleteParams{
 			ResultJson:  db.NullString(string(resultJSON)),
-			CompletedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+			CompletedAt: db.NullString(timelayout.Format(time.Now().UTC())),
 			ID:          claimed.ID, ClaimToken: db.NullString(claimed.ClaimToken),
 		})
 		if err != nil {
@@ -397,7 +398,7 @@ func (s *sqlCore) FinalizeFailure(ctx context.Context, claimed *api.CodeScan, st
 	err := s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		changed, err := qtx.MarkScanTerminalFailure(ctx, db.MarkScanTerminalFailureParams{
 			Status: string(status), Error: db.NullString(strings.TrimSpace(message)),
-			CompletedAt: db.NullString(db.FormatTime(time.Now().UTC())),
+			CompletedAt: db.NullString(timelayout.Format(time.Now().UTC())),
 			ID:          claimed.ID, ClaimToken: db.NullString(claimed.ClaimToken),
 		})
 		if err != nil {
@@ -429,7 +430,7 @@ func (s *sqlCore) FinalizePendingFailure(ctx context.Context, id, code, message 
 	err := s.inTx(ctx, func(qtx *db.Queries, tx *sql.Tx) error {
 		changed, err := qtx.MarkPendingScanFailed(ctx, db.MarkPendingScanFailedParams{
 			Error:       db.NullString(strings.TrimSpace(message)),
-			CompletedAt: db.NullString(db.FormatTime(time.Now().UTC())), ID: id,
+			CompletedAt: db.NullString(timelayout.Format(time.Now().UTC())), ID: id,
 		})
 		if err != nil || changed != 1 {
 			return err
@@ -487,7 +488,7 @@ func commitFindingSetTx(ctx context.Context, tx *sql.Tx, scan *api.CodeScan, fin
 		ExecutionFingerprint: scan.ExecutionFingerprint,
 		FingerprintScheme:    scan.FingerprintScheme, CoverageStatus: string(coverage),
 		WarningsJson: string(warningsJSON),
-		CreatedAt:    db.FormatTime(time.Now().UTC()),
+		CreatedAt:    timelayout.Format(time.Now().UTC()),
 	}); err != nil {
 		return "", nil, coverage, err
 	}

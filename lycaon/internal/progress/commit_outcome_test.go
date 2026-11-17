@@ -42,7 +42,10 @@ type unsettledReconciliation struct {
 func (r *unsettledReconciliation) Reconciliation(string) *Reconciliation {
 	return &Reconciliation{Token: r.token, Jobs: []string{"worker"}}
 }
-func (r *unsettledReconciliation) Acknowledge(string, string) bool { r.acknowledgements++; return true }
+func (r *unsettledReconciliation) Acknowledge(context.Context, string, string) bool {
+	r.acknowledgements++
+	return true
+}
 
 func TestAuthorUpdatePublishesOnlySettledStoreOutcomes(t *testing.T) {
 	for _, mode := range []string{"store failure", "callback cancellation"} {

@@ -171,6 +171,9 @@ func TestFetchURLToolCacheHitPreservesResponseMetadata(t *testing.T) {
 	if invocation.RetrievedFrom != "final.example" {
 		t.Fatalf("cache hit reported provenance %q, want final.example", invocation.RetrievedFrom)
 	}
+	if len(invocation.CardFacts) != 1 || invocation.CardFacts[0].HTTPStatus == nil || *invocation.CardFacts[0].HTTPStatus != 404 {
+		t.Fatalf("card facts %+v, want the cached 404", invocation.CardFacts)
+	}
 	for _, want := range []string{
 		"# Missing page",
 		"status: 404 | text/html; charset=utf-8",

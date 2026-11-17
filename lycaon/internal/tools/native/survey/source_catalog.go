@@ -39,8 +39,7 @@ type sourceInventory struct {
 	// base is the scope relative to the project root.
 	base string
 	// rebased marks a scoped generation whose paths start at base.
-	rebased  bool
-	revision uint64
+	rebased bool
 	// stale marks the last complete generation served while a newer one builds.
 	stale bool
 	// live is used when no complete generation can answer this scope yet.
@@ -231,13 +230,13 @@ func sourceInventoryForScope(
 		if err != nil {
 			return sourceInventory{}, err
 		}
-		return reportedInventory(ctx, scoped, snapshot, false), nil
+		return reportedInventory(scoped, snapshot, false), nil
 	}
 	if base != "." {
 		// Reuse ready parent snapshot to avoid re-crawling subtrees.
 		current := svc.Current(ctx, projectID, []sourcecatalog.Root{{ID: root.ID, Path: root.Path}})
 		if current.State == sourcecatalog.StateReady {
-			return reportedInventory(ctx, whole, current, current.Refreshing), nil
+			return reportedInventory(whole, current, current.Refreshing), nil
 		}
 		// Scoped generations avoid full-root reconciliation when parent is cold.
 		scoped := sourceInventory{catalog: svc, rootPath: root.Path, catalogRoot: root.ID + "\x00" + base, catalogDir: ".", rootID: root.ID, base: base, rebased: true}
@@ -260,7 +259,7 @@ func snapshotInventory(
 			// Serve the last complete generation as stale under continuous write churn.
 			current := catalog.Current(ctx, projectID, roots)
 			if current.State == sourcecatalog.StateReady {
-				return reportedInventory(ctx, scope, current, true), nil
+				return reportedInventory(scope, current, true), nil
 			}
 			scope.live = true
 			return scope, nil
@@ -270,18 +269,16 @@ func snapshotInventory(
 	if snapshot.State != sourcecatalog.StateReady {
 		current := catalog.Current(ctx, projectID, roots)
 		if current.State == sourcecatalog.StateReady {
-			return reportedInventory(ctx, scope, current, true), nil
+			return reportedInventory(scope, current, true), nil
 		}
 		return sourceInventory{}, fmt.Errorf("source catalog state %q", snapshot.State)
 	}
-	return reportedInventory(ctx, scope, snapshot, !fresh), nil
+	return reportedInventory(scope, snapshot, !fresh), nil
 }
 
-func reportedInventory(ctx context.Context, scope sourceInventory, snapshot sourcecatalog.Snapshot, stale bool) sourceInventory {
+func reportedInventory(scope sourceInventory, snapshot sourcecatalog.Snapshot, stale bool) sourceInventory {
 	scope.snapshot = snapshot
-	scope.revision = snapshot.Revision
 	scope.stale = stale
-	reportInventory(ctx, scope)
 	return scope
 }
 

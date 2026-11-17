@@ -269,9 +269,6 @@ func TestGitLogRevisionRangesAndPaging(t *testing.T) {
 	if len(empty) != 0 {
 		t.Fatal("identical range is not empty")
 	}
-	if raw, err := MarshalHistoryPage(empty, GitLogOpts{Ref: "feature..feature", Limit: 10}, nil); err != nil || !strings.Contains(raw, `"commits":[]`) {
-		t.Fatalf("empty page: %s %v", raw, err)
-	}
 }
 
 func TestOperationReviewsIndexOnlyChanges(t *testing.T) {

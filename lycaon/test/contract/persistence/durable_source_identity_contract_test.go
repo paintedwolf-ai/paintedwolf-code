@@ -16,9 +16,7 @@ import (
 )
 
 // durableWorkspaceIDExemptions records physical workspace observations.
-var durableWorkspaceIDExemptions = map[string]string{
-	"delegation_legs": "records the workspace a leg ran in; nothing is looked up by it",
-}
+var durableWorkspaceIDExemptions = map[string]string{}
 
 func TestDurableTablesDoNotKeyOnPhysicalWorkspace(t *testing.T) {
 	t.Parallel()
