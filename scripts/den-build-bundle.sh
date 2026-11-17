@@ -278,7 +278,9 @@ if [[ "${HOST_KIND}" == "darwin" ]]; then
   APP_PATH="$(find "${BUNDLE_DIR}/macos" -maxdepth 1 -name '*.app' -print -quit 2>/dev/null || true)"
 fi
 if [[ -n "${APP_PATH}" ]]; then
-  VERIFY_ARGS=(--app "${APP_PATH}" --require-signed)
+  VERIFY_ARGS=(--app "${APP_PATH}")
+  # Only a Developer ID build can satisfy the signing audit; an unsigned build still gets the rest.
+  [[ -z "${APPLE_SIGNING_IDENTITY:-}" ]] || VERIFY_ARGS+=(--require-signed)
   echo "den:bundle — verifying bundle integrity" >&2
   bash "${ROOT}/scripts/verify-bundle.sh" "${VERIFY_ARGS[@]}"
 fi

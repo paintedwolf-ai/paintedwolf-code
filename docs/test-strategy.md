@@ -879,9 +879,22 @@ allocation before claiming an end-to-end speedup.
 The [desktop self-upgrade gate](dev-tasks.md#desktop-self-upgrade-release-gate)
 runs after signed packaging and before immutable publication. Harness tests prove
 fixture verification, isolation, and failure evidence; an actual released-app
-upgrade requires the protected run with the exact signed candidate. The separate
-sidecar/store rehearsal retains migration and backup-restore coverage, including
-clients that require manual installation.
+upgrade to the candidate requires the protected run with the exact signed
+candidate, because a shipped build trusts only its compiled-in keys. Nightly runs
+the gate's cases from the published release before the newest to the newest,
+which exercises the harness every night and says nothing about the current source.
+The separate sidecar/store rehearsal retains migration and backup-restore coverage,
+including clients that require manual installation.
+
+Nightly also runs the release's scripts through
+[`release-rehearsal.yml`](../.github/workflows/release-rehearsal.yml) on tiny
+payloads signed with disposable keys: workflow environment names, Debian and RPM
+metadata lint, upload limits, manifest, public set and cask assembly, package and
+repository signing for apt, dnf and pacman, and on macOS an unsigned `den:bundle`
+with `bundle:verify`, its updater archive checks and a cask install. Each check
+requires a seeded fault the release once shipped to be refused, so a check that
+stops refusing fails like one that breaks. Notarization, stapling and production
+signatures stay in the release.
 
 ### Hosted admission and qualification
 
@@ -1466,7 +1479,7 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 |---|---|---|---|
 | Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs beside the `release` platform lanes one at a time, then two browser shards beside the desktop journey |
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
-| Nightly | `nightly.yml` | `nightly` | 12 (4): the `nightly` profile capped at six, beside the two platform jobs, two browser shards with the desktop journey, and the upgrade rehearsal |
+| Nightly | `nightly.yml` | `nightly` | 20 (7): the `nightly` profile capped at six, beside the two platform jobs, two browser shards with the desktop journey, the store upgrade rehearsal, the five release rehearsal jobs, and the installed upgrade's preparation and two cases |
 | Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | DCO certification | `dco.yml` | `dco-certification` | 1 |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
@@ -1517,11 +1530,15 @@ unchanged compiler inputs and development outputs stay available between them.
 Each phase retains its own evidence, and either failure blocks publication.
 Signing remains isolated in its protected packaging job.
 
-Nightly upgrade rehearsal uses the shared verification setup for the pinned
+Nightly store upgrade rehearsal uses the shared verification setup for the pinned
 Node/Bun runtimes and frontend semantic fixture dependencies, then installs the
 public feed verifier. The managed rehearsal task owns its development sidecar
-build. Bundle execution restores the shared Go compiler cache and consumes the
-prepared signed fixture artifact.
+build. Nightly bundle execution installs the published release before the newest
+and lets it update itself to the newest, from fixtures that a Linux job prepares
+from public signed bytes alone; no key is used. It exercises the harness on
+known-good inputs and shows nothing about the current source. In a release,
+bundle execution consumes the fixture artifact the protected preparation signs
+for the candidate.
 
 Every bundle case retains `startup-observation.json` before cleanup. It records
 the expected version, captured process identities, daemon PID/port, and the last
