@@ -119,6 +119,20 @@ func (inv *invocation) bind(operand string, write bool) (projectpaths.BoundPath,
 	return bound, nil
 }
 
+// bindInput binds a path whose bytes a write carries elsewhere: a copy source
+// or an archive member. The person's unsaved text there is saved first, so the
+// copy carries what they see.
+func (inv *invocation) bindInput(operand string) (projectpaths.BoundPath, error) {
+	bound, err := inv.bind(operand, false)
+	if err != nil {
+		return projectpaths.BoundPath{}, err
+	}
+	if err := inv.owners.Revisions.SaveDrafts(inv.ctx, inv.tc, bound.Resolved.Abs, true); err != nil {
+		return projectpaths.BoundPath{}, err
+	}
+	return bound, nil
+}
+
 // recordPin retains one capture for this execution before its effect.
 func (inv *invocation) recordPin(pin toolcontract.ExecutionRevision) error {
 	return inv.owners.Pins.AppendRevisionPin(inv.ctx, inv.request.Invocation.Identity.ExecutionID, pin)

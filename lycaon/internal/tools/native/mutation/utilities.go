@@ -145,7 +145,7 @@ func runCp(inv *invocation) error {
 	}
 	defer operation.Close()
 	return inv.each(sources, func(operand string) (int, error) {
-		source, err := inv.bind(operand, false)
+		source, err := inv.bindInput(operand)
 		if err != nil {
 			return 0, err
 		}

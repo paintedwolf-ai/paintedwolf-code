@@ -31,16 +31,32 @@ func TestPinnedEditPublishesWithoutAgentReadAtCapturedRevision(t *testing.T) {
 	}
 }
 
-func TestPinnedEditConflictsInsteadOfRebasing(t *testing.T) {
-	cases := map[string]func(t *testing.T, f agentFixture, d *Document){
-		"compatible human edit": func(t *testing.T, f agentFixture, d *Document) {
-			_, err := f.service.ReplaceSnapshot(t.Context(), d.ID, f.project.ID, SnapshotReplacement{DocumentCommand: DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: d.Revision}, Content: "one\ntwo\nthree\nhuman\n", EOL: "lf"})
-			testutil.FailErr(t, "type", err)
-		},
-		"external disk write": func(t *testing.T, f agentFixture, _ *Document) {
-			f.write(t, "a.txt", "one\ntwo\nthree\nexternal\n")
-		},
-		"deleted file": func(t *testing.T, f agentFixture, _ *Document) {
+// Typing after a program's capture is anchored with its change, as for a
+// conversational edit, and the save publishes both.
+func TestPinnedEditMergesTypingAfterCapture(t *testing.T) {
+	f := newAgentFixture(t, map[string]string{"a.txt": "one\ntwo\nthree\n"})
+	document := f.open(t, "a.txt")
+	edit := pinnedEdit(document, "ONE\ntwo\nthree\n")
+	_, err := f.service.ReplaceSnapshot(t.Context(), document.ID, f.project.ID, SnapshotReplacement{DocumentCommand: DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: document.Revision}, Content: "one\ntwo\nthree\nhuman\n", EOL: "lf"})
+	testutil.FailErr(t, "type after capture", err)
+	previews, err := f.service.PreviewAgentEdits(t.Context(), []AgentEdit{edit})
+	testutil.FailErr(t, "preview anchored edit", err)
+	if previews[0].After != "ONE\ntwo\nthree\nhuman\n" {
+		t.Fatalf("preview = %q", previews[0].After)
+	}
+	edit.ReviewedRevision = previews[0].Before.Revision
+	result, err := f.service.ApplyAgentEdit(t.Context(), edit)
+	testutil.FailErr(t, "apply anchored edit", err)
+	if !result.Saved || f.disk(t, "a.txt") != "ONE\ntwo\nthree\nhuman\n" {
+		t.Fatalf("result=%+v disk=%q", result, f.disk(t, "a.txt"))
+	}
+}
+
+// A file changed outside the document is the conflict a program edit cannot merge.
+func TestPinnedEditConflictsWhenTheFileChangedOutside(t *testing.T) {
+	cases := map[string]func(t *testing.T, f agentFixture){
+		"external disk write": func(t *testing.T, f agentFixture) { f.write(t, "a.txt", "one\ntwo\nthree\nexternal\n") },
+		"deleted file": func(t *testing.T, f agentFixture) {
 			testutil.FailErr(t, "delete", os.Remove(filepath.Join(f.root, "a.txt")))
 		},
 	}
@@ -49,9 +65,9 @@ func TestPinnedEditConflictsInsteadOfRebasing(t *testing.T) {
 			f := newAgentFixture(t, map[string]string{"a.txt": "one\ntwo\nthree\n"})
 			document := f.open(t, "a.txt")
 			edit := pinnedEdit(document, "ONE\ntwo\nthree\n")
-			move(t, f, document)
+			move(t, f)
 			before, err := f.store.Get(t.Context(), document.ID)
-			testutil.FailErr(t, "read moved document", err)
+			testutil.FailErr(t, "read document", err)
 			for _, step := range []string{"preview", "apply"} {
 				var conflict *ExecutionConflict
 				if step == "preview" {
@@ -59,7 +75,7 @@ func TestPinnedEditConflictsInsteadOfRebasing(t *testing.T) {
 				} else {
 					_, err = f.service.ApplyAgentEdit(t.Context(), edit)
 				}
-				if !errors.As(err, &conflict) || !errors.Is(err, ErrExecutionConflict) || conflict.Pinned != *edit.Pin || conflict.Current == *edit.Pin {
+				if !errors.As(err, &conflict) || conflict.Pinned != *edit.Pin || conflict.Path != "a.txt" || conflict.Current == conflict.Pinned {
 					t.Fatalf("%s: err=%v", step, err)
 				}
 			}
@@ -75,11 +91,11 @@ func TestPinnedEditConflictsInsteadOfRebasing(t *testing.T) {
 	}
 }
 
-func TestPinnedEditRefusesDifferentReviewedRevision(t *testing.T) {
+func TestPinnedEditRefusesReviewBehindItsCapture(t *testing.T) {
 	f := newAgentFixture(t, map[string]string{"a.txt": "base\n"})
 	document := f.open(t, "a.txt")
 	edit := pinnedEdit(document, "next\n")
-	edit.ReviewedRevision = document.Revision + 1
+	edit.ReviewedRevision = document.Revision - 1
 	if _, err := f.service.ApplyAgentEdit(t.Context(), edit); !errors.Is(err, ErrOperationConflict) {
 		t.Fatalf("err=%v", err)
 	}

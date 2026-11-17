@@ -131,6 +131,18 @@ func (f *fakeEditorDocuments) VisitUnsavedDocuments(_ context.Context, _ string,
 	return nil
 }
 
+// SaveForAgentOperation saves each matching draft as its base, as a save would.
+func (f *fakeEditorDocuments) SaveForAgentOperation(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string, descendants bool, _ tools.EditorAgentCall) error {
+	return f.VisitUnsavedDocuments(ctx, projectID, branch, rootID, path, descendants, func(state tools.EditorDocumentState) error {
+		doc := f.docs[state.RootID+"/"+state.Path]
+		if doc.Diverged {
+			return &tools.EditorFileChanged{RootID: state.RootID, Path: state.Path, BaseSHA256: doc.BaseSHA256, DiskAbsent: true}
+		}
+		doc.Dirty, doc.BaseSHA256, doc.Revision = false, doc.SHA256, doc.Revision+1
+		return nil
+	})
+}
+
 func (f *fakeEditorDocuments) DirtyDocuments(_ context.Context, _ string, _ sourcebranch.ID) ([]tools.EditorDocumentPath, error) {
 	if f.dirtyErr != nil {
 		return nil, f.dirtyErr
