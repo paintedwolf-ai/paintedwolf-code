@@ -27,7 +27,7 @@ func (s *MemoryStore) Append(_ context.Context, sessionID, agent, summary, ref, 
 	if s == nil {
 		return false, nil
 	}
-	key := normalizeKey(sessionID)
+	key := strings.TrimSpace(sessionID)
 	agent, summary, ref = normalizeFindingFields(agent, summary, ref)
 	if key == "" || summary == "" {
 		return false, nil
@@ -55,7 +55,7 @@ func (s *MemoryStore) Recent(_ context.Context, sessionID, excludeAgent string, 
 	if s == nil {
 		return nil, afterID, nil
 	}
-	key := normalizeKey(sessionID)
+	key := strings.TrimSpace(sessionID)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	all := filterSince(s.bySess[key], since)
@@ -81,7 +81,7 @@ func (s *MemoryStore) List(_ context.Context, sessionID string, max int) ([]Find
 	if s == nil {
 		return nil, nil
 	}
-	key := normalizeKey(sessionID)
+	key := strings.TrimSpace(sessionID)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	all := s.bySess[key]
@@ -96,7 +96,7 @@ func (s *MemoryStore) List(_ context.Context, sessionID string, max int) ([]Find
 func (s *MemoryStore) Get(_ context.Context, sessionID string, id int64) (Finding, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, f := range s.bySess[normalizeKey(sessionID)] {
+	for _, f := range s.bySess[strings.TrimSpace(sessionID)] {
 		if f.ID == id {
 			return f, nil
 		}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -14,53 +15,43 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// CatalogResolver hands back the effective catalog whose captured bytes back
-// workflow manifests and topologies for a run.
+// CatalogResolver returns the effective catalog whose captured bytes back workflow manifests and topologies.
 type CatalogResolver func() (*extpacks.EffectiveCatalog, error)
 
 // OrchestratorDeps wires runtime dependencies for OrchestratorImpl.
 type OrchestratorDeps struct {
-	Delegation PipelineDelegation
-	Store      PipelineDelegationStore
+	Workers    TopologyWorkers
 	Agents     AgentRegistry
 	Models     ModelGroupSelector
 	Workflows  *WorkflowRunLifecycle
-	// Catalog is required for workflow-id runs: the manifest and its topology are
-	// provide units, and there is no directory to fall back to.
 	Catalog    CatalogResolver
 	Workspaces WorkspaceBinder
 }
 
-// OrchestratorImpl coordinates multi-agent topologies with iteration enforcement.
+// OrchestratorImpl coordinates multi-agent topologies over worker batches.
 type OrchestratorImpl struct {
-	delegation   PipelineDelegation
-	store        PipelineDelegationStore
-	agents       AgentRegistry
-	models       ModelGroupSelector
-	workflows    *WorkflowRunLifecycle
-	catalog      CatalogResolver
-	workspaces   WorkspaceBinder
-	iterationCap *InMemoryIterationCap
-	selfTerm     *DefaultSelfTermination
+	workers    TopologyWorkers
+	agents     AgentRegistry
+	models     ModelGroupSelector
+	workflows  *WorkflowRunLifecycle
+	catalog    CatalogResolver
+	workspaces WorkspaceBinder
 
 	mu   sync.RWMutex
 	runs map[string]*runState
 }
 
 type runState struct {
-	runID string
-	// delegationID is bound under o.mu once setup completes.
-	delegationID    string
+	runID           string
+	batchID         string
 	workflowRunID   string
 	workflowID      string
 	workflowVersion string
 	blueprintPath   string
-	// Topology maps belong to the runner; parallel stages only read a settled batch.
-	completed   map[string]bool
-	outputs     map[string]string
-	stageLegs   map[string]string
-	stagePhases map[string]map[string]bool
-	// Lifecycle fields below are shared with Status and Cancel under OrchestratorImpl.mu.
+	completed       map[string]bool
+	outputs         map[string]string
+	stageUnits      map[string]string
+	stagePhases     map[string]map[string]bool
 	phase           string
 	active          bool
 	completedAt     time.Time
@@ -68,12 +59,8 @@ type runState struct {
 	cancelRequested bool
 }
 
-// runRetentionWindow keeps final status available after return.
 const runRetentionWindow = 10 * time.Minute
 
-// registerRun stores a new run and opportunistically drops runs that finished
-// more than runRetentionWindow ago, keeping o.runs bounded without a
-// background sweeper.
 func (o *OrchestratorImpl) registerRun(runID string, state *runState) {
 	o.mu.Lock()
 	defer o.mu.Unlock()
@@ -89,16 +76,13 @@ func (o *OrchestratorImpl) registerRun(runID string, state *runState) {
 // NewOrchestratorImpl constructs an orchestrator with the given dependencies.
 func NewOrchestratorImpl(deps OrchestratorDeps) *OrchestratorImpl {
 	return &OrchestratorImpl{
-		delegation:   deps.Delegation,
-		store:        deps.Store,
-		agents:       deps.Agents,
-		models:       deps.Models,
-		workflows:    deps.Workflows,
-		catalog:      deps.Catalog,
-		workspaces:   deps.Workspaces,
-		iterationCap: NewInMemoryIterationCap(MaxIterations),
-		selfTerm:     NewDefaultSelfTermination(),
-		runs:         make(map[string]*runState),
+		workers:    deps.Workers,
+		agents:     deps.Agents,
+		models:     deps.Models,
+		workflows:  deps.Workflows,
+		catalog:    deps.Catalog,
+		workspaces: deps.Workspaces,
+		runs:       make(map[string]*runState),
 	}
 }
 
@@ -117,8 +101,7 @@ func (o *OrchestratorImpl) LoadTopology(ctx context.Context, path extpacks.Sourc
 	return spec, nil
 }
 
-// LoadTopologyForID resolves a topology from the catalog's captured bytes and
-// validates its agent profiles.
+// LoadTopologyForID resolves a topology from the catalog's captured bytes and validates its profiles.
 func (o *OrchestratorImpl) LoadTopologyForID(ctx context.Context, catalog *extpacks.EffectiveCatalog, topologyID string) (*TopologySpec, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -332,9 +315,6 @@ func (o *OrchestratorImpl) Status(ctx context.Context, runID string) (*RunStatus
 	var active bool
 	var workflowRunID string
 	if ok {
-		// Copy fields out while holding the lock: Cancel and the completion
-		// paths mutate phase/active under o.mu.Lock(), so reading them after
-		// releasing RLock would race.
 		phase = st.phase
 		active = st.active
 		workflowRunID = st.workflowRunID
@@ -362,7 +342,7 @@ func (o *OrchestratorImpl) Status(ctx context.Context, runID string) (*RunStatus
 }
 
 func (o *OrchestratorImpl) runPipeline(ctx context.Context, req RunRequest, wf *workflowRunContext) (*RunResult, error) {
-	if o.delegation == nil || o.store == nil || o.agents == nil {
+	if o.workers == nil || o.agents == nil {
 		return nil, fmt.Errorf("orchestrator pipeline dependencies not configured")
 	}
 	if req.Topology.Pipeline == nil {
@@ -388,29 +368,7 @@ func (o *OrchestratorImpl) runPipeline(ctx context.Context, req RunRequest, wf *
 	}
 
 	runID := uuid.NewString()
-	state := &runState{
-		runID:     runID,
-		completed: make(map[string]bool, len(stages)),
-		outputs:   make(map[string]string, len(stages)),
-		stageLegs: make(map[string]string, len(stages)),
-		phase:     "pipeline",
-		active:    true,
-	}
-	if wf != nil {
-		state.workflowRunID = wf.runID
-		state.workflowID = wf.id
-		state.workflowVersion = wf.version
-		state.blueprintPath = wf.blueprintPath
-		state.stagePhases = wf.stagePhases
-		state.phase = "research"
-	} else if inline := workflowContextFromInput(req); inline != nil {
-		state.workflowRunID = inline.runID
-		state.workflowID = inline.id
-		state.workflowVersion = inline.version
-		if state.workflowID != "" {
-			state.phase = "research"
-		}
-	}
+	state := newPipelineRunState(runID, len(stages), req, wf)
 	o.registerRun(runID, state)
 	defer func() {
 		o.mu.Lock()
@@ -422,20 +380,15 @@ func (o *OrchestratorImpl) runPipeline(ctx context.Context, req RunRequest, wf *
 		o.mu.Unlock()
 	}()
 
-	delegationID, err := o.setupPipelineDelegation(ctx, req, sessionID, projectDir, stages, state)
+	batchID, err := o.setupPipelineBatch(ctx, req, sessionID, projectDir, stages, state)
 	if err != nil {
 		return nil, err
 	}
-	if err := o.bindRunDelegation(ctx, state, delegationID); err != nil {
+	if err := o.bindRunBatch(ctx, state, batchID); err != nil {
 		return nil, err
 	}
-	for _, stage := range stages {
-		if !state.completed[stage.Name] || o.workflows == nil || state.workflowRunID == "" {
-			continue
-		}
-		if err := o.workflows.Topology.MarkTopologyStageComplete(ctx, state.workflowRunID, stage.Name, state.outputs[stage.Name], ""); err != nil {
-			return nil, err
-		}
+	if err := o.markCompletedPipelineStages(ctx, stages, state); err != nil {
+		return nil, err
 	}
 
 	for len(state.completed) < len(stages) {
@@ -443,7 +396,7 @@ func (o *OrchestratorImpl) runPipeline(ctx context.Context, req RunRequest, wf *
 		if len(ready) == 0 {
 			return nil, newRunFailure(RunFailureCodePipelineStalled, "", false, fmt.Errorf("pipeline stalled with no ready stages"))
 		}
-		results, err := o.executePipelineWave(ctx, req, runID, delegationID, ready, state)
+		results, err := o.executePipelineWave(ctx, req, batchID, ready, state)
 		if err != nil {
 			return nil, err
 		}
@@ -467,6 +420,48 @@ func (o *OrchestratorImpl) runPipeline(ctx context.Context, req RunRequest, wf *
 	}, nil
 }
 
+func newPipelineRunState(runID string, stageCount int, req RunRequest, wf *workflowRunContext) *runState {
+	state := &runState{
+		runID:      runID,
+		completed:  make(map[string]bool, stageCount),
+		outputs:    make(map[string]string, stageCount),
+		stageUnits: make(map[string]string, stageCount),
+		phase:      "pipeline",
+		active:     true,
+	}
+	if wf != nil {
+		state.workflowRunID = wf.runID
+		state.workflowID = wf.id
+		state.workflowVersion = wf.version
+		state.blueprintPath = wf.blueprintPath
+		state.stagePhases = wf.stagePhases
+		state.phase = "research"
+	} else if inline := workflowContextFromInput(req); inline != nil {
+		state.workflowRunID = inline.runID
+		state.workflowID = inline.id
+		state.workflowVersion = inline.version
+		if state.workflowID != "" {
+			state.phase = "research"
+		}
+	}
+	return state
+}
+
+func (o *OrchestratorImpl) markCompletedPipelineStages(ctx context.Context, stages []PipelineStage, state *runState) error {
+	if o.workflows == nil || state.workflowRunID == "" {
+		return nil
+	}
+	for _, stage := range stages {
+		if !state.completed[stage.Name] {
+			continue
+		}
+		if err := o.workflows.Topology.MarkTopologyStageComplete(ctx, state.workflowRunID, stage.Name, state.outputs[stage.Name], ""); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func pipelineProjectDir(req RunRequest) (string, error) {
 	if req.Input != nil {
 		if v, ok := req.Input["project_dir"].(string); ok && strings.TrimSpace(v) != "" {
@@ -485,32 +480,57 @@ func pipelineProjectID(req RunRequest) (string, error) {
 	return "", fmt.Errorf("project_id required in RunRequest.Input")
 }
 
-func (o *OrchestratorImpl) setupPipelineDelegation(
+func boundPhaseForStage(state *runState, stage string) string {
+	if state == nil || len(state.stagePhases) == 0 {
+		return ""
+	}
+	phases := state.stagePhases[strings.TrimSpace(stage)]
+	if len(phases) == 0 {
+		return ""
+	}
+	names := make([]string, 0, len(phases))
+	for p, ok := range phases {
+		if ok && strings.TrimSpace(p) != "" {
+			names = append(names, strings.TrimSpace(p))
+		}
+	}
+	slices.Sort(names)
+	if len(names) == 0 {
+		return ""
+	}
+	return names[0]
+}
+
+func (o *OrchestratorImpl) setupPipelineBatch(
 	ctx context.Context,
 	req RunRequest,
 	sessionID, projectDir string,
 	stages []PipelineStage,
 	state *runState,
 ) (string, error) {
-	delegationID, _ := req.Input["delegation_id"].(string)
-	delegationID = strings.TrimSpace(delegationID)
-	if delegationID == "" {
+	batchID, _ := req.Input["batch_id"].(string)
+	batchID = strings.TrimSpace(batchID)
+	if batchID == "" {
 		if state.workflowRunID != "" {
 			var err error
-			delegationID, _, err = o.store.DelegationByWorkflowRunID(ctx, state.workflowRunID)
+			batchID, _, err = o.workers.BatchByWorkflowRun(ctx, state.workflowRunID)
 			if err != nil {
 				return "", err
 			}
 		} else {
-			delegationID, _ = o.store.DelegationBySessionID(sessionID)
+			var err error
+			batchID, _, err = o.workers.BatchBySession(ctx, sessionID)
+			if err != nil {
+				return "", err
+			}
 		}
 	}
-	if delegationID != "" {
+	if batchID != "" {
 		keys := make([]string, len(stages))
 		for i, stage := range stages {
 			keys[i] = stage.Name
 		}
-		restored, err := o.restoreDelegation(ctx, delegationID, keys, state)
+		restored, err := o.restoreBatch(ctx, batchID, keys, state)
 		if err != nil {
 			return "", err
 		}
@@ -525,54 +545,45 @@ func (o *OrchestratorImpl) setupPipelineDelegation(
 	if err != nil {
 		return "", err
 	}
-	delegation := api.Delegation{
+	batch := TopologyBatch{
+		SessionID:       sessionID,
 		ProjectID:       projectID,
 		WorkspacePath:   projectDir,
 		Task:            task,
-		Strategy:        api.HuntStrategyFileBased,
-		Status:          "active",
-		Phase:           api.DelegationPhaseSetup,
+		Pattern:         TopologyPipeline,
+		Status:          TopologyBatchActive,
 		WorkflowID:      state.workflowID,
 		WorkflowVersion: state.workflowVersion,
 		WorkflowRunID:   state.workflowRunID,
+		BlueprintPath:   state.blueprintPath,
 	}
-	legs := make([]api.Leg, len(stages))
+	units := make([]TopologyUnit, len(stages))
 	for i := range stages {
-		leg := buildPipelineLeg(stages[i], req.Topology, nil, state.blueprintPath)
-		legs[i] = leg
-		state.stageLegs[stages[i].Name] = leg.ID
+		u := buildPipelineUnit(stages[i], req.Topology, nil, state)
+		units[i] = u
 	}
-	created, err := o.store.Create(ctx, delegation, sessionID, legs)
+	created, createdUnits, err := o.workers.CreateBatch(ctx, batch, units)
 	if err != nil {
 		return "", err
+	}
+	for i := range stages {
+		state.stageUnits[stages[i].Name] = createdUnits[i].ID
 	}
 	return created.ID, nil
 }
 
-func restoreRecordedLegs(state *runState, legs []api.Leg) {
-	for _, leg := range legs {
-		state.stageLegs[leg.Title] = leg.ID
-		if leg.Status != api.LegStatusComplete {
-			continue
-		}
-		output := leg.Title + " complete"
-		if leg.Result != nil && strings.TrimSpace(leg.Result.Summary) != "" {
-			output = leg.Result.Summary
-		}
-		state.completed[leg.Title] = true
-		state.outputs[leg.Title] = output
+func buildPipelineUnit(stage PipelineStage, spec TopologySpec, outputs map[string]string, state *runState) TopologyUnit {
+	var blueprintPath string
+	if state != nil {
+		blueprintPath = state.blueprintPath
 	}
-}
-
-func buildPipelineLeg(stage PipelineStage, spec TopologySpec, outputs map[string]string, blueprintPath string) api.Leg {
-	return api.Leg{
+	return TopologyUnit{
 		ID:        uuid.NewString(),
-		Title:     stage.Name,
+		WorkID:    stage.Name,
 		AgentType: stage.AgentProfile,
 		Prompt:    buildStagePrompt(spec, stage, outputs, blueprintPath),
-		Files:     []string{wholeProjectScopeGlob},
+		Phase:     boundPhaseForStage(state, stage.Name),
 		Status:    api.LegStatusPending,
-		CreatedAt: time.Now().UTC(),
 	}
 }
 
@@ -601,7 +612,7 @@ type pipelineStageResult struct {
 func (o *OrchestratorImpl) executePipelineWave(
 	ctx context.Context,
 	req RunRequest,
-	runID, delegationID string,
+	batchID string,
 	stages []PipelineStage,
 	state *runState,
 ) ([]pipelineStageResult, error) {
@@ -612,13 +623,13 @@ func (o *OrchestratorImpl) executePipelineWave(
 		err    error
 	}, len(stages))
 	for _, stage := range stages {
-		go func() {
-			result, err := o.executePipelineStage(waveCtx, req, runID, delegationID, stage, state)
+		go func(st PipelineStage) {
+			result, err := o.executePipelineStage(waveCtx, req, batchID, st, state)
 			results <- struct {
 				result pipelineStageResult
 				err    error
 			}{result: result, err: err}
-		}()
+		}(stage)
 	}
 	out := make([]pipelineStageResult, 0, len(stages))
 	var firstErr error
@@ -642,79 +653,61 @@ func (o *OrchestratorImpl) executePipelineWave(
 func (o *OrchestratorImpl) executePipelineStage(
 	ctx context.Context,
 	req RunRequest,
-	runID, delegationID string,
+	batchID string,
 	stage PipelineStage,
 	state *runState,
 ) (pipelineStageResult, error) {
 	if err := o.waitForWorkflowStagePhase(ctx, state, stage.Name); err != nil {
 		return pipelineStageResult{}, err
 	}
-	legID, ok := state.stageLegs[stage.Name]
+	unitID, ok := state.stageUnits[stage.Name]
 	if !ok {
-		return pipelineStageResult{}, newRunFailure(RunFailureCodeStageMissing, stage.Name, false, fmt.Errorf("pipeline stage %q missing leg", stage.Name))
+		return pipelineStageResult{}, newRunFailure(RunFailureCodeStageMissing, stage.Name, false, fmt.Errorf("pipeline stage %q missing unit", stage.Name))
 	}
 	if len(stage.InputFrom) > 0 {
-		leg, err := o.store.GetLeg(ctx, delegationID, legID)
+		unit, err := o.workers.GetUnit(ctx, batchID, unitID)
 		if err != nil {
 			return pipelineStageResult{}, err
 		}
-		if leg.Status == api.LegStatusPending {
-			leg.Prompt = buildStagePrompt(req.Topology, stage, state.outputs, state.blueprintPath)
-			if err := o.store.UpdateLeg(ctx, *leg); err != nil {
+		if unit.Status == api.LegStatusPending {
+			unit.Prompt = buildStagePrompt(req.Topology, stage, state.outputs, state.blueprintPath)
+			if err := o.workers.UpdateUnit(ctx, batchID, *unit); err != nil {
 				return pipelineStageResult{}, err
 			}
 		}
 	}
 	for {
-		leg, err := o.store.GetLeg(ctx, delegationID, legID)
+		unit, err := o.workers.GetUnit(ctx, batchID, unitID)
 		if err != nil {
 			return pipelineStageResult{}, err
 		}
-		switch leg.Status {
+		switch unit.Status {
 		case api.LegStatusPending:
-			if err := o.beforePipelineDispatch(ctx, req, runID, stage, state); err != nil {
+			if err := o.assertWorkflowRunnable(ctx, state.workflowRunID); err != nil {
 				return pipelineStageResult{}, err
 			}
-			if _, err := o.delegation.DispatchLeg(ctx, delegationID, legID, ""); err != nil {
+			if _, err := o.workers.DispatchUnit(ctx, batchID, unitID); err != nil {
 				return pipelineStageResult{}, err
-			}
-		case api.LegStatusRetryPending:
-			if err := o.beforePipelineDispatch(ctx, req, runID, stage, state); err != nil {
-				return pipelineStageResult{}, err
-			}
-			resumer, ok := o.delegation.(pipelineLegResumer)
-			if !ok {
-				return pipelineStageResult{}, newRunFailure(RunFailureCodeRetryUnavailable, stage.Name, false, fmt.Errorf("pipeline delegation cannot resume a leg"))
-			}
-			if _, err := resumer.ResumeLeg(ctx, delegationID, legID); err != nil {
-				return pipelineStageResult{}, newRunFailure(RunFailureCodeRetryExhausted, stage.Name, false, err)
 			}
 		case api.LegStatusComplete:
 			output := stage.Name + " complete"
-			if leg.Result != nil && strings.TrimSpace(leg.Result.Summary) != "" {
-				output = leg.Result.Summary
+			if strings.TrimSpace(unit.Summary) != "" {
+				output = unit.Summary
 			}
 			return pipelineStageResult{stage: stage.Name, output: output}, nil
 		case api.LegStatusFailed, api.LegStatusCanceled:
-			return pipelineStageResult{}, newRunFailure(RunFailureCodeStageFailed, stage.Name, false, fmt.Errorf("pipeline stage %q leg %s", stage.Name, leg.Status))
-		case api.LegStatusDispatched, api.LegStatusRunning, api.LegStatusHeld:
+			return pipelineStageResult{}, newRunFailure(RunFailureCodeStageFailed, stage.Name, false, fmt.Errorf("pipeline stage %q %s", stage.Name, unit.Status))
+		case api.LegStatusDispatched, api.LegStatusRunning, api.LegStatusHeld, api.LegStatusRetryPending:
 		}
-		if _, err := o.waitForLeg(ctx, delegationID, legID); err != nil {
+		if _, err := o.waitForUnit(ctx, batchID, unitID); err != nil {
 			return pipelineStageResult{}, err
 		}
 	}
 }
 
-func (o *OrchestratorImpl) beforePipelineDispatch(ctx context.Context, req RunRequest, runID string, stage PipelineStage, state *runState) error {
-	taskID := runID + ":" + stage.Name
-	if _, err := o.iterationCap.Track(ctx, stage.AgentProfile, taskID); err != nil {
-		return err
-	}
-	if err := o.checkIteration(ctx, req.Topology, stage.AgentProfile, taskID, TerminationContext{AgentID: stage.AgentProfile, TaskID: taskID}); err != nil {
-		return err
-	}
-	if o.workflows != nil && state.workflowRunID != "" {
-		return o.workflows.Policy.AssertRunnable(ctx, state.workflowRunID)
+func (o *OrchestratorImpl) assertWorkflowRunnable(ctx context.Context, workflowRunID string) error {
+	if o.workflows != nil && strings.TrimSpace(workflowRunID) != "" {
+		return o.workflows.Policy.AssertRunnable(ctx, workflowRunID)
 	}
 	return nil
 }
@@ -769,36 +762,23 @@ func (o *OrchestratorImpl) waitForWorkflowStagePhase(ctx context.Context, state 
 	}
 }
 
-// settleLegs waits until every leg is complete or failed. A leg that ran out
-// of budget resumes with a larger one. Legs are polled together so one leg's
-// retry never waits behind another's work; callers decide what a failed leg means.
-func (o *OrchestratorImpl) settleLegs(ctx context.Context, delegationID string, legIDs []string, stage string) ([]*api.Leg, error) {
-	settled := make([]*api.Leg, len(legIDs))
+func (o *OrchestratorImpl) settleUnits(ctx context.Context, batchID string, unitIDs []string) ([]*TopologyUnit, error) {
+	settled := make([]*TopologyUnit, len(unitIDs))
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
 	for {
 		open := 0
-		for i, legID := range legIDs {
+		for i, unitID := range unitIDs {
 			if settled[i] != nil {
 				continue
 			}
-			leg, err := o.store.GetLeg(ctx, delegationID, legID)
+			unit, err := o.workers.GetUnit(ctx, batchID, unitID)
 			if err != nil {
 				return nil, err
 			}
-			switch leg.Status {
-			case api.LegStatusComplete, api.LegStatusFailed, api.LegStatusCanceled:
-				settled[i] = leg
+			if unit.Status.IsTerminal() {
+				settled[i] = unit
 				continue
-			case api.LegStatusRetryPending:
-				resumer, ok := o.delegation.(pipelineLegResumer)
-				if !ok {
-					return nil, newRunFailure(RunFailureCodeRetryUnavailable, stage, false, fmt.Errorf("%s delegation cannot resume a leg", stage))
-				}
-				if _, err := resumer.ResumeLeg(ctx, delegationID, legID); err != nil {
-					return nil, newRunFailure(RunFailureCodeRetryExhausted, stage, false, err)
-				}
-			case api.LegStatusPending, api.LegStatusDispatched, api.LegStatusRunning, api.LegStatusHeld:
 			}
 			open++
 		}
@@ -813,16 +793,16 @@ func (o *OrchestratorImpl) settleLegs(ctx context.Context, delegationID string, 
 	}
 }
 
-func (o *OrchestratorImpl) waitForLeg(ctx context.Context, delegationID, legID string) (*api.Leg, error) {
+func (o *OrchestratorImpl) waitForUnit(ctx context.Context, batchID, unitID string) (*TopologyUnit, error) {
 	ticker := time.NewTicker(25 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		leg, err := o.store.GetLeg(ctx, delegationID, legID)
+		unit, err := o.workers.GetUnit(ctx, batchID, unitID)
 		if err != nil {
 			return nil, err
 		}
-		if isSettledLegAttempt(leg.Status) {
-			return leg, nil
+		if unit.Status.IsTerminal() {
+			return unit, nil
 		}
 		select {
 		case <-ctx.Done():
@@ -830,10 +810,6 @@ func (o *OrchestratorImpl) waitForLeg(ctx context.Context, delegationID, legID s
 		case <-ticker.C:
 		}
 	}
-}
-
-func isSettledLegAttempt(status api.LegStatus) bool {
-	return status.IsTerminal() || status == api.LegStatusRetryPending
 }
 
 func copyStringMap(in map[string]string) map[string]string {
@@ -845,23 +821,4 @@ func copyStringMap(in map[string]string) map[string]string {
 		out[k] = v
 	}
 	return out
-}
-
-// checkIteration enforces iteration cap and self-termination before re-dispatch.
-func (o *OrchestratorImpl) checkIteration(ctx context.Context, spec TopologySpec, agentID, taskID string, tc TerminationContext) error {
-	if o == nil {
-		return fmt.Errorf("orchestrator not configured")
-	}
-	max := EffectiveIterationCap(spec)
-	if dec, err := o.iterationCap.CheckMax(ctx, agentID, taskID, max); err != nil {
-		return err
-	} else if dec != nil && dec.ShouldTerminate {
-		return fmt.Errorf("iteration terminated: %s", dec.Reason)
-	}
-	if dec, err := o.selfTerm.Evaluate(ctx, tc); err != nil {
-		return err
-	} else if dec != nil && dec.ShouldTerminate {
-		return fmt.Errorf("self-termination: %s", dec.Reason)
-	}
-	return nil
 }

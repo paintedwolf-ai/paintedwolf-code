@@ -2,6 +2,7 @@ package bgprocess
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
 )
@@ -21,7 +22,7 @@ func (r *Registry) ActiveDirectIPJobs(sessionID string) []ActiveDirectIPJob {
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
 	var out []ActiveDirectIPJob
-	for _, proc := range r.jobs.ownedProcessesLocked(trim(sessionID)) {
+	for _, proc := range r.jobs.ownedProcessesLocked(strings.TrimSpace(sessionID)) {
 		status, ok := proc.directIPProtectionStatusLocked()
 		if !ok {
 			continue

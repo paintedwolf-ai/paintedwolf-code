@@ -87,7 +87,7 @@ func NewTracker(cfg TrackerConfig) (*Tracker, error) {
 	if cfg.ViewID == "" {
 		return nil, errors.New("observation: ViewID is required")
 	}
-	facts := NormalizeVisibilityFacts(cfg.Facts)
+	facts := cfg.Facts
 	if err := ValidateVisibilityFacts(facts); err != nil {
 		return nil, err
 	}
@@ -151,7 +151,6 @@ func (t *Tracker) BindCore(core *layeredfs.Core, roots ...layeredfs.RootSpec) {
 
 // SetVisibilityFacts updates the tracker's adapter visibility and attribution facts.
 func (t *Tracker) SetVisibilityFacts(facts VisibilityFacts) error {
-	facts = NormalizeVisibilityFacts(facts)
 	if err := ValidateVisibilityFacts(facts); err != nil {
 		return err
 	}
@@ -169,7 +168,7 @@ func (t *Tracker) SetVisibilityFacts(facts VisibilityFacts) error {
 
 // BindViewCapabilities updates the tracker's visibility facts from a ViewCapabilityDescriptor.
 func (t *Tracker) BindViewCapabilities(desc ViewCapabilityDescriptor) error {
-	return t.SetVisibilityFacts(VisibilityFactsFromDescriptor(desc))
+	return t.SetVisibilityFacts(desc.Facts)
 }
 
 // Facts returns the declared adapter visibility and cache capability facts.
@@ -178,9 +177,6 @@ func (t *Tracker) Facts() VisibilityFacts {
 	defer t.mu.RUnlock()
 	return t.facts
 }
-
-// VisibilityFacts returns the declared adapter visibility and cache capability facts.
-func (t *Tracker) VisibilityFacts() VisibilityFacts { return t.Facts() }
 
 // RegisterInvalidationSink registers an adapter sink to receive targeted cache invalidations.
 func (t *Tracker) RegisterInvalidationSink(sink InvalidationSink) {

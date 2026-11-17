@@ -15,11 +15,7 @@ import (
 
 var fixtureTime = time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 
-var (
-	roundTripTime        = fixtureTime
-	roundTripStartedAt   = fixtureTime.Add(time.Minute)
-	roundTripCompletedAt = fixtureTime.Add(2 * time.Minute)
-)
+var roundTripTime = fixtureTime
 
 type wireRoundTripCase struct {
 	name string
@@ -88,25 +84,6 @@ var wireRoundTripCases = []wireRoundTripCase{
 		Status:    api.BlueprintStatusDraft,
 		Version:   1,
 		UpdatedAt: roundTripTime,
-	}},
-	{"Delegation", api.Delegation{
-		ID:          "44444444-4444-4444-8444-444444444444",
-		Task:        "fix bug",
-		Strategy:    api.HuntStrategyFileBased,
-		InspectMode: api.InspectModeStandard,
-		Status:      "active",
-		Phase:       api.DelegationPhaseWorker,
-		CreatedAt:   roundTripTime,
-	}},
-	{"Leg", api.Leg{
-		ID:           "55555555-5555-4555-8555-555555555555",
-		DelegationID: "44444444-4444-4444-8444-444444444444",
-		Title:        "leg-1",
-		Status:       api.LegStatusPending,
-		Files:        []string{"a.go"},
-		CreatedAt:    roundTripTime,
-		StartedAt:    &roundTripStartedAt,
-		CompletedAt:  &roundTripCompletedAt,
 	}},
 	{"WorkerTask", api.WorkerTask{
 		ID:              "66666666-6666-4666-8666-666666666666",

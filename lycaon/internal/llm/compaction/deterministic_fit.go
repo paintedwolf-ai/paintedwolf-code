@@ -11,12 +11,6 @@ const fitDropBlockMessages = 32
 // contextTrimNoticeID identifies the transient host trim notice.
 const contextTrimNoticeID = "host-context-trim-notice"
 
-// DeterministicFit drops old rows in blocks while preserving checkpoints, pins, and recent exchanges.
-// Protected rows may leave the result over budget.
-func DeterministicFit(cfg CompactionConfig, messages []ContextMessage, maxTokens int) []ContextMessage {
-	return DeterministicFitWithReserve(cfg, messages, maxTokens, 0)
-}
-
 // DeterministicFitWithReserve also aims to leave reserve tokens free after a
 // required drop, so the cut it chooses can hold across later appends.
 func DeterministicFitWithReserve(cfg CompactionConfig, messages []ContextMessage, maxTokens, reserve int) []ContextMessage {

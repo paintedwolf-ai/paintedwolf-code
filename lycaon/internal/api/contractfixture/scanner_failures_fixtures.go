@@ -7,7 +7,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/board"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/scan"
@@ -63,10 +62,6 @@ func (e *ErrScanCoordinator) ListByWorkflowRunID(ctx context.Context, workflowRu
 	return nil, nil
 }
 
-func (e *ErrScanCoordinator) LatestForDelegation(ctx context.Context, delegationID string, categories []wire.ScanCategory) (*wire.CodeScan, error) {
-	return nil, nil
-}
-
 func (e *ErrScanCoordinator) Query(ctx context.Context, req scan.QueryRequest) (*wire.ScanQueryResponse, error) {
 	return nil, e.GetErr
 }
@@ -85,22 +80,19 @@ func (e *ErrScanCoordinator) ResolveID(ctx context.Context, path, prefix string)
 
 func (c *ErrScanCoordinator) SnapshotStore() *sourcesnapshot.Store { return nil }
 
-func NewInMemoryDelegationServer(t *testing.T) *api.Server {
+func NewInMemoryWorkersServer(t *testing.T) *api.Server {
 	t.Helper()
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(TestMockConfig(t))
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	delegationStore := delegation.NewMemoryStore()
 	workersCfg := worker.DefaultWorkersConfig()
 	queue := worker.NewInMemoryQueue(workersCfg.Poller.MaxConcurrency)
 	queue.SetWorkersConfig(workersCfg)
-	delegationMgr := delegation.NewManager(delegationStore, queue, mgr, nil)
 	reg := project.NewMemoryRegistry()
-	delegationMgr.Projects = reg
-	snap := &board.SnapshotBuilder{Delegations: delegationStore, Workers: queue, Repo: repotest.NewProvider(t)}
+	snap := &board.SnapshotBuilder{Workers: queue, Repo: repotest.NewProvider(t)}
 	return api.NewServer(RequiredTestDeps(t, api.Dependencies{Core: api.CoreDependencies{
 		Store: store, Projects: reg, Sessions: mgr}, Workflow: api.WorkflowDependencies{
-		Delegations: delegationMgr, Workers: queue, Board: snap}}), nil, api.TestAPIToken)
+		Workers: queue, Board: snap}}), nil, api.TestAPIToken)
 }
 
 func WithErrScanCoordinator(d *api.Dependencies) {

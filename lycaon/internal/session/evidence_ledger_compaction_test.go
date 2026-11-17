@@ -256,7 +256,7 @@ func TestQueueCoordinatorGuidanceAdvisoriesStacksDistinctCodes(t *testing.T) {
 		{Code: "COORDINATOR_UNGROUNDED_CLAIM"},
 		{Code: "COORDINATOR_HOST_TURN_REQUIRES_WAIT"},
 	})
-	first := mgr.Coordinator.Runtime.Kicks().TakePendingKickID("sess-adv")
+	first := mgr.Coordinator.Runtime.Kicks().TakePendingKickIDUnless("sess-adv", nil)
 	if first != "guidance:COORDINATOR_UNGROUNDED_CLAIM:session:sess-adv" {
 		t.Fatalf("first kick = %q", first)
 	}
@@ -265,7 +265,7 @@ func TestQueueCoordinatorGuidanceAdvisoriesStacksDistinctCodes(t *testing.T) {
 		t.Fatalf("first nudge = %q ok=%v", text, ok)
 	}
 	mgr.Coordinator.Runtime.Kicks().AckPendingNudge("sess-adv", lease)
-	second := mgr.Coordinator.Runtime.Kicks().TakePendingKickID("sess-adv")
+	second := mgr.Coordinator.Runtime.Kicks().TakePendingKickIDUnless("sess-adv", nil)
 	if second != "guidance:COORDINATOR_HOST_TURN_REQUIRES_WAIT:session:sess-adv" {
 		t.Fatalf("second kick = %q", second)
 	}
@@ -295,7 +295,7 @@ func TestErrGroundingNudgeSingleCodeQueues(t *testing.T) {
 	mgr := advisoryTestManager(t)
 	nudge := &guidance.ErrGroundingNudge{Code: "COORDINATOR_UNGROUNDED_CLAIM"}
 	mgr.Coordinator.Guidance.QueueAdvisories(t.Context(), "sess-one", nudge.Nudges())
-	if id := mgr.Coordinator.Runtime.Kicks().TakePendingKickID("sess-one"); id != "guidance:COORDINATOR_UNGROUNDED_CLAIM:session:sess-one" {
+	if id := mgr.Coordinator.Runtime.Kicks().TakePendingKickIDUnless("sess-one", nil); id != "guidance:COORDINATOR_UNGROUNDED_CLAIM:session:sess-one" {
 		t.Fatalf("kick id = %q", id)
 	}
 }
@@ -305,7 +305,7 @@ func TestGroundingNudgeQueuesFrozenCopy(t *testing.T) {
 	mgr := advisoryTestManager(t)
 	nudge := &guidance.ErrGroundingNudge{Code: "COORDINATOR_UNGROUNDED_CLAIM", Data: map[string]any{"count": 99}, Copy: map[string]string{"what": "Measured 3 claims", "fix": "Keep literal {{ count }}"}}
 	mgr.Coordinator.Guidance.QueueAdvisories(t.Context(), "frozen", nudge.Nudges())
-	if mgr.Coordinator.Runtime.Kicks().TakePendingKickID("frozen") == "" {
+	if mgr.Coordinator.Runtime.Kicks().TakePendingKickIDUnless("frozen", nil) == "" {
 		t.Fatal("frozen nudge was not queued")
 	}
 	text, _, ok, err := mgr.Coordinator.Runtime.Kicks().RenderPendingNudge(t.Context(), "frozen", kick.CoordinatorKickRenderContext{})

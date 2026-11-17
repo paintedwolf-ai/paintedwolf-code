@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/configlayout"
+	"github.com/lycaon/lycaon/internal/oarcopy"
 	"io"
 	"os"
 	"path/filepath"
@@ -23,7 +24,7 @@ func TestPortablePackIsPortable(t *testing.T) {
 	var profileMap AnchorProfileMap
 	testutil.FailErr(t, "decode profile map", yaml.Unmarshal(profileRaw, &profileMap))
 	decl := &EngineDeclaration{
-		Host: "example", ProfileMap: profileMap, Profiles: []string{ProfileFilesystem, ProfileContentSafety, ProfileMCP},
+		Host: "example", ProfileMap: profileMap, Profiles: []string{oarcopy.ProfileFilesystem, oarcopy.ProfileContentSafety, oarcopy.ProfileMCP},
 		Window: 16, ExpressionNodesMax: 256,
 		Detectors: []string{"detector://noop", "detector://error", "detector://fixture"},
 	}

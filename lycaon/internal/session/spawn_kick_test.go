@@ -57,8 +57,8 @@ func TestSpawnChildInjectsWorkerKick(t *testing.T) {
 	}
 	found := false
 	for _, msg := range rec.LastRequest().Messages {
-		if msg.Role == api.MessageRoleSystem && msg.Origin == api.MessageOriginHost && strings.Contains(msg.Content, "Worker leg started") &&
-			strings.Contains(msg.Content, "leg-99") && strings.Contains(msg.Content, "implement") {
+		if msg.Role == api.MessageRoleSystem && msg.Origin == api.MessageOriginHost && strings.Contains(msg.Content, "Worker task started") &&
+			strings.Contains(msg.Content, orchestration.ProfileImplementer) {
 			found = true
 		}
 	}
@@ -121,8 +121,8 @@ func TestListToolsForPromptSpecHidesDelegation(t *testing.T) {
 	fix := setupContextualToolsFixture(t, api.SessionPostureSpec)
 	ctx := context.Background()
 	listed := fix.Mgr.Coordinator.Guards.Policy().ListForPrompt(ctx, fix.Sess, fix.ProfileID)
-	if hasTool(listed, "delegate_dispatch") {
-		t.Fatalf("spec posture must hide delegate_dispatch, got %v", toolNames(listed))
+	if hasTool(listed, "task") || hasTool(listed, "plan_from_blueprint") {
+		t.Fatalf("spec posture must hide delegation tools, got %v", toolNames(listed))
 	}
 	assertPromptCommand(t, listed)
 	if !hasTool(listed, "workflow_compose") {
@@ -143,8 +143,8 @@ func TestListToolsForPromptBuildShowsDelegation(t *testing.T) {
 	fix := setupContextualToolsFixture(t, api.SessionPostureBuild)
 	ctx := context.Background()
 	listed := fix.Mgr.Coordinator.Guards.Policy().ListForPrompt(ctx, fix.Sess, fix.ProfileID)
-	if !hasTool(listed, "delegate_dispatch") {
-		t.Fatalf("build posture must show delegate_dispatch, got %v", toolNames(listed))
+	if !hasTool(listed, "plan_from_blueprint") {
+		t.Fatalf("build posture must show plan_from_blueprint, got %v", toolNames(listed))
 	}
 	if !hasTool(listed, "task") {
 		t.Fatal("expected task visible in build posture")
@@ -156,7 +156,7 @@ func TestListToolsForPromptCoordinatorCeiling(t *testing.T) {
 	ctx := context.Background()
 	listed := fix.Mgr.Coordinator.Guards.Policy().ListForPrompt(ctx, fix.Sess, fix.ProfileID)
 	assertPromptCommand(t, listed)
-	for _, name := range []string{"delegate_dispatch", "task"} {
+	for _, name := range []string{"plan_from_blueprint", "task"} {
 		if !hasTool(listed, name) {
 			t.Fatalf("coordinator profile should list %q", name)
 		}

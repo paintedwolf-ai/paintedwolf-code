@@ -55,7 +55,7 @@ func (m *Fanout) WorkflowWork(ctx context.Context, sessionID, workID string) (sp
 	}
 	for _, leg := range plan.Legs {
 		if leg.ID == workID {
-			work := spawn.WorkflowWork{RunID: run.ID, Phase: run.CurrentPhase, AgentType: leg.AgentType, Scope: leg.Scope, MaxToolLoops: leg.MaxToolLoops}
+			work := spawn.WorkflowWork{RunID: run.ID, Phase: run.CurrentPhase, AgentType: leg.AgentType, Scope: leg.Scope}
 			if len(leg.DoneWhen) > 0 {
 				work.Charter = &api.WorkerTaskCharter{Goal: leg.Prompt, DoneWhen: leg.DoneWhen, SharedContext: plan.ThreatModel}
 			}
@@ -73,6 +73,13 @@ func (m *Fanout) BindWorkflowTask(ctx context.Context, tctx tools.ToolContext, w
 	}
 	if run == nil {
 		if workID != "" {
+			if m.PlannedWorkKnown != nil {
+				known, kErr := m.PlannedWorkKnown(ctx, tctx.Identity.SessionID, strings.TrimSpace(workID))
+				if kErr != nil || known {
+					task.WorkflowWorkID = strings.TrimSpace(workID)
+					return kErr
+				}
+			}
 			return toolguard.RejectFanoutTask("no_active_workflow", task)
 		}
 		return nil
@@ -116,6 +123,15 @@ func (m *Fanout) AssertWorkerTask(ctx context.Context, task *api.WorkerTask) err
 			return m.Questions.AssertTask(ctx, run, *def.ReviewLoop, vars, task)
 		}
 		if task.WorkflowWorkID != "" {
+			if strings.TrimSpace(def.BindTopologyStage) != "" || len(def.BindParallelGroup) > 0 {
+				return nil
+			}
+			if m.PlannedWorkKnown != nil {
+				known, kErr := m.PlannedWorkKnown(ctx, task.ParentSessionID, task.WorkflowWorkID)
+				if kErr != nil || known {
+					return kErr
+				}
+			}
 			return toolguard.RejectFanoutTask("not_a_planned_fanout_phase", task)
 		}
 		return nil
@@ -127,12 +143,16 @@ func (m *Fanout) AssertWorkerTask(ctx context.Context, task *api.WorkerTask) err
 	if err != nil {
 		return err
 	}
+	isContinuation := false
 	for _, prior := range tasks {
 		if prior.SourceToolCallID != "" && prior.SourceToolCallID == task.SourceToolCallID && prior.ParentSessionID == task.ParentSessionID {
 			return nil
 		}
-		if task.ChildSessionID != "" && prior.ChildSessionID == task.ChildSessionID && (prior.WorkflowWorkID != task.WorkflowWorkID || prior.WorkflowPhase != task.WorkflowPhase) {
-			return toolguard.RejectFanoutTask("recovery_child_belongs_to_another_leg", task)
+		if task.ChildSessionID != "" && prior.ChildSessionID == task.ChildSessionID {
+			if prior.WorkflowWorkID != task.WorkflowWorkID || prior.WorkflowPhase != task.WorkflowPhase {
+				return toolguard.RejectFanoutTask("recovery_child_belongs_to_another_leg", task)
+			}
+			isContinuation = true
 		}
 	}
 	for _, leg := range runstate.FanoutCoverage(plan, tasks, run.CurrentPhase) {
@@ -142,14 +162,14 @@ func (m *Fanout) AssertWorkerTask(ctx context.Context, task *api.WorkerTask) err
 		if leg.AgentType != task.AgentType {
 			return toolguard.RejectFanoutTask("planned_agent_mismatch", task)
 		}
-		if leg.Settled {
-			return toolguard.RejectFanoutTask("planned_leg_settled", task)
-		}
 		if len(leg.Attempts) > 0 {
 			switch leg.Status {
 			case "pending", "running", "waiting", "held":
 				return toolguard.RejectFanoutTask("planned_leg_already_active", task)
 			}
+		}
+		if leg.Settled && !isContinuation {
+			return toolguard.RejectFanoutTask("planned_leg_settled", task)
 		}
 		return nil
 	}

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -60,7 +61,7 @@ func (s *sqlCompaction) PutCompactionView(ctx context.Context, sessionID string,
 			SourceSeq:               view.SourceSeq,
 			TokensBefore:            int64(view.TokensBefore),
 			TokensAfter:             int64(view.TokensAfter),
-			CreatedAt:               db.FormatTime(time.Now().UTC()),
+			CreatedAt:               timelayout.Format(time.Now().UTC()),
 		}); err != nil {
 			return err
 		}

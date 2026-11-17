@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -43,7 +44,7 @@ func (s *Blueprints) CommitBlueprintApproval(ctx context.Context, run *api.Workf
 	now := time.Now().UTC()
 	queries := db.New(tx)
 	n, err := queries.UpdateWorkflowRunVars(ctx, db.UpdateWorkflowRunVarsParams{
-		ProjectDir: projectDir, VarsJson: string(raw), UpdatedAt: db.FormatTime(now), ID: run.ID, Revision: run.Revision,
+		ProjectDir: projectDir, VarsJson: string(raw), UpdatedAt: timelayout.Format(now), ID: run.ID, Revision: run.Revision,
 	})
 	if err != nil {
 		return err
@@ -55,7 +56,7 @@ func (s *Blueprints) CommitBlueprintApproval(ctx context.Context, run *api.Workf
 	if err := queries.UpsertBlueprintApproval(ctx, db.UpsertBlueprintApprovalParams{
 		ProjectID: run.ProjectID, Path: run.BlueprintPath, ContentDigest: digest,
 		WorkflowRunID: db.NullString(run.ID), WorkflowRevision: run.Revision,
-		ApprovedAt: db.FormatTime(now), ApprovedVia: strings.TrimSpace(channel), ApprovedByPersonID: approver.ID,
+		ApprovedAt: timelayout.Format(now), ApprovedVia: strings.TrimSpace(channel), ApprovedByPersonID: approver.ID,
 		SessionID: strings.TrimSpace(run.SessionID),
 	}); err != nil {
 		return err
@@ -108,7 +109,7 @@ func (s *Blueprints) RelocateBlueprintPath(ctx context.Context, projectID, from,
 	defer func() { _ = tx.Rollback() }()
 	rows, err := s.transactions.queries.WithTx(tx).RelocateWorkflowRunBlueprintPaths(ctx, db.RelocateWorkflowRunBlueprintPathsParams{
 		ToPath:    db.NullString(to),
-		UpdatedAt: db.FormatTime(time.Now().UTC()),
+		UpdatedAt: timelayout.Format(time.Now().UTC()),
 		ProjectID: projectID,
 		FromPath:  db.NullString(from),
 	})

@@ -14,15 +14,6 @@ func TextEdits(before, after string) []Edit {
 	return utf16Edits(before, udiff.Strings(before, after))
 }
 
-// LineEdits protects the complete source lines an agent used to plan a rewrite.
-func LineEdits(before, after string) ([]Edit, error) {
-	diff, err := lineEdits(before, after)
-	if err != nil {
-		return nil, err
-	}
-	return utf16Edits(before, diff), nil
-}
-
 // HunkEdits returns the whole-line hunks a rewrite touched, as guards, and
 // the character edits confined to each hunk, so every edit lands inside a
 // guarded line and an inserted line anchors at its boundary.

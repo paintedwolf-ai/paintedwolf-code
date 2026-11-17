@@ -140,9 +140,6 @@ const client = stubClient({
     coordinator_host_turn_timeout_ms: 10800000,
     coordinator_max_sleep_ms: 10800000,
     await_parent_workers_timeout_ms: 1800000,
-    worker_tool_budget_default: 20,
-    worker_tool_budget_min: 2,
-    worker_tool_budget_max: 120,
   })),
   getLocalData: vi.fn(async () => ({
     buckets: [{ id: "web_index", present: true, bytes: 2048 }],

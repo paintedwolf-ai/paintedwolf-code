@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"io"
 	"mime"
 	"mime/multipart"
@@ -538,9 +539,9 @@ func TestCurlExchangeProvenanceReporting(t *testing.T) {
 	extBase := "http://api.external.example:" + port
 	h := newHarness(t)
 
-	runObserved := func(args ...string) (run, []httpaction.ExchangeProvenance) {
-		var observed []httpaction.ExchangeProvenance
-		ctx := httpaction.WithExchangeProvenanceObserver(t.Context(), func(prov httpaction.ExchangeProvenance) {
+	runObserved := func(args ...string) (run, []evidence.ExchangeProvenance) {
+		var observed []evidence.ExchangeProvenance
+		ctx := evidence.WithExchangeProvenanceObserver(t.Context(), func(prov evidence.ExchangeProvenance) {
 			observed = append(observed, prov)
 		})
 		res := h.curl(ctx, args...)

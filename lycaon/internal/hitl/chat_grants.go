@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"log/slog"
 	"math"
 	"strings"
@@ -116,11 +117,11 @@ func recordChatGrantsTx(ctx context.Context, tx *sql.Tx, checkpointID string, op
 		}
 		var expiresAt sql.NullString
 		if expires := delta.chatExpiry(approvedAt); expires != nil {
-			expiresAt = db.NullString(db.FormatTime(*expires))
+			expiresAt = db.NullString(timelayout.Format(*expires))
 		}
 		if err := queries.UpsertChatGrant(ctx, db.UpsertChatGrantParams{
 			ChatSessionID: chat, ID: id, CheckpointID: checkpointID,
-			DeltaJson: string(raw), CreatedAt: db.FormatTime(approvedAt), ExpiresAt: expiresAt,
+			DeltaJson: string(raw), CreatedAt: timelayout.Format(approvedAt), ExpiresAt: expiresAt,
 			AuthorityFormat: authority.format, AuthorityDigest: authority.digest, AuthorityBody: authority.body,
 		}); err != nil {
 			return fmt.Errorf("record chat grant %s: %w", id, err)
@@ -182,7 +183,7 @@ func (s *SQLStore) eachChatGrant(ctx context.Context, state toolcontract.ReviewS
 	if err != nil {
 		return err
 	}
-	if err := s.queries.DeleteExpiredChatGrants(ctx, db.NullString(db.FormatTime(now))); err != nil {
+	if err := s.queries.DeleteExpiredChatGrants(ctx, db.NullString(timelayout.Format(now))); err != nil {
 		return fmt.Errorf("prune expired chat grants: %w", err)
 	}
 	return nil

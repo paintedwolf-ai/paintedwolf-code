@@ -1,8 +1,0 @@
-description: Decompose an approved plan into delegation legs
-schema:
-  type: object
-  properties:
-    blueprint_path:
-      description: "Plan-store key of the approved blueprint (not a filesystem path)."
-      type: string
-  required: [blueprint_path]

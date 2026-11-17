@@ -51,7 +51,7 @@ Tool-output compaction and routing branch on tool identity and chunk role, never
 |------|---------|---------|
 | `promptloop/batch.go` `stampDietFieldsOnCommit` | calls `tooloutput.IsOverlayPromoteTool(toolName)` at commit time and stamps `msg.DietStamp` / `msg.DietStampSource` | tool identity, checked once at commit |
 | `compaction/chunk_compactor.go` `CompactChunk` | routes off the stamped `chunk.Class.Strategy` / `chunk.Class.Source`, never off `chunk.ToolName` at compact time | routes on the stamped diet class |
-| `compaction/overlay_promote_chunk.go` `IsOverlayPromoteConflictProtected` | `strings.Contains(content, …)` on the `OVERLAY_PROMOTE_SPILL` / `BANNER_PROMOTE_CONFLICT_DIGEST` hint codes | reads back codes the host itself stamped; unreachable for other tools after the identity gate |
+| `compaction/overlay_promote_chunk.go` `IsOverlayPromoteConflictProtected` | `strings.Contains(content, …)` on the `OVERLAY_PROMOTE_SPILL` hint code | reads back codes the host itself stamped; unreachable for other tools after the identity gate |
 | `compaction/chunk_compactor.go` `strategyFor` | `strings.Contains(content, hostmarker.CompactionBannerOpen)` | idempotency for already-compacted chunks, using the named constant the compactor wrote |
 | `compaction/overlay_promote_diet.go` | tool identity and overlay id | retains latest overlay assessments and board snapshots; source reads use shared budget fitting |
 

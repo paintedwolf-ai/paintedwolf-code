@@ -1,0 +1,8 @@
+CREATE TABLE items (id TEXT PRIMARY KEY);
+CREATE TABLE tags (item TEXT);
+CREATE TABLE audit (id TEXT);
+CREATE TABLE events (id TEXT);
+CREATE TABLE archived (id TEXT);
+CREATE TABLE rollup (n INTEGER);
+CREATE VIEW item_count AS
+  SELECT COUNT(*) AS n FROM rollup;

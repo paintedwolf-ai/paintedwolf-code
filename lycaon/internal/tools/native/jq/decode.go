@@ -153,18 +153,6 @@ func candidateToAny(node *yqlib.CandidateNode) (any, error) {
 	return decodeJSONValue(raw)
 }
 
-func normalizedFormatNote(parsedAs string) string {
-	switch parsedAs {
-	case "json":
-		return ""
-	default:
-		return fmt.Sprintf(
-			"Parsed as %s — values[] are normalized (decoded structure), not source-verbatim bytes.",
-			parsedAs,
-		)
-	}
-}
-
 func decodeJSONStream(data []byte) ([]any, error) {
 	stream := NewValueStream(bytes.NewReader(data))
 	var out []any

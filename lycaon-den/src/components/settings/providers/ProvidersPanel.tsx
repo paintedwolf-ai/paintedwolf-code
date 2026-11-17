@@ -52,6 +52,7 @@ import {
   parseConfiguredModels,
   formShowsApiKeyField,
   flattenGroupedProviders,
+  filterProviderKindGroups,
 } from "./provider-form-model.ts";
 
 type Props = {
@@ -121,20 +122,7 @@ export function ProvidersPanel(props: Props) {
 
   const groups = () => groupProvidersByKind(props.providers, kinds());
   const kindGroups = () => providerKindTemplateGroups(kinds());
-  const filteredKindGroups = () => {
-    const q = kindQuery().trim().toLowerCase();
-    if (!q) return kindGroups();
-    return kindGroups()
-      .map((group) => ({
-        ...group,
-        templates: group.templates.filter(
-          (t) =>
-            t.label.toLowerCase().includes(q) ||
-            t.kind.toLowerCase().includes(q),
-        ),
-      }))
-      .filter((group) => group.templates.length > 0);
-  };
+  const filteredKindGroups = () => filterProviderKindGroups(kindGroups(), kindQuery());
   const existingIds = () => new Set(props.providers.map((p) => p.id));
   const selectedTemplate = () => kinds().find((k) => k.kind === form.kind);
   const selectedProvider = () =>

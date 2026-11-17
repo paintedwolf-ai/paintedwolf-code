@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/workspace"
@@ -31,25 +30,21 @@ func (b *mockWorkspaceBinder) DestroyWorkerWorkspace(context.Context, *workspace
 	return nil
 }
 
-type autoCompleteDelegation struct {
-	inner delegation.DelegationManager
-	store orchestration.PipelineDelegationStore
+type autoCompleteTopologyWorkers struct {
+	orchestration.TopologyWorkers
 }
 
-func (a *autoCompleteDelegation) DispatchLeg(ctx context.Context, delegationID, legID, sourceToolCallID string) (*wire.Leg, error) {
-	leg, err := a.inner.DispatchLeg(ctx, delegationID, legID, sourceToolCallID)
+func (a *autoCompleteTopologyWorkers) DispatchUnit(ctx context.Context, batchID, unitID string) (*orchestration.TopologyUnit, error) {
+	unit, err := a.GetUnit(ctx, batchID, unitID)
 	if err != nil {
 		return nil, err
 	}
-	if err := a.inner.RecordOutcome(ctx, delegationID, legID, leg.WorkerID, wire.WorkerResult{
-		Status:  "complete",
-		Summary: leg.Title + " done",
-	}); err != nil {
-		return nil, err
+	settler, ok := a.TopologyWorkers.(orchestration.TopologyDirectSettler)
+	if !ok {
+		return a.TopologyWorkers.DispatchUnit(ctx, batchID, unitID)
 	}
-	return a.store.GetLeg(ctx, delegationID, legID)
-}
-
-func (a *autoCompleteDelegation) Abort(ctx context.Context, delegationID, reason string) error {
-	return a.inner.Abort(ctx, delegationID, reason)
+	return settler.DispatchSettled(ctx, batchID, unitID, wire.WorkerResult{
+		Status:  "complete",
+		Summary: unit.WorkID + " done",
+	})
 }

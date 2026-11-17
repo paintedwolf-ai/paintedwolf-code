@@ -3,19 +3,10 @@ package toolkit
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/internal/tools/surveyreceipt"
 )
-
-// TruncationBanner marks incomplete survey output.
-func TruncationBanner(summary string) string {
-	if summary == "" {
-		return ""
-	}
-	return fmt.Sprintf("--- TRUNCATED: %s ---\n", summary)
-}
 
 // OutlineBanner distinguishes an outline from literal content.
 func OutlineBanner(summary string) string {
@@ -71,17 +62,4 @@ func patchResponseFields(raw []byte, fields map[string]any) (string, error) {
 // AttachReceipt stamps a survey receipt onto a tool's encoded output.
 func AttachReceipt(tool, path string, pathsTouched, bytesReturned int, truncated bool, output string) string {
 	return surveyreceipt.Attach(output, surveyreceipt.New(tool, path, pathsTouched, bytesReturned, truncated))
-}
-
-// AppendNote separates nonempty notes with a semicolon.
-func AppendNote(base, extra string) string {
-	base = strings.TrimSpace(base)
-	extra = strings.TrimSpace(extra)
-	if extra == "" {
-		return base
-	}
-	if base == "" {
-		return extra
-	}
-	return base + "; " + extra
 }

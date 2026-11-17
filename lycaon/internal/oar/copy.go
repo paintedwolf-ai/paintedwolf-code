@@ -1,19 +1,10 @@
 package oar
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oarcore"
 )
-
-func copyInterpolatableType(typ string) bool {
-	switch typ {
-	case "string", "bool", "int", "double", "list<string>":
-		return true
-	}
-	return false
-}
 
 func DeclaresCopyFact(name string) bool {
 	_, ok := publishedFacts[name]
@@ -30,32 +21,6 @@ func copyFields(c Copy) []struct{ name, text string } {
 		{"instead", c.Instead},
 		{"message", c.Message},
 	}
-}
-
-// ValidateRuleCopy rejects illegal constructs, unknown names, and
-// non-interpolatable types ([OAR-COPY-2]–[OAR-COPY-4]).
-func ValidateRuleCopy(r *Rule) error {
-	if r == nil {
-		return nil
-	}
-	for _, field := range copyFields(r.Copy) {
-		if strings.TrimSpace(field.text) == "" {
-			continue
-		}
-		bindings, err := oarcore.ParseCopy(field.text)
-		if err != nil {
-			return fmt.Errorf("[OAR-COPY-3] rule %s copy.%s carries construct %s", r.ID, field.name, err.Error())
-		}
-		for _, b := range bindings {
-			if _, ok := publishedFacts[b.Name]; !ok {
-				return fmt.Errorf("[OAR-COPY-2] rule %s copy.%s names %s, which this engine does not declare", r.ID, field.name, b.Name)
-			}
-			if b.Interpolate && !copyInterpolatableType(declaredFactTypes[b.Name]) {
-				return fmt.Errorf("[OAR-COPY-4] rule %s copy.%s interpolates %s, whose type is %s", r.ID, field.name, b.Name, declaredFactTypes[b.Name])
-			}
-		}
-	}
-	return nil
 }
 
 // RenderRuleCopy renders every authored copy member against occurrence facts.

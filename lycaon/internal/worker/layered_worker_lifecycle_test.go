@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"io/fs"
 	"os"
 	osexec "os/exec"
@@ -83,10 +84,10 @@ func newLayeredWorkerFixture(t *testing.T, selector *adapter.Selector) *layeredW
 	branches := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches")
 	privateGit, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	manager := workspace.NewManager(branches).WithPrivateGit(privateGit)
-	if selector != nil {
-		manager = manager.WithSelector(selector)
+	if selector == nil {
+		selector = platform.NewSelector(platform.Config{})
 	}
+	manager := workspace.NewManager(branches, selector).WithPrivateGit(privateGit)
 	queue := NewSQLQueue(sqlDB, 4)
 	queue.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
 	queue.SetWorkerWorkspaceManager(manager)
@@ -157,7 +158,7 @@ func TestOrdinaryWorkerClaimRegistersAndSettlesItsConsumerEngine(t *testing.T) {
 
 // A small materialized worker retains private Git and exact checkpoint bases without a mount.
 func TestUnderBudgetMaterializedWorkerRetainsGitAndCheckpointBases(t *testing.T) {
-	selector := workspace.DefaultWorkspaceSelector()
+	selector := platform.NewSelector(platform.Config{})
 	selector.BudgetFor = func(class adapter.BudgetClass) adapter.BudgetFact {
 		return adapter.BudgetFact{Class: class, Limit: 1 << 20, EntryCost: 1}
 	}
@@ -165,7 +166,7 @@ func TestUnderBudgetMaterializedWorkerRetainsGitAndCheckpointBases(t *testing.T)
 	fixture := newLayeredWorkerFixture(t, selector)
 	task := fixture.claim(t)
 
-	snap, receipt, ok := WorkerClaimWorkspaceState(task.ID)
+	snap, receipt, ok := workspace.BranchWorkspaceState(task.WorkspaceRoot)
 	if !ok || snap.Readiness != claim.StateReady {
 		t.Fatalf("claim state ok=%v snap=%+v", ok, snap)
 	}
@@ -250,7 +251,7 @@ func TestMaterializedWorkerReachesOnlyItsOwnBranch(t *testing.T) {
 	root := task.WorkspaceRoot
 	binding := &workspace.Binding{ID: task.ID, Root: root}
 	t.Cleanup(func() { _ = fixture.manager.DestroyWorkerWorkspace(t.Context(), binding) })
-	snap, _, ok := WorkerClaimWorkspaceState(task.ID)
+	snap, _, ok := workspace.BranchWorkspaceState(task.WorkspaceRoot)
 	if !ok || snap.Adapter.PreparationKind != adapter.PreparationMaterialized {
 		t.Fatalf("the default selector chose: ok=%v %+v", ok, snap.Adapter)
 	}
@@ -301,14 +302,14 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 	if !confine.Available() {
 		t.Skip("this host applies no confinement")
 	}
-	selector := workspace.EnforcedWorkspaceSelector()
+	selector := workspace.HostSelector()
 	selector.BudgetFor = adapter.ZeroBudget
 	skipWithoutMount(t, selector)
 	fixture := newLayeredWorkerFixture(t, selector)
 	// Worker storage sits under the engine's state root, as it does in production.
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(fixture.branches))
 	task := fixture.claim(t)
-	snap, _, ok := WorkerClaimWorkspaceState(task.ID)
+	snap, _, ok := workspace.BranchWorkspaceState(task.WorkspaceRoot)
 	if !ok {
 		t.Fatal("claim recorded no workspace state")
 	}

@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/timelayout"
 )
 
 // SQLStore persists authorization_contexts rows with per-session hash chains.
@@ -65,11 +65,10 @@ func (s *SQLStore) AppendContext(ctx context.Context, c Context) (bool, error) {
 	if sealed.IsZero() {
 		sealed = time.Now().UTC()
 	}
-	ts := db.FormatTime(sealed)
+	ts := timelayout.Format(sealed)
+	// Appends never write the ceiling columns, so they always seal version 2.
+	c.HashVersion = HashVersion2
 	hashVersion := c.HashVersion
-	if hashVersion == 0 {
-		hashVersion = HashVersion1
-	}
 	payload := chainPayloadFromContext(c)
 	rowHash, err := ComputeRowHash(hashVersion, sessionID, seq, ts, payload, prevHash)
 	if err != nil {
@@ -87,9 +86,9 @@ func (s *SQLStore) AppendContext(ctx context.Context, c Context) (bool, error) {
 			allowed_tools_json, deny_tools_json, mcp_deny_json,
 			read_globs_json, write_globs_json, ask_rules_json,
 			grants_json, chat_grants_json, never_ask,
-			max_tool_loops, mcp_inventory_json, spawn_allowlist_json, worker_tool_budget_json,
+			mcp_inventory_json, spawn_allowlist_json,
 			config_hash
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		c.ID, sessionID, seq, prevHash, rowHash, hashVersion, ts,
 		c.WorkerJobID, c.ParentSessionID, c.ProjectID, c.AgentType,
@@ -97,7 +96,7 @@ func (s *SQLStore) AppendContext(ctx context.Context, c Context) (bool, error) {
 		cols.allowed, cols.deny, cols.mcpDeny,
 		cols.readGlobs, cols.writeGlobs, cols.rules,
 		cols.grants, cols.chatGrants, c.NeverAsk,
-		c.MaxToolLoops, cols.mcpInventory, cols.spawnAllowlist, cols.workerBudget,
+		cols.mcpInventory, cols.spawnAllowlist,
 		c.ConfigHash,
 	)
 	if err != nil {
@@ -190,7 +189,7 @@ func (s *SQLStore) ListContexts(ctx context.Context, sessionID string) ([]Contex
 
 type contextColumns struct {
 	allowed, deny, mcpDeny, readGlobs, writeGlobs, rules, grants, chatGrants string
-	mcpInventory, spawnAllowlist, workerBudget                               string
+	mcpInventory, spawnAllowlist                                             string
 }
 
 func marshalContextColumns(c Context) (contextColumns, error) {
@@ -226,9 +225,6 @@ func marshalContextColumns(c Context) (contextColumns, error) {
 	if cols.spawnAllowlist, err = marshalJSON(c.SpawnAllowlist); err != nil {
 		return cols, err
 	}
-	if cols.workerBudget, err = marshalJSON(spawnToolBudgetToWire(c.WorkerToolBudget)); err != nil {
-		return cols, err
-	}
 	return cols, nil
 }
 
@@ -241,6 +237,7 @@ func scanContextRow(row contextScanner) (Context, error) {
 	var posture string
 	var allowed, deny, mcpDeny, readGlobs, writeGlobs, rules, grants, chatGrants string
 	var mcpInventory, spawnAllowlist, workerBudget, ts string
+	var maxToolLoops int
 	err := row.Scan(
 		&c.ID, &c.SessionID, &c.ContextSeq, &c.PrevHash, &c.RowHash, &c.HashVersion, &ts,
 		&c.WorkerJobID, &c.ParentSessionID, &c.ProjectID, &c.AgentType,
@@ -248,7 +245,7 @@ func scanContextRow(row contextScanner) (Context, error) {
 		&allowed, &deny, &mcpDeny,
 		&readGlobs, &writeGlobs, &rules,
 		&grants, &chatGrants, &c.NeverAsk,
-		&c.MaxToolLoops, &mcpInventory, &spawnAllowlist, &workerBudget,
+		&maxToolLoops, &mcpInventory, &spawnAllowlist, &workerBudget,
 		&c.ConfigHash,
 	)
 	if err != nil {
@@ -288,11 +285,13 @@ func scanContextRow(row contextScanner) (Context, error) {
 	if c.SpawnAllowlist, err = unmarshalStrings(spawnAllowlist); err != nil {
 		return Context{}, err
 	}
-	var budget spawnToolBudgetWire
-	if err := json.Unmarshal([]byte(nullJSONArray(workerBudget)), &budget); err != nil {
-		return Context{}, fmt.Errorf("authzcontext worker_tool_budget: %w", err)
+	if c.HashVersion == HashVersion1 {
+		var budget spawnToolBudgetWire
+		if err := json.Unmarshal([]byte(nullJSONArray(workerBudget)), &budget); err != nil {
+			return Context{}, fmt.Errorf("authzcontext worker_tool_budget: %w", err)
+		}
+		c.V1Ceiling = &V1Ceiling{MaxToolLoops: maxToolLoops, Default: budget.Default, Min: budget.Min, Max: budget.Max}
 	}
-	c.WorkerToolBudget = spawn.WorkerToolBudget{Default: budget.Default, Min: budget.Min, Max: budget.Max}
 	if parsed, err := db.ParseTime(ts); err == nil {
 		c.SealedAt = parsed
 	}
@@ -387,7 +386,7 @@ func (s *SQLStore) AppendEventTx(ctx context.Context, tx *sql.Tx, e Event) error
 	if recorded.IsZero() {
 		recorded = time.Now().UTC()
 	}
-	ts := db.FormatTime(recorded)
+	ts := timelayout.Format(recorded)
 	hashVersion := e.HashVersion
 	if hashVersion == 0 {
 		hashVersion = HashVersion1
@@ -459,7 +458,7 @@ func (s *SQLStore) ListApprovalDecisionsSince(ctx context.Context, since time.Ti
 		FROM authz_events
 		WHERE action = ? AND ts >= ?
 		ORDER BY ts ASC, event_seq ASC
-	`, string(EventActionApprovalDecision), db.FormatTime(since))
+	`, string(EventActionApprovalDecision), timelayout.Format(since))
 	if err != nil {
 		return nil, fmt.Errorf("authzcontext list approval decisions: %w", err)
 	}

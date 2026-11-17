@@ -7,7 +7,7 @@ import { selectionCopyTextAtTarget } from "../../platform/interaction/text-edit-
 import { createAppStore } from "../../store/app-state.ts";
 import type { ProjectRoot } from "../../api/types.ts";
 import { ProjectFilesView } from "./ProjectFilesView.tsx";
-import { resetProjectFilesForTests } from "../documents/project-files-buffers.ts";
+import { resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 
 const denSrc = join(import.meta.dirname, "../..");
 

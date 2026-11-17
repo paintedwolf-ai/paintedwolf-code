@@ -2,6 +2,7 @@ package contract
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
@@ -105,7 +106,7 @@ func TestScanRetentionDefaultKeepsOrphanedRows(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "retain-policy.db")
 
 	orphanPath := t.TempDir()
-	ts := db.FormatTime(time.Now().UTC().Add(-40 * 24 * time.Hour))
+	ts := timelayout.Format(time.Now().UTC().Add(-40 * 24 * time.Hour))
 	_, err := sqlDB.ExecContext(ctx, `
 		INSERT INTO code_scans (
 			id, canonical_path, categories_json, scanner_id, status, created_at, completed_at, trigger, reuse_key

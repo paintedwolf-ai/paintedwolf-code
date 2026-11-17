@@ -83,7 +83,8 @@ func (m *Assignments) ValidateCoverageCompletion(ctx context.Context, task *api.
 		}
 		phase, ok := manifest.PhaseByID(task.WorkflowPhase)
 		if ok && phase.ReviewLoop != nil && slices.Contains(phase.ReviewLoop.CoverageReviewers, task.AgentType) {
-			return &toolrejection.ToolReject{Code: "COMPLETE_LEG_REVIEW_ASSIGNMENT_MISSING", Data: map[string]any{"action": "resolve_dependency", "work_id": reviewWorkID(task.AgentType)}}
+			workID := reviewWorkID(task.AgentType)
+			return &toolrejection.ToolReject{Code: "COMPLETE_LEG_REVIEW_ASSIGNMENT_MISSING", Data: map[string]any{"action": "resolve_dependency", "work_id": workID, "workflow_work_id": workID}}
 		}
 		return nil
 	}
@@ -97,10 +98,40 @@ func (m *Assignments) ValidateCoverageCompletion(ctx context.Context, task *api.
 			return nil
 		}
 		detail = err.Error()
+	} else if task.ChildSessionID != "" && m.WorkerTasks != nil {
+		if satisfied, sErr := m.priorRoundCoverageSatisfied(ctx, task, binding); sErr == nil && satisfied {
+			return nil
+		}
 	}
 	raw, err := json.Marshal(reviewcoverage.FirstPage(*binding))
 	if err != nil {
 		return err
 	}
 	return &toolrejection.ToolReject{Code: "COMPLETE_LEG_COVERAGE_INVALID", Data: map[string]any{"detail": detail, "assignment": string(raw)}}
+}
+
+func (m *Assignments) priorRoundCoverageSatisfied(ctx context.Context, task *api.WorkerTask, binding *reviewcoverage.Binding) (bool, error) {
+	tasks, err := m.WorkerTasks(ctx, task.WorkflowRunID)
+	if err != nil {
+		return false, err
+	}
+	for _, prior := range tasks {
+		if prior.ID == task.ID || prior.ChildSessionID != task.ChildSessionID || prior.WorkflowPhase != task.WorkflowPhase {
+			continue
+		}
+		if !api.WorkerReviewSucceeded(prior) || prior.Result == nil || prior.Result.CompletionReport == nil || prior.Result.CompletionReport.CoverageReview == nil {
+			continue
+		}
+		priorBinding, bErr := m.Records.ReviewBinding(ctx, prior.ID)
+		if bErr != nil {
+			return false, bErr
+		}
+		if priorBinding == nil || priorBinding.Subject.Facts.Revision != binding.Subject.Facts.Revision {
+			continue
+		}
+		if reviewcoverage.Validate(priorBinding.Subject.Facts, *prior.Result.CompletionReport.CoverageReview) == nil {
+			return true, nil
+		}
+	}
+	return false, nil
 }

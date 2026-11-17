@@ -255,17 +255,17 @@ func TestDecideAttributedHostAsksAndCaches(t *testing.T) {
 	defer SetEgressResolver(nil)
 
 	cmd := EgressCommand{SessionID: "web-sess", ToolCallID: "tc"}
-	if !DecideAttributedHost(context.Background(), cmd, "provider.test") {
+	if !DecideAttributedHTTPRequest(context.Background(), cmd, "provider.test", "", "") {
 		t.Fatal("approve should allow")
 	}
 	asks = 0
-	if !DecideAttributedHost(context.Background(), cmd, "provider.test") {
+	if !DecideAttributedHTTPRequest(context.Background(), cmd, "provider.test", "", "") {
 		t.Fatal("cached allow")
 	}
 	if asks != 0 {
 		t.Fatalf("must not re-ask cached host, got %d", asks)
 	}
-	if !DecideAttributedHost(context.Background(), EgressCommand{SessionID: "web-sess", ToolCallID: "tc-2"}, "provider.test") {
+	if !DecideAttributedHTTPRequest(context.Background(), EgressCommand{SessionID: "web-sess", ToolCallID: "tc-2"}, "provider.test", "", "") {
 		t.Fatal("second action should allow after its own approval")
 	}
 	if asks != 1 {
@@ -275,7 +275,7 @@ func TestDecideAttributedHostAsksAndCaches(t *testing.T) {
 
 func TestDecideAttributedHostRejectsMalformedEndpoint(t *testing.T) {
 	cmd := EgressCommand{SessionID: "sess", ToolCallID: "call"}
-	if DecideAttributedHost(context.Background(), cmd, "bad\n.example") {
+	if DecideAttributedHTTPRequest(context.Background(), cmd, "bad\n.example", "", "") {
 		t.Fatal("malformed attributed endpoint must fail closed")
 	}
 }
@@ -673,7 +673,7 @@ func TestEgressResolverReleasePreservesReplacementAndDrainsApproval(t *testing.T
 	egressBroker.mu.Unlock()
 	dial := make(chan bool, 1)
 	go func() {
-		dial <- DecideAttributedHost(ctx, EgressCommand{SessionID: "resolver-owner"}, "approval.test")
+		dial <- DecideAttributedHTTPRequest(ctx, EgressCommand{SessionID: "resolver-owner"}, "approval.test", "", "")
 	}()
 	select {
 	case <-entered:
@@ -705,7 +705,7 @@ func TestEgressResolverReleasePreservesReplacementAndDrainsApproval(t *testing.T
 	if copied(t.Context(), EgressCommand{}, egressproxy.Endpoint{}, nil) {
 		t.Fatal("copied callback authorized after owner close")
 	}
-	if DecideAttributedHost(t.Context(), EgressCommand{SessionID: "closed-resolver"}, "after-close.test") {
+	if DecideAttributedHTTPRequest(t.Context(), EgressCommand{SessionID: "closed-resolver"}, "after-close.test", "", "") {
 		t.Fatal("closed resolver authorized a new dial")
 	}
 	if err := currentRelease(t.Context()); err != nil {

@@ -21,7 +21,7 @@ import (
 )
 
 func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "security-survey")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
@@ -97,7 +97,7 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 }
 
 func TestReconPackFanOutWorkflowEndToEnd(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "recon-pack")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureOrchestrate}, dir)
@@ -120,7 +120,7 @@ func TestReconPackFanOutWorkflowEndToEnd(t *testing.T) {
 }
 
 func TestBugbashWorkflowEndToEnd(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := h.OwnerCtx(t, context.Background())
 	dir := h.ProjectDir(t, "bugbash")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureOrchestrate}, dir)

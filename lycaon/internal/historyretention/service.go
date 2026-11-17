@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -139,7 +140,7 @@ func (s *Service) preview(ctx context.Context, request api.HistoryRetentionReque
 			if err := ctx.Err(); err != nil {
 				return p.preview, err
 			}
-			items, err := listCandidates(ctx, s.Database, classes[i], projectID, db.FormatTime(before), afterTime, afterID)
+			items, err := listCandidates(ctx, s.Database, classes[i], projectID, timelayout.Format(before), afterTime, afterID)
 			if err != nil {
 				return p.preview, err
 			}
@@ -147,7 +148,7 @@ func (s *Service) preview(ctx context.Context, request api.HistoryRetentionReque
 				break
 			}
 			for _, item := range items {
-				item, err = s.groupCandidate(ctx, item, projectID, db.FormatTime(before))
+				item, err = s.groupCandidate(ctx, item, projectID, timelayout.Format(before))
 				if err != nil {
 					return p.preview, err
 				}

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"io"
 	"os"
 	"time"
@@ -61,10 +62,10 @@ func (s *SourceMutationService) prepareAgentEffectOpt(ctx context.Context, effec
 	}
 	effect.Record.BeforeSize = max(effect.Record.BeforeSize, int64(len(effect.Record.Before)))
 	effect.Record.AfterSize = max(effect.Record.AfterSize, int64(len(effect.Record.After)))
-	if len(effect.Record.Before) > sourceledger.MaxRevisionContentBytes {
+	if len(effect.Record.Before) > sourceblob.MaxRevisionContentBytes {
 		effect.Record.Before = nil
 	}
-	if len(effect.Record.After) > sourceledger.MaxRevisionContentBytes {
+	if len(effect.Record.After) > sourceblob.MaxRevisionContentBytes {
 		effect.Record.After = nil
 	}
 	now := time.Now().UTC()

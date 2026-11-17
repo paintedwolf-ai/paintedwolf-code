@@ -1,0 +1,314 @@
+components:
+  schemas:
+    ActionDescriptor:
+      x-go-generate: true
+      type: object
+      description: >-
+        The host's account of one visible action, composed from typed facts on
+        the call, its result or its command activity. Den draws every action
+        card from this and owns only copy and formatting.
+      additionalProperties: false
+      required: [label, status, ran, facts, row, links]
+      properties:
+        label:
+          type: string
+          description: Verb-first action name from the tool presentation catalog.
+        status:
+          type: string
+          enum: [running, done, error]
+        ran:
+          $ref: "#/components/schemas/ActionRan"
+        facts:
+          type: array
+          maxItems: 4
+          description: At most four facts, in vocabulary order, at most one of each kind.
+          items:
+            $ref: "#/components/schemas/ActionFact"
+        row:
+          type: array
+          maxItems: 2
+          description: Fact kinds whose compact form makes the row's outcome text, in order.
+          items:
+            $ref: "#/components/schemas/ActionFactKind"
+        preview:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ActionPreview"
+        links:
+          type: array
+          maxItems: 3
+          description: Records the action has, in the order Input, Output, Receipt; absent kinds are omitted.
+          items:
+            $ref: "#/components/schemas/ActionLink"
+        opener:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ActionOpener"
+        fold_key:
+          type: string
+          description: >-
+            Actions sharing a key render as one card: one terminal session, one
+            page session, repeated reads of one path, or a burst of one
+            coordination family. Empty for an action that stands alone.
+    ActionRan:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [text, noun]
+      properties:
+        text:
+          type: string
+          description: What the action ran or addressed, already screened for secrets.
+        noun:
+          type: string
+          description: What the text is, for the copy control's name.
+          enum: [command, path, pattern, query, url, request, message, transition, skill, phase, scan, brief, need, target]
+        redaction:
+          x-go-pointer: true
+          $ref: messages.yaml#/components/schemas/HostSecretRedactionMeta
+    # Enum values from docs/openapi/vocab — do not hand-edit generated fragments.
+    ActionFactKind:
+      $ref: ../action-fact-kind.generated.yaml#/components/schemas/ActionFactKind
+    ActionFact:
+      x-go-generate: true
+      type: object
+      description: >-
+        One typed fact. The fields a kind uses are listed on each field; Den
+        formats the values and owns the label for each kind.
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind:
+          $ref: "#/components/schemas/ActionFactKind"
+        outcome:
+          type: string
+          description: "result: how the action ended."
+          enum: [passed, failed, refused, interrupted, completed, created, updated, deleted, moved, copied, committed, merged, checked_out, answered, approved, declined, pass, fail, captured, loaded, canceled]
+        exit_code:
+          type: integer
+          x-go-pointer: true
+          description: "result: process exit status."
+        http_status:
+          type: integer
+          x-go-pointer: true
+          description: "result: HTTP response status."
+        ref:
+          type: string
+          description: "result: a short identifier the outcome produced, such as a commit."
+        files:
+          type: integer
+          description: "changed: files touched. found: files the matches are in."
+        added:
+          type: integer
+          description: "changed: lines added."
+        removed:
+          type: integer
+          description: "changed: lines removed."
+        hunks:
+          type: integer
+          description: "changed: hunks."
+        created:
+          type: integer
+          description: "changed: new files."
+        count:
+          type: integer
+          description: "found: how many. steps: how many members."
+        noun:
+          type: string
+          description: "found: what was counted."
+          enum: [matches, files, entries, lines, results, tools, findings, citations, items, bytes, processes, secrets, refs, commits]
+        items:
+          type: array
+          maxItems: 3
+          description: "found: up to three named items, such as loaded tools."
+          items:
+            type: string
+        high:
+          type: integer
+          description: "found: high-severity findings."
+        medium:
+          type: integer
+          description: "found: medium-severity findings."
+        low:
+          type: integer
+          description: "found: low-severity findings."
+        duration_ms:
+          type: integer
+          format: int64
+          description: "took: elapsed time of a settled action."
+        failed:
+          type: integer
+          description: "steps: members that failed, were refused or were interrupted."
+        unit:
+          type: string
+          description: "steps: what a member is."
+          enum: [executions, calls, actions]
+        sequence:
+          type: array
+          maxItems: 8
+          description: "steps: the members' actions in order, for a session such as a terminal."
+          items:
+            type: string
+        by:
+          type: string
+          description: "stopped_by: what stopped or approved the action. loaded_by: how a tool or skill was resolved."
+          enum: [host_stop, approval, policy, budget, engine, name, none]
+        code:
+          type: string
+          description: "stopped_by: the host stop or rejection code."
+        decided_by:
+          type: string
+          description: "stopped_by: who decided an approval."
+          enum: [person, policy]
+        decided_at:
+          type: string
+          format: date-time
+          x-go-pointer: true
+          description: "stopped_by: when an approval was decided."
+        hosts:
+          type: array
+          maxItems: 3
+          description: "network: hosts reached."
+          items:
+            type: string
+        egress:
+          type: string
+          description: "network: how traffic left the host."
+          enum: [proxy_only, direct, local_only]
+        role:
+          type: string
+          description: "worker: the worker's role."
+        state:
+          type: string
+          description: "worker: the worker's state. process: the process state."
+        used:
+          type: integer
+          format: int64
+          description: "budget: amount used."
+        limit:
+          type: integer
+          format: int64
+          description: "budget: amount allowed."
+        port:
+          type: integer
+          x-go-pointer: true
+          description: "process: listening port."
+        caption:
+          type: string
+          description: "captured: the artifact's caption."
+        artifact_id:
+          type: string
+          format: uuid
+          description: "captured: the artifact."
+        mode:
+          type: string
+          description: "containment: the confinement mode."
+    ActionPreview:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [output, diff, hits, steps, image]
+        lines:
+          type: array
+          maxItems: 4
+          items:
+            $ref: "#/components/schemas/ActionPreviewLine"
+        lines_omitted:
+          type: integer
+          description: Further lines not shown.
+        tail:
+          type: boolean
+          description: "output: the lines are the end of the stream."
+        receipts:
+          type: array
+          description: >-
+            output: the lines are in these activities' execution receipts, which
+            Den reads when the card opens; head for a success, tail for a
+            failure or a running activity.
+          items:
+            $ref: "#/components/schemas/ActionReceiptScope"
+        artifact_id:
+          type: string
+          format: uuid
+          description: "image: the artifact to show."
+        caption:
+          type: string
+          description: "image: the artifact's caption."
+    ActionPreviewLine:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [text]
+      properties:
+        text:
+          type: string
+        stream:
+          type: string
+          enum: [stdout, stderr]
+        sign:
+          type: string
+          description: "diff: added or removed."
+          enum: [added, removed]
+        location:
+          type: string
+          description: "hits: where the line is."
+        state:
+          type: string
+          description: "steps: how the step ended."
+    ActionLink:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [input, output, receipt]
+        content_ref:
+          x-go-pointer: true
+          $ref: ../chat-content.yaml#/components/schemas/ChatContentReference
+        process_handle:
+          type: string
+          description: "output: a background process whose output is the record."
+        receipts:
+          type: array
+          description: "receipt: the program activities the receipt document covers."
+          items:
+            $ref: "#/components/schemas/ActionReceiptScope"
+    ActionReceiptScope:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [program_id, activity_id]
+      properties:
+        program_id:
+          type: string
+          format: uuid
+        activity_id:
+          type: string
+          format: uuid
+    ActionOpener:
+      x-go-generate: true
+      type: object
+      description: Where the action's subject opens, beyond its records.
+      additionalProperties: false
+      required: [kind]
+      properties:
+        kind:
+          type: string
+          enum: [file, terminal, running, search]
+        path:
+          type: string
+          description: "file: the path, as the action named it."
+        line:
+          type: integer
+          x-go-pointer: true
+          description: "file: the line to open at."
+        query:
+          type: string
+          description: "search: what to search for."
+        process_handle:
+          type: string
+          description: "terminal: the session whose output opens."

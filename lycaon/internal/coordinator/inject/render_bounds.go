@@ -28,19 +28,6 @@ const (
 // renderCeiling is the hard limit every budget above must stay under.
 const renderCeiling = pongoplain.MaxCollectionItems
 
-// renderBudgets lists the budgets checked against the ceiling.
-func renderBudgets() map[string]int {
-	return map[string]int{
-		"MaxScopeOutlineSymbols":   MaxScopeOutlineSymbols,
-		"MaxScopeFileOrientations": MaxScopeFileOrientations,
-		"MaxScopePaths":            MaxScopePaths,
-		"MaxCharterItems":          MaxCharterItems,
-		"MaxForwardedAttachments":  MaxForwardedAttachments,
-		"MaxRecordedVerdicts":      MaxRecordedVerdicts,
-		"MaxRecordedVerdictFields": MaxRecordedVerdictFields,
-	}
-}
-
 // bound truncates items to budget and reports how many it dropped.
 func bound[T any](items []T, budget int) ([]T, int) {
 	if budget <= 0 || len(items) <= budget {

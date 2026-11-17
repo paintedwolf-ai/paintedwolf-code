@@ -44,7 +44,7 @@ func TestTrimOverlayPromoteChunkDropsDigestSummariesKeepsSpill(t *testing.T) {
 	}
 	raw, err := json.Marshal(in)
 	testutil.FailErr(t, "json.Marshal failed", err)
-	banners := "\n>>> promote conflict digest\nCode: BANNER_PROMOTE_CONFLICT_DIGEST"
+	banners := "\n>>> overlay promote spill\nCode: OVERLAY_PROMOTE_SPILL"
 	out, ok := TrimOverlayPromoteChunk(string(raw) + banners)
 	if !ok {
 		t.Fatal("expected compact")
@@ -61,7 +61,7 @@ func TestTrimOverlayPromoteChunkDropsDigestSummariesKeepsSpill(t *testing.T) {
 	if !strings.Contains(out, "util.go") || !strings.Contains(out, "router.go") {
 		t.Fatalf("missing path_status paths in %q", out)
 	}
-	if !strings.Contains(out, "BANNER_PROMOTE_CONFLICT_DIGEST") {
+	if !strings.Contains(out, "OVERLAY_PROMOTE_SPILL") {
 		t.Fatalf("guidance banners must be preserved: %q", out[len(out)-120:])
 	}
 }

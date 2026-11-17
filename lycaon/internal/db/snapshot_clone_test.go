@@ -62,7 +62,7 @@ func TestQuiescentCopyPreservesCommittedWALAndCancellation(t *testing.T) {
 	defer func() { _ = writer.Close() }()
 	_, err = writer.Exec(`PRAGMA wal_autocheckpoint=0; CREATE TABLE retained(v TEXT); INSERT INTO retained VALUES('committed'); PRAGMA user_version=7`)
 	testutil.FailErr(t, "write committed history", err)
-	source, err := openReader(t.Context(), path)
+	source, err := OpenReadOnly(t.Context(), path)
 	testutil.FailErr(t, "open quiescent reader", err)
 	defer func() { _ = source.Close() }()
 	destination := filepath.Join(t.TempDir(), "copy.db")
@@ -81,7 +81,7 @@ func TestQuiescentCopyPreservesCommittedWALAndCancellation(t *testing.T) {
 	if got := fmt.Sprintf("%x", sha256.Sum256(raw)); got != sum {
 		t.Fatalf("copied digest = %s, want %s", got, sum)
 	}
-	snapshot, err := openReader(t.Context(), destination)
+	snapshot, err := OpenReadOnly(t.Context(), destination)
 	testutil.FailErr(t, "open copied history", err)
 	defer func() { _ = snapshot.Close() }()
 	for name, database := range map[string]*sql.DB{"source": source, "snapshot": snapshot} {

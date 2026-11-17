@@ -293,6 +293,7 @@ func (p *Publisher) PublishActivity(ctx context.Context, projectIDOrDir, session
 		return
 	}
 	ev.SessionID = strings.TrimSpace(sessionID)
+	ev = describeActivityProgram(ev)
 	p.observeActivity(ev)
 	if p.ActivityObserver != nil {
 		p.ActivityObserver.ObserveActivity(ev)

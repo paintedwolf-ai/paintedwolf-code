@@ -10,11 +10,11 @@ effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:update_progress
 message: Progress reconciliation snapshot changed
-what: The pending worker-finish set changed.
-cause: The supplied reconciliation token does not identify the current worker finishes.
-why: Acknowledgement must identify the finishes the coordinator has reviewed.
-fix: Review the returned snapshot and worker jobs, then submit the current reconciliation_token and expected_revision. Keep unfinished deliverables pending.
-instead: Review the current listed finishes and submit their reconciliation_token with expected_revision.
+what: The unacknowledged worker-round settlement set changed.
+cause: The supplied reconciliation token does not identify the current settled worker rounds.
+why: Acknowledgement must identify the worker rounds the coordinator has reviewed.
+fix: Review the returned snapshot and settled worker rounds, then submit the current reconciliation_token and expected_revision. Keep unfinished deliverables pending.
+instead: Review the current listed worker rounds and submit their reconciliation_token with expected_revision.
 x-paintedwolf-scenarios:
   - id: default
     vars:

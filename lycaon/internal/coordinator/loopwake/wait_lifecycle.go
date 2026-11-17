@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/workscope"
 )
@@ -67,7 +66,7 @@ func (l *Waits) parkForActiveHold(ctx context.Context, sessionID string) bool {
 		return true
 	}
 	maxSleep := time.Now().UTC().Add(l.Facts.sessionLimits(ctx, sessionID).CoordinatorMaxSleep())
-	overlayPromoteDue := l.Subscriptions.overlayPromoteDue(ctx, sessionID, anchor.Envelope{})
+	overlayPromoteDue := l.Subscriptions.overlayPromoteDue(ctx, sessionID)
 	if l.Facts.sessionHumanApprovalAwaiting(ctx, sessionID) {
 		l.EnterSleep(
 			ctx,
@@ -114,7 +113,7 @@ func (l *Waits) OnTurnComplete(ctx context.Context, sessionID string, hostTurn b
 	cycleIdle := l.Cycles.WorkerCycleIsIdle(ctx, sessionID)
 	// Unmet phase obligations re-arm a workflow wake instead of the awaiting-user park.
 	if cycleIdle && l.Facts.workflowObligationsOpen(ctx, sessionID) {
-		overlayPromoteDue := l.Subscriptions.overlayPromoteDue(ctx, sessionID, anchor.Envelope{})
+		overlayPromoteDue := l.Subscriptions.overlayPromoteDue(ctx, sessionID)
 		l.EnterSleep(
 			ctx,
 			sessionID,
@@ -127,7 +126,7 @@ func (l *Waits) OnTurnComplete(ctx context.Context, sessionID string, hostTurn b
 		return UserTurnContinues
 	}
 	if hostTurn && cycleIdle {
-		overlayPromoteDue := l.Subscriptions.overlayPromoteDue(ctx, sessionID, anchor.Envelope{})
+		overlayPromoteDue := l.Subscriptions.overlayPromoteDue(ctx, sessionID)
 		l.EnterSleep(
 			ctx,
 			sessionID,
@@ -420,7 +419,7 @@ func (l *Waits) ParkForHostObligation(ctx context.Context, sessionID string) {
 	if sessionID == "" || !l.Facts.sessionHostObligationHeld(ctx, sessionID) {
 		return
 	}
-	overlayPromoteDue := l.Subscriptions.overlayPromoteDue(ctx, sessionID, anchor.Envelope{})
+	overlayPromoteDue := l.Subscriptions.overlayPromoteDue(ctx, sessionID)
 	l.EnterSleep(
 		ctx,
 		sessionID,

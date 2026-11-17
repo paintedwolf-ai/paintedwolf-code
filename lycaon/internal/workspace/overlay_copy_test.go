@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"io/fs"
 	"os"
 	"os/exec"
@@ -31,7 +32,7 @@ func TestCreateWorkerWorkspaceCapturesCompleteImmutableSnapshot(t *testing.T) {
 			testutil.FailErr(t, "write", err)
 		}
 	}
-	mgr := workspace.NewManager(t.TempDir())
+	mgr := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}))
 	binding, err := mgr.CreateWorkerWorkspace(context.Background(), primary, "skip")
 	testutil.FailErr(t, "CreateWorkerWorkspace", err)
 	defer func() { _ = mgr.DestroyWorkerWorkspace(t.Context(), binding) }()
@@ -60,7 +61,7 @@ func TestCreateWorkerWorkspaceRefusesACorruptSourceRepository(t *testing.T) {
 	testutil.FailErr(t, "mkdir .git", os.MkdirAll(filepath.Join(primary, ".git"), 0o755))
 	testutil.FailErr(t, "write HEAD", os.WriteFile(filepath.Join(primary, ".git", "HEAD"), []byte("x"), 0o644))
 	testutil.FailErr(t, "write main.go", os.WriteFile(filepath.Join(primary, "main.go"), []byte("x"), 0o644))
-	mgr := workspace.NewManager(t.TempDir())
+	mgr := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}))
 	_, err := mgr.CreateWorkerWorkspace(context.Background(), primary, "corrupt")
 	if !errors.Is(err, privategit.ErrCorruptObjectStore) {
 		t.Fatalf("claim over a corrupt repository = %v, want a typed refusal", err)
@@ -70,7 +71,7 @@ func TestCreateWorkerWorkspaceRefusesACorruptSourceRepository(t *testing.T) {
 func TestOverlaySurveyListsCompleteSnapshot(t *testing.T) {
 	primary := t.TempDir()
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(primary, "seen.go"), []byte("ok"), 0o644))
-	mgr := workspace.NewManager(t.TempDir())
+	mgr := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}))
 	binding, err := mgr.CreateWorkerWorkspace(context.Background(), primary, "survey")
 	testutil.FailErr(t, "CreateWorkerWorkspace", err)
 	defer func() { _ = mgr.DestroyWorkerWorkspace(t.Context(), binding) }()
@@ -148,7 +149,7 @@ func TestWorkerSnapshotMirrorsBuildSymlink(t *testing.T) {
 		testutil.FailErr(t, "symlink .build/debug", err)
 	}
 
-	mgr := workspace.NewManager(t.TempDir())
+	mgr := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}))
 	binding, err := mgr.CreateWorkerWorkspace(context.Background(), primary, "symlink")
 	testutil.FailErr(t, "CreateWorkerWorkspace", err)
 	defer func() { _ = mgr.DestroyWorkerWorkspace(t.Context(), binding) }()
@@ -187,7 +188,7 @@ func TestWorkerSnapshotPrunesMetadataNotGitignore(t *testing.T) {
 		}
 	}
 
-	mgr := workspace.NewManager(t.TempDir())
+	mgr := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}))
 	binding, err := mgr.CreateWorkerWorkspace(context.Background(), primary, "prune")
 	testutil.FailErr(t, "CreateWorkerWorkspace", err)
 	defer func() { _ = mgr.DestroyWorkerWorkspace(t.Context(), binding) }()
@@ -212,7 +213,8 @@ func TestProductionCreateWorkerWorkspaceRoutesThroughAdapterAndMountedSelector(t
 	testutil.FailErr(t, "write main.go", os.WriteFile(filepath.Join(primary, "main.go"), []byte("package main\n"), 0o644))
 
 	// 1. A small tree is under budget, so the default Manager materializes it and never probes a mount.
-	mgr := workspace.NewManager(t.TempDir())
+	branches := t.TempDir()
+	mgr := workspace.NewManager(branches, platform.NewSelector(platform.Config{}))
 	binding, err := mgr.CreateWorkerWorkspace(ctx, primary, "prod-entry")
 	testutil.FailErr(t, "CreateWorkerWorkspace", err)
 
@@ -247,7 +249,7 @@ func TestProductionCreateWorkerWorkspaceRoutesThroughAdapterAndMountedSelector(t
 	}
 	testutil.FailErr(t, "DestroyWorkerWorkspace", mgr.DestroyWorkerWorkspace(t.Context(), binding))
 
-	// 2. Manager.WithSelector(mountedSel) routes CreateWorkerWorkspace through MountedAdapter.Prepare & Release.
+	// 2. A manager built with the mounted selector prepares and releases through the mounted adapter.
 	var mountedPrepared, mountedReleased bool
 	mountedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
 		AdapterID: adapter.AdapterNFSDarwin,
@@ -267,7 +269,7 @@ func TestProductionCreateWorkerWorkspaceRoutesThroughAdapterAndMountedSelector(t
 	mountedSel := adapter.NewSelector("", mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter())
 	mountedSel.BudgetFor = adapter.ZeroBudget
 	mountedSel.Confinement = fixtureConfinement{}
-	mBinding, err := mgr.WithSelector(mountedSel).CreateWorkerWorkspace(ctx, primary, "prod-mounted")
+	mBinding, err := workspace.NewManager(branches, mountedSel).CreateWorkerWorkspace(ctx, primary, "prod-mounted")
 	testutil.FailErr(t, "CreateWorkerWorkspace mounted", err)
 	if !mountedPrepared || mBinding.View == nil || mBinding.Selection.Facts.PreparationKind != adapter.PreparationMounted {
 		t.Fatalf("expected mounted adapter Prepare via CreateWorkerWorkspace, got prepared=%v binding=%+v", mountedPrepared, mBinding)
@@ -329,7 +331,7 @@ func TestWorkerSnapshotExcludesLinkedWorktreeAndSubmoduleGitlinks(t *testing.T) 
 		}
 	}
 
-	mgr := workspace.NewManager(t.TempDir())
+	mgr := workspace.NewManager(t.TempDir(), platform.NewSelector(platform.Config{}))
 	binding, err := mgr.CreateWorkerWorkspace(context.Background(), primary, "gitlink-isolation")
 	testutil.FailErr(t, "CreateWorkerWorkspace", err)
 	defer func() { _ = mgr.DestroyWorkerWorkspace(t.Context(), binding) }()

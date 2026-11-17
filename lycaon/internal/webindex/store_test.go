@@ -10,7 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -300,15 +299,5 @@ func TestSearchTimingCarriedInStats(t *testing.T) {
 	testutil.FailErr(t, "stats after store", err)
 	if st.LastSearchMs != 7 || st.MaxSearchMs != 9 {
 		t.Fatalf("stats = %+v want stored search timings carried", st)
-	}
-}
-
-func TestDefaultPathUnderHome(t *testing.T) {
-	p, err := DefaultPath()
-	testutil.FailErr(t, "default path", err)
-	dir, err := configdir.UserConfigDir()
-	testutil.FailErr(t, "UserConfigDir", err)
-	if filepath.Dir(p) != dir || filepath.Base(p) != "web-index.db" {
-		t.Fatalf("path = %q, want under %q", p, dir)
 	}
 }

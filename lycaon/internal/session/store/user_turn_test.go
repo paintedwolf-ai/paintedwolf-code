@@ -71,7 +71,6 @@ func TestTurnNumbersAreNotReusedAfterTranscriptTruncation(t *testing.T) {
 	for name, st := range map[string]interface {
 		Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
 		AppendMessages(context.Context, string, ...api.Message) error
-		TruncateMessagesFrom(context.Context, string, string) (int, error)
 		ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
 		Get(context.Context, string) (*api.Session, error)
 	}{"memory": NewMemory(), "sql": NewSQL(database)} {
@@ -83,8 +82,7 @@ func TestTurnNumbersAreNotReusedAfterTranscriptTruncation(t *testing.T) {
 			second := first
 			second.ID = uuid.NewString()
 			testutil.FailErr(t, "append turns", st.AppendMessages(ctx, sess.ID, first, second))
-			_, err = st.TruncateMessagesFrom(ctx, sess.ID, first.ID)
-			testutil.FailErr(t, "truncate turns", err)
+			rewindFrom(t, st.(rewindStore), sess.ID, first.ID)
 			empty, err := st.Get(ctx, sess.ID)
 			testutil.FailErr(t, "read rewound session", err)
 			if empty.CurrentTurn != 0 {

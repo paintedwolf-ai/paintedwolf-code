@@ -16,6 +16,7 @@
     },
     { "id": "path", "label": "File path" },
     { "id": "session", "label": "Session", "single_valued": true },
+    { "id": "worker", "label": "Worker", "single_valued": true },
     { "id": "agent", "label": "Agent", "single_valued": true },
     { "id": "project", "label": "Project" },
     { "id": "role", "label": "Message role", "single_valued": true },

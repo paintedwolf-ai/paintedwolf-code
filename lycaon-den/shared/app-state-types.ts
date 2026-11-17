@@ -58,7 +58,7 @@ export type DenLayoutPrefs = {
    * Column a split keeps when the host is too narrow for both. Absent follows
    * {@link DenLayoutPrefs.startupCompanion}.
    */
-  narrowSurvivor?: NarrowSplitSurvivor;
+  narrowSurvivor?: SplitPane;
   /** Reflects the whole workspace, including navigation and stage interiors. */
   workspaceOrientation?: WorkspaceOrientation;
   /** Column order away from the sidebar, before workspace mirroring. */
@@ -577,7 +577,6 @@ export type StagePlacement = "inline" | "split";
 
 /** Split column that survives a host too narrow to carry both. */
 export type SplitPane = "conversation" | "stage";
-export type NarrowSplitSurvivor = SplitPane;
 
 export type WorkspaceOrientation = "standard" | "mirrored";
 export type SplitOrder = "context-first" | "chat-first";

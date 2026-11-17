@@ -2,23 +2,23 @@ import type { BoardView } from "../../api/types.ts";
 
 export type WorklogReservationGroup = {
   jobId: string;
-  agentType: string;
+  worker: string;
   paths: string[];
 };
 
-/** Fold board roster reservations by worker job id. */
+/** Reserved paths grouped by the worker whose live round holds them. */
 export function reservationsByWorker(
   board?: BoardView,
 ): WorklogReservationGroup[] {
-  const roster = board?.roster;
-  if (!Array.isArray(roster) || roster.length === 0) return [];
+  const workers = board?.workers;
+  if (!Array.isArray(workers) || workers.length === 0) return [];
   const groups: WorklogReservationGroup[] = [];
-  for (const row of roster) {
-    const paths = row.reservations?.filter((p) => p.trim()) ?? [];
+  for (const bw of workers) {
+    const paths = bw.reservations?.filter((p) => p.trim()) ?? [];
     if (paths.length === 0) continue;
     groups.push({
-      jobId: row.worker_id,
-      agentType: row.agent_type?.trim() || "worker",
+      jobId: bw.latest_job_id?.trim() ?? "",
+      worker: bw.name.trim() || bw.agent_type?.trim() || "worker",
       paths,
     });
   }

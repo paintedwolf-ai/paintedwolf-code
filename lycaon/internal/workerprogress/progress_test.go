@@ -1,8 +1,11 @@
 package workerprogress_test
 
 import (
+	"reflect"
+	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/workerprogress"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -13,24 +16,23 @@ func TestFromTaskSeedsLifetimeCountersOnly(t *testing.T) {
 	usage := &api.WorkerContextUsage{PromptTokens: 1234}
 	seed := workerprogress.FromTask(&api.WorkerTask{
 		ToolLoopsUsed: 12,
-		MaxToolLoops:  40,
 		ToolCallsUsed: 96,
 		// A batch cannot survive the run that opened it; a resumed worker starts
 		// between rounds, so these must not come back from the row.
 		TurnToolCalls: 6,
 		TurnToolsDone: 3,
+		TurnTools:     []string{"read"},
 		ContextUsage:  usage,
 	})
 	want := workerprogress.Snapshot{
 		ToolLoopsUsed: 12,
-		MaxToolLoops:  40,
 		ToolCallsUsed: 96,
 		ContextUsage:  usage,
 	}
-	if seed != want {
+	if !reflect.DeepEqual(seed, want) {
 		t.Fatalf("seed = %+v want %+v", seed, want)
 	}
-	if got := workerprogress.FromTask(nil); got != (workerprogress.Snapshot{}) {
+	if got := workerprogress.FromTask(nil); !reflect.DeepEqual(got, workerprogress.Snapshot{}) {
 		t.Fatalf("nil task seed = %+v want zero", got)
 	}
 }
@@ -39,17 +41,21 @@ func TestTrackerRoundAndBatchEdges(t *testing.T) {
 	t.Parallel()
 	tracker := workerprogress.NewTracker(workerprogress.Snapshot{ToolLoopsUsed: 3, ToolCallsUsed: 10})
 
-	round := tracker.CompleteRound(4, 40, &api.WorkerContextUsage{PromptTokens: 500})
-	if round.ToolLoopsUsed != 4 || round.MaxToolLoops != 40 {
-		t.Fatalf("round edge = %+v want used 4 max 40", round)
+	round := tracker.CompleteRound(4, &api.WorkerContextUsage{PromptTokens: 500})
+	if round.ToolLoopsUsed != 4 {
+		t.Fatalf("round edge = %+v want used 4", round)
 	}
 	if round.TurnToolCalls != 0 || round.TurnToolsDone != 0 {
 		t.Fatalf("round edge kept a batch: %+v", round)
 	}
 
-	open := tracker.BeginBatch(3)
+	began := time.Date(2026, 11, 14, 12, 0, 0, 0, time.UTC)
+	open := tracker.BeginBatch([]string{"read", "read", "grep"}, began)
 	if open.TurnToolCalls != 3 || open.TurnToolsDone != 0 {
 		t.Fatalf("open edge = %+v want 0 of 3", open)
+	}
+	if !slices.Equal(open.TurnTools, []string{"read", "grep"}) || !open.TurnStartedAt.Equal(began) {
+		t.Fatalf("open edge names %v from %v", open.TurnTools, open.TurnStartedAt)
 	}
 
 	first := tracker.SettleCall()
@@ -61,7 +67,7 @@ func TestTrackerRoundAndBatchEdges(t *testing.T) {
 	}
 
 	closed := tracker.EndBatch()
-	if closed.TurnToolCalls != 0 || closed.TurnToolsDone != 0 {
+	if closed.TurnToolCalls != 0 || closed.TurnToolsDone != 0 || closed.TurnTools != nil || !closed.TurnStartedAt.IsZero() {
 		t.Fatalf("close edge = %+v want no batch", closed)
 	}
 	if closed.ToolCallsUsed != 11 {
@@ -74,7 +80,7 @@ func TestTrackerRoundAndBatchEdges(t *testing.T) {
 func TestTrackerBatchGrowsToFitExtraSettledCalls(t *testing.T) {
 	t.Parallel()
 	tracker := workerprogress.NewTracker(workerprogress.Snapshot{})
-	tracker.BeginBatch(1)
+	tracker.BeginBatch([]string{"read"}, time.Time{})
 	tracker.SettleCall()
 	got := tracker.SettleCall()
 	if got.TurnToolsDone != 2 || got.TurnToolCalls != 2 {
@@ -85,7 +91,7 @@ func TestTrackerBatchGrowsToFitExtraSettledCalls(t *testing.T) {
 func TestTrackerRoundCountNeverRegresses(t *testing.T) {
 	t.Parallel()
 	tracker := workerprogress.NewTracker(workerprogress.Snapshot{ToolLoopsUsed: 9})
-	if got := tracker.CompleteRound(4, 40, nil); got.ToolLoopsUsed != 9 {
+	if got := tracker.CompleteRound(4, nil); got.ToolLoopsUsed != 9 {
 		t.Fatalf("used = %d want the seeded 9 to hold", got.ToolLoopsUsed)
 	}
 }
@@ -93,7 +99,7 @@ func TestTrackerRoundCountNeverRegresses(t *testing.T) {
 func TestTrackerSettlesConcurrently(t *testing.T) {
 	t.Parallel()
 	tracker := workerprogress.NewTracker(workerprogress.Snapshot{})
-	tracker.BeginBatch(64)
+	tracker.BeginBatch(make([]string, 64), time.Time{})
 	var wg sync.WaitGroup
 	for range 64 {
 		wg.Add(1)
@@ -111,44 +117,41 @@ func TestTrackerSettlesConcurrently(t *testing.T) {
 func TestNilTrackerIsInert(t *testing.T) {
 	t.Parallel()
 	var tracker *workerprogress.Tracker
-	if got := tracker.SettleCall(); got != (workerprogress.Snapshot{}) {
+	if got := tracker.SettleCall(); !reflect.DeepEqual(got, workerprogress.Snapshot{}) {
 		t.Fatalf("nil settle = %+v want zero", got)
 	}
 	if got := tracker.ToolLoopsUsed(); got != 0 {
 		t.Fatalf("nil used = %d want 0", got)
 	}
-	tracker.SetMaxToolLoops(40)
-	if got := tracker.Current(); got != (workerprogress.Snapshot{}) {
+	if got := tracker.Current(); !reflect.DeepEqual(got, workerprogress.Snapshot{}) {
 		t.Fatalf("nil current = %+v want zero", got)
 	}
 }
 
 func TestApplyKeepsLifetimeCountersMonotonic(t *testing.T) {
 	t.Parallel()
-	task := &api.WorkerTask{ToolLoopsUsed: 12, ToolCallsUsed: 96, MaxToolLoops: 40}
+	task := &api.WorkerTask{ToolLoopsUsed: 12, ToolCallsUsed: 96}
 	workerprogress.Apply(task, workerprogress.Snapshot{
 		ToolLoopsUsed: 3,
 		ToolCallsUsed: 40,
-		MaxToolLoops:  0,
 		TurnToolCalls: 6,
 		TurnToolsDone: 2,
+		TurnTools:     []string{"command"},
+		TurnStartedAt: time.Unix(100, 0),
 	})
 	if task.ToolLoopsUsed != 12 || task.ToolCallsUsed != 96 {
 		t.Fatalf("task = %+v want lifetime counters held", task)
 	}
-	if task.MaxToolLoops != 40 {
-		t.Fatalf("unset ceiling overwrote the row: %d", task.MaxToolLoops)
-	}
 	// The batch is one moment, not an accumulation — it replaces, both ways.
-	if task.TurnToolCalls != 6 || task.TurnToolsDone != 2 {
+	if task.TurnToolCalls != 6 || task.TurnToolsDone != 2 || !slices.Equal(task.TurnTools, []string{"command"}) || task.TurnStartedAt == nil || !task.TurnStartedAt.Equal(time.Unix(100, 0)) {
 		t.Fatalf("task = %+v want batch 2 of 6", task)
 	}
-	workerprogress.Apply(task, workerprogress.Snapshot{ToolLoopsUsed: 13, MaxToolLoops: 60})
-	if task.TurnToolCalls != 0 || task.TurnToolsDone != 0 {
+	workerprogress.Apply(task, workerprogress.Snapshot{ToolLoopsUsed: 13})
+	if task.TurnToolCalls != 0 || task.TurnToolsDone != 0 || task.TurnTools != nil || task.TurnStartedAt != nil {
 		t.Fatalf("task = %+v want the batch cleared", task)
 	}
-	if task.ToolLoopsUsed != 13 || task.MaxToolLoops != 60 {
-		t.Fatalf("task = %+v want used 13 max 60", task)
+	if task.ToolLoopsUsed != 13 {
+		t.Fatalf("task = %+v want used 13", task)
 	}
 }
 

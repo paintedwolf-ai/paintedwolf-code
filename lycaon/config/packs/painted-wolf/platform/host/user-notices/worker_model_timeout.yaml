@@ -1,0 +1,12 @@
+surfaces:
+  - worker_failure
+notification: { tier: non_catastrophic, scope: session }
+title: Worker model timed out
+message: >-
+  The model did not answer the worker within the time limit. The worker's
+  changes so far are kept.
+suggested_action: >-
+  Try again, or check the model provider's status if it keeps happening.
+scenarios:
+  - id: generic
+    vars: {}

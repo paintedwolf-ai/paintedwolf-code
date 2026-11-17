@@ -137,27 +137,6 @@ func (s *Store) SyncFromTracker(
 	return notice, nil
 }
 
-// MatchesObservedIdentity checks whether current matches recorded without ever relying
-// on timestamp-only (ModifiedNS) equality as proof of unchanged content.
-func MatchesObservedIdentity(recorded, current File) bool {
-	if recorded.Uncertain || current.Uncertain {
-		return false
-	}
-	if recorded.Provenance == observation.ProvenanceUncertainOverflow || current.Provenance == observation.ProvenanceUncertainOverflow {
-		return false
-	}
-	if recorded.Size != current.Size {
-		return false
-	}
-	if recorded.Ino != 0 && current.Ino != 0 && recorded.Ino != current.Ino {
-		return false
-	}
-	if recorded.SHA256 == "" || current.SHA256 == "" {
-		return false
-	}
-	return recorded.SHA256 == current.SHA256
-}
-
 // DeletePaths removes paths that left the tree.
 func (s *Store) DeletePaths(ctx context.Context, rootPath string, paths []string) error {
 	if len(paths) == 0 {

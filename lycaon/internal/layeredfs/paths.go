@@ -32,9 +32,7 @@ func sanitizeRelPath(rel string) (string, error) {
 }
 
 // IsGitMetadataPath reports a path inside a repository's .git, which only private Git manages.
-func IsGitMetadataPath(rel string) bool { return isGitComponentPath(rel) }
-
-func isGitComponentPath(rel string) bool {
+func IsGitMetadataPath(rel string) bool {
 	rel = cleanRelPath(rel)
 	if rel == ".git" || strings.HasPrefix(rel, ".git/") || strings.HasSuffix(rel, "/.git") {
 		return true
@@ -43,7 +41,7 @@ func isGitComponentPath(rel string) bool {
 }
 
 func checkGitAccess(c *Core, qpath QualifiedPath, writeIntent bool) (QualifiedPath, error) {
-	if !isGitComponentPath(qpath.Rel) {
+	if !IsGitMetadataPath(qpath.Rel) {
 		return qpath, nil
 	}
 	c.mu.RLock()

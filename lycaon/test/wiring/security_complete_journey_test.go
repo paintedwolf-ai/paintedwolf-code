@@ -51,7 +51,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		if turn == 1 {
 			return modelcall.Completion{ToolCalls: []api.ToolCall{{ID: uuid.NewString(), Name: "command", Args: map[string]any{"command": "cat audit.go"}}}}
 		}
-		task, ok := h.Delegations.Queue.Get(jobID)
+		task, ok := h.Workers.Queue.Get(jobID)
 		if !ok {
 			t.Errorf("worker %s missing", jobID)
 			return modelcall.Completion{}
@@ -119,7 +119,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 	}
 	testutil.FailErr(t, "execute survey workers", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
 	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "claims")
-	surveyTasks, err := h.Delegations.Queue.ListByWorkflowRunID(ctx, run.ID)
+	surveyTasks, err := h.Workers.Queue.ListByWorkflowRunID(ctx, run.ID)
 	testutil.FailErr(t, "read survey workers", err)
 	if len(surveyTasks) != 5 {
 		t.Fatalf("survey workers=%d", len(surveyTasks))
@@ -156,7 +156,7 @@ func TestSecuritySurveyCompletesWithFullCoverageWithoutRepeatingWork(t *testing.
 		invoke("task", map[string]any{"workflow_work_id": "review/" + agent, "agent_type": agent, "brief": map[string]any{"goal": "Independently review coverage", "done_when": []any{"Account for the assigned boundary"}}, "prompt": "Independently review the assigned coverage and source evidence.", "scope": map[string]any{"mode": "read"}})
 	}
 	testutil.FailErr(t, "execute independent review", DrainPendingWorkerJobs(ctx, h, sess.ProjectID, ""))
-	tasks, err := h.Delegations.Queue.ListByWorkflowRunID(ctx, run.ID)
+	tasks, err := h.Workers.Queue.ListByWorkflowRunID(ctx, run.ID)
 	testutil.FailErr(t, "read completed work", err)
 	var citations []any
 	for _, task := range tasks {

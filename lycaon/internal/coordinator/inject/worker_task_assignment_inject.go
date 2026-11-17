@@ -37,10 +37,13 @@ type WorkerTaskAssignmentInput struct {
 	SessionID          string
 	ProjectDir         string
 	Charter            api.WorkerTaskCharter
+	WorkerName         string
+	RoundInstructions  string
+	ViewKind           string
+	HasGit             bool
 	AgentType          string
 	WorkerJobID        string
 	Scope              api.TaskScope
-	MaxToolLoops       int
 	Attachments        []promptattach.ForwardedAttachment
 	// RecordedVerdicts are the run's stamped verdicts in phase order.
 	RecordedVerdicts []RecordedVerdict
@@ -51,6 +54,10 @@ type WorkerTaskAssignmentData struct {
 	CoverageRequired   bool
 	CoverageAssignment string
 	ScanInventory      string
+	WorkerName         string
+	RoundInstructions  string
+	ViewKind           string
+	HasGit             bool
 	AgentType          string
 	WorkerJobID        string
 	SharedContext      string
@@ -62,7 +69,6 @@ type WorkerTaskAssignmentData struct {
 	ScopeMode          string
 	ScopePaths         []string
 	LinkedCheckout     bool
-	MaxToolLoops       int
 	FileOrientations   []ScopeFileOrientation
 	Attachments        []promptattach.ForwardedAttachment
 	RecordedVerdicts   []RecordedVerdict
@@ -100,20 +106,29 @@ func BuildWorkerTaskAssignmentData(ctx context.Context, in WorkerTaskAssignmentI
 		}
 		verdicts[i].Fields = fields
 	}
+	viewKind := strings.TrimSpace(in.ViewKind)
+	if viewKind == "" && norm.Mode == api.TaskScopeModeWrite {
+		viewKind = "materialized"
+	}
+	_, discoveredGit := gitrepo.Discover(in.ProjectDir)
+	hasGit := norm.Mode != api.TaskScopeModeWrite && (in.HasGit || discoveredGit)
 	data := WorkerTaskAssignmentData{
-		AgentType:      strings.TrimSpace(in.AgentType),
-		WorkerJobID:    strings.TrimSpace(in.WorkerJobID),
-		Goal:           strings.TrimSpace(in.Charter.Goal),
-		SharedContext:  in.Charter.SharedContext,
-		KnownFacts:     charter("known facts", in.Charter.KnownFacts),
-		Constraints:    charter("constraints", in.Charter.Constraints),
-		DoneWhen:       charter("done-when criteria", in.Charter.DoneWhen),
-		ContextRefs:    charter("context refs", in.Charter.ContextRefs),
-		ScopeMode:      string(norm.Mode),
-		ScopePaths:     paths,
-		LinkedCheckout: norm.Mode == api.TaskScopeModeWrite && gitrepo.ScopeIncludesLinkedCheckout(in.ProjectDir, norm.Paths),
-		MaxToolLoops:   in.MaxToolLoops,
-		Attachments:    attachments,
+		WorkerName:        strings.TrimSpace(in.WorkerName),
+		RoundInstructions: strings.TrimSpace(in.RoundInstructions),
+		ViewKind:          viewKind,
+		HasGit:            hasGit,
+		AgentType:         strings.TrimSpace(in.AgentType),
+		WorkerJobID:       strings.TrimSpace(in.WorkerJobID),
+		Goal:              strings.TrimSpace(in.Charter.Goal),
+		SharedContext:     in.Charter.SharedContext,
+		KnownFacts:        charter("known facts", in.Charter.KnownFacts),
+		Constraints:       charter("constraints", in.Charter.Constraints),
+		DoneWhen:          charter("done-when criteria", in.Charter.DoneWhen),
+		ContextRefs:       charter("context refs", in.Charter.ContextRefs),
+		ScopeMode:         string(norm.Mode),
+		ScopePaths:        paths,
+		LinkedCheckout:    norm.Mode == api.TaskScopeModeWrite && gitrepo.ScopeIncludesLinkedCheckout(in.ProjectDir, norm.Paths),
+		Attachments:       attachments,
 
 		RecordedVerdicts: verdicts,
 		ScanInventory:    in.ScanInventory,
@@ -200,6 +215,10 @@ func WorkerTaskAssignmentToMap(data WorkerTaskAssignmentData) map[string]any {
 		"scan_inventory":      data.ScanInventory,
 		"coverage_assignment": data.CoverageAssignment,
 		"coverage_required":   data.CoverageRequired,
+		"worker_name":         data.WorkerName,
+		"round_instructions":  data.RoundInstructions,
+		"view_kind":           data.ViewKind,
+		"has_git":             data.HasGit,
 		"agent_type":          data.AgentType,
 		"worker_job_id":       data.WorkerJobID,
 		"goal":                data.Goal,
@@ -211,7 +230,6 @@ func WorkerTaskAssignmentToMap(data WorkerTaskAssignmentData) map[string]any {
 		"scope_mode":          data.ScopeMode,
 		"scope_paths":         data.ScopePaths,
 		"linked_checkout":     data.LinkedCheckout,
-		"max_tool_loops":      data.MaxToolLoops,
 		"file_orientations":   orientations,
 		"attachments":         attachments,
 		"recorded_verdicts":   recorded,

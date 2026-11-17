@@ -4,8 +4,8 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/secretcap"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -62,13 +62,13 @@ func (c *revisionCapture) Write(raw []byte) (int, error) {
 		if ctx == nil {
 			ctx = context.Background()
 		}
-		buffer, err := (ExecutionRevisions{Memory: c.memory}).NewBufferedBytes(ctx, sourceledger.MaxRevisionContentBytes, "source_revision_bytes")
+		buffer, err := (ExecutionRevisions{Memory: c.memory}).NewBufferedBytes(ctx, sourceblob.MaxRevisionContentBytes, "source_revision_bytes")
 		if err != nil {
 			return 0, err
 		}
 		c.buffer = buffer
 	}
-	if len(c.buffer.Bytes)+len(raw) > sourceledger.MaxRevisionContentBytes {
+	if len(c.buffer.Bytes)+len(raw) > sourceblob.MaxRevisionContentBytes {
 		c.overflow = true
 		c.buffer.Close()
 		return len(raw), nil

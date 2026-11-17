@@ -50,7 +50,7 @@ func TestDeterministicFitRelaxesRecentRowsAcrossHostFeedback(t *testing.T) {
 	rows = append(rows, ContextMessage{ID: "current", Role: "user", Content: "Recover the original observation", ContextPinned: true})
 	cfg := fitCfg()
 	cfg.ModelContextWindow = 4096
-	out := DeterministicFit(cfg, rows, 800)
+	out := DeterministicFitWithReserve(cfg, rows, 800, 0)
 	if cost := EstimateMessagesTokens(out); cost > 800 {
 		t.Fatalf("historical feedback kept %d tokens above the receiving budget", cost)
 	}
@@ -69,7 +69,7 @@ func TestDeterministicFitNeverEvictsPinnedCharter(t *testing.T) {
 	total := EstimateMessagesTokens(msgs)
 	for _, frac := range []int{95, 75, 50, 25, 10, 2, 1} {
 		budget := total * frac / 100
-		out := DeterministicFit(fitCfg(), msgs, budget)
+		out := DeterministicFitWithReserve(fitCfg(), msgs, budget, 0)
 		if !hasCharter(out) {
 			t.Fatalf("frac %d%% (budget %d): charter evicted from %d retained rows",
 				frac, budget, len(out))
@@ -81,7 +81,7 @@ func TestDeterministicFitNeverEvictsPinnedCharter(t *testing.T) {
 func TestDeterministicFitKeepsCharterAheadOfRetainedWindow(t *testing.T) {
 	msgs := withCharter(fitRows(300))
 	budget := EstimateMessagesTokens(msgs) / 4
-	out := DeterministicFit(fitCfg(), msgs, budget)
+	out := DeterministicFitWithReserve(fitCfg(), msgs, budget, 0)
 	if len(out) == 0 || !strings.Contains(out[0].Content, guidance.MarkerWorkerTaskPreamble) {
 		t.Fatalf("charter is not the first retained row; got role=%q content=%.60q",
 			out[0].Role, out[0].Content)
@@ -92,7 +92,7 @@ func TestDeterministicFitKeepsCharterAheadOfRetainedWindow(t *testing.T) {
 func TestDeterministicFitAnnouncesTrim(t *testing.T) {
 	msgs := withCharter(fitRows(300))
 	budget := EstimateMessagesTokens(msgs) / 4
-	out := DeterministicFit(fitCfg(), msgs, budget)
+	out := DeterministicFitWithReserve(fitCfg(), msgs, budget, 0)
 	if got := countTrimNotices(out); got != 1 {
 		t.Fatalf("want exactly one trim notice, got %d", got)
 	}
@@ -115,7 +115,7 @@ func TestDeterministicFitAnnouncesTrim(t *testing.T) {
 // A transcript that fits is left exactly alone: no notice, no reordering.
 func TestDeterministicFitSilentWhenNothingDropped(t *testing.T) {
 	msgs := withCharter(fitRows(10))
-	out := DeterministicFit(fitCfg(), msgs, EstimateMessagesTokens(msgs)*2)
+	out := DeterministicFitWithReserve(fitCfg(), msgs, EstimateMessagesTokens(msgs)*2, 0)
 	if got := countTrimNotices(out); got != 0 {
 		t.Fatalf("announced a trim that did not happen (%d notices)", got)
 	}
@@ -127,8 +127,8 @@ func TestDeterministicFitSilentWhenNothingDropped(t *testing.T) {
 // Repeated fitting retains one notice.
 func TestDeterministicFitRefreshesRatherThanStacksNotices(t *testing.T) {
 	msgs := withCharter(fitRows(300))
-	first := DeterministicFit(fitCfg(), msgs, EstimateMessagesTokens(msgs)/4)
-	second := DeterministicFit(fitCfg(), first, EstimateMessagesTokens(first)/2)
+	first := DeterministicFitWithReserve(fitCfg(), msgs, EstimateMessagesTokens(msgs)/4, 0)
+	second := DeterministicFitWithReserve(fitCfg(), first, EstimateMessagesTokens(first)/2, 0)
 	if got := countTrimNotices(second); got != 1 {
 		t.Fatalf("want one trim notice after a second pass, got %d", got)
 	}
@@ -143,7 +143,7 @@ func TestDeterministicFitStaysUnderBudgetWithPins(t *testing.T) {
 	total := EstimateMessagesTokens(msgs)
 	for _, frac := range []int{75, 50, 25} {
 		budget := total * frac / 100
-		out := DeterministicFit(fitCfg(), msgs, budget)
+		out := DeterministicFitWithReserve(fitCfg(), msgs, budget, 0)
 		if got := EstimateMessagesTokens(out); got > budget {
 			t.Fatalf("frac %d%%: %d tokens over budget %d", frac, got, budget)
 		}
@@ -154,7 +154,7 @@ func TestDeterministicFitPreservesQuotedTrimNotice(t *testing.T) {
 	for _, role := range []string{"user", "tool", "assistant"} {
 		t.Run(role, func(t *testing.T) {
 			quoted := ContextMessage{ID: "quoted-notice", Role: role, Content: guidance.ContextTrimNotice}
-			out := DeterministicFit(fitCfg(), []ContextMessage{quoted}, 10000)
+			out := DeterministicFitWithReserve(fitCfg(), []ContextMessage{quoted}, 10000, 0)
 			if len(out) != 1 || out[0].ID != quoted.ID || out[0].Role != role {
 				t.Fatalf("quoted notice was replaced: %+v", out)
 			}
@@ -165,7 +165,7 @@ func TestDeterministicFitPreservesQuotedTrimNotice(t *testing.T) {
 func TestDeterministicFitReplacesNoticeByIdentity(t *testing.T) {
 	notice := contextTrimNotice()
 	notice.Content = "Host trim notice from an earlier fitting pass."
-	out := DeterministicFit(fitCfg(), []ContextMessage{charterRow(), notice}, 10000)
+	out := DeterministicFitWithReserve(fitCfg(), []ContextMessage{charterRow(), notice}, 10000, 0)
 	if len(out) != 2 || out[1].ID != contextTrimNoticeID || out[1].Content != guidance.ContextTrimNotice {
 		t.Fatalf("host notice was not refreshed: %+v", out)
 	}

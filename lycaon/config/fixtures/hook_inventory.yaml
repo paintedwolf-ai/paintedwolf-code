@@ -115,13 +115,3 @@ hooks:
     reentrant: false
     notes: |
       Writes the search projection without re-entering RunManager.
-
-  - manager: delegation.Manager
-    field: OnCloseout
-    fires_on: "delegation finishes via closeout"
-    binds_to: workflowMgr.Phases.TryAutoAdvance
-    posture: synchronous
-    reentrant: true
-    notes: |
-      TryAutoAdvance may synchronously fire workflow hooks. Phase transitions
-      are idempotent.

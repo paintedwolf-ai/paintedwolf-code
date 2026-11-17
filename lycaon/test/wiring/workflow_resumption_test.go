@@ -46,7 +46,7 @@ func runSource(run *api.WorkflowRun) anchor.RunSource {
 }
 
 func TestWorkflowResumption_100RetainsPromptRulesAndGateFeedback(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "security-survey")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
@@ -117,7 +117,7 @@ func TestWorkflowResumption_100RetainsPromptRulesAndGateFeedback(t *testing.T) {
 }
 
 func TestWorkflowResumption_100AdvancesThroughEveryPhase(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "security-survey")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)

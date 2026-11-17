@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -139,7 +140,7 @@ func (s *SQL) HasActiveProjectSessions(ctx context.Context, projectID string, ac
 			    )
 			  )
 		)`
-	err := s.db.QueryRowContext(ctx, query, projectID, db.FormatTime(activeSince)).Scan(&exists)
+	err := s.db.QueryRowContext(ctx, query, projectID, timelayout.Format(activeSince)).Scan(&exists)
 	if err != nil {
 		return false, fmt.Errorf("check active project sessions: %w", err)
 	}
@@ -163,7 +164,7 @@ func (s *SQL) ReassignSessionsWorkspaceRoot(ctx context.Context, projectID, from
 	q := db.New(s.db)
 	return q.ReassignSessionsWorkspaceRoot(ctx, db.ReassignSessionsWorkspaceRootParams{
 		WorkspaceRootID:   replacement,
-		UpdatedAt:         db.FormatTime(time.Now().UTC()),
+		UpdatedAt:         timelayout.Format(time.Now().UTC()),
 		ProjectID:         projectID,
 		WorkspaceRootID_2: db.NullString(fromRootID),
 	})

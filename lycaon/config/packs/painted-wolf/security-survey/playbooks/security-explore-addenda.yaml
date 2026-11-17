@@ -1,10 +1,10 @@
 id: security-explore-addenda
 extends: worker-leg-default
-description: "Security exploration leg checklist"
+description: "Security exploration worker checklist"
 triggers:
   topology_patterns: ["pipeline", "default-pipeline", "*"]
   phase_ids: ["research", "implement", "closeout"]
 checklist:
-  - "Use security MCP tools from Leg tools only"
+  - "Use security MCP tools from offered tools only"
   - "Report ScanGuidanceSummary codes for the coordinator"
   - "Exploration does not satisfy security closeout — host ingester is authoritative"

@@ -132,7 +132,7 @@ func (s *Service) Answer(ctx context.Context, req Request) (*Result, error) {
 	out.Count = Count{Value: len(hits), Relation: relationFor(truncated)}
 	out.Facets = facetsFor(hits, truncated)
 	if truncated {
-		out.NextAction = "More rows matched than were returned. Narrow with agent:, leg:, tool:, or after: rather than repeating this query."
+		out.NextAction = "More rows matched than were returned. Narrow with worker:, agent:, leg:, tool:, or after: rather than repeating this query."
 	}
 	if removed > 0 {
 		out.NextAction = strings.TrimSpace(out.NextAction + " Some matching rows belong to deleted sessions and carry no content.")
@@ -257,6 +257,7 @@ func statedQuery(in search.SearchInterpretation) string {
 
 func facetsFor(hits []Hit, truncated bool) *Facets {
 	f := &Facets{
+		ByWorker:   map[string]int{},
 		ByAgent:    map[string]int{},
 		ByLeg:      map[string]int{},
 		ByKind:     map[string]int{},
@@ -264,6 +265,7 @@ func facetsFor(hits []Hit, truncated bool) *Facets {
 		Exhaustive: !truncated,
 	}
 	for _, h := range hits {
+		countInto(f.ByWorker, h.Worker)
 		countInto(f.ByAgent, h.AgentType)
 		countInto(f.ByLeg, h.LegID)
 		countInto(f.ByKind, h.Kind)

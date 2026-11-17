@@ -2,7 +2,7 @@ import type { EditorView } from "@codemirror/view";
 import type { LycaonClient } from "../../api/client.ts";
 import type { ProjectRoot } from "../../api/types.ts";
 import type { LifecycleHooks } from "../commands/project-files-lifecycle.ts";
-import type { FilesBufferRelease } from "../documents/project-files-buffers.ts";
+import type { FilesBufferRelease } from "../documents/project-files-buffer-lifecycle.ts";
 import type { FileBuffer, ProjectFilesState } from "../documents/files-buffer-state.ts";
 import type { FileVersionView } from "../history/file-version.ts";
 import type { FileBufferKey } from "./project-files-model.ts";

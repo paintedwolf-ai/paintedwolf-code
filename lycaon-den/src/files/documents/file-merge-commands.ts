@@ -1,11 +1,11 @@
-import { filesBufferText } from "../documents/project-files-buffers.ts";
+import { filesBufferText } from "../documents/files-buffer-state.ts";
 import { createSignal } from "solid-js";
 import { normalizeEolForEditor } from "../../components/source/editor/eol.ts";
 import { isSourceWriteConflict, sourceSaveErrorMessage } from "../../components/source/editor/source-editor-model.ts";
 import type { BufferMergeModel } from "../documents/buffer-merge.ts";
 import { resolveEditorConflict, editorReplica } from "../documents/editor-document.ts";
 import { flushFilesDraftSyncFor } from "../documents/files-draft-sync.ts";
-import { applyFilesBufferSaved } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferSaved } from "../documents/project-files-buffer-io.ts";
 import { type FileBufferKey } from "../components/project-files-model.ts";
 import { dropFilesEditorHandlers } from "../editor/files-editor-host.ts";
 import type { FilesScope } from "../components/files-scope.ts";

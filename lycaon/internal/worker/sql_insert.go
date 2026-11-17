@@ -4,12 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -27,14 +27,6 @@ func (s *SQLStore) InsertTask(ctx context.Context, task api.WorkerTask) error {
 	return s.mutateInTx(ctx, task.ID, func(q *db.Queries) error {
 		return insertTask(ctx, q, task)
 	})
-}
-
-// InsertTaskTx inserts a job in the caller's transaction.
-func InsertTaskTx(ctx context.Context, tx *sql.Tx, task api.WorkerTask) error {
-	if tx == nil {
-		return fmt.Errorf("worker insert transaction required")
-	}
-	return insertTask(ctx, db.New(tx), task)
 }
 
 func insertTask(ctx context.Context, queries *db.Queries, task api.WorkerTask) error {
@@ -107,11 +99,10 @@ func insertTask(ctx context.Context, queries *db.Queries, task api.WorkerTask) e
 		ResultJson:       resultJSON,
 		Error:            db.NullString(task.Error),
 		FailureJson:      failureJSON,
-		CreatedAt:        db.FormatTime(task.CreatedAt),
+		CreatedAt:        timelayout.Format(task.CreatedAt),
 		StartedAt:        db.NullTimePtr(task.StartedAt),
 		CompletedAt:      db.NullTimePtr(task.CompletedAt),
 		OverlayID:        db.NullString(task.OverlayID),
-		MaxToolLoops:     workerJobMaxToolLoops(task.MaxToolLoops),
 		ToolLoopsUsed:    workerJobCount(task.ToolLoopsUsed),
 		ToolCallsUsed:    workerJobCount(task.ToolCallsUsed),
 	})
@@ -124,13 +115,6 @@ func insertTask(ctx context.Context, queries *db.Queries, task api.WorkerTask) e
 		}
 	}
 	return nil
-}
-
-func workerJobMaxToolLoops(n int) sql.NullInt64 {
-	if n <= 0 {
-		return sql.NullInt64{}
-	}
-	return sql.NullInt64{Int64: int64(n), Valid: true}
 }
 
 func workerJobCount(n int) sql.NullInt64 {

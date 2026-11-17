@@ -2,11 +2,12 @@ package llm
 
 import (
 	"context"
+	"strings"
+	"sync"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/pkg/api"
-	"strings"
-	"sync"
 )
 
 // MockConfig is the on-disk mock_llm.yaml shape.
@@ -104,19 +105,6 @@ func (c *RecordingClient) AllRequests() []modelcall.CompletionRequest {
 	defer c.mu.Unlock()
 	out := make([]modelcall.CompletionRequest, len(c.all))
 	copy(out, c.all)
-	return out
-}
-
-// RequestsWhere preserves request order; a nil predicate matches every request.
-func (c *RecordingClient) RequestsWhere(pred func(modelcall.CompletionRequest) bool) []modelcall.CompletionRequest {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	var out []modelcall.CompletionRequest
-	for _, req := range c.all {
-		if pred == nil || pred(req) {
-			out = append(out, req)
-		}
-	}
 	return out
 }
 
