@@ -2,11 +2,14 @@ package wiring
 
 import (
 	"context"
+	"maps"
 	"sort"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/scaffoldvars"
@@ -18,14 +21,38 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workflow"
+	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
+// startableShippedManifests returns every bundled manifest and every bundled
+// template expanded and resolved against them, keyed id@version.
+func startableShippedManifests(t *testing.T) map[string]workflowdef.Manifest {
+	t.Helper()
+	bundled, err := workflowdef.RegistryFromDirs("")
+	testutil.FailErr(t, "workflowdef.RegistryFromDirs", err)
+	out := bundled.All()
+	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
+	testutil.FailErr(t, "load workflow templates", err)
+	for id, tpl := range templates {
+		yaml, err := tpl.Expand(map[string]any{"workflow_id": "wiring-" + id, "question": "Which API surface?"})
+		testutil.FailErr(t, "expand template "+id, err)
+		raw, err := workflowdef.ParseManifestYAML(yaml)
+		testutil.FailErr(t, "parse template "+id, err)
+		catalog := maps.Clone(bundled.All())
+		catalog[raw.ID+"@"+raw.Version] = raw
+		resolved, err := workflowdef.ResolveManifestChain(raw, catalog)
+		testutil.FailErr(t, "resolve template "+id, err)
+		out[resolved.ID+"@"+resolved.Version] = resolved
+	}
+	return out
+}
+
 // A run parked on a human-input phase refuses every coordinator loop wake, for
-// every human-input phase of every shipped workflow the run manager can start.
+// every human-input phase of every shipped workflow and template.
 func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 	ctx := context.Background()
 	sqlDB := testdbfixture.Open(t, "loop-wake-human-input.db")
@@ -36,13 +63,11 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 	testutil.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(ctx, agents))
 	mgr.Profiles.SetAgentRegistry(agents)
 
-	manifests, err := workflowdef.RegistryFromDirs("")
-	testutil.FailErr(t, "workflowdef.RegistryFromDirs", err)
-	wfMgr := workflow.NewManager(workflowpersistence.New(sqlDB), sessions, manifests, nil)
+	all := startableShippedManifests(t)
+	wfMgr := workflow.NewManager(workflowpersistence.New(sqlDB), sessions, workflowdef.NewRegistry(all), nil)
 	mgr.SetWorkflowDomains(&session.WorkflowDomains{Runs: wfMgr.Store.Runs, Policy: wfMgr.Policy, Ambient: wfMgr.Ambient, Blueprints: wfMgr.Blueprints, Batch: wfMgr.Batch, Slash: wfMgr.Slash, Requests: wfMgr.Requests, Feedback: wfMgr.Feedback, Transcript: wfMgr.Transcript, Asks: wfMgr.Asks, Fanout: wfMgr.Fanout, Phases: wfMgr.Phases, Reports: wfMgr.Reports, Recovery: wfMgr.Recovery, Cleanup: wfMgr})
 	mgr.SetLoopWorkflowSource(&loopwake.WorkflowDomains{Runs: wfMgr.Store.Runs, Approvals: wfMgr.Policy, Obligations: wfMgr.Obligations})
 
-	all := manifests.All()
 	keys := make([]string, 0, len(all))
 	for key := range all {
 		keys = append(keys, key)
@@ -61,7 +86,7 @@ func TestHumanInputScaffoldDeniesCoordinatorLoop(t *testing.T) {
 				testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 				sess, err := sessions.Create(ctx, wire.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 				testutil.FailErr(t, "create session", err)
-				run, err := wfMgr.Starts.Start(ctx, sess.ID, wire.StartWorkflowRunRequest{WorkflowID: m.ID, WorkflowVersion: m.Version})
+				run, err := wfMgr.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{WorkflowID: m.ID, WorkflowVersion: m.Version})
 				testutil.FailErr(t, "start "+key, err)
 				run.CurrentPhase = phase.ID
 				run.Status = wire.WorkflowRunStatusRunning
