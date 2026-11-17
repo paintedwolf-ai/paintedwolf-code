@@ -52,8 +52,8 @@ SELECT v.operation_id FROM source_versions v WHERE v.file_id = sqlc.arg(file_id)
 -- name: DeleteEmptySourceOperation :exec
 DELETE FROM source_operations
 WHERE id = sqlc.arg(operation_id)
-  AND NOT EXISTS (SELECT 1 FROM source_effects e WHERE e.operation_id = sqlc.arg(operation_id))
-  AND NOT EXISTS (SELECT 1 FROM source_versions v WHERE v.operation_id = sqlc.arg(operation_id));
+  AND NOT EXISTS (SELECT 1 FROM source_effects e WHERE e.operation_id = source_operations.id)
+  AND NOT EXISTS (SELECT 1 FROM source_versions v WHERE v.operation_id = source_operations.id);
 
 -- name: AdoptSourceDirectoryAsRoot :exec
 UPDATE source_directories SET parent_id = NULL, name = '', root_id = sqlc.arg(root_id)

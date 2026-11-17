@@ -27,8 +27,8 @@ func (q *Queries) AdoptSourceDirectoryAsRoot(ctx context.Context, arg AdoptSourc
 const deleteEmptySourceOperation = `-- name: DeleteEmptySourceOperation :exec
 DELETE FROM source_operations
 WHERE id = ?1
-  AND NOT EXISTS (SELECT 1 FROM source_effects e WHERE e.operation_id = sqlc.arg(operation_id))
-  AND NOT EXISTS (SELECT 1 FROM source_versions v WHERE v.operation_id = sqlc.arg(operation_id))
+  AND NOT EXISTS (SELECT 1 FROM source_effects e WHERE e.operation_id = source_operations.id)
+  AND NOT EXISTS (SELECT 1 FROM source_versions v WHERE v.operation_id = source_operations.id)
 `
 
 func (q *Queries) DeleteEmptySourceOperation(ctx context.Context, operationID string) error {
