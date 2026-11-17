@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/gitexec"
@@ -97,5 +98,54 @@ func TestLandWorktreeCountsExactSourceAndIsIdempotent(t *testing.T) {
 	testutil.FailErr(t, "head after second land", err)
 	if count != 0 || before != after {
 		t.Fatalf("second land count=%d head changed=%v", count, before != after)
+	}
+}
+
+// Each state that blocks a land refuses with its reason before anything merges,
+// and the base keeps its branch tip.
+func TestLandWorktreeRefusesEachBlockedState(t *testing.T) {
+	run := func(t *testing.T, dir string, args ...string) string {
+		t.Helper()
+		out, code, err := gitexec.Run(t.Context(), dir, args, hermeticOpts(0))
+		if err != nil || code != 0 {
+			t.Fatalf("git %v: exit %d: %v\n%s", args, code, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	for _, tc := range []struct {
+		reason, currentBranch string
+		block                 func(*testing.T, WorktreeLandRequest)
+	}{
+		{"worktree_stale", "", func(t *testing.T, req WorktreeLandRequest) {
+			testutil.FailErr(t, "remove worktree", os.RemoveAll(req.WorktreePath))
+		}},
+		{"worktree_dirty", "", func(t *testing.T, req WorktreeLandRequest) {
+			testutil.FailErr(t, "dirty worktree", os.WriteFile(filepath.Join(req.WorktreePath, "dirty.txt"), []byte("d\n"), 0o600))
+		}},
+		{"base_branch_missing", "", func(t *testing.T, req WorktreeLandRequest) {
+			run(t, req.BaseDir, "checkout", "-q", "-b", "other")
+			run(t, req.BaseDir, "branch", "-q", "-D", req.BaseBranch)
+		}},
+		{"base_on_other_branch", "other", func(t *testing.T, req WorktreeLandRequest) {
+			run(t, req.BaseDir, "checkout", "-q", "-b", "other")
+		}},
+		{"base_dirty", "", func(t *testing.T, req WorktreeLandRequest) {
+			testutil.FailErr(t, "dirty base", os.WriteFile(filepath.Join(req.BaseDir, "base-dirty.txt"), []byte("d\n"), 0o600))
+		}},
+	} {
+		t.Run(tc.reason, func(t *testing.T) {
+			t.Parallel()
+			mgr, req := landFixture(t)
+			before := run(t, req.BaseDir, "rev-parse", "HEAD")
+			tc.block(t, req)
+			_, err := mgr.LandWorktree(t.Context(), req)
+			var blocked *WorktreeLandError
+			if !errors.As(err, &blocked) || blocked.Reason != tc.reason || blocked.CurrentBranch != tc.currentBranch {
+				t.Fatalf("land = %v, want blocked by %s (current branch %q)", err, tc.reason, tc.currentBranch)
+			}
+			if after := run(t, req.BaseDir, "rev-parse", "HEAD"); after != before {
+				t.Fatalf("a blocked land moved the base from %s to %s", before, after)
+			}
+		})
 	}
 }
