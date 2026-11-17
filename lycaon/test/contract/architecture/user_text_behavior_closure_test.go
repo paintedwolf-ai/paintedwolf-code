@@ -59,6 +59,9 @@ func TestCoordinatorPromptBooleanGatesRegistered(t *testing.T) {
 		}
 	}
 	for gate := range coordinatorOccurrenceGates {
+		if vocab.AllowsReference(gate) {
+			violations = append(violations, "coordinatorOccurrenceGates entry "+gate+" is a declared reader fact")
+		}
 		if !usedOccurrence[gate] {
 			violations = append(violations, "coordinatorOccurrenceGates entry "+gate+" gates no coordinator template")
 		}

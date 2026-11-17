@@ -381,7 +381,7 @@ func TestMultiRootAnalyzeRootsBudget(t *testing.T) {
 			}
 		}
 	}
-	budget := repoinfo.BriefBudget{TotalBytes: 1024, PrimaryShare: 0.6}
+	budget := repoinfo.BriefBudget{TotalBytes: 80, PrimaryShare: 0.5}
 	provider := repotest.NewProvider(t)
 	defer func() { _ = provider.Close() }()
 	mrb, err := repoinfo.AnalyzeRoots(ctx, []projectroot.RootRef{
