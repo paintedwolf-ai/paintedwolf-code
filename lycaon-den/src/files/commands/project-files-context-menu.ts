@@ -619,20 +619,13 @@ export function filesContextMenuItems(
   }
 }
 
-/** A chat location's rows browse and edit; files outside the project are never reorganized from here. */
+/** A chat location's rows browse and edit; files outside the project are never reorganized or restored from here. */
 function outsideRowMenuItems(
   target: Extract<FilesContextTarget, { surface: "tree-row" }>,
   actions: FilesContextMenuActions,
   openIn: ReturnType<NonNullable<FilesContextMenuActions["openInTarget"]>> | undefined,
 ): ContextMenuItem[] {
   const items: ContextMenuItem[] = [];
-  const revertChangedFile = actions.revertChangedFile;
-  if (target.deleted && !target.isDir && revertChangedFile) {
-    items.push(contextAction("restoreComparisonBaseline", {
-      testId: "files-ctx-tree-revert",
-      onSelect: () => revertChangedFile(target.rootId, target.path),
-    }));
-  }
   const openFileInNewWindow = actions.openFileInNewWindow;
   if (!target.isDir && openFileInNewWindow) {
     items.push(contextAction("openInNewWindow", {
