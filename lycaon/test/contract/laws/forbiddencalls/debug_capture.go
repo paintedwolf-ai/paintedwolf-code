@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/debugpaths"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/test/contract/laws"
 )
 
@@ -97,6 +98,25 @@ var debugSwitch = []laws.Rule{{
 					}
 				})
 			}
+		}
+	},
+}}
+
+var overlayDir = []laws.Rule{{
+	// Protected settings paths share one overlay directory definition.
+	Name:    "overlay-dir-name-has-one-definition",
+	Anchors: []laws.Anchor{laws.Func("internal/settingsoverlay", "DirName"), laws.GoPath("internal/settingsoverlay/basenames.go")},
+	Check: func(r *laws.Run) {
+		name := settingsoverlay.DirName()
+		for _, f := range r.GoFiles(laws.Production, "internal", "cmd", "pkg", "config", "test") {
+			if f.Rel == "internal/settingsoverlay/basenames.go" {
+				continue
+			}
+			laws.StringLits(f.AST, func(lit *ast.BasicLit, value string) {
+				if value == name {
+					r.ReportAt(lit.Pos(), "spells the overlay directory %q; use settingsoverlay.DirName()", name)
+				}
+			})
 		}
 	},
 }}

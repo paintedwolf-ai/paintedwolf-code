@@ -47,21 +47,7 @@ var projectWalk = []laws.Rule{{
 	// Session code reaches workflow capabilities through their typed port.
 	Name: "session-has-no-workflow-type-assertions",
 	Anchors: []laws.Anchor{laws.AnchorFunc("a workflows field in internal/session", func(c *laws.Corpus) error {
-		for _, f := range c.Go().Files() {
-			if f.IsTest || !laws.Under(f, "internal/session") {
-				continue
-			}
-			found := false
-			ast.Inspect(f.AST, func(n ast.Node) bool {
-				sel, ok := n.(*ast.SelectorExpr)
-				found = found || ok && sel.Sel.Name == "workflows"
-				return !found
-			})
-			if found {
-				return nil
-			}
-		}
-		return errors.New("no selector named workflows")
+		return anyProductionSelector(c, "internal/session", "workflows")
 	})},
 	Check: func(r *laws.Run) {
 		for _, f := range r.GoFiles(laws.Production, "internal/session") {
@@ -120,4 +106,23 @@ func ecosystemLiteral(node ast.Node) (*ast.BasicLit, bool) {
 	}
 	value, err := strconv.Unquote(lit.Value)
 	return lit, err == nil && ecosystemDirectoryNames[value]
+}
+
+// anyProductionSelector anchors on a selector name used below dir.
+func anyProductionSelector(c *laws.Corpus, dir, name string) error {
+	for _, f := range c.Go().Files() {
+		if f.IsTest || !laws.Under(f, dir) {
+			continue
+		}
+		found := false
+		ast.Inspect(f.AST, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectorExpr)
+			found = found || ok && sel.Sel.Name == name
+			return !found
+		})
+		if found {
+			return nil
+		}
+	}
+	return errors.New("no selector named " + name + " below " + dir)
 }

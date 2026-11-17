@@ -70,3 +70,54 @@ func carriesCatalog(t types.Type) bool {
 	path, name := named.Obj().Pkg().Path(), named.Obj().Name()
 	return path == extpacksPkg && name == "EffectiveCatalog" || path == "github.com/lycaon/lycaon/internal/catalogview" && name == "View"
 }
+
+// extensionHandlerBans are the subsystem's own steps; an extension handler
+// submits one typed transaction intent and leaves them to it.
+var extensionHandlerBans = []string{
+	"PrepareInstall", "PrepareInstallMeta", "PrepareRemoval", "PrepareUpdate", "PrepareReload", "PrepareLockDesired",
+	"ApplyMutationToState", "PrepareMetaMemberMutation", "EncodeDesired", "EncodeLock", "AcquireIntentLocks", "WithOmitted",
+}
+
+// packWalkPrimitives enumerate pack directories.
+var packWalkPrimitives = []string{"KindDirs", "DiscoverEffective", "DiscoverStock", "DiscoverStockContent"}
+
+var extensionTransactions = []laws.Rule{{
+	Name:    "extension-handlers-submit-one-intent",
+	Anchors: []laws.Anchor{laws.GoPath("internal/api/extensionadmin/extensions.go"), laws.Func("internal/extpacks", "PrepareInstall"), laws.Func("internal/extpacks", "AcquireIntentLocks")},
+	Check: func(r *laws.Run) {
+		for _, f := range r.GoFiles(laws.Production, "internal/api/extensionadmin") {
+			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+				if pkg == extpacksPkg && contains(extensionHandlerBans, name) {
+					r.ReportAt(sel.Pos(), "extpacks.%s; submit the intent and let the extension subsystem prepare and commit", name)
+				}
+			})
+		}
+	},
+}, {
+	// After resolve, loaders compile from the catalog's captured unit bytes,
+	// so a catalog revision binds what they load.
+	Name:    "pack-content-loaders-compile-from-catalog-bytes",
+	Anchors: []laws.Anchor{laws.Func("internal/extpacks", "DiscoverStockContent"), laws.Func("internal/extpacks", "KindDirs")},
+	Exempt: []laws.Exemption{
+		{Key: "internal/prompts/bundled_layout.go", Reason: "reserved `_` template includes have no unit id"},
+		{Key: "internal/prompts/persona_contract.go", Reason: "reserved persona-contract definition"},
+		{Key: "internal/website/customization.go", Reason: "website codegen projection of the checkout"},
+		{Key: "internal/website/sdk.go", Reason: "website codegen projection of the checkout"},
+		{Key: "internal/workflowvalidate/checks_closure.go", Reason: "author-ref existence probe"},
+		{Key: "internal/testutil/extpackstest/catalog.go", Reason: "test catalog staging helper"},
+	},
+	Check: func(r *laws.Run) {
+		for _, f := range r.GoFiles(laws.Production, laws.Source...) {
+			if laws.Under(f, "internal/extpacks") {
+				continue
+			}
+			walks := false
+			f.Calls(f.AST, func(_ *ast.CallExpr, pkg, name string) {
+				walks = walks || pkg == extpacksPkg && contains(packWalkPrimitives, name)
+			})
+			if walks && !r.Exempt(f.Rel) {
+				r.Report("%s walks pack directories after resolve; compile from catalog.LoadedUnitIDs and UnitContent", f.Rel)
+			}
+		}
+	},
+}}

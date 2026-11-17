@@ -126,3 +126,19 @@ var toolIngest = []laws.Rule{{
 		}
 	},
 }}
+
+var toolOutcomes = []laws.Rule{{
+	// Catalog tools report refusals through codes; the settled error or
+	// rejected outcome is derived from them, never stated.
+	Name:    "catalog-tools-state-no-uncoded-outcome",
+	Anchors: []laws.Anchor{laws.Decl("pkg/api", "ToolResultOutcomeError"), laws.Decl("pkg/api", "ToolResultOutcomeRejected")},
+	Check: func(r *laws.Run) {
+		for _, f := range r.GoFiles(laws.Production, "internal/tools") {
+			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
+				if pkg == "github.com/lycaon/lycaon/pkg/api" && (name == "ToolResultOutcomeError" || name == "ToolResultOutcomeRejected") {
+					r.ReportAt(sel.Pos(), "states %s; return a coded refusal", name)
+				}
+			})
+		}
+	},
+}}
