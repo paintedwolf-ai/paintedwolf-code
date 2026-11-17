@@ -180,7 +180,9 @@ func TestBuildPreservesExplicitSessionLimits(t *testing.T) {
 func TestBuildStopsWhenShutdownArrivesDuringStartup(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	app, err := Build(ctx, testBuildConfig(t, t.TempDir()))
+	cfg := testBuildConfig(t, t.TempDir())
+	cfg.TestChangeDebounce = time.Hour
+	app, err := Build(ctx, cfg)
 	if !errors.Is(err, context.Canceled) || app != nil {
 		t.Fatalf("Build = %v, %v; want no app and the cancellation", app, err)
 	}
