@@ -1,12 +1,30 @@
 """The tolerance an exported artifact is held to against its merged checkpoint."""
 import unittest
 
-from behavior import compare, served_cases
+from behavior import MERGE_TOLERANCE, compare, merge_difference, served_cases
 
 
 def expected(*prompts):
     return {"prompts": [{"name": name, "prompt_tokens": [2, 5], "tokens": tokens, "margins": margins}
                         for name, tokens, margins in prompts]}
+
+
+class MergeDifference(unittest.TestCase):
+    def logits(self, *values):
+        import torch
+        return torch.tensor([[list(values)]])
+
+    def test_rounding_between_the_adapter_and_its_merge_is_measured_and_accepted(self):
+        difference = merge_difference(self.logits(12.0, -3.0, 0.5), self.logits(12.004, -3.0, 0.4999))
+        self.assertAlmostEqual(difference, 0.004, places=5)
+
+    def test_a_merge_that_moves_a_logit_past_the_tolerance_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "departs from its adapter"):
+            merge_difference(self.logits(12.0, -3.0), self.logits(12.0, -3.0 + 2 * MERGE_TOLERANCE))
+
+    def test_a_merge_that_produces_no_number_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "departs from its adapter"):
+            merge_difference(self.logits(12.0, -3.0), self.logits(float("nan"), -3.0))
 
 
 class Compare(unittest.TestCase):

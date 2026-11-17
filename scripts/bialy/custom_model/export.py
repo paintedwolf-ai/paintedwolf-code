@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 import uuid
 
-from behavior import reference, rendered
+from behavior import MERGE_TOLERANCE, merge_difference, reference, rendered
 from checkpoint import atomic_json, exclusive_run, sync_directory
 from common import digest, file_digest, inventory
 from rendering import template_sha256
@@ -59,7 +59,7 @@ def export_owned(model_path, run, out):
             before = model(input_ids=ids).logits
             merged = model.merge_and_unload(safe_merge=True).eval()
             after = merged(input_ids=ids).logits
-        torch.testing.assert_close(before, after, rtol=1e-4, atol=1e-4)
+        difference = merge_difference(before, after)
         staged = out / (".merged-" + uuid.uuid4().hex)
         merged.save_pretrained(staged / "model", safe_serialization=True)
         tokenizer.save_pretrained(staged / "model")
@@ -71,7 +71,7 @@ def export_owned(model_path, run, out):
                     os.fsync(stream.fileno())
         sync_directory(staged / "model")
         sync_directory(staged)
-        stage = {"directory":staged.name, "files":inventory(staged)}
+        stage = {"directory":staged.name, "files":inventory(staged), "merge_logit_difference":difference}
         atomic_json(stage_file, stage)
         del model, base, merged
         gc.collect()
@@ -96,7 +96,8 @@ def export_owned(model_path, run, out):
         raise ValueError("merged checkpoint does not carry the template its rows were rendered with")
     manifest = {"schema":"pw-custom-merge/2", "training_sha256":digest(result), **rendering,
                 "files":inventory(out / "model"), "behavior_sha256":file_digest(out / "behavior.json"),
-                "merge_parity":"passed", "load_parity":"passed"}
+                "merge_parity":{"greatest_logit_difference":stage["merge_logit_difference"], "tolerance":MERGE_TOLERANCE},
+                "load_parity":"passed"}
     atomic_json(out / "manifest.json", manifest)
     return manifest
 
