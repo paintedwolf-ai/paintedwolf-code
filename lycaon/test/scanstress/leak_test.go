@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -88,7 +89,7 @@ func TestRepeatedInterruptsStayBounded(t *testing.T) {
 			obs.finish()
 			t.Fatalf("iteration %d: engine never started", i)
 		}
-		time.Sleep(2 * time.Second)
+		awaitEngineWorking(t, os.Getpid())
 		cancel()
 		select {
 		case err := <-done:
@@ -106,10 +107,13 @@ func TestRepeatedInterruptsStayBounded(t *testing.T) {
 		obs.finish()
 	}
 
-	runtime.GC()
-	time.Sleep(2 * time.Second)
-	endGoroutines := runtime.NumGoroutine()
-	endFDs := openFDs(t)
+	// Sampling goroutines wind down after their observers finish; a leak never does.
+	var endGoroutines, endFDs int
+	testutil.WaitFor(t, "goroutines and descriptors return to under one per run", func() bool {
+		runtime.GC()
+		endGoroutines, endFDs = runtime.NumGoroutine(), openFDs(t)
+		return endGoroutines-baseGoroutines < repeatCount() && endFDs-baseFDs < repeatCount()
+	})
 
 	if leaked := survivingDirs(allRunDirs); len(leaked) > 0 {
 		t.Errorf("run directories accumulated across %d interrupted scans: %v", repeatCount(), leaked)

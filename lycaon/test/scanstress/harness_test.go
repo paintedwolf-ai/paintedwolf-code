@@ -15,6 +15,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // procRow is one line of the host process table.
@@ -235,6 +237,20 @@ func runDirsFromRows(rows []procRow) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// awaitEngineWorking waits until an engine below root has written to its log,
+// so an interrupt meets an engine at work rather than one still starting.
+func awaitEngineWorking(t *testing.T, root int) {
+	t.Helper()
+	testutil.WaitFor(t, "the engine writes its log", func() bool {
+		for _, dir := range runDirsFromRows(descendants(processTable(t), root)) {
+			if info, err := os.Stat(filepath.Join(dir, "semgrep.log")); err == nil && info.Size() > 0 {
+				return true
+			}
+		}
+		return false
+	})
 }
 
 // survivingDirs reports which of the given paths still exist.

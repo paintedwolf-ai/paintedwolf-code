@@ -135,8 +135,7 @@ func runShutdownCase(t *testing.T, sig syscall.Signal, handler bool) {
 	if len(engine) == 0 {
 		t.Fatalf("victim %d never started an engine; output:\n%s", victim, stderr.String())
 	}
-	// Steady-state engine work before the interrupt.
-	time.Sleep(5 * time.Second)
+	awaitEngineWorking(t, victim)
 	engine = engineProcesses(descendants(processTable(t), victim))
 	runDirs := runDirsFromRows(descendants(processTable(t), victim))
 	enginePIDs := make([]int, 0, len(engine))

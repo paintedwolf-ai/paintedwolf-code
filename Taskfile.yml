@@ -426,9 +426,13 @@ tasks:
       - python3 {{.SCRIPTS_DIR}}/rewrite-fail-messages.py
 
   test:fail-messages:check:
-    desc: CI guard — fail if any bare t.Fatal(err) patterns remain in test files
+    desc: CI guard — fail on bare t.Fatal(err) patterns or fixed real-clock sleeps in test files
     cmds:
       - python3 {{.SCRIPTS_DIR}}/rewrite-fail-messages.py --check
+      - cmd: go test -timeout 0 ./...
+        dir: '{{.SCRIPTS_DIR}}/testsleep'
+      - cmd: go run . --root ../../lycaon
+        dir: '{{.SCRIPTS_DIR}}/testsleep'
 
   check:digest:
     desc: 'Lighter summarized pass (build + lint:fast + Go + Den + harness canary); not the ship gate. FULL=1 for full Go tests'

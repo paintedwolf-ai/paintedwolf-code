@@ -51,8 +51,7 @@ func TestCancellationTerminatesEngineTree(t *testing.T) {
 		obs.finish()
 		t.Fatal("engine never started; nothing to cancel")
 	}
-	// Let the engine reach steady-state work before the interrupt.
-	time.Sleep(5 * time.Second)
+	awaitEngineWorking(t, os.Getpid())
 	engineBefore := engineProcesses(descendants(processTable(t), os.Getpid()))
 	cancelAt := time.Now()
 	cancel()

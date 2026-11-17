@@ -658,20 +658,21 @@ func (w *terminalWatch) text() string {
 
 func (w *terminalWatch) await(t *testing.T, marker string) {
 	t.Helper()
-	for !strings.Contains(w.text(), marker) {
+	testutil.WaitFor(t, fmt.Sprintf("the output shows %q", marker), func() bool {
+		closed := false
 		select {
 		case <-w.done:
-			if !strings.Contains(w.text(), marker) {
-				t.Fatalf("terminal closed before %q:\n%q", marker, w.text())
-			}
-			return
+			closed = true
 		default:
 		}
-		if t.Context().Err() != nil {
-			t.Fatalf("terminal never showed %q:\n%q", marker, w.text())
+		if strings.Contains(w.text(), marker) {
+			return true
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
+		if closed {
+			t.Fatalf("terminal closed before %q:\n%q", marker, w.text())
+		}
+		return false
+	})
 }
 
 func TestTerminalWatchKeepsFinalOutputAfterClosing(t *testing.T) {
@@ -1018,11 +1019,14 @@ func TestLinuxExitStatusAndSignalsAreMirrored(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), "/bin/sleep", []string{"30"}, c)
+	cmd, cleanup, err := confine.Command(ctx, helperBinary(t, self), "/bin/sh", []string{"-c", "echo ready; exec sleep 30"}, c)
 	testutil.FailErr(t, "confine.Command", err)
 	defer cleanup()
+	var out terminalWatch
+	cmd.Stdout, cmd.Stderr = &out, &out
 	testutil.FailErr(t, "start sleep", cmd.Start())
-	time.Sleep(time.Second)
+	// The command is running inside the sandbox before the signal is forwarded.
+	out.await(t, "ready")
 	testutil.FailErr(t, "signal helper", cmd.Process.Signal(syscall.SIGTERM))
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()

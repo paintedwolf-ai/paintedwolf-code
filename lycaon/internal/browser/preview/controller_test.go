@@ -142,34 +142,32 @@ func TestPublishActionWithoutStreamIsNoop(t *testing.T) {
 }
 
 func TestClaimEmitsAndSnapshotsInvocationAssociation(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		var events []api.PreviewEvent
-		c := NewController(DefaultConfig(), func(_ context.Context, _, _ string, ev api.PreviewEvent) {
-			events = append(events, ev)
-		})
-		configurePreviewProjection(c)
-		c.pages[streamKey("s", "page-1")] = &stream{
-			projectID:          "project",
-			sessionID:          "s",
-			pageID:             "page-1",
-			assistantMessageID: "assistant-1",
-			toolCallID:         "call-1",
-			held:               &browser.HeldPage{TargetURL: "https://example.test"},
-		}
-
-		c.Claim(context.Background(), "s", "page-1", "assistant-2", "call-2")
-
-		if len(events) != 1 {
-			t.Fatalf("events=%d want 1", len(events))
-		}
-		if events[0].AssistantMessageID != "assistant-2" || events[0].ToolCallID != "call-2" {
-			t.Fatalf("event association=%+v", events[0])
-		}
-		attachments := c.SnapshotForSession(context.Background(), "s")
-		if len(attachments) != 1 || attachments[0].AssistantMessageID != "assistant-2" || attachments[0].ToolCallID != "call-2" {
-			t.Fatalf("attachments=%+v", attachments)
-		}
+	var events []api.PreviewEvent
+	c := NewController(DefaultConfig(), func(_ context.Context, _, _ string, ev api.PreviewEvent) {
+		events = append(events, ev)
 	})
+	configurePreviewProjection(c)
+	c.pages[streamKey("s", "page-1")] = &stream{
+		projectID:          "project",
+		sessionID:          "s",
+		pageID:             "page-1",
+		assistantMessageID: "assistant-1",
+		toolCallID:         "call-1",
+		held:               &browser.HeldPage{TargetURL: "https://example.test"},
+	}
+
+	c.Claim(context.Background(), "s", "page-1", "assistant-2", "call-2")
+
+	if len(events) != 1 {
+		t.Fatalf("events=%d want 1", len(events))
+	}
+	if events[0].AssistantMessageID != "assistant-2" || events[0].ToolCallID != "call-2" {
+		t.Fatalf("event association=%+v", events[0])
+	}
+	attachments := c.SnapshotForSession(context.Background(), "s")
+	if len(attachments) != 1 || attachments[0].AssistantMessageID != "assistant-2" || attachments[0].ToolCallID != "call-2" {
+		t.Fatalf("attachments=%+v", attachments)
+	}
 }
 
 func TestSnapshotProjectsMetadataInTheAttachmentProject(t *testing.T) {
@@ -270,55 +268,58 @@ func TestStopCastClearsPendingFrame(t *testing.T) {
 }
 
 func TestPendingFrameIsMaskedAgainstItsOwnPageState(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.MaxFPS = 2
-	c := NewController(cfg, func(context.Context, string, string, api.PreviewEvent) {})
-	c.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
-	var mu sync.Mutex
-	var seen []browser.PageRegions
-	c.projectFrame = func(
-		_ context.Context, _ *captureprojection.Projector, _ captureprojection.Scope,
-		regions browser.PageRegions, _ string, raw []byte,
-	) ([]byte, error) {
-		mu.Lock()
-		seen = append(seen, regions)
-		mu.Unlock()
-		return append([]byte(nil), raw...), nil
-	}
-	h := &castHandle{cancel: func() {}, done: make(chan struct{})}
-	st := &stream{
-		projectID: "p", sessionID: "s", pageID: "page-1", cast: h,
-		minInterval: time.Second / time.Duration(cfg.MaxFPS),
-		held:        &browser.HeldPage{Width: 100, Height: 80},
-		lastPublish: time.Now(),
-	}
-	c.mu.Lock()
-	c.pages[streamKey("s", "page-1")] = st
-	c.mu.Unlock()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.MaxFPS = 2
+		c := NewController(cfg, func(context.Context, string, string, api.PreviewEvent) {})
+		c.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
+		var mu sync.Mutex
+		var seen []browser.PageRegions
+		c.projectFrame = func(
+			_ context.Context, _ *captureprojection.Projector, _ captureprojection.Scope,
+			regions browser.PageRegions, _ string, raw []byte,
+		) ([]byte, error) {
+			mu.Lock()
+			seen = append(seen, regions)
+			mu.Unlock()
+			return append([]byte(nil), raw...), nil
+		}
+		h := &castHandle{cancel: func() {}, done: make(chan struct{})}
+		st := &stream{
+			projectID: "p", sessionID: "s", pageID: "page-1", cast: h,
+			minInterval: time.Second / time.Duration(cfg.MaxFPS),
+			held:        &browser.HeldPage{Width: 100, Height: 80},
+			lastPublish: time.Now(),
+		}
+		c.mu.Lock()
+		c.pages[streamKey("s", "page-1")] = st
+		c.mu.Unlock()
 
-	captured := browser.PageRegions{
-		Regions: []captureprojection.Region{{
-			Text: "token", Spans: []captureprojection.TextSpan{{
-				Start: 0, End: 1, Rects: []captureprojection.Rect{{X: 1, Y: 2, Width: 3, Height: 4}},
+		captured := browser.PageRegions{
+			Regions: []captureprojection.Region{{
+				Text: "token", Spans: []captureprojection.TextSpan{{
+					Start: 0, End: 1, Rects: []captureprojection.Rect{{X: 1, Y: 2, Width: 3, Height: 4}},
+				}},
 			}},
-		}},
-		Complete: true, Width: 100, Height: 80,
-	}
-	c.offerFrame(context.Background(), st, h, []byte{0xff, 0xd8}, "", "", captured)
-	time.Sleep(st.minInterval + 20*time.Millisecond)
-	c.flushPending(context.Background(), st, h)
+			Complete: true, Width: 100, Height: 80,
+		}
+		c.offerFrame(context.Background(), st, h, []byte{0xff, 0xd8}, "", "", captured)
+		time.Sleep(st.minInterval + 20*time.Millisecond)
+		synctest.Wait()
+		c.flushPending(context.Background(), st, h)
 
-	mu.Lock()
-	defer mu.Unlock()
-	if len(seen) != 1 {
-		t.Fatalf("projected frames = %d, want 1", len(seen))
-	}
-	if len(seen[0].Regions) != 1 || seen[0].Regions[0].Text != "token" {
-		t.Fatalf("frame was masked against %+v, want the geometry captured with it", seen[0])
-	}
-	if seen[0].Width != captured.Width || seen[0].Height != captured.Height {
-		t.Fatalf("mask extent = %vx%v, want %vx%v", seen[0].Width, seen[0].Height, captured.Width, captured.Height)
-	}
+		mu.Lock()
+		defer mu.Unlock()
+		if len(seen) != 1 {
+			t.Fatalf("projected frames = %d, want 1", len(seen))
+		}
+		if len(seen[0].Regions) != 1 || seen[0].Regions[0].Text != "token" {
+			t.Fatalf("frame was masked against %+v, want the geometry captured with it", seen[0])
+		}
+		if seen[0].Width != captured.Width || seen[0].Height != captured.Height {
+			t.Fatalf("mask extent = %vx%v, want %vx%v", seen[0].Width, seen[0].Height, captured.Width, captured.Height)
+		}
+	})
 }
 
 func TestAcceptFrameBoundsGeometryReads(t *testing.T) {
