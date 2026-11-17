@@ -30,7 +30,7 @@ func TestEveryGateFailureRejectsAdvanceWithItsFeedback(t *testing.T) {
 			}
 			res := enrichGateFailure(t, enricher, workflowAdvanceTool, wf)
 			assertGateBlocked(t, res, api.ToolResultOutcomeRejected)
-			own, err := catalog.RenderGateFeedback(t.Context(), gateID, feedback.GateFeedbackContext(wf, nil))
+			own, err := catalog.RenderGateFeedback(t.Context(), gateID, feedback.GateFeedbackContext(wf, feedback.PlanStubGateExtras("")))
 			contractcheck.FailErr(t, "RenderGateFeedback", err)
 			if own == "" || !strings.Contains(own, gateID) {
 				t.Fatalf("gate %s feedback does not carry its id", gateID)

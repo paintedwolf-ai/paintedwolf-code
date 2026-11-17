@@ -10,7 +10,7 @@ import (
 )
 
 // A review_loop phase spawns its reviewer through task, so the coordinator
-// surface it binds must offer task immediately.
+// surface it binds, directly or through its surface profile, offers task immediately.
 func TestReviewLoopDeliberationPhasesBindAdjudicateSurface(t *testing.T) {
 	t.Parallel()
 	reg, err := workflowdef.RegistryFromDirs("")
@@ -22,13 +22,15 @@ func TestReviewLoopDeliberationPhasesBindAdjudicateSurface(t *testing.T) {
 				continue
 			}
 			checked++
-			plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: ph.CoordinatorSurface}, 1)
+			binding, err := workflowdef.ResolveSurfaceBinding(m, ph.ID, m.ID, "")
+			contractcheck.FailErr(t, "ResolveSurfaceBinding "+key+" "+ph.ID, err)
+			plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: binding.CoordinatorSurface}, 1)
 			if err != nil {
-				t.Errorf("%s phase %s: compile surface %q: %v", key, ph.ID, ph.CoordinatorSurface, err)
+				t.Errorf("%s phase %s: compile surface %q: %v", key, ph.ID, binding.CoordinatorSurface, err)
 				continue
 			}
 			if !slices.Contains(plan.ImmediateNames(), "task") {
-				t.Errorf("%s phase %s: surface %q does not offer task immediately", key, ph.ID, ph.CoordinatorSurface)
+				t.Errorf("%s phase %s: surface %q does not offer task immediately", key, ph.ID, binding.CoordinatorSurface)
 			}
 		}
 	}

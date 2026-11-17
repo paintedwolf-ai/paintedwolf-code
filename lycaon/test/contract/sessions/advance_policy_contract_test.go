@@ -47,11 +47,14 @@ func TestGateFeedbackSatisfySplitByAdvancePolicy(t *testing.T) {
 				if !catalog.Has(gateID) {
 					continue
 				}
+				binding, err := workflowdef.ResolveSurfaceBinding(m, phase.ID, m.ID, "")
+				contractcheck.FailErr(t, "ResolveSurfaceBinding "+key+" "+phase.ID, err)
 				for _, policy := range policies {
 					offered := offeredCoordinatorTools(t, api.CoordinatorRunContext{
 						WorkflowID: m.ID, WorkflowVersion: m.Version, RunStatus: "running",
-						CurrentPhase: phase.ID, FailedLeaves: []string{gateID},
-						PhaseCoordinatorSurface: phase.CoordinatorSurface, PhaseSurfaceTemplate: phase.SurfaceTemplate,
+						CurrentPhase: phase.ID, FailedLeaves: []string{gateID}, SurfaceProfile: m.SurfaceProfile,
+						PhaseCoordinatorSurface: binding.CoordinatorSurface, PhaseSurfaceTemplate: binding.SurfaceTemplate,
+						PhaseModeRefs: binding.ModeRefs, WorkflowInvestigateEligible: &binding.WorkflowInvestigateEligible,
 						AdvanceWhenGateMet: string(policy),
 					})
 					out := renderGateFeedback(t, catalog, gateID, feedback.WorkflowEvaluationContext{
@@ -81,8 +84,8 @@ func renderGateFeedback(t *testing.T, catalog *feedback.GateFeedbackCatalog, gat
 	return out
 }
 
-// offeredCoordinatorTools resolves the turn's surface as the prompt loop does and
-// applies the advance policy's effect on workflow_advance.
+// offeredCoordinatorTools resolves the turn's surface as the prompt loop does from
+// the run frame's phase binding, and applies the advance policy's effect on workflow_advance.
 func offeredCoordinatorTools(t *testing.T, runCtx api.CoordinatorRunContext) func(string) bool {
 	t.Helper()
 	profile := surface.ResolveTurnProfile(runCtx, &api.Session{Posture: api.SessionPostureBuild}, nil)
