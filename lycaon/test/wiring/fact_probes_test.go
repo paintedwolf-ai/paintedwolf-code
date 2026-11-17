@@ -92,7 +92,7 @@ func probeProgram(t *testing.T, s *replaySession, probe programProbe) (refused b
 		testutil.FailErr(t, "seed "+name, os.WriteFile(filepath.Join(s.dir, name), []byte(body), 0o644))
 	}
 	result := s.call(t, "command", map[string]any{"command": probe.source})
-	out, hasOutcome := programOutcome(t, result)
+	out, hasOutcome := probeOutcome(t, result)
 	typed := slices.ContainsFunc(result.Feedback, func(f wire.ToolFeedback) bool { return slices.Contains(profileRefusals, f.Code) }) ||
 		(hasOutcome && out.Refusal != nil && slices.Contains(profileRefusals, out.Refusal.Code))
 	switch {
@@ -109,8 +109,8 @@ func probeProgram(t *testing.T, s *replaySession, probe programProbe) (refused b
 	}
 }
 
-// programOutcome decodes the program outcome a command result carries.
-func programOutcome(t *testing.T, result *wire.ToolResult) (command.ProgramOutcome, bool) {
+// probeOutcome decodes the program outcome a command result carries.
+func probeOutcome(t *testing.T, result *wire.ToolResult) (command.ProgramOutcome, bool) {
 	t.Helper()
 	_, body, _, ok := hostmarker.SplitToolJSONBody(result.Content)
 	if !ok {
