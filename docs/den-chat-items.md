@@ -87,11 +87,11 @@ Redaction metadata describes the current message copy. It does not accumulate ac
 
 ## Activity spans
 
-Assistant responses containing tool calls contribute tool cards, not assistant prose. The host projects their text and content parts out of transcript pages, message events, and stream replay while retaining the recorded response for model continuity and diagnostics. A mid-turn update is a separate `agent_note` row, which the host commits with its [published carrier](grounding.md#mid-turn-notes) before that batch's tools run, so it sits above their cards, running or settled; answers have no tool calls. Exempt speech (`evidence_optional`) shows as a note or answer with no evidence state. A stored `surface_note` call in an older session renders as an action card beside its note row. User-visible tool arguments, including `wait.reason`, describe the requested work or dependency rather than execution modes or recovery mechanics.
+Assistant responses containing tool calls contribute tool cards, not assistant prose. The host projects their text and content parts out of transcript pages, message events, and stream replay while retaining the recorded response for model continuity and diagnostics. A mid-turn update is a separate `agent_note` row, which the host stores for its [published carrier](grounding.md#mid-turn-notes) before the carrier's calls reach the transcript and before that batch's tools run, so it sits above their cards, running or settled; answers have no tool calls. Exempt speech (`evidence_optional`) shows as a note or answer with no evidence state. A stored `surface_note` call in an older session renders as an action card beside its note row. User-visible tool arguments, including `wait.reason`, describe the requested work or dependency rather than execution modes or recovery mechanics.
 
 Span membership ([`activity-span-model.ts`](../lycaon-den/src/chat/tool/activity-span-model.ts)): every visible non-worker tool call projects into an activity span, including a span of one call. Consecutive calls share a span when a persisted workflow run proves the relation. Outside a workflow, sibling calls from the same durable assistant row form one span in parent chat. In a worker transcript, consecutive tool-only turns share a span because the drawer already supplies the durable child-session boundary. Visible prose, user input, and any other transcript row end the span, and unrelated adjacent calls never merge merely because their headlines match.
 
-File writes fold by path into one diff row per `user` row (a `user_continuation` also closes the fold): the row anchors directly below the span holding the path's first write, and every later write composes into that same row while its chicklet stays in whichever span made it. A span holding a first-touch write accepts only further writes; any other call starts the next span below the diff row, so a later call never renders above an older diff, and a repeated write never mints a second card.
+File writes fold by path into one diff row per `user` row (a `user_continuation` also closes the fold): the row anchors directly below the span holding the path's first write, and every later write composes into that same row while its chicklet stays in whichever span made it. A span holding a first-touch write accepts only further writes whose rows first appear settled. Any other call starts the next span below the diff row, including a call drawn while it runs, which stays there when it settles as a write. A later call therefore never renders above an older diff, a diff row never moves below a call, and a repeated write never mints a second card.
 
 A diff row names a whole-file change in words, **New file** or **Deleted file** beside the path for the revision on show, and its body follows the [reader's change rule](files-stage.md#read-only-source-ranges): a created file reads as the file, a deleted one as removed lines. A path that cannot be opened carries the change in its own name instead; an openable path keeps the link colour.
 
@@ -186,7 +186,13 @@ whose execution preview failed to load.
 
 Timestamps are display data, not a total order. Arrival order is a transport accident. Draft versions use their own append-only `version_index` within the draft rail.
 
-Cross-message order is `ord`. Within one message, structural array order or an explicit sub-sequence orders children. A synthesized activity span uses the minimum constituent order and never moves when a later patch arrives.
+A row keeps the place it is first drawn at ([`transcript-item-order.ts`](../lycaon-den/src/chat/transcript/projection/transcript-item-order.ts)). Its place is the `ord` of the message that first shows it:
+
+- a call whose tool draws while it runs (`long_running`, or any call in verbose mode and worker transcripts) sits at its assistant row;
+- a call drawn once it settles sits at its result;
+- a note sits at the assistant row whose calls it introduces.
+
+Within one ordinal the message's own row comes first, then its note, decision rows, the calls in batch order with each approval after its call, and merged worker diffs. Later messages add rows at the tail or directly beneath the call they belong to, and patch existing rows in place; no drawn row changes place. A row's calls draw once the host commits the row to the transcript, which follows its note.
 
 ## Time in the transcript
 

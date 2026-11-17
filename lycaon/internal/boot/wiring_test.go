@@ -44,6 +44,6 @@ func TestValidateServeWiringAcceptsProductionShape(t *testing.T) {
 		SessionManager:  mgr,
 		WorkflowManager: workflowMgr,
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "boot.ValidateServeWiring failed", err)
 	}
 }

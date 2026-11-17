@@ -118,11 +118,7 @@ func TestProxyRefusalMalformedReplyAndCancellationNeverDialDirect(t *testing.T) 
 	if err == nil {
 		t.Fatal("overdue proxy became a direct connection")
 	}
-	select {
-	case <-closed:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("cancelled proxy connection stayed open")
-	}
+	testutil.AwaitClosed(t, "the cancelled proxy connection closes", closed)
 }
 
 func TestNoProxyUsesOriginalDestinationAndExplicitPolicyDoesNotReadDesktop(t *testing.T) {

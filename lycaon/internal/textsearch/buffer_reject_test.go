@@ -149,11 +149,11 @@ func BenchmarkBufferedLiteralScan(b *testing.B) {
 			b.Run(fmt.Sprintf("fold=%v/records=%v", fold, baseline), func(b *testing.B) {
 				limits, err := CatalogLimits()
 				if err != nil {
-					b.Fatal(err)
+					testutil.FailErr(b, "CatalogLimits failed", err)
 				}
 				m, err := Compile(context.Background(), Spec{Dialect: Basic, Patterns: []string{"needle", "target"}, IgnoreCase: fold}, limits)
 				if err != nil {
-					b.Fatal(err)
+					testutil.FailErr(b, "Compile failed", err)
 				}
 				input := strings.Repeat("ordinary irrelevant line\n", 12000) + "needle\n"
 				opts := ScanOptions{MaxSelected: 1}
@@ -166,7 +166,7 @@ func BenchmarkBufferedLiteralScan(b *testing.B) {
 				for range b.N {
 					_, err := ScanReader(context.Background(), strings.NewReader(input), 0, nil, m, opts, func(Line) error { return nil })
 					if err != nil {
-						b.Fatal(err)
+						testutil.FailErr(b, "ScanReader failed", err)
 					}
 				}
 			})

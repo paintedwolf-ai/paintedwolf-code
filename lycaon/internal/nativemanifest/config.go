@@ -839,13 +839,6 @@ func (c Config) ResourceImpliedTools(fact string) []string {
 // from no path surface to the widest.
 var multiRootCapabilities = []string{"none", "path", "discovery", "command"}
 
-// MultiRootCapabilities returns the capability ids in order.
-func MultiRootCapabilities() []string {
-	out := make([]string, len(multiRootCapabilities))
-	copy(out, multiRootCapabilities)
-	return out
-}
-
 // MultiRootTools returns tool id -> multi-root capability id.
 func (c Config) MultiRootTools() map[string]string {
 	out := make(map[string]string)

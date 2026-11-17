@@ -11,6 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -237,6 +239,36 @@ func TestWrapProducerStreamsCountsAndFinishes(t *testing.T) {
 	if len(run.provenance.activeTrackers) != 0 {
 		t.Fatalf("activeTrackers after finish = %d, want 0", len(run.provenance.activeTrackers))
 	}
+}
+
+// A producer's stream records source mappings only where its sink keeps them,
+// so a producer can tell a sink that needs each record from one it may batch.
+func TestProducerStreamRecordsMappingsOnlyForMappedSinks(t *testing.T) {
+	run := &programRun{}
+	stream := newProgramStream(t.Context(), 1024, &outputSpillAccount{}, testMappingMemory(t))
+	defer stream.Close()
+	var plain bytes.Buffer
+	wrapped, finish := run.wrapProducerStreams(context.Background(), run.beginOpTracker(),
+		outputStreamClass{topLevel: true}, outputStreamClass{piped: true}, commandprogram.Streams{Output: stream, Error: &plain})
+	defer finish()
+	if _, ok := wrapped.Error.(commandprogram.SourceMappingRecorder); ok {
+		t.Fatal("a sink without mappings became a mapping recorder")
+	}
+	recorder, ok := wrapped.Output.(commandprogram.SourceMappingRecorder)
+	if !ok {
+		t.Fatal("a sink with mappings lost its recorder")
+	}
+	_, err := wrapped.Output.Write([]byte("abcd"))
+	testutil.FailErr(t, "write mapped output", err)
+	testutil.FailErr(t, "record mapping", recorder.RecordSourceMapping(toolcontract.StreamSourceMapping{OutputEndByte: 4, SourceStartByte: 10, SourceEndByte: 14}))
+	if got := stream.mappings.values; len(got) != 1 || got[0].SourceStartByte != 10 || got[0].OutputEndByte != 4 {
+		t.Fatalf("recorded mappings=%+v", got)
+	}
+	view := newChildStreamView(wrapped.Output)
+	if view == nil {
+		t.Fatal("a nested child lost the mapped sink's coordinates")
+	}
+	view.Close()
 }
 
 func TestFinishOpTrackerRouting(t *testing.T) {

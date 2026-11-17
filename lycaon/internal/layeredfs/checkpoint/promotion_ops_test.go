@@ -34,7 +34,7 @@ func promotionOps(t *testing.T, changed, others int) (preview, apply map[string]
 	testutil.FailErr(t, "publisher", err)
 	_, err = publisher.Publish(t.Context(), PublishRequest{CheckpointID: "cp-ops", Trigger: TriggerWorkerCompletion})
 	testutil.FailErr(t, "publish", err)
-	promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}})
+	promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"primary": primary}, PrimaryRoot: "primary"})
 	testutil.FailErr(t, "promoter", err)
 	reviewed, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "cp-ops"})
 	testutil.FailErr(t, "preview", err)
@@ -92,4 +92,14 @@ func total(m map[string]int64) int64 {
 		n += v
 	}
 	return n
+}
+
+func TestNewPromoterRefusesAPrimaryRootItDoesNotTarget(t *testing.T) {
+	store, err := NewStore(t.TempDir())
+	testutil.FailErr(t, "NewStore", err)
+	for _, primary := range []string{"", "primary", "elsewhere"} {
+		if _, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: map[string]string{"root-a": t.TempDir()}, PrimaryRoot: primary}); err == nil {
+			t.Errorf("accepted primary root %q", primary)
+		}
+	}
 }

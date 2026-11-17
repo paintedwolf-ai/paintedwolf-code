@@ -15,7 +15,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	internalapi "github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/egress"
@@ -170,24 +169,16 @@ func awaitOutboundPrompt(t *testing.T, h *wiring.Harness, sessionID string, done
 
 func waitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string) wire.CheckpointEvent {
 	t.Helper()
-	ev, ok := tryWaitOnePendingApproval(t, h, sessionID)
-	if !ok {
-		t.Fatal("timed out waiting for tool_approval checkpoint")
-	}
-	return ev
-}
-
-func tryWaitOnePendingApproval(t *testing.T, h *wiring.Harness, sessionID string) (wire.CheckpointEvent, bool) {
-	t.Helper()
 	var ev wire.CheckpointEvent
-	for t.Context().Err() == nil {
-		pending, err := h.Sessions.Checkpoints.ListPending(context.Background(), sessionID, nil)
-		if err == nil && len(pending) == 1 && pending[0].Kind == wire.CheckpointKindToolApproval {
-			return pending[0], true
+	testutil.WaitFor(t, "one tool approval is pending", func() bool {
+		pending, err := h.Sessions.Checkpoints.ListPending(t.Context(), sessionID, nil)
+		if err != nil || len(pending) != 1 || pending[0].Kind != wire.CheckpointKindToolApproval {
+			return false
 		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	return ev, false
+		ev = pending[0]
+		return true
+	})
+	return ev
 }
 
 func dumpSessionFloorDebug(t *testing.T, h *wiring.Harness, sessionID string, promptErr error) {

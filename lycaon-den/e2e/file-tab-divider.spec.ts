@@ -44,11 +44,15 @@ modelIndependentWebE2e("selected tabs meet the overflow divider at fractional wi
             gap: divider.left > selected.right,
             dividerOnTop: topmost === button || button.contains(topmost),
             lastBorder: getComputedStyle(body).borderRightWidth,
+            innerBorder: getComputedStyle(el.querySelector<HTMLElement>(".den-files-tab:first-child .den-files-tab__body")!).borderRightWidth,
+            activeMark: getComputedStyle(body).backgroundImage.includes("gradient"),
             dividerWidth: getComputedStyle(button).borderLeftWidth,
             flushRight: Math.abs(divider.right - el.getBoundingClientRect().right) < 0.01,
           };
         });
-      }).toEqual({ gap: false, dividerOnTop: true, lastBorder: "0px", dividerWidth: "1px", flushRight: true });
+      }).toEqual({
+        gap: false, dividerOnTop: true, lastBorder: "0px", innerBorder: "1px", activeMark: true, dividerWidth: "1px", flushRight: true,
+      });
     }
   }
   await strip.screenshot({ path: testInfo.outputPath("selected-tab-divider.png") });

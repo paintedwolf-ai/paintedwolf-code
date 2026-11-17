@@ -94,6 +94,7 @@ func TestExactBaseScenariosAndThreeWayPromotion(t *testing.T) {
 	promoter, err := NewPromoter(PromoterConfig{
 		Store:       store,
 		TargetRoots: map[string]string{"primary": trunk},
+		PrimaryRoot: "primary",
 	})
 	testutil.FailErr(t, "NewPromoter", err)
 
@@ -225,6 +226,7 @@ func TestAmbiguousCandidateBasesStaleTargetAndRetryIdempotency(t *testing.T) {
 	promoter, err := NewPromoter(PromoterConfig{
 		Store:       store,
 		TargetRoots: map[string]string{"primary": trunk},
+		PrimaryRoot: "primary",
 	})
 	testutil.FailErr(t, "NewPromoter", err)
 

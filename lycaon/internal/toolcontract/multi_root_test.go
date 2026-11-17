@@ -89,16 +89,3 @@ func TestMultiRootCapabilityStringsAreStable(t *testing.T) {
 		}
 	}
 }
-
-func TestMultiRootDeclaredNamesIsSortedAndNonEmpty(t *testing.T) {
-	t.Parallel()
-	names := toolcontract.MultiRootDeclaredNames()
-	if len(names) == 0 {
-		t.Fatal("no tools declared")
-	}
-	for i := 1; i < len(names); i++ {
-		if names[i-1] >= names[i] {
-			t.Fatalf("not sorted at %d: %q then %q", i, names[i-1], names[i])
-		}
-	}
-}

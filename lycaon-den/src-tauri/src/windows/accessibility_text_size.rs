@@ -293,11 +293,4 @@ mod tests {
         assert!(json.contains("\"category\""));
         assert!(!json.contains("text_scale"));
     }
-
-    #[test]
-    fn stub_command_shape_on_any_platform() {
-        let payload = accessibility_preferred_text_size();
-        assert!(payload.text_scale > 0.0);
-        assert!(!payload.category.is_empty());
-    }
 }

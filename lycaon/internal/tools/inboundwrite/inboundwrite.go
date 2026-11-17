@@ -2,16 +2,18 @@
 package inboundwrite
 
 import (
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 
 	"bytes"
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -159,7 +161,7 @@ func afterWorkerWrite(ctx context.Context, tctx tools.ToolContext, resolved proj
 	}
 	if coord, ok := tctx.Source.WorkerCoord.(tools.WorkerObservationCoordinator); ok && coord != nil {
 		rootID := resolved.Root.ID
-		if rootID == "" || rootID == "worker-branch" {
+		if rootID == "" || rootID == projectroot.WorkerBranchRootID {
 			rootID = "primary"
 		}
 		coord.ObserveWorkerWrite(ctx, tctx, tools.WorkerFileObservationFacts{

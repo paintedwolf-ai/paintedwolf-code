@@ -54,10 +54,10 @@ func (f *installFixture) program(name string) string {
 	f.t.Helper()
 	path := filepath.Join(f.system, name)
 	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
-		f.t.Fatal(err)
+		testutil.FailErr(f.t, "write file", err)
 	}
 	if err := os.Chmod(path, 0o755); err != nil {
-		f.t.Fatal(err)
+		testutil.FailErr(f.t, "os.Chmod failed", err)
 	}
 	return path
 }
@@ -80,14 +80,14 @@ func (f *installFixture) stage(resource string) {
 		},
 	})
 	if err != nil {
-		f.t.Fatal(err)
+		testutil.FailErr(f.t, "json.Marshal failed", err)
 	}
 	files := map[string][]byte{"bin/pw": []byte("#!/bin/sh\nexit 0\n"), "resource.data": []byte(resource), LaunchCatalog: catalog}
 	if err := os.MkdirAll(filepath.Join(f.staging, "bin"), 0o755); err != nil {
-		f.t.Fatal(err)
+		testutil.FailErr(f.t, "create directory", err)
 	}
 	if err := os.Chmod(filepath.Join(f.staging, "bin"), 0o755); err != nil {
-		f.t.Fatal(err)
+		testutil.FailErr(f.t, "os.Chmod failed", err)
 	}
 	payload := []map[string]any{{"path": "bin", "kind": "directory", "mode": 0o755, "size": nil, "sha256": nil, "target": nil}}
 	var executables []map[string]any
@@ -97,10 +97,10 @@ func (f *installFixture) stage(resource string) {
 			mode = 0o755
 		}
 		if err := os.WriteFile(filepath.Join(f.staging, name), raw, os.FileMode(mode)); err != nil {
-			f.t.Fatal(err)
+			testutil.FailErr(f.t, "write file", err)
 		}
 		if err := os.Chmod(filepath.Join(f.staging, name), os.FileMode(mode)); err != nil {
-			f.t.Fatal(err)
+			testutil.FailErr(f.t, "os.Chmod failed", err)
 		}
 		sum := sha256.Sum256(raw)
 		payload = append(payload, map[string]any{"path": name, "kind": "file", "mode": mode, "size": len(raw),
@@ -112,13 +112,13 @@ func (f *installFixture) stage(resource string) {
 	manifest, err := json.Marshal(map[string]any{"format_version": 2, "package": "painted-wolf-code", "version": "1.0.2",
 		"architecture": "x86_64", "install_root": "/opt/painted-wolf-code", "executables": executables, "payload": payload})
 	if err != nil {
-		f.t.Fatal(err)
+		testutil.FailErr(f.t, "json.Marshal failed", err)
 	}
 	if err := os.WriteFile(filepath.Join(f.staging, "manifest.json"), manifest, 0o644); err != nil {
-		f.t.Fatal(err)
+		testutil.FailErr(f.t, "write file", err)
 	}
 	if err := os.Chmod(filepath.Join(f.staging, "manifest.json"), 0o644); err != nil {
-		f.t.Fatal(err)
+		testutil.FailErr(f.t, "os.Chmod failed", err)
 	}
 }
 
@@ -140,7 +140,7 @@ func (f *installFixture) install(policy *recordedPolicy, family string) (Generat
 	f.t.Helper()
 	staging, err := os.OpenRoot(f.staging)
 	if err != nil {
-		f.t.Fatal(err)
+		testutil.FailErr(f.t, "os.OpenRoot failed", err)
 	}
 	defer func() { _ = staging.Close() }()
 	return f.layout.install(staging, family, "amd64", policy.commit, policy.selection)

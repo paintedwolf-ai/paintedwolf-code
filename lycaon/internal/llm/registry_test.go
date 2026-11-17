@@ -455,7 +455,7 @@ func TestProviderCatalogRemoveHardDeletes(t *testing.T) {
 		BaseURL: "https://api.fireworks.ai/inference/v1",
 		Models:  []modelinfo.Entry{{ID: "model-a"}},
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "catalog.Put failed", err)
 	}
 	if err := catalog.Reload(); err != nil {
 		testutil.FailErr(t, "catalog.Reload failed", err)
@@ -470,7 +470,7 @@ func TestProviderCatalogRemoveHardDeletes(t *testing.T) {
 		BaseURL: "http://127.0.0.1:60242",
 		Models:  []modelinfo.Entry{{ID: "model-a"}},
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "catalog.Put failed", err)
 	}
 	if err := catalog.Reload(); err != nil {
 		testutil.FailErr(t, "catalog.Reload failed", err)

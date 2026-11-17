@@ -22,7 +22,7 @@ describe("shell search navigation", () => {
       onTestFinished(dispose);
       return createShellSearchNavigation({
       shell, recents: { state: { recents: [recent] } } as never, closeSearch: vi.fn(), closeLauncher: vi.fn(),
-      showProjects, openProject: vi.fn(), resumeSession, openWorkers,
+      showProjects, openProject: vi.fn(), resumeSession, openWorkers, openWorklog: vi.fn(),
       projects: { state: { projects: [] } } as never, activeProject: () => undefined,
       setNav: vi.fn(), attentionIndex: () => new Map(), securityScannersFeatureOn: () => true,
       routeToStage: vi.fn(), selectSettingsSection: vi.fn(), openSettings: vi.fn(),

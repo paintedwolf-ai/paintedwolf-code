@@ -4,10 +4,7 @@ import { render, screen, waitFor, cleanup } from "@solidjs/testing-library";
 import { stubFilesClient } from "../test/source-client-fixture.ts";
 import { FileEditDiff } from "./FileEditDiff.tsx";
 import { assertNamedControl } from "../test/controls.ts";
-import {
-  foldFileEdits
-
-} from "../chat/file-edit/file-edit-fold.ts";
+import { foldFileEdits } from "../chat/file-edit/file-edit-fold.ts";
 import type { FileEditStep } from "../chat/file-edit/file-edit-fold.ts";
 import { resetFindControllerForTests } from "../find/find-controller.ts";
 import { transcriptDisclosureKey } from "../chat/transcript/presentation/transcript-disclosure-key.ts";
@@ -24,6 +21,9 @@ import {
   createRowAccordion,
 } from "../chat/transcript/presentation/row-accordion.ts";
 import { fileEditPreviewFixture, singleFileEditFold } from "../test/file-edit-fixture.ts";
+import { useElapsableClock } from "../test/elapse.ts";
+
+const elapse = useElapsableClock();
 
 const client = stubFilesClient();
 vi.mock("../platform/connection/app-connection.ts", async original => ({
@@ -89,7 +89,7 @@ describe("FileEditDiff", () => {
       await waitFor(() => expect(screen.getByTestId("file-edit-diff-stat").textContent).toBe("+1−1"));
       const requested = opens.mock.calls.length + reads.mock.calls.length;
       setFold(multiWriteFold());
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await elapse(20);
       expect(screen.getByTestId("file-edit-diff-writes").textContent).toMatch(/3/);
       expect(opens.mock.calls.length + reads.mock.calls.length).toBe(requested);
     } finally {
@@ -110,15 +110,11 @@ describe("FileEditDiff", () => {
 
   it("rotates the disclosure caret with the diff", () => {
     render(() => <FileEditDiff projectId="p1" sessionId="s1" fold={multiWriteFold()} />);
-    const caret = document.querySelector(".den-file-edit-diff-caret")!;
-    expect(caret.classList.contains("den-file-edit-diff-caret--open")).toBe(
-      false,
-    );
+    const toggle = assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
 
-    assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button").click();
-    expect(caret.classList.contains("den-file-edit-diff-caret--open")).toBe(
-      true,
-    );
+    toggle.click();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
   });
 
   it("gives the header's empty space to the diff, not to the path", () => {

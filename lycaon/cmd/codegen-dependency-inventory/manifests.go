@@ -205,6 +205,10 @@ func collectCargoTables(deps map[string]*cargoDependency, doc map[string]any, ta
 			case string:
 				req = s
 			case map[string]any:
+				// A path dependency is this repository's own crate, with no registry upstream.
+				if _, local := s["path"]; local {
+					continue
+				}
 				req, _ = s["version"].(string)
 				if renamed, ok := s["package"].(string); ok {
 					name = renamed
