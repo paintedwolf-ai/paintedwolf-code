@@ -8,7 +8,7 @@ func (b *serveBuilder) wireBoardAndResearch() error {
 	b.boards = boards.New(boards.Dependencies{
 		Storage:                  b.storage,
 		Sessions:                 b.sessions,
-		Delegations:              b.delegations,
+		Workers:                  b.workerRuntime,
 		Workflows:                b.workflows,
 		Scanning:                 b.scanning,
 		Security:                 b.security,

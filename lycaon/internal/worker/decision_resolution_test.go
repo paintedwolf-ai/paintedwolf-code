@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"testing"
 	"time"
@@ -73,7 +74,7 @@ func TestSQLDecisionResolverRequeuesSameWorkerWithBranchContinuity(t *testing.T)
 		ParentSessionID: "parent-1", ChildSessionID: "child-1",
 		AgentType: "implementer", Status: api.WorkerStatusHeld,
 		ExecutionTarget: api.ExecutionTargetLocal, Prompt: "fixture", Brief: "fixture",
-		OverlayID: "job-1", MaxToolLoops: 14,
+		OverlayID: "job-1",
 	}))
 	workspaceRoot := filepath.Join(testbaseline.DataDir(t, database), "worker-branches", "job-1")
 	baseline := testbaseline.Durable(t, database, "job-1", t.TempDir())
@@ -104,7 +105,7 @@ func TestSQLDecisionResolverRequeuesSameWorkerWithBranchContinuity(t *testing.T)
 	queue.SetEventOutbox(outbox)
 	testutil.FailErr(t, "ack decision checkpoint", db.New(database).MarkWorkerOutcomeDelivered(
 		t.Context(), db.MarkWorkerOutcomeDeliveredParams{
-			WorkerJobID: "job-1", DeliveredAt: db.FormatTime(time.Now().UTC()),
+			WorkerJobID: "job-1", DeliveredAt: timelayout.Format(time.Now().UTC()),
 		},
 	))
 
@@ -122,8 +123,8 @@ func TestSQLDecisionResolverRequeuesSameWorkerWithBranchContinuity(t *testing.T)
 	if task.WorkspaceRoot != workspaceRoot || task.WorkspaceBaselinePath != baseline {
 		t.Fatalf("resumed branch = root %q baseline %q", task.WorkspaceRoot, task.WorkspaceBaselinePath)
 	}
-	if task.ToolLoopsUsed != 5 || task.ToolCallsUsed != 17 || task.MaxToolLoops != 14 {
-		t.Fatalf("resumed counters = loops %d calls %d max %d", task.ToolLoopsUsed, task.ToolCallsUsed, task.MaxToolLoops)
+	if task.ToolLoopsUsed != 5 || task.ToolCallsUsed != 17 {
+		t.Fatalf("resumed counters = loops %d calls %d", task.ToolLoopsUsed, task.ToolCallsUsed)
 	}
 	if task.Result != nil || task.CompletedAt != nil {
 		t.Fatalf("completed state survived resume: result=%+v completed=%v", task.Result, task.CompletedAt)

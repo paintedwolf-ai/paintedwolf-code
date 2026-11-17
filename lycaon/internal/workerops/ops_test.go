@@ -1,0 +1,584 @@
+package workerops_test
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"reflect"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
+	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
+	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerrecords"
+	"github.com/lycaon/lycaon/internal/workerstate"
+	"github.com/lycaon/lycaon/pkg/api"
+)
+
+type jobs map[string]*api.WorkerTask
+
+func (j jobs) Get(id string) (*api.WorkerTask, bool) { t, ok := j[id]; return t, ok }
+
+type decisions map[string]api.WorkerDecisionRequest
+
+func (d decisions) Get(_ context.Context, child string) (api.WorkerDecisionRequest, bool, error) {
+	r, ok := d[child]
+	return r, ok, nil
+}
+
+type fixture struct {
+	db       *db.Store
+	records  *workerrecords.Store
+	jobs     jobs
+	dec      decisions
+	svc      *workerops.Service
+	coord    workerrecords.Actor
+	workerID string
+	enqueued []workerops.RoundJob
+	woken    []string
+	released []string
+}
+
+func now() string { return timelayout.Format(time.Now().UTC()) }
+
+func newFixture(t *testing.T) *fixture {
+	t.Helper()
+	sqlDB := testdbfixture.Open(t, "ops.db")
+	testdbseed.InsertSession(t, sqlDB, "coord", testdbseed.DefaultProjectID)
+	_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
+		VALUES ('child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now(), now(), now())
+	testutil.FailErr(t, "insert child", err)
+	records := workerrecords.New(sqlDB)
+	f := &fixture{db: sqlDB, records: records, jobs: jobs{}, dec: decisions{},
+		coord: workerrecords.Actor{SessionID: "coord", Role: workerrecords.RoleCoordinator, PrincipalID: "coord"}}
+	f.svc = &workerops.Service{
+		Reader: workerops.Reader{Records: records, Jobs: f.jobs, Decisions: f.dec},
+		WakeParked: func(_ context.Context, jobID string) error {
+			f.woken = append(f.woken, jobID)
+			return nil
+		},
+		Release: func(_ context.Context, jobID string) error {
+			f.released = append(f.released, jobID)
+			return nil
+		},
+		Agents: func(agent string) (bool, bool) {
+			switch agent {
+			case "implementer":
+				return true, true
+			case "repo-researcher":
+				return false, true
+			}
+			return false, false
+		},
+	}
+	w, err := records.CreateWorker(t.Context(), f.coord, workerrecords.Op{ID: "create"}, workerrecords.WorkerSpec{Name: "surveyor", AgentType: "repo-researcher", ScopeMode: "read", ChildSessionID: "child"})
+	testutil.FailErr(t, "create worker", err)
+	f.workerID = w.WorkerID
+	return f
+}
+
+func (f *fixture) job(t *testing.T, id string, status api.WorkerStatus, legStatus string) {
+	t.Helper()
+	_, err := f.db.ExecContext(t.Context(), `INSERT INTO worker_jobs (id, project_id, parent_session_id, child_session_id, agent_type, status, prompt, brief, created_at)
+		VALUES (?, ?, 'coord', 'child', 'repo-researcher', ?, 'p', 'b', ?)`, id, testdbseed.DefaultProjectID, string(status), now())
+	testutil.FailErr(t, "insert job "+id, err)
+	task := &api.WorkerTask{ID: id, Status: status}
+	if legStatus != "" {
+		task.Result = &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: legStatus}}
+	}
+	f.jobs[id] = task
+}
+
+// round runs one round on jobID to settlement, with a result and optional
+// checkpoint.
+func (f *fixture) round(t *testing.T, jobID, legStatus, checkpoint string) {
+	t.Helper()
+	f.job(t, jobID, api.WorkerStatusRunning, "")
+	_, err := f.records.AdmitRound(t.Context(), f.coord, workerrecords.Op{ID: "admit-" + jobID}, f.workerID, workerrecords.RoundSpec{JobID: jobID, ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	f.settle(t, jobID, legStatus, checkpoint)
+}
+
+func (f *fixture) settle(t *testing.T, jobID, legStatus, checkpoint string) {
+	t.Helper()
+	_, err := f.db.ExecContext(t.Context(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES (?, ?, 'complete', ?)`, "result-"+jobID, jobID, now())
+	testutil.FailErr(t, "insert result", err)
+	n, err := db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{
+		SettledAt: db.NullString(now()), CheckpointID: checkpoint, JobID: jobID,
+	})
+	testutil.FailErr(t, "settle", err)
+	if n != 1 {
+		t.Fatalf("settle %s touched %d rounds", jobID, n)
+	}
+	status := api.WorkerStatusComplete
+	if legStatus == "" {
+		status = api.WorkerStatusFailed
+	}
+	f.jobs[jobID] = &api.WorkerTask{ID: jobID, Status: status}
+	if legStatus != "" {
+		f.jobs[jobID].Result = &api.WorkerResult{CompletionReport: &api.WorkerCompletionReport{LegStatus: legStatus}}
+	}
+}
+
+func (f *fixture) enqueue(next string) workerops.Enqueuer {
+	return func(ctx context.Context, job workerops.RoundJob) (string, string, error) {
+		f.enqueued = append(f.enqueued, job)
+		if _, ok := f.jobs[next]; !ok {
+			_, err := f.db.ExecContext(ctx, `INSERT INTO worker_jobs (id, project_id, parent_session_id, child_session_id, agent_type, status, prompt, brief, created_at)
+				VALUES (?, ?, 'coord', 'child', ?, 'pending', 'p', 'b', ?)`, next, testdbseed.DefaultProjectID, job.Worker.AgentType, now())
+			if err != nil {
+				return "", "", err
+			}
+			f.jobs[next] = &api.WorkerTask{ID: next, Status: api.WorkerStatusPending}
+		}
+		return next, "local", nil
+	}
+}
+
+func (f *fixture) state(t *testing.T) workerstate.View {
+	t.Helper()
+	w, err := f.records.Worker(t.Context(), f.coord, f.workerID)
+	testutil.FailErr(t, "worker", err)
+	snap, err := f.svc.Reader.Read(t.Context(), f.coord, w)
+	testutil.FailErr(t, "read", err)
+	return snap.View
+}
+
+func op(id string) workerrecords.Op { return workerrecords.Op{ID: id} }
+
+// A surveyor that delivered becomes the implementer with one instruction:
+// the same conversation, a new round, its result accounted for.
+func TestInstructStartsARoundAndAccountsForTheResult(t *testing.T) {
+	f := newFixture(t)
+	f.round(t, "job-1", "complete", "")
+	if v := f.state(t); v.State != workerstate.Delivered || v.Reason != workerstate.ReasonUnaccounted {
+		t.Fatalf("before = %+v", v)
+	}
+	receipt, err := f.svc.Instruct(t.Context(), f.coord, op("instruct-1"), workerops.Instruction{
+		Worker: "surveyor", Instructions: "implement the fix you found", AgentType: "implementer", Brief: "Fix the parser",
+	}, f.enqueue("job-2"))
+	testutil.FailErr(t, "instruct", err)
+	if receipt.Outcome != workerops.OutcomeStarted || receipt.Round != 2 || receipt.JobID != "job-2" || receipt.Accounted != "result-job-1" {
+		t.Fatalf("receipt = %+v", receipt)
+	}
+	if len(f.released) != 1 || f.released[0] != "job-2" {
+		t.Fatalf("released = %v, want the new round's job once its round is recorded", f.released)
+	}
+	if len(f.enqueued) != 1 || f.enqueued[0].ScopeMode != "write" || f.enqueued[0].AgentType != "implementer" {
+		t.Fatalf("enqueued = %+v", f.enqueued)
+	}
+	w, err := f.records.Worker(t.Context(), f.coord, f.workerID)
+	testutil.FailErr(t, "worker", err)
+	if w.AgentType != "implementer" || w.ScopeMode != "write" || w.Brief != "Fix the parser" || w.ChildSessionID != "child" {
+		t.Fatalf("worker = %+v", w)
+	}
+	if v := f.state(t); v.State != workerstate.Working || v.Reason != workerstate.ReasonQueued {
+		t.Fatalf("after = %+v", v)
+	}
+}
+
+// An instruction to a running round is queued for its next model call and
+// starts nothing.
+func TestInstructQueuesForARunningRound(t *testing.T) {
+	f := newFixture(t)
+	f.job(t, "job-1", api.WorkerStatusRunning, "")
+	_, err := f.records.AdmitRound(t.Context(), f.coord, op("admit"), f.workerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	receipt, err := f.svc.Instruct(t.Context(), f.coord, op("instruct"), workerops.Instruction{Worker: "surveyor", Instructions: "also read the encoder"}, f.enqueue("unused"))
+	testutil.FailErr(t, "instruct", err)
+	if receipt.Outcome != workerops.OutcomeQueued || receipt.Round != 1 || len(f.enqueued) != 0 {
+		t.Fatalf("receipt = %+v enqueued = %d", receipt, len(f.enqueued))
+	}
+	// An agent change waits for the round to end.
+	_, err = f.svc.Instruct(t.Context(), f.coord, op("change"), workerops.Instruction{Worker: "surveyor", Instructions: "implement", AgentType: "implementer"}, f.enqueue("unused"))
+	var refusal *workerops.Refusal
+	if !errors.As(err, &refusal) || refusal.AgentChange != workerstate.AgentChangeBusy {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// An instruction to a parked worker settles its wait so it resumes and reads
+// the instruction; one to a running worker only queues.
+func TestInstructWakesAParkedWorker(t *testing.T) {
+	f := newFixture(t)
+	f.job(t, "job-1", api.WorkerStatusRunning, "")
+	_, err := f.records.AdmitRound(t.Context(), f.coord, op("admit"), f.workerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	_, err = f.svc.Instruct(t.Context(), f.coord, op("running"), workerops.Instruction{Worker: "surveyor", Instructions: "also read the encoder"}, f.enqueue("unused"))
+	testutil.FailErr(t, "instruct running", err)
+	if len(f.woken) != 0 {
+		t.Fatalf("a running worker was woken: %v", f.woken)
+	}
+	f.jobs["job-1"].Status = api.WorkerStatusWaiting
+	receipt, err := f.svc.Instruct(t.Context(), f.coord, op("parked"), workerops.Instruction{Worker: "surveyor", Instructions: "the server is up now"}, f.enqueue("unused"))
+	testutil.FailErr(t, "instruct parked", err)
+	if receipt.Outcome != workerops.OutcomeQueued || len(f.woken) != 1 || f.woken[0] != "job-1" {
+		t.Fatalf("receipt = %+v woken = %v", receipt, f.woken)
+	}
+}
+
+func TestInstructRefusalsFollowState(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(*testing.T, *fixture)
+		state workerstate.State
+	}{
+		{"asking", func(t *testing.T, f *fixture) {
+			f.job(t, "job-1", api.WorkerStatusRunning, "")
+			_, err := f.records.AdmitRound(t.Context(), f.coord, op("admit"), f.workerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+			testutil.FailErr(t, "admit", err)
+			f.dec["child"] = api.WorkerDecisionRequest{ChildSessionID: "child", WorkerID: "job-1", Question: "which?"}
+		}, workerstate.Asking},
+		{"waiting", func(t *testing.T, f *fixture) {
+			f.job(t, "job-1", api.WorkerStatusHeld, "")
+			_, err := f.records.AdmitRound(t.Context(), f.coord, op("admit"), f.workerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+			testutil.FailErr(t, "admit", err)
+		}, workerstate.Waiting},
+		{"closed", func(t *testing.T, f *fixture) {
+			_, err := f.records.Close(t.Context(), f.coord, op("close"), f.workerID, "withdrawn")
+			testutil.FailErr(t, "close", err)
+		}, workerstate.Closed},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFixture(t)
+			tc.setup(t, f)
+			_, err := f.svc.Instruct(t.Context(), f.coord, op("instruct"), workerops.Instruction{Worker: "surveyor", Instructions: "go"}, f.enqueue("job-x"))
+			var refusal *workerops.Refusal
+			if tc.state == workerstate.Closed {
+				// A closed worker no longer resolves by name for new work.
+				if refusal == nil && err == nil {
+					t.Fatal("closed worker instructed")
+				}
+				return
+			}
+			if !errors.As(err, &refusal) || refusal.View.State != tc.state || len(f.enqueued) != 0 {
+				t.Fatalf("err = %v enqueued = %d", err, len(f.enqueued))
+			}
+		})
+	}
+}
+
+// A write worker cannot become a read worker while its changes are open,
+// shelved ones included.
+func TestAgentChangeRefusedWithOpenChanges(t *testing.T) {
+	f := newFixture(t)
+	f.round(t, "job-1", "complete", "")
+	_, err := f.svc.Instruct(t.Context(), f.coord, op("to-write"), workerops.Instruction{Worker: "surveyor", Instructions: "implement", AgentType: "implementer"}, f.enqueue("job-2"))
+	testutil.FailErr(t, "to write", err)
+	f.settle(t, "job-2", "complete", "checkpoint-2")
+	d, err := f.svc.Shelve(t.Context(), f.coord, op("shelve"), "result-job-2", "waiting on the API freeze")
+	testutil.FailErr(t, "shelve", err)
+	if d.ChangeState != workerrecords.ChangeShelved || d.AccountedAt == "" {
+		t.Fatalf("disposition = %+v", d)
+	}
+	if v := f.state(t); v.State != workerstate.Idle || !v.Admits(workerstate.OpPromote) || v.Admits(workerstate.OpShelve) {
+		t.Fatalf("after shelving = %+v", v)
+	}
+	_, err = f.svc.Instruct(t.Context(), f.coord, op("to-read"), workerops.Instruction{Worker: "surveyor", Instructions: "survey", AgentType: "repo-researcher"}, f.enqueue("job-3"))
+	var refusal *workerops.Refusal
+	if !errors.As(err, &refusal) || refusal.AgentChange != workerstate.AgentChangeOpenChanges {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// Shelving names one result; a result that changed nothing has nothing to
+// shelve even while a later one does.
+func TestShelveNeedsChanges(t *testing.T) {
+	f := newFixture(t)
+	f.round(t, "job-1", "complete", "")
+	_, err := f.svc.Shelve(t.Context(), f.coord, op("shelve-none"), "result-job-1", "later")
+	var refusal *workerops.Refusal
+	if !errors.As(err, &refusal) || refusal.View.State != workerstate.Delivered {
+		t.Fatalf("shelving with nothing open: err = %v", err)
+	}
+	_, err = f.svc.Instruct(t.Context(), f.coord, op("to-write"), workerops.Instruction{Worker: "surveyor", Instructions: "implement", AgentType: "implementer"}, f.enqueue("job-2"))
+	testutil.FailErr(t, "to write", err)
+	f.settle(t, "job-2", "complete", "checkpoint-2")
+	_, err = f.svc.Shelve(t.Context(), f.coord, op("shelve-1"), "result-job-1", "later")
+	if !errors.Is(err, workerops.ErrNoChanges) {
+		t.Fatalf("err = %v, want no changes", err)
+	}
+	_, err = f.svc.Shelve(t.Context(), f.coord, op("shelve-2"), "result-job-2", " ")
+	if !errors.Is(err, workerrecords.ErrReasonRequired) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+// History pages older messages and resolves nothing.
+func TestHistoryPagesWithoutResolving(t *testing.T) {
+	f := newFixture(t)
+	f.job(t, "job-1", api.WorkerStatusRunning, "")
+	_, err := f.records.AdmitRound(t.Context(), f.coord, op("admit"), f.workerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	for i := range 5 {
+		_, err := f.records.AppendMessage(t.Context(), f.coord, op("m"+string(rune('a'+i))), f.workerID, workerrecords.MessageSpec{Body: "note"})
+		testutil.FailErr(t, "append", err)
+	}
+	page, err := f.svc.HistoryPaged(t.Context(), f.coord, "surveyor", workerops.HistoryQuery{BeforeSeq: 0, Limit: 3})
+	testutil.FailErr(t, "history", err)
+	if len(page.Messages) != 3 || page.Messages[0].Seq != 5 || page.Before != 3 || len(page.Rounds) != 1 {
+		t.Fatalf("page = %+v", page)
+	}
+	older, err := f.svc.HistoryPaged(t.Context(), f.coord, "surveyor", workerops.HistoryQuery{BeforeSeq: page.Before, Limit: 3})
+	testutil.FailErr(t, "older", err)
+	if len(older.Messages) != 2 || older.Before != 0 {
+		t.Fatalf("older = %+v", older)
+	}
+}
+
+// A replayed instruction returns what it did the first time, though the
+// worker is now working on the round it started.
+func TestInstructReplaysItsFirstReceipt(t *testing.T) {
+	f := newFixture(t)
+	f.round(t, "job-1", "complete", "")
+	in := workerops.Instruction{Worker: "surveyor", Instructions: "look again"}
+	first, err := f.svc.Instruct(t.Context(), f.coord, op("instruct"), in, f.enqueue("job-2"))
+	testutil.FailErr(t, "instruct", err)
+	again, err := f.svc.Instruct(t.Context(), f.coord, op("instruct"), in, f.enqueue("job-3"))
+	testutil.FailErr(t, "replay", err)
+	if again != first || len(f.enqueued) != 1 {
+		t.Fatalf("replay = %+v, first = %+v, enqueued %d", again, first, len(f.enqueued))
+	}
+	queued, err := f.svc.Instruct(t.Context(), f.coord, op("queue"), workerops.Instruction{Worker: "surveyor", Instructions: "and the caller"}, f.enqueue("unused"))
+	testutil.FailErr(t, "queue", err)
+	replayed, err := f.svc.Instruct(t.Context(), f.coord, op("queue"), workerops.Instruction{Worker: "surveyor", Instructions: "and the caller"}, f.enqueue("unused"))
+	testutil.FailErr(t, "replay queued", err)
+	if replayed != queued || queued.JobID != "job-2" {
+		t.Fatalf("queued = %+v, replayed = %+v", queued, replayed)
+	}
+}
+
+// A worker name resolves to the job of its latest result, and delivered
+// workers are counted; a name with no worker, or no result yet, resolves to
+// nothing.
+func TestLatestResultJobAndDeliveredCount(t *testing.T) {
+	f := newFixture(t)
+	if _, ok, err := f.svc.Reader.LatestResultJob(t.Context(), f.coord, "surveyor"); ok || err != nil {
+		t.Fatalf("before any result: ok=%v err=%v", ok, err)
+	}
+	if n, err := f.svc.Reader.CountState(t.Context(), f.coord, workerstate.Delivered); n != 0 || err != nil {
+		t.Fatalf("delivered before any result = %d, %v", n, err)
+	}
+	f.round(t, "job-1", "complete", "")
+	job, ok, err := f.svc.Reader.LatestResultJob(t.Context(), f.coord, "surveyor")
+	if !ok || err != nil || job != "job-1" {
+		t.Fatalf("latest result job = %q ok=%v err=%v", job, ok, err)
+	}
+	if n, err := f.svc.Reader.CountState(t.Context(), f.coord, workerstate.Delivered); n != 1 || err != nil {
+		t.Fatalf("delivered = %d, %v", n, err)
+	}
+	if _, ok, err := f.svc.Reader.LatestResultJob(t.Context(), f.coord, "nobody"); ok || err != nil {
+		t.Fatalf("unknown name: ok=%v err=%v", ok, err)
+	}
+}
+
+// A round suspended on its decision is held like a prerequisite wait, but its
+// worker is asking: the answer, not a producer, releases it.
+func TestRoundSuspendedOnItsDecisionIsAsking(t *testing.T) {
+	f := newFixture(t)
+	f.job(t, "job-1", api.WorkerStatusRunning, "")
+	_, err := f.records.AdmitRound(t.Context(), f.coord, workerrecords.Op{ID: "admit"}, f.workerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	f.jobs["job-1"].Status = api.WorkerStatusHeld
+	if v := f.state(t); v.State != workerstate.Waiting || v.Reason != workerstate.ReasonPrerequisite {
+		t.Fatalf("held without a decision = %+v", v)
+	}
+	f.dec["child"] = api.WorkerDecisionRequest{WorkerID: "job-1", Question: "Which parser?"}
+	if v := f.state(t); v.State != workerstate.Asking {
+		t.Fatalf("held on its decision = %+v", v)
+	}
+}
+
+// A worker that has run and then lost its child session reads as closed
+// because its session is unusable.
+func TestLostChildSessionMakesTheWorkerUnusable(t *testing.T) {
+	f := newFixture(t)
+	f.round(t, "job-1", "complete", "")
+	if v := f.state(t); v.Reason == workerstate.ReasonSessionUnusable {
+		t.Fatalf("a worker with its session was unusable: %+v", v)
+	}
+	_, err := f.db.ExecContext(t.Context(), `UPDATE workers SET child_session_id = NULL WHERE id = ?`, f.workerID)
+	testutil.FailErr(t, "lose child", err)
+	if v := f.state(t); v.State != workerstate.Closed || v.Reason != workerstate.ReasonSessionUnusable {
+		t.Fatalf("after losing the child session: %+v", v)
+	}
+}
+
+// A pending round whose producer has not delivered waits on its
+// prerequisite and queues once the producer's output is ready; withdrawing
+// the waiting worker cancels that round first, so the worker can close.
+func TestWaitingOnAPrerequisiteAndWithdrawal(t *testing.T) {
+	f := newFixture(t)
+	f.job(t, "producer-job", api.WorkerStatusRunning, "")
+	f.job(t, "job-1", api.WorkerStatusPending, "")
+	f.jobs["job-1"].AfterWorkers = []string{"producer-job"}
+	_, err := f.records.AdmitRound(t.Context(), f.coord, op("admit"), f.workerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	if v := f.state(t); v.State != workerstate.Waiting {
+		t.Fatalf("before the producer delivers: %+v", v)
+	}
+	f.jobs["producer-job"].Status = api.WorkerStatusComplete
+	f.jobs["producer-job"].Result = &api.WorkerResult{Status: "complete"}
+	if v := f.state(t); v.State != workerstate.Working || v.Reason != workerstate.ReasonQueued {
+		t.Fatalf("once the producer delivered: %+v", v)
+	}
+	f.jobs["producer-job"].Status = api.WorkerStatusRunning
+	var cancelled []string
+	stop, err := f.svc.Stop(t.Context(), f.coord, op("withdraw"), "surveyor", "", func(_ context.Context, jobID string) error {
+		cancelled = append(cancelled, jobID)
+		_, err := db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(now()), JobID: jobID})
+		return err
+	})
+	testutil.FailErr(t, "withdraw", err)
+	if !stop.Withdrawn || len(cancelled) != 1 || cancelled[0] != "job-1" {
+		t.Fatalf("stop = %+v cancelled = %v", stop, cancelled)
+	}
+	if v := f.state(t); v.State != workerstate.Closed {
+		t.Fatalf("after withdrawal: %+v", v)
+	}
+}
+
+// Two instructions to an idle worker at once start one round; the other
+// joins it as a queued instruction instead of failing.
+func TestConcurrentInstructionsStartOneRound(t *testing.T) {
+	f := newFixture(t)
+	f.round(t, "job-1", "complete", "")
+	for _, id := range []string{"job-a", "job-b"} {
+		f.job(t, id, api.WorkerStatusPending, "")
+	}
+	var next atomic.Int32
+	enqueue := func(context.Context, workerops.RoundJob) (string, string, error) {
+		return []string{"job-a", "job-b"}[next.Add(1)-1], "local", nil
+	}
+	var wg sync.WaitGroup
+	receipts := make([]workerops.Receipt, 2)
+	errs := make([]error, 2)
+	for i := range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			receipts[i], errs[i] = f.svc.Instruct(t.Context(), f.coord, op("concurrent-"+strconv.Itoa(i)), workerops.Instruction{Worker: "surveyor", Instructions: "look again " + strconv.Itoa(i)}, enqueue)
+		}()
+	}
+	wg.Wait()
+	outcomes := map[workerops.Outcome]int{}
+	for i := range 2 {
+		testutil.FailErr(t, "instruct "+strconv.Itoa(i), errs[i])
+		outcomes[receipts[i].Outcome]++
+	}
+	if outcomes[workerops.OutcomeStarted] != 1 || outcomes[workerops.OutcomeQueued] != 1 || next.Load() != 1 {
+		t.Fatalf("outcomes = %v, enqueued %d", outcomes, next.Load())
+	}
+}
+
+func TestShelveReplaysItsFirstDisposition(t *testing.T) {
+	f := newFixture(t)
+	f.round(t, "job-1", "complete", "checkpoint-1")
+	first, err := f.svc.Shelve(t.Context(), f.coord, op("shelve-op"), "result-job-1", "defer until migration")
+	testutil.FailErr(t, "shelve", err)
+	again, err := f.svc.Shelve(t.Context(), f.coord, op("shelve-op"), "result-job-1", "defer until migration")
+	testutil.FailErr(t, "replay shelve", err)
+	if !reflect.DeepEqual(again, first) {
+		t.Fatalf("replay = %+v, want %+v", again, first)
+	}
+	_, err = f.svc.Shelve(t.Context(), f.coord, op("shelve-op"), "result-job-1", "different reason")
+	if !errors.Is(err, workerrecords.ErrOperationConflict) {
+		t.Fatalf("conflicting shelve replay = %v, want ErrOperationConflict", err)
+	}
+}
+
+func TestReadBoundedParityAndHistoryPagedBounds(t *testing.T) {
+	f := newFixture(t)
+	childActor := workerrecords.Actor{SessionID: "child", Role: workerrecords.RoleWorker, PrincipalID: "child"}
+	for i := 1; i <= 44; i++ {
+		jobID := fmt.Sprintf("job-%02d", i)
+		if i == 1 {
+			f.round(t, jobID, "complete", "")
+		} else {
+			_, err := f.svc.Instruct(t.Context(), f.coord, op(fmt.Sprintf("start-%02d", i)), workerops.Instruction{
+				Worker: "surveyor", Instructions: fmt.Sprintf("round %d", i),
+			}, f.enqueue(jobID))
+			testutil.FailErr(t, "instruct round", err)
+			f.settle(t, jobID, "complete", "")
+		}
+		if i < 44 {
+			_, _ = f.records.AccountResult(t.Context(), f.coord, op(fmt.Sprintf("acct-%02d", i)), "result-"+jobID)
+		}
+	}
+
+	w, err := f.records.Worker(t.Context(), f.coord, f.workerID)
+	testutil.FailErr(t, "worker", err)
+	fullSnap, err := f.svc.Reader.Read(t.Context(), f.coord, w)
+	testutil.FailErr(t, "full read", err)
+	boundedSnap, err := f.svc.Reader.ReadBounded(t.Context(), f.coord, w, 4)
+	testutil.FailErr(t, "bounded read", err)
+	if !reflect.DeepEqual(boundedSnap.View, fullSnap.View) || len(boundedSnap.Rounds) != 4 {
+		t.Fatalf("bounded view=%+v (rounds=%d), full=%+v", boundedSnap.View, len(boundedSnap.Rounds), fullSnap.View)
+	}
+	fullRes, _ := fullSnap.LatestResult()
+	boundedRes, _ := boundedSnap.LatestResult()
+	if boundedRes.ResultID != fullRes.ResultID {
+		t.Fatalf("latest result bounded=%q full=%q", boundedRes.ResultID, fullRes.ResultID)
+	}
+	if gotJob, ok, err := f.svc.Reader.LatestResultJob(t.Context(), f.coord, "surveyor"); err != nil || !ok || gotJob != "job-44" {
+		t.Fatalf("LatestResultJob = %q ok=%v err=%v", gotJob, ok, err)
+	}
+	if n, err := f.svc.Reader.CountState(t.Context(), f.coord, workerstate.Delivered); err != nil || n != 1 {
+		t.Fatalf("CountState delivered = %d err=%v", n, err)
+	}
+
+	// Start round 45 and send 60 messages including unread worker messages.
+	_, err = f.svc.Instruct(t.Context(), f.coord, op("start-45"), workerops.Instruction{
+		Worker: "surveyor", Instructions: "round 45",
+	}, f.enqueue("job-45"))
+	testutil.FailErr(t, "start 45", err)
+	for i := range 30 {
+		_, err := f.records.AppendMessage(t.Context(), childActor, op(fmt.Sprintf("wmsg-%02d", i)), f.workerID, workerrecords.MessageSpec{
+			Body: fmt.Sprintf("finding-%02d %s", i, strings.Repeat("m", 600)),
+		})
+		testutil.FailErr(t, "worker msg", err)
+	}
+
+	// Page all 45 rounds via BeforeRound.
+	beforeRound := int64(0)
+	totalRounds := 0
+	for {
+		page, err := f.svc.HistoryPaged(t.Context(), f.coord, "surveyor", workerops.HistoryQuery{BeforeRound: beforeRound})
+		testutil.FailErr(t, "history paged rounds", err)
+		if len(page.Rounds) > workerops.MaxHistoryRounds {
+			t.Fatalf("round page len=%d > %d", len(page.Rounds), workerops.MaxHistoryRounds)
+		}
+		if len(page.Rounds) > 1 && page.Rounds[0].Ordinal >= page.Rounds[len(page.Rounds)-1].Ordinal {
+			t.Fatalf("rounds within page not chronological: %d..%d", page.Rounds[0].Ordinal, page.Rounds[len(page.Rounds)-1].Ordinal)
+		}
+		totalRounds += len(page.Rounds)
+		if page.BeforeRound == 0 {
+			break
+		}
+		beforeRound = page.BeforeRound
+	}
+	if totalRounds != 45 {
+		t.Fatalf("paged %d rounds, want 45", totalRounds)
+	}
+
+	// Page messages via Before and ensure unread coordinator page is still intact.
+	p1, err := f.svc.HistoryPaged(t.Context(), f.coord, "surveyor", workerops.HistoryQuery{})
+	testutil.FailErr(t, "history messages p1", err)
+	if p1.Before == 0 || len(p1.Messages) == 0 {
+		t.Fatalf("expected more message pages: len=%d before=%d", len(p1.Messages), p1.Before)
+	}
+	unread, err := f.records.OpenPageBounded(t.Context(), f.coord, f.workerID, 0, 5, workerrecords.MaxHistoryPageBytes)
+	testutil.FailErr(t, "unread after history", err)
+	if len(unread.Messages) != 5 {
+		t.Fatalf("unread messages cleared by HistoryPaged: got %d", len(unread.Messages))
+	}
+}

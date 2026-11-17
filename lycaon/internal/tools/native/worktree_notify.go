@@ -5,16 +5,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// mutationLocation carries the structured identity of a mutated path so
-// invalidation never re-resolves display strings. Display keeps traveling for
-// the legacy notifiers; the catalog hears (root, scope-relative) directly.
+// mutationLocation is one mutated path: its root identity, its scope-relative
+// path, and the model's spelling for observers keyed on it.
 type mutationLocation struct {
 	rootID   string
 	scopeRel string
@@ -25,30 +23,13 @@ func resolvedMutationLocation(res projectpaths.Resolved) mutationLocation {
 	return mutationLocation{rootID: res.Root.ID, scopeRel: res.ScopeRel, display: res.DisplayPath}
 }
 
-// afterSuccessfulMutation runs worker mutation hooks, emits WorktreeChanged,
-// and notifies the blueprint write observer. Paths arrive in the model path
-// grammar (bare, @label-qualified, or absolute).
-func afterSuccessfulMutation(ctx context.Context, tctx tools.ToolContext, paths ...string) {
-	tools.ReportSyntaxOverride(ctx, tctx, paths...)
-	for _, p := range paths {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		afterWorkerMutation(ctx, tctx, p)
-	}
-	notifyWorktreeChanged(ctx, tctx, paths...)
-	notifyBlueprintWrite(ctx, tctx, paths...)
-}
-
-// afterSuccessfulMutationResolved reports one resolved mutation: legacy
-// notifiers keep the display spelling while invalidation carries identity.
+// afterSuccessfulMutationResolved reports one resolved mutation.
 func afterSuccessfulMutationResolved(ctx context.Context, tctx tools.ToolContext, res projectpaths.Resolved) {
 	afterSuccessfulMutationLocations(ctx, tctx, resolvedMutationLocation(res))
 }
 
-// afterSuccessfulMutationLocations is the structured form of
-// afterSuccessfulMutation for callers holding resolved identities.
+// afterSuccessfulMutationLocations runs worker mutation hooks, emits
+// WorktreeChanged, and notifies the blueprint write observer.
 func afterSuccessfulMutationLocations(ctx context.Context, tctx tools.ToolContext, locations ...mutationLocation) {
 	displays := make([]string, 0, len(locations))
 	for _, loc := range locations {
@@ -64,28 +45,8 @@ func afterSuccessfulMutationLocations(ctx context.Context, tctx tools.ToolContex
 	notifyBlueprintWrite(ctx, tctx, displays...)
 }
 
-// notifyWorktreeChanged debounces WorktreeChanged events for the mutated
-// paths. Each path is resolved once against the session's root set so the
-// event carries (root, scope-relative) locations; paths outside the root
-// grammar keep the write-root join.
-func notifyWorktreeChanged(ctx context.Context, tctx tools.ToolContext, paths ...string) {
-	locations := make([]mutationLocation, 0, len(paths))
-	for _, p := range paths {
-		p = filepath.ToSlash(strings.TrimSpace(p))
-		if p == "" {
-			continue
-		}
-		if abs, root, err := projectroot.ResolveAbs(tctx.Source.Roots, tctx.Source.ActiveRootID, p); err == nil {
-			locations = append(locations, mutationLocation{rootID: root.ID, scopeRel: projectroot.ScopeRel(root, abs), display: p})
-			continue
-		}
-		locations = append(locations, mutationLocation{display: p})
-	}
-	notifyWorktreeChangedLocations(ctx, tctx, locations...)
-}
-
-// notifyWorktreeChangedLocations groups mutated paths by their structured root
-// identity and debounces one WorktreeChanged event per affected root.
+// notifyWorktreeChangedLocations groups mutated paths by root and debounces
+// one WorktreeChanged event per affected root.
 func notifyWorktreeChangedLocations(ctx context.Context, tctx tools.ToolContext, locations ...mutationLocation) {
 	fallbackRoot := strings.TrimSpace(tools.HostWriteRoot(tctx))
 	grouped := make(map[string][]string, len(locations))
@@ -106,8 +67,7 @@ func notifyWorktreeChangedLocations(ctx context.Context, tctx tools.ToolContext,
 				continue
 			}
 		}
-		// No structured identity for this location (external areas, grants):
-		// keep the display spelling under the write root, as before.
+		// External areas and grants have no root: their spelling lands under the write root.
 		add(fallbackRoot, loc.display)
 	}
 	for _, rootPath := range order {
@@ -115,8 +75,7 @@ func notifyWorktreeChangedLocations(ctx context.Context, tctx tools.ToolContext,
 	}
 }
 
-// mutationRootPath maps a structured root id onto the host path the catalog
-// indexes for it.
+// mutationRootPath maps a root id onto the host path the catalog indexes for it.
 func mutationRootPath(tctx tools.ToolContext, rootID string) string {
 	if rootID == "worker-branch" {
 		return strings.TrimSpace(tctx.Source.WorkerBranchRoot)

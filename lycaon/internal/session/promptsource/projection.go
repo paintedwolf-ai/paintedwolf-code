@@ -18,6 +18,7 @@ type ProjectionRepository interface {
 	AdmitModelResponse(context.Context, string, string) error
 	AppendDraftVersion(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error)
 	CheckpointTurn(ctx context.Context, turnID, attemptID string, phase store.TurnPhase, checkpointJSON string) error
+	TouchTurnProgress(ctx context.Context, turnID string) error
 	CountDraftVersions(ctx context.Context, sessionID, slotID string) (int, error)
 	MarkModelOutputProjected(ctx context.Context, outputID string) error
 	SettleModelOutput(ctx context.Context, out store.ModelOutput) (store.ModelOutput, error)
@@ -99,6 +100,12 @@ func (m *Projection) Build() promptloop.ProjectionDeps {
 			return fmt.Errorf("session store not configured")
 		}
 		return m.Sessions.CheckpointTurn(ctx, turnID, attemptID, phase, checkpointJSON)
+	}
+	deps.TouchTurnProgress = func(ctx context.Context, turnID string) error {
+		if m == nil || m.Sessions == nil {
+			return fmt.Errorf("session store not configured")
+		}
+		return m.Sessions.TouchTurnProgress(ctx, turnID)
 	}
 	deps.AppendDraftVersion = func(ctx context.Context, sessionID, slotID, body, outcomeCode string) (int, error) {
 		if m == nil {

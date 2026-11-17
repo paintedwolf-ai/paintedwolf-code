@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/sourceeffect"
 	"os"
 	"strings"
@@ -196,7 +197,7 @@ func (s *SourceVersions) captureRestoreBaseVersion(
 		}
 		return head.VersionID, nil
 	}
-	if plan.BeforeSize > sourceledger.MaxRevisionContentBytes {
+	if plan.BeforeSize > sourceblob.MaxRevisionContentBytes {
 		return "", sourceledger.ErrVersionUnavailable
 	}
 	head, err := s.heads.ResolveHeadByFile(ctx, p.SourceID(), sourcebranch.Trunk, req.FileID)

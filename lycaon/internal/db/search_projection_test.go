@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"path/filepath"
 	"testing"
@@ -50,7 +51,7 @@ func TestSearchProjectionWriteThroughAndFTS(t *testing.T) {
 		INSERT INTO messages (
 			id, entry_id, session_id, role, content, origin, authority, trust_tier, kind, ts
 		) VALUES (?, ?, ?, ?, ?, 'user', 'user', 'trusted', '', ?)
-	`, msg.ID, "entry-"+msg.ID, sessionID, msg.Role, msg.Content, db.FormatTime(msg.CreatedAt))
+	`, msg.ID, "entry-"+msg.ID, sessionID, msg.Role, msg.Content, timelayout.Format(msg.CreatedAt))
 	testutil.FailErr(t, "insert message", err)
 	testutil.FailErr(t, "SyncMessageWriteThrough", search.SyncMessageWriteThrough(ctx, tx, testdbseed.DefaultProjectID, sessionID, msg))
 	testutil.FailErr(t, "Commit", tx.Commit())
@@ -107,7 +108,7 @@ func TestSyncMessageWriteThroughReplacesEvidence(t *testing.T) {
 	msg := api.Message{ID: "msg-replace-1", Role: api.MessageRoleUser, Content: "old-unique-token", CreatedAt: time.Now().UTC()}
 	testdbseed.InsertSessionEntry(t, tx, "entry-"+msg.ID, sessionID, "utterance", msg.ID, 1)
 	_, err = tx.ExecContext(ctx, `INSERT INTO messages (id, entry_id, session_id, role, content, origin, authority, trust_tier, kind, ts) VALUES (?, ?, ?, ?, ?, 'user', 'user', 'trusted', '', ?)`,
-		msg.ID, "entry-"+msg.ID, sessionID, msg.Role, msg.Content, db.FormatTime(msg.CreatedAt))
+		msg.ID, "entry-"+msg.ID, sessionID, msg.Role, msg.Content, timelayout.Format(msg.CreatedAt))
 	testutil.FailErr(t, "insert", err)
 	testutil.FailErr(t, "write-through old", search.SyncMessageWriteThrough(ctx, tx, testdbseed.DefaultProjectID, sessionID, msg))
 	testutil.FailErr(t, "Commit", tx.Commit())

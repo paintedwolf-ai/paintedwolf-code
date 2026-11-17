@@ -68,16 +68,8 @@ func LimitsToDTO(scope wire.SettingsScope, lim SessionLimits, mergedFrom []strin
 		CoordinatorHostTurnTimeoutMs: lim.CoordinatorHostTurnTimeoutSec * 1000,
 		CoordinatorMaxSleepMs:        lim.CoordinatorMaxSleepSec * 1000,
 		AwaitParentWorkersTimeoutMs:  lim.AwaitParentWorkersTimeoutSec * 1000,
-		WorkerToolBudgetDefault:      lim.WorkerToolBudgetDefault,
-		WorkerToolBudgetMin:          lim.WorkerToolBudgetMin,
-		WorkerToolBudgetMax:          lim.WorkerToolBudgetMax,
 		MergedFrom:                   mergedFrom,
 	}
-}
-
-// WireScope converts llm scope to API scope.
-func WireScope(scope string) wire.SettingsScope {
-	return wire.SettingsScope(scope)
 }
 
 // SecurityScannersToDTO converts effective Security scanners settings to API response.

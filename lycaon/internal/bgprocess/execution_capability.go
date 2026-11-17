@@ -1,6 +1,9 @@
 package bgprocess
 
-import "sort"
+import (
+	"sort"
+	"strings"
+)
 
 // ActiveExecutionJob retains exceptional access until an exit is observed.
 type ActiveExecutionJob struct {
@@ -17,7 +20,7 @@ func (r *Registry) ActiveExecutionJobs(sessionID string) []ActiveExecutionJob {
 	r.jobs.mu.Lock()
 	defer r.jobs.mu.Unlock()
 	var jobs []ActiveExecutionJob
-	for _, process := range r.jobs.ownedProcessesLocked(trim(sessionID)) {
+	for _, process := range r.jobs.ownedProcessesLocked(strings.TrimSpace(sessionID)) {
 		if process.hasExit {
 			continue
 		}

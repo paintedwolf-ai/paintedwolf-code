@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"hash"
 	"io"
 	"os"
@@ -50,7 +51,7 @@ type sourceHistoryBuffer struct {
 
 func (b *sourceHistoryBuffer) Write(data []byte) (int, error) {
 	b.size += int64(len(data))
-	if b.size <= sourceledger.MaxRevisionContentBytes {
+	if b.size <= sourceblob.MaxRevisionContentBytes {
 		b.body = append(b.body, data...)
 	} else {
 		b.body = nil

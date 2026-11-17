@@ -170,7 +170,7 @@ func openBranchParentLayers(ctx context.Context, services *layeredServices, bran
 		layers, _, err := services.recovery.OpenCheckpointChainLayers(ctx, parentIDs)
 		return layers, parentIDs, err
 	}
-	storeDir := findBranchCheckpointStoreDir(branchRoot, meta, parentIDs[0])
+	storeDir := branchCheckpointStoreDir(branchRoot, meta, parentIDs[0])
 	if storeDir == "" {
 		return nil, parentIDs, nil
 	}
@@ -192,24 +192,6 @@ func recoveredParentCheckpointIDs(services *layeredServices, branchRoot, jobID s
 		}
 	}
 	return nil
-}
-
-func findBranchCheckpointStoreDir(branchRoot string, meta JobMeta, checkpointID string) string {
-	if checkpointManifestExists(meta.CheckpointStoreDir, checkpointID) {
-		return meta.CheckpointStoreDir
-	}
-	workerBranchesDir := filepath.Dir(filepath.Dir(filepath.Clean(branchRoot)))
-	configDir := filepath.Dir(workerBranchesDir)
-	for _, cand := range []string{
-		filepath.Join(configDir, enginepaths.WorkerRecoveryDirName, "checkpoints"),
-		filepath.Join(workerBranchesDir, adapterRuntimeDirName, "recovery", "checkpoints"),
-		filepath.Join(configDir, enginepaths.WorkerBaselinesDirName, ".task-checkpoints"),
-	} {
-		if checkpointManifestExists(cand, checkpointID) {
-			return cand
-		}
-	}
-	return ""
 }
 
 func openStoreParentChain(ctx context.Context, store *checkpoint.Store, ids []string) ([]layeredfs.ParentLayer, error) {

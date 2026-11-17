@@ -13,11 +13,7 @@ function toolPresentationKeys(
   partId: string,
 ): TranscriptDisclosureKey[] {
   const toolKey = transcriptDisclosureKey.tool(partId);
-  if (!isOpen(toolKey)) return [];
-  const keys = [toolKey];
-  const networkKey = transcriptDisclosureKey.toolNetwork(partId);
-  if (isOpen(networkKey)) keys.push(networkKey);
-  return keys;
+  return isOpen(toolKey) ? [toolKey] : [];
 }
 
 function rowDisclosureKey(
@@ -151,11 +147,5 @@ export function transcriptRowPresentationEstimate(
     return 30 + item.parts.length * 53 + openChildren * 360;
   }
   if (presentation === TRANSCRIPT_ROW_COLLAPSED_PRESENTATION) return undefined;
-  if (
-    item.kind === "tool" &&
-    isOpen(transcriptDisclosureKey.toolNetwork(item.part.id))
-  ) {
-    return 660;
-  }
   return 420;
 }

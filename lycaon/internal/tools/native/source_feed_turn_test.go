@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -33,7 +33,7 @@ func bindLedgerForWrites(t *testing.T, dir string) *sourceledger.Store {
 	_, err := sqlDB.ExecContext(t.Context(), `
 		INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at)
 		VALUES ('r1', 'p1', ?, 'root', 1, ?)
-	`, dir, db.FormatTime(time.Now().UTC()))
+	`, dir, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert root failed", err)
 	st := sourceledger.New(sqlDB, t.TempDir())
 	return st

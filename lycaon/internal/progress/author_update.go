@@ -195,7 +195,7 @@ func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string, recon
 	}
 	if u.reconciliationToken != "" {
 		result.ReconciliationStatus = "changed"
-		if reconciler.Acknowledge(root, u.reconciliationToken) {
+		if reconciler.Acknowledge(ctx, root, u.reconciliationToken) {
 			result.ReconciliationStatus = "acknowledged"
 		}
 	}

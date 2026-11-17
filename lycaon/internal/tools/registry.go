@@ -97,6 +97,8 @@ type ToolInvocationOut struct {
 	SourceDeliveries []SourceDeliveryTag
 	// Listener is Den UI and wire metadata for loopback listener attribution on http_request.
 	Listener *api.LoopbackListenerFact
+	// CardFacts are facts the handler states for its action card; the model never sees them.
+	CardFacts []api.ActionFact
 	// SourceRun is nil until a command or verify run exits.
 	SourceRun *SourceRunCapture
 	// RetrievedFrom is the final retrieval host after redirects.
@@ -199,6 +201,10 @@ type InvocationSource struct {
 	ActiveRootID        string
 	SourceWorkspaceKind api.SourceWorkspaceKind
 	WorkerBranchRoot    string
+	// ReadOnly forbids this invocation to change project files: path
+	// resolution refuses writes and its processes may write only the session
+	// scratch. A reviewer reads its sealed subject's view this way.
+	ReadOnly bool
 	// RecordViewProcess durably names a process started in the worker's view, so recovery can settle it.
 	RecordViewProcess func(pid int) error
 	// WorkerViewBoundary reads what a process of this worker must not reach, as of its launch.

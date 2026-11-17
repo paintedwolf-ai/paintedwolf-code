@@ -2,12 +2,11 @@ package toolhost
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/grounding"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -18,7 +17,7 @@ type GuidanceNudger interface {
 
 // GroundingService audits record_finding findings against the evidence ledger.
 type GroundingService struct {
-	Config    delegation.GroundingConfig
+	Config    grounding.GroundingConfig
 	State     *grounding.StateStore
 	Ledger    guidance.EvidenceLedgerReader
 	RejectFmt *guidance.StaticRejectFormatter

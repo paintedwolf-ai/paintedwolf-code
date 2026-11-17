@@ -1,4 +1,4 @@
-import { filesBufferBase } from "../documents/project-files-buffers.ts";
+import { filesBufferBase } from "../documents/files-buffer-state.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import type { SourceFileVersion, SourceTip } from "../../api/types.ts";
 import type { FileBuffer } from "../documents/files-buffer-state.ts";

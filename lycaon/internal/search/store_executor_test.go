@@ -469,3 +469,27 @@ func TestStoreExecutorNegatedFreeTextExcludesRows(t *testing.T) {
 		t.Fatalf("case-sensitive NOT Gamma must keep lowercase gamma rows: %v", storeSnippets(hits))
 	}
 }
+
+func TestStoreExecutorFiltersAndProjectsWorkerName(t *testing.T) {
+	sqlDB := seedStoreRows(t, "child-surveyor", []IndexRow{
+		{ID: "ev-w1", Source: SourceTool, HitKind: HitKindEvidence, Snippet: "parser token boundary"},
+	})
+	testdbseed.InsertSession(t, sqlDB, "coord-w", testdbseed.DefaultProjectID)
+	_, err := sqlDB.ExecContext(t.Context(), `UPDATE sessions SET parent_session_id = 'coord-w' WHERE id = 'child-surveyor'`)
+	testutil.FailErr(t, "parent child-surveyor", err)
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err = sqlDB.ExecContext(t.Context(), `INSERT INTO workers (
+		id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id, operation_id, created_at, updated_at
+	) VALUES ('w-1', ?, 'coord-w', 'surveyor', 'repo-researcher', 'read', 'survey', 'child-surveyor', 'op-w1', ?, ?)`,
+		testdbseed.DefaultProjectID, now, now)
+	testutil.FailErr(t, "insert worker", err)
+
+	hits := runStoreQuery(t, sqlDB, "worker:surveyor boundary", MatchFlags{})
+	if len(hits) != 1 || hits[0].WorkerName != "surveyor" {
+		t.Fatalf("worker:surveyor hits = %+v", hits)
+	}
+	none := runStoreQuery(t, sqlDB, "worker:other boundary", MatchFlags{})
+	if len(none) != 0 {
+		t.Fatalf("worker:other hits = %+v, want empty", none)
+	}
+}

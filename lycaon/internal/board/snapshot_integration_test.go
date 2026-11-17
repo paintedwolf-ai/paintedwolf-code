@@ -11,7 +11,6 @@ import (
 
 	"time"
 
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/repoinfo"
@@ -94,9 +93,8 @@ func TestSnapshotBuilderPackContentHashNonEmpty(t *testing.T) {
 		testutil.FailErr(t, "write file", err)
 	}
 	builder := &SnapshotBuilder{
-		Repo:        repotest.NewProvider(t),
-		Delegations: delegation.NewMemoryStore(),
-		Workers:     worker.NewInMemoryQueue(4),
+		Repo:    repotest.NewProvider(t),
+		Workers: worker.NewInMemoryQueue(4),
 	}
 	snap, err := builder.Build(context.Background(), testdbseed.DefaultProjectID, dir, "sess-1", api.BoardDetailLevelCompact, nil)
 	testutil.FailErr(t, "builder.Build failed", err)

@@ -76,10 +76,7 @@ func coordinatorScopeRejectCode(toolName, turnSurfaceID string, kind sandbox.Sco
 		}
 		return ""
 	case sandbox.ScopeRead:
-		switch toolName {
-		case "read", "grep":
-			return "COORDINATOR_READ_OUTSIDE_SCOPE"
-		}
+		return "COORDINATOR_READ_OUTSIDE_SCOPE"
 	}
 	return ""
 }

@@ -32,10 +32,6 @@ func DraftRecoveryTarget(message Message) string {
 	return id
 }
 
-func draftRecoveryTarget(message Message) string {
-	return DraftRecoveryTarget(message)
-}
-
 // orderDraftRecovery restores causal order without moving immutable transcript rows.
 // A stable draft rail can precede guidance that its replacement already consumed.
 func orderDraftRecovery(messages []Message) []Message {
@@ -48,7 +44,7 @@ func orderDraftRecovery(messages []Message) []Message {
 	before := make(map[int][]Message)
 	moved := make(map[int]bool)
 	for i, message := range messages {
-		if target, ok := drafts[draftRecoveryTarget(message)]; ok && target < i {
+		if target, ok := drafts[DraftRecoveryTarget(message)]; ok && target < i {
 			before[target] = append(before[target], message)
 			moved[i] = true
 		}

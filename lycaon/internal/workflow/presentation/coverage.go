@@ -1,11 +1,12 @@
 package presentation
 
 import (
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	workflowvalidation "github.com/lycaon/lycaon/internal/workflow/validation"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func RunCoverageReview(verdicts []PhaseVerdict) *api.CoverageReview {
+func RunCoverageReview(verdicts []runstate.PhaseVerdict) *api.CoverageReview {
 	var out *api.CoverageReview
 	for _, v := range verdicts {
 		if !v.Def.CarriesCoverage() {

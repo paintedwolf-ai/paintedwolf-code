@@ -211,16 +211,9 @@ func TestProjectDeleteCascadesDurableProjectState(t *testing.T) {
 		VALUES ('delete-evidence', ?, 'tool', 'evidence', 'delete-session');
 		INSERT INTO worker_jobs (id, project_id, agent_type, status, prompt, brief, created_at)
 		VALUES ('delete-worker', ?, 'implementer', 'complete', 'fixture', 'fixture', ?);
-		INSERT INTO delegations (
-			id, project_id, task, strategy, status, created_at
-		) VALUES ('delete-delegation', ?, 'task', 'feature-based', 'done', ?);
-		INSERT INTO delegation_legs (id, delegation_id, title, status, created_at)
-		VALUES ('delete-leg', 'delete-delegation', 'leg', 'complete', ?);
 	`,
 		projectID,
 		projectID, now,
-		projectID, now,
-		now,
 	)
 	testutil.FailErr(t, "seed project state", err)
 
@@ -234,7 +227,7 @@ func TestProjectDeleteCascadesDurableProjectState(t *testing.T) {
 		"source_checkpoints": 0,
 		"source_line_attr":   0, "source_blob_objects": 1,
 		"evidence_index": 0,
-		"worker_jobs":    0, "delegations": 0, "delegation_legs": 0,
+		"worker_jobs":    0,
 	} {
 		var got int
 		testutil.FailErr(t, "count "+table, sqlDB.QueryRowContext(t.Context(), "SELECT count(*) FROM "+table).Scan(&got))

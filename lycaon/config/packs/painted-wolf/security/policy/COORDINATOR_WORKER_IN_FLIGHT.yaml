@@ -8,12 +8,12 @@ when: paintedwolf.tool_is_task && paintedwolf.worker_spawn_blocked
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-message: Coordinator tried to spawn a worker while {{ paintedwolf.active_count }} job(s) are still pending or running (max {{ paintedwolf.max_workers }})
-what: 'This dispatch would exceed the session worker limit: {{ paintedwolf.active_count }}/{{ paintedwolf.max_workers }} total, {{ paintedwolf.active_read_count }}/{{ paintedwolf.max_read_workers }} read, and {{ paintedwolf.active_write_count }}/{{ paintedwolf.max_write_workers }} write jobs are in flight.'
+message: Coordinator tried to start a worker while {{ paintedwolf.active_count }} worker round(s) are working or asking (max {{ paintedwolf.max_workers }})
+what: 'Starting another worker would exceed the session concurrency limit: {{ paintedwolf.active_count }}/{{ paintedwolf.max_workers }} total, {{ paintedwolf.active_read_count }}/{{ paintedwolf.max_read_workers }} read, and {{ paintedwolf.active_write_count }}/{{ paintedwolf.max_write_workers }} write workers are currently active.'
 cause: The total limit or the limit for this {{ paintedwolf.scope_mode }} scope is full.
 why: Read, write, and total concurrency have separate limits; capacity in another scope does not open this slot.
-fix: 'Wait for at least one job to finish and its completion envelope to land, or synthesize existing envelopes before dispatching another worker.'
-instead: 'Wait for a slot in the requested scope and the total worker limit, then dispatch only the remaining work'
+fix: 'Wait for an active worker to reach waiting or closed, or instruct a waiting worker in the needed scope once a slot opens before starting another worker.'
+instead: 'Wait for an active slot in the requested scope and total concurrency limit, then instruct a waiting worker or start only the remaining work.'
 x-paintedwolf-scenarios:
   - id: default
     vars:

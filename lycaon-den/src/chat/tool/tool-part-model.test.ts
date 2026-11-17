@@ -12,7 +12,6 @@ import {
   toolPartFromCall,
   toolCompletionLabel,
   toolPartSummaryTitle,
-  toolResultText,
 } from "./tool-part-model.ts";
 import {
   applyBackgroundProcessEvent,
@@ -60,7 +59,7 @@ describe("tool-part-model", () => {
     );
     expect(part.status).toBe("running");
     expect(part.process?.handle).toBe("h-1");
-    expect(toolResultText(part)).toContain('"running":true');
+    expect(part.output).toContain('"running":true');
     expect(toolPartDisplayStatus(part, "s1")).toBe("running");
 
     applyBackgroundProcessEvent({

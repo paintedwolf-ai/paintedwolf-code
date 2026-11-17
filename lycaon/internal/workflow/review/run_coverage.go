@@ -89,7 +89,7 @@ func (r Assignments) facts(ctx context.Context, run *api.WorkflowRun, manifest w
 		return reviewcoverage.Facts{}, nil, err
 	}
 	if current != inputRevision {
-		return reviewcoverage.Facts{}, nil, &toolrejection.ToolReject{Code: ReviewContextChangedCode, Data: map[string]any{"action": "refresh_context"}}
+		return reviewcoverage.Facts{}, nil, &toolrejection.ToolReject{Code: runstate.ReviewContextChangedCode, Data: map[string]any{"action": "refresh_context"}}
 	}
 	facts := BuildCoverageFacts(manifest, vars, tasks, inventory.Scans)
 	facts.InputRevision = inputRevision
@@ -301,7 +301,7 @@ func (m *Coverage) ValidateReview(ctx context.Context, run *api.WorkflowRun, def
 		return nil, err
 	}
 	if review.Revision != facts.Revision {
-		return &toolrejection.ToolReject{Code: ReviewContextChangedCode, Data: map[string]any{"action": "refresh_context", "revision": facts.Revision}}, nil
+		return &toolrejection.ToolReject{Code: runstate.ReviewContextChangedCode, Data: map[string]any{"action": "refresh_context", "revision": facts.Revision}}, nil
 	}
 	if err := reviewcoverage.Validate(facts, *review); err != nil {
 		return coverageReject(def, err), nil

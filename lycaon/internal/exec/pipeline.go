@@ -60,10 +60,6 @@ type PipelineResult struct {
 	TimedOut bool
 }
 
-func buildExecCmd(ctx context.Context, name string, args []string, opts ExecOpts, stageEnv map[string]string) (*exec.Cmd, func(), error) {
-	return prepareNativeCommand(ctx, name, args, opts, stageEnv, false)
-}
-
 // ProcessEnvironment builds the sanitized base environment for a process launch
 // before OS-specific sandbox confinement variables (such as proxy or SSH
 // wrappers) are attached. Both the command program's native env builtin and
@@ -166,7 +162,7 @@ func PrepareCommand(ctx context.Context, name string, args []string, opts ExecOp
 	if argv.ContainsShellMetacharacters(name) {
 		return nil, nil, fmt.Errorf("%w: command name", argv.ErrShellMetacharacters)
 	}
-	cmd, cleanup, err := buildExecCmd(ctx, name, args, opts, nil)
+	cmd, cleanup, err := prepareNativeCommand(ctx, name, args, opts, nil, false)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -346,7 +342,7 @@ func wirePipelineStages(
 			releaseWired(wired[:i])
 			return nil, err
 		}
-		cmd, cleanup, err := buildExecCmd(runCtx, stage.Name, stage.Args, opts, stage.Env)
+		cmd, cleanup, err := prepareNativeCommand(runCtx, stage.Name, stage.Args, opts, stage.Env, false)
 		if err != nil {
 			guard.release()
 			releaseWired(wired[:i])

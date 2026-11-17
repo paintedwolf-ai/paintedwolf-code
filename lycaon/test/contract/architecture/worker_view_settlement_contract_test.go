@@ -17,10 +17,9 @@ const platformAdapterImportPrefix = "github.com/lycaon/lycaon/internal/layeredfs
 
 // settlerArgument names each production deletion entrypoint and the position of its settler.
 var settlerArgument = map[string]int{
-	"ReconcileStaleSandboxes":       3,
-	"ReconcileProjectSandboxes":     3,
-	"ReconcileSandboxRoots":         4,
-	"ReconcileSelectedSandboxRoots": 6,
+	"ReconcileStaleSandboxes":   3,
+	"ReconcileProjectSandboxes": 3,
+	"ReconcileSandboxRoots":     4,
 }
 
 // TestWorkerDataDeletionSettlesAndPlatformAdaptersStayBehindTheContract holds the two properties

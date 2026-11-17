@@ -1,6 +1,7 @@
 package claim
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,98 +13,78 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
 
-func TestFormatV1UpgradeRetainsMaterializedSemanticsAndUnknownVersionsFailWithoutWrites(t *testing.T) {
+type versionProbe struct {
+	FormatVersion *int `json:"format_version"`
+}
+
+func LoadViewMetadata(path string) (ViewMetadataV2, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return ViewMetadataV2{}, err
+	}
+	var vp versionProbe
+	if err := json.Unmarshal(raw, &vp); err != nil || vp.FormatVersion == nil {
+		return ViewMetadataV2{}, fmt.Errorf("%w: missing or unreadable format_version", ErrInvalidMetadata)
+	}
+	if *vp.FormatVersion != FormatVersionV2 {
+		return ViewMetadataV2{}, fmt.Errorf("%w: version %d", ErrUnsupportedMetadataVersion, *vp.FormatVersion)
+	}
+	var meta ViewMetadataV2
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&meta); err != nil {
+		return ViewMetadataV2{}, fmt.Errorf("%w: %w", ErrInvalidMetadata, err)
+	}
+	if err := validateViewMetadataV2(meta); err != nil {
+		return ViewMetadataV2{}, err
+	}
+	return meta, nil
+}
+
+func TestViewMetadataRoundTripsAndRefusesUnknownShapesWithoutWrites(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
-
-	v1Fixture := LegacyBranchMetadataV1{
-		FormatVersion:    FormatVersionV1,
-		JobID:            "job-legacy-42",
-		ProjectID:        "proj-legacy",
-		SourceGeneration: 19,
-		BranchRoot:       filepath.Join(tmp, "legacy-branch", "primary"),
-		Roots: []RootMappingRecord{
-			{
-				RootID:        "primary",
-				Label:         "primary",
-				SourcePath:    filepath.Join(tmp, "trunk"),
-				WorkspacePath: filepath.Join(tmp, "legacy-branch", "primary"),
-				IsPrimary:     true,
-			},
+	meta := ViewMetadataV2{
+		Identity: ClaimIdentity{WorkerID: "job-42", ProjectID: "proj", ViewID: "view-42", SourceGeneration: 19},
+		SelectedRoots: []RootMappingRecord{{
+			RootID: "primary", Label: "primary", SourcePath: filepath.Join(tmp, "trunk"),
+			WorkspacePath: filepath.Join(tmp, "branch", "primary"), IsPrimary: true,
+		}},
+		Adapter: AdapterMetadataFacts{
+			AdapterID: adapter.AdapterEagerCopy, PreparationKind: adapter.PreparationMaterialized,
+			SourceVisibility: adapter.VisibilityFixed,
 		},
-		FocusPathHints: []string{"cmd/app/main.go"},
-		CapturedBases: []layeredfs.BaseCapture{
-			{
-				Path:   layeredfs.QualifiedPath{RootID: "primary", Rel: "cmd/app/main.go"},
-				Layer:  layeredfs.LayerTrunk,
-				Kind:   layeredfs.EntryRegular,
-				Mode:   0o644,
-				Size:   128,
-				SHA256: "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-			},
-		},
-		LastCheckpointID: "cp-legacy-only-result",
+		JournalPath: filepath.Join(tmp, "branch", "journal"),
+		Checkpoints: CheckpointMetadataRefs{LastPublishedCheckpointID: "cp-1"},
 	}
-	v1Path := filepath.Join(tmp, "v1-meta.json")
-	rawV1, err := json.MarshalIndent(v1Fixture, "", "  ")
-	testutil.FailErr(t, "marshal v1", err)
-	testutil.FailErr(t, "write v1", os.WriteFile(v1Path, rawV1, 0o600))
-
-	coord := NewCoordinator(nil)
-	cv, upgraded, err := coord.LoadOrUpgradeRetainedView(v1Path)
-	testutil.FailErr(t, "LoadOrUpgradeRetainedView v1", err)
-	if !upgraded {
-		t.Fatal("expected upgraded=true for Format-v1 fixture")
-	}
-	if cv.Metadata.FormatVersion != FormatVersionV2 ||
-		cv.Metadata.Adapter.AdapterID != adapter.AdapterEagerCopy ||
-		cv.Metadata.Adapter.PreparationKind != adapter.PreparationMaterialized ||
-		cv.Metadata.Adapter.SourceVisibility != adapter.VisibilityFixed ||
-		!cv.Metadata.Adapter.IsLegacyMaterialized {
-		t.Fatalf("v1 materialized branch must retain materialized fixed visibility semantics, got %+v", cv.Metadata.Adapter)
-	}
-	if len(cv.Metadata.LegacyCapturedBases) != 1 || cv.Metadata.Checkpoints.LastPublishedCheckpointID != "cp-legacy-only-result" {
-		t.Fatalf("upgrade must preserve captured bases and retained checkpoint result, got %+v", cv.Metadata)
+	path := filepath.Join(tmp, "view-metadata.json")
+	testutil.FailErr(t, "SaveViewMetadata", SaveViewMetadata(path, meta))
+	loaded, err := LoadViewMetadata(path)
+	testutil.FailErr(t, "LoadViewMetadata", err)
+	if loaded.FormatVersion != FormatVersionV2 || loaded.Identity != meta.Identity || loaded.Adapter.AdapterID != adapter.AdapterEagerCopy ||
+		loaded.Checkpoints.LastPublishedCheckpointID != "cp-1" {
+		t.Fatalf("loaded metadata = %+v, want the saved record", loaded)
 	}
 
-	upgradedMeta, err := UpgradeMetadataFile(v1Path)
-	testutil.FailErr(t, "UpgradeMetadataFile", err)
-	if upgradedMeta.FormatVersion != FormatVersionV2 || !upgradedMeta.Adapter.IsLegacyMaterialized {
-		t.Fatalf("expected persisted Format-v2 legacy materialized record, got %+v", upgradedMeta)
-	}
-
-	// Attempting to relabel a legacy materialized branch as a live mounted view must be refused.
-	relabeled := upgradedMeta
-	relabeled.Adapter.AdapterID = adapter.AdapterFUSELinux
-	relabeled.Adapter.PreparationKind = adapter.PreparationMounted
-	relabeled.Adapter.SourceVisibility = adapter.VisibilityLive
-	if err := SaveViewMetadata(filepath.Join(tmp, "relabeled.json"), relabeled); !errors.Is(err, ErrInvalidMetadata) {
-		t.Fatalf("expected ErrInvalidMetadata when relabeling legacy materialized branch as mounted, got %v", err)
-	}
-
-	// Unknown versions and unknown shapes must fail without mutating the file on disk.
 	for _, tc := range []struct {
 		name    string
 		payload string
 		wantErr error
 	}{
 		{"v0", `{"format_version": 0, "job_id": "x"}`, ErrUnsupportedMetadataVersion},
+		{"v1", `{"format_version": 1, "job_id": "x", "roots": []}`, ErrUnsupportedMetadataVersion},
 		{"v3", `{"format_version": 3, "identity": {"worker_id": "w", "view_id": "v"}}`, ErrUnsupportedMetadataVersion},
 		{"unknown_field", `{"format_version": 2, "unknown_shape": true}`, ErrInvalidMetadata},
 	} {
 		badPath := filepath.Join(tmp, "bad-"+tc.name+".json")
 		testutil.FailErr(t, "write "+tc.name, os.WriteFile(badPath, []byte(tc.payload), 0o600))
-		if _, _, lErr := LoadViewMetadata(badPath); !errors.Is(lErr, tc.wantErr) {
+		if _, lErr := LoadViewMetadata(badPath); !errors.Is(lErr, tc.wantErr) {
 			t.Fatalf("%s: expected %v, got %v", tc.name, tc.wantErr, lErr)
-		}
-		if _, uErr := UpgradeMetadataFile(badPath); !errors.Is(uErr, tc.wantErr) {
-			t.Fatalf("%s upgrade: expected %v, got %v", tc.name, tc.wantErr, uErr)
 		}
 		afterBytes, rErr := os.ReadFile(badPath)
 		testutil.FailErr(t, "read after "+tc.name, rErr)

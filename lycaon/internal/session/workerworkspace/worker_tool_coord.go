@@ -44,7 +44,8 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 	if !ok || task == nil {
 		return tctx, nil
 	}
-	if task.EffectiveScope().IsWrite() && strings.TrimSpace(task.WorkspaceRoot) == "" {
+	// A write worker claims its branch; a reviewer its view of the subject.
+	if strings.TrimSpace(task.WorkspaceRoot) == "" && (task.EffectiveScope().IsWrite() || m.tasks.ReviewsWorker(ctx, task)) {
 		claimed, err := m.tasks.ClaimWorkerBranch(ctx, task.ID)
 		if err != nil {
 			return tctx, fmt.Errorf("claim worker branch: %w", err)
@@ -68,7 +69,8 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 	tctx.Identity.HandoffSessionID = parentID
 	tctx.Identity.HandoffAgentID = task.ID
 	tctx.Source.WorkerCoord = m
-	if root := strings.TrimSpace(task.WorkspaceRoot); root != "" && task.EffectiveScope().IsWrite() {
+	// A write worker's branch is its own; a reviewer's view is read-only.
+	if root := strings.TrimSpace(task.WorkspaceRoot); root != "" {
 		layout, err := workspace.LoadBranchLayout(root)
 		if err != nil {
 			tctx.Source.BranchWorkspace = nil
@@ -78,6 +80,7 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 		tctx.Source.WorkerSourceRoots = workerSourceRootPaths(layout.Roots)
 		tctx.Source.Roots = layout.Roots
 		tctx.Source.WorkerBranchRoot = root
+		tctx.Source.ReadOnly = !task.EffectiveScope().IsWrite()
 		tctx.Source.RecordViewProcess = workspace.BranchProcessRecorder(root)
 		tctx.Source.WorkerViewBoundary = workspace.BranchViewBoundary(root)
 		tctx.Source.WorkerBaselinePath = task.WorkspaceBaselinePath
@@ -86,7 +89,9 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 			return tctx, err
 		}
 		tctx.Source.BranchWorkspace = branchState
-		_, _ = m.BindPreparedBranch(root, task.ID, sess.ID)
+		if !tctx.Source.ReadOnly {
+			_, _ = m.BindPreparedBranch(root, task.ID, sess.ID)
+		}
 	}
 	m.EnsureTracker(task.ID, sess.ID, firstNonEmpty(task.WorkspacePath, sess.WorkspacePath), strings.TrimSpace(task.WorkspaceRoot), tctx.Source.Roots)
 	return tctx, nil
@@ -122,7 +127,6 @@ func (m *Service) BeforeWorkerWrite(ctx context.Context, tctx tools.ToolContext,
 						"path":       relPath,
 						"agent_type": strings.TrimSpace(task.AgentType),
 						"scope_mode": string(scope.Mode),
-						"job_id":     strings.TrimSpace(task.ID),
 					},
 				}
 			}

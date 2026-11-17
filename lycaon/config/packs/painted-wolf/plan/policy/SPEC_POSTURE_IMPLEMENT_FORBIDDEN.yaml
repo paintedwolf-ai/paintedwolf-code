@@ -10,11 +10,11 @@ x-paintedwolf-audience:
   - coordinator
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: rule:spec
-message: Implementer Task forbidden before planning handoff
-what: Implementer Task forbidden before planning handoff
-cause: Implementer Task forbidden before planning handoff
-why: Complete plan critics and handoff before implementer Task
-fix: Complete plan critics and handoff before implementer Task
+message: Implementer worker dispatch forbidden before planning handoff
+what: Implementer worker dispatch forbidden before planning handoff
+cause: Implementer worker dispatch forbidden before planning handoff
+why: Complete plan critics and handoff before starting or instructing an implementer worker
+fix: Complete plan critics and handoff before starting or instructing an implementer worker
 instead: Stay in spec posture phases until the plan is approved and handed off
 x-paintedwolf-scenarios:
   - id: default

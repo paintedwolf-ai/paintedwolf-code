@@ -6,9 +6,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
+
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/project"
@@ -157,7 +158,7 @@ func TestPromptWithToolCall(t *testing.T) {
 func TestMaxIterationCap(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	mgr, store, projectID := newRootedTestManager(t)
-	if hintCfg, err := guidance.LoadHintConfig(extpacks.Bundled(hintregistry.DefaultDir)); err == nil {
+	if hintCfg, err := guidance.LoadHintConfig(extpacks.Bundled(config.PlatformPolicy)); err == nil {
 		mgr.SetWorkflowHints(hintCfg, nil)
 	}
 	mgr.Limits.SetMaxIterations(3)

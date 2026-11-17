@@ -14,7 +14,7 @@ func TestDisallowedAgentRule(t *testing.T) {
 	engine := NewSimpleEngine(&RulesConfig{Rules: []RuleEntry{{
 		ID: "deny_bad_agent",
 		When: map[string]any{
-			"tool_is_task":     true,
+			"tool_names_agent": true,
 			"disallowed_agent": true,
 		},
 		Then: map[string]any{
@@ -44,11 +44,33 @@ func TestDisallowedAgentRule(t *testing.T) {
 	}
 }
 
+// Changing a worker's agent with instruct_worker meets the same roster;
+// instructing it without naming an agent changes nothing to check.
+func TestDisallowedAgentCoversAgentChanges(t *testing.T) {
+	reg := ruleTestRegistry(t)
+	engine := NewSimpleEngine(&RulesConfig{Rules: []RuleEntry{{
+		ID:   "deny_bad_agent",
+		When: map[string]any{"tool_names_agent": true, "disallowed_agent": true},
+		Then: map[string]any{"deny": map[string]any{"code": "DISALLOWED_AGENT"}},
+	}}}, reg)
+	roster := []string{"repo-researcher"}
+	outcome, err := engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{ToolName: "instruct_worker", ToolArgs: map[string]any{"worker": "scout", "agent_type": "implementer"}, AllowedAgents: roster}})
+	testutil.FailErr(t, "evaluate agent change", err)
+	if outcome.Allowed || outcome.Code != "DISALLOWED_AGENT" {
+		t.Fatalf("agent change outside the roster = %+v", outcome)
+	}
+	outcome, err = engine.Evaluate(context.Background(), EvalContext{EvalContext: conditions.EvalContext{ToolName: "instruct_worker", ToolArgs: map[string]any{"worker": "scout"}, AllowedAgents: roster}})
+	testutil.FailErr(t, "evaluate instruction", err)
+	if !outcome.Allowed {
+		t.Fatalf("instruction without an agent = %+v", outcome)
+	}
+}
+
 func TestDisallowedAgentIgnoredWithoutAllowlist(t *testing.T) {
 	reg := ruleTestRegistry(t)
 	engine := NewSimpleEngine(&RulesConfig{Rules: []RuleEntry{{
 		When: map[string]any{
-			"tool_is_task":     true,
+			"tool_names_agent": true,
 			"disallowed_agent": true,
 		},
 		Then: map[string]any{
@@ -69,7 +91,7 @@ func TestDisallowedAgentEmptyEffectiveRosterDeniesAll(t *testing.T) {
 	engine := NewSimpleEngine(&RulesConfig{Rules: []RuleEntry{{
 		ID: "deny_bad_agent",
 		When: map[string]any{
-			"tool_is_task":     true,
+			"tool_names_agent": true,
 			"disallowed_agent": true,
 		},
 		Then: map[string]any{

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"slices"
 	"strconv"
 	"time"
@@ -100,7 +101,7 @@ func (s *SQLStore) Update(ctx context.Context, sessionID string, change func(Sna
 		if err != nil {
 			return err
 		}
-		stamp := db.FormatTime(nextSnapshotTime(snapshot.version))
+		stamp := timelayout.Format(nextSnapshotTime(snapshot.version))
 		if err := q.UpsertSessionProgressContent(ctx, db.UpsertSessionProgressContentParams{
 			SessionID:     key,
 			WorkflowRunID: snapshot.RunID,

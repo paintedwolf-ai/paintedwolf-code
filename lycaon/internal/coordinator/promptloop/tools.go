@@ -53,6 +53,7 @@ type toolCaptures struct {
 	sourceDeliveries []tools.SourceDeliveryTag
 	sourceRun        *tools.SourceRunCapture
 	listener         *api.LoopbackListenerFact
+	cardFacts        []api.ActionFact
 	dispatch         *api.WorkerDispatch
 	workerReport     *api.WorkerReportAcceptance
 	completion       *api.ToolCompletion
@@ -431,6 +432,7 @@ func toolCapturesFrom(out *tools.ToolInvocationOut) toolCaptures {
 		sourceDeliveries: append([]tools.SourceDeliveryTag(nil), out.SourceDeliveries...),
 		sourceRun:        out.SourceRun, dispatch: out.Dispatch, completion: out.Completion,
 		listener:      out.Listener,
+		cardFacts:     append([]api.ActionFact(nil), out.CardFacts...),
 		retrievedFrom: out.RetrievedFrom,
 		sourceReads:   out.SourceReads,
 	}
@@ -550,6 +552,7 @@ func applyToolResultSidecars(
 	if captures.listener != nil {
 		tr.Listener = captures.listener
 	}
+	tr.CardFacts = captures.cardFacts
 	if visualCap := captures.visual; visualCap != nil && store != nil && strings.TrimSpace(rootSessionID) != "" {
 		stamped, err := visual.AttachToolResult(ctx, store, rootSessionID, producerSessionID, tr.ToolCallID, tr, visualCap, toolContent)
 		if err != nil {

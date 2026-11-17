@@ -24,30 +24,32 @@ var changeTemplate = briefing.Template{ID: "activity_change", Version: "1"}
 
 func buildSections(ctx context.Context, ev evidence) ([]briefing.SectionPlan, error) {
 	choice := decide(ev.facts)
-	purpose, err := purposeSection(ctx, ev, choice)
+	purpose, err := purposeSection(ctx, ev)
 	if err != nil {
 		return nil, err
 	}
 	sections := []briefing.SectionPlan{purpose}
-	if choice.change {
+	switch choice.change {
+	case changeGenerated:
 		change, err := changeSection(ctx, ev)
 		if err != nil {
 			return nil, err
 		}
 		sections = append(sections, change)
+	case changeNothingRan:
+		sections = append(sections, nothingRanSection(ev))
+	case changeNone:
 	}
 	return append(sections, outcomeSection(ev, choice)), nil
 }
 
-func purposeSection(ctx context.Context, ev evidence, choice decision) (briefing.SectionPlan, error) {
+func purposeSection(ctx context.Context, ev evidence) (briefing.SectionPlan, error) {
 	call := ev.cause.Call
 	action := briefing.ActionEvidence{Action: briefing.ActionFacts{
 		Tool: call.Name, CallRef: "tool_call:" + ev.target.ToolCallIds[0], Args: callArgs(call.Args), Session: ev.target.SessionID,
 	}, PhaseScope: phaseScope(ev)}
 	briefing.ApplyCause(&action, ev.cause)
-	section, err := briefing.PurposeSection(ctx, action)
-	section.Mode = choice.purpose
-	return section, err
+	return briefing.PurposeSection(ctx, action)
 }
 
 func callArgs(raw string) map[string]any {
@@ -192,6 +194,19 @@ func formatOutput(executions []wire.CommandExecutionReceipt) (string, bool) {
 		}
 	}
 	return b.String(), cut
+}
+
+// nothingRanText is the change of an activity the host refused before any
+// step ran.
+const nothingRanText = "Nothing ran."
+
+func nothingRanSection(ev evidence) briefing.SectionPlan {
+	items := []briefing.Item{
+		{Key: "state", Role: briefing.RoleObservation, SourceKind: "activity_state", Inclusion: briefing.IncludedWhole, Text: outcomeText(ev), Audience: ev.target.SessionID},
+	}
+	manifest := briefing.Manifest{ProfileID: ProfileID, ProfileVersion: profileVersion, SectionID: "change", Template: briefing.Template{ID: "activity_nothing_ran", Version: "1"},
+		Contract: briefing.OneSentence, Items: items}.Sealed()
+	return briefing.SectionPlan{ID: "change", Mode: briefing.Deterministic, Manifest: manifest, Text: nothingRanText}
 }
 
 func outcomeSection(ev evidence, choice decision) briefing.SectionPlan {

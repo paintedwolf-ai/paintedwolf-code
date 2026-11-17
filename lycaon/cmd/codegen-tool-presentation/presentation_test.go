@@ -221,7 +221,7 @@ func TestSurveyToolsStayGenericKind(t *testing.T) {
 	for tool, want := range map[string]Kind{
 		"read": KindRead, "grep": KindRead,
 		"write": KindWrite, "edit": KindWrite,
-		"command": KindCommand, "task": KindTask, "delegate_dispatch": KindTask,
+		"command": KindCommand, "task": KindTask,
 	} {
 		if kinds[tool] != want {
 			t.Errorf("tool %q kind = %q, want %q", tool, kinds[tool], want)
@@ -251,8 +251,8 @@ func TestVisibilityClassMembership(t *testing.T) {
 		vis  Visibility
 		want []string
 	}{
-		{VisibilityCoordinatorInternal, []string{"git_status", "pack_board", "update_progress"}},
-		{VisibilityLongRunning, []string{"command", "summarize", "survey_repo", "verify"}},
+		{VisibilityCoordinatorInternal, []string{"git_status", "pack_board", "read_findings", "read_review", "update_progress"}},
+		{VisibilityLongRunning, []string{"command", "instruct_worker", "summarize", "survey_repo", "verify"}},
 	} {
 		got := cfg.ToolsWithVisibility(tc.vis)
 		if strings.Join(got, ",") != strings.Join(tc.want, ",") {
@@ -260,8 +260,8 @@ func TestVisibilityClassMembership(t *testing.T) {
 		}
 	}
 
-	if got := cfg.ToolsWithKind(KindTask); strings.Join(got, ",") != "delegate_dispatch,task" {
-		t.Errorf("kind task = %v, want delegate_dispatch, task", got)
+	if got := cfg.ToolsWithKind(KindTask); strings.Join(got, ",") != "task" {
+		t.Errorf("kind task = %v, want task", got)
 	}
 }
 
@@ -432,5 +432,25 @@ func TestLoadRejectsUnknownEntryField(t *testing.T) {
 	}
 	if _, err := Load(path); err == nil {
 		t.Fatal("a misspelled entry field should fail Load, not be dropped")
+	}
+}
+
+func TestValidateRequiresLabelsOutsideWorkerCards(t *testing.T) {
+	cfg, schemas := loadBundled(t)
+	read := cfg.Tools["read"]
+	read.Label = ""
+	cfg.Tools["read"] = read
+	task := cfg.Tools["task"]
+	task.Label = "Worker"
+	cfg.Tools["task"] = task
+
+	err := cfg.Validate(schemas)
+	if err == nil {
+		t.Fatal("expected a missing label and a worker card label to fail validation")
+	}
+	for _, want := range []string{`tool "read": label is required`, `tool "task": kind task keeps its worker card`} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error should contain %q, got: %v", want, err)
+		}
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"sort"
 	"strings"
 	"time"
@@ -31,7 +32,7 @@ func (s *sqlSessionViews) PinSession(ctx context.Context, id string) error {
 			return nil, err
 		}
 		if err := qtx.SetSessionPinRank(ctx, db.SetSessionPinRankParams{
-			PinRank: sql.NullInt64{Int64: rank, Valid: true}, UpdatedAt: db.FormatTime(time.Now().UTC()), ID: id,
+			PinRank: sql.NullInt64{Int64: rank, Valid: true}, UpdatedAt: timelayout.Format(time.Now().UTC()), ID: id,
 		}); err != nil {
 			return nil, err
 		}
@@ -46,7 +47,7 @@ func (s *sqlSessionViews) UnpinSession(ctx context.Context, id string) error {
 			return nil, nil
 		}
 		if err := qtx.SetSessionPinRank(ctx, db.SetSessionPinRankParams{
-			UpdatedAt: db.FormatTime(time.Now().UTC()), ID: id,
+			UpdatedAt: timelayout.Format(time.Now().UTC()), ID: id,
 		}); err != nil {
 			return nil, err
 		}
@@ -73,7 +74,7 @@ func (s *sqlSessionViews) MovePinnedSession(ctx context.Context, id string, posi
 		if err := qtx.ClearProjectPinRanks(ctx, state.ProjectID); err != nil {
 			return nil, err
 		}
-		now := db.FormatTime(time.Now().UTC())
+		now := timelayout.Format(time.Now().UTC())
 		changed := []string{}
 		for i, pin := range next {
 			rank := int64(i + 1)

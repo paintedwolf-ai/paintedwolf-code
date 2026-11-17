@@ -117,9 +117,9 @@ func newFirefoxWorkerFixture(t *testing.T, source string) *layeredWorkerFixture 
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(branches))
 	git, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "scale private Git", err)
-	selector := workspace.EnforcedWorkspaceSelector()
+	selector := workspace.HostSelector()
 	selector.BudgetFor = adapter.ZeroBudget
-	manager := workspace.NewManager(branches).WithPrivateGit(git).WithSelector(selector)
+	manager := workspace.NewManager(branches, selector).WithPrivateGit(git)
 	queue := NewSQLQueue(database, 4)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content")).Baselines)
 	queue.SetWorkerWorkspaceManager(manager)

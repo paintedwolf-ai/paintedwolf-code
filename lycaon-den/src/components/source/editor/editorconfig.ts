@@ -87,10 +87,3 @@ export function editorConfigIsActive(
   if (!props) return false;
   return Object.keys(props).length > 0;
 }
-
-/** The host encoding named by a charset; `latin1` has none. */
-export function editorConfigCharsetToHost(
-  charset: string | undefined,
-): string | null {
-  return charset && charset !== "latin1" ? charset : null;
-}

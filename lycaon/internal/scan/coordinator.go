@@ -56,7 +56,6 @@ type ScanCoordinator interface {
 	ListPage(ctx context.Context, canonicalPaths []string, query PageQuery) (api.CodeScanPage, error)
 	ListByWorkflowRunID(ctx context.Context, workflowRunID string) ([]api.CodeScan, error)
 	ListBySessionID(ctx context.Context, sessionID string) ([]api.CodeScan, error)
-	LatestForDelegation(ctx context.Context, delegationID string, categories []api.ScanCategory) (*api.CodeScan, error)
 	Query(ctx context.Context, req QueryRequest) (*api.ScanQueryResponse, error)
 	Compare(ctx context.Context, oldScanID, newScanID string) (*Comparison, error)
 	PreviousComplete(ctx context.Context, latest api.CodeScan) (*api.CodeScan, error)
@@ -489,12 +488,4 @@ func (c *CoordinatorImpl) ListBySessionID(ctx context.Context, sessionID string)
 		return nil, fmt.Errorf("scan coordinator not configured")
 	}
 	return c.Store.ListBySessionID(ctx, sessionID)
-}
-
-// LatestForDelegation returns the newest scan for delegation+categories.
-func (c *CoordinatorImpl) LatestForDelegation(ctx context.Context, delegationID string, categories []api.ScanCategory) (*api.CodeScan, error) {
-	if c == nil || c.Store == nil {
-		return nil, fmt.Errorf("scan coordinator not configured")
-	}
-	return c.Store.LatestForDelegation(ctx, delegationID, categories)
 }

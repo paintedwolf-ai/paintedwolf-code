@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { LycaonApiError } from "../../api/http.ts";
-import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffers.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { applyProjectSourceLoadFailure } from "./project-files-load-error.ts";
 
