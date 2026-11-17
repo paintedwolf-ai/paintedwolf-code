@@ -4,7 +4,7 @@ import {
   isProgressArchivedInTranscript,
   isTerminalProgressStep,
   liveProgressItems,
-  progressChangesToSteps,
+  progressSnapshotSteps,
   progressHistoryFromMessages,
   progressUpdateSummaryLabel,
 } from "./progress-model.ts";
@@ -42,15 +42,18 @@ describe("progress-model", () => {
 
   it("progressChangesToSteps renders delta rows for transcript strips", () => {
     expect(
-      progressChangesToSteps([
-        { kind: "done", label: "Ship auth", state: "done" },
-        {
-          kind: "updated",
-          label: "Verify build",
-          prev_label: "Run tests",
-          state: "pending",
-        },
-      ]),
+      progressSnapshotSteps({
+        kind: "updated",
+        changes: [
+          { kind: "done", label: "Ship auth", state: "done" },
+          {
+            kind: "updated",
+            label: "Verify build",
+            prev_label: "Run tests",
+            state: "pending",
+          },
+        ],
+      }),
     ).toEqual([
       { label: "Ship auth", state: "done" },
       { label: "Run tests → Verify build", state: "pending" },

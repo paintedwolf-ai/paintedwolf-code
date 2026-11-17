@@ -46,24 +46,6 @@ func normalizeFindingFields(agent, summary, ref string) (string, string, string)
 	return strings.TrimSpace(agent), strings.TrimSpace(summary), strings.TrimSpace(ref)
 }
 
-func findingMatches(f Finding, agent, summary, ref string) bool {
-	a, s, r := normalizeFindingFields(agent, summary, ref)
-	return f.Agent == a && f.Summary == s && f.Ref == r
-}
-
-func filterSince(all []Finding, since time.Time) []Finding {
-	if since.IsZero() || len(all) == 0 {
-		return all
-	}
-	out := make([]Finding, 0, len(all))
-	for _, f := range all {
-		if f.TS.After(since) {
-			out = append(out, f)
-		}
-	}
-	return out
-}
-
 // Delivery retains the bounded peer context used by a successful model request.
 type Delivery struct {
 	Cursor int64

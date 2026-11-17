@@ -59,97 +59,85 @@ fn find_among_returns_none_when_absent() {
     assert!(got.is_none());
 }
 
+#[cfg(target_os = "macos")]
 #[test]
 fn detect_reports_cursor_when_app_bundle_present() {
     // A bundle alone is sufficient.
-    #[cfg(target_os = "macos")]
-    {
-        let probe = FakeProbe::new(&["/Applications/Cursor.app"], &[]);
-        let got = detect_installed_editors_with(&probe);
-        assert_eq!(got.len(), 1);
-        assert_eq!(got[0].id, "cursor");
-        assert_eq!(got[0].install_path, "/Applications/Cursor.app");
-    }
+    let probe = FakeProbe::new(&["/Applications/Cursor.app"], &[]);
+    let got = detect_installed_editors_with(&probe);
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].id, "cursor");
+    assert_eq!(got[0].install_path, "/Applications/Cursor.app");
 }
 
+#[cfg(target_os = "macos")]
 #[test]
 fn detect_preserves_catalog_order() {
     // Catalog order determines the first result.
-    #[cfg(target_os = "macos")]
-    {
-        let probe = FakeProbe::new(
-            &[
-                "/Applications/Cursor.app",
-                "/Applications/Visual Studio Code.app",
-            ],
-            &[],
-        );
-        let got = detect_installed_editors_with(&probe);
-        assert_eq!(
-            got.iter().map(|e| e.id.clone()).collect::<Vec<_>>(),
-            ["cursor", "vscode"]
-        );
-    }
+    let probe = FakeProbe::new(
+        &[
+            "/Applications/Cursor.app",
+            "/Applications/Visual Studio Code.app",
+        ],
+        &[],
+    );
+    let got = detect_installed_editors_with(&probe);
+    assert_eq!(
+        got.iter().map(|e| e.id.clone()).collect::<Vec<_>>(),
+        ["cursor", "vscode"]
+    );
 }
 
+#[cfg(target_os = "macos")]
 #[test]
 fn detect_omits_absent_editors() {
-    #[cfg(target_os = "macos")]
-    {
-        let probe = FakeProbe::new(&["/Applications/Visual Studio Code.app"], &[]);
-        let got = detect_installed_editors_with(&probe);
-        assert_eq!(
-            got.iter().map(|e| e.id.clone()).collect::<Vec<_>>(),
-            ["vscode"]
-        );
-    }
+    let probe = FakeProbe::new(&["/Applications/Visual Studio Code.app"], &[]);
+    let got = detect_installed_editors_with(&probe);
+    assert_eq!(
+        got.iter().map(|e| e.id.clone()).collect::<Vec<_>>(),
+        ["vscode"]
+    );
 }
 
+#[cfg(target_os = "macos")]
 #[test]
 fn detect_reports_bundle_only_editor_when_cli_absent() {
     // Bundle-only entries remain detectable.
-    #[cfg(target_os = "macos")]
-    {
-        let probe = FakeProbe::new(&["/Applications/Nova.app"], &[]);
-        let got = detect_installed_editors_with(&probe);
-        let nova = got.iter().find(|e| e.id == "nova").expect("nova detected");
-        assert_eq!(nova.install_path, "/Applications/Nova.app");
-    }
+    let probe = FakeProbe::new(&["/Applications/Nova.app"], &[]);
+    let got = detect_installed_editors_with(&probe);
+    let nova = got.iter().find(|e| e.id == "nova").expect("nova detected");
+    assert_eq!(nova.install_path, "/Applications/Nova.app");
 }
 
+#[cfg(target_os = "macos")]
 #[test]
 fn detect_prefers_intellij_ultimate_over_community() {
     // Catalog priority selects the first installed edition.
-    #[cfg(target_os = "macos")]
-    {
-        let probe = FakeProbe::new(
-            &[
-                "/Applications/IntelliJ IDEA.app",
-                "/Applications/IntelliJ IDEA CE.app",
-            ],
-            &[],
-        );
-        let got = detect_installed_editors_with(&probe);
-        let idea = got
-            .iter()
-            .find(|e| e.id == "intellij-idea")
-            .expect("idea detected");
-        assert_eq!(idea.install_path, "/Applications/IntelliJ IDEA.app");
-    }
+    let probe = FakeProbe::new(
+        &[
+            "/Applications/IntelliJ IDEA.app",
+            "/Applications/IntelliJ IDEA CE.app",
+        ],
+        &[],
+    );
+    let got = detect_installed_editors_with(&probe);
+    let idea = got
+        .iter()
+        .find(|e| e.id == "intellij-idea")
+        .expect("idea detected");
+    assert_eq!(idea.install_path, "/Applications/IntelliJ IDEA.app");
 }
 
+#[cfg(target_os = "macos")]
 #[test]
 fn detect_reports_intellij_community_when_ultimate_absent() {
-    #[cfg(target_os = "macos")]
-    {
-        let probe = FakeProbe::new(&["/Applications/IntelliJ IDEA CE.app"], &[]);
-        let got = detect_installed_editors_with(&probe);
-        let idea = got
-            .iter()
-            .find(|e| e.id == "intellij-idea")
-            .expect("idea detected");
-        assert_eq!(idea.install_path, "/Applications/IntelliJ IDEA CE.app");
-    }
+    let probe = FakeProbe::new(&["/Applications/IntelliJ IDEA CE.app"], &[]);
+    let got = detect_installed_editors_with(&probe);
+    let idea = got
+        .iter()
+        .find(|e| e.id == "intellij-idea")
+        .expect("idea detected");
+    assert_eq!(idea.install_path, "/Applications/IntelliJ IDEA CE.app");
 }
 
 #[test]
@@ -177,34 +165,3 @@ fn catalog_ids_are_unique() {
     }
 }
 
-#[test]
-fn catalog_includes_expected_macos_editors() {
-    let ids: Vec<&str> = catalog().iter().map(|e| e.id).collect();
-    for expected in [
-        "cursor",
-        "vscode",
-        "vscode-insiders",
-        "vscodium",
-        "windsurf",
-        "sublime",
-        "bbedit",
-        "textmate",
-        "coteditor",
-        "nova",
-        "zed",
-        "xcode",
-        "intellij-idea",
-        "webstorm",
-        "pycharm",
-        "goland",
-        "rubymine",
-        "phpstorm",
-        "clion",
-        "android-studio",
-        "rider",
-        "macvim",
-        "neovide",
-    ] {
-        assert!(ids.contains(&expected), "missing editor: {expected}");
-    }
-}

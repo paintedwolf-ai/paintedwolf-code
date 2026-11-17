@@ -59,6 +59,8 @@ function seamFor(
   if (item.kind === "turn_tail") return "row";
   const spanKeyOf = ctx.spanKeyOf;
   if (spanKeyOf && spanKeyOf(previous.key) !== spanKeyOf(item.key)) return "section";
+  // A diff reports on the activity above it, so it sits as close as a part of that row.
+  if (section === "diff" && previous.section === "activity") return "part";
   return section === previous.section ? "row" : "section";
 }
 

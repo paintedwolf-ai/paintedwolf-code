@@ -162,7 +162,7 @@ func TestWaitLeaseRetiresWhenTimerFires(t *testing.T) {
 		t.Fatal("expected an open lease while the sleep is armed")
 	}
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the wait lease retires", func() bool {
 		return rec.openCount() == 0 && !waitLeaseOpenForTest(loop.Waits, "sess")
 	})
 

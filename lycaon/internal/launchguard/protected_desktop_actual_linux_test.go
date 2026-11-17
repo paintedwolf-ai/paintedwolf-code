@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -37,13 +36,7 @@ func TestProtectedLaunchActualDesktop(t *testing.T) {
 	_, err = rand.Read(nonce[:])
 	testutil.FailErr(t, "fixture identity", err)
 	dir := filepath.Join("/opt", "pw-protected-desktop-"+hex.EncodeToString(nonce[:]))
-	build := t.TempDir()
-	bootstrap, entry := filepath.Join(build, "pw-launch"), filepath.Join(build, "pw-launch-entry")
-	module := "github.com/lycaon/lycaon/internal/launchguard"
-	flags := fmt.Sprintf("-X %s.policyPath=%s -X %s.lockDirectory=%s", module, filepath.Join(dir, "launch.json"), module, filepath.Join(dir, "locks"))
-	goBuild(t, bootstrap, "github.com/lycaon/lycaon/cmd/pw-launch", flags)
-	goBuild(t, entry, "github.com/lycaon/lycaon/cmd/pw-launch-entry", "")
-	testutil.FailErr(t, "root-readable build directory", os.Chmod(build, 0o755))
+	bootstrap, entry := fixtureBinary(t, "pw-launch"), fixtureBinary(t, "pw-launch-entry")
 	groups, err := os.Getgroups()
 	testutil.FailErr(t, "caller groups", err)
 	rawGroups, err := json.Marshal(groups)

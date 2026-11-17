@@ -16,6 +16,32 @@
   animation: den-drawer-in var(--den-duration-drawer) var(--den-ease) both;
 }
 
+/* The session drawer's layer covers the column on screen: a lone column fills
+   the host, and a split's conversation gives way to its stage when hidden or dropped. */
+.den-session-drawer-layer {
+  position: absolute;
+  inset: 0;
+  z-index: var(--den-z-context-drawer);
+  pointer-events: none;
+}
+
+.den-session-drawer-layer > * {
+  pointer-events: auto;
+}
+
+.den-shell-stage-host--split > .den-session-drawer-layer {
+  position: relative;
+  inset: auto;
+  grid-area: chat;
+}
+
+.den-shell-stage-host--split[data-conversation-hidden] > .den-session-drawer-layer,
+.den-shell-stage-host--split:where(
+    [data-host-band~="max-900"][data-narrow-survivor="stage"]
+  ):not([data-context-hidden]) > .den-session-drawer-layer {
+  grid-area: stage;
+}
+
 .den-shell--orientation-mirrored .den-context-drawer {
   left: 0;
   right: auto;
@@ -35,18 +61,23 @@ height: 1.8571rem;
 }
 
 
-/* Default clears the titlebar traffic-light corner. */
 .den-shell {
-  --den-context-drawer-header-pad-top: calc(
-    var(--den-titlebar-inset) + var(--den-tabs-top-gap)
-  );
+  --den-context-drawer-header-pad-top: var(--den-tabs-top-gap);
 }
 
-/* Only a mirrored workspace puts the drawer under the traffic lights. */
-.den-custom-chrome:not(.den-tauri-macos) .den-shell,
-.den-tauri-macos.den-custom-chrome
-  .den-shell:not(.den-shell--orientation-mirrored) {
-  --den-context-drawer-header-pad-top: var(--den-tabs-top-gap);
+/* The edge's drawn controls stay in the strip, above the drawer. */
+.den-custom-chrome .den-session-drawer-layer > .den-shell-window-controls {
+  position: absolute;
+  top: calc(var(--den-pane-control-center) - var(--den-window-control-size) / 2);
+  z-index: calc(var(--den-z-context-drawer) + 1);
+}
+
+.den-custom-chrome .den-session-drawer-layer > .den-shell-window-controls[data-side="left"] {
+  left: var(--den-window-controls-inset);
+}
+
+.den-custom-chrome .den-session-drawer-layer > .den-shell-window-controls[data-side="right"] {
+  right: var(--den-window-controls-inset);
 }
 
 @utility den-context-drawer-header {

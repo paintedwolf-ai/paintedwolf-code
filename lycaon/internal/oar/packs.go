@@ -2,10 +2,11 @@ package oar
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/hintregistry"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/hintregistry"
 )
 
 // PackSource is a named rule pack (tier:pack).

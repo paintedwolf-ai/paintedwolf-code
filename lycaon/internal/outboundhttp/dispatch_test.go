@@ -107,7 +107,7 @@ func startDispatchSink(t *testing.T, useTLS bool, behavior sinkBehavior, bodyLen
 func (s *dispatchSink) wait(t *testing.T) string {
 	t.Helper()
 	var got string
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the server receives the request", func() bool {
 		got = s.received.Load().(string)
 		return got != ""
 	})

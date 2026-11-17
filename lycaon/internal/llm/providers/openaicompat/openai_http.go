@@ -150,6 +150,10 @@ func (p *Provider) streamChatCompletionFromResponse(ctx context.Context, req mod
 			if chunk.Usage != nil {
 				usage = NormalizeUsage(chunk.Usage)
 			}
+			if streamErr := providerretry.StreamError(chunk.Error); streamErr != nil {
+				modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: failure.InterruptedResponse(ctx, p.id, p.ResolveModel(req), streamErr), Usage: usage, Done: true})
+				return
+			}
 			if len(chunk.Choices) == 0 {
 				continue
 			}

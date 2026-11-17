@@ -49,6 +49,21 @@ func TestCanonicalPathResolvesASymlinkToItsTarget(t *testing.T) {
 	}
 }
 
+// A dangling link reached through a linked directory names a path relative to
+// where the link actually is, which can lie outside the spelled path's tree.
+func TestCanonicalPathReadsADanglingLinkFromItsRealDirectory(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve temp dir", err)
+	testutil.FailErr(t, "mkdir tree", os.MkdirAll(filepath.Join(dir, "root", "a", "b"), 0o755))
+	testutil.FailErr(t, "mkdir outside", os.MkdirAll(filepath.Join(dir, "outside", "shallow"), 0o755))
+	testutil.FailErr(t, "link into outside", os.Symlink(filepath.Join(dir, "outside", "shallow"), filepath.Join(dir, "root", "a", "b", "c")))
+	testutil.FailErr(t, "dangling link", os.Symlink("../x", filepath.Join(dir, "outside", "shallow", "d")))
+
+	if got, want := fspath.CanonicalPath(filepath.Join(dir, "root", "a", "b", "c", "d")), filepath.Join(dir, "outside", "x"); got != want {
+		t.Fatalf("CanonicalPath through a linked directory = %q, want %q", got, want)
+	}
+}
+
 func TestCanonicalPathCarriesAMissingTail(t *testing.T) {
 	dir := t.TempDir()
 	missing := filepath.Join(dir, "not-created-yet", "leaf.txt")

@@ -84,7 +84,7 @@ func (fx *recoveryFixture) coordinatorOnBoot(boot string) *recovery.Coordinator 
 		MountReconciler: recovery.ConnectionReconciler{},
 	})
 	if err != nil {
-		fx.t.Fatal(err)
+		testutil.FailErr(fx.t, "recovery.NewCoordinator failed", err)
 	}
 	return coord
 }
@@ -123,7 +123,7 @@ func TestFaultInjectionAllSevenPhasesAndQuarantine(t *testing.T) {
 		ProjectID:     "proj-1",
 		AdapterID:     fx.mountedAdp.ID(),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "fx.coord.SaveWorkerJournal failed", err)
 	}
 
 	view1, err := fx.mountedAdp.Prepare(ctx, fx.prepareRequest("view-init"))

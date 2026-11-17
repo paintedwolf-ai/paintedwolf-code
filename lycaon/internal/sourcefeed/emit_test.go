@@ -440,7 +440,7 @@ func TestHostEmitContinuesWhileWatcherIsActive(t *testing.T) {
 func waitForWatcherBarrier(t *testing.T, cap *capturePub, path string) bool {
 	t.Helper()
 	resynced := false
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the watcher reports the barrier or resyncs", func() bool {
 		for _, batch := range cap.batches() {
 			if batch.Resync {
 				resynced = true

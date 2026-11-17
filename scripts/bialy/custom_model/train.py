@@ -13,7 +13,7 @@ from data import assert_disjoint, encode, load_split
 from checkpoint import atomic_json, ReferenceCache, sync_directory, exclusive_run
 from training_loop import run_loop
 from terminal import execute
-from rendering import configure_training_renderer
+from rendering import configure_training_renderer, template_sha256
 
 
 def train(args):
@@ -21,16 +21,45 @@ def train(args):
         return execute(args, train_owned)
 
 
+def confined_adapters(modules, adapted, expected):
+    """The adapted module names, refused unless they are exactly the expected number of
+    modules and, in a multimodal checkpoint, all inside its language model."""
+    if not adapted:
+        raise ValueError("LoRA targets match no module")
+    multimodal = any("language_model" in name.split(".") for name in modules)
+    outside = [name for name in adapted if multimodal and "language_model" not in name.split(".")]
+    if outside:
+        raise ValueError("LoRA targets reach outside the language model: " + outside[0])
+    if len(adapted) != expected:
+        raise ValueError("LoRA targets match %d modules, not the declared %d" % (len(adapted), expected))
+    return sorted(adapted)
+
+
+def attention_kernels(device):
+    """On CUDA, refuse the attention kernel that materializes a full attention matrix:
+    at the declared sequence length it cannot fit, and failing at the first update is cheaper."""
+    import contextlib
+    import torch
+    if not device.startswith("cuda"):
+        return contextlib.nullcontext()
+    backends = torch.nn.attention.SDPBackend
+    return torch.nn.attention.sdpa_kernel([backends.FLASH_ATTENTION, backends.EFFICIENT_ATTENTION])
+
+
 def train_owned(args):
     started = time.monotonic()
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
     from peft import LoraConfig, get_peft_model
+    from peft.tuners.lora import LoraLayer
     from objective import dpo, scores
 
     if args.checkpoint_every < 1 or args.max_updates < 0 or args.max_seconds < 0 or args.keep_checkpoints < 2:
         raise ValueError("invalid recovery or budget settings")
-    if args.epochs < 1 or args.learning_rate <= 0 or args.max_length < 2 or args.rank < 1:
+    if (args.epochs < 1 or args.learning_rate <= 0 or args.max_length < 2 or args.rank < 1 or args.lora_alpha <= 0
+            or not 0 <= args.lora_dropout < 1 or args.accumulation < 1 or not 0 <= args.warmup_ratio < 1
+            or not 0 <= args.final_learning_rate_ratio <= 1 or args.weight_decay < 0 or args.max_grad_norm <= 0
+            or args.adapted_modules < 1):
         raise ValueError("invalid training parameters")
     if args.mode == "dpo" and args.reference is None:
         raise ValueError("DPO requires the frozen, merged SFT reference checkpoint")
@@ -61,7 +90,7 @@ def train_owned(args):
     config = {k:v for k,v in vars(args).items() if k not in {"resume","max_seconds","max_updates","checkpoint_every","keep_checkpoints","checkpoint_mirror"}}
     config = {k:str(v) if isinstance(v, Path) else v for k,v in config.items()}
     manifest = {"schema":"pw-custom-training/1", "config":config, "model":source,
-                "reference":reference_source, "template_sha256":digest(tokenizer.chat_template),
+                "reference":reference_source, "template_sha256":template_sha256(tokenizer.chat_template),
                 "rendering_profile":rendering_profile,
                 "train_sha256":file_digest(args.train), "validation_sha256":file_digest(args.validation),
                 "holdout_sha256":file_digest(args.holdout),
@@ -125,12 +154,16 @@ def train_owned(args):
     targets = args.targets[3:] if args.targets.startswith("re:") else [t for t in args.targets.split(",") if t]
     if not targets:
         raise ValueError("no LoRA target modules")
-    model = get_peft_model(model, LoraConfig(r=args.rank, lora_alpha=2*args.rank, lora_dropout=0.0,
+    modules = [name for name, _ in model.named_modules()]
+    model = get_peft_model(model, LoraConfig(r=args.rank, lora_alpha=args.lora_alpha, lora_dropout=args.lora_dropout,
                                            target_modules=targets, task_type="CAUSAL_LM"))
+    confined_adapters(modules, [name for name, module in model.base_model.model.named_modules()
+                                if isinstance(module, LoraLayer)], args.adapted_modules)
     model.config.use_cache = False
     model.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant":False})
     model.enable_input_require_grads()
-    optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.learning_rate)
+    optimizer = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.learning_rate,
+                                  weight_decay=args.weight_decay)
     def loss(pair):
         chosen, nll = scores(model, pair[0], args.device)
         if args.mode == "sft":
@@ -138,7 +171,8 @@ def train_owned(args):
         rejected, _ = scores(model, pair[1], args.device)
         ref = [torch.tensor(cache[digest({"sample":s,"reference":reference_source,"template":manifest["template_sha256"]})], device=args.device) for s in pair]
         return dpo(chosen, rejected, *ref, nll, args.beta, args.anchor)
-    progress = run_loop(model, optimizer, training, validation, loss, args, manifest, started)
+    with attention_kernels(args.device):
+        progress = run_loop(model, optimizer, training, validation, loss, args, manifest, started)
     if progress["status"] != "complete":
         return progress
     if source != inventory(args.model) or reference_source != (inventory(args.reference) if args.reference else None):
@@ -171,11 +205,20 @@ def parser():
     p.add_argument("--mode", choices=("sft", "dpo"), required=True)
     p.add_argument("--device", default="cpu")
     p.add_argument("--targets", required=True, help="Comma-separated LoRA module names, or re:<regex> over full module paths")
-    p.add_argument("--rank", type=int, default=16)
-    p.add_argument("--max-length", type=int, default=4096)
-    p.add_argument("--epochs", type=int, default=1)
-    p.add_argument("--seed", type=int, default=7)
-    p.add_argument("--learning-rate", type=float, default=2e-5)
+    p.add_argument("--adapted-modules", type=int, required=True, help="Exact number of modules the targets adapt")
+    p.add_argument("--max-length", type=int, required=True)
+    # The recipe has one owner, the caller: none of its values has a default here.
+    p.add_argument("--rank", type=int, required=True)
+    p.add_argument("--lora-alpha", type=int, required=True)
+    p.add_argument("--lora-dropout", type=float, required=True)
+    p.add_argument("--epochs", type=int, required=True)
+    p.add_argument("--seed", type=int, required=True)
+    p.add_argument("--learning-rate", type=float, required=True, help="Peak rate, reached after warmup")
+    p.add_argument("--warmup-ratio", type=float, required=True, help="Share of all updates spent warming up linearly")
+    p.add_argument("--final-learning-rate-ratio", type=float, required=True, help="Share of the peak the cosine decay ends at")
+    p.add_argument("--accumulation", type=int, required=True, help="Rows whose mean gradient makes one update")
+    p.add_argument("--weight-decay", type=float, required=True)
+    p.add_argument("--max-grad-norm", type=float, required=True)
     p.add_argument("--beta", type=float, default=0.1)
     p.add_argument("--anchor", type=float, default=0.0)
     p.add_argument("--resume", action="store_true")

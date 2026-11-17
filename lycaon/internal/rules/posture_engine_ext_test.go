@@ -2,8 +2,9 @@ package rules_test
 
 import (
 	"context"
-	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 	"testing"
+
+	sessionposture "github.com/lycaon/lycaon/internal/session/posture"
 
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/rules"
