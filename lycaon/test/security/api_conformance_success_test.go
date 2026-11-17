@@ -54,7 +54,7 @@ type successInputs struct {
 
 // successRecipes holds the operations whose success needs more than fixture
 // ids and a schema-valid body, one map per domain.
-var successRecipes = mergeRecipes(hostWideRecipes, projectRecipes, sourceRecipes, hostRecipes)
+var successRecipes = mergeRecipes(hostWideRecipes, projectRecipes, sourceRecipes, hostRecipes, sessionRecipes)
 
 // hostWideRecipes change state every other operation depends on, so they
 // run last, in this order, or end the host's service and run alone.
