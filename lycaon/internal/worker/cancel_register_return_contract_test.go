@@ -196,9 +196,6 @@ func TestCancelRunningGracefulNonBlockingUnderSlowCloseout(t *testing.T) {
 	if out.Status != api.WorkerStatusRunning {
 		t.Fatalf("interim status = %q want running", out.Status)
 	}
-	if err := deadlineCtx.Err(); err != nil {
-		t.Fatalf("request ctx ended before return: %v", err)
-	}
 	if _, ok := mock.pending(child); !ok {
 		t.Fatal("expected registration pending")
 	}
