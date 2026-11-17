@@ -270,6 +270,20 @@ func TestUnreachableNamesCommandForms(t *testing.T) {
 	if len(held) != 0 {
 		t.Fatalf("held tool reported unreachable: %v", held)
 	}
+	// The survey-repo alias of the repo-map form is gated on command and survey_repo.
+	alias := "Map the tree with `survey-repo` first."
+	for _, tc := range []struct {
+		reachable map[string]bool
+		want      string
+	}{
+		{map[string]bool{"command": true, "survey_repo": true}, ""},
+		{map[string]bool{"command": true}, "survey-repo"},
+		{map[string]bool{"survey_repo": true}, "survey-repo"},
+	} {
+		if got := toolvocab.UnreachableNames(catalog, alias, tc.reachable); strings.Join(got, ",") != tc.want {
+			t.Fatalf("alias with %v: UnreachableNames = %v, want %q", tc.reachable, got, tc.want)
+		}
+	}
 }
 
 func TestUnreachableNamesFlagInvocations(t *testing.T) {

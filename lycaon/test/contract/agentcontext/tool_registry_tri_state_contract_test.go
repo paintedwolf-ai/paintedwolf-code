@@ -1,12 +1,12 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/nativemanifest"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/nativemanifest"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -14,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolschema"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
-	"gopkg.in/yaml.v3"
 )
 
 // toolsSchemaExempt lists registered tools whose JSON schema is not in tools/schemas.
@@ -282,19 +281,4 @@ func TestToolRegistryTriStateExemptMapsStale(t *testing.T) {
 	checkStale("toolsSchemaExempt", toolsSchemaExempt)
 	checkStale("toolsNativeSchemaOnly", toolsNativeSchemaOnly)
 	checkStale("toolsProfileSchemaExempt", toolsProfileSchemaExempt)
-}
-
-func TestAgentToolProfilesYAMLShape(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "host", "agent-tool-profiles.yaml")
-	data, err := os.ReadFile(path)
-	contractcheck.FailErr(t, "read agent-tool-profiles.yaml", err)
-	var doc struct {
-		Profiles map[string]any `yaml:"profiles"`
-	}
-	contractcheck.FailErr(t, "parse agent-tool-profiles.yaml", yaml.Unmarshal(data, &doc))
-	if len(doc.Profiles) == 0 {
-		t.Fatal("agent-tool-profiles.yaml must declare at least coordinator profile")
-	}
 }

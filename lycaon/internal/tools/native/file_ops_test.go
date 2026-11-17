@@ -96,6 +96,9 @@ func TestCopyToolRejectsSizeExceeded(t *testing.T) {
 	if !errors.As(err, &reject) || reject.Code != "COPY_SIZE_EXCEEDED" {
 		t.Fatalf("err = %v want COPY_SIZE_EXCEEDED", err)
 	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "copy.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("refused copy left a destination: %v", err)
+	}
 }
 
 func TestCopyToolRejectsBulk(t *testing.T) {
@@ -174,6 +177,9 @@ func TestMoveToolOverwritesDestination(t *testing.T) {
 	testutil.FailErr(t, "read dst", err)
 	if string(data) != "new" {
 		t.Fatalf("dst = %q", data)
+	}
+	if _, err := os.Stat(filepath.Join(tmpDir, "src.txt")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("moved source still present: %v", err)
 	}
 }
 
@@ -317,6 +323,11 @@ func TestMkdirToolRejectsFileExists(t *testing.T) {
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "MKDIR_FILE_EXISTS" {
 		t.Fatalf("err = %v want MKDIR_FILE_EXISTS", err)
+	}
+	data, err := os.ReadFile(filepath.Join(tmpDir, "file.txt"))
+	testutil.FailErr(t, "read preserved file", err)
+	if string(data) != "x" {
+		t.Fatalf("refused mkdir changed the file: %q", data)
 	}
 }
 

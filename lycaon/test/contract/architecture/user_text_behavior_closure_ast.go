@@ -291,6 +291,8 @@ var coordinatorPongoBooleanGateRE = regexp.MustCompile(`\{%\s*(?:if|elif)\s+(?:n
 var bannedCoordinatorGateNameRE = regexp.MustCompile(`(?i)(greenfield|dispatch[_-]?hint|user[_-]?intent|(^|[_-])nl([_-]|$)|build[_-]?intent|chat[_-]?approv)`)
 
 var registeredCoordinatorBooleanGates = map[string]bool{
+	// Offered lifecycle tools the progress catalog leaves ungated.
+	"progress_ungated_lifecycle_tools": true,
 	// Round notice measurements come from the host's usage ledger for the round.
 	"tokens":              true,
 	"spend_under_cent":    true,

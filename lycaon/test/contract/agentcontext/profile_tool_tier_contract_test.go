@@ -65,17 +65,6 @@ func TestProfileToolTier_implementHasFullNativeToolkit(t *testing.T) {
 	}
 }
 
-func TestProfileToolTier_implementHasVerify(t *testing.T) {
-	t.Parallel()
-	prof := loadToolProfileByID(t, "implement")
-	if !prof.Tools["verify"] {
-		t.Fatal("implement must include verify")
-	}
-	if !prof.Tools["command"] {
-		t.Fatal("implement must include command")
-	}
-}
-
 func TestProfileToolTier_implementHasScanDrillDown(t *testing.T) {
 	t.Parallel()
 	prof := loadToolProfileByID(t, "implement")

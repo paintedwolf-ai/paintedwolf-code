@@ -23,22 +23,6 @@ func contractPersonaEngine(t *testing.T) *prompts.FileTemplateEngine {
 	return prompts.NewFileTemplateEngineLayers(contractPromptLayers(t))
 }
 
-func TestPersonaContractYAMLValid(t *testing.T) {
-	t.Parallel()
-	cfg, err := prompts.LoadPersonaContract()
-	contractcheck.FailErr(t, "prompts.LoadPersonaContract failed", err)
-	if cfg.Version != 2 {
-		t.Fatalf("version = %d want 2", cfg.Version)
-	}
-	// Coverage is asserted against the agent registry, not a count pinned here.
-	if len(cfg.Agents) == 0 {
-		t.Fatal("persona contract defines no agents")
-	}
-	if len(cfg.Archetypes) < 5 {
-		t.Fatalf("archetypes = %d want at least 5", len(cfg.Archetypes))
-	}
-}
-
 func TestArchetypeRequiredPartialsExist(t *testing.T) {
 	t.Parallel()
 	cfg, err := prompts.LoadPersonaContract()

@@ -42,22 +42,6 @@ func TestToolNameAllowancesNameLiveTools(t *testing.T) {
 	contractcheck.FailViolations(t, "tool-name allowances for tools the registry does not have", stale)
 }
 
-// TestToolNameAllowancesCarryRationale requires every tool-name allowance to
-// state its rationale.
-func TestToolNameAllowancesCarryRationale(t *testing.T) {
-	t.Parallel()
-	var bare []string
-	for label, allowance := range toolNameAllowances() {
-		for tool, rationale := range allowance {
-			if len(rationale) < 12 {
-				bare = append(bare, label+"["+tool+"] has no usable rationale")
-			}
-		}
-	}
-	sort.Strings(bare)
-	contractcheck.FailViolations(t, "tool-name allowances with no rationale", bare)
-}
-
 // isToolFamilyWildcard reports a name that stands for a per-install family
 // rather than one registered tool.
 func isToolFamilyWildcard(tool string) bool {

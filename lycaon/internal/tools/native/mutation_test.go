@@ -34,8 +34,8 @@ func TestChmodToolSymbolicPlusX(t *testing.T) {
 	}
 	info, err := os.Stat(script)
 	testutil.FailErr(t, "stat script", err)
-	if info.Mode().Perm()&0o111 == 0 {
-		t.Fatalf("expected execute bit, mode=%o", info.Mode().Perm())
+	if info.Mode().Perm() != 0o755 {
+		t.Fatalf("mode after +x = %o, want 755", info.Mode().Perm())
 	}
 }
 
@@ -68,6 +68,11 @@ func TestChmodToolRejects777(t *testing.T) {
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "CHMOD_MODE_DENIED" {
 		t.Fatalf("err = %v want CHMOD_MODE_DENIED", err)
+	}
+	info, err := os.Stat(filepath.Join(tmpDir, "a.txt"))
+	testutil.FailErr(t, "stat refused file", err)
+	if info.Mode().Perm() != 0o644 {
+		t.Fatalf("refused chmod changed mode to %v", info.Mode().Perm())
 	}
 }
 
@@ -283,6 +288,32 @@ func TestDeleteToolRejectsGitPath(t *testing.T) {
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" || reject.Data["class"] != "metadata" {
 		t.Fatalf("err = %v want GIT_INTERNALS_WRITE_DENIED for repository metadata", err)
+	}
+	data, err := os.ReadFile(filepath.Join(tmpDir, ".git", "HEAD"))
+	testutil.FailErr(t, "read refused HEAD", err)
+	if string(data) != "ref: refs/heads/main\n" {
+		t.Fatalf("refused delete changed HEAD: %q", data)
+	}
+}
+
+func TestDeleteToolRejectsPathOutsideRoot(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "root")
+	testutil.FailErr(t, "mkdir root", os.Mkdir(root, 0o755))
+	outside := filepath.Join(parent, "outside.txt")
+	testutil.FailErr(t, "write outside file", os.WriteFile(outside, []byte("outside"), 0o644))
+	tool := &DeleteTool{Boundary: nativefixture.Boundary(t)}
+	_, err := tool.Run(context.Background(), map[string]any{
+		"paths": []any{"../outside.txt"},
+	}, nativefixture.Context(root))
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != "DELETE_PATH_DENIED" {
+		t.Fatalf("err = %v want DELETE_PATH_DENIED", err)
+	}
+	data, err := os.ReadFile(outside)
+	testutil.FailErr(t, "read outside file", err)
+	if string(data) != "outside" {
+		t.Fatalf("refused delete changed the outside file: %q", data)
 	}
 }
 

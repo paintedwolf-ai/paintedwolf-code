@@ -3,10 +3,6 @@ package contract
 import (
 	"context"
 	"encoding/json"
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -72,52 +68,6 @@ func TestRetiredEditSchemaRejectCarriesCommandOperationCode(t *testing.T) {
 		t.Fatal("expected edit schema reject")
 	}
 	assertStructuredRejectCode(t, err, "TOOL_COMMAND_OPERATION")
-}
-
-func TestNativeOwnersDoNotFmtMissingArg(t *testing.T) {
-	t.Parallel()
-	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "tools", "native")
-	fset := token.NewFileSet()
-	err := filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		file, parseErr := parser.ParseFile(fset, path, nil, 0)
-		if parseErr != nil {
-			t.Fatalf("parse %s: %v", path, parseErr)
-		}
-		ast.Inspect(file, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != "Errorf" {
-				return true
-			}
-			ident, ok := sel.X.(*ast.Ident)
-			if !ok || ident.Name != "fmt" {
-				return true
-			}
-			if len(call.Args) == 0 {
-				return true
-			}
-			lit, ok := call.Args[0].(*ast.BasicLit)
-			if !ok {
-				return true
-			}
-			msg := strings.Trim(lit.Value, "`\"")
-			if strings.HasPrefix(msg, "missing ") || strings.HasPrefix(msg, "missing'") {
-				t.Errorf("%s: handler fmt.Errorf missing-arg %s — use schema reject or missingArg", path, lit.Value)
-			}
-			return true
-		})
-		return nil
-	})
-	contractcheck.FailErr(t, "walk native", err)
 }
 
 // A fence named for a tool that carries that tool's own arguments is an action

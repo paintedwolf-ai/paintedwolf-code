@@ -292,6 +292,15 @@ func TestFailureIsTotal(t *testing.T) {
 	if cache.Len() != 1 || cache.BuildCount() != 1 {
 		t.Fatalf("good catalog: len=%d builds=%d", cache.Len(), cache.BuildCount())
 	}
+
+	// A cache without a module root cannot build even a good catalog.
+	rootless := catalogview.NewCache("", nil)
+	if _, err := rootless.For(t.Context(), good); err == nil {
+		t.Fatal("empty module root must fail Build")
+	}
+	if rootless.Len() != 0 || rootless.BuildCount() != 0 {
+		t.Fatalf("rootless failure cached: len=%d builds=%d", rootless.Len(), rootless.BuildCount())
+	}
 }
 
 func TestForNilCatalogErrors(t *testing.T) {

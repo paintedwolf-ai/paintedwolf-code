@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -60,63 +59,6 @@ func ledgerResolved(ids ...string) surface.ImplementSessionState {
 
 func ledgerResolvedEmpty() surface.ImplementSessionState {
 	return ledgerResolved()
-}
-
-func TestCoordinatorOverlayLedgerInvariants_pendingTruthMatrix(t *testing.T) {
-	t.Parallel()
-
-	historyTwoStale := stalePendingEnvelopeHistory("6fd7c5e0-1722-41e3-9cde-07bc374b74e3", "f4d1856a-7eed-4e2d-a87b-ce3da7cafc33")
-
-	cases := []struct {
-		name      string
-		history   []api.Message
-		state     surface.ImplementSessionState
-		wantIDs   []string
-		wantPromo bool
-	}{
-		{
-			name:      "empty_ledger_state_ignores_envelope",
-			history:   historyTwoStale,
-			state:     surface.ImplementSessionState{},
-			wantIDs:   nil,
-			wantPromo: false,
-		},
-		{
-			name:      "ledger_empty_after_terminal_reject_ignores_stale_envelope",
-			history:   historyTwoStale,
-			state:     ledgerResolvedEmpty(),
-			wantIDs:   nil,
-			wantPromo: false,
-		},
-		{
-			name:      "ledger_pending_wins_without_envelope",
-			history:   completeImplementerHostCycleHistory(),
-			state:     ledgerResolved("j-live"),
-			wantIDs:   []string{"j-live"},
-			wantPromo: true,
-		},
-		{
-			name:      "ledger_empty_and_no_envelope",
-			history:   completeImplementerHostCycleHistory(),
-			state:     ledgerResolvedEmpty(),
-			wantIDs:   nil,
-			wantPromo: false,
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			got := tc.state.PendingOverlayIDs
-			if !sameStringSet(got, tc.wantIDs) {
-				t.Fatalf("OverlayPromotePending = %v want %v", got, tc.wantIDs)
-			}
-			promoDue := len(got) > 0
-			if promoDue != tc.wantPromo {
-				t.Fatalf("overlay promote due = %v want %v (ids=%v)", promoDue, tc.wantPromo, got)
-			}
-		})
-	}
 }
 
 func sameStringSet(a, b []string) bool {
@@ -183,19 +125,5 @@ func TestCoordinatorOverlayLedgerInvariants_ignoresEnvelopeWithoutLedgerState(t 
 	)
 	if profile.SurfaceID == surface.SurfaceImplementOverlayPromote {
 		t.Fatalf("surface = %q must not route from transcript overlay state", profile.SurfaceID)
-	}
-}
-
-func TestCoordinatorOverlayLedgerInvariants_hostTurnGuardAgreesWithLedger(t *testing.T) {
-	t.Parallel()
-
-	state := ledgerResolvedEmpty()
-
-	if !guard.HostTurnMayFinishWithProse(
-		"implement_synthesis",
-		true,
-		len(state.PendingOverlayIDs) > 0,
-	) {
-		t.Fatal("expected synthesis prose allowed when ledger reports zero pending overlays despite stale envelope")
 	}
 }

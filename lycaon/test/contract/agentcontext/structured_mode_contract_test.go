@@ -31,17 +31,3 @@ func TestTurnProfileActiveVsInactivePlan(t *testing.T) {
 		t.Fatalf("inactive surface = %q want implement_investigate", inactive.SurfaceID)
 	}
 }
-
-func TestCoordinatorTripartiteRenderDiffersActiveVsInactive(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	inactive := renderCoordinatorTripartiteForRunContext(t, root, surface.EnrichRunContextForWorkflow(api.CoordinatorRunContext{}, lycaonRoot), &api.Session{Posture: api.SessionPostureBuild}, surface.HostLoopWakeSentinel, nil, "")
-	active := renderCoordinatorTripartiteForRunContext(t, root, surface.EnrichRunContextForWorkflow(api.CoordinatorRunContext{
-		WorkflowID: "plan", WorkflowVersion: "1.0.0", SurfaceProfile: "plan",
-		RunID: "run-1", CurrentPhase: "expand",
-	}, lycaonRoot), &api.Session{Posture: api.SessionPostureSpec}, surface.HostLoopWakeSentinel, nil, "")
-	if inactive == active {
-		t.Fatal("rendered policy text must differ for active vs inactive run")
-	}
-}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -96,8 +97,10 @@ func TestLogLLMRequestCapturesCommandGuidanceTemplatesAndFacts(t *testing.T) {
 		t.Fatalf("expected 1 row with command_guidance, got %+v", rows)
 	}
 	cg := rows[0].CommandGuidance
-	if len(cg.Templates) != 3 || cg.Facts["profile_command_mutation"] != true || cg.Facts["reviews_confined_writes"] != false {
-		t.Fatalf("command_guidance = %+v", cg)
+	wantTemplates := []string{"tools/schemas/command.yaml", "partials/command-surface.md", "units/runner-operating-procedure.md"}
+	wantFacts := map[string]any{"profile_command_mutation": true, "reviews_confined_writes": false, "command_external_hidden": false}
+	if !reflect.DeepEqual(cg.Templates, wantTemplates) || !reflect.DeepEqual(cg.Facts, wantFacts) {
+		t.Fatalf("command_guidance = %+v, want templates %v facts %v", cg, wantTemplates, wantFacts)
 	}
 }
 

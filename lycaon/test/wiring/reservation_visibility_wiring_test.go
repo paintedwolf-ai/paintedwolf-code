@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -19,7 +20,17 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestHandoffReserveVisibleOnPackBoardAndPeerLegWiring(t *testing.T) {
+type handoffReservation struct {
+	h      *Harness
+	dir    string
+	parent *wire.Session
+	childB *wire.Session
+}
+
+// reservedHandoff runs two implementer legs under one coordinator session and
+// reserves reservedPath from the first leg.
+func reservedHandoff(t *testing.T) handoffReservation {
+	t.Helper()
 	h := BuildForTest(t)
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -58,7 +69,7 @@ func TestHandoffReserveVisibleOnPackBoardAndPeerLegWiring(t *testing.T) {
 	testutil.FailErr(t, "link b", h.Workers.Queue.SetChildSessionID(ctx, taskB.ID, childB.ID))
 
 	_, err = h.ToolRegistry.Run(ctx, "handoff_reserve", map[string]any{
-		"paths": []string{"shellsim/builtins.py"},
+		"paths": []string{reservedPath},
 	}, tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
 			ActiveRootID: "r1"},
@@ -69,6 +80,14 @@ func TestHandoffReserveVisibleOnPackBoardAndPeerLegWiring(t *testing.T) {
 			WorkerJobID:      taskA.ID},
 	})
 	testutil.FailErr(t, "handoff_reserve", err)
+	return handoffReservation{h: h, dir: dir, parent: parent, childB: childB}
+}
+
+const reservedPath = "shellsim/builtins.py"
+
+func TestHandoffReserveVisibleOnPackBoardAndPeerLegWiring(t *testing.T) {
+	f := reservedHandoff(t)
+	h, ctx, dir, parent, childB := f.h, context.Background(), f.dir, f.parent, f.childB
 
 	out, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{}, tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}},
@@ -76,16 +95,41 @@ func TestHandoffReserveVisibleOnPackBoardAndPeerLegWiring(t *testing.T) {
 		Identity: tools.InvocationIdentity{SessionID: parent.ID},
 	})
 	testutil.FailErr(t, "pack_board", err)
-	if !strings.Contains(out, "shellsim/builtins.py") || !strings.Contains(out, "Reserved paths") {
+	if !strings.Contains(out, reservedPath) || !strings.Contains(out, "Reserved paths") {
 		t.Fatalf("pack_board missing reservation: %q", out)
 	}
 
 	peer := h.Sessions.Manager.Workers.Workspaces.PeerReservations(ctx, childB.ID)
-	if len(peer) != 1 || peer[0].Path != "shellsim/builtins.py" {
+	if len(peer) != 1 || peer[0].Path != reservedPath {
 		t.Fatalf("peer reservations = %+v", peer)
 	}
 	if peer[0].LegLabel != "timer-leg" {
 		t.Fatalf("leg label = %q", peer[0].LegLabel)
+	}
+}
+
+// The served graph binds the board builder, renderer, worker roots and
+// reservation source to the coordinator runtime: a coordinator turn and a
+// worker request each receive a pack board carrying the reserved path.
+func TestBoardInjectReachesCoordinatorAndWorkerTurnsWiring(t *testing.T) {
+	f := reservedHandoff(t)
+	ctx := context.Background()
+	engine := f.h.Sessions.Manager.Coordinator.Runtime.Board()
+
+	block, ok := engine.PrependBoardIfChanged(ctx, f.parent, wire.CoordinatorRunContext{RunID: "run-1"})
+	if !ok {
+		t.Fatal("coordinator turn received no board inject")
+	}
+	if !strings.Contains(block, packboard.PackBoardSentinel) || !strings.Contains(block, reservedPath) {
+		t.Fatalf("coordinator board inject lacks the pack board or reservation: %q", block)
+	}
+
+	workerBlock, ok := engine.WorkerBoard(ctx, f.childB)
+	if !ok {
+		t.Fatal("worker request received no board inject")
+	}
+	if !strings.Contains(workerBlock, packboard.PackBoardSentinel) || !strings.Contains(workerBlock, reservedPath) {
+		t.Fatalf("worker board inject lacks the pack board or reservation: %q", workerBlock)
 	}
 }
 
