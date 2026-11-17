@@ -252,7 +252,7 @@ func TestDrainPassesAStoredRowThatCannotBeDecoded(t *testing.T) {
 		testutil.FailErr(t, "enqueue "+id,
 			outbox.Enqueue(t.Context(), testTopic, events.PublishKey{Project: "018eca20-5608-7a55-824f-920998f472b2", EventID: id}, nil))
 	}
-	_, err := sqlDB.ExecContext(t.Context(), `UPDATE event_outbox SET data_json = '?' WHERE event_id = 'malformed'`)
+	_, err := sqlDB.ExecContext(t.Context(), `UPDATE event_outbox SET data_json = '' WHERE event_id = 'malformed'`)
 	testutil.FailErr(t, "corrupt queued payload", err)
 
 	testutil.FailErr(t, "drain", outbox.drain(t.Context()))
