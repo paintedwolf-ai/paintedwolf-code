@@ -21,16 +21,20 @@ type archiveEntry struct {
 	name, target string
 }
 
-// archiveEntries reads one member per line: a kind byte, the name, and for a
-// link a NUL then its target.
+// archiveEntries reads one member per line: a kind letter (any other byte
+// picks one), the name, and for a link a NUL then its target.
 func archiveEntries(spec string) []archiveEntry {
 	var entries []archiveEntry
 	for _, line := range strings.Split(spec, "\n") {
 		if line == "" || len(entries) == 16 {
 			continue
 		}
+		kind := line[0]
+		if strings.IndexByte("fdlh", kind) < 0 {
+			kind = "fdlh"[int(kind)%4]
+		}
 		name, target, _ := strings.Cut(line[1:], "\x00")
-		entries = append(entries, archiveEntry{kind: "fdlh"[int(line[0])%4], name: name, target: target})
+		entries = append(entries, archiveEntry{kind: kind, name: name, target: target})
 	}
 	return entries
 }
