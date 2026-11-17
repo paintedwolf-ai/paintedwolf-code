@@ -240,9 +240,9 @@ func TestSandboxBrokerDenialLeavesNoAuthority(t *testing.T) {
 	}
 }
 
-// Every sandbox capability ask offers a quiet rung, except a protected read
-// path, which is an exact-path floor approval.
-func TestSandboxBrokerAsksOfferQuiet(t *testing.T) {
+// Every sandbox capability ask lets the person stop asking for the rest of the
+// chat: a chat lease, or a quiet rung where the card has no chat lease.
+func TestSandboxBrokerAsksOfferChatStop(t *testing.T) {
 	t.Parallel()
 	for _, tc := range denialInvariantCases(t) {
 		t.Run(tc.name, func(t *testing.T) {
@@ -253,22 +253,24 @@ func TestSandboxBrokerAsksOfferQuiet(t *testing.T) {
 			if len(s.checkpoints.plans) != 1 || s.checkpoints.plans[0] == nil {
 				t.Fatalf("%s minted %d approval plans, want one", tc.name, len(s.checkpoints.plans))
 			}
-			plan := s.checkpoints.plans[0]
-			quiet := 0
-			for _, option := range plan.Options {
-				if option.Kind == hitl.ApprovalOptionQuiet {
-					quiet++
-				}
-			}
-			want := 1
-			if plan.Subject.Kind == hitl.ApprovalSubjectReadPathSet {
-				want = 0
-			}
-			if quiet != want {
-				t.Fatalf("%s plan (subject %s) offers %d quiet options, want %d", tc.name, plan.Subject.Kind, quiet, want)
+			if n := chatStopOptions(s.checkpoints.plans[0].Options); n != 1 {
+				t.Fatalf("%s plan (subject %s) offers %d chat stop options, want 1", tc.name, s.checkpoints.plans[0].Subject.Kind, n)
 			}
 		})
 	}
+}
+
+// chatStopOptions counts the enabled options that stop asking for the rest of
+// the chat.
+func chatStopOptions(options []hitl.ApprovalOption) int {
+	n := 0
+	for _, option := range options {
+		if option.Rung == hitl.ApprovalRungChat && !option.Disabled &&
+			(option.Kind == hitl.ApprovalOptionLease || option.Kind == hitl.ApprovalOptionQuiet) {
+			n++
+		}
+	}
+	return n
 }
 
 func TestSandboxBrokerAttachedDirectionRenewsReview(t *testing.T) {

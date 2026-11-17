@@ -19,7 +19,8 @@ func TestStreamedTurnRecordsCompactionTokenObservation(t *testing.T) {
 	cancel := h.StartBackgroundWorkers(t, context.Background())
 	t.Cleanup(cancel)
 	ctx := context.Background()
-	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, t.TempDir())
+	// The session names the receiver the mock client answers as.
+	sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{ProviderID: "mock", Model: "mock"}, t.TempDir())
 	testutil.FailErr(t, "CreateHarnessSession", err)
 	history := h.Sessions.Manager.Runner.History
 	if history.Calibration(ctx, sess).Calibrated() {

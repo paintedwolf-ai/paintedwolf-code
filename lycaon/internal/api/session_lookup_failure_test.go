@@ -22,13 +22,19 @@ import (
 // errStoreUnreadable is a store failure that is not an absent session.
 var errStoreUnreadable = errors.New("session store unreadable")
 
-// lookupStore answers every session lookup with err.
+// lookupStore answers every read of a session row with err.
 type lookupStore struct {
 	*store.Memory
 	err error
 }
 
 func (s lookupStore) Get(context.Context, string) (*wire.Session, error) { return nil, s.err }
+
+func (s lookupStore) UpdateSession(context.Context, string, func(*wire.Session)) error { return s.err }
+
+func (s lookupStore) GetTranscriptPage(context.Context, string, wire.TranscriptPageQuery) (wire.SessionTranscriptPage, error) {
+	return wire.SessionTranscriptPage{}, s.err
+}
 
 // A store failure is not an absent session: a 404 tells Den the chat was
 // deleted. Every session route that reports session_not_found for the store's

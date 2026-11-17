@@ -24,18 +24,13 @@ type resourceSocketReview struct {
 	hitl.CheckpointManager
 	runtime *approvalstate.SocketCapabilityRuntime
 	calls   int
-	// quiet counts the quiet rungs on the latest plan.
-	quiet int
+	// chatStop counts the latest plan's options that stop asking for the chat.
+	chatStop int
 }
 
 func (r *resourceSocketReview) RequestCheckpoint(_ context.Context, req hitl.CheckpointRequest) (*hitl.CheckpointResponse, error) {
 	r.calls++
-	r.quiet = 0
-	for _, option := range req.ApprovalPlan.Options {
-		if option.Kind == hitl.ApprovalOptionQuiet {
-			r.quiet++
-		}
-	}
+	r.chatStop = chatStopOptions(req.ApprovalPlan.Options)
 	for _, option := range req.ApprovalPlan.Options {
 		if option.Rung != hitl.ApprovalRungOnce {
 			continue
@@ -96,8 +91,8 @@ func assertHostResourceSocketBinding(t *testing.T, operation string) {
 	if review.calls != 1 || first.AuthorizationSource != authzledger.AuthorizationSourceHuman {
 		t.Fatalf("pathname lease covered retained request: calls=%d, source=%s", review.calls, first.AuthorizationSource)
 	}
-	if review.quiet != 1 {
-		t.Fatalf("socket approval plan offers %d quiet rungs, want 1", review.quiet)
+	if review.chatStop != 1 {
+		t.Fatalf("socket approval plan offers %d chat stop options, want 1", review.chatStop)
 	}
 	assertSocketLedgerSource(t, recorder.records, authzledger.ActionCapabilityGranted, authzledger.AuthorizationSourceHuman)
 	grant := first.SocketGrants[0]
@@ -148,8 +143,9 @@ func assertSocketLedgerSource(t *testing.T, records []authzledger.CapabilityReco
 	t.Fatalf("ledger lacks %s", action)
 }
 
-// The direct-network card offers the same quiet rung as every other approval.
-func TestDirectIPApprovalOffersQuiet(t *testing.T) {
+// The direct-network card lets the person stop asking for the rest of the chat,
+// as every other approval does.
+func TestDirectIPApprovalOffersChatStop(t *testing.T) {
 	ctx := socketInvocationContext(t)
 	executor := NewExecutor(nil, nil, "")
 	review := &resourceSocketReview{}
@@ -169,9 +165,22 @@ func TestDirectIPApprovalOffersQuiet(t *testing.T) {
 	approval, err := resourceSocketGate{}.Evaluate(ctx, action)
 	testutil.FailErr(t, "evaluate the explicit approval request", err)
 	testutil.FailErr(t, "direct-network approval", executor.Capabilities.awaitDirectIPCapability(ctx, action, lease, tc, approval))
-	if review.calls != 1 || review.quiet != 1 {
-		t.Fatalf("direct-network asks = %d with %d quiet rungs, want one ask with one quiet rung", review.calls, review.quiet)
+	if review.calls != 1 || review.chatStop != 1 {
+		t.Fatalf("direct-network asks = %d with %d chat stop options, want one ask with one", review.calls, review.chatStop)
 	}
+}
+
+// chatStopOptions counts the enabled options that stop asking for the rest of
+// the chat.
+func chatStopOptions(options []hitl.ApprovalOption) int {
+	n := 0
+	for _, option := range options {
+		if option.Rung == hitl.ApprovalRungChat && !option.Disabled &&
+			(option.Kind == hitl.ApprovalOptionLease || option.Kind == hitl.ApprovalOptionQuiet) {
+			n++
+		}
+	}
+	return n
 }
 
 type resourceSocketGate struct{ coveringHostResourceGate }

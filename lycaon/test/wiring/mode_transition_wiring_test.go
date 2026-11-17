@@ -35,7 +35,9 @@ func TestEnteringAWorkflowPhasePushesModeTransitionCause(t *testing.T) {
 			h.RegisterManifest(m)
 			sess, err := h.CreateHarnessSession(t, wire.CreateSessionRequest{}, t.TempDir())
 			testutil.FailErr(t, "create session", err)
-			run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{WorkflowID: "mode-probe", WorkflowVersion: "1.0.0"})
+			run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
+				WorkflowID: "mode-probe", WorkflowVersion: "1.0.0", Request: "Probe the execution mode",
+			})
 			testutil.FailErr(t, "start probe run", err)
 			if run.CurrentPhase != "work" {
 				t.Fatalf("phase = %q want work", run.CurrentPhase)
