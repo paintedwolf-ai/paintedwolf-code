@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 	"time"
