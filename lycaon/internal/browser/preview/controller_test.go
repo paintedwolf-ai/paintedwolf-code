@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/browser"
@@ -87,49 +88,52 @@ func TestPageWatchesRemainIndependent(t *testing.T) {
 }
 
 func TestFPSCoalesceDropsIntermediateFrames(t *testing.T) {
-	cfg := DefaultConfig()
-	cfg.MaxFPS = 2 // 500ms
-	var mu sync.Mutex
-	var frames int
-	c := NewController(cfg, func(_ context.Context, _, _ string, ev api.PreviewEvent) {
-		if ev.Op == api.PreviewEventOpFrame {
-			mu.Lock()
-			frames++
-			mu.Unlock()
+	synctest.Test(t, func(t *testing.T) {
+		cfg := DefaultConfig()
+		cfg.MaxFPS = 2 // 500ms
+		var mu sync.Mutex
+		var frames int
+		c := NewController(cfg, func(_ context.Context, _, _ string, ev api.PreviewEvent) {
+			if ev.Op == api.PreviewEventOpFrame {
+				mu.Lock()
+				frames++
+				mu.Unlock()
+			}
+		})
+		configurePreviewProjection(c)
+		h := &castHandle{cancel: func() {}, done: make(chan struct{})}
+		st := &stream{
+			projectID:   "p",
+			sessionID:   "s",
+			pageID:      "page-1",
+			cast:        h,
+			minInterval: time.Second / time.Duration(cfg.MaxFPS),
+			held:        &browser.HeldPage{Width: 100, Height: 80},
+		}
+		c.mu.Lock()
+		c.pages[streamKey("s", "page-1")] = st
+		c.mu.Unlock()
+
+		jpeg := []byte{0xff, 0xd8, 0xff, 0xd9} // minimal jpeg markers
+		c.offerFrame(context.Background(), st, h, jpeg, "", "", browser.PageRegions{})
+		c.offerFrame(context.Background(), st, h, jpeg, "", "", browser.PageRegions{})
+		c.offerFrame(context.Background(), st, h, jpeg, "", "", browser.PageRegions{})
+		mu.Lock()
+		first := frames
+		mu.Unlock()
+		if first != 1 {
+			t.Fatalf("first burst frames=%d want 1", first)
+		}
+		time.Sleep(st.minInterval + 20*time.Millisecond)
+		synctest.Wait()
+		c.flushPending(context.Background(), st, h)
+		mu.Lock()
+		second := frames
+		mu.Unlock()
+		if second != 2 {
+			t.Fatalf("after interval frames=%d want 2", second)
 		}
 	})
-	configurePreviewProjection(c)
-	h := &castHandle{cancel: func() {}, done: make(chan struct{})}
-	st := &stream{
-		projectID:   "p",
-		sessionID:   "s",
-		pageID:      "page-1",
-		cast:        h,
-		minInterval: time.Second / time.Duration(cfg.MaxFPS),
-		held:        &browser.HeldPage{Width: 100, Height: 80},
-	}
-	c.mu.Lock()
-	c.pages[streamKey("s", "page-1")] = st
-	c.mu.Unlock()
-
-	jpeg := []byte{0xff, 0xd8, 0xff, 0xd9} // minimal jpeg markers
-	c.offerFrame(context.Background(), st, h, jpeg, "", "", browser.PageRegions{})
-	c.offerFrame(context.Background(), st, h, jpeg, "", "", browser.PageRegions{})
-	c.offerFrame(context.Background(), st, h, jpeg, "", "", browser.PageRegions{})
-	mu.Lock()
-	first := frames
-	mu.Unlock()
-	if first != 1 {
-		t.Fatalf("first burst frames=%d want 1", first)
-	}
-	time.Sleep(st.minInterval + 20*time.Millisecond)
-	c.flushPending(context.Background(), st, h)
-	mu.Lock()
-	second := frames
-	mu.Unlock()
-	if second != 2 {
-		t.Fatalf("after interval frames=%d want 2", second)
-	}
 }
 
 func TestPublishActionWithoutStreamIsNoop(t *testing.T) {
@@ -138,32 +142,34 @@ func TestPublishActionWithoutStreamIsNoop(t *testing.T) {
 }
 
 func TestClaimEmitsAndSnapshotsInvocationAssociation(t *testing.T) {
-	var events []api.PreviewEvent
-	c := NewController(DefaultConfig(), func(_ context.Context, _, _ string, ev api.PreviewEvent) {
-		events = append(events, ev)
+	synctest.Test(t, func(t *testing.T) {
+		var events []api.PreviewEvent
+		c := NewController(DefaultConfig(), func(_ context.Context, _, _ string, ev api.PreviewEvent) {
+			events = append(events, ev)
+		})
+		configurePreviewProjection(c)
+		c.pages[streamKey("s", "page-1")] = &stream{
+			projectID:          "project",
+			sessionID:          "s",
+			pageID:             "page-1",
+			assistantMessageID: "assistant-1",
+			toolCallID:         "call-1",
+			held:               &browser.HeldPage{TargetURL: "https://example.test"},
+		}
+
+		c.Claim(context.Background(), "s", "page-1", "assistant-2", "call-2")
+
+		if len(events) != 1 {
+			t.Fatalf("events=%d want 1", len(events))
+		}
+		if events[0].AssistantMessageID != "assistant-2" || events[0].ToolCallID != "call-2" {
+			t.Fatalf("event association=%+v", events[0])
+		}
+		attachments := c.SnapshotForSession(context.Background(), "s")
+		if len(attachments) != 1 || attachments[0].AssistantMessageID != "assistant-2" || attachments[0].ToolCallID != "call-2" {
+			t.Fatalf("attachments=%+v", attachments)
+		}
 	})
-	configurePreviewProjection(c)
-	c.pages[streamKey("s", "page-1")] = &stream{
-		projectID:          "project",
-		sessionID:          "s",
-		pageID:             "page-1",
-		assistantMessageID: "assistant-1",
-		toolCallID:         "call-1",
-		held:               &browser.HeldPage{TargetURL: "https://example.test"},
-	}
-
-	c.Claim(context.Background(), "s", "page-1", "assistant-2", "call-2")
-
-	if len(events) != 1 {
-		t.Fatalf("events=%d want 1", len(events))
-	}
-	if events[0].AssistantMessageID != "assistant-2" || events[0].ToolCallID != "call-2" {
-		t.Fatalf("event association=%+v", events[0])
-	}
-	attachments := c.SnapshotForSession(context.Background(), "s")
-	if len(attachments) != 1 || attachments[0].AssistantMessageID != "assistant-2" || attachments[0].ToolCallID != "call-2" {
-		t.Fatalf("attachments=%+v", attachments)
-	}
 }
 
 func TestSnapshotProjectsMetadataInTheAttachmentProject(t *testing.T) {

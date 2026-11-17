@@ -239,7 +239,8 @@ func TestCurlExitStatusesAndUnknownOutcomes(t *testing.T) {
 		hits.Add(1)
 		switch r.URL.Path {
 		case "/slow":
-			time.Sleep(2 * time.Second)
+			// Outlives the client's --max-time; returns once the client gives up.
+			<-r.Context().Done()
 		case "/drop":
 			conn, _, _ := w.(http.Hijacker).Hijack()
 			_ = conn.Close()

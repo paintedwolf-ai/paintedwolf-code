@@ -22,25 +22,6 @@ func watchRestoreRoot(t *testing.T, path string) {
 	}
 }
 
-// awaitQuietStructure waits for the head generation to stop advancing, so a
-// checkpoint and the observations compared against it describe the same pass.
-func awaitQuietStructure(t *testing.T, store *indexStore) {
-	t.Helper()
-	settled := int64(-1)
-	testutil.WaitFor(t, "the structure generation stops changing", func() bool {
-		pin, err := store.retainGeneration(headGeneration, true)
-		testutil.FailErr(t, "read head generation", err)
-		current := pin.Generation
-		pin.Release()
-		quiet := current == settled
-		settled = current
-		if !quiet {
-			time.Sleep(300 * time.Millisecond)
-		}
-		return quiet
-	})
-}
-
 func fixtureStamp(t *testing.T, dir string) DirectoryStamp {
 	t.Helper()
 	info, err := os.Lstat(dir)
@@ -181,15 +162,18 @@ func TestStructuralCheckpointRestoresAcrossEnginesByDirectoryStamp(t *testing.T)
 	testutil.FailErr(t, "await first inventory", first.Directories.AwaitNavigation(t.Context(), "p1", firstRoot))
 	firstStore, err := first.Trees.indexStore(t.Context(), "p1", firstRoot)
 	testutil.FailErr(t, "open first store", err)
-	awaitQuietStructure(t, firstStore)
 	before := make(map[string]DirectoryObservation, len(dirs))
-	for _, dir := range dirs {
-		before[dir], err = firstStore.readObservation(t.Context(), dir)
-		testutil.FailErr(t, "read first observation", err)
-		if !before[dir].Stamp.known() {
-			t.Fatalf("listing of %q recorded no directory stamp", dir)
+	testutil.WaitFor(t, "every directory listing records its stamp", func() bool {
+		for _, dir := range dirs {
+			observation, err := firstStore.readObservation(t.Context(), dir)
+			testutil.FailErr(t, "read first observation", err)
+			if !observation.Stamp.known() {
+				return false
+			}
+			before[dir] = observation
 		}
-	}
+		return true
+	})
 	_, err = firstStore.checkpointStructure(t.Context())
 	testutil.FailErr(t, "write checkpoint", err)
 	checkpoint, err := loadStructuralCheckpoint(t.Context(), firstStore, true)
@@ -205,10 +189,19 @@ func TestStructuralCheckpointRestoresAcrossEnginesByDirectoryStamp(t *testing.T)
 	checkpoint.close()
 	testutil.FailErr(t, "drain first engine", first.Drain(context.Background()))
 
-	// One directory changes while no engine is running.
-	time.Sleep(20 * time.Millisecond)
-	testutil.FailErr(t, "add a file while nothing runs",
-		os.WriteFile(filepath.Join(rootPath, "other", "d.txt"), []byte("content"), 0o600))
+	// One directory changes while no engine is running. Directory times tick
+	// coarsely, so the entry is created again until the stamp has moved.
+	otherDir := filepath.Join(rootPath, "other")
+	testutil.WaitFor(t, "the changed directory's stamp moves past the checkpoint", func() bool {
+		added := filepath.Join(otherDir, "d.txt")
+		if err := os.Remove(added); err != nil && !os.IsNotExist(err) {
+			testutil.FailErr(t, "remove the added file", err)
+		}
+		testutil.FailErr(t, "add a file while nothing runs", os.WriteFile(added, []byte("content"), 0o600))
+		info, err := os.Stat(otherDir)
+		testutil.FailErr(t, "stat the changed directory", err)
+		return directoryStampOf(info) != before["other"].Stamp
+	})
 
 	second := New()
 	second.Trees.treeDir = treeDir
