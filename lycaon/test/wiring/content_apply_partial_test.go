@@ -42,8 +42,8 @@ func TestContentApplyPartialReturnsOneHostComposedResult(t *testing.T) {
 	}()
 
 	var checkpointID, selectedHunk string
-	testutil.WaitFor(t, func() bool {
-		pending, listErr := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, ptrKind(wire.CheckpointKindContentApply))
+	testutil.WaitFor(t, "the content apply card is pending", func() bool {
+		pending, listErr := h.Sessions.Checkpoints.ListPending(ctx, sess.ID, PtrKind(wire.CheckpointKindContentApply))
 		if listErr != nil || len(pending) != 1 || pending[0].ContentApply == nil || len(pending[0].ContentApply.Hunks) != 2 {
 			return false
 		}

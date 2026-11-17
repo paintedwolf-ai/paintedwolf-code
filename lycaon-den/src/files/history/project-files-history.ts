@@ -9,7 +9,7 @@ import type {
   SourceHistoryState,
 } from "../../api/types.ts";
 import type { FilesScope } from "../components/files-scope.ts";
-import { closeFilesBuffersUnderPath } from "../documents/project-files-buffers.ts";
+import { closeFilesBuffersUnderPath } from "../documents/project-files-buffer-lifecycle.ts";
 import type { DirtyGuardResult } from "../commands/project-files-lifecycle.ts";
 import { retargetOpenFilesUnderPath } from "../commands/project-files-retarget.ts";
 

@@ -100,7 +100,7 @@ func deniedCopy(t *testing.T) string {
 func (h *approvalHITLHarness) waitPending(t *testing.T, done <-chan error) string {
 	t.Helper()
 	var checkpointID string
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the approval is pending", func() bool {
 		select {
 		case err := <-done:
 			t.Fatalf("prompt completed before approval: %v", err)
@@ -133,7 +133,7 @@ func TestApprovalHITLApproveCompletesTool(t *testing.T) {
 	done := h.runPrompt(t)
 	decisionID := h.waitPending(t, done)
 
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID, strings.NewReader(`{"kind":"tool_approval","action":"approve","option_id":"approve_current_action"}`))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID, strings.NewReader(`{"kind":"tool_approval","action":"approve","option_id":"approve_current_action"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.srv.ServeHTTP(w, req)
@@ -178,7 +178,7 @@ func TestApprovalHITLRejectViaHTTP(t *testing.T) {
 	done := h.runPrompt(t)
 	decisionID := h.waitPending(t, done)
 
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID, strings.NewReader(`{"kind":"tool_approval","action":"reject"}`))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID, strings.NewReader(`{"kind":"tool_approval","action":"reject"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.srv.ServeHTTP(w, req)
@@ -207,7 +207,7 @@ func TestApprovalHITLRejectsClientAuthoredEdit(t *testing.T) {
 	decisionID := h.waitPending(t, done)
 
 	body := `{"kind":"tool_approval","action":"edit","edited_args":{"path":"via-http.txt","content":"z"}}`
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID, strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	h.srv.ServeHTTP(w, req)
@@ -215,7 +215,7 @@ func TestApprovalHITLRejectsClientAuthoredEdit(t *testing.T) {
 		t.Fatalf("edit status = %d body = %s, want 400", w.Code, w.Body.String())
 	}
 
-	approve := authedRequest(t, http.MethodPost, "/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID, strings.NewReader(`{"kind":"tool_approval","action":"approve","option_id":"approve_current_action"}`))
+	approve := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+h.sess.ID+"/checkpoints/"+decisionID, strings.NewReader(`{"kind":"tool_approval","action":"approve","option_id":"approve_current_action"}`))
 	approve.Header.Set("Content-Type", "application/json")
 	approved := httptest.NewRecorder()
 	h.srv.ServeHTTP(approved, approve)

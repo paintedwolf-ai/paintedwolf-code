@@ -2,6 +2,7 @@ package sourceapi
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -197,7 +198,7 @@ func gitReviewObjectSide(ctx context.Context, req sourceGitReviewRequest, oid, m
 		if err != nil {
 			return sourceledger.ComparisonSide{State: "content", Availability: sourceledger.ContentUnavailable, Reason: "content_unavailable"}
 		}
-		if size > sourceledger.MaxRevisionContentBytes {
+		if size > sourceblob.MaxRevisionContentBytes {
 			return sourceledger.ComparisonSide{State: "content", SizeBytes: size, Availability: sourceledger.ContentNotCaptured, Reason: "content_too_large"}
 		}
 	}

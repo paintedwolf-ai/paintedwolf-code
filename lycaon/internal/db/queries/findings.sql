@@ -13,14 +13,14 @@ SELECT id, agent, summary, ref, body, created_at FROM findings
 WHERE session_id = ? AND id > ?
   AND (sqlc.arg(exclude_agent) = '' OR agent != sqlc.arg(exclude_agent))
 ORDER BY id
-LIMIT 200;
+LIMIT sqlc.arg(page_limit);
 
 -- name: ListFindingsSinceAfterID :many
 SELECT id, agent, summary, ref, body, created_at FROM findings
 WHERE session_id = ? AND created_at > ? AND id > ?
   AND (sqlc.arg(exclude_agent) = '' OR agent != sqlc.arg(exclude_agent))
 ORDER BY id
-LIMIT 200;
+LIMIT sqlc.arg(page_limit);
 
 -- name: ListRecentFindings :many
 SELECT id, agent, summary, ref, body, created_at FROM findings

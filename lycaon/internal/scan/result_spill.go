@@ -69,22 +69,3 @@ func SpillResultJSON(result *scanoutput.Result, capBytes int, spillDir, scanID s
 	}
 	return json.Marshal(stub)
 }
-
-// LoadSpilledResult reads a spilled full ScanResult from evidenceRoot + relative spill path.
-func LoadSpilledResult(evidenceRoot, spillRel string) (*scanoutput.Result, error) {
-	spillRel = strings.TrimSpace(spillRel)
-	evidenceRoot = strings.TrimSpace(evidenceRoot)
-	if spillRel == "" || evidenceRoot == "" {
-		return nil, fmt.Errorf("spill path and evidence root required")
-	}
-	abs := filepath.Join(evidenceRoot, filepath.FromSlash(spillRel))
-	raw, err := os.ReadFile(abs) // #nosec G304 -- host-managed spill under PathKeyedHostDataDir
-	if err != nil {
-		return nil, err
-	}
-	var out scanoutput.Result
-	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
-}

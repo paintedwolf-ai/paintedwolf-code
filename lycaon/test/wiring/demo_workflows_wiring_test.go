@@ -21,7 +21,7 @@ import (
 )
 
 func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "security-survey")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
@@ -29,13 +29,13 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 
 	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.1"})
 	testutil.FailErr(t, "start security workflow", err)
-	settleScanObligationAndAdvance(t, h, ctx, run.ID, "plan")
+	SettleScanObligationAndAdvance(t, h, ctx, run.ID, "plan")
 	satisfyFanoutPlannedAndAdvance(t, h, ctx, run.ID, dir, []runstate.FanoutPlanLeg{
 		{AgentType: "security-reviewer", Subject: "Dependencies", Prompt: "Survey dependency risk", DoneWhen: []string{"Account for dependency risk and unexamined scope"}},
 		{AgentType: "security-reviewer", Subject: "Sign-in", Prompt: "Survey auth patterns", DoneWhen: []string{"Trace authentication boundaries and unexamined scope"}},
 	}, "execute")
 	satisfyWorkerCycleAndAdvance(t, h, ctx, sess, run.ID, dir)
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "claims")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "claims")
 
 	assertManifestBoundSurface(t, h, ctx, sess, surface.HostLoopWakeSentinel, "review_adjudicate")
 
@@ -70,7 +70,7 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 	if !out.Valid || !out.Terminal {
 		t.Fatalf("claims verdict = %+v, want valid terminal outcome", out)
 	}
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "challenge")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "challenge")
 
 	skepticChild := appendSucceededReviewAgent(t, h, ctx, sess, "skeptic", "review/skeptic")
 	researcherChild := appendSucceededReviewAgent(t, h, ctx, sess, "web-researcher", "review/web-researcher")
@@ -91,13 +91,13 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 	if !out.Valid || !out.Terminal {
 		t.Fatalf("challenge verdict = %+v, want valid terminal outcome", out)
 	}
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "report")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "report")
 
 	deliverTopologyReport(t, h, ctx, sess, run.ID)
 }
 
 func TestReconPackFanOutWorkflowEndToEnd(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "recon-pack")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureOrchestrate}, dir)
@@ -109,10 +109,10 @@ func TestReconPackFanOutWorkflowEndToEnd(t *testing.T) {
 		{AgentType: "path-explorer", Subject: "Test entrypoints", Prompt: "Find test entrypoints"},
 	}, "execute")
 	satisfyWorkerCycleAndAdvance(t, h, ctx, sess, run.ID, dir)
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "reconcile")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "reconcile")
 	_, err = h.Workflows.Manager.Phases.FireTransition(ctx, run.ID, "report", workflowdef.TransitionActorCoordinator)
 	testutil.FailErr(t, "FireTransition report", err)
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "report")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "report")
 
 	scaffoldTopologyOutput(t, h.Workflows.Manager, run.ID, orchestration.TopologyBindStageFanOut)
 
@@ -120,7 +120,7 @@ func TestReconPackFanOutWorkflowEndToEnd(t *testing.T) {
 }
 
 func TestBugbashWorkflowEndToEnd(t *testing.T) {
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := h.OwnerCtx(t, context.Background())
 	dir := h.ProjectDir(t, "bugbash")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureOrchestrate}, dir)
@@ -134,9 +134,9 @@ func TestBugbashWorkflowEndToEnd(t *testing.T) {
 	for _, stage := range []string{"hunt_correctness", "hunt_edges", "hunt_races"} {
 		waitTopologyStageComplete(t, h.Workflows.Manager, run.ID, stage)
 	}
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "triage")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "triage")
 	waitTopologyStageComplete(t, h.Workflows.Manager, run.ID, "triage")
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "expand")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "expand")
 	blueprintPath := filepath.Join(dir, filepath.FromSlash(run.BlueprintPath))
 	testutil.FailErr(t, "create Bugbash blueprint dir", os.MkdirAll(filepath.Dir(blueprintPath), 0o755))
 	testutil.FailErr(t, "write Bugbash blueprint", os.WriteFile(blueprintPath, []byte(conditions.TestPlanContentStubOnly), 0o644))
@@ -161,7 +161,7 @@ func TestBugbashWorkflowEndToEnd(t *testing.T) {
 	child.Status, child.CompletedAt, child.UpdatedAt = api.WorkflowRunStatusComplete, &now, now
 	testutil.FailErr(t, "complete implementation child", h.Workflows.Manager.Store.State.Update(ctx, child))
 	testutil.FailErr(t, "resume bugbash after implementation", h.Workflows.Manager.Children.ReconcileTerminalRun(ctx, child))
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "closeout")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "closeout")
 
 	vars, err := h.Workflows.Manager.Store.Runs.GetScaffoldVars(ctx, run.ID)
 	testutil.FailErr(t, "GetScaffoldVars", err)

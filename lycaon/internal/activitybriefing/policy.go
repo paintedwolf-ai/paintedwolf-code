@@ -1,29 +1,37 @@
 package activitybriefing
 
 import (
-	"github.com/lycaon/lycaon/internal/briefing"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-// Row names the generation policy row an activity fell under; the outcome
-// section records it so the evidence page can say why.
+// Row names how an activity was classified; the outcome section records it
+// so the evidence page can say what kind of activity was explained.
 type Row string
 
 const (
-	RowTool        Row = "tool_activity"
-	RowExecute     Row = "command_execute"
-	RowFailed      Row = "command_failed_or_interrupted"
-	RowMixedSteps  Row = "command_steps_differ"
-	RowLookup      Row = "command_settled_inspect_or_mutate"
-	RowRefused     Row = "command_refused"
-	RowUnsupported Row = "command_running_inspect_or_mutate"
+	RowTool       Row = "tool_activity"
+	RowExecute    Row = "command_execute"
+	RowFailed     Row = "command_failed_or_interrupted"
+	RowMixedSteps Row = "command_steps_differ"
+	RowInspect    Row = "command_inspect_or_mutate"
+	RowRefused    Row = "command_refused"
 )
 
-// decision is what the policy asks of the model for one activity.
+// changeMode says how an activity's change section is produced.
+type changeMode int
+
+const (
+	changeNone changeMode = iota
+	changeGenerated
+	// changeNothingRan states that a refused activity ran nothing.
+	changeNothingRan
+)
+
+// decision is what the policy asks for one opened activity. Purpose is
+// always generated; the change waits until the activity settles.
 type decision struct {
-	row     Row
-	purpose briefing.SectionMode
-	change  bool
+	row    Row
+	change changeMode
 }
 
 // facts are the typed host facts the policy reads; never command text or
@@ -76,21 +84,23 @@ func (f facts) stepsDiffer() bool {
 
 // decide applies the activity generation policy.
 func decide(f facts) decision {
+	settledChange := changeNone
+	if f.settled {
+		settledChange = changeGenerated
+	}
 	if !f.command {
-		return decision{row: RowTool, purpose: briefing.Generated, change: f.settled}
+		return decision{row: RowTool, change: settledChange}
 	}
 	switch {
 	case f.allState("refused"):
-		return decision{row: RowRefused, purpose: briefing.Lookup}
+		return decision{row: RowRefused, change: changeNothingRan}
 	case f.anyState("failed", "interrupted"):
-		return decision{row: RowFailed, purpose: briefing.Generated, change: f.settled}
+		return decision{row: RowFailed, change: settledChange}
 	case f.phase("execute"):
-		return decision{row: RowExecute, purpose: briefing.Generated, change: f.settled}
+		return decision{row: RowExecute, change: settledChange}
 	case f.settled && f.stepsDiffer():
-		return decision{row: RowMixedSteps, purpose: briefing.Generated, change: true}
-	case !f.settled:
-		return decision{row: RowUnsupported, purpose: briefing.Lookup}
+		return decision{row: RowMixedSteps, change: settledChange}
 	default:
-		return decision{row: RowLookup, purpose: briefing.Lookup}
+		return decision{row: RowInspect, change: settledChange}
 	}
 }

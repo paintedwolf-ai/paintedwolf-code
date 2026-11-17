@@ -44,10 +44,12 @@ func contractStockOARPipeline(t *testing.T) *oar.GuardPipeline {
 			contractOARErr = err
 			return
 		}
-		if err := oar.InstallEngineDeclarationFile(profile); err != nil {
+		declaration, err := oar.LoadEngineDeclaration(profile)
+		if err != nil {
 			contractOARErr = err
 			return
 		}
+		oar.InstallEngineDeclaration(declaration)
 		schemaDir := filepath.Join(filepath.Dir(root), "schemas")
 		loader, err := oar.NewLoader(schemaDir)
 		if err != nil {

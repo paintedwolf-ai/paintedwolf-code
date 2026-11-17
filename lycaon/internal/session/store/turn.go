@@ -106,20 +106,6 @@ type ModelOutput struct {
 	SettledAt     time.Time
 }
 
-// LiveModelOutput is a bounded, replaceable projection while bytes stream.
-type LiveModelOutput struct {
-	ID            string
-	TurnAttemptID string
-	SessionID     string
-	Iteration     int
-	MessageID     string
-	Content       string
-	ToolCallsJSON string
-	ReasoningJSON string
-	CreatedAt     time.Time
-	UpdatedAt     time.Time
-}
-
 // PendingModelOutputProjection awaits read-model projection.
 type PendingModelOutputProjection struct {
 	Output      ModelOutput

@@ -20,7 +20,7 @@ func TestSecurityCloseoutPendingObligationIsPure(t *testing.T) {
 	store, obligation := commitRequiredLanding(t, sqlDB, projectDir, "dep-pending")
 	checker := &scan.SecurityCloseoutChecker{Store: store, Evidence: inspector.NewJSONLStore(inspector.DefaultEvidenceDir)}
 
-	err := checker.Check(t.Context(), "dep-pending", projectDir)
+	err := checker.CheckSession(t.Context(), "session-1", projectDir)
 	pending, ok := scan.AsGatePending(err)
 	if !ok || pending.ScanID != obligation.ID {
 		t.Fatalf("pending = %#v err=%v", pending, err)
@@ -40,7 +40,7 @@ func TestSecurityCloseoutFreshAnchoredObligationPasses(t *testing.T) {
 	completeSecurityEvidence(t, store, evidenceStore, projectDir, obligation, &scanoutput.Result{})
 
 	checker := &scan.SecurityCloseoutChecker{Store: store, Evidence: evidenceStore}
-	if err := checker.Check(t.Context(), "dep-pass", projectDir); err != nil {
+	if err := checker.CheckSession(t.Context(), "session-1", projectDir); err != nil {
 		t.Fatalf("expected pass: %v", err)
 	}
 }
@@ -57,7 +57,7 @@ func TestSecurityCloseoutFailedEvidenceBlocks(t *testing.T) {
 		},
 	})
 
-	err := (&scan.SecurityCloseoutChecker{Store: store, Evidence: evidenceStore}).Check(t.Context(), "dep-fail", projectDir)
+	err := (&scan.SecurityCloseoutChecker{Store: store, Evidence: evidenceStore}).CheckSession(t.Context(), "session-1", projectDir)
 	if err == nil {
 		t.Fatal("expected security gate failure")
 	}
@@ -75,7 +75,7 @@ func TestSecurityCloseoutMainOffBypassesObligation(t *testing.T) {
 	testutil.FailErr(t, "PutGlobal", settingsStore.PutGlobal(settings.SecurityScannersUserOverlay{Enabled: boolPtr(false)}))
 
 	checker := &scan.SecurityCloseoutChecker{Store: store, Settings: settingsStore}
-	if err := checker.Check(t.Context(), "dep-off", projectDir); err != nil {
+	if err := checker.CheckSession(t.Context(), "session-1", projectDir); err != nil {
 		t.Fatalf("main switch should bypass closeout: %v", err)
 	}
 }

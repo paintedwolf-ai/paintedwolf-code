@@ -1,6 +1,8 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -148,5 +150,37 @@ func TestRenderTSStateMachineProjectsForApplyingClients(t *testing.T) {
 	}
 	if strings.Count(out, "export ") != 1 {
 		t.Fatalf("client projection should export exactly one symbol:\n%s", out)
+	}
+}
+
+func TestPlannedOutputsMatchTheRepositoryAndStage(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", ".."))
+	testutil.FailErr(t, "repository root", err)
+	outputs, err := planOutputs(root)
+	testutil.FailErr(t, "plan outputs", err)
+	testutil.FailErr(t, "generated files are current", checkOutputs(outputs))
+
+	stage := t.TempDir()
+	testutil.FailErr(t, "stage outputs", stageOutputs(root, stage, outputs))
+	manifest, err := os.ReadFile(filepath.Join(stage, "manifest"))
+	testutil.FailErr(t, "read manifest", err)
+	staged := strings.Split(strings.TrimSpace(string(manifest)), "\n")
+	if len(staged) != len(outputs) {
+		t.Fatalf("manifest lists %d files, want %d", len(staged), len(outputs))
+	}
+	for i, rel := range staged {
+		body, err := os.ReadFile(filepath.Join(stage, rel))
+		testutil.FailErr(t, "read staged "+rel, err)
+		if string(body) != string(outputs[i].body) {
+			t.Fatalf("staged %s differs from its rendering", rel)
+		}
+	}
+
+	stale := []outputFile{{path: filepath.Join(stage, "missing"), hint: "fixture"}}
+	if err := checkOutputs(stale); err == nil {
+		t.Fatal("a missing output passed the check")
+	}
+	if err := stageOutputs(root, stage, []outputFile{{path: filepath.Join(filepath.Dir(root), "outside")}}); err == nil {
+		t.Fatal("an output outside the repository was staged")
 	}
 }

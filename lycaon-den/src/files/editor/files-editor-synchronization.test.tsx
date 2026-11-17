@@ -34,7 +34,7 @@ vi.mock("../components/project-files-model.ts", () => ({ fileBufferKey: () => "f
 vi.mock("../documents/files-buffer-state.ts", () => ({
   projectFilesState: () => ({ order: ["file"], activeKey: "file", byKey: { file: fixture.buffer } }),
 }));
-vi.mock("../documents/project-files-buffers.ts", () => ({
+vi.mock("../documents/project-files-buffer-io.ts", () => ({
   setFilesBufferDocumentOpening: (_project: string, _key: string, state: FileBuffer["editorOpening"]) => { fixture.buffer.editorOpening = state; },
   applyFilesBufferEditorDocument: (_project: string, _key: string, document: EditorDocumentState) => {
     Object.assign(fixture.buffer, {

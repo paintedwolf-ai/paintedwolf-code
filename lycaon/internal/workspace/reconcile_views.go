@@ -305,10 +305,7 @@ func (m *Manager) releaseLiveJournaledViews(ctx context.Context, jobID, root str
 			return err
 		}
 	}
-	m.viewsMu.Lock()
-	delete(m.views, key)
-	m.viewsMu.Unlock()
-	sharedBranchViews.Delete(key)
+	m.forgetBranchViews(key)
 	forgetSettledBranchClaim(key)
 	return nil
 }

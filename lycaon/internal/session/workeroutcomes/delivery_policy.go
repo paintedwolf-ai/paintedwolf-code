@@ -93,11 +93,15 @@ func (m *DeliveryPolicy) Evaluate(ctx context.Context, env workercompletion.Work
 	}
 	if blocked {
 		out.Blocked = true
-		out.Envelope = workercompletion.WorkerCompletionEnvelope{
-			JobID: env.JobID, ChildSessionID: env.ChildSessionID, AgentType: env.AgentType,
-			State: string(api.WorkerSummaryStatusPartial), MergeStatus: env.MergeStatus,
-			HintCode: res.Decision.Code, Summary: text, Digest: text,
-		}
+		out.Envelope = env
+		out.Envelope.State = string(api.WorkerSummaryStatusPartial)
+		out.Envelope.HintCode = res.Decision.Code
+		out.Envelope.Summary = text
+		out.Envelope.Digest = text
+		out.Envelope.Body = ""
+		out.Envelope.Proof = workercompletion.WorkerCompletionProof{}
+		out.Envelope.Report = workercompletion.WorkerCompletionReport{}
+		out.Envelope.DecisionRequest = nil
 	} else if res.Decision.Effect == oar.EffectWarn || res.Decision.Effect == oar.EffectNudge {
 		out.Envelope.Summary = strings.TrimSpace(env.Summary + "\n" + text)
 		out.Envelope.Digest = strings.TrimSpace(env.Digest + "\n" + text)

@@ -31,7 +31,7 @@ The main store persists sessions, messages, workflows, evidence, authorization h
 
 `schema.sql` is the current fresh-install target at `SchemaVersion` (`internal/db`). Released revisions cannot be redefined, and development shapes have no reader or conversion. Only stores written by a released build are upgrade sources; preview builds that preceded 1.0.0 are not released baselines. Startup refuses any other store's unknown shape into recovery without opening a writer.
 
-The upgrade corpus records the shape a release ships. `./task upgrade:corpus:prepare` writes a versioned fixture with an archive, semantic expectations, and checksums; preparing a candidate does not register a shipped baseline, and candidate fixtures stay editable until release. After a schema change in a candidate, seed a replacement with `./task upgrade:corpus:seed -- --out <directory>`, verify it with `./task upgrade:corpus:boot -- <directory>`, and replace the candidate fixture. `./task release:preflight -- --require-corpus` verifies the candidate's exact baseline, both database payloads, and archive integrity; a matching product version alone is insufficient. The contract suite checks the same identity during ordinary full verification. A later step may drop a released table or column only through `migrations.DropReleased` with a registered rebuild, and the contract suite requires a released fixture to hold those rows. Seed rows into tables a future step might retire while preparing the candidate, when its own write paths still exist and its fixture is still editable.
+The upgrade corpus records the shape a release ships. `./task upgrade:corpus:prepare` writes a versioned fixture with an archive, semantic expectations, and checksums; preparing a candidate does not register a shipped baseline, and candidate fixtures stay editable until release. After a schema change in a candidate, seed a replacement with `./task upgrade:corpus:seed -- --out <directory>`, verify it with `./task upgrade:corpus:boot -- <directory>`, and replace the candidate fixture. `./task release:preflight -- --require-corpus` verifies the candidate's exact baseline, both database payloads, and archive integrity; a matching product version alone is insufficient. The contract suite checks the same identity during ordinary full verification. A later step may drop a released table or column only through `migrations.DropReleased` with a registered rebuild, and the contract suite requires a released fixture to hold those rows. In-flight scratch that settlement or startup recovery already clears is registered as a discard instead, stating why no reader needs the rows; the contract suite then requires every released fixture that has the table to lose it on upgrade. Seed rows into tables a future step might retire while preparing the candidate, when its own write paths still exist and its fixture is still editable.
 
 The directory-identity migration replaces the flat current-path projection with directory relationships and entry names. It preserves immutable source versions, effects, saved pins, their ordinal and Git boundaries, and lifecycle recovery. The former `source_checkpoint_entries` table was a redundant derived projection with no read consumer; migration retires it, while comparisons continue to resolve the preserved ordinal boundaries. It does not discard retained content or user-created pins.
 
@@ -329,6 +329,17 @@ directly, and unavailable forms use `COMMAND_NATIVE_FORM_UNSUPPORTED`. The
 retirement catalog records this lineage; it does not translate old facts or
 restore retired rules.
 
+Painted Wolf 1.0.2 shipped the OAR 1.0 candidate, whose rule documents name
+their version with `oar` rather than `spec_version`. Extension packs written
+for it keep loading: the pack inventory reads each candidate rule in the
+published OAR 1.0 shape (`internal/oardraft`), leaving the file untouched. A
+candidate rule that relies on something OAR 1.0 removed, such as a `transform`
+effect, `overrides`, `enforcement: off` or a selector clause other than `tool`,
+is refused on its own with a diagnostic naming the file; the rest of the pack
+loads. `pw rules upgrade PATH…` rewrites candidate rules in place when their
+author chooses. A release contract reads every candidate rule a post-v1 release
+shipped and checks the result against the vendored OAR 1.0 schema.
+
 The release controller is pinned to `refs/heads/main` and reads the selected candidate tree
 (including [`agent-public-retirements.json`](../schemas/agent-public-retirements.json)),
 so neither a tag push nor an older qualified source can select an older compatibility gate.
@@ -347,9 +358,13 @@ an object such as `{"content_contract": "paintedwolf.markdown_note", "version": 
 the meaning moves out of the vocabulary into a non-callable content contract. The object
 must match an entry in the catalog's `content_contracts` map at its declared version.
 Contract identifiers are dotted namespaces that never name a tool, and a released
-contract stays declared at its version or later. Both forms belong to catalog format 1:
-released catalogs parse unchanged, and the gate that reads a candidate's catalog runs
-from `main`.
+contract stays declared at its version or later. A candidate's catalog uses format 2,
+which adds the `theme_keys` and `virtual_roots` vocabularies. Released format-1 catalogs
+still parse, so the records they published are compared unchanged.
+
+The same check runs on every pull request through the release contract test
+(`lycaon/test/contract/release`), against the newest stable tag merged into the
+candidate. A checkout without release tags fails that test rather than skipping it.
 
 ### Release coverage
 
@@ -363,10 +378,10 @@ store schema, and a regenerated cache does not justify changing an archive forma
 | Main store and migration history | Revision plus canonical shape; immutable migration IDs and checksums | Every published post-v1 corpus must remain byte-for-byte identical to its tag and retain a supported schema identity. Early checks also preserve published migration IDs and checksums. Compiled migration registration validates complete routes; built-candidate preflight and upgrade/restore rehearsal validate actual stores. |
 | Backups and recovery | Archive format, store identity, exact replacement scope, journal formats | Corpus integrity checks run early. Backup integrity, relocation, recovery, unknown-format refusal, and restart tests run during qualification; release rehearsal restores a released archive. |
 | Worker branches and retained source | Worker metadata, seed/package manifests, promotion and rewind journals | Workspace, checkpoint, source-ledger, and promotion recovery tests preserve retained bytes and resumable operations. These formats are independent of product SemVer. |
-| Project configuration | Overlay format, extension manifest/desired-state/lock formats, ignore document version | Format, transition, unknown-shape refusal, dependency-lock, and catalog publication tests run during qualification. Compatible stock updates are resolved against declared constraints. |
+| Project configuration | Overlay format, extension manifest/desired-state/lock formats, ignore document version | Every overlay a published release carried (each corpus's project overlay and the repository's own at each post-v1 tag) must still load through the shipped loaders; each new corpus records an example of every overlay setting (`lycaon/testdata/overlay-example/overlay-dir`). Format, transition, unknown-shape refusal, dependency-lock, and catalog publication tests run during qualification. Compatible stock updates are resolved against declared constraints. |
 | Extension and suite releases | Pack version, suite version, extension API requirement | Early checks require changed pack/suite bytes to advance their own release identity and reject API regressions or unavailable capabilities. Suite membership has its own version; member content changes do not change membership. |
 | Workflows and prompt content | Workflow ID/version, sealed archives, persona contract, prompt-unit identity | Early checks preserve released workflow bytes and archives. Persona, prompt rendering, bindings, and unit/catalog validation run during qualification. Copied prompt overrides need the explicit repairs above. |
-| Agent and extension vocabulary | OAR facts, rejection codes, tool names/runtime prefixes, workflow terms, anchors, theme IDs | Early checks reject unnamed removals, retired-name reuse, changed fact/term signatures, and missing successors. Anchor contract changes advance the catalog's minor or major version as appropriate. |
+| Agent and extension vocabulary | OAR facts, rejection codes, tool names/runtime prefixes, workflow terms, anchors, theme IDs, theme unit keys, virtual root labels | Early checks reject unnamed removals, retired-name reuse, changed fact/term signatures, and missing successors. Anchor contract changes advance the catalog's minor or major version as appropriate. |
 | OAR language and authoring schemas | Vendored spec/capability version and pinned source digests | Vendor integrity, schema synchronization, conformance, and catalog tests run during qualification. A pack version does not authorize changing a language contract. |
 | Den/host and native IPC | Generated OpenAPI, startup/document/decision protocols | OpenAPI evidence is retained against the pinned stable source. Drift, generated-consumer, native protocol, and platform tests run on the qualified commit. Co-shipped protocols move with both consumers. |
 | Device settings and credentials | App-state/preferences formats, exact grants, identity and vault custody | Strict decoding, explicit updater format-1 conversions, unknown-journal preservation, app-state normalization, credential custody, and store-reset tests run during qualification. A database wipe is never their migration. |

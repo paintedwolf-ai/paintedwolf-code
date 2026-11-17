@@ -96,7 +96,7 @@ func writeTrunkAtomicReplace(t *testing.T, dir, rel string, content []byte) {
 
 func TestUnreadReadAndPrivatePathsInPlaceAndAtomicReplacement(t *testing.T) {
 	t.Parallel()
-	facts := LiveMountVisibilityFacts("nfs-loopback", true, true, true, CompletenessComplete)
+	facts := VisibilityFacts{AdapterName: "nfs-loopback", UntouchedVisibility: VisibilityLive, SupportsInvalidation: true, SupportsNegativeLookupInvalidation: true, SupportsDirCookieInvalidation: true, AttributionCompleteness: CompletenessComplete}
 	fx := newTestFixture(t, facts)
 	qp := func(rel string) layeredfs.QualifiedPath {
 		return layeredfs.QualifiedPath{RootID: "root-a", Rel: rel}
@@ -193,7 +193,7 @@ func TestUnreadReadAndPrivatePathsInPlaceAndAtomicReplacement(t *testing.T) {
 
 func TestNegativeLookupsSameSizeChangesAndDirectoryListingsCoherence(t *testing.T) {
 	t.Parallel()
-	facts := LiveMountVisibilityFacts("fuse-linux", true, true, true, CompletenessComplete)
+	facts := VisibilityFacts{AdapterName: "fuse-linux", UntouchedVisibility: VisibilityLive, SupportsInvalidation: true, SupportsNegativeLookupInvalidation: true, SupportsDirCookieInvalidation: true, AttributionCompleteness: CompletenessComplete}
 	fx := newTestFixture(t, facts)
 	qp := func(rel string) layeredfs.QualifiedPath {
 		return layeredfs.QualifiedPath{RootID: "root-a", Rel: rel}
@@ -276,12 +276,12 @@ func TestWatcherOverflowAndVisibilityFactsContract(t *testing.T) {
 	if err := ValidateVisibilityFacts(VisibilityFacts{}); !errors.Is(err, ErrInvalidVisibilityFacts) {
 		t.Fatalf("expected ErrInvalidVisibilityFacts for zero VisibilityFacts, got %v", err)
 	}
-	seedFacts := MaterializedSeedVisibilityFacts("")
+	seedFacts := VisibilityFacts{AdapterName: "eagercopy", UntouchedVisibility: VisibilityFixed, AttributionCompleteness: CompletenessMaterializedSnapshot}
 	if err := ValidateVisibilityFacts(seedFacts); err != nil || seedFacts.UntouchedVisibility != VisibilityFixed {
 		t.Fatalf("unexpected materialized seed facts: %+v (err=%v)", seedFacts, err)
 	}
 
-	facts := LiveMountVisibilityFacts("fskit-macos", true, true, true, CompletenessPartialKernelCached)
+	facts := VisibilityFacts{AdapterName: "fskit-macos", UntouchedVisibility: VisibilityLive, SupportsInvalidation: true, SupportsNegativeLookupInvalidation: true, SupportsDirCookieInvalidation: true, AttributionCompleteness: CompletenessPartialKernelCached}
 	fx := newTestFixture(t, facts)
 	qp := func(rel string) layeredfs.QualifiedPath {
 		return layeredfs.QualifiedPath{RootID: "root-a", Rel: rel}

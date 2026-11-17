@@ -3,6 +3,7 @@ package query
 import (
 	"bytes"
 	"context"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,7 +15,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -75,7 +75,7 @@ func newHarness(t *testing.T, files map[string]string) *harness {
 	}
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, sqlDB, "p1")
-	_, err = sqlDB.ExecContext(t.Context(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at) VALUES ('r1', 'p1', ?, 'root', 1, ?)`, root, db.FormatTime(time.Now().UTC()))
+	_, err = sqlDB.ExecContext(t.Context(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at) VALUES ('r1', 'p1', ?, 'root', 1, ?)`, root, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert root", err)
 	ledger := sourceledger.New(sqlDB, t.TempDir())
 	service := projectsource.NewSourceMutationService(ledger.LedgerDB(), ledger)

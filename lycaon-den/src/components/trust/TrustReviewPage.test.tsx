@@ -1,3 +1,4 @@
+import { expectPaneChrome } from "../../test/files-pane-chrome.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,6 +23,7 @@ describe("shared trust review", () => {
     await publishTrust(trust);
     const onOpen = vi.fn();
     render(() => <><TrustPopoverBody trust={projectTrustView("project").value!} onOpen={onOpen} /><TrustReviewPage projectId="project" /></>);
+    expectPaneChrome(document.body, "trust");
     const count = () => expect(screen.getByTestId("trust-popover-title").textContent).toBe(screen.getByTestId("trust-review-count").textContent);
     count();
     expect(screen.getByTestId("trust-popover-row-agents_md").textContent).not.toContain("99");

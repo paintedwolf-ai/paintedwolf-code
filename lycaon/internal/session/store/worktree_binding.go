@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -81,13 +82,13 @@ func (s *sqlSessionViews) PutWorktreeBinding(ctx context.Context, b WorktreeBind
 	id, err := q.UpsertSourceWorktree(ctx, db.UpsertSourceWorktreeParams{
 		ID: uuid.NewString(), ProjectID: b.ProjectID, RepoID: strings.TrimSpace(b.RepoID),
 		Toplevel: strings.TrimSpace(b.Toplevel), WorktreePath: strings.TrimSpace(b.WorktreePath),
-		Branch: strings.TrimSpace(b.Branch), BaseBranch: strings.TrimSpace(b.BaseBranch), CreatedAt: db.FormatTime(createdAt),
+		Branch: strings.TrimSpace(b.Branch), BaseBranch: strings.TrimSpace(b.BaseBranch), CreatedAt: timelayout.Format(createdAt),
 	})
 	if err != nil {
 		return err
 	}
 	if err := q.UpsertSessionWorktree(ctx, db.UpsertSessionWorktreeParams{
-		SessionID: b.SessionID, ProjectID: b.ProjectID, WorktreeID: id, CreatedAt: db.FormatTime(createdAt),
+		SessionID: b.SessionID, ProjectID: b.ProjectID, WorktreeID: id, CreatedAt: timelayout.Format(createdAt),
 	}); err != nil {
 		return err
 	}

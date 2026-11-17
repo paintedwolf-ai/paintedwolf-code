@@ -3,8 +3,9 @@ package guidance
 import (
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
+
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,7 +29,7 @@ func TestComposeToolResultCompleted(t *testing.T) {
 // Quiet chrome follows the registry row for the raised code; the body never
 // enters the decision.
 func TestComposeToolResultUiVisibilityFollowsRegistry(t *testing.T) {
-	bundled, err := LoadHintConfig(extpacks.Bundled(hintregistry.DefaultDir))
+	bundled, err := LoadHintConfig(extpacks.Bundled(config.PlatformPolicy))
 	testutil.FailErr(t, "LoadHintConfig failed", err)
 	stock, err := LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfigStock failed", err)
@@ -74,12 +75,6 @@ func TestComposeToolResultUiVisibilityFollowsRegistry(t *testing.T) {
 			facts:   ToolResultFacts{Codes: []string{"BOARD_EMPTY_SKIP_TO_VERIFY"}},
 			outcome: api.ToolResultOutcomeCompleted,
 			vis:     api.ToolResultUiVisibilityBenign,
-		},
-		"worker dispatch stays on the transcript": {
-			hints:   bundled,
-			facts:   ToolResultFacts{Codes: []string{"BANNER_TASK_QUEUED"}},
-			outcome: api.ToolResultOutcomeCompleted,
-			vis:     api.ToolResultUiVisibilityNormal,
 		},
 		"phase exit required is visible": {
 			hints:   bundled,
@@ -173,6 +168,21 @@ func TestApplyDelegateDispatchMetadata(t *testing.T) {
 	}
 	if tr.UiVisibility != api.ToolResultUiVisibilityNormal {
 		t.Fatalf("ui_visibility = %q want normal", tr.UiVisibility)
+	}
+}
+
+// An instruction that started a round carries the round's dispatch, so the
+// round's completion has a row to land on.
+func TestApplyInstructWorkerDispatchMetadata(t *testing.T) {
+	tr := &api.ToolResult{Content: `{"worker":"fixer","outcome":"started"}`}
+	ApplyTaskDispatchMetadata("instruct_worker", tr, &api.WorkerDispatch{WorkerID: "round-2"})
+	if tr.Tool != "instruct_worker" || tr.Dispatch == nil || tr.Dispatch.WorkerID != "round-2" {
+		t.Fatalf("result = %+v", tr)
+	}
+	other := &api.ToolResult{}
+	ApplyTaskDispatchMetadata("shelve_overlay", other, &api.WorkerDispatch{WorkerID: "x"})
+	if other.Dispatch != nil {
+		t.Fatalf("a tool that starts no round took a dispatch: %+v", other)
 	}
 }
 

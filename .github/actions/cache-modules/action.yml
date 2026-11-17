@@ -1,0 +1,82 @@
+name: Cache dependency downloads
+description: Restore the Go module and Cargo registry downloads that main saved for the current lockfiles
+inputs:
+  go:
+    description: Restore the Go module cache
+    default: 'true'
+  cargo:
+    description: Restore the Cargo registry and Git dependency cache
+    default: 'true'
+  lookup-only:
+    description: Check the exact cache identities without restoring payloads
+    default: 'false'
+  save:
+    description: Publish the downloads (main only); the default restores without saving
+    default: 'false'
+outputs:
+  go-cache-hit:
+    description: Whether the Go module cache for the current go.sum files was restored
+    value: ${{ steps.go.outputs.cache-hit }}
+  cargo-cache-hit:
+    description: Whether the Cargo download cache for the current lockfiles was restored
+    value: ${{ steps.cargo.outputs.cache-hit }}
+runs:
+  using: composite
+  steps:
+    # Lookup runs before any toolchain exists, so the paths follow the tools' defaults and are pinned for later steps.
+    - name: Resolve dependency cache paths
+      id: paths
+      shell: bash
+      run: |
+        set -euo pipefail
+        modules="${GOMODCACHE:-${GOPATH:-$HOME/go}/pkg/mod}"
+        cargo="${CARGO_HOME:-$HOME/.cargo}"
+        printf 'GOMODCACHE=%s\n' "$modules" >> "$GITHUB_ENV"
+        {
+          printf 'modules=%s\ncargo=%s\n' "$modules" "$cargo"
+          printf 'prefix=%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}"
+        } >> "$GITHUB_OUTPUT"
+
+    - id: go
+      if: inputs.go == 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.paths.outputs.modules }}
+        key: go-modules-v1-${{ steps.paths.outputs.prefix }}${{ hashFiles('lycaon/go.sum', 'scripts/commentlint/go.sum') }}
+        lookup-only: ${{ inputs.lookup-only == 'true' || inputs.save == 'true' }}
+        restore-keys: ${{ inputs.save != 'true' && inputs.lookup-only != 'true' && format('go-modules-v1-{0}', steps.paths.outputs.prefix) || '' }}
+    - if: ${{ inputs.go == 'true' && inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.go.outputs.cache-hit != 'true' }}
+      id: save-go
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: ${{ steps.paths.outputs.modules }}
+        key: go-modules-v1-${{ steps.paths.outputs.prefix }}${{ hashFiles('lycaon/go.sum', 'scripts/commentlint/go.sum') }}
+    - if: ${{ steps.save-go.outcome == 'success' }}
+      uses: ./.github/actions/cache-prune
+      with:
+        family: go-modules-v1-${{ steps.paths.outputs.prefix }}
+
+    - id: cargo
+      if: inputs.cargo == 'true'
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ${{ steps.paths.outputs.cargo }}/registry/index
+          ${{ steps.paths.outputs.cargo }}/registry/cache
+          ${{ steps.paths.outputs.cargo }}/git/db
+        key: cargo-downloads-v1-${{ steps.paths.outputs.prefix }}${{ hashFiles('lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/*/native/Cargo.lock') }}
+        lookup-only: ${{ inputs.lookup-only == 'true' || inputs.save == 'true' }}
+        restore-keys: ${{ inputs.save != 'true' && inputs.lookup-only != 'true' && format('cargo-downloads-v1-{0}', steps.paths.outputs.prefix) || '' }}
+    - if: ${{ inputs.cargo == 'true' && inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.cargo.outputs.cache-hit != 'true' }}
+      id: save-cargo
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: |
+          ${{ steps.paths.outputs.cargo }}/registry/index
+          ${{ steps.paths.outputs.cargo }}/registry/cache
+          ${{ steps.paths.outputs.cargo }}/git/db
+        key: cargo-downloads-v1-${{ steps.paths.outputs.prefix }}${{ hashFiles('lycaon-den/src-tauri/Cargo.lock', 'lycaon/internal/*/native/Cargo.lock') }}
+    - if: ${{ steps.save-cargo.outcome == 'success' }}
+      uses: ./.github/actions/cache-prune
+      with:
+        family: cargo-downloads-v1-${{ steps.paths.outputs.prefix }}

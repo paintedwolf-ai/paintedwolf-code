@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -95,7 +96,7 @@ func TestBranchWorkspaceRejectsMissingMeta(t *testing.T) {
 	testutil.FailErr(t, "mkdir project", os.MkdirAll(dir, 0o755))
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "only.txt"), []byte("x"), 0o644))
 	roots := []projectroot.RootRef{{ID: "p", Label: "root", Path: dir, IsPrimary: true}}
-	mgr := workspace.NewManager(filepath.Join(base, "branches"))
+	mgr := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}))
 	binding, _, err := mgr.CreateWorkerWorkspaceFromSources(context.Background(), roots, roots, "p", "job-meta")
 	testutil.FailErr(t, "CreateWorkerWorkspaceFromSources", err)
 	testutil.FailErr(t, "remove meta", os.RemoveAll(enginepaths.MetaDirForBranchRoot(binding.Root)))
@@ -117,7 +118,7 @@ func TestBranchWorkspaceRejectsInvalidMultiRootPath(t *testing.T) {
 		{ID: "primary", Label: "app", Path: primary, IsPrimary: true},
 		{ID: "secondary", Label: "docs", Path: secondary},
 	}
-	mgr := workspace.NewManager(filepath.Join(base, "branches"))
+	mgr := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}))
 	binding, _, err := mgr.CreateWorkerWorkspaceFromSources(context.Background(), roots, roots, "primary", "job-roots")
 	testutil.FailErr(t, "create branch", err)
 	branch, err := newBranchWorkspace(binding.Root)
@@ -137,7 +138,7 @@ func TestEnsureWorkerBranchRestoresPrimaryReadDeniesFromMetadata(t *testing.T) {
 	testutil.FailErr(t, "mkdir primary", os.MkdirAll(primary, 0o755))
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(primary, "module.py"), []byte("value = 1\n"), 0o644))
 	roots := []projectroot.RootRef{{ID: "primary", Label: "app", Path: primary, IsPrimary: true}}
-	workspaceManager := workspace.NewManager(filepath.Join(base, "branches"))
+	workspaceManager := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}))
 	binding, _, err := workspaceManager.CreateWorkerWorkspaceFromSources(
 		context.Background(), roots, roots, "primary", "job-read-deny",
 	)
@@ -168,6 +169,8 @@ func (j jobLister) ListBySession(_ context.Context, _, sessionID string, _ ...ap
 }
 func (jobLister) ListPendingOutcomes(context.Context) ([]api.WorkerTask, error) { return nil, nil }
 func (jobLister) Get(string) (*api.WorkerTask, bool)                            { return nil, false }
+func (jobLister) ReviewsWorker(context.Context, *api.WorkerTask) bool           { return false }
+
 func (jobLister) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error) {
 	return nil, nil
 }

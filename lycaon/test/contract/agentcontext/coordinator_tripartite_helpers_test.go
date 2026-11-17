@@ -39,7 +39,7 @@ func coordinatorTestReader(t *testing.T, surfaceID string, rootCount int) prompt
 
 func mergeCoordinatorSurfaceVars(t *testing.T, _ string) map[string]any {
 	t.Helper()
-	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+	vars := spawn.PolicyTemplateVars()
 	vars["has_file_tools"] = true
 	vars["can_orient"] = true
 	vars["can_spawn_implementer"] = true

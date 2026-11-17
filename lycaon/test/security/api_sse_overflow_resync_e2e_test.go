@@ -145,7 +145,7 @@ func pageWholeTranscript(t *testing.T, srv *api.Server, sessionID string) []wire
 		if before != "" {
 			path += "&before=" + before
 		}
-		req := authedRequest(t, http.MethodGet, path, nil)
+		req := AuthedRequest(t, http.MethodGet, path, nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
 		if w.Code != http.StatusOK {

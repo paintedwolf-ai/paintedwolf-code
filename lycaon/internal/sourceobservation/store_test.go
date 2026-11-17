@@ -139,21 +139,11 @@ func TestProvenancePrivateImmunityAndWatcherOverflow(t *testing.T) {
 	if !ok || !gotTrunk.Uncertain || gotTrunk.Provenance != observation.ProvenanceUncertainOverflow {
 		t.Fatalf("expected trunk observation to be marked uncertain on overflow: %+v", gotTrunk)
 	}
-	if MatchesObservedIdentity(gotTrunk, gotTrunk) {
-		t.Fatal("uncertain observation must not vouch for identity")
-	}
 
 	gotPrivAfter, ok, err := store.Get(ctx, root, "priv.go")
 	testutil.FailErr(t, "get priv.go after overflow", err)
 	if !ok || gotPrivAfter.Uncertain || gotPrivAfter.SHA256 != "sha-private-v1" {
 		t.Fatalf("private observation affected by trunk watcher overflow: %+v", gotPrivAfter)
-	}
-
-	// Same-timestamp, same-size file with different SHA256 must not match identity.
-	sameTimeDifferentDigest := gotPrivAfter
-	sameTimeDifferentDigest.SHA256 = "sha-different"
-	if MatchesObservedIdentity(gotPrivAfter, sameTimeDifferentDigest) {
-		t.Fatal("timestamp-only equality must never prove unchanged content")
 	}
 }
 
@@ -162,7 +152,7 @@ func TestSyncFromTrackerBridgesTrunkChangedNotice(t *testing.T) {
 	store := New(filepath.Join(t.TempDir(), "source-observations.db"))
 	t.Cleanup(func() { _ = store.Close() })
 
-	facts := observation.LiveMountVisibilityFacts("fuse-linux", true, true, true, observation.CompletenessComplete)
+	facts := observation.VisibilityFacts{AdapterName: "fuse-linux", UntouchedVisibility: observation.VisibilityLive, SupportsInvalidation: true, SupportsNegativeLookupInvalidation: true, SupportsDirCookieInvalidation: true, AttributionCompleteness: observation.CompletenessComplete}
 	tracker, err := observation.NewTracker(observation.TrackerConfig{ViewID: "view-sync", Facts: facts})
 	testutil.FailErr(t, "NewTracker", err)
 

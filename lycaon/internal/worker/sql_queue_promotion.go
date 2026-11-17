@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -93,6 +92,14 @@ func (q *sqlQueuePromotion) SetMergeStatuses(ctx context.Context, updates []Merg
 	return nil
 }
 
+// LaterRounds reports the worker's later rounds carrying this job's changes.
+func (q *sqlQueuePromotion) LaterRounds(ctx context.Context, jobID string) ([]string, bool, error) {
+	if q == nil || q.sqlQueueCore == nil || q.store == nil {
+		return nil, false, fmt.Errorf("worker queue store not configured")
+	}
+	return q.store.LaterRounds(ctx, jobID)
+}
+
 // CommitPromotion finalizes one landed promotion under its lease.
 func (q *sqlQueuePromotion) CommitPromotion(ctx context.Context, jobID, claimToken string, commit PromotionCommit) error {
 	if q == nil || q.sqlQueueCore == nil || q.store == nil {
@@ -165,11 +172,20 @@ func (q *sqlQueuePromotion) ListByWorkspacePath(ctx context.Context, workspacePa
 	return q.store.ListByWorkspacePath(ctx, workspacePath, status...)
 }
 
-// ListPendingOverlayPromote returns completed write workers awaiting overlay promote.
+// ListPendingOverlayPromote returns completed write workers awaiting overlay
+// promote. Shelved changes stay unlanded on purpose and are not listed.
 func (q *sqlQueuePromotion) ListPendingOverlayPromote(ctx context.Context, sessionID string) ([]api.WorkerTask, error) {
 	tasks, err := q.ListBySession(ctx, "", sessionID, api.WorkerStatusComplete)
 	if err != nil {
 		return nil, err
+	}
+	shelvedIDs, err := q.store.queries.ListShelvedWorkerJobs(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	shelved := make(map[string]struct{}, len(shelvedIDs))
+	for _, id := range shelvedIDs {
+		shelved[id] = struct{}{}
 	}
 	var pending []api.WorkerTask
 	for _, task := range tasks {
@@ -177,6 +193,9 @@ func (q *sqlQueuePromotion) ListPendingOverlayPromote(ctx context.Context, sessi
 			continue
 		}
 		if task.MergeStatus != api.WorkerMergeStatusPending {
+			continue
+		}
+		if _, ok := shelved[task.ID]; ok {
 			continue
 		}
 		pending = append(pending, task)
@@ -212,6 +231,18 @@ func (q *sqlQueueCore) Lookup(ctx context.Context, jobID string) (*api.WorkerTas
 	return task, ok
 }
 
+// LookupByResult resolves a settled round's result handle to the job that produced it.
+func (q *sqlQueueCore) LookupByResult(ctx context.Context, resultHandle string) (*api.WorkerTask, bool) {
+	if q == nil || q.store == nil {
+		return nil, false
+	}
+	owner, err := q.store.queries.GetWorkerResultOwner(ctx, strings.TrimSpace(resultHandle))
+	if err != nil {
+		return nil, false
+	}
+	return q.Lookup(ctx, owner.WorkerJobID)
+}
+
 // TaskReceipt resolves a durable native-tool receipt before mutable spawn checks.
 func (q *sqlQueueCore) TaskReceipt(ctx context.Context, sessionID, callID string) (*api.WorkerTask, error) {
 	row, err := q.store.queries.GetWorkerJobBySourceToolCall(ctx, db.GetWorkerJobBySourceToolCallParams{
@@ -223,5 +254,5 @@ func (q *sqlQueueCore) TaskReceipt(ctx context.Context, sessionID, callID string
 	if err != nil {
 		return nil, err
 	}
-	return jobstate.FromRow(ctx, q.store.db, row)
+	return q.store.jobs.FromRow(ctx, q.store.db, row)
 }

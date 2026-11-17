@@ -87,7 +87,7 @@ func TestGitDiffSpillsOnlyScreenedHunks(t *testing.T) {
 	testutil.FailErr(t, "marshal sensitive diff", err)
 	projection := loop.Projection.projectToolResultForStorage(t.Context(), raw, nil)
 	sess := &api.Session{ID: "screened-git", ProjectID: testdbseed.DefaultProjectID}
-	got := loop.Tools.truncateToolResultForSession(t.Context(), "git_diff", projection, raw, 64000, 0, sess)
+	got := loop.Tools.truncateToolResultForSession(t.Context(), "git_diff", "", projection, raw, 64000, 0, sess)
 	if got.reject != nil {
 		t.Fatalf("screened diff rejected: %+v", got.reject)
 	}

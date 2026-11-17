@@ -1,7 +1,7 @@
 import { createShellWorkspaceContext } from "./shell-workspace-context.ts";
 import { createShellNavigationState } from "./shell-navigation-state.ts";
 import { createShellOnboarding } from "./shell-onboarding.tsx";
-import { createShellWorkerDrawer } from "./shell-worker-drawer.ts";
+import { createShellSessionDrawer } from "./shell-session-drawer.ts";
 import { createShellSearchNavigation } from "./shell-search-navigation.ts";
 import { createShellSearchState } from "./shell-search-state.ts";
 import { type ShellScope } from "./shell-scope.ts";
@@ -98,7 +98,7 @@ type Props = Pick<ShellScope, "shell" | "appStore" | "projects" | "recents" | "a
   openExtensionsSettings: () => void;
   openStageWithPlacement: (stage: ContextNavItemId, arrival: "routed" | "deliberate", open?: () => void) => void;
   openSearch: ReturnType<typeof createShellSearchState>["openSearch"];
-  revealInTranscript: ReturnType<typeof createShellWorkerDrawer>["revealInTranscript"];
+  revealInTranscript: ReturnType<typeof createShellSessionDrawer>["revealInTranscript"];
 };
 
 export function WorkspaceStage(props: Props) {

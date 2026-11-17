@@ -181,14 +181,6 @@ values:
     status: 409
     comment: >-
       checkpoint resolve targeted a non-pending record
-  - id: delegation_not_found
-    status: 404
-    comment: >-
-      delegation id not found
-  - id: delegation_leg_not_found
-    status: 404
-    comment: >-
-      delegation leg id not found
   - id: feedback_not_pending
     status: 409
     comment: >-
@@ -520,6 +512,11 @@ values:
     status: 409
     comment: >-
       workspace .paintedwolf/overlay.yaml has a missing or invalid overlay_format
+  - id: project_settings_need_repair
+    status: 409
+    comment: >-
+      the project's .paintedwolf/limits.yaml, verify.yaml, or review.yaml could
+      not be read; saving would replace it, so the file must be fixed first
   - id: project_approvals_need_repair
     status: 409
     comment: >-
@@ -1048,10 +1045,10 @@ values:
     comment: >-
       the host could not record a tool call's outcome and stopped the turn (SSE
       host_error)
-  - id: worker_closeout_exhausted
-    status: 500
+  - id: worker_model_timeout
+    status: 504
     comment: >-
-      worker hit LLM turn limit after scheduled and recovery closeout (SSE worker.failure)
+      the model did not answer a worker within the turn time limit (SSE worker.failure)
   - id: worker_execute_failed
     status: 500
     comment: >-
@@ -1113,10 +1110,6 @@ values:
     status: 409
     comment: >-
       worker cancel targeted a terminal job
-  - id: leg_not_pending
-    status: 409
-    comment: >-
-      delegation dispatch targeted a leg that already left pending
   - id: decision_not_pending
     status: 409
     comment: >-

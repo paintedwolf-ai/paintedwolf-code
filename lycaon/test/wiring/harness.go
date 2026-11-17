@@ -2,6 +2,7 @@ package wiring
 
 import (
 	"context"
+	"errors"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io/fs"
@@ -11,20 +12,17 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/config/configtest"
-	"github.com/lycaon/lycaon/internal/api"
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/cost"
-	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/scan"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/session"
@@ -40,14 +38,6 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Each test supplies its own server catalog.
-func stageFakeMCPDistro(t *testing.T) {
-	t.Helper()
-	configtest.Overlay(t, map[config.Rel]string{
-		config.DistroMCP: "providers:\n  - id: svca\n    command: \"true\"\n    args: []\n    enabled: false\n",
-	})
-}
-
 // Harness holds a production-wired ServeApp for E2E tests.
 type Harness struct {
 	*app.ServeApp
@@ -57,17 +47,20 @@ type Harness struct {
 	dbPath    string
 }
 
-// BuildForTest constructs a production-parity server via app.Build with test defaults.
+// BuildForTest assembles a host in a temporary directory.
 func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	t.Helper()
-	t.Setenv("LYCAON_LLM_MOCK", "1")
-	t.Setenv("LYCAON_API_TOKEN", api.TestAPIToken)
-	t.Setenv("LYCAON_TEST", "1")
-	t.Setenv("LYCAON_LOG_LEVEL", "error")
-	// Isolate device configuration for deterministic tests.
-	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	// The process source catalog caches trees under <config>/cache; its builds
-	// outlive the app, so finish and retire them before TempDir removal.
+	return BuildForTestAt(t, t.TempDir(), opts...)
+}
+
+// BuildForTestAt boots on a caller-owned directory, including an existing store.
+func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
+	t.Helper()
+	requirePreparedHostProcess(t)
+	configDir := filepath.Join(dir, "config")
+	testutil.FailErr(t, "create device configuration", os.MkdirAll(configDir, 0o700))
+	t.Setenv("LYCAON_CONFIG_DIR", configDir)
+	// Retire process-wide cached trees before removing their directory.
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
@@ -78,19 +71,19 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	if o.globalApprovalPosture != "" {
-		testutil.FailErr(t, "write global approvals", os.WriteFile(filepath.Join(os.Getenv("LYCAON_CONFIG_DIR"), "approvals.yaml"), []byte("approval_posture: "+string(o.globalApprovalPosture)+"\n"), 0o600))
-	}
-
-	cfg := configuration.Config{}
+	cfg := configuration.Config{TestChangeDebounce: o.changeDebounce}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()
 	// Install packs before the builder resolves the catalog.
 	installHarnessPacks(t, o.installedPackDirs)
-	testDir := t.TempDir()
-	// Restore read-only snapshots before TempDir cleanup.
+	testDir := dir
+	// Restore read-only snapshots before the directory is removed.
 	t.Cleanup(func() { restoreTreePermissions(filepath.Join(testDir, "source-snapshots")) })
 	dbPath := filepath.Join(testDir, "wiring-test.db")
-	cloneDatabaseBaseline(t, dbPath)
+	if _, err := os.Stat(dbPath); errors.Is(err, fs.ErrNotExist) {
+		cloneDatabaseBaseline(t, dbPath)
+	} else {
+		testutil.FailErr(t, "inspect store", err)
+	}
 	cfg.DBPath = dbPath
 	cfg.ListenAddr = "127.0.0.1:0"
 	cfg.MockLLMPath = mockLLMConfigPath(t)
@@ -102,7 +95,6 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 			"svca": {{Name: "do", Description: "do"}},
 		}}
 	}
-	stageFakeMCPDistro(t)
 	if o.secretMatcher != nil {
 		cfg.TestSecretMatcher = o.secretMatcher
 	}
@@ -128,7 +120,7 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	if !o.productionCostPricer {
 		cfg.TestCostPricer = testCostPricer{}
 	}
-	if o.autoCompleteDelegation {
+	if o.autoCompleteLegs {
 		cfg.TestOrchestrator = autoCompleteOrchestrator
 	}
 	var recording *llm.RecordingClient
@@ -144,16 +136,11 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 
 	sa, err := app.Build(t.Context(), cfg)
 	testutil.FailErr(t, "build app", err)
-	t.Cleanup(func() {
-		testutil.FailErr(t, "close test app", sa.Close())
-		_ = db.RemoveStore(dbPath)
-	})
+	t.Cleanup(func() { testutil.FailErr(t, "close test app", sa.Close()) })
 
 	if o.replaceManifests != nil {
 		sa.Workflows.Manager.Resolver.Overlay = workflowdef.NewRegistry(o.replaceManifests)
 	}
-
-	applyTestHarnessRelaxations(sa)
 
 	trackHost(t.Name(), sa)
 
@@ -229,6 +216,33 @@ func (h *Harness) CreateHarnessSession(t *testing.T, req wire.CreateSessionReque
 func (h *Harness) OwnerCtx(t testing.TB, ctx context.Context) context.Context {
 	t.Helper()
 	return testdbseed.OwnerCaller(t, ctx, h.DB)
+}
+
+// CoordinatorToolContext builds a coordinator ToolContext bound to sess and dir.
+func (h *Harness) CoordinatorToolContext(t *testing.T, ctx context.Context, sess *wire.Session, dir string) tools.ToolContext {
+	t.Helper()
+	var activeRootID string
+	testutil.FailErr(t, "resolve primary root", h.DB.QueryRowContext(
+		ctx,
+		"SELECT id FROM project_roots WHERE project_id = ? AND is_primary = 1",
+		sess.ProjectID,
+	).Scan(&activeRootID))
+	return tools.ToolContext{
+		Identity: tools.InvocationIdentity{
+			SessionID:  sess.ID,
+			ProjectID:  sess.ProjectID,
+			Agent:      "coordinator",
+			ToolCallID: uuid.NewString(),
+		},
+		Source: tools.InvocationSource{
+			Roots:        []projectroot.RootRef{{ID: activeRootID, Label: "root", Path: dir, IsPrimary: true}},
+			ActiveRootID: activeRootID,
+		},
+		Host: tools.InvocationHost{
+			SessionOutputDir:  t.TempDir(),
+			SessionScratchDir: t.TempDir(),
+		},
+	}
 }
 
 // SeedProgress supplies a pending checklist that survives turn bootstrap.
@@ -309,15 +323,6 @@ func mockLLMConfigPath(t *testing.T) string {
 	return filepath.Join(configlayout.FindModuleRoot(), "config", "fixtures", "mock_llm.yaml")
 }
 
-func loadMockConfig(t *testing.T) *llm.MockConfig {
-	t.Helper()
-	cfg, err := llm.LoadMockConfig()
-	if err != nil {
-		t.Fatalf("load mock config: %v", err)
-	}
-	return cfg
-}
-
 type testCostPricer struct{}
 
 // NoCharge: the fixture prices every provider, so none is local-free.
@@ -337,20 +342,9 @@ func (testCostPricer) EstimateCost(_, _ string, usage cost.TokenUsage) (cost.Cos
 	}, nil
 }
 
-func applyTestHarnessRelaxations(sa *app.ServeApp) {
-	if sa == nil || sa.Delegations.Manager == nil {
-		return
-	}
-	if g := sa.Delegations.Manager.Grounding; g != nil {
-		cfg := g.Config
-		cfg.Closeout.Mode = "off"
-		g.Config = cfg
-	}
-}
-
 // autoCompleteOrchestrator dispatches legs that complete immediately in mock workspaces.
 func autoCompleteOrchestrator(deps orchestration.OrchestratorDeps) orchestration.Orchestrator {
-	deps.Delegation = &autoCompleteDelegation{inner: deps.Delegation.(delegation.DelegationManager), store: deps.Store}
+	deps.Workers = &autoCompleteTopologyWorkers{TopologyWorkers: deps.Workers}
 	deps.Workspaces = &mockWorkspaceBinder{}
 	return orchestration.NewOrchestratorImpl(deps)
 }

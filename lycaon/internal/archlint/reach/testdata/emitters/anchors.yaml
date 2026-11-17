@@ -1,0 +1,3 @@
+anchors:
+  - id: anchor.fired
+  - id: anchor.unfired

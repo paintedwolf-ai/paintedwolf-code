@@ -2,12 +2,14 @@ package workerworkspace_test
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
@@ -17,7 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workspace"
 )
 
-func TestWorkspaceTrackerUnboundAndNameOnlyDescriptorsRemainUnknownAndUnverified(t *testing.T) {
+func TestWorkspaceTrackerKeepsUnboundAndUnverifiedFactsConservative(t *testing.T) {
 	t.Parallel()
 	svc := workerworkspace.New(nil, nil, nil)
 	t.Cleanup(svc.Close)
@@ -30,55 +32,35 @@ func TestWorkspaceTrackerUnboundAndNameOnlyDescriptorsRemainUnknownAndUnverified
 	if tr == nil {
 		t.Fatal("expected EnsureTracker to return a tracker")
 	}
-	facts := tr.VisibilityFacts()
-	if facts.Mode != observation.VisibilityModeUnknown || facts.UntouchedVisibility != observation.VisibilityUnknown ||
-		facts.LiveVisible || facts.SupportsInvalidation || facts.InvalidationVerified ||
-		facts.Completeness != observation.CompletenessUnknown {
+	if facts := tr.Facts(); facts.UntouchedVisibility != observation.VisibilityUnknown || facts.SupportsInvalidation ||
+		facts.InvalidationVerified || facts.AttributionCompleteness != observation.CompletenessUnknown {
 		t.Fatalf("expected unbound tracker to remain conservative unknown/unverified, got %+v", facts)
 	}
 
-	// Name-only descriptors must never infer visibility or completeness from adapter-name spelling.
-	for _, name := range []string{"fuselinux", "nfsdarwin", "fskit-macos", "eagercopy", "materialized-fallback"} {
-		desc := observation.ViewCapabilityDescriptor{AdapterName: name}
-		got := observation.VisibilityFactsFromDescriptor(desc)
-		if got.UntouchedVisibility != observation.VisibilityUnknown || got.Mode != observation.VisibilityModeUnknown ||
-			got.LiveVisible || got.SupportsInvalidation || got.InvalidationVerified ||
-			got.Completeness != observation.CompletenessUnknown || got.AttributionCompleteness != observation.CompletenessUnknown {
-			t.Fatalf("adapter name %q alone must not infer visibility or completeness, got %+v", name, got)
-		}
-		boundTr, err := svc.BindViewCapabilities(desc, "job-name-only-"+name)
-		testutil.FailErr(t, "BindViewCapabilities "+name, err)
-		bf := boundTr.VisibilityFacts()
-		if bf.UntouchedVisibility != observation.VisibilityUnknown || bf.Completeness != observation.CompletenessUnknown || bf.LiveVisible || bf.InvalidationVerified {
-			t.Fatalf("bound name-only descriptor %q must remain unknown/unverified, got %+v", name, bf)
+	// Undeclared visibility, and invalidation claimed for a view that is not live, are refused.
+	for name, facts := range map[string]observation.VisibilityFacts{
+		"undeclared": {AdapterName: "fuselinux"},
+		"fixed with invalidation": {
+			AdapterName: "eagercopy", UntouchedVisibility: observation.VisibilityFixed,
+			SupportsInvalidation: true, AttributionCompleteness: observation.CompletenessMaterializedSnapshot,
+		},
+	} {
+		desc := observation.ViewCapabilityDescriptor{ViewID: "job-invalid", Facts: facts}
+		if _, err := svc.BindViewCapabilities(desc, "job-invalid"); !errors.Is(err, observation.ErrInvalidVisibilityFacts) {
+			t.Fatalf("%s: BindViewCapabilities error = %v, want ErrInvalidVisibilityFacts", name, err)
 		}
 	}
 
-	// Declared-live + SupportsInvalidation=true + InvalidationVerified=false must preserve InvalidationVerified=false.
-	unverifiedLiveDesc := observation.ViewCapabilityDescriptor{
-		ViewID:               "job-live-unverified",
-		AdapterName:          "fuselinux",
-		Mode:                 observation.VisibilityModeLiveMount,
-		UntouchedVisibility:  observation.VisibilityLive,
-		LiveVisible:          true,
-		SupportsInvalidation: true,
-		InvalidationVerified: false,
-		Completeness:         observation.CompletenessPartialKernelCached,
-	}
-	liveFacts := observation.VisibilityFactsFromDescriptor(unverifiedLiveDesc)
-	if !liveFacts.LiveVisible || !liveFacts.SupportsInvalidation || liveFacts.InvalidationVerified {
-		t.Fatalf("expected LiveVisible=true, SupportsInvalidation=true, InvalidationVerified=false, got %+v", liveFacts)
-	}
-	liveTr, err := svc.BindVisibilityFacts(observation.VisibilityFacts{
+	// Invalidation support without verification stays unverified once bound.
+	liveTr, err := svc.BindViewCapabilities(observation.ViewCapabilityDescriptor{ViewID: "job-live-unverified", Facts: observation.VisibilityFacts{
 		AdapterName:             "fuselinux",
 		UntouchedVisibility:     observation.VisibilityLive,
 		SupportsInvalidation:    true,
-		InvalidationVerified:    false,
 		AttributionCompleteness: observation.CompletenessPartialKernelCached,
-	}, "job-live-unverified")
-	testutil.FailErr(t, "BindVisibilityFacts job-live-unverified", err)
-	if liveTr.VisibilityFacts().InvalidationVerified {
-		t.Fatalf("expected InvalidationVerified=false to be preserved on tracker, got %+v", liveTr.VisibilityFacts())
+	}}, "job-live-unverified")
+	testutil.FailErr(t, "BindViewCapabilities job-live-unverified", err)
+	if facts := liveTr.Facts(); !facts.Live() || !facts.SupportsInvalidation || facts.InvalidationVerified {
+		t.Fatalf("expected live, invalidating and unverified facts, got %+v", facts)
 	}
 
 	// Even with a native read SHA256 digest, an unbound tracker must not claim CompletenessComplete.
@@ -103,7 +85,7 @@ func TestOrdinaryWorkspacePreparationSuppliesEagerCopyFactsWithoutTestInjection(
 	testutil.FailErr(t, "WriteFile other v1", os.WriteFile(filepath.Join(trunkDir, "pkg", "other.go"), []byte("package pkg // other v1\n"), 0o644))
 
 	// Prepare workspace through ordinary workspace.Manager (selects eagercopy fallback when no mounted helper is active).
-	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"))
+	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), platform.NewSelector(platform.Config{}))
 	binding, layout, err := wsMgr.CreateWorkerBranch(
 		ctx,
 		[]projectroot.RootRef{{ID: "primary", Label: "primary", Path: trunkDir, IsPrimary: true}},
@@ -113,8 +95,7 @@ func TestOrdinaryWorkspacePreparationSuppliesEagerCopyFactsWithoutTestInjection(
 	testutil.FailErr(t, "CreateWorkerBranch", err)
 	t.Cleanup(func() { _ = wsMgr.DestroyWorkerWorkspace(t.Context(), binding) })
 
-	// Construct production workerworkspace.Service and call EnsureTracker / ObserveReadWithFacts
-	// with ZERO test-only calls to BindViewCapabilities, BindVisibilityFacts, or SetViewCapabilitiesResolver.
+	// The service finds the prepared view's facts itself; nothing binds capabilities by hand.
 	svc := workerworkspace.New(nil, nil, nil)
 	t.Cleanup(svc.Close)
 
@@ -128,17 +109,14 @@ func TestOrdinaryWorkspacePreparationSuppliesEagerCopyFactsWithoutTestInjection(
 		dispatched = append(dispatched, ev)
 	}))
 
-	facts := tr.VisibilityFacts()
+	facts := tr.Facts()
 	if facts.AdapterName != string(adapter.AdapterEagerCopy) {
 		t.Fatalf("expected AdapterName=eagercopy from prepared workspace view, got %q", facts.AdapterName)
 	}
-	if facts.Mode != observation.VisibilityModeMaterializedSeed || facts.UntouchedVisibility != observation.VisibilityFixed {
-		t.Fatalf("expected VisibilityModeMaterializedSeed / VisibilityFixed, got %+v", facts)
+	if facts.UntouchedVisibility != observation.VisibilityFixed || facts.SupportsInvalidation || facts.InvalidationVerified {
+		t.Fatalf("expected fixed, non-invalidating facts for eagercopy, got %+v", facts)
 	}
-	if facts.LiveVisible || facts.SupportsInvalidation || facts.SupportsInvalidationUpcall || facts.InvalidationVerified {
-		t.Fatalf("expected LiveVisible=false and SupportsInvalidation=false for eagercopy, got %+v", facts)
-	}
-	if facts.Completeness != observation.CompletenessMaterializedSnapshot || facts.AttributionCompleteness != observation.CompletenessMaterializedSnapshot {
+	if facts.AttributionCompleteness != observation.CompletenessMaterializedSnapshot {
 		t.Fatalf("expected CompletenessMaterializedSnapshot for eagercopy, got %+v", facts)
 	}
 
@@ -204,7 +182,7 @@ func TestOrdinaryWorkspacePreparationSuppliesMountedPartialAttributionFactsWitho
 	selector := adapter.NewSelector("darwin", nil, mountedAdp, adapter.NewEagerCopyAdapter())
 	selector.BudgetFor = adapter.ZeroBudget
 	selector.Confinement = fixtureConfinement{}
-	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches")).WithSelector(selector)
+	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches"), selector)
 
 	binding, layout, err := wsMgr.CreateWorkerBranch(
 		ctx,
@@ -239,14 +217,14 @@ func TestOrdinaryWorkspacePreparationSuppliesMountedPartialAttributionFactsWitho
 		dispatched = append(dispatched, ev)
 	}))
 
-	facts := tr.VisibilityFacts()
-	if facts.AdapterName != string(adapter.AdapterNFSDarwin) || facts.Mode != observation.VisibilityModeLiveMount || !facts.LiveVisible {
+	facts := tr.Facts()
+	if facts.AdapterName != string(adapter.AdapterNFSDarwin) || !facts.Live() {
 		t.Fatalf("expected live mount facts for nfsdarwin from prepared view, got %+v", facts)
 	}
 	if !facts.SupportsInvalidation || facts.SupportsNegativeLookupInvalidation || !facts.SupportsDirCookieInvalidation || facts.InvalidationVerified {
 		t.Fatalf("expected adapter's exact invalidation and unverified flags to be preserved, got %+v", facts)
 	}
-	if facts.Completeness != observation.CompletenessPartialKernelCached {
+	if facts.AttributionCompleteness != observation.CompletenessPartialKernelCached {
 		t.Fatalf("expected CompletenessPartialKernelCached on tracker facts, got %+v", facts)
 	}
 

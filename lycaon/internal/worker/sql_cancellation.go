@@ -4,16 +4,17 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/worker/jobstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// CancelJob finalizes a job as canceled (CAS on non-terminal status).
-func (s *SQLStore) CancelJob(ctx context.Context, id string, result *api.WorkerResult) (bool, error) {
+// CancelJob finalizes a job as canceled (CAS on non-terminal status). A
+// non-empty keptCheckpoint keeps the stopped round's changes pending.
+func (s *SQLStore) CancelJob(ctx context.Context, id string, result *api.WorkerResult, keptCheckpoint string) (bool, error) {
 	if result == nil {
 		result = &api.WorkerResult{Status: "canceled"}
 	}
@@ -35,11 +36,12 @@ func (s *SQLStore) CancelJob(ctx context.Context, id string, result *api.WorkerR
 		return false, err
 	}
 
-	completedAt := db.FormatTime(time.Now().UTC())
+	completedAt := timelayout.Format(time.Now().UTC())
 	n, err := q.CancelWorkerJob(ctx, db.CancelWorkerJobParams{
-		ResultJson:  resultJSON,
-		CompletedAt: sql.NullString{String: completedAt, Valid: true},
-		ID:          id,
+		ResultJson:     resultJSON,
+		CompletedAt:    sql.NullString{String: completedAt, Valid: true},
+		KeptCheckpoint: keptCheckpoint,
+		ID:             id,
 	})
 	if err != nil || n != 1 {
 		return n == 1, err
@@ -64,13 +66,20 @@ func (s *SQLStore) CancelJob(ctx context.Context, id string, result *api.WorkerR
 	if err := insertCanceledWorkerResult(ctx, tx, id, claimToken, resultJSON, completedAt); err != nil {
 		return false, err
 	}
+	if _, err := q.SettleWorkerRoundByJob(ctx, db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(completedAt), CheckpointID: keptCheckpoint, JobID: id}); err != nil {
+		return false, err
+	}
+	// A stopped worker's unanswered question goes with its round.
+	if err := q.DeleteWorkerDecisionByJob(ctx, id); err != nil {
+		return false, err
+	}
 	if _, err := q.CancelWorkerWaitLeases(ctx, db.CancelWorkerWaitLeasesParams{
 		UpdatedAt: completedAt, ResolvedAt: sql.NullString{String: completedAt, Valid: true},
 		WorkerJobID: sql.NullString{String: id, Valid: true},
 	}); err != nil {
 		return false, err
 	}
-	if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, id); err != nil {
+	if err := s.jobs.EnqueueJobEventTx(ctx, tx, s.outbox, id); err != nil {
 		return false, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -84,6 +93,13 @@ func insertCanceledWorkerResult(ctx context.Context, tx *sql.Tx, jobID, claimTok
 	return db.New(tx).InsertCanceledWorkerResult(ctx, db.InsertCanceledWorkerResultParams{
 		ID: uuid.NewString(), WorkerJobID: jobID, ClaimToken: claimToken,
 		ResultJson: resultJSON, CreatedAt: createdAt,
+	})
+}
+
+// ReleaseAdmittedJob makes a held job whose round is recorded claimable.
+func (s *SQLStore) ReleaseAdmittedJob(ctx context.Context, id string) (bool, error) {
+	return s.casInTx(ctx, id, func(q *db.Queries) (int64, error) {
+		return q.ReleaseAdmittedWorkerJob(ctx, id)
 	})
 }
 

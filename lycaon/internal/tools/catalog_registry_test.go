@@ -18,7 +18,7 @@ func TestParseCatalogToolIDs(t *testing.T) {
 	for _, id := range ids {
 		found[id] = true
 	}
-	for _, want := range []string{"parse_validate", "delegate_init", "state_query", "plan_append_review_evidence"} {
+	for _, want := range []string{"parse_validate", "plan_from_blueprint", "state_query", "plan_append_review_evidence"} {
 		if !found[want] {
 			t.Fatalf("missing catalog id %q", want)
 		}
@@ -52,7 +52,7 @@ func TestValidateBootToolClaimsHonest(t *testing.T) {
 		if err := reg.Register(name, func(_ context.Context, _ map[string]any, _ ToolContext) (string, error) {
 			return "ok", nil
 		}); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "reg.Register failed", err)
 		}
 	}
 	if err := ValidateBootToolClaimsHonest(reg); err != nil {

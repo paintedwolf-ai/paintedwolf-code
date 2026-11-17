@@ -1,7 +1,7 @@
 import type { ComparisonSnapshot } from "../../api/source-reader.ts";
 import type {  SourceGitReview, SourceGitReviewFile } from "../../api/types.ts";
 import { fileVersionFromComparison } from "../history/file-version.ts";
-import { openFilesBuffer } from "../documents/project-files-buffers.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import { type FileDiffPreview } from "../documents/files-buffer-state.ts";
 import { sourceContentNotice, type ContentNotice } from "../source/source-content-availability.ts";
 import type { WalkGitStep } from "../walk/walk-model.ts";

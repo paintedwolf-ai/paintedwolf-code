@@ -25,7 +25,7 @@ func newestToolContent(req modelcall.CompletionRequest) string {
 	return ""
 }
 
-func deliveryTagSession(t *testing.T, script *citableScriptLLM) (*Harness, string) {
+func deliveryTagSession(t *testing.T, script *CitableScriptLLM) (*Harness, string) {
 	t.Helper()
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "1")
 	h := BuildForTest(t, WithLLMClient(script))
@@ -44,17 +44,17 @@ func deliveryTagSession(t *testing.T, script *citableScriptLLM) (*Harness, strin
 // copied from a tag resolves. A coordinate with no excerpt is traced either way.
 func TestDeliveryTagsStateCoverageThroughTheRealPath(t *testing.T) {
 	var numbered, section, piped, copied string
-	script := &citableScriptLLM{steps: []citableStep{
-		{command: "cat -n notes.txt"},
-		{text: func(req modelcall.CompletionRequest) string {
+	script := &CitableScriptLLM{Steps: []CitableStep{
+		{Command: "cat -n notes.txt"},
+		{Text: func(req modelcall.CompletionRequest) string {
 			numbered = newestToolContent(req)
 			return ""
-		}, command: "sed -n '2,3p' lines.txt"},
-		{text: func(req modelcall.CompletionRequest) string {
+		}, Command: "sed -n '2,3p' lines.txt"},
+		{Text: func(req modelcall.CompletionRequest) string {
 			section = newestToolContent(req)
 			return ""
-		}, command: "cat -n lines.txt | sed -n '2,3p'"},
-		{text: func(req modelcall.CompletionRequest) string {
+		}, Command: "cat -n lines.txt | sed -n '2,3p'"},
+		{Text: func(req modelcall.CompletionRequest) string {
 			piped = newestToolContent(req)
 			if match := deliveryTagRE.FindStringSubmatch(section); match != nil {
 				copied = match[0]
@@ -110,13 +110,13 @@ func TestDeliveryTagsStateCoverageThroughTheRealPath(t *testing.T) {
 // until an excerpt verifies it. The script's second answer is reached only by that refusal.
 func TestNumberedReadOfSeveralFilesKeepsLaterFilesUnnumbered(t *testing.T) {
 	var printed string
-	script := &citableScriptLLM{steps: []citableStep{
-		{command: "cat -n notes.txt body.txt"},
-		{text: func(req modelcall.CompletionRequest) string {
+	script := &CitableScriptLLM{Steps: []CitableStep{
+		{Command: "cat -n notes.txt body.txt"},
+		{Text: func(req modelcall.CompletionRequest) string {
 			printed = newestToolContent(req)
 			return "The note is second [notes.txt:2], and the body opens with the third printed row [body.txt:3]."
 		}},
-		{text: func(modelcall.CompletionRequest) string {
+		{Text: func(modelcall.CompletionRequest) string {
 			return `[cite: c2 => body.txt:2 "second row of the body"]`
 		}},
 	}}
@@ -130,8 +130,8 @@ func TestNumberedReadOfSeveralFilesKeepsLaterFilesUnnumbered(t *testing.T) {
 	if !strings.Contains(printed, "3\tfirst row of the body") {
 		t.Fatalf("stdout changed: %s", printed)
 	}
-	if script.next != len(script.steps) {
-		t.Fatalf("a printed number from a later file was accepted after %d of %d steps", script.next, len(script.steps))
+	if script.next != len(script.Steps) {
+		t.Fatalf("a printed number from a later file was accepted after %d of %d steps", script.next, len(script.Steps))
 	}
 	g := lastAnswerGrounding(t, h, session)
 	if g == nil || !g.Traced || g.HostAssembled {
@@ -148,9 +148,9 @@ func TestNumberedReadOfSeveralFilesKeepsLaterFilesUnnumbered(t *testing.T) {
 
 // The same delivery still supports what needs no count: a verified excerpt and the handle.
 func TestLaterFileOfNumberedReadCitesByExcerptAndHandle(t *testing.T) {
-	script := &citableScriptLLM{steps: []citableStep{
-		{command: "cat -n notes.txt body.txt"},
-		{text: func(req modelcall.CompletionRequest) string {
+	script := &CitableScriptLLM{Steps: []CitableStep{
+		{Command: "cat -n notes.txt body.txt"},
+		{Text: func(req modelcall.CompletionRequest) string {
 			tags := deliveryTagRE.FindAllStringSubmatch(newestToolContent(req), -1)
 			return `The body continues [body.txt:2 "second row of the body"], as read [` + tags[1][1] + `].`
 		}},
@@ -159,16 +159,16 @@ func TestLaterFileOfNumberedReadCitesByExcerptAndHandle(t *testing.T) {
 	_, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), session, "read the files")
 	testutil.FailErr(t, "prompt", err)
 	g := lastAnswerGrounding(t, h, session)
-	if script.next != len(script.steps) || g == nil || !g.Traced || g.HostAssembled || len(g.CitedEvidence) != 2 {
+	if script.next != len(script.Steps) || g == nil || !g.Traced || g.HostAssembled || len(g.CitedEvidence) != 2 {
 		t.Fatalf("steps %d, grounding %+v", script.next, g)
 	}
 }
 
 // `grep -n` prints each line's own number beside its path, however many files it reads.
 func TestNumberedSearchOfSeveralFilesKeepsItsLines(t *testing.T) {
-	script := &citableScriptLLM{steps: []citableStep{
-		{command: "grep -n -e second -e bravo notes.txt lines.txt"},
-		{text: func(modelcall.CompletionRequest) string {
+	script := &CitableScriptLLM{Steps: []CitableStep{
+		{Command: "grep -n -e second -e bravo notes.txt lines.txt"},
+		{Text: func(modelcall.CompletionRequest) string {
 			return "The note is second [notes.txt:2], and the section holds bravo [lines.txt:2]."
 		}},
 	}}
@@ -176,7 +176,7 @@ func TestNumberedSearchOfSeveralFilesKeepsItsLines(t *testing.T) {
 	_, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), session, "search the files")
 	testutil.FailErr(t, "prompt", err)
 	g := lastAnswerGrounding(t, h, session)
-	if script.next != len(script.steps) || g == nil || !g.Traced || g.HostAssembled || len(g.CitedEvidence) != 2 {
+	if script.next != len(script.Steps) || g == nil || !g.Traced || g.HostAssembled || len(g.CitedEvidence) != 2 {
 		t.Fatalf("grep coordinates: steps %d, grounding %+v", script.next, g)
 	}
 }
@@ -197,10 +197,10 @@ func lastAnswerGrounding(t *testing.T, h *Harness, session string) *wire.Citatio
 // A coordinate on what only a pipeline printed is refused, and an excerpt on the
 // command then grounds the repaired answer.
 func TestPipelineCoordinateRepairsThroughACommandExcerpt(t *testing.T) {
-	script := &citableScriptLLM{steps: []citableStep{
-		{command: "cat -n lines.txt | sed -n '2,3p'"},
-		{text: func(modelcall.CompletionRequest) string { return "It holds bravo [lines.txt:2]." }},
-		{text: func(modelcall.CompletionRequest) string { return "It holds bravo [command#1 \"bravo\"]." }},
+	script := &CitableScriptLLM{Steps: []CitableStep{
+		{Command: "cat -n lines.txt | sed -n '2,3p'"},
+		{Text: func(modelcall.CompletionRequest) string { return "It holds bravo [lines.txt:2]." }},
+		{Text: func(modelcall.CompletionRequest) string { return "It holds bravo [command#1 \"bravo\"]." }},
 	}}
 	h, session := deliveryTagSession(t, script)
 	_, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), session, "read the file")
@@ -226,21 +226,21 @@ func TestProgramOperationWindowsAreCitableThroughTheRealPath(t *testing.T) {
 	const source = "package audit\n\n// Alpha adds one.\nfunc Alpha(n int) int {\n\treturn n + 1\n}\n"
 	var windowResult, outlineResult, repoResult, surveyResult string
 	var handle, path, lines string
-	script := &citableScriptLLM{steps: []citableStep{
-		{command: "summarize --path audit.go --focus Alpha"},
-		{text: func(req modelcall.CompletionRequest) string {
+	script := &CitableScriptLLM{Steps: []CitableStep{
+		{Command: "summarize --path audit.go --focus Alpha"},
+		{Text: func(req modelcall.CompletionRequest) string {
 			windowResult = newestToolContent(req)
 			return ""
-		}, command: "outline --path audit.go"},
-		{text: func(req modelcall.CompletionRequest) string {
+		}, Command: "outline --path audit.go"},
+		{Text: func(req modelcall.CompletionRequest) string {
 			outlineResult = newestToolContent(req)
 			return ""
-		}, command: "repo-map --path . --depth 1"},
-		{text: func(req modelcall.CompletionRequest) string {
+		}, Command: "repo-map --path . --depth 1"},
+		{Text: func(req modelcall.CompletionRequest) string {
 			repoResult = newestToolContent(req)
 			return ""
-		}, command: "survey-repo --path . --depth 1"},
-		{text: func(req modelcall.CompletionRequest) string {
+		}, Command: "survey-repo --path . --depth 1"},
+		{Text: func(req modelcall.CompletionRequest) string {
 			surveyResult = newestToolContent(req)
 			if match := deliveryTagRE.FindStringSubmatch(windowResult); match != nil {
 				handle = match[1]

@@ -87,7 +87,7 @@ func assertFastCustodyBytes(t *testing.T, path string, want []byte) {
 
 func verifyFastCustodyImage(t *testing.T, path string, revision int) {
 	t.Helper()
-	database, err := openReader(t.Context(), path)
+	database, err := OpenReadOnly(t.Context(), path)
 	testutil.FailErr(t, "open retained custody image", err)
 	defer func() { _ = database.Close() }()
 	testutil.FailErr(t, "verify retained custody integrity and foreign keys", auditSnapshot(t.Context(), database, nil))

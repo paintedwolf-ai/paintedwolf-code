@@ -46,7 +46,7 @@ func TestSourcePresentationsKeepCoordinatesAcrossDisclosureCommands(t *testing.T
 	ready := func() *wire.SourceTreeView {
 		t.Helper()
 		var state *wire.SourceTreeView
-		testutil.WaitFor(t, func() bool {
+		testutil.WaitFor(t, "the source view tree is ready", func() bool {
 			state = contractfixture.ReadSourceViewResponse(t, call(http.MethodGet, created.ID, nil), http.StatusOK).Tree
 			return state.State == "ready"
 		})
@@ -174,7 +174,7 @@ func TestSourceTreeUpdateReportsAForeignDisplayedBasisAsAChangedPresentation(t *
 		t.Helper()
 		created := contractfixture.ReadSourceViewResponse(t, call(http.MethodPost, "", wire.SourceTreeViewCreate{Kind: "tree", ClientID: "test", OperationID: uuid.NewString(), WorkspaceID: physical.WorkspaceID()}), http.StatusCreated).Tree
 		var state *wire.SourceTreeView
-		testutil.WaitFor(t, func() bool {
+		testutil.WaitFor(t, "the source view tree is ready", func() bool {
 			state = contractfixture.ReadSourceViewResponse(t, call(http.MethodGet, created.ID, nil), http.StatusOK).Tree
 			return state.State == "ready"
 		})

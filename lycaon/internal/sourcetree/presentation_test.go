@@ -13,7 +13,7 @@ func captureForTest(t *testing.T, v *View) *Presentation {
 	t.Helper()
 	var result *Presentation
 	var err error
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the capture is prepared", func() bool {
 		result, err = v.Capture(t.Context())
 		return !errors.Is(err, pagedview.ErrPreparing) && !errors.Is(err, pagedview.ErrRevision)
 	})

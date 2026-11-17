@@ -23,7 +23,7 @@ func TestSequentialPlanRunsE2E(t *testing.T) {
 
 	start := func() wire.WorkflowRun {
 		t.Helper()
-		req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", workflowStartBody(t, srv, sess.ID, map[string]any{"workflow_id": "plan", "workflow_version": "1.0.1", "request": "Plan the fixture change"}))
+		req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", workflowStartBody(t, srv, sess.ID, map[string]any{"workflow_id": "plan", "workflow_version": "1.0.1", "request": "Plan the fixture change"}))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
@@ -41,9 +41,9 @@ func TestSequentialPlanRunsE2E(t *testing.T) {
 	if runA.BlueprintPath == "" {
 		t.Fatal("expected blueprint_path on run")
 	}
-	seedPlanStub(t, blueprintMgr, runA.ProjectID, runA.BlueprintPath)
+	SeedPlanStub(t, blueprintMgr, runA.ProjectID, runA.BlueprintPath)
 
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/prompts", strings.NewReader(`{"text":"during plan A"}`))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/prompts", strings.NewReader(`{"text":"during plan A"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -52,7 +52,7 @@ func TestSequentialPlanRunsE2E(t *testing.T) {
 	}
 	var accepted wire.PromptAcceptedResponse
 	testutil.FailErr(t, "decode admitted prompt", json.Unmarshal(w.Body.Bytes(), &accepted))
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the admitted prompt settles", func() bool {
 		submission, err := sessionStore.GetPromptSubmission(ctx, accepted.OperationID)
 		testutil.FailErr(t, "read admitted prompt", err)
 		if !submission.Status.Terminal() {

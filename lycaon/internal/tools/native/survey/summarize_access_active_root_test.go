@@ -1,7 +1,6 @@
 package survey
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
 // Summary windows carry structured identity when they can; the session folder
@@ -28,20 +26,16 @@ func TestResolveSummaryWindowPrefersStructuredIdentity(t *testing.T) {
 		{ID: "active", Label: "den", Path: secondary},
 	}
 	tctx.Source.ActiveRootID = "active"
-	reads := projectpaths.NewReadSession(testfixture.Boundary(t), tctx)
-	ctx := context.Background()
-
-	resolved, ok := resolveSummaryWindow(ctx, reads, tctx, summarize.PackWindow{RootID: "active", ScopeRel: "notes.txt", Path: "@den/notes.txt"})
+	resolved, ok := resolveSummaryWindow(tctx, summarize.PackWindow{RootID: "active", ScopeRel: "notes.txt", Path: "@den/notes.txt"})
 	if !ok || resolved.Root.ID != "active" || resolved.ScopeRel != "notes.txt" {
 		t.Fatalf("structured window = %+v ok=%v", resolved, ok)
 	}
 
-	if _, ok := resolveSummaryWindow(ctx, reads, tctx, summarize.PackWindow{RootID: "missing", ScopeRel: "notes.txt", Path: "notes.txt"}); ok {
+	if _, ok := resolveSummaryWindow(tctx, summarize.PackWindow{RootID: "missing", ScopeRel: "notes.txt", Path: "notes.txt"}); ok {
 		t.Fatal("unknown structured root resolved anyway")
 	}
 
-	resolved, ok = resolveSummaryWindow(ctx, reads, tctx, summarize.PackWindow{Path: "notes.txt"})
-	if !ok || resolved.Root.ID != "active" || resolved.ScopeRel != "notes.txt" {
-		t.Fatalf("legacy window = %+v ok=%v", resolved, ok)
+	if _, ok := resolveSummaryWindow(tctx, summarize.PackWindow{Path: "notes.txt"}); ok {
+		t.Fatal("a window without root identity resolved by its display path")
 	}
 }

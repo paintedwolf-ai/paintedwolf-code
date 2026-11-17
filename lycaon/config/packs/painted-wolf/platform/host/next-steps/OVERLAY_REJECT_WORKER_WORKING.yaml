@@ -1,0 +1,8 @@
+steps:
+  - when: "paintedwolf.worker != ''"
+    tool: "worker_cancel"
+    args:
+      worker: "{{ paintedwolf.worker }}"
+    complete: true
+    say: "Wait for the round to finish, or stop it with {{ call }}; then reject again, which also rejects the later results that carry these changes."
+    otherwise: "Wait for the round to finish; then reject again, which also rejects the later results that carry these changes."

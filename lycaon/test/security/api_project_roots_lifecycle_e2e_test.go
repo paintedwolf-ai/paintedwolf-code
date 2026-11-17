@@ -25,25 +25,25 @@ func TestDetachThenReadDenied(t *testing.T) {
 		testutil.FailErr(t, "write fixture file", err)
 	}
 
-	project := createAPIProjectAtPath(t, base, dir)
+	project := CreateAPIProjectAtPath(t, base, dir)
 	if project.RootsGeneration != 0 {
 		t.Fatalf("initial generation = %d want 0", project.RootsGeneration)
 	}
 	rootID := project.Roots[0].ID
 
-	sess := openAPIPostJSON[struct {
+	sess := OpenAPIPostJSON[struct {
 		ID string `json:"id"`
 	}](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
 
-	req := authedRequest(t, http.MethodDelete, "/v1/projects/"+project.ID+"/roots/"+rootID, nil)
+	req := AuthedRequest(t, http.MethodDelete, "/v1/projects/"+project.ID+"/roots/"+rootID, nil)
 	w := httptest.NewRecorder()
 	h.Server.ServeHTTP(w, req)
 	if w.Code != http.StatusNoContent {
 		t.Fatalf("detach status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	updated := openAPIGetJSON[struct {
+	updated := OpenAPIGetJSON[struct {
 		Roots           []any `json:"roots"`
 		RootsGeneration int   `json:"roots_generation"`
 	}](t, base, "/v1/projects/{id}", map[string]string{"id": project.ID}, http.StatusOK)

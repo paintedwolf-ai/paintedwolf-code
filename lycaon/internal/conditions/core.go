@@ -10,16 +10,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// DelegationReader loads delegation state for core predicates.
-type DelegationReader interface {
-	DelegationBySessionID(sessionID string) (string, bool)
-	Get(ctx context.Context, delegationID string) (*api.Delegation, error)
-	ListLegs(ctx context.Context, delegationID string) ([]api.Leg, error)
-}
-
 // EvidenceReader loads anchored evidence for gate predicates.
 type EvidenceReader interface {
-	LatestEvidence(ctx context.Context, projectDir, delegationID, taskID string, gateType evidence.GateType, scope inspector.EvidenceScope) (*evidence.Record, error)
+	LatestEvidence(ctx context.Context, projectDir, runID, taskID string, gateType evidence.GateType, scope inspector.EvidenceScope) (*evidence.Record, error)
 }
 
 // SourceSnapshotReader resolves the immutable source identity used by scan gates.
@@ -29,9 +22,9 @@ type SourceSnapshotReader interface {
 
 // CoreDeps supplies host services for reusable core vocabulary evaluators.
 type CoreDeps struct {
-	DelegationStore         DelegationReader
+	SessionWorkIDs          func(ctx context.Context, sessionID string) ([]string, error)
 	Evidence                EvidenceReader
-	DelegationCloseout      func(ctx context.Context, sessionID string) (bool, error)
+	PlanCloseout            func(ctx context.Context, sessionID string) (bool, error)
 	SourceVerifyPassed      func(ctx context.Context, sessionID string) (bool, error)
 	DeliveryReported        func(ctx context.Context, sessionID, runID, phase string) (bool, error)
 	ScanLedger              ScanLedger
@@ -63,7 +56,7 @@ func RegisterCoreConditions(reg *ConditionRegistry, deps CoreDeps) error {
 	if err := registerCoreSpawnGuards(reg, deps); err != nil {
 		return err
 	}
-	if err := registerCoreDelegation(reg, deps); err != nil {
+	if err := registerCoreGrounding(reg, deps); err != nil {
 		return err
 	}
 	if err := registerCoreEvidence(reg, deps); err != nil {
@@ -182,13 +175,17 @@ func registerCoreTools(reg *ConditionRegistry) error {
 			return strings.HasPrefix(ec.ToolName, "state_"), nil
 		}},
 		{"tool_is_delegation", func(ec EvalContext) (bool, error) {
-			return strings.HasPrefix(ec.ToolName, "delegate_"), nil
+			return ec.ToolName == "plan_from_blueprint" || ec.ToolName == "instruct_worker", nil
 		}},
 		{"tool_is_handoff", func(ec EvalContext) (bool, error) {
 			return strings.HasPrefix(ec.ToolName, "handoff_"), nil
 		}},
 		{"tool_is_task", func(ec EvalContext) (bool, error) {
 			return ec.ToolName == "task", nil
+		}},
+		{"tool_names_agent", func(ec EvalContext) (bool, error) {
+			_, ok := namedAgent(ec.ToolName, ec.ToolArgs)
+			return ok, nil
 		}},
 		// The compiled axis avoids a tools → guidance → conditions import cycle.
 		{"tool_is_write", func(ec EvalContext) (bool, error) {
@@ -230,119 +227,13 @@ func registerCoreSpawnGuards(reg *ConditionRegistry, deps CoreDeps) error {
 	})
 }
 
-func registerCoreDelegation(reg *ConditionRegistry, deps CoreDeps) error {
-	entries := []struct {
-		name string
-		fn   func(EvalContext, CoreDeps) (bool, error)
-	}{
-		{"delegation_active", func(ec EvalContext, d CoreDeps) (bool, error) {
-			if d.DelegationStore == nil || ec.SessionID == "" {
-				return false, nil
-			}
-			_, ok := d.DelegationStore.DelegationBySessionID(ec.SessionID)
-			return ok, nil
-		}},
-		{"delegation_phase_setup", delegationPhaseFn(api.DelegationPhaseSetup)},
-		{"delegation_phase_worker", delegationPhaseFn(api.DelegationPhaseWorker)},
-		{"delegation_phase_done", delegationPhaseFn(api.DelegationPhaseDone)},
-		{"leg_pending", func(ec EvalContext, d CoreDeps) (bool, error) {
-			dep, err := loadDelegation(d, ec)
-			if err != nil || dep == nil {
-				return false, err
-			}
-			for _, leg := range dep.Legs {
-				if leg.Status == api.LegStatusPending || leg.Status == api.LegStatusRunning {
-					return true, nil
-				}
-			}
+func registerCoreGrounding(reg *ConditionRegistry, deps CoreDeps) error {
+	return reg.Register("grounding_blocked", func(ec EvalContext) (bool, error) {
+		if deps.GroundingBlocked == nil || ec.SessionID == "" {
 			return false, nil
-		}},
-		{"all_legs_complete", func(ec EvalContext, d CoreDeps) (bool, error) {
-			dep, err := loadDelegation(d, ec)
-			if err != nil || dep == nil || len(dep.Legs) == 0 {
-				return false, err
-			}
-			for _, leg := range dep.Legs {
-				if leg.Status != api.LegStatusComplete {
-					return false, nil
-				}
-			}
-			return true, nil
-		}},
-		{"leg_failed", func(ec EvalContext, d CoreDeps) (bool, error) {
-			dep, err := loadDelegation(d, ec)
-			if err != nil || dep == nil {
-				return false, err
-			}
-			for _, leg := range dep.Legs {
-				if leg.Status == api.LegStatusFailed {
-					return true, nil
-				}
-			}
-			return false, nil
-		}},
-		{"worker_jobs_pending", func(ec EvalContext, d CoreDeps) (bool, error) {
-			dep, err := loadDelegation(d, ec)
-			if err != nil || dep == nil {
-				return false, err
-			}
-			for _, leg := range dep.Legs {
-				if leg.Status == api.LegStatusRunning && strings.TrimSpace(leg.WorkerID) != "" {
-					return true, nil
-				}
-			}
-			return false, nil
-		}},
-		{"grounding_blocked", func(ec EvalContext, d CoreDeps) (bool, error) {
-			if d.GroundingBlocked == nil || ec.SessionID == "" {
-				return false, nil
-			}
-			return d.GroundingBlocked(ec.Ctx, ec.SessionID)
-		}},
-		{"completion_criteria_met", func(ec EvalContext, d CoreDeps) (bool, error) {
-			dep, err := loadDelegation(d, ec)
-			if err != nil || dep == nil {
-				return false, err
-			}
-			for _, leg := range dep.Legs {
-				if leg.Status == api.LegStatusComplete && len(leg.CompletionCriteria) > 0 {
-					return true, nil
-				}
-			}
-			return false, nil
-		}},
-	}
-	for _, e := range entries {
-		name := e.name
-		evalFn := e.fn
-		if err := reg.Register(name, func(ec EvalContext) (bool, error) {
-			return evalFn(ec, deps)
-		}); err != nil {
-			return err
 		}
-	}
-	return nil
-}
-
-func delegationPhaseFn(want api.DelegationPhase) func(EvalContext, CoreDeps) (bool, error) {
-	return func(ec EvalContext, d CoreDeps) (bool, error) {
-		dep, err := loadDelegation(d, ec)
-		if err != nil || dep == nil {
-			return false, err
-		}
-		return dep.Phase == want, nil
-	}
-}
-
-func loadDelegation(d CoreDeps, ec EvalContext) (*api.Delegation, error) {
-	if d.DelegationStore == nil || ec.SessionID == "" {
-		return nil, nil
-	}
-	depID, ok := d.DelegationStore.DelegationBySessionID(ec.SessionID)
-	if !ok {
-		return nil, nil
-	}
-	return d.DelegationStore.Get(ec.Ctx, depID)
+		return deps.GroundingBlocked(ec.Ctx, ec.SessionID)
+	})
 }
 
 func registerCoreEvidence(reg *ConditionRegistry, deps CoreDeps) error {
@@ -359,15 +250,6 @@ func registerCoreEvidence(reg *ConditionRegistry, deps CoreDeps) error {
 		evType := suffixAfter(ec.ConditionID, "evidence_missing:")
 		ok, err := evidenceSatisfied(deps, ec, evidence.GateType(evType), true)
 		return !ok && err == nil, err
-	}); err != nil {
-		return err
-	}
-	if err := reg.Register("file_modified_since_base", func(ec EvalContext) (bool, error) {
-		dep, err := loadDelegation(deps, ec)
-		if err != nil || dep == nil {
-			return false, err
-		}
-		return strings.TrimSpace(dep.BaseHeadSHA) != "", nil
 	}); err != nil {
 		return err
 	}
@@ -394,13 +276,23 @@ func evidenceSatisfied(deps CoreDeps, ec EvalContext, evType evidence.GateType, 
 	if evType == evidence.GateTypeSecurity {
 		return securityEvidenceSatisfied(deps, ec, requireAnchored)
 	}
-	dep, err := loadDelegation(deps, ec)
-	if err != nil || dep == nil {
-		return false, err
+	runID := evidenceRunID(ec)
+	if runID == "" {
+		return false, nil
 	}
-	taskIDs := delegationTaskIDs(dep)
+	var taskIDs []string
 	if legScope := strings.TrimSpace(ec.EvidenceLegID); legScope != "" {
 		taskIDs = []string{legScope}
+	} else if deps.SessionWorkIDs != nil {
+		ids, err := deps.SessionWorkIDs(ec.Ctx, ec.SessionID)
+		if err != nil {
+			return false, err
+		}
+		taskIDs = ids
+	} else if phase := strings.TrimSpace(ec.Phase); phase != "" {
+		taskIDs = []string{phase}
+	} else if sess := strings.TrimSpace(ec.SessionID); sess != "" {
+		taskIDs = []string{sess}
 	}
 	if len(taskIDs) == 0 {
 		return false, nil
@@ -410,7 +302,7 @@ func evidenceSatisfied(deps CoreDeps, ec EvalContext, evType evidence.GateType, 
 		WorkspaceID: strings.TrimSpace(ec.EvidenceWorkspaceID),
 	}
 	for _, taskID := range taskIDs {
-		rec, err := deps.Evidence.LatestEvidence(ec.Ctx, ec.ProjectDir, dep.ID, taskID, evType, scope)
+		rec, err := deps.Evidence.LatestEvidence(ec.Ctx, ec.ProjectDir, runID, taskID, evType, scope)
 		if err != nil {
 			return false, err
 		}
@@ -427,14 +319,11 @@ func evidenceSatisfied(deps CoreDeps, ec EvalContext, evType evidence.GateType, 
 	return true, nil
 }
 
-func delegationTaskIDs(dep *api.Delegation) []string {
-	var out []string
-	for _, leg := range dep.Legs {
-		if leg.Status == api.LegStatusComplete || leg.Status == api.LegStatusRunning {
-			out = append(out, leg.ID)
-		}
+func evidenceRunID(ec EvalContext) string {
+	if id := strings.TrimSpace(ec.WorkflowRunID); id != "" {
+		return id
 	}
-	return out
+	return strings.TrimSpace(ec.SessionID)
 }
 
 func gateSatisfiedInVars(vars map[string]any, gate string) bool {
@@ -471,10 +360,10 @@ func registerCoreCompleteWhen(reg *ConditionRegistry, deps CoreDeps) error {
 			return parallelStagesComplete(ec.Vars, ec.BindParallelGroup), nil
 		}},
 		{"delegation_closeout_complete", func(ec EvalContext) (bool, error) {
-			if deps.DelegationCloseout == nil {
+			if deps.PlanCloseout == nil {
 				return false, nil
 			}
-			return deps.DelegationCloseout(ec.Ctx, ec.SessionID)
+			return deps.PlanCloseout(ec.Ctx, ec.SessionID)
 		}},
 		{"delivery_gates_passed", func(ec EvalContext) (bool, error) {
 			if deps.DeliveryReported == nil {
@@ -510,19 +399,14 @@ func closeoutGatesPassed(deps CoreDeps, ec EvalContext) (bool, error) {
 }
 
 func deliveryGatesPassed(deps CoreDeps, ec EvalContext) (bool, error) {
-	if deps.DelegationCloseout == nil {
+	if deps.PlanCloseout == nil {
 		return false, nil
 	}
-	ok, err := deps.DelegationCloseout(ec.Ctx, ec.SessionID)
+	ok, err := deps.PlanCloseout(ec.Ctx, ec.SessionID)
 	if err != nil || !ok {
 		return false, err
 	}
 	if deps.ScanLedger != nil {
-		if deps.DelegationStore != nil && ec.SessionID != "" {
-			if _, assigned := deps.DelegationStore.DelegationBySessionID(ec.SessionID); !assigned {
-				return true, nil
-			}
-		}
 		securityOK, err := securityEvidenceSatisfied(deps, ec, true)
 		if err != nil || !securityOK {
 			return false, err
@@ -567,25 +451,35 @@ func registerCoreRuleFacts(reg *ConditionRegistry) error {
 	return nil
 }
 
-// isHighRiskTool classifies state transitions, handoffs, and implementation delegation.
+// namedAgent is the agent a worker-starting call names: task always, and
+// instruct_worker when it changes the worker's agent.
+func namedAgent(name string, args map[string]any) (string, bool) {
+	agent, _ := args["agent_type"].(string)
+	agent = strings.TrimSpace(agent)
+	switch name {
+	case "task":
+		return agent, true
+	case "instruct_worker":
+		return agent, agent != ""
+	}
+	return "", false
+}
+
+// isHighRiskTool classifies state transitions, handoffs, blueprint planning, and implementation workers.
 func isHighRiskTool(name string, args map[string]any) bool {
-	if strings.HasPrefix(name, "state_") || strings.HasPrefix(name, "handoff_") || strings.HasPrefix(name, "delegate_") {
+	if strings.HasPrefix(name, "state_") || strings.HasPrefix(name, "handoff_") || name == "plan_from_blueprint" {
 		return true
 	}
-	if name != "task" {
-		return false
-	}
-	agent, _ := args["agent_type"].(string)
-	return strings.EqualFold(strings.TrimSpace(agent), "implementer")
+	agent, ok := namedAgent(name, args)
+	return ok && strings.EqualFold(agent, "implementer")
 }
 
 // matchDisallowedAgent treats a nil roster as unrestricted and an empty roster as closed.
 func matchDisallowedAgent(ec EvalContext) bool {
-	if ec.ToolName != "task" || ec.AllowedAgents == nil {
+	agent, ok := namedAgent(ec.ToolName, ec.ToolArgs)
+	if !ok || ec.AllowedAgents == nil {
 		return false
 	}
-	agent, _ := ec.ToolArgs["agent_type"].(string)
-	agent = strings.TrimSpace(agent)
 	if agent == "" {
 		return len(ec.AllowedAgents) == 0
 	}

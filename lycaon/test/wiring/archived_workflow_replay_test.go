@@ -79,7 +79,7 @@ func TestArchivedWorkflowReplay_100(t *testing.T) {
 		t.Fatalf("reading changes.yaml: %v", err)
 	}
 
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, fixture.WorkflowID)
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
@@ -122,7 +122,7 @@ func TestArchivedWorkflowReplay_100(t *testing.T) {
 
 	for i, p := range fixture.Phases {
 		// 1. Exact prompt matching for the phase.
-		matchCtx := anchor.RunMatch(runSource(run), "phase", p.Phase)
+		matchCtx := anchor.RunMatch(RunSource(run), "phase", p.Phase)
 		binding, err := anchor.RegistryFor(ctx, sess.ID).ResolveInform(anchor.PhaseEntered, matchCtx)
 		testutil.FailErr(t, "ResolveInform for phase "+p.Phase, err)
 		if binding == nil {
@@ -175,7 +175,7 @@ func TestArchivedWorkflowReplay_100(t *testing.T) {
 				}
 			}
 			if i+1 < len(fixture.Phases) {
-				waitWorkflowPhase(t, ctx, h.Workflows.Manager, runID, fixture.Phases[i+1].Phase)
+				WaitWorkflowPhase(t, ctx, h.Workflows.Manager, runID, fixture.Phases[i+1].Phase)
 				run, err = h.Workflows.Manager.Store.Runs.Get(ctx, runID)
 				testutil.FailErr(t, "get run after verdict in "+p.Phase, err)
 			}

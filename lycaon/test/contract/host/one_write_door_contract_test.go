@@ -117,7 +117,6 @@ var doorExemptions = map[string]string{
 	"lycaon/cmd/lycaon-debug/eval_tool_usage.go": "operator-selected report path",
 	"lycaon/cmd/lycaon/completion.go":            "shell completion script written to an operator-selected path",
 	"lycaon/cmd/lycaon/extensions_theme.go":      "theme export written to an operator-selected path",
-	"lycaon/cmd/oar-import-invariant/main.go":    "invariant import written to an operator-selected path",
 	"lycaon/cmd/decide-rerank/eval.go":           "evaluation report written to an operator-selected path",
 	"lycaon/cmd/decide-rerank/units.go":          "training units written to an operator-selected path",
 }

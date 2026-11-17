@@ -149,6 +149,9 @@ func LeaseExistingBranch(ctx context.Context, task *api.WorkerTask) (*BranchLeas
 type BranchJob struct {
 	ID        string
 	ProjectID string
+	// Branch names the job's branch directory: the job's own, or the lane
+	// of the worker whose round it ran.
+	Branch string
 	// Sealed reports a completed overlay whose changes are on record, so its
 	// tree can be reclaimed and rebuilt.
 	Sealed bool
@@ -172,7 +175,9 @@ func branchJobSealed(status api.WorkerStatus, mergeStatus api.WorkerMergeStatus,
 	return false
 }
 
-// RecoverOrphanedMergeApplies repairs expired promotion leases.
+// RecoverOrphanedMergeApplies repairs expired promotion leases. It lists again
+// at once after a pass that repaired one and waits a lease interval only when
+// the remaining leases are still live.
 func (s *MergeService) RecoverOrphanedMergeApplies(ctx context.Context) error {
 	if s == nil || s.Store == nil || s.Queue == nil {
 		return fmt.Errorf("merge apply sweep requires queue and store")
@@ -187,6 +192,7 @@ func (s *MergeService) RecoverOrphanedMergeApplies(ctx context.Context) error {
 		if len(ids) == 0 {
 			return nil
 		}
+		repaired := false
 		for _, id := range ids {
 			task, ok := s.Queue.Get(id)
 			if !ok || task == nil || task.MergeStatus != api.WorkerMergeStatusApplying {
@@ -196,10 +202,15 @@ func (s *MergeService) RecoverOrphanedMergeApplies(ctx context.Context) error {
 			if lockErr != nil {
 				return lockErr
 			}
-			if _, err := eng.reclaimOrphanedApply(ctx, task, id); err != nil {
+			reclaimed, err := eng.reclaimOrphanedApply(ctx, task, id)
+			if err != nil {
 				slog.WarnContext(ctx, "orphaned merge apply repair deferred", "job_id", id, "err", err)
 			}
+			repaired = repaired || (reclaimed && err == nil)
 			lock.release()
+		}
+		if repaired {
+			continue
 		}
 		select {
 		case <-ctx.Done():
@@ -232,7 +243,7 @@ func (s *MergeService) beginMergeClaim(ctx context.Context, jobID string) (*merg
 		return nil, nil, err
 	}
 	if !claimed {
-		return nil, nil, s.reject(OverlayPromoteNotPendingCode, map[string]any{"job_id": jobID})
+		return nil, nil, s.reject(ctx, OverlayPromoteNotPendingCode, map[string]any{"job_id": jobID})
 	}
 	claimCtx, cancel := context.WithCancelCause(ctx)
 	claim := &mergeApplyClaim{jobID: jobID, token: token, cancel: cancel}
@@ -277,6 +288,15 @@ func (claim *mergeApplyClaim) stop() {
 	})
 }
 
+// stopOnPanic, deferred by a promotion, stops renewing the lease of one that
+// panicked, so the lease expires and recovery reclaims it as after a crash.
+func (claim *mergeApplyClaim) stopOnPanic() {
+	if recovered := recover(); recovered != nil {
+		claim.stop()
+		panic(recovered)
+	}
+}
+
 // releaseMergeClaim returns the branch to pending under the claim.
 func (s mergeEngine) releaseMergeClaim(ctx context.Context, claim *mergeApplyClaim) error {
 	claim.stop()
@@ -286,7 +306,7 @@ func (s mergeEngine) releaseMergeClaim(ctx context.Context, claim *mergeApplyCla
 }
 
 func (s mergeEngine) teardownBranch(ctx context.Context, task *api.WorkerTask) error {
-	if s.MergeService == nil || s.Workspace == nil || task == nil {
+	if s.MergeService == nil || s.Workspace == nil || task == nil || s.Lanes.Holds(ctx, task) {
 		return nil
 	}
 	cleanupCtx, cancel := promoteCleanupContext(ctx)
@@ -313,7 +333,7 @@ func (s mergeEngine) holdBranch(ctx context.Context, jobID string) (*BranchLease
 			if checkpointed {
 				return LeaseExistingBranch(ctx, task)
 			}
-			return nil, s.reject(OverlayPromoteNotPendingCode, map[string]any{
+			return nil, s.reject(ctx, OverlayPromoteNotPendingCode, map[string]any{
 				"job_id": jobID, "reason": "overlay workspace unavailable",
 			})
 		}

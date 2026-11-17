@@ -5,7 +5,7 @@ import type { LycaonClient } from "../../api/client.ts";
 import { canEditLoadedSource } from "../../components/source/editor/source-editor-model.ts";
 import { editorReplica, evictEditorDocument, observeEditorDocument, resolveEditorDocument, type EditorDocumentState } from "./editor-document.ts";
 import { FileDocumentOpeningController, type DocumentOpeningTarget } from "./file-document-opening.ts";
-import { applyFilesBufferEditorDocument, setFilesBufferDocumentOpening } from "./project-files-buffers.ts";
+import { applyFilesBufferEditorDocument, setFilesBufferDocumentOpening } from "./project-files-buffer-io.ts";
 import { projectFilesState, type FileBuffer } from "./files-buffer-state.ts";
 import { workspaceMismatchId } from "../source/source-workspace-identity.ts";
 import { WORKSPACE_IDENTITY_RECONCILE_LIMIT } from "../source/files-workspace-fault.ts";

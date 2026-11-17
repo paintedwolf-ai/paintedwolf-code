@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { Message } from "../../api/types.ts";
 import {
   isEnqueuedWorkerDispatchResult,
+  taskJobIdFromPart,
   taskJobIdFromToolMessage,
 } from "./task-result-model.ts";
 
@@ -50,5 +51,10 @@ describe("task-result-model", () => {
       created_at: "t",
     };
     expect(taskJobIdFromToolMessage(result)).toBeUndefined();
+    expect(taskJobIdFromPart({
+      id: "tc1", toolCallId: "tc1", assistantMessageId: "a1", messageId: "m1",
+      tool: "task", kind: "task", status: "completed",
+      output: '<task job_id="content-only" state="complete"/>', error: null,
+    })).toBeUndefined();
   });
 });

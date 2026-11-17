@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/cost"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/packboard"
@@ -59,9 +58,8 @@ type ScanComparer interface {
 	BoardComparison(ctx context.Context, oldScan, newScan api.CodeScan) (*scan.Comparison, error)
 }
 
-// SnapshotBuilder assembles BoardSnapshot DTOs from delegation and worker state.
+// SnapshotBuilder assembles BoardSnapshot DTOs from worker and repository state.
 type SnapshotBuilder struct {
-	Delegations        delegation.Store
 	Workers            worker.WorkerQueue
 	Touches            WorkerTouchEnricher
 	ActiveReservations ActiveReservationLister
@@ -82,6 +80,8 @@ type SnapshotBuilder struct {
 	CostTrackingEnabled func() bool
 	// Worktree is nil when worktree bindings are unavailable.
 	Worktree func(ctx context.Context, sessionID string) *api.BoardGitWorktree
+	// NamedWorkers lists the session's open workers; nil leaves them out.
+	NamedWorkers func(ctx context.Context, sessionID string) ([]api.BoardWorker, error)
 }
 
 // Build scopes workers and workflows to the session, and repository facts to the workspace.
@@ -95,15 +95,6 @@ func (b *SnapshotBuilder) Build(ctx context.Context, projectID, workspacePath, s
 		level = api.BoardDetailLevelCompact
 	}
 	sessionID = strings.TrimSpace(sessionID)
-
-	var delegations []api.Delegation
-	if b.Delegations != nil {
-		var err error
-		delegations, err = b.Delegations.ListByProject(ctx, projectID, sessionID)
-		if err != nil {
-			return nil, err
-		}
-	}
 
 	var tasks []api.WorkerTask
 	if b.Workers != nil && sessionID != "" {
@@ -121,11 +112,15 @@ func (b *SnapshotBuilder) Build(ctx context.Context, projectID, workspacePath, s
 		}
 	}
 
-	delegationSlice := api.BoardDelegationSlice{
-		"delegations": delegations,
-	}
 	workersSlice := api.BoardWorkersSlice{
 		"tasks": tasks,
+	}
+	if b.NamedWorkers != nil && sessionID != "" {
+		named, err := b.NamedWorkers(ctx, sessionID)
+		if err != nil {
+			return nil, err
+		}
+		workersSlice["workers"] = named
 	}
 
 	var activeRun *api.WorkflowRun
@@ -143,7 +138,7 @@ func (b *SnapshotBuilder) Build(ctx context.Context, projectID, workspacePath, s
 	now := time.Now().UTC()
 	snap := &api.BoardSnapshot{
 		Repo: facts.repo, OrientationRoots: facts.roots, Host: b.loadHost(ctx, facts.repo.Languages),
-		Delegation: &delegationSlice, Workers: &workersSlice, ActiveWorkflowRun: activeRun,
+		Workers: &workersSlice, ActiveWorkflowRun: activeRun,
 		Cost: b.costSlice(ctx, sessionID), DetailLevel: level, Scans: facts.scans,
 	}
 	if facts.git != nil {

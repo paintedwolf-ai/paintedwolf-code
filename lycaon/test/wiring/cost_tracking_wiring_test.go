@@ -78,7 +78,7 @@ func TestCostTrackingOnPricedSummaryAndSSE(t *testing.T) {
 	}
 
 	var got wire.CostEvent
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the cost event carries the summary", func() bool {
 		select {
 		case envelope, ok := <-ch:
 			if !ok || envelope.Topic != wire.EventTopicCost {

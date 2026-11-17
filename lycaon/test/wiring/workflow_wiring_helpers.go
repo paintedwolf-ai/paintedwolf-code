@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -24,7 +26,7 @@ import (
 
 func waitTopologyStageComplete(t *testing.T, mgr *workflow.RunManager, runID, stage string) {
 	t.Helper()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the topology stage completes", func() bool {
 		vars, err := mgr.Store.Runs.GetScaffoldVars(context.Background(), runID)
 		if err != nil {
 			return false
@@ -35,10 +37,10 @@ func waitTopologyStageComplete(t *testing.T, mgr *workflow.RunManager, runID, st
 	})
 }
 
-func waitWorkflowPhase(t *testing.T, ctx context.Context, mgr *workflow.RunManager, runID, phase string) {
+func WaitWorkflowPhase(t *testing.T, ctx context.Context, mgr *workflow.RunManager, runID, phase string) {
 	t.Helper()
 	got := ""
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the workflow reaches the phase", func() bool {
 		run, err := mgr.Store.Runs.Get(ctx, runID)
 		if err != nil || run == nil {
 			return false
@@ -48,50 +50,64 @@ func waitWorkflowPhase(t *testing.T, ctx context.Context, mgr *workflow.RunManag
 	})
 }
 
+func activeWorkflowVersion(workflowID string) string {
+	switch workflowID {
+	case "bugbash":
+		return "1.1.0"
+	case "recon-pack":
+		return "1.0.1"
+	default:
+		return "1.0.0"
+	}
+}
+
 func startTopologyWorkflowRun(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, workflowID string) *api.WorkflowRun {
 	t.Helper()
-	version := "1.0.0"
-	if workflowID == "bugbash" {
-		version = "1.1.0"
-	}
 	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
-		WorkflowID: workflowID, WorkflowVersion: version,
+		WorkflowID: workflowID, WorkflowVersion: activeWorkflowVersion(workflowID),
 	})
 	testutil.FailErr(t, "StartHuman "+workflowID, err)
 	return run
 }
 
-func fanOutLegsForSession(t *testing.T, h *Harness, sessionID string) []api.Leg {
+func fanOutWorkersForRun(t *testing.T, h *Harness, runID string) []api.WorkerTask {
 	t.Helper()
-	if h == nil || h.Delegations.Store == nil {
-		t.Fatal("delegation store required")
+	if h == nil || h.Workers.Records == nil || h.Workers.Queue == nil {
+		t.Fatal("worker records and queue required")
 	}
-	delegationID, ok := h.Delegations.Store.DelegationBySessionID(sessionID)
-	if !ok {
-		t.Fatal("expected topology delegation for session")
+	records, err := h.Workers.Records.ByWorkflowRun(context.Background(), runID)
+	testutil.FailErr(t, "ByWorkflowRun", err)
+	if len(records) == 0 {
+		t.Fatal("expected topology workers for workflow run")
 	}
-	legs, err := h.Delegations.Store.ListLegs(context.Background(), delegationID)
-	testutil.FailErr(t, "ListLegs", err)
-	return legs
+	tasks, err := h.Workers.Queue.ListByWorkflowRunID(context.Background(), runID)
+	testutil.FailErr(t, "ListByWorkflowRunID", err)
+	out := make([]api.WorkerTask, 0, len(tasks))
+	for _, task := range tasks {
+		if task.WorkflowWorkID != "" {
+			out = append(out, task)
+		}
+	}
+	return out
 }
 
-func assertFanOutWorkers(t *testing.T, legs []api.Leg, wantProfile string, wantCount int) {
+func assertFanOutWorkers(t *testing.T, tasks []api.WorkerTask, wantProfile string, wantCount int) {
 	t.Helper()
-	if len(legs) != wantCount {
-		t.Fatalf("fan_out legs = %d want %d", len(legs), wantCount)
+	if len(tasks) != wantCount {
+		t.Fatalf("fan_out workers = %d want %d", len(tasks), wantCount)
 	}
-	for _, leg := range legs {
-		if leg.AgentType != wantProfile {
-			t.Fatalf("leg %q agent = %q want %q", leg.ID, leg.AgentType, wantProfile)
+	for _, task := range tasks {
+		if task.AgentType != wantProfile {
+			t.Fatalf("worker %q agent = %q want %q", task.ID, task.AgentType, wantProfile)
 		}
-		if leg.Status != api.LegStatusComplete {
-			t.Fatalf("leg %q status = %q want complete", leg.ID, leg.Status)
+		if task.Status != api.WorkerStatusComplete {
+			t.Fatalf("worker %q status = %q want complete", task.ID, task.Status)
 		}
 	}
 }
 
 // Expected worker profiles and counts come from the run's topology.
-func assertFanOutWorkersMatchTopology(t *testing.T, h *Harness, runID string, legs []api.Leg) {
+func assertFanOutWorkersMatchTopology(t *testing.T, h *Harness, runID string, tasks []api.WorkerTask) {
 	t.Helper()
 	m, err := h.Workflows.Manager.Resolver.ForRunID(context.Background(), runID)
 	testutil.FailErr(t, "manifest for run "+runID, err)
@@ -105,7 +121,7 @@ func assertFanOutWorkersMatchTopology(t *testing.T, h *Harness, runID string, le
 	if spec.FanOut.MaxWorkers > 0 && spec.FanOut.MaxWorkers < wantCount {
 		wantCount = spec.FanOut.MaxWorkers
 	}
-	assertFanOutWorkers(t, legs, spec.FanOut.ProfileID, wantCount)
+	assertFanOutWorkers(t, tasks, spec.FanOut.ProfileID, wantCount)
 }
 
 func deliverTopologyReport(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, runID string) {
@@ -151,7 +167,7 @@ func scaffoldTopologyOutput(t *testing.T, mgr *workflow.RunManager, runID, stage
 func startWorkflowRunAt(t *testing.T, h *Harness, ctx context.Context, sess *api.Session, workflowID, wantPhase string) *api.WorkflowRun {
 	t.Helper()
 	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
-		WorkflowID: workflowID, WorkflowVersion: "1.0.0",
+		WorkflowID: workflowID, WorkflowVersion: activeWorkflowVersion(workflowID),
 	})
 	testutil.FailErr(t, "StartHuman "+workflowID, err)
 	if run.CurrentPhase != wantPhase {
@@ -190,7 +206,7 @@ func satisfyFanoutPlannedAndAdvance(t *testing.T, h *Harness, ctx context.Contex
 	}
 }
 
-func settleScanObligationAndAdvance(t *testing.T, h *Harness, ctx context.Context, runID, wantPhase string) {
+func SettleScanObligationAndAdvance(t *testing.T, h *Harness, ctx context.Context, runID, wantPhase string) {
 	t.Helper()
 	run, err := h.Workflows.Manager.Store.Runs.Get(ctx, runID)
 	testutil.FailErr(t, "get run", err)
@@ -240,11 +256,11 @@ func appendSucceededReviewAgent(t *testing.T, h *Harness, ctx context.Context, s
 	testutil.FailErr(t, "bind reviewer "+agent, h.Workflows.Manager.Fanout.BindWorkflowTask(ctx, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}, workID, &task))
 	testutil.FailErr(t, "enqueue defaults "+agent, worker.ApplyEnqueueDefaults(&task,
 		project.ProjectScope{ProjectID: sess.ProjectID, WorkspacePath: sess.WorkspacePath}, worker.DefaultWorkersConfig()))
-	workerID, err := h.Delegations.Queue.Enqueue(ctx, task)
+	workerID, err := h.Workers.Queue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue "+agent, err)
 	child, err := h.Store.CreateChild(ctx, sess, api.SpawnChildRequest{AgentType: agent, Prompt: "review " + agent})
 	testutil.FailErr(t, "CreateChild "+agent, err)
-	testutil.FailErr(t, "link "+agent, h.Delegations.Queue.SetChildSessionID(ctx, workerID, child.ID))
+	testutil.FailErr(t, "link "+agent, h.Workers.Queue.SetChildSessionID(ctx, workerID, child.ID))
 	completeQueuedFixtureWork(t, h, ctx, sess.ProjectID, workerID)
 	testutil.FailErr(t, "AppendMessages "+agent, h.Store.AppendMessages(ctx, sess.ID, api.Message{
 		Role: api.MessageRoleTool,
@@ -302,7 +318,7 @@ func satisfyWorkerCycleAndAdvance(t *testing.T, h *Harness, ctx context.Context,
 func completeQueuedFixtureWork(t *testing.T, h *Harness, ctx context.Context, projectID, target string) {
 	t.Helper()
 	for {
-		claimed, err := h.Delegations.Queue.ClaimNext(ctx, worker.ClaimRequest{ProjectID: projectID, ClaimedBy: "review-fixture", ExecutionTarget: api.ExecutionTargetLocal})
+		claimed, err := h.Workers.Queue.ClaimNext(ctx, worker.ClaimRequest{ProjectID: projectID, ClaimedBy: "review-fixture", ExecutionTarget: api.ExecutionTargetLocal})
 		testutil.FailErr(t, "claim fixture work", err)
 		if claimed == nil {
 			t.Fatalf("fixture task %s is not claimable", target)
@@ -315,12 +331,12 @@ func completeQueuedFixtureWork(t *testing.T, h *Harness, ctx context.Context, pr
 				report.CoverageReview = coverageReviewFixture(assignment.Subject.Facts)
 			}
 		}
-		won, err := h.Delegations.Queue.Complete(ctx, claimed, api.WorkerResult{Status: "complete", CompletionReport: report})
+		won, err := h.Workers.Queue.Complete(ctx, claimed, api.WorkerResult{Status: "complete", CompletionReport: report})
 		testutil.FailErr(t, "complete fixture work", err)
 		if !won {
 			t.Fatal("fixture claim lost")
 		}
-		testutil.FailErr(t, "deliver fixture outcome", h.Delegations.Queue.MarkOutcomeDelivered(ctx, claimed.ID))
+		testutil.FailErr(t, "deliver fixture outcome", h.Workers.Queue.MarkOutcomeDelivered(ctx, claimed.ID))
 		if claimed.ID == target {
 			return
 		}
@@ -344,4 +360,47 @@ func coverageReviewFixture(facts reviewcoverage.Facts) *api.CoverageReview {
 	}
 
 	return &review
+}
+
+func RoutingTurnHistory(history []api.Message, prompt string) []api.Message {
+	out := append([]api.Message(nil), history...)
+	msg := api.Message{
+		Role:       api.MessageRoleUser,
+		Origin:     api.MessageOriginUser,
+		Visibility: api.MessageVisibilityTranscript,
+		Content:    prompt,
+	}
+	if prompt == surface.HostLoopWakeSentinel {
+		msg.Origin = api.MessageOriginHost
+		msg.Visibility = api.MessageVisibilityInternal
+		msg.Kind = api.MessageKindHostLoopWake
+	}
+	return append(out, msg)
+}
+
+func RunSource(run *api.WorkflowRun) anchor.RunSource {
+	if run == nil {
+		return nil
+	}
+	return testRunSource{
+		workflowID:      run.WorkflowID,
+		workflowVersion: run.WorkflowVersion,
+	}
+}
+
+type testRunSource struct {
+	workflowID      string
+	workflowVersion string
+}
+
+func (s testRunSource) WorkflowIdentity() (string, string) {
+	return s.workflowID, s.workflowVersion
+}
+
+func CompleteCoverageReview(facts reviewcoverage.Facts, citation api.CitationGroundingCitedEvidence) *api.CoverageReview {
+	review := &api.CoverageReview{Revision: facts.Revision}
+	for _, fact := range facts.Obligations {
+		review.Assessments = append(review.Assessments, api.CoverageAssessment{ID: fact.ID, Disposition: reviewcoverage.Satisfied, Reason: "Required source scope and recorded outcomes were independently reviewed.", CitedEvidence: []api.CitationGroundingCitedEvidence{citation}})
+	}
+	return review
 }

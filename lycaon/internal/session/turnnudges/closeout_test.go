@@ -27,7 +27,7 @@ func (r *recordedKick) RenderKick(_ context.Context, name string, data map[strin
 func TestCloseoutPreservesCancellationAndIterationContext(t *testing.T) {
 	setupanchor.Install()
 	r := &recordedKick{}
-	s := New(turnload.NewLedger(), nil, nil)
+	s := New(turnload.NewLedger(), nil)
 	s.SetPrompts(r)
 	child := &api.Session{ID: "child", ParentSessionID: "parent"}
 	n := s.Closeout(t.Context(), child, "implementer", promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutCanceled, CancelReason: "human stopped the job"})
@@ -42,26 +42,19 @@ func TestCloseoutPreservesCancellationAndIterationContext(t *testing.T) {
 	if n.SignalID != string(anchor.TurnIterationsLow) || r.data["remaining"] != 3 {
 		t.Fatalf("iteration guidance=%+v data=%v", n, r.data)
 	}
-	n = s.BudgetAnswer(anchor.WorkerBudgetRaised)(t.Context(), child, 4, 9)
-	if n.Content == "" || r.data["tool_loops_used"] != 4 || r.data["max_tool_loops"] != 9 || r.data["remaining"] != 5 {
-		t.Fatalf("budget guidance=%+v data=%v", n, r.data)
-	}
-	if n = s.BudgetAnswer(anchor.WorkerBudgetRaised)(t.Context(), &api.Session{ID: "parent"}, 4, 9); n.Content != "" {
-		t.Fatalf("worker budget leaked to coordinator: %+v", n)
-	}
 }
 
 // AC-COMPAT-08: both forced final turns read exactly what Closeout sends.
 func TestForcedFinalTurnKicksReadWhatCloseoutSends(t *testing.T) {
 	setupanchor.Install()
 	r := &recordedKick{}
-	s := New(turnload.NewLedger(), nil, nil)
+	s := New(turnload.NewLedger(), nil)
 	s.SetPrompts(r)
 	s.Closeout(t.Context(), &api.Session{ID: "parent"}, "coordinator", promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutLLMTimeout})
 	reference := regexp.MustCompile(`(?:\{\{\s*|\{%\s*if\s+)(\w+)`)
 	for _, stem := range []string{"coordinator-closeout", "coordinator-turn-closeout"} {
-		raw, _, err := prompts.DefaultBundledLayout().ReadBundled("guidance/" + stem + ".md")
-		testutil.FailErr(t, "prompts.DefaultBundledLayout failed", err)
+		raw, _, err := (prompts.BundledLayout{}).ReadBundled("guidance/" + stem + ".md")
+		testutil.FailErr(t, "read bundled template", err)
 		reads := map[string]bool{}
 		for _, match := range reference.FindAllStringSubmatch(string(raw), -1) {
 			reads[match[1]] = true

@@ -103,11 +103,11 @@ run_go_tests go-test
 
 if command -v bun >/dev/null 2>&1; then
   run_plain den:typecheck -- bash "${ROOT}/scripts/repo-snapshot-lock.sh" read -- bash -c "cd '${DEN_DIR}' && bun run typecheck"
-  LYCAON_VITEST_FAST=1 run_vitest_tests den:test:fast
+  run_vitest_tests den:test
   run_plain den:harness:canary -- bash "${ROOT}/scripts/den-harness-canary.sh"
 else
   record den:typecheck SKIP
-  record den:test:fast SKIP
+  record den:test SKIP
   record den:harness:canary SKIP
 fi
 

@@ -214,8 +214,5 @@ func (p *LocalWorkerPoller) deliverOutcome(ctx context.Context, task api.WorkerT
 		return fmt.Errorf("acknowledge outcome for %s: %w", task.ID, err)
 	}
 	p.Outcomes.OnOutcomeDelivered(ctx, task)
-	if p.ParentWaiter != nil {
-		p.ParentWaiter.NotifyParent(task.ParentSessionID)
-	}
 	return nil
 }

@@ -309,11 +309,9 @@ func TestListenerSweepSharedScanCoalescingAndPortChangeEvents(t *testing.T) {
 		}
 	}
 
-	time.Sleep(80 * time.Millisecond)
-	scansAfterIdle := scanCount.Load()
-	time.Sleep(220 * time.Millisecond)
-	if later := scanCount.Load(); later != scansAfterIdle {
-		t.Fatalf("sweeper continued scanning after all background jobs ended: before=%d after=%d", scansAfterIdle, later)
+	// The last job's end stops the sweep loop before its completion is visible.
+	if reg.Lifecycle.ListenerSweepRunning() {
+		t.Fatal("sweeper kept running after all background jobs ended")
 	}
 }
 

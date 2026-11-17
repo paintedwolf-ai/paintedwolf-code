@@ -19,6 +19,16 @@ func (q *Queries) DeleteWorkerDecision(ctx context.Context, childSessionID strin
 	return err
 }
 
+const deleteWorkerDecisionByJob = `-- name: DeleteWorkerDecisionByJob :exec
+DELETE FROM worker_decisions
+WHERE job_id = ?
+`
+
+func (q *Queries) DeleteWorkerDecisionByJob(ctx context.Context, jobID string) error {
+	_, err := q.db.ExecContext(ctx, deleteWorkerDecisionByJob, jobID)
+	return err
+}
+
 const getWorkerDecision = `-- name: GetWorkerDecision :one
 SELECT child_session_id, job_id, decision_json, created_at
 FROM worker_decisions

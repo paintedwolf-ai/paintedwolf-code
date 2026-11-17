@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -32,7 +32,7 @@ func TestBlueprintManagerProjectsCanonicalApproval(t *testing.T) {
 		t.Fatalf("path = %q: %v", p.Path, err)
 	}
 	_, err = sqlDB.ExecContext(ctx, `INSERT INTO blueprint_approvals(project_id, path, content_digest, workflow_revision, status, approved_at, approved_via, approved_by_person_id, session_id) VALUES (?, ?, ?, 0, 'approved', ?, 'api', (SELECT id FROM people WHERE role = 'owner'), 'sess-approval')`,
-		testdbseed.DefaultProjectID, p.Path, ContentDigest(p.Content), db.FormatTime(p.UpdatedAt))
+		testdbseed.DefaultProjectID, p.Path, ContentDigest(p.Content), timelayout.Format(p.UpdatedAt))
 	testutil.FailErr(t, "insert canonical approval", err)
 	approved, err := mgr.Get(ctx, testdbseed.DefaultProjectID, p.Path)
 	testutil.FailErr(t, "mgr.Get failed", err)

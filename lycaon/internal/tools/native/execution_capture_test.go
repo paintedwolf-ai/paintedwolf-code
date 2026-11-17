@@ -71,9 +71,7 @@ func TestBufferedBytesRefusesGrowthWithoutLosingPriorBody(t *testing.T) {
 	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 64 << 10, State: 96 << 10})
 	testutil.FailErr(t, "toolcontract.NewProgramMemory failed", err)
 	buffer, err := (ExecutionRevisions{Memory: memory}).NewBufferedBytes(t.Context(), 128<<10, "whole_file_bytes")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "allocate buffered bytes", err)
 	original := bytes.Repeat([]byte{'x'}, 64<<10)
 	if _, err = buffer.Write(original); err != nil {
 		testutil.FailErr(t, "buffer.Write failed", err)
@@ -93,9 +91,7 @@ func TestBufferedBytesResetReusesOnlyAdmittedCapacity(t *testing.T) {
 	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: 4096})
 	testutil.FailErr(t, "toolcontract.NewProgramMemory failed", err)
 	buffer, err := (ExecutionRevisions{Memory: memory}).NewBufferedBytes(t.Context(), 4096, "record_bytes")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "allocate buffered bytes", err)
 	for range 100 {
 		if err := buffer.Reset(); err != nil {
 			testutil.FailErr(t, "buffer.Reset failed", err)

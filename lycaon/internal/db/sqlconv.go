@@ -8,10 +8,6 @@ import (
 	"github.com/lycaon/lycaon/internal/timelayout"
 )
 
-func FormatTime(t time.Time) string {
-	return timelayout.Format(t)
-}
-
 func ParseTime(s string) (time.Time, error) {
 	if s == "" {
 		return time.Time{}, nil
@@ -69,7 +65,7 @@ func NullTimePtr(t *time.Time) sql.NullString {
 	if t == nil || t.IsZero() {
 		return sql.NullString{}
 	}
-	return sql.NullString{String: FormatTime(*t), Valid: true}
+	return sql.NullString{String: timelayout.Format(*t), Valid: true}
 }
 
 // INPlaceholders returns n comma-separated ? markers for parameterized IN clauses.

@@ -18,7 +18,7 @@ import (
 func createAPISessionForProject(t *testing.T, serve http.Handler, projectDir, posture string) wire.Session {
 	t.Helper()
 	createBody := `{"roots":[{"path":"` + projectDir + `"}]}`
-	createReq := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(createBody))
+	createReq := AuthedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
 	createRec := httptest.NewRecorder()
 	serve.ServeHTTP(createRec, createReq)
@@ -48,7 +48,7 @@ postures:
   spec:
     label: Audit
 `), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 
 	sess := createAPISessionForProject(t, srv, projectDir, "spec")
@@ -77,11 +77,11 @@ postures:
   plan:
     label: Plan
 `), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 
 	createBody := `{"roots":[{"path":"` + projectDir + `"}]}`
-	createReq := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(createBody))
+	createReq := AuthedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(createBody))
 	createReq.Header.Set("Content-Type", "application/json")
 	createRec := httptest.NewRecorder()
 	srv.ServeHTTP(createRec, createReq)
@@ -93,7 +93,7 @@ postures:
 		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
 	body := `{"project_id":"` + proj.ID + `","posture":"spec"}`
-	req := authedRequest(t, http.MethodPost, "/v1/sessions", strings.NewReader(body))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -104,7 +104,7 @@ postures:
 	if err := json.Unmarshal(w.Body.Bytes(), &sess); err != nil {
 		testutil.FailErr(t, "decode accepted session", err)
 	}
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the session is in error", func() bool {
 		stored, err := h.Store.Get(t.Context(), sess.ID)
 		return err == nil && stored.Status == wire.SessionStatusError
 	})
@@ -125,11 +125,11 @@ postures:
   spec:
     label: Audit
 `), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 
 	createBody := `{"roots":[{"path":"` + projectDir + `"}]}`
-	req := authedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(createBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/projects", strings.NewReader(createBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

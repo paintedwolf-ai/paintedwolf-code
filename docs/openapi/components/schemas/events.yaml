@@ -190,6 +190,30 @@ components:
         worker_id:
           type: string
           format: uuid
+        worker_record_id:
+          type: string
+          format: uuid
+        worker_name:
+          type: string
+        round:
+          type: integer
+          minimum: 1
+        result_handle:
+          type: string
+          format: uuid
+        result_disposition:
+          $ref: worker.yaml#/components/schemas/WorkerResultDisposition
+        shelve_reason:
+          type: string
+        review_of:
+          type: string
+          format: uuid
+        parked_reason:
+          type: string
+        parked_until_at:
+          x-go-type: "string"
+          type: string
+          format: date-time
         status:
           $ref: worker.yaml#/components/schemas/WorkerStatus
         agent_type:
@@ -205,13 +229,6 @@ components:
           description: Worker assignment goal used for card titles.
         merge_status:
           $ref: worker.yaml#/components/schemas/WorkerMergeStatus
-        max_tool_loops:
-          type: integer
-          minimum: 0
-        budget_request:
-          x-go-pointer: true
-          $ref: worker.yaml#/components/schemas/WorkerBudgetRequest
-          description: The worker's unanswered request for more tool rounds; absent once granted
         tool_loops_used:
           type: integer
           minimum: 0
@@ -257,26 +274,6 @@ components:
           $ref: board.yaml#/components/schemas/BoardView
         detail_level:
           $ref: board.yaml#/components/schemas/BoardDetailLevel
-    DelegationEvent:
-      x-go-generate: true
-      type: object
-      required:
-      - delegation_id
-      - status
-      - phase
-      additionalProperties: false
-      properties:
-        delegation_id:
-          type: string
-          format: uuid
-        status:
-          $ref: delegation.yaml#/components/schemas/DelegationStatus
-        leg_id:
-          description: The leg whose transition this is; absent for the delegation's own.
-          type: string
-          format: uuid
-        phase:
-          $ref: delegation.yaml#/components/schemas/DelegationPhase
     LLMTokenCounts:
       x-go-generate: true
       type: object

@@ -50,6 +50,9 @@ func (r Assignments) Bind(ctx context.Context, run *api.WorkflowRun, task *api.W
 			binding.Purpose = reviewcoverage.QuestionReview
 		}
 	}
+	if def.AssignmentBinding == "explicit" && task.WorkflowWorkID == "" {
+		return nil
+	}
 	if binding.QuestionID == "" && !slices.Contains(runstate.DedupeReviewAgents(def.RequiredAgents, def.IfSpawnable), task.AgentType) {
 		return nil
 	}

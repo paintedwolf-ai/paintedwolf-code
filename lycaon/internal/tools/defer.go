@@ -25,15 +25,3 @@ func HideSkillsReadWhenEmpty(metas []ToolMeta, skillCount int) []ToolMeta {
 	}
 	return out
 }
-
-// FilterDeferredMetas drops deferred tools that the session has not activated.
-func FilterDeferredMetas(metas []ToolMeta, activated map[string]bool) []ToolMeta {
-	out := make([]ToolMeta, 0, len(metas))
-	for _, meta := range metas {
-		if meta.Deferred && !activated[meta.Name] {
-			continue
-		}
-		out = append(out, meta)
-	}
-	return out
-}

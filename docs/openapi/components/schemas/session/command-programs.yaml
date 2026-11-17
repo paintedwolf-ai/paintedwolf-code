@@ -302,6 +302,10 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CommandActivitySpan'
+        action:
+          x-go-pointer: true
+          $ref: actions.yaml#/components/schemas/ActionDescriptor
+          description: Card for this activity; projected on read and in live snapshots, never stored.
     CommandActivitySpan:
       x-go-generate: true
       type: object

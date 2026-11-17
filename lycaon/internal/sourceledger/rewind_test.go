@@ -3,6 +3,7 @@ package sourceledger
 import (
 	"bytes"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -91,9 +92,9 @@ func TestRewindPlanChecksTheFinalEffectByteBudget(t *testing.T) {
 	s, ctx := openLedger(t)
 	testdbseed.InsertSession(t, s.sqlDB, "s1", "p1")
 	insertWalkMessage(t, s, "first", "s1", "", "transcript", "first", 1)
-	before := bytes.Repeat([]byte("a"), MaxRevisionContentBytes)
+	before := bytes.Repeat([]byte("a"), sourceblob.MaxRevisionContentBytes)
 	for i := range 9 {
-		after := bytes.Repeat([]byte{byte('b' + i)}, MaxRevisionContentBytes)
+		after := bytes.Repeat([]byte{byte('b' + i)}, sourceblob.MaxRevisionContentBytes)
 		mustRecord(t, s, ctx, RecordInput{
 			RecordLocation: RecordLocation{RootID: "r1", Path: "file"}, ProjectID: "p1", SessionID: "s1", Turn: 1, Origin: api.SourceChangeOriginAgent, Op: api.SourceChangeOpWrite, Before: before, After: after})
 		if i >= 7 {

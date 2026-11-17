@@ -8,6 +8,12 @@ from ci_policy import verification_report as ci
 
 
 class VerificationReportTests(unittest.TestCase):
+    def test_every_job_records_the_commit_and_tree_it_checked_out(self):
+        with patch.object(ci.subprocess, "check_output", side_effect=["a" * 40 + "\n", "b" * 40 + "\n"]) as git:
+            self.assertEqual(ci.source(), {"sha": "a" * 40, "tree": "b" * 40})
+        self.assertEqual([call.args[0] for call in git.call_args_list],
+                         [["git", "rev-parse", "HEAD"], ["git", "rev-parse", "HEAD^{tree}"]])
+
     def test_report_names_what_did_not_pass_in_the_summary_and_annotations(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -37,16 +43,18 @@ class VerificationReportTests(unittest.TestCase):
                 "started_at": 100.0, "finished_at": 160.0, "status": "failed"
             }))
             summary = root / "summary.md"
-            with patch.object(ci, "artifact_root", return_value=root), \
+            source = {"sha": "a" * 40, "tree": "b" * 40}
+            with patch.object(ci, "artifact_root", return_value=root), patch.object(ci, "source", return_value=source), \
                     patch.dict(ci.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}), \
                     patch("builtins.print") as printed:
                 ci.report("failure")
             record = json.loads((root / "ci" / "run.json").read_text())
             self.assertEqual(record["passed_stages"], [])
+            self.assertEqual(json.loads((root / "ci" / "source.json").read_text()), source)
             # When a stage inside a batch receipt passes all subjects, passed_stages records it.
             receipts["1-go.json"]["evidence"].append({"stage": "build", "results": {"task": {"status": "passed"}}})
             (batch / "1-go.json").write_text(json.dumps(receipts["1-go.json"]))
-            with patch.object(ci, "artifact_root", return_value=root), \
+            with patch.object(ci, "artifact_root", return_value=root), patch.object(ci, "source", return_value=source), \
                     patch.dict(ci.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}), \
                     patch("builtins.print"):
                 ci.report("failure")

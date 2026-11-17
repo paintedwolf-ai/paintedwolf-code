@@ -12,7 +12,7 @@ import (
 var pathParamRE = regexp.MustCompile(`\{[^}]+\}`)
 
 func LoadServerRoutes(repoRoot string) ([]openAPIRoute, error) {
-	operations, err := loadGeneratedOperations(repoRoot)
+	operations, err := GeneratedOperations(repoRoot)
 	if err != nil {
 		return nil, err
 	}
@@ -123,10 +123,6 @@ func collectServerRoutes(body *ast.BlockStmt, prefix string, operations map[stri
 // GeneratedOperations maps each generated operation variable in
 // lycaon/internal/api/operations.generated.go to its route and operationId.
 func GeneratedOperations(repoRoot string) (map[string]openAPIRoute, error) {
-	return loadGeneratedOperations(repoRoot)
-}
-
-func loadGeneratedOperations(repoRoot string) (map[string]openAPIRoute, error) {
 	path := filepath.Join(repoRoot, "lycaon", "internal", "api", "operations.generated.go")
 	fset := token.NewFileSet()
 	file, err := parser.ParseFile(fset, path, nil, 0)

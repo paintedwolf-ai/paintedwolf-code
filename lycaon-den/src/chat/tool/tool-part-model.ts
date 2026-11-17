@@ -1,5 +1,6 @@
 import type { CommandActivityView } from "./command-activity-model.ts";
 import type {
+  ActionDescriptor,
   Message,
   ChatContentReference,
   ToolCall,
@@ -24,12 +25,11 @@ import {
   type ToolArgsRedaction,
 } from "../transcript/content/redaction-spans.ts";
 import { resolveChickletTitle } from "./tool-chicklet-titles.ts";
-import { skillReadResource, skillResourceTitle } from "../skill/skill-card-model.ts";
+import { skillReadResource, skillResourceTitle } from "../skill/skill-read.ts";
 import {
   COORDINATOR_INTERNAL_TOOLS,
   LONG_RUNNING_COORDINATOR_TOOLS,
   TOOL_CARD_KINDS,
-  TOOL_CHICKLET_RUNNING_LABELS,
 } from "./tool-presentation.generated.ts";
 import {
   getBackgroundProcessSnapshot,
@@ -118,6 +118,10 @@ export interface ToolPartView {
   codes?: string[];
   /** Structured guidance facts. */
   feedback?: ToolFeedback[];
+  /** The host's account of this action for the action card. */
+  action?: ActionDescriptor;
+  /** Further calls the host folded into this card, such as one terminal session's. */
+  foldMembers?: ToolPartView[];
 }
 
 const TOOL_PART_KINDS = new Set<string>([
@@ -131,7 +135,9 @@ const TOOL_PART_KINDS = new Set<string>([
 
 /** Host-declared card rendering family. */
 export function classifyToolKind(toolName: string): ToolPartKind {
-  const kind = TOOL_CARD_KINDS[toolName.toLowerCase()];
+  const lower = toolName.toLowerCase();
+  if (lower === "delegate_dispatch") return "task";
+  const kind = TOOL_CARD_KINDS[lower];
   return kind && TOOL_PART_KINDS.has(kind) ? (kind as ToolPartKind) : "generic";
 }
 
@@ -278,6 +284,11 @@ export function shouldOmitToolPartFromTranscript(
   return !options.verboseMode;
 }
 
+/** Whether a tool's row is drawn before its result arrives; fixed per tool and view. */
+export function toolDrawsWhileRunning(toolName: string, options: ToolPartTranscriptOmitOptions): boolean {
+  return !shouldOmitToolPartFromTranscript(undefined, toolName, options);
+}
+
 /** One-line label for collapsed group hints and card summaries. */
 export function toolPartSummaryTitle(part: ToolPartView): string {
   // The host-stamped skill identifies the activation reliably.
@@ -366,19 +377,8 @@ export function toolPartFromCall(
     outcome: resultMsg?.tool_result?.outcome,
     codes: resultMsg?.tool_result?.codes,
     feedback: resultMsg?.tool_result?.feedback,
+    action: resultMsg?.tool_result?.action ?? call.action,
   };
-}
-
-export function toolResultText(part: ToolPartView): string | null {
-  if (part.status === "error") {
-    return part.error ?? part.output ?? null;
-  }
-  if (part.status === "completed") return part.output ?? null;
-  // Yielded/background command: the tool returned a handle while still running.
-  if (part.status === "running" && liveToolProcess(part)) {
-    return part.output ?? null;
-  }
-  return null;
 }
 
 export function toolSummaryFields(
@@ -456,19 +456,4 @@ export function isLoopbackTarget(args?: Record<string, unknown>): boolean {
       lower.includes("::1")
     );
   }
-}
-
-export function toolRunningLabel(part: ToolPartView): string {
-  const tool = part.tool.toLowerCase();
-  if (part.args?.background === true && part.kind === "command") {
-    return "Background process…";
-  }
-  if (tool === "http_request" && isLoopbackTarget(part.args)) {
-    return "Testing endpoint…";
-  }
-  const mapped = TOOL_CHICKLET_RUNNING_LABELS[tool];
-  if (mapped) return mapped;
-  if (part.kind === "read") return "Reading…";
-  if (part.kind === "write") return "Writing…";
-  return "Running…";
 }

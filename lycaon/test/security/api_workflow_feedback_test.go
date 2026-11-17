@@ -28,7 +28,7 @@ func TestFeedbackPhaseBlocksAdvanceUntilSubmit(t *testing.T) {
 	srv := h.Server
 	run := startHarnessRun(t, h, sess.ID, "feedback-api", "1.0.0")
 
-	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
+	req := AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusConflict {
@@ -54,7 +54,7 @@ func TestFeedbackSubmitUnblocksAdvance(t *testing.T) {
 	srv := h.Server
 	run := startHarnessRun(t, h, sess.ID, "feedback-submit", "1.0.0")
 
-	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/feedback/clarify", workflowCommandBody(t, srv, run.ID, map[string]any{"response": "Use REST"}))
+	req := AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/feedback/clarify", workflowCommandBody(t, srv, run.ID, map[string]any{"response": "Use REST"}))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)

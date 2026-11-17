@@ -24,7 +24,7 @@ func TestPlanWorkflowAdvanceToImplementInvokesChildRun(t *testing.T) {
 	}
 
 	startBody := planStartBody
-	req := authedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
+	req := AuthedRequest(t, http.MethodPost, "/v1/sessions/"+sess.ID+"/workflow-runs", strings.NewReader(startBody))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
@@ -35,7 +35,7 @@ func TestPlanWorkflowAdvanceToImplementInvokesChildRun(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &run); err != nil {
 		testutil.FailErr(t, "unmarshal JSON document", err)
 	}
-	seedPlanStub(t, blueprintMgr, run.ProjectID, run.BlueprintPath)
+	SeedPlanStub(t, blueprintMgr, run.ProjectID, run.BlueprintPath)
 	run = advancePlanRunToExecuteHTTP(t, h, srv, blueprintMgr, sess, run)
 	if run.CurrentPhase != "execute" {
 		t.Fatalf("phase = %q want execute", run.CurrentPhase)
@@ -52,7 +52,7 @@ func TestPlanWorkflowAdvanceToImplementInvokesChildRun(t *testing.T) {
 		t.Fatalf("child parent_run_id = %v want %q", active.ParentRunID, run.ID)
 	}
 
-	req = authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
+	req = AuthedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/advance", workflowCommandBody(t, srv, run.ID, nil))
 	w = httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusConflict {

@@ -60,8 +60,9 @@ func DecisionHandler(deps RequestDecisionDeps) tools.ToolHandler {
 				}
 			}
 		}
-		if len(options) < 2 {
-			return "", fmt.Errorf("provide at least 2 concrete options for the coordinator to choose from")
+		// No options asks an open question the coordinator answers in its own words.
+		if len(options) == 1 {
+			return "", fmt.Errorf("offer at least 2 concrete options, or none to ask an open question")
 		}
 		blockerClass := api.WorkerBlockerClass(strings.TrimSpace(stringArg(args, "blocker_class")))
 		if blockerClass == "" {
@@ -123,12 +124,10 @@ func DecisionHandler(deps RequestDecisionDeps) tools.ToolHandler {
 			return "", fmt.Errorf("store decision: %w", err)
 		}
 		body := map[string]any{
-			"status":           "decision_requested",
-			"job_id":           jobID,
-			"child_session_id": child,
-			"question":         question,
-			"options":          options,
-			"blocker_class":    blockerClass,
+			"status":        "decision_requested",
+			"question":      question,
+			"options":       options,
+			"blocker_class": blockerClass,
 		}
 		if artifactID != "" {
 			body["artifact_id"] = artifactID

@@ -122,8 +122,8 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 
 	ctx := context.Background()
 	dir := t.TempDir()
-	writeTestProjectApprovalsAllowWrite(t, dir)
-	_ = writeImplementFixture(t, dir)
+	WriteTestProjectApprovalsAllowWrite(t, dir)
+	_ = WriteImplementFixture(t, dir)
 	if err := os.WriteFile(filepath.Join(dir, "TODO.txt"), []byte("TODO: resolve later\n"), 0o600); err != nil {
 		testutil.FailErr(t, "seed TODO marker", err)
 	}
@@ -156,9 +156,9 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 		testutil.FailErr(t, "user Prompt", err)
 	}
 	var pending []wire.WorkerTask
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the worker task is pending", func() bool {
 		var err error
-		pending, err = h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
+		pending, err = h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(pending) == 1
 	})
 	testutil.FailErr(t, "ListBySession pending", err)
@@ -168,17 +168,17 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 	completeWorkerWrite(t, h, sess, pending[0], dir, "w1", "package main\n// TODO: resolve later\n", "Wrote main.go")
 
 	// Wait for repair dispatch.
-	testutil.WaitFor(t, func() bool { return stage.Load() >= 2 })
+	testutil.WaitFor(t, "the second stage starts", func() bool { return stage.Load() >= 2 })
 
 	t.Logf("stage 1 elapsed = %v", time.Since(start))
 
 	// Complete repair and wait for closeout.
 	stage2Start := time.Now()
-	testutil.WaitFor(t, func() bool {
-		tasks, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
+	testutil.WaitFor(t, "a worker task is pending", func() bool {
+		tasks, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(tasks) >= 1
 	})
-	pending2, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
+	pending2, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 	testutil.FailErr(t, "ListBySession follow-up pending", err)
 	if len(pending2) != 1 {
 		t.Fatalf("follow-up pending jobs = %d want 1", len(pending2))
@@ -186,7 +186,7 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 	completeWorkerWrite(t, h, sess, pending2[0], dir, "w2", "package main\n", "Resolved TODO in main.go")
 
 	// Drain the final coordinator wake.
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the session is idle", func() bool {
 		got, err := h.Store.Get(ctx, sess.ID)
 		return err == nil && got != nil && got.Status == wire.SessionStatusIdle
 	})
@@ -208,7 +208,7 @@ func completeWorkerWrite(t *testing.T, h *Harness, sess *wire.Session, job wire.
 	ctx := context.Background()
 	child, err := h.Store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: job.Prompt})
 	testutil.FailErr(t, "CreateChild "+callID, err)
-	testutil.FailErr(t, "SetChildSessionID "+callID, h.Delegations.Queue.SetChildSessionID(ctx, job.ID, child.ID))
+	testutil.FailErr(t, "SetChildSessionID "+callID, h.Workers.Queue.SetChildSessionID(ctx, job.ID, child.ID))
 	testutil.FailErr(t, "AppendMessages child "+callID, h.Store.AppendMessages(ctx, child.ID,
 		wire.Message{
 			Role: wire.MessageRoleAssistant,

@@ -1,4 +1,4 @@
-import type { EditorView } from "@codemirror/view";
+import { BlockType, type EditorView } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
 import { readReadingAnchor } from "./editor-reading-anchor.ts";
 
@@ -10,7 +10,7 @@ function view(blockHeight: number, scrollTop: number, contentLeft = 40, wrapping
     lineWrapping: wrapping,
     scrollDOM: { clientHeight: 600, clientWidth: 800, scrollWidth, scrollTop, getBoundingClientRect: () => PORT },
     contentDOM: { getBoundingClientRect: () => ({ left: contentLeft }) },
-    lineBlockAtHeight: () => ({ top: 0, height: blockHeight }),
+    lineBlockAtHeight: () => ({ top: 0, height: blockHeight, type: BlockType.Text }),
     documentTop: PORT.top - scrollTop,
     viewport: { from: 0, to: 1_000_000 },
     posAtCoords: ({ x, y }: { x: number; y: number }) => (x < PORT.left ? -1 : Math.floor((y - PORT.top + scrollTop) / 10)),
@@ -41,6 +41,20 @@ describe("reading anchor", () => {
 
   it("has none for an unwrapped line that fits sideways", () => {
     expect(readReadingAnchor(view(20, 5_000, 40, false, 800))).toBeNull();
+  });
+
+  it.each([
+    ["a block widget", BlockType.WidgetRange],
+    ["a text line carrying block widgets", [BlockType.WidgetBefore, BlockType.Text]],
+  ])("has none and reads no coordinates when the top block is %s", (_name, type) => {
+    const at = view(50_000, 5_000);
+    let reads = 0;
+    Object.assign(at, {
+      lineBlockAtHeight: () => ({ top: 0, height: 50_000, type }),
+      posAtCoords: () => { reads++; return 500; },
+    });
+    expect(readReadingAnchor(at)).toBeNull();
+    expect(reads).toBe(0);
   });
 
   it("probes inside the viewport when the content is scrolled sideways", () => {

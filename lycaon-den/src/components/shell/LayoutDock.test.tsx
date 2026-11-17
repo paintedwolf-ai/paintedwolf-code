@@ -232,11 +232,6 @@ describe("LayoutDockTray", () => {
     ).toBe("false");
   });
 
-  it("leaves dismissal to the shell — no listeners of its own", () => {
-    const source = readSourceText(join(denSrc, "components/shell/LayoutDock.tsx"), "utf8");
-    expect(source).not.toMatch(/addEventListener/);
-  });
-
   it("every catalog stage has a label the tray can name", () => {
     for (const stageId of CONTEXT_NAV_CATALOG) {
       expect(stageLabelFor(stageId).length).toBeGreaterThan(0);
@@ -292,31 +287,6 @@ describe("LayoutDockButton", () => {
     expect(live.querySelector(".den-layout-glyph--split")).toBeTruthy();
     live.click();
     expect(onToggle).toHaveBeenCalled();
-  });
-});
-
-describe("dock chrome CSS", () => {
-  it("splits the dock row evenly between its two links", () => {
-    const text = readSourceText(join(denSrc, "global-components.css"), "utf8");
-    expect(text).toMatch(/\.den-shell-dock-link\s*\{[^}]*flex:\s*1 1 0/);
-  });
-
-  it("washes the rail into the dock above the trays", () => {
-    const text = readSourceText(join(denSrc, "global-components.css"), "utf8");
-    const wash = text.match(
-      /\.den-shell-aside-main > \.den-shell-nav-dock::after\s*\{([^}]*)\}/,
-    )?.[1];
-    expect(wash, "dock wash missing").toBeTruthy();
-    expect(wash).toMatch(/bottom:\s*100%/);
-    // Rail wash uses --den-plane so it follows the chrome theme.
-    expect(wash).toMatch(/linear-gradient\(to top, var\(--den-plane\), transparent\)/);
-    expect(wash).toMatch(/pointer-events:\s*none/);
-  });
-
-  it("uses a two-up view chooser", () => {
-    const text = readSourceText(join(denSrc, "global-components.css"), "utf8");
-    const tiles = text.match(/\.den-layout-tray__tiles\s*\{([^}]*)\}/)?.[1];
-    expect(tiles).toMatch(/grid-template-columns:\s*repeat\(2, 1fr\)/);
   });
 });
 

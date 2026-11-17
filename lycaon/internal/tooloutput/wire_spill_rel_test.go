@@ -52,15 +52,3 @@ func TestAgentWireSpillScopeRelSeatbelt(t *testing.T) {
 		t.Fatal("evidence under host must not admit")
 	}
 }
-
-func TestIsAgentWireSpillReadArg(t *testing.T) {
-	if !tooloutput.IsAgentWireSpillReadArg("promote-spills/job-a.json") {
-		t.Fatal("relative wire")
-	}
-	if !tooloutput.IsAgentWireSpillReadArg("/tmp/host/promote-spills/job-a.json") {
-		t.Fatal("absolute leftover seatbelt")
-	}
-	if tooloutput.IsAgentWireSpillReadArg("/tmp/host/evidence/x.jsonl") {
-		t.Fatal("non-spill abs")
-	}
-}

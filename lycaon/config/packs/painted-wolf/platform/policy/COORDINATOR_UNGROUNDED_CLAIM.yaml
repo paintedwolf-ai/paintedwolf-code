@@ -3,24 +3,32 @@ id: COORDINATOR_UNGROUNDED_CLAIM
 kind: invariant
 on: coordinator.closeout_check
 selector: {}
-requires_facts: [paintedwolf.grounding_reason, paintedwolf.grounding_verdict, paintedwolf.leg_id]
+requires_facts: [paintedwolf.closeout_criteria_unmet, paintedwolf.closeout_round_incomplete, paintedwolf.grounding_verdict, paintedwolf.leg_id, paintedwolf.next_steps, paintedwolf.overlay_id, paintedwolf.unmet_criteria, paintedwolf.worker]
 when: paintedwolf.grounding_verdict == "COORDINATOR_UNGROUNDED_CLAIM"
 effect: block
 on_fire:
   - increment_breaker
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:grounding
-message: Coordinator claimed work completed without a recorded worker job
-what: 'Completed leg {{ paintedwolf.leg_id }} lacks required completion evidence.'
-cause: '{{ paintedwolf.grounding_reason }}'
-why: A leg's completed status must agree with its durable job, delivered summary, and completion criteria.
-fix: Inspect the named leg's current job and summary delivery. Await running work or recover its missing completion record; dispatch only work that remains undone, preserving any existing overlay.
-instead: Resolve the reported evidence gap before claiming the delegation is complete
+message: Completion claimed without a completed worker round behind it
+what: 'Planned work {{ paintedwolf.leg_id }} has no completed, reported round behind it.'
+cause: '{% if paintedwolf.closeout_round_incomplete %}The latest round of worker {{ paintedwolf.worker }} ended without completing.{% endif %}{% if paintedwolf.closeout_criteria_unmet %}Result {{ paintedwolf.overlay_id }} from worker {{ paintedwolf.worker }} does not meet: {{ paintedwolf.unmet_criteria }}.{% endif %}'
+why: Planned work counts as done only when a worker round completed and reported.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Claim the work complete only after a round completes and reports.
 x-paintedwolf-scenarios:
-  - id: default
+  - id: round-incomplete
     vars:
-      grounding_reason: Completion evidence is missing.
+      closeout_round_incomplete: true
       leg_id: leg-1
-      path: src/main.go
+      worker: parser-fix
+      overlay_id: res-1
       session_role: coordinator
-      tool: read
+  - id: summary-missing
+    vars:
+      closeout_criteria_unmet: true
+      leg_id: leg-1
+      worker: parser-fix
+      overlay_id: res-1
+      unmet_criteria: ["summary:present"]
+      session_role: coordinator

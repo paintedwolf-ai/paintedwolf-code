@@ -2862,91 +2862,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/delegations": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create a delegation */
-        post: operations["createDelegation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/delegations/{id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get delegation by ID */
-        get: operations["getDelegation"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/delegations/{id}/legs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List legs for a delegation */
-        get: operations["listDelegationLegs"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/delegations/{id}/dispatch": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Dispatch a delegation leg to a worker */
-        post: operations["dispatchDelegationLeg"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/v1/delegations/{id}/abort": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Abort a delegation */
-        post: operations["abortDelegation"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/v1/workflows": {
         parameters: {
             query?: never;
@@ -3272,6 +3187,23 @@ export interface paths {
         };
         /** List worker tasks for a project */
         get: operations["listWorkers"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/workers/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Read bounded round and message history for a session worker */
+        get: operations["getWorkerHistory"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5691,12 +5623,6 @@ export interface components {
             checked_at: string;
             fingerprint: string;
         };
-        BoardDelegationEntry: {
-            /** Format: uuid */
-            id: string;
-            phase: components["schemas"]["DelegationPhase"];
-            task?: string;
-        };
         /** @enum {string} */
         BoardDetailLevel: "status" | "compact" | "full" | "forensic";
         /** @description Present only when detail_level is forensic. Full worker job records for host debugging — not for routine coordination. */
@@ -5705,6 +5631,7 @@ export interface components {
             tasks: components["schemas"]["WorkerTask"][];
         };
         BoardGitRepoLine: {
+            /** Format: uuid */
             repo_id: string;
             label: string;
             branch?: string;
@@ -5714,8 +5641,8 @@ export interface components {
         };
         BoardGitSlice: {
             available: boolean;
-            /** @description Absent when the active folder is not in a git repository. */
-            repo_id?: string;
+            /** Format: uuid */
+            repo_id: string;
             label: string;
             branch?: string;
             head_short?: string;
@@ -5800,10 +5727,14 @@ export interface components {
             repo: components["schemas"]["RepoBrief"];
             git?: components["schemas"]["BoardGitSlice"];
             scans?: components["schemas"]["BoardScansSlice"];
-            roster?: components["schemas"]["BoardWorkerRosterEntry"][];
+            /** @description Open workers in the session, needing the coordinator and most recent first. */
+            workers?: components["schemas"]["BoardWorker"][];
+            /** @description Opaque cursor for the next page of workers when workers_has_more is true. */
+            workers_next_cursor?: string;
+            workers_has_more?: boolean;
+            workers_omitted?: number;
             promote_paths?: components["schemas"]["WorkerPromoteJobPathStatus"][];
             overlay_merge_plan?: components["schemas"]["OverlayMergePlan"];
-            delegation?: components["schemas"]["BoardDelegationEntry"][];
             active_workflow_run?: components["schemas"]["WorkflowRun"];
             forensic_workers?: components["schemas"]["BoardForensicWorkers"];
             cost: components["schemas"]["CostSummary"] | null;
@@ -5817,30 +5748,67 @@ export interface components {
             generated_at: string;
             now_line: string;
         };
-        BoardWorkerRosterEntry: {
-            dependencies?: components["schemas"]["WorkerDependency"][];
-            /** Format: uuid */
-            worker_id: string;
+        /** @description One worker as its coordinator sees it, with the state admission reads. */
+        BoardWorker: {
+            /**
+             * Format: uuid
+             * @description Durable worker record identity across rounds.
+             */
+            worker_id?: string;
+            name: string;
             agent_type: string;
-            status: components["schemas"]["WorkerStatus"];
-            merge_status?: components["schemas"]["WorkerMergeStatus"];
-            overlay_id?: string;
-            scope_summary?: string;
+            /**
+             * Format: uuid
+             * @description Child session reused across rounds once spawned.
+             */
+            child_session_id?: string;
+            /**
+             * Format: uuid
+             * @description Latest round job identity when at least one round exists.
+             */
+            latest_job_id?: string;
+            /** @description Latest 1-based round ordinal when at least one round exists. */
+            round?: number;
+            scope_mode?: string;
+            /** @description Derived workspace state for this worker (shared, retained, preparing, refreshed, reset, recovering). */
+            workspace_state?: string;
+            state: components["schemas"]["WorkerState"];
+            reason?: components["schemas"]["WorkerStateReason"];
+            /** @description Derived display label for state and reason. */
+            state_label?: string;
+            /** @description The worker's latest instruction, else its brief, clipped to one line. */
+            about?: string;
+            /** @description The pending decision an asking worker waits on. */
+            question?: string;
+            /** @description Active wait lease reason when the round is parked. */
+            parked_reason?: string;
+            /**
+             * Format: date-time
+             * @description Active wait lease deadline when the round is parked.
+             */
+            parked_until_at?: string;
+            /** @description Handle of the worker's latest result. */
+            result_handle?: string;
+            result_disposition?: components["schemas"]["WorkerResultDisposition"];
+            /** @description Coordinator reason recorded when the latest result is shelved. */
+            shelve_reason?: string;
+            /** @description Derived display label for result_disposition. */
+            disposition_label?: string;
+            /** @description Derived display label for workspace_state. */
+            workspace_label?: string;
+            /** @description Worker messages not yet delivered to a coordinator turn. */
+            unread_message_count?: number;
+            /**
+             * Format: date-time
+             * @description Most recent activity timestamp for recency ordering.
+             */
+            updated_at?: string;
+            read_paths?: string[];
+            read_omitted?: number;
             changed_paths?: string[];
-            touched_paths?: string[];
-            /** @description Worker assignment goal included in full board detail. */
-            brief?: string;
-            error?: string;
-            /** @description Effective worker tool-round ceiling when known (host default 20, maximum 120) */
-            max_tool_loops?: number;
-            /** @description The worker's unanswered request for more tool rounds; grant it with extend_worker_budget */
-            budget_request?: components["schemas"]["WorkerBudgetRequest"];
-            /** @description Completed tool rounds this worker run */
-            tool_loops_used?: number;
-            /** @description Repo-relative paths held by handoff_reserve for this worker */
+            changed_omitted?: number;
+            /** @description Repo-relative paths the worker's live round holds with handoff_reserve. */
             reservations?: string[];
-            /** @description True when checkpoint SSE reports a pending human checkpoint for this worker child session */
-            blocked_on_approval?: boolean;
         };
         /** @description Project orientation summary — languages detected by content via enry, listed in dominant-bytes order. */
         RepoBrief: {
@@ -5903,9 +5871,9 @@ export interface components {
             actions?: components["schemas"]["NoticeAction"][];
         };
         /** @enum {string} */
-        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "delegation" | "cost" | "llm" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "project_background" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "chat_vault" | "source_view";
+        EventTopic: "session" | "message" | "worker" | "checkpoint" | "board" | "cost" | "llm" | "activity" | "oar" | "scan" | "providers" | "model_policy" | "settings" | "workflow" | "grounding" | "findings" | "progress" | "queue" | "project" | "project_background" | "process" | "preview" | "attention" | "cli_open" | "source_changed" | "source_operation" | "file_briefing" | "briefing" | "artifact" | "agent_presence" | "editor_document" | "preflight" | "turn_clock" | "turn_load" | "chat_vault" | "source_view";
         /** @description Topic-discriminated EventHub SSE envelope. */
-        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeDelegation"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProjectBackground"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeChatVault"] | components["schemas"]["EventEnvelopeSourceView"];
+        EventEnvelope: components["schemas"]["EventEnvelopeSession"] | components["schemas"]["EventEnvelopeMessage"] | components["schemas"]["EventEnvelopeWorker"] | components["schemas"]["EventEnvelopeCheckpoint"] | components["schemas"]["EventEnvelopeBoard"] | components["schemas"]["EventEnvelopeCost"] | components["schemas"]["EventEnvelopeLlm"] | components["schemas"]["EventEnvelopeActivity"] | components["schemas"]["EventEnvelopeOar"] | components["schemas"]["EventEnvelopeScan"] | components["schemas"]["EventEnvelopeProviders"] | components["schemas"]["EventEnvelopeModelPolicy"] | components["schemas"]["EventEnvelopeSettings"] | components["schemas"]["EventEnvelopeWorkflow"] | components["schemas"]["EventEnvelopeGrounding"] | components["schemas"]["EventEnvelopeFindings"] | components["schemas"]["EventEnvelopeProgress"] | components["schemas"]["EventEnvelopeQueue"] | components["schemas"]["EventEnvelopeProject"] | components["schemas"]["EventEnvelopeProjectBackground"] | components["schemas"]["EventEnvelopeProcess"] | components["schemas"]["EventEnvelopePreview"] | components["schemas"]["EventEnvelopeAttention"] | components["schemas"]["EventEnvelopeCliOpen"] | components["schemas"]["EventEnvelopeSourceChanged"] | components["schemas"]["EventEnvelopeSourceOperation"] | components["schemas"]["EventEnvelopeFileBriefing"] | components["schemas"]["EventEnvelopeBriefing"] | components["schemas"]["EventEnvelopeArtifact"] | components["schemas"]["EventEnvelopeAgentPresence"] | components["schemas"]["EventEnvelopeEditorDocument"] | components["schemas"]["EventEnvelopePreflight"] | components["schemas"]["EventEnvelopeTurnClock"] | components["schemas"]["EventEnvelopeTurnLoad"] | components["schemas"]["EventEnvelopeChatVault"] | components["schemas"]["EventEnvelopeSourceView"];
         /** @description One transcript row change. message is always the full post-write row: apply it as a whole-row snapshot ordered by seq, never a field merge onto a cached row — an absent field means the row no longer has it. */
         MessageEvent: {
             /** Format: uuid */
@@ -5919,6 +5887,19 @@ export interface components {
             dependencies?: components["schemas"]["WorkerDependency"][];
             /** Format: uuid */
             worker_id: string;
+            /** Format: uuid */
+            worker_record_id?: string;
+            worker_name?: string;
+            round?: number;
+            /** Format: uuid */
+            result_handle?: string;
+            result_disposition?: components["schemas"]["WorkerResultDisposition"];
+            shelve_reason?: string;
+            /** Format: uuid */
+            review_of?: string;
+            parked_reason?: string;
+            /** Format: date-time */
+            parked_until_at?: string;
             status: components["schemas"]["WorkerStatus"];
             agent_type?: string;
             /** Format: uuid */
@@ -5928,9 +5909,6 @@ export interface components {
             /** @description Worker assignment goal used for card titles. */
             brief?: string;
             merge_status?: components["schemas"]["WorkerMergeStatus"];
-            max_tool_loops?: number;
-            /** @description The worker's unanswered request for more tool rounds; absent once granted */
-            budget_request?: components["schemas"]["WorkerBudgetRequest"];
             tool_loops_used?: number;
             tool_calls_used?: number;
             turn_tool_calls?: number;
@@ -5948,17 +5926,6 @@ export interface components {
             session_id?: string;
             snapshot: components["schemas"]["BoardView"];
             detail_level: components["schemas"]["BoardDetailLevel"];
-        };
-        DelegationEvent: {
-            /** Format: uuid */
-            delegation_id: string;
-            status: components["schemas"]["DelegationStatus"];
-            /**
-             * Format: uuid
-             * @description The leg whose transition this is; absent for the delegation's own.
-             */
-            leg_id?: string;
-            phase: components["schemas"]["DelegationPhase"];
         };
         LLMTokenCounts: {
             prompt?: number;
@@ -6471,100 +6438,8 @@ export interface components {
             prompt: number;
             completion: number;
         };
-        AbortDelegationRequest: {
-            reason?: string;
-        };
-        CreateDelegationRequest: {
-            /**
-             * Format: uuid
-             * @description Idempotency key. Repeating a create with the same key and body answers the delegation the first create made; the same key with a different body is an idempotency_conflict.
-             */
-            operation_id: string;
-            /** Format: uuid */
-            project_id: string;
-            task: string;
-            /** @description Decomposition strategy. The host uses file-based when the request omits it. */
-            strategy?: components["schemas"]["HuntStrategy"];
-            inspect_mode?: components["schemas"]["InspectMode"];
-            workflow_id?: string;
-            workflow_version?: string;
-            /** Format: uuid */
-            workflow_run_id?: string;
-            /** @description Project-relative path under the overlay blueprints/ directory */
-            blueprint_path?: string;
-        };
-        Delegation: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            project_id: string;
-            /** Format: uuid */
-            workspace_root_id?: string;
-            workspace_path?: string;
-            /**
-             * Format: uuid
-             * @description Coordinator session created with the delegation (for prompts and grounding)
-             */
-            coordinator_session_id?: string;
-            task: string;
-            strategy: components["schemas"]["HuntStrategy"];
-            inspect_mode?: components["schemas"]["InspectMode"];
-            workflow_id?: string;
-            workflow_version?: string;
-            /** Format: uuid */
-            workflow_run_id?: string;
-            /** @description Project-relative path under the overlay blueprints/ directory */
-            blueprint_path?: string;
-            base_head_sha?: string;
-            status: components["schemas"]["DelegationStatus"];
-            reason?: string;
-            phase?: components["schemas"]["DelegationPhase"];
-            legs?: components["schemas"]["Leg"][];
-            /** Format: date-time */
-            created_at: string;
-        };
-        /** @enum {string} */
-        DelegationPhase: "setup" | "worker" | "closeout" | "done";
-        DispatchRequest: {
-            /** Format: uuid */
-            leg_id?: string;
-        };
-        /** @enum {string} */
-        HuntStrategy: "file-based" | "feature-based" | "risk-based" | "research-based";
-        /** @enum {string} */
-        InspectMode: "standard" | "turbo" | "full";
-        Leg: {
-            /** Format: uuid */
-            id: string;
-            /** Format: uuid */
-            delegation_id: string;
-            title: string;
-            /** @description Functional worker agent id stamped at dispatch */
-            agent_type?: string;
-            status: components["schemas"]["LegStatus"];
-            /** Format: uuid */
-            worker_id?: string;
-            /** Format: uuid */
-            parent_id?: string;
-            /** @description Leg ids that must complete before this leg can dispatch. */
-            depends_on?: string[];
-            files?: string[];
-            prompt?: string;
-            completion_criteria?: string[];
-            /** @description Stable workspace binding id for scoped evidence */
-            workspace_id?: string;
-            result?: components["schemas"]["WorkerResult"];
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            started_at?: string;
-            /** Format: date-time */
-            completed_at?: string;
-        };
         /** @enum {string} */
         LegStatus: "pending" | "dispatched" | "running" | "retry_pending" | "complete" | "failed" | "held" | "canceled";
-        /** @enum {string} */
-        DelegationStatus: "active" | "done" | "failed" | "aborted" | "canceled";
         LogDigest: {
             format: components["schemas"]["LogFormat"];
             record_count: number;
@@ -6917,10 +6792,11 @@ export interface components {
             activity_id: string;
         };
         WorkerResultBriefingTarget: {
-            /** Format: uuid */
-            worker_id: string;
-            /** @description The worker's completion time; a rerun is a new revision. */
-            result_revision: string;
+            /**
+             * Format: uuid
+             * @description Settled worker round result handle.
+             */
+            result_handle: string;
         };
         BriefingRequest: {
             /** @enum {string} */
@@ -8149,8 +8025,6 @@ export interface components {
             updated_at: string;
             /** Format: uuid */
             parent_session_id?: string;
-            /** @description Effective worker tool-loop cap. Omitted task budgets default to 12 for read scope and 20 for write scope; maximum 120. The final iteration is prose-only. */
-            max_tool_loops?: number;
             compaction_generation?: number;
             /** @description Server-derived: true once this session has ingested untrusted external content (web tools, MCP, or web-researcher worker summary). Read-only; ignored on input. */
             untrusted_content?: boolean;
@@ -8321,6 +8195,8 @@ export interface components {
             extra_content?: {
                 [key: string]: unknown;
             };
+            /** @description Card for the call before its result arrives; projected on read, never stored. */
+            action?: components["schemas"]["ActionDescriptor"];
         };
         ToolApprovalPayload: {
             tool_call_id?: string;
@@ -8392,6 +8268,10 @@ export interface components {
             codes?: string[];
             /** @description Structured facts for every raised guidance code, in the same order as codes. Agents branch on code and details, never on rendered content. */
             feedback?: components["schemas"]["ToolFeedback"][];
+            /** @description Card for a settled call that is not a command program; projected on read, never stored. */
+            action?: components["schemas"]["ActionDescriptor"];
+            /** @description Facts the tool's handler stated for its action card, such as what it found or the HTTP status it got. Stored with the result; never part of the model's tool result. */
+            card_facts?: components["schemas"]["ActionFact"][];
             /** @description Quiet-chrome for Den verbose prefs. Host stamps from the policy registry (`guard:` emit, advisory/informational/expected_behavior categories, info|warning severity) or a structured reject `code` with no registry row. `benign` hides unless verbose; `normal` stays visible (worker_dispatch, SPEC_POSTURE, …). */
             ui_visibility?: components["schemas"]["ToolResultUiVisibility"];
             /** @description Producer-stated worker dispatch identity. */
@@ -8420,6 +8300,199 @@ export interface components {
             verdict?: components["schemas"]["VerdictOutcome"];
             /** @description Host-observed loopback listener attribution for an http_request whose first hop connected to a loopback address. */
             listener?: components["schemas"]["LoopbackListenerFact"];
+        };
+        /** @description The host's account of one visible action, composed from typed facts on the call, its result or its command activity. Den draws every action card from this and owns only copy and formatting. */
+        ActionDescriptor: {
+            /** @description Verb-first action name from the tool presentation catalog. */
+            label: string;
+            /** @enum {string} */
+            status: "running" | "done" | "error";
+            ran: components["schemas"]["ActionRan"];
+            /** @description At most four facts, in vocabulary order, at most one of each kind. */
+            facts: components["schemas"]["ActionFact"][];
+            /** @description Fact kinds whose compact form makes the row's outcome text, in order. */
+            row: components["schemas"]["ActionFactKind"][];
+            preview?: components["schemas"]["ActionPreview"];
+            /** @description Records the action has, in the order Input, Output, Receipt; absent kinds are omitted. */
+            links: components["schemas"]["ActionLink"][];
+            opener?: components["schemas"]["ActionOpener"];
+            /** @description Actions sharing a key render as one card: one terminal session, one page session, repeated reads of one path, or a burst of one coordination family. Empty for an action that stands alone. */
+            fold_key?: string;
+        };
+        ActionRan: {
+            /** @description What the action ran or addressed, already screened for secrets. */
+            text: string;
+            /**
+             * @description What the text is, for the copy control's name.
+             * @enum {string}
+             */
+            noun: "command" | "path" | "pattern" | "query" | "url" | "request" | "message" | "transition" | "skill" | "phase" | "scan" | "brief" | "need" | "target";
+            redaction?: components["schemas"]["HostSecretRedactionMeta"];
+        };
+        /** @enum {string} */
+        ActionFactKind: "result" | "changed" | "found" | "took" | "steps" | "stopped_by" | "network" | "worker" | "budget" | "process" | "captured" | "containment" | "loaded_by";
+        /** @description One typed fact. The fields a kind uses are listed on each field; Den formats the values and owns the label for each kind. */
+        ActionFact: {
+            kind: components["schemas"]["ActionFactKind"];
+            /**
+             * @description result: how the action ended.
+             * @enum {string}
+             */
+            outcome?: "passed" | "failed" | "refused" | "interrupted" | "completed" | "created" | "updated" | "deleted" | "moved" | "copied" | "committed" | "merged" | "checked_out" | "answered" | "approved" | "declined" | "pass" | "fail" | "captured" | "loaded" | "canceled";
+            /** @description result: process exit status. */
+            exit_code?: number;
+            /** @description result: HTTP response status. */
+            http_status?: number;
+            /** @description result: a short identifier the outcome produced, such as a commit. */
+            ref?: string;
+            /** @description changed: files touched. found: files the matches are in. */
+            files?: number;
+            /** @description changed: lines added. */
+            added?: number;
+            /** @description changed: lines removed. */
+            removed?: number;
+            /** @description changed: hunks. */
+            hunks?: number;
+            /** @description changed: new files. */
+            created?: number;
+            /** @description found: how many. steps: how many members. */
+            count?: number;
+            /**
+             * @description found: what was counted.
+             * @enum {string}
+             */
+            noun?: "matches" | "files" | "entries" | "lines" | "results" | "tools" | "findings" | "citations" | "items" | "bytes" | "processes" | "secrets" | "refs" | "commits";
+            /** @description found: up to three named items, such as loaded tools. */
+            items?: string[];
+            /** @description found: high-severity findings. */
+            high?: number;
+            /** @description found: medium-severity findings. */
+            medium?: number;
+            /** @description found: low-severity findings. */
+            low?: number;
+            /**
+             * Format: int64
+             * @description took: elapsed time of a settled action.
+             */
+            duration_ms?: number;
+            /** @description steps: members that failed, were refused or were interrupted. */
+            failed?: number;
+            /**
+             * @description steps: what a member is.
+             * @enum {string}
+             */
+            unit?: "executions" | "calls" | "actions";
+            /** @description steps: the members' actions in order, for a session such as a terminal. */
+            sequence?: string[];
+            /**
+             * @description stopped_by: what stopped or approved the action. loaded_by: how a tool or skill was resolved.
+             * @enum {string}
+             */
+            by?: "host_stop" | "approval" | "policy" | "budget" | "engine" | "name" | "none";
+            /** @description stopped_by: the host stop or rejection code. */
+            code?: string;
+            /**
+             * @description stopped_by: who decided an approval.
+             * @enum {string}
+             */
+            decided_by?: "person" | "policy";
+            /**
+             * Format: date-time
+             * @description stopped_by: when an approval was decided.
+             */
+            decided_at?: string;
+            /** @description network: hosts reached. */
+            hosts?: string[];
+            /**
+             * @description network: how traffic left the host.
+             * @enum {string}
+             */
+            egress?: "proxy_only" | "direct" | "local_only";
+            /** @description worker: the worker's role. */
+            role?: string;
+            /** @description worker: the worker's state. process: the process state. */
+            state?: string;
+            /**
+             * Format: int64
+             * @description budget: amount used.
+             */
+            used?: number;
+            /**
+             * Format: int64
+             * @description budget: amount allowed.
+             */
+            limit?: number;
+            /** @description process: listening port. */
+            port?: number;
+            /** @description captured: the artifact's caption. */
+            caption?: string;
+            /**
+             * Format: uuid
+             * @description captured: the artifact.
+             */
+            artifact_id?: string;
+            /** @description containment: the confinement mode. */
+            mode?: string;
+        };
+        ActionPreview: {
+            /** @enum {string} */
+            kind: "output" | "diff" | "hits" | "steps" | "image";
+            lines?: components["schemas"]["ActionPreviewLine"][];
+            /** @description Further lines not shown. */
+            lines_omitted?: number;
+            /** @description output: the lines are the end of the stream. */
+            tail?: boolean;
+            /** @description output: the lines are in these activities' execution receipts, which Den reads when the card opens; head for a success, tail for a failure or a running activity. */
+            receipts?: components["schemas"]["ActionReceiptScope"][];
+            /**
+             * Format: uuid
+             * @description image: the artifact to show.
+             */
+            artifact_id?: string;
+            /** @description image: the artifact's caption. */
+            caption?: string;
+        };
+        ActionPreviewLine: {
+            text: string;
+            /** @enum {string} */
+            stream?: "stdout" | "stderr";
+            /**
+             * @description diff: added or removed.
+             * @enum {string}
+             */
+            sign?: "added" | "removed";
+            /** @description hits: where the line is. */
+            location?: string;
+            /** @description steps: how the step ended. */
+            state?: string;
+        };
+        ActionLink: {
+            /** @enum {string} */
+            kind: "input" | "output" | "receipt";
+            content_ref?: components["schemas"]["ChatContentReference"];
+            /** @description output: a background process whose output is the record. */
+            process_handle?: string;
+            /** @description receipt: the program activities the receipt document covers. */
+            receipts?: components["schemas"]["ActionReceiptScope"][];
+        };
+        ActionReceiptScope: {
+            /** Format: uuid */
+            program_id: string;
+            /** Format: uuid */
+            activity_id: string;
+        };
+        /** @description Where the action's subject opens, beyond its records. */
+        ActionOpener: {
+            /** @enum {string} */
+            kind: "file" | "terminal" | "running" | "search";
+            /** @description file: the path, as the action named it. */
+            path?: string;
+            /** @description file: the line to open at. */
+            line?: number;
+            /** @description search: what to search for. */
+            query?: string;
+            /** @description terminal: the session whose output opens. */
+            process_handle?: string;
         };
         ExternalAccess: {
             modes: components["schemas"]["ExternalAccessMode"][];
@@ -8581,6 +8654,14 @@ export interface components {
             delegation_id?: string;
             /** Format: uuid */
             leg_id?: string;
+            /** Format: uuid */
+            worker_record_id?: string;
+            worker_name?: string;
+            round?: number;
+            /** Format: uuid */
+            result_handle?: string;
+            /** Format: uuid */
+            review_of?: string;
             /** Format: uuid */
             worker_id: string;
             /** Format: uuid */
@@ -9574,12 +9655,6 @@ export interface components {
             coordinator_max_sleep_ms?: number | null;
             /** @description Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds. */
             await_parent_workers_timeout_ms?: number | null;
-            /** @description Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget. */
-            worker_tool_budget_default?: number | null;
-            /** @description Smallest worker tool-round ceiling the coordinator may set (host floor is 2). */
-            worker_tool_budget_min?: number | null;
-            /** @description Largest worker tool-round ceiling the coordinator may set or grant. */
-            worker_tool_budget_max?: number | null;
             /**
              * Format: int64
              * @description Opt-in per-session nano-USD spend limit (enforced only when spend_ceiling_enabled is true and spend is priced).
@@ -9612,12 +9687,6 @@ export interface components {
             coordinator_max_sleep_ms: number;
             /** @description Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds. */
             await_parent_workers_timeout_ms: number;
-            /** @description Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget. */
-            worker_tool_budget_default: number;
-            /** @description Smallest worker tool-round ceiling the coordinator may set (host floor is 2). */
-            worker_tool_budget_min: number;
-            /** @description Largest worker tool-round ceiling the coordinator may set or grant. */
-            worker_tool_budget_max: number;
             /**
              * Format: int64
              * @description Opt-in per-session nano-USD spend limit (enforced only when spend_ceiling_enabled is true and spend is priced).
@@ -9633,6 +9702,8 @@ export interface components {
              */
             spend_soft_stop: boolean;
             merged_from: string[];
+            /** @description Present on project scope when the project's limits.yaml could not be applied. The limits shown are the device's, and the project's limits cannot be saved until the file is fixed. */
+            rejected?: components["schemas"]["ProjectSettingsRejectedRow"][];
         };
         ContentReviewRule: {
             tool?: string;
@@ -9648,6 +9719,8 @@ export interface components {
             scope: components["schemas"]["SettingsScope"];
             review_paths: components["schemas"]["ContentReviewRule"][];
             merged_from: string[];
+            /** @description Present on project scope when the project's review.yaml could not be applied. Every edit asks for review until it is fixed, and the project's review settings cannot be saved until then. */
+            rejected?: components["schemas"]["ProjectSettingsRejectedRow"][];
         };
         UpdateReviewSettingsRequest: {
             review_paths?: components["schemas"]["ContentReviewRule"][];
@@ -9661,6 +9734,8 @@ export interface components {
             backend_configured: boolean;
             suggestion_state?: components["schemas"]["VerifySuggestionState"];
             dismissed?: boolean;
+            /** @description Present on project scope when the project's verify.yaml could not be applied. No test command is declared while it stands, and the project's verify settings cannot be saved until the file is fixed. */
+            rejected?: components["schemas"]["ProjectSettingsRejectedRow"][];
         };
         UpdateVerifySettingsRequest: {
             test?: string;
@@ -9952,7 +10027,6 @@ export interface components {
             status?: string;
             hint_code?: string;
             policy_feedback?: components["schemas"]["WorkerPolicyFeedback"];
-            host_assembled?: boolean;
         };
         /** @enum {string} */
         ExecutionTarget: "local" | "runner";
@@ -9960,6 +10034,21 @@ export interface components {
         SpawnReason: "initial" | "retry" | "human_request" | "closeout";
         /** @enum {string} */
         WorkerStatus: "pending" | "running" | "waiting" | "complete" | "failed" | "canceled" | "held";
+        /**
+         * @description A worker's derived state.
+         * @enum {string}
+         */
+        WorkerState: "planned" | "waiting" | "working" | "asking" | "delivered" | "idle" | "failed" | "recovering" | "closed";
+        /**
+         * @description What qualifies a worker's state.
+         * @enum {string}
+         */
+        WorkerStateReason: "queued" | "parked" | "approval_wait" | "prerequisite" | "result_unaccounted" | "changes_unresolved" | "no_report" | "recovery_required" | "withdrawn" | "session_unusable";
+        /**
+         * @description What became of a worker's latest result.
+         * @enum {string}
+         */
+        WorkerResultDisposition: "unaccounted" | "accounted" | "open" | "landed" | "rejected" | "shelved";
         /**
          * @description Lifecycle of a write overlay. Every transition is an explicit event
          *     the coordinator can observe — there is no silent "skipped" state.
@@ -10054,8 +10143,8 @@ export interface components {
         };
         /** @description The promote_overlay and preview_overlay tool result. */
         WorkerMergeResult: {
-            /** Format: uuid */
-            job_id: string;
+            /** @description The result these changes belong to. */
+            result_handle: string;
             mode: string;
             merge_status?: components["schemas"]["WorkerMergeStatus"];
             agent_type?: string;
@@ -10064,9 +10153,11 @@ export interface components {
             clean_paths?: string[];
             applied?: string[];
             path_status?: components["schemas"]["WorkerPromotePathStatus"][];
-            overlap_job_ids?: string[];
+            overlap_overlay_ids?: string[];
             promote_order?: components["schemas"]["WorkerPromoteOrderKind"];
+            /** @description Handles of results that must land before these changes are clean. */
             promote_after?: string[];
+            /** @description Handles of results these changes must land before. */
             blocked_by?: string[];
             conflict_digest?: components["schemas"]["WorkerPromoteConflictDigest"][];
             conflicts?: components["schemas"]["WorkerMergeConflict"][];
@@ -10094,7 +10185,9 @@ export interface components {
             reason?: string;
             hunk_count?: number;
             promote_order?: components["schemas"]["WorkerPromoteOrderKind"];
+            /** @description Handles of results that must land before this path is clean. */
             promote_after?: string[];
+            /** @description Handles of results this path must land before. */
             blocked_by?: string[];
             promote_order_note?: string;
             conflict_tier?: components["schemas"]["WorkerPromoteConflictTier"];
@@ -10110,6 +10203,36 @@ export interface components {
             after_workers?: string[];
             /** Format: uuid */
             id: string;
+            /**
+             * Format: uuid
+             * @description Durable worker record identity across rounds.
+             */
+            worker_record_id?: string;
+            /** @description Canonical worker name on the session roster. */
+            worker_name?: string;
+            /** @description 1-based round ordinal within the worker record. */
+            round?: number;
+            /**
+             * Format: uuid
+             * @description Settled result handle recorded for this round.
+             */
+            result_handle?: string;
+            /** @description Disposition of this round's settled result. */
+            result_disposition?: components["schemas"]["WorkerResultDisposition"];
+            /** @description Coordinator reason recorded when this round's result is shelved. */
+            shelve_reason?: string;
+            /**
+             * Format: uuid
+             * @description Sealed result handle reviewed by this round when it is a reviewer round.
+             */
+            review_of?: string;
+            /** @description Active wait lease reason while this round is parked. */
+            parked_reason?: string;
+            /**
+             * Format: date-time
+             * @description Active wait lease deadline while this round is parked.
+             */
+            parked_until_at?: string;
             /** Format: uuid */
             child_session_id?: string;
             /** Format: uuid */
@@ -10135,10 +10258,6 @@ export interface components {
              *     scopes.
              */
             overlay_id?: string;
-            /** @description Worker tool-round ceiling (host default 20, range 2–120); raised only when the coordinator grants a request; final iteration is prose-only */
-            max_tool_loops?: number;
-            /** @description The worker's unanswered request for more tool rounds; absent once granted or when none was made */
-            budget_request?: components["schemas"]["WorkerBudgetRequest"];
             /** @description Completed tool rounds this worker run; omitted when zero and the job never started */
             tool_loops_used?: number;
             /** @description Tool calls this worker has settled over its lifetime; moves forward only */
@@ -10147,6 +10266,13 @@ export interface components {
             turn_tool_calls?: number;
             /** @description Calls already settled in that in-flight batch; never exceeds turn_tool_calls */
             turn_tools_done?: number;
+            /** @description Distinct tool names in the in-flight batch, in call order; empty between turns */
+            turn_tools?: string[];
+            /**
+             * Format: date-time
+             * @description When the in-flight batch began; absent between turns
+             */
+            turn_started_at?: string;
             /** @description Live per-worker context occupancy for the Den worker-card ring; absent until the first turn completes */
             context_usage?: components["schemas"]["WorkerContextUsage"];
             /** @description Ephemeral progress while an isolated write workspace is being prepared */
@@ -10173,6 +10299,62 @@ export interface components {
             started_at?: string;
             /** Format: date-time */
             completed_at?: string;
+        };
+        /** @enum {string} */
+        WorkerMessageSenderRole: "coordinator" | "worker" | "person" | "host";
+        /** @enum {string} */
+        WorkerInstructionStatus: "applied" | "queued" | "not_applied";
+        WorkerHistoryRound: {
+            ordinal: number;
+            /**
+             * Format: uuid
+             * @description Worker job identity for this round.
+             */
+            worker_id: string;
+            status?: components["schemas"]["WorkerStatus"];
+            instruction_first_seq?: number;
+            instruction_last_seq?: number;
+            /** Format: uuid */
+            result_handle?: string;
+            result_disposition?: components["schemas"]["WorkerResultDisposition"];
+            shelve_reason?: string;
+            checkpoint_id?: string;
+            /** Format: uuid */
+            review_of?: string;
+            result?: components["schemas"]["WorkerResult"];
+            failure?: components["schemas"]["WorkerFailure"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            settled_at?: string;
+        };
+        WorkerHistoryMessage: {
+            seq: number;
+            sender_role: components["schemas"]["WorkerMessageSenderRole"];
+            round_ordinal?: number;
+            body: string;
+            artifact_ref?: string;
+            needs_reply?: boolean;
+            reply_to_seq?: number;
+            delivered: boolean;
+            instruction_status?: components["schemas"]["WorkerInstructionStatus"];
+            /** Format: date-time */
+            created_at: string;
+        };
+        WorkerHistoryResponse: {
+            /** Format: uuid */
+            worker_id: string;
+            name: string;
+            agent_type: string;
+            brief?: string;
+            /** Format: uuid */
+            child_session_id?: string;
+            state: components["schemas"]["WorkerState"];
+            reason?: components["schemas"]["WorkerStateReason"];
+            rounds: components["schemas"]["WorkerHistoryRound"][];
+            messages: components["schemas"]["WorkerHistoryMessage"][];
+            before?: number;
+            before_round?: number;
         };
         ComposeDecisionPhase: {
             id: string;
@@ -10496,7 +10678,7 @@ export interface components {
          * @description Closed machine-readable error identity emitted by the private Den-sidecar API.
          * @enum {string}
          */
-        ApiErrorCode: "approval_capacity_exceeded" | "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "project_not_draft" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "delegation_not_found" | "delegation_leg_not_found" | "feedback_not_pending" | "feedback_response_required" | "briefing_disabled" | "briefing_target_unavailable" | "briefing_busy" | "briefing_unavailable" | "briefing_record_not_found" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "command_program_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "project_removal_operation_conflict" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_closeout_exhausted" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "leg_not_pending" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
+        ApiErrorCode: "approval_capacity_exceeded" | "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "feedback_not_pending" | "feedback_response_required" | "briefing_disabled" | "briefing_target_unavailable" | "briefing_busy" | "briefing_unavailable" | "briefing_record_not_found" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "command_program_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_settings_need_repair" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "project_removal_operation_conflict" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_model_timeout" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
         /** @enum {string} */
         NoticeAction: "open_ai_providers" | "retry_contribution_frame" | "prompt_retry" | "prompt_keep_going" | "prompt_rewind_and_retry";
         /** @enum {string} */
@@ -10691,6 +10873,53 @@ export interface components {
             start_byte: number;
             end_byte: number;
         };
+        /**
+         * @description What a replacement claims. A secret was detected and removed; a managed_reference is a protected value written as its capability reference, so the source still holds the value the reference names; an observer_mask is a standing policy that never showed the value to observers and asserts nothing about its content.
+         * @enum {string}
+         */
+        RedactionKind: "secret" | "managed_reference" | "observer_mask";
+        /**
+         * @description The evidence lens that justified one replacement. policy accompanies observer_mask, where no detection took place.
+         * @enum {string}
+         */
+        RedactionSource: "shape_rule" | "container_harvest" | "remembered_match" | "policy";
+        /** @description One replacement in this message copy. Offsets index the redacted string, and length is the marker's own width — the placeholder or the capability reference — never the width of the value it replaced, so a span can be marked without disclosing how long the original was. */
+        RedactedSpan: {
+            /** @description Dotted path of the redacted field within this message, such as content, tool_result.content, or tool_calls.0.args.command. */
+            field: string;
+            /** @description Rune offset of the marker within the redacted field value. */
+            start: number;
+            /** @description Rune length of the marker. */
+            length: number;
+            kind: components["schemas"]["RedactionKind"];
+            source?: components["schemas"]["RedactionSource"];
+            /** @description Catalog rule identity, when a shape rule named the value. */
+            rule_id?: string;
+            /** @description Human-readable rule name for presentation. */
+            rule_title?: string;
+        };
+        /** @description Host-recorded provenance for spans replaced in this message copy. Presence is authoritative; literal marker text in content is not a redaction signal. Every replacement in this copy is listed, so a client renders from the list rather than by searching content, and the list describes this copy alone rather than accumulating across projections of one message. */
+        HostSecretRedactionMeta: {
+            spans: components["schemas"]["RedactedSpan"][];
+        };
+        ChatContentRow: {
+            index: number;
+            offset: number;
+            text: string;
+            spans: components["schemas"]["RedactedSpan"][];
+        };
+        /** @description Retained screened content; the inline field is a bounded preview, never a replacement for this revision. */
+        ChatContentReference: {
+            /** @enum {string} */
+            field: "content" | "tool_output" | "tool_args";
+            tool_call_id?: string;
+            sha256: string;
+            total_runes: number;
+            size_bytes: number;
+            /** @description Number of display rows in this revision. */
+            rows: number;
+            preview_rows?: components["schemas"]["ChatContentRow"][];
+        };
         CommandActivity: {
             /** Format: uuid */
             id: string;
@@ -10722,6 +10951,8 @@ export interface components {
             /** @description First execution of each structural step; use activity_id to page all member receipts. */
             execution_ids: string[];
             spans: components["schemas"]["CommandActivitySpan"][];
+            /** @description Card for this activity; projected on read and in live snapshots, never stored. */
+            action?: components["schemas"]["ActionDescriptor"];
         };
         /** @description Capture or delivery limit. Execution status and completed effects retain their original outcomes; saved bytes form an incomplete prefix. */
         CommandProgramOutputLimit: {
@@ -10862,35 +11093,6 @@ export interface components {
             end_line?: number;
         };
         /**
-         * @description What a replacement claims. A secret was detected and removed; a managed_reference is a protected value written as its capability reference, so the source still holds the value the reference names; an observer_mask is a standing policy that never showed the value to observers and asserts nothing about its content.
-         * @enum {string}
-         */
-        RedactionKind: "secret" | "managed_reference" | "observer_mask";
-        /**
-         * @description The evidence lens that justified one replacement. policy accompanies observer_mask, where no detection took place.
-         * @enum {string}
-         */
-        RedactionSource: "shape_rule" | "container_harvest" | "remembered_match" | "policy";
-        /** @description One replacement in this message copy. Offsets index the redacted string, and length is the marker's own width — the placeholder or the capability reference — never the width of the value it replaced, so a span can be marked without disclosing how long the original was. */
-        RedactedSpan: {
-            /** @description Dotted path of the redacted field within this message, such as content, tool_result.content, or tool_calls.0.args.command. */
-            field: string;
-            /** @description Rune offset of the marker within the redacted field value. */
-            start: number;
-            /** @description Rune length of the marker. */
-            length: number;
-            kind: components["schemas"]["RedactionKind"];
-            source?: components["schemas"]["RedactionSource"];
-            /** @description Catalog rule identity, when a shape rule named the value. */
-            rule_id?: string;
-            /** @description Human-readable rule name for presentation. */
-            rule_title?: string;
-        };
-        /** @description Host-recorded provenance for spans replaced in this message copy. Presence is authoritative; literal marker text in content is not a redaction signal. Every replacement in this copy is listed, so a client renders from the list rather than by searching content, and the list describes this copy alone rather than accumulating across projections of one message. */
-        HostSecretRedactionMeta: {
-            spans: components["schemas"]["RedactedSpan"][];
-        };
-        /**
          * @description State of one checklist row. Derived by the host from the coordinator's markdown markers; the coordinator never writes these strings directly.
          * @enum {string}
          */
@@ -10908,7 +11110,7 @@ export interface components {
             prev_label?: string;
             state: components["schemas"]["ProgressState"];
         };
-        /** @description Aggregate progress update; the full checklist remains in ProgressDigest. */
+        /** @description The plan's state after a progress update; the full checklist remains in ProgressDigest. */
         ProgressUpdateSummary: {
             change_count: number;
             total_steps: number;
@@ -10916,7 +11118,7 @@ export interface components {
             done: number;
             na: number;
         };
-        /** @description Incremental progress update with a plan, delta, or aggregate summary. */
+        /** @description Incremental progress update. `summary` states the plan it leaves; `steps` or `changes` list its rows unless they are too many to show. */
         ProgressUpdateMeta: {
             changes?: components["schemas"]["ProgressChange"][];
             steps?: components["schemas"]["ProgressStep"][];
@@ -11118,24 +11320,6 @@ export interface components {
             duration_ms?: number;
             skip_reason?: string;
         };
-        ChatContentRow: {
-            index: number;
-            offset: number;
-            text: string;
-            spans: components["schemas"]["RedactedSpan"][];
-        };
-        /** @description Retained screened content; the inline field is a bounded preview, never a replacement for this revision. */
-        ChatContentReference: {
-            /** @enum {string} */
-            field: "content" | "tool_output" | "tool_args";
-            tool_call_id?: string;
-            sha256: string;
-            total_runes: number;
-            size_bytes: number;
-            /** @description Number of display rows in this revision. */
-            rows: number;
-            preview_rows?: components["schemas"]["ChatContentRow"][];
-        };
         /** @enum {string} */
         InvocationStatus: "running" | "completed" | "rejected" | "error" | "interrupted";
         InvocationEvidence: {
@@ -11309,6 +11493,8 @@ export interface components {
             brief?: string;
             findings?: components["schemas"]["WorkerCompletionFinding"][];
             cited_urls?: string[];
+            /** @description Handles of the worker's own earlier results this report builds on, cited as historical evidence. */
+            cited_results?: string[];
             evidence_obligations?: components["schemas"]["WorkerEvidenceObligation"][];
         };
         /**
@@ -11644,19 +11830,6 @@ export interface components {
             worker_id: string;
             /** @enum {string} */
             state: "ready" | "waiting" | "blocked";
-        };
-        /** @description A running worker's request that its coordinator raise its tool-round ceiling. */
-        WorkerBudgetRequest: {
-            /** @description Additional tool rounds the worker asked for beyond its ceiling at request time */
-            rounds: number;
-            /** @description Ceiling the worker asked for, bounded by the host maximum */
-            requested_max: number;
-            /** @description Worker-authored work the extra rounds would cover; data for the coordinator, not instructions */
-            remaining_work: string[];
-            /** @description Rounds the worker had completed when it asked */
-            tool_loops_used: number;
-            /** Format: date-time */
-            requested_at: string;
         };
         /** @description Per-worker context occupancy mirrored to the Den worker-card ring: prompt tokens on the latest turn against the model window, plus the compaction trigger point. Same shape the coordinator context ring uses. */
         WorkerContextUsage: {
@@ -12779,11 +12952,8 @@ export interface components {
         SourceOperationResult: components["schemas"]["ProjectSourceEntryCreatedResponse"] | components["schemas"]["ProjectSourceLifecycleResponse"] | components["schemas"]["SourceHistoryMutationResponse"];
         /** @description Durable file operation identified by its mutation operation_id. Disconnects leave accepted work running; terminal results survive restart. */
         SourceOperationStatus: {
-            /**
-             * Format: uuid
-             * @description The root the request named; absent when it named none.
-             */
-            root_id?: string;
+            /** Format: uuid */
+            root_id: string;
             path: string;
             from_path: string;
             /**
@@ -15048,9 +15218,6 @@ export interface components {
             /** @description Present and true when older blueprints were cut from this answer. */
             truncated?: boolean;
         };
-        DelegationLegListResponse: {
-            legs: components["schemas"]["Leg"][];
-        };
         WorkflowRequestSpec: {
             /** @enum {string} */
             cadence: "once" | "each_turn";
@@ -15157,22 +15324,32 @@ export interface components {
         };
         OverlayMergeSharedPath: {
             path: string;
-            worker_ids: string[];
+            /** @description Handles of the pending results that change this path. */
+            overlay_ids: string[];
         };
+        /** @description One worker's latest pending result. */
         OverlayMergePlanEntry: {
-            /** Format: uuid */
-            worker_id: string;
+            /**
+             * Format: uuid
+             * @description Handle of the result.
+             */
+            overlay_id: string;
+            /** @description Name of the worker that delivered it. */
+            worker: string;
             agent_type?: string;
             changed_paths?: string[];
             clean_paths?: string[];
             conflict_paths?: string[];
             promote_order?: components["schemas"]["WorkerPromoteOrderKind"];
+            /** @description Handles of results that must land before this one is clean. */
             promote_after?: string[];
+            /** @description Handles of results this one must land before. */
             blocked_by?: string[];
             preview_stale?: boolean;
         };
         OverlayMergePlan: {
             pending_count: number;
+            /** @description Result handles in landing order. */
             promote_sequence?: string[];
             shared_paths?: components["schemas"]["OverlayMergeSharedPath"][];
             entries?: components["schemas"]["OverlayMergePlanEntry"][];
@@ -15623,6 +15800,15 @@ export interface components {
             code: string;
             /** @description What was wrong, for display beside the row. */
             detail?: string;
+        };
+        ProjectSettingsRejectedRow: {
+            /**
+             * @description Why the project's file was not applied. project_unreadable means the file could not be read or holds a key or value the host does not accept, so none of it applied. Clients branch on this rather than on detail.
+             * @enum {string}
+             */
+            code: "project_unreadable";
+            /** @description What was wrong, naming the file. */
+            detail: string;
         };
         FileSummariesSettingsResponse: {
             /** @description Device-wide File summaries switch. When false, briefing requests are rejected, running briefing work is canceled, and stored briefings are deleted. */
@@ -16430,7 +16616,7 @@ export interface components {
          */
         HostResourcePromptMode: "omit" | "advertise" | "avoid";
         UpdateHostResourceRequest: {
-            access: components["schemas"]["HostResourceAccessSetting"];
+            access?: components["schemas"]["HostResourceAccessSetting"];
         };
         SourceTreeAddress: {
             /** Format: uuid */
@@ -17153,17 +17339,6 @@ export interface components {
              */
             topic: "board";
         };
-        EventEnvelopeDelegation: components["schemas"]["EventEnvelopeBase"] & {
-            /** @constant */
-            topic: "delegation";
-            data: components["schemas"]["DelegationEvent"];
-        } & {
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            topic: "delegation";
-        };
         EventEnvelopeCost: components["schemas"]["EventEnvelopeBase"] & {
             /** @constant */
             topic: "cost";
@@ -17798,7 +17973,6 @@ export interface components {
         /** @description Root-relative, slash-separated directory; "." or omitted means the root folder */
         SourceDirQuery: string;
         BlueprintId: string;
-        DelegationId: string;
         /** @description Canonical project UUID from the project registry */
         ProjectIDQuery: string;
         WorkerId: string;
@@ -20372,7 +20546,7 @@ export interface operations {
             401: components["responses"]["Unauthorized"];
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
-            /** @description The chosen folder is not empty (FOLDER_NOT_EMPTY), or the project is not a draft (PROJECT_NOT_DRAFT) */
+            /** @description The chosen folder is not empty (FOLDER_NOT_EMPTY) */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -24633,155 +24807,6 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
-    createDelegation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateDelegationRequest"];
-            };
-        };
-        responses: {
-            /** @description Delegation created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Delegation"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            413: components["responses"]["ContentTooLarge"];
-            415: components["responses"]["UnsupportedMediaType"];
-            429: components["responses"]["TooManyRequests"];
-            default: components["responses"]["Error"];
-        };
-    };
-    getDelegation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["DelegationId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Delegation */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Delegation"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            default: components["responses"]["Error"];
-        };
-    };
-    listDelegationLegs: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["DelegationId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Legs */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DelegationLegListResponse"];
-                };
-            };
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            default: components["responses"]["Error"];
-        };
-    };
-    dispatchDelegationLeg: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["DelegationId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["DispatchRequest"];
-            };
-        };
-        responses: {
-            /** @description Dispatched leg */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Leg"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            413: components["responses"]["ContentTooLarge"];
-            415: components["responses"]["UnsupportedMediaType"];
-            429: components["responses"]["TooManyRequests"];
-            default: components["responses"]["Error"];
-        };
-    };
-    abortDelegation: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: components["parameters"]["DelegationId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["AbortDelegationRequest"];
-            };
-        };
-        responses: {
-            /** @description Aborted delegation */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Delegation"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            404: components["responses"]["NotFound"];
-            413: components["responses"]["ContentTooLarge"];
-            415: components["responses"]["UnsupportedMediaType"];
-            429: components["responses"]["TooManyRequests"];
-            default: components["responses"]["Error"];
-        };
-    };
     listWorkflows: {
         parameters: {
             query?: {
@@ -25475,6 +25500,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkerListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getWorkerHistory: {
+        parameters: {
+            query: {
+                /** @description Canonical project UUID from the project registry */
+                project_id: components["parameters"]["ProjectIDQuery"];
+                /** @description Coordinator session that owns the worker. */
+                session_id: string;
+                /** @description Worker name or round job id on the session roster. */
+                worker: string;
+                /** @description Exclusive message sequence cursor for older messages. */
+                before?: number;
+                /** @description Exclusive 1-based round ordinal cursor for older rounds. */
+                before_round?: number;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Bounded worker collaboration history page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerHistoryResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -30633,7 +30695,6 @@ export type HostResourceConnection = components["schemas"]["HostResourceConnecti
 export type HostResource = components["schemas"]["HostResource"];
 export type HostResourceDiagnostic = components["schemas"]["HostResourceDiagnostic"];
 export type HostResourcesResponse = components["schemas"]["HostResourcesResponse"];
-export type BoardDelegationEntry = components["schemas"]["BoardDelegationEntry"];
 export type BoardDetailLevel = components["schemas"]["BoardDetailLevel"];
 export type BoardForensicWorkers = components["schemas"]["BoardForensicWorkers"];
 export type BoardGitRepoLine = components["schemas"]["BoardGitRepoLine"];
@@ -30644,7 +30705,7 @@ export type BoardScanCompareSlice = components["schemas"]["BoardScanCompareSlice
 export type BoardScanCompareStub = components["schemas"]["BoardScanCompareStub"];
 export type BoardScanSummary = components["schemas"]["BoardScanSummary"];
 export type BoardView = components["schemas"]["BoardView"];
-export type BoardWorkerRosterEntry = components["schemas"]["BoardWorkerRosterEntry"];
+export type BoardWorker = components["schemas"]["BoardWorker"];
 export type RepoBrief = components["schemas"]["RepoBrief"];
 export type RepoLayout = components["schemas"]["RepoLayout"];
 export type ReadOutlineResponse = components["schemas"]["ReadOutlineResponse"];
@@ -30655,7 +30716,6 @@ export type EventEnvelope = components["schemas"]["EventEnvelope"];
 export type MessageEvent = components["schemas"]["MessageEvent"];
 export type WorkerEvent = components["schemas"]["WorkerEvent"];
 export type BoardEvent = components["schemas"]["BoardEvent"];
-export type DelegationEvent = components["schemas"]["DelegationEvent"];
 export type LLMTokenCounts = components["schemas"]["LLMTokenCounts"];
 export type CoordinatorLoopProgress = components["schemas"]["CoordinatorLoopProgress"];
 export type LLMCallEvent = components["schemas"]["LLMCallEvent"];
@@ -30699,16 +30759,7 @@ export type SummarizeAnchor = components["schemas"]["SummarizeAnchor"];
 export type SummarizeNextAction = components["schemas"]["SummarizeNextAction"];
 export type SummarizeResponse = components["schemas"]["SummarizeResponse"];
 export type TokenTotals = components["schemas"]["TokenTotals"];
-export type AbortDelegationRequest = components["schemas"]["AbortDelegationRequest"];
-export type CreateDelegationRequest = components["schemas"]["CreateDelegationRequest"];
-export type Delegation = components["schemas"]["Delegation"];
-export type DelegationPhase = components["schemas"]["DelegationPhase"];
-export type DispatchRequest = components["schemas"]["DispatchRequest"];
-export type HuntStrategy = components["schemas"]["HuntStrategy"];
-export type InspectMode = components["schemas"]["InspectMode"];
-export type Leg = components["schemas"]["Leg"];
 export type LegStatus = components["schemas"]["LegStatus"];
-export type DelegationStatus = components["schemas"]["DelegationStatus"];
 export type LogDigest = components["schemas"]["LogDigest"];
 export type LogDigestCluster = components["schemas"]["LogDigestCluster"];
 export type LogDigestFacet = components["schemas"]["LogDigestFacet"];
@@ -30890,6 +30941,15 @@ export type ToolApprovalResolveBody = components["schemas"]["ToolApprovalResolve
 export type ToolApprovalApproveBody = components["schemas"]["ToolApprovalApproveBody"];
 export type ToolApprovalRejectBody = components["schemas"]["ToolApprovalRejectBody"];
 export type ToolResult = components["schemas"]["ToolResult"];
+export type ActionDescriptor = components["schemas"]["ActionDescriptor"];
+export type ActionRan = components["schemas"]["ActionRan"];
+export type ActionFactKind = components["schemas"]["ActionFactKind"];
+export type ActionFact = components["schemas"]["ActionFact"];
+export type ActionPreview = components["schemas"]["ActionPreview"];
+export type ActionPreviewLine = components["schemas"]["ActionPreviewLine"];
+export type ActionLink = components["schemas"]["ActionLink"];
+export type ActionReceiptScope = components["schemas"]["ActionReceiptScope"];
+export type ActionOpener = components["schemas"]["ActionOpener"];
 export type ExternalAccess = components["schemas"]["ExternalAccess"];
 export type ExternalAccessVisibility = components["schemas"]["ExternalAccessVisibility"];
 export type ExternalAccessVisibilitySummary = components["schemas"]["ExternalAccessVisibilitySummary"];
@@ -31046,6 +31106,9 @@ export type WorkerResult = components["schemas"]["WorkerResult"];
 export type ExecutionTarget = components["schemas"]["ExecutionTarget"];
 export type SpawnReason = components["schemas"]["SpawnReason"];
 export type WorkerStatus = components["schemas"]["WorkerStatus"];
+export type WorkerState = components["schemas"]["WorkerState"];
+export type WorkerStateReason = components["schemas"]["WorkerStateReason"];
+export type WorkerResultDisposition = components["schemas"]["WorkerResultDisposition"];
 export type WorkerMergeStatus = components["schemas"]["WorkerMergeStatus"];
 export type WorkerPromotePathOutcome = components["schemas"]["WorkerPromotePathOutcome"];
 export type WorkerPromoteOrderKind = components["schemas"]["WorkerPromoteOrderKind"];
@@ -31063,6 +31126,11 @@ export type WorkerSourceEvidence = components["schemas"]["WorkerSourceEvidence"]
 export type WorkerPromotePathStatus = components["schemas"]["WorkerPromotePathStatus"];
 export type WorkerPromoteJobPathStatus = components["schemas"]["WorkerPromoteJobPathStatus"];
 export type WorkerTask = components["schemas"]["WorkerTask"];
+export type WorkerMessageSenderRole = components["schemas"]["WorkerMessageSenderRole"];
+export type WorkerInstructionStatus = components["schemas"]["WorkerInstructionStatus"];
+export type WorkerHistoryRound = components["schemas"]["WorkerHistoryRound"];
+export type WorkerHistoryMessage = components["schemas"]["WorkerHistoryMessage"];
+export type WorkerHistoryResponse = components["schemas"]["WorkerHistoryResponse"];
 export type ComposeDecisionPhase = components["schemas"]["ComposeDecisionPhase"];
 export type ComposeEffectiveSummary = components["schemas"]["ComposeEffectiveSummary"];
 export type ComposeFeedbackPhase = components["schemas"]["ComposeFeedbackPhase"];
@@ -31112,6 +31180,12 @@ export type ActivityKind = components["schemas"]["ActivityKind"];
 export type ActivityStatus = components["schemas"]["ActivityStatus"];
 export type CommandActivityStep = components["schemas"]["CommandActivityStep"];
 export type CommandActivitySpan = components["schemas"]["CommandActivitySpan"];
+export type RedactionKind = components["schemas"]["RedactionKind"];
+export type RedactionSource = components["schemas"]["RedactionSource"];
+export type RedactedSpan = components["schemas"]["RedactedSpan"];
+export type HostSecretRedactionMeta = components["schemas"]["HostSecretRedactionMeta"];
+export type ChatContentRow = components["schemas"]["ChatContentRow"];
+export type ChatContentReference = components["schemas"]["ChatContentReference"];
 export type CommandActivity = components["schemas"]["CommandActivity"];
 export type CommandProgramOutputLimit = components["schemas"]["CommandProgramOutputLimit"];
 export type CommandProgramOutputWindow = components["schemas"]["CommandProgramOutputWindow"];
@@ -31122,10 +31196,6 @@ export type ContentAuthority = components["schemas"]["ContentAuthority"];
 export type ContentTrustTier = components["schemas"]["ContentTrustTier"];
 export type MessageReferenceKind = components["schemas"]["MessageReferenceKind"];
 export type MessageContentPart = components["schemas"]["MessageContentPart"];
-export type RedactionKind = components["schemas"]["RedactionKind"];
-export type RedactionSource = components["schemas"]["RedactionSource"];
-export type RedactedSpan = components["schemas"]["RedactedSpan"];
-export type HostSecretRedactionMeta = components["schemas"]["HostSecretRedactionMeta"];
 export type ProgressState = components["schemas"]["ProgressState"];
 export type ProgressCompleteMeta = components["schemas"]["ProgressCompleteMeta"];
 export type ProgressChangeKind = components["schemas"]["ProgressChangeKind"];
@@ -31153,8 +31223,6 @@ export type CompletionReportDefectCode = components["schemas"]["CompletionReport
 export type CompletionReportDefect = components["schemas"]["CompletionReportDefect"];
 export type CompletionReportMeta = components["schemas"]["CompletionReportMeta"];
 export type IndexWarmingMeta = components["schemas"]["IndexWarmingMeta"];
-export type ChatContentRow = components["schemas"]["ChatContentRow"];
-export type ChatContentReference = components["schemas"]["ChatContentReference"];
 export type InvocationStatus = components["schemas"]["InvocationStatus"];
 export type InvocationEvidence = components["schemas"]["InvocationEvidence"];
 export type InvocationFailure = components["schemas"]["InvocationFailure"];
@@ -31204,7 +31272,6 @@ export type SessionTranscriptPage = components["schemas"]["SessionTranscriptPage
 export type WorkflowRequestState = components["schemas"]["WorkflowRequestState"];
 export type CoordinatorBatchPhase = components["schemas"]["CoordinatorBatchPhase"];
 export type WorkerDependency = components["schemas"]["WorkerDependency"];
-export type WorkerBudgetRequest = components["schemas"]["WorkerBudgetRequest"];
 export type WorkerContextUsage = components["schemas"]["WorkerContextUsage"];
 export type WorkspaceProvisionStrategy = components["schemas"]["WorkspaceProvisionStrategy"];
 export type WorkspaceNotClonableReason = components["schemas"]["WorkspaceNotClonableReason"];
@@ -31480,7 +31547,6 @@ export type SourceAttributionResponse = components["schemas"]["SourceAttribution
 export type WorkerJobChangedFile = components["schemas"]["WorkerJobChangedFile"];
 export type WorkerJobChangesResponse = components["schemas"]["WorkerJobChangesResponse"];
 export type BlueprintListResponse = components["schemas"]["BlueprintListResponse"];
-export type DelegationLegListResponse = components["schemas"]["DelegationLegListResponse"];
 export type WorkflowRequestSpec = components["schemas"]["WorkflowRequestSpec"];
 export type WorkflowPresetSummary = components["schemas"]["WorkflowPresetSummary"];
 export type ExcludedWorkflow = components["schemas"]["ExcludedWorkflow"];
@@ -31550,6 +31616,7 @@ export type RevokeApprovalGrantsResponse = components["schemas"]["RevokeApproval
 export type ApprovalRecentAskRow = components["schemas"]["ApprovalRecentAskRow"];
 export type ApprovalRecentAsksResponse = components["schemas"]["ApprovalRecentAsksResponse"];
 export type DetectionPackRejectedRow = components["schemas"]["DetectionPackRejectedRow"];
+export type ProjectSettingsRejectedRow = components["schemas"]["ProjectSettingsRejectedRow"];
 export type FileSummariesSettingsResponse = components["schemas"]["FileSummariesSettingsResponse"];
 export type UpdateFileSummariesSettingsRequest = components["schemas"]["UpdateFileSummariesSettingsRequest"];
 export type PowerSettingsResponse = components["schemas"]["PowerSettingsResponse"];
@@ -31721,7 +31788,6 @@ export type EventEnvelopeMessage = components["schemas"]["EventEnvelopeMessage"]
 export type EventEnvelopeWorker = components["schemas"]["EventEnvelopeWorker"];
 export type EventEnvelopeCheckpoint = components["schemas"]["EventEnvelopeCheckpoint"];
 export type EventEnvelopeBoard = components["schemas"]["EventEnvelopeBoard"];
-export type EventEnvelopeDelegation = components["schemas"]["EventEnvelopeDelegation"];
 export type EventEnvelopeCost = components["schemas"]["EventEnvelopeCost"];
 export type EventEnvelopeLlm = components["schemas"]["EventEnvelopeLlm"];
 export type EventEnvelopeActivity = components["schemas"]["EventEnvelopeActivity"];

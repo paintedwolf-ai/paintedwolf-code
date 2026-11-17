@@ -38,7 +38,7 @@ func assertCoordinatorSurface(t *testing.T, h *Harness, ctx context.Context, ses
 	runCtx, err := h.Sessions.Manager.Coordinator.Context.RunContext(ctx, sess.ID)
 	testutil.FailErr(t, "CoordinatorRunContext", err)
 	state := h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
-	profile := surface.ResolveTurnProfile(runCtx, sess, routingTurnHistory(nil, userPrompt), state)
+	profile := surface.ResolveTurnProfile(runCtx, sess, RoutingTurnHistory(nil, userPrompt), state)
 	if profile.SurfaceID != wantSurface {
 		t.Fatalf("surface = %q want %q (phase=%q workflow=%q)", profile.SurfaceID, wantSurface, runCtx.CurrentPhase, runCtx.WorkflowID)
 	}
@@ -110,7 +110,7 @@ func TestCustomDesignDocWorkflowLiveGolden(t *testing.T) {
 	if child.ParentRunID == nil || *child.ParentRunID != parentID {
 		t.Fatalf("child parent = %v want %q", child.ParentRunID, parentID)
 	}
-	waitWorkflowPhase(t, ctx, h.Workflows.Manager, child.ID, "work")
+	WaitWorkflowPhase(t, ctx, h.Workflows.Manager, child.ID, "work")
 
 	assertCoordinatorSurface(t, h, ctx, sess, "map the codebase", toolcontract.SurfaceImplementInvestigate)
 

@@ -21,7 +21,7 @@ func TestPromptUserImageRejectsActiveSVG(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	errResp := decodeAPIError(t, w)
+	errResp := DecodeAPIError(t, w)
 	if errResp.Code != "unsupported_attachment" {
 		t.Fatalf("code = %q want unsupported_attachment", errResp.Code)
 	}

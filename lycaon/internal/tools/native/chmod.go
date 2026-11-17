@@ -6,10 +6,11 @@ import (
 
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/fseffect"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -75,7 +76,7 @@ func (t *ChmodTool) Chmod(ctx context.Context, paths []string, modeSpec string, 
 		if err := ctx.Err(); err != nil {
 			return results, err
 		}
-		target, modeBefore, err := assertChmodTarget(ctx, t.Boundary, tctx, relPath, prof)
+		target, resolved, modeBefore, err := assertChmodTarget(ctx, t.Boundary, tctx, relPath, prof)
 		if err != nil {
 			return results, err
 		}
@@ -88,7 +89,7 @@ func (t *ChmodTool) Chmod(ctx context.Context, paths []string, modeSpec string, 
 		}
 		relSlash := filepath.ToSlash(relPath)
 		results = append(results, chmodResult{Path: relSlash, ModeBefore: sourceview.FormatFileMode(uint32(modeBefore.Perm())), ModeAfter: sourceview.FormatFileMode(uint32(modeAfter.Perm()))})
-		afterSuccessfulMutation(ctx, tctx, relSlash)
+		afterSuccessfulMutationResolved(ctx, tctx, resolved)
 	}
 	return results, nil
 }

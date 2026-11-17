@@ -172,7 +172,7 @@ type plannedRefWrite struct{ dstRef, oid string }
 // retained with the checkpoint.
 func ImportAndValidateCheckpointGitRefs(
 	ctx context.Context, sources GitObjectSources, checkpointID, workerID string, git PrivateGitSnapshot,
-	targetRoots map[string]string, authorizedGitDirs ...string,
+	targetRoots map[string]string, primaryRoot string, authorizedGitDirs ...string,
 ) (map[string]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -195,7 +195,7 @@ func ImportAndValidateCheckpointGitRefs(
 	}
 	imported := map[string]string{}
 	if len(git.Refs) > 0 {
-		primaryDir := selectPrimaryRootDir(targetRoots)
+		primaryDir := strings.TrimSpace(targetRoots[primaryRoot])
 		if repositoryPresent(primaryDir) {
 			request.repoRoot, request.refs = primaryDir, git.Refs
 			planned, err := importRootRefs(ctx, request)
@@ -468,24 +468,6 @@ func CheckpointGitObjectsDir(storeDir, checkpointID, rootID string) string {
 		return filepath.Join(storeDir, "checkpoints", checkpointID, "git-objects")
 	}
 	return filepath.Join(storeDir, "checkpoints", checkpointID, "git-objects-roots", rootID)
-}
-
-func selectPrimaryRootDir(targetRoots map[string]string) string {
-	return strings.TrimSpace(targetRoots[selectPrimaryRootID(targetRoots)])
-}
-
-func selectPrimaryRootID(targetRoots map[string]string) string {
-	for _, k := range []string{"primary", "root-0", ""} {
-		if strings.TrimSpace(targetRoots[k]) != "" {
-			return k
-		}
-	}
-	for _, id := range slices.Sorted(maps.Keys(targetRoots)) {
-		if strings.TrimSpace(targetRoots[id]) != "" {
-			return id
-		}
-	}
-	return ""
 }
 
 func readBoundedFile(path string, maxBytes int64) ([]byte, error) {

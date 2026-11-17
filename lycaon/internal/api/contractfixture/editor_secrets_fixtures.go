@@ -170,7 +170,7 @@ func (f SecretSpanFixture) AwaitScreen(t *testing.T) *api.SecretScreen {
 	testutil.FailErr(t, "snapshot screening evidence", err)
 	digest := hex.EncodeToString(sum[:]) + evidence
 	var screen *api.SecretScreen
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the editor screen is ready", func() bool {
 		screen, _ = f.Srv.Sources.Editor.EditorScreen(f.FixtureDocument.ID, digest)
 		return screen != nil
 	})

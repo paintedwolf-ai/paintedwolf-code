@@ -25,8 +25,6 @@ import (
 )
 
 const (
-	// MaxRevisionContentBytes bounds content retained for one version.
-	MaxRevisionContentBytes = sourceblob.MaxRevisionContentBytes
 	CauseOverlayPromote     = "overlay_promote"
 	CauseVersionRestore     = "version_restore"
 	CauseVersionRestoreBase = "version_restore_base"
@@ -88,7 +86,7 @@ func New(sqlDB db.Handle, contentDir string) *Store {
 	snapshots := sourcesnapshot.New(sqlDB, blobs, filepath.Join(filepath.Dir(contentDir), enginepaths.SourceObservationsDBName), backgroundwork.Process())
 	s := &Store{sqlDB: sqlDB, queries: queries, people: peoplestore.New(sqlDB), Content: blobs, Baselines: baselines, Snapshots: snapshots}
 	s.Inventory = &Inventory{inventoryJobs: make(map[string]*inventoryJob), inventoryNow: time.Now, observationBudget: commandObservationBudget, queries: queries, recordMu: &s.recordMu, snapshots: snapshots, sqlDB: sqlDB, writer: s}
-	s.Commands = &Commands{observationBudget: commandObservationBudget, openWindows: make(map[string][]*openCommandWindow), now: time.Now, overduePasses: make(map[string]int), slowPasses: make(map[string]slowPass), queries: queries, recordMu: &s.recordMu, retention: &startRetention{objects: blobs, queries: queries, recordMu: &s.recordMu, snapshots: snapshots, sqlDB: sqlDB, budget: commandObservationBudget / 2, files: windowRetainFiles}, sqlDB: sqlDB, windowSettle: func() <-chan time.Time { return time.After(commandWindowSettle) }}
+	s.Commands = &Commands{observationBudget: commandObservationBudget, openWindows: make(map[string][]*openCommandWindow), now: time.Now, overduePasses: make(map[string]int), slowPasses: make(map[string]slowPass), queries: queries, recordMu: &s.recordMu, retention: &startRetention{objects: blobs, queries: queries, recordMu: &s.recordMu, snapshots: snapshots, sqlDB: sqlDB, budget: commandObservationBudget / 2, files: windowRetainFiles}, sqlDB: sqlDB, startQuietGrace: windowStartQuietGrace, startQuietWait: windowStartQuietWait, windowSettle: func() <-chan time.Time { return time.After(commandWindowSettle) }}
 	s.Git = &Git{queries: queries, recordMu: &s.recordMu, sqlDB: sqlDB}
 	s.History = &History{queries: queries, sqlDB: sqlDB}
 	s.Walk = &Walk{queries: queries, sqlDB: sqlDB}
@@ -323,7 +321,7 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in preparedTrack
 			RootID:          in.RootID, Path: in.Path, EntryKind: in.EntryKind,
 			SHA256: in.SHA256, Object: in.object, Size: in.Size,
 			CaptureQuality: "exact", TS: in.TS,
-		})
+		}, nil)
 		if err != nil {
 			return TrackedFile{}, err
 		}
@@ -332,7 +330,7 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in preparedTrack
 			FileID: head.FileID, VersionID: versionID, RootID: in.RootID, Path: in.Path,
 			State: entryState(in.EntryKind, in.SHA256), ContentSha256: in.SHA256, Ordinal: head.Ordinal,
 			ObservedTs: in.TS.Format(time.RFC3339Nano),
-		}); err != nil {
+		}, nil); err != nil {
 			return TrackedFile{}, err
 		}
 		return TrackedFile{FileID: head.FileID, VersionID: versionID}, nil
@@ -375,7 +373,7 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in preparedTrack
 		RootID:               in.RootID, Path: in.Path,
 		EntryKind: in.EntryKind, State: state, SHA256: in.SHA256, Object: in.object,
 		Size: in.Size, CaptureQuality: "exact", TS: in.TS,
-	})
+	}, nil)
 	if err != nil {
 		return TrackedFile{}, err
 	}
@@ -388,7 +386,7 @@ func (s *Store) trackFileTx(ctx context.Context, q *db.Queries, in preparedTrack
 		FileID: fileID, VersionID: versionID, RootID: in.RootID, Path: in.Path,
 		State: state, ContentSha256: in.SHA256, Ordinal: ordinal,
 		ObservedTs: in.TS.Format(time.RFC3339Nano),
-	}); err != nil {
+	}, nil); err != nil {
 		return TrackedFile{}, err
 	}
 	return TrackedFile{FileID: fileID, VersionID: versionID}, nil
