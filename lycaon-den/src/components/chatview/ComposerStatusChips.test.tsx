@@ -223,9 +223,9 @@ describe("ComposerStatusChips preparation", () => {
 
     cost.resolve(costDoc("s1", 0.12));
     await waitFor(() => expect(preparation.ready()).toBe(true));
-    expect(screen.getByTestId("status-chip-trust").textContent).toBe("Checking trust…");
+    expect(screen.getByTestId("status-chip-trust").getAttribute("aria-busy")).toBe("true");
     trust.resolve(emptyTrust);
-    await waitFor(() => expect(screen.getByTestId("status-chip-trust").textContent).toBe("Trust"));
+    await waitFor(() => expect(screen.getByTestId("status-chip-trust").getAttribute("aria-busy")).toBeNull());
     expect(screen.getByTestId("status-chip-posture").textContent).toBe("Balanced");
     expect(screen.getByTestId("status-chip-model").textContent).toBe("coordinator-1");
     expect(screen.getByTestId("status-chip-cost").textContent).toBe("$0.12");
@@ -325,15 +325,14 @@ describe("ComposerStatusChips preparation", () => {
     const { appStore, preparation } = mountChips();
     await waitFor(() => expect(preparation.ready()).toBe(true));
     const chip = screen.getByTestId("status-chip-trust");
-    expect(chip.textContent).toBe("Trust");
+    expect(chip.getAttribute("aria-busy")).toBeNull();
 
     appStore.actions.bumpProjectTrustRevision();
     await waitFor(() => expect(getProjectTrust).toHaveBeenCalledTimes(2));
-    expect(chip.textContent).toBe("Trust");
     expect(chip.getAttribute("aria-busy")).toBeNull();
 
     refresh.resolve({ ...emptyTrust, surfaces: [] });
-    await waitFor(() => expect(chip.textContent).toBe("Trust"));
+    await waitFor(() => expect(chip.getAttribute("aria-busy")).toBeNull());
   });
 });
 
@@ -476,7 +475,6 @@ describe("ComposerStatusChips project trust state", () => {
     await waitFor(() => expect(preparation.ready()).toBe(true));
 
     const chip = screen.getByTestId("status-chip-trust");
-    expect(chip.textContent).toBe("Trust");
     expect(chip.getAttribute("data-state")).toBe("empty");
 
     fireEvent.click(chip);
@@ -490,7 +488,6 @@ describe("ComposerStatusChips project trust state", () => {
     connection.client = readyClient({ getProjectTrust: vi.fn(() => trust.promise) });
     mountChips();
     const chip = screen.getByTestId("status-chip-trust");
-    expect(chip.textContent).toBe("Checking trust…");
     expect(chip.getAttribute("aria-busy")).toBe("true");
 
     trust.reject(new Error("unavailable"));

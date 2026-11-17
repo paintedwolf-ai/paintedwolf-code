@@ -369,13 +369,13 @@ describe("StepBar", () => {
   it("steps forward", async () => {
     await mounted();
     const dots = screen.getAllByTestId("step-bar-dot");
-    expect(dots[0]?.classList.contains("den-step-bar__dot--current")).toBe(true);
+    expect(dots[0]?.getAttribute("aria-current")).toBe("step");
     fireEvent.click(screen.getByTestId("walk-transport-next"));
     await waitFor(() =>
       expect(screen.getByTestId("step-bar-read").textContent).toContain("2 of 6"),
     );
-    expect(dots[0]?.classList.contains("den-step-bar__dot--current")).toBe(false);
-    expect(dots[1]?.classList.contains("den-step-bar__dot--current")).toBe(true);
+    expect(dots[0]?.getAttribute("aria-current")).toBeNull();
+    expect(dots[1]?.getAttribute("aria-current")).toBe("step");
     expect(dots[0]?.classList.contains("den-step-bar__dot--past")).toBe(true);
   });
 
@@ -404,13 +404,13 @@ describe("StepBar", () => {
 
     expect(walkState(PID).targetAt).toBe(2);
     expect(screen.getByTestId("step-bar-read").textContent).toContain("1 of 6");
-    expect(dot()[0]?.classList.contains("den-step-bar__dot--current")).toBe(true);
+    expect(dot()[0]?.getAttribute("aria-current")).toBe("step");
 
     arrive();
     await waitFor(() =>
       expect(screen.getByTestId("step-bar-read").textContent).toContain("3 of 6"),
     );
-    expect(dot()[2]?.classList.contains("den-step-bar__dot--current")).toBe(true);
+    expect(dot()[2]?.getAttribute("aria-current")).toBe("step");
   });
 
   it("disables the transport at each end", async () => {

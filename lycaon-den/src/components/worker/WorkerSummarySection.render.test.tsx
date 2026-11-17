@@ -63,7 +63,7 @@ function makeSnapshot(partial: Partial<BriefingSnapshot>): BriefingSnapshot {
 afterEach(() => resetBriefingLiveForTests());
 
 describe("WorkerSummarySection render", () => {
-  it("renders waiting blocks while pending and labelled summary blocks with evidence once settled", async () => {
+  it("shows its three labelled blocks waiting while pending, then settled with evidence", async () => {
     const clock = new FakeClock();
     setBriefingClockForTests(clock);
     let nextSnapshot = makeSnapshot({ status: "pending", pending_sections: ["summary"] });
@@ -74,14 +74,21 @@ describe("WorkerSummarySection render", () => {
       },
     }));
     const onPresence = vi.fn();
-    const pendingView = render(() => (
+    const pending = render(() => (
       <WorkerSummarySection worker={() => finishedWorker} onSelect={vi.fn()} onPresence={onPresence} />
     ));
-    clock.advance(BRIEFING_DEBOUNCE_MS);
-    await waitFor(() => expect(pendingView.getByTestId("worker-summary")).toBeTruthy());
-    expect(onPresence).toHaveBeenCalledWith(true);
-    pendingView.unmount();
+    const blocks = () => [...screen.getByTestId("worker-summary").querySelectorAll<HTMLElement>("[data-section]")]
+      .map((block) => [block.dataset.section, block.dataset.state ?? block.dataset.source]);
 
+    clock.advance(BRIEFING_DEBOUNCE_MS);
+    await waitFor(() => expect(blocks()).toEqual([
+      ["Contribution", "waiting"], ["Verification", "waiting"], ["Remaining", "waiting"],
+    ]));
+    expect(onPresence).toHaveBeenCalledWith(true);
+    expect(screen.queryByTestId("briefing-evidence-link")).toBeNull();
+    pending.unmount();
+
+    // A fresh view of the same worker reads the settled briefing.
     resetBriefingLiveForTests();
     setBriefingClockForTests(clock);
     nextSnapshot = makeSnapshot({
@@ -108,7 +115,9 @@ describe("WorkerSummarySection render", () => {
     }));
     render(() => <WorkerSummarySection worker={() => finishedWorker} onSelect={vi.fn()} onPresence={vi.fn()} />);
     clock.advance(BRIEFING_DEBOUNCE_MS);
-    await waitFor(() => expect(screen.getByText(/Added worker card\./)).toBeTruthy());
-    expect(screen.getByTestId("briefing-evidence-link")).toBeTruthy();
+    await waitFor(() => expect(blocks()).toEqual([
+      ["Contribution", "summarizer"], ["Verification", "summarizer"], ["Remaining", "summarizer"],
+    ]));
+    expect(screen.queryByTestId("briefing-evidence-link")).not.toBeNull();
   });
 });

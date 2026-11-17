@@ -220,7 +220,6 @@ describe("the diffs page", () => {
     await waitFor(() => {
       for (const section of screen.getAllByTestId("diffs-section-header")) expect(section.getAttribute("data-expanded")).toBe("false");
     });
-    expect(fold.textContent).toBe("Expand all");
 
     fold.click();
     await waitFor(() => {
@@ -241,12 +240,14 @@ describe("the diffs page", () => {
       </>
     ));
     const shown = screen.getByTestId("shown-page"), retained = screen.getByTestId("retained-page");
-    const shownFold = await within(shown).findByTestId("diffs-page-fold");
-    const retainedFold = await within(retained).findByTestId("diffs-page-fold");
+    await within(shown).findByTestId("diffs-page-fold");
+    await within(retained).findByTestId("diffs-page-fold");
 
     expect(invokeCommand("files.diffToggleCollapse")).toBe("ran");
-    await waitFor(() => expect(shownFold.textContent).toBe("Expand all"));
-    expect(retainedFold.textContent).not.toBe("Expand all");
+    const expanded = (page: HTMLElement) =>
+      within(page).getAllByTestId("diffs-section-header").map((section) => section.getAttribute("data-expanded"));
+    await waitFor(() => expect(expanded(shown)).not.toContain("true"));
+    expect(expanded(retained)).not.toContain("false");
   });
 
   it("opens a folded run through the section's own presentation", async () => {
@@ -552,16 +553,14 @@ describe("the diffs page", () => {
 
     fireEvent.click(assertNamedControl(screen.getByTestId("diffs-page-fold"), "button"));
 
-    await waitFor(() => {
-      expect(screen.getByTestId("diffs-page-fold").textContent).toBe("Expand all");
-    });
+    const expanded = () => screen.getAllByTestId("diffs-section-header").map((section) => section.getAttribute("data-expanded"));
+    await waitFor(() => expect(expanded()).not.toContain("true"));
 
     const nextTurn: DiffsAddress = { kind: "turn", sessionId: "s1", turn: 5, messageId: "s1-user-5" };
     setAddress(nextTurn);
 
-    await waitFor(() => {
-      expect(screen.queryByTestId("diffs-page-fold")?.textContent).not.toBe("Expand all");
-    });
+    // The next comparison opens with its own, unfolded, sections.
+    await waitFor(() => expect(expanded()).not.toContain("false"));
   });
 
   it("renders a status bar with wrap toggle and updates wrap preference reactively", async () => {

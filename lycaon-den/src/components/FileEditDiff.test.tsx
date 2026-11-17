@@ -113,15 +113,11 @@ describe("FileEditDiff", () => {
 
   it("rotates the disclosure caret with the diff", () => {
     render(() => <FileEditDiff projectId="p1" sessionId="s1" fold={multiWriteFold()} />);
-    const caret = document.querySelector(".den-file-edit-diff-caret")!;
-    expect(caret.classList.contains("den-file-edit-diff-caret--open")).toBe(
-      false,
-    );
+    const toggle = assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
 
-    assertNamedControl(screen.getByTestId("file-edit-diff-toggle"), "button").click();
-    expect(caret.classList.contains("den-file-edit-diff-caret--open")).toBe(
-      true,
-    );
+    toggle.click();
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
   });
 
   it("gives the header's empty space to the diff, not to the path", () => {

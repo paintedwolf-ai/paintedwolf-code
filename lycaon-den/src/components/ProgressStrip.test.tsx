@@ -283,7 +283,6 @@ describe("ProgressStrip", () => {
     const items = screen.getAllByTestId("progress-strip-item");
     const na = items.find((el) => el.getAttribute("data-state") === "na");
     if (!na) throw new Error("expected an n/a item row");
-    expect(na.classList.contains("progress-strip__item--na")).toBe(true);
     expect(na.textContent).toContain("dropped scope");
   });
 
