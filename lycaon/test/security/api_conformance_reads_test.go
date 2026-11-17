@@ -153,6 +153,8 @@ type hostEffects struct {
 	barrierStep int
 	// textColumns lists each table's text columns, read once.
 	textColumns map[string][]string
+	// silent is set once the watcher stops reporting; later reads fail at once.
+	silent error
 }
 
 // watcherQuietGrace is how long the fixture tree's change debouncer must stay
@@ -191,7 +193,11 @@ func (e *hostEffects) mark(ctx context.Context) (int64, error) {
 	if _, err := os.Stat(e.projectDir); err != nil {
 		return 0, fmt.Errorf("the fixture project folder is gone: %w", err)
 	}
+	if e.silent != nil {
+		return 0, e.silent
+	}
 	if err := e.awaitWatcherBarrier(ctx); err != nil {
+		e.silent = err
 		return 0, err
 	}
 	e.quiesce(ctx)

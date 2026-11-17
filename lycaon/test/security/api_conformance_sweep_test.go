@@ -173,8 +173,8 @@ type conformanceSweep struct {
 	beforeDeletes func(context.Context)
 	// lastMutation names the latest success request, for diagnostics.
 	lastMutation string
-	corpus        *corpusRecorder
-	findings      *conformanceFindings
+	corpus       *corpusRecorder
+	findings     *conformanceFindings
 	// children maps a collection path to the path parameters addressed below it.
 	children map[string][]string
 	// outcomes is shared by every sweep of one run, terminal hosts included.
