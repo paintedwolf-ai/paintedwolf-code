@@ -13,9 +13,10 @@ import (
 )
 
 // syntheticStock is the stock the mutation tests resolve against: the
-// platform pack every catalog builds on and two small packs. Validating a
-// candidate against it skips the shipped catalog's other ten packs.
-var syntheticStock = []string{"platform", "options", "themes"}
+// platform pack every catalog builds on, hitl, whose skill the platform's
+// coordinator prompts name, and options. Validating a candidate against it
+// skips the shipped catalog's other ten packs.
+var syntheticStock = []string{"platform", "hitl", "options"}
 
 // useSyntheticStock stages the bundled tree with only syntheticStock under the
 // stock namespace and a suite manifest that names just those members.
