@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/zricethezav/gitleaks/v8/config"
 	"github.com/zricethezav/gitleaks/v8/detect"
 	"github.com/zricethezav/gitleaks/v8/regexp"
@@ -71,9 +72,8 @@ func TestStreamCursorStaysPastAMatchCrossingTheWindowStop(t *testing.T) {
 	})
 	want := m.RedactString(t.Context(), raw)
 	var out bytes.Buffer
-	if _, err := m.ScreenBytes(t.Context(), strings.NewReader(raw), &out, "", StreamPolicy{}, StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 36}, nil, nil, nil); err != nil {
-		t.Fatal(err)
-	}
+	_, err := m.ScreenBytes(t.Context(), strings.NewReader(raw), &out, "", StreamPolicy{}, StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 36}, nil, nil, nil)
+	testutil.FailErr(t, "screen", err)
 	if out.String() != want {
 		t.Fatalf("stream %q, whole field %q", out.String(), want)
 	}
