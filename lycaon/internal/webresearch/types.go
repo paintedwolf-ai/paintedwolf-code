@@ -205,7 +205,6 @@ func providerConfigured(id string, kind ProviderKind, required []string, s Setti
 	}
 }
 
-
 // FilterKnownProviderIDs excludes bundled providers from persisted user selections.
 func FilterKnownProviderIDs(cat *Catalog, ids []string) []string {
 	if len(ids) == 0 {
