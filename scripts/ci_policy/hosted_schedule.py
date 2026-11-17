@@ -28,14 +28,11 @@ def summarize(matrix, timings=None):
     lines = ["### Verification schedule", "", f"Estimate basis: `{rows[0]['timing_basis']}`.", ""]
     if missing:
         lines += ["Missing measurements: " + ", ".join(f"`{key}`" for key in missing) + ".", ""]
-    runs = (timings or {}).get("runs", [])
-    if runs:
-        lines += ["Nightly timing sources: " + ", ".join(str(run) for run in runs) + ".", ""]
-    lines += ["| Order | Lane | Shard | Priority | Execution estimate (seconds) | Timing row | Measurement run |",
-              "|---|---|---|---|---|---|---|"]
+    run = (timings or {}).get("run")
+    if run:
+        lines += [f"Nightly timing source: run {run}.", ""]
+    lines += ["| Order | Lane | Shard | Priority | Execution estimate (seconds) | Timing row |",
+              "|---|---|---|---|---|---|"]
     for index, row in enumerate(rows, 1):
-        source = (timings or {}).get("lane_runs", {}).get(row["timing_row"], "")
-        if row["timing_basis"] != "measured":
-            source = ""
-        lines.append(f"| {index} | {row['lane']} | {row['shard']} | {row['priority']} | {row['expected_seconds']} | {row['timing_row']} | {source} |")
+        lines.append(f"| {index} | {row['lane']} | {row['shard']} | {row['priority']} | {row['expected_seconds']} | {row['timing_row']} |")
     return "\n".join(lines) + "\n"

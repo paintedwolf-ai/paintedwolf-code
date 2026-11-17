@@ -566,8 +566,9 @@ touch never fails it, and floors live in
   runs a different interpreter is not measured; launch fixtures with
   `sys.executable` or `python3` from `PATH`.
 
-Aggregate floors (`check:coverage`, `den:coverage-check`) read the same policy
-and run nightly.
+Aggregate floors (`check:coverage`, `den:coverage-check`) read the same policy.
+They are local reports: no hosted tier runs them, and changed coverage is the
+gate.
 
 ### Structural defects
 
@@ -811,10 +812,8 @@ history and three recovery captures. Its catalog recipe keeps packages and tests
 serial and allows 90 minutes per package before host-load scaling. The nightly
 workflow includes this tier. Active fuzz exploration runs through
 `./task test:fuzz` in nightly verification, separately from
-`check`; ordinary Go tests still execute saved fuzz seed cases. Transcript
-scale tests use the `.perf.test.ts` suffix and run through
-`./task den:test:transcript-scale` in nightly verification. Den suites assert
-memory, DOM and row bounds, never elapsed time. SQL query and OpenAPI bundle generation drift are
+`check`; ordinary Go tests still execute saved fuzz seed cases. Den suites,
+transcript scale included, assert memory, DOM and row bounds, never elapsed time. SQL query and OpenAPI bundle generation drift are
 checked once through `db:sqlc:check` and `openapi:bundle:check` in
 `check:drift`; Go contracts inspect the generated surfaces without launching the
 generators again.
@@ -871,8 +870,6 @@ allocation before claiming an end-to-end speedup.
 |------|-------|
 | `./task test:full` | Complete Go behavior, wiring, smoke, HTTP, and required bundled scanner suites |
 | `./task test:race` | Go race detector with integration scenarios and no `-short`; the dedicated `test/security` HTTP journeys remain in `test:full`, and so does `internal/launchguard`: its identity transitions use `syscall.AllThreadsSyscall`, which Go refuses in a binary that links cgo, as every race-instrumented binary does |
-| `./task check:coverage` | Go aggregate statement coverage floor |
-| `./task den:coverage-check` | Den aggregate coverage floors |
 | `./task den:test:rust` | Tauri Rust tests |
 | `./task upgrade:rehearse -- --bundle …` | Signed macOS automatic update discovery, staging, activation, startup confirmation, retained history, and another restart |
 | `./task test:scanners` | Bundled scanners against the committed corpus, with a staged engine |
@@ -929,8 +926,7 @@ The merge queue measures changed coverage on its exact source and executes the
 complete affected integration selection. Frontend and scripts assertions execute
 once through their coverage stages; distinct short-covered and integration-tagged
 Go recipes retain their separate modes. Every lane runs to the end, so one failed group reports all its failures.
-The limits lane keeps its existing two-hour completion allowance, independent of
-the under-hour performance objective.
+Budgets and changed coverage are the first stages of the build lane.
 
 Pull requests no longer run the integration gate themselves. Running it for
 the pull request and again for its merge group doubled demand on the
@@ -983,21 +979,23 @@ the whole selected matrix to budgets until nightly measures its rows.
 Partial receipts from a cancelled run cannot
 mix short measured times with large timeout fallbacks. Shards share their lane's
 longest estimate because package balancing changes which packages each shard runs.
-The catalog orders lanes by explicit priority: `reject` for limits and lint,
+The catalog orders lanes by explicit priority: `reject` for build, lint and runner,
 `critical` for both behavior shards, and `normal` for remaining work, longest
 first. Timing estimates are advisory; the model is not a guarantee of hosted runtime.
 
 Lanes and shards are planned from measured durations. Each lane of main's
-nightly records setup plus execution time beside its receipts in `ci/timings.json`;
-a sharded lane also records its packages' durations. A job-start marker precedes
-checkout and provisioning. Measurements without that timing basis supply package
-weights only; they cannot mix execution-only times with setup-inclusive estimates.
-Evidence-upload time is accounted for separately by queue health. The plan job reads the
-newest valid measurement for each row and package from nightly
-receipts in at most 20 completed runs, filling gaps from older runs.
-History stops once the rows nightly actually runs have measurements. The
-job summary records the estimate basis, missing timing rows, source runs, and
-matrix order, including declared timing sources.
+nightly records setup plus execution time and its 50 slowest tests beside its
+receipts in `ci/timings.json`; a sharded lane also records its packages'
+durations. A job-start marker precedes checkout and provisioning. Measurements
+without that timing basis supply package weights only; they cannot mix
+execution-only times with setup-inclusive estimates. A lane supplies its
+duration whatever its verdict, unless a signal ended it part-way. Evidence-upload time is accounted for separately by queue
+health. Nightly's final job merges the lanes' records into one `timings.json`,
+bound to the run and to the source commit and tree it measured, and publishes
+it as the `nightly-timings` artifact. The plan job of every tier downloads that
+one artifact from the newest main nightly that published it, and plans from
+catalog budgets when there is none. The job summary records the estimate
+basis, missing timing rows, the source run, and matrix order.
 Every shard receives the same package durations, so the shards partition the
 selection identically:
 packages go longest first to the least loaded shard, so the longest package
@@ -1073,14 +1071,19 @@ that completed the aggregate. Candidate qualification holds at most three runner
 
 Nightly qualifies main daily with every check and release-platform catalog lane,
 platform confinement and upgrade corpus, and complete web and desktop journeys.
-It also runs race, fuzz, WebKit, stress, coverage, and performance checks, plus the
-prior-release upgrade rehearsal. The stages run in turn within its two-runner
-budget. Specific manual matrix selections stay scoped; scheduled and `all` runs cover the
-complete check tier. A release requires successful manual **Qualification** for its exact
+It also runs race, fuzz, WebKit, stress, and performance checks, every declared
+Python suite, plus the prior-release upgrade rehearsal. A first job binds the
+source: the scheduled commit, or the exact commit a dispatch names in
+`source-sha`, which must carry the dispatched commit's CI tooling. The catalog
+matrix, the platform jobs, the browser journeys, and the upgrade rehearsal
+then start together. Every job's evidence records the commit and tree it
+checked out in `ci/source.json`. Specific manual matrix selections stay scoped;
+scheduled and `all` runs cover the complete check tier. A release requires successful manual **Qualification** for its exact
 source on main; daily nightly and merge admission do not grant publication.
 
-Main's cache warmer publishes prepared Go, decision-engine, notices-tool, and
-analysis-tool caches after compiler preparation. Lint diagnostics publish their
+Main's cache warmer publishes prepared Go, decision-engine, generation-runtime,
+notices-tool, and analysis-tool caches after compiler preparation. The jobs
+that build the engine restore them and compile only the engine's own crates. Lint diagnostics publish their
 own result separately. WebKitGTK
 images also publish before diagnostics, so diagnostic cleanup cannot block
 their reuse. A failed or cancelled preparation cannot publish these caches;
@@ -1168,7 +1171,7 @@ retry. The one-retry limit remains in force.
 #### Automatic queue batching
 
 Use the merge queue normally. The hosted `Automatic queue batching` controller
-runs after CI, source changes, no-combine label changes, and every five minutes. It
+runs after CI, source changes, and no-combine label changes. It
 reserves the first two queue positions for existing cumulative groups, then
 combines up to four consecutive waiting entries in their existing priority
 order. Campaign exclusions live in `.github/queue-batching.json`; Linux and
@@ -1240,8 +1243,7 @@ toolchain, test options, and declared environment. Extending that reuse to
 hosted or native test results needs equally complete input accounting; compiler
 cache hits alone do not establish a test pass. Existing recovery retains first
 failures and retries only demonstrated infrastructure faults. Product assertions
-and races remain blocking; there is no new automatic quarantine or assertion
-retry policy.
+and races remain blocking; there is no assertion retry policy.
 
 ##### Admission and scale execution
 
@@ -1350,12 +1352,8 @@ A missing or mismatched binary is rebuilt before analysis. Lint diagnostics are 
 through `./task setup-dev`; workspace verification enters through its ordinary
 managed targets.
 
-Quarantine is explicit reviewed policy in
-[`quarantine.json`](../scripts/ci_policy/quarantine.json), initially empty.
-Each entry names one package and exact top-level test, a GitHub issue, owner,
-and expiry date. Expiry fails planning. Quarantined tests run independently in
-nightly observation and remain visible without blocking admission. The system
-never labels an unexplained failure flaky or quarantines it automatically.
+No test is parked. A deterministic failure is fixed in the product or the
+test; the system never labels an unexplained failure flaky or excuses it.
 
 [`queue-health.yml`](../.github/workflows/queue-health.yml) reports the last
 24 hours every four hours: queue-to-merge time from structured timeline events,
@@ -1453,8 +1451,7 @@ The GitHub Free plan runs twenty hosted jobs at once across the organization,
 five of them on macOS, and starts waiting jobs first come, first served. The
 project uses no larger or self-hosted runners, so those limits are fixed.
 Concurrency is bounded by construction: each class of work holds a
-fixed number of runners, through one run at a time, capped matrices, and a
-run's stages in turn wherever running them side by side would widen it. The
+fixed number of runners, through one run at a time and capped matrices. The
 merge queue's own settings budget its class: groups built at once times the
 gate's cap. The `capacity` table in
 [`verification-plan.json`](../scripts/verification-plan.json) declares each
@@ -1469,7 +1466,7 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 |---|---|---|---|
 | Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs beside the `release` platform lanes one at a time, then two browser shards beside the desktop journey |
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
-| Nightly | `nightly.yml` | `nightly` | 2 (1): the `nightly` profile capped at two, then the two platform jobs, then one browser shard beside the desktop journey, then the upgrade rehearsal beside quarantine observation |
+| Nightly | `nightly.yml` | `nightly` | 12 (4): the `nightly` profile capped at six, beside the two platform jobs, two browser shards with the desktop journey, and the upgrade rehearsal |
 | Releases | `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build; later desktop rehearsal or protected fixture preparation beside Linux packaging |
 | DCO certification | `dco.yml` | `dco-certification` | 1 |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
@@ -1506,8 +1503,10 @@ average occupancy does not change with it. Recorded occupancy averages about eig
 of the twenty runners, and jobs without a matrix cap start within seconds. Raising a
 cap is worthwhile while lanes wait on the cap rather than on a runner; check that
 before changing one. Caps do not establish queue latency guarantees.
-On macOS, qualification, warming, and nightly hold one runner each and a release
-two, five in all; the merge queue and the admission tier run on Linux.
+On macOS, qualification and warming hold one runner each, nightly four, and a
+release two. Nightly is scheduled outside the hours releases and qualification
+run; when they do overlap, macOS jobs wait for one of the five runners. The
+merge queue and the admission tier run on Linux.
 
 ### Upgrade rehearsal preparation and startup evidence
 

@@ -104,8 +104,7 @@ func TestHostedVerificationAggregatesRequireEveryBlockingJob(t *testing.T) {
 		jobs := hostedJobs(t, workflow)
 		var dependencies []string
 		for name := range jobs {
-			if name != gate && !(workflow == "nightly" && name == "quarantine") &&
-				!(workflow == "ci" && name == "dispatched-check") {
+			if name != gate && !(workflow == "ci" && name == "dispatched-check") {
 				dependencies = append(dependencies, name)
 			}
 		}

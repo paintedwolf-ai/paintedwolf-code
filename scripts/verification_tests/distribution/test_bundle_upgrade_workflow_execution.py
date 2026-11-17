@@ -67,7 +67,7 @@ class WorkflowTests(unittest.TestCase):
 
     def test_nightly_installs_the_same_rehearsal_dependencies_before_execution(self):
         workflow = (ROOT / ".github/workflows/nightly.yml").read_text()
-        upgrade = workflow.split("  upgrade-path:\n", 1)[1].split("  quarantine:\n", 1)[0]
+        upgrade = workflow.split("  upgrade-path:\n", 1)[1].split("  nightly:\n", 1)[0]
         self.assertLess(upgrade.index("uses: ./.github/actions/setup-verification"), upgrade.index("run: ./task upgrade:rehearse"))
         self.assertLess(upgrade.index("brew install minisign"), upgrade.index("run: ./task upgrade:rehearse"))
         self.assertNotIn("run: ./task build:lycaon-dev", upgrade)

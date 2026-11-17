@@ -65,6 +65,9 @@ outputs:
   decide-cache-hit:
     description: Whether the decision engine's exact build cache was restored
     value: ${{ steps.decide.outputs.cache-hit }}
+  generation-cache-hit:
+    description: Whether the generation runtime's exact build cache was restored
+    value: ${{ steps.generation.outputs.cache-hit }}
   document-cache-hit:
     description: Whether the document compiler cache was restored
     value: ${{ steps.document.outputs.cache-hit }}
@@ -170,6 +173,13 @@ runs:
       id: decide
       if: inputs.setup == 'shell'
       uses: ./.github/actions/cache-decide
+      with:
+        lookup-only: ${{ inputs.lookup-only }}
+
+    - name: Restore the generation runtime build
+      id: generation
+      if: inputs.setup == 'shell'
+      uses: ./.github/actions/cache-generation
       with:
         lookup-only: ${{ inputs.lookup-only }}
 

@@ -1154,23 +1154,10 @@
       "setup": "verification",
       "shards": 2
     },
-    "limits": {
-      "targets": [
-        "budgets",
-        "coverage:changes"
-      ],
-      "minutes": 120,
-      "profiles": [
-        "check",
-        "integration",
-        "nightly"
-      ],
-      "suite": "all",
-      "setup": "verification",
-      "priority": "reject"
-    },
     "build": {
       "targets": [
+        "budgets",
+        "coverage:changes",
         "build",
         "build:cross",
         "licenses:notices",
@@ -1187,7 +1174,12 @@
         "nightly"
       ],
       "suite": "all",
-      "setup": "verification"
+      "setup": "verification",
+      "early_targets": [
+        "budgets",
+        "coverage:changes"
+      ],
+      "priority": "reject"
     },
     "lint": {
       "targets": [
@@ -1402,39 +1394,6 @@
         "./internal/worker"
       ]
     },
-    "go-coverage": {
-      "targets": [
-        "check:coverage"
-      ],
-      "minutes": 180,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "coverage",
-      "setup": "verification"
-    },
-    "frontend-coverage": {
-      "targets": [
-        "den:coverage-check"
-      ],
-      "minutes": 90,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "coverage",
-      "setup": "verification"
-    },
-    "transcript-scale": {
-      "targets": [
-        "den:test:transcript-scale"
-      ],
-      "minutes": 60,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "performance",
-      "setup": "verification"
-    },
     "vulnerability-freshness": {
       "targets": [
         "lint:vuln:fresh"
@@ -1457,22 +1416,12 @@
       "suite": "performance",
       "setup": "verification"
     },
-    "sidecar-performance": {
-      "targets": [
-        "perf:sidecar"
-      ],
-      "minutes": 120,
-      "profiles": [
-        "nightly"
-      ],
-      "suite": "performance",
-      "setup": "verification"
-    },
     "sidecar-soak": {
       "targets": [
+        "perf:sidecar",
         "perf:soak"
       ],
-      "minutes": 90,
+      "minutes": 120,
       "profiles": [
         "nightly"
       ],
@@ -1503,7 +1452,7 @@
       "fast": 4,
       "integration": 6,
       "check": 3,
-      "nightly": 2,
+      "nightly": 6,
       "release": 1
     }
   }
