@@ -76,7 +76,7 @@ func (s *conformanceSweep) observedRead(ctx context.Context, req conformanceRequ
 	}
 	mark, err := s.effects.mark(ctx)
 	if err != nil {
-		s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not observe host state: %v", err)
+		s.findings.add(ruleReadsHaveNoEffects, req.op.ID, req.probe, "could not observe host state after %s: %v", s.lastMutation, err)
 		return s.send(ctx, req), nil
 	}
 	ex := s.send(ctx, req)
@@ -205,15 +205,22 @@ func (e *hostEffects) mark(ctx context.Context) (int64, error) {
 // later report outstanding, which the read that follows would be charged with, so
 // only a round that wrote once proves the pipeline empty.
 func (e *hostEffects) awaitWatcherBarrier(ctx context.Context) error {
-	for patience := time.Second; ; patience *= 2 {
+	patience := time.Second
+	for range watcherBarrierRounds {
 		rewrote, err := e.watcherBarrierRound(ctx, patience)
 		if err != nil || !rewrote {
 			return err
 		}
 		e.quiesce(ctx)
 		e.drain()
+		patience *= 2
 	}
+	return fmt.Errorf("the watcher reported none of %d barrier rounds in %s", watcherBarrierRounds, e.projectDir)
 }
+
+// watcherBarrierRounds bounds the rewrites of an unanswered barrier, so a
+// watcher that stopped reporting fails each read instead of hanging the sweep.
+const watcherBarrierRounds = 6
 
 func (e *hostEffects) watcherBarrierRound(ctx context.Context, patience time.Duration) (bool, error) {
 	path := filepath.Join(e.projectDir, watcherBarrierFile)
@@ -248,11 +255,7 @@ func (e *hostEffects) watcherBarrierRound(ctx context.Context, patience time.Dur
 				}
 			}
 		case <-retry.C:
-			rewrote = true
-			e.barrierStep++
-			if err := write(); err != nil {
-				return rewrote, err
-			}
+			return true, nil
 		case <-ctx.Done():
 			return rewrote, ctx.Err()
 		}

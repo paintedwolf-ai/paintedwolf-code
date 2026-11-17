@@ -171,6 +171,8 @@ type conformanceSweep struct {
 	// beforeDeletes runs once the resources every later probe needs exist,
 	// before the delete stage removes them.
 	beforeDeletes func(context.Context)
+	// lastMutation names the latest success request, for diagnostics.
+	lastMutation string
 	corpus        *corpusRecorder
 	findings      *conformanceFindings
 	// children maps a collection path to the path parameters addressed below it.

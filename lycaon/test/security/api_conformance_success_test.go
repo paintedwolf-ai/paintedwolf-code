@@ -133,6 +133,7 @@ func (s *conformanceSweep) probeSuccessPaths(ctx context.Context, stages ...succ
 			continue
 		}
 		ex := s.send(ctx, req)
+		s.lastMutation = op.ID
 		if ex.status/100 != 2 {
 			continue
 		}
