@@ -13,11 +13,14 @@ var outsideNamespaceImplementation []byte
 //go:embed outside_namespace.sql
 var outsideNamespaceSQL []byte
 
+//go:embed table_rebuild.go
+var tableRebuildImplementation []byte
+
 // OutsideNamespace gives every project one source namespace for files beyond
 // its attached folders, and per-chat references to the files in it.
 func OutsideNamespace() Part {
 	return Part{
-		Source:        append(append([]byte{}, outsideNamespaceImplementation...), outsideNamespaceSQL...),
+		Source:        append(append(append([]byte{}, outsideNamespaceImplementation...), outsideNamespaceSQL...), tableRebuildImplementation...),
 		RebuildTables: true,
 		Apply:         migrateOutsideNamespace,
 		Validate:      validateOutsideNamespace,

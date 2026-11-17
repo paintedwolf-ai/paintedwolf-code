@@ -9,6 +9,21 @@ import (
 	"context"
 )
 
+const adoptSourceDirectoryAsRoot = `-- name: AdoptSourceDirectoryAsRoot :exec
+UPDATE source_directories SET parent_id = NULL, name = '', root_id = ?1
+WHERE id = ?2 AND present = 1
+`
+
+type AdoptSourceDirectoryAsRootParams struct {
+	RootID      string `json:"root_id"`
+	DirectoryID string `json:"directory_id"`
+}
+
+func (q *Queries) AdoptSourceDirectoryAsRoot(ctx context.Context, arg AdoptSourceDirectoryAsRootParams) error {
+	_, err := q.db.ExecContext(ctx, adoptSourceDirectoryAsRoot, arg.RootID, arg.DirectoryID)
+	return err
+}
+
 const deleteEmptySourceOperation = `-- name: DeleteEmptySourceOperation :exec
 DELETE FROM source_operations
 WHERE id = ?1
@@ -146,8 +161,59 @@ func (q *Queries) ListSourceFileOperationIDs(ctx context.Context, fileID string)
 	return items, nil
 }
 
-const recordSourceChatFile = `-- name: RecordSourceChatFile :exec
+const moveOutsideEditorDocuments = `-- name: MoveOutsideEditorDocuments :exec
+UPDATE editor_documents
+SET root_id = ?1, path = substr(path, length(?2) + 2)
+WHERE project_id = ?3 AND root_id = ?4
+  AND substr(path, 1, length(?2) + 1) = ?2 || '/'
+`
 
+type MoveOutsideEditorDocumentsParams struct {
+	RootID        string      `json:"root_id"`
+	Prefix        interface{} `json:"prefix"`
+	ProjectID     string      `json:"project_id"`
+	OutsideRootID string      `json:"outside_root_id"`
+}
+
+func (q *Queries) MoveOutsideEditorDocuments(ctx context.Context, arg MoveOutsideEditorDocumentsParams) error {
+	_, err := q.db.ExecContext(ctx, moveOutsideEditorDocuments,
+		arg.RootID,
+		arg.Prefix,
+		arg.ProjectID,
+		arg.OutsideRootID,
+	)
+	return err
+}
+
+const moveSourceDirectoryHeadsRoot = `-- name: MoveSourceDirectoryHeadsRoot :exec
+UPDATE source_head_entries SET root_id = ?1 WHERE directory_id = ?2
+`
+
+type MoveSourceDirectoryHeadsRootParams struct {
+	RootID      string `json:"root_id"`
+	DirectoryID string `json:"directory_id"`
+}
+
+func (q *Queries) MoveSourceDirectoryHeadsRoot(ctx context.Context, arg MoveSourceDirectoryHeadsRootParams) error {
+	_, err := q.db.ExecContext(ctx, moveSourceDirectoryHeadsRoot, arg.RootID, arg.DirectoryID)
+	return err
+}
+
+const moveSourceDirectoryRoot = `-- name: MoveSourceDirectoryRoot :exec
+UPDATE source_directories SET root_id = ?1 WHERE id = ?2
+`
+
+type MoveSourceDirectoryRootParams struct {
+	RootID      string `json:"root_id"`
+	DirectoryID string `json:"directory_id"`
+}
+
+func (q *Queries) MoveSourceDirectoryRoot(ctx context.Context, arg MoveSourceDirectoryRootParams) error {
+	_, err := q.db.ExecContext(ctx, moveSourceDirectoryRoot, arg.RootID, arg.DirectoryID)
+	return err
+}
+
+const recordSourceChatFile = `-- name: RecordSourceChatFile :exec
 INSERT INTO source_chat_files (session_id, file_id, changed, read, opened, first_ts, last_ts)
 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6)
 ON CONFLICT(session_id, file_id) DO UPDATE SET
@@ -166,7 +232,7 @@ type RecordSourceChatFileParams struct {
 	Ts        string `json:"ts"`
 }
 
-// Outside files a chat touched.
+// RecordSourceChatFile adds a chat's relations to an outside file.
 func (q *Queries) RecordSourceChatFile(ctx context.Context, arg RecordSourceChatFileParams) error {
 	_, err := q.db.ExecContext(ctx, recordSourceChatFile,
 		arg.SessionID,

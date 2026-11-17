@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -21,6 +22,10 @@ func DeleteSessionTree(ctx context.Context, tx *sql.Tx, rootID string) ([]string
 	if len(ids) == 0 {
 		return nil, nil
 	}
+	var projectID string
+	if err := tx.QueryRowContext(ctx, `SELECT project_id FROM sessions WHERE id = ?`, rootID).Scan(&projectID); err != nil {
+		return nil, fmt.Errorf("session project: %w", err)
+	}
 	now := time.Now().UTC()
 	for _, id := range ids {
 		if err := deleteSessionOwnedRows(ctx, tx, id, now); err != nil {
@@ -34,7 +39,34 @@ func DeleteSessionTree(ctx context.Context, tx *sql.Tx, rootID string) ([]string
 	if n, _ := res.RowsAffected(); n == 0 {
 		return nil, nil
 	}
+	if err := ReleaseOutsideFiles(ctx, New(tx), projectID); err != nil {
+		return nil, fmt.Errorf("release outside files: %w", err)
+	}
 	return ids, nil
+}
+
+// ReleaseOutsideFiles deletes the history of outside files nothing holds any
+// longer, together with operations left without effects or versions.
+func ReleaseOutsideFiles(ctx context.Context, q *Queries, projectID string) error {
+	released, err := q.ListReleasedOutsideFiles(ctx, projectID)
+	if err != nil {
+		return err
+	}
+	for _, fileID := range released {
+		operations, err := q.ListSourceFileOperationIDs(ctx, fileID)
+		if err != nil {
+			return err
+		}
+		if err := q.DeleteReleasedOutsideFile(ctx, DeleteReleasedOutsideFileParams{FileID: fileID, ProjectID: projectID}); err != nil {
+			return err
+		}
+		for _, operation := range operations {
+			if err := q.DeleteEmptySourceOperation(ctx, operation); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // sessionTreeQuery returns a root session and its descendants.
@@ -107,7 +139,7 @@ func deleteWorkflowRuns(ctx context.Context, tx *sql.Tx, runIDs []string) error 
 	return nil
 }
 
-func queryStringColumn(ctx context.Context, tx *sql.Tx, query string, args ...any) ([]string, error) {
+func queryStringColumn(ctx context.Context, tx DBTX, query string, args ...any) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -131,3 +163,56 @@ func stringArgs(ss []string) []any {
 	}
 	return out
 }
+
+// AdoptOutsideTree moves the outside files under rel into a newly attached
+// root, keeping their file identities, history and editor documents. Recorded
+// versions keep the address they were recorded at.
+func AdoptOutsideTree(ctx context.Context, q *Queries, projectID, rootID, rel string) error {
+	outside, err := q.GetProjectOutsideRootID(ctx, projectID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	dir, err := q.GetSourceDirectoryRoot(ctx, GetSourceDirectoryRootParams{ProjectID: projectID, BranchID: "", RootID: outside})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	for _, name := range strings.Split(rel, "/") {
+		dir, err = q.GetSourceDirectoryChild(ctx, GetSourceDirectoryChildParams{ParentID: NullString(dir.ID), Name: name})
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+	}
+	subtree, err := queryStringColumn(ctx, q.db, sourceSubtreeQuery, dir.ID)
+	if err != nil {
+		return err
+	}
+	for _, id := range subtree {
+		if err := q.MoveSourceDirectoryHeadsRoot(ctx, MoveSourceDirectoryHeadsRootParams{RootID: rootID, DirectoryID: id}); err != nil {
+			return err
+		}
+		if err := q.MoveSourceDirectoryRoot(ctx, MoveSourceDirectoryRootParams{RootID: rootID, DirectoryID: id}); err != nil {
+			return err
+		}
+	}
+	if err := q.AdoptSourceDirectoryAsRoot(ctx, AdoptSourceDirectoryAsRootParams{DirectoryID: dir.ID, RootID: rootID}); err != nil {
+		return err
+	}
+	return q.MoveOutsideEditorDocuments(ctx, MoveOutsideEditorDocumentsParams{RootID: rootID, Prefix: rel, ProjectID: projectID, OutsideRootID: outside})
+}
+
+const sourceSubtreeQuery = `
+		WITH RECURSIVE subtree(id) AS (
+		    SELECT source_directories.id FROM source_directories WHERE source_directories.id = ?
+		    UNION ALL
+		    SELECT d.id FROM source_directories d JOIN subtree parent ON d.parent_id = parent.id
+		)
+		SELECT subtree.id FROM subtree`

@@ -54,3 +54,19 @@ DELETE FROM source_operations
 WHERE id = sqlc.arg(operation_id)
   AND NOT EXISTS (SELECT 1 FROM source_effects e WHERE e.operation_id = sqlc.arg(operation_id))
   AND NOT EXISTS (SELECT 1 FROM source_versions v WHERE v.operation_id = sqlc.arg(operation_id));
+
+-- name: AdoptSourceDirectoryAsRoot :exec
+UPDATE source_directories SET parent_id = NULL, name = '', root_id = sqlc.arg(root_id)
+WHERE id = sqlc.arg(directory_id) AND present = 1;
+
+-- name: MoveSourceDirectoryRoot :exec
+UPDATE source_directories SET root_id = sqlc.arg(root_id) WHERE id = sqlc.arg(directory_id);
+
+-- name: MoveSourceDirectoryHeadsRoot :exec
+UPDATE source_head_entries SET root_id = sqlc.arg(root_id) WHERE directory_id = sqlc.arg(directory_id);
+
+-- name: MoveOutsideEditorDocuments :exec
+UPDATE editor_documents
+SET root_id = sqlc.arg(root_id), path = substr(path, length(sqlc.arg(prefix)) + 2)
+WHERE project_id = sqlc.arg(project_id) AND root_id = sqlc.arg(outside_root_id)
+  AND substr(path, 1, length(sqlc.arg(prefix)) + 1) = sqlc.arg(prefix) || '/';
