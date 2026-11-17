@@ -5,7 +5,11 @@ import { ActivitySummary, type ActivitySummaryState } from "./ActivitySummary.ts
 import { briefingCopy } from "./briefing-copy.ts";
 import { SUMMARY_FADE_CLASS, clearSummaryFades } from "./summary-fade.ts";
 
-afterEach(() => clearSummaryFades());
+afterEach(() => {
+  clearSummaryFades();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 const region = (root: HTMLElement) => root.querySelector<HTMLElement>('[data-testid="activity-summary"]')!;
 
@@ -46,4 +50,51 @@ describe("ActivitySummary", () => {
     const writing = render(() => <ActivitySummary state={{ kind: "ready", purpose: "Runs the tests.", recordId: "r3", changePending: true }} running={false} onRetry={() => {}} />);
     expect(region(writing.container).textContent).toContain(briefingCopy.waiting);
   });
+
+  it("keeps both labels visible while each section arrives independently", () => {
+    const [state, setState] = createSignal<ActivitySummaryState>({ kind: "pending" });
+    const view = render(() => <ActivitySummary state={state()} running={false} onRetry={() => {}} />);
+    const intent = () => region(view.container).querySelector('[data-section="intent"]')!;
+    const outcome = () => region(view.container).querySelector('[data-section="outcome"]')!;
+    expect(intent().textContent).toContain(`Intent: ${briefingCopy.waiting}`);
+    expect(outcome().textContent).toContain(`Outcome: ${briefingCopy.waiting}`);
+    setState({ kind: "ready", change: "Found `main.go`.", recordId: "partial", changePending: false, purposePending: true });
+    expect(intent().textContent).toContain(briefingCopy.waiting);
+    expect(outcome().textContent).toContain("Outcome: Found main.go.");
+    expect(view.queryByTestId("activity-summary-retry")).toBeNull();
+    setState({ kind: "ready", purpose: "Finds the entry point.", change: "Found `main.go`.", recordId: "partial", changePending: false });
+    expect(intent().textContent).toContain("Intent: Finds the entry point.");
+    expect(outcome().querySelector(`.${SUMMARY_FADE_CLASS}`)).not.toBeNull();
+  });
+
+  it("makes a missing section retryable without hiding the available section", () => {
+    const retry = vi.fn();
+    const view = render(() => <ActivitySummary state={{ kind: "ready", change: "The command failed.", recordId: "failed", changePending: false }} running={false} onRetry={retry} />);
+    expect(view.getByRole("button", { name: "Retry intent summary" })).toBeTruthy();
+    expect(region(view.container).textContent).toContain("Outcome: The command failed.");
+    fireEvent.click(view.getByRole("button", { name: "Retry intent summary" }));
+    expect(retry).toHaveBeenCalledTimes(1);
+  });
+
+  it("expands only the clipped section and disconnects its observer", () => {
+    const disconnect = vi.fn();
+    vi.stubGlobal("ResizeObserver", class {
+      observe = vi.fn();
+      disconnect = disconnect;
+    });
+    vi.spyOn(window, "getComputedStyle").mockReturnValue({
+      getPropertyValue: () => "3", lineHeight: "20px",
+    } as unknown as CSSStyleDeclaration);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      return { height: this.closest('[data-section="outcome"]') ? 100 : 20 } as DOMRect;
+    });
+    const view = render(() => <ActivitySummary state={{ kind: "ready", purpose: "Reads source.", change: "A long outcome.", recordId: "long", changePending: false }} running={false} onRetry={() => {}} />);
+    expect(view.queryByRole("button", { name: "Show all intent" })).toBeNull();
+    fireEvent.click(view.getByRole("button", { name: "Show all outcome" }));
+    expect(region(view.container).querySelector('[data-section="outcome"] .den-activity-summary__text')?.hasAttribute("data-expanded")).toBe(true);
+    expect(region(view.container).querySelector('[data-section="intent"] .den-activity-summary__text')?.hasAttribute("data-expanded")).toBe(false);
+    view.unmount();
+    expect(disconnect).toHaveBeenCalledTimes(2);
+  });
+
 });
