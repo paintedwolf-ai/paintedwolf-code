@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"fmt"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -121,45 +123,34 @@ func TestEnqueueTxOnAnUnwiredOutboxSaysSo(t *testing.T) {
 	}
 }
 
-// Publish-then-delete is the delivery guarantee. A failure after the subscriber
-// fanout leaves the row, so the next drain sends it again: at-least-once, never
-// at-most-once.
-func TestDrainRepublishesRatherThanLosingAnEvent(t *testing.T) {
-	sqlDB := testDB(t)
-	hub := &recordingHub{failures: 1}
-	outbox := New(sqlDB, hub)
-	testutil.FailErr(t, "enqueue",
-		outbox.Enqueue(t.Context(), testTopic, events.PublishKey{Project: "018eca20-5608-7a55-824f-920998f472b2", EventID: "ev-1"}, map[string]string{"op": "noop"}))
-
-	if err := outbox.drain(t.Context()); err == nil {
-		t.Fatal("drain reported success while delivery failed")
-	}
-	if n := outboxRows(t, sqlDB); n != 1 {
-		t.Fatalf("outbox rows = %d want the undelivered event kept", n)
-	}
-	testutil.FailErr(t, "second drain", outbox.drain(t.Context()))
-	if got := hub.deliveries(); len(got) != 2 || got[0] != "ev-1" || got[1] != "ev-1" {
-		t.Fatalf("deliveries = %v want the same event published twice", got)
-	}
-	if n := outboxRows(t, sqlDB); n != 0 {
-		t.Fatalf("outbox rows = %d want 0 once delivery succeeded", n)
-	}
-}
-
-// Delivery order is the row order, so an entity's transitions reach a subscriber
-// in the order they committed.
-func TestDrainPublishesInCommitOrder(t *testing.T) {
-	sqlDB := testDB(t)
-	hub := &recordingHub{}
-	outbox := New(sqlDB, hub)
-	for _, id := range []string{"ev-1", "ev-2", "ev-3"} {
-		testutil.FailErr(t, "enqueue "+id,
-			outbox.Enqueue(t.Context(), testTopic, events.PublishKey{Project: "018eca20-5608-7a55-824f-920998f472b2", EventID: id}, map[string]string{"op": id}))
-	}
-	testutil.FailErr(t, "drain", outbox.drain(t.Context()))
-	got := hub.deliveries()
-	if len(got) != 3 || got[0] != "ev-1" || got[1] != "ev-2" || got[2] != "ev-3" {
-		t.Fatalf("deliveries = %v want commit order", got)
+func TestDrainPreservesOrderAcrossFailedPublishesAndRestart(t *testing.T) {
+	for _, failures := range []int{0, 1, 6, 13} {
+		t.Run(fmt.Sprint(failures), func(t *testing.T) {
+			sqlDB := testDB(t)
+			hub := &recordingHub{failures: failures}
+			outbox := New(sqlDB, hub)
+			for _, id := range []string{"ev-1", "ev-2", "ev-3"} {
+				testutil.FailErr(t, "enqueue "+id,
+					outbox.Enqueue(t.Context(), testTopic, events.PublishKey{Project: "018eca20-5608-7a55-824f-920998f472b2", EventID: id}, map[string]string{"op": id}))
+			}
+			for i := range failures {
+				if err := outbox.drain(t.Context()); err == nil {
+					t.Fatalf("attempt %d succeeded with a failing hub", i+1)
+				}
+				if rows := outboxRows(t, sqlDB); rows != 3 {
+					t.Fatalf("attempt %d left %d queued events, want 3", i+1, rows)
+				}
+				outbox = New(sqlDB, hub)
+			}
+			testutil.FailErr(t, "drain after recovery", outbox.drain(t.Context()))
+			want := append(slices.Repeat([]string{"ev-1"}, failures), "ev-1", "ev-2", "ev-3")
+			if got := hub.deliveries(); !slices.Equal(got, want) {
+				t.Fatalf("deliveries = %v, want %v", got, want)
+			}
+			if rows := outboxRows(t, sqlDB); rows != 0 {
+				t.Fatalf("%d queued events after delivery", rows)
+			}
+		})
 	}
 }
 
@@ -253,84 +244,23 @@ func TestEnqueueTxRejectsEmptyTopic(t *testing.T) {
 	}
 }
 
-// selectiveFailHub always fails one chosen event id and delivers everything
-// else, which is how a permanently unpublishable row is told apart from an
-// ordinary transient failure.
-type selectiveFailHub struct {
-	mu          sync.Mutex
-	failEventID string
-	attempts    int
-	published   []string
-}
-
-func (h *selectiveFailHub) Publish(_ context.Context, _ api.EventTopic, key events.PublishKey, _ any) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	if key.EventID == h.failEventID {
-		h.attempts++
-		return errors.New("permanently broken subscriber")
-	}
-	h.published = append(h.published, key.EventID)
-	return nil
-}
-
-func (h *selectiveFailHub) Subscribe(context.Context, events.Subscription) (<-chan api.EventEnvelope, func(), error) {
-	return nil, func() {}, nil
-}
-
-func (h *selectiveFailHub) SubscriberCount() int { return 0 }
-
-func (h *selectiveFailHub) deliveries() []string {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return append([]string(nil), h.published...)
-}
-
-// A row that can never deliver must not wedge the rows behind it forever: it
-// blocks them only while under the retry cap, and drain keeps flowing again
-// once the row is dropped past it.
-func TestDrainDropsRowAfterMaxDeliveryAttempts(t *testing.T) {
-	var logged bytes.Buffer
-	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logged, &slog.HandlerOptions{Level: slog.LevelError})))
-	t.Cleanup(func() { slog.SetDefault(previous) })
-
+func TestDrainPassesAStoredRowThatCannotBeDecoded(t *testing.T) {
 	sqlDB := testDB(t)
-	hub := &selectiveFailHub{failEventID: "ev-bad"}
+	hub := &recordingHub{}
 	outbox := New(sqlDB, hub)
+	for _, id := range []string{"malformed", "valid"} {
+		testutil.FailErr(t, "enqueue "+id,
+			outbox.Enqueue(t.Context(), testTopic, events.PublishKey{Project: "018eca20-5608-7a55-824f-920998f472b2", EventID: id}, nil))
+	}
+	_, err := sqlDB.ExecContext(t.Context(), `UPDATE event_outbox SET data_json = '?' WHERE event_id = 'malformed'`)
+	testutil.FailErr(t, "corrupt queued payload", err)
 
-	testutil.FailErr(t, "enqueue bad",
-		outbox.Enqueue(t.Context(), testTopic, events.PublishKey{Project: "018eca20-5608-7a55-824f-920998f472b2", EventID: "ev-bad"}, map[string]string{}))
-	testutil.FailErr(t, "enqueue good",
-		outbox.Enqueue(t.Context(), testTopic, events.PublishKey{Project: "018eca20-5608-7a55-824f-920998f472b2", EventID: "ev-good"}, map[string]string{}))
-
-	// Under the cap, the bad row still blocks the good one queued behind it.
-	for i := 0; i < maxDeliveryAttempts-1; i++ {
-		if err := outbox.drain(t.Context()); err == nil {
-			t.Fatalf("drain attempt %d: want failure while under the retry cap", i)
-		}
+	testutil.FailErr(t, "drain", outbox.drain(t.Context()))
+	if got := hub.deliveries(); !slices.Equal(got, []string{"valid"}) {
+		t.Fatalf("deliveries = %v, want only the valid event", got)
 	}
-	if got := hub.deliveries(); len(got) != 0 {
-		t.Fatalf("deliveries = %v want none while the bad row blocks the queue", got)
-	}
-	if n := outboxRows(t, sqlDB); n != 2 {
-		t.Fatalf("outbox rows = %d want both rows still queued", n)
-	}
-
-	// The attempt that exceeds the cap drops the bad row and keeps draining
-	// straight through to the good one in the same call.
-	testutil.FailErr(t, "final drain", outbox.drain(t.Context()))
-	if got := hub.deliveries(); len(got) != 1 || got[0] != "ev-good" {
-		t.Fatalf("deliveries = %v want only ev-good delivered", got)
-	}
-	if n := outboxRows(t, sqlDB); n != 0 {
-		t.Fatalf("outbox rows = %d want both rows gone (one delivered, one dropped)", n)
-	}
-	if hub.attempts != maxDeliveryAttempts {
-		t.Fatalf("hub saw %d attempts at the bad row, want exactly %d", hub.attempts, maxDeliveryAttempts)
-	}
-	if !strings.Contains(logged.String(), "ev-bad") {
-		t.Fatalf("dropped row was not logged loudly: %q", logged.String())
+	if rows := outboxRows(t, sqlDB); rows != 0 {
+		t.Fatalf("%d queued events after drain", rows)
 	}
 }
 
