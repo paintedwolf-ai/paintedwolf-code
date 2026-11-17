@@ -71,23 +71,38 @@ func sessionContext(root, call string) tools.ToolContext {
 	}
 }
 
+// result is what a test reads from one exchange through Perform, the path curl
+// runs.
+type result struct {
+	Status      int
+	FinalURL    string
+	Headers     []outboundhttp.Header
+	SentHeaders []outboundhttp.Header
+	Redirects   []outboundhttp.Hop
+	Bytes       int64
+	SHA256      string
+	ContentType string
+	Body        string
+}
+
 func runRequest(t *testing.T, deps Deps, args map[string]any, tctx tools.ToolContext) (result, error) {
 	t.Helper()
-	registry := tools.NewDefaultRegistry()
-	if err := Register(registry, deps); err != nil {
-		t.Fatalf("register http_request: %v", err)
-	}
 	ctx, scope := socketref.WithScope(t.Context())
 	defer scope.Close()
-	out, err := registry.Run(ctx, "http_request", args, tctx)
+	ex, err := Perform(ctx, deps, args, tctx, ExchangeOptions{MaxBodyBytes: 4 << 20})
+	var transport *TransportFailure
+	if errors.As(err, &transport) {
+		return result{}, transport.Reject
+	}
 	if err != nil {
 		return result{}, err
 	}
-	var got result
-	if err := json.Unmarshal([]byte(out), &got); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-	return got, nil
+	resp := ex.Response
+	return result{
+		Status: resp.Status, FinalURL: ex.FinalURL, Headers: resp.Headers, SentHeaders: ex.SentHeaders,
+		Redirects: ex.Redirects, Bytes: resp.Bytes, SHA256: resp.SHA256, ContentType: resp.ContentType,
+		Body: string(resp.Body),
+	}, nil
 }
 
 func TestHTTPRequestCookieJarPersistsALoginSessionWithoutDisclosingValues(t *testing.T) {

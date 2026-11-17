@@ -2,7 +2,6 @@ package httpaction
 
 import (
 	"context"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
@@ -137,7 +136,7 @@ func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[st
 		RuleID:      match.RuleID, RuleTitle: match.Title, GenericShape: match.GenericShape,
 		Occurrences: len(matches), SourceKind: secretmatch.SourceToolArgument, SourceTool: "http_request",
 		SourcePath: path, OriginKind: origin, Fingerprints: secretmatch.Fingerprints(matches),
-		VarName: match.VarName, Container: match.Container, ContestToken: strings.TrimSpace(spec.contest),
+		VarName: match.VarName, Container: match.Container,
 		RecipientsLocal: spec.dialsLoopback(),
 	})
 	if err != nil {

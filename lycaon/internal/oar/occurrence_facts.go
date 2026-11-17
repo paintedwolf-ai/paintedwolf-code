@@ -115,8 +115,6 @@ var staticOccurrenceFactDecls = []factDecl{
 	{"page_live_ids", oarcore.TypeListString, FactTierHost, ""},
 
 	{"measure_selector", oarcore.TypeString, FactTierHost, ""},
-	{"cookie_jar_name", oarcore.TypeString, FactTierHost, ""},
-	{"token_jar_name", oarcore.TypeString, FactTierHost, ""},
 
 	{"grep_nested_repeat", oarcore.TypeBool, FactTierHost, ""},
 	{"can_page_act", oarcore.TypeBool, FactTierHost, ""},

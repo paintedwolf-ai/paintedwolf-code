@@ -65,13 +65,3 @@ func externalObservedURLs(secrets *secretcap.Resolution, spec requestSpec, final
 	}
 	return out
 }
-
-// renderHeaders presents redirect header values with resolved secrets shown
-// as their references, as hop URLs are.
-func renderHeaders(render func(string) string, headers []outboundhttp.Header) []outboundhttp.Header {
-	out := make([]outboundhttp.Header, len(headers))
-	for i, h := range headers {
-		out[i] = outboundhttp.Header{Name: h.Name, Value: render(h.Value)}
-	}
-	return out
-}

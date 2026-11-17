@@ -452,3 +452,27 @@ retired:
     kind: hint_code
     summary: Rejected delegate_dispatch without a leg id; delegate_dispatch is retired.
     date: 2026-11-15
+  - id: HTTP_REQUEST_COOKIE_JAR_FAILED
+    kind: hint_code
+    summary: A named cookie jar could not be opened or saved; named jars left with the standalone http_request tool, and curl keeps cookies in -b and -c files.
+    date: 2026-11-16
+  - id: HTTP_REQUEST_COOKIE_NOT_HELD
+    kind: hint_code
+    summary: A cookie reference named a cookie the jar did not hold; cookie references left with the standalone http_request tool.
+    date: 2026-11-16
+  - id: HTTP_REQUEST_RESPONSE_PATH_DENIED
+    kind: hint_code
+    summary: response_path could not land the response body in the project; curl writes bodies with -o through the write door.
+    date: 2026-11-16
+  - id: HTTP_REQUEST_TOKEN_CAPTURE_FAILED
+    kind: hint_code
+    summary: capture_tokens could not extract a token from the response; token jars left with the standalone http_request tool.
+    date: 2026-11-16
+  - id: HTTP_REQUEST_TOKEN_JAR_FAILED
+    kind: hint_code
+    summary: A token jar could not be opened or saved; token jars left with the standalone http_request tool.
+    date: 2026-11-16
+  - id: HTTP_REQUEST_TOKEN_NOT_HELD
+    kind: hint_code
+    summary: A token reference named a token the jar did not hold; token jars left with the standalone http_request tool.
+    date: 2026-11-16

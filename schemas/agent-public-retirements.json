@@ -224,6 +224,38 @@
     "paintedwolf.grep_scope_required": {
       "version": 1,
       "summary": "Open-root grep needed a path or narrowing glob; search through command walks the requested scope under the program's own budgets."
+    },
+    "paintedwolf.http_request_cookie_jar_failed": {
+      "version": 1,
+      "summary": "A named cookie jar could not be opened or saved; named jars left with the standalone http_request tool, and curl keeps cookies in -b and -c files."
+    },
+    "paintedwolf.http_request_cookie_not_held": {
+      "version": 1,
+      "summary": "A cookie reference named a cookie the jar did not hold; cookie references left with the standalone http_request tool."
+    },
+    "paintedwolf.http_request_response_path_denied": {
+      "version": 1,
+      "summary": "response_path could not land the response body in the project; curl writes bodies with -o through the write door."
+    },
+    "paintedwolf.http_request_token_capture_failed": {
+      "version": 1,
+      "summary": "capture_tokens could not extract a token from the response; token jars left with the standalone http_request tool."
+    },
+    "paintedwolf.http_request_token_jar_failed": {
+      "version": 1,
+      "summary": "A token jar could not be opened or saved; token jars left with the standalone http_request tool."
+    },
+    "paintedwolf.http_request_token_not_held": {
+      "version": 1,
+      "summary": "A token reference named a token the jar did not hold; token jars left with the standalone http_request tool."
+    },
+    "paintedwolf.cookie_jar_name": {
+      "version": 1,
+      "summary": "Host fact of type string; the named cookie jar a standalone http_request call used."
+    },
+    "paintedwolf.token_jar_name": {
+      "version": 1,
+      "summary": "Host fact of type string; the token jar a standalone http_request call used."
     }
   },
   "vocabularies": {
@@ -551,6 +583,14 @@
       "paintedwolf.git_conflict_paths": {
         "content_contract": "paintedwolf.git_conflict_paths",
         "version": 1
+      },
+      "paintedwolf.cookie_jar_name": {
+        "content_contract": "paintedwolf.cookie_jar_name",
+        "version": 1
+      },
+      "paintedwolf.token_jar_name": {
+        "content_contract": "paintedwolf.token_jar_name",
+        "version": 1
       }
     },
     "rejection_codes": {
@@ -740,7 +780,31 @@
       ],
       "DELEGATE_DISPATCH_LEG_REQUIRED": [
         "TOOL_ARGS_INVALID"
-      ]
+      ],
+      "HTTP_REQUEST_COOKIE_JAR_FAILED": {
+        "content_contract": "paintedwolf.http_request_cookie_jar_failed",
+        "version": 1
+      },
+      "HTTP_REQUEST_COOKIE_NOT_HELD": {
+        "content_contract": "paintedwolf.http_request_cookie_not_held",
+        "version": 1
+      },
+      "HTTP_REQUEST_RESPONSE_PATH_DENIED": {
+        "content_contract": "paintedwolf.http_request_response_path_denied",
+        "version": 1
+      },
+      "HTTP_REQUEST_TOKEN_CAPTURE_FAILED": {
+        "content_contract": "paintedwolf.http_request_token_capture_failed",
+        "version": 1
+      },
+      "HTTP_REQUEST_TOKEN_JAR_FAILED": {
+        "content_contract": "paintedwolf.http_request_token_jar_failed",
+        "version": 1
+      },
+      "HTTP_REQUEST_TOKEN_NOT_HELD": {
+        "content_contract": "paintedwolf.http_request_token_not_held",
+        "version": 1
+      }
     },
     "tools": {
       "chmod": [

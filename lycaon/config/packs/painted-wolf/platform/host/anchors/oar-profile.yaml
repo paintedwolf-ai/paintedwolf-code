@@ -636,10 +636,6 @@ host_facts:
    type: list<string>
  - name: paintedwolf.measure_selector
    type: string
- - name: paintedwolf.cookie_jar_name
-   type: string
- - name: paintedwolf.token_jar_name
-   type: string
  - name: paintedwolf.grep_nested_repeat
    type: bool
  - name: paintedwolf.can_page_act
