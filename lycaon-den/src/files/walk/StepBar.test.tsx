@@ -19,6 +19,9 @@ import {
 
 import { resetEditorPrefsForTests } from "../../settings/editor/editor-prefs.ts";
 import { resetAppStateSnapshotForTests, getAppStateSnapshot } from "../../store/app-state-snapshot.ts";
+import { useElapsableClock } from "../../test/elapse.ts";
+
+const elapse = useElapsableClock();
 
 vi.mock("../../platform/persistence/app-state.ts", () => ({
   patchAppState: vi.fn(async (_patch, fallback) => fallback),
@@ -130,7 +133,7 @@ describe("StepBar", () => {
 
     fireEvent.mouseLeave(dot);
     fireEvent.mouseEnter(tooltip);
-    await new Promise((resolve) => setTimeout(resolve, 180));
+    await elapse(180);
     expect(screen.getByTestId("step-bar-tooltip")).toBe(tooltip);
 
     fireEvent.mouseLeave(tooltip);

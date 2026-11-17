@@ -24,6 +24,9 @@ import {
   RowAccordionProvider,
   createRowAccordion,
 } from "../chat/transcript/presentation/row-accordion.ts";
+import { useElapsableClock } from "../test/elapse.ts";
+
+const elapse = useElapsableClock();
 
 const client = stubFilesClient();
 vi.mock("../platform/connection/app-connection.ts", async original => ({
@@ -89,7 +92,7 @@ describe("FileEditDiff", () => {
       await waitFor(() => expect(screen.getByTestId("file-edit-diff-stat").textContent).toBe("+1−1"));
       const requested = opens.mock.calls.length + reads.mock.calls.length;
       setFold(multiWriteFold());
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await elapse(20);
       expect(screen.getByTestId("file-edit-diff-writes").textContent).toMatch(/3/);
       expect(opens.mock.calls.length + reads.mock.calls.length).toBe(requested);
     } finally {

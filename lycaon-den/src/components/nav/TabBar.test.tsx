@@ -219,7 +219,7 @@ describe("TabBar", () => {
     ).toBeTruthy();
     const progress = screen.getByTestId("tab-progress");
     expect(screen.getByTestId("expand-btn")).toBeTruthy();
-    expect(progress.classList.contains("tabs__chip--shown")).toBe(true);
+    expect(progress.getAttribute("aria-expanded")).toBe("true");
     expect(
       screen.getByTestId("tabs-panel").closest(".tabs__strip"),
     ).toBeTruthy();
@@ -343,7 +343,7 @@ describe("TabBar", () => {
     expect(chip.classList.contains("tabs__chip--empty")).toBe(true);
     fireEvent.click(chip);
     expect(chip.classList.contains("tabs__chip--empty")).toBe(false);
-    expect(chip.classList.contains("tabs__chip--shown")).toBe(true);
+    expect(chip.getAttribute("aria-expanded")).toBe("true");
     const panel = screen.getByTestId("tabs-panel");
     expect(panel.dataset.tab).toBe("progress");
     expect(panel.textContent).toContain("nothing yet");
@@ -382,10 +382,10 @@ describe("TabBar", () => {
     ));
     const chip = () => screen.getByTestId("tab-git");
     expect(screen.getByTestId("tabs-panel").dataset.tab).toBe("git");
-    expect(chip().classList.contains("tabs__chip--shown")).toBe(true);
+    expect(chip().getAttribute("aria-expanded")).toBe("true");
 
     setEmpty(true);
-    expect(chip().classList.contains("tabs__chip--shown")).toBe(true);
+    expect(chip().getAttribute("aria-expanded")).toBe("true");
     expect(chip().classList.contains("tabs__chip--empty")).toBe(false);
     vi.runAllTimers();
     expect(screen.getByTestId("tabs-panel").dataset.tab).toBe("git");
