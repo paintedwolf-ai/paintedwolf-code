@@ -267,7 +267,7 @@ func (t *ReadTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 			return
 		}
 		if st.Editor != nil {
-			if documents, ok := sourceview.DocumentsFor(tctx, resolved); ok {
+			if documents, _, ok := sourceview.DocumentsFor(tctx, resolved); ok {
 				documents.RememberAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, *st.Editor)
 			}
 		}

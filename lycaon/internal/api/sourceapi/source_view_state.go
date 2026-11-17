@@ -107,7 +107,7 @@ func (view *sourceViewRead) snapshot(ctx context.Context) (wire.SourceView, erro
 	return wire.SourceView{Tree: &wire.SourceTreeView{Kind: "tree", ID: view.id,
 		IntentRevision: intentRevision, ProjectionRevision: revision.Projection,
 		State: view.state, Extent: wireViewExtent(extent), ExpiresAt: view.expires, Failure: view.failure,
-		WorkspaceID: view.workspaceID, Intent: intent, Roots: view.navigation.roots, LoadingDirectories: view.navigation.tree.LoadingDirectories()}}, nil
+		WorkspaceID: view.workspaceID, Intent: intent, Roots: view.navigation.roots, OutsideLocations: view.navigation.outsideLocations(), LoadingDirectories: view.navigation.tree.LoadingDirectories()}}, nil
 }
 
 // sourceViewPublication identifies what a client can observe; renewing the lease is not a change.

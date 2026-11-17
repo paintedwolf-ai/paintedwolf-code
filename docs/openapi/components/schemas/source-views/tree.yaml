@@ -107,6 +107,7 @@ components:
         - "workspace_id"
         - "intent"
         - "roots"
+        - "outside_locations"
         - "loading_directories"
       properties:
         kind:
@@ -147,6 +148,14 @@ components:
           type: "array"
           items:
             $ref: "../project/identity.yaml#/components/schemas/ProjectRoot"
+        outside_locations:
+          type: "array"
+          description: >
+            The view's chat's visible locations outside the project, in tree
+            order after the roots. Each is also a tree root whose id is the
+            location id.
+          items:
+            $ref: "../project/source-outside.yaml#/components/schemas/SourceChatLocation"
         loading_directories:
           type: "integer"
           minimum: 0

@@ -65,15 +65,15 @@ func rememberSummaryReads(ctx context.Context, reads *projectpaths.ReadSession, 
 		if !ok {
 			continue
 		}
-		documents, ok := sourceview.DocumentsFor(tctx, resolved)
+		documents, address, ok := sourceview.DocumentsFor(tctx, resolved)
 		if !ok {
 			continue
 		}
-		branch, err := tctx.SourceBranch(resolved.Root.ID)
+		branch, err := tctx.SourceBranch(address.RootID)
 		if err != nil {
 			continue
 		}
-		doc, open, err := documents.OpenDocument(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, resolved.ScopeRel)
+		doc, open, err := documents.OpenDocument(ctx, tctx.Identity.ProjectID, branch, address.RootID, address.Path)
 		if err != nil || !open {
 			continue
 		}

@@ -3710,6 +3710,99 @@ paths:
           $ref: '#/components/responses/Conflict'
         default:
           $ref: '#/components/responses/Error'
+  /v1/projects/{id}/source/outside-files:
+    post:
+      tags:
+        - projects
+      operationId: openOutsideFile
+      x-person-action: record
+      summary: Open a file outside the project in a chat's Files section
+      description: |
+        Adds a file the person chose in the native file picker to the chat: records that the chat opened it and places it in one of the chat's locations. Afterwards the file is addressed by the project's outside namespace and its path like any other source file.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenOutsideFileRequest'
+      responses:
+        '200':
+          description: The file and the location holding it
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OpenedOutsideFile'
+        '400':
+          description: The path is not an absolute file path outside the project
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Project
+          chat: null
+          or file not found: null
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/projects/{id}/source/outside-locations/{location_id}:
+    patch:
+      tags:
+        - projects
+      operationId: updateSourceChatLocation
+      x-person-action: record
+      summary: Hide or show a chat location
+      description: Changes only whether the chat's Files section presents the location; agent access and history are unchanged.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+        - name: location_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSourceChatLocationRequest'
+      responses:
+        '200':
+          description: The updated location
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SourceChatLocation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          description: Project or location not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
   /v1/projects/{id}/agent-presence:
     get:
       tags:
@@ -33318,6 +33411,104 @@ components:
           $ref: '#/components/schemas/SourceInventoryState'
           description: |
             The ledger's pass over the tree. Outside edits to tracked files reach history by path before it completes; untracked files enter history when the pass, or an open command window, admits them.
+    OpenOutsideFileRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - session_id
+        - path
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: The chat whose Files section receives the file.
+        path:
+          type: string
+          minLength: 1
+          description: Absolute host path the person chose in the native file picker.
+    SourceChatLocation:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - session_id
+        - root_id
+        - anchor
+        - path
+        - kind
+        - label
+        - hidden
+      description: |
+        A place outside the project where a root chat has worked. A Files tree view for the chat lists each visible location as a root whose id is the location id; its rows address files by the location and their path under the anchor.
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+          description: The root chat the location belongs to.
+        root_id:
+          type: string
+          format: uuid
+          description: The project's outside namespace, which addresses the location's files in source history.
+        anchor:
+          type: string
+          minLength: 1
+          description: The anchor's outside-namespace path, its host path without the leading slash.
+        path:
+          type: string
+          minLength: 1
+          description: The anchor's host path.
+        kind:
+          type: string
+          enum:
+            - repository
+            - folder
+            - file
+          description: |
+            What the location is anchored at: a repository work tree, a folder, or one protected file listed alone.
+        label:
+          type: string
+          minLength: 1
+          description: The anchor's name for display.
+        hidden:
+          type: boolean
+          description: Hidden from the chat's Files section. Hiding revokes and deletes nothing.
+    OpenedOutsideFile:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - root_id
+        - path
+        - file_id
+        - location
+      properties:
+        root_id:
+          type: string
+          format: uuid
+          description: The project's outside namespace.
+        path:
+          type: string
+          minLength: 1
+          description: The file's outside-namespace path.
+        file_id:
+          type: string
+          format: uuid
+        location:
+          $ref: '#/components/schemas/SourceChatLocation'
+    UpdateSourceChatLocationRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - hidden
+      properties:
+        hidden:
+          type: boolean
     AgentActivityKind:
       type: string
       enum:
@@ -41769,6 +41960,7 @@ components:
         - workspace_id
         - intent
         - roots
+        - outside_locations
         - loading_directories
       properties:
         kind:
@@ -41809,6 +42001,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectRoot'
+        outside_locations:
+          type: array
+          description: |
+            The view's chat's visible locations outside the project, in tree order after the roots. Each is also a tree root whose id is the location id.
+          items:
+            $ref: '#/components/schemas/SourceChatLocation'
         loading_directories:
           type: integer
           minimum: 0

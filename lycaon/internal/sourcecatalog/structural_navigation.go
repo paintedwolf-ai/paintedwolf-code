@@ -238,7 +238,7 @@ func (c *Directories) CollapseBoundaries(ctx context.Context, project string, ro
 	if err := store.startInventory(ctx); err != nil {
 		return nil, false, err
 	}
-	policy := c.trees.policyFor(ctx, root.Path)
+	policy := c.trees.policyFor(ctx, root.Path).forRoot(root)
 	dir = normalizeDir(dir)
 	navigation, err := openNavigation(ctx, store, headGeneration)
 	if err != nil {

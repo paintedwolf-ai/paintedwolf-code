@@ -182,10 +182,10 @@ func (c *TreeStores) indexStore(ctx context.Context, projectID string, root Root
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
-	policy := c.policyFor(ctx, root.Path)
-	policyIdentity := ""
+	policy := c.policyFor(ctx, root.Path).forRoot(root)
+	policyIdentity := root.discoveryIdentity()
 	if policy.scope != nil {
-		policyIdentity = policy.scope.Identity()
+		policyIdentity += policy.scope.Identity()
 	}
 	sum := sha256.Sum256([]byte(indexSchema + "\x00" + key + "\x00" + policyIdentity))
 	// Projects attached to the same filesystem root share its structural checkpoint.

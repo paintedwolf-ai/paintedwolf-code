@@ -240,6 +240,7 @@ var (
 	operationMarkSessionSeen                    = generatedOperation{ID: "markSessionSeen", Method: "POST", Path: "/v1/sessions/{id}/seen", Params: []string{"id"}}
 	operationObserveEditorDocument              = generatedOperation{ID: "observeEditorDocument", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/observe", Params: []string{"id", "document_id"}}
 	operationOpenEditorDocument                 = generatedOperation{ID: "openEditorDocument", Method: "POST", Path: "/v1/projects/{id}/editor-documents", Params: []string{"id"}}
+	operationOpenOutsideFile                    = generatedOperation{ID: "openOutsideFile", Method: "POST", Path: "/v1/projects/{id}/source/outside-files", Params: []string{"id"}, RecordsPersonAction: true}
 	operationOpenProjectTrustReview             = generatedOperation{ID: "openProjectTrustReview", Method: "POST", Path: "/v1/projects/{id}/trust/review", Params: []string{"id"}}
 	operationPauseWorkflowRun                   = generatedOperation{ID: "pauseWorkflowRun", Method: "POST", Path: "/v1/workflow-runs/{id}/pause", Params: []string{"id"}, RecordsPersonAction: true}
 	operationPersistWorkflow                    = generatedOperation{ID: "persistWorkflow", Method: "POST", Path: "/v1/sessions/{id}/workflows/{workflow_id}/persist", Params: []string{"id", "workflow_id"}, RecordsPersonAction: true}
@@ -350,6 +351,7 @@ var (
 	operationUpdateSecurityScannersSettings     = generatedOperation{ID: "updateSecurityScannersSettings", Method: "PATCH", Path: "/v1/settings/security-scanners", RecordsPersonAction: true}
 	operationUpdateSession                      = generatedOperation{ID: "updateSession", Method: "PATCH", Path: "/v1/sessions/{id}", Params: []string{"id"}, RecordsPersonAction: true}
 	operationUpdateSessionQueue                 = generatedOperation{ID: "updateSessionQueue", Method: "PATCH", Path: "/v1/sessions/{id}/queue", Params: []string{"id"}, RecordsPersonAction: true}
+	operationUpdateSourceChatLocation           = generatedOperation{ID: "updateSourceChatLocation", Method: "PATCH", Path: "/v1/projects/{id}/source/outside-locations/{location_id}", Params: []string{"id", "location_id"}, RecordsPersonAction: true}
 	operationUpdateTrustSettings                = generatedOperation{ID: "updateTrustSettings", Method: "PATCH", Path: "/v1/settings/project-trust", RecordsPersonAction: true}
 	operationUpdateVerifySettings               = generatedOperation{ID: "updateVerifySettings", Method: "PATCH", Path: "/v1/settings/verify", RecordsPersonAction: true}
 	operationUpdateWebResearchProvider          = generatedOperation{ID: "updateWebResearchProvider", Method: "PATCH", Path: "/v1/web-research/providers/{provider_id}", Params: []string{"provider_id"}, RecordsPersonAction: true}
@@ -584,6 +586,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationMarkSessionSeen,
 	operationObserveEditorDocument,
 	operationOpenEditorDocument,
+	operationOpenOutsideFile,
 	operationOpenProjectTrustReview,
 	operationPauseWorkflowRun,
 	operationPersistWorkflow,
@@ -694,6 +697,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationUpdateSecurityScannersSettings,
 	operationUpdateSession,
 	operationUpdateSessionQueue,
+	operationUpdateSourceChatLocation,
 	operationUpdateTrustSettings,
 	operationUpdateVerifySettings,
 	operationUpdateWebResearchProvider,

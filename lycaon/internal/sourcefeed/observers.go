@@ -6,15 +6,28 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// Notice contains only the change categories needed by in-process projections.
-type Notice struct{ FileWritesOnly bool }
+// Notice contains only the change categories and addresses needed by
+// in-process projections.
+type Notice struct {
+	FileWritesOnly bool
+	// Changed names each changed root and path, and the source of a move.
+	Changed []Address
+}
+
+// Address is one root and root-relative path.
+type Address struct{ RootID, Path string }
 
 func changeNotice(event api.SourceChangesEvent) Notice {
 	writes := !event.Resync && !event.GitChanged && len(event.Changes) > 0
+	changed := make([]Address, 0, len(event.Changes))
 	for _, change := range event.Changes {
 		writes = writes && change.Op == api.SourceChangeOpWrite && change.IsDir != nil && !*change.IsDir
+		changed = append(changed, Address{RootID: change.RootID, Path: change.Path})
+		if change.FromPath != "" {
+			changed = append(changed, Address{RootID: change.RootID, Path: change.FromPath})
+		}
 	}
-	return Notice{FileWritesOnly: writes}
+	return Notice{FileWritesOnly: writes, Changed: changed}
 }
 
 // Source observers receive a content-free signal only after a committed change.

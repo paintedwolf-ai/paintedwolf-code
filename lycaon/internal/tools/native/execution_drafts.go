@@ -15,20 +15,20 @@ func (e ExecutionRevisions) CheckUnsavedDraft(ctx context.Context, tctx tools.To
 	if err != nil {
 		return err
 	}
-	documents, ok := sourceview.DocumentsFor(tctx, resolved)
+	documents, address, ok := sourceview.DocumentsFor(tctx, resolved)
 	if !ok {
 		return nil
 	}
-	branch, err := tctx.SourceBranch(resolved.Root.ID)
+	branch, err := tctx.SourceBranch(address.RootID)
 	if err != nil {
 		return err
 	}
-	queryPath := resolved.ScopeRel
+	queryPath := address.Path
 	if queryPath == "." {
 		queryPath = ""
 	}
-	return documents.VisitUnsavedDocuments(ctx, tctx.Identity.ProjectID, branch, resolved.Root.ID, queryPath, descendants, func(state tools.EditorDocumentState) error {
-		resolved.ScopeRel, resolved.DisplayPath = state.Path, state.Path
+	return documents.VisitUnsavedDocuments(ctx, tctx.Identity.ProjectID, branch, address.RootID, queryPath, descendants, func(state tools.EditorDocumentState) error {
+		resolved.ScopeRel, resolved.DisplayPath = state.Path, address.DisplayPath(state.Path)
 		return unsavedDraftConflict(resolved, state)
 	})
 }

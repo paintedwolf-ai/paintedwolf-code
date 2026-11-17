@@ -230,6 +230,7 @@ export const API_OPERATIONS = {
   markSessionSeen: { method: "POST", path: "/v1/sessions/{id}/seen" },
   observeEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/observe" },
   openEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents" },
+  openOutsideFile: { method: "POST", path: "/v1/projects/{id}/source/outside-files" },
   openProjectTrustReview: { method: "POST", path: "/v1/projects/{id}/trust/review" },
   pauseWorkflowRun: { method: "POST", path: "/v1/workflow-runs/{id}/pause" },
   persistWorkflow: { method: "POST", path: "/v1/sessions/{id}/workflows/{workflow_id}/persist" },
@@ -340,6 +341,7 @@ export const API_OPERATIONS = {
   updateSecurityScannersSettings: { method: "PATCH", path: "/v1/settings/security-scanners" },
   updateSession: { method: "PATCH", path: "/v1/sessions/{id}" },
   updateSessionQueue: { method: "PATCH", path: "/v1/sessions/{id}/queue" },
+  updateSourceChatLocation: { method: "PATCH", path: "/v1/projects/{id}/source/outside-locations/{location_id}" },
   updateTrustSettings: { method: "PATCH", path: "/v1/settings/project-trust" },
   updateVerifySettings: { method: "PATCH", path: "/v1/settings/verify" },
   updateWebResearchProvider: { method: "PATCH", path: "/v1/web-research/providers/{provider_id}" },
@@ -581,6 +583,7 @@ export type OperationPathParameters = {
   markSessionSeen: { id: string | number; };
   observeEditorDocument: { id: string | number; document_id: string | number; };
   openEditorDocument: { id: string | number; };
+  openOutsideFile: { id: string | number; };
   openProjectTrustReview: { id: string | number; };
   pauseWorkflowRun: { id: string | number; };
   persistWorkflow: { id: string | number; workflow_id: string | number; };
@@ -691,6 +694,7 @@ export type OperationPathParameters = {
   updateSecurityScannersSettings: Record<string, never>;
   updateSession: { id: string | number; };
   updateSessionQueue: { id: string | number; };
+  updateSourceChatLocation: { id: string | number; location_id: string | number; };
   updateTrustSettings: Record<string, never>;
   updateVerifySettings: Record<string, never>;
   updateWebResearchProvider: { provider_id: string | number; };

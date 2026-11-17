@@ -103,7 +103,7 @@ func landPinnedText(ctx context.Context, tctx tools.ToolContext, resolved projec
 		reportLandedEditorConfig(ctx, tctx, resolved, st, newContent)
 		return landing{change: mutationContext(st.Content, newContent), publishedSHA256: textfile.SHA256(after)}, nil
 	}
-	documents, ok := sourceview.DocumentsFor(tctx, resolved)
+	documents, _, ok := sourceview.DocumentsFor(tctx, resolved)
 	if !ok {
 		return landing{}, &toolrejection.ToolReject{Code: "EDITOR_DOCUMENT_CHANGING", Data: map[string]any{"path": resolved.DisplayPath}}
 	}

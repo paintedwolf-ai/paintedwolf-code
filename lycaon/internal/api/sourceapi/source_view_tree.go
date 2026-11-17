@@ -29,6 +29,10 @@ func (s *Trees) newTreeView(scope pagedview.Scope, p *project.Project, request w
 			slog.Warn("Source inventory could not start", "root", root.ID, "error", err)
 		}
 	}
+	view.navigation.outside = s.chatLocations(ctx, p, request.SessionID)
+	for _, location := range view.navigation.outside {
+		roots = append(roots, chatLocationRoot(location))
+	}
 	view.navigation.tree = sourcetree.New(ctx, scope, roots, sourcecatalog.Process(), func() { s.treeViewChanged(view) })
 	s.watchTreeView(view, p)
 	return view

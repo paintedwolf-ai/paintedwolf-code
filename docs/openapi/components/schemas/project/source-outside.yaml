@@ -1,0 +1,86 @@
+components:
+  schemas:
+    SourceChatLocation:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [id, session_id, root_id, anchor, path, kind, label, hidden]
+      description: >
+        A place outside the project where a root chat has worked. A Files tree
+        view for the chat lists each visible location as a root whose id is the
+        location id; its rows address files by the location and their path
+        under the anchor.
+      properties:
+        id:
+          type: string
+          format: uuid
+        session_id:
+          type: string
+          format: uuid
+          description: The root chat the location belongs to.
+        root_id:
+          type: string
+          format: uuid
+          description: The project's outside namespace, which addresses the location's files in source history.
+        anchor:
+          type: string
+          minLength: 1
+          description: The anchor's outside-namespace path, its host path without the leading slash.
+        path:
+          type: string
+          minLength: 1
+          description: The anchor's host path.
+        kind:
+          type: string
+          enum: [repository, folder, file]
+          description: >
+            What the location is anchored at: a repository work tree, a folder,
+            or one protected file listed alone.
+        label:
+          type: string
+          minLength: 1
+          description: The anchor's name for display.
+        hidden:
+          type: boolean
+          description: Hidden from the chat's Files section. Hiding revokes and deletes nothing.
+    UpdateSourceChatLocationRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [hidden]
+      properties:
+        hidden:
+          type: boolean
+    OpenOutsideFileRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [session_id, path]
+      properties:
+        session_id:
+          type: string
+          format: uuid
+          description: The chat whose Files section receives the file.
+        path:
+          type: string
+          minLength: 1
+          description: Absolute host path the person chose in the native file picker.
+    OpenedOutsideFile:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [root_id, path, file_id, location]
+      properties:
+        root_id:
+          type: string
+          format: uuid
+          description: The project's outside namespace.
+        path:
+          type: string
+          minLength: 1
+          description: The file's outside-namespace path.
+        file_id:
+          type: string
+          format: uuid
+        location:
+          $ref: '#/components/schemas/SourceChatLocation'

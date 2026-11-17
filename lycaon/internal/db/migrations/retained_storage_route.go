@@ -24,7 +24,7 @@ func (p Plan) reviewedRetainedRoute() bool {
 }
 
 // revision6Target is the shape the reviewed revision-6 step produces.
-var revision6Target = Baseline{Revision: 6, Shape: "1be9f1c48f33fdca8c9ffb417993c5fff801aa683ddece54f69ef5fd95708c20"}
+var revision6Target = Baseline{Revision: 6, Shape: "8421f2dd35adab7955d0f67444bae55e21ffc4d3e9f4406bb5e4a3f102e98b2e"}
 
 // The manifest writer bounds its re-derivable memos and maintains target
 // indexes during insertion. Receipt index rebuilds use the measured receipt
@@ -37,8 +37,9 @@ func reviewedRevision5(step Step) bool {
 }
 
 // The outside namespace rebuilds project_roots, whose rows are the projects'
-// roots plus one per project, and creates one empty table.
+// roots plus one per project, and creates the empty chat file and chat
+// location tables.
 func reviewedRevision6(step Step) bool {
 	return step.ID == "outside-namespace" &&
-		step.Checksum == "f5e1e557853468d71dedcbf8be694b4da913af5f8d2ce85185a4b30034cd1aa5"
+		step.Checksum == "c8caf73b1841ab94a58e1d318df7a30e1ebeaf753c5c962d580d32e6125ad645"
 }

@@ -404,7 +404,7 @@ func (c *Catalog) reconcile(ctx context.Context, projectID string, root Root) (S
 	rec.dirtyPaths = nil
 	rec.fullReconcile = false
 	c.mu.Unlock()
-	policy := c.Trees.policyFor(ctx, root.Path)
+	policy := c.Trees.policyFor(ctx, root.Path).forRoot(root)
 	if full || !repochange.Coverage(root.watchRoot()).Complete {
 		return c.build(ctx, []Root{root}, policy)
 	}

@@ -12,7 +12,7 @@ func Revision5Release() Baseline { return revision5Release }
 func Revision6(target Baseline) Step {
 	return composeStep(Step{
 		ID:       "outside-namespace",
-		Checksum: "f5e1e557853468d71dedcbf8be694b4da913af5f8d2ce85185a4b30034cd1aa5",
+		Checksum: "c8caf73b1841ab94a58e1d318df7a30e1ebeaf753c5c962d580d32e6125ad645",
 		From:     revision5Release, To: target,
 	}, OutsideNamespace(), ChatLocations())
 }

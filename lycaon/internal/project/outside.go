@@ -38,6 +38,11 @@ func WithOutside(p *Project) *Project {
 	if p == nil || p.Outside.ID == "" {
 		return p
 	}
+	for _, root := range p.Roots {
+		if root.ID == p.Outside.ID {
+			return p
+		}
+	}
 	out := *p
 	out.Roots = append(append([]Root(nil), p.Roots...), p.Outside)
 	return &out

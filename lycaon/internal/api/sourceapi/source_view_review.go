@@ -168,6 +168,12 @@ func (s *Trees) loadTreeReview(ctx context.Context, view *sourceView, scope *wir
 				return nil, err
 			}
 			for _, path := range page.Paths {
+				if path.RootID == p.Outside.ID {
+					if err := addAbsentLocationPath(view.navigation.outside, builder, path.Path); err != nil {
+						return nil, err
+					}
+					continue
+				}
 				if err := addAbsentReviewPath(p, builder, path.RootID, path.Path); err != nil {
 					return nil, err
 				}

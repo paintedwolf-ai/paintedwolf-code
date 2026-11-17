@@ -34,6 +34,11 @@ type Root struct {
 	// Within is the attached root a subtree generation belongs to; empty for an
 	// attached root. Its watcher covers the subtree and its events reach it.
 	Within string
+	// OnDemand roots list only the directories a reader asks for; no scan
+	// descends into them on its own.
+	OnDemand bool
+	// Only, when set, is the one entry name the root lists.
+	Only string
 }
 
 // Scoped reports a subtree generation.
@@ -367,13 +372,21 @@ func cleanRoots(roots []Root) ([]Root, error) {
 			continue
 		}
 		seen[key] = struct{}{}
-		cleaned = append(cleaned, Root{ID: id, Path: rootPath, Within: cleanAbs(root.Within)})
+		cleaned = append(cleaned, Root{ID: id, Path: rootPath, Within: cleanAbs(root.Within), OnDemand: root.OnDemand, Only: root.Only})
 	}
 	return cleaned, nil
 }
 
 func rootKey(projectID string, root Root) string {
-	return strings.TrimSpace(projectID) + "\x00" + root.ID + "\x00" + root.Path
+	return strings.TrimSpace(projectID) + "\x00" + root.ID + "\x00" + root.Path + "\x00" + root.discoveryIdentity()
+}
+
+// discoveryIdentity distinguishes roots whose listings differ over one path.
+func (r Root) discoveryIdentity() string {
+	if !r.OnDemand && r.Only == "" {
+		return ""
+	}
+	return fmt.Sprintf("on-demand=%t only=%q", r.OnDemand, r.Only)
 }
 
 func combineSnapshots(roots []Root, parts []Snapshot) Snapshot {

@@ -95,10 +95,17 @@ func placeChatLocation(ctx context.Context, q *db.Queries, chat, rel string, ts 
 	})
 }
 
-// ChatLocations lists a root chat's locations, outermost first, leaving out
-// any location another visible one of the chat covers.
+// ChatLocations lists the locations of sessionID's root chat in anchor order,
+// leaving out any location another visible one of the chat covers.
 func (s *Store) ChatLocations(ctx context.Context, sessionID string) ([]ChatLocation, error) {
-	rows, err := s.queries.ListSourceChatLocations(ctx, sessionID)
+	chat, err := s.queries.GetRootSessionID(ctx, sessionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	rows, err := s.queries.ListSourceChatLocations(ctx, chat)
 	if err != nil {
 		return nil, err
 	}
@@ -120,6 +127,20 @@ func (s *Store) ChatLocations(ctx context.Context, sessionID string) ([]ChatLoca
 		}
 	}
 	return locations, nil
+}
+
+// ChatLocationCovering answers the chat's visible location covering rel.
+func (s *Store) ChatLocationCovering(ctx context.Context, sessionID, rel string) (ChatLocation, bool, error) {
+	locations, err := s.ChatLocations(ctx, sessionID)
+	if err != nil {
+		return ChatLocation{}, false, err
+	}
+	for _, location := range locations {
+		if location.Covers(rel) {
+			return location, true, nil
+		}
+	}
+	return ChatLocation{}, false, nil
 }
 
 // ChatLocation answers one location of the project.

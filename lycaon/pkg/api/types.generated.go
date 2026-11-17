@@ -4723,6 +4723,24 @@ type OpenEditorDocumentRequest struct {
 	Replica  *RetainedReplica `json:"replica,omitempty"`
 }
 
+// OpenOutsideFileRequest
+type OpenOutsideFileRequest struct {
+	// The chat whose Files section receives the file.
+	SessionID string `json:"session_id"`
+	// Absolute host path the person chose in the native file picker.
+	Path string `json:"path"`
+}
+
+// OpenedOutsideFile
+type OpenedOutsideFile struct {
+	// The project's outside namespace.
+	RootID string `json:"root_id"`
+	// The file's outside-namespace path.
+	Path     string             `json:"path"`
+	FileID   string             `json:"file_id"`
+	Location SourceChatLocation `json:"location"`
+}
+
 // OverlayMergePlan
 type OverlayMergePlan struct {
 	PendingCount    int                      `json:"pending_count"`
@@ -7003,6 +7021,25 @@ type SourceChangesEvent struct {
 	GitChanged bool `json:"git_changed,omitempty"`
 }
 
+// SourceChatLocation A place outside the project where a root chat has worked. A Files tree view for the chat lists each visible location as a root whose id is the location id; its rows address files by the location and their path under the anchor.
+type SourceChatLocation struct {
+	ID string `json:"id"`
+	// The root chat the location belongs to.
+	SessionID string `json:"session_id"`
+	// The project's outside namespace, which addresses the location's files in source history.
+	RootID string `json:"root_id"`
+	// The anchor's outside-namespace path, its host path without the leading slash.
+	Anchor string `json:"anchor"`
+	// The anchor's host path.
+	Path string `json:"path"`
+	// What the location is anchored at: a repository work tree, a folder, or one protected file listed alone.
+	Kind string `json:"kind"`
+	// The anchor's name for display.
+	Label string `json:"label"`
+	// Hidden from the chat's Files section. Hiding revokes and deletes nothing.
+	Hidden bool `json:"hidden"`
+}
+
 // SourceCommandWindow One host-run command's observation window: the span of a command or
 // verify tool call during which reconcile passes attribute the file
 // changes they observe to that command, and admit files the window's
@@ -8096,6 +8133,8 @@ type SourceTreeView struct {
 	WorkspaceID        string             `json:"workspace_id"`
 	Intent             SourceTreeIntent   `json:"intent"`
 	Roots              []ProjectRoot      `json:"roots"`
+	// The view's chat's visible locations outside the project, in tree order after the roots. Each is also a tree root whose id is the location id.
+	OutsideLocations []SourceChatLocation `json:"outside_locations"`
 	// Directory reads still pending for this view.
 	LoadingDirectories int `json:"loading_directories"`
 }
@@ -8965,6 +9004,11 @@ type UpdateSessionRequest struct {
 	Pinned *bool `json:"pinned,omitempty"`
 	// Moves a pinned session to this 1-based position in its project's pinned order; a position past the end moves it last. The project's pinned chats are renumbered 1…n.
 	PinPosition *int `json:"pin_position,omitempty"`
+}
+
+// UpdateSourceChatLocationRequest
+type UpdateSourceChatLocationRequest struct {
+	Hidden bool `json:"hidden"`
 }
 
 // UpdateTrustSettingsRequest
