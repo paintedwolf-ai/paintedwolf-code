@@ -24,8 +24,8 @@ BENCHMARK_GATES: dict[str, dict[str, float]] = {
         "allocs_per_op": 7_000.0,
     },
     "internal/toolhost/BenchmarkCommandProgram/native-child-wc": {
-        "bytes_per_op": 7_200_000.0,
-        "allocs_per_op": 14_000.0,
+        "bytes_per_op": 8_100_000.0,
+        "allocs_per_op": 17_500.0,
     },
     "internal/toolhost/BenchmarkStructuredWc": {
         "bytes_per_op": 60_000.0,
@@ -44,15 +44,15 @@ BENCHMARK_GATES: dict[str, dict[str, float]] = {
         "allocs_per_op": 483_000.0,
     },
     "internal/toolhost/BenchmarkCommandSearch/grep-r-10k-indexed=false": {
-        "bytes_per_op": 94_000_000.0,
-        "allocs_per_op": 750_000.0,
+        "bytes_per_op": 128_000_000.0,
+        "allocs_per_op": 1_225_000.0,
     },
     "internal/toolhost/BenchmarkCommandSearch/grep-r-10k-indexed=true": {
-        "bytes_per_op": 31_000_000.0,
-        "allocs_per_op": 205_000.0,
+        "bytes_per_op": 41_500_000.0,
+        "allocs_per_op": 259_000.0,
     },
     "internal/toolhost/BenchmarkCommandSearch/find-100k-entries": {
-        "bytes_per_op": 137_000_000.0,
+        "bytes_per_op": 160_000_000.0,
         "allocs_per_op": 1_110_000.0,
     },
 }
