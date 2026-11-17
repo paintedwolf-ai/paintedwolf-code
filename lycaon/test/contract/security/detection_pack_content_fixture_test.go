@@ -2,8 +2,6 @@ package contract
 
 import (
 	"fmt"
-	"path/filepath"
-	"strings"
 	"sync"
 	"testing"
 
@@ -13,14 +11,8 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/testutil"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
-
-func detectionPackConfigRoot(t *testing.T) string {
-	t.Helper()
-	return filepath.Join(contractcheck.RepoRoot(t), "lycaon")
-}
 
 func contractToolEvent(
 	tool, command, projectDir string,
@@ -157,32 +149,6 @@ func readRuleYAML(t *testing.T, rel config.Rel) map[string]any {
 	var raw map[string]any
 	testutil.FailErr(t, "parse "+rel.String(), yaml.Unmarshal(data, &raw))
 	return raw
-}
-
-func ruleImageEqualsFromDisk(t *testing.T, root, packID, slug string) []string {
-	t.Helper()
-	raw := readRuleYAML(t, config.DetectionPacksDir.Join(packID, "rules", slug+".yml"))
-	det, _ := raw["detection"].(map[string]any)
-	var out []string
-	for k, v := range det {
-		if k == "condition" {
-			continue
-		}
-		sel, ok := v.(map[string]any)
-		if !ok {
-			continue
-		}
-		for fk, fv := range sel {
-			if strings.Split(fk, "|")[0] != "Image" {
-				continue
-			}
-			out = append(out, yamlStringList(fv)...)
-		}
-	}
-	for i := range out {
-		out[i] = strings.ToLower(out[i])
-	}
-	return out
 }
 
 func yamlStringList(v any) []string {

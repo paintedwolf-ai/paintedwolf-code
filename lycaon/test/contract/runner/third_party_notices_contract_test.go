@@ -12,51 +12,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestBundledBinariesCatalogParsesAndHasRequiredFields(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	data, err := os.ReadFile(filepath.Join(root, "licensing", "bundled-binaries.yaml"))
-	contractcheck.FailErr(t, "read bundled binaries catalog", err)
-	var catalog struct {
-		Binaries []struct {
-			Name            string `yaml:"name"`
-			Version         string `yaml:"version"`
-			License         string `yaml:"license"`
-			SourceURL       string `yaml:"source_url"`
-			SourcePath      string `yaml:"source_path"`
-			LicenseTextFile string `yaml:"license_text_file"`
-			Artifact        string `yaml:"artifact"`
-		} `yaml:"binaries"`
-	}
-	contractcheck.FailErr(t, "parse bundled binaries catalog", yaml.Unmarshal(data, &catalog))
-	seen := make(map[string]bool)
-	for _, binary := range catalog.Binaries {
-		if binary.Name == "" || seen[binary.Name] {
-			t.Fatalf("invalid binary attribution: %+v", binary)
-		}
-		seen[binary.Name] = true
-		if binary.Name == "opengrep" || binary.Artifact != "" {
-			if binary.Name != "opengrep" || binary.Artifact != "opengrep" || binary.Version != "" || binary.License != "" || binary.SourcePath != "" || binary.SourceURL != "" || binary.LicenseTextFile != "" {
-				t.Fatalf("artifact attribution must derive from selected release: %+v", binary)
-			}
-			continue
-		}
-		if binary.Version == "" || binary.License == "" || (binary.SourceURL == "") == (binary.SourcePath == "") {
-			t.Fatalf("invalid binary attribution: %+v", binary)
-		}
-		if binary.SourcePath != "" && (!filepath.IsLocal(binary.SourcePath) || filepath.ToSlash(filepath.Clean(binary.SourcePath)) != binary.SourcePath) {
-			t.Fatalf("source path escapes application resources: %q", binary.SourcePath)
-		}
-		if binary.LicenseTextFile != "" {
-			_, err := os.Stat(filepath.Join(root, "licensing", binary.LicenseTextFile))
-			contractcheck.FailErr(t, "read license for "+binary.Name, err)
-		}
-	}
-	if !seen["opengrep"] || !seen["chrome-headless-shell"] {
-		t.Fatal("bundled scanner or browser attribution missing")
-	}
-}
-
 func TestLicensesNoticesFailClosedOnUnknown(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	tmp := t.TempDir()

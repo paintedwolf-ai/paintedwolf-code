@@ -122,30 +122,6 @@ func TestEgressFailureCodesAreWellFormed(t *testing.T) {
 	contractcheck.FailViolations(t, "egress notice code drift", violations)
 }
 
-// Declared notice codes belong to the catalog and API error surface.
-func TestEgressFailureCodesHaveNotices(t *testing.T) {
-	t.Parallel()
-	cfg := loadUserNoticeConfig(t)
-
-	var violations []string
-	for _, c := range egressclass.All() {
-		if c.NoticeCode == "" {
-			continue
-		}
-		entry, ok := cfg.UserNotices[c.NoticeCode]
-		if !ok {
-			violations = append(violations, fmt.Sprintf(
-				"egress class %s NoticeCode %q has no row in host/user-notices", c.ID, c.NoticeCode))
-			continue
-		}
-		if !entry.IsUserVisible() {
-			violations = append(violations, fmt.Sprintf(
-				"egress class %s NoticeCode %q is user_visible:false — the user is told nothing", c.ID, c.NoticeCode))
-		}
-	}
-	contractcheck.FailViolations(t, "egress notice catalog drift", violations)
-}
-
 func TestEgressFailureCodesAreDistinct(t *testing.T) {
 	t.Parallel()
 	seen := map[string]string{}

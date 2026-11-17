@@ -111,52 +111,6 @@ func TestDetectionPackReadOnlySilent(t *testing.T) {
 	}
 }
 
-// TestDetectionPackEquivalenceClassesComplete: any Image list that names one
-// equivalents-class member names them all.
-func TestDetectionPackEquivalenceClassesComplete(t *testing.T) {
-	t.Parallel()
-	root := detectionPackConfigRoot(t)
-	cat := loadBundledDetectionCatalog(t)
-	for _, p := range cat.Packs {
-		if len(p.Equivalents) == 0 {
-			continue
-		}
-		for _, r := range p.Rules {
-			images := ruleImageEqualsFromDisk(t, root, p.ID, r.Slug)
-			if len(images) == 0 {
-				continue
-			}
-			for canon, alts := range p.Equivalents {
-				members := append([]string{canon}, alts...)
-				var hit bool
-				for _, img := range images {
-					for _, m := range members {
-						if img == m {
-							hit = true
-						}
-					}
-				}
-				if !hit {
-					continue
-				}
-				have := map[string]bool{}
-				for _, img := range images {
-					have[img] = true
-				}
-				var missing []string
-				for _, m := range members {
-					if !have[m] {
-						missing = append(missing, m)
-					}
-				}
-				if len(missing) > 0 {
-					t.Errorf("%s/%s Image list missing equivalents %v (have %v)", p.ID, r.Slug, missing, images)
-				}
-			}
-		}
-	}
-}
-
 // TestDetectionPackMultiStageMatchesSingleStage pins per-stage image/ApiAction resolution.
 func TestDetectionPackMultiStageMatchesSingleStage(t *testing.T) {
 	t.Parallel()

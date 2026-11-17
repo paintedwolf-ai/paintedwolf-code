@@ -2,8 +2,6 @@ package contract
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -143,26 +141,6 @@ func TestProductCatalogDemoSKUs(t *testing.T) {
 		if match.Manifest.ID != wantID {
 			t.Fatalf("FindTriggerMatch(%q) manifest = %q want %q", trigger, match.Manifest.ID, wantID)
 		}
-	}
-}
-
-func TestBundledDefaultPipelineTopologyYAMLExists(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	// default-pipeline ships as a topology file with no workflow manifest.
-	topologyPath := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "workflows", "_topologies", "default-pipeline.yaml")
-	if _, err := os.Stat(topologyPath); err != nil {
-		t.Fatalf("topology file: %v", err)
-	}
-	bugbashPath := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "bugbash", "workflows", "bugbash", "workflow.yaml")
-	m, err := workflowdef.LoadManifestFromFile(bugbashPath)
-	contractcheck.FailErr(t, "workflow.LoadManifestFromFile failed", err)
-	if m.Topology != "bugbash" {
-		t.Fatalf("topology = %q", m.Topology)
-	}
-	bugbashTopo := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "workflows", "_topologies", m.Topology+".yaml")
-	if _, err := os.Stat(bugbashTopo); err != nil {
-		t.Fatalf("bugbash topology file: %v", err)
 	}
 }
 

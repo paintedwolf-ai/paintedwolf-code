@@ -26,6 +26,9 @@ var Family = laws.Family{Name: "catalog-load", Rules: slices.Concat(
 	providers,
 	scanning,
 	detectionPacks,
+	sessionCatalog,
+	toolSchemaArgs,
+	rejectTemplates,
 )}
 
 var errNotRegistered = errors.New("not registered")
