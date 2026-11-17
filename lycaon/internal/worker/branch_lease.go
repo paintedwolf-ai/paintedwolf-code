@@ -285,6 +285,15 @@ func (claim *mergeApplyClaim) stop() {
 	})
 }
 
+// stopOnPanic, deferred by a promotion, stops renewing the lease of one that
+// panicked, so the lease expires and recovery reclaims it as after a crash.
+func (claim *mergeApplyClaim) stopOnPanic() {
+	if recovered := recover(); recovered != nil {
+		claim.stop()
+		panic(recovered)
+	}
+}
+
 // releaseMergeClaim returns the branch to pending under the claim.
 func (s mergeEngine) releaseMergeClaim(ctx context.Context, claim *mergeApplyClaim) error {
 	claim.stop()
