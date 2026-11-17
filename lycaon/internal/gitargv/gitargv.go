@@ -35,7 +35,8 @@ func LocalCloneSourcePath(source string) (string, bool) {
 	if trimmed == "" || strings.HasPrefix(trimmed, "-") {
 		return "", false
 	}
-	if rest, ok := cutPrefixFold(trimmed, "file://"); ok {
+	// Git reads file:// only in lowercase; another case names a remote helper.
+	if rest, ok := strings.CutPrefix(trimmed, "file://"); ok {
 		// Git ignores a file URL's host and decodes the path from the first
 		// slash after it: file:///p and file://localhost/p both name /p.
 		slash := strings.IndexByte(rest, '/')
@@ -60,13 +61,6 @@ func LocalCloneSourcePath(source string) (string, bool) {
 		return "", false
 	}
 	return trimmed, true
-}
-
-func cutPrefixFold(s, prefix string) (string, bool) {
-	if len(s) < len(prefix) || !strings.EqualFold(s[:len(prefix)], prefix) {
-		return "", false
-	}
-	return s[len(prefix):], true
 }
 
 // ValidateRefArg rejects a ref that git would parse as an option.
