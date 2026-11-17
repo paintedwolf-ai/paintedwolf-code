@@ -243,13 +243,6 @@ func apiErrorUnknownResourceRows(f apiErrorMatrixFixture) []apiErrorMatrixRow {
 			wantCode:   "blueprint_not_found",
 		},
 		{
-			name:       "unknown delegation GET",
-			method:     http.MethodGet,
-			path:       "/v1/delegations/" + unknownUUID,
-			wantStatus: http.StatusNotFound,
-			wantCode:   "delegation_not_found",
-		},
-		{
 			name:       "unknown scan GET",
 			method:     http.MethodGet,
 			path:       "/v1/projects/" + project.ID + "/scans/" + unknownUUID,
@@ -517,14 +510,6 @@ func apiErrorValidationRows(f apiErrorMatrixFixture) []apiErrorMatrixRow {
 			method:     http.MethodPost,
 			path:       "/v1/sessions/" + sess.ID + "/prompts",
 			body:       `{}`,
-			wantStatus: http.StatusBadRequest,
-			wantCode:   "invalid_request",
-		},
-		{
-			name:       "delegation invalid strategy",
-			method:     http.MethodPost,
-			path:       "/v1/delegations",
-			body:       `{"project_id":"` + project.ID + `","task":"do it","strategy":"single"}`,
 			wantStatus: http.StatusBadRequest,
 			wantCode:   "invalid_request",
 		},

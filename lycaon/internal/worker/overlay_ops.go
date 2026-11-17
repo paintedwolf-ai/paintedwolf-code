@@ -6,25 +6,33 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceworkspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// PromoteOverlay implements session.OverlayPromoter for the worker merge service.
+// PromoteOverlay lands an overlay's changes.
 func (s *MergeService) PromoteOverlay(ctx context.Context, sessionID, overlayID string, in api.PromoteOverlayInput) (api.WorkerMergeResult, error) {
+	ctx = gitexec.WithHostPurpose(ctx, mergeHostPurpose)
+	out, err := s.promoteOverlay(ctx, sessionID, overlayID, in)
+	s.nameOverlaps(ctx, &out)
+	return out, err
+}
+
+func (s *MergeService) promoteOverlay(ctx context.Context, sessionID, overlayID string, in api.PromoteOverlayInput) (api.WorkerMergeResult, error) {
 	overlayID = strings.TrimSpace(overlayID)
 	sessionID = strings.TrimSpace(sessionID)
 	if s == nil || s.Queue == nil {
 		return api.WorkerMergeResult{}, fmt.Errorf("overlay promote service not configured")
 	}
 	if overlayID == "" {
-		return api.WorkerMergeResult{}, s.reject(OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
+		return api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
 	}
 	lockTask, ok := s.Queue.Get(overlayID)
 	if !ok || lockTask == nil {
-		return api.WorkerMergeResult{}, s.reject(OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
+		return api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
 	}
 	lock, err := acquirePromoteFileLock(ctx, s.hostDataDirFor(lockTask))
 	if err != nil {
@@ -53,7 +61,7 @@ func (s *MergeService) PromoteOverlay(ctx context.Context, sessionID, overlayID 
 			return api.WorkerMergeResult{}, err
 		}
 		if len(changed) > 0 {
-			return api.WorkerMergeResult{}, s.reject(OverlayPromoteNoPathsCode, map[string]any{"job_id": overlayID, "remaining_overlay_paths": changed})
+			return api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteNoPathsCode, map[string]any{"job_id": overlayID, "remaining_overlay_paths": changed})
 		}
 		return eng.finalizeEmptyPromote(ctx, sessionID, work.task, overlayID, in.Detail)
 	}
@@ -100,7 +108,7 @@ func (s mergeEngine) preparePromoteOverlayPlans(
 		s.attachPromoteSpill(s.hostDataDirFor(work.task), work.overlayID, &out, assessment)
 		s.registerReconcilePaths(work.sessionID, assessment)
 		s.recordPromoteOutput(work.sessionID, work.overlayID, &out)
-		return promotePlans{}, nil, out, s.rejectConflict(work.overlayID, assessment)
+		return promotePlans{}, nil, out, s.rejectConflict(ctx, work.overlayID, assessment)
 	}
 	return s.buildValidatedPromotePlans(ctx, work, assessment, resolutions, resolutionByPath)
 }
@@ -141,7 +149,7 @@ func (s mergeEngine) buildValidatedPromotePlans(
 	}
 	resolutionPlans, err := preparePromoteResolutions(work.task, work.roots, validated, resolutionByPath)
 	if err != nil {
-		return promotePlans{}, nil, api.WorkerMergeResult{}, s.reject(OverlayPromoteResolutionsRequiredCode, map[string]any{
+		return promotePlans{}, nil, api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteResolutionsRequiredCode, map[string]any{
 			"job_id": work.overlayID,
 			"reason": err.Error(),
 		})
@@ -152,7 +160,7 @@ func (s mergeEngine) buildValidatedPromotePlans(
 	}
 	plans := append(append([]promoteMutation(nil), mergePlans...), resolutionPlans...)
 	if issue := validatePromoteSyntax(ctx, plans); issue != nil {
-		return promotePlans{}, nil, api.WorkerMergeResult{}, s.reject(OverlayPromoteSyntaxUnhealthyCode, issue.rejectData(work.overlayID))
+		return promotePlans{}, nil, api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteSyntaxUnhealthyCode, issue.rejectData(work.overlayID))
 	}
 	out := promotePlans{all: plans, direct: plans, resolved: validated}
 	if assessment.checkpointID != "" {
@@ -172,6 +180,7 @@ func (s mergeEngine) applyPromoteOverlayPlans(ctx context.Context, work promoteW
 	if err != nil {
 		return api.WorkerMergeResult{}, err
 	}
+	defer claim.stopOnPanic()
 	revertPending := func() error { return s.releaseMergeClaim(ctx, claim) }
 	if s.Captures != nil {
 		s.Captures.RecordPromotedPrimaryPaths(ctx, work.sessionID, promoteMutationIdentities(plans.all))
@@ -225,10 +234,10 @@ type promoteWork struct {
 func (s mergeEngine) resolvePromoteWork(ctx context.Context, sessionID, overlayID string) (promoteWork, error) {
 	task, ok := s.Queue.Get(overlayID)
 	if !ok || task == nil {
-		return promoteWork{}, s.reject(OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
+		return promoteWork{}, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
 	}
 	if strings.TrimSpace(task.ParentSessionID) != sessionID {
-		return promoteWork{}, s.reject(OverlayPromoteSessionMismatchCode, map[string]any{"job_id": overlayID})
+		return promoteWork{}, s.reject(ctx, OverlayPromoteSessionMismatchCode, map[string]any{"job_id": overlayID})
 	}
 	if task.MergeStatus == api.WorkerMergeStatusApplying {
 		if err := s.recoverInterruptedPromote(ctx, task, overlayID); err != nil {
@@ -237,9 +246,18 @@ func (s mergeEngine) resolvePromoteWork(ctx context.Context, sessionID, overlayI
 		task.MergeStatus = api.WorkerMergeStatusPending
 	}
 	if task.MergeStatus != api.WorkerMergeStatusPending {
-		return promoteWork{}, s.reject(OverlayPromoteNotPendingCode, map[string]any{
-			"overlay_id": overlayID, "merge_status": string(task.MergeStatus),
+		return promoteWork{}, s.reject(ctx, OverlayPromoteNotPendingCode, map[string]any{
+			"job_id": overlayID, "merge_status": string(task.MergeStatus),
 		})
+	}
+	if s.Store != nil {
+		if _, working, err := s.Store.LaterRounds(ctx, overlayID); err != nil {
+			return promoteWork{}, err
+		} else if working {
+			return promoteWork{}, s.reject(ctx, OverlayPromoteNotPendingCode, map[string]any{
+				"job_id": overlayID, "merge_status": "worker_working",
+			})
+		}
 	}
 	lease, err := s.holdBranch(ctx, overlayID)
 	if err != nil {
@@ -282,6 +300,7 @@ func (s mergeEngine) finalizeEmptyPromote(ctx context.Context, sessionID string,
 	if err != nil {
 		return out, err
 	}
+	defer claim.stopOnPanic()
 	rebased, childStatuses, err := s.assessChildRebases(claimCtx, sessionID, jobID)
 	if err != nil {
 		return out, errors.Join(err, s.releaseMergeClaim(ctx, claim))

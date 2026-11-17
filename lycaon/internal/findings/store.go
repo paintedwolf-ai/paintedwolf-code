@@ -10,7 +10,7 @@ import (
 // SummaryMaxChars bounds automatic peer announcements.
 const SummaryMaxChars = 320
 
-// BodyMaxBytes bounds retained detail, read through pack_board.
+// BodyMaxBytes bounds retained detail, read through read_findings.
 const BodyMaxBytes = 8192
 
 // DefaultListCap is the default max findings returned for worklog projection.
@@ -43,29 +43,7 @@ type Store interface {
 }
 
 func normalizeFindingFields(agent, summary, ref string) (string, string, string) {
-	return strings.TrimSpace(agent), trimSummary(summary), strings.TrimSpace(ref)
-}
-
-func findingMatches(f Finding, agent, summary, ref string) bool {
-	a, s, r := normalizeFindingFields(agent, summary, ref)
-	return f.Agent == a && f.Summary == s && f.Ref == r
-}
-
-func filterSince(all []Finding, since time.Time) []Finding {
-	if since.IsZero() || len(all) == 0 {
-		return all
-	}
-	out := make([]Finding, 0, len(all))
-	for _, f := range all {
-		if f.TS.After(since) {
-			out = append(out, f)
-		}
-	}
-	return out
-}
-
-func trimSummary(summary string) string {
-	return strings.TrimSpace(summary)
+	return strings.TrimSpace(agent), strings.TrimSpace(summary), strings.TrimSpace(ref)
 }
 
 // Delivery retains the bounded peer context used by a successful model request.

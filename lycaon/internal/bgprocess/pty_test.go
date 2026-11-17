@@ -51,7 +51,7 @@ func TestStartPTYDriveSendReadClose(t *testing.T) {
 	readUntil := func(step, marker string) {
 		t.Helper()
 		var buf strings.Builder
-		testutil.WaitFor(t, func() bool {
+		testutil.WaitFor(t, "the terminal echoes the input", func() bool {
 			res, err := reg.Terminal.ReadPTY("s1", handle, PTYReadOpts{Idle: 50 * time.Millisecond, Timeout: 250 * time.Millisecond})
 			if err != nil {
 				return false

@@ -1,6 +1,5 @@
-// Package claim implements worker view claiming without lower-tree walks,
-// Format-v2 persisted workspace metadata (with Format-v1 upgrade support),
-// and the typed Host/Den workspace state surface.
+// Package claim implements worker view claiming without lower-tree walks, persisted workspace view
+// metadata, and the typed host and Den workspace state surface.
 package claim
 
 import (
@@ -12,12 +11,9 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
 
-const (
-	// FormatVersionV1 identifies legacy materialized branch metadata.
-	FormatVersionV1 = 1
-	// FormatVersionV2 identifies layered/materialized workspace view metadata.
-	FormatVersionV2 = 2
-)
+// FormatVersionV2 identifies workspace view metadata. Format 1 is the worker branch state.json that
+// workspace.LoadJobMeta reads; no view metadata was ever written in it.
+const FormatVersionV2 = 2
 
 var (
 	// ErrUnsupportedMetadataVersion is returned when persisted metadata has an unknown format_version.

@@ -100,7 +100,7 @@ func TestPromptLoopOpenAIProviderTwoTurns(t *testing.T) {
 	if err := reg.Register("read", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return "file-body", nil
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "reg.Register failed", err)
 	}
 
 	provider := openaicompat.New("openai-test", mockServer.URL, "test-key", []modelinfo.Entry{{ID: "gpt-4o"}})
@@ -193,7 +193,7 @@ func TestPromptLoopReassignsCollidingToolCallIDsAcrossTurns(t *testing.T) {
 	if err := reg.Register("read", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 		return "body-of-" + fmt.Sprint(args["path"]), nil
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "reg.Register failed", err)
 	}
 
 	var mu sync.Mutex

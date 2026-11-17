@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -28,12 +29,44 @@ func CheckpointStoreDirForTask(task *api.WorkerTask) string {
 }
 
 // taskBranchCheckpoint names the checkpoint a task's mounted branch published. A sealed overlay is
-// newer: a view rebuilt as a materialized tree after that checkpoint captures its result there.
+// newer: a view rebuilt as a materialized tree after that checkpoint captures its result there. A
+// worker's rounds share one lane, whose record holds only its latest checkpoint, so a round's job
+// names the checkpoint its round published.
 func taskBranchCheckpoint(task *api.WorkerTask) (storeDir, checkpointID string, ok bool) {
 	if strings.TrimSpace(task.WorkspaceOverlayPath) != "" {
 		return "", "", false
 	}
-	return workspace.BranchCheckpoint(task.WorkspaceRoot)
+	storeDir, checkpointID, ok = workspace.BranchCheckpoint(task.WorkspaceRoot)
+	if !ok {
+		return storeDir, checkpointID, ok
+	}
+	if round, found := roundCheckpoint(task.ID); found {
+		checkpointID = round
+	}
+	return storeDir, checkpointID, ok
+}
+
+var (
+	roundCheckpointsMu sync.RWMutex
+	roundCheckpoints   func(jobID string) (checkpointID string, ok bool)
+)
+
+// SetRoundCheckpoints names the checkpoint each worker round published.
+func SetRoundCheckpoints(fn func(jobID string) (string, bool)) {
+	roundCheckpointsMu.Lock()
+	defer roundCheckpointsMu.Unlock()
+	roundCheckpoints = fn
+}
+
+func roundCheckpoint(jobID string) (string, bool) {
+	roundCheckpointsMu.RLock()
+	fn := roundCheckpoints
+	roundCheckpointsMu.RUnlock()
+	if fn == nil {
+		return "", false
+	}
+	checkpointID, ok := fn(jobID)
+	return checkpointID, ok && checkpointID != ""
 }
 
 // OpenTaskCheckpointStore loads the reviewed checkpoint, or latest when no preview is bound.
@@ -290,7 +323,7 @@ func QualifyCheckpointPath(qpath layeredfs.QualifiedPath, roots []projectroot.Ro
 	}
 	if len(roots) > 1 {
 		for _, r := range roots {
-			if r.ID == qpath.RootID || ((qpath.RootID == "primary" || qpath.RootID == "root-0" || qpath.RootID == "") && r.IsPrimary) {
+			if r.ID == qpath.RootID {
 				return projectroot.BaselineDisplayPath(roots, r.ID, rel)
 			}
 		}

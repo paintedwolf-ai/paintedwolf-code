@@ -5,6 +5,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/bundledhint"
 )
 
 // tagsSnapshot fills a "tags" view from already-parsed files: a flat definition
@@ -220,7 +222,7 @@ func emptyDiagnostics(ctx context.Context, snap *Snapshot) *Diagnostics {
 		code = emptyRepoMapHintCode
 	}
 	return &Diagnostics{
-		Hint:     envelopeHint(ctx, code),
+		Hint:     bundledhint.Message(ctx, code, nil),
 		HintCode: code,
 	}
 }

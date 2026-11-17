@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/detectionpack"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // Invariant: tools screened for outbound secrets match tools projecting commands into detection rules.
@@ -19,7 +18,7 @@ func TestScreenedCommandSurfacesReachDetectionRules(t *testing.T) {
 		"terminal_send": {"id": "t1", "input": marker + "{Enter}"},
 	}
 	screened := map[string]bool{}
-	for _, tool := range toolcontract.SecretReferenceTools() {
+	for _, tool := range secretReferenceTools(t) {
 		if _, ok := processArgumentSurface(catalogContract(t, tool)); ok {
 			screened[tool] = true
 		}

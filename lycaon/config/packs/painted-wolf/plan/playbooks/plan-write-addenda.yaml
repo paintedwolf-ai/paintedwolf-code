@@ -6,5 +6,5 @@ triggers:
   phase_ids: ["plan", "research"]
 checklist:
   - "Write or edit `${overlay_dir}/blueprints/**/*.md` only — no product implementation"
-  - "Align plan sections with leg CompletionCriteria"
+  - "Align plan sections with worker CompletionCriteria"
   - "On PLAN_MODE_* tool rejects, branch on the reject Code: per your tool guidance"

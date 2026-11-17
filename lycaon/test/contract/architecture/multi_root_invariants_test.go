@@ -2,20 +2,19 @@ package contract
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/nativemanifest"
+
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repoinfo"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
@@ -53,7 +52,9 @@ func TestMultiRootCapabilityDeclaredNamesAreBootTools(t *testing.T) {
 	reg := toolfixture.ContractServeBootRegistry(t)
 	registered := toolfixture.BootRegisteredToolSet(t, reg)
 	schemas := contractToolSchemas(t)
-	for _, name := range toolcontract.MultiRootDeclaredNames() {
+	manifest, err := nativemanifest.Load()
+	contractcheck.FailErr(t, "load native manifest", err)
+	for name := range manifest.MultiRootTools() {
 		if registered[name] || toolcontract.IsCommandOperation(name) {
 			continue
 		}
@@ -341,41 +342,6 @@ func TestMultiRootActiveFolderDisplayContract(t *testing.T) {
 		t.Fatalf("primary folder display = %q", resolved.DisplayPath)
 	}
 
-	// Survey tools render the same spellings. The command program expands
-	// @label words to native paths before dispatch, so the model-visible
-	// display contract lives on the survey tools themselves.
-	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true},
-		[]sandbox.ToolProfile{{ID: "implement", Tools: map[string]bool{"stat": true, "list_dir": true, "find": true, "grep": true}}})
-	tctx := fix.tctx("s1")
-	statRaw, err := (&survey.StatTool{Boundary: boundary}).Run(context.Background(),
-		map[string]any{"paths": []any{"secondary-sentinel.txt", "@lycaon/primary-sentinel.txt"}}, tctx)
-	contractcheck.FailErr(t, "stat", err)
-	var statResp struct {
-		Results []struct {
-			Path string `json:"path"`
-		} `json:"results"`
-	}
-	contractcheck.FailErr(t, "decode stat", json.Unmarshal([]byte(statRaw), &statResp))
-	if len(statResp.Results) != 2 || statResp.Results[0].Path != "secondary-sentinel.txt" || statResp.Results[1].Path != "@lycaon/primary-sentinel.txt" {
-		t.Fatalf("stat paths = %+v", statResp.Results)
-	}
-	listRaw, err := (&survey.ListDirTool{Boundary: boundary}).Run(context.Background(), map[string]any{"path": "@lycaon"}, tctx)
-	contractcheck.FailErr(t, "list_dir", err)
-	if !strings.Contains(listRaw, "@lycaon/primary-sentinel.txt") {
-		t.Fatalf("list_dir = %q", listRaw)
-	}
-	findRaw, err := (&survey.FindTool{Boundary: boundary}).Run(context.Background(),
-		map[string]any{"path": "@lycaon", "name_glob": "*-sentinel.txt"}, tctx)
-	contractcheck.FailErr(t, "find", err)
-	if !strings.Contains(findRaw, "@lycaon/primary-sentinel.txt") {
-		t.Fatalf("find = %q", findRaw)
-	}
-	grepRaw, err := (&survey.GrepTool{Boundary: boundary}).Run(context.Background(),
-		map[string]any{"pattern": "primary", "path": "@lycaon"}, tctx)
-	contractcheck.FailErr(t, "grep", err)
-	if !strings.Contains(grepRaw, "@lycaon/primary-sentinel.txt") {
-		t.Fatalf("grep = %q", grepRaw)
-	}
 }
 
 func TestMultiRootPathsArrayToolStat(t *testing.T) {

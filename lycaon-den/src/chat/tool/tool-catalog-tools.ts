@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { loadSourceCorpus } from "../../test/source-corpus.ts";
-import { TASK_DISPATCH_TOOLS } from "./tool-presentation.generated.ts";
 
 const REPO_ROOT = join(import.meta.dirname, "../../../..");
 
@@ -18,6 +17,7 @@ const CATALOG_PATH = join(
   REPO_ROOT,
   "lycaon/config/packs/painted-wolf/platform/tools/lycaon-tools.yaml",
 );
+const RETIREMENTS_PATH = join(REPO_ROOT, "schemas/agent-public-retirements.json");
 const EVIDENCE_KINDS_PATH = join(
   REPO_ROOT,
   "lycaon/config/packs/painted-wolf/platform/guidance/evidence-kinds.yaml",
@@ -41,21 +41,17 @@ export function toolOperationSchemaNames(): string[] {
     .sort();
 }
 
+/** Tools a published release offered and later retired; stored transcripts still name them. */
+export function retiredToolNames(): string[] {
+  const catalog = JSON.parse(readFileSync(RETIREMENTS_PATH, "utf8")) as {
+    vocabularies: { tools: Record<string, unknown> };
+  };
+  return Object.keys(catalog.vocabularies.tools).sort();
+}
+
 /** Catalog opt-in / coordinator profile tools from lycaon-tools.yaml. */
 export function lycaonCatalogToolNames(): string[] {
   return namesFromYamlList(readFileSync(CATALOG_PATH, "utf8"));
-}
-
-/** Catalog tools rendered through StructuredToolBody. */
-export function genericTranscriptToolNames(): string[] {
-  const names = new Set<string>([
-    ...toolSchemaNames(),
-    ...lycaonCatalogToolNames(),
-  ]);
-  for (const tool of TASK_DISPATCH_TOOLS) {
-    names.delete(tool);
-  }
-  return [...names].sort();
 }
 
 let cachedToolEvidenceKindMap: Readonly<Record<string, string>> | undefined;

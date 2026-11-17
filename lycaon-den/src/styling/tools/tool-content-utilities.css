@@ -26,27 +26,9 @@
   }
 }
 
-
 @utility den-tool-part-body {
 padding: 0 10px 10px;
 }
-
-
-@utility den-tool-part-card-badge {
-font-size: var(--text-den-overline);
-  font-weight: 600;
-  padding: 2px 8px;
-  border-radius: var(--den-radius-sm);
-  background: var(--den-tint-2);
-  color: var(--den-text-muted);
-}
-
-
-@utility den-tool-part-card-badge--stale {
-color: var(--den-danger-text);
-  background: color-mix(in srgb, var(--den-danger) 14%, transparent);
-}
-
 
 @utility den-tool-part-card-body {
 display: flex;
@@ -54,96 +36,15 @@ display: flex;
   gap: 10px;
 }
 
-
 @utility den-tool-part-card-facts {
 display: flex;
   flex-direction: column;
   margin: 0;
 }
 
-
 @utility den-tool-part-card-facts--wide {
 flex-direction: column;
 }
-
-
-
-@utility den-tool-part-card-log-digest {
-display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-
-@utility den-tool-part-card-log-digest-cluster-body {
-display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-}
-
-
-@utility den-tool-part-card-log-digest-clusters {
-margin: 0;
-  padding-left: 0;
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-
-@utility den-tool-part-card-log-digest-count {
-flex: 0 0 auto;
-  color: var(--den-text-muted);
-  font-size: var(--text-den-caption);
-}
-
-
-@utility den-tool-part-card-log-digest-facet {
-display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-
-@utility den-tool-part-card-log-digest-facet-key {
-font-size: var(--text-den-caption);
-  font-weight: 600;
-  color: var(--den-text-muted);
-}
-
-
-@utility den-tool-part-card-log-digest-facets {
-display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-
-@utility den-tool-part-card-log-digest-format {
-font-weight: 600;
-  color: var(--den-text);
-}
-
-
-@utility den-tool-part-card-log-digest-head {
-display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--text-den-hint);
-  color: var(--den-text-muted);
-}
-
-
-@utility den-tool-part-card-log-digest-template {
-overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
 
 @utility den-tool-part-card-note {
 margin: 0;
@@ -151,7 +52,6 @@ margin: 0;
   line-height: 1.45;
   color: var(--den-text-muted);
 }
-
 
 /* How the decision engine bore on this call: the card's closing line. */
 @utility den-tool-part-load {
@@ -172,41 +72,9 @@ margin: 0;
   }
 }
 
-
 @utility den-tool-part-load-sep {
   color: color-mix(in srgb, var(--den-text-muted) 60%, transparent);
 }
-
-
-@utility den-tool-part-card-compaction {
-display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--den-border);
-  background: color-mix(in srgb, var(--den-surface-elevated) 88%, var(--den-accent-text) 12%);
-}
-
-
-@utility den-tool-part-card-compaction-banner {
-margin: 0;
-  font-size: var(--text-den-hint);
-  line-height: 1.45;
-  color: var(--den-text-muted);
-}
-
-
-@utility den-tool-part-card-compaction-spill {
-margin: 0;
-  font-size: var(--text-den-hint);
-  line-height: 1.45;
-  color: var(--den-text-muted);
-  min-width: 0;
-  overflow-wrap: anywhere;
-  word-break: break-word;
-}
-
 
 @utility den-chat-content-link {
 border: none;
@@ -221,46 +89,17 @@ border: none;
   text-align: left;
 }
 
-
 @utility den-tool-part-card-section {
 display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-
-@utility den-tool-part-card-section-label {
-margin: 0;
-  font-size: var(--text-den-overline);
-  font-weight: 600;
-  color: var(--den-text-muted);
-}
-
-
-@utility den-tool-part-card-section-label--row {
-display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.5em 0.75em;
-  letter-spacing: 0;
-}
-
-
-@utility den-tool-part-card-section-label-text {
-font-size: var(--text-den-overline);
-  font-weight: 600;
-  color: var(--den-text-muted);
-}
-
-
-
-
 @utility den-tool-part-card-structured {
 display: flex;
   flex-direction: column;
   gap: 10px;
 }
-
 
 @utility den-tool-part-chicklet {
 display: flex;
@@ -278,7 +117,6 @@ display: flex;
   transition: background var(--den-duration-drawer) var(--den-ease);
 }
 
-
 @utility den-tool-part-chicklet-main {
 display: inline-flex;
   align-items: baseline;
@@ -286,7 +124,6 @@ display: inline-flex;
   flex: 1 1 auto;
   min-width: 0;
 }
-
 
 @utility den-tool-part-name {
 flex: 0 1 auto;
@@ -298,7 +135,6 @@ flex: 0 1 auto;
   font-size: var(--text-den-compact);
   letter-spacing: 0.02em;
 }
-
 
 @utility den-tool-part-outcome {
 flex: 0 1 auto;
@@ -312,7 +148,6 @@ flex: 0 1 auto;
   color: var(--den-text-muted);
   font-variant-numeric: tabular-nums;
 }
-
 
 @utility den-tool-part-status-dot {
 flex: 0 0 auto;
@@ -335,7 +170,6 @@ flex: 0 0 auto;
   }
 }
 
-
 @utility den-workflow-explain-summary {
 flex: 0 1 auto;
   min-width: 0;
@@ -347,13 +181,11 @@ flex: 0 1 auto;
   white-space: nowrap;
 }
 
-
 @utility den-workflow-explain-state {
 font-size: var(--text-den-compact);
   font-weight: 400;
   color: var(--den-text-muted);
 }
-
 
 @utility den-tool-part-progress-state {
   flex: 0 0 auto;

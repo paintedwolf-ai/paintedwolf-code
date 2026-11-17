@@ -2,8 +2,8 @@
 tools:
   - restore_version
   - task
-  - delegate_dispatch
-  - delegate_decompose
+  - instruct_worker
+  - plan_from_blueprint
   - write
   - edit
   - replace_lines

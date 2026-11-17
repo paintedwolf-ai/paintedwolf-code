@@ -101,9 +101,7 @@ func programOperations(t *testing.T, program api.CommandProgramReceipt, executio
 	reads := fakeProgramReads{programs: map[string]string{"r1": "p1"}, pages: map[string][]api.CommandProgramReceiptPage{"p1": programPages(program, executions...)}}
 	receipt := api.InvocationReceipt{ID: "r1", Tool: "command", ToolCallID: "c1", Status: api.InvocationStatusCompleted, Invoked: true, SettledAt: settledAt()}
 	ops, err := programSource{reads}.Operations(t.Context(), receipt, "s1", "m1")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "read program operations", err)
 	return ops
 }
 

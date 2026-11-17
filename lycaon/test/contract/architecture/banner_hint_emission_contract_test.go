@@ -59,7 +59,7 @@ func TestHintCodeYAMLEmitFieldIsRecognized(t *testing.T) {
 		if allowedExact[emit] {
 			continue
 		}
-		if anchorID, ok := guidance.InjectAnchor(emit); ok {
+		if anchorID, ok := contractcheck.InjectAnchor(emit); ok {
 			if !anchors.IDs[anchorID] {
 				bad = append(bad, code+":"+emit+" (no anchor "+anchorID+")")
 			}

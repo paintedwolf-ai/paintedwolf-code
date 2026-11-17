@@ -30,7 +30,8 @@ mockedBackendE2e.describe("store incompatible recovery", () => {
     await seedAppState(page, { onboarding: { firstRunSetupCompleted: true } });
     await page.goto("/");
     await expect(page.getByTestId("critical-stop")).toHaveAttribute("data-code", "store_incompatible", { timeout: 30_000 });
-    // A retry interval passes on the page's clock: a reachable 503 must not start another read by itself.
+    await expect(page.getByTestId("shell")).toHaveCount(0);
+    // Advance the page clock to expose an unintended retry.
     await page.clock.runFor(2_000);
     await expect.poll(async () => {
       const before = unavailableRequests;

@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -41,7 +42,7 @@ func (s *sqlCompaction) AppendDraftVersion(ctx context.Context, sessionID, slotI
 		VersionIndex: nextIndex,
 		Body:         body,
 		OutcomeCode:  strings.TrimSpace(outcomeCode),
-		CreatedAt:    db.FormatTime(now),
+		CreatedAt:    timelayout.Format(now),
 	}); err != nil {
 		return 0, err
 	}

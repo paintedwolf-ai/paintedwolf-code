@@ -48,8 +48,8 @@ modelIndependentWebE2e("hundreds of tabs retain only the admitted document worki
   const rootId = project.roots[0]?.id;
   if (!rootId) throw new Error("Missing fixture root.");
   await page.evaluate(async ({ projectId, rootId, names }) => {
-    const url = "/src/files/documents/project-files-buffers.ts";
-    const { openFilesBuffer } = await import(/* @vite-ignore */ url) as typeof import("../src/files/documents/project-files-buffers.ts");
+    const url = "/src/files/documents/project-files-buffer-lifecycle.ts";
+    const { openFilesBuffer } = await import(/* @vite-ignore */ url) as typeof import("../src/files/documents/project-files-buffer-lifecycle.ts");
     for (const name of names) openFilesBuffer(projectId, { rootId, rootLabel: "root", path: name, intent: "permanent" });
   }, { projectId: project.id, rootId, names });
   await expect(page.getByTestId("files-tab")).toHaveCount(300);
@@ -65,8 +65,8 @@ modelIndependentWebE2e("hundreds of tabs retain only the admitted document worki
     const name = names[index];
     if (!name) throw new Error("Missing document fixture.");
     await page.evaluate(async ({ projectId, rootId, name }) => {
-      const url = "/src/files/documents/project-files-buffers.ts";
-      const { openFilesBuffer } = await import(/* @vite-ignore */ url) as typeof import("../src/files/documents/project-files-buffers.ts");
+      const url = "/src/files/documents/project-files-buffer-lifecycle.ts";
+      const { openFilesBuffer } = await import(/* @vite-ignore */ url) as typeof import("../src/files/documents/project-files-buffer-lifecycle.ts");
       openFilesBuffer(projectId, { rootId, rootLabel: "root", path: name, intent: "permanent" });
     }, { projectId: project.id, rootId, name });
     await expect(page.locator(`[data-testid="files-tab"][data-path="${name}"]`)).toHaveAttribute("aria-busy", "false");

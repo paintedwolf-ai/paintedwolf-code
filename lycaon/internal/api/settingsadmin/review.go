@@ -20,9 +20,10 @@ func (s *Handler) HandleGetReview(w http.ResponseWriter, r *http.Request) {
 	}
 	cfg := s.Service.Review.Get(scope, projectDir)
 	httpio.WriteJSON(w, http.StatusOK, settings.ReviewToDTO(
-		settings.WireScope(string(scope)),
+		wire.SettingsScope(string(scope)),
 		cfg,
 		s.Service.Review.MergedFrom(scope, projectDir),
+		s.Service.Review.ProjectRejected(projectDir),
 	))
 }
 
@@ -51,7 +52,9 @@ func (s *Handler) HandleUpdateReview(w http.ResponseWriter, r *http.Request) {
 	switch scope {
 	case llm.SettingsScopeProject:
 		if err := s.Service.Review.PutProject(projectDir, cfg); err != nil {
-			s.responses.InternalError(w, r, err)
+			if !ProjectSettingsWriteError(s.responses, w, err) {
+				s.responses.InternalError(w, r, err)
+			}
 			return
 		}
 	default:
@@ -62,8 +65,9 @@ func (s *Handler) HandleUpdateReview(w http.ResponseWriter, r *http.Request) {
 	}
 	projectview.PublishSettings(s.Events, s.Projects, r.Context(), wire.SettingsAreaReview, string(scope), projectDir, "updated")
 	httpio.WriteJSON(w, http.StatusOK, settings.ReviewToDTO(
-		settings.WireScope(string(scope)),
+		wire.SettingsScope(string(scope)),
 		s.Service.Review.Get(scope, projectDir),
 		s.Service.Review.MergedFrom(scope, projectDir),
+		s.Service.Review.ProjectRejected(projectDir),
 	))
 }

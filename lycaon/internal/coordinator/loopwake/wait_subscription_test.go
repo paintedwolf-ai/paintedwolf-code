@@ -151,7 +151,7 @@ func TestLoopNeedsDecisionWakesThroughAllWorkersIdleWait(t *testing.T) {
 		Question:       "Which scan path?",
 		Options:        []string{"retry scan_list", "manual audit"},
 		BlockerClass:   api.WorkerBlockerDecision,
-	})
+	}, "fixer")
 	loop.Nudges.NudgeAfterWorkerJobTerminal(
 		context.Background(),
 		"s1",
@@ -161,7 +161,7 @@ func TestLoopNeedsDecisionWakesThroughAllWorkersIdleWait(t *testing.T) {
 		"",
 		env,
 	)
-	testutil.WaitFor(t, func() bool { return prompts.Load() >= 1 })
+	testutil.WaitFor(t, "the needs-decision wake runs a prompt", func() bool { return prompts.Load() >= 1 })
 	if loop.Waits.IsSleeping("s1") {
 		t.Fatal("needs_decision must break sleep")
 	}

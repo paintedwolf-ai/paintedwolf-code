@@ -12,7 +12,6 @@ import {
   languageForInfoString,
   languageLabelForPath,
   prettyLayoutCatalog,
-  prettyLayoutForBuffer,
   prettyLayoutForLanguage,
   prettyLayoutForPath,
 } from "./codemirror-lang.ts";
@@ -280,7 +279,7 @@ describe("codemirror-lang", () => {
     expect(languageForInfoString("Common Lisp")).not.toBeNull();
     expect(languageForInfoString("golang")).not.toBeNull();
     expect(languageForInfoString("postgresql")).not.toBeNull();
-    expect(prettyLayoutForBuffer("bin/deploy", "python")).toEqual(prettyLayoutForPath("deploy.py"));
+    expect(prettyLayoutForLanguage("python")).toEqual(prettyLayoutForPath("deploy.py"));
     expect(formattersForBuffer("bin/deploy", "python")).toEqual(["ruff", "black"]);
   });
 });

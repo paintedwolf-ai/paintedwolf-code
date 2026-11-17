@@ -2,6 +2,7 @@ package review
 
 import (
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
 	scanfindings "github.com/lycaon/lycaon/internal/scan/findings"
@@ -15,7 +16,7 @@ func TestReviewInventoryUsesInheritedLinksAndSetAsides(t *testing.T) {
 	prior.Record.Artifacts["set_asides"] = `[{"scanner":"secrets","paths":["**/*_test.go"],"reason":"fixtures"}]`
 	current := phaseVerdict("challenge", challenge, "challenges", `[{"id":"c1","statement":"s","status":"survives"}]`)
 	current.Record.Artifacts["set_asides"] = `[{"scan_group_ids":["group:mixed","group:locationless"],"reason":"reviewed samples"}]`
-	phases := []workflowpresentation.PhaseVerdict{prior, current}
+	phases := []runstate.PhaseVerdict{prior, current}
 	facts := ReportDocumentFacts{
 		Claims: workflowpresentation.ReconcileClaims(phases), SetAsides: workflowpresentation.RunSetAsides(phases),
 		Inventory: RunInventory{Settled: true, Groups: []scanfindings.InventoryGroup{

@@ -14,18 +14,28 @@ func (r *Runtime) bindEvidence(deps Dependencies) {
 	evidenceStore := inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
 	simpleInspector := inspector.NewSimpleInspector(evidenceStore)
 	simpleInspector.ProjectDir = func(c context.Context, runID string) (string, error) {
-		if deps.DelegationStore == nil {
+		runID = strings.TrimSpace(runID)
+		if runID == "" {
 			return "", nil
 		}
-		r, err := deps.DelegationStore.Get(c, runID)
-		if err != nil {
+		if r.Store != nil && r.Store.Runs != nil {
+			if wfRun, err := r.Store.Runs.Get(c, runID); err == nil && wfRun != nil && deps.Sessions != nil {
+				if sess, sErr := deps.Sessions.Get(c, wfRun.SessionID); sErr == nil && sess != nil && strings.TrimSpace(sess.ProjectID) != "" {
+					return project.EnsureHostDataDir(deps.DataDir, sess.ProjectID)
+				}
+			}
+		}
+		if deps.Sessions == nil {
+			return "", nil
+		}
+		sess, err := deps.Sessions.Get(c, runID)
+		if err != nil || sess == nil {
 			return "", err
 		}
-		dir, err := project.EnsureHostDataDir(deps.DataDir, r.ProjectID)
-		if err != nil {
-			return "", err
+		if strings.TrimSpace(sess.ProjectID) == "" {
+			return "", nil
 		}
-		return dir, nil
+		return project.EnsureHostDataDir(deps.DataDir, sess.ProjectID)
 	}
 	r.Manager.Verdicts.EvidenceStore = evidenceStore
 	r.Manager.SetEvidenceProjectDir(func(c context.Context, sessionID string) (string, error) {

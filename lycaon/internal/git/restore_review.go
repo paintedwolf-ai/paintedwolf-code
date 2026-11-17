@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/gitlease"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
 // RestoreFile describes one exact file Git will restore, including index-only changes.
@@ -186,7 +186,7 @@ func (r *restoreReview) prepareFiles(ctx context.Context, dir string, staged, wo
 
 func (r *restoreReview) appendFile(file RestoreFile) {
 	size := int64(len(file.Before.Bytes) + len(file.After.Bytes))
-	if size > sourceledger.MaxRevisionContentBytes-r.previewBytes {
+	if size > sourceblob.MaxRevisionContentBytes-r.previewBytes {
 		file.Before.Bytes, file.After.Bytes = nil, nil
 	} else {
 		r.previewBytes += size
@@ -268,13 +268,13 @@ func readRestoreContent(path string) (RestoreContent, error) {
 
 func readRestoreStream(content RestoreContent, reader io.Reader) (RestoreContent, error) {
 	hash := sha256.New()
-	limited := io.LimitReader(io.TeeReader(reader, hash), sourceledger.MaxRevisionContentBytes+1)
+	limited := io.LimitReader(io.TeeReader(reader, hash), sourceblob.MaxRevisionContentBytes+1)
 	raw, err := io.ReadAll(limited)
 	if err != nil {
 		return RestoreContent{}, err
 	}
 	content.Size = int64(len(raw))
-	if content.Size <= sourceledger.MaxRevisionContentBytes {
+	if content.Size <= sourceblob.MaxRevisionContentBytes {
 		content.Bytes = raw
 	} else {
 		n, err := io.Copy(hash, reader)

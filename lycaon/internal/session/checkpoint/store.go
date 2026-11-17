@@ -24,8 +24,7 @@ const (
 
 	checkpointDirPerm os.FileMode = 0o750
 
-	MaxPaths               = 500
-	checkpointMaxFileBytes = sourceblob.MaxRevisionContentBytes
+	MaxPaths = 500
 )
 
 // PathOp distinguishes captured content from an absent path.
@@ -287,7 +286,7 @@ func (s *Store) capturePath(ctx context.Context, rel string) (entry PathEntry, s
 	if info.IsDir() || !info.Mode().IsRegular() {
 		return PathEntry{}, true, nil
 	}
-	if info.Size() > checkpointMaxFileBytes {
+	if info.Size() > sourceblob.MaxRevisionContentBytes {
 		return PathEntry{}, true, nil
 	}
 	data, readErr := os.ReadFile(abs)

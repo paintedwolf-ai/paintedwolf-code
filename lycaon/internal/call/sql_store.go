@@ -2,6 +2,7 @@ package call
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -46,7 +47,7 @@ func (s *SQLStore) InsertReservation(ctx context.Context, sessionID, agent, path
 		Path:      path,
 		Agent:     agent,
 		SessionID: db.NullString(sessionID),
-		CreatedAt: db.FormatTime(time.Now().UTC()),
+		CreatedAt: timelayout.Format(time.Now().UTC()),
 	})
 }
 

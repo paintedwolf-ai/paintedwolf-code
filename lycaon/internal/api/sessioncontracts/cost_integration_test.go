@@ -40,12 +40,12 @@ func TestHandleCostSummarySessionBreakdown(t *testing.T) {
 	if err := tracker.RecordUsage(t.Context(), cost.UsageEvent{
 		SessionID: parent.ID, Caller: cost.CallerCoordinator, EstimatedNanoUSD: costtest.NanoUSD(t, coord),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "tracker.RecordUsage failed", err)
 	}
 	if err := tracker.RecordUsage(t.Context(), cost.UsageEvent{
 		SessionID: child.ID, ParentSessionID: parent.ID, Caller: cost.CallerWorker, EstimatedNanoUSD: costtest.NanoUSD(t, worker),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "tracker.RecordUsage failed", err)
 	}
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/cost/summary?session_id="+parent.ID, nil)
@@ -82,12 +82,12 @@ func TestHandleCostSummaryProjectBreakdown(t *testing.T) {
 	if err := tracker.RecordUsage(t.Context(), cost.UsageEvent{
 		SessionID: parent.ID, ProjectID: p.ID, Caller: cost.CallerCoordinator, EstimatedNanoUSD: costtest.NanoUSD(t, c1),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "tracker.RecordUsage failed", err)
 	}
 	if err := tracker.RecordUsage(t.Context(), cost.UsageEvent{
 		SessionID: child.ID, ParentSessionID: parent.ID, ProjectID: p.ID, Caller: cost.CallerWorker, EstimatedNanoUSD: costtest.NanoUSD(t, c2),
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "tracker.RecordUsage failed", err)
 	}
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/cost/summary?project_id="+p.ID, nil)

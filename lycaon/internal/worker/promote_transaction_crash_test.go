@@ -103,7 +103,7 @@ func (f *promoteCrashFixture) slot(path string) string {
 func (f *promoteCrashFixture) run(t *testing.T, crashAt int, observe func(checkpoint.TransactionStep, string)) error {
 	t.Helper()
 	n := 0
-	effects := promoteTransactionEffects{Reached: func(step checkpoint.TransactionStep, path string) error {
+	effects := checkpoint.TransactionConfig{Reached: func(step checkpoint.TransactionStep, path string) error {
 		if observe != nil {
 			observe(step, path)
 		}

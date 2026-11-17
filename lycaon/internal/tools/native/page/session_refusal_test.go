@@ -6,6 +6,8 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/contactsheet"
+
 	"github.com/lycaon/lycaon/internal/browser"
 	"github.com/lycaon/lycaon/internal/browser/pagesession"
 	"github.com/lycaon/lycaon/internal/browser/preview"
@@ -62,7 +64,7 @@ func TestRecordedFailurePreservesProjectedEvidenceAndOriginalReject(t *testing.T
 	original := &browserengine.RejectError{Code: "CAPTURE_TARGET_INVALID", Data: map[string]any{"reason": "action_failed"}}
 	effect := &tools.ToolInvocationOut{}
 	ctx := tools.ToolContext{Effects: tools.InvocationEffects{Out: effect}}
-	capture := browser.CaptureResult{Mime: browser.FilmstripMime, Bytes: []byte("recording"), Timeline: &timelinearchive.Report{}}
+	capture := browser.CaptureResult{Mime: contactsheet.FilmstripMime, Bytes: []byte("recording"), Timeline: &timelinearchive.Report{}}
 	err := recordedFailure(ctx, capture, original)
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != original.Code || reject.Data["recorded"] != true || reject.Data["timeline"] != capture.Timeline {

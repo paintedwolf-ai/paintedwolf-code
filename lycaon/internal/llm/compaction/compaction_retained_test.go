@@ -17,7 +17,7 @@ func TestContextRetentionKeepsRecentToolBatchBeforeSystemTail(t *testing.T) {
 		rows = append(rows, ContextMessage{Role: "system", Content: "current host state"})
 	}
 	for name, retained := range map[string][]ContextMessage{
-		"fit":     DeterministicFit(CompactionConfig{KeepRecentMessages: 2}, rows, 1),
+		"fit":     DeterministicFitWithReserve(CompactionConfig{KeepRecentMessages: 2}, rows, 1, 0),
 		"compact": retainedCompactionMessages(rows, 2),
 	} {
 		t.Run(name, func(t *testing.T) {

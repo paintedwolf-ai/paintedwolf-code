@@ -21,6 +21,7 @@ const SURFACES = [
   "workflow-feedback",
   "workflow-explain",
   "blueprint",
+  "progress-update",
   "draft",
   "code-fence",
 ] as const;
@@ -40,7 +41,6 @@ function disclosureKey(
 
 export const transcriptDisclosureKey = {
   tool: (partId: string) => disclosureKey("tool", partId),
-  toolNetwork: (partId: string) => disclosureKey("tool-network", partId),
   groundingEvidence: (rowKey: string) => disclosureKey("grounding-evidence", rowKey),
   activitySpan: (leadEntryKey: string) => disclosureKey("activity-span", leadEntryKey),
   indexWarming: (entryKey: string) => disclosureKey("index-warming", entryKey),
@@ -50,6 +50,7 @@ export const transcriptDisclosureKey = {
   workflowFeedback: (entryKey: string) => disclosureKey("workflow-feedback", entryKey),
   workflowExplain: (entryKey: string) => disclosureKey("workflow-explain", entryKey),
   blueprint: (entryKey: string) => disclosureKey("blueprint", entryKey),
+  progressUpdate: (entryKey: string) => disclosureKey("progress-update", entryKey),
   draft: (slotId: string) => disclosureKey("draft", slotId),
   codeFence: (fenceKey: string) => disclosureKey("code-fence", fenceKey),
 } as const;

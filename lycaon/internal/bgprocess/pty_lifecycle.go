@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strings"
 	"time"
 
 	execution "github.com/lycaon/lycaon/internal/exec"
@@ -41,7 +42,7 @@ func (r *Terminal) ClosePTY(sessionID, handle string) (PTYCloseResult, error) {
 		Refusals: proc.facts.Refusals(),
 	}
 	r.jobs.mu.Unlock()
-	r.jobs.remove(trim(sessionID), trim(handle))
+	r.jobs.remove(strings.TrimSpace(sessionID), strings.TrimSpace(handle))
 	if hasExit {
 		code := exitCode
 		out.ExitCode = &code

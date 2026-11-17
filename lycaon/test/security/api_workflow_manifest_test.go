@@ -104,7 +104,7 @@ func TestWorkflowCoordinatorProfileOverridesPostureE2E(t *testing.T) {
 	if _, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "readonly-coord", WorkflowVersion: "1.0.0",
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "h.Workflows.Manager.Starts.StartHuman failed", err)
 	}
 
 	got, err = mgr.Profiles.ResolvePromptToolProfile(ctx, sess.ID)

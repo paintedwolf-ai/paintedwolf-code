@@ -96,7 +96,7 @@ services:
     # Match the module's pinned toolchain on a Debian release whose C library
     # satisfies the engine's Linux runtime floor (internal/platformfloor), or
     # the preflight refuses to serve and every spec waits on "connecting".
-    image: golang:1.26.10-trixie
+    image: golang:1.26.11-trixie
     network_mode: ${LYCAON_E2E_NETWORK_MODE:-}
     # Confinement creates user namespaces and mounts /proc inside each command sandbox.
     security_opt:

@@ -2,7 +2,6 @@ package orchestration
 
 import (
 	"context"
-	"fmt"
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"testing"
 
@@ -171,120 +170,61 @@ func loadDefaultPipelineStages(t *testing.T) []PipelineStage {
 	return spec.Pipeline.Stages
 }
 
-func TestSetupPipelineDelegationBranches(t *testing.T) {
+func TestSetupPipelineBatchBranches(t *testing.T) {
 	ctx := context.Background()
-	store := newPipelineStoreStub()
+	workers := NewMemoryTopologyWorkers()
 	orch := NewOrchestratorImpl(OrchestratorDeps{
-		Store:  store,
-		Agents: NewMemoryAgentRegistryForTest(),
+		Workers: workers,
+		Agents:  NewMemoryAgentRegistryForTest(),
 	})
 	allStages := loadDefaultPipelineStages(t)
 	stages := allStages[:1]
 	projectDir := t.TempDir()
-	state := &runState{stageLegs: make(map[string]string)}
 
-	created, leg := store.seedDelegation("sess-dep", projectDir, "research", ProfileRepoResearcher)
-	depID, err := orch.setupPipelineDelegation(ctx, RunRequest{
-		Input: map[string]any{"delegation_id": created.ID},
+	seeded, seededUnits, err := workers.CreateBatch(ctx, TopologyBatch{
+		SessionID:     "sess-dep",
+		ProjectID:     testdbseed.DefaultProjectID,
+		WorkspacePath: projectDir,
+		Task:          "seed",
+		WorkflowRunID: "wf-seed",
+	}, []TopologyUnit{{ID: "unit-research", WorkID: "research", AgentType: ProfileRepoResearcher, Status: api.LegStatusPending}})
+	testutil.FailErr(t, "seed batch", err)
+
+	state := &runState{stageUnits: make(map[string]string), completed: make(map[string]bool), outputs: make(map[string]string), workflowRunID: "wf-seed"}
+	batchID, err := orch.setupPipelineBatch(ctx, RunRequest{
+		Input: map[string]any{"batch_id": seeded.ID},
 	}, "sess-dep", projectDir, stages, state)
-	testutil.FailErr(t, "orch.setupPipelineDelegation failed", err)
-	if depID != created.ID {
-		t.Fatalf("delegation_id = %q want %q", depID, created.ID)
+	testutil.FailErr(t, "orch.setupPipelineBatch failed", err)
+	if batchID != seeded.ID {
+		t.Fatalf("batch_id = %q want %q", batchID, seeded.ID)
 	}
-	if state.stageLegs["research"] != leg.ID {
-		t.Fatalf("stage legs = %v", state.stageLegs)
+	if state.stageUnits["research"] != seededUnits[0].ID {
+		t.Fatalf("stage units = %v", state.stageUnits)
 	}
 
-	state = &runState{stageLegs: make(map[string]string)}
-	_, err = orch.setupPipelineDelegation(ctx, RunRequest{}, "sess-dep", projectDir, allStages, state)
+	state = &runState{stageUnits: make(map[string]string), completed: make(map[string]bool), outputs: make(map[string]string)}
+	_, err = orch.setupPipelineBatch(ctx, RunRequest{}, "sess-dep", projectDir, allStages, state)
 	if err == nil {
-		t.Fatal("expected leg count mismatch error for existing delegation")
+		t.Fatal("expected unit count mismatch error for existing batch")
 	}
 
-	state = &runState{stageLegs: make(map[string]string)}
-	depID, err = orch.setupPipelineDelegation(ctx, RunRequest{
+	state = &runState{stageUnits: make(map[string]string), completed: make(map[string]bool), outputs: make(map[string]string)}
+	batchID, err = orch.setupPipelineBatch(ctx, RunRequest{
 		Topology: TopologySpec{Task: "new"},
 		Input:    map[string]any{"project_id": testdbseed.DefaultProjectID, "project_dir": projectDir},
 	}, "sess-new", projectDir, stages, state)
-	testutil.FailErr(t, "orch.setupPipelineDelegation failed", err)
-	if depID == "" || len(state.stageLegs) != 1 {
-		t.Fatalf("created delegation = %q legs = %v", depID, state.stageLegs)
+	testutil.FailErr(t, "orch.setupPipelineBatch failed", err)
+	if batchID == "" || len(state.stageUnits) != 1 {
+		t.Fatalf("created batch = %q units = %v", batchID, state.stageUnits)
 	}
 }
 
-type pipelineStoreStub struct {
-	delegations map[string]*api.Delegation
-	legs        map[string][]api.Leg
-	bySession   map[string]string
-}
-
-func newPipelineStoreStub() *pipelineStoreStub {
-	return &pipelineStoreStub{
-		delegations: make(map[string]*api.Delegation),
-		legs:        make(map[string][]api.Leg),
-		bySession:   make(map[string]string),
-	}
-}
-
-func (s *pipelineStoreStub) seedDelegation(sessionID, projectDir, title, agentType string) (*api.Delegation, api.Leg) {
-	dep := &api.Delegation{ID: "dep-" + sessionID, ProjectID: testdbseed.DefaultProjectID, WorkspacePath: projectDir, Task: "seed", Strategy: api.HuntStrategyFileBased, Status: "active"}
-	leg := api.Leg{ID: "leg-" + title, Title: title, AgentType: agentType, Status: api.LegStatusPending}
-	s.delegations[dep.ID] = dep
-	s.legs[dep.ID] = []api.Leg{leg}
-	s.bySession[sessionID] = dep.ID
-	return dep, leg
-}
-
-func (s *pipelineStoreStub) Create(ctx context.Context, delegation api.Delegation, sessionID string, legs []api.Leg) (*api.Delegation, error) {
-	if delegation.ID == "" {
-		delegation.ID = "dep-" + sessionID + "-new"
-	}
-	created := delegation
-	s.delegations[created.ID] = &created
-	s.legs[created.ID] = append([]api.Leg(nil), legs...)
-	s.bySession[sessionID] = created.ID
-	return &created, nil
-}
-
-func (s *pipelineStoreStub) GetLeg(ctx context.Context, delegationID, legID string) (*api.Leg, error) {
-	for i := range s.legs[delegationID] {
-		if s.legs[delegationID][i].ID == legID {
-			leg := s.legs[delegationID][i]
-			return &leg, nil
-		}
-	}
-	return nil, context.Canceled
-}
-
-func (s *pipelineStoreStub) UpdateLeg(ctx context.Context, leg api.Leg) error { return nil }
-
-func (s *pipelineStoreStub) ListLegs(ctx context.Context, delegationID string) ([]api.Leg, error) {
-	return append([]api.Leg(nil), s.legs[delegationID]...), nil
-}
-
-func (s *pipelineStoreStub) DelegationBySessionID(sessionID string) (string, bool) {
-	id, ok := s.bySession[sessionID]
-	return id, ok
-}
-
-func (s *pipelineStoreStub) DelegationByWorkflowRunID(context.Context, string) (string, bool, error) {
-	return "", false, nil
-}
-
-func TestPipelineProjectDirAndLegHelpers(t *testing.T) {
+func TestPipelineProjectDirAndMapHelpers(t *testing.T) {
 	if _, err := pipelineProjectDir(RunRequest{}); err == nil {
 		t.Fatal("expected missing project_dir error")
 	}
 	if dir, err := pipelineProjectDir(RunRequest{Input: map[string]any{"project_dir": " /tmp/x "}}); err != nil || dir != "/tmp/x" {
 		t.Fatalf("dir = %q err = %v", dir, err)
-	}
-	for _, status := range []api.LegStatus{api.LegStatusComplete, api.LegStatusFailed, api.LegStatusCanceled, api.LegStatusRetryPending} {
-		if !isSettledLegAttempt(status) {
-			t.Fatalf("%s should settle a leg attempt", status)
-		}
-	}
-	if isSettledLegAttempt(api.LegStatusPending) {
-		t.Fatal("pending should not settle a leg attempt")
 	}
 	if copyStringMap(nil) != nil {
 		t.Fatal("expected nil copy")
@@ -329,12 +269,4 @@ func TestWorkflowContextFromInputPartial(t *testing.T) {
 	if wf == nil || wf.runID != "run-1" || wf.id != "default-pipeline" {
 		t.Fatalf("wf = %+v", wf)
 	}
-}
-
-func (s *pipelineStoreStub) Get(_ context.Context, id string) (*api.Delegation, error) {
-	if delegation, ok := s.delegations[id]; ok {
-		copy := *delegation
-		return &copy, nil
-	}
-	return nil, fmt.Errorf("delegation %q not found", id)
 }

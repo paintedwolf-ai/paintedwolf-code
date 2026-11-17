@@ -5,7 +5,11 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/prompts"
+	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -298,5 +302,69 @@ func TestResultsAvailableAcceptsNormalPartialCoverage(t *testing.T) {
 				t.Fatalf("got %s, want %s", got.Status, tc.want)
 			}
 		})
+	}
+}
+
+func TestSecurityCloseoutCheckerAndSessionGuidance(t *testing.T) {
+	store := authorityTestStore(t)
+	projectDir := t.TempDir()
+	testdbseed.InsertSession(t, store.DB(), "sess-scan", testdbseed.DefaultProjectID)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	_, err := store.DB().ExecContext(t.Context(), `
+		INSERT INTO worker_jobs (id, project_id, parent_session_id, agent_type, status, prompt, brief, created_at)
+		VALUES ('job-scan-1', ?, 'sess-scan', 'implementer', 'complete', 'p', 'b', ?)
+	`, testdbseed.DefaultProjectID, now)
+	testutil.FailErr(t, "insert worker job", err)
+
+	checker := &SecurityCloseoutChecker{Store: store}
+	testutil.FailErr(t, "empty session check", checker.CheckSession(t.Context(), "", projectDir))
+	testutil.FailErr(t, "no landed changes", checker.CheckSession(t.Context(), "sess-scan", projectDir))
+	if err := (&SecurityCloseoutChecker{}).CheckSession(t.Context(), "sess-scan", projectDir); err == nil {
+		t.Fatal("nil store accepted")
+	}
+
+	sc := authorityScan("scan-sess-1", "assess-1", projectDir, "snap-1", "sast", api.ScanTargetPaths, nil)
+	testutil.FailErr(t, "insert scan", store.Insert(t.Context(), sc, []string{"a.go"}, ""))
+	_, err = store.DB().ExecContext(t.Context(), `
+		INSERT INTO landed_changes (id, worker_job_id, canonical_path, delegation_id, workflow_run_id, changed_paths_json, deleted_paths_json, scan_required, scan_id, created_at)
+		VALUES ('lc-1', 'job-scan-1', ?, 'sess-scan', '', '["a.go"]', '[]', 1, 'scan-sess-1', ?)
+	`, projectDir, now)
+	testutil.FailErr(t, "insert landed change", err)
+
+	landed, err := store.LatestRequiredLandedChangeForSession(t.Context(), "sess-scan")
+	testutil.FailErr(t, "latest landed change", err)
+	if landed == nil || landed.ID != "lc-1" || landed.ScanID != "scan-sess-1" {
+		t.Fatalf("landed = %+v", landed)
+	}
+	var pending *GatePendingError
+	if err := checker.CheckSession(t.Context(), "sess-scan", projectDir); !errors.As(err, &pending) || pending.ScanID != "scan-sess-1" {
+		t.Fatalf("pending closeout error = %v", err)
+	}
+
+	coord := newTestCoordinator(t, store, nil)
+	completeNextScan(t, store)
+	_, err = store.DB().ExecContext(t.Context(), `
+		INSERT INTO session_scan_bindings (session_id, scan_id, created_at) VALUES ('sess-scan', 'scan-sess-1', ?)
+	`, now)
+	testutil.FailErr(t, "bind session scan", err)
+	_, err = store.DB().ExecContext(t.Context(), `
+		UPDATE code_scans SET guidance_json = '[{"code":"G1","file":"a.go","message":"check input","fix":"sanitize","count":2}]' WHERE id = 'scan-sess-1'
+	`)
+	testutil.FailErr(t, "seed scan guidance", err)
+
+	renderer := prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
+	provider := NewGuidanceProvider(coord, scancfg.AgentBudgetConfig{MaxHintsPerInjection: 1})
+	provider.SetInjectRenderer(renderer)
+	adapter := &SessionGuidanceAdapter{Provider: provider}
+	base := []api.Message{{Role: api.MessageRoleUser, Content: "continue"}}
+	if got := provider.Prepend(t.Context(), "", base); len(got) != 1 {
+		t.Fatalf("empty ids prepended: %d", len(got))
+	}
+	prepended := adapter.PrependGuidance(t.Context(), "sess-scan", base)
+	if len(prepended) != 2 || prepended[0].Role != api.MessageRoleSystem {
+		t.Fatalf("expected system guidance message, got %+v", prepended)
+	}
+	if again := adapter.PrependGuidance(t.Context(), "sess-scan", base); len(again) != 1 {
+		t.Fatalf("watermark did not suppress duplicate guidance: %d", len(again))
 	}
 }

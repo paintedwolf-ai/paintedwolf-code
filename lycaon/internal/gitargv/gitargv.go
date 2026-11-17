@@ -3,7 +3,6 @@ package gitargv
 
 import (
 	"fmt"
-	"net/url"
 	"strings"
 )
 
@@ -35,18 +34,15 @@ func LocalCloneSourcePath(source string) (string, bool) {
 	if trimmed == "" || strings.HasPrefix(trimmed, "-") {
 		return "", false
 	}
-	if rest, ok := cutPrefixFold(trimmed, "file://"); ok {
+	// Git reads file:// only in lowercase; another case names a remote helper.
+	if rest, ok := strings.CutPrefix(trimmed, "file://"); ok {
 		// Git ignores a file URL's host and decodes the path from the first
 		// slash after it: file:///p and file://localhost/p both name /p.
 		slash := strings.IndexByte(rest, '/')
 		if slash < 0 {
 			return "", false
 		}
-		path, err := url.PathUnescape(rest[slash:])
-		if err != nil {
-			return "", false
-		}
-		return path, true
+		return gitURLDecode(rest[slash:]), true
 	}
 	if strings.Contains(trimmed, "://") {
 		return "", false
@@ -62,11 +58,34 @@ func LocalCloneSourcePath(source string) (string, bool) {
 	return trimmed, true
 }
 
-func cutPrefixFold(s, prefix string) (string, bool) {
-	if len(s) < len(prefix) || !strings.EqualFold(s[:len(prefix)], prefix) {
-		return "", false
+// gitURLDecode decodes a file URL's path as Git does: %XX becomes its byte
+// and a % without two hex digits stays as written.
+func gitURLDecode(path string) string {
+	var out strings.Builder
+	for i := 0; i < len(path); i++ {
+		if path[i] == '%' && i+2 < len(path) && isHex(path[i+1]) && isHex(path[i+2]) {
+			out.WriteByte(unhex(path[i+1])<<4 | unhex(path[i+2]))
+			i += 2
+			continue
+		}
+		out.WriteByte(path[i])
 	}
-	return s[len(prefix):], true
+	return out.String()
+}
+
+func isHex(c byte) bool {
+	return '0' <= c && c <= '9' || 'a' <= c && c <= 'f' || 'A' <= c && c <= 'F'
+}
+
+func unhex(c byte) byte {
+	switch {
+	case c <= '9':
+		return c - '0'
+	case c <= 'F':
+		return c - 'A' + 10
+	default:
+		return c - 'a' + 10
+	}
 }
 
 // ValidateRefArg rejects a ref that git would parse as an option.

@@ -11,7 +11,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// Cleanup settles durable worker and delegation cleanup intents.
+// Cleanup settles durable worker cleanup intents.
 type Cleanup struct {
 	Intents  TeardownRepository
 	Runs     RunReader
@@ -39,7 +39,7 @@ func (m *Cleanup) converge(ctx context.Context, op runstate.TeardownIntent) erro
 	case runstate.WorkerCancelNone:
 	}
 	if op.AbortDelegation {
-		errs = append(errs, m.Workers.CancelDelegationsByRunID(ctx, op.RunID))
+		errs = append(errs, m.Workers.WithdrawPlannedWorkersByRunID(ctx, op.RunID))
 	}
 	err := errors.Join(errs...)
 	if err != nil {

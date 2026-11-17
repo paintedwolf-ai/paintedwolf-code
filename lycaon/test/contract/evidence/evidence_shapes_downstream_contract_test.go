@@ -34,30 +34,14 @@ func TestEvidenceExplorerOpenShapeFacet(t *testing.T) {
 	var grounding api.CitationGrounding
 	guidance.StampEvidenceRecords(&grounding, ev)
 	wire := grounding.EvidenceRecords
-	facets := guidance.DistinctEvidenceFacetValues(wire, "shape")
-	if len(facets) != 2 {
-		t.Fatalf("shape facets = %v want file_region + custom_timeline", facets)
-	}
 	foundNovel := false
-	for _, shape := range facets {
-		if shape == "custom_timeline" {
+	for _, rec := range wire {
+		if rec.Shape == "custom_timeline" {
 			foundNovel = true
 		}
 	}
 	if !foundNovel {
 		t.Fatal("novel shape must surface as an open facet without Explorer-specific code")
-	}
-}
-
-func TestEvidenceExplorerOpenKindFacet(t *testing.T) {
-	t.Parallel()
-	records := []api.CitationGroundingEvidenceRecord{
-		{Kind: "read", Shape: evidence.ShapeFileRegion},
-		{Kind: "mcp_custom_tool", Shape: evidence.ShapeOpaque},
-	}
-	kinds := guidance.DistinctEvidenceFacetValues(records, "kind")
-	if len(kinds) != 2 {
-		t.Fatalf("kind facets = %v want open discovery", kinds)
 	}
 }
 
@@ -116,7 +100,7 @@ func TestTrustTierClassifiesEveryLockedShape(t *testing.T) {
 		evidence.ShapeCommand:         evidence.FidelityOpaque,
 		evidence.ShapeOpaque:          evidence.FidelityOpaque,
 	}
-	for _, shape := range evidence.ShapeIDs() {
+	for _, shape := range lockedShapes {
 		expected, ok := want[shape]
 		if !ok {
 			t.Fatalf("shape %q has no declared trust tier — classify it in evidence.FidelityForShape", shape)

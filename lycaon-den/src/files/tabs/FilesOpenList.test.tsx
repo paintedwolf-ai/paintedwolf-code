@@ -3,7 +3,9 @@ import { stockBindingId } from "../../contributions/stock-frame-test.ts";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { FilesOpenList } from "./FilesOpenList.tsx";
 import { assertNamedControl } from "../../test/controls.ts";
-import { applyFilesBufferLoad, applyFilesBufferLoadError, applyFilesBufferUnsupportedEncoding, markFilesBufferLoading, openFilesBuffer, resetProjectFilesForTests, setFilesBufferPinned } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferLoad, applyFilesBufferLoadError, applyFilesBufferUnsupportedEncoding, markFilesBufferLoading } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
+import { setFilesBufferPinned } from "../documents/project-files-buffers.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import type { FileBufferKey } from "../components/project-files-model.ts";
 import {

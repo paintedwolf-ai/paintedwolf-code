@@ -1,6 +1,6 @@
 import type { ProjectTrustReview, TrustFileChange } from "../../api/types.ts";
 import { openFilesSurface } from "../../platform/navigation/open-files-surface.ts";
-import { openFilesBuffer } from "../../files/documents/project-files-buffers.ts";
+import { openFilesBuffer } from "../../files/documents/project-files-buffer-lifecycle.ts";
 import { fileVersionFromSnapshot, type FileVersionView } from "../../files/history/file-version.ts";
 
 export function showTrustReview(projectId: string): void {

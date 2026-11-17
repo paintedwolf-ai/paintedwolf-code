@@ -1,7 +1,8 @@
-import { filesBufferText } from "../files/documents/project-files-buffers.ts";
+import { filesBufferText } from "../files/documents/files-buffer-state.ts";
 import { stubClient } from "../test/client-fixture.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { applyFilesBufferLoad, applyFilesBufferDraft, closeFilesBuffer, openFilesBuffer, resetProjectFilesForTests } from "../files/documents/project-files-buffers.ts";
+import { applyFilesBufferLoad, applyFilesBufferDraft } from "../files/documents/project-files-buffer-io.ts";
+import { closeFilesBuffer, openFilesBuffer, resetProjectFilesForTests } from "../files/documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState, suspendFilesBufferContent } from "../files/documents/files-buffer-state.ts";
 import { refreshBuffersAfterReplace } from "./search-replace-buffers.ts";
 

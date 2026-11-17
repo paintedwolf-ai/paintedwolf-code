@@ -49,7 +49,7 @@ func TestOverlayChangedPathsAndDivergenceFromPublishedCheckpoint(t *testing.T) {
 	testutil.FailErr(t, "write uncheckpointed", os.WriteFile(filepath.Join(overlay, "uncheckpointed.go"), []byte("package p\n// dirty\n"), 0o644))
 
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite}
-	task := &api.WorkerTask{ID: "job-cp-session", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, Scope: &scope}
+	task := &api.WorkerTask{ID: "job-cp-session", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, WorkspaceRootID: "primary", Scope: &scope}
 	if !session.OverlayAwaitingPromote(t.Context(), task) {
 		t.Fatal("expected OverlayAwaitingPromote true for published checkpoint")
 	}
@@ -78,13 +78,13 @@ func TestCheckpointRefImportValidatesReachableObjectsConflictsAndWorktreeGitdir(
 
 	danglingOID := "1111111111111111111111111111111111111111"
 	unauthImporter := func(ctx context.Context, _, worker string, git checkpoint.PrivateGitSnapshot) (map[string]string, error) {
-		return checkpoint.ImportAndValidateCheckpointGitRefs(ctx, checkpoint.GitObjectSources{StoreDir: storeDir}, "chk-1", worker, git, map[string]string{"primary": primary})
+		return checkpoint.ImportAndValidateCheckpointGitRefs(ctx, checkpoint.GitObjectSources{StoreDir: storeDir}, "chk-1", worker, git, map[string]string{"primary": primary}, "primary")
 	}
 	if _, err := unauthImporter(t.Context(), "tx-1", "w-1", checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": danglingOID}}); !errors.Is(err, checkpoint.ErrUnauthorizedGitDir) {
 		t.Fatalf("expected ErrUnauthorizedGitDir for external worktree gitdir without grant, got %v", err)
 	}
 	importer := func(ctx context.Context, _, worker string, git checkpoint.PrivateGitSnapshot) (map[string]string, error) {
-		return checkpoint.ImportAndValidateCheckpointGitRefs(ctx, checkpoint.GitObjectSources{StoreDir: storeDir}, "chk-1", worker, git, map[string]string{"primary": primary}, worktreeGit, commonGit)
+		return checkpoint.ImportAndValidateCheckpointGitRefs(ctx, checkpoint.GitObjectSources{StoreDir: storeDir}, "chk-1", worker, git, map[string]string{"primary": primary}, "primary", worktreeGit, commonGit)
 	}
 	if _, err := importer(t.Context(), "tx-1", "w-1", checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": danglingOID}}); err == nil {
 		t.Fatal("expected error for dangling object OID, got nil")
@@ -147,11 +147,11 @@ func TestCheckpointPromotionRetryUnresolvedRootAndErrorPropagation(t *testing.T)
 	testutil.FailErr(t, "Publish", err)
 	bindCheckpoint("chk-retry-1")
 
-	task := &api.WorkerTask{ID: "job-retry", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay}
+	task := &api.WorkerTask{ID: "job-retry", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, WorkspaceRootID: "primary"}
 	badManifest := pubRes.Manifest
 	badManifest.Entries = append([]checkpoint.ManifestEntry(nil), badManifest.Entries...)
 	badManifest.Entries[0].Path.RootID = "unmapped-secondary"
-	if _, err := session.TargetRootsForTaskCheckpoint(task, nil, badManifest); !errors.Is(err, layeredfs.ErrInvalidRoot) {
+	if _, _, err := session.TargetRootsForTaskCheckpoint(task, nil, badManifest); !errors.Is(err, layeredfs.ErrInvalidRoot) {
 		t.Fatalf("TargetRootsForTaskCheckpoint unmapped root err = %v, want ErrInvalidRoot", err)
 	}
 
@@ -205,7 +205,7 @@ func TestMultiRootCheckpointQualificationAndWorkspaceSync(t *testing.T) {
 	}
 
 	scope := api.TaskScope{Mode: api.TaskScopeModeWrite}
-	task := &api.WorkerTask{ID: "job-multi-cp", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, Scope: &scope}
+	task := &api.WorkerTask{ID: "job-multi-cp", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, WorkspaceRootID: "primary", Scope: &scope}
 	changed := session.OverlayWorkspaceChangedPaths(t.Context(), task, roots)
 	if len(changed) != 1 || changed[0] != "@docs/mod.txt" {
 		t.Fatalf("OverlayWorkspaceChangedPaths = %v, want [@docs/mod.txt]", changed)
@@ -243,19 +243,19 @@ func TestSyncTaskCheckpointBindsEntriesToTheBranchLayout(t *testing.T) {
 	t.Run("single root is flat under its real id", func(t *testing.T) {
 		primary, overlay := t.TempDir(), t.TempDir()
 		publishCheckpointForSync(t, overlay, []layeredfs.RootSpec{{ID: "root-main", TrunkPath: primary, IsPrimary: true}}, func(core *layeredfs.Core) { write(t, core, "root-main") })
-		task := &api.WorkerTask{ID: "job-sync", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, Scope: &scope}
+		task := &api.WorkerTask{ID: "job-sync", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, WorkspaceRootID: "primary", Scope: &scope}
 		roots := []projectroot.RootRef{{ID: "root-main", Label: "root-main", Path: primary, IsPrimary: true}}
 		testutil.FailErr(t, "sync", session.SyncTaskCheckpointToWorkspace(task, roots))
 		if got, err := os.ReadFile(filepath.Join(overlay, "a.txt")); err != nil || string(got) != "worker\n" {
 			t.Fatalf("flat branch file = %q, %v", got, err)
 		}
 	})
-	t.Run("primary alias lands in the primary branch directory", func(t *testing.T) {
+	t.Run("the primary root's id lands in the primary branch directory", func(t *testing.T) {
 		primary, secondary, overlay := t.TempDir(), t.TempDir(), t.TempDir()
 		publishCheckpointForSync(t, overlay, []layeredfs.RootSpec{
-			{ID: "primary", TrunkPath: primary, IsPrimary: true},
+			{ID: "root-main", TrunkPath: primary, IsPrimary: true},
 			{ID: "root-sec", TrunkPath: secondary},
-		}, func(core *layeredfs.Core) { write(t, core, "primary") })
+		}, func(core *layeredfs.Core) { write(t, core, "root-main") })
 		task := &api.WorkerTask{ID: "job-sync", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, WorkspaceRootID: "root-main", Scope: &scope}
 		roots := []projectroot.RootRef{{ID: "root-main", Label: "root-main", Path: primary, IsPrimary: true}, {ID: "root-sec", Label: "root-sec", Path: secondary}}
 		testutil.FailErr(t, "sync", session.SyncTaskCheckpointToWorkspace(task, roots))
@@ -277,7 +277,7 @@ func TestSyncTaskCheckpointBindsEntriesToTheBranchLayout(t *testing.T) {
 			_, err := core.Symlink(outside, qp("d"))
 			testutil.FailErr(t, "replace with symlink", err)
 		})
-		task := &api.WorkerTask{ID: "job-sync", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, Scope: &scope}
+		task := &api.WorkerTask{ID: "job-sync", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, WorkspaceRootID: "primary", Scope: &scope}
 		for range 2 {
 			testutil.FailErr(t, "sync", session.SyncTaskCheckpointToWorkspace(task, nil))
 			if got, err := os.ReadFile(victim); err != nil || string(got) != "outside\n" {
@@ -291,7 +291,7 @@ func TestSyncTaskCheckpointBindsEntriesToTheBranchLayout(t *testing.T) {
 	t.Run("unknown root in a multi-root project refuses", func(t *testing.T) {
 		primary, secondary, overlay := t.TempDir(), t.TempDir(), t.TempDir()
 		publishCheckpointForSync(t, overlay, []layeredfs.RootSpec{{ID: "root-gone", TrunkPath: secondary}}, func(core *layeredfs.Core) { write(t, core, "root-gone") })
-		task := &api.WorkerTask{ID: "job-sync", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, Scope: &scope}
+		task := &api.WorkerTask{ID: "job-sync", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, WorkspaceRootID: "primary", Scope: &scope}
 		roots := []projectroot.RootRef{{ID: "root-main", Label: "root-main", Path: primary, IsPrimary: true}, {ID: "root-sec", Label: "root-sec", Path: t.TempDir()}}
 		if err := session.SyncTaskCheckpointToWorkspace(task, roots); !errors.Is(err, layeredfs.ErrInvalidRoot) {
 			t.Fatalf("sync = %v, want ErrInvalidRoot", err)
@@ -351,7 +351,7 @@ func TestCheckpointPromotionUsesBoundPreviewAfterNewPublication(t *testing.T) {
 			_, err = pub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: "cp-reviewed", Trigger: checkpoint.TriggerWorkerCompletion})
 			testutil.FailErr(t, "publish reviewed checkpoint", err)
 			bindCheckpoint("cp-reviewed")
-			task := &api.WorkerTask{ID: "job-bound-preview", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay}
+			task := &api.WorkerTask{ID: "job-bound-preview", ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: overlay, WorkspaceRootID: "primary"}
 			_, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, nil)
 			testutil.FailErr(t, "prepare reviewed checkpoint", err)
 			if !ok {
@@ -459,5 +459,66 @@ func TestOverlayPromoteConsultsLayeredConsumerDivergenceWithoutFullBaseline(t *t
 	}
 	if !session.OverlayAwaitingPromote(ctx, task) {
 		t.Fatalf("expected OverlayAwaitingPromote=true when layered view has private changes")
+	}
+}
+
+// A worker's rounds share one lane, whose record names only the latest
+// checkpoint: each round's job still opens the checkpoint its round published.
+func TestEachRoundOpensItsOwnCheckpointInASharedLane(t *testing.T) {
+	primary, lane := t.TempDir(), t.TempDir()
+	testutil.FailErr(t, "write primary", os.WriteFile(filepath.Join(primary, "total.go"), []byte("v0\n"), 0o644))
+	store, bindCheckpoint := recoveryStoreFor(t, lane, primary)
+	core, err := layeredfs.New(layeredfs.Config{
+		ViewID: "lane-view", BackingDir: t.TempDir(),
+		Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}},
+	})
+	testutil.FailErr(t, "New Core", err)
+	defer func() { _ = core.ReleaseView() }()
+	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
+		WorkerID: "worker-1", TaskID: "job-1", ProjectID: testdbseed.DefaultProjectID, SourceGeneration: "gen-1", Core: core, Store: store,
+	})
+	testutil.FailErr(t, "NewPublisher", err)
+	for i, id := range []string{"chk-round-1", "chk-round-2"} {
+		_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "total.go"}, []byte(fmt.Sprintf("v%d\n", i+1)), 0o644)
+		testutil.FailErr(t, "write round", err)
+		_, err = pub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: id, Trigger: checkpoint.TriggerWorkerCompletion})
+		testutil.FailErr(t, "Publish "+id, err)
+	}
+	bindCheckpoint("chk-round-2")
+	session.SetRoundCheckpoints(func(jobID string) (string, bool) {
+		cp, ok := map[string]string{"job-1": "chk-round-1", "job-2": "chk-round-2"}[jobID]
+		return cp, ok
+	})
+	t.Cleanup(func() { session.SetRoundCheckpoints(nil) })
+	scope := api.TaskScope{Mode: api.TaskScopeModeWrite}
+	for job, want := range map[string]string{"job-1": "chk-round-1", "job-2": "chk-round-2", "job-roundless": "chk-round-2"} {
+		task := &api.WorkerTask{ID: job, ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: lane, Scope: &scope}
+		_, manifest, ok, err := session.OpenTaskCheckpointStore(task)
+		testutil.FailErr(t, "open "+job, err)
+		if !ok || manifest.CheckpointID != want {
+			t.Fatalf("%s opened %q, want %q", job, manifest.CheckpointID, want)
+		}
+	}
+}
+
+// The primary root is the one the project marks primary, wherever its id sorts.
+func TestCheckpointTargetsNameThePrimaryRootByIdentity(t *testing.T) {
+	roots := []projectroot.RootRef{
+		{ID: "a-docs", Label: "docs", Path: "/p/docs"},
+		{ID: "z-app", Label: "app", Path: "/p/app", IsPrimary: true},
+	}
+	manifest := checkpoint.Manifest{Entries: []checkpoint.ManifestEntry{{Path: layeredfs.QualifiedPath{RootID: "a-docs", Rel: "x"}}}}
+	targets, primary, err := session.TargetRootsForTaskCheckpoint(&api.WorkerTask{}, roots, manifest)
+	if err != nil || primary != "z-app" || targets["z-app"] != "/p/app" || targets["a-docs"] != "/p/docs" || len(targets) != 2 {
+		t.Fatalf("targets=%v primary=%q err=%v", targets, primary, err)
+	}
+	for _, alias := range []string{"primary", "root-0", ""} {
+		manifest.Entries[0].Path.RootID = alias
+		if _, _, err := session.TargetRootsForTaskCheckpoint(&api.WorkerTask{}, roots, manifest); !errors.Is(err, layeredfs.ErrInvalidRoot) {
+			t.Errorf("alias %q resolved: %v", alias, err)
+		}
+	}
+	if _, _, err := session.TargetRootsForTaskCheckpoint(&api.WorkerTask{}, nil, checkpoint.Manifest{}); !errors.Is(err, layeredfs.ErrInvalidRoot) {
+		t.Errorf("a task with no roots and no root id resolved: %v", err)
 	}
 }

@@ -21,7 +21,7 @@ func TestRenderedSystemPromptSurvivesProviderContextFit(t *testing.T) {
 	if len(msgs) == 0 || !msgs[0].ContextPinned || msgs[0].Role != api.MessageRoleSystem {
 		t.Fatal("rendered system instructions are not pinned")
 	}
-	fitted := compaction.DeterministicFit(compaction.CompactionConfig{KeepRecentMessages: 1}, compaction.ContextMessagesFromAPI(msgs), 1)
+	fitted := compaction.DeterministicFitWithReserve(compaction.CompactionConfig{KeepRecentMessages: 1}, compaction.ContextMessagesFromAPI(msgs), 1, 0)
 	var system, request bool
 	for _, msg := range fitted {
 		system = system || msg.Content == msgs[0].Content

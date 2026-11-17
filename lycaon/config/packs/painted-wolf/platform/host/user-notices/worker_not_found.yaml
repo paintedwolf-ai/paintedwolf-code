@@ -2,9 +2,9 @@ surfaces: [http]
 notification: { tier: non_catastrophic, scope: session }
 title: Worker not found
 message: >-
-  That worker is not running any more.
+  No worker with that identity is on this session's roster.
 suggested_action: >-
-  Check the worker list — it finished or was canceled.
+  Check the worker list for active and settled workers in this session.
 scenarios:
   - id: default
     vars: {}

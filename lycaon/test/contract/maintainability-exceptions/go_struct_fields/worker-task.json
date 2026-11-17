@@ -1,0 +1,6 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/pkg/api/api.WorkerTask",
+  "cap": 58,
+  "reason": "One persisted worker round record spans queue claim, workspace lineage, turn batching, result accounting, and card projection across SQLite, local executors, and OpenAPI wire responses; splitting those fields across nested records would break flat wire compatibility."
+}

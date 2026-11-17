@@ -119,12 +119,12 @@ func TestServiceCustodyReportsEmptyAndFailedResponses(t *testing.T) {
 	svc.probe = vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Code: "store"}
 	_, err = p.LoadOrCreate(true)
 	assertIdentityRecoveryError(t, err, ErrCustodianUnavailable)
-	if vaultidentity.StatusOf(err) != vaultidentity.StatusUnavailable {
+	if identityStatus(err) != vaultidentity.StatusUnavailable {
 		t.Fatalf("store failure: %v", err)
 	}
 	err = p.Purge()
 	assertIdentityRecoveryError(t, err, ErrCustodianUnavailable)
-	if vaultidentity.StatusOf(err) != vaultidentity.StatusUnavailable {
+	if identityStatus(err) != vaultidentity.StatusUnavailable {
 		t.Fatalf("purge during store failure: %v", err)
 	}
 	svc.probe = vaultidentity.Response{Status: vaultidentity.StatusRefused, Code: "executable_mismatch"}
@@ -163,7 +163,7 @@ func TestRefusedEngineCannotOpenTheVaultOnAnyPath(t *testing.T) {
 		t.Fatalf("refused protection verification: %v", err)
 	}
 	p := c.provider("/cfg/credential-vault.age")
-	if _, err := p.LoadOrCreate(false); !errors.Is(err, ErrLauncherRefused) || vaultidentity.StatusOf(errors.Unwrap(err)) == vaultidentity.StatusOK {
+	if _, err := p.LoadOrCreate(false); !errors.Is(err, ErrLauncherRefused) || identityStatus(errors.Unwrap(err)) == vaultidentity.StatusOK {
 		t.Fatalf("load: %v", err)
 	}
 	if err := p.Purge(); !errors.Is(err, ErrLauncherRefused) {
@@ -225,4 +225,13 @@ func TestServiceCorruptionPreservesIdentityAndCiphertext(t *testing.T) {
 			}
 		})
 	}
+}
+
+// identityStatus is the status a vault identity failure carries, or "".
+func identityStatus(err error) vaultidentity.Status {
+	var status *vaultidentity.StatusError
+	if errors.As(err, &status) {
+		return status.Status
+	}
+	return ""
 }

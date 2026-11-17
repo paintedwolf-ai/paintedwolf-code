@@ -13,10 +13,6 @@ import (
 // oauthCallbackPath is the path the authorization server redirects back to.
 const oauthCallbackPath = "/mcp/oauth/callback"
 
-// oauthCallbackTimeout bounds how long a loopback listener waits for the browser.
-// It is the same budget as the pending authorization it serves.
-const oauthCallbackTimeout = pendingOAuthTTL
-
 // callbackListener is a one-shot loopback HTTP server that receives an OAuth authorization code redirect.
 type callbackListener struct {
 	srv      *http.Server
@@ -74,7 +70,7 @@ func startCallbackListener(ctx context.Context, handle func(callbackResult) erro
 	go func() {
 		select {
 		case <-l.done:
-		case <-time.After(oauthCallbackTimeout):
+		case <-time.After(pendingOAuthTTL):
 			l.finish(ctx)
 		}
 	}()

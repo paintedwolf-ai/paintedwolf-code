@@ -37,6 +37,9 @@ type WaitToolDeps struct {
 	ProfileConditions map[string]map[string]bool
 	SecretMatcher     *secretmatch.Matcher
 	RuntimeContext    context.Context
+	// WorkerKnown reports whether handle names a worker of the session, or a
+	// job of it that runs no worker round.
+	WorkerKnown func(ctx context.Context, sessionID, handle string) bool
 }
 
 type waitSubscription struct {
@@ -59,8 +62,8 @@ type waitRequest struct {
 
 // RegisterWaitTool registers durable agent waits.
 func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps WaitToolDeps) error {
-	if reg == nil || loop == nil {
-		return fmt.Errorf("registry and loop engine required")
+	if reg == nil || loop == nil || deps.WorkerKnown == nil {
+		return fmt.Errorf("registry, loop engine and worker lookup required")
 	}
 	loop.SetWaitStore(deps.Store)
 	return reg.Register("wait", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
@@ -190,6 +193,11 @@ func prepareWaitRequest(ctx context.Context, loop *WaitSubscriptions, deps WaitT
 	}
 	if err := validateProfileConditions(tctx.Identity.Agent, request.Conditions, deps.ProfileConditions); err != nil {
 		return waitRequest{}, err
+	}
+	for _, handle := range request.WorkerHandles {
+		if !deps.WorkerKnown(ctx, tctx.Identity.SessionID, handle) {
+			return waitRequest{}, &toolrejection.ToolReject{Code: "WORKER_NAME_UNKNOWN", Data: map[string]any{"tool": "wait", "worker": handle}}
+		}
 	}
 	if err := screenWaitURLs(ctx, deps, tctx, request.Conditions); err != nil {
 		return waitRequest{}, err

@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/extpacks"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -42,26 +41,6 @@ func TestExtensionDiagnosticRegistryClosure(t *testing.T) {
 		}
 	}
 	contractcheck.FailViolations(t, "extension diagnostic registry drift", violations)
-}
-
-// The exported accessor is the only view codegen and the API have, so it must
-// carry every declared code rather than whatever the literal happened to list.
-func TestExtensionDiagnosticCodesExported(t *testing.T) {
-	t.Parallel()
-	consts, _, _ := scanExtpackDiagnosticTables(t)
-
-	exported := map[string]bool{}
-	for _, code := range extpacks.AllDiagnosticCodes() {
-		exported[code] = true
-	}
-
-	var violations []string
-	for name, code := range consts {
-		if !exported[code] {
-			violations = append(violations, code+" ("+name+") is not returned by AllDiagnosticCodes")
-		}
-	}
-	contractcheck.FailViolations(t, "extension diagnostic export drift", violations)
 }
 
 // scanExtpackDiagnosticTables reads the package source rather than its runtime

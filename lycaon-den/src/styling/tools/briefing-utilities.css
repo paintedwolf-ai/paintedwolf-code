@@ -137,3 +137,89 @@
   font-size: var(--text-den-compact);
   overflow-wrap: anywhere;
 }
+
+@utility den-activity-summary-frame {
+  container: den-activity-summary / inline-size;
+  min-width: 0;
+}
+
+/* A held box keeps its line count for the opening; a clamped one gives its
+   last line to Show all, so the box height never changes on arrival. */
+@utility den-activity-summary {
+  --den-activity-summary-lines: 3;
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--den-accent-text) 5%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--den-accent-text) 14%, transparent);
+  line-height: 1.5;
+  &[data-held] {
+    min-height: calc(var(--den-activity-summary-lines) * 1lh + 12px);
+  }
+  & .den-briefing-mark {
+    line-height: 1.5;
+  }
+}
+
+@container den-activity-summary (max-width: 26rem) {
+  .den-activity-summary {
+    --den-activity-summary-lines: 4;
+  }
+}
+
+@utility den-activity-summary__body {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  line-height: 1.5;
+}
+
+@utility den-activity-summary__measure {
+  position: absolute;
+  inset: 0 0 auto;
+  margin: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.5;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+@utility den-activity-summary__text {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  user-select: text;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--den-activity-summary-lines);
+  line-clamp: var(--den-activity-summary-lines);
+  .den-activity-summary[data-clamped] & {
+    -webkit-line-clamp: calc(var(--den-activity-summary-lines) - 1);
+    line-clamp: calc(var(--den-activity-summary-lines) - 1);
+  }
+  &[data-expanded] {
+    display: block;
+    overflow: visible;
+    -webkit-line-clamp: none;
+    line-clamp: none;
+  }
+}
+
+@utility den-activity-summary__purpose {
+  color: var(--den-text-muted);
+}
+
+@utility den-activity-summary__waiting {
+  color: var(--den-text-muted);
+}
+
+@utility den-activity-summary__more {
+  justify-self: start;
+  height: 1lh;
+  padding: 0;
+  line-height: 1.5;
+}

@@ -39,6 +39,7 @@ import { DenButton } from "../primitives/DenButton.tsx";
 import { DenCheckboxControl } from "../primitives/DenCheckbox.tsx";
 import { ChromeDragSurface } from "../shell/ChromeDragSurface.tsx";
 import { registerChatDrop, type DroppedItem } from "../../platform/files/file-drop.ts";
+import { useResidentPresence } from "../../ui/resident-presence-context.tsx";
 import {
   ATTACHMENT_PROVIDER_SEND_HINT,
   attachPastedFiles,
@@ -113,6 +114,7 @@ export function HomeView(props: Props) {
   const [idea, setIdea] = createSignal("");
   const [ideaAttachments, setIdeaAttachments] = createSignal<HomeIdeaAttachment[]>([]);
   const [dragActive, setDragActive] = createSignal(false);
+  const residentPresence = useResidentPresence();
   const [listPage, setListPage] = createSignal(0);
   const [listSortKey, setListSortKey] = createSignal<ProjectListSortKey>("updated");
   const [listSortDir, setListSortDir] = createSignal<ProjectListSortDir>("desc");
@@ -209,16 +211,20 @@ export function HomeView(props: Props) {
     setIdeaAttachments([]);
   };
 
-  onMount(() => {
-    const detachDrop = registerChatDrop({
+  // Home stays mounted while hidden; it takes window drops only while presented.
+  createEffect(() => {
+    if (residentPresence() === "idle") return;
+    onCleanup(registerChatDrop({
       htmlTarget: frameRef,
       onDragActive: (active) => setDragActive(active && !props.submitting),
       onDrop: (event) => {
         setDragActive(false);
         appendDroppedItems(event.items);
       },
-    });
-    onCleanup(detachDrop);
+    }));
+  });
+
+  onMount(() => {
     onCleanup(() => {
       for (const item of ideaAttachments()) revokeHomeIdeaAttachment(item);
     });

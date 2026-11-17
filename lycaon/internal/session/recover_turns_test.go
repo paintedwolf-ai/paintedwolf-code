@@ -209,7 +209,7 @@ func TestReviewGuidanceFollowsLiveVerdictGate(t *testing.T) {
 					kicks.QueueDeferred("review-session", other)
 					kicks.QueueDeferred("other-session", review)
 					if staged {
-						if got := kicks.TakePendingKickID("review-session"); got != review {
+						if got := kicks.TakePendingKickIDUnless("review-session", nil); got != review {
 							t.Fatalf("open review guidance = %q, want %q", got, review)
 						}
 					}

@@ -31,15 +31,9 @@ type WorkspaceStrategySelection struct {
 	Adapter    adapter.Adapter        `json:"-"`
 }
 
-// DefaultWorkspaceSelector returns this host's selector without a confinement enforcer: an
-// over-budget worker finds its mounted adapter unavailable and refuses when confinement is required.
-func DefaultWorkspaceSelector() *adapter.Selector {
-	return platform.NewSelector(platform.Config{})
-}
-
-// EnforcedWorkspaceSelector is this host's selector with its production enforcer: a mounted adapter
+// HostSelector is this host's workspace selector with its confinement enforcer: a mounted adapter
 // passes its probe only where a confined process is actually denied a view's storage.
-func EnforcedWorkspaceSelector() *adapter.Selector {
+func HostSelector() *adapter.Selector {
 	return platform.NewSelector(platform.Config{Confinement: viewconfine.New()})
 }
 
@@ -72,9 +66,6 @@ func (m *Manager) chooseWorkspaceAdapter(
 	keepMounted bool,
 ) (WorkspaceStrategySelection, error) {
 	selector := m.selector
-	if selector == nil {
-		selector = DefaultWorkspaceSelector()
-	}
 	metaDir := enginepaths.MetaDirForBranchRoot(branchRoot)
 	// Placement already probed a clone from the sources to this branch's volume.
 	clone := func(context.Context, adapter.RootGrant) (bool, error) { return decision.Clonable, nil }
@@ -132,9 +123,6 @@ func grantsForSources(sources []projectroot.RootRef) []adapter.RootGrant {
 	grants := make([]adapter.RootGrant, 0, len(sources))
 	for _, s := range sources {
 		id := s.ID
-		if id == "" {
-			id = "primary"
-		}
 		label := s.Label
 		if label == "" {
 			label = id
