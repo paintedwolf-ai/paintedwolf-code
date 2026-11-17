@@ -48,6 +48,8 @@ var outboxSilentMutators = map[string]string{
 	"lycaon/internal/sourceledger/gittrack.go:commitGitTransitions": "records observed git ref transitions; its projects write only allocates their source-history ordinals",
 	"lycaon/internal/sourceledger/commandwindow.go:insertWindow":    "opens a command window; its projects write only allocates the window's source-history ordinal, which is off the project wire",
 
+	"lycaon/internal/progress/sql_transition.go:writeTransition": "runs inside AppendMessagesWith; its returned transition rows enqueue message events in the same transaction, and post-commit observers invalidate the progress projection",
+
 	// Security scan bookkeeping; the scans announce through emitScanTx.
 	"lycaon/internal/scan/authority_store.go:EnsureAssessment":            "records the assessment a scan joins; the scans that join it announce through emitScanTx, which refreshes the assessment rollup",
 	"lycaon/internal/scan/lease.go:RenewClaim":                            "extends a scan claim's lease deadline",
