@@ -157,6 +157,7 @@ func rootRefFrom(r Root) projectroot.RootRef {
 		Label:     r.Label,
 		Path:      r.Path,
 		IsPrimary: r.IsPrimary,
+		Outside:   r.Kind == RootKindOutside,
 	}
 }
 

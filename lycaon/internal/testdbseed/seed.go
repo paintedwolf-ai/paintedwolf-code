@@ -49,7 +49,7 @@ func InsertProjectRootWithID(t *testing.T, sqlDB store, projectID, rootID, path 
 	t.Helper()
 	InsertProject(t, sqlDB, projectID)
 	var existing int
-	err := sqlDB.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM project_roots WHERE project_id = ?`, projectID).Scan(&existing)
+	err := sqlDB.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM project_roots WHERE project_id = ? AND kind != 'outside'`, projectID).Scan(&existing)
 	testutil.FailErr(t, "count project roots", err)
 	isPrimary := 0
 	if existing == 0 {
