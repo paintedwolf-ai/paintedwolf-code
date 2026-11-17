@@ -1,0 +1,40 @@
+package confine
+
+import (
+	"context"
+	"log/slog"
+	"sync/atomic"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/egressproxy"
+)
+
+type countingHandler struct{ records *atomic.Int32 }
+
+func (h countingHandler) Enabled(context.Context, slog.Level) bool { return true }
+func (h countingHandler) Handle(context.Context, slog.Record) error {
+	h.records.Add(1)
+	return nil
+}
+func (h countingHandler) WithAttrs([]slog.Attr) slog.Handler { return h }
+func (h countingHandler) WithGroup(string) slog.Handler      { return h }
+
+// A retrying unleased process is warned about once per destination.
+func TestOrphanRefusalWarnsOncePerDestination(t *testing.T) {
+	var records atomic.Int32
+	prev := slog.Default()
+	slog.SetDefault(slog.New(countingHandler{&records}))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+
+	broker := &egressBrokerT{}
+	peer := egressproxy.Peer{Lineage: "orphan-warn-once", Owner: "./build --all"}
+	first := egressproxy.Endpoint{Host: "registry.example.test", Port: 443, Transport: egressproxy.TransportHTTPConnect}
+	second := egressproxy.Endpoint{Host: "mirror.example.test", Port: 443, Transport: egressproxy.TransportHTTPConnect}
+	for range 3 {
+		broker.reportRefusal(peer, first, egressproxy.Refusal("unleased"))
+	}
+	broker.reportRefusal(peer, second, egressproxy.Refusal("unleased"))
+	if got := records.Load(); got != 2 {
+		t.Fatalf("warnings = %d, want one per destination", got)
+	}
+}
