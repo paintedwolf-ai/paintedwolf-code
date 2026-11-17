@@ -57,3 +57,24 @@ func TestScreenBytesRejectsNilContextBeforeReadingOrWriting(t *testing.T) {
 		t.Fatalf("nil context admitted screening: err=%v input=%q output=%q result=%+v", err, input.String(), output.String(), result)
 	}
 }
+
+// A match ending past a window's harvest stop must not let the next window
+// rescan the bytes it covered, or the stream finds overlapping occurrences the
+// whole-field screen does not.
+func TestStreamCursorStaysPastAMatchCrossingTheWindowStop(t *testing.T) {
+	secret := "FFFF"
+	raw := "0" + secret + "F" + strings.Repeat("0", 68)
+	m := NewInertMatcher()
+	m.SetScreenWindow(72, 71)
+	m.SetHarvestSource(func(context.Context) []HarvestedValue {
+		return []HarvestedValue{managedValue(secret, testReference)}
+	})
+	want := m.RedactString(t.Context(), raw)
+	var out bytes.Buffer
+	if _, err := m.ScreenBytes(t.Context(), strings.NewReader(raw), &out, "", StreamPolicy{}, StreamBounds{InputBytes: 1 << 20, OutputBytes: 1 << 20, MemoryBytes: 32 << 20, DetectorWork: 1 << 36}, nil, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if out.String() != want {
+		t.Fatalf("stream %q, whole field %q", out.String(), want)
+	}
+}
