@@ -1,5 +1,6 @@
 """Publish complete notice files for concurrent build and snapshot readers."""
 
+import os
 from pathlib import Path
 import shutil
 import sys
@@ -10,16 +11,15 @@ def stage(source, destinations):
     with source.open("rb") as contents:
         for destination in destinations:
             contents.seek(0)
-            with tempfile.NamedTemporaryFile(dir=destination.parent, prefix=".THIRD-PARTY-NOTICES.md.",
-                                             delete=False) as output:
-                staged = Path(output.name)
-                try:
+            fd, name = tempfile.mkstemp(dir=destination.parent, prefix=".THIRD-PARTY-NOTICES.md.")
+            staged = Path(name)
+            try:
+                with os.fdopen(fd, "wb") as output:
                     shutil.copyfileobj(contents, output)
-                    output.close()
-                    staged.chmod(0o644)
-                    staged.replace(destination)
-                finally:
-                    staged.unlink(missing_ok=True)
+                staged.chmod(0o644)
+                staged.replace(destination)
+            finally:
+                staged.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

@@ -93,6 +93,7 @@ remaining=("$TMPDIR"/paintedwolf-capture.* "$TMPDIR"/paintedwolf-index.*)
 
 func TestSnapshotIsolatesPreparedShellNotices(t *testing.T) {
 	script := snapshotCacheFixture + `
+unset PW_SOURCE_ROOT_ORIGINAL PW_SOURCE_SNAPSHOT_COMMIT
 resource=lycaon-den/src-tauri/THIRD-PARTY-NOTICES.md
 mkdir -p "$fixture/lycaon-den/src-tauri"
 touch "$fixture/lycaon-den/src-tauri/manifest"
