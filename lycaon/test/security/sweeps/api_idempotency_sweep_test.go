@@ -474,7 +474,7 @@ func settleSourceRequest(t *testing.T, base, projectID, method, path, body strin
 		t.Fatal("accepted source mutation lacks operation_id")
 	}
 	params := map[string]string{"id": projectID, "operation_id": status.OperationID}
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the source operation settles", func() bool {
 		status = security.OpenAPIGetJSON[wire.SourceOperationStatus](t, base, "/v1/projects/{id}/source/operations/{operation_id}", params, http.StatusOK)
 		return status.Complete
 	})

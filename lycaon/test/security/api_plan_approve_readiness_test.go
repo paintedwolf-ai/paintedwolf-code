@@ -144,9 +144,9 @@ func TestApprovePlanHTTPPersistsBeforeAdvanceAndWakesCoordinator(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("approve status = %d body = %s", w.Code, w.Body.String())
 	}
-	testutil.WaitFor(t, sawApprovalAdvance.Load)
+	testutil.WaitFor(t, "the approval advance is seen", sawApprovalAdvance.Load)
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the coordinator sends another request", func() bool {
 		return len(h.Recording.AllRequests()) > requestCountBeforeApproval
 	})
 	h.Sessions.Manager.Coordinator.WaitForTurns(ctx)

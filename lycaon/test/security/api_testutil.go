@@ -7,10 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"runtime/pprof"
+	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/api"
@@ -131,7 +130,7 @@ func createSessionForProjectHandlerHTTP(t *testing.T, serve http.Handler, projec
 
 func waitSessionPreparedHTTP(t *testing.T, serve http.Handler, sess wire.Session) wire.Session {
 	t.Helper()
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "session "+sess.ID+" is prepared", func() bool {
 		req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID, nil)
 		w := httptest.NewRecorder()
 		serve.ServeHTTP(w, req)
@@ -141,16 +140,11 @@ func waitSessionPreparedHTTP(t *testing.T, serve http.Handler, sess wire.Session
 		if err := json.Unmarshal(w.Body.Bytes(), &sess); err != nil {
 			t.Fatalf("decode preparing session: %v", err)
 		}
-		switch sess.Status {
-		case wire.SessionStatusIdle:
-			return sess
-		case wire.SessionStatusError:
+		if sess.Status == wire.SessionStatusError {
 			t.Fatal("session preparation failed")
-		case wire.SessionStatusPreparing, wire.SessionStatusBusy:
 		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatalf("session preparation did not complete: status %q", sess.Status)
+		return sess.Status == wire.SessionStatusIdle
+	})
 	return sess
 }
 
@@ -287,22 +281,19 @@ func listMessagesHTTP(t *testing.T, srv *api.Server, sessionID string) []wire.Me
 func postPromptAndWaitIdle(t *testing.T, srv *api.Server, sessionID, text string) {
 	t.Helper()
 	accepted := acceptPromptHTTP(t, srv, sessionID, text)
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, fmt.Sprintf("session %s answers prompt %q", sessionID, text), func() bool {
 		// Two idle reads fence the transcript snapshot.
 		preStatus := getSessionHTTP(t, srv, sessionID).Status
 		msgs := listMessagesHTTP(t, srv, sessionID)
 		postStatus := getSessionHTTP(t, srv, sessionID).Status
-		if preStatus == wire.SessionStatusIdle && postStatus == wire.SessionStatusIdle {
-			// Receipt identity distinguishes repeated prompts with identical text.
-			for _, msg := range msgs {
-				if msg.ID == accepted.OperationID && msg.Role == wire.MessageRoleUser {
-					return
-				}
-			}
+		if preStatus != wire.SessionStatusIdle || postStatus != wire.SessionStatusIdle {
+			return false
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("session %s prompt %q did not produce a response", sessionID, text)
+		// Receipt identity distinguishes repeated prompts with identical text.
+		return slices.ContainsFunc(msgs, func(msg wire.Message) bool {
+			return msg.ID == accepted.OperationID && msg.Role == wire.MessageRoleUser
+		})
+	})
 }
 
 // postPromptAndWaitTranscriptHTTP waits for matching transcript content.
@@ -314,38 +305,24 @@ func postPromptAndWaitTranscriptHTTP(t *testing.T, srv *api.Server, sessionID, t
 
 func waitTranscriptContainsHTTP(t *testing.T, srv *api.Server, sessionID, want string) {
 	t.Helper()
-	for t.Context().Err() == nil {
-		msgs := listMessagesHTTP(t, srv, sessionID)
-		for _, msg := range msgs {
-			if strings.Contains(msg.Content, want) {
-				return
-			}
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	// A stalled turn is diagnosable only from the stacks that hold it.
-	var stacks bytes.Buffer
-	_ = pprof.Lookup("goroutine").WriteTo(&stacks, 2)
-	t.Logf("goroutines at transcript wait timeout:\n%s", stacks.String())
-	t.Fatalf("session %s transcript did not contain %q; messages: %+v", sessionID, want, listMessagesHTTP(t, srv, sessionID))
+	testutil.WaitFor(t, fmt.Sprintf("session %s transcript contains %q", sessionID, want), func() bool {
+		return slices.ContainsFunc(listMessagesHTTP(t, srv, sessionID), func(msg wire.Message) bool {
+			return strings.Contains(msg.Content, want)
+		})
+	})
 }
 
 func waitTaskEnqueueCountHTTP(t *testing.T, srv *api.Server, sessionID string, want int) {
 	t.Helper()
-	for t.Context().Err() == nil {
-		msgs := listMessagesHTTP(t, srv, sessionID)
+	testutil.WaitFor(t, fmt.Sprintf("session %s enqueues %d tasks", sessionID, want), func() bool {
 		enqueued := 0
-		for _, msg := range msgs {
+		for _, msg := range listMessagesHTTP(t, srv, sessionID) {
 			if taskMessageEnqueued(msg) {
 				enqueued++
 			}
 		}
-		if enqueued == want {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("session %s task enqueue count != %d; messages: %+v", sessionID, want, listMessagesHTTP(t, srv, sessionID))
+		return enqueued == want
+	})
 }
 
 func taskMessageEnqueued(message wire.Message) bool {
@@ -355,7 +332,7 @@ func taskMessageEnqueued(message wire.Message) bool {
 
 func waitToolFeedbackHTTP(t *testing.T, srv *api.Server, sessionID, code string) {
 	t.Helper()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the tool feedback is stored", func() bool {
 		for _, message := range listMessagesHTTP(t, srv, sessionID) {
 			if message.ToolResult == nil {
 				continue
@@ -372,45 +349,34 @@ func waitToolFeedbackHTTP(t *testing.T, srv *api.Server, sessionID, code string)
 
 func waitWorkflowRunCountHTTP(t *testing.T, srv *api.Server, sessionID string, wantCount int) {
 	t.Helper()
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, fmt.Sprintf("session %s has %d workflow runs", sessionID, wantCount), func() bool {
 		req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID+"/workflow-runs", nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
-		if w.Code != http.StatusOK {
-			time.Sleep(20 * time.Millisecond)
-			continue
-		}
 		var page wire.WorkflowRunPage
-		if err := json.Unmarshal(w.Body.Bytes(), &page); err != nil {
-			time.Sleep(20 * time.Millisecond)
-			continue
-		}
-		if len(page.Runs) == wantCount {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("session %s workflow run count did not reach %d", sessionID, wantCount)
+		return w.Code == http.StatusOK && json.Unmarshal(w.Body.Bytes(), &page) == nil && len(page.Runs) == wantCount
+	})
 }
 
 // waitActiveWorkflowRunHTTP waits for an asynchronous workflow start.
 func waitActiveWorkflowRunHTTP(t *testing.T, srv *api.Server, sessionID, wantWorkflowID string) wire.WorkflowRun {
 	t.Helper()
-	var last string
-	for t.Context().Err() == nil {
+	var active wire.WorkflowRun
+	testutil.WaitFor(t, fmt.Sprintf("session %s runs workflow %q", sessionID, wantWorkflowID), func() bool {
 		req := AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sessionID+"/workflow-runs/active", nil)
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
-		last = w.Body.String()
-		if w.Code == http.StatusOK {
-			if run := decodeActiveWorkflowRun(t, w.Body.Bytes()); run != nil && run.WorkflowID == wantWorkflowID {
-				return *run
-			}
+		if w.Code != http.StatusOK {
+			return false
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("session %s active workflow run %q not present; last=%s", sessionID, wantWorkflowID, last)
-	return wire.WorkflowRun{}
+		run := decodeActiveWorkflowRun(t, w.Body.Bytes())
+		if run == nil || run.WorkflowID != wantWorkflowID {
+			return false
+		}
+		active = *run
+		return true
+	})
+	return active
 }
 
 const (

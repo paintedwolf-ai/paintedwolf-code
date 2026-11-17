@@ -143,12 +143,11 @@ func unlockPrompt(held *HeldRelease) string {
 
 // heldAnswer decides how an approving answer that sends held values may
 // proceed: an unlocked chat needs nothing more, a locked one needs the
-// resolver's verified presence, which unlocks it. Only a person
-// answers for held values, never a policy.
+// resolver's verified presence, which unlocks it.
 func (m *VaultPresence) heldAnswer(
 	sessionID, checkpointID string, plan ApprovalPlan, option ApprovalOption, resolver ApprovalResolver, resolution Resolution,
 ) (*presence.Unlock, error) {
-	if resolver.policy != nil || strings.TrimSpace(resolution.PersonID) == "" {
+	if strings.TrimSpace(resolution.PersonID) == "" {
 		return nil, ErrPresenceRequired
 	}
 	if resolver.proof == nil {

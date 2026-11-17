@@ -52,7 +52,7 @@ func TestPromptReferencePathFileAccepted(t *testing.T) {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the user message carries the attached file", func() bool {
 		msgs := listMessagesHTTP(t, srv, sess.ID)
 		for _, m := range msgs {
 			if m.Role == wire.MessageRoleUser && strings.Contains(m.Content, "[User attached file: readme.md]") {
@@ -135,7 +135,7 @@ func TestPromptReferenceArtifactRelink(t *testing.T) {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the user message carries the artifact", func() bool {
 		msgs := listMessagesHTTP(t, srv, sess.ID)
 		for _, m := range msgs {
 			if m.Role == wire.MessageRoleUser {

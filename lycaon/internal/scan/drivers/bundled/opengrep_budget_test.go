@@ -77,7 +77,7 @@ func TestOpenGrepCancellationRejectsUnfinishedReport(t *testing.T) {
 		cancel()
 		<-done
 	})
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the scanner writes its report", func() bool {
 		select {
 		case <-done:
 			t.Fatalf("scanner exited before report readiness: %v", err)

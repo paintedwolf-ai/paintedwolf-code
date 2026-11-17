@@ -119,7 +119,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 	var checkpointID string
 	var promptErr error
 	promptFinished := false
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the prompt ends, answering its approvals", func() bool {
 		select {
 		case promptErr = <-done:
 			promptFinished = true
@@ -148,7 +148,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 	}
 	testutil.FailErr(t, "Prompt", promptErr)
 	var data []byte
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the project file holds the write", func() bool {
 		var readErr error
 		data, readErr = os.ReadFile(targetPath)
 		return readErr == nil && strings.Contains(string(data), "investigate project write")

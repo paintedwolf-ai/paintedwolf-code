@@ -52,7 +52,7 @@ func TestWorkflowRecommendedApprovalRunsExternalCommand(t *testing.T) {
 	}()
 	kind := wire.CheckpointKindToolApproval
 	var checkpoint wire.CheckpointEvent
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the recommended approval is pending", func() bool {
 		pending, err := f.h.Sessions.Checkpoints.ListPending(ctx, f.session, &kind)
 		if err == nil && len(pending) == 1 {
 			checkpoint = pending[0]

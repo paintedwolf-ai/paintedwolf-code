@@ -24,7 +24,7 @@ func TestHumanPlanStartLoopWakesCoordinator(t *testing.T) {
 		t.Fatalf("start run status = %d body = %s", w.Code, w.Body.String())
 	}
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the coordinator answers the loop wake", func() bool {
 		h.Sessions.Manager.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(t.Context(), sess.ID)
 		msgs, err := h.Store.GetMessages(t.Context(), sess.ID)
 		testutil.FailErr(t, "GetMessages", err)

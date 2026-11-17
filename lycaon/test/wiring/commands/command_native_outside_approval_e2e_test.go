@@ -38,7 +38,7 @@ func runCommandWithApprovals(t *testing.T, s *commandProgramSession, options ...
 	kind := wire.CheckpointKindToolApproval
 	var checkpoints []wire.CheckpointEvent
 	var runErr error
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the command ends, answering its approvals", func() bool {
 		select {
 		case runErr = <-done:
 			return true

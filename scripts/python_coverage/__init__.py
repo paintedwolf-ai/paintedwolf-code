@@ -109,6 +109,28 @@ def executed_lines(data, files):
     return executed
 
 
+def suite_command(python, root, name, suite):
+    """The runner suite needs its own entry point, which pins the workflow parser; the others are plain discovery."""
+    if name == "test:runner":
+        return [str(python), str(Path(root) / "scripts/ci_policy/runner_tests.py")]
+    return [str(python), "-m", "unittest", "discover", "-s", suite["start"].rstrip("/"), "-p", suite["pattern"]]
+
+
+def run(root, suites):
+    """Run every suite with only its own pinned requirements, unmeasured, and return the names that failed."""
+    root = Path(root)
+    failed = []
+    for name, suite in sorted(suites.items()):
+        # Coverage tools stay off the path: suites assert what happens when coverage.py is absent.
+        paths = [str(python_tools.provision(root / suite["requirements"]))] if suite.get("requirements") else []
+        paths += filter(None, [os.environ.get("PYTHONPATH")])
+        env = {**os.environ, "PYTHONPATH": os.pathsep.join(paths)}
+        print(f"Script tests: {name}: unittest discover -s {suite['start']} -p '{suite['pattern']}'", flush=True)
+        if subprocess.call(suite_command(sys.executable, root, name, suite), cwd=root, env=env) != 0:
+            failed.append(name)
+    return failed
+
+
 def measure(root, files, suites, work):
     """{path: Measurement, or the error that kept it from being read} under every suite whose tree holds a changed
     source; None when a suite fails."""
@@ -122,9 +144,7 @@ def measure(root, files, suites, work):
         if not any(path.startswith(start + "/") for path in files):
             continue
         print(f"Changed coverage (Python): {name}: unittest discover -s {start} -p '{suite['pattern']}'", flush=True)
-        command = ([str(python), str(root / "scripts/ci_policy/runner_tests.py")] if name == "test:runner"
-                   else [str(python), "-m", "unittest", "discover", "-s", start, "-p", suite["pattern"]])
-        if subprocess.call(command, cwd=root, env=env) != 0:
+        if subprocess.call(suite_command(python, root, name, suite), cwd=root, env=env) != 0:
             return None
     if not any(data.glob("started.*")):
         missing = RuntimeError("coverage.py did not start in any measured suite process")

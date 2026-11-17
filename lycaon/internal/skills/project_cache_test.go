@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -52,52 +53,53 @@ func TestProjectCacheExpires(t *testing.T) {
 // Concurrent misses for the same root set share one walk, so an older walk
 // cannot overwrite a newer result.
 func TestProjectCacheCollapsesConcurrentMissesForSameKey(t *testing.T) {
-	root := t.TempDir()
-	writeProjectSkill(t, root, settingsoverlay.DirName()+"/skills", "concurrent", skillBody("concurrent", "d", "b\n"))
+	synctest.Test(t, func(t *testing.T) {
+		root := t.TempDir()
+		writeProjectSkill(t, root, settingsoverlay.DirName()+"/skills", "concurrent", skillBody("concurrent", "d", "b\n"))
 
-	var mu sync.Mutex
-	calls := 0
-	entered := make(chan struct{})
-	release := make(chan struct{})
-	c := ProjectCache{discover: func(roots []string) ([]Skill, []ProjectNote) {
-		mu.Lock()
-		calls++
-		mu.Unlock()
-		entered <- struct{}{}
-		<-release
-		return DiscoverProject(roots)
-	}}
+		var mu sync.Mutex
+		calls := 0
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		c := ProjectCache{discover: func(roots []string) ([]Skill, []ProjectNote) {
+			mu.Lock()
+			calls++
+			mu.Unlock()
+			entered <- struct{}{}
+			<-release
+			return DiscoverProject(roots)
+		}}
 
-	const n = 5
-	var wg sync.WaitGroup
-	results := make([][]Skill, n)
-	for i := range results {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			got, _ := c.Discover([]string{root})
-			results[i] = got
-		}(i)
-	}
-
-	<-entered
-	// Give the other goroutines a chance to reach group.Do and queue behind
-	// the in-flight call before releasing it.
-	time.Sleep(20 * time.Millisecond)
-	close(release)
-	wg.Wait()
-
-	mu.Lock()
-	got := calls
-	mu.Unlock()
-	if got != 1 {
-		t.Fatalf("want exactly one walk for %d concurrent misses on the same key, got %d", n, got)
-	}
-	for i, r := range results {
-		if len(r) != 1 || r[0].Name != "concurrent" {
-			t.Fatalf("result[%d] = %#v", i, r)
+		const n = 5
+		var wg sync.WaitGroup
+		results := make([][]Skill, n)
+		for i := range results {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				got, _ := c.Discover([]string{root})
+				results[i] = got
+			}(i)
 		}
-	}
+
+		<-entered
+		// Once every goroutine is blocked, the others are queued behind the in-flight call.
+		synctest.Wait()
+		close(release)
+		wg.Wait()
+
+		mu.Lock()
+		got := calls
+		mu.Unlock()
+		if got != 1 {
+			t.Fatalf("want exactly one walk for %d concurrent misses on the same key, got %d", n, got)
+		}
+		for i, r := range results {
+			if len(r) != 1 || r[0].Name != "concurrent" {
+				t.Fatalf("result[%d] = %#v", i, r)
+			}
+		}
+	})
 }
 
 func TestProjectCacheKeysByRootSet(t *testing.T) {

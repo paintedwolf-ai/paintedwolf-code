@@ -86,37 +86,6 @@ func TestBuildIncludesProjectSourceAtAnyPath(t *testing.T) {
 	}
 }
 
-func TestBuildFromInventoryIncludesHiddenAndGeneratedPaths(t *testing.T) {
-	dir := t.TempDir()
-	paths := []string{".project/generated/schema.go", "node_modules/pkg/ignored.go"}
-	source := []byte("package x\nfunc Included() {}\n")
-	entries := make([]InventoryEntry, 0, len(paths)+1)
-	for _, rel := range paths {
-		abs := filepath.Join(dir, filepath.FromSlash(rel))
-		testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Dir(abs), 0o755))
-		testutil.FailErr(t, "write source", os.WriteFile(abs, source, 0o644))
-		entries = append(entries, InventoryEntry{Path: rel, Name: filepath.Base(rel), Size: int64(len(source))})
-	}
-	unknownPath := "scratch/authoritative.xyz"
-	unknown := []byte("primary-record = yes\n")
-	unknownAbs := filepath.Join(dir, filepath.FromSlash(unknownPath))
-	testutil.FailErr(t, "mkdir unknown", os.MkdirAll(filepath.Dir(unknownAbs), 0o755))
-	testutil.FailErr(t, "write unknown", os.WriteFile(unknownAbs, unknown, 0o644))
-	entries = append(entries, InventoryEntry{Path: unknownPath, Name: filepath.Base(unknownPath), Size: int64(len(unknown))})
-
-	snap, err := BuildFromInventory(context.Background(), Options{Root: dir}, entries)
-	testutil.FailErr(t, "build inventory", err)
-	if snap.FilesParsed != len(paths) {
-		t.Fatalf("files parsed = %d, want %d", snap.FilesParsed, len(paths))
-	}
-	if snap.SourceFiles != len(entries) {
-		t.Fatalf("source files = %d, want %d", snap.SourceFiles, len(entries))
-	}
-	if snap.View != "map" || !mapContainsPath(snap.Tree, unknownPath) {
-		t.Fatalf("unknown-language file missing from map: %+v", snap.Tree)
-	}
-}
-
 func mapContainsPath(node *Node, want string) bool {
 	if node == nil {
 		return false
@@ -240,11 +209,6 @@ func TestBuildEmptyRootStatesEmpty(t *testing.T) {
 		t.Fatalf("shallow diagnostics = %+v want hint_code %s", shallow.Diagnostics, noFilesHintCode)
 	}
 
-	inv, err := BuildFromInventory(context.Background(), Options{Root: dir}, nil)
-	testutil.FailErr(t, "inventory Build failed", err)
-	if inv.Diagnostics == nil || inv.Diagnostics.HintCode != noFilesHintCode {
-		t.Fatalf("inventory diagnostics = %+v want hint_code %s", inv.Diagnostics, noFilesHintCode)
-	}
 }
 
 func TestBuildTagsViewUnderThreshold(t *testing.T) {

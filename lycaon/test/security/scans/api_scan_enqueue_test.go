@@ -30,7 +30,7 @@ func TestAPIScanEnqueuePollLedgerAndSSE(t *testing.T) {
 	created := security.EnqueueSingleScanner(t, srv, project.ID, []wire.ScanCategory{wire.ScanCategorySecret})
 
 	var sawSSE bool
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the scan event reports completion", func() bool {
 		for {
 			select {
 			case envelope := <-ch:

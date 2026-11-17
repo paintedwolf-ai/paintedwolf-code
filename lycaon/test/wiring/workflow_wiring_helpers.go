@@ -26,7 +26,7 @@ import (
 
 func waitTopologyStageComplete(t *testing.T, mgr *workflow.RunManager, runID, stage string) {
 	t.Helper()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the topology stage completes", func() bool {
 		vars, err := mgr.Store.Runs.GetScaffoldVars(context.Background(), runID)
 		if err != nil {
 			return false
@@ -40,7 +40,7 @@ func waitTopologyStageComplete(t *testing.T, mgr *workflow.RunManager, runID, st
 func WaitWorkflowPhase(t *testing.T, ctx context.Context, mgr *workflow.RunManager, runID, phase string) {
 	t.Helper()
 	got := ""
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the workflow reaches the phase", func() bool {
 		run, err := mgr.Store.Runs.Get(ctx, runID)
 		if err != nil || run == nil {
 			return false

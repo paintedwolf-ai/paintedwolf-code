@@ -84,6 +84,7 @@ func TestCheckpointGitImportPackedRepositoryAndSubmoduleGitlink(t *testing.T) {
 			"refs/tags/v1.0":  tagOID,
 		}},
 		map[string]string{"primary": dstRepo},
+		"primary",
 	)
 	testutil.FailErr(t, "ImportAndValidateCheckpointGitRefs packed+submodule", err)
 
@@ -113,6 +114,7 @@ func TestCheckpointGitImportRefusesMalformedObjectsAndInvalidRefNames(t *testing
 			t.Context(), GitObjectSources{StoreDir: storeDir}, id, "w-bad",
 			PrivateGitSnapshot{Refs: map[string]string{"refs/heads/bad": oid}},
 			map[string]string{"primary": dstRepo},
+			"primary",
 		)
 		if !errors.Is(err, ErrCheckpointGitBoundary) {
 			t.Fatalf("malformed %s: %v", object.kind, err)
@@ -159,6 +161,7 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 		t.Context(), GitObjectSources{StoreDir: storeDir}, "chk-auth", "w-1",
 		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": oidA}},
 		map[string]string{"primary": primary},
+		"primary",
 	); !errors.Is(err, ErrUnauthorizedGitDir) {
 		t.Fatalf("expected ErrUnauthorizedGitDir without authorized dirs, got %v", err)
 	}
@@ -171,6 +174,7 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 		t.Context(), GitObjectSources{StoreDir: storeDir}, "chk-sib", "w-1",
 		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/sib": siblingOID}},
 		map[string]string{"primary": primary},
+		"primary",
 		worktreeGit, commonGit,
 	); !errors.Is(err, ErrCheckpointGitBoundary) {
 		t.Fatalf("an object outside the checkpoint was published: %v", err)
@@ -183,6 +187,7 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 		t.Context(), GitObjectSources{StoreDir: storeDir}, "chk-packed-conflict", "w-1",
 		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/packed": oidA}},
 		map[string]string{"primary": primary},
+		"primary",
 		worktreeGit, commonGit,
 	); !errors.Is(err, ErrCheckpointRefConflict) {
 		t.Fatalf("expected ErrCheckpointRefConflict against packed-refs, got %v", err)
@@ -202,6 +207,7 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 		t.Context(), GitObjectSources{StoreDir: storeDir}, "chk-crash", "w-1",
 		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/ok": oidA}},
 		map[string]string{"primary": primary},
+		"primary",
 		worktreeGit, commonGit,
 	); err != nil {
 		t.Fatalf("crash recovery retry failed: %v", err)
@@ -212,6 +218,7 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 		t.Context(), GitObjectSources{StoreDir: storeDir}, "chk-seed-b", "w-seed",
 		PrivateGitSnapshot{Refs: map[string]string{"refs/heads/seed": oidB}},
 		map[string]string{"primary": primary},
+		"primary",
 		worktreeGit, commonGit,
 	)
 	testutil.FailErr(t, "seed oidB", err)
@@ -226,6 +233,7 @@ func TestCheckpointGitImportPackedRefsConcurrentCASAndAuthorizedGitDirs(t *testi
 				context.Background(), GitObjectSources{StoreDir: ""}, "", "w-race",
 				PrivateGitSnapshot{Refs: map[string]string{"refs/heads/race": oids[idx]}},
 				map[string]string{"primary": primary},
+				"primary",
 				worktreeGit, commonGit,
 			)
 		}(i)

@@ -212,8 +212,22 @@ class HostedExecutionTests(unittest.TestCase):
                         patch.object(ci.subprocess, "call", return_value=0) as run:
                     if not inherited:
                         ci.os.environ.pop("PW_GO_TEST_TIMEOUT_SECONDS", None)
-                    ci.run_lane("behavior", "1/2")
+                    ci.run_lane("behavior", "1/2", clock=lambda: 0)
                     self.assertEqual(run.call_args.kwargs["env"]["PW_GO_TEST_TIMEOUT_SECONDS"], expected)
+
+    def test_each_phase_watchdog_gets_what_is_left_of_the_lane_budget(self):
+        seconds = hosted_plan.lanes()["ready-tests"]["minutes"] * 60
+        # The lane starts at 0; its phases start 100 seconds in and 40 seconds past the budget.
+        readings = iter([0, 100, seconds + 40])
+        phases = [["./task", "test:contract"], ["./task", "test:short"]]
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.object(ci, "artifact_root", return_value=Path(directory)), \
+                patch.object(ci.ready_scope, "test_phases", return_value=(phases, [])), \
+                patch.object(ci.subprocess, "call", return_value=0) as run:
+            ci.os.environ.pop("PW_GO_TEST_TIMEOUT_SECONDS", None)
+            ci.run_lane("ready-tests", "1/4", clock=lambda: next(readings))
+        budgets = [call.kwargs["env"]["PW_GO_TEST_TIMEOUT_SECONDS"] for call in run.call_args_list]
+        self.assertEqual(budgets, [str(seconds - 100), "1"])
 
     def test_interrupted_invocation_leaves_an_unfinished_record(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -264,14 +278,14 @@ class HostedExecutionTests(unittest.TestCase):
         with patch.object(ci.subprocess, "run", return_value=refused):
             self.assertEqual(ci.task_json(["test:cancel"]), (1, None))
 
-    def test_full_limits_lane_receives_structured_change_base(self):
+    def test_full_build_lane_receives_structured_change_base(self):
         scope = dict(base='b' * 40, head='a' * 40, paths=['lycaon/internal/a/a.go'], full=True, reasons=[])
         with tempfile.TemporaryDirectory() as directory, \
                 patch.dict('os.environ', PW_CI_AFFECTED='0'), \
                 patch('ci_policy.impact.change', return_value=scope), \
                 patch.object(ci, 'artifact_root', return_value=Path(directory)), \
                 patch.object(ci.subprocess, 'call', return_value=0) as command:
-            ci.run_lane('limits')
+            ci.run_lane('build')
         self.assertEqual(command.call_args.kwargs['env']['PW_CHANGE_BASE'], 'b' * 40)
 
     def test_fast_lanes_run_every_phase_and_keep_the_worst_verdict(self):
@@ -285,12 +299,23 @@ class HostedExecutionTests(unittest.TestCase):
                         patch(f'ci_policy.ready_scope.{target}', return_value=value), \
                         patch.object(ci, 'artifact_root', return_value=Path(directory)), \
                         patch.object(ci.subprocess, 'call', side_effect=verdicts) as run:
-                    self.assertEqual(ci.run_lane(name, '1/2' if name == 'ready-tests' else ''), expected)
+                    self.assertEqual(ci.run_lane(name, '1/4' if name == 'ready-tests' else ''), expected)
                     self.assertEqual(run.call_count, 3)
                     self.assertEqual(run.call_args.kwargs['env']['PW_TEST_KEEP_GOING'], '1')
                     record = json.loads((Path(directory) / 'ci/run.json').read_text())
                     self.assertEqual([phase['exit_code'] for phase in record['phases']], verdicts)
                     self.assertEqual(record['status'], {0: 'passed', 1: 'failed', 2: 'unverified'}[expected])
+
+    def test_the_den_lane_reports_every_failing_stage(self):
+        scope = dict(base='b' * 40, head='a' * 40, paths=['lycaon-den/src/app.ts'], full=False)
+        with tempfile.TemporaryDirectory() as directory, \
+                patch.dict('os.environ', PW_CI_AFFECTED='1'), \
+                patch('ci_policy.impact.change', return_value=scope), \
+                patch.object(ci, 'artifact_root', return_value=Path(directory)), \
+                patch.object(ci.subprocess, 'call', return_value=1) as run:
+            self.assertEqual(ci.run_lane('frontend'), 1)
+        self.assertEqual(run.call_args.args[0][1:], ['den:typecheck', 'den:lint', 'den:knip:changes', 'den:coverage:changes'])
+        self.assertEqual(run.call_args.kwargs['env']['PW_TEST_KEEP_GOING'], '1')
 
     def test_fast_lane_stops_when_a_phase_is_interrupted(self):
         scope = dict(base='b' * 40, head='a' * 40, paths=[], full=False)
@@ -321,6 +346,6 @@ class HostedExecutionTests(unittest.TestCase):
                 patch('ci_policy.impact.change', return_value=scope), \
                 patch.object(ci, 'artifact_root', return_value=Path(directory)), \
                 patch.object(ci.subprocess, 'call', return_value=1) as run:
-            self.assertEqual(ci.run_lane('limits'), 1)
+            self.assertEqual(ci.run_lane('build'), 1)
         self.assertEqual(run.call_count, 1)
         self.assertNotIn('PW_TEST_KEEP_GOING', run.call_args.kwargs['env'])

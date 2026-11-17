@@ -88,7 +88,7 @@ func TestFinishPromptExecutionDrainsLoopPendingAfterCanceledRequestCtx(t *testin
 		_ = mgr.Runner.Settlement.Drain(canceled, sess.ID)
 	}()
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the loop wake message is stored", func() bool {
 		msgs, err := store.GetMessages(ctx, sess.ID)
 		if err != nil {
 			return false
@@ -273,7 +273,7 @@ func TestFailedHostTurnReportsItself(t *testing.T) {
 	finishExecution()
 	mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the failed turn is reported", func() bool {
 		mu.Lock()
 		defer mu.Unlock()
 		return len(reported) > 0

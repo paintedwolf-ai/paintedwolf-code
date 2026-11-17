@@ -14,21 +14,6 @@
   --chat-fade-right-inset: calc(var(--chat-scrollbar-size) / 2);
 }
 
-/* An open drawer keeps transcript fades below tab chrome. */
-.den-shell-stage--chat
-  .den-shell-main
-  > .den-chat.den-chat--context-drawer-open {
-  position: static;
-  overflow: visible;
-  z-index: auto;
-}
-
-.den-shell-main:has(.den-chat--context-drawer-open) {
-  position: static;
-  overflow: visible;
-}
-
-
 @utility den-chat-composer-dock {
 position: relative;
   display: flex;
@@ -77,12 +62,16 @@ position: relative;
   }
 }
 
-@utility den-transcript-disclosure-card {
+/* Every card in a transcript row takes this width; outside a chat stream it fills the row. */
+@utility den-transcript-card {
   align-self: flex-start;
   width: var(--den-transcript-card-width, 100%);
   max-width: 100%;
   min-width: 0;
+}
 
+/* A transcript card that opens to the full row. */
+@utility den-transcript-disclosure-card {
   & > .den-transcript-disclosure-header {
     box-sizing: border-box;
     width: 100%;
@@ -101,6 +90,143 @@ position: relative;
 
   &[data-closing] > .den-transcript-disclosure-header .den-tool-chicklet-caret {
     transform: rotate(0);
+  }
+}
+
+/* A disclosure card that rests as a link; its surface and outline appear when it opens. */
+@utility den-transcript-disclosure-link {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--den-radius);
+  background: transparent;
+  transition:
+    background-color var(--den-duration-drawer) var(--den-ease),
+    margin-inline-start var(--den-duration-drawer) var(--den-ease);
+
+  /* The overlay border adds no height and stays above row backgrounds. */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border: 1px solid transparent;
+    border-radius: inherit;
+    pointer-events: none;
+    transition: border-color var(--den-duration-drawer) var(--den-ease);
+  }
+
+  &[data-expanded="false"] {
+    width: fit-content;
+  }
+
+  /* The hover chip pads the label, so the label itself rests on the text edge. */
+  &[data-expanded="false"],
+  &[data-closing] {
+    margin-inline-start: calc(-1 * var(--den-transcript-link-inset-x));
+  }
+
+  &[data-expanded="false"]:hover {
+    background: var(--den-tint-2);
+  }
+
+  &[data-expanded="false"]:active {
+    background: var(--den-tint-3);
+  }
+
+  &[data-expanded="true"]:not([data-closing]) {
+    background: var(--den-surface);
+  }
+
+  &[data-expanded="true"]:not([data-closing])::after {
+    border-color: var(--den-line);
+  }
+
+  & > .den-transcript-disclosure-header {
+    border-bottom: 1px solid transparent;
+  }
+
+  &[data-expanded="true"]:not([data-closing]) > .den-transcript-disclosure-header {
+    border-bottom-color: color-mix(in srgb, var(--den-line) 55%, transparent);
+    color: var(--den-text);
+  }
+
+  &[data-expanded="false"]:hover > .den-transcript-disclosure-header {
+    color: var(--den-text);
+  }
+
+  &[data-expanded="false"] > .den-transcript-disclosure-header,
+  &[data-closing] > .den-transcript-disclosure-header {
+    padding-inline: var(--den-transcript-link-inset-x) calc(var(--den-transcript-link-inset-x) + 2px);
+  }
+
+  &[data-expanded="true"]:not([data-closing]) > .den-transcript-disclosure-header .den-disclosure-chevron {
+    transform: rotate(45deg) translate(-1px, -1px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+
+    &::after {
+      transition: none;
+    }
+  }
+}
+
+/* The header of a link disclosure: label, facts, then the chevron. */
+@utility den-transcript-link-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--den-transcript-link-row-h);
+  padding: 0 var(--den-transcript-card-inset-x);
+  font-size: var(--text-den-label);
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--den-text-muted);
+  background: transparent;
+  user-select: none;
+  transition:
+    padding-inline-start var(--den-duration-drawer) var(--den-ease),
+    padding-inline-end var(--den-duration-drawer) var(--den-ease),
+    border-color var(--den-duration-drawer) var(--den-ease),
+    color var(--den-duration-drawer) var(--den-ease);
+
+  &:focus-visible {
+    outline: 2px solid var(--den-accent-signal);
+    outline-offset: -2px;
+    border-radius: var(--den-radius);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+@utility den-transcript-link-summary-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  &[data-attention] {
+    color: var(--den-status-running);
+  }
+}
+
+/* A stroke chevron: right at rest, down when its disclosure is open. */
+@utility den-disclosure-chevron {
+  flex: 0 0 auto;
+  box-sizing: content-box;
+  width: 0.42em;
+  height: 0.42em;
+  margin-inline: 1px 2px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  color: var(--den-text-muted);
+  transform: rotate(-45deg);
+  transition: transform var(--den-duration) var(--den-ease);
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
   }
 }
 

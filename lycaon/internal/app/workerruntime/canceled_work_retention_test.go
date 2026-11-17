@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -317,7 +318,7 @@ func TestAnExpiredCallerDoesNotRetainTheWholeTree(t *testing.T) {
 	writeTreeFile(t, task.WorkspaceRoot, "app.txt", "unpromoted edit\n")
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	err := f.engine.Workspace.RetainCanceledWork(ctx, task.ID, task.WorkspaceRoot, task.WorkspaceBaselinePath)
+	err := f.engine.Workspace.RetainCanceledWork(ctx, task.ID, task.WorkspaceRoot, task.WorkspaceBaselinePath, projectroot.RootRef{ID: task.WorkspaceRootID, Path: task.WorkspacePath})
 	assertRetentionBlocked(t, f, task, err)
 }
 
@@ -421,7 +422,7 @@ func TestRetentionRetriesAcrossARestartWithoutDuplicating(t *testing.T) {
 	f := newEngineFixture(t)
 	task := f.claimMaterializedWorker()
 	writeTreeFile(t, task.WorkspaceRoot, "app.txt", "unpromoted edit\n")
-	testutil.FailErr(t, "retain", f.engine.Workspace.RetainCanceledWork(t.Context(), task.ID, task.WorkspaceRoot, task.WorkspaceBaselinePath))
+	testutil.FailErr(t, "retain", f.engine.Workspace.RetainCanceledWork(t.Context(), task.ID, task.WorkspaceRoot, task.WorkspaceBaselinePath, projectroot.RootRef{ID: task.WorkspaceRootID, Path: task.WorkspacePath}))
 
 	engine := f.boot()
 	testutil.FailErr(t, "cancel on the next engine", engine.Queue.Cancel(t.Context(), task.ID, nil))

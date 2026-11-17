@@ -110,7 +110,7 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 			if reject == nil || reject.Data["reason"] != "workflow_phase_changed" {
 				t.Fatalf("queue accepted stale workflow phase: %v", reject)
 			}
-			testutil.WaitFor(t, func() bool {
+			testutil.WaitFor(t, "no worker outcome is pending", func() bool {
 				pending, err := h.Workers.Queue.ListPendingOutcomes(ctx)
 				return err == nil && len(pending) == 0
 			})

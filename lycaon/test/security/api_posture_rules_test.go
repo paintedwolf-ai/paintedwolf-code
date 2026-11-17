@@ -73,7 +73,7 @@ func TestBuildPostureDisallowedAgentAfterImplementPhase(t *testing.T) {
 	h.SeedProgress(t, ctx, sess.ID)
 	accepted := acceptPromptHTTP(t, srv, sess.ID, "spawn task")
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the posture prompt settles", func() bool {
 		submission, err := store.GetPromptSubmission(ctx, accepted.OperationID)
 		testutil.FailErr(t, "read posture prompt receipt", err)
 		if !submission.Status.Terminal() {
@@ -129,7 +129,7 @@ func TestBuildPostureAllowsDelegationWithPlanManifestRules(t *testing.T) {
 	// Pending workers keep the workflow active until a poller claims them.
 	h.SeedProgress(t, ctx, sess.ID)
 	acceptPromptHTTP(t, srv, sess.ID, "spawn delegate")
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "one worker task is pending", func() bool {
 		tasks, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(tasks) == 1
 	})

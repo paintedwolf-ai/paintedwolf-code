@@ -139,7 +139,7 @@ func acceptPromptOpenAPI(t *testing.T, base, sessionID, body string) {
 	t.Helper()
 	accepted := OpenAPIPostJSON[wire.PromptAcceptedResponse](t, base, "/v1/sessions/{id}/prompts",
 		map[string]string{"id": sessionID}, body, http.StatusAccepted)
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the prompt is accepted and visible", func() bool {
 		params := map[string]string{"id": sessionID}
 		before := OpenAPIGetJSON[wire.Session](t, base, "/v1/sessions/{id}", params, http.StatusOK)
 		messages := listMessagesOpenAPI(t, base, params, http.StatusOK)

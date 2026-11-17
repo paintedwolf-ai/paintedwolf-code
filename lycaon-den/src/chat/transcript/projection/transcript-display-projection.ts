@@ -1,6 +1,6 @@
 import type { Message } from "../../../api/types.ts";
 import { type TranscriptItem, type RawTranscriptItem, type DisplayTranscriptItem, type TranscriptBuildOptions } from "./transcript-item-model.ts";
-import { buildOrdIndex, sortItemsWithIndex } from "./transcript-item-order.ts";
+import { buildTranscriptOrder, sortItemsInOrder } from "./transcript-item-order.ts";
 import { finalizeTranscriptItems, messagesToTranscriptItems } from "./transcript-items.ts";
 import { sameWireValue } from "./wire-equal.ts";
 
@@ -104,7 +104,7 @@ export function createTranscriptDisplayProjector() {
     const buildOpts = { verboseMode: options.verboseMode ?? false, layout: options.layout ?? "chat" } as const;
     const freshItems = messagesToTranscriptItems(messages, buildOpts);
     const fresh = new Map(freshItems.map((item) => [item.key, item]));
-    const order = buildOrdIndex(messages);
+    const order = buildTranscriptOrder(messages, buildOpts);
     const next = (spans ?? [freshItems]).map((span, index): SpanProjection => {
       let raw = spans ? reconcileProse(span, fresh) : [...span];
       if (spans) raw = raw.map((item) => {
@@ -114,7 +114,7 @@ export function createTranscriptDisplayProjector() {
         }
         return item;
       });
-      raw = sortItemsWithIndex(raw, order);
+      raw = sortItemsInOrder(raw, order);
       // Visibility options change rendering without changing rows.
       const prior = previous[index];
       if (prior && prior.verboseMode === buildOpts.verboseMode && prior.layout === buildOpts.layout &&

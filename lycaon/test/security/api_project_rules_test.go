@@ -10,7 +10,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
@@ -137,7 +136,7 @@ func TestSessionPreparationRejectsInvalidProjectRules(t *testing.T) {
 	}
 	var sess wire.Session
 	testutil.FailErr(t, "decode preparing session", json.Unmarshal(w.Body.Bytes(), &sess))
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "session preparation rejects the invalid project rules", func() bool {
 		req = AuthedRequest(t, http.MethodGet, "/v1/sessions/"+sess.ID, nil)
 		w = httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
@@ -145,14 +144,9 @@ func TestSessionPreparationRejectsInvalidProjectRules(t *testing.T) {
 			t.Fatalf("get preparing session status = %d body = %s", w.Code, w.Body.String())
 		}
 		testutil.FailErr(t, "decode prepared session", json.Unmarshal(w.Body.Bytes(), &sess))
-		switch sess.Status {
-		case wire.SessionStatusError:
-			return
-		case wire.SessionStatusIdle:
+		if sess.Status == wire.SessionStatusIdle {
 			t.Fatal("invalid project rules were accepted during session preparation")
-		case wire.SessionStatusPreparing, wire.SessionStatusBusy:
 		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatal("session preparation did not reject invalid project rules")
+		return sess.Status == wire.SessionStatusError
+	})
 }

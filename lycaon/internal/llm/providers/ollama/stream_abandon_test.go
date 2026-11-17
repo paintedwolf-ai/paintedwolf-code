@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 )
@@ -12,27 +12,28 @@ import (
 // A ctx check at the top of the read loop cannot release a goroutine already
 // parked handing a chunk to the consumer; the send must observe cancellation.
 func TestOllamaDecoderReleasesAbandonedStream(t *testing.T) {
-	ctx, cancel := context.WithCancel(t.Context())
-	defer cancel()
+	synctest.Test(t, func(t *testing.T) {
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
 
-	body := newLineReader(
-		`{"message":{"content":"one"},"done":false}`,
-		`{"message":{"content":"two"},"done":false}`,
-		`{"message":{"content":"three"},"done":false}`,
-	)
+		body := newLineReader(
+			`{"message":{"content":"one"},"done":false}`,
+			`{"message":{"content":"two"},"done":false}`,
+			`{"message":{"content":"three"},"done":false}`,
+		)
 
-	ch := decodeOllamaStream(ctx, body, "desktop", "model", 8192, nil, nil)
-	if _, ok := <-ch; !ok {
-		t.Fatal("expected at least one decoded chunk")
-	}
-	cancel()
-	time.Sleep(abandonSettle)
-
-	assertStreamClosed(t, ch, "ollama decoder")
+		ch := decodeOllamaStream(ctx, body, "desktop", "model", 8192, nil, nil)
+		if _, ok := <-ch; !ok {
+			t.Fatal("expected at least one decoded chunk")
+		}
+		cancel()
+		synctest.Wait()
+		assertStreamClosed(t, ch, "ollama decoder")
+	})
 }
 
-const abandonSettle = 50 * time.Millisecond
-
+// assertStreamClosed runs once every goroutine in the bubble is blocked, so a
+// producer that observed cancellation has closed the stream by now.
 func assertStreamClosed(t *testing.T, ch <-chan modelcall.StreamChunk, what string) {
 	t.Helper()
 	select {
@@ -40,7 +41,7 @@ func assertStreamClosed(t *testing.T, ch <-chan modelcall.StreamChunk, what stri
 		if ok {
 			t.Fatalf("%s: producer was stranded on a send after the consumer abandoned the stream (delivered %+v)", what, chunk)
 		}
-	case <-t.Context().Done():
+	default:
 		t.Fatalf("%s: stream neither closed nor delivered after abandonment", what)
 	}
 }

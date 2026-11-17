@@ -2,9 +2,10 @@ package guidance
 
 import (
 	"context"
+	"maps"
+
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/pkg/api"
-	"maps"
 )
 
 // PolicyFeedback is one frozen rule result. Its copy and machine facts travel together.

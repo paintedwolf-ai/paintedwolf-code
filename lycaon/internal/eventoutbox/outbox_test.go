@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -164,33 +165,31 @@ func TestDrainPublishesInCommitOrder(t *testing.T) {
 
 // With the idle sweep an hour out, only Notify can deliver the committed row.
 func TestNotifyWakesTheDispatcher(t *testing.T) {
-	sqlDB := testDB(t)
-	hub := &recordingHub{}
-	outbox := New(sqlDB, hub)
-	outbox.idle = time.Hour
-	outbox.Start(t.Context())
-	t.Cleanup(func() { _ = outbox.Close() })
-	// Let the startup sweep finish, so the dispatcher is parked on its wake.
-	time.Sleep(100 * time.Millisecond)
+	synctest.Test(t, func(t *testing.T) {
+		sqlDB := testDB(t)
+		hub := &recordingHub{}
+		outbox := New(sqlDB, hub)
+		outbox.idle = time.Hour
+		outbox.Start(t.Context())
+		t.Cleanup(func() { _ = outbox.Close() })
+		// Every goroutine in the bubble is blocked: the dispatcher is parked on its wake.
+		synctest.Wait()
 
-	tx, err := sqlDB.BeginTx(t.Context(), nil)
-	testutil.FailErr(t, "begin", err)
-	testutil.FailErr(t, "enqueue",
-		outbox.EnqueueTx(t.Context(), tx, testTopic, events.PublishKey{Project: "018eca20-5608-7a55-824f-920998f472b2", EventID: "ev-wake"}, map[string]string{"op": "noop"}))
-	testutil.FailErr(t, "commit", tx.Commit())
-
-	time.Sleep(100 * time.Millisecond)
-	if got := hub.deliveries(); len(got) != 0 {
-		t.Fatalf("deliveries = %v want none before Notify", got)
-	}
-	outbox.Notify()
-	for t.Context().Err() == nil {
-		if len(hub.deliveries()) == 1 {
-			return
+		tx, err := sqlDB.BeginTx(t.Context(), nil)
+		testutil.FailErr(t, "begin", err)
+		testutil.FailErr(t, "enqueue",
+			outbox.EnqueueTx(t.Context(), tx, testTopic, events.PublishKey{Project: "018eca20-5608-7a55-824f-920998f472b2", EventID: "ev-wake"}, map[string]string{"op": "noop"}))
+		testutil.FailErr(t, "commit", tx.Commit())
+		synctest.Wait()
+		if got := hub.deliveries(); len(got) != 0 {
+			t.Fatalf("deliveries = %v want none before Notify", got)
 		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatalf("Notify did not wake delivery: deliveries = %v", hub.deliveries())
+		outbox.Notify()
+		synctest.Wait()
+		if got := hub.deliveries(); len(got) != 1 {
+			t.Fatalf("Notify did not wake delivery: deliveries = %v", got)
+		}
+	})
 }
 
 func TestEnqueueWithoutADatabaseReportsNotWired(t *testing.T) {
@@ -337,32 +336,30 @@ func TestDrainDropsRowAfterMaxDeliveryAttempts(t *testing.T) {
 
 // Concurrent Start calls run one dispatcher; -race checks the cancel guard.
 func TestStartIsSafeUnderConcurrentCalls(t *testing.T) {
-	sqlDB := testDB(t)
-	hub := &recordingHub{}
-	outbox := New(sqlDB, hub)
-	outbox.idle = time.Hour
+	synctest.Test(t, func(t *testing.T) {
+		sqlDB := testDB(t)
+		hub := &recordingHub{}
+		outbox := New(sqlDB, hub)
+		outbox.idle = time.Hour
 
-	var wg sync.WaitGroup
-	for i := 0; i < 16; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			outbox.Start(t.Context())
-		}()
-	}
-	wg.Wait()
-	t.Cleanup(func() { testutil.FailErr(t, "close", outbox.Close()) })
+		var wg sync.WaitGroup
+		for i := 0; i < 16; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				outbox.Start(t.Context())
+			}()
+		}
+		wg.Wait()
+		t.Cleanup(func() { testutil.FailErr(t, "close", outbox.Close()) })
 
-	testutil.FailErr(t, "enqueue",
-		outbox.Enqueue(t.Context(), testTopic, events.PublishKey{Project: "018eca20-5608-7a55-824f-920998f472b2", EventID: "ev-once"}, map[string]string{}))
-	outbox.Notify()
-
-	for t.Context().Err() == nil && len(hub.deliveries()) == 0 {
-		time.Sleep(5 * time.Millisecond)
-	}
-	// Give a stray second dispatcher a chance to double-deliver before checking.
-	time.Sleep(50 * time.Millisecond)
-	if got := hub.deliveries(); len(got) != 1 {
-		t.Fatalf("deliveries = %v want exactly one dispatcher delivering exactly once", got)
-	}
+		testutil.FailErr(t, "enqueue",
+			outbox.Enqueue(t.Context(), testTopic, events.PublishKey{Project: "018eca20-5608-7a55-824f-920998f472b2", EventID: "ev-once"}, map[string]string{}))
+		outbox.Notify()
+		// Once every goroutine is blocked, any second dispatcher has had its chance to deliver.
+		synctest.Wait()
+		if got := hub.deliveries(); len(got) != 1 {
+			t.Fatalf("deliveries = %v want exactly one dispatcher delivering exactly once", got)
+		}
+	})
 }

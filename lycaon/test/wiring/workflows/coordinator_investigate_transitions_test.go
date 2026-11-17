@@ -129,7 +129,7 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 
 	// Wait for the batch ledger and follow-up surface to settle.
 	var followProfile surface.TurnProfile
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the workers drain and the batch leaves dispatch", func() bool {
 		state = h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 		if state.WorkersInFlight == 0 && state.BatchPhase != batch.PhaseDispatch {
 			msgs, err = h.Sessions.Manager.Runner.Transcript.GetMessages(ctx, sess.ID)

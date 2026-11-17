@@ -82,11 +82,32 @@ def knip(tree, policy):
     return found
 
 
+def product_flags(policy, tree):
+    """Reach also judges what the product emits and reads when the policy names the product."""
+    reach = policy["reach"]
+    if "product" not in reach:
+        return []
+    flags = ["-product", ",".join(reach["product"])]
+    if reach.get("config_fields"):
+        flags.append("-config-fields")
+    if "emitters" in policy:
+        flags += ["-emitters", json.dumps(policy["emitters"]), "-repo", tree]
+    return flags
+
+
 def target_goos(reach, host=sys.platform):
     """The platforms this host can type-check; cgo-only packages stop a cross-platform load."""
     if host not in reach["goos"]:
         raise RuntimeError(f"arch-lint policy names no target platforms for host {host}")
     return reach["goos"][host]
+
+
+def identity_flags(vet):
+    """The identity fields whose constants only their owner package may declare."""
+    identity = vet.get("identity")
+    if not identity:
+        return []
+    return ["-identity-fields", ",".join(identity["fields"]), "-identity-owner", identity["owner"]]
 
 
 def checks(binary, tree, policy, go=True, den=False, refs=True):
@@ -99,8 +120,9 @@ def checks(binary, tree, policy, go=True, den=False, refs=True):
     go_commands = [
         [binary, "reach", "-dir", go_dir, "-goos", ",".join(target_goos(reach)), "-report", reach["report"],
          "-skip", support, "-schema", go_dir / reach["schema"], "-scope", ",".join(reach.get("scope", [])),
-         *reach["roots"]],
-        [binary, "vet", "-dir", go_dir, "-test-support", support, *policy["vet"]["packages"]],
+         *product_flags(policy, tree), *reach["roots"]],
+        [binary, "vet", "-dir", go_dir, "-test-support", support, *identity_flags(policy["vet"]),
+         *policy["vet"]["packages"]],
     ]
     found = {}
     with tempfile.NamedTemporaryFile("w", suffix=".index") as index:

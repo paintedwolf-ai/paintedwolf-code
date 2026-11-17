@@ -121,7 +121,7 @@ func TestPlanImplementLegLoopWakesCoordinator(t *testing.T) {
 	}
 	mgr.Coordinator.Runtime.CoordinatorLoop().Nudges.Nudge(ctx, sess.ID, anchor.LegFinished, anchor.LegFinished, "leg-e2e", anchor.Envelope{})
 
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the coordinator answers the loop wake", func() bool {
 		mgr.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, sess.ID)
 		msgs, err := mgr.Runner.Transcript.GetMessages(ctx, sess.ID)
 		if err != nil {

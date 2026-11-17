@@ -53,7 +53,7 @@ exit 2
 				cancel()
 				<-done
 			})
-			testutil.WaitFor(t, func() bool {
+			testutil.WaitFor(t, "the scanner writes its report", func() bool {
 				select {
 				case <-done:
 					t.Fatalf("scanner exited before cancellation: %v", got.err)

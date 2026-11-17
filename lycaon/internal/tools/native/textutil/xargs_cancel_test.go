@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -82,16 +81,8 @@ func TestXargsEarlyConsumerClosesBlockedInputAndActiveChildren(t *testing.T) {
 			parser := &xargsInput{inv: inv, ctx: ctx, reader: bufio.NewReaderSize(input, 64<<10)}
 			done := make(chan error, 1)
 			go func() { done <- (xargsRun{inv: inv}).execute(parser, plan) }()
-			select {
-			case err := <-done:
-				if !errors.Is(err, commandprogram.ErrConsumerClosed) {
-					t.Fatalf("early close: %v", err)
-				}
-			case <-time.After(testutil.Timeout(time.Minute)):
-				cancel()
-				_ = input.Close()
-				<-done
-				t.Fatal("early consumer left parser or child blocked")
+			if err := testutil.Receive(t, "the early-closed consumer ends execution", done); !errors.Is(err, commandprogram.ErrConsumerClosed) {
+				t.Fatalf("early close: %v", err)
 			}
 			select {
 			case <-input.closed:

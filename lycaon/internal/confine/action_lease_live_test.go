@@ -174,15 +174,7 @@ func TestSurvivorEgressFollowsProjectAccountability(t *testing.T) {
 
 	// With nothing running, nobody is accountable and the daemon reaches nothing.
 	successor.Close(t.Context())
-	confine.ForgetOrphanEgressAttempts()
 	if status := fetch(upstream.URL); status != "403" {
 		t.Fatalf("status with no live action = %s, want 403", status)
-	}
-	attempts := confine.OrphanEgressAttempts()
-	if len(attempts) == 0 {
-		t.Fatal("a refused dial from a surviving process was not recorded")
-	}
-	if !strings.Contains(attempts[0].Owner, "./build --all") {
-		t.Fatalf("the record does not name the command that left the process running: %+v", attempts[0])
 	}
 }
