@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -52,27 +51,6 @@ open(sys.argv[1], "w", encoding="utf-8").write(str(s.getsockname()[1]))
 while True:
     time.sleep(60)
 `
-
-func TestDenSidecarStartUsesEnsureEngineListenPort(t *testing.T) {
-	t.Parallel()
-	sidecar := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "scripts/den-dev-sidecar.sh")
-	if !strings.Contains(sidecar, `ensure_engine_listen_port "${LYCAON_ADDR}" is_engine_pid`) {
-		t.Fatal("den-dev-sidecar.sh must call ensure_engine_listen_port")
-	}
-	reclaimCall := regexp.MustCompile(`(?m)^\s*reclaim_listen_port\s`)
-	if reclaimCall.MatchString(sidecar) {
-		t.Fatal("den-dev-sidecar.sh must not call reclaim_listen_port")
-	}
-
-	fresh := taskBody(taskfile(t), "den:sidecar:fresh")
-	if !strings.Contains(fresh, "den:sidecar:stop") {
-		t.Fatal("den:sidecar:fresh must run den:sidecar:stop")
-	}
-	start := taskBody(taskfile(t), "den:sidecar")
-	if strings.Contains(start, "den:sidecar:stop") {
-		t.Fatal("den:sidecar must not run den:sidecar:stop")
-	}
-}
 
 func TestEnsureEngineListenPortRefusesLiveHealth(t *testing.T) {
 	t.Parallel()

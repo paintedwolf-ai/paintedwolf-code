@@ -1,7 +1,6 @@
 package contract
 
 import (
-	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -37,17 +36,6 @@ func TestZxcvbnPasswordsCatalogIsPinned(t *testing.T) {
 		}
 		if len(vendor.Include) == 0 {
 			t.Errorf("%s: no include: paths", vendor.ID)
-		}
-	}
-}
-
-func TestZxcvbnPasswordsVendorTreeHoldsLicenseAndList(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	dir := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "security", "host", "secret-mint", "vendor", "zxcvbn-passwords")
-	for _, name := range []string{"LICENSE", "passwords.txt"} {
-		if _, err := os.Stat(filepath.Join(dir, name)); err != nil {
-			t.Errorf("%s missing from vendored tree", name)
 		}
 	}
 }

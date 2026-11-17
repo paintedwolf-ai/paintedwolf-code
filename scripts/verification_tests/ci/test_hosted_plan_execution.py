@@ -94,7 +94,7 @@ class HostedPlanTests(unittest.TestCase):
                                    "build", "build:cross", "licenses:notices", "check:drift", "openapi:lint",
                                    "validate:workflows", "oar:verify", "lint:full", "test:fail-messages:check",
                                    "comments:check", "lint:vuln", "den:typecheck", "den:lint",
-                                   "den:test:rust", "decide:test"})
+                                   "den:test:rust", "decide:test", "release:contracts:check"})
         for suite in ci.SUITES - {"all"}:
             with self.subTest(suite=suite):
                 names = {row["lane"] for row in ci.matrix("nightly", suite)["include"]}

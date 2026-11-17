@@ -170,12 +170,17 @@ pub async fn fetch_with_deadline(
     .map_err(Into::into)
 }
 
+/// A feed read names only its static URL: no query and no identifying header.
+fn feed_request(client: &reqwest::Client, url: &str) -> reqwest::RequestBuilder {
+    client
+        .get(url)
+        .header("Cache-Control", "no-cache, no-store")
+}
+
 async fn fetch_bytes(url: &str, cap: u64) -> Result<Vec<u8>, UpdateError> {
     let client = crate::http_transport::update_client(url, CHECK_REQUEST_TIMEOUT).await
         .map_err(|error| UpdateError::new(Failure::CheckFailed, error))?;
-    let response = client
-        .get(url)
-        .header("Cache-Control", "no-cache, no-store")
+    let response = feed_request(&client, url)
         .send()
         .await
         .map_err(UpdateError::transport)?;
@@ -380,6 +385,24 @@ mod tests {
     }
     fn running() -> semver::Version {
         semver::Version::parse("1.0.0").unwrap()
+    }
+    #[test]
+    fn feed_requests_carry_no_identifying_header_or_query() {
+        let client = crate::http_transport::client_builder().build().unwrap();
+        for channel in [UpdateChannel::Stable, UpdateChannel::Preview] {
+            let endpoint = channel.endpoint();
+            for url in [endpoint.clone(), format!("{endpoint}.sig")] {
+                let request = feed_request(&client, &url).build().unwrap();
+                assert_eq!(request.method(), reqwest::Method::GET);
+                assert_eq!(request.url().as_str(), url);
+                assert_eq!(request.url().scheme(), "https");
+                assert_eq!(request.url().host_str(), Some("downloads.paintedwolf.dev"));
+                assert_eq!(request.url().query(), None);
+                let headers: Vec<&str> =
+                    request.headers().keys().map(|name| name.as_str()).collect();
+                assert_eq!(headers, ["cache-control"]);
+            }
+        }
     }
     #[test]
     fn newer_signed_release_becomes_a_candidate_with_its_publication_age() {

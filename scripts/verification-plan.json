@@ -15,6 +15,7 @@
       "den:test:fast",
       "test:short",
       "test:contract",
+      "release:contracts:check",
       "licenses:notices",
       "comments:check",
       "test:fail-messages:check",
@@ -49,7 +50,8 @@
       "den:typecheck",
       "den:lint",
       "den:test:rust",
-      "decide:test"
+      "decide:test",
+      "release:contracts:check"
     ],
     "check:drift": [
       "codegen:wire-enums:check",
@@ -414,6 +416,9 @@
     ],
     "validate:workflows": [
       "validate:workflows"
+    ],
+    "release:contracts:check": [
+      "release:contracts:check"
     ],
     "lint:vuln:vendor:check": [
       "lint:vuln:vendor:check"
@@ -820,6 +825,15 @@
       "locks": [],
       "workers": "shared"
     },
+    "release:contracts:check": {
+      "locks": [
+        "go"
+      ],
+      "workers": "shared",
+      "shared_locks": [
+        "go"
+      ]
+    },
     "build:lycaon-dev": {
       "locks": [
         "dev-engine",
@@ -1121,7 +1135,8 @@
         "den:typecheck",
         "den:lint",
         "den:knip:changes",
-        "den:test:fast"
+        "den:test:fast",
+        "release:contracts:check"
       ],
       "minutes": 120,
       "profiles": [
@@ -1177,7 +1192,8 @@
         "check:drift",
         "openapi:lint",
         "validate:workflows",
-        "oar:verify"
+        "oar:verify",
+        "release:contracts:check"
       ],
       "minutes": 120,
       "profiles": [

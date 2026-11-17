@@ -1855,6 +1855,11 @@ tasks:
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-preflight.sh {{.CLI_ARGS}}
 
+  release:contracts:check:
+    desc: Verify catalog contracts and published migration identities against the stable release tags
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/release-contracts-check.sh
+
   release:halt:
     desc: 'Signed-feed and negative-ledger halt primitive; use the protected release-halt workflow for complete multi-surface withdrawal'
     preconditions:

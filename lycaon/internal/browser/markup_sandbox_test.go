@@ -59,6 +59,9 @@ func TestValidateMarkupStillRejectsNonAssetNetwork(t *testing.T) {
 	cases := []string{
 		`<img src="https://cdn.example/logo.png">`,
 		`<img src="http://lycaon.evil/logo.png">`,
+		`<img src="https://lycaon.asset/assets/logo.png">`,
+		`<img src="http://lycaon.assetx/logo.png">`,
+		`<link rel="stylesheet" href="http://lycaon.capture/app.css">`,
 		`<link rel="stylesheet" href="https://cdn.example/app.css">`,
 		`<link rel="stylesheet" href="http://lycaon.asset/app.css" onload="alert(1)">`,
 		`<style>@import url(https://cdn.example/base.css);</style>`,

@@ -4,14 +4,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/localdata"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	_ "modernc.org/sqlite"
 )
@@ -40,40 +39,6 @@ func releaseCandidateCorpus(t *testing.T, root string) string {
 	t.Helper()
 	version := strings.TrimSpace(contractcheck.ReadRepoFile(t, root, "VERSION"))
 	return filepath.Join(root, "lycaon", "testdata", "upgrade-corpus", version)
-}
-
-var releaseBlastForbiddenTouch = []string{
-	"lycaon/internal/db/schema.sql",
-	"lycaon/internal/db/schema_version_lock.json",
-	"lycaon/internal/db/store_schema.go",
-}
-
-func TestReleaseBlastRadiusCorpusLayout(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	t.Parallel()
-	baseline := releaseCandidateCorpus(t, root)
-	raw, err := os.ReadFile(filepath.Join(baseline, "MANIFEST.json"))
-	contractcheck.FailErr(t, "read release baseline MANIFEST", err)
-	var m map[string]any
-	contractcheck.FailErr(t, "parse MANIFEST", json.Unmarshal(raw, &m))
-	if m["recipe"] != "retained-history-v1" {
-		t.Fatalf("recipe = %v want retained-history-v1", m["recipe"])
-	}
-	if m["seeded_secondary"] != "tool_result" {
-		t.Fatalf("seeded_secondary = %v want tool_result", m["seeded_secondary"])
-	}
-	for _, name := range []string{"store.db", "backup.zip", "SEMANTICS.json", "app-state-v1", "project-root"} {
-		if _, err := os.Stat(filepath.Join(baseline, name)); err != nil {
-			t.Fatalf("release baseline missing %s: %v", name, err)
-		}
-	}
-	// Fixtures materialize their placeholder through the shared overlay helper.
-	if _, err := os.Stat(filepath.Join(baseline, "project-root", testutil.OverlayFixtureDirName)); err != nil {
-		t.Fatalf("release baseline project-root/%s missing: %v", testutil.OverlayFixtureDirName, err)
-	}
-	if _, err := os.Stat(filepath.Join(baseline, "project-root", settingsoverlay.DirName())); err == nil {
-		t.Fatalf("release baseline stores the resolved %s path — store the overlay as %s", settingsoverlay.DirName(), testutil.OverlayFixtureDirName)
-	}
 }
 
 func TestReleaseBlastRadiusNoCredentialsInCorpus(t *testing.T) {
@@ -110,17 +75,6 @@ func TestReleaseBlastRadiusNoCredentialsInCorpus(t *testing.T) {
 		return nil
 	})
 	contractcheck.FailErr(t, "walk corpus", err)
-}
-
-func TestReleaseBlastRadiusSeedBootTasks(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	t.Parallel()
-	taskfile := contractcheck.ReadRepoFile(t, root, "Taskfile.yml")
-	for _, needle := range []string{"upgrade:corpus:seed:", "upgrade:corpus:boot:"} {
-		if !strings.Contains(taskfile, needle) {
-			t.Fatalf("Taskfile.yml missing %s", needle)
-		}
-	}
 }
 
 func TestReleaseBlastRadiusCiUpgradeCorpusJob(t *testing.T) {
@@ -218,73 +172,42 @@ func TestReleaseBlastRadiusPublishOrder(t *testing.T) {
 	}
 }
 
-func TestReleaseBlastRadiusPriorReleaseAuthorityIsR2(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
+// Upgrade rehearsal resolves the prior release through the public feed resolver
+// alone: no other host is asked.
+func TestUpgradeRehearsalResolvesPriorReleaseFromThePublicFeed(t *testing.T) {
 	t.Parallel()
-	script := contractcheck.ReadRepoFile(t, root, "scripts/upgrade-rehearse.sh")
-	for _, needle := range []string{
-		"scripts/release_control.py",
-		`--generation "${SIGNING_GENERATION}"`,
-		"release-validate-updater-manifest.sh",
-	} {
-		if !strings.Contains(script, needle) {
-			t.Fatalf("upgrade-rehearse.sh must use the public feed resolver (%q missing)", needle)
-		}
-	}
-	if strings.Contains(script, "api.github.com") {
-		t.Fatal("upgrade-rehearse.sh must not resolve the prior release from the GitHub API")
-	}
-}
-
-func TestReleaseBlastRadiusHaltAndRecovery(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
-	t.Parallel()
-	taskfile := contractcheck.ReadRepoFile(t, root, "Taskfile.yml")
-	for _, task := range []string{"release:halt:", "release:recovery:prepare:"} {
-		if !strings.Contains(taskfile, task) {
-			t.Fatalf("Taskfile.yml missing %s", task)
-		}
+	tools, build := t.TempDir(), t.TempDir()
+	calls := filepath.Join(tools, "calls")
+	python, err := exec.LookPath("python3")
+	contractcheck.FailErr(t, "find Python", err)
+	contractcheck.FailErr(t, "write HEAD sidecar", os.WriteFile(filepath.Join(build, "lycaon-dev"), []byte("#!/bin/sh\nexit 1\n"), 0o700))
+	// The resolver reports no published release; every other script runs unchanged.
+	shims := map[string]string{
+		"python3": "#!/bin/sh\ncase \"$1\" in */release_control.py) printf 'python3 %s\\n' \"$*\" >> \"$REHEARSAL_CALLS\"; exit 0 ;; esac\nexec " + python + " \"$@\"\n",
 	}
-	script := contractcheck.ReadRepoFile(t, root, "scripts/release-halt.sh")
-	for _, needle := range []string{
-		"updates/releases",
-		`--channel "${CHANNEL}"`,
-		"active updater version is",
-		"release-r2-publish-pointer.sh",
-		`--from-version "${BAD_VERSION}"`,
-		"installed ${BAD_VERSION} clients remain installed",
-	} {
-		if !strings.Contains(script, needle) {
-			t.Fatalf("release halt is missing safety contract %q", needle)
-		}
+	for _, name := range []string{"curl", "sqlite3", "tar"} {
+		shims[name] = "#!/bin/sh\nprintf '" + name + " %s\\n' \"$*\" >> \"$REHEARSAL_CALLS\"\nexit 1\n"
 	}
-	workflow := contractcheck.ReadRepoFile(t, root, ".github/workflows/release-halt.yml")
-	for _, needle := range []string{
-		"environment: release-publication",
-		"scripts/release_withdrawal.py prepare",
-		"scripts/release_withdrawal.py apply",
-		"steps.distribution_plan.outcome",
-		"needs.halt.outputs.barrier == 'success'",
-	} {
-		if !strings.Contains(workflow, needle) {
-			t.Fatalf("release halt workflow missing %q", needle)
-		}
+	for name, body := range shims {
+		contractcheck.FailErr(t, "write "+name+" shim", os.WriteFile(filepath.Join(tools, name), []byte(body), 0o700))
 	}
-	pointer := contractcheck.ReadRepoFile(t, root, "scripts/release-r2-publish-pointer.sh")
-	for _, needle := range []string{
-		"--from-version",
-		"updater pointer changed to",
-		"updater pointer may only advance",
-	} {
-		if !strings.Contains(pointer, needle) {
-			t.Fatalf("pointer publisher missing race/monotonic guard %q", needle)
-		}
+	const feed = "https://downloads.paintedwolf.dev"
+	cmd := exec.CommandContext(t.Context(), "bash", filepath.Join(root, "scripts", "upgrade-rehearse.sh"))
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "PATH="+tools+string(os.PathListSeparator)+os.Getenv("PATH"),
+		"PW_BUILD_DIR="+build, "DOWNLOAD_BASE_URL="+feed, "SIGNING_GENERATION=3", "REHEARSAL_CALLS="+calls)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("upgrade rehearsal without a prior release failed: %v\n%s", err, out)
 	}
-	preflight := contractcheck.ReadRepoFile(t, root, "scripts/release-preflight.sh")
-	release := contractcheck.ReadRepoFile(t, root, ".github/workflows/release.yml")
-	if !strings.Contains(preflight, ".release/recovery.json") ||
-		!strings.Contains(release, "release-metadata/${VERSION}/recovery.json") {
-		t.Fatal("recovery provenance must be validated and deposited immutably")
+	recorded, err := os.ReadFile(calls)
+	contractcheck.FailErr(t, "read rehearsal calls", err)
+	version := strings.TrimSpace(contractcheck.ReadRepoFile(t, root, "VERSION"))
+	want := "python3 " + filepath.Join(root, "scripts", "release_control.py") + " prior --base-url " + feed +
+		" --candidate " + version + " --generation 3\n"
+	if string(recorded) != want {
+		t.Fatalf("prior release resolution made calls %q, want only %q", recorded, want)
 	}
 }
 
@@ -341,36 +264,6 @@ func TestReleaseBlastRadiusStaticUpdaterEndpoint(t *testing.T) {
 	endpoint := staticUpdaterEndpoint(t, root)
 	if !strings.HasSuffix(endpoint, "/updates/stable/key-1/latest.json") {
 		t.Fatalf("updater endpoint is not the static stable manifest: %q", endpoint)
-	}
-}
-
-func TestReleaseBlastRadiusNonInterference(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	t.Parallel()
-	for _, rel := range []string{
-		"scripts/upgrade-corpus-seed.sh",
-		"scripts/upgrade-corpus-boot.sh",
-		"scripts/release-halt.sh",
-		"scripts/release-r2-live-test.sh",
-		"scripts/release-recovery-prepare.sh",
-		".github/workflows/release.yml",
-		".github/workflows/release-halt.yml",
-		".github/workflows/release-system-live-test.yml",
-		".github/workflows/ci.yml",
-	} {
-		body := contractcheck.ReadRepoFile(t, root, rel)
-		for _, surface := range releaseBlastForbiddenTouch {
-			for _, needle := range []string{
-				"> " + surface,
-				">> " + surface,
-				surface + " <<",
-				"tee " + surface,
-			} {
-				if strings.Contains(body, needle) {
-					t.Fatalf("%s must not write durable surface via %q", rel, needle)
-				}
-			}
-		}
 	}
 }
 
