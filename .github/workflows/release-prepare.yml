@@ -211,6 +211,17 @@ jobs:
           persist-credentials: false
       - name: Install the pinned Nix
         run: python3 -c 'from scripts.linux_release.nix_runner import install; print(install())' >> "${GITHUB_PATH}"
+      # The runner restricts user namespaces to profiled programs; the scanner build
+      # confines the scanner it audits, so its builder's exact-path grant loads first.
+      - name: Grant the scanner builder user namespaces
+        run: |
+          set -euo pipefail
+          derivation="$(python3 -c 'import os; from scripts.linux_release import nix, nix_closure_notices as tools; print(tools.command(nix.NIX, "git+file://" + os.getcwd(), dict(os.environ))[1]["derivation"])')"
+          output="$(nix build --extra-experimental-features 'nix-command flakes' --no-link --print-out-paths "${derivation}^out")"
+          for grant in "${output}"/share/painted-wolf-code/apparmor/paintedwolf-scanner-builder-*; do
+            sudo install -m 0644 "${grant}" "/etc/apparmor.d/$(basename "${grant}")"
+            sudo apparmor_parser -r "/etc/apparmor.d/$(basename "${grant}")"
+          done
       - name: Build and export the application closure
         env:
           SYSTEM: ${{ matrix.system }}
