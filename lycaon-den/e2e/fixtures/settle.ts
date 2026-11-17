@@ -1,26 +1,26 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-/** Resolves after two animation frames: the last change has been laid out and painted. */
+/** Give the browser a paint opportunity between frames. */
 export async function settleFrames(page: Page): Promise<void> {
   await page.evaluate(
     () => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
   );
 }
 
-/** Resolves when every finite animation on the element and its descendants has ended. */
+/** Wait for the subtree’s finite animations. */
 export async function animationsFinished(scope: Locator): Promise<void> {
   await scope.evaluate(async (element) => {
-    // A transition starts in the frame after the style change that triggers it.
+    // Let the style change start its transition.
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const finite = element
       .getAnimations({ subtree: true })
       .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime));
-    // A canceled animation rejects, and has ended all the same.
+    // Cancellation also ends the animation.
     await Promise.allSettled(finite.map((animation) => animation.finished));
   });
 }
 
-/** Resolves when the scroller's offset and range hold across four frames. */
+/** Wait for scroll geometry to hold across four frames. */
 export async function scrollSettled(scroller: Locator): Promise<void> {
   await scroller.evaluate(
     (element) =>
@@ -39,7 +39,7 @@ export async function scrollSettled(scroller: Locator): Promise<void> {
   );
 }
 
-/** Resolves when the element's painted box holds across four frames. */
+/** Wait for the element’s box to hold across four frames. */
 export async function boxSettled(target: Locator): Promise<void> {
   await target.evaluate(
     (element) =>
@@ -59,7 +59,7 @@ export async function boxSettled(target: Locator): Promise<void> {
   );
 }
 
-/** Resolves when the live transcript's rows and scroll geometry hold across four frames with no animation running. */
+/** Sample the transcript after its finite animations settle. */
 export async function settleTranscriptLayout(page: Page): Promise<void> {
   await page.evaluate(async () => {
     await document.fonts.ready;
@@ -98,7 +98,7 @@ export async function settleTranscriptLayout(page: Page): Promise<void> {
   });
 }
 
-/** Resolves when the scrollport around the element no longer counts the reader's last wheel, key or drag as active. */
+/** Wait for scrollport input to become idle. */
 export async function directInputSettled(scroller: Locator): Promise<void> {
   await expect
     .poll(() =>
