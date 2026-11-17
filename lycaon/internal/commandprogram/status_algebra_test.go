@@ -36,13 +36,35 @@ func TestStatusAlgebraMatchesBash(t *testing.T) {
 			testutil.FailErr(t, "stored snapshots", err)
 			want := refs[referenceuserland.GNU]
 			status, stdout := evaluateWithStubOwners(t, c.Program, c.Workspace(seed))
-			if status != want.Status || stdout != string(want.Stdout) {
-				t.Fatalf("status %d, want %d; stdout:\n%s\nwant:\n%s", status, want.Status, stdout, want.Stdout)
+			if status != want.Status {
+				t.Errorf("program status %d, want %d", status, want.Status)
+			}
+			for _, diff := range reportDiffs(stdout, string(want.Stdout)) {
+				t.Error(diff)
 			}
 			fragments += strings.Count(stdout, " status=") - 1
 		})
 	}
 	t.Logf("compared %d status fragments in %d compositions", fragments, len(cases))
+}
+
+// reportDiffs names each report line that differs from bash's.
+func reportDiffs(got, want string) []string {
+	gotLines, wantLines := strings.Split(got, "\n"), strings.Split(want, "\n")
+	var diffs []string
+	for i := range max(len(gotLines), len(wantLines)) {
+		var g, w string
+		if i < len(gotLines) {
+			g = gotLines[i]
+		}
+		if i < len(wantLines) {
+			w = wantLines[i]
+		}
+		if g != w {
+			diffs = append(diffs, fmt.Sprintf("line %d: got %q, bash %q", i+1, g, w))
+		}
+	}
+	return diffs
 }
 
 func evaluateWithStubOwners(t *testing.T, program string, workspace map[string]referenceuserland.Entry) (int, string) {
@@ -64,6 +86,7 @@ func evaluateWithStubOwners(t *testing.T, program string, workspace map[string]r
 		files[name] = string(entry.Data)
 	}
 	var stdout bytes.Buffer
+	jobs := &runningJobs{done: map[string]chan int{}}
 	ports := commandprogram.EvaluationPorts{
 		Invocation: toolcontract.OperationInvocation{
 			Kind: toolcontract.ProgramChildInvocation, ActorID: "actor", SessionID: "session", SourceUnitID: "program",
@@ -71,11 +94,11 @@ func evaluateWithStubOwners(t *testing.T, program string, workspace map[string]r
 			Scope:    toolcontract.OperationScope{Kind: toolcontract.ProjectOperationScope, ProjectID: "project"},
 			Span:     toolcontract.SourceSpan{Line: 1, Column: 1}, CatalogDigest: toolcontract.LanguageCatalogDigest(),
 		},
-		Dispatch:    stubOwners{files: files},
+		Dispatch:    stubOwners{files: files, jobs: jobs},
 		Binder:      commandprogram.CatalogBinder{},
 		Files:       noGlobFiles{},
 		Publication: discardedOutputs{},
-		Supervision: &runningJobs{},
+		Supervision: jobs,
 		Predicates:  commandprogram.PredicateRuntime{Files: stubPaths{files: files}},
 		Memory:      memory,
 		Streams:     commandprogram.Streams{Input: commandprogram.NullInput(), Output: &stdout, Error: io.Discard},
@@ -90,7 +113,10 @@ func evaluateWithStubOwners(t *testing.T, program string, workspace map[string]r
 
 // stubOwners settle each command the status corpus reaches with the status
 // the real owner settles with in the reference workspace.
-type stubOwners struct{ files map[string]string }
+type stubOwners struct {
+	files map[string]string
+	jobs  *runningJobs
+}
 
 func (o stubOwners) Fork(context.Context) (commandprogram.Dispatch, func(), error) {
 	return o, func() {}, nil
@@ -131,6 +157,8 @@ func (o stubOwners) Invoke(ctx context.Context, request commandprogram.Operation
 	case "git":
 		// The reference workspace is not a repository.
 		return settled(128), nil
+	case "wait":
+		return settled(o.jobs.wait(argv[1:])), nil
 	}
 	return failed(127), fmt.Errorf("no stub owner for %q", argv[0])
 }
@@ -201,10 +229,75 @@ func failed(status int) toolcontract.ProducerResult {
 }
 
 // runningJobs runs each started job at once with its own discarded streams,
-// as the host's job registry does.
+// and answers wait from their statuses, as the host's job registry does.
 type runningJobs struct {
-	mu      sync.Mutex
-	started int
+	mu       sync.Mutex
+	order    []string
+	done     map[string]chan int
+	statuses map[string]int
+	waited   map[string]bool
+}
+
+// wait reports 0 for a bare wait and the last named job's status otherwise; a
+// reaped job keeps its status.
+func (j *runningJobs) wait(operands []string) int {
+	j.mu.Lock()
+	named := len(operands) > 0
+	if !named {
+		for _, id := range j.order {
+			if !j.waited[id] {
+				operands = append(operands, id)
+			}
+		}
+	}
+	j.mu.Unlock()
+	status := 0
+	for _, operand := range operands {
+		id := j.resolve(operand)
+		if id == "" {
+			return 127
+		}
+		if s := j.status(id); named {
+			status = s
+		}
+	}
+	return status
+}
+
+func (j *runningJobs) resolve(operand string) string {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	switch {
+	case operand == "%%" || operand == "%+":
+		if len(j.order) == 0 {
+			return ""
+		}
+		return j.order[len(j.order)-1]
+	case strings.HasPrefix(operand, "%"):
+		operand = strings.TrimPrefix(operand, "%")
+	}
+	if _, ok := j.done[operand]; ok {
+		return operand
+	}
+	return ""
+}
+
+func (j *runningJobs) status(id string) int {
+	j.mu.Lock()
+	if s, ok := j.statuses[id]; ok {
+		j.mu.Unlock()
+		return s
+	}
+	done := j.done[id]
+	j.mu.Unlock()
+	s := <-done
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	if j.statuses == nil {
+		j.statuses, j.waited = map[string]int{}, map[string]bool{}
+	}
+	j.statuses[id], j.waited[id] = s, true
+	return s
 }
 
 func (j *runningJobs) RunProgram(ctx context.Context, _ toolcontract.OperationInvocation, run func(context.Context) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
@@ -213,11 +306,14 @@ func (j *runningJobs) RunProgram(ctx context.Context, _ toolcontract.OperationIn
 
 func (j *runningJobs) StartJob(ctx context.Context, _ toolcontract.OperationInvocation, run func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error)) (commandprogram.StartedJob, error) {
 	j.mu.Lock()
-	j.started++
-	job := commandprogram.StartedJob{ID: strconv.Itoa(j.started), Handle: "job-" + strconv.Itoa(j.started)}
+	id := strconv.Itoa(len(j.order) + 1)
+	job := commandprogram.StartedJob{ID: id, Handle: "job-" + id}
+	done := make(chan int, 1)
+	j.order, j.done[id] = append(j.order, id), done
 	j.mu.Unlock()
 	go func() {
-		_, _ = run(context.WithoutCancel(ctx), job.Handle, commandprogram.Streams{Input: commandprogram.NullInput(), Output: io.Discard, Error: io.Discard})
+		result, _ := run(context.WithoutCancel(ctx), job.Handle, commandprogram.Streams{Input: commandprogram.NullInput(), Output: io.Discard, Error: io.Discard})
+		done <- result.Status
 	}()
 	return job, nil
 }
