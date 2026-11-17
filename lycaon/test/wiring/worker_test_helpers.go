@@ -112,30 +112,29 @@ func DrainPendingWorkerJobs(ctx context.Context, h *Harness, projectID, parentSe
 	if h == nil || h.Delegations.Queue == nil || h.Sessions.Manager == nil {
 		return errors.New("harness worker queue or session manager missing")
 	}
-	drainCtx := ctx
 	exec := wiringWorkerExecutor(h)
 	bridge := &worker.SessionOutcomeBridge{Workers: h.Sessions.Manager.Coordinator.Workers, Loop: h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges, Results: h.Sessions.Manager.Workers.Results, State: h.Sessions.Manager.Workers.State, Closure: h.Sessions.Manager.Coordinator.ProgressClosure}
 	if h.Delegations.Manager != nil {
 		bridge.Inner = h.Delegations.Manager
 	}
 	for {
-		if err := drainCtx.Err(); err != nil {
+		if err := ctx.Err(); err != nil {
 			return err
 		}
-		task, err := h.Delegations.Queue.ClaimNext(drainCtx, worker.ClaimRequest{
+		task, err := h.Delegations.Queue.ClaimNext(ctx, worker.ClaimRequest{
 			ClaimedBy:       "wiring-test",
 			ExecutionTarget: api.ExecutionTargetLocal,
 		})
 		if errors.Is(err, worker.ErrNoPendingJobs) {
-			if workerCycleQuiescent(drainCtx, h, projectID, parentSessionID) {
+			if workerCycleQuiescent(ctx, h, projectID, parentSessionID) {
 				if parentSessionID != "" {
-					h.Sessions.Manager.Coordinator.Batch.Reconcile(drainCtx, parentSessionID)
-					h.Sessions.Manager.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(drainCtx, parentSessionID)
+					h.Sessions.Manager.Coordinator.Batch.Reconcile(ctx, parentSessionID)
+					h.Sessions.Manager.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, parentSessionID)
 				}
 				return nil
 			}
-			if drainCtx.Err() != nil {
-				return drainCtx.Err()
+			if ctx.Err() != nil {
+				return ctx.Err()
 			}
 			time.Sleep(25 * time.Millisecond)
 			continue
@@ -144,33 +143,33 @@ func DrainPendingWorkerJobs(ctx context.Context, h *Harness, projectID, parentSe
 			return err
 		}
 		if task == nil {
-			if workerCycleQuiescent(drainCtx, h, projectID, parentSessionID) {
+			if workerCycleQuiescent(ctx, h, projectID, parentSessionID) {
 				if parentSessionID != "" {
-					h.Sessions.Manager.Coordinator.Batch.Reconcile(drainCtx, parentSessionID)
-					h.Sessions.Manager.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(drainCtx, parentSessionID)
+					h.Sessions.Manager.Coordinator.Batch.Reconcile(ctx, parentSessionID)
+					h.Sessions.Manager.Runner.Coordinator.CoordinatorLoop().Nudges.DrainPending(ctx, parentSessionID)
 				}
 				return nil
 			}
 			continue
 		}
-		result, err := executeWorkerWithinDrain(drainCtx, h, exec, *task)
+		result, err := executeWorkerWithinDrain(ctx, h, exec, *task)
 		if err != nil {
 			return err
 		}
-		won, err := h.Delegations.Queue.Complete(drainCtx, task, result)
+		won, err := h.Delegations.Queue.Complete(ctx, task, result)
 		if err != nil {
 			return err
 		}
 		if !won {
 			return worker.ErrClaimLost
 		}
-		if err := bridge.OnWorkerComplete(drainCtx, task.ID, result); err != nil {
+		if err := bridge.OnWorkerComplete(ctx, task.ID, result); err != nil {
 			return err
 		}
-		if err := h.Delegations.Queue.MarkOutcomeDelivered(drainCtx, task.ID); err != nil {
+		if err := h.Delegations.Queue.MarkOutcomeDelivered(ctx, task.ID); err != nil {
 			return err
 		}
-		bridge.OnOutcomeDelivered(drainCtx, *task)
+		bridge.OnOutcomeDelivered(ctx, *task)
 	}
 }
 

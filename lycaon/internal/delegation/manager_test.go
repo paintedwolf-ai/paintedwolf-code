@@ -110,8 +110,10 @@ func TestDelegationSingleLegDispatchAndCloseout(t *testing.T) {
 	exec.SetPromptInjects(promptstest.InjectRenderer(t))
 	poller := worker.NewLocalWorkerPoller(queue, exec, worker.DefaultWorkersConfig(), &worker.SessionOutcomeBridge{Inner: delegationMgr})
 	queue.SetRunningCancel(poller.Abort)
-	pollCtx := ctx
-	go poller.Run(pollCtx)
+	pollCtx, stopPolling := context.WithCancel(ctx)
+	polled := make(chan struct{})
+	go func() { poller.Run(pollCtx); close(polled) }()
+	t.Cleanup(func() { stopPolling(); <-polled })
 
 	testutil.WaitFor(t, "the delegation is done", func() bool {
 		st, err := delegationMgr.GetStatus(ctx, r.ID)
