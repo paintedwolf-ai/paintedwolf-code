@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -20,8 +21,10 @@ import (
 
 // programProbe asks the executor one question about a native program. Effect
 // reports whether the program did what it was asked, read from the outcome or
-// from the session's directory.
+// from the directory the probe acts in.
 type programProbe struct {
+	// source names the agent's write directory as {w}; a probe that names it
+	// acts there, so a refusal is about the program, never about the path.
 	program, source string
 	// seed names the files the probe works on, so a mutating probe never
 	// touches what a later probe reads.
@@ -46,19 +49,19 @@ var programProbes = []programProbe{
 	{program: "summarize", source: "summarize --path notes.txt", effect: func(_ string, out command.ProgramOutcome) bool {
 		return out.Status == 0 && strings.TrimSpace(out.Stdout) != ""
 	}},
-	{program: "mkdir", source: "mkdir made", effect: func(dir string, _ command.ProgramOutcome) bool {
+	{program: "mkdir", source: "mkdir {w}/made", effect: func(dir string, _ command.ProgramOutcome) bool {
 		info, err := os.Stat(filepath.Join(dir, "made"))
 		return err == nil && info.IsDir()
 	}},
-	{program: "rm", source: "rm rm-probe.txt", seed: map[string]string{"rm-probe.txt": "remove me\n"},
+	{program: "rm", source: "rm {w}/rm-probe.txt", seed: map[string]string{"rm-probe.txt": "remove me\n"},
 		effect: func(dir string, _ command.ProgramOutcome) bool {
 			_, err := os.Stat(filepath.Join(dir, "rm-probe.txt"))
 			return errors.Is(err, fs.ErrNotExist)
 		}},
-	{program: "tee", source: "printf 'x' | tee tee-probe.txt", effect: func(dir string, _ command.ProgramOutcome) bool {
+	{program: "tee", source: "printf 'x' | tee {w}/tee-probe.txt", effect: func(dir string, _ command.ProgramOutcome) bool {
 		return fileIs(dir, "tee-probe.txt", "x")
 	}},
-	{program: "edit", source: "edit --path edit-probe.txt --old-string first --new-string changed",
+	{program: "edit", source: "edit --path {w}/edit-probe.txt --old-string first --new-string changed",
 		seed: map[string]string{"edit-probe.txt": "first note\n"},
 		effect: func(dir string, _ command.ProgramOutcome) bool {
 			return fileIs(dir, "edit-probe.txt", "changed note\n")
@@ -86,25 +89,31 @@ var profileRefusals = []string{"COMMAND_EFFECT_NOT_ALLOWED", "COMMAND_OPERATION_
 // probeProgram runs one probe and reports whether the host refused it. A run
 // must show its effect and a refusal must be typed and leave the world as it
 // was; anything else fails the test.
-func probeProgram(t *testing.T, s *replaySession, probe programProbe) (refused bool) {
+func probeProgram(t *testing.T, s *replaySession, probe programProbe, writeDir string) (refused bool) {
 	t.Helper()
-	for name, body := range probe.seed {
-		testutil.FailErr(t, "seed "+name, os.WriteFile(filepath.Join(s.dir, name), []byte(body), 0o644))
+	dir := s.dir
+	if strings.Contains(probe.source, "{w}") {
+		dir = filepath.Join(s.dir, writeDir)
+		testutil.FailErr(t, "create write directory", os.MkdirAll(dir, 0o755))
 	}
-	result := s.call(t, "command", map[string]any{"command": probe.source})
+	for name, body := range probe.seed {
+		testutil.FailErr(t, "seed "+name, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
+	}
+	source := strings.ReplaceAll(probe.source, "{w}", filepath.ToSlash(writeDir))
+	result := s.call(t, "command", map[string]any{"command": source})
 	out, hasOutcome := probeOutcome(t, result)
 	typed := slices.ContainsFunc(result.Feedback, func(f wire.ToolFeedback) bool { return slices.Contains(profileRefusals, f.Code) }) ||
 		(hasOutcome && out.Refusal != nil && slices.Contains(profileRefusals, out.Refusal.Code))
 	switch {
 	case typed:
-		if hasOutcome && probe.effect(s.dir, out) {
-			t.Fatalf("%s was refused but its effect happened: %+v", probe.source, out)
+		if hasOutcome && probe.effect(dir, out) {
+			t.Fatalf("%s was refused but its effect happened: %+v", source, out)
 		}
 		return true
-	case hasOutcome && out.State == "completed" && out.Refusal == nil && probe.effect(s.dir, out):
+	case hasOutcome && out.State == "completed" && out.Refusal == nil && probe.effect(dir, out):
 		return false
 	default:
-		t.Fatalf("%s neither ran with its effect nor was refused by profile: outcome %+v, feedback %+v", probe.source, out, result.Feedback)
+		t.Fatalf("%s neither ran with its effect nor was refused by profile: outcome %+v, feedback %+v", source, out, result.Feedback)
 		return false
 	}
 }
@@ -138,11 +147,12 @@ func TestProgramReachDistinguishesProfiles(t *testing.T) {
 
 // What reach says about a native program is what the executor then does with it.
 func TestProgramReachMatchesTheExecutor(t *testing.T) {
-	agents := []struct{ id, profile string }{
-		{"implementer", "implement"},
-		{"path-explorer", "explore_readonly"},
-		{"plan-writer", "plan_write_only"},
-		{"plan-reviewer", "plan_review_readonly"},
+	// writeDir is inside each profile's write scope.
+	agents := []struct{ id, profile, writeDir string }{
+		{"implementer", "implement", "."},
+		{"path-explorer", "explore_readonly", "."},
+		{"plan-writer", "plan_write_only", filepath.Join(settingsoverlay.DirName(), "blueprints")},
+		{"plan-reviewer", "plan_review_readonly", "."},
 	}
 	p := newProgramHost(t)
 	asserted := 0
@@ -156,7 +166,7 @@ func TestProgramReachMatchesTheExecutor(t *testing.T) {
 			}
 			for _, probe := range programProbes {
 				t.Run(probe.program, func(t *testing.T) {
-					if refused := probeProgram(t, s, probe); reach(probe.program) == refused {
+					if refused := probeProgram(t, s, probe, agent.writeDir); reach(probe.program) == refused {
 						t.Fatalf("reach says %v, executor refused = %v", reach(probe.program), refused)
 					}
 					asserted++
