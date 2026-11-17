@@ -143,13 +143,17 @@ func normalizeHost(host string) (string, error) {
 		}
 		inner := strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
 		addr, err := netip.ParseAddr(inner)
-		if err != nil || !addr.Is6() {
+		if err != nil || !addr.Is6() || addr.Zone() != "" {
 			return "", fmt.Errorf("invalid host")
 		}
 		// An IPv4-mapped address is the IPv4 host, for rules and decisions alike.
 		return addr.Unmap().String(), nil
 	}
 	if addr, err := netip.ParseAddr(host); err == nil {
+		// A zone names an interface on this host, never a destination.
+		if addr.Zone() != "" {
+			return "", fmt.Errorf("invalid host")
+		}
 		return addr.Unmap().String(), nil
 	}
 	host = strings.TrimSuffix(host, ".")

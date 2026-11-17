@@ -62,9 +62,10 @@ func TestIPv4MappedLiteralIsTheIPv4Host(t *testing.T) {
 	}
 }
 
-// One trailing dot roots a name; otherwise a host keeps DNS's label and name limits.
+// One trailing dot roots a name; otherwise a host keeps DNS's label and name
+// limits. An address carries no interface zone.
 func TestParseHTTPEndpointRefusesHostsDNSCannotName(t *testing.T) {
-	for _, in := range []string{".", "..", "..:443", "a..b", ".example.com", "example.com..", strings.Repeat("a", 64) + ".com",
+	for _, in := range []string{"[fe80::1%eth0]:443", "[::% ]", "fe80::1%lo", ".", "..", "..:443", "a..b", ".example.com", "example.com..", strings.Repeat("a", 64) + ".com",
 		strings.Repeat("t", 60) + "‣", strings.Repeat("abcdefgh.", 28) + "com"} {
 		if ep, err := egressproxy.ParseHTTPEndpoint(in, egressproxy.TransportHTTPConnect); err == nil {
 			t.Fatalf("ParseHTTPEndpoint(%q) = %+v, want refusal", in, ep)
