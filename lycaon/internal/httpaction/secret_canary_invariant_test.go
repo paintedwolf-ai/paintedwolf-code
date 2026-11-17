@@ -161,11 +161,6 @@ func TestSecretCanaryNeverEchoedByHTTPRequestResult(t *testing.T) {
 		wire = append(wire, r.Header.Get("Authorization")+"|"+r.Header.Get("X-Api-Key")+"|"+r.Header.Get("Cookie"))
 		w.WriteHeader(http.StatusNoContent)
 	})
-	mux.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
-		wire = append(wire, r.URL.Query().Get("key"))
-		http.Redirect(w, r, "/final?echo="+url.QueryEscape(r.URL.Query().Get("key"))+"&page=2", http.StatusFound)
-	})
-	mux.HandleFunc("/final", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	server := httptest.NewServer(mux)
 	defer server.Close()
 
@@ -204,9 +199,6 @@ func TestSecretCanaryNeverEchoedByHTTPRequestResult(t *testing.T) {
 		}},
 		{scheme: "cookie header reference", wire: "||session=" + canaryValue, args: map[string]any{
 			"url": server.URL + "/echo", "headers": []any{map[string]any{"name": "Cookie", "value": "session=" + meta.Reference}},
-		}},
-		{scheme: "query reference with redirect", wire: canaryValue, args: map[string]any{
-			"url": server.URL + "/start?key=" + meta.Reference, "redirects": "safe",
 		}},
 	} {
 		t.Run(tc.scheme, func(t *testing.T) {

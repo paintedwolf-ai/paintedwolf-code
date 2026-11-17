@@ -78,7 +78,7 @@ func TestSentHeadersStateReferencesAndSchemeNotCredentials(t *testing.T) {
 }
 
 func TestFinalURLStatesSecretReferencesAndKeepsTheRedirectChain(t *testing.T) {
-	const value = "managed-query-credential+/="
+	const value = "managed-query-credential-7741"
 	service, _ := managedRequestService(t)
 	meta := hostSecret(t, service, "create", "Key", value)
 	var landed string

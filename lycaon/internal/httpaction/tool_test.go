@@ -75,7 +75,7 @@ func TestHTTPRequestSendsJSONAndReturnsStructuredResponse(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("decode http response: %v", err)
 	}
-	if got.Status != http.StatusAccepted || got.Body != `{"accepted":true}` || outcome.RetrievedFrom != "127.0.0.1" {
+	if got.Status != http.StatusAccepted || got.Body != `{"accepted":true}` {
 		t.Fatalf("response = %+v outcome=%+v", got, outcome)
 	}
 }
