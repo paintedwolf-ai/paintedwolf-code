@@ -17,7 +17,7 @@ function remember(key: string): void {
   shown.add(key);
 }
 
-/** True the first time a section is shown, which is when it fades in. */
+/** Claims the first reveal of summary text. */
 export function claimSummaryFade(key: string | undefined): boolean {
   const normalized = normalize(key);
   if (!normalized || shown.has(normalized)) return false;
@@ -25,7 +25,7 @@ export function claimSummaryFade(key: string | undefined): boolean {
   return true;
 }
 
-/** Records a section shown without arriving, such as text settled on open. */
+/** Records text already available when the view opens. */
 export function markSummaryShown(key: string | undefined): void {
   const normalized = normalize(key);
   if (normalized) remember(normalized);

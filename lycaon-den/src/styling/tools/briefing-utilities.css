@@ -219,10 +219,6 @@
   }
 }
 
-@utility den-activity-summary__waiting {
-  color: var(--den-text-muted);
-}
-
 @utility den-activity-summary__more {
   justify-self: start;
   height: 1lh;

@@ -36,9 +36,6 @@ export function activityBriefingTarget(part: ToolPartView, sessionId: string | u
   };
 }
 
-/** Text a card has shown; kept while a newer revision of the same card is asked for. */
-type HeldSummaryText = { purpose?: string; recordId?: string };
-
 function sectionText(view: BriefingView, id: string): string | undefined {
   return view.snapshot?.result?.summary.find((section) => section.section_id === id)?.text || undefined;
 }
@@ -49,7 +46,7 @@ function summaryPending(view: BriefingView): boolean {
 }
 
 /** Maps the host's answer, and text held from an earlier revision, to what the region shows. */
-function activitySummaryState(view: BriefingView, held: HeldSummaryText | null): ActivitySummaryState {
+function activitySummaryState(view: BriefingView, heldPurpose: string | undefined): ActivitySummaryState {
   const snapshot = view.snapshot;
   const purpose = sectionText(view, "purpose");
   const change = sectionText(view, "change");
@@ -57,10 +54,9 @@ function activitySummaryState(view: BriefingView, held: HeldSummaryText | null):
   const ended = view.stalled || snapshot?.status === "failed" || snapshot?.status === "complete";
   const recordId = snapshot?.result?.evidence_ref.record_id;
   if ((purpose || change) && recordId && !summaryPending(view)) {
-    return { kind: "ready", purpose: purpose ?? held?.purpose, change, recordId };
+    return { kind: "ready", purpose: purpose ?? heldPurpose, change, recordId };
   }
-  const earlier = held?.purpose;
-  return ended ? { kind: "missing", purpose: earlier } : { kind: "pending", purpose: earlier };
+  return ended ? { kind: "missing", purpose: heldPurpose } : { kind: "pending", purpose: heldPurpose };
 }
 
 type Args = {
@@ -80,12 +76,12 @@ export function useActivityBriefingSlots(args: Args): ToolBriefingSlots {
     return activityBriefingTarget(args.part(), args.sessionId());
   }, null, { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) });
   const view = useBriefing(args.projectId, target);
-  const [held, setHeld] = createSignal<HeldSummaryText | null>(null);
+  const [heldPurpose, setHeldPurpose] = createSignal<string>();
   createEffect(() => {
     const purpose = sectionText(view(), "purpose");
-    if (purpose && !summaryPending(view())) setHeld({ purpose, recordId: view().snapshot?.result?.evidence_ref.record_id });
+    if (purpose && !summaryPending(view())) setHeldPurpose(purpose);
   });
-  const state = createMemo(() => activitySummaryState(view(), held()));
+  const state = createMemo(() => activitySummaryState(view(), heldPurpose()));
   const running = () => {
     const activity = args.part().commandActivity;
     return activity ? activity.fact.state === "running" : args.part().status === "running";
