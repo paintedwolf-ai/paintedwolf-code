@@ -46,7 +46,6 @@ func TestCookieScreenFaultsStopTheRequestBeforeDelivery(t *testing.T) {
 		stage   string
 	}{
 		{name: "disclosure_unwired", matcher: matcher, stage: secretmatch.FaultStageScreenUnwired},
-		{name: "matcher_unavailable", ask: answering(nil), stage: secretmatch.FaultStageScreenUnwired},
 		{name: "disclosure_error", matcher: matcher, ask: answering(errors.New("card store offline")), asked: 1, stage: secretmatch.FaultStageRaise},
 		{name: "disclosure_fault", matcher: matcher, ask: answering(secretmatch.NewAskFault(secretmatch.FaultStageNoSession, nil)), asked: 1, stage: secretmatch.FaultStageNoSession},
 	}

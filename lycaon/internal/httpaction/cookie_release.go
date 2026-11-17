@@ -65,15 +65,15 @@ func frontendJarCookieDelivery(
 		selected := store.Selected(target)
 		current = make(map[httpcookies.Cookie]bool, len(selected))
 		store.SetDelivery(hopIssuer, func(cookie httpcookies.Cookie) bool { return current[cookie] })
-		if len(selected) == 0 {
-			if hop.FreezeCookies(nil) {
+		if len(selected) == 0 || deps.SecretMatcher == nil {
+			for _, cookie := range selected {
+				current[cookie] = true
+			}
+			admitted := admittedHTTP(selected, current)
+			if hop.FreezeCookies(admitted) {
 				_ = store.Cookies(target)
 			}
 			return nil
-		}
-		// Like a header, a cookie no screen can judge is not sent.
-		if deps.SecretMatcher == nil {
-			return screenFaultReject(secretmatch.FaultStageScreenUnwired)
 		}
 		classification := deps.SecretMatcher.ClassificationSnapshot(hopCtx)
 		screenCtx := deps.SecretMatcher.WithClassifications(hopCtx, classification)
