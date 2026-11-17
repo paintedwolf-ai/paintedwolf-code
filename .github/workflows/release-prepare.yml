@@ -22,6 +22,10 @@ permissions:
   contents: read
   actions: read
 
+env:
+  # MLX Metal kernels need the Xcode 26 toolchain; Linux runners ignore it.
+  DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+
 jobs:
   source:
     runs-on: ubuntu-24.04

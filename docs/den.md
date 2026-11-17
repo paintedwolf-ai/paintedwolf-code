@@ -43,10 +43,11 @@ implementation owns the workflow on every platform. Verification has three tiers
   runs applied confinement on amd64 and arm64. `den:webkit:atspi` checks
   WebKitGTK accessibility text attributes in the merge queue, nightly, and at
   release.
-- **Package source:** the independent `linux-candidates` workflow builds, stages
-  and audits DEB, RPM and pacman packages without publication authority. Regular
-  releases build both public architectures through the shared release lane; Nix
-  delivery builds the native closures. A build does not qualify installation.
+- **Package source:** release preparation builds, stages and audits DEB, RPM and
+  pacman packages and the Nix closures for both architectures once per source,
+  without publication authority; packaging pull requests run it through
+  `linux-candidates`. Nix delivery imports the prepared closures. A build does
+  not qualify installation.
 - **Installed:** installed-package qualification of a candidate on the
   [native qualification matrix](#native-qualification-matrix) (row checklist in
   [#456](https://github.com/paintedwolf-ai/paintedwolf-code/issues/456)).

@@ -1142,6 +1142,8 @@ flowchart TD
     setup --> deposit["publish-artifacts<br/>Deposit and verify immutable package bytes"]
     gates --> deposit
     deposit --> native["Activate apt, dnf and pacman repositories"]
+    classify --> prepare["Prepare unsigned artifacts of the source<br/>or reuse its receipt"]
+    prepare --> nix
     native --> nix["Publish and observe both Nix cache closures"]
     nix --> document["publish-immutable<br/>Sign and verify completed distribution document"]
     document --> cask["update-cask<br/>Homebrew tap"]
@@ -1349,7 +1351,7 @@ The existing R2 and feed credentials remain in `release-publication` (`CLOUDFLAR
 |---|---|---|
 | apt and dnf | Signed packages and native repository generations for both architectures; signed `painted-wolf-code-repo` setup packages install the selected repository definition and public key | Restore the selected retained generation; apt receives a fresh `Release`, dated after the halted one, over the restored indexes, because apt keeps an index cached from a later `Release`. A legacy macOS-only last-good release or no replacement activates the pre-published signed empty generation. A higher recovery version advances normally |
 | pacman | Signed packages and one repository generation per architecture | Same retained-generation or signed-empty withdrawal; no downgrade or epoch |
-| Nix cache | Build both native closures and publish signed cache objects plus availability records | Withdraw the availability record; retain closures, NARs and existing pins. A higher recovery version publishes a new availability record |
+| Nix cache | Import both prepared closures and publish signed cache objects plus availability records | Withdraw the availability record; retain closures, NARs and existing pins. A higher recovery version publishes a new availability record |
 
 A read-only selection step retains one structured monotonic channel plan before signing: stable advances Preview when no newer Preview exists; a newer Preview is preserved; a Preview release touches only Preview. Every native repository, setup package, cask, website and feed consumes that selected plan and refuses changed controls. Halts restore only channels actually offering the bad release. The shared per-channel halt plan selects the exact last-good version; default `--last-good` applies that replacement to every affected channel. Each effect prepares `withdraw` or `keep` from its actual published state, and the negative release ledger prepares separately even when feed pointers keep. The complete symmetric barrier admits all native, feed, ledger, Nix, package and website preparations before any mutation. A refusal blocks them all; retained `halt-effects.json` names every action or refusal.
 
@@ -1730,34 +1732,41 @@ To rotate, append the next generation with both of its public keys; set the sour
 
 A withdrawn bridge requires a reviewed `./task release:halt -- --plan PATH` plan. It names `source_generation` and a `feeds` array covering both source channels and every existing successor channel. Each entry declares `generation`, `channel`, and either `bad`/`last_good` or an explicit unaffected `keep_version`; a generation-1 feed must name a `last_good`, because the 1.0.x clients that read it ignore the `withdrawn` marker. The tool reads all affected feeds and validates every halt before changing any pointer; changed or omitted offers refuse the plan. The protected workflow accepts that same JSON, withdraws every bad GitHub mirror, and restores only the newest affected channel casks and website offers. A replacement bridge gets a strictly higher version and updates the source's registered bridge; retained immutable artifacts remain untouched. Every subsequent bridge must remain newer than its predecessor. The offline generation rehearsal runs with `./task release:halt -- --self-test` and through the release contract tests; credentialed pointer behavior remains in `release:live-test`.
 
-### Linux candidate builds
+### Release preparation
 
-The [Linux candidate requests workflow](../.github/workflows/linux-candidate-requests.yml)
-builds the native amd64 and arm64 deb/rpm packages through the production bundle
-and staging path. It runs weekly, when a packaging pull request into `main`
-opens ready or becomes ready, or by manual dispatch on the selected branch.
-Queue entry builds again when packaging inputs differ from the last successful
-candidate's source. Missing or uncertain retained source evidence also builds.
-Application-only pushes between readiness and queue entry do not rebuild
-packages; installed qualification still selects exact source and artifact bytes. Use
-`gh workflow run linux-candidate-requests.yml --ref <branch>` when a pull
-request into another branch needs package artifacts. The release workflow calls the reusable
-[package build](../.github/workflows/linux-candidates.yml) directly with its exact
-selected source commit, within the release runner budget. Candidate
-artifacts include checksums and the source commit and are retained for 90 days.
-Installed rehearsals select a `linux-candidate-requests.yml` run from a main
-schedule or dispatch, or a pull request into `main`, by exact run, artifact,
-controller and source identities. For PR candidates, the API head identifies
-artifact provenance while the referenced reusable workflow identifies the built
-merge controller. Compact attempt-bound source metadata supports queue-entry
-comparison; it grants no installed or publication authority.
-The workflow has read-only repository access and no signing environment or
-publication credentials. Package signing rehearsals and installed-system
-qualification remain separate requirements; a candidate build alone does not
-qualify a release. Standalone requests share the maintenance runner budget;
-release calls use the release budget and cannot be replaced by maintenance.
+The reusable [release preparation](../.github/workflows/release-prepare.yml)
+builds the unsigned artifacts of one source commit, all at once: deb, rpm and
+pacman packages for x86_64 and aarch64, the `default` Nix closure for both
+systems, and the macOS application compiled before any signing
+(`./task den:bundle -- --phase compile --archive PATH`; `--phase package`
+signs, notarizes and builds the disk image from that archive). Package jobs
+lint the production deb and rpm metadata on a tiny payload before the compile,
+then audit and lint the real packages, and rehearse signing with a disposable
+key. No job holds a signing or publication credential, and nothing is published.
 
-When a package stage fails after the build starts, the workflow runs
+Each artifact holds a `preparation.json` stamp with its source commit, source
+tree and a content digest over every file. The run ends with the
+`release-preparation-<commit>` receipt listing every artifact. A consumer runs
+`python3 -m scripts.release_preparation verify` and refuses an artifact whose
+stamp names another commit or tree, or whose bytes changed.
+
+A call first looks for a receipt for the same commit and tree that is still
+retained (90 days) and reuses it, compiling nothing. Only a receipt from a
+schedule, push or dispatch run of this repository whose workflow commit is on
+`main` counts; pull request runs and branch dispatches never vouch for
+artifacts. A failed lookup builds.
+
+The release calls it for its source and imports the Nix closures from it. The
+[Linux candidates workflow](../.github/workflows/linux-candidates.yml) calls it
+for packaging pull requests into `main` when they open ready or become ready,
+weekly for `main`, and by dispatch for any commit
+(`gh workflow run linux-candidates.yml --ref <branch> -f source_sha=<commit>`).
+Each pull request has its own concurrency group. Installed rehearsals select
+the `prepared-linux-<arch>` artifact of such a run by exact run, artifact,
+controller and source identities; the artifact grants no installed or
+publication authority.
+
+When a package stage fails after the build starts, the job runs
 `./task release:candidate:diagnostics -- --source CHECKOUT --controller SHA --output FRESH_DIR`
 from the same source checkout. It retains the canonical assembled packages with
 hashes and an explicit report that grants no complete-candidate, installed or
