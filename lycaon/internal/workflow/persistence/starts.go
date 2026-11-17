@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -77,8 +78,8 @@ func (s *Starts) ActivateStart(ctx context.Context, operationID, inputDigest str
 		}
 		now := time.Now().UTC()
 		changed, cancelErr := queries.CancelActiveWorkflowLineage(ctx, db.CancelActiveWorkflowLineageParams{
-			Reason: db.NullString(runstate.ExitReasonSupersededByWorkflowStart), CompletedAt: db.NullString(db.FormatTime(now)),
-			UpdatedAt: db.FormatTime(now), TargetSessionID: active.SessionID, ExpectedID: active.ID, ExpectedRevision: active.Revision,
+			Reason: db.NullString(runstate.ExitReasonSupersededByWorkflowStart), CompletedAt: db.NullString(timelayout.Format(now)),
+			UpdatedAt: timelayout.Format(now), TargetSessionID: active.SessionID, ExpectedID: active.ID, ExpectedRevision: active.Revision,
 		})
 		if cancelErr != nil {
 			return nil, cancelErr
@@ -151,7 +152,7 @@ func (s *Starts) ActivateStart(ctx context.Context, operationID, inputDigest str
 	}
 	if err := queries.InsertWorkflowStartOperation(ctx, db.InsertWorkflowStartOperationParams{
 		ID: operationID, SessionID: replacement.SessionID, InputDigest: inputDigest,
-		WorkflowRunID: replacement.ID, ResponseJson: string(response), CommittedAt: db.FormatTime(time.Now().UTC()),
+		WorkflowRunID: replacement.ID, ResponseJson: string(response), CommittedAt: timelayout.Format(time.Now().UTC()),
 	}); err != nil {
 		return nil, err
 	}
@@ -186,7 +187,7 @@ func (s *Starts) StartChild(ctx context.Context, parent, child *api.WorkflowRun,
 		CurrentPhase: parent.CurrentPhase,
 		PauseReason:  db.NullString(parent.PauseReason),
 		FailureJson:  failureJSON,
-		UpdatedAt:    db.FormatTime(parent.UpdatedAt),
+		UpdatedAt:    timelayout.Format(parent.UpdatedAt),
 		PausedAt:     db.NullTimePtr(parent.PausedAt),
 		CompletedAt:  db.NullTimePtr(parent.CompletedAt),
 		ID:           parent.ID,

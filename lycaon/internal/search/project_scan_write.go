@@ -61,13 +61,22 @@ func ProjectScanComplete(ctx context.Context, sqlDB db.Handle, scanID string) er
 	return tx.Commit()
 }
 
-func resolveScanProjectID(ctx context.Context, sqlDB db.Handle, delegationID, canonicalPath string) (string, error) {
-	delegationID = strings.TrimSpace(delegationID)
-	if delegationID != "" {
+func resolveScanProjectID(ctx context.Context, sqlDB db.Handle, scopeID, canonicalPath string) (string, error) {
+	scopeID = strings.TrimSpace(scopeID)
+	if scopeID != "" {
 		var projectID string
 		err := sqlDB.QueryRowContext(ctx, `
-			SELECT project_id FROM delegations WHERE id = ?
-		`, delegationID).Scan(&projectID)
+			SELECT project_id FROM sessions WHERE id = ?
+		`, scopeID).Scan(&projectID)
+		if err == nil {
+			return strings.TrimSpace(projectID), nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return "", err
+		}
+		err = sqlDB.QueryRowContext(ctx, `
+			SELECT project_id FROM workers WHERE delegation_id = ? LIMIT 1
+		`, scopeID).Scan(&projectID)
 		if err == nil {
 			return strings.TrimSpace(projectID), nil
 		}

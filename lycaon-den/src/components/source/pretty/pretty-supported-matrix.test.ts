@@ -10,7 +10,7 @@ import {
   languageExtensionForBuffer,
   languageExtensionForPath,
   prettyLayoutCatalog,
-  prettyLayoutForBuffer,
+  prettyLayoutForLanguage,
   prettyLayoutForPath,
 } from "../editor/codemirror-lang.ts";
 import { createPrettyExtension, prettyOutcomeOf } from "./pretty-layout.ts";
@@ -377,7 +377,7 @@ describe("bidirectional supportedLanguages and Pretty catalog matrix", () => {
     expect(supported).toHaveLength(44);
     for (const lang of supported) {
       expect(languageExtensionForBuffer("unknown", lang), lang).not.toBeNull();
-      const layout = prettyLayoutForBuffer("unknown", lang);
+      const layout = prettyLayoutForLanguage(lang);
       expect(layout.kind, lang).not.toBe("none");
       expect(layout.kind, lang).not.toBe("containers");
       expect(Array.isArray(formattersForBuffer("unknown", lang)), lang).toBe(true);

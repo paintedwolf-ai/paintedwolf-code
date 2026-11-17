@@ -19,6 +19,8 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workerplan"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -27,38 +29,48 @@ type TaskToolDeps struct {
 	Queue            WorkerQueue
 	Agents           orchestration.AgentRegistry
 	Workers          WorkersConfig
-	ToolBudget       func(projectDir string) spawn.WorkerToolBudget
 	ComposePrompt    func(ctx context.Context, tctx tools.ToolContext, agentType string, brief api.WorkerTaskCharter, task *api.WorkerTask) (string, error)
 	WebSearchEnabled func() bool
-	// PendingDecision returns a child's open decision.
-	PendingDecision  func(context.Context, string) (jobID string, ok bool, err error)
 	BindWorkflowTask func(context.Context, tools.ToolContext, string, *api.WorkerTask) error
 	// WorkflowWork resolves dispatch constraints for an active workflow work id.
 	WorkflowWork func(context.Context, string, string) (spawn.WorkflowWork, bool, error)
 	TaskReceipt  func(context.Context, string, string) (*api.WorkerTask, error)
+	// WorkerRecords records the worker each task starts and its first round.
+	WorkerRecords *workerrecords.Store
+	// Reviews binds a reviewer to the sealed result it reads.
+	Reviews ReviewBinder
+	// Plan resolves a task to its planned worker and gates its admission.
+	Plan *workerplan.Service
 }
 
-// IdentityResolver supplies the same child, plan, and budget sources to task admission and execution.
+// ReviewBinder names a review's subject and accounts for it once the
+// reviewer's round is admitted.
+type ReviewBinder interface {
+	Review(ctx context.Context, actor workerrecords.Actor, resultID string) (workerrecords.ReviewSubject, error)
+	ReviewStarted(ctx context.Context, actor workerrecords.Actor, op workerrecords.Op, subject workerrecords.ReviewSubject) error
+}
+
+// IdentityResolver supplies the same plan source to task admission and execution.
 func (d TaskToolDeps) IdentityResolver() workeradmission.TaskIdentityResolver {
-	return workeradmission.TaskIdentityResolver{Children: d.Queue, WorkflowWork: d.WorkflowWork, ToolBudget: d.ToolBudget}
+	return workeradmission.TaskIdentityResolver{WorkflowWork: d.resolveWorkflowWork}
+}
+
+func (d TaskToolDeps) resolveWorkflowWork(ctx context.Context, sessionID, workID string) (spawn.WorkflowWork, bool, error) {
+	if d.WorkflowWork != nil {
+		work, found, err := d.WorkflowWork(ctx, sessionID, workID)
+		if err != nil || found {
+			return work, found, err
+		}
+	}
+	return d.Plan.ResolvePlannedWorkflowWork(ctx, sessionID, workID)
 }
 
 var taskToolLog = observability.LazyComponent("task_tool")
 
-// overlayDiscarded reports whether a write overlay was removed.
-func overlayDiscarded(status api.WorkerMergeStatus) bool {
-	switch status {
-	case api.WorkerMergeStatusRejected, api.WorkerMergeStatusAborted:
-		return true
-	default:
-		return false
-	}
-}
-
 // RegisterTaskTool registers task(agent_type, brief, files?) for coordinator spawns.
 func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
-	if reg == nil || deps.Queue == nil || deps.Agents == nil {
-		return fmt.Errorf("registry, sessions, queue, and agents required")
+	if reg == nil || deps.Queue == nil || deps.Agents == nil || deps.WorkerRecords == nil || deps.Reviews == nil || deps.Plan == nil {
+		return fmt.Errorf("registry, queue, agents, worker records, reviews and plan required")
 	}
 	identityResolver := deps.IdentityResolver()
 	return reg.Register("task", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
@@ -66,20 +78,10 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		if err != nil {
 			return "", err
 		}
-		if deps.TaskReceipt != nil && strings.TrimSpace(tctx.Identity.ToolCallID) != "" {
-			prior, err := deps.TaskReceipt(ctx, tctx.Identity.SessionID, strings.TrimSpace(tctx.Identity.ToolCallID))
-			if err != nil {
-				return "", err
-			}
-			if prior != nil {
-				if err := compareTaskReceipt(prior, api.WorkerTask{SourceToolCallID: tctx.Identity.ToolCallID, SourceArgsDigest: sourceDigest}); err != nil {
-					return "", err
-				}
-				scope := project.ScopeFromToolContext(tctx.Identity.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, tctx.ActiveRootPath())
-				return taskEnqueueOutput(tctx, scope, *prior)
-			}
+		if replayed, handled, rErr := replayTaskCall(ctx, deps, tctx, sourceDigest); handled || rErr != nil {
+			return replayed, rErr
 		}
-		identity, err := identityResolver.Resolve(ctx, tctx.Identity.SessionID, tctx.ActiveRootPath(), args)
+		identity, err := identityResolver.Resolve(ctx, tctx.Identity.SessionID, args)
 		if err != nil {
 			return "", err
 		}
@@ -99,47 +101,26 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			return "", err
 		}
 		prompt := formatTaskCharter(brief)
-		var files []string
-		if raw, ok := args["files"].([]any); ok {
-			for _, item := range raw {
-				if s, ok := item.(string); ok && strings.TrimSpace(s) != "" {
-					files = append(files, strings.TrimSpace(s))
-				}
-			}
-		}
-		childSessionID, _ := args["child_session_id"].(string)
-		childSessionID = strings.TrimSpace(childSessionID)
-		if childSessionID != "" && deps.PendingDecision != nil {
-			pendingJobID, ok, err := deps.PendingDecision(ctx, childSessionID)
-			if err != nil {
-				return "", fmt.Errorf("load pending decision: %w", err)
-			}
-			if ok {
-				return "", &toolrejection.ToolReject{
-					Code: "TASK_DECISION_PENDING",
-					Data: map[string]any{
-						"child_session_id": childSessionID,
-						"job_id":           pendingJobID,
-					},
-				}
-			}
-		}
+		files := parseTaskFilesArg(args)
 		normalizedScope := identity.Scope
-		effectiveMaxToolLoops := identity.MaxToolLoops
 		scopePtr := &normalizedScope
-		jobID := uuid.NewString()
-		if prior := identity.Prior; prior != nil && overlayDiscarded(prior.MergeStatus) {
-			return "", &toolrejection.ToolReject{
-				Code: "WORKER_RESUME_OVERLAY_DISCARDED",
-				Data: map[string]any{
-					"child_session_id": childSessionID,
-					"prior_job_id":     prior.ID,
-					"merge_status":     string(prior.MergeStatus),
-				},
-			}
+		name, err := workerNameArg(args)
+		if err != nil {
+			return "", err
 		}
-
 		projScope := project.ScopeFromToolContext(tctx.Identity.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, tctx.ActiveRootPath())
+		plannedWorker, after, files, err := applyPlannedWorkerTask(ctx, deps, tctx, projScope.ProjectID, identity.WorkflowWorkID, name, scopePtr, files, after)
+		if err != nil {
+			return "", err
+		}
+		subject, err := bindReviewSubject(ctx, deps, tctx, args, identity.WorkflowWorkID, after, normalizedScope)
+		if err != nil {
+			return "", err
+		}
+		if after, err = resolveTaskAddresses(ctx, deps, tctx, after, scopePtr); err != nil {
+			return "", err
+		}
+		jobID := uuid.NewString()
 		if !projScope.HasRoots && !prompts.AgentRunsWithoutWorkspace(agentType) {
 			return "", &toolrejection.ToolReject{
 				Code: "WORKER_WORKSPACE_REQUIRED",
@@ -156,7 +137,6 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			ID:              jobID,
 			AfterWorkers:    after,
 			ParentSessionID: tctx.Identity.SessionID,
-			ChildSessionID:  childSessionID,
 			AgentType:       agentType,
 			Prompt:          prompt,
 			Brief:           brief.Goal,
@@ -166,9 +146,10 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			WorkspaceRootID: projScope.WorkspaceRootID,
 			WorkspacePath:   projScope.WorkspacePath,
 			SpawnReason:     api.SpawnReasonHumanRequest,
-			Status:          api.WorkerStatusPending,
+			// Held until its round is recorded, so no executor claims it
+			// as work without a round.
+			Status:          api.WorkerStatusHeld,
 			ExecutionTarget: DefaultExecutionTarget(deps.Workers),
-			MaxToolLoops:    effectiveMaxToolLoops,
 		}
 		if err := ApplyEnqueueDefaults(&task, projScope, deps.Workers); err != nil {
 			return "", err
@@ -190,8 +171,17 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		}
 
 		task.SourceArgsDigest = sourceDigest
+		created, discardOnFail, err := ensureTaskWorker(ctx, deps, tctx, task, name, formatTaskCharter(brief), plannedWorker)
+		if err != nil {
+			return "", err
+		}
 		enqueuedID, err := deps.Queue.Enqueue(ctx, task)
 		if err != nil {
+			if discardOnFail {
+				if discardErr := deps.WorkerRecords.Discard(ctx, coordinatorActor(tctx), taskWorkerOp(tctx, "worker"), created.WorkerID); discardErr != nil {
+					return "", errors.Join(err, discardErr)
+				}
+			}
 			var active *ReviewAssignmentActiveError
 			if errors.As(err, &active) {
 				return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "task", "field": "workflow_work_id", "reason": "review_assignment_already_active", "action": "wait_for_work", "job_ids": []string{active.JobID}, "workflow_work_id": task.WorkflowWorkID}}
@@ -199,7 +189,19 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			return "", err
 		}
 		task.ID = enqueuedID
-		return taskEnqueueOutput(tctx, projScope, task)
+		workerName, err := startWorkerRound(ctx, deps, tctx, task, &created, subject)
+		if err != nil {
+			return "", err
+		}
+		if subject != nil {
+			if err := deps.Reviews.ReviewStarted(ctx, coordinatorActor(tctx), taskWorkerOp(tctx, "review"), *subject); err != nil {
+				return "", err
+			}
+		}
+		if err := deps.Queue.ReleaseAdmitted(ctx, task.ID); err != nil {
+			return "", err
+		}
+		return taskEnqueueOutput(tctx, projScope, task, workerName)
 	})
 }
 
@@ -225,7 +227,7 @@ func taskIncludesLinkedCheckout(tctx tools.ToolContext, scope project.ProjectSco
 	return false
 }
 
-func taskEnqueueOutput(tctx tools.ToolContext, scope project.ProjectScope, task api.WorkerTask) (string, error) {
+func taskEnqueueOutput(tctx tools.ToolContext, scope project.ProjectScope, task api.WorkerTask, worker string) (string, error) {
 	jobID, childSessionID, agentType := task.ID, task.ChildSessionID, task.AgentType
 	if tctx.Effects.Out != nil {
 		tctx.Effects.Out.OwnerRef = jobID
@@ -242,11 +244,10 @@ func taskEnqueueOutput(tctx tools.ToolContext, scope project.ProjectScope, task 
 	)
 
 	out := map[string]any{
+		"worker":             worker,
 		"agent_type":         agentType,
-		"job_id":             jobID,
 		"status":             "enqueued",
 		"scope_mode":         task.EffectiveScope().Mode,
-		"after_workers":      task.AfterWorkers,
 		"sibling_files_live": false,
 	}
 	if task.EffectiveScope().IsWrite() {
@@ -258,9 +259,6 @@ func taskEnqueueOutput(tctx tools.ToolContext, scope project.ProjectScope, task 
 		}
 	} else {
 		out["workspace_kind"] = "primary"
-	}
-	if childSessionID != "" {
-		out["child_session_id"] = childSessionID
 	}
 	raw, err := json.Marshal(out)
 	if err != nil {

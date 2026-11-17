@@ -13,7 +13,7 @@ import (
 
 func TestEveryDiscretionaryGateProducesAQuietSubject(t *testing.T) {
 	t.Parallel()
-	for _, g := range gate.All() {
+	for _, g := range api.AllApprovalGateValues() {
 		decision := &gate.Decision{Primary: g, ReasonKey: string(g) + ":subject"}
 		subjects := hitl.QuietSubjectsFromDecision(decision, nil, "digest")
 		if g == api.GateAgentPolicyChange {
@@ -59,7 +59,7 @@ func TestQuietIsNeverTheGlobalSwitch(t *testing.T) {
 		api.GateIncompleteFacts:         true,
 		api.GateExplicitApprovalRequest: true,
 	}
-	for _, g := range gate.All() {
+	for _, g := range api.AllApprovalGateValues() {
 		got := gate.ExactActionQuiet(g)
 		if want := mustNarrow[g]; got != want {
 			t.Errorf("%s: ExactActionQuiet = %v want %v", g, got, want)

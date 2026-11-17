@@ -37,8 +37,8 @@ sizes:
                 reason: The integration surface lands or rejects worker overlays and verifies them, so its floor carries overlay, command, terminal_open, verification, and scan tools; terminal session controls, secret, and visual checks load on demand.
         worker_personas:
             implementer:
-                cap: 36000
-                reason: The worker that implements changes; it alone carries the implement shell archetype and the implement addenda playbook.
+                cap: 36500
+                reason: The worker that implements changes; it alone carries the implement shell archetype, the implement addenda playbook, and long-lived worker coordination guidance while keeping 34% static-token headroom.
         kicks:
             coordinator-process-finished:
                 cap: 6000

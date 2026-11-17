@@ -207,8 +207,6 @@ var extensionTransactions = []laws.Rule{{
 	Exempt: []laws.Exemption{
 		{Key: "internal/prompts/bundled_layout.go", Reason: "reserved `_` template includes have no unit id"},
 		{Key: "internal/prompts/persona_contract.go", Reason: "reserved persona-contract definition"},
-		{Key: "internal/website/customization.go", Reason: "website codegen projection of the checkout"},
-		{Key: "internal/website/sdk.go", Reason: "website codegen projection of the checkout"},
 		{Key: "internal/workflowvalidate/checks_closure.go", Reason: "author-ref existence probe"},
 		{Key: "internal/testutil/extpackstest/catalog.go", Reason: "test catalog staging helper"},
 	},

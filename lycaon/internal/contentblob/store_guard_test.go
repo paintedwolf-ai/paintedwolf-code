@@ -2,6 +2,7 @@ package contentblob_test
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"path/filepath"
 	"testing"
@@ -31,7 +32,7 @@ func TestRunGCBatchRefusesWhenTheStoreClaimIsLost(t *testing.T) {
 	testutil.FailErr(t, "write blob", err)
 	q := db.New(database)
 	testutil.FailErr(t, "upsert object", q.UpsertContentBlobObject(t.Context(), db.UpsertContentBlobObjectParams{
-		ProjectID: projectID, Sha256: sha, ByteSize: byteSize, StoredSize: storedSize, CreatedAt: db.FormatTime(time.Now().UTC()),
+		ProjectID: projectID, Sha256: sha, ByteSize: byteSize, StoredSize: storedSize, CreatedAt: timelayout.Format(time.Now().UTC()),
 	}))
 	_, err = database.ExecContext(t.Context(), `INSERT INTO content_blob_reclaim_queue(project_id,sha256) VALUES(?,?)`, projectID, sha)
 	testutil.FailErr(t, "queue blob", err)

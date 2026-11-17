@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -114,7 +115,7 @@ func TestResolvePublicIPsBlocksPrivateLiteral(t *testing.T) {
 func TestFetchURLBlocksLoopbackBySSRF(t *testing.T) {
 	// Default policy (no allowLoopbackFetch) must refuse a loopback server.
 	srv := testHTTPServer(t, "text/plain", "should not be reachable")
-	_, err := FetchURL(context.Background(), FetchOptions{URL: srv})
+	_, err := fetchURL(context.Background(), FetchOptions{URL: srv})
 	if err == nil || !strings.Contains(err.Error(), "blocked") {
 		t.Fatalf("expected SSRF block, got err=%v", err)
 	}
@@ -209,4 +210,21 @@ func TestFetchTimeoutFollowsTheCallersDeadline(t *testing.T) {
 	if got := fetchTimeout(spent); got != 0 {
 		t.Fatalf("a spent deadline = %v, want none left", got)
 	}
+}
+
+// fetchURL fetches and extracts readable text as the fetch tool does.
+func fetchURL(ctx context.Context, opts FetchOptions) (FetchURLResult, error) {
+	raw, err := fetchBytes(ctx, opts)
+	if err != nil {
+		return FetchURLResult{}, err
+	}
+	return fetchTextResult(raw), nil
+}
+
+func guardedGet(ctx context.Context, u *url.URL, accept string, limit int64) (*http.Response, string, error) {
+	return guardedGetWithHopPolicy(ctx, u, accept, limit, nil, nil)
+}
+
+func resolvePublicIPs(ctx context.Context, host string) ([]netip.Addr, error) {
+	return resolveIPsWithPolicy(ctx, host, ipAllowed)
 }

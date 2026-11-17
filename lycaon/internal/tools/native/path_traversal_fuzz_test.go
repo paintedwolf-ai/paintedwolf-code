@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
-	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 )
 
 // TestNativePathArgsRejectTraversal checks path rejection and error redaction.
@@ -26,13 +25,7 @@ func TestNativePathArgsRejectTraversal(t *testing.T) {
 	}
 
 	allTools := []tool{
-		&surveytools.ReadTool{Boundary: boundary},
 		&WriteTool{Boundary: boundary},
-		&surveytools.FindTool{Boundary: boundary},
-		&surveytools.GrepTool{Boundary: boundary},
-		&surveytools.StatTool{Boundary: boundary},
-		&surveytools.WcTool{Boundary: boundary},
-		&surveytools.ListDirTool{Boundary: boundary},
 		&ChmodTool{Boundary: boundary},
 		&DeleteTool{Boundary: boundary},
 	}

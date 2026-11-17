@@ -1,4 +1,6 @@
 steps:
   - tool: complete_leg
-    say: 'Submit {{ call }} with observed evidence and the actual leg status.'
+    say: 'Submit {{ call }} with observed evidence and complete, partial, or blocked status when ready to deliver.'
     otherwise: 'Retain the observations and report what remains incomplete.'
+  - tool: request_decision
+    say: 'If you cannot proceed without an answer, ask with {{ call }}.'

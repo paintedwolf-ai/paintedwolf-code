@@ -5,9 +5,11 @@ import {
   buildWorkerEvidenceFallbackView,
   resolveCitationGrounding,
   workerEvidenceSectionId,
+  workerReviewedResultHandle,
   workerSummaryMetaForJob,
 } from "../../chat/worker/worker-evidence-model.ts";
 import {
+  findSessionWorker,
   workerDispatchParamRows,
   workerDispatchBrief,
   workerRowStatus,
@@ -29,6 +31,10 @@ import { MarkdownBody } from "../transcript/MarkdownBody.tsx";
 import { SessionTranscript } from "../transcript/SessionTranscript.tsx";
 import { WorkerCoordinationSection } from "./WorkerCoordinationSection.tsx";
 import { WorkerEvidenceSection } from "./WorkerEvidenceSection.tsx";
+import {
+  WorkerHistorySection,
+  type WorkerHistoryFocusTarget,
+} from "./WorkerHistorySection.tsx";
 import {
   WorkerTranscriptSection,
   type WorkerSectionKey,
@@ -62,6 +68,8 @@ type WorkerTranscriptPaneProps = {
   findingsDigest: Accessor<FindingsDigest | undefined>;
   summaryMeta: Accessor<WorkerSummaryMeta | undefined>;
   evidenceHighlight: Accessor<boolean>;
+  historyFocus: Accessor<WorkerHistoryFocusTarget | null>;
+  onHistoryFocusHandled?: () => void;
   activityPreview: Accessor<string | null>;
   selectSection: (key: WorkerSectionKey) => void;
   setSummaryShown: (shown: boolean) => void;
@@ -145,6 +153,13 @@ function WorkerTranscriptPane(props: WorkerTranscriptPaneProps) {
           </Show>
         </WorkerTranscriptSection>
       </Show>
+      <WorkerHistorySection
+        worker={props.worker}
+        board={() => props.appStore.state.board}
+        focusTarget={props.historyFocus}
+        onFocusHandled={props.onHistoryFocusHandled}
+        onSelect={() => props.selectSection("history")}
+      />
       <WorkerTranscriptSection
         title="Activity"
         sectionKey="activity"
@@ -196,7 +211,8 @@ function WorkerTranscriptPane(props: WorkerTranscriptPaneProps) {
       <WorkerCoordinationSection
         worker={props.worker()}
         findings={props.findingsDigest()}
-        roster={props.appStore.state.board?.roster}
+        board={props.appStore.state.board}
+        workers={props.appStore.state.workers}
         onSelect={() => props.selectSection("coordination")}
       />
       <WorkerEvidenceSection
@@ -217,13 +233,13 @@ export function WorkerTranscript(props: Props) {
   const worker = createMemo(() => {
     const id = props.workerId?.trim();
     if (!id) return null;
-    return props.workers.find((row) => row.id === id) ?? null;
+    return findSessionWorker(props.workers, id, props.appStore.state.workers) ?? null;
   });
 
   const summaryMeta = createMemo(() => {
     const row = worker();
     if (!row) return undefined;
-    return workerSummaryMetaForJob(props.appStore.state.messages, row.id);
+    return workerSummaryMetaForJob(props.appStore.state.messages, row.id, row);
   });
 
   const displayMessages = createMemo(() => {
@@ -238,8 +254,7 @@ export function WorkerTranscript(props: Props) {
     if (!row) return null;
     const used = row.tool_loops_used ?? 0;
     if (used <= 0) return null;
-    const max = row.max_tool_loops;
-    return max ? `${used} of ${max} tool turns so far` : `${used} tool turns so far`;
+    return `${used} ${used === 1 ? "turn" : "turns"} so far`;
   });
 
   const isWorking = createMemo(() => {
@@ -272,9 +287,18 @@ export function WorkerTranscript(props: Props) {
     const row = worker();
     if (!row) return false;
     const meta = summaryMeta();
+    if (workerReviewedResultHandle(meta, row)) return true;
     const grounding = resolveCitationGrounding(meta, row);
     if (grounding && citationGroundingPresent(grounding)) return true;
     return Boolean(buildWorkerEvidenceFallbackView(meta, row, row.id));
+  });
+
+  const historyFocus = createMemo<WorkerHistoryFocusTarget | null>(() => {
+    const focus = props.scrollToFocus;
+    if (focus && typeof focus === "object" && focus.section === "history") {
+      return { messageSeq: focus.messageSeq, roundOrdinal: focus.roundOrdinal };
+    }
+    return null;
   });
 
   const [summaryShown, setSummaryShown] = createSignal(false);
@@ -282,6 +306,7 @@ export function WorkerTranscript(props: Props) {
     const keys: WorkerSectionKey[] = [];
     if (summaryShown()) keys.push("summary");
     if (dispatchPrompt()) keys.push("task");
+    keys.push("history");
     keys.push("activity");
     keys.push("coordination");
     if (hasEvidenceSection()) keys.push("evidence");
@@ -328,7 +353,7 @@ export function WorkerTranscript(props: Props) {
     on(
       () => props.workerId?.trim(),
       (id, prevId) => {
-        if (!id || id === prevId || props.scrollToFocus === "evidence") return;
+        if (!id || id === prevId || props.scrollToFocus != null) return;
         queueMicrotask(() => {
           if (!paneEl) return;
           const motion = scrollportMotionContaining(paneEl);
@@ -377,6 +402,8 @@ export function WorkerTranscript(props: Props) {
               findingsDigest={findingsDigest}
               summaryMeta={summaryMeta}
               evidenceHighlight={evidenceHighlight}
+              historyFocus={historyFocus}
+              onHistoryFocusHandled={props.onScrollToFocusHandled}
               selectSection={selectSection}
               setSummaryShown={setSummaryShown}
             />

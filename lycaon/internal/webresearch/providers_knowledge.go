@@ -10,8 +10,6 @@ import (
 	"strings"
 )
 
-const openAlexPoliteMailto = politeContactMailto
-
 func openalexRESTSpec() RESTSpec {
 	return RESTSpec{
 		ProviderID: "openalex",
@@ -32,7 +30,7 @@ func openalexRESTSpec() RESTSpec {
 			q := u.Query()
 			q.Set("search", query)
 			q.Set("per_page", fmt.Sprintf("%d", count))
-			q.Set("mailto", openAlexPoliteMailto)
+			q.Set("mailto", politeContactMailto)
 			u.RawQuery = q.Encode()
 			return u.String(), nil
 		},

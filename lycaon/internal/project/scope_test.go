@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestDraftWorkspaceDirRequiresProjectID(t *testing.T) {
@@ -15,7 +14,7 @@ func TestDraftWorkspaceDirRequiresProjectID(t *testing.T) {
 	}
 }
 
-func TestScopeForSessionNoRootsUsesDraftScratch(t *testing.T) {
+func TestScopeFromToolContextNoRootsUsesDraftScratch(t *testing.T) {
 	configDir := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", configDir)
 	ctx := context.Background()
@@ -25,9 +24,7 @@ func TestScopeForSessionNoRootsUsesDraftScratch(t *testing.T) {
 	if p.Roots[0].Label != "Draft" {
 		t.Fatalf("draft root label = %q want Draft", p.Roots[0].Label)
 	}
-	sess := &api.Session{ProjectID: p.ID}
-	scope, err := ScopeForSession(ctx, sess, reg)
-	testutil.FailErr(t, "ScopeForSession failed", err)
+	scope := ScopeFromToolContext(p.ID, "", RootRefsFrom(p), "")
 	if !scope.HasRoots {
 		t.Fatal("expected HasRoots=true for draft scratch workspace")
 	}
@@ -46,15 +43,13 @@ func TestScopeForSessionNoRootsUsesDraftScratch(t *testing.T) {
 	}
 }
 
-func TestScopeForSessionPrimaryDefault(t *testing.T) {
+func TestScopeFromToolContextPrimaryDefault(t *testing.T) {
 	ctx := context.Background()
 	reg := NewMemoryRegistry()
 	dir := t.TempDir()
 	p, err := reg.Create(ctx, CreateParams{Roots: []AttachRootParams{{Path: dir}}})
 	testutil.FailErr(t, "reg.Create failed", err)
-	sess := &api.Session{ProjectID: p.ID}
-	scope, err := ScopeForSession(ctx, sess, reg)
-	testutil.FailErr(t, "ScopeForSession failed", err)
+	scope := ScopeFromToolContext(p.ID, "", RootRefsFrom(p), "")
 	if !scope.HasRoots {
 		t.Fatal("expected HasRoots=true")
 	}
@@ -67,7 +62,7 @@ func TestScopeForSessionPrimaryDefault(t *testing.T) {
 	}
 }
 
-func TestScopeForSessionExplicitRoot(t *testing.T) {
+func TestScopeFromToolContextExplicitRoot(t *testing.T) {
 	ctx := context.Background()
 	reg := NewMemoryRegistry()
 	primary := t.TempDir()
@@ -91,9 +86,7 @@ func TestScopeForSessionExplicitRoot(t *testing.T) {
 	if secondaryID == "" {
 		t.Fatal("secondary root id missing")
 	}
-	sess := &api.Session{ProjectID: p.ID, WorkspaceRootID: secondaryID}
-	scope, err := ScopeForSession(ctx, sess, reg)
-	testutil.FailErr(t, "ScopeForSession failed", err)
+	scope := ScopeFromToolContext(p.ID, secondaryID, RootRefsFrom(p), "")
 	if scope.WorkspaceRootID != secondaryID {
 		t.Fatalf("WorkspaceRootID = %q want %q", scope.WorkspaceRootID, secondaryID)
 	}

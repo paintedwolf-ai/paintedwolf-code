@@ -109,20 +109,9 @@ func PurposeSection(ctx context.Context, ev ActionEvidence) (SectionPlan, error)
 	vars := map[string]any{}
 	var items []Item
 	add := func(key string, role Role, kind, ref, text string, limit int, gap string) {
-		text = observability.RedactCaptureText(strings.TrimSpace(text))
-		item := Item{Key: key, Role: role, SourceKind: kind, Ref: ref, Audience: ev.Action.Session}
-		switch {
-		case text != "":
-			clamped := clampSection(text, limit)
-			item.Text, item.Inclusion = clamped, IncludedWhole
-			if clamped != text {
-				item.Inclusion = IncludedTruncated
-			}
+		item, clamped := boundedItem(key, role, kind, ref, text, limit, gap, ev.Action.Session)
+		if clamped != "" {
 			vars[key] = clamped
-		case gap != "":
-			item.Inclusion, item.Reason = Unavailable, gap
-		default:
-			item.Inclusion, item.Reason = Unavailable, "absent"
 		}
 		items = append(items, item)
 	}
@@ -133,13 +122,10 @@ func PurposeSection(ctx context.Context, ev ActionEvidence) (SectionPlan, error)
 	add("action", RoleAction, "tool_call", ev.Action.CallRef, formatAction(ev.Action), sectionRunes, "")
 	add("host_facts", RoleContext, "approval_request", "", ev.HostFacts.Text, sectionRunes, ev.HostFacts.Unavailable)
 	add("assistant_note", RoleContext, "message", ev.AssistantProse.Ref, ev.AssistantProse.Text, sectionRunes, ev.AssistantProse.Unavailable)
-	reasoning, reasoningRef := "", ""
-	if excerpt := ev.Reasoning.Excerpt; excerpt != nil {
-		reasoning, reasoningRef = excerpt.Text, excerpt.Ref
-	}
-	add("assistant_reasoning", RoleContext, "reasoning", reasoningRef, reasoning, sectionRunes, ev.Reasoning.Gap)
-	if excerpt := ev.Reasoning.Excerpt; excerpt != nil && (excerpt.Shared || excerpt.Truncated) {
-		items[len(items)-1].Reason = strings.Join(nonEmpty(flag(excerpt.Shared, "shared across calls"), flag(excerpt.Truncated, "suffix")), ", ")
+	reasoning := ReasoningItem(ev.Reasoning, ev.Action.Session)
+	items = append(items, reasoning.Item)
+	if reasoning.Text != "" {
+		vars[reasoning.Item.Key] = reasoning.Text
 	}
 	if strings.TrimSpace(ev.PhaseScope) != "" {
 		add("phase_scope", RoleAction, "activity", "", ev.PhaseScope, sectionRunes, "")
@@ -153,7 +139,29 @@ func PurposeSection(ctx context.Context, ev ActionEvidence) (SectionPlan, error)
 		return SectionPlan{}, err
 	}
 	manifest := Manifest{ProfileID: purposeTemplate.ID, ProfileVersion: purposeTemplate.Version, SectionID: PurposeSectionID, Template: purposeTemplate, Contract: OneSentence, Items: items}.Sealed()
-	return SectionPlan{ID: PurposeSectionID, Mode: Generated, Manifest: manifest, Prompt: Prompt{System: system, User: user, MaxTokens: purposeMaxTokens}}, nil
+	return SectionPlan{ID: PurposeSectionID, Mode: Generated, Manifest: manifest, Prompt: Prompt{System: system, User: user, MaxTokens: purposeMaxTokens},
+		Quality: reasoning.Quality}, nil
+}
+
+// boundedItem redacts and clamps one text input; an empty input is recorded as
+// unavailable with its gap. It returns the item and the text the prompt gets.
+func boundedItem(key string, role Role, kind, ref, text string, limit int, gap, audience string) (Item, string) {
+	text = observability.RedactCaptureText(strings.TrimSpace(text))
+	item := Item{Key: key, Role: role, SourceKind: kind, Ref: ref, Audience: audience}
+	switch {
+	case text != "":
+		clamped := clampSection(text, limit)
+		item.Text, item.Inclusion = clamped, IncludedWhole
+		if clamped != text {
+			item.Inclusion = IncludedTruncated
+		}
+		return item, clamped
+	case gap != "":
+		item.Inclusion, item.Reason = Unavailable, gap
+	default:
+		item.Inclusion, item.Reason = Unavailable, "absent"
+	}
+	return item, ""
 }
 
 func formatPlan(steps []PlanStep) string {

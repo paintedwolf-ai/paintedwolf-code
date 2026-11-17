@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -23,8 +24,8 @@ func (s *SQLStore) BeginMergeApply(ctx context.Context, jobID string) (string, b
 	won, err := s.casInTx(ctx, jobID, func(q *db.Queries) (int64, error) {
 		return q.BeginWorkerJobMergeApply(ctx, db.BeginWorkerJobMergeApplyParams{
 			ClaimToken:     db.NullString(token),
-			HeartbeatAt:    db.NullString(db.FormatTime(now)),
-			LeaseExpiresAt: db.NullString(db.FormatTime(now.Add(mergeApplyLease))),
+			HeartbeatAt:    db.NullString(timelayout.Format(now)),
+			LeaseExpiresAt: db.NullString(timelayout.Format(now.Add(mergeApplyLease))),
 			ID:             jobID,
 		})
 	})
@@ -38,8 +39,8 @@ func (s *SQLStore) BeginMergeApply(ctx context.Context, jobID string) (string, b
 func (s *SQLStore) RenewMergeApply(ctx context.Context, jobID, claimToken string) (bool, error) {
 	now := time.Now().UTC()
 	n, err := s.queries.RenewWorkerJobMergeClaim(ctx, db.RenewWorkerJobMergeClaimParams{
-		HeartbeatAt:    db.NullString(db.FormatTime(now)),
-		LeaseExpiresAt: db.NullString(db.FormatTime(now.Add(mergeApplyLease))),
+		HeartbeatAt:    db.NullString(timelayout.Format(now)),
+		LeaseExpiresAt: db.NullString(timelayout.Format(now.Add(mergeApplyLease))),
 		ID:             jobID,
 		ClaimToken:     db.NullString(claimToken),
 	})
@@ -78,10 +79,10 @@ func (s *SQLStore) ReclaimExpiredMergeApply(ctx context.Context, jobID string) (
 	won, err := s.casInTx(ctx, jobID, func(q *db.Queries) (int64, error) {
 		return q.ReclaimExpiredWorkerJobMergeApply(ctx, db.ReclaimExpiredWorkerJobMergeApplyParams{
 			ClaimToken:     db.NullString(token),
-			HeartbeatAt:    db.NullString(db.FormatTime(now)),
-			LeaseExpiresAt: db.NullString(db.FormatTime(now.Add(mergeApplyLease))),
+			HeartbeatAt:    db.NullString(timelayout.Format(now)),
+			LeaseExpiresAt: db.NullString(timelayout.Format(now.Add(mergeApplyLease))),
 			ID:             jobID,
-			ExpiredBefore:  db.NullString(db.FormatTime(now)),
+			ExpiredBefore:  db.NullString(timelayout.Format(now)),
 		})
 	})
 	if err != nil || !won {

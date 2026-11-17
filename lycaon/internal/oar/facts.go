@@ -66,23 +66,6 @@ func buildCatalogueFacts() map[string]struct{} {
 	return out
 }
 
-// expensiveFacts require lazy providers (evidence / ledger).
-var expensiveFacts = map[string]struct{}{
-	"paintedwolf.unobserved_cited_paths": {}, "paintedwolf.unobserved_cited_urls": {},
-	"paintedwolf.unobserved_cited_handles": {},
-	"paintedwolf.claims_completion":        {}, "paintedwolf.has_matching_ledger_job": {},
-	"paintedwolf.worker_summary_present":  {},
-	"paintedwolf.worker_artifact_present": {},
-	// Git index comparisons run only for a rule that reads them.
-	"paintedwolf.worktree_stale_paths": {}, "paintedwolf.worktree_leftover_paths": {},
-	"paintedwolf.worktree_conflict_paths":      {},
-	"paintedwolf.reproduced_source_lines":      {},
-	"paintedwolf.reproduced_source_file_lines": {},
-	"paintedwolf.reproduced_source_path":       {},
-	"paintedwolf.reproduced_source_start_line": {},
-	"paintedwolf.reproduced_source_end_line":   {},
-}
-
 // FactsReferenced returns catalogue fact names appearing in when / flow text.
 func FactsReferenced(when string, flow []string) []string {
 	seen := map[string]struct{}{}

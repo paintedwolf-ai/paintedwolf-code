@@ -10,8 +10,6 @@ import {
   TRANSCRIPT_ROW_HEIGHT_VARIANT_CAP,
 } from "../../../../shared/app-state-types.ts";
 
-export { transcriptRowContentRevision } from "./transcript-row-revision.ts";
-
 /**
  * Measured heights by row. A row remembers the content revision it measured and one height
  * per layout variant (geometry and presentation); a new revision drops every variant, since

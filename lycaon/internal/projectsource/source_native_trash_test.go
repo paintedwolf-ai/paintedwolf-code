@@ -3,6 +3,7 @@ package projectsource
 import (
 	"bytes"
 	"errors"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"os"
 	"path/filepath"
 	"testing"
@@ -113,14 +114,14 @@ func TestNativeCopyHistoryPreservesEditsWithoutRetainedBackup(t *testing.T) {
 func TestRevisionBufferBoundsGrowingInput(t *testing.T) {
 	var buffer bytes.Buffer
 	writer := sourceRevisionBuffer{buffer: &buffer}
-	chunk := bytes.Repeat([]byte("x"), sourceledger.MaxRevisionContentBytes/2+1)
+	chunk := bytes.Repeat([]byte("x"), sourceblob.MaxRevisionContentBytes/2+1)
 	for range 4 {
 		n, err := writer.Write(chunk)
 		if err != nil || n != len(chunk) {
 			t.Fatalf("write = %d, %v", n, err)
 		}
 	}
-	if buffer.Len() != sourceledger.MaxRevisionContentBytes {
+	if buffer.Len() != sourceblob.MaxRevisionContentBytes {
 		t.Fatalf("retained %d bytes", buffer.Len())
 	}
 }

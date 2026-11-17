@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
@@ -64,7 +65,7 @@ func (tree *promotionTargets) makeTargetDirectory(root *targetRoot, path layered
 				return err
 			}
 		}
-		return syncFile(file)
+		return fssync.File(file)
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
@@ -110,7 +111,7 @@ func createStagedTargetDirectory(
 	if err := file.Chmod(mode); err != nil {
 		return err
 	}
-	if err := syncFile(file); err != nil {
+	if err := fssync.File(file); err != nil {
 		return err
 	}
 	if recordPostimage != nil {
@@ -133,7 +134,7 @@ func createStagedTargetDirectory(
 		return err
 	}
 	defer func() { _ = parent.Close() }()
-	return syncFile(parent)
+	return fssync.File(parent)
 }
 
 // promotionTargets owns descriptor-confined reads, staged writes and namespace effects.

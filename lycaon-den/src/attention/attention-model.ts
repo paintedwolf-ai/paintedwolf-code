@@ -61,13 +61,6 @@ export function indexAttention(rows: readonly AttentionRow[]): AttentionIndex {
   return index;
 }
 
-export function attentionFor(
-  index: AttentionIndex | undefined,
-  sessionId: string,
-): AttentionRow | undefined {
-  return index?.get(sessionId);
-}
-
 /** Suppress finished attention while its chat is readable; the host seen stamp may lag. */
 export function withoutReadFinish(
   index: AttentionIndex,

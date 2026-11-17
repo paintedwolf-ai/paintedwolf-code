@@ -159,7 +159,6 @@ var doorExemptions = []laws.Exemption{
 	{Key: "cmd/lycaon-debug/eval_tool_usage.go", Reason: "operator-selected report path"},
 	{Key: "cmd/lycaon/completion.go", Reason: "shell completion script written to an operator-selected path"},
 	{Key: "cmd/lycaon/extensions_theme.go", Reason: "theme export written to an operator-selected path"},
-	{Key: "cmd/oar-import-invariant/main.go", Reason: "invariant import written to an operator-selected path"},
 	{Key: "cmd/decide-rerank/eval.go", Reason: "evaluation report written to an operator-selected path"},
 	{Key: "cmd/decide-rerank/units.go", Reason: "training units written to an operator-selected path"},
 }

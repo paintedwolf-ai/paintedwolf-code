@@ -142,6 +142,10 @@ func TestRegisteredRetirementsReproduceReleasedCorpusRows(t *testing.T) {
 	for step, retirements := range migrations.RegisteredRetirements() {
 		for _, r := range retirements {
 			t.Run(step+"/"+r.Table+"/"+r.Column, func(t *testing.T) {
+				if r.Discard != "" {
+					requireDiscarded(t, r)
+					return
+				}
 				populated := 0
 				for _, path := range retirementCorpusStores(t) {
 					database := openCorpusCopy(t, path)
@@ -149,6 +153,9 @@ func TestRegisteredRetirementsReproduceReleasedCorpusRows(t *testing.T) {
 					if _, ok := columns[r.Table]; !ok || (r.Column != "" && !slices.Contains(columns[r.Table], r.Column)) {
 						testutil.FailErr(t, "close corpus store", database.Close())
 						continue
+					}
+					if r.Table == "delegations" || r.Table == "delegation_legs" {
+						seedReleasedDelegations(t, database)
 					}
 					captured := retirementRows(t, database, r.Capture)
 					var file string
@@ -159,7 +166,7 @@ func TestRegisteredRetirementsReproduceReleasedCorpusRows(t *testing.T) {
 					}
 					populated++
 					testutil.FailErr(t, "upgrade corpus store", UpgradeStaged(t.Context(), file))
-					upgraded, err := openReader(t.Context(), file)
+					upgraded, err := OpenReadOnly(t.Context(), file)
 					testutil.FailErr(t, "open upgraded store", err)
 					rebuilt := retirementRows(t, upgraded, r.Rebuild)
 					testutil.FailErr(t, "close upgraded store", upgraded.Close())
@@ -172,6 +179,38 @@ func TestRegisteredRetirementsReproduceReleasedCorpusRows(t *testing.T) {
 				}
 			})
 		}
+	}
+}
+
+// requireDiscarded checks that a discard declares no rows to reproduce and that
+// every released store that had the table or column loses it on upgrade.
+func requireDiscarded(t *testing.T, r migrations.Retirement) {
+	t.Helper()
+	if r.Capture != "" || r.Rebuild != "" {
+		t.Fatalf("discarded %s %s declares rows to reproduce", r.Table, r.Column)
+	}
+	upgraded := 0
+	for _, path := range retirementCorpusStores(t) {
+		database := openCorpusCopy(t, path)
+		columns := corpusColumns(t, database)
+		var file string
+		testutil.FailErr(t, "locate corpus copy", database.QueryRowContext(t.Context(), `SELECT file FROM pragma_database_list WHERE name = 'main'`).Scan(&file))
+		testutil.FailErr(t, "close corpus store", database.Close())
+		if _, ok := columns[r.Table]; !ok || (r.Column != "" && !slices.Contains(columns[r.Table], r.Column)) {
+			continue
+		}
+		upgraded++
+		testutil.FailErr(t, "upgrade corpus store", UpgradeStaged(t.Context(), file))
+		after, err := OpenReadOnly(t.Context(), file)
+		testutil.FailErr(t, "open upgraded store", err)
+		remaining := corpusColumns(t, after)
+		testutil.FailErr(t, "close upgraded store", after.Close())
+		if _, ok := remaining[r.Table]; ok && (r.Column == "" || slices.Contains(remaining[r.Table], r.Column)) {
+			t.Errorf("%s: upgrade kept discarded %s %s", path, r.Table, r.Column)
+		}
+	}
+	if upgraded == 0 {
+		t.Fatalf("no released corpus fixture has %s %s to discard", r.Table, r.Column)
 	}
 }
 

@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/report/reporttest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/visual"
-	"github.com/lycaon/lycaon/internal/workflow"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -265,13 +264,13 @@ func TestGetWorkflowRunReport_MissingArtifactBytesShrinks(t *testing.T) {
 func TestBlockedReviewServesItsRetainedSnapshot(t *testing.T) {
 	h := contractfixture.NewReportTestHarness(t)
 	run := h.SeedSecuritySurveyRun(t, "run_review_blocked")
-	repair := workflow.ReviewRepair{
+	repair := workflowrunstate.ReviewRepair{
 		ID: "repair", Phase: "claims", State: "blocked", UpdatedAt: time.Now().UTC(),
-		Responses: []workflow.ReviewRepairResponse{{ID: "response"}},
-		Snapshot:  &workflow.ReviewSnapshot{Vars: map[string]any{}, Unavailable: []string{"scan ledger"}},
+		Responses: []workflowrunstate.ReviewRepairResponse{{ID: "response"}},
+		Snapshot:  &workflowrunstate.ReviewSnapshot{Vars: map[string]any{}, Unavailable: []string{"scan ledger"}},
 	}
 	_, err := h.WfMgr.Vars.Stamp(t.Context(), run.ID, func(_ context.Context, _ *wire.WorkflowRun, vars map[string]any) (map[string]any, bool, error) {
-		vars["review_repairs"] = []workflow.ReviewRepair{repair}
+		vars["review_repairs"] = []workflowrunstate.ReviewRepair{repair}
 		return vars, true, nil
 	})
 	testutil.FailErr(t, "stamp blocked repair", err)
@@ -284,7 +283,7 @@ func TestBlockedReviewServesItsRetainedSnapshot(t *testing.T) {
 	}
 
 	reports := h.Srv.Admin.Workflow.Reports
-	pause(workflow.ReviewBlockedReason)
+	pause(workflowrunstate.ReviewBlockedReason)
 	input, ok, err := reports.BuildRunReportInput(t.Context(), run.ID)
 	testutil.FailErr(t, "build blocked report", err)
 	if !ok || input.Kind != report.BlockedReviewSnapshot || input.Completeness() != report.CompletenessIncomplete {

@@ -92,7 +92,7 @@ func TestQuestionVerdictsCannotReplenishInvestigationBudget(t *testing.T) {
 }
 
 func TestPrerequisiteRefusalsDoNotSpendSubmissionRepairBudget(t *testing.T) {
-	for _, code := range []string{ReviewRequiredCode, ReviewContextChangedCode, SubmitVerdictScansPendingCode} {
+	for _, code := range []string{ReviewRequiredCode, runstate.ReviewContextChangedCode, SubmitVerdictScansPendingCode} {
 		if runstate.RepairableVerdictCodes([]string{code}) {
 			t.Errorf("prerequisite %s consumes malformed-submission budget", code)
 		}

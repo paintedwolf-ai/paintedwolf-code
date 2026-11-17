@@ -196,7 +196,7 @@ var userText = []laws.Rule{{
 }, {
 	// A string probe of the user's text never feeds a behavior sink.
 	Name:    "no-user-text-probe-to-behavior-sink",
-	Anchors: []laws.Anchor{laws.Func("internal/coordinator/surface", "SessionUserTask")},
+	Anchors: []laws.Anchor{laws.Package("internal/session"), laws.Package("internal/workflow")},
 	Check: func(r *laws.Run) {
 		for _, f := range r.GoFiles(laws.Production, coordinatorScanRoots...) {
 			f.Funcs(func(fn *ast.FuncDecl) {
@@ -237,8 +237,6 @@ func isUserText(expr ast.Expr, params map[string]bool) bool {
 		return params[e.Name] || slices.Contains(userTextParams, e.Name)
 	case *ast.CallExpr:
 		switch laws.CalleeName(e) {
-		case "SessionUserTask":
-			return true
 		case "TrimSpace", "ToLower", "ToUpper":
 			return len(e.Args) > 0 && isUserText(e.Args[0], params)
 		}

@@ -14,5 +14,5 @@ deny_tools:
   - git_commit
   - git_restore
   - delete
-  - delegate_*
+  - plan_from_blueprint
   - state_*

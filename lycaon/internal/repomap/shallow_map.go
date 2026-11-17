@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/bundledhint"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
@@ -169,7 +170,7 @@ func buildShallowInventoryMap(
 func shallowMapDiagnostics(ctx context.Context, entryCount int) *Diagnostics {
 	if entryCount == 0 {
 		return &Diagnostics{
-			Hint:     envelopeHint(ctx, noFilesHintCode),
+			Hint:     bundledhint.Message(ctx, noFilesHintCode, nil),
 			HintCode: noFilesHintCode,
 		}
 	}

@@ -207,7 +207,7 @@ func settleMaterializedBranchView(ctx context.Context, view *branchLayeredView) 
 func (m *Manager) settleMaterializedRuntime(ctx context.Context, branchRoot string) error {
 	clean := filepath.Clean(branchRoot)
 	branchClaimsMu.RLock()
-	rec := branchClaimStates[clean]
+	rec, _ := lookupBranchClaimRecord(clean)
 	branchClaimsMu.RUnlock()
 	if rec.layered != nil && rec.layered.engine == nil {
 		if err := settleMaterializedBranchView(ctx, rec.layered); err != nil {
@@ -228,7 +228,7 @@ func isMaterializedBranch(branchRoot string) bool {
 func (m *Manager) settleEvictedMaterializedView(ctx context.Context, branchRoot string) error {
 	clean := filepath.Clean(branchRoot)
 	branchClaimsMu.RLock()
-	rec := branchClaimStates[clean]
+	rec, _ := lookupBranchClaimRecord(clean)
 	branchClaimsMu.RUnlock()
 	if rec.layered == nil || rec.layered.engine != nil {
 		releaseBranchClaimState(clean)
@@ -347,8 +347,9 @@ func (m *Manager) offerMaterializedBranchesForRecovery(ctx context.Context) erro
 			continue
 		}
 		clean := filepath.Clean(tree.Root)
+		key := branchRootKey(clean)
 		branchClaimsMu.Lock()
-		if _, known := branchClaimStates[clean]; !known {
+		if _, known := lookupBranchClaimRecord(clean); !known {
 			meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(clean))
 			if err != nil {
 				branchClaimsMu.Unlock()
@@ -356,7 +357,7 @@ func (m *Manager) offerMaterializedBranchesForRecovery(ctx context.Context) erro
 				continue
 			}
 			root, jobID := clean, tree.JobID
-			branchClaimStates[clean] = branchClaimRecord{
+			branchClaimStates[key] = branchClaimRecord{
 				state: snapshotFromJobMeta(clean, meta),
 				reopen: func(c context.Context) (*branchLayeredView, error) {
 					return m.reopenMaterializedBranch(c, root, jobID)
@@ -512,7 +513,7 @@ func (m *Manager) adoptRecoveredMaterializedView(ctx context.Context, branchRoot
 func materializedViewOf(ctx context.Context, branchRoot string) (*adapter.PreparedView, bool, error) {
 	clean := filepath.Clean(branchRoot)
 	branchClaimsMu.RLock()
-	rec, ok := branchClaimStates[clean]
+	rec, ok := lookupBranchClaimRecord(clean)
 	branchClaimsMu.RUnlock()
 	if ok && rec.claimed != nil && rec.claimed.Prepared != nil {
 		return rec.claimed.Prepared, rec.claimed.Prepared.Facts.PreparationKind == adapter.PreparationMaterialized, nil

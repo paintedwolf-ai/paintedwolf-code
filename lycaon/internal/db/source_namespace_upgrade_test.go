@@ -25,7 +25,7 @@ func TestSourceNamespaceMigratesReleasedHistory(t *testing.T) {
 		{"tree/nested/unresolved", "", "unresolved"},
 		{"tree/nested/file", "worker", "content"}, {"other/file", "worker", "absent"},
 	})
-	before, err := openReader(t.Context(), target)
+	before, err := OpenReadOnly(t.Context(), target)
 	testutil.FailErr(t, "open released history", err)
 	tables := []string{"source_branch_heads", "source_files", "source_versions", "source_effects", "source_operations", "source_history_entries", "source_recovery_entries", "source_checkpoints", "source_checkpoint_git_states"}
 	retained := map[string]string{}
@@ -34,7 +34,7 @@ func TestSourceNamespaceMigratesReleasedHistory(t *testing.T) {
 	}
 	testutil.FailErr(t, "close released history", before.Close())
 	testutil.FailErr(t, "upgrade released store", UpgradeStaged(t.Context(), target))
-	after, err := openReader(t.Context(), target)
+	after, err := OpenReadOnly(t.Context(), target)
 	testutil.FailErr(t, "open upgraded history", err)
 	defer func() { _ = after.Close() }()
 	for _, table := range tables {
@@ -142,7 +142,7 @@ func TestSourceNamespaceRefusesLossyReleasedPaths(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "store.db")
 			testutil.FailErr(t, "copy released store", os.WriteFile(path, raw, 0600))
 			seedReleasedNamespace(t, path, []namespaceSeed{seed})
-			before, err := openReader(t.Context(), path)
+			before, err := OpenReadOnly(t.Context(), path)
 			testutil.FailErr(t, "open seeded source", err)
 			retained := namespaceTableContents(t, before, "source_branch_heads")
 			baseline, err := inspectSchema(t.Context(), before)
@@ -151,7 +151,7 @@ func TestSourceNamespaceRefusesLossyReleasedPaths(t *testing.T) {
 			if err := UpgradeStaged(t.Context(), path); err == nil {
 				t.Fatal("lossy path migration succeeded")
 			}
-			after, err := openReader(t.Context(), path)
+			after, err := OpenReadOnly(t.Context(), path)
 			testutil.FailErr(t, "open refused source", err)
 			defer func() { _ = after.Close() }()
 			got, err := inspectSchema(t.Context(), after)

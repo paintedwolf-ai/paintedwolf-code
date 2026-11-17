@@ -7,7 +7,9 @@ import {
 } from "../../store/app-state-snapshot.ts";
 import { scheduleSessionFidelityPersist } from "../editor/editor-session-fidelity.ts";
 import { fileVersionFromSnapshot } from "../history/file-version.ts";
-import { openFilesBuffer, applyFilesBufferLoad, focusedFilesBufferKey, resetProjectFilesForTests, setFilesActiveBuffer } from "./project-files-buffers.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "./project-files-buffer-lifecycle.ts";
+import { applyFilesBufferLoad } from "./project-files-buffer-io.ts";
+import { focusedFilesBufferKey, setFilesActiveBuffer } from "./project-files-buffers.ts";
 import { projectFilesState } from "./files-buffer-state.ts";
 import {
   flushFilesHotExitToDisk,

@@ -4,6 +4,9 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-li
 import { HomeView } from "./HomeView.tsx";
 import type { HomeIdeaDraft } from "../../home/idea-attachments.ts";
 import { loaded } from "../../store/load-state.ts";
+import { createSignal } from "solid-js";
+import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";
+import type { ResidentPresence } from "../../ui/resident-surfaces.ts";
 
 afterEach(() => {
   cleanup();
@@ -172,5 +175,22 @@ describe("Home idea drop intake", () => {
     // Let the async intake settle before asserting nothing was buffered.
     await Promise.resolve();
     expect(screen.queryByTestId("home-idea-attachment-chip")).toBeNull();
+  });
+
+  it("takes drops again when Home returns from being parked", () => {
+    const [presence, setPresence] = createSignal<ResidentPresence>("idle");
+    render(() => (
+      <ResidentPresenceProvider presence={presence()}>
+        <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} />
+      </ResidentPresenceProvider>
+    ));
+    const frame = screen.getByTestId("home-view");
+
+    frame.dispatchEvent(dragEvent("dragenter", [webFile("notes.txt", 12)]));
+    expect(screen.queryByTestId("home-drop-overlay")).toBeNull();
+
+    setPresence("active");
+    frame.dispatchEvent(dragEvent("dragenter", [webFile("notes.txt", 12)]));
+    expect(screen.getByTestId("home-drop-overlay")).toBeTruthy();
   });
 });

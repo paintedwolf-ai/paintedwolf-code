@@ -1,4 +1,4 @@
-import { filesBufferText } from "../documents/project-files-buffers.ts";
+import { filesBufferText } from "../documents/files-buffer-state.ts";
 import type { ProjectSourceReadResponse } from "../../api/types.ts";
 import { prefersReducedMotion } from "../../platform/interaction/reduced-motion.ts";
 import { normalizeEolForEditor } from "../../components/source/editor/eol.ts";
@@ -12,7 +12,7 @@ import { dropFilesEditorHandlers, getFilesEditorView } from "../editor/files-edi
 import { readFileBufferSource } from "../source/files-source-read.ts";
 import { PLAYBACK_BURST_BUDGET_MS, PLAYBACK_EVENT_BUDGET_MS, computeLineHunks, playHunks } from "../walk/hunk-playback.ts";
 import { isComposedBufferKind } from "../documents/project-files-buffer-kind.ts";
-import { applyFilesBufferLoad } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferLoad } from "../documents/project-files-buffer-io.ts";
 import { filesBufferNeedsBody, projectFilesState, type FileBuffer } from "../documents/files-buffer-state.ts";
 import { applyProjectSourceLoadFailure } from "../components/project-files-load-error.ts";
 import { type FileBufferKey } from "../components/project-files-model.ts";

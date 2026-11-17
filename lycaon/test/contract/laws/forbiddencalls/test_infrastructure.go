@@ -3,6 +3,7 @@ package forbiddencalls
 import (
 	"go/ast"
 	"go/token"
+	"path"
 	"strings"
 
 	"github.com/lycaon/lycaon/test/contract/laws"
@@ -152,19 +153,12 @@ func directDatabaseScenarios(files ...string) []laws.Exemption {
 	return out
 }
 
-// envelopeOnlyNativeFiles hold the envelope-only analysis tools, which take
-// path resolution, confinement and caps from safecmd.
-var envelopeOnlyNativeFiles = []string{
-	"internal/tools/native/survey/stat.go",
-	"internal/tools/native/survey/wc.go",
-	"internal/tools/native/survey/list_dir.go",
-	"internal/tools/native/survey/list_dir_altitude.go",
-	"internal/tools/native/survey/find.go",
-	"internal/tools/native/survey/find_walk.go",
-	"internal/tools/native/survey/grep.go",
-	"internal/tools/native/survey/grep_scope_guard.go",
-	"internal/tools/native/jq/jq.go",
-	"internal/tools/native/jq/decode.go",
+// isEnvelopeOnlyTool selects the envelope-only analysis tools, find, grep
+// and jq, which take path resolution, confinement and caps from safecmd.
+func isEnvelopeOnlyTool(f *laws.GoFile) bool {
+	base := path.Base(f.Rel)
+	return !f.IsTest && (laws.Under(f, "internal/tools/native/jq") ||
+		f.Dir == "internal/tools/native/survey" && (strings.HasPrefix(base, "find") || strings.HasPrefix(base, "grep")))
 }
 
 // capNameParts mark a host cap constant safecmd declares.
@@ -172,7 +166,7 @@ var capNameParts = []string{"Max", "Timeout", "Bytes", "Depth", "Scan", "Zoom", 
 
 var surveyTools = []laws.Rule{{
 	Name:    "envelope-only-tools-use-safecmd",
-	Anchors: append(goPaths(envelopeOnlyNativeFiles), laws.Package("internal/tools/safecmd")),
+	Anchors: []laws.Anchor{laws.Package("internal/tools/native/survey"), laws.Package("internal/tools/native/jq"), laws.Package("internal/tools/safecmd")},
 	Exempt:  []laws.Exemption{{Key: "internal/tools/native/survey/grep.go:hostGrepMaxFileBytes", Reason: "a package variable tests lower to exercise the clamp"}},
 	Check: func(r *laws.Run) {
 		banned := map[string]string{
@@ -180,8 +174,7 @@ var surveyTools = []laws.Rule{{
 			"github.com/lycaon/lycaon/internal/confine":            "DefaultConfinement",
 			"github.com/lycaon/lycaon/internal/tools/toolkit":      "PathEscapeReject",
 		}
-		for _, rel := range envelopeOnlyNativeFiles {
-			f := r.GoFile(rel)
+		for _, f := range r.GoFiles(isEnvelopeOnlyTool, "internal/tools/native/survey", "internal/tools/native/jq") {
 			f.Selectors(f.AST, func(sel *ast.SelectorExpr, pkg, name string) {
 				if banned[pkg] == name {
 					r.ReportAt(sel.Pos(), "%s; take it from safecmd", laws.SelectorName(sel))

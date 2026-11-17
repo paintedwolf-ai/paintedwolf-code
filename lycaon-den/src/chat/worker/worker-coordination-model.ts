@@ -2,7 +2,9 @@ import type {
   BoardView,
   FindingsDigest,
   Finding,
+  WorkerTask,
 } from "../../api/types.ts";
+import { boardWorkerForTask } from "../../store/workers-board-sync.ts";
 
 /** Notes this worker posted (record_finding agent = job id). */
 export function findingsByWorker(
@@ -34,28 +36,24 @@ export function siblingNotesFor(
   });
 }
 
-/** Reserved paths from this worker's roster entry. */
+/** Paths this worker's live round holds. */
 export function reservationsFor(
-  roster: BoardView["roster"],
-  jobId: string,
+  board: BoardView | undefined,
+  worker: WorkerTask,
 ): string[] {
-  const id = jobId.trim();
-  if (!id || !Array.isArray(roster)) return [];
-  const row = roster.find((entry) => entry.worker_id === id);
-  return row?.reservations?.filter((path) => path.trim()) ?? [];
+  const paths = boardWorkerForTask(board, worker)?.reservations ?? [];
+  return paths.filter((path) => path.trim());
 }
 
-/** Human label for a peer note's author: its agent type, else a short job id. */
+/** Label for a peer note's author job: its worker's name, else agent type, else a short job id. */
 export function findingAgentLabel(
-  roster: BoardView["roster"],
+  workers: readonly WorkerTask[] | undefined,
   agent: string | undefined,
 ): string {
   const id = agent?.trim() ?? "";
   if (!id) return "";
-  const entry = Array.isArray(roster)
-    ? roster.find((row) => row.worker_id === id)
-    : undefined;
-  const type = entry?.agent_type?.trim();
-  if (type) return type;
+  const row = workers?.find((w) => w.id === id);
+  const label = row?.worker_name?.trim() || row?.agent_type?.trim();
+  if (label) return label;
   return id.length > 8 ? id.slice(0, 8) : id;
 }

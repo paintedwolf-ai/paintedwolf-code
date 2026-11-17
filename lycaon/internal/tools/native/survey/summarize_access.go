@@ -56,12 +56,12 @@ func (a *summaryAccess) qualify(root projectroot.RootRef, abs string) string {
 
 // Only a complete, exact source window can establish the same document basis
 // as read. Internal gathering and partial summaries cannot advance it.
-func rememberSummaryReads(ctx context.Context, reads *projectpaths.ReadSession, tctx tools.ToolContext, windows []summarize.PackWindow) {
+func rememberSummaryReads(ctx context.Context, tctx tools.ToolContext, windows []summarize.PackWindow) {
 	for _, window := range windows {
 		if window.StartLine != 1 || window.Body == "" || window.Path == "inline" {
 			continue
 		}
-		resolved, ok := resolveSummaryWindow(ctx, reads, tctx, window)
+		resolved, ok := resolveSummaryWindow(tctx, window)
 		if !ok {
 			continue
 		}
@@ -85,20 +85,15 @@ func rememberSummaryReads(ctx context.Context, reads *projectpaths.ReadSession, 
 	}
 }
 
-// resolveSummaryWindow prefers the structured root identity carried by the
-// window and only falls back to display-string resolution for legacy windows.
-func resolveSummaryWindow(ctx context.Context, reads *projectpaths.ReadSession, tctx tools.ToolContext, window summarize.PackWindow) (projectpaths.Resolved, bool) {
-	if window.RootID != "" && window.ScopeRel != "" && window.ScopeRel != "." {
-		for _, root := range tctx.Source.Roots {
-			if root.ID == window.RootID {
-				return projectpaths.Resolved{Root: root, ScopeRel: window.ScopeRel, Abs: filepath.Join(root.Path, filepath.FromSlash(window.ScopeRel)), DisplayPath: window.Path}, true
-			}
+// resolveSummaryWindow locates a file window by the root identity it carries.
+func resolveSummaryWindow(tctx tools.ToolContext, window summarize.PackWindow) (projectpaths.Resolved, bool) {
+	if window.RootID == "" || window.ScopeRel == "" || window.ScopeRel == "." {
+		return projectpaths.Resolved{}, false
+	}
+	for _, root := range tctx.Source.Roots {
+		if root.ID == window.RootID {
+			return projectpaths.Resolved{Root: root, ScopeRel: window.ScopeRel, Abs: filepath.Join(root.Path, filepath.FromSlash(window.ScopeRel)), DisplayPath: window.Path}, true
 		}
-		return projectpaths.Resolved{}, false
 	}
-	resolved, err := reads.Resolve(ctx, window.Path)
-	if err != nil {
-		return projectpaths.Resolved{}, false
-	}
-	return resolved, true
+	return projectpaths.Resolved{}, false
 }

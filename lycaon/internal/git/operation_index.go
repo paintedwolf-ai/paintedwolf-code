@@ -8,6 +8,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"io"
 	"os"
 	"path/filepath"
@@ -17,7 +18,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/gitrepo"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
 type operationIndexKey struct {
@@ -153,10 +153,10 @@ func readLooseGitObject(dir, oid string) (string, []byte, bool) {
 		_ = f.Close()
 		return "", nil, false
 	}
-	raw, err := io.ReadAll(io.LimitReader(zr, sourceledger.MaxRevisionContentBytes+1024))
+	raw, err := io.ReadAll(io.LimitReader(zr, sourceblob.MaxRevisionContentBytes+1024))
 	_ = zr.Close()
 	_ = f.Close()
-	if err != nil || int64(len(raw)) > sourceledger.MaxRevisionContentBytes+512 {
+	if err != nil || int64(len(raw)) > sourceblob.MaxRevisionContentBytes+512 {
 		return "", nil, false
 	}
 	headerBytes, body, found := bytes.Cut(raw, []byte{0})
@@ -190,7 +190,7 @@ func readOperationBlob(ctx context.Context, dir string, entry operationIndexEntr
 			sum := sha256.Sum256(body)
 			hexSum := hex.EncodeToString(sum[:])
 			var stored []byte
-			if int64(len(body)) <= sourceledger.MaxRevisionContentBytes {
+			if int64(len(body)) <= sourceblob.MaxRevisionContentBytes {
 				stored = body
 			}
 			if len(body) <= 65536 {

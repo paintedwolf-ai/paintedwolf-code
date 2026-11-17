@@ -1,0 +1,6 @@
+steps:
+  - tool: "read_review"
+    args:
+      view: "summary"
+    complete: true
+    say: "Read {{ call }} for current review assignments and exact work identities."

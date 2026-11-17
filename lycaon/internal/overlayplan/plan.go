@@ -19,11 +19,19 @@ type PreviewSnapshot struct {
 	ConflictPaths []string
 }
 
-// Build assembles a session-level promote sequence and overlap graph for pending overlays.
+// LatestResult names a job whose result is its worker's latest.
+type LatestResult struct {
+	Worker, Handle string
+}
+
+// Build assembles a session-level promote sequence and overlap graph over each
+// worker's latest pending result, named by handle. Landing that result
+// disposes the worker's earlier rounds, so they take no place of their own.
 func Build(
 	sessionID string,
 	tasks []api.WorkerTask,
 	preview func(sessionID, jobID string) (PreviewSnapshot, bool),
+	latest map[string]LatestResult,
 ) api.OverlayMergePlan {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
@@ -37,7 +45,19 @@ func Build(
 		if !api.WorkerTaskOverlayOpen(&task) {
 			continue
 		}
+		if latest[task.ID].Handle == "" {
+			continue
+		}
 		pending = append(pending, task)
+	}
+	handles := func(jobIDs []string) []string {
+		var out []string
+		for _, id := range jobIDs {
+			if h := latest[strings.TrimSpace(id)].Handle; h != "" {
+				out = append(out, h)
+			}
+		}
+		return out
 	}
 	if len(pending) == 0 {
 		return api.OverlayMergePlan{}
@@ -45,24 +65,26 @@ func Build(
 	sort.Slice(pending, func(i, j int) bool { return pending[i].ID < pending[j].ID })
 
 	promotableSet := map[string]struct{}{}
-	pathToJobs := map[string][]string{}
+	pathToHandles := map[string][]string{}
 	entries := make([]api.OverlayMergePlanEntry, 0, len(pending))
 	promotableEntries := make([]api.OverlayMergePlanEntry, 0, len(pending))
 
 	for _, task := range pending {
+		named := latest[task.ID]
 		paths := planPaths(task)
 		for _, p := range paths {
-			pathToJobs[p] = append(pathToJobs[p], task.ID)
+			pathToHandles[p] = append(pathToHandles[p], named.Handle)
 		}
 		entry := api.OverlayMergePlanEntry{
-			WorkerID:     task.ID,
+			OverlayID:    named.Handle,
+			Worker:       named.Worker,
 			AgentType:    strings.TrimSpace(task.AgentType),
 			ChangedPaths: paths,
 		}
 		if snap, ok := preview(sessionID, task.ID); ok {
 			entry.PromoteOrder = snap.PromoteOrder
-			entry.PromoteAfter = append([]string(nil), snap.PromoteAfter...)
-			entry.BlockedBy = append([]string(nil), snap.BlockedBy...)
+			entry.PromoteAfter = handles(snap.PromoteAfter)
+			entry.BlockedBy = handles(snap.BlockedBy)
 			entry.ConflictPaths = append([]string(nil), snap.ConflictPaths...)
 			entry.CleanPaths = append([]string(nil), snap.CleanPaths...)
 		} else {
@@ -70,23 +92,23 @@ func Build(
 		}
 		entries = append(entries, entry)
 		if !unfinishedOverlayLeg(task) {
-			promotableSet[task.ID] = struct{}{}
+			promotableSet[named.Handle] = struct{}{}
 			promotableEntries = append(promotableEntries, entry)
 		}
 	}
 
-	for path := range pathToJobs {
-		pathToJobs[path] = idset.UnionSorted(nil, pathToJobs[path])
+	for path := range pathToHandles {
+		pathToHandles[path] = idset.UnionSorted(nil, pathToHandles[path])
 	}
 
 	var shared []api.OverlayMergeSharedPath
-	for path, jobIDs := range pathToJobs {
-		if len(jobIDs) < 2 {
+	for path, ids := range pathToHandles {
+		if len(ids) < 2 {
 			continue
 		}
 		shared = append(shared, api.OverlayMergeSharedPath{
-			Path:      path,
-			WorkerIDs: jobIDs,
+			Path:       path,
+			OverlayIDs: ids,
 		})
 	}
 	sort.Slice(shared, func(i, j int) bool { return shared[i].Path < shared[j].Path })
@@ -168,7 +190,7 @@ func promoteSequence(
 				continue
 			}
 			// blocked_by: promote this overlay before listed siblings land.
-			blockedBy[sibling] = append(blockedBy[sibling], entry.WorkerID)
+			blockedBy[sibling] = append(blockedBy[sibling], entry.OverlayID)
 		}
 		for _, after := range entry.PromoteAfter {
 			after = strings.TrimSpace(after)
@@ -179,7 +201,7 @@ func promoteSequence(
 				continue
 			}
 			// promote_after: this overlay becomes clean only after listed siblings promote.
-			blockedBy[entry.WorkerID] = append(blockedBy[entry.WorkerID], after)
+			blockedBy[entry.OverlayID] = append(blockedBy[entry.OverlayID], after)
 		}
 	}
 	for jobID, blockers := range blockedBy {
@@ -203,7 +225,7 @@ func promoteSequence(
 	if len(shared) > 0 {
 		sharedCount := map[string]int{}
 		for _, row := range shared {
-			for _, id := range row.WorkerIDs {
+			for _, id := range row.OverlayIDs {
 				sharedCount[id]++
 			}
 		}
@@ -214,11 +236,11 @@ func promoteSequence(
 					continue
 				}
 				if a.PreviewStale && b.PreviewStale {
-					first, second := a.WorkerID, b.WorkerID
-					if sharedCount[a.WorkerID] > sharedCount[b.WorkerID] {
-						first, second = b.WorkerID, a.WorkerID
-					} else if sharedCount[a.WorkerID] == sharedCount[b.WorkerID] && a.WorkerID > b.WorkerID {
-						first, second = b.WorkerID, a.WorkerID
+					first, second := a.OverlayID, b.OverlayID
+					if sharedCount[a.OverlayID] > sharedCount[b.OverlayID] {
+						first, second = b.OverlayID, a.OverlayID
+					} else if sharedCount[a.OverlayID] == sharedCount[b.OverlayID] && a.OverlayID > b.OverlayID {
+						first, second = b.OverlayID, a.OverlayID
 					}
 					if !hasBlocker(blockedBy, second, first) {
 						blockedBy[second] = append(blockedBy[second], first)

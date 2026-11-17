@@ -17,8 +17,8 @@ import (
 
 func TestSourceSearchCursorBindsScopeGenerationAndAddress(t *testing.T) {
 	address := projectsource.SourceIndexEntry{RootID: "root", Path: "src/a.go"}
-	scope := sourceSearchScope("project", "", "query")
-	raw, err := encodeSourceSearchCursor(scope, 42, address)
+	scope := pagecursor.Scope("project", "", "query")
+	raw, err := sourceSearchPages.EncodeAt(scope, 42, address)
 	testutil.FailErr(t, "encode source cursor", err)
 	got, err := decodeSourceSearchCursor(raw, scope, 42)
 	testutil.FailErr(t, "decode source cursor", err)
@@ -28,7 +28,7 @@ func TestSourceSearchCursorBindsScopeGenerationAndAddress(t *testing.T) {
 	if _, err = decodeSourceSearchCursor(raw, scope, 43); !errors.Is(err, pagecursor.ErrExpired) {
 		t.Fatalf("generation mismatch=%v, want expired", err)
 	}
-	if _, err = decodeSourceSearchCursor(raw, sourceSearchScope("project", "", "other"), 42); !errors.Is(err, pagecursor.ErrInvalid) {
+	if _, err = decodeSourceSearchCursor(raw, pagecursor.Scope("project", "", "other"), 42); !errors.Is(err, pagecursor.ErrInvalid) {
 		t.Fatalf("other scope=%v, want invalid", err)
 	}
 }

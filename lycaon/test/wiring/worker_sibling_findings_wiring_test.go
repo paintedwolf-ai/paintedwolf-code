@@ -55,17 +55,17 @@ func TestParallelWorkerRecordFindingSiblingInjectWiring(t *testing.T) {
 	}
 	testutil.FailErr(t, "defaults a", worker.ApplyEnqueueDefaults(&taskA, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
 	testutil.FailErr(t, "defaults b", worker.ApplyEnqueueDefaults(&taskB, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
-	_, err = h.Delegations.Queue.Enqueue(ctx, taskA)
+	_, err = h.Workers.Queue.Enqueue(ctx, taskA)
 	testutil.FailErr(t, "enqueue a", err)
-	_, err = h.Delegations.Queue.Enqueue(ctx, taskB)
+	_, err = h.Workers.Queue.Enqueue(ctx, taskB)
 	testutil.FailErr(t, "enqueue b", err)
 
 	childA, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "leg a"})
 	testutil.FailErr(t, "create child a", err)
 	childB, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "leg b"})
 	testutil.FailErr(t, "create child b", err)
-	testutil.FailErr(t, "link a", h.Delegations.Queue.SetChildSessionID(ctx, taskA.ID, childA.ID))
-	testutil.FailErr(t, "link b", h.Delegations.Queue.SetChildSessionID(ctx, taskB.ID, childB.ID))
+	testutil.FailErr(t, "link a", h.Workers.Queue.SetChildSessionID(ctx, taskA.ID, childA.ID))
+	testutil.FailErr(t, "link b", h.Workers.Queue.SetChildSessionID(ctx, taskB.ID, childB.ID))
 
 	configDir := filepath.Join(dir, "internal", "config")
 	testutil.FailErr(t, "create config dir", os.MkdirAll(configDir, 0o755))

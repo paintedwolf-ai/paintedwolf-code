@@ -5,7 +5,6 @@ import (
 
 	"github.com/go-chi/cors"
 	"github.com/lycaon/lycaon/internal/configdir"
-	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 // productionCORSOrigins lists shipped desktop UI origins.
@@ -53,28 +52,5 @@ func corsOptions() cors.Options {
 		AllowCredentials: false,
 		// The preflight cache is limited to 600 seconds per URL.
 		MaxAge: 600,
-	}
-}
-
-func validHuntStrategy(s wire.HuntStrategy) bool {
-	switch s {
-	case wire.HuntStrategyFileBased,
-		wire.HuntStrategyFeatureBased,
-		wire.HuntStrategyRiskBased,
-		wire.HuntStrategyResearchBased:
-		return true
-	default:
-		return false
-	}
-}
-
-func validInspectMode(m wire.InspectMode) bool {
-	switch m {
-	case wire.InspectModeStandard,
-		wire.InspectModeTurbo,
-		wire.InspectModeFull:
-		return true
-	default:
-		return false
 	}
 }

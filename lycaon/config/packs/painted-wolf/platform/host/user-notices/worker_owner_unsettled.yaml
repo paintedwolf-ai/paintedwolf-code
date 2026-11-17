@@ -1,14 +1,14 @@
 surfaces:
   - worker_failure
 notification: { tier: non_catastrophic, scope: session }
-title: Worker subsystem owner failed
+title: Worker round subsystem did not settle
 message: >-
-  A subsystem owner on this worker ran and could not commit its outcome.
+  A subsystem owner in this round ran and could not commit its outcome.
   The isolated workspace was already prepared; this is not a workspace-setup
-  failure.
+  failure, and work saved in the workspace is kept.
 suggested_action: >-
-  Retry the worker. If the same subsystem fails again, open the worker to see which
-  tool call could not settle.
+  Open the worker to see which tool call could not settle; the coordinator can
+  instruct the worker again once ready.
 scenarios:
   - id: generic
     vars: {}

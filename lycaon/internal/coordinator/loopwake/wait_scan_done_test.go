@@ -89,7 +89,7 @@ func TestWaitScanDoneAlreadySatisfiedWhenNoOpenScans(t *testing.T) {
 	loop := NewLoopEngine()
 	loop.SetDeps(scanCycleLoopDeps(false))
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
@@ -115,7 +115,7 @@ func TestWaitScanDoneArmsSleepWhileScanOpen(t *testing.T) {
 	loop := NewLoopEngine()
 	loop.SetDeps(scanCycleLoopDeps(true))
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	invocationOut := &tools.ToolInvocationOut{}

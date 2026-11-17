@@ -5,18 +5,18 @@ on: tool.rejected
 selector:
   tools:
     - worker_cancel
-requires_facts: [paintedwolf.job_id, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.rejection_code, paintedwolf.worker]
 when: paintedwolf.rejection_code == "WORKER_CANCEL_SESSION_MISMATCH"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-message: Worker job {{ paintedwolf.job_id }} does not belong to this coordinator session
-what: worker_cancel may only stop jobs spawned from the active session
-cause: The job_id belongs to another session or project
-why: The job_id belongs to another session or project
-fix: 'Cancel only jobs you spawned in this session.'
-instead: 'Use job_id from this session''s enqueue result or pulse roster.'
+message: '{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}This worker{% endif %} belongs to another coordinator session'
+what: '{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}This worker{% endif %} belongs to another coordinator session and cannot be cancelled from here.'
+cause: 'The worker was started from another session.'
+why: 'Only the coordinator that started a worker may stop it.'
+fix: 'Cancel only workers on this session''s roster.'
+instead: 'Act only on workers from this session''s roster.'
 x-paintedwolf-scenarios:
   - id: default
     vars:
-      job_id: job-other
+      worker: parser-fix

@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/store"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -37,12 +36,7 @@ func TestAuthorizationRuntimeSealsActualToolAndSpawnInventoryAndDetectsDrift(t *
 	})
 	err = runtime.BuildAuthorization("", []sandbox.ToolProfile{{ID: "fixture", Tools: map[string]bool{"read": true}, DenyTools: []string{"blocked_*"}}}, nil, func() hitl.ApprovalGate { return nil }, func() []tools.ToolMeta {
 		return []tools.ToolMeta{{Name: "read"}, {Name: "mcp_fixture_query"}, {Name: "blocked_write"}}
-	}, func(context.Context, *api.Session) sandbox.ToolAccess { return sandbox.ToolAccessAll }, func(path string) spawn.WorkerToolBudget {
-		if path != root {
-			t.Fatalf("worker budget attributed to another root:%q", path)
-		}
-		return spawn.WorkerToolBudget{Default: 7, Min: 2, Max: 9}
-	})
+	}, func(context.Context, *api.Session) sandbox.ToolAccess { return sandbox.ToolAccessAll })
 	testutil.FailErr(t, "build runtime authorization", err)
 	runtime.BindMCPInventory(mcpInventoryFixture{})
 	for range 2 {
@@ -56,7 +50,7 @@ func TestAuthorizationRuntimeSealsActualToolAndSpawnInventoryAndDetectsDrift(t *
 		t.Fatalf("runtime fact drift did not form a single chain:%+v", rows)
 	}
 	current := rows[1]
-	if !slices.Equal(current.AllowedTools, []string{"mcp_fixture_query", "read"}) || !slices.Equal(current.MCPInventory.ProviderIDs, []string{"fixture-provider"}) || !slices.Equal(current.SpawnAllowlist, roster) || current.WorkerToolBudget.Default != 7 || len(current.ChatGrants) != 0 {
+	if !slices.Equal(current.AllowedTools, []string{"mcp_fixture_query", "read"}) || !slices.Equal(current.MCPInventory.ProviderIDs, []string{"fixture-provider"}) || !slices.Equal(current.SpawnAllowlist, roster) || len(current.ChatGrants) != 0 {
 		t.Fatalf("sealed runtime facts departed from actual inventory:%+v", current)
 	}
 	if broken := authzcontext.VerifyContexts(sess.ID, rows); broken != nil {

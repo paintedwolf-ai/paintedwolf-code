@@ -12,7 +12,7 @@ import (
 )
 
 func TestCatalogAllowlistRegistrySync(t *testing.T) {
-	for _, callee := range []string{"delegation.RegisterDelegationTools", "parse.RegisterParseTools", "workflowstatetools.RegisterStateTools", "blueprint.RegisterPlanTools"} {
+	for _, callee := range []string{"parse.RegisterParseTools", "workflowstatetools.RegisterStateTools", "blueprint.RegisterPlanTools"} {
 		requireCatalogCall(t, "build_tools.go", "registerCoordinatorTools", callee, "b.execution.Host.Registry")
 	}
 	requireCatalogCall(t, "build_board.go", "wireGroundingAndFindings", "b.boards.WireGroundingAndFindings", "b.startup.ctx")

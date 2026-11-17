@@ -28,10 +28,10 @@ type Graph struct {
 	Packages  map[string]bool
 }
 
-// buildGraph parses production Go files under lycaon/ and records package
+// BuildGraph parses production Go files under lycaon/ and records package
 // imports between module packages. Test files are excluded: the graph answers
 // how the engine is wired, not how it is verified.
-func buildGraph(tree Tree) (*Graph, error) {
+func BuildGraph(tree Tree) (*Graph, error) {
 	files, err := tree.Files()
 	if err != nil {
 		return nil, fmt.Errorf("list checkout: %w", err)

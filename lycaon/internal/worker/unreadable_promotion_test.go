@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
@@ -41,7 +42,7 @@ func TestEntryLeftOutOfTheBranchIsNotAWorkerDeletion(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRootWithID(t, sqlDB, testdbseed.DefaultProjectID, "root-id", project)
 	dataDir := testbaseline.DataDir(t, sqlDB)
-	mgr := workspace.NewManager(filepath.Join(dataDir, "worker-branches"))
+	mgr := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}))
 	q := NewSQLQueue(sqlDB, 4)
 	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(dataDir, "source-content")).Baselines)
 	q.SetWorkerWorkspaceManager(mgr)

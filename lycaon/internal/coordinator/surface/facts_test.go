@@ -130,6 +130,7 @@ func TestSurfaceFactsRegistry_structFieldClosure(t *testing.T) {
 		"InvestigateDefaultEligible":            FactInvestigateDefaultEligible,
 		"InvestigateHardBlock":                  FactInvestigateHardBlock,
 		"WorkersInFlight":                       FactWorkersInFlight,
+		"WorkersDelivered":                      FactWorkersDelivered,
 		"HostCycleTurn":                         FactHostCycleTurn,
 		"WorkerTaskFinishedTurn":                FactWorkerTaskFinishedTurn,
 		"HostLoopWakeTurn":                      FactHostLoopWakeTurn,

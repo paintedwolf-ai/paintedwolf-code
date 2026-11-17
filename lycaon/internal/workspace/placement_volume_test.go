@@ -5,6 +5,7 @@ package workspace
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -42,7 +43,7 @@ func placementFixtureAt(t *testing.T, state string) placementFixture {
 	})
 	return placementFixture{
 		state: state,
-		mgr:   NewManager(enginepaths.WorkerBranchesRootUnder(state)),
+		mgr:   NewManager(enginepaths.WorkerBranchesRootUnder(state), platform.NewSelector(platform.Config{})),
 	}
 }
 

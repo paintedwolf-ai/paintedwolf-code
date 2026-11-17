@@ -1,7 +1,6 @@
 package toolhost
 
 import (
-	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
@@ -11,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
+	"github.com/lycaon/lycaon/internal/toolprofiles"
 )
 
 func TestBuildNativeRegistryConstructsSummarizeWithoutProviderServices(t *testing.T) {
@@ -29,7 +29,7 @@ func TestBuildNativeRegistryConstructsSummarizeWithoutProviderServices(t *testin
 		boundary: boundary, nativeConfig: nativeConfig, toolSchemas: toolSchemas,
 	})
 	testutil.FailErr(t, "build native registry", err)
-	if mutationTools.Survey.summarizeTool == nil {
+	if mutationTools.Commands.owners.summarize == nil {
 		t.Fatal("native summarize tool was not constructed")
 	}
 }
