@@ -21,7 +21,7 @@ schema:
       items:
         type: string
         # Pinned to api.AllScanCategoryValues() plus "all" by
-        # TestScanToolCatalogEnumsMatchWire.
+        # the catalog-load/scan-tool-catalog-enums-match-the-wire law.
         enum: [all, security, sast, sca, container, secret, lint, types, style, license, custom]
     paths:
       type: array

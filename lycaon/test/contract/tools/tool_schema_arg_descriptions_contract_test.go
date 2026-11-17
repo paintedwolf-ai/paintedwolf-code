@@ -83,41 +83,6 @@ func TestToolSchemaDescriptionsAvoidToolArgDupes(t *testing.T) {
 	contractcheck.FailViolations(t, "tools/schemas arg description restates its tool blurb (null-model outlier)", violations)
 }
 
-func collectUndescribedProperties(tool, prefix string, node map[string]any, out *[]string) {
-	if node == nil {
-		return
-	}
-	props, _ := node["properties"].(map[string]any)
-	if props == nil {
-		return
-	}
-	keys := make([]string, 0, len(props))
-	for k := range props {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		path := key
-		if prefix != "" {
-			path = prefix + "." + key
-		}
-		raw := props[key]
-		child, ok := raw.(map[string]any)
-		if !ok {
-			*out = append(*out, fmt.Sprintf("%s.%s: property schema must be a map with description", tool, path))
-			continue
-		}
-		desc, _ := child["description"].(string)
-		if strings.TrimSpace(desc) == "" {
-			*out = append(*out, fmt.Sprintf("%s.%s", tool, path))
-		}
-		collectUndescribedProperties(tool, path, child, out)
-		if items, ok := child["items"].(map[string]any); ok {
-			collectUndescribedProperties(tool, path+"[]", items, out)
-		}
-	}
-}
-
 func collectDescribedArgs(tool, prefix string, node map[string]any, out *[]toolSchemaArgDesc) {
 	if node == nil {
 		return
