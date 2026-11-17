@@ -26,8 +26,12 @@ func (s *conformanceSweep) probePagination(ctx context.Context) {
 		if len(pages) == 0 {
 			continue
 		}
-		params, _ := s.values.pathParams(op)
-		base := s.values.requiredQuery(op)
+		prepared, err := s.successRequest(ctx, op)
+		if err != nil {
+			s.findings.add(rulePagination, op.ID, "page inputs", "could not prepare: %v", err)
+			continue
+		}
+		params, base := prepared.params, prepared.query
 		add := func(probe, param, value, code string) {
 			query := url.Values{}
 			for k, v := range base {
@@ -102,9 +106,17 @@ func (s *conformanceSweep) walkPages(ctx context.Context) {
 		if len(pages) == 0 || limit == nil || limit.Max == nil {
 			continue
 		}
-		params, _ := s.values.pathParams(op)
+		base, err := s.successRequest(ctx, op)
+		if err != nil {
+			s.findings.add(rulePagination, op.ID, "walk", "could not prepare: %v", err)
+			continue
+		}
+		params := base.params
 		page := func(probe string, n int64, param, cursor string) (conformanceExchange, []any) {
-			query := s.values.requiredQuery(op)
+			query := url.Values{}
+			for k, v := range base.query {
+				query[k] = append([]string(nil), v...)
+			}
 			query.Set("limit", strconv.FormatInt(n, 10))
 			if cursor != "" {
 				query.Set(param, cursor)
@@ -197,12 +209,18 @@ func listMembers(path string, body []byte) []any {
 	if list, ok := envelope[strings.ReplaceAll(segments[len(segments)-1], "-", "_")].([]any); ok {
 		return list
 	}
+	// Otherwise the only non-empty array, so an always-empty side list
+	// cannot stand in for the rows.
+	var rows []any
 	for _, key := range slices.Sorted(maps.Keys(envelope)) {
-		if list, ok := envelope[key].([]any); ok {
-			return list
+		if list, ok := envelope[key].([]any); ok && len(list) > 0 {
+			if rows != nil {
+				return nil
+			}
+			rows = list
 		}
 	}
-	return nil
+	return rows
 }
 
 // memberIdentity names a row by its id, or by its whole value.
