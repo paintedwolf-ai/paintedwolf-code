@@ -6751,6 +6751,11 @@ export interface components {
             id: string;
             name: string | null;
             roots: components["schemas"]["ProjectRoot"][];
+            /**
+             * Format: uuid
+             * @description The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
+             */
+            outside_root_id: string;
             roots_generation: number;
             /** @description Number of retained root chats, including archived chats and excluding worker sessions. */
             session_count: number;

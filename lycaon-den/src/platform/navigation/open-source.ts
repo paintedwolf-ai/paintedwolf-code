@@ -1,5 +1,6 @@
 // Contract: docs/source-navigation.md
 
+import { outsideHostPath } from "../../files/source/outside-namespace.ts";
 import {
   resolveProjectFile,
   relativeUnderRoot,
@@ -57,7 +58,7 @@ export type OpenSourceSink = (req: SourceNavigationRequest) => void;
 
 export type OpenSourceProjectLookup = (
   projectId: string,
-) => ResolveProjectFileInput | undefined;
+) => (ResolveProjectFileInput & { outsideRootId?: string }) | undefined;
 
 export type OpenSourceLocationResult =
   | { status: "opened-in-app" }
@@ -123,6 +124,13 @@ export function resolveProjectPath(
   if (!project) return { status: "noop", reason: "no_project" };
   const requestedRootId = args.rootId?.trim();
   const activeRootId = args.activeRootId?.trim();
+  if (requestedRootId && requestedRootId === project.outsideRootId) {
+    const outsidePath = path.replace(/^\/+/, "");
+    return {
+      status: "resolved",
+      target: { projectId, path: outsidePath, absolutePath: outsideHostPath(outsidePath), rootId: requestedRootId },
+    };
+  }
   // A pinned root wins; bare paths otherwise resolve against the session folder.
   const resolveProject = requestedRootId
     ? { roots: project.roots.filter((root) => root.id === requestedRootId) }
@@ -193,7 +201,7 @@ export function classifyPathKind(path: string): "file" | "folder" | "unknown" {
   return "unknown";
 }
 
-/** Opens only paths resolved inside attached roots. */
+/** Opens paths resolved inside attached roots or the project's outside namespace. */
 export async function openSourceLocation(
   args: OpenSourceLocationArgs,
   options?: OpenSourceOptions,

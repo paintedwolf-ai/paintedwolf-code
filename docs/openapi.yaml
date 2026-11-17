@@ -17768,6 +17768,7 @@ components:
         - id
         - name
         - roots
+        - outside_root_id
         - roots_generation
         - session_count
         - starred
@@ -17785,6 +17786,7 @@ components:
         - id
         - name
         - roots
+        - outside_root_id
         - roots_generation
         - session_count
         - starred
@@ -17805,6 +17807,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ProjectRoot'
+        outside_root_id:
+          type: string
+          format: uuid
+          description: |
+            The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
         roots_generation:
           type: integer
           minimum: 0

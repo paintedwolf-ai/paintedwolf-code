@@ -12,6 +12,7 @@ func ToAPI(p *Project) api.Project {
 	out := api.Project{
 		ID:              p.ID,
 		Roots:           make([]api.ProjectRoot, 0, len(p.Roots)),
+		OutsideRootID:   p.Outside.ID,
 		RootsGeneration: p.RootsGeneration,
 		SessionCount:    p.SessionCount,
 		Starred:         p.Starred,

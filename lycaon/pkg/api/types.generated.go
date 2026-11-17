@@ -5017,10 +5017,12 @@ type ProgressUpdateSummary struct {
 
 // Project
 type Project struct {
-	ID              string        `json:"id"`
-	Name            *string       `json:"name"`
-	Roots           []ProjectRoot `json:"roots"`
-	RootsGeneration int           `json:"roots_generation"`
+	ID    string        `json:"id"`
+	Name  *string       `json:"name"`
+	Roots []ProjectRoot `json:"roots"`
+	// The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
+	OutsideRootID   string `json:"outside_root_id"`
+	RootsGeneration int    `json:"roots_generation"`
 	// Number of retained root chats, including archived chats and excluding worker sessions.
 	SessionCount int  `json:"session_count"`
 	Starred      bool `json:"starred"`

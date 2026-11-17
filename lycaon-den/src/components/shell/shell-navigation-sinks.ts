@@ -172,7 +172,7 @@ export function installShellNavigationSinks({ shell, projects, appStore, openSta
   });
   const unregisterProjectLookup = registerOpenSourceProjectLookup((id) => {
     const project = projects.byId(id);
-    return project ? { roots: project.roots } : undefined;
+    return project ? { roots: project.roots, outsideRootId: project.outside_root_id } : undefined;
   });
   const unregisterNotificationOpen = registerNotificationSessionOpenSink(
     (sessionId) => openNotificationSession(sessionId),

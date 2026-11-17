@@ -409,6 +409,8 @@ export type CachedProject = {
     admitted?: boolean;
     admission_code?: "write_root_under_secret_store" | "write_root_contains_control_plane" | null;
   }>;
+  /** Absent in caches written before projects named their outside namespace. */
+  outside_root_id?: string;
   roots_generation: number;
   session_count: number;
   starred: boolean;

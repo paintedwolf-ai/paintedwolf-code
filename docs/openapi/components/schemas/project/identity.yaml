@@ -76,12 +76,13 @@ components:
           format: date-time
     Project:
       x-go-generate: true
-      x-go-field-order: ["id", "name", "roots", "roots_generation", "session_count", "starred", "is_draft", "promotion", "cover_artifact_id", "cover_root_session_id", "cover_source", "cover_updated_at", "last_activity_at", "last_opened_at", "created_at"]
+      x-go-field-order: ["id", "name", "roots", "outside_root_id", "roots_generation", "session_count", "starred", "is_draft", "promotion", "cover_artifact_id", "cover_root_session_id", "cover_source", "cover_updated_at", "last_activity_at", "last_opened_at", "created_at"]
       type: object
       required:
       - id
       - name
       - roots
+      - outside_root_id
       - roots_generation
       - session_count
       - starred
@@ -100,6 +101,13 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/ProjectRoot"
+        outside_root_id:
+          type: string
+          format: uuid
+          description: >
+            The project's namespace for files beyond every root. Source history
+            addresses those files by this root id and their host path without
+            its leading slash.
         roots_generation:
           type: integer
           minimum: 0

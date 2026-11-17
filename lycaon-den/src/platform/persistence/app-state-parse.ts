@@ -556,6 +556,7 @@ function parseCachedProject(value: unknown): CachedProject | null {
     id: row.id,
     name: typeof row.name === "string" ? row.name : row.name ?? null,
     roots,
+    outside_root_id: typeof row.outside_root_id === "string" ? row.outside_root_id : "",
     roots_generation: row.roots_generation,
     session_count: row.session_count,
     starred: row.starred,
