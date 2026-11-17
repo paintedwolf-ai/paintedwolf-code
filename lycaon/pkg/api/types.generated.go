@@ -2588,8 +2588,9 @@ type Delegation struct {
 type DelegationEvent struct {
 	DelegationID string           `json:"delegation_id"`
 	Status       DelegationStatus `json:"status"`
-	LegID        string           `json:"leg_id"`
-	Phase        DelegationPhase  `json:"phase"`
+	// The leg whose transition this is; absent for the delegation's own.
+	LegID string          `json:"leg_id,omitempty"`
+	Phase DelegationPhase `json:"phase"`
 }
 
 // DelegationLegListResponse
@@ -7640,7 +7641,8 @@ type SourceOperationList struct {
 
 // SourceOperationStatus Durable file operation identified by its mutation operation_id. Disconnects leave accepted work running; terminal results survive restart.
 type SourceOperationStatus struct {
-	RootID   string `json:"root_id"`
+	// The root the request named; absent when it named none.
+	RootID   string `json:"root_id,omitempty"`
 	Path     string `json:"path"`
 	FromPath string `json:"from_path"`
 	// Original history head for an undo or redo request; omitted for other operations.

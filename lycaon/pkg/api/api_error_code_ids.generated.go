@@ -125,6 +125,8 @@ const (
 	// ApiErrorCodePromotionNotFound project has no active save-to-folder
 	// transition
 	ApiErrorCodePromotionNotFound ApiErrorCode = "promotion_not_found"
+	// ApiErrorCodeProjectNotDraft only a draft project can be saved to a folder
+	ApiErrorCodeProjectNotDraft ApiErrorCode = "project_not_draft"
 	// ApiErrorCodeDraftRootImmutable draft roots change only through
 	// save-to-folder
 	ApiErrorCodeDraftRootImmutable ApiErrorCode = "draft_root_immutable"
@@ -996,6 +998,7 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeProjectMutationInProgress,
 	ApiErrorCodePromotionConflict,
 	ApiErrorCodePromotionNotFound,
+	ApiErrorCodeProjectNotDraft,
 	ApiErrorCodeDraftRootImmutable,
 	ApiErrorCodeProjectBusy,
 	ApiErrorCodeCheckpointNotPending,
@@ -1468,6 +1471,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeFolderNotEmpty,
 		ApiErrorCodeProjectMutationInProgress,
 		ApiErrorCodePromotionConflict,
+		ApiErrorCodeProjectNotDraft,
 		ApiErrorCodeDraftRootImmutable,
 		ApiErrorCodeProjectBusy,
 		ApiErrorCodeCheckpointNotPending,

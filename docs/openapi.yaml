@@ -2906,7 +2906,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFound'
         '409':
-          description: The chosen folder is not empty (FOLDER_NOT_EMPTY)
+          description: The chosen folder is not empty (FOLDER_NOT_EMPTY), or the project is not a draft (PROJECT_NOT_DRAFT)
           content:
             application/json:
               schema:
@@ -15165,7 +15165,7 @@ components:
       properties:
         repo_id:
           type: string
-          format: uuid
+          pattern: ^[a-zA-Z0-9_-]+$
         label:
           type: string
         branch:
@@ -15196,7 +15196,7 @@ components:
         repo_id:
           description: Absent when the active folder is not in a git repository.
           type: string
-          format: uuid
+          pattern: ^[a-zA-Z0-9_-]+$
         label:
           type: string
         branch:
@@ -15906,7 +15906,6 @@ components:
       required:
         - delegation_id
         - status
-        - leg_id
         - phase
       additionalProperties: false
       properties:
@@ -15916,6 +15915,7 @@ components:
         status:
           $ref: '#/components/schemas/DelegationStatus'
         leg_id:
+          description: The leg whose transition this is; absent for the delegation's own.
           type: string
           format: uuid
         phase:
@@ -26988,6 +26988,7 @@ components:
         - project_mutation_in_progress
         - promotion_conflict
         - promotion_not_found
+        - project_not_draft
         - draft_root_immutable
         - project_busy
         - checkpoint_not_pending
@@ -32732,7 +32733,6 @@ components:
       type: object
       additionalProperties: false
       required:
-        - root_id
         - path
         - from_path
         - operation_id
@@ -32749,6 +32749,7 @@ components:
         root_id:
           type: string
           format: uuid
+          description: The root the request named; absent when it named none.
         path:
           type: string
         from_path:
