@@ -10,7 +10,7 @@ on:
         description: Which legs to run
         type: choice
         default: all
-        options: [all, behavior, race, performance, fuzz, e2e]
+        options: [all, behavior, race, performance, fuzz, e2e, release]
       source-sha:
         description: Exact source commit; blank uses the dispatched commit
         type: string
@@ -54,6 +54,7 @@ jobs:
 
   verification:
     needs: source
+    if: ${{ inputs.suite != 'release' }}
     uses: ./.github/workflows/verification.yml
     # Reads the measured durations that plan the matrix.
     permissions:
@@ -117,7 +118,7 @@ jobs:
 
   release-rehearsal:
     needs: source
-    if: ${{ (inputs.suite || 'all') == 'all' }}
+    if: ${{ contains(fromJSON('["all", "release"]'), inputs.suite || 'all') }}
     uses: ./.github/workflows/release-rehearsal.yml
     with:
       source-sha: ${{ needs.source.outputs.sha }}
@@ -127,7 +128,7 @@ jobs:
   # nothing about the current source; the release gate qualifies the candidate.
   installed-upgrade-fixtures:
     needs: source
-    if: ${{ (inputs.suite || 'all') == 'all' }}
+    if: ${{ contains(fromJSON('["all", "release"]'), inputs.suite || 'all') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
@@ -253,5 +254,5 @@ jobs:
       - name: Require all selected nightly verification
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
-          SKIPPED: ${{ inputs.suite == 'e2e' && 'platform,upgrade-path,release-rehearsal,installed-upgrade-fixtures,installed-upgrade' || (inputs.suite || 'all') != 'all' && 'platform,e2e,upgrade-path,release-rehearsal,installed-upgrade-fixtures,installed-upgrade' || '' }}
+          SKIPPED: ${{ inputs.suite == 'release' && 'verification,platform,e2e,upgrade-path' || inputs.suite == 'e2e' && 'platform,upgrade-path,release-rehearsal,installed-upgrade-fixtures,installed-upgrade' || (inputs.suite || 'all') != 'all' && 'platform,e2e,upgrade-path,release-rehearsal,installed-upgrade-fixtures,installed-upgrade' || '' }}
         run: python3 scripts/ci_verification.py gate --skipped "$SKIPPED"
