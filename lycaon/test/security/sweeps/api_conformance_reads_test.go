@@ -285,7 +285,6 @@ func (e *hostEffects) quiesce(ctx context.Context) {
 		e.settle(ctx)
 		var pending int64
 		if err := e.conn.QueryRowContext(ctx, "SELECT COUNT(*) FROM event_outbox").Scan(&pending); err == nil && pending > 0 {
-			time.Sleep(time.Millisecond)
 			continue
 		}
 		next, err := e.dataVersion(ctx)
