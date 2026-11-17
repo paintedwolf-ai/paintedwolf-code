@@ -1,4 +1,4 @@
-package sourceapi
+package outsideaccess
 
 import (
 	"errors"
@@ -15,7 +15,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestOutsideReadsNeedAChatThatHoldsTheFile(t *testing.T) {
+func TestAdmitNeedsAChatThatHoldsTheFile(t *testing.T) {
 	ctx := t.Context()
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, database, "p1")
@@ -31,7 +31,7 @@ func TestOutsideReadsNeedAChatThatHoldsTheFile(t *testing.T) {
 		Op: api.SourceChangeOpWrite, Origin: api.SourceChangeOriginAgent, After: []byte("a=1\n")}))
 	p := &project.Project{ID: "p1", Outside: project.Root{ID: outside, ProjectID: "p1", Path: "/", Kind: project.RootKindOutside}}
 
-	admitted, err := admitOutside(ctx, ledger, p, outside, "etc/app.conf")
+	admitted, err := Admit(ctx, ledger, p, outside, "etc/app.conf")
 	testutil.FailErr(t, "admit the held file", err)
 	if roots := admitted.SourceRoots(); len(roots) != 1 || roots[0].ID != outside {
 		t.Fatalf("admitted view roots = %+v", roots)
@@ -40,11 +40,11 @@ func TestOutsideReadsNeedAChatThatHoldsTheFile(t *testing.T) {
 		t.Fatal("admission changed the project")
 	}
 	for _, rel := range []string{"etc/other.conf", "etc/../etc/app.conf", "/etc/app.conf", ""} {
-		if _, err := admitOutside(ctx, ledger, p, outside, rel); !errors.Is(err, projectsource.ErrSourcePathDenied) {
-			t.Fatalf("admitOutside(%q) = %v, want denial", rel, err)
+		if _, err := Admit(ctx, ledger, p, outside, rel); !errors.Is(err, projectsource.ErrSourcePathDenied) {
+			t.Fatalf("Admit(%q) = %v, want denial", rel, err)
 		}
 	}
-	unchanged, err := admitOutside(ctx, ledger, p, "folder-root", "etc/other.conf")
+	unchanged, err := Admit(ctx, ledger, p, "folder-root", "etc/other.conf")
 	testutil.FailErr(t, "pass a folder root through", err)
 	if unchanged != p {
 		t.Fatal("a folder root request was rewritten")

@@ -243,7 +243,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	// Editor publications share source path reservations.
 	deps.EditorDocuments.SetSourcePaths(deps.SourceMutations.Paths)
 
-	editor := editoradmin.New(responses, background, editoradmin.Dependencies{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, ProjectViews: deps.ProjectViews, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, TryRunPromotion: deps.TryRunPromotion})
+	editor := editoradmin.New(responses, background, editoradmin.Dependencies{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, ProjectViews: deps.ProjectViews, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, TryRunPromotion: deps.TryRunPromotion})
 	sourceViews := &sourceViewService{}
 	sourceReaders := &sourcecomparison.Cache{}
 	warmupPolls := newWarmupClock()

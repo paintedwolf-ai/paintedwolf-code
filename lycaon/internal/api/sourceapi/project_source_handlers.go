@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/outsideaccess"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/filekind"
 	"github.com/lycaon/lycaon/internal/project"
@@ -53,7 +54,7 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 		s.writeSourceReadError(w, r, err)
 		return
 	}
-	if p, err = admitOutside(r.Context(), s.SourceLedger, p, req.RootID, req.Path); err != nil {
+	if p, err = outsideaccess.Admit(r.Context(), s.SourceLedger, p, req.RootID, req.Path); err != nil {
 		s.writeSourceReadError(w, r, err)
 		return
 	}

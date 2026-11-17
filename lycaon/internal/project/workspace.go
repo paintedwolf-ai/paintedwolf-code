@@ -14,7 +14,14 @@ func (p *Project) WorkspaceID() string {
 	if p == nil {
 		return ""
 	}
-	return sourceworkspace.ID(p.ID, p.SourceRoots())
+	roots := p.SourceRoots()
+	attached := roots[:0:0]
+	for _, root := range roots {
+		if !root.Outside {
+			attached = append(attached, root)
+		}
+	}
+	return sourceworkspace.ID(p.ID, attached)
 }
 
 // ResolveWorkspaceRoot selects the requested or primary admitted root for a

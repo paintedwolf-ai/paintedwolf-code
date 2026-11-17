@@ -189,6 +189,7 @@ func (c savePublisher) finishMutation(ctx context.Context, p *project.Project, d
 // document expected no file, a guarded replacement otherwise.
 func publishMutation(p *project.Project, m *Mutation) (*projectsource.SourceWriteResult, error) {
 	req := projectsource.SourceWriteRequest{Path: m.Path, RootID: m.RootID, Content: m.Content, Encoding: m.Encoding, BaseSHA256: m.ExpectedSHA256}
+	p = documentProject(p, m.RootID)
 	if m.Creates() {
 		return projectsource.ApplySourceWriteCreate(p, req)
 	}

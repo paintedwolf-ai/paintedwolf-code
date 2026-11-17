@@ -35,9 +35,10 @@ func (s *Store) outsideRootID(ctx context.Context, q *db.Queries, projectID stri
 	return id, nil
 }
 
-// referenceChatFile records that the root chat of sessionID holds an outside
-// file. Files under attached roots need no reference.
-func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID, rootID, sessionID, fileID string, relation ChatFileRelation, ts time.Time) error {
+// referenceChatFile records that the root chat of sessionID holds the outside
+// file at rel, and where the chat has worked. Files under attached roots need
+// no reference.
+func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID, rootID, rel, sessionID, fileID string, relation ChatFileRelation, ts time.Time) error {
 	if sessionID == "" || fileID == "" {
 		return nil
 	}
@@ -58,11 +59,14 @@ func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID,
 		}
 		return 0
 	}
-	return q.RecordSourceChatFile(ctx, db.RecordSourceChatFileParams{
+	if err := q.RecordSourceChatFile(ctx, db.RecordSourceChatFileParams{
 		SessionID: chat, FileID: fileID,
 		Changed: flag(ChatFileChanged), Read: flag(ChatFileRead), Opened: flag(ChatFileOpened),
 		Ts: ts.UTC().Format(time.RFC3339Nano),
-	})
+	}); err != nil {
+		return err
+	}
+	return placeChatLocation(ctx, q, chat, rel, ts)
 }
 
 // OutsideFileHeld reports whether a chat of the project holds the outside

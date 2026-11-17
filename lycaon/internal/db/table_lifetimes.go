@@ -191,6 +191,7 @@ var tableLifetimes = map[string]TableLifetime{
 	"source_agent_presentations":     cascadeOwnedBy("projects"),
 	"source_checkpoint_git_states":   cascadeOwnedBy("source_checkpoints"),
 	"source_chat_files":              cascadeOwnedBy("sessions"),
+	"source_chat_locations":          cascadeOwnedBy("sessions"),
 	"source_checkpoints":             cascadeOwnedBy("projects"),
 	"source_command_window_objects":  cascadeOwnedBy("source_command_windows"),
 	"source_command_windows":         cascadeOwnedBy("projects"),

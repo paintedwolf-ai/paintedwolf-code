@@ -200,6 +200,10 @@ type AuthorshipReader interface {
 
 // TrackFile establishes or refreshes a file's tracked baseline.
 func (s *Store) TrackFile(ctx context.Context, raw TrackInput) (TrackedFile, error) {
+	return s.trackFile(ctx, raw, nil)
+}
+
+func (s *Store) trackFile(ctx context.Context, raw TrackInput, also func(context.Context, *db.Queries, TrackInput, TrackedFile) error) (TrackedFile, error) {
 	if s == nil || s.sqlDB == nil {
 		return TrackedFile{}, fmt.Errorf("ledger not configured")
 	}
@@ -224,6 +228,11 @@ func (s *Store) TrackFile(ctx context.Context, raw TrackInput) (TrackedFile, err
 	tracked, err := s.trackFileTx(ctx, q, preparedTrack{TrackInput: in, object: object})
 	if err != nil {
 		return TrackedFile{}, err
+	}
+	if also != nil {
+		if err := also(ctx, q, in, tracked); err != nil {
+			return TrackedFile{}, err
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return TrackedFile{}, err

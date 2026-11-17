@@ -107,7 +107,7 @@ func (s *Store) recordBatchIdentityTxWithCache(ctx context.Context, q *db.Querie
 		if err := s.recordEffectWithCache(ctx, q, operationID, in, &recorded, cache); err != nil {
 			return recorded, err
 		}
-		if err := s.referenceChatFile(ctx, q, in.ProjectID, in.RootID, in.SessionID, recorded.FileID, ChatFileChanged, in.TS); err != nil {
+		if err := s.referenceChatFile(ctx, q, in.ProjectID, in.RootID, in.Path, in.SessionID, recorded.FileID, ChatFileChanged, in.TS); err != nil {
 			return recorded, err
 		}
 	}

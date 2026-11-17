@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/outsideaccess"
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/api/secretview"
 	"github.com/lycaon/lycaon/internal/editordoc"
@@ -57,7 +58,7 @@ func (s *Comparisons) readChatFileEdit(ctx context.Context, sessionID string, re
 }
 
 func (s *Comparisons) readerCurrentSide(ctx context.Context, p *project.Project, rootID, path string) (wire.SourceComparisonSide, error) {
-	p, err := admitOutside(ctx, s.SourceLedger, p, rootID, path)
+	p, err := outsideaccess.Admit(ctx, s.SourceLedger, p, rootID, path)
 	if err != nil {
 		return wire.SourceComparisonSide{}, err
 	}

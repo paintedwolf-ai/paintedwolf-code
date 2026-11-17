@@ -186,6 +186,7 @@ func observeDocumentSource(p *project.Project, d *Document) (*projectsource.Sour
 	if err := checkWorkspace(p, d); err != nil {
 		return nil, nil, err
 	}
+	p = documentProject(p, d.RootID)
 	req := projectsource.SourceReadRequest{Path: d.Path, RootID: d.RootID}
 	observation, err := projectsource.ObserveProjectSource(p, req)
 	if err != nil {

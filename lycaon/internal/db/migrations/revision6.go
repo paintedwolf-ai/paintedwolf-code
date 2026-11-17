@@ -14,5 +14,5 @@ func Revision6(target Baseline) Step {
 		ID:       "outside-namespace",
 		Checksum: "f5e1e557853468d71dedcbf8be694b4da913af5f8d2ce85185a4b30034cd1aa5",
 		From:     revision5Release, To: target,
-	}, OutsideNamespace())
+	}, OutsideNamespace(), ChatLocations())
 }
