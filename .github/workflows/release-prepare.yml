@@ -228,7 +228,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "${RUNNER_TEMP}/prepared"
-          nix build --extra-experimental-features 'nix-command flakes' --no-link --print-out-paths \
+          nix build -L --extra-experimental-features 'nix-command flakes' --no-write-lock-file --no-link --print-out-paths \
             ".#packages.${SYSTEM}.default" > "${RUNNER_TEMP}/prepared/outputs.txt"
           xargs nix copy --extra-experimental-features nix-command \
             --to "file://${RUNNER_TEMP}/prepared/cache" < "${RUNNER_TEMP}/prepared/outputs.txt"
