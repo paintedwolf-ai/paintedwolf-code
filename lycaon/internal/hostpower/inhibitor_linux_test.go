@@ -187,7 +187,7 @@ func TestLogindLeaseRejectsAClosedDescriptor(t *testing.T) {
 	testutil.FailErr(t, "close fixture descriptor", writer.Close())
 	held := &logindLease{file: writer, done: make(chan error, 1), stop: make(chan struct{}), stopped: make(chan struct{})}
 	go held.watch()
-	err := testutil.Receive(t, "the closed descriptor ends the inhibition", held.Done())
+	err = testutil.Receive(t, "the closed descriptor ends the inhibition", held.Done())
 	if err == nil {
 		t.Fatal("closed descriptor had no failure")
 	}
@@ -381,7 +381,7 @@ func TestPortalDenialAndResponseEndTheLease(t *testing.T) {
 	request := fixture.request
 	fixture.mu.Unlock()
 	testutil.FailErr(t, "emit portal response", fixture.server.Emit(request, portalRequest+".Response", uint32(2), map[string]dbus.Variant{}))
-	err := testutil.Receive(t, "the portal response ends the lease", held.Done())
+	err = testutil.Receive(t, "the portal response ends the lease", held.Done())
 	if err == nil || !strings.Contains(err.Error(), "response 2") {
 		t.Fatalf("portal response = %v", err)
 	}
@@ -406,7 +406,7 @@ func TestSessionLeaseReportsBusDisconnection(t *testing.T) {
 	held, err := portalProvider{connect: connectTo(daemon.path), appID: testAppID, unitAppID: inOwnUnit}.Acquire(t.Context())
 	testutil.FailErr(t, "acquire portal inhibitor", err)
 	daemon.stop()
-	err := testutil.Receive(t, "the bus loss ends the inhibition", held.Done())
+	err = testutil.Receive(t, "the bus loss ends the inhibition", held.Done())
 	if err == nil {
 		t.Fatal("bus loss had no failure")
 	}
