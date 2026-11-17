@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -188,27 +189,20 @@ func (h *projectHub) waitFor(t *testing.T, topic wire.EventTopic) wire.EventEnve
 	h.mu.Unlock()
 
 	for {
-		select {
-		case env, ok := <-h.ch:
-			if !ok {
-				t.Fatalf("event stream closed before topic %q arrived", topic)
-			}
-			if env.Topic == topic {
-				return env
-			}
-			h.mu.Lock()
-			h.queued = append(h.queued, env)
-			h.mu.Unlock()
-		case <-t.Context().Done():
-			t.Fatalf("timeout waiting for topic %q (queued topics: %v)", topic, h.queuedTopics())
+		env := testutil.Receive(t, fmt.Sprintf("an event on topic %q", topic), h.ch)
+		if env.Topic == topic {
+			return env
 		}
+		h.mu.Lock()
+		h.queued = append(h.queued, env)
+		h.mu.Unlock()
 	}
 }
 
 // waitForField skips earlier envelopes that lack the requested field.
 func (h *projectHub) waitForField(t *testing.T, topic wire.EventTopic, field string) wire.EventEnvelope {
 	t.Helper()
-	for t.Context().Err() == nil {
+	for {
 		env := h.waitFor(t, topic)
 		var raw map[string]any
 		if err := json.Unmarshal(env.Data, &raw); err != nil {
@@ -218,15 +212,13 @@ func (h *projectHub) waitForField(t *testing.T, topic wire.EventTopic, field str
 			return env
 		}
 	}
-	t.Fatalf("timeout waiting for topic %q field %q", topic, field)
-	return wire.EventEnvelope{}
 }
 
 // waitForWorkflowRunID selects one run's workflow envelope.
 func (h *projectHub) waitForWorkflowRunID(t *testing.T, runID string) wire.EventEnvelope {
 	t.Helper()
 	runID = strings.TrimSpace(runID)
-	for t.Context().Err() == nil {
+	for {
 		env := h.waitFor(t, wire.EventTopicWorkflow)
 		var raw map[string]any
 		if err := json.Unmarshal(env.Data, &raw); err != nil {
@@ -236,28 +228,21 @@ func (h *projectHub) waitForWorkflowRunID(t *testing.T, runID string) wire.Event
 			return env
 		}
 	}
-	t.Fatalf("timeout waiting for workflow_run_id %q", runID)
-	return wire.EventEnvelope{}
 }
 
 // waitForSettingsArea selects one settings area.
 func (h *projectHub) waitForSettingsArea(t *testing.T, area string) wire.EventEnvelope {
 	t.Helper()
-	var seen []string
-	for t.Context().Err() == nil {
+	for {
 		env := h.waitFor(t, wire.EventTopicSettings)
 		var raw map[string]any
 		if err := json.Unmarshal(env.Data, &raw); err != nil {
 			t.Fatalf("settings data not an object: %v", err)
 		}
-		got := strings.TrimSpace(stringField(raw, "area"))
-		if got == area {
+		if strings.TrimSpace(stringField(raw, "area")) == area {
 			return env
 		}
-		seen = append(seen, got)
 	}
-	t.Fatalf("timeout waiting for settings area %q (saw: %v)", area, seen)
-	return wire.EventEnvelope{}
 }
 
 func stringField(raw map[string]any, key string) string {

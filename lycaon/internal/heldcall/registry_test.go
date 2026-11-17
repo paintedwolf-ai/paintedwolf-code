@@ -217,20 +217,16 @@ func TestStopCancelsTheHeldCall(t *testing.T) {
 	if err != nil || !stop.Running {
 		t.Fatalf("stop = %+v, %v", stop, err)
 	}
-	for t.Context().Err() == nil {
-		status, statusErr := registry.Status("s", outcome.Handle)
-		if statusErr != nil {
-			testutil.FailErr(t, "status", statusErr)
-		}
-		if status.Settled != nil {
-			if status.Settled.Content != "canceled" || !status.Stopped {
-				t.Fatalf("status = %+v", status)
-			}
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	var status Status
+	testutil.WaitFor(t, "the stopped call settles", func() bool {
+		var statusErr error
+		status, statusErr = registry.Status("s", outcome.Handle)
+		testutil.FailErr(t, "status", statusErr)
+		return status.Settled != nil
+	})
+	if status.Settled.Content != "canceled" || !status.Stopped {
+		t.Fatalf("status = %+v", status)
 	}
-	t.Fatal("stop did not cancel the call")
 }
 
 func TestTurnCancellationCancelsAnUnheldCall(t *testing.T) {
@@ -295,13 +291,10 @@ func TestSettledResultsAreRetainedUpToTheBound(t *testing.T) {
 
 func waitSettled(t *testing.T, registry *Registry, handle string) {
 	t.Helper()
-	for t.Context().Err() == nil {
-		if known, running := registry.State("s", handle); !known || !running {
-			return
-		}
-		time.Sleep(2 * time.Millisecond)
-	}
-	t.Fatalf("%s did not settle", handle)
+	testutil.WaitFor(t, handle+" settles", func() bool {
+		known, running := registry.State("s", handle)
+		return !known || !running
+	})
 }
 
 func TestDisposeSessionCancelsAndForgetsHeldCalls(t *testing.T) {

@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"syscall"
 	"testing"
 	"time"
 
@@ -32,10 +31,7 @@ func TestRunInOwnGroupEndsWhatTheCommandLeftBehind(t *testing.T) {
 
 	testutil.FailErr(t, "run", RunInOwnGroup(t.Context(), cmd))
 	helper := waitForPIDFile(t, pidFile)
-	if err := waitForProcessGone(t.Context(), helper); err != nil {
-		_ = syscall.Kill(helper, syscall.SIGKILL)
-		testutil.FailErr(t, "helper outlived the command that started it", err)
-	}
+	waitForProcessGone(t, helper)
 }
 
 // Interactive shells ignore SIGTERM.
@@ -65,10 +61,7 @@ func TestRunInOwnGroupCancellationKillsAShellIgnoringTerm(t *testing.T) {
 		t.Fatalf("run error = %v, want the killed shell's exit", err)
 	}
 	helper := waitForPIDFile(t, pidFile)
-	if err := waitForProcessGone(t.Context(), helper); err != nil {
-		_ = syscall.Kill(helper, syscall.SIGKILL)
-		testutil.FailErr(t, "helper outlived cancellation", err)
-	}
+	waitForProcessGone(t, helper)
 }
 
 // An engine started from a shell holds that terminal; a child that reads it

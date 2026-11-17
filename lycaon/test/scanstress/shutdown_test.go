@@ -125,16 +125,10 @@ func runShutdownCase(t *testing.T, sig syscall.Signal, handler bool) {
 	})
 
 	var engine []procRow
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, fmt.Sprintf("victim %d starts an engine", victim), func() bool {
 		engine = engineProcesses(descendants(processTable(t), victim))
-		if len(engine) > 0 {
-			break
-		}
-		time.Sleep(200 * time.Millisecond)
-	}
-	if len(engine) == 0 {
-		t.Fatalf("victim %d never started an engine; output:\n%s", victim, stderr.String())
-	}
+		return len(engine) > 0
+	})
 	awaitEngineWorking(t, victim)
 	engine = engineProcesses(descendants(processTable(t), victim))
 	runDirs := runDirsFromRows(descendants(processTable(t), victim))
@@ -157,40 +151,19 @@ func runShutdownCase(t *testing.T, sig syscall.Signal, handler bool) {
 
 	// Poll only the engine pids and run directories this victim owned. After an
 	// abrupt exit the reaper removes the directories once the engine is gone.
-	var survivors []int
-	var leaked []string
-	for {
-		survivors = survivors[:0]
+	// An orphan left by the host keeps this wait open; the backstop names it.
+	testutil.WaitFor(t, fmt.Sprintf("the engines and run directories of victim %d go", victim), func() bool {
 		table := processTable(t)
 		for _, pid := range enginePIDs {
 			if row, ok := table[pid]; ok && strings.Contains(row.Command, "opengrep") {
-				survivors = append(survivors, pid)
+				return false
 			}
 		}
-		leaked = survivingDirs(runDirs)
-		if (len(survivors) == 0 && len(leaked) == 0) || t.Context().Err() != nil {
-			break
-		}
-		time.Sleep(250 * time.Millisecond)
-	}
+		return len(survivingDirs(runDirs)) == 0
+	})
 	drain := time.Since(killAt) - hostGone
-
-	reportf(t, "signal=%s handler=%t victim=%d engine_pids=%v host_exit=%s engine_drain=%s orphans=%v leaked_run_dirs=%v",
-		sig, handler, victim, enginePIDs, hostGone.Round(time.Millisecond), drain.Round(time.Millisecond), survivors, leaked)
-
-	if len(survivors) > 0 {
-		// Reap this test's own orphans so the host is left clean.
-		for _, pid := range survivors {
-			_ = syscall.Kill(pid, syscall.SIGKILL)
-		}
-		t.Errorf("%s to the scan host orphaned engine processes %v; they outlived the host by more than 60s", sig, survivors)
-	}
-	if len(leaked) > 0 {
-		for _, dir := range leaked {
-			_ = os.RemoveAll(dir)
-		}
-		t.Errorf("%s to the scan host left run directories behind for more than 60s: %v", sig, leaked)
-	}
+	reportf(t, "signal=%s handler=%t victim=%d engine_pids=%v host_exit=%s engine_drain=%s",
+		sig, handler, victim, enginePIDs, hostGone.Round(time.Millisecond), drain.Round(time.Millisecond))
 }
 
 // TestGracefulShutdownReapsEngine models the sidecar receiving SIGTERM while a

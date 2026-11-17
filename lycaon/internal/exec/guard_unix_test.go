@@ -46,10 +46,7 @@ func TestUnixGuardKillsGroupAfterLeaderIsReaped(t *testing.T) {
 
 	guard.kill(cmd)
 
-	if err := waitForProcessGone(t.Context(), grandchild); err != nil {
-		_ = syscall.Kill(grandchild, syscall.SIGKILL)
-		testutil.FailErr(t, "descendant outlived guard kill", err)
-	}
+	waitForProcessGone(t, grandchild)
 }
 
 func TestReapedSessionReuseNeverSignalsStandInProcess(t *testing.T) {
@@ -242,10 +239,7 @@ func TestRunPipelineTimeoutKillsDescendants(t *testing.T) {
 	grandchild := waitForPIDFile(t, pidFile)
 	t.Cleanup(func() { _ = syscall.Kill(grandchild, syscall.SIGKILL) })
 	testutil.AwaitClosed(t, "the pipeline returns at its timeout", done)
-	if err := waitForProcessGone(t.Context(), grandchild); err != nil {
-		_ = syscall.Kill(grandchild, syscall.SIGKILL)
-		testutil.FailErr(t, "descendant outlived pipeline timeout", err)
-	}
+	waitForProcessGone(t, grandchild)
 }
 
 // An escaped descendant cannot hold the caller past the wait deadline.
@@ -311,25 +305,19 @@ func TestExecDetachHelperProcess(t *testing.T) {
 
 func waitForPIDFile(t *testing.T, path string) int {
 	t.Helper()
-	for t.Context().Err() == nil {
+	var pid int
+	testutil.WaitFor(t, "the descendant reports its pid at "+path, func() bool {
 		raw, err := os.ReadFile(path)
-		if err == nil {
-			if pid, convErr := strconv.Atoi(strings.TrimSpace(string(raw))); convErr == nil && pid > 0 {
-				return pid
-			}
+		if err != nil {
+			return false
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("descendant never reported its pid at %s", path)
-	return 0
+		pid, err = strconv.Atoi(strings.TrimSpace(string(raw)))
+		return err == nil && pid > 0
+	})
+	return pid
 }
 
-func waitForProcessGone(ctx context.Context, pid int) error {
-	for ctx.Err() == nil {
-		if !osprocess.Alive(pid) {
-			return nil
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	return fmt.Errorf("process %d still running: %w", pid, ctx.Err())
+func waitForProcessGone(t testing.TB, pid int) {
+	t.Helper()
+	testutil.WaitFor(t, fmt.Sprintf("process %d exits", pid), func() bool { return !osprocess.Alive(pid) })
 }

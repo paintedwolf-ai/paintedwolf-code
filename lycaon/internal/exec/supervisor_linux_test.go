@@ -60,7 +60,7 @@ func TestSupervisorCleansDoubleForkedNewSessionOnCommandCompletion(t *testing.T)
 	defer cleanup()
 	testutil.FailErr(t, "run daemon launcher", RunInOwnGroup(t.Context(), cmd))
 	pid := waitForPIDFile(t, path)
-	testutil.FailErr(t, "detached daemon survived completion", waitForProcessGone(t.Context(), pid))
+	waitForProcessGone(t, pid)
 }
 
 func TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon(t *testing.T) {
@@ -82,7 +82,7 @@ func TestSupervisorCancellationSparesAnotherCommandsDetachedDaemon(t *testing.T)
 	case <-t.Context().Done():
 		t.Fatal("cancelled supervisor did not settle")
 	}
-	testutil.FailErr(t, "cancelled detached daemon survived", waitForProcessGone(t.Context(), pid))
+	waitForProcessGone(t, pid)
 	if !osprocess.Alive(otherPID) {
 		t.Fatal("cancellation killed a different command's daemon")
 	}
@@ -99,7 +99,7 @@ func TestSupervisorEngineLifetimeEOFRemovesDetachedDaemon(t *testing.T) {
 	done := make(chan struct{})
 	go func() { _ = cmd.Wait(); close(done) }()
 	testutil.AwaitClosed(t, "the engine lifetime EOF ends the supervisor", done)
-	testutil.FailErr(t, "daemon survived engine lifetime EOF", waitForProcessGone(t.Context(), pid))
+	waitForProcessGone(t, pid)
 }
 
 func TestSupervisorCompanionRequestsOwnedTreeCleanup(t *testing.T) {
@@ -109,7 +109,7 @@ func TestSupervisorCompanionRequestsOwnedTreeCleanup(t *testing.T) {
 	pid := waitForPIDFile(t, path)
 	reapLines(fmt.Sprintf("+s%d\n", cmd.Process.Pid))
 	_ = cmd.Wait()
-	testutil.FailErr(t, "daemon survived companion cleanup", waitForProcessGone(t.Context(), pid))
+	waitForProcessGone(t, pid)
 }
 
 func TestGuardedPipelinePriorityReachesPrimary(t *testing.T) {

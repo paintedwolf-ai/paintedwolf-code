@@ -195,22 +195,14 @@ func peakProcs(samples []treeSample) int {
 
 // awaitNoEngineProcesses waits for every engine descendant of this process to
 // leave the process table, returning the time it took and what survived.
-func awaitNoEngineProcesses(t *testing.T, within time.Duration) (time.Duration, []procRow) {
+// awaitNoEngineProcesses returns how long the engines took to go, for the report.
+func awaitNoEngineProcesses(t *testing.T) time.Duration {
 	t.Helper()
-	_ = within
-	self := os.Getpid()
 	start := time.Now()
-	var last []procRow
-	for {
-		last = engineProcesses(descendants(processTable(t), self))
-		if len(last) == 0 {
-			return time.Since(start), nil
-		}
-		if t.Context().Err() != nil {
-			return time.Since(start), last
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
+	testutil.WaitFor(t, "every engine process below the test exits", func() bool {
+		return len(engineProcesses(descendants(processTable(t), os.Getpid()))) == 0
+	})
+	return time.Since(start)
 }
 
 // runDirsFromRows returns the engine run directories named by the given

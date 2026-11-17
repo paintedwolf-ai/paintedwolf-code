@@ -116,33 +116,18 @@ func TestBackgroundOutputStreamsIncrementally(t *testing.T) {
 	testutil.FailErr(t, "start background", err)
 
 	var first bgprocess.OutputSnapshot
-	var firstFound, secondFound bool
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "incremental output arrives", func() bool {
 		snapshot, err := reg.Output.ReadRawOutput("sess-1", handle, 0)
 		testutil.FailErr(t, "command_output cursor 0", err)
-		if len(snapshot.Output.Chunks) > 0 {
-			first = snapshot
-			firstFound = true
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if !firstFound {
-		t.Fatal("expected incremental output")
-	}
+		first = snapshot
+		return len(snapshot.Output.Chunks) > 0
+	})
 	cursor := first.Output.Next
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "output arrives after the cursor", func() bool {
 		snapshot, err := reg.Output.ReadRawOutput("sess-1", handle, cursor)
 		testutil.FailErr(t, "command_output follow-up", err)
-		if len(snapshot.Output.Chunks) > 0 {
-			secondFound = true
-			break
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	if !secondFound {
-		t.Fatal("expected output after cursor")
-	}
+		return len(snapshot.Output.Chunks) > 0
+	})
 }
 
 func TestBackgroundLiveAndReloadProjectionCatchSecretsSplitAcrossWrites(t *testing.T) {
@@ -251,18 +236,14 @@ func TestBackgroundStopKillsProcess(t *testing.T) {
 	testutil.FailErr(t, "start background", err)
 	_, err = reg.Lifecycle.Stop("sess-1", handle, bgprocess.TerminationStoppedByAgent)
 	testutil.FailErr(t, "stop background", err)
-	for t.Context().Err() == nil {
-		out, err := reg.Output.ReadOutput(context.Background(), "sess-1", handle)
+	testutil.WaitFor(t, "the stopped process reports it is not running", func() bool {
+		out, err := reg.Output.ReadOutput(t.Context(), "sess-1", handle)
 		testutil.FailErr(t, "output after stop", err)
-		if !out.Running {
-			if out.TerminationReason != api.BackgroundProcessTerminationReason(bgprocess.TerminationStoppedByAgent) {
-				t.Fatalf("output termination reason = %q, want %q", out.TerminationReason, bgprocess.TerminationStoppedByAgent)
-			}
-			return
+		if !out.Running && out.TerminationReason != api.BackgroundProcessTerminationReason(bgprocess.TerminationStoppedByAgent) {
+			t.Fatalf("output termination reason = %q, want %q", out.TerminationReason, bgprocess.TerminationStoppedByAgent)
 		}
-		time.Sleep(50 * time.Millisecond)
-	}
-	t.Fatal("expected process stopped")
+		return !out.Running
+	})
 }
 
 func TestBackgroundSessionEndKillsAll(t *testing.T) {
