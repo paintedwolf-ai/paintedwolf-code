@@ -151,7 +151,6 @@ tasks:
     sources:
       - '**/*.go'
       - .golangci.yml
-      - .deadcode-exclude
       - '{{.ROOT_DIR}}/.github/workflows/*.yml'
       - '{{.ROOT_DIR}}/.github/workflows/*.yaml'
       - '{{.SCRIPTS_DIR}}/workflow_lint/**/*.py'
@@ -160,12 +159,11 @@ tasks:
       - '{{.SCRIPTS_DIR}}/toolchain/python_tools.py'
       - '{{.SCRIPTS_DIR}}/analysis_tools.py'
       - '{{.SCRIPTS_DIR}}/lint-go.sh'
-      - '{{.SCRIPTS_DIR}}/deadcode-check.sh'
     cmds:
       - bash {{.SCRIPTS_DIR}}/lint-go.sh fast {{.CLI_ARGS}}
 
   lint:full:
-    desc: GitHub workflows + full golangci-lint + deadcode
+    desc: GitHub workflows + full golangci-lint
     dir: '{{.GO_DIR}}'
     sources:
       - '**/*.go'
@@ -178,9 +176,13 @@ tasks:
       - '{{.SCRIPTS_DIR}}/toolchain/python_tools.py'
       - '{{.SCRIPTS_DIR}}/analysis_tools.py'
       - '{{.SCRIPTS_DIR}}/lint-go.sh'
-      - '{{.SCRIPTS_DIR}}/deadcode-check.sh'
     cmds:
       - bash {{.SCRIPTS_DIR}}/lint-go.sh full {{.CLI_ARGS}}
+
+  lint:deadcode:
+    desc: Whole-program deadcode over the module's command and test roots (exclusions in lycaon/.deadcode-exclude)
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/deadcode-check.sh
 
   lint:vuln:
     desc: Offline govulncheck symbol scan against the vendored database (required in check; allowlist in lycaon/govulncheck-allowlist.yaml)
@@ -357,6 +359,11 @@ tasks:
     desc: Assembled Go component tests and randomized SQLite lifecycle properties
     cmds:
       - python3 {{.SCRIPTS_DIR}}/test-execution.py plan -- test:integration -- {{.CLI_ARGS}}
+
+  test:integration:changes:
+    desc: Integration-tagged tests of the Go packages the change edits directly
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/integration_changes.py
 
   test:full:
     desc: Full Go behavior and required bundled scanner tests (mock LLM)
@@ -622,16 +629,6 @@ tasks:
         msg: bun required — install from https://bun.sh
     cmds:
       - bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test
-
-  den:test:fast:
-    desc: Vitest seam canaries (model + DOM; exhaustive suite runs at closeout)
-    preconditions:
-      - sh: command -v bun
-        msg: bun required — install from https://bun.sh
-    env:
-      LYCAON_VITEST_FAST: '1'
-    cmds:
-      - bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test:fast
 
   den:test:digest:
     desc: 'Vitest with failure digest (e.g. task den:test:digest -- src/**/*.test.ts)'

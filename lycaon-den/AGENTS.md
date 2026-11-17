@@ -8,7 +8,6 @@ Package-specific rules for the Tauri + Solid.js desktop app (`lycaon-den/`). Uni
 
 ```bash
 ./task den:typecheck
-./task den:test:fast
 ./task den:test
 ./task den:test:digest -- src/**/*.test.ts
 ./task den:harness          # LLM-drivable UI stack — author e2e specs
@@ -33,7 +32,7 @@ Wire contract: [`../docs/host-contract.md`](../docs/host-contract.md). `src/api/
 
 ## Testing
 
-Frontend tests via `./task den:test` (full) or `./task den:test:fast` (handoff; representative model and DOM seam canaries). Styling invariants: `src/styling/styling-invariants.test.ts`. E2E: `lycaon-den/e2e/` with `e2e/helpers.ts`; prefer `./task den:harness:test` for local iteration.
+Frontend tests via `./task den:test`; `./task den:coverage:changes` runs the same suite with the changed-coverage floor, as a ready pull request does. Styling invariants: `src/styling/styling-invariants.test.ts`. E2E: `lycaon-den/e2e/` with `e2e/helpers.ts`; prefer `./task den:harness:test` for local iteration.
 
 Den verification shares the host queue and worker budget with Go checks. Submit
 one request at a time and wait for its result using the

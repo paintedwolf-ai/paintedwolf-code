@@ -78,6 +78,8 @@ jobs:
           PYTHONPATH: scripts
           CACHE_HITS: >-
             {"Go":{"active":true,"hit":"${{ steps.probe.outputs.go-cache-hit }}"},
+             "Go modules":{"active":true,"hit":"${{ steps.probe.outputs.go-modules-cache-hit }}"},
+             "Cargo downloads":{"active":true,"hit":"${{ steps.probe.outputs.cargo-cache-hit }}"},
              "Desktop Rust":{"active":true,"hit":"${{ steps.probe.outputs.rust-cache-hit }}"},
              "Decision engine":{"active":true,"hit":"${{ steps.probe.outputs.decide-cache-hit }}"},
              "Generation runtime":{"active":true,"hit":"${{ steps.probe.outputs.generation-cache-hit }}"},
@@ -172,6 +174,12 @@ jobs:
       - name: Publish prepared Go caches
         if: steps.state.outputs.prepare == 'true' && (github.ref == 'refs/heads/main' && steps.setup.outputs.go-cache-hit != 'true')
         uses: ./.github/actions/cache-go
+        with:
+          save: 'true'
+
+      - name: Publish dependency downloads
+        if: steps.state.outputs.prepare == 'true' && (github.ref == 'refs/heads/main' && (steps.setup.outputs.go-modules-cache-hit != 'true' || steps.setup.outputs.cargo-cache-hit != 'true'))
+        uses: ./.github/actions/cache-modules
         with:
           save: 'true'
 

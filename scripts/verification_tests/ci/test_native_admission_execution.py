@@ -7,15 +7,16 @@ from ci_policy import native_admission, native_verify, hosted_plan
 
 class NativeAdmissionTests(unittest.TestCase):
     def test_admission_runs_supervisor_and_script_checks_without_native_compilation(self):
-        for scope in (None, {'full': True}, {'full': False, 'paths': ['lycaon-den/src-tauri/src/main.rs']},
-                      {'full': False, 'paths': ['lycaon/internal/decide/native/src/main.rs']}):
+        go = {'ready': 'verification', 'ready-lint': 'analysis', 'ready-tests': 'verification'}
+        for scope, frontend in ((None, True), ({'full': True, 'paths': []}, True),
+                                ({'full': False, 'paths': ['lycaon-den/src-tauri/src/main.rs']}, True),
+                                ({'full': False, 'paths': ['lycaon/internal/decide/native/src/main.rs']}, False)):
             expected = [['./task', 'test:confine:linux', '--', 'supervisor']] if scope is None or scope['full'] else []
             if scope and scope['full']:
                 expected = [*expected, ['./task', 'scripts:coverage:changes']]
             self.assertEqual(native_admission.commands(scope), expected)
             rows = hosted_plan.matrix('fast', scope=scope)['include']
-            self.assertEqual({row['lane']: row['setup'] for row in rows},
-                             {'ready': 'verification', 'ready-lint': 'analysis', 'ready-tests': 'verification'})
+            self.assertEqual({row['lane']: row['setup'] for row in rows}, {**go, **({'frontend': 'frontend'} if frontend else {})})
         lanes = hosted_plan.lanes()
         self.assertEqual(lanes['native']['targets'], ['den:test:rust', 'decide:test'])
         self.assertIn('integration', lanes['native']['profiles'])

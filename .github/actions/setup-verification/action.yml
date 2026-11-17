@@ -80,6 +80,12 @@ outputs:
   rust-cache-hit:
     description: Whether the Tauri shell dependency build for the current lockfile was restored
     value: ${{ steps.rust.outputs.cache-hit }}
+  go-modules-cache-hit:
+    description: Whether the Go module downloads for the current go.sum files were restored
+    value: ${{ steps.modules.outputs.go-cache-hit }}
+  cargo-cache-hit:
+    description: Whether the Cargo downloads for the current lockfiles were restored
+    value: ${{ steps.modules.outputs.cargo-cache-hit }}
 runs:
   using: composite
   steps:
@@ -136,6 +142,12 @@ runs:
       if: inputs.lookup-only != 'true'
       shell: bash
       run: rustup toolchain install "$(sed -n 's/^channel = "\(.*\)"/\1/p' rust-toolchain.toml)" --profile minimal
+
+    - id: modules
+      uses: ./.github/actions/cache-modules
+      with:
+        go: ${{ inputs.setup != 'frontend' }}
+        lookup-only: ${{ inputs.lookup-only }}
 
     - name: Allow verification engines to create user namespaces
       if: inputs.lookup-only != 'true' && (runner.os == 'Linux')

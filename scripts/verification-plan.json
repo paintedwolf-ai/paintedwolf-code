@@ -5,6 +5,7 @@
     ],
     "check-fast": [
       "build",
+      "build:cross",
       "lint:full",
       "budgets",
       "coverage:changes",
@@ -12,8 +13,9 @@
       "den:knip:changes",
       "den:typecheck",
       "den:lint",
-      "den:test:fast",
+      "den:coverage:changes",
       "test:short",
+      "test:integration:changes",
       "test:contract",
       "licenses:notices",
       "comments:check",
@@ -367,9 +369,6 @@
     "den:test:digest": [
       "den:test:digest"
     ],
-    "den:test:fast": [
-      "den:test:fast"
-    ],
     "den:test:rust": [
       "den:test:rust"
     ],
@@ -495,6 +494,12 @@
     ],
     "den:knip:changes": [
       "den:knip:changes"
+    ],
+    "test:integration:changes": [
+      "test:integration:changes"
+    ],
+    "lint:deadcode": [
+      "lint:deadcode"
     ]
   },
   "private": [
@@ -645,12 +650,6 @@
       "workers": "shared"
     },
     "den:test:digest": {
-      "locks": [
-        "frontend"
-      ],
-      "workers": "shared"
-    },
-    "den:test:fast": {
       "locks": [
         "frontend"
       ],
@@ -1045,6 +1044,21 @@
         "frontend"
       ],
       "workers": 1
+    },
+    "test:integration:changes": {
+      "locks": [
+        "go"
+      ],
+      "shared_locks": [
+        "go"
+      ],
+      "workers": "shared"
+    },
+    "lint:deadcode": {
+      "locks": [
+        "lint"
+      ],
+      "workers": "shared"
     }
   },
   "environment": {
@@ -1116,12 +1130,9 @@
     "ready": {
       "targets": [
         "build",
+        "build:cross",
         "budgets",
-        "coverage:changes",
-        "den:typecheck",
-        "den:lint",
-        "den:knip:changes",
-        "den:test:fast"
+        "coverage:changes"
       ],
       "minutes": 120,
       "profiles": [
@@ -1144,7 +1155,8 @@
     "ready-tests": {
       "targets": [
         "test:contract",
-        "test:short"
+        "test:short",
+        "test:integration:changes"
       ],
       "minutes": 120,
       "profiles": [
@@ -1152,7 +1164,7 @@
       ],
       "suite": "all",
       "setup": "verification",
-      "shards": 2
+      "shards": 4
     },
     "build": {
       "targets": [
@@ -1201,6 +1213,17 @@
         "comments:check",
         "test:fail-messages:check"
       ]
+    },
+    "deadcode": {
+      "targets": [
+        "lint:deadcode"
+      ],
+      "minutes": 60,
+      "profiles": [
+        "nightly"
+      ],
+      "suite": "all",
+      "setup": "analysis"
     },
     "vulnerabilities": {
       "targets": [
@@ -1258,6 +1281,7 @@
       ],
       "minutes": 90,
       "profiles": [
+        "fast",
         "check",
         "release",
         "integration",
@@ -1449,7 +1473,7 @@
   },
   "capacity": {
     "max_parallel": {
-      "fast": 4,
+      "fast": 6,
       "integration": 6,
       "check": 3,
       "nightly": 6,
