@@ -137,9 +137,10 @@ pub(super) async fn run_check(app: &AppHandle, automatic: bool) -> Result<Check,
             error: Some(super::Failure::StateUnavailable.into()),
         });
     let package = facts.package.take();
+    let trust = super::Trust::embedded();
     let result = tokio::select! {
         result = async {
-            tokio::join!(feed::fetch(channel, &version, &super::Trust::embedded()), crate::linux_install::refresh_source(package))
+            tokio::join!(feed::fetch(channel, &version, &trust), crate::linux_install::refresh_source(package))
         } => Some(result),
         _ = wake.wait_for(|_| !service.current(generation)) => None,
     };

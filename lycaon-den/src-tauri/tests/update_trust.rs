@@ -191,7 +191,7 @@ fn assert_nothing_staged(candidate: &Candidate, target: &Path) {
     let root = staging::root(candidate).unwrap();
     assert!(!root.join("artifact").exists(), "a refused artifact stays cached");
     assert!(snapshot(&root).is_empty(), "a refused download leaves bytes in staging");
-    assert!(staging::read_ready().unwrap().is_none(), "a refused artifact was published");
+    assert!(!records(candidate).join("ready.json").exists(), "a refused artifact was published");
     assert!(!records(candidate).join("transaction.json").exists(), "activation began for a refused artifact");
     let beside = fs::read_dir(target.parent().unwrap()).unwrap().count();
     assert_eq!(beside, usize::from(target.exists()), "a refused artifact prepared a bundle");
@@ -259,7 +259,7 @@ fn tampered_replayed_and_foreign_inputs_are_refused_before_anything_is_staged() 
     origin.serve(ARTIFACT_PATH, archive.clone());
     let _ = transfer(&candidate);
     assert_eq!(fs::read(staging::root(&candidate).unwrap().join("artifact")).unwrap(), archive);
-    assert!(staging::read_ready().unwrap().is_none());
+    assert!(!records(&candidate).join("ready.json").exists());
 }
 
 #[cfg(target_os = "macos")]
@@ -354,9 +354,11 @@ mod macos {
         origin.serve(ARTIFACT_PATH, release);
         let identity = transfer(&candidate).unwrap();
         staging::publish(&target, &candidate, identity, None).unwrap();
-        let ready = staging::read_ready().unwrap().unwrap();
-        assert_eq!(ready.candidate.release_id, candidate.release_id);
-        assert!(ready.prepared_bundle.join("Contents/MacOS/painted-wolf-code").is_file());
+        let ready: serde_json::Value = serde_json::from_slice(&fs::read(records(&candidate).join("ready.json")).unwrap()).unwrap();
+        assert_eq!(ready["candidate"]["release_id"], candidate.release_id.as_str());
+        let prepared = PathBuf::from(ready["prepared_bundle"].as_str().unwrap());
+        assert_eq!(prepared.parent(), target.parent());
+        assert!(prepared.join("Contents/MacOS/painted-wolf-code").is_file());
         assert_eq!(snapshot(&target), installed);
     }
 }

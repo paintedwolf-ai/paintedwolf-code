@@ -262,7 +262,7 @@ pub async fn transfer(
     if dir.join("artifact").is_file() {
         progress.phase(Installation::Preparing).await?;
         // Preparation verifies the cached archive before using any of its bytes.
-        return prepare(target, candidate, trust).await;
+        return prepare_beside(target, candidate, trust).await;
     }
     let partial = dir.join(format!("{}.partial", uuid::Uuid::new_v4()));
     let cleanup = Partial(partial.clone());
@@ -323,9 +323,9 @@ pub async fn transfer(
         .map_err(|e| UpdateError::new(Failure::DownloadFailed, e))?;
     drop(cleanup);
     progress.phase(Installation::Preparing).await?;
-    prepare(target, candidate, trust).await
+    prepare_beside(target, candidate, trust).await
 }
-async fn prepare(
+async fn prepare_beside(
     target: &Path,
     candidate: &Candidate,
     trust: &Trust,
