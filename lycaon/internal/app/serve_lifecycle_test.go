@@ -83,3 +83,17 @@ func TestBuiltAppClosesDurableStateLast(t *testing.T) {
 		}
 	}
 }
+
+// Boot recovery is the first startup runner of an app whose approval gate
+// sealed during Build, and its serve phase settles on the wired app.
+func TestBootRecoveryRunsOnTheSealedApp(t *testing.T) {
+	app := buildServeAppForTest(t)
+	if len(app.runners.runners) == 0 {
+		t.Fatal("built app registered no runners")
+	}
+	first := app.runners.runners[0]
+	if first.name != "boot-recovery" || first.mode != runnerStartupOnce {
+		t.Fatalf("first runner = %s (mode %d), want startup-once boot-recovery", first.name, first.mode)
+	}
+	testutil.FailErr(t, "run serve-phase recovery", first.run(t.Context()))
+}

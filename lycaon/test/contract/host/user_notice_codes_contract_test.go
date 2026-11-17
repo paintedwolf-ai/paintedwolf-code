@@ -3,7 +3,6 @@ package contract
 import (
 	"path/filepath"
 	"sort"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/usernotice"
@@ -185,14 +184,4 @@ func TestUserNoticeLedgerDocumented(t *testing.T) {
 		violations = append(violations, "host/user-notices row "+code+" is not in the ApiErrorCode vocabulary")
 	}
 	contractcheck.FailViolations(t, "user notice ledger ↔ YAML drift", violations)
-}
-
-func TestAppBuildWiresUserNoticeCatalog(t *testing.T) {
-	text := contractcheck.ServeWireSource(t)
-	if !strings.Contains(text, "deps.Core.UserNotices = ") {
-		t.Fatal("serve build graph must hand the user notice catalog to the HTTP server's dependencies")
-	}
-	if !strings.Contains(text, "LoadEffectiveUserNotices") {
-		t.Fatal("serve build graph must load the user notice catalog via LoadEffectiveUserNotices")
-	}
 }

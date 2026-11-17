@@ -23,6 +23,7 @@ type options struct {
 	mcpConnector            mcp.SessionConnector
 	installedPackDirs       []string
 	globalApprovalPosture   gate.Posture
+	configRoot              *string
 }
 
 // A scripted model calls surface tools outright, so the default decider
@@ -42,6 +43,11 @@ func WithDecider(d decide.Decider) Option {
 
 // Option configures BuildForTest.
 type Option func(*options)
+
+// withConfigRoot boots with dir as the configuration root in place of the checkout.
+func withConfigRoot(dir string) Option {
+	return func(o *options) { o.configRoot = &dir }
+}
 
 func withGlobalApprovalPosture(posture gate.Posture) Option {
 	return func(o *options) { o.globalApprovalPosture = posture }

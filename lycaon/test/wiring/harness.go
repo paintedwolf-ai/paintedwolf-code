@@ -85,6 +85,9 @@ func BuildForTest(t *testing.T, opts ...Option) *Harness {
 
 	cfg := configuration.Config{}
 	cfg.ConfigRoot = configlayout.FindModuleRoot()
+	if o.configRoot != nil {
+		cfg.ConfigRoot = *o.configRoot
+	}
 	// Install packs before the builder resolves the catalog.
 	installHarnessPacks(t, o.installedPackDirs)
 	testDir := t.TempDir()
