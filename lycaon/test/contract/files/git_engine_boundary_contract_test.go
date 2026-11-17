@@ -51,80 +51,12 @@ var gitBoundaryRefusedConfigFamilies = []string{"filter", "merge"}
 func TestGitBoundaryEngine(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	assertGitBoundaryNoPathResolution(t, root)
 	assertGitBoundaryNoConfigWrites(t, root)
 	assertGitBoundaryNeutralizePrefixIntact(t, root)
 	assertGitBoundaryHooksOffNotOptional(t, root)
 	assertGitBoundaryPinFailsClosed(t, root)
 	assertGitBoundaryWriteSinksWired(t)
 	assertGitBoundaryNoticeUnits(t, root)
-}
-
-func assertGitBoundaryNoPathResolution(t *testing.T, root string) {
-	t.Helper()
-	var findings []string
-	internalRoot := filepath.Join(root, "lycaon", "internal")
-	fset := token.NewFileSet()
-	err := filepath.WalkDir(internalRoot, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil || d.IsDir() {
-			return walkErr
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		src, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		file, err := parser.ParseFile(fset, path, src, 0)
-		if err != nil {
-			return err
-		}
-		ast.Inspect(file, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			if isLookPathGitOrLFS(call) {
-				findings = append(findings, fset.Position(n.Pos()).String()+`: LookPath(git|git-lfs)`)
-			}
-			return true
-		})
-		return nil
-	})
-	contractcheck.FailErr(t, "walk internal", err)
-
-	lycaonRoot := filepath.Join(root, "lycaon")
-	err = filepath.WalkDir(lycaonRoot, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil || d.IsDir() {
-			return walkErr
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		rel, _ := filepath.Rel(root, path)
-		src, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if strings.Contains(string(src), "/usr/bin/git") {
-			findings = append(findings, rel+`: literal /usr/bin/git`)
-		}
-		return nil
-	})
-	contractcheck.FailErr(t, "walk lycaon", err)
-
-	if len(findings) > 0 {
-		t.Fatalf("PATH/system git resolution still present:\n  %s", strings.Join(findings, "\n  "))
-	}
-}
-
-func isLookPathGitOrLFS(call *ast.CallExpr) bool {
-	sel, ok := call.Fun.(*ast.SelectorExpr)
-	if !ok || sel.Sel.Name != "LookPath" || len(call.Args) < 1 {
-		return false
-	}
-	return stringLitIs(call.Args[0], "git") || stringLitIs(call.Args[0], "git-lfs")
 }
 
 func assertGitBoundaryNoConfigWrites(t *testing.T, root string) {

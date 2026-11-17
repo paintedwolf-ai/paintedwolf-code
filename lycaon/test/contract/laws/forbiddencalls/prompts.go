@@ -1,6 +1,7 @@
 package forbiddencalls
 
 import (
+	"bytes"
 	"go/ast"
 	"go/token"
 	"strings"
@@ -39,7 +40,7 @@ var prompts = []laws.Rule{{
 	Anchors: []laws.Anchor{laws.Func("internal/datamark", "Frame")},
 	Check: func(r *laws.Run) {
 		for _, f := range r.GoFiles(laws.Production, "internal") {
-			if !laws.Under(f, "internal/datamark") && strings.ContainsAny(string(f.Src), "⟪⟫") {
+			if !laws.Under(f, "internal/datamark") && bytes.ContainsAny(f.Src, "⟪⟫") {
 				r.Report("%s writes the retrieval delimiter outside internal/datamark", f.Rel)
 			}
 		}

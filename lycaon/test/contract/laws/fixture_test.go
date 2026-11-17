@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/laws"
 )
 
@@ -30,10 +31,10 @@ func fixture(t *testing.T, files map[string]string) *laws.Corpus {
 	for rel, body := range files {
 		path := filepath.Join(root, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			t.Fatal(err)
+			contractcheck.FailErr(t, "create directory", err)
 		}
 		if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-			t.Fatal(err)
+			contractcheck.FailErr(t, "write file", err)
 		}
 	}
 	return laws.LoadFixture(root)

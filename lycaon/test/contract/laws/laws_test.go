@@ -4,6 +4,7 @@ import (
 	"os"
 	"testing"
 
+	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/laws"
 )
 
@@ -22,10 +23,9 @@ func TestMain(m *testing.M) {
 
 // TestLaws evaluates every rule of every family against the repository.
 func TestLaws(t *testing.T) {
+	t.Parallel()
 	corpus, err := laws.Shared()
-	if err != nil {
-		t.Fatal(err)
-	}
+	contractcheck.FailErr(t, "laws.Shared failed", err)
 	for _, family := range families {
 		t.Run(family.Name, func(t *testing.T) {
 			t.Parallel()

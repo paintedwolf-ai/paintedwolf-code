@@ -15,12 +15,17 @@ var gitDoor = []laws.Rule{{
 	Name:    "git-one-door",
 	Anchors: []laws.Anchor{laws.Package("internal/gitexec")},
 	Check: func(r *laws.Run) {
-		for _, f := range r.GoFiles(laws.Production, laws.Source...) {
+		for _, f := range r.GoFiles(laws.Production, "internal", "cmd", "pkg", "config", "test") {
+			if laws.Under(f, "test/contract/laws") {
+				continue
+			}
 			laws.StringLits(f.AST, func(lit *ast.BasicLit, value string) {
 				if strings.Contains(value, "/usr/bin/git") {
 					r.ReportAt(lit.Pos(), "literal /usr/bin/git")
 				}
 			})
+		}
+		for _, f := range r.GoFiles(laws.Production, laws.Source...) {
 			for _, finding := range scanGitOneDoor(f, laws.Under(f, "internal/gitexec")) {
 				r.ReportAt(finding.pos, "%s", finding.what)
 			}
