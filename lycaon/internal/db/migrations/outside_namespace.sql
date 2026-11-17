@@ -107,11 +107,3 @@ WHEN NOT EXISTS (
 BEGIN
     SELECT RAISE(ABORT, 'source_chat_files session_id is not a root chat of the file project');
 END;
-
-INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
-SELECT lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4'
-        || substr(lower(hex(randomblob(2))), 2) || '-'
-        || substr('89ab', 1 + abs(random()) % 4, 1) || substr(lower(hex(randomblob(2))), 2) || '-'
-        || lower(hex(randomblob(6))),
-    id, '', 'outside', 0, created_at, 'outside'
-FROM projects;

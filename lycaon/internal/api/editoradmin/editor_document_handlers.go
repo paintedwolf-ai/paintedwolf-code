@@ -60,6 +60,11 @@ func (s *Handler) HandleOpenEditorDocument(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
+	// Outside files are read through the source reader.
+	if req.RootID == p.Outside.ID {
+		s.writeEditorDocumentError(w, r, editordoc.ErrReadOnly)
+		return
+	}
 	d, err := s.EditorDocuments.Open(r.Context(), p, req.Path, req.RootID, req.DecodeAs, req.ClientID, retainedReplica(req.Replica))
 	if err != nil {
 		s.writeEditorDocumentError(w, r, err)

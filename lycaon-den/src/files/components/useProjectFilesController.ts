@@ -18,6 +18,7 @@ import { isBackendReachable } from "../../platform/connection/sidecar-status.ts"
 import { useResidentLive } from "../../ui/resident-activity.ts";
 import { createFilesEditorSynchronization } from "../editor/files-editor-synchronization.ts";
 import { orderWithPinnedGroup } from "../tabs/files-tab-strip.ts";
+import { isOutsideRoot, OUTSIDE_ROOT_LABEL } from "../source/outside-namespace.ts";
 import type { createFilesWorkspace } from "../source/files-workspace.ts";
 import type { FilesScope } from "./files-scope.ts";
 import { focusedFilesBufferKey, openFilesBuffer } from "../documents/project-files-buffers.ts";
@@ -111,7 +112,7 @@ export function useProjectFilesController(options: {
     aimedKey,
     editorPresentationPending: () => delegates?.editorPresentationPending() ?? false,
     filesRoots,
-    rootLabelFor: (rootId) => filesRoots().find((r) => r.id === rootId)?.label ?? rootId,
+    rootLabelFor: (rootId) => isOutsideRoot(props.projectId, rootId) ? OUTSIDE_ROOT_LABEL : filesRoots().find((r) => r.id === rootId)?.label ?? rootId,
     stripOrder: () => stripOrder(),
     tabsElement: () => tabsEl,
     scrollerElement: () => tabsScrollerEl,

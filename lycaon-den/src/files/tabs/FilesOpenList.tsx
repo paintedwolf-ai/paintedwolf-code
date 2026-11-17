@@ -31,6 +31,7 @@ export type FilesOpenListRow = {
 };
 
 type Props = {
+  isOutside?: (rootId: string) => boolean;
   open: boolean;
   rows: FilesOpenListRow[];
   activeKey: FileBufferKey | null;
@@ -64,7 +65,7 @@ export function FilesOpenList(props: Props) {
 
   createOverlayShortcutScope(() => props.open);
 
-  const names = createMemo(() => filesTabNames(props.rows.map(row => row.buffer)));
+  const names = createMemo(() => filesTabNames(props.rows.map(row => row.buffer), props.isOutside));
   const filtered = createMemo(() => {
     const q = query().trim().toLowerCase();
     const rows = props.rows;

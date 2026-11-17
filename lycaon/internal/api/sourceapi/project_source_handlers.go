@@ -53,6 +53,10 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 		s.writeSourceReadError(w, r, err)
 		return
 	}
+	if p, err = admitOutside(r.Context(), s.SourceLedger, p, req.RootID, req.Path); err != nil {
+		s.writeSourceReadError(w, r, err)
+		return
+	}
 	if !branch.IsWorker() {
 		rootID, rootErr := sourceRootID(p, req.RootID)
 		if rootErr != nil {

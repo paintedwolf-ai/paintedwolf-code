@@ -40,5 +40,5 @@ func reviewedRevision5(step Step) bool {
 // roots plus one per project, and creates one empty table.
 func reviewedRevision6(step Step) bool {
 	return step.ID == "outside-namespace" &&
-		step.Checksum == "af32b308c4b34cf56c2fb8c512b112c5b1fca8f7a20a9c9f2f9784034acaa96b"
+		step.Checksum == "f5e1e557853468d71dedcbf8be694b4da913af5f8d2ce85185a4b30034cd1aa5"
 }

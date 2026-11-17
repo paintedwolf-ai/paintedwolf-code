@@ -101,17 +101,12 @@ func rebuildTable(ctx context.Context, tx *sql.Tx, table string, edit func(tail 
 	if err := rows.Close(); err != nil {
 		return err
 	}
-	statement := fmt.Sprintf(tableRebuildTemplate, table+"_rebuild", table, tail)
+	statement := fmt.Sprintf(string(outsideRebuildSQL), table+"_rebuild", table, tail)
 	if _, err := tx.ExecContext(ctx, statement); err != nil {
 		return err
 	}
 	return restoreSchemaObjects(ctx, tx, indexes)
 }
-
-const tableRebuildTemplate = `CREATE TABLE %[1]s %[3]s;
-INSERT INTO %[1]s SELECT * FROM %[2]s;
-DROP TABLE %[2]s;
-ALTER TABLE %[1]s RENAME TO %[2]s;`
 
 // replaceOnce rewrites the single expected occurrence of old in a definition.
 func replaceOnce(definition, old, replacement string) (string, error) {

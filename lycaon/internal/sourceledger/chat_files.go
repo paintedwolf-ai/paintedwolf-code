@@ -64,3 +64,21 @@ func (s *Store) referenceChatFile(ctx context.Context, q *db.Queries, projectID,
 		Ts: ts.UTC().Format(time.RFC3339Nano),
 	})
 }
+
+// OutsideFileHeld reports whether a chat of the project holds the outside
+// file currently at rel.
+func (s *Store) OutsideFileHeld(ctx context.Context, projectID, rel string) (bool, error) {
+	outside, err := s.outsideRootID(ctx, s.queries, projectID)
+	if err != nil || outside == "" {
+		return false, err
+	}
+	head, err := s.queries.GetSourceBranchHeadByPath(ctx, db.GetSourceBranchHeadByPathParams{ProjectID: projectID, BranchID: "", RootID: outside, Path: rel})
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	referenced, err := s.queries.SourceFileReferencedInProject(ctx, db.SourceFileReferencedInProjectParams{FileID: head.FileID, ProjectID: projectID})
+	return referenced != 0, err
+}

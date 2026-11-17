@@ -13089,6 +13089,11 @@ export interface components {
             session_scoped: boolean;
             /** @description Ordered physical roots used by every Files read and path action. */
             roots: components["schemas"]["SourceWorkspaceRoot"][];
+            /**
+             * Format: uuid
+             * @description The project's namespace for files beyond every root. Source history addresses those files by this root id and their host path without its leading slash.
+             */
+            outside_root_id: string;
             /** @description The ledger's pass over the tree. Outside edits to tracked files reach history by path before it completes; untracked files enter history when the pass, or an open command window, admits them. */
             inventory: components["schemas"]["SourceInventoryState"];
         };

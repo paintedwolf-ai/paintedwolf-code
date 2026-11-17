@@ -31,3 +31,14 @@ func (p *Project) HistoryRoots() []Root {
 	}
 	return roots
 }
+
+// WithOutside is a view of p in which the outside namespace is one of its
+// roots. Callers build it only for a path already admitted for the request.
+func WithOutside(p *Project) *Project {
+	if p == nil || p.Outside.ID == "" {
+		return p
+	}
+	out := *p
+	out.Roots = append(append([]Root(nil), p.Roots...), p.Outside)
+	return &out
+}

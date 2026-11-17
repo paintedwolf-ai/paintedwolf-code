@@ -12,7 +12,7 @@ func Revision5Release() Baseline { return revision5Release }
 func Revision6(target Baseline) Step {
 	return composeStep(Step{
 		ID:       "outside-namespace",
-		Checksum: "af32b308c4b34cf56c2fb8c512b112c5b1fca8f7a20a9c9f2f9784034acaa96b",
+		Checksum: "f5e1e557853468d71dedcbf8be694b4da913af5f8d2ce85185a4b30034cd1aa5",
 		From:     revision5Release, To: target,
 	}, OutsideNamespace())
 }

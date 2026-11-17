@@ -17,6 +17,7 @@ import type { AppStore } from "../../store/app-state-model.ts";
 import { KeyedIndex } from "../../components/keyed-index.tsx";
 import { fileVersionFromComparison, type FileVersionView } from "../history/file-version.ts";
 import { ReviewFileRow as ReviewFileRowView } from "./ReviewFileRow.tsx";
+import { isOutsideRoot } from "../source/outside-namespace.ts";
 import { ThemeIcon } from "../../components/primitives/ThemeIcon.tsx";
 import { ReviewWalkContext } from "./ReviewWalkContext.tsx";
 import { LycaonApiError } from "../../api/http.ts";
@@ -470,13 +471,14 @@ export function ReviewLens(props: Props) {
                     {(row) => (
                       <ReviewFileRowView
                         row={row()}
+                        outside={isOutsideRoot(props.projectId, row().rootId)}
                         chatRef={chatRefFor(row())}
                         reserveStat={showsStats()}
                         expanded={selected() === rowKey(row())}
                         stepsOpen={stepsOpen()}
                         onOpen={() => openRow(row())}
                         onRevert={
-                          props.onRevertFile
+                          props.onRevertFile && !isOutsideRoot(props.projectId, row().rootId)
                             ? () => props.onRevertFile?.(row().rootId, row().path)
                             : undefined
                         }
@@ -507,6 +509,7 @@ export function ReviewLens(props: Props) {
                     {(row) => (
                       <ReviewFileRowView
                         row={row()}
+                        outside={isOutsideRoot(props.projectId, row().rootId)}
                         seen
                         arrived={seenArrivals().arrived.has(rowKey(row()))}
                         chatRef={chatRefFor(row())}
