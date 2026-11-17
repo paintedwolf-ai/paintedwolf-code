@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/project"
@@ -107,20 +106,7 @@ func (m *Tools) Build() promptloop.ToolsDeps {
 		return handle, patched, err
 	}
 	deps.RecordSourceRunEvidence = m.Verification.RecordSourceRunEvidence
-	deps.InFlightWorkerRosterNote = func(ctx context.Context, sess *api.Session) string {
-		if m == nil || m.Workers == nil || sess == nil {
-			return ""
-		}
-		active, err := workeroutcomes.ParentSessionInFlightWorkers(ctx, m.Workers, sess.ProjectID, sess.ID)
-		if err != nil || len(active) == 0 {
-			return ""
-		}
-		note, err := guidance.RenderWorkerInFlightRoster(ctx, guidance.BuildWorkerRosterLines(active))
-		if err != nil {
-			return ""
-		}
-		return note
-	}
+
 	deps.CompactOversizedToolResults = func(ctx context.Context, sessionID string, sess *api.Session) error {
 		if m == nil {
 			return nil

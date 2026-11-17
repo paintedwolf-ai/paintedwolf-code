@@ -8,12 +8,12 @@ import (
 
 // RegistryDeps supplies optional host services for domain predicates and core wiring.
 type RegistryDeps struct {
-	DelegationStore         DelegationReader
+	SessionWorkIDs          func(ctx context.Context, sessionID string) ([]string, error)
 	Evidence                EvidenceReader
 	GroundingBlocked        func(ctx context.Context, sessionID string) (bool, error)
 	DoomLoopExceeded        func(ctx context.Context, sessionID string) (bool, error)
 	BlueprintGet            func(ctx context.Context, blueprintPath string) (*api.Blueprint, error)
-	DelegationCloseout      func(ctx context.Context, sessionID string) (bool, error)
+	PlanCloseout            func(ctx context.Context, sessionID string) (bool, error)
 	SourceVerifyPassed      func(ctx context.Context, sessionID string) (bool, error)
 	DeliveryReported        func(ctx context.Context, sessionID, runID, phase string) (bool, error)
 	ScanLedger              ScanLedger
@@ -33,9 +33,9 @@ type RegistryDeps struct {
 func NewDefaultRegistry(deps RegistryDeps) (*ConditionRegistry, error) {
 	reg := NewRegistry()
 	core := CoreDeps{
-		DelegationStore:         deps.DelegationStore,
+		SessionWorkIDs:          deps.SessionWorkIDs,
 		Evidence:                deps.Evidence,
-		DelegationCloseout:      deps.DelegationCloseout,
+		PlanCloseout:            deps.PlanCloseout,
 		SourceVerifyPassed:      deps.SourceVerifyPassed,
 		DeliveryReported:        deps.DeliveryReported,
 		ScanLedger:              deps.ScanLedger,
@@ -82,7 +82,7 @@ func TestRegistryDeps() RegistryDeps {
 		BlueprintGet: func(_ context.Context, blueprintPath string) (*api.Blueprint, error) {
 			return &api.Blueprint{Path: blueprintPath, Content: TestPlanContentWithTasks}, nil
 		},
-		DelegationCloseout: func(context.Context, string) (bool, error) {
+		PlanCloseout: func(context.Context, string) (bool, error) {
 			return true, nil
 		},
 	}

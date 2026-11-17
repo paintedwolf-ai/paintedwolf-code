@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"slices"
 	"strings"
 	"sync"
@@ -56,7 +57,7 @@ func (s *Store) Record(ctx context.Context, a Action) error {
 	return s.queries.InsertPersonAction(ctx, db.InsertPersonActionParams{
 		ID: uuid.NewString(), PersonID: a.PersonID, OperationID: a.OperationID,
 		PathParamsJson: string(params), SubjectJson: string(subject),
-		Status: int64(a.Status), RecordedAt: db.FormatTime(s.now().UTC()),
+		Status: int64(a.Status), RecordedAt: timelayout.Format(s.now().UTC()),
 	})
 }
 

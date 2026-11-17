@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,7 +20,7 @@ func TestDecisionBranchStaysAttachedButCannotBePromoted(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 	queue := NewInMemoryQueue(1)
 	queue.SetProjectStore(projects)
-	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(t.TempDir(), "branches")))
+	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(t.TempDir(), "branches"), platform.NewSelector(platform.Config{})))
 	id, err := queue.Enqueue(t.Context(), api.WorkerTask{
 		ProjectID: p.ID, ParentSessionID: "parent", WorkspaceRootID: p.Roots[0].ID, WorkspacePath: canonical,
 		AgentType: "implementer", Prompt: "choose", Brief: "choose",

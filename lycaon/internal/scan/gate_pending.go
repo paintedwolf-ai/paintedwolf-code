@@ -31,6 +31,27 @@ func (e *GatePendingError) Is(target error) bool {
 	return target == ErrGatePending
 }
 
+// GateFailedError reports a scan obligation that finished without clearing
+// its gate.
+type GateFailedError struct {
+	ScanID   string
+	Guidance []api.ScanGuidanceSummary
+	Reason   string
+}
+
+func (e *GateFailedError) Error() string {
+	return "security gate failed: " + e.Reason
+}
+
+// AsGateFailed unwraps a GateFailedError.
+func AsGateFailed(err error) (*GateFailedError, bool) {
+	var fe *GateFailedError
+	if errors.As(err, &fe) {
+		return fe, true
+	}
+	return nil, false
+}
+
 // AsGatePending unwraps a GatePendingError.
 func AsGatePending(err error) (*GatePendingError, bool) {
 	var pe *GatePendingError

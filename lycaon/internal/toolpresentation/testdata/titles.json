@@ -53,8 +53,8 @@
   {
     "tool": "answer_decision",
     "args": {
-      "job_id": "job",
-      "option": "Use local data"
+      "worker": "parser-fix",
+      "answer": "Use local data"
     },
     "title": "Use local data"
   },
@@ -240,21 +240,6 @@
       "handle": "held-1"
     },
     "title": "Held tool call"
-  },
-  {
-    "tool": "delegate_status",
-    "args": {
-      "delegation_id": "opaque"
-    },
-    "title": "Delegated task"
-  },
-  {
-    "tool": "extend_worker_budget",
-    "args": {
-      "job_id": "opaque",
-      "max_tool_loops": 80
-    },
-    "title": "Worker task"
   },
   {
     "tool": "delete",

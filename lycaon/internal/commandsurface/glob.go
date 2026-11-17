@@ -95,9 +95,6 @@ func MatchGlob(ctx context.Context, files GlobFiles, pattern string, budget *Glo
 	return matches, nil
 }
 
-// GlobActive reports an unescaped `*`, `?`, or `[` anywhere in a pattern.
-func GlobActive(pattern string) bool { return hasActiveGlob(pattern) }
-
 // GlobScope is the filesystem view one plan's patterns expand against.
 type GlobScope struct {
 	// Dir is the absolute process directory relative patterns resolve under.
@@ -227,7 +224,7 @@ func (g *globber) component(base, component string, last bool) ([]string, error)
 	switch {
 	case component == "**":
 		return g.globstar(base, last)
-	case !hasActiveGlob(component):
+	case !GlobActive(component):
 		candidate := joinGlob(base, unescapeGlob(component))
 		entry, found, err := g.files.Entry(g.ctx, candidate)
 		if err != nil || !found || (!last && !entry.Dir) {
@@ -340,8 +337,8 @@ func joinGlob(base, name string) string {
 	}
 }
 
-// hasActiveGlob reports an unescaped `*`, `?`, or `[` in a pattern.
-func hasActiveGlob(component string) bool {
+// GlobActive reports an unescaped `*`, `?`, or `[` anywhere in a pattern.
+func GlobActive(component string) bool {
 	for i := 0; i < len(component); i++ {
 		switch component[i] {
 		case '\\':

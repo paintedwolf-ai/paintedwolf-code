@@ -10,10 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
+
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/oar"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -58,7 +59,7 @@ func TestOARNoMaybeRejectFuncs(t *testing.T) {
 func TestOARHintCoverageUsesCatalogAnchors(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	contractcheck.FailErr(t, "install catalog", anchorcatalog.InstallFile(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "host", "anchors", "catalog.yaml")))
-	hintsAt := extpacks.Bundled(hintregistry.DefaultDir)
+	hintsAt := extpacks.Bundled(config.PlatformPolicy)
 	schemaDir := filepath.Join(root, "schemas")
 	loader, err := oar.NewLoader(schemaDir)
 	contractcheck.FailErr(t, "oar loader", err)
@@ -104,10 +105,48 @@ func TestOARHintCoverageUsesCatalogAnchors(t *testing.T) {
 	}
 }
 
+func scanOARDeclaredFacts(t *testing.T) []string {
+	t.Helper()
+	path := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "oar", "catalogue.go")
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
+	contractcheck.FailErr(t, "parse oar/catalogue.go", err)
+	var names []string
+	for _, decl := range file.Decls {
+		gen, ok := decl.(*ast.GenDecl)
+		if !ok || gen.Tok != token.VAR {
+			continue
+		}
+		for _, spec := range gen.Specs {
+			vs, ok := spec.(*ast.ValueSpec)
+			if !ok || len(vs.Names) != 1 || vs.Names[0].Name != "factDecls" || len(vs.Values) != 1 {
+				continue
+			}
+			lit, ok := vs.Values[0].(*ast.CompositeLit)
+			if !ok {
+				continue
+			}
+			for _, elt := range lit.Elts {
+				row, ok := elt.(*ast.CompositeLit)
+				if !ok || len(row.Elts) == 0 {
+					continue
+				}
+				if name := contractcheck.AstStringLit(row.Elts[0]); name != "" {
+					names = append(names, name)
+				}
+			}
+		}
+	}
+	if len(names) == 0 {
+		t.Fatal("no factDecls parsed from oar/catalogue.go")
+	}
+	return names
+}
+
 func TestOARNoVerdictFacts(t *testing.T) {
-	for _, fact := range oar.FactCatalogue() {
-		if verdictFactName.MatchString(fact.Name) {
-			t.Fatalf("catalogue declares verdict-shaped fact %q", fact.Name)
+	for _, name := range scanOARDeclaredFacts(t) {
+		if verdictFactName.MatchString(name) {
+			t.Fatalf("catalogue declares verdict-shaped fact %q", name)
 		}
 	}
 	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "oar")
@@ -131,8 +170,8 @@ func TestOARObservationOnlyFacts(t *testing.T) {
 	TestOARNoVerdictFacts(t)
 
 	declared := map[string]bool{}
-	for _, f := range oar.FactCatalogue() {
-		declared[f.Name] = true
+	for _, name := range scanOARDeclaredFacts(t) {
+		declared[name] = true
 	}
 	for _, name := range []string{"command_not_argv", "is_directory", "reject_observation"} {
 		if !declared[name] {

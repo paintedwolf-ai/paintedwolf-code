@@ -26,7 +26,7 @@ func TestProjectSourceReadsLiveWorkerOverlay(t *testing.T) {
 	projectDir := t.TempDir()
 	project := CreateAPIProjectAtPath(t, base, projectDir)
 
-	workerID, err := h.Delegations.Queue.Enqueue(t.Context(), wire.WorkerTask{
+	workerID, err := h.Workers.Queue.Enqueue(t.Context(), wire.WorkerTask{
 		Prompt:        "fixture",
 		Brief:         "fixture",
 		ProjectID:     project.ID,
@@ -36,7 +36,7 @@ func TestProjectSourceReadsLiveWorkerOverlay(t *testing.T) {
 	testutil.FailErr(t, "enqueue write worker", err)
 
 	// The first isolating operation provisions the private branch.
-	claimed, err := h.Delegations.Queue.ClaimNext(t.Context(), worker.ClaimRequest{
+	claimed, err := h.Workers.Queue.ClaimNext(t.Context(), worker.ClaimRequest{
 		ProjectID:       project.ID,
 		ClaimedBy:       "source-branch-test",
 		ExecutionTarget: wire.ExecutionTargetLocal,
@@ -48,7 +48,7 @@ func TestProjectSourceReadsLiveWorkerOverlay(t *testing.T) {
 	if strings.TrimSpace(claimed.WorkspaceRoot) != "" {
 		t.Fatal("ClaimNext must not provision a private branch")
 	}
-	claimed, err = h.Delegations.Queue.ClaimWorkerBranch(t.Context(), workerID)
+	claimed, err = h.Workers.Queue.ClaimWorkerBranch(t.Context(), workerID)
 	testutil.FailErr(t, "ClaimWorkerBranch", err)
 	overlayDir := claimed.WorkspaceRoot
 	if overlayDir == "" {
@@ -121,7 +121,7 @@ func TestProjectSourceReadsLiveWorkerOverlay(t *testing.T) {
 // Overlay reads must retain the claimed branch and its attached root identities.
 func assertWorkerSourceOverlay(t *testing.T, h *wiring.Harness, projectID, workerID, expectedRoot, file string) {
 	t.Helper()
-	task, ok := h.Delegations.Queue.Get(workerID)
+	task, ok := h.Workers.Queue.Get(workerID)
 	if !ok || task == nil || filepath.Clean(task.WorkspaceRoot) != filepath.Clean(expectedRoot) {
 		t.Fatalf("claimed worker branch lookup lost its root: found=%t task=%+v want=%q", ok, task, expectedRoot)
 	}

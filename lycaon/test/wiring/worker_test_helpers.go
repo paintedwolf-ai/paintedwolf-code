@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -76,10 +77,10 @@ func MockWorkerCompletionJSON(legStatus, brief string, objectives []string) stri
 
 // PromotePendingWriteOverlays merges completed write workers onto primary for wiring tests.
 func PromotePendingWriteOverlays(ctx context.Context, h *Harness, projectID, parentSessionID string) error {
-	if h == nil || h.Delegations.Queue == nil || h.Sessions.Manager == nil || strings.TrimSpace(parentSessionID) == "" {
+	if h == nil || h.Workers.Queue == nil || h.Sessions.Manager == nil || strings.TrimSpace(parentSessionID) == "" {
 		return nil
 	}
-	jobs, err := h.Delegations.Queue.ListBySession(ctx, projectID, parentSessionID, api.WorkerStatusComplete)
+	jobs, err := h.Workers.Queue.ListBySession(ctx, projectID, parentSessionID, api.WorkerStatusComplete)
 	if err != nil {
 		return err
 	}
@@ -108,21 +109,18 @@ const workerDrainQuiescenceTimeout = 30 * time.Second
 // DrainPendingWorkerJobs runs all pending local worker jobs and waits until the queue is quiescent.
 // parentSessionID, when non-empty, also drains deferred coordinator loop after workers finish.
 func DrainPendingWorkerJobs(ctx context.Context, h *Harness, projectID, parentSessionID string) error {
-	if h == nil || h.Delegations.Queue == nil || h.Sessions.Manager == nil {
+	if h == nil || h.Workers.Queue == nil || h.Sessions.Manager == nil {
 		return errors.New("harness worker queue or session manager missing")
 	}
 	drainCtx, cancel := context.WithTimeout(ctx, testutil.Timeout(workerDrainQuiescenceTimeout))
 	defer cancel()
 	exec := WiringWorkerExecutor(h)
 	bridge := &worker.SessionOutcomeBridge{Workers: h.Sessions.Manager.Coordinator.Workers, Loop: h.Sessions.Manager.Coordinator.Runtime.CoordinatorLoop().Nudges, Results: h.Sessions.Manager.Workers.Results, State: h.Sessions.Manager.Workers.State, Closure: h.Sessions.Manager.Coordinator.ProgressClosure}
-	if h.Delegations.Manager != nil {
-		bridge.Inner = h.Delegations.Manager
-	}
 	for {
 		if err := drainCtx.Err(); err != nil {
 			return err
 		}
-		task, err := h.Delegations.Queue.ClaimNext(drainCtx, worker.ClaimRequest{
+		task, err := h.Workers.Queue.ClaimNext(drainCtx, worker.ClaimRequest{
 			ClaimedBy:       "wiring-test",
 			ExecutionTarget: api.ExecutionTargetLocal,
 		})
@@ -157,7 +155,7 @@ func DrainPendingWorkerJobs(ctx context.Context, h *Harness, projectID, parentSe
 		if err != nil {
 			return err
 		}
-		won, err := h.Delegations.Queue.Complete(drainCtx, task, result)
+		won, err := h.Workers.Queue.Complete(drainCtx, task, result)
 		if err != nil {
 			return err
 		}
@@ -167,7 +165,7 @@ func DrainPendingWorkerJobs(ctx context.Context, h *Harness, projectID, parentSe
 		if err := bridge.OnWorkerComplete(drainCtx, task.ID, result); err != nil {
 			return err
 		}
-		if err := h.Delegations.Queue.MarkOutcomeDelivered(drainCtx, task.ID); err != nil {
+		if err := h.Workers.Queue.MarkOutcomeDelivered(drainCtx, task.ID); err != nil {
 			return err
 		}
 		bridge.OnOutcomeDelivered(drainCtx, *task)
@@ -196,7 +194,7 @@ func executeWorkerWithinDrain(
 	case <-ctx.Done():
 		// The harness deadline explicitly cancels checkpoint waits.
 		lookupCtx, cancelLookup := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
-		current, ok := h.Delegations.Queue.Lookup(lookupCtx, task.ID)
+		current, ok := h.Workers.Queue.Lookup(lookupCtx, task.ID)
 		cancelLookup()
 		if ok && current != nil && current.ChildSessionID != "" {
 			h.Sessions.Manager.Runner.Execution.Cancel(current.ChildSessionID)
@@ -208,9 +206,25 @@ func executeWorkerWithinDrain(
 	}
 }
 
-func workerQueueQuiescent(ctx context.Context, q worker.WorkerQueue, projectID string) bool {
-	jobs, err := q.List(ctx, projectID, api.WorkerStatusPending, api.WorkerStatusRunning)
-	return err == nil && len(jobs) == 0
+func workerQueueQuiescent(ctx context.Context, h *Harness, projectID string) bool {
+	running, err := h.Workers.Queue.List(ctx, projectID, api.WorkerStatusRunning)
+	if err != nil || len(running) > 0 {
+		return false
+	}
+	pending, err := h.Workers.Queue.List(ctx, projectID, api.WorkerStatusPending)
+	if err != nil {
+		return false
+	}
+	for _, job := range pending {
+		if len(job.AfterWorkers) == 0 || h.Workers.Records == nil {
+			return false
+		}
+		waiting, wErr := workerops.PrerequisitePending(ctx, h.Workers.Records.LatestRoundJob, h.Workers.Queue, job)
+		if wErr != nil || !waiting {
+			return false
+		}
+	}
+	return true
 }
 
 func workerCycleQuiescent(
@@ -218,14 +232,14 @@ func workerCycleQuiescent(
 	h *Harness,
 	projectID, parentSessionID string,
 ) bool {
-	if !workerQueueQuiescent(ctx, h.Delegations.Queue, projectID) {
+	if !workerQueueQuiescent(ctx, h, projectID) {
 		return false
 	}
 	if parentSessionID == "" {
 		return true
 	}
 	idle, err := workeroutcomes.ParentSessionWorkerCycleIdle(
-		ctx, h.Delegations.Queue, projectID, parentSessionID, "",
+		ctx, h.Workers.Queue, projectID, parentSessionID, "",
 	)
 	return err == nil && idle
 }

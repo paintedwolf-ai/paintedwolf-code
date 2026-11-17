@@ -1,6 +1,6 @@
 id: security-survey-addenda
 extends: worker-leg-default
-description: Threat-model survey leg checklist
+description: Threat-model survey worker checklist
 triggers:
   topology_patterns: ["pipeline", "default-pipeline", "*"]
   phase_ids: ["execute", "research"]

@@ -2,11 +2,11 @@ package survey
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools/safecmd"
 	"regexp"
 	"regexp/syntax"
-	"strings"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
 
 func compileGrepPattern(opts grepOptions) (*regexp.Regexp, error) {
@@ -25,29 +25,6 @@ func compileGrepPattern(opts grepOptions) (*regexp.Regexp, error) {
 		})
 	}
 	return re, nil
-}
-
-// unescapedRegexOperators lists unescaped RE2 operators in first-seen order, backtick-quoted.
-func unescapedRegexOperators(pattern string) string {
-	const operators = ".*+?()[]{}|^$"
-	var found []string
-	seen := map[rune]bool{}
-	escaped := false
-	for _, r := range pattern {
-		if escaped {
-			escaped = false
-			continue
-		}
-		if r == '\\' {
-			escaped = true
-			continue
-		}
-		if strings.ContainsRune(operators, r) && !seen[r] {
-			seen[r] = true
-			found = append(found, "`"+string(r)+"`")
-		}
-	}
-	return strings.Join(found, ", ")
 }
 
 func compileGrepRegex(pattern string, caseInsensitive bool) (*regexp.Regexp, error) {

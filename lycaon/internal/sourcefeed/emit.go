@@ -159,15 +159,11 @@ func emitProjectSignal(ctx context.Context, projectID, workspaceID string, resyn
 
 // EmitTx stages one source event in the caller's transaction.
 func EmitTx(ctx context.Context, tx *sql.Tx, c Change) (*StagedDelivery, error) {
-	return emitBatchTx(ctx, tx, []Change{c})
+	return EmitBatchTx(ctx, tx, []Change{c})
 }
 
 // EmitBatchTx stages one bounded batch in the caller's transaction.
 func EmitBatchTx(ctx context.Context, tx *sql.Tx, changes []Change) (*StagedDelivery, error) {
-	return emitBatchTx(ctx, tx, changes)
-}
-
-func emitBatchTx(ctx context.Context, tx *sql.Tx, changes []Change) (*StagedDelivery, error) {
 	prepared, err := prepareChanges(changes, false)
 	if err != nil {
 		return nil, err

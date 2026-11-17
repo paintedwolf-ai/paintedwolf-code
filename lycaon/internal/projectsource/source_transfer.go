@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"io"
 	"os"
 	"path/filepath"
@@ -170,7 +171,7 @@ func (t *sourceTreeTransfer) transferFileBytes(source *os.Root, from string, des
 	if err != nil {
 		return entry, err
 	}
-	retain := entry.Path == "." && info.Size() <= sourceledger.MaxRevisionContentBytes
+	retain := entry.Path == "." && info.Size() <= sourceblob.MaxRevisionContentBytes
 	if retain {
 		outputs = append(outputs, sourceRevisionBuffer{buffer: &content})
 	}
@@ -178,7 +179,7 @@ func (t *sourceTreeTransfer) transferFileBytes(source *os.Root, from string, des
 	entry.SHA = hex.EncodeToString(digest.Sum(nil))
 	if entry.Path == "." && err == nil {
 		t.rootSHA = entry.SHA
-		if retain && count <= sourceledger.MaxRevisionContentBytes {
+		if retain && count <= sourceblob.MaxRevisionContentBytes {
 			t.rootContent = append([]byte{}, content.Bytes()...)
 		}
 	}
@@ -190,7 +191,7 @@ type sourceRevisionBuffer struct{ buffer *bytes.Buffer }
 
 func (w sourceRevisionBuffer) Write(p []byte) (int, error) {
 	n := len(p)
-	remaining := sourceledger.MaxRevisionContentBytes - w.buffer.Len()
+	remaining := sourceblob.MaxRevisionContentBytes - w.buffer.Len()
 	if remaining > 0 {
 		if len(p) > remaining {
 			p = p[:remaining]

@@ -4,8 +4,9 @@ import (
 	"github.com/johnfercher/maroto/v2/pkg/consts/fontstyle"
 	"github.com/johnfercher/maroto/v2/pkg/core/entity"
 	"github.com/johnfercher/maroto/v2/pkg/fontrepository"
-	"github.com/lycaon/lycaon/internal/fonts"
 	"github.com/phpdave11/gofpdf"
+
+	"github.com/lycaon/lycaon/internal/fonts"
 )
 
 // Font family keys used by gofpdf.
@@ -32,15 +33,11 @@ var faces = []face{
 	{familyMono, fontstyle.BoldItalic, "JetBrainsMono-BoldItalic.ttf"},
 }
 
-func faceBytes(file string) ([]byte, error) {
-	return fonts.ReadFace(file)
-}
-
 // customFonts is the face set handed to the document builder.
 func customFonts() ([]entity.CustomFont, error) {
 	repo := fontrepository.New()
 	for _, f := range faces {
-		b, err := faceBytes(f.file)
+		b, err := fonts.ReadFace(f.file)
 		if err != nil {
 			return nil, err
 		}
@@ -52,7 +49,7 @@ func customFonts() ([]entity.CustomFont, error) {
 // registerFaces registers font faces with a gofpdf document.
 func registerFaces(pdf *gofpdf.Fpdf) error {
 	for _, f := range faces {
-		b, err := faceBytes(f.file)
+		b, err := fonts.ReadFace(f.file)
 		if err != nil {
 			return err
 		}

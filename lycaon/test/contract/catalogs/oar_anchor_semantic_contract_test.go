@@ -10,8 +10,8 @@ import (
 func TestSharedObservationFactsRegistered(t *testing.T) {
 	t.Parallel()
 	declared := map[string]bool{}
-	for _, fact := range oar.FactCatalogue() {
-		declared[fact.Name] = true
+	for _, name := range scanOARDeclaredFacts(t) {
+		declared[name] = true
 	}
 	for _, tc := range []struct {
 		name, condition string

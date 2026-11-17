@@ -13,7 +13,7 @@ const seams = vi.hoisted(() => ({
   report: vi.fn(), notify: vi.fn((_notice: import("../../notices/notice-model.ts").NoticeInput) => {}), assess: vi.fn(), remove: vi.fn(), lookup: vi.fn(),
   detachRoot: vi.fn(), listBg: vi.fn(), confirm: vi.fn(),
 }));
-vi.mock("../../files/documents/project-files-buffers.ts", () => ({ prepareFilesRootDetach: seams.prepare, dropFilesBuffersForRoot: vi.fn() }));
+vi.mock("../../files/documents/project-files-buffer-lifecycle.ts", () => ({ prepareFilesRootDetach: seams.prepare, dropFilesBuffersForRoot: vi.fn() }));
 vi.mock("../../home/thumbnail-store.ts", () => ({ forgetProjectThumbnail: seams.thumbnail }));
 vi.mock("../../contributions/contribution-store.ts", () => ({ invalidateContributionFrame: seams.invalidate }));
 vi.mock("../../platform/interaction/confirm-dialog.ts", () => ({ confirmDestructive: (...args: unknown[]) => seams.confirm(...args) }));

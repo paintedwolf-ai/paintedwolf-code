@@ -84,14 +84,14 @@ func TestStrictEgressAskComposesOnce(t *testing.T) {
 	t.Cleanup(func() { confine.SetEgressResolver(nil) })
 
 	cmd := confine.EgressCommand{SessionID: "compose-sess", ToolCallID: "tc-1"}
-	if !confine.DecideAttributedHost(context.Background(), cmd, "new-host.example") {
+	if !confine.DecideAttributedHTTPRequest(context.Background(), cmd, "new-host.example", "", "") {
 		t.Fatal("first Strict host ask should allow")
 	}
 	if asks != 1 {
 		t.Fatalf("first host must ask exactly once, got %d", asks)
 	}
 	asks = 0
-	if !confine.DecideAttributedHost(context.Background(), cmd, "new-host.example") {
+	if !confine.DecideAttributedHTTPRequest(context.Background(), cmd, "new-host.example", "", "") {
 		t.Fatal("cached host must still allow")
 	}
 	if asks != 0 {

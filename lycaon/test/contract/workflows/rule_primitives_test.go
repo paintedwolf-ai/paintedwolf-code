@@ -71,18 +71,18 @@ func TestRuleEnginePostureBehaviorContract(t *testing.T) {
 	contractcheck.FailErr(t, "rules.NewPostureRuleEngine failed", err)
 	ctx := context.Background()
 
-	deny, err := engine.Evaluate(ctx, rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "delegate_dispatch"}})
+	deny, err := engine.Evaluate(ctx, rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint"}})
 	contractcheck.FailErr(t, "engine.Evaluate failed", err)
 	if deny.Allowed {
-		t.Fatal("expected delegate_dispatch denied in spec posture")
+		t.Fatal("expected plan_from_blueprint denied in spec posture")
 	}
 	if deny.Code != "SPEC_POSTURE_DELEGATION_FORBIDDEN" {
 		t.Fatalf("code = %q", deny.Code)
 	}
 
-	allow, err := engine.Evaluate(ctx, rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureBuild, ToolName: "delegate_dispatch"}})
+	allow, err := engine.Evaluate(ctx, rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureBuild, ToolName: "plan_from_blueprint"}})
 	contractcheck.FailErr(t, "engine.Evaluate failed", err)
 	if !allow.Allowed {
-		t.Fatalf("expected delegate_dispatch allowed in build posture, got %q", allow.Code)
+		t.Fatalf("expected plan_from_blueprint allowed in build posture, got %q", allow.Code)
 	}
 }

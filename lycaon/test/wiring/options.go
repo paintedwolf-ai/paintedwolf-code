@@ -15,7 +15,7 @@ type options struct {
 	llmClient               modelcall.LLMClient
 	decider                 decide.Decider
 	recording               bool
-	autoCompleteDelegation  bool
+	autoCompleteLegs        bool
 	replaceManifests        map[string]workflowdef.Manifest
 	useBundledScanners      bool
 	coordinatorLoopDisabled bool
@@ -91,10 +91,10 @@ func WithManifestRegistry(manifests map[string]workflowdef.Manifest) Option {
 	}
 }
 
-// WithAutoCompleteDelegation records dispatched leg outcomes automatically.
-func WithAutoCompleteDelegation() Option {
+// WithAutoCompleteLegs records dispatched leg outcomes automatically.
+func WithAutoCompleteLegs() Option {
 	return func(o *options) {
-		o.autoCompleteDelegation = true
+		o.autoCompleteLegs = true
 	}
 }
 

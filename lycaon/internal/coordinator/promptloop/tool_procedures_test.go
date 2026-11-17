@@ -199,7 +199,7 @@ func TestToolProceduresSurviveContextFit(t *testing.T) {
 	history = append(history, api.Message{Role: api.MessageRoleUser, Content: "current request"})
 	got, err := loop.Tools.appendToolProcedures(t.Context(), &api.Session{}, "coordinator", history, []tools.ToolMeta{{Name: "command"}})
 	testutil.FailErr(t, "append procedures", err)
-	fitted := compaction.DeterministicFit(compaction.CompactionConfig{KeepRecentMessages: 2}, compaction.ContextMessagesFromAPI(got), 100)
+	fitted := compaction.DeterministicFitWithReserve(compaction.CompactionConfig{KeepRecentMessages: 2}, compaction.ContextMessagesFromAPI(got), 100, 0)
 	found := false
 	for _, msg := range fitted {
 		if msg.Content == "runner procedure" {

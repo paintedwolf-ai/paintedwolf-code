@@ -1,5 +1,6 @@
 import type { LycaonClient } from "../api/client.ts";
-import { applyFilesBufferRefresh, filesBufferKeyAtAddress } from "../files/documents/project-files-buffers.ts";
+import { applyFilesBufferRefresh } from "../files/documents/project-files-buffer-io.ts";
+import { filesBufferKeyAtAddress } from "../files/documents/files-buffer-state.ts";
 import { filesBufferNeedsBody, projectFilesState } from "../files/documents/files-buffer-state.ts";
 
 /** Refresh admitted clean buffers after replace-apply writes. */

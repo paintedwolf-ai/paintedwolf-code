@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -179,7 +180,7 @@ func (s *sqlLedgerStore) InsertFullPass(ctx context.Context, draft FullPassDraft
 	}
 	return s.queries.InsertFullPass(ctx, db.InsertFullPassParams{
 		ID: draft.ID, CanonicalPath: draft.CanonicalPath, ScannersJson: string(scannersJSON),
-		Trigger: string(draft.Trigger), RequestedAt: db.FormatTime(draft.RequestedAt.UTC()),
+		Trigger: string(draft.Trigger), RequestedAt: timelayout.Format(draft.RequestedAt.UTC()),
 	})
 }
 
@@ -209,7 +210,7 @@ func (s *sqlLedgerStore) WidenFullPass(ctx context.Context, id string, scanners 
 }
 
 func (s *sqlLedgerStore) MarkFullPassStarted(ctx context.Context, id string, at time.Time) error {
-	_, err := s.queries.MarkFullPassStarted(ctx, db.MarkFullPassStartedParams{StartedAt: db.FormatTime(at.UTC()), ID: id})
+	_, err := s.queries.MarkFullPassStarted(ctx, db.MarkFullPassStartedParams{StartedAt: timelayout.Format(at.UTC()), ID: id})
 	return err
 }
 
@@ -224,14 +225,14 @@ func (s *sqlLedgerStore) BindFullPassRequester(ctx context.Context, passID strin
 		now := time.Now().UTC()
 		if sessionID != "" {
 			if err := qtx.BindFullPassSession(ctx, db.BindFullPassSessionParams{
-				PassID: passID, SessionID: sessionID, CreatedAt: db.FormatTime(now),
+				PassID: passID, SessionID: sessionID, CreatedAt: timelayout.Format(now),
 			}); err != nil {
 				return err
 			}
 		}
 		if workflowRunID != "" {
 			if err := qtx.BindFullPassWorkflowRun(ctx, db.BindFullPassWorkflowRunParams{
-				PassID: passID, WorkflowRunID: workflowRunID, CreatedAt: db.FormatTime(now),
+				PassID: passID, WorkflowRunID: workflowRunID, CreatedAt: timelayout.Format(now),
 			}); err != nil {
 				return err
 			}

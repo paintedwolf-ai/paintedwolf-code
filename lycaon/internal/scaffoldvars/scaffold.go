@@ -38,12 +38,6 @@ func pendingBucketPhase(vars map[string]any, bucketKey string) (string, bool) {
 	return "", false
 }
 
-// AnyDecisionPending reports whether any user_decision entry is pending.
-func AnyDecisionPending(vars map[string]any) bool {
-	_, ok := pendingBucketPhase(vars, "user_decision")
-	return ok
-}
-
 // HumanApprovalAwaitingSincePath holds when the current approval wait opened.
 const HumanApprovalAwaitingSincePath = "human_approval.awaiting_since"
 

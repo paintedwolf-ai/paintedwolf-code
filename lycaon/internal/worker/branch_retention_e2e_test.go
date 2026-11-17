@@ -4,6 +4,10 @@ import (
 	"archive/zip"
 	"context"
 	"database/sql"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -14,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/backup"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -50,7 +55,7 @@ func testCompletedOverlaySurvivesTreeEviction(t *testing.T, relocate bool) {
 	testdbseed.InsertProjectRootWithID(t, sqlDB, testdbseed.DefaultProjectID, "root-id", project)
 
 	branches := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches")
-	mgr := workspace.NewManager(branches)
+	mgr := workspace.NewManager(branches, platform.NewSelector(platform.Config{}))
 	q := NewSQLQueue(sqlDB, 4)
 	q.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
 	q.SetWorkerWorkspaceManager(earlierFormatBranches{mgr})
@@ -183,7 +188,7 @@ func relocateWorkerInstallation(t *testing.T, original db.Handle, jobID string) 
 	}
 	queue := NewSQLQueue(restored, 4)
 	queue.SetBaselineStore(sourceledger.New(restored, filepath.Join(newRoot, "source-content")).Baselines)
-	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"))
+	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"), platform.NewSelector(platform.Config{}))
 	queue.SetWorkerWorkspaceManager(earlierFormatBranches{manager})
 	return queue, manager
 }
@@ -197,7 +202,7 @@ func TestUnsealedWorkerEditsSurviveRelocatedArchive(t *testing.T) {
 	dataDir := testbaseline.DataDir(t, database)
 	queue := NewSQLQueue(database, 1)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
-	queue.SetWorkerWorkspaceManager(earlierFormatBranches{workspace.NewManager(filepath.Join(dataDir, "worker-branches"))})
+	queue.SetWorkerWorkspaceManager(earlierFormatBranches{workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}))})
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})
 	testutil.FailErr(t, "enqueue unsealed worker", err)
 	_, err = queue.ClaimNext(ctx, ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
@@ -299,7 +304,8 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 	initialBranches := filepath.Join(dataDir, "worker-branches")
 	initialGit, err := workspace.OpenPrivateGit(initialBranches)
 	testutil.FailErr(t, "open initial private Git", err)
-	initialManager := workspace.NewManager(initialBranches).WithPrivateGit(initialGit)
+	initialManager := workspace.NewManager(initialBranches, platform.NewSelector(platform.Config{})).WithPrivateGit(initialGit).
+		WithRecovery(openEngineRecovery(t, dataDir, initialGit))
 	queue := NewSQLQueue(database, 1)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
 	queue.SetWorkerWorkspaceManager(initialManager)
@@ -383,11 +389,11 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 	restoredDB := testdbfixture.OpenPath(t, filepath.Join(newRoot, "store.db"))
 	restored := NewSQLQueue(restoredDB, 4)
 	restored.SetBaselineStore(sourceledger.New(restoredDB, filepath.Join(newRoot, "source-content")).Baselines)
-	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"))
+	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"), platform.NewSelector(platform.Config{}))
 	restoredGit, err := workspace.OpenPrivateGit(manager.BranchBase())
 	testutil.FailErr(t, "open restored private Git", err)
 	restored.SetWorkerWorkspaceManager(manager.WithPrivateGit(restoredGit))
-	coordinator := openFixtureRecovery(t, manager.BranchBase())
+	coordinator := openEngineRecovery(t, newRoot, restoredGit)
 	manager.WithRecovery(coordinator)
 	_, err = manager.RecoverWorkerViews(ctx)
 	testutil.FailErr(t, "startup recovery", err)
@@ -432,7 +438,8 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 // into it, files, refs and objects.
 func promoteRestoredCheckpoint(t *testing.T, svc *MergeService, project, id, checkpointID, workerCommit string) {
 	t.Helper()
-	ctx, origCheckpointID := t.Context(), checkpointID
+	// Promotion runs inside the coordinator's tool call.
+	ctx, origCheckpointID := gitexec.AgentEntry(t.Context()), checkpointID
 	testutil.FailErr(t, "mkdir target project", os.MkdirAll(project, 0o755))
 	testutil.FailErr(t, "seed target main", os.WriteFile(filepath.Join(project, "main.go"), []byte("package before\n"), 0o644))
 	testutil.FailErr(t, "seed target keep", os.WriteFile(filepath.Join(project, "keep.go"), []byte("package keep\n"), 0o644))
@@ -476,7 +483,7 @@ func TestUnfinishedMaterializedWorkerGitAndEditsSurviveRelocatedArchiveWithTrunk
 	testutil.FailErr(t, "open initial private Git", err)
 	queue := NewSQLQueue(database, 1)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
-	queue.SetWorkerWorkspaceManager(workspace.NewManager(initialBranches).WithPrivateGit(initialGit))
+	queue.SetWorkerWorkspaceManager(workspace.NewManager(initialBranches, platform.NewSelector(platform.Config{})).WithPrivateGit(initialGit))
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})
 	testutil.FailErr(t, "enqueue", err)
 	_, err = queue.ClaimNext(ctx, ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
@@ -509,7 +516,7 @@ func TestUnfinishedMaterializedWorkerGitAndEditsSurviveRelocatedArchiveWithTrunk
 	restoredDB := testdbfixture.OpenPath(t, filepath.Join(newRoot, "store.db"))
 	restored := NewSQLQueue(restoredDB, 4)
 	restored.SetBaselineStore(sourceledger.New(restoredDB, filepath.Join(newRoot, "source-content")).Baselines)
-	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"))
+	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"), platform.NewSelector(platform.Config{}))
 	restoredGit, err := workspace.OpenPrivateGit(manager.BranchBase())
 	testutil.FailErr(t, "open restored private Git", err)
 	restored.SetWorkerWorkspaceManager(manager.WithPrivateGit(restoredGit))
@@ -544,4 +551,17 @@ func TestUnfinishedMaterializedWorkerGitAndEditsSurviveRelocatedArchiveWithTrunk
 		t.Fatalf("checkpoint lost commit history: %v", manifest.PrivateGit.RetainedObjects)
 	}
 	testutil.FailErr(t, "destroy", manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: id, Root: task.WorkspaceRoot}))
+}
+
+// openEngineRecovery opens the recovery coordinator where the engine keeps it under stateRoot.
+func openEngineRecovery(t *testing.T, stateRoot string, privateGit *privategit.Manager) *recovery.Coordinator {
+	t.Helper()
+	root := enginepaths.WorkerRecoveryRootUnder(stateRoot)
+	store, err := checkpoint.NewStore(filepath.Join(root, "checkpoints"))
+	testutil.FailErr(t, "open checkpoint store", err)
+	coordinator, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
+		RootDir: filepath.Join(root, "state"), CheckpointStore: store, GitStore: privateGit.Store(), GitManager: privateGit,
+	})
+	testutil.FailErr(t, "open coordinator", err)
+	return coordinator
 }

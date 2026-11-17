@@ -5,14 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-
-	"github.com/lycaon/lycaon/internal/logscli"
 )
 
-const usage = `usage: lycaon-debug {logs|eval|bundle-verify|authz|decide} …
+const usage = `usage: lycaon-debug {eval|bundle-verify|authz|decide} …
 
 Maintainer debug tooling:
-  logs           capture log viewer (same as pw logs / pw-logs)
   eval           outcome evaluation and captured application evidence
   bundle-verify  structural + signing audit of a built macOS .app/.dmg
   authz          verify, inspect, or export durable authorization evidence
@@ -35,8 +32,6 @@ func run(args []string) error {
 		return fmt.Errorf("%s", usage)
 	}
 	switch args[0] {
-	case "logs":
-		return logscli.Run("lycaon-debug logs", args[1:])
 	case "eval":
 		return runEval(args[1:])
 	case "bundle-verify":

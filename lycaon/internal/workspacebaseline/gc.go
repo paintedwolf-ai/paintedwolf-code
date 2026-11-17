@@ -3,6 +3,7 @@ package workspacebaseline
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"io"
 	"os"
 	"path/filepath"
@@ -34,7 +35,7 @@ func (s *Store) Prune(ctx context.Context) error {
 		return nil
 	}
 	defer release()
-	cutoff := db.FormatTime(time.Now().Add(-orphanGrace))
+	cutoff := timelayout.Format(time.Now().Add(-orphanGrace))
 	_, err = s.queries.PruneAbandonedWorkerBaselines(ctx, db.PruneAbandonedWorkerBaselinesParams{CreatedBefore: cutoff, BatchLimit: pruneBatch})
 	if err != nil {
 		return err

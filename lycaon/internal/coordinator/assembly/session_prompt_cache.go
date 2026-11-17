@@ -18,6 +18,7 @@ type TurnAssemblyScratch struct {
 	SurfaceID                  string
 	Reader                     prompts.Reader
 	PendingKickIDs             []string
+	PendingMessages            MessageDelivery
 	StablePrompt               string
 	StablePromptKey            string
 	BoardBlock                 string

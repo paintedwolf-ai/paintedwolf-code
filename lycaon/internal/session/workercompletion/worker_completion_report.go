@@ -18,6 +18,7 @@ import (
 
 const (
 	WorkerCompletionReportMissingCode = "WORKER_COMPLETION_REPORT_MISSING"
+	WorkerSpendLimitReachedCode       = "WORKER_SPEND_LIMIT_REACHED"
 	maxReportListItems                = 12
 	maxReportBriefChars               = 1200
 	maxReportListItemChars            = 200
@@ -41,6 +42,7 @@ type WorkerCompletionReport struct {
 	Brief               string                   `json:"brief,omitempty"`
 	Findings            []WorkerFinding          `json:"findings,omitempty"`
 	CitedURLs           []string                 `json:"cited_urls,omitempty"`
+	CitedResults        []string                 `json:"cited_results,omitempty"`
 	EvidenceObligations []EvidenceObligation     `json:"evidence_obligations,omitempty"`
 }
 
@@ -171,6 +173,7 @@ func (r WorkerCompletionReport) Empty() bool {
 		strings.TrimSpace(r.Brief) == "" &&
 		len(r.Findings) == 0 &&
 		len(r.CitedURLs) == 0 &&
+		len(r.CitedResults) == 0 &&
 		len(r.EvidenceObligations) == 0
 }
 
@@ -188,6 +191,7 @@ func (r *WorkerCompletionReport) normalizeListsAndLeg() {
 	r.RemainingRisk = normalizeReportStringList(r.RemainingRisk, 0)
 	r.Findings = normalizeFindings(r.Findings, 0)
 	r.CitedURLs = normalizeReportStringList(r.CitedURLs, 0)
+	r.CitedResults = normalizeReportStringList(r.CitedResults, 0)
 	r.EvidenceObligations = normalizeEvidenceObligations(r.EvidenceObligations)
 	r.SuggestedNextTask = strings.TrimSpace(r.SuggestedNextTask)
 }
@@ -432,73 +436,6 @@ func SourceEvidenceView(proof WorkerCompletionProof) (status, reason string, ref
 	return obligations[0].Status, obligations[0].Reason, append([]string(nil), obligations[0].EvidenceRefs...)
 }
 
-// SynthesizeCompletionReport builds a bounded report from child tool receipts.
-func SynthesizeCompletionReport(msgs []api.Message, agentType string, proof WorkerCompletionProof) (WorkerCompletionReport, bool) {
-	excerpts := collectToolExcerpts(msgs, 1200)
-	if excerpts == "" && proof.ReceiptCount == 0 && len(proof.ChangedPaths) == 0 {
-		return WorkerCompletionReport{}, false
-	}
-	report := WorkerCompletionReport{
-		LegStatus:     LegStatusPartial,
-		FilesModified: append([]string(nil), proof.ChangedPaths...),
-		ObjectivesMet: synthesizeObjectivesFromProof(proof, excerpts),
-		RemainingRisk: []string{"Worker did not call complete_leg"},
-		Brief:         synthesizeBrief(agentType, proof),
-	}
-	report.Normalize()
-	return report, true
-}
-
-func synthesizeObjectivesFromProof(proof WorkerCompletionProof, excerpts string) []string {
-	var out []string
-	if proof.ReceiptCount > 0 {
-		out = append(out, "Survey receipts: "+strconv.Itoa(proof.ReceiptCount))
-	}
-	if len(proof.MutationTools) > 0 {
-		out = append(out, "Mutation tools: "+strings.Join(proof.MutationTools, ", "))
-	}
-	if excerpts != "" {
-		lines := strings.Split(excerpts, "\n")
-		for _, line := range lines {
-			line = strings.TrimSpace(line)
-			if line == "" || strings.HasPrefix(line, "###") || strings.HasPrefix(line, "---") {
-				continue
-			}
-			line = runeclamp.Clamp(line, 160)
-			out = append(out, line)
-			if len(out) >= 5 {
-				break
-			}
-		}
-	}
-	return normalizeReportStringList(out, 5)
-}
-
-// AnnotateWorkerReportForBranch adds merge routing hints for isolated write workers.
-func AnnotateWorkerReportForBranch(report WorkerCompletionReport, task *api.WorkerTask) WorkerCompletionReport {
-	if task == nil || !task.EffectiveScope().IsWrite() || strings.TrimSpace(task.WorkspaceRoot) == "" {
-		return report
-	}
-	if strings.TrimSpace(report.SuggestedNextTask) == "" {
-		report.SuggestedNextTask = "preview_overlay then promote_overlay for overlay " + strings.TrimSpace(task.ID)
-	}
-	return report
-}
-
-func synthesizeBrief(agentType string, proof WorkerCompletionProof) string {
-	agent := strings.TrimSpace(agentType)
-	if agent == "" {
-		agent = "worker"
-	}
-	if proof.ReceiptCount > 0 {
-		return agent + " finished survey without an accepted completion report; host compiled tool receipts."
-	}
-	if len(proof.ChangedPaths) > 0 {
-		return agent + " changed " + strings.Join(proof.ChangedPaths, ", ") + " without completion JSON."
-	}
-	return agent + " finished without structured completion JSON; host compiled tool excerpts."
-}
-
 func mergeChangedPaths(groups ...[]string) []string {
 	seen := map[string]struct{}{}
 	var out []string
@@ -528,6 +465,7 @@ func (r WorkerCompletionReport) ParentReport() WorkerCompletionReport {
 	r.ObjectivesMet = parentReportNarrativeList(r.ObjectivesMet)
 	r.RemainingRisk = parentReportNarrativeList(r.RemainingRisk)
 	r.CitedURLs = normalizeReportStringList(r.CitedURLs, maxReportListItems)
+	r.CitedResults = normalizeReportStringList(r.CitedResults, maxReportListItems)
 	r.Findings = normalizeFindings(r.Findings, maxReportListItems)
 	for i := range r.Findings {
 		r.Findings[i].Note = runeclamp.Fit(r.Findings[i].Note, maxFindingNoteChars)

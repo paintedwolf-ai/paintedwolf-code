@@ -51,11 +51,13 @@ func commitSecurityLanding(t *testing.T, sqlDB db.Handle, projectDir, delegation
 	t.Helper()
 	jobID := uuid.NewString()
 	testdbseed.InsertProject(t, sqlDB, testdbseed.DefaultProjectID)
+	testdbseed.InsertSession(t, sqlDB, "sess-closeout", testdbseed.DefaultProjectID)
 	workerStore := worker.NewSQLStore(sqlDB)
 	testutil.FailErr(t, "InsertTask", workerStore.InsertTask(t.Context(), wire.WorkerTask{
 		ID: jobID, Prompt: "security fixture", Brief: "security fixture",
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: projectDir,
-		DelegationID: delegationID, AgentType: "implementer", ExecutionTarget: wire.ExecutionTargetLocal,
+		ParentSessionID: "sess-closeout",
+		DelegationID:    delegationID, AgentType: "implementer", ExecutionTarget: wire.ExecutionTargetLocal,
 		Status: wire.WorkerStatusComplete,
 	}))
 	branch := enginepaths.JobBranchDir(enginepaths.WorkerBranchesRootUnder(testbaseline.DataDir(t, sqlDB)), projectDir, jobID)
@@ -72,7 +74,7 @@ func commitSecurityLanding(t *testing.T, sqlDB db.Handle, projectDir, delegation
 	}
 	plan := obligation.Plan{
 		ID: uuid.NewString(), ScanID: uuid.NewString(), AssessmentID: uuid.NewString(), WorkerJobID: jobID, CanonicalPath: projectDir,
-		DelegationID: delegationID, ScannerID: "sast-one", ChangedPaths: []string{"main.go"},
+		SessionID: "sess-closeout", DelegationID: delegationID, ScannerID: "sast-one", ChangedPaths: []string{"main.go"},
 		ExecutionManifest: wire.ScanExecutionManifest{
 			SchemaVersion: "v1", ScannerID: "sast-one", Engine: "security-test", Driver: "security-test",
 			ScopeKind: "source_driver", DefinitionFingerprint: strings.Repeat("a", 64),

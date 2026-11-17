@@ -18,7 +18,7 @@ func TestParseCatalogToolIDs(t *testing.T) {
 	for _, id := range ids {
 		found[id] = true
 	}
-	for _, want := range []string{"parse_validate", "delegate_init", "state_query", "plan_append_review_evidence"} {
+	for _, want := range []string{"parse_validate", "plan_from_blueprint", "state_query", "plan_append_review_evidence"} {
 		if !found[want] {
 			t.Fatalf("missing catalog id %q", want)
 		}

@@ -16,7 +16,7 @@ import (
 )
 
 func TestWorkflowVersionDualRun_Concurrent100And200Isolation(t *testing.T) {
-	h := wiring.BuildForTest(t, wiring.WithAutoCompleteDelegation(), wiring.WithoutCoordinatorLoop())
+	h := wiring.BuildForTest(t, wiring.WithAutoCompleteLegs(), wiring.WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dirA := h.ProjectDir(t, "security-survey-a")
 	dirB := h.ProjectDir(t, "security-survey-b")

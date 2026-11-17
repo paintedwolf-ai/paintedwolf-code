@@ -3,6 +3,7 @@ package secretcap
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -191,7 +192,7 @@ func (s *secretAdminService) revokeRow(ctx context.Context, row db.ManagedSecret
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
 
-	when := db.FormatTime(s.now())
+	when := timelayout.Format(s.now())
 	if !row.RevokedAt.Valid && by.allowed != nil {
 		if err := by.allowed(ctx, row); err != nil {
 			return Metadata{}, err

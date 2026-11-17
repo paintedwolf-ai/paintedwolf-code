@@ -2,6 +2,7 @@ package project
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"path/filepath"
 	"strings"
 	"time"
@@ -164,7 +165,7 @@ func (r *SQLRegistry) TouchLastOpened(ctx context.Context, id string) error {
 	q := r.queries.WithTx(tx)
 	now := time.Now().UTC()
 	if err := q.TouchProjectLastOpened(ctx, db.TouchProjectLastOpenedParams{
-		LastOpenedAt: db.FormatTime(now),
+		LastOpenedAt: timelayout.Format(now),
 		ID:           id,
 	}); err != nil {
 		return err

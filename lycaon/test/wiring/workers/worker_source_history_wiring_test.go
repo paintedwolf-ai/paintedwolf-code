@@ -144,9 +144,9 @@ func runWorkerScriptOnHarness(t *testing.T, agentType string, scope *api.TaskSco
 	testutil.FailErr(t, "worker defaults", worker.ApplyEnqueueDefaults(
 		&task, project.ProjectScope{ProjectID: parent.ProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig(),
 	))
-	jobID, err := h.Delegations.Queue.Enqueue(ctx, task)
+	jobID, err := h.Workers.Queue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue worker", err)
-	claimed, err := h.Delegations.Queue.ClaimNext(ctx, worker.ClaimRequest{
+	claimed, err := h.Workers.Queue.ClaimNext(ctx, worker.ClaimRequest{
 		ProjectID: parent.ProjectID, ExecutionTarget: api.ExecutionTargetLocal, ClaimedBy: "source-history-test",
 	})
 	testutil.FailErr(t, "claim worker", err)
@@ -196,11 +196,16 @@ func TestSourceHistoryACOV15WorkerWithNothingToShow(t *testing.T) {
 			historyCall("overview", map[string]any{}),
 			historyCall("diff", map[string]any{"path": "main.go", "mode": "diff"}),
 		)
-		for _, call := range []string{"overview", "diff"} {
-			result := decodeWorkerHistory(t, results, call)
-			if result.Recorded || len(result.Files) != 0 || result.Note == "" || result.Since != nil {
-				t.Fatalf("%s = %+v, want an unknown window with a note", call, result)
-			}
+		// Every round starts from a checkpoint, so even a read worker on the
+		// trunk has a recorded window; it holds nothing.
+		overview := decodeWorkerHistory(t, results, "overview")
+		if !overview.Recorded || len(overview.Files) != 0 || overview.Since == nil {
+			t.Fatalf("overview = %+v, want a recorded window with nothing in it", overview)
+		}
+		// A path the ledger never tracked has unknown provenance, not "unchanged".
+		diff := decodeWorkerHistory(t, results, "diff")
+		if diff.Recorded || len(diff.Files) != 0 || diff.Note == "" {
+			t.Fatalf("diff = %+v, want unknown provenance with a note", diff)
 		}
 	})
 }
@@ -370,7 +375,7 @@ func TestSourceHistoryACDF19CredentialDiffMarksTheWorkersSession(t *testing.T) {
 	if !strings.Contains(diff.Diff, "TOKEN") {
 		t.Fatalf("diff = %+v, want the file's text", diff)
 	}
-	job, ok := h.Delegations.Queue.Get(jobID)
+	job, ok := h.Workers.Queue.Get(jobID)
 	if !ok || job.ChildSessionID == "" {
 		t.Fatalf("job = %+v, want its child session", job)
 	}

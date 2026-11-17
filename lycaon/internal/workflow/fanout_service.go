@@ -5,7 +5,6 @@ import (
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/promptstate"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowphases "github.com/lycaon/lycaon/internal/workflow/phases"
@@ -30,5 +29,5 @@ type Fanout struct {
 	Policy           FanoutRoster
 	Progress         progress.RunScopedStore
 	WorkerTasks      func(context.Context, string) ([]api.WorkerTask, error)
-	WorkerToolBudget func(string) spawn.WorkerToolBudget
+	PlannedWorkKnown func(ctx context.Context, sessionID, workID string) (bool, error)
 }

@@ -44,7 +44,7 @@ func (m *Matcher) ScreenOCR(s string) []Match {
 
 // ScreenOCRContext returns ranked, non-overlapping findings under OCR glyph confusion tolerance.
 func (m *Matcher) ScreenOCRContext(ctx context.Context, s string) []Match {
-	return dedupeAndSort(screenOCRRaw(ctx, m, s))
+	return DedupeAndSort(screenOCRRaw(ctx, m, s))
 }
 
 // RedactOCRString masks spans detected under OCR glyph confusion tolerance.

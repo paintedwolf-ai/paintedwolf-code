@@ -65,7 +65,7 @@ rules:
 	}
 	testutil.FailErr(t, "enqueue defaults", worker.ApplyEnqueueDefaults(&task,
 		project.ProjectScope{ProjectID: p.ID, WorkspacePath: projectDir}, worker.DefaultWorkersConfig()))
-	jobID, err := h.Delegations.Queue.Enqueue(ctx, task)
+	jobID, err := h.Workers.Queue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue worker job", err)
 	child, err := h.Sessions.Manager.Workers.SpawnChild(ctx, parent.ID, wire.SpawnChildRequest{
 		AgentType:   "implementer",
@@ -73,7 +73,7 @@ rules:
 		WorkerJobID: jobID,
 	})
 	testutil.FailErr(t, "spawn implementer", err)
-	testutil.FailErr(t, "link child", h.Delegations.Queue.SetChildSessionID(ctx, jobID, child.ID))
+	testutil.FailErr(t, "link child", h.Workers.Queue.SetChildSessionID(ctx, jobID, child.ID))
 	// A worker child's turn resolves its queued task from the bound job.
 	workerCtx := workercontext.WithJob(ctx, jobID)
 	if _, err := h.Sessions.Manager.Submissions.Prompt(workerCtx, child.ID, "[[scn:project_rule_write]] attempt project write"); err != nil {

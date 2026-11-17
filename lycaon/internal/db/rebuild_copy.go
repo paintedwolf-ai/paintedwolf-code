@@ -62,7 +62,7 @@ func copyRetainedRows(ctx context.Context, source, destination string, plan migr
 	defer func() { err = errors.Join(err, copyDB.Close()) }()
 	reserve := uint64(0)
 	if boundedRetainedRoute(plan) {
-		sourceReader, openErr := openReader(ctx, source)
+		sourceReader, openErr := OpenReadOnly(ctx, source)
 		if openErr != nil {
 			return openErr
 		}

@@ -10,6 +10,7 @@ import {
   type WorkerEvidenceOutcome,
   workerEvidenceJobId,
   workerEvidenceSectionId,
+  workerReviewedResultHandle,
 } from "../../chat/worker/worker-evidence-model.ts";
 import { workerRowStatus } from "../../chat/worker/workers-model.ts";
 import { openInSearch } from "../../search/search-nav.ts";
@@ -75,6 +76,17 @@ export function WorkerEvidenceSection(props: Props) {
       props.worker,
       props.worker.id,
     );
+  const reviewedHandle = () =>
+    workerReviewedResultHandle(props.summaryMeta, props.worker);
+  const reviewedSubject = () => (
+    <Show when={reviewedHandle()}>
+      {(handle) => (
+        <p class="den-worker-reviewed-subject" data-testid="worker-reviewed-subject">
+          Reviewed result · <code>{handle()}</code>
+        </p>
+      )}
+    </Show>
+  );
 
   return (
     <>
@@ -97,6 +109,7 @@ export function WorkerEvidenceSection(props: Props) {
             status={evidenceSectionStatus(view.outcome, props.worker)}
             onSelect={() => props.onSelect()}
           >
+            {reviewedSubject()}
             <CitationGroundingPanel
               view={view}
               projectId={projectId() || undefined}
@@ -127,6 +140,7 @@ export function WorkerEvidenceSection(props: Props) {
             status={evidenceSectionStatus(detail.outcome, props.worker)}
             onSelect={() => props.onSelect()}
           >
+            {reviewedSubject()}
             <p class="den-worker-transcript-evidence-headline">
               {detail.headline}
             </p>
@@ -137,6 +151,24 @@ export function WorkerEvidenceSection(props: Props) {
             </Show>
           </WorkerTranscriptSection>
         )}
+      </Show>
+      <Show when={!groundingView() && !fallback() && reviewedHandle()}>
+        <WorkerTranscriptSection
+          title="Evidence"
+          sectionKey="evidence"
+          id={workerEvidenceSectionId(jobId() ?? props.worker.id)}
+          class="den-worker-transcript-evidence"
+          classList={{
+            "den-worker-transcript-evidence--traced": true,
+            "den-worker-transcript-evidence--highlight": props.highlight,
+          }}
+          data-testid="worker-evidence-section"
+          data-evidence-outcome="traced"
+          status={evidenceSectionStatus("traced", props.worker)}
+          onSelect={() => props.onSelect()}
+        >
+          {reviewedSubject()}
+        </WorkerTranscriptSection>
       </Show>
     </>
   );

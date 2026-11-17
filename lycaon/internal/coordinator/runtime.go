@@ -71,7 +71,7 @@ func (r *Runtime) refreshDepsLocked() {
 	if r.loopDeps != nil {
 		deps := r.loopDeps()
 		deps.Context.ObservePrompt = r.coordLoop.Observations.ObservePrompt
-		deps.Context.CommitWorkerContext = r.assemblyEngineLocked().CommitWorkerContext
+		deps.Context.CommitTurnContext = r.assemblyEngineLocked().CommitTurnContext
 		r.loop = promptloop.NewPromptLoop(deps)
 	}
 	if r.assemblyDepsFn != nil {
@@ -376,7 +376,7 @@ func (r *Runtime) SetPromotePathOverlay(fn func(sessionID string) []api.WorkerPr
 }
 
 // SetOverlayMergePlan wires session-level overlay overlap planning into pack board inject.
-func (r *Runtime) SetOverlayMergePlan(fn func(sessionID string, tasks []api.WorkerTask) *api.OverlayMergePlan) {
+func (r *Runtime) SetOverlayMergePlan(fn func(ctx context.Context, sessionID string, tasks []api.WorkerTask) *api.OverlayMergePlan) {
 	if r == nil {
 		return
 	}

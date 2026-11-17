@@ -115,12 +115,6 @@ func refreshManagedCookieJar(
 	return true, nil
 }
 
-// prepareCookieDelivery keeps release decisions on this invocation's opened jar.
-// The HTTP client's before-hop boundary reviews newly eligible cookies as well.
-func prepareCookieDelivery(ctx context.Context, deps Deps, spec requestSpec, jar *secretcap.CookieJar) (func(context.Context, outboundhttp.HopRequest) error, error) {
-	return prepareRequestCookieDelivery(ctx, deps, spec, tools.ToolContext{}, jar, secretcap.CookieJarRequest{}, nil, true)
-}
-
 func prepareRequestCookieDelivery(
 	ctx context.Context, deps Deps, spec requestSpec, tctx tools.ToolContext,
 	jar *secretcap.CookieJar, jarReq secretcap.CookieJarRequest, frontendJar http.CookieJar, preRunHop0 bool,

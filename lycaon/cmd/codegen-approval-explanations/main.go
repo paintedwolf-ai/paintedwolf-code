@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/lycaon/lycaon/config"
+
 	"github.com/lycaon/lycaon/internal/approvalregistry"
 	"github.com/lycaon/lycaon/internal/approvals"
 )
@@ -56,7 +58,7 @@ func main() {
 		return
 	}
 
-	platformDir := onDisk(approvalregistry.DefaultDir.String())
+	platformDir := onDisk(config.PlatformApprovals.String())
 	for _, key := range approvals.GateableKeys() {
 		path, ok := pathByKey[key]
 		if !ok {

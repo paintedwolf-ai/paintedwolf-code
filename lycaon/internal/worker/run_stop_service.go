@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerresults"
 	"github.com/lycaon/lycaon/internal/worker/jobstate"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -26,18 +27,13 @@ type WorkerRunStopSession interface {
 	Hold(ctx context.Context, parentID string, in workerresults.HoldInput) error
 }
 
-// DelegationRunStopper marks active delegations canceled for a workflow run.
-type DelegationRunStopper interface {
-	CancelActiveByWorkflowRunID(ctx context.Context, runID string) error
-}
-
-// RunStopService coordinates worker and delegation shutdown.
+// RunStopService coordinates worker shutdown and unstarted worker withdrawal.
 type RunStopService struct {
 	Queue          WorkerQueue
 	Holds          WorkerRunStopSession
 	Cancellations  WorkerCancellationProjection
 	Reports        ChangeReportDeps
-	Delegations    DelegationRunStopper
+	Records        *workerrecords.Store
 	ReleaseTimeout time.Duration
 }
 
@@ -115,16 +111,50 @@ func (s *RunStopService) HoldPendingWorkersByRunID(ctx context.Context, runID st
 	return errors.Join(errs...)
 }
 
-// CancelDelegationsByRunID marks active delegations canceled for a workflow run.
-func (s *RunStopService) CancelDelegationsByRunID(ctx context.Context, runID string) error {
-	if s == nil || s.Delegations == nil {
+// WithdrawPlannedWorkersByRunID withdraws unstarted planned workers for runID.
+func (s *RunStopService) WithdrawPlannedWorkersByRunID(ctx context.Context, runID string) error {
+	if s == nil {
 		return nil
 	}
 	runID = strings.TrimSpace(runID)
 	if runID == "" {
 		return nil
 	}
-	return s.Delegations.CancelActiveByWorkflowRunID(ctx, runID)
+	if s.Records == nil {
+		return nil
+	}
+	return s.withdrawPlannedRunWorkers(ctx, runID)
+}
+
+func (s *RunStopService) withdrawPlannedRunWorkers(ctx context.Context, runID string) error {
+	workers, err := s.Records.ByWorkflowRun(ctx, runID)
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, w := range workers {
+		if w.ClosedAt != "" {
+			continue
+		}
+		actor := workerrecords.Actor{
+			SessionID:   w.SessionID,
+			Role:        workerrecords.RoleCoordinator,
+			PrincipalID: w.SessionID,
+		}
+		rounds, rErr := s.Records.Rounds(ctx, actor, w.ID)
+		if rErr != nil {
+			errs = append(errs, rErr)
+			continue
+		}
+		if len(rounds) > 0 {
+			continue
+		}
+		op := workerrecords.Op{ID: "run_stop:" + runID + ":withdraw:" + w.ID}
+		if _, cErr := s.Records.Close(ctx, actor, op, w.ID, "withdrawn"); cErr != nil {
+			errs = append(errs, cErr)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 func (s *RunStopService) cancelTask(ctx context.Context, task api.WorkerTask, reason string) error {
@@ -210,7 +240,7 @@ var _ interface {
 	CancelWorkersByRunID(ctx context.Context, runID, reason string) error
 	SettleWorkerCancellationsByRunID(ctx context.Context, runID, reason string) error
 	HoldPendingWorkersByRunID(ctx context.Context, runID string) error
-	CancelDelegationsByRunID(ctx context.Context, runID string) error
+	WithdrawPlannedWorkersByRunID(ctx context.Context, runID string) error
 } = (*RunStopService)(nil)
 
 var (

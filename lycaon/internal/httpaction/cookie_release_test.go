@@ -151,8 +151,8 @@ func TestCookieRecipientOverridesRequireReview(t *testing.T) {
 				}
 				return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
 			}}
-			beforeHop, err := prepareCookieDelivery(t.Context(), deps, tc.spec, jar)
-			testutil.FailErr(t, "prepareCookieDelivery", err)
+			beforeHop, err := prepareRequestCookieDelivery(t.Context(), deps, tc.spec, tools.ToolContext{}, jar, secretcap.CookieJarRequest{}, nil, true)
+			testutil.FailErr(t, "prepareRequestCookieDelivery", err)
 			testutil.FailErr(t, "beforeHop", beforeHop(t.Context(), outboundhttp.HopRequest{URL: target, Method: http.MethodGet, HostHeader: tc.spec.hostHeader}))
 			delivered := jar.Store.Cookies(target)
 			if tc.foreign && (asks != 1 || len(delivered) != 0) {
@@ -166,7 +166,7 @@ func TestCookieRecipientOverridesRequireReview(t *testing.T) {
 			// issuer and cannot be silently promoted into plain URL authority later.
 			captureStore := httpcookies.New(nil)
 			captureJar := &secretcap.CookieJar{Name: "jar", Reference: "secret://cookie-jar", Store: captureStore}
-			captureHop, err := prepareCookieDelivery(t.Context(), deps, tc.spec, captureJar)
+			captureHop, err := prepareRequestCookieDelivery(t.Context(), deps, tc.spec, tools.ToolContext{}, captureJar, secretcap.CookieJarRequest{}, nil, true)
 			testutil.FailErr(t, "prepare capture hop", err)
 			testutil.FailErr(t, "run capture hop", captureHop(t.Context(), outboundhttp.HopRequest{URL: target, Method: http.MethodGet, HostHeader: tc.spec.hostHeader}))
 			captureStore.SetCookies(target, []*http.Cookie{{Name: "captured", Value: "override-cookie-8822", Path: "/"}})
@@ -176,7 +176,7 @@ func TestCookieRecipientOverridesRequireReview(t *testing.T) {
 				plainAsks++
 				return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
 			}}
-			plainHop, err := prepareCookieDelivery(t.Context(), plainDeps, plain, captureJar)
+			plainHop, err := prepareRequestCookieDelivery(t.Context(), plainDeps, plain, tools.ToolContext{}, captureJar, secretcap.CookieJarRequest{}, nil, true)
 			testutil.FailErr(t, "prepare plain hop", err)
 			testutil.FailErr(t, "run plain hop", plainHop(t.Context(), outboundhttp.HopRequest{URL: target, Method: http.MethodGet}))
 			plainDelivered := captureStore.Cookies(target)

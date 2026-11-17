@@ -33,7 +33,7 @@ func TestCompactionRetainsAndBudgetsReasoning(t *testing.T) {
 	}
 	cfg := testCompactionConfig()
 	cfg.KeepRecentMessages = 1
-	fitted := DeterministicFit(cfg, rows, EstimateMessagesTokens(rows[1:])+100)
+	fitted := DeterministicFitWithReserve(cfg, rows, EstimateMessagesTokens(rows[1:])+100, 0)
 	out := ContextMessagesToAPI(fitted, original)
 	var call *api.Message
 	for i := range out {

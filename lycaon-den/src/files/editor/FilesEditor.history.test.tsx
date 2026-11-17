@@ -31,7 +31,8 @@ import { createSignal } from "solid-js";
 import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";
 import { createPreparation } from "../../ui/presentation.ts";
 import { PresentationProvider } from "../../ui/presentation-context.tsx";
-import { applyFilesBufferLoadError, openFilesBuffer } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferLoadError } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { FilesEditor } from "./FilesEditor.tsx";
 

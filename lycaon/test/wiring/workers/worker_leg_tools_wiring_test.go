@@ -65,7 +65,7 @@ func TestWorkerLegToolsMatchListForPrompt(t *testing.T) {
 
 // implementerLegToolsWant is the isolated implementation profile.
 var implementerLegToolsWant = []string{
-	"capture_page", "code_rewrite", "summarize", "survey_repo", "command", "command_output", "command_stop", "complete_leg", "fetch_url", "handoff_release", "handoff_release_all", "handoff_reserve", "held_result", "held_stop", "measure_page", "pack_board", "page_act", "page_close", "page_open", "page_snapshot", "recall", "record_finding", "render_view", "request_budget", "request_decision", "request_tools", "restore_version", "scan_compare", "scan_list", "scan_pack", "scan_query", "scan_summary", "secret_generate", "secret_list", "secret_revoke", "skills_read", "source_history", "terminal_close", "terminal_open", "terminal_read", "terminal_send", "terminal_snapshot", "verify", "view_image", "view_video", "wait", "web_search",
+	"capture_page", "code_rewrite", "summarize", "survey_repo", "command", "command_output", "command_stop", "complete_leg", "fetch_url", "handoff_release", "handoff_release_all", "handoff_reserve", "held_result", "held_stop", "measure_page", "message_coordinator", "pack_board", "page_act", "page_close", "page_open", "page_snapshot", "read_findings", "read_review", "recall", "record_finding", "render_view", "request_decision", "request_tools", "restore_version", "scan_compare", "scan_list", "scan_pack", "scan_query", "scan_summary", "secret_generate", "secret_list", "secret_revoke", "skills_read", "source_history", "terminal_close", "terminal_open", "terminal_read", "terminal_send", "terminal_snapshot", "verify", "view_image", "view_video", "wait", "web_search",
 }
 
 func TestImplementerLegToolsMatchImplementProfile(t *testing.T) {
@@ -107,7 +107,7 @@ func TestImplementerLegToolsMatchImplementProfile(t *testing.T) {
 			t.Fatalf("leg inject missing %q in %q", tool, block)
 		}
 	}
-	if strings.Contains(block, "## Leg tools (allowlisted)\n(none)") {
-		t.Fatalf("leg tools block must not show (none): %q", block)
+	if strings.Contains(block, "## Assignment tools (allowlisted)\n(none)") {
+		t.Fatalf("assignment tools block must not show (none): %q", block)
 	}
 }

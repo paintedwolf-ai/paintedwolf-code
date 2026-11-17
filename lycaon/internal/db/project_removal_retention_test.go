@@ -1,6 +1,7 @@
 package db
 
 import (
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
@@ -9,8 +10,8 @@ import (
 
 func TestProjectRemovalRetentionKeepsUnsettledReceipts(t *testing.T) {
 	database := openTestDB(t)
-	old := FormatTime(time.Now().UTC().Add(-40 * 24 * time.Hour))
-	fresh := FormatTime(time.Now().UTC())
+	old := timelayout.Format(time.Now().UTC().Add(-40 * 24 * time.Hour))
+	fresh := timelayout.Format(time.Now().UTC())
 	for _, row := range []struct {
 		id      string
 		settled bool

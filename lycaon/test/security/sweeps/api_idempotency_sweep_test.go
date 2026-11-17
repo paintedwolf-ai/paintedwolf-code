@@ -10,6 +10,8 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/lycaon/lycaon/test/security"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -171,7 +173,7 @@ func testWorkflowCommandIdempotency(t *testing.T, h *wiring.Harness, base, proje
 func testSettingsWriteIdempotency(t *testing.T, base, projectID string) {
 	t.Helper()
 	policyProvider, _ := security.SeedTestProvider(t, base, false)
-	modelRef := wire.ModelRefDTO{ProviderID: policyProvider, Model: testProviderModel}
+	modelRef := wire.ModelRefDTO{ProviderID: policyProvider, Model: security.TestProviderModel}
 	modelPolicyBody, _ := json.Marshal(wire.ModelPolicy{
 		Coordinator: &modelRef,
 		Lite:        &modelRef,
@@ -460,7 +462,7 @@ func assertConflictCode(t *testing.T, base, method, path, body string) {
 func settleSourceRequest(t *testing.T, base, projectID, method, path, body string, wantStatus int) {
 	t.Helper()
 	res := security.ValidatedRequest(t, base, method, path, nil, body)
-	AssertHTTPResponseMatchesOpenAPI(t, res.StatusCode, res.Header, res.Body, method, path, nil)
+	security.AssertHTTPResponseMatchesOpenAPI(t, res.StatusCode, res.Header, res.Body, method, path, nil)
 	if res.StatusCode == wantStatus {
 		return
 	}

@@ -29,7 +29,7 @@ func runGateFeedback(t *testing.T, h *wiring.Harness, sessionID string) *feedbac
 }
 
 func TestWorkflowResumption_100RetainsPromptRulesAndGateFeedback(t *testing.T) {
-	h := wiring.BuildForTest(t, wiring.WithAutoCompleteDelegation(), wiring.WithoutCoordinatorLoop())
+	h := wiring.BuildForTest(t, wiring.WithAutoCompleteLegs(), wiring.WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "security-survey")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
@@ -100,7 +100,7 @@ func TestWorkflowResumption_100RetainsPromptRulesAndGateFeedback(t *testing.T) {
 }
 
 func TestWorkflowResumption_100AdvancesThroughEveryPhase(t *testing.T) {
-	h := wiring.BuildForTest(t, wiring.WithAutoCompleteDelegation(), wiring.WithoutCoordinatorLoop())
+	h := wiring.BuildForTest(t, wiring.WithAutoCompleteLegs(), wiring.WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, "security-survey")
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)

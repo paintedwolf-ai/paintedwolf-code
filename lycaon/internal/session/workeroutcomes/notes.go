@@ -156,7 +156,7 @@ func (m *Notes) RecentSiblingNotes(ctx context.Context, childSessionID string, a
 	}
 	notes := make([]inject.SiblingNote, 0, len(found)+max)
 	for _, f := range found {
-		notes = append(notes, inject.SiblingNote{ID: f.ID, HasBody: f.Body != "", Agent: f.Agent, Summary: f.Summary, Ref: f.Ref})
+		notes = append(notes, inject.SiblingNote{ID: f.ID, HasBody: f.Body != "" || f.HasBody, Agent: f.Agent, Summary: f.Summary, Ref: f.Ref})
 	}
 	return notes, nextID, nil
 }

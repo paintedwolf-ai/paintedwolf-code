@@ -88,18 +88,14 @@ func TestCoordinatorPolicyFactKeys(t *testing.T) {
 			t.Fatalf("missing reader fact %q", key)
 		}
 	}
-	policy := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+	policy := spawn.PolicyTemplateVars()
 	for _, key := range []string{
 		"max_in_flight",
 		"max_read_workers",
 		"max_write_workers",
 		"max_concurrent_tool_calls",
 		"worker_summary_max_chars",
-		"worker_tool_budget_default",
 		"hunt_wave_workers",
-		"throwaway_tool_loops_min",
-		"throwaway_tool_loops_max",
-		"deep_tool_loops_hint",
 	} {
 		if _, ok := policy[key]; !ok {
 			t.Fatalf("missing policy var %q", key)
@@ -110,8 +106,5 @@ func TestCoordinatorPolicyFactKeys(t *testing.T) {
 	}
 	if policy["worker_summary_max_chars"] != limits.DefaultWorkerSummaryMaxChars {
 		t.Fatalf("worker_summary_max_chars = %v want %d", policy["worker_summary_max_chars"], limits.DefaultWorkerSummaryMaxChars)
-	}
-	if policy["worker_tool_budget_default"] != spawn.DefaultWorkerMaxToolLoops {
-		t.Fatalf("worker default = %v want %d", policy["worker_tool_budget_default"], spawn.DefaultWorkerMaxToolLoops)
 	}
 }

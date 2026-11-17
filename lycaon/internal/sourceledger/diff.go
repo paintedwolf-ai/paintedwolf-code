@@ -77,7 +77,7 @@ func (s *Comparisons) CompareEffect(ctx context.Context, projectID, effectID str
 	if effect.ProjectID != projectID {
 		return Comparison{}, ErrHistoryNotFound
 	}
-	out, err := s.compareVersions(ctx, projectID, effect.BeforeVersionID, effect.AfterVersionID)
+	out, err := s.CompareVersionPair(ctx, projectID, effect.BeforeVersionID, effect.AfterVersionID)
 	if err != nil {
 		return Comparison{}, err
 	}
@@ -102,7 +102,7 @@ func (s *Comparisons) CompareVersions(ctx context.Context, projectID, versionID 
 	if version.ProjectID != projectID {
 		return Comparison{}, ErrHistoryNotFound
 	}
-	out, err := s.compareVersions(ctx, projectID, version.ParentVersionID, version.ID)
+	out, err := s.CompareVersionPair(ctx, projectID, version.ParentVersionID, version.ID)
 	if err != nil {
 		return Comparison{}, err
 	}
@@ -189,7 +189,7 @@ func (s *Comparisons) CompareScope(
 		}
 		beforeVersionID = row.BeforeVersionID
 	}
-	out, err := s.compareVersions(ctx, projectID, beforeVersionID, head.VersionID)
+	out, err := s.CompareVersionPair(ctx, projectID, beforeVersionID, head.VersionID)
 	if err != nil {
 		return Comparison{}, err
 	}
@@ -232,7 +232,7 @@ func (s *Comparisons) CompareTurn(ctx context.Context, projectID, sessionID stri
 	if err != nil {
 		return Comparison{}, err
 	}
-	out, err := s.compareVersions(ctx, projectID, first.BeforeVersionID, last.AfterVersionID)
+	out, err := s.CompareVersionPair(ctx, projectID, first.BeforeVersionID, last.AfterVersionID)
 	if err != nil {
 		return Comparison{}, err
 	}
@@ -252,10 +252,6 @@ func (s *Comparisons) CompareTurn(ctx context.Context, projectID, sessionID stri
 
 // CompareVersionPair compares two arbitrary retained states.
 func (s *Comparisons) CompareVersionPair(ctx context.Context, projectID, beforeID, afterID string) (Comparison, error) {
-	return s.compareVersions(ctx, projectID, beforeID, afterID)
-}
-
-func (s *Comparisons) compareVersions(ctx context.Context, projectID, beforeID, afterID string) (Comparison, error) {
 	before, err := s.comparisonSide(ctx, projectID, beforeID)
 	if err != nil {
 		return Comparison{}, err

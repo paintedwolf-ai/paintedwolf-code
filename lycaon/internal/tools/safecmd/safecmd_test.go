@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolprofiles"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/lycaon/lycaon/internal/toolprofiles"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -73,21 +74,6 @@ func TestResolvePathAllowsDotsInsideFilename(t *testing.T) {
 	testutil.FailErr(t, "resolve dotted file", err)
 	if resolved.Abs != path {
 		t.Fatalf("abs = %q want %q", resolved.Abs, path)
-	}
-}
-
-func TestCapsEnforceInputBytes(t *testing.T) {
-	c := Caps{InputBytes: 10}
-	if err := c.EnforceInputBytes(5, "JQ_INPUT_TOO_LARGE", map[string]any{"path": "x"}); err != nil {
-		t.Fatalf("under cap: %v", err)
-	}
-	err := c.EnforceInputBytes(11, "JQ_INPUT_TOO_LARGE", map[string]any{"path": "x"})
-	var rej *toolrejection.ToolReject
-	if !errors.As(err, &rej) || rej.Code != "JQ_INPUT_TOO_LARGE" {
-		t.Fatalf("err = %v", err)
-	}
-	if rej.Data["bytes"] != int64(11) || rej.Data["max_bytes"] != int64(10) {
-		t.Fatalf("Data = %#v", rej.Data)
 	}
 }
 

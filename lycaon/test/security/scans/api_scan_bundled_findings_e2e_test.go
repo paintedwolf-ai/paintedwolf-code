@@ -38,20 +38,20 @@ func TestAPIScanBundledScannerFindingsE2E(t *testing.T) {
 		{
 			name:     "secret_gitleaks",
 			category: wire.ScanCategorySecret,
-			WantFile: "secrets.env",
+			wantFile: "secrets.env",
 			minCount: 1,
 		},
 		{
 			name:      "sast_opengrep",
 			category:  wire.ScanCategorySAST,
-			WantFile:  "vuln.go",
+			wantFile:  "vuln.go",
 			minCount:  1,
 			skipShort: true,
 		},
 		{
 			name:      "sca_scalibr",
 			category:  wire.ScanCategorySCA,
-			WantFile:  "package-lock.json",
+			wantFile:  "package-lock.json",
 			minCount:  1,
 			skipShort: true,
 		},

@@ -8,6 +8,8 @@
       "lint:full",
       "budgets",
       "coverage:changes",
+      "arch-lint:changes",
+      "den:knip:changes",
       "den:typecheck",
       "den:lint",
       "den:test:fast",
@@ -35,6 +37,8 @@
       "lint:full",
       "budgets",
       "coverage:changes",
+      "arch-lint:changes",
+      "den:knip:changes",
       "den:coverage:changes",
       "scripts:coverage:changes",
       "lint:vuln",
@@ -482,6 +486,15 @@
     ],
     "decide:prepare": [
       "decide:prepare"
+    ],
+    "arch-lint:changes": [
+      "arch-lint:changes"
+    ],
+    "arch-lint:report": [
+      "arch-lint:report"
+    ],
+    "den:knip:changes": [
+      "den:knip:changes"
     ]
   },
   "private": [
@@ -1008,6 +1021,30 @@
         "rust"
       ],
       "workers": 1
+    },
+    "arch-lint:changes": {
+      "locks": [
+        "go"
+      ],
+      "shared_locks": [
+        "go"
+      ],
+      "workers": "shared"
+    },
+    "arch-lint:report": {
+      "locks": [
+        "go"
+      ],
+      "shared_locks": [
+        "go"
+      ],
+      "workers": "shared"
+    },
+    "den:knip:changes": {
+      "locks": [
+        "frontend"
+      ],
+      "workers": 1
     }
   },
   "environment": {
@@ -1066,7 +1103,8 @@
   "ci": {
     "ready-lint": {
       "targets": [
-        "lint:full"
+        "lint:full",
+        "arch-lint:changes"
       ],
       "minutes": 120,
       "profiles": [
@@ -1076,13 +1114,13 @@
       "setup": "analysis"
     },
     "ready": {
-      "compile_targets": {},
       "targets": [
         "build",
         "budgets",
         "coverage:changes",
         "den:typecheck",
         "den:lint",
+        "den:knip:changes",
         "den:test:fast"
       ],
       "minutes": 120,
@@ -1155,7 +1193,8 @@
       "targets": [
         "lint:full",
         "test:fail-messages:check",
-        "comments:check"
+        "comments:check",
+        "arch-lint:changes"
       ],
       "minutes": 90,
       "profiles": [
@@ -1222,6 +1261,7 @@
       "targets": [
         "den:typecheck",
         "den:lint",
+        "den:knip:changes",
         "den:coverage:changes"
       ],
       "minutes": 90,

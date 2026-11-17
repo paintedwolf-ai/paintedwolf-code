@@ -119,7 +119,7 @@ func computePathPromoteOrder(
 	if len(blockedBy) > 0 {
 		out.Order = api.WorkerPromoteOrderCleanIfFirst
 		out.BlockedBy = blockedBy
-		out.PromoteOrderNote = fmt.Sprintf("clean vs current primary; promote before %s or re-preview after they land", strings.Join(blockedBy, ", "))
+		out.PromoteOrderNote = "clean vs current primary; promote before the results in blocked_by or re-preview after they land"
 		return out
 	}
 	if inconclusive {
@@ -177,7 +177,7 @@ func simulateCleanAfter(
 	}
 	out.Order = api.WorkerPromoteOrderCleanAfter
 	out.PromoteAfter = idset.UnionSorted(nil, promoteAfter)
-	out.PromoteOrderNote = fmt.Sprintf("conflict vs current primary; clean after %s promote", strings.Join(out.PromoteAfter, ", "))
+	out.PromoteOrderNote = "conflict vs current primary; clean once the results in promote_after land"
 	return out
 }
 

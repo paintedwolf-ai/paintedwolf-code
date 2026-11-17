@@ -154,7 +154,7 @@ func TestRewindPastAWorkerDispatchLeavesNoGhostState(t *testing.T) {
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mustMessages(t, h, ctx, sess.ID))[0]
 
-	jobID, err := h.Delegations.Queue.Enqueue(ctx, api.WorkerTask{
+	jobID, err := h.Workers.Queue.Enqueue(ctx, api.WorkerTask{
 		ParentSessionID: sess.ID,
 		ProjectID:       sess.ProjectID,
 		WorkspacePath:   projectDir,

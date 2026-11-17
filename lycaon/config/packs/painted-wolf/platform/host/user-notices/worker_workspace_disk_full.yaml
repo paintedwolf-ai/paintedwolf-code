@@ -4,15 +4,16 @@ notification: { tier: non_catastrophic, scope: session }
 title: Worker workspace storage full
 message: >-
   {% if reason == "capacity_preflight" -%}
-  Preparing this isolated workspace requires about {{ required }}, but the
-  application-data volume has only {{ available }} available. No worker changes
-  were applied to the project.
+  Preparing this round's isolated workspace requires about {{ required }}, but
+  the application-data volume has only {{ available }} available. No worker
+  changes were applied to the project.
   {%- else -%}
   The application-data volume ran out of available space while preparing this
-  worker's isolated workspace. No worker changes were applied to the project.
+  round's isolated workspace. No worker changes were applied to the project.
   {%- endif %}
 suggested_action: >-
-  Free space or clear retained worker workspaces in Settings, then retry the worker.
+  Free space or clear retained worker workspaces in Settings so the coordinator
+  can instruct the worker again.
 scenarios:
   - id: generic
     vars: {}

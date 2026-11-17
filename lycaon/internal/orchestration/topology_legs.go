@@ -7,22 +7,14 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// RunLegStore reads the legs a workflow run's delegation dispatched.
-type RunLegStore interface {
-	DelegationByWorkflowRunID(ctx context.Context, workflowRunID string) (string, bool, error)
-	ListLegs(ctx context.Context, delegationID string) ([]api.Leg, error)
-}
-
-// TopologyLegView projects a run's topology plan with its legs' statuses.
+// TopologyLegView projects a run's topology plan with its workers' statuses.
 type TopologyLegView struct {
-	Store   RunLegStore
+	Workers RunWorkerStore
 	Catalog CatalogResolver
 }
 
-// RunTopologyLegs lists every leg the run's topology plans for its bound
-// phases, in topology order, each with the status of its dispatched leg. The
-// plan comes from the topology, so a leg reads pending before its dispatch.
-// stagePhases maps each bound stage to the phase that binds it.
+// RunTopologyLegs lists every unit the run's topology plans for its bound
+// phases, in topology order, each with the status of its worker round.
 func (v TopologyLegView) RunTopologyLegs(
 	ctx context.Context,
 	run *api.WorkflowRun,
@@ -47,28 +39,13 @@ func (v TopologyLegView) RunTopologyLegs(
 	return plannedTopologyLegs(spec, stagePhases, statuses), nil
 }
 
-// dispatchedStatuses keys leg status by leg title, which is the planned leg id.
 func (v TopologyLegView) dispatchedStatuses(ctx context.Context, workflowRunID string) (map[string]api.LegStatus, error) {
-	if v.Store == nil {
+	if v.Workers == nil {
 		return nil, nil
 	}
-	delegationID, ok, err := v.Store.DelegationByWorkflowRunID(ctx, workflowRunID)
-	if err != nil || !ok {
-		return nil, err
-	}
-	legs, err := v.Store.ListLegs(ctx, delegationID)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]api.LegStatus, len(legs))
-	for _, leg := range legs {
-		out[strings.TrimSpace(leg.Title)] = leg.Status
-	}
-	return out, nil
+	return v.Workers.WorkflowWorkStatuses(ctx, workflowRunID)
 }
 
-// plannedTopologyLegs covers the patterns whose legs a phase binds: pipeline
-// stages and fan-out subtasks. Pack and supervisor topologies bind no stage.
 func plannedTopologyLegs(spec *TopologySpec, stagePhases map[string]string, statuses map[string]api.LegStatus) []api.WorkflowTopologyLeg {
 	status := func(id string) api.LegStatus {
 		if s, ok := statuses[id]; ok && s != "" {

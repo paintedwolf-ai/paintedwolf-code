@@ -49,14 +49,6 @@ var internalDomainGateLeaves = []string{
 	"options_selection_valid",
 }
 
-// PublicGateKit returns custom-workflow and bundled-only gate identifiers.
-func PublicGateKit() (static, prefixes, bundledOnly []string) {
-	static = append([]string(nil), genericGateKitStaticLeaves...)
-	prefixes = append([]string(nil), genericGateKitLeafPrefixes...)
-	bundledOnly = append([]string(nil), internalDomainGateLeaves...)
-	return static, prefixes, bundledOnly
-}
-
 // IsGenericGateKitLeaf reports whether id is in the supported custom-workflow gate vocabulary.
 func IsGenericGateKitLeaf(id string) bool {
 	id = strings.TrimSpace(id)

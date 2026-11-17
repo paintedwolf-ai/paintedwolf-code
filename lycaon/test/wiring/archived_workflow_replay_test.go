@@ -79,7 +79,7 @@ func TestArchivedWorkflowReplay_100(t *testing.T) {
 		t.Fatalf("reading changes.yaml: %v", err)
 	}
 
-	h := BuildForTest(t, WithAutoCompleteDelegation(), WithoutCoordinatorLoop())
+	h := BuildForTest(t, WithAutoCompleteLegs(), WithoutCoordinatorLoop())
 	ctx := context.Background()
 	dir := h.ProjectDir(t, fixture.WorkflowID)
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)

@@ -9,26 +9,26 @@ modelIndependentWebE2e("long activity cards use the enclosing viewport through t
   const list = activity.getByTestId("virtual-card-list");
   await expect(list).toHaveCSS("overflow-y", "visible");
   expect(await list.evaluate(element => element.scrollHeight - element.clientHeight)).toBeLessThan(2);
-  expect(await activity.getByTestId("tool-part-card").count()).toBeLessThan(60);
+  expect(await activity.getByTestId("action-card").count()).toBeLessThan(60);
   await page.getByTestId("fixture-scroll").evaluate(element => { element.scrollTop = element.scrollHeight; });
   await expect(activity.locator('[data-tool-call-id="call-9999"]')).toBeVisible();
   await expect(list).toHaveJSProperty("scrollTop", 0);
-  expect(await activity.getByTestId("tool-part-card").count()).toBeLessThan(60);
+  expect(await activity.getByTestId("action-card").count()).toBeLessThan(60);
 });
 
 modelIndependentWebE2e("tool content opens a Files reader with bounded scrolling through end and resize", async ({ page }, testInfo) => {
   await page.goto("/e2e/fixtures/chat-content-scroll.html");
   const activity = page.getByTestId("activity-span-card");
   await activity.locator(":scope > .den-transcript-disclosure-header").click();
-  expect(await page.getByTestId("tool-part-card").count()).toBeLessThan(40);
-  const card = page.locator('[data-testid="tool-part-card"][data-tool-call-id="call-0"]');
+  expect(await page.getByTestId("action-card").count()).toBeLessThan(40);
+  const card = page.locator('[data-testid="action-card"][data-tool-call-id="call-0"]');
   await card.locator(":scope > .den-transcript-disclosure-header").click();
   await expect.poll(() => card.evaluate(element => {
     const next = element.closest('[data-index]')?.nextElementSibling;
     return next ? next.getBoundingClientRect().top - element.getBoundingClientRect().bottom : -Infinity;
   })).toBeGreaterThanOrEqual(-1);
   expect(await card.locator("[data-den-scrollport]").count()).toBe(0);
-  await card.getByRole("button", { name: "Raw output in Files", exact: true }).click();
+  await card.getByRole("button", { name: "Output in Files", exact: true }).click();
   const reader = page.getByTestId("chat-content-page");
   const scroller = reader.locator(".cm-scroller");
   await expect(reader).toContainText("Line 0:");
@@ -68,7 +68,7 @@ modelIndependentWebE2e("tool content opens a Files reader with bounded scrolling
   }
   expect(await reader.locator(".cm-line").count()).toBeLessThan(100);
   const requests = await page.getByTestId("content-request-count").textContent();
-  await card.getByRole("button", { name: "Raw output in Files", exact: true }).click();
+  await card.getByRole("button", { name: "Output in Files", exact: true }).click();
   await expect(reader).toContainText("Line 19999:");
   await expect(page.getByTestId("content-request-count")).toHaveText(requests!);
   await page.screenshot({ path: testInfo.outputPath("tool-output-end.png") });

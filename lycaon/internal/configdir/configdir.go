@@ -60,11 +60,6 @@ func Label() string {
 	return "~/.config/" + ChannelDirName()
 }
 
-// LabelProd returns the release configuration label.
-func LabelProd() string {
-	return "~/.config/" + DirNameProd
-}
-
 // UserConfigDir returns the per-user config dir, creating it if missing.
 func UserConfigDir() (string, error) {
 	dir, err := Root()

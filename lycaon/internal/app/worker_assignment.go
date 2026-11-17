@@ -2,16 +2,41 @@ package app
 
 import (
 	"context"
+	"path/filepath"
+	"strings"
+
+	"github.com/lycaon/lycaon/internal/app/boards"
+	"github.com/lycaon/lycaon/internal/app/persistence"
+	"github.com/lycaon/lycaon/internal/app/scanning"
+	"github.com/lycaon/lycaon/internal/app/workerruntime"
+	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
+	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 func (b *serveBuilder) composeWorkerAssignment(ctx context.Context, tctx tools.ToolContext, agentType string, brief wire.WorkerTaskCharter, task *wire.WorkerTask) (string, error) {
-	msgs, err := b.storage.Sessions.GetMessages(ctx, tctx.Identity.SessionID)
+	return composeWorkerTaskAssignment(ctx, b.storage, b.workflows, b.scanning, b.boards, b.workerRuntime, tctx, agentType, brief, task)
+}
+
+func composeWorkerTaskAssignment(
+	ctx context.Context,
+	storage persistence.Runtime,
+	wf *workflows.Runtime,
+	scanningRT *scanning.Runtime,
+	boardsRT *boards.Runtime,
+	workersRt *workerruntime.Runtime,
+	tctx tools.ToolContext,
+	agentType string,
+	brief wire.WorkerTaskCharter,
+	task *wire.WorkerTask,
+) (string, error) {
+	msgs, err := storage.Sessions.GetMessages(ctx, tctx.Identity.SessionID)
 	if err != nil {
 		return brief.Goal, err
 	}
@@ -21,35 +46,45 @@ func (b *serveBuilder) composeWorkerAssignment(ctx context.Context, tctx tools.T
 		Charter:          brief,
 		AgentType:        agentType,
 		WorkerJobID:      task.ID,
-		MaxToolLoops:     task.MaxToolLoops,
 		Attachments:      surface.SessionForwardedAttachments(msgs),
-		RecordedVerdicts: recordedVerdictsForLeg(ctx, b.workflows.Manager, tctx.Identity.SessionID),
+		RecordedVerdicts: recordedVerdictsForLeg(ctx, wf.Manager, tctx.Identity.SessionID),
 	}
 	if task.Scope != nil {
 		in.Scope = *task.Scope
 	}
-	run, err := b.workflows.Store.Runs.ActiveBySession(ctx, tctx.Identity.SessionID)
+	if child := strings.TrimSpace(task.ChildSessionID); child != "" {
+		in.RoundInstructions = strings.TrimSpace(task.Prompt)
+		if boardsRT != nil && boardsRT.WorkerRecords != nil {
+			if w, wErr := boardsRT.WorkerRecords.Self(ctx, workerrecords.Actor{SessionID: child, Role: workerrecords.RoleWorker, PrincipalID: child}); wErr == nil {
+				in.WorkerName = w.Name
+				if workersRt != nil && workersRt.Workspace != nil && workersRt.Workspace.BranchBase() != "" {
+					in.ViewKind = workspace.BranchViewKind(filepath.Join(workersRt.Workspace.BranchBase(), w.ID))
+				}
+			}
+		}
+	}
+	run, err := wf.Store.Runs.ActiveBySession(ctx, tctx.Identity.SessionID)
 	if err != nil {
 		return "", err
 	}
 	if run != nil {
-		manifest, err := b.workflows.Manager.Resolver.ForRunID(ctx, run.ID)
+		manifest, err := wf.Manager.Resolver.ForRunID(ctx, run.ID)
 		if err != nil {
 			return "", err
 		}
-		in.CoverageAssignment, err = b.workflows.Manager.Assignments.TaskCoverageAssignment(ctx, task)
+		in.CoverageAssignment, err = wf.Manager.Assignments.TaskCoverageAssignment(ctx, task)
 		if err != nil {
 			return "", err
 		}
 		if def, ok := manifest.PhaseByID(run.CurrentPhase); ok && def.ReviewLoop != nil && def.ReviewLoop.IncludeScanInventory && (in.CoverageAssignment == nil || in.CoverageAssignment.QuestionID == "") {
-			inventory, err := scan.WorkflowAdvisoryInventory(ctx, b.scanning.Store, run.ID)
+			inventory, err := scan.WorkflowAdvisoryInventory(ctx, scanningRT.Store, run.ID)
 			if err != nil {
 				return "", err
 			}
 			in.ScanInventory = inventory
 		}
 	}
-	return inject.RenderWorkerTaskAssignment(ctx, b.delegations.InjectRenderer, in)
+	return inject.RenderWorkerTaskAssignment(ctx, workersRt.InjectRenderer, in)
 }
 
 // recordedVerdictsForLeg projects stamped verdicts onto the assignment DTO.

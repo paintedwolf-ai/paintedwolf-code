@@ -181,9 +181,8 @@ describe("axe smoke — macOS accessibility", () => {
 
   it("Files info card chrome", async () => {
     const { FilesInfoCard } = await import("../files/components/FilesInfoCard.tsx");
-    const { applyFilesBufferLoad, openFilesBuffer } = await import(
-      "../files/documents/project-files-buffers.ts"
-    );
+    const { applyFilesBufferLoad } = await import("../files/documents/project-files-buffer-io.ts");
+    const { openFilesBuffer } = await import("../files/documents/project-files-buffer-lifecycle.ts");
     const key = openFilesBuffer("axe-p", {
       intent: "permanent",
       rootId: "r1",
@@ -242,8 +241,9 @@ path: "big.dat",
     const { FilesImageViewer } = await import(
       "../files/editor/FilesImageViewer.tsx"
     );
-    const { applyFilesBufferLoad, openFilesBuffer, resetProjectFilesForTests } =
-      await import("../files/documents/project-files-buffers.ts");
+    const { applyFilesBufferLoad } = await import("../files/documents/project-files-buffer-io.ts");
+    const { openFilesBuffer, resetProjectFilesForTests } =
+      await import("../files/documents/project-files-buffer-lifecycle.ts");
     resetProjectFilesForTests();
     const key = openFilesBuffer("axe-img", {
       intent: "permanent",
@@ -304,12 +304,11 @@ path: "a.png",
     const { FilesOpenList } = await import(
       "../files/tabs/FilesOpenList.tsx"
     );
-    const {
-      applyFilesBufferLoad,
-      openFilesBuffer,
-      resetProjectFilesForTests,
-      setFilesBufferPinned,
-    } = await import("../files/documents/project-files-buffers.ts");
+    const { applyFilesBufferLoad } = await import("../files/documents/project-files-buffer-io.ts");
+    const { openFilesBuffer, resetProjectFilesForTests } = await import(
+      "../files/documents/project-files-buffer-lifecycle.ts"
+    );
+    const { setFilesBufferPinned } = await import("../files/documents/project-files-buffers.ts");
     const { projectFilesState } = await import("../files/documents/files-buffer-state.ts");
     const { screen } = await import("@solidjs/testing-library");
     resetProjectFilesForTests();

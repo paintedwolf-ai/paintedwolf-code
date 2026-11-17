@@ -42,7 +42,7 @@ func TestSkillProcedureRejectsRetiredOperationNames(t *testing.T) {
 			}
 			// Retired names resolve through the forms that replaced them, so
 			// a mutating command reader is offered the skill.
-			if !toolvocab.SkillToolsOffered(sk, map[string]bool{"command": true, toolvocab.ReachCommandMutation: true}) {
+			if !toolvocab.SkillToolsOffered(sk, map[string]bool{"command": true, toolcontract.ReachCommandMutation: true}) {
 				t.Fatalf("retired operation %q did not resolve through its replacing forms", retired)
 			}
 		})
@@ -254,9 +254,9 @@ func TestUnreachableNamesCommandForms(t *testing.T) {
 	}{
 		{"nothing", nil, []string{"code_rewrite", "edit", "replace-lines", "repo-map", "summarize"}},
 		{"command only", map[string]bool{"command": true}, []string{"code_rewrite", "edit", "replace-lines", "repo-map", "summarize"}},
-		{"command mutation", map[string]bool{"command": true, toolvocab.ReachCommandMutation: true}, []string{"code_rewrite", "repo-map", "summarize"}},
-		{"survey tool", map[string]bool{"command": true, toolvocab.ReachCommandMutation: true, "survey_repo": true}, []string{"code_rewrite", "summarize"}},
-		{"rewrite tool", map[string]bool{"command": true, toolvocab.ReachCommandMutation: true, "code_rewrite": true}, []string{"repo-map", "summarize"}},
+		{"command mutation", map[string]bool{"command": true, toolcontract.ReachCommandMutation: true}, []string{"code_rewrite", "repo-map", "summarize"}},
+		{"survey tool", map[string]bool{"command": true, toolcontract.ReachCommandMutation: true, "survey_repo": true}, []string{"code_rewrite", "summarize"}},
+		{"rewrite tool", map[string]bool{"command": true, toolcontract.ReachCommandMutation: true, "code_rewrite": true}, []string{"repo-map", "summarize"}},
 		{"summarize tool", map[string]bool{"summarize": true}, []string{"code_rewrite", "edit", "replace-lines", "repo-map"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -280,7 +280,7 @@ func TestUnreachableNamesFlagInvocations(t *testing.T) {
 	if strings.Join(nothing, ",") != "edit,jq-edit" {
 		t.Fatalf("nothing held: %v", nothing)
 	}
-	held := toolvocab.UnreachableNames(catalog, corpus, map[string]bool{"command": true, toolvocab.ReachCommandMutation: true})
+	held := toolvocab.UnreachableNames(catalog, corpus, map[string]bool{"command": true, toolcontract.ReachCommandMutation: true})
 	if len(held) != 0 {
 		t.Fatalf("command mutation held: %v", held)
 	}

@@ -13,7 +13,7 @@ import (
 )
 
 func (o *OrchestratorImpl) runPack(ctx context.Context, req RunRequest, wf *workflowRunContext) (*RunResult, error) {
-	if o.delegation == nil || o.store == nil || o.agents == nil {
+	if o.workers == nil || o.agents == nil {
 		return nil, fmt.Errorf("orchestrator pack dependencies not configured")
 	}
 	if req.Topology.Pack == nil {
@@ -53,12 +53,12 @@ func (o *OrchestratorImpl) runPack(ctx context.Context, req RunRequest, wf *work
 
 	runID := uuid.NewString()
 	state := &runState{
-		runID:     runID,
-		completed: make(map[string]bool),
-		outputs:   make(map[string]string),
-		stageLegs: make(map[string]string, count),
-		phase:     "pack",
-		active:    true,
+		runID:      runID,
+		completed:  make(map[string]bool),
+		outputs:    make(map[string]string),
+		stageUnits: make(map[string]string, count),
+		phase:      "pack",
+		active:     true,
 	}
 	applyWorkflowContextToState(state, wf)
 	o.registerRun(runID, state)
@@ -77,37 +77,37 @@ func (o *OrchestratorImpl) runPack(ctx context.Context, req RunRequest, wf *work
 		task = "pack run"
 	}
 
-	delegationID, legIDs, err := o.setupPackDelegation(ctx, req, wf, sessionID, projectDir, task, profileID, count, assignments, state)
+	batchID, unitIDs, err := o.setupPackBatch(ctx, req, wf, sessionID, projectDir, task, profileID, count, assignments, state)
 	if err != nil {
 		return nil, err
 	}
-	if err := o.bindRunDelegation(ctx, state, delegationID); err != nil {
+	if err := o.bindRunBatch(ctx, state, batchID); err != nil {
 		return nil, err
 	}
 
-	bindings, err := o.bindLegWorkspacesIfIsolated(ctx, req.Topology, projectDir, delegationID, legIDs)
+	bindings, err := o.bindUnitWorkspacesIfIsolated(ctx, req.Topology, projectDir, batchID, unitIDs)
 	if err != nil {
 		return nil, err
 	}
 	defer o.destroyBindings(ctx, bindings)
 
-	if err := o.dispatchPackLegsParallel(ctx, req, runID, delegationID, profileID, count, legIDs, state.workflowRunID); err != nil {
+	if err := o.dispatchPackUnitsParallel(ctx, batchID, unitIDs, state.workflowRunID); err != nil {
 		return nil, err
 	}
 
-	settled, err := o.settleLegs(ctx, delegationID, legIDs, TopologyBindStagePack)
+	settled, err := o.settleUnits(ctx, batchID, unitIDs)
 	if err != nil {
 		return nil, err
 	}
 	results := make([]packLegResult, count)
-	for i, leg := range settled {
+	for i, unit := range settled {
 		key := packProbeKey(i)
-		failed := (leg.Status == api.LegStatusFailed || leg.Status == api.LegStatusCanceled)
+		failed := (unit.Status == api.LegStatusFailed || unit.Status == api.LegStatusCanceled)
 		output := ""
 		if !failed {
 			output = key + " complete"
-			if leg.Result != nil && strings.TrimSpace(leg.Result.Summary) != "" {
-				output = leg.Result.Summary
+			if strings.TrimSpace(unit.Summary) != "" {
+				output = unit.Summary
 			}
 		}
 		results[i] = packLegResult{Index: i, Output: output, Failed: failed}
@@ -130,7 +130,7 @@ func (o *OrchestratorImpl) runPack(ctx context.Context, req RunRequest, wf *work
 	}, nil
 }
 
-func (o *OrchestratorImpl) setupPackDelegation(
+func (o *OrchestratorImpl) setupPackBatch(
 	ctx context.Context,
 	req RunRequest,
 	wf *workflowRunContext,
@@ -144,41 +144,43 @@ func (o *OrchestratorImpl) setupPackDelegation(
 	for i := range keys {
 		keys[i] = packProbeKey(i)
 	}
-	restored, err := o.restoreWorkflowDelegation(ctx, wfRunID, keys, state)
+	restored, err := o.restoreWorkflowBatch(ctx, wfRunID, keys, state)
 	if err != nil {
 		return "", nil, err
 	}
 	if restored != nil {
-		return restored.ID, restored.LegIDs, nil
+		return restored.ID, restored.UnitIDs, nil
 	}
 	projectID, err := pipelineProjectID(req)
 	if err != nil {
 		return "", nil, err
 	}
-	delegation := api.Delegation{
+	batch := TopologyBatch{
+		SessionID:       sessionID,
 		ProjectID:       projectID,
 		WorkspacePath:   projectDir,
 		Task:            task,
-		Strategy:        api.HuntStrategyFileBased,
-		Status:          "active",
-		Phase:           api.DelegationPhaseSetup,
+		Pattern:         TopologyPack,
+		Status:          TopologyBatchActive,
 		WorkflowID:      wfID,
 		WorkflowVersion: wfVer,
 		WorkflowRunID:   wfRunID,
 	}
-	legIDs := make([]string, count)
-	legs := make([]api.Leg, count)
+	phase := boundPhaseForStage(state, TopologyBindStagePack)
+	units := make([]TopologyUnit, count)
 	for i := range count {
-		leg := buildPackLeg(profileID, task, i, modelAssignmentAt(assignments, i))
-		legs[i] = leg
-		legIDs[i] = leg.ID
-		state.stageLegs[packProbeKey(i)] = leg.ID
+		units[i] = buildPackUnit(profileID, task, phase, i, modelAssignmentAt(assignments, i))
 	}
-	created, err := o.store.Create(ctx, delegation, sessionID, legs)
+	created, createdUnits, err := o.workers.CreateBatch(ctx, batch, units)
 	if err != nil {
 		return "", nil, err
 	}
-	return created.ID, legIDs, nil
+	unitIDs := make([]string, count)
+	for i := range createdUnits {
+		unitIDs[i] = createdUnits[i].ID
+		state.stageUnits[packProbeKey(i)] = createdUnits[i].ID
+	}
+	return created.ID, unitIDs, nil
 }
 
 func modelAssignmentAt(assignments []ModelAssignment, index int) *ModelAssignment {
@@ -188,49 +190,45 @@ func modelAssignmentAt(assignments []ModelAssignment, index int) *ModelAssignmen
 	return &assignments[index]
 }
 
-func buildPackLeg(profileID, task string, index int, model *ModelAssignment) api.Leg {
+func buildPackUnit(profileID, task, phase string, index int, model *ModelAssignment) TopologyUnit {
 	prompt := strings.TrimSpace(task)
 	if model != nil {
 		prompt = fmt.Sprintf("Probe %d\nTask: %s\nModel: %s/%s", index, task, model.ProviderID, model.Model)
 	}
-	return api.Leg{
+	return TopologyUnit{
 		ID:        uuid.NewString(),
-		Title:     packProbeKey(index),
+		WorkID:    packProbeKey(index),
 		AgentType: profileID,
 		Prompt:    prompt,
-		Files:     []string{wholeProjectScopeGlob},
+		Phase:     phase,
 		Status:    api.LegStatusPending,
-		CreatedAt: time.Now().UTC(),
 	}
 }
 
-func (o *OrchestratorImpl) dispatchPackLegsParallel(
+func (o *OrchestratorImpl) dispatchPackUnitsParallel(
 	ctx context.Context,
-	req RunRequest,
-	runID, delegationID, profileID string,
-	count int,
-	legIDs []string,
+	batchID string,
+	unitIDs []string,
 	workflowRunID string,
 ) error {
 	var wg sync.WaitGroup
-	errCh := make(chan error, len(legIDs))
-	for i, legID := range legIDs {
+	errCh := make(chan error, len(unitIDs))
+	for _, unitID := range unitIDs {
 		wg.Add(1)
-		go func(index int, legID string) {
+		go func(unitID string) {
 			defer wg.Done()
-			// A panicking leg fails its own dispatch, not the engine.
 			defer func() {
 				r := recover()
 				if r == nil {
 					return
 				}
-				observability.LogRecoveredPanic("orchestration.pack_leg", r, "leg_id", legID)
-				errCh <- fmt.Errorf("leg %s panicked: %v", legID, r)
+				observability.LogRecoveredPanic("orchestration.pack_unit", r, "unit_id", unitID)
+				errCh <- fmt.Errorf("unit %s panicked: %v", unitID, r)
 			}()
-			if err := o.dispatchPackLeg(ctx, req, runID, delegationID, legID, profileID, index, workflowRunID); err != nil {
+			if err := o.dispatchPackUnit(ctx, batchID, unitID, workflowRunID); err != nil {
 				errCh <- err
 			}
-		}(i, legID)
+		}(unitID)
 	}
 	wg.Wait()
 	close(errCh)
@@ -242,36 +240,20 @@ func (o *OrchestratorImpl) dispatchPackLegsParallel(
 	return nil
 }
 
-func (o *OrchestratorImpl) dispatchPackLeg(
+func (o *OrchestratorImpl) dispatchPackUnit(
 	ctx context.Context,
-	req RunRequest,
-	runID, delegationID, legID, profileID string,
-	index int,
-	workflowRunID string,
+	batchID, unitID, workflowRunID string,
 ) error {
-	leg, err := o.store.GetLeg(ctx, delegationID, legID)
+	unit, err := o.workers.GetUnit(ctx, batchID, unitID)
 	if err != nil {
 		return err
 	}
-	if leg.Status != api.LegStatusPending {
+	if unit.Status != api.LegStatusPending {
 		return nil
 	}
-
-	taskID := runID + ":pack:" + packProbeKey(index)
-	if _, err := o.iterationCap.Track(ctx, profileID, taskID); err != nil {
+	if err := o.assertWorkflowRunnable(ctx, workflowRunID); err != nil {
 		return err
 	}
-	if err := o.checkIteration(ctx, req.Topology, profileID, taskID, TerminationContext{
-		AgentID: profileID,
-		TaskID:  taskID,
-	}); err != nil {
-		return err
-	}
-	if o.workflows != nil && strings.TrimSpace(workflowRunID) != "" {
-		if err := o.workflows.Policy.AssertRunnable(ctx, workflowRunID); err != nil {
-			return err
-		}
-	}
-	_, err = o.delegation.DispatchLeg(ctx, delegationID, legID, "")
+	_, err = o.workers.DispatchUnit(ctx, batchID, unitID)
 	return err
 }

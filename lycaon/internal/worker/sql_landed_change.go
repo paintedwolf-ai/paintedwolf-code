@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"sort"
 	"strings"
 	"time"
@@ -62,13 +63,13 @@ func insertLandedChangeTx(ctx context.Context, q *db.Queries, plan obligation.Pl
 		sourceSnapshotID := api.SourceSnapshotWarming
 		if plan.InitialFailure != "" {
 			status = "failed"
-			completedAt = db.NullString(db.FormatTime(createdAt))
+			completedAt = db.NullString(timelayout.Format(createdAt))
 			errorText = db.NullString(plan.InitialFailure)
 			sourceSnapshotID = ""
 		}
 		if err := q.InsertCodeScan(ctx, db.InsertCodeScanRowParams{
 			ID: plan.ScanID, CanonicalPath: plan.CanonicalPath, CategoriesJson: `["sast"]`,
-			ScannerID: db.NullString(plan.ScannerID), Status: status, CreatedAt: db.FormatTime(createdAt),
+			ScannerID: db.NullString(plan.ScannerID), Status: status, CreatedAt: timelayout.Format(createdAt),
 			DelegationID:     plan.DelegationID,
 			SourceSnapshotID: sourceSnapshotID, Trigger: string(api.ScanTriggerLandedChange),
 			CompletedAt: completedAt, PathsJson: pathsJSON.String,
@@ -78,7 +79,14 @@ func insertLandedChangeTx(ctx context.Context, q *db.Queries, plan obligation.Pl
 		}
 		if strings.TrimSpace(plan.WorkflowRunID) != "" {
 			if _, err := q.BindScanWorkflowRun(ctx, db.BindScanWorkflowRunParams{
-				WorkflowRunID: plan.WorkflowRunID, ScanID: plan.ScanID, CreatedAt: db.FormatTime(createdAt),
+				WorkflowRunID: plan.WorkflowRunID, ScanID: plan.ScanID, CreatedAt: timelayout.Format(createdAt),
+			}); err != nil {
+				return err
+			}
+		}
+		if strings.TrimSpace(plan.SessionID) != "" {
+			if _, err := q.BindScanSession(ctx, db.BindScanSessionParams{
+				SessionID: strings.TrimSpace(plan.SessionID), ScanID: plan.ScanID, CreatedAt: timelayout.Format(createdAt),
 			}); err != nil {
 				return err
 			}
@@ -101,12 +109,12 @@ func insertLandedChangeTx(ctx context.Context, q *db.Queries, plan obligation.Pl
 			RequiredScannersJson: requiredScannersJSON.String,
 			TargetKind:           targetKind, TargetPathsJson: pathsJSON.String,
 			DeletedPathsJson: scanDeletedJSON.String,
-			Trigger:          string(api.ScanTriggerLandedChange), CreatedAt: db.FormatTime(createdAt),
+			Trigger:          string(api.ScanTriggerLandedChange), CreatedAt: timelayout.Format(createdAt),
 		}); err != nil {
 			return err
 		}
 		if _, err := q.BindScanAssessment(ctx, db.BindScanAssessmentParams{
-			AssessmentID: plan.AssessmentID, ScanID: plan.ScanID, CreatedAt: db.FormatTime(createdAt),
+			AssessmentID: plan.AssessmentID, ScanID: plan.ScanID, CreatedAt: timelayout.Format(createdAt),
 		}); err != nil {
 			return err
 		}
@@ -142,7 +150,7 @@ func insertLandedChangeTx(ctx context.Context, q *db.Queries, plan obligation.Pl
 		ID: plan.ID, WorkerJobID: plan.WorkerJobID, CanonicalPath: plan.CanonicalPath,
 		DelegationID: plan.DelegationID, WorkflowRunID: plan.WorkflowRunID,
 		ChangedPathsJson: changedJSON.String, DeletedPathsJson: deletedJSON.String,
-		ScanRequired: required, ScanID: db.NullString(plan.ScanID), CreatedAt: db.FormatTime(createdAt),
+		ScanRequired: required, ScanID: db.NullString(plan.ScanID), CreatedAt: timelayout.Format(createdAt),
 	})
 }
 
@@ -169,7 +177,24 @@ func accumulatedLandedDeltaTx(ctx context.Context, q *db.Queries, plan obligatio
 			}
 		}
 	}
-	if strings.TrimSpace(plan.DelegationID) != "" {
+	if strings.TrimSpace(plan.SessionID) != "" {
+		rows, err := q.ListLandedPathDeltasForSession(ctx, db.ListLandedPathDeltasForSessionParams{
+			ParentSessionID: db.NullString(strings.TrimSpace(plan.SessionID)), CanonicalPath: plan.CanonicalPath,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, row := range rows {
+			var changed, deleted []string
+			if err := json.Unmarshal([]byte(row.ChangedPathsJson), &changed); err != nil {
+				return nil, nil, fmt.Errorf("decode prior landed changed paths: %w", err)
+			}
+			if err := json.Unmarshal([]byte(row.DeletedPathsJson), &deleted); err != nil {
+				return nil, nil, fmt.Errorf("decode prior landed deleted paths: %w", err)
+			}
+			apply(changed, deleted)
+		}
+	} else if strings.TrimSpace(plan.DelegationID) != "" {
 		rows, err := q.ListLandedPathDeltas(ctx, db.ListLandedPathDeltasParams{
 			DelegationID: plan.DelegationID, CanonicalPath: plan.CanonicalPath,
 		})

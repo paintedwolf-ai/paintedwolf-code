@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { required } from "../../test/at.ts";
 import "../../test/document-outbox-fixture.ts";
-import { filesBufferText } from "../documents/project-files-buffers.ts";
+import { filesBufferText } from "../documents/files-buffer-state.ts";
 import { DocumentReplica } from "../documents/document-replica.ts";
 import { documentOutbox } from "../documents/document-outbox.ts";
 import { DocumentFixture } from "../../test/document-fixture.ts";
@@ -15,7 +15,9 @@ import {
   resolveEditorDocument,
 } from "../documents/editor-document.ts";
 import { connectFilesEditorDocuments } from "../editor/files-editor-synchronization.ts";
-import { applyFilesBufferDraft, applyFilesBufferEditorDocument, applyFilesBufferLoad, closeFilesBuffer, closeFilesBuffers, FILES_CLOSE_FAILED_MESSAGE, focusedFilesBufferKey, openFilesBuffer, prepareFilesRootDetach, resetProjectFilesForTests, setFilesActiveBuffer, switchFilesRootBranches, type FilesBufferRelease } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferDraft, applyFilesBufferEditorDocument, applyFilesBufferLoad } from "../documents/project-files-buffer-io.ts";
+import { closeFilesBuffer, closeFilesBuffers, FILES_CLOSE_FAILED_MESSAGE, openFilesBuffer, prepareFilesRootDetach, resetProjectFilesForTests, switchFilesRootBranches, type FilesBufferRelease } from "../documents/project-files-buffer-lifecycle.ts";
+import { focusedFilesBufferKey, setFilesActiveBuffer } from "../documents/project-files-buffers.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import type { FileBufferKey } from "../components/project-files-model.ts";
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -27,7 +28,7 @@ func (s *sqlSessions) CreateWithStatus(ctx context.Context, req api.CreateSessio
 	if err != nil {
 		return nil, err
 	}
-	return createSession(ctx, s.core, owner.ID, req, projectID, "", "", 0, status)
+	return createSession(ctx, s.core, owner.ID, req, projectID, "", "", status)
 }
 
 // CreateChild stores a child session.
@@ -45,7 +46,7 @@ func (s *sqlSessions) CreateChild(ctx context.Context, parent *api.Session, req 
 		WorkspaceRootID: parent.WorkspaceRootID,
 		Posture:         mode,
 	}
-	sess, err := createSession(ctx, s.core, parent.OwnerPersonID, childReq, parent.ProjectID, parent.ID, req.AgentType, req.MaxToolLoops, api.SessionStatusIdle)
+	sess, err := createSession(ctx, s.core, parent.OwnerPersonID, childReq, parent.ProjectID, parent.ID, req.AgentType, api.SessionStatusIdle)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +65,7 @@ func (s *sqlSessions) CreateChild(ctx context.Context, parent *api.Session, req 
 	return sess, nil
 }
 
-func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req api.CreateSessionRequest, projectID, parentID, agentType string, maxToolLoops int, status api.SessionStatus) (*api.Session, error) {
+func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req api.CreateSessionRequest, projectID, parentID, agentType string, status api.SessionStatus) (*api.Session, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -79,10 +80,6 @@ func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req ap
 	posture := req.Posture
 	if strings.TrimSpace(string(posture)) == "" {
 		posture = api.SessionPostureBuild
-	}
-	maxLoops := sql.NullInt64{}
-	if maxToolLoops > 0 {
-		maxLoops = sql.NullInt64{Int64: int64(maxToolLoops), Valid: true}
 	}
 	projectID = strings.TrimSpace(projectID)
 	if projectID == "" {
@@ -111,7 +108,6 @@ func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req ap
 		Model:           model,
 		Status:          status,
 		ParentSessionID: parentID,
-		MaxToolLoops:    maxToolLoops,
 		CreatedAt:       now,
 		ActivityAt:      now,
 		UpdatedAt:       now,
@@ -138,12 +134,11 @@ func createSession(ctx context.Context, s *sqlCore, ownerPersonID string, req ap
 		ProviderID:      db.NullString(sess.ProviderID),
 		Model:           db.NullString(sess.Model),
 		ParentSessionID: db.NullString(sess.ParentSessionID),
-		MaxToolLoops:    maxLoops,
 		Title:           db.NullString(sess.Title),
 		Status:          string(sess.Status),
-		CreatedAt:       db.FormatTime(sess.CreatedAt),
-		ActivityAt:      db.FormatTime(sess.ActivityAt),
-		UpdatedAt:       db.FormatTime(sess.UpdatedAt),
+		CreatedAt:       timelayout.Format(sess.CreatedAt),
+		ActivityAt:      timelayout.Format(sess.ActivityAt),
+		UpdatedAt:       timelayout.Format(sess.UpdatedAt),
 	}); err != nil {
 		return nil, fmt.Errorf("insert session: %w", err)
 	}

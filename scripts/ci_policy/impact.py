@@ -33,6 +33,12 @@ def git(*args):
 
 def event_base(event, name):
     if name == "pull_request":
+        # A pull request runs on its merge with the current base branch. The
+        # event's base sha is not updated when that branch moves, so the merge's
+        # first parent is what the change is applied onto.
+        parents = git("rev-list", "--parents", "-n", "1", "HEAD").split()[1:]
+        if len(parents) == 2 and parents[1] == event["pull_request"]["head"]["sha"]:
+            return parents[0]
         return git("merge-base", "HEAD", event["pull_request"]["base"]["sha"])
     if name == "merge_group":
         return event["merge_group"]["base_sha"]

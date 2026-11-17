@@ -195,6 +195,16 @@ Missing route policy or call history does not establish a cold cache. Tools
 that become unavailable on the active surface leave immediately, and the
 final schema list has canonical name order.
 
+Copy lifetimes follow the same boundary. Standing persona prompts, shared
+partials, skills, and skill references render from slow facts only (role,
+profile, tool reachability, workspace Git/branch shape, posture, and workflow
+obligations). Volatile facts (worker states, result dispositions, pending
+questions, queued instructions, workspace preparation, and spend or round
+notices) render in the per-request turn-state frame and OAR guidance after
+fitted history. That separation keeps the cached prefix byte-identical across
+worker state changes and ensures a skill read into transcript history through
+`skills_read` never carries a volatile claim that later events make false.
+
 Every decision leaves a receipt: the state the engine read, the answers, the
 catalog revision, the cache boundary the turn opened on, and the standing
 surface afterwards, which a restart restores. A `request_tools` receipt records
