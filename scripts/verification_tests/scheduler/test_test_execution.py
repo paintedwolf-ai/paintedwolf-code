@@ -69,14 +69,18 @@ class TaskAdmissionTests(unittest.TestCase):
                 execution.validate_task_selection(args)
 
     def test_declared_selection_targets_keep_their_grammar(self):
-        for args in (["test:digest", "--", "./internal/db", "-run", "TestFixture"],
-                     ["den:test:digest", "--", "src/shell-contract.test.ts"],
-                     ["den:harness:test", "--", "--grep", "fixture"],
-                     ["lint:full", "--", "--timeout=40m"],
-                     ["oar:conformance", "--", "--json"],
+        for target, accepted, refused in (
+                ("test:digest", ["./internal/db", "-run", "TestFixture"], ["./internal/missing-fixture"]),
+                ("den:test:digest", ["src/shell-contract.test.ts"], ["src/missing-fixture.test.ts"]),
+                ("den:harness:test", ["--grep", "fixture"], ["missing-fixture.spec.ts"])):
+            with self.subTest(target=target):
+                execution.validate_task_selection([target, "--", *accepted])
+                with self.assertRaises(ValueError):
+                    execution.validate_task_selection([target, "--", *refused])
+        for args in (["lint:full", "--", "--timeout=40m"], ["oar:conformance", "--", "--json"],
                      ["den:bundle", "--", "--debug"]):
             with self.subTest(args=args):
-                execution.validate_task_selection(args)
+                self.assertIsNone(execution.validate_task_selection(args))
 
     def test_heavy_tasks_queue(self):
         for args in ([], ["check"], ["check-fast"], ["test:digest", "--", "./internal/db"],

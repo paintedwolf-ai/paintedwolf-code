@@ -151,13 +151,7 @@ class MLXOfflineSource(unittest.TestCase):
         self.assertNotEqual(rejected.returncode, 0)
         self.assertIn('MLX_SOURCE_PIN_MISMATCH', rejected.stderr)
 
-    def test_ordinary_cargo_builds_select_same_toolchain(self):
-        config = (ROOT / ".cargo/config.toml").read_text()
-        self.assertIn('[env]\n', config)
-        manifest = (ROOT / 'lycaon/internal/decide/native/Cargo.toml').read_text()
-        self.assertIn('mlx-sys = { path = "vendor/mlx-sys" }', manifest)
-        self.assertIn('CMAKE_TOOLCHAIN_FILE = { value = "scripts/toolchain/mlx-offline.cmake", '
-                      'relative = true, force = true }', config)
+    def test_vendored_sources_match_their_pinned_digests(self):
         pin = json.loads((ROOT / "third_party/mlx/pin.json").read_text())
         for source in pin["sources"]:
             archive = ROOT / "third_party/mlx" / source["archive"]

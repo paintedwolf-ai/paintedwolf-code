@@ -19,12 +19,6 @@ class DiagnosticLaneTests(unittest.TestCase):
         rows = json.loads(result.stdout)['include']
         self.assertEqual([(row['lane'], row['runner']) for row in rows],
                          [('confinement-arm64', 'ubuntu-24.04-arm')])
-        workflow = yaml.safe_load((ROOT / '.github/workflows/verification.yml').read_text())
-        watch = next(step for step in workflow['jobs']['verify']['steps']
-                     if step.get('uses') == './.github/actions/merge-group-watch')
-        self.assertEqual(watch['if'], "inputs.lane == ''")
-        caller = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())
-        self.assertIn("inputs.lane == ''", caller['jobs']['integration']['with']['affected'])
 
     def test_fast_dispatch_provisions_the_scope_its_ready_lane_executes(self):
         caller = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())

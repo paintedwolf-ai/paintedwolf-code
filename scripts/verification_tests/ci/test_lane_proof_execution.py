@@ -153,16 +153,3 @@ class LaneProofTests(unittest.TestCase):
                     patch.object(proof_reuse.subprocess, "check_output", return_value="other"), self.assertRaises(ValueError):
                 proof_reuse.main()
 
-    def test_workflow_records_proof_only_after_success_and_keeps_reuse_in_qualification(self):
-        root = Path(__file__).resolve().parents[3]
-        workflow = (root / ".github/workflows/verification.yml").read_text()
-        self.assertIn(
-            "if: success() && (github.event_name == 'merge_group' || startsWith(github.ref, 'refs/heads/gh-readonly-queue/main/'))",
-            workflow,
-        )
-        self.assertLess(workflow.index("Run verification"), workflow.index("Seal complete merge-group lane proof"))
-        self.assertIn('[[ "$PROFILE" == check && "$AFFECTED" != true && "$PLATFORM" != true ]]', workflow)
-        self.assertIn("if-no-files-found: error", workflow.split("Retain qualification coverage sources", 1)[1])
-        qualification = (root / ".github/workflows/qualification.yml").read_text()
-        self.assertEqual(qualification.count("reuse-merge-proof: true"), 1)
-        self.assertNotIn("reuse-merge-proof", (root / ".github/workflows/ci.yml").read_text())

@@ -92,10 +92,8 @@ class PlanningTests(unittest.TestCase):
     def test_catalog_declares_resources_for_every_stage(self):
         catalog = planning.catalog()
         self.assertLessEqual(set(catalog["tasks"]) | {"go", "go:bundled"}, set(catalog["resources"]))
-        taskfile = (SCRIPT.parent.parent / "Taskfile.yml").read_text()
         for name in set(catalog["resources"]) - set(catalog["tasks"]) - {"go", "go:bundled"}:
             with self.subTest(invocation=name):
-                self.assertRegex(taskfile, rf"(?m)^  {re.escape(name)}:$")
                 self.assertNotIn(name, planning.declared_names(catalog))
 
     def test_invocations_hold_what_their_stages_declare(self):

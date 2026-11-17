@@ -1,6 +1,9 @@
-"""Source-bound budget snapshots and issue lifecycle decisions."""
+"""Source-bound budget snapshots and issue lifecycle decisions, independent of reporter intake and
+stale closure."""
 import html
 import json
+from pathlib import Path
+import subprocess
 import unittest
 from urllib.parse import quote
 
@@ -299,3 +302,28 @@ class WorkstreamTests(unittest.TestCase):
         # A touch the frozen area cannot record waits for a later report.
         ops, _ = self.groups.plan([dismissed], self.artifacts(changed), observation(), held=lambda _: True)
         self.assertEqual(ops, [{'action': 'hold', 'key': 'pkg', 'artifacts': [{'category': 'source_files', 'id': 'pkg/server.go'}]}])
+
+
+class IssuePolicyTests(unittest.TestCase):
+    def test_only_bot_authored_budget_markers_bypass_reporter_lifecycle(self):
+        source = r'''
+const assert = require("node:assert/strict");
+const { isExempt, markStale } = require("./.github/scripts/issue-policy.cjs");
+const tracked = { number: 1, user: { login: "github-actions[bot]" },
+  body: "<!-- paintedwolf-maintainability:v1 -->", labels: [],
+  updated_at: "2000-01-01T00:00:00Z" };
+assert.equal(isExempt(tracked), true);
+assert.equal(isExempt({ ...tracked, body: "<!-- paintedwolf-maintainability:v2 -->" }), true);
+assert.equal(isExempt({ ...tracked, user: { login: "someone" } }), false);
+assert.equal(isExempt({ ...tracked, body: "ordinary automated report" }), false);
+const writes = [];
+const github = { paginate: async () => [tracked], rest: { issues: {
+  listForRepo: {}, addLabels: async (...args) => writes.push(args),
+  createComment: async (...args) => writes.push(args),
+} } };
+markStale({ github, context: { repo: { owner: "owner", repo: "repo" } },
+  core: { info: () => {} } }).then(() => assert.deepEqual(writes, []));
+'''
+        result = subprocess.run(['node', '-e', source], cwd=Path(__file__).resolve().parents[3],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
