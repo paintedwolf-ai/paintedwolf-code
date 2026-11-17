@@ -472,6 +472,9 @@
     "release:rehearse:rpm-metadata": [
       "release:rehearse:rpm-metadata"
     ],
+    "release:rehearse:deb-metadata": [
+      "release:rehearse:deb-metadata"
+    ],
     "release:rehearse:pacman-construction": [
       "release:rehearse:pacman-construction"
     ],
@@ -542,6 +545,7 @@
     "release:live-test": "passthrough",
     "release:rehearse:package-probe": "passthrough",
     "release:rehearse:rpm-metadata": "passthrough",
+    "release:rehearse:deb-metadata": "passthrough",
     "release:rehearse:pacman-construction": "passthrough",
     "userlands:build": "passthrough",
     "test:conformance:live": "passthrough",
@@ -981,6 +985,12 @@
     "release:rehearse:rpm-metadata": {
       "locks": [
         "rpm-metadata-fixture"
+      ],
+      "workers": 1
+    },
+    "release:rehearse:deb-metadata": {
+      "locks": [
+        "deb-metadata-fixture"
       ],
       "workers": 1
     },

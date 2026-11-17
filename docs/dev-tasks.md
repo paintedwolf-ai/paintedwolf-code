@@ -709,7 +709,7 @@ Gate composition lives in `scripts/verification-plan.json`.
 | `den:stage-engine` | Stages the sidecar and engine-root a desktop Playwright run expects. `e2e:den:desktop` does **not** stage for you — the release workflow runs `den:stage-engine` immediately before it, and a local reproduction without it fails on a missing engine |
 | `bundle:verify` | macOS-only structural audit (arch slices, macOS floor, dylib paths, nested signing, hardened runtime, each executable's exact entitlements, staple, Gatekeeper), then runs the packaged engine's scanner, document-core, and credential probes. The release workflow already runs it (with `bundle:smoke`) on every staged macOS artifact, so you run it by hand only on a copy that travelled — see [Clean-Mac validation](#clean-mac-validation) |
 | `bundle:smoke` | Launches the app through LaunchServices, then authenticates, resolves catalogs, opens and edits a document, and checks the engine survived. Ad-hoc-signed builds are **rejected**: they cannot exercise the release Keychain path without an authorization dialog, so a pass on one would prove nothing about the shipped app |
-| `release:preflight` | Read-only validation of version, updater, and brand inputs. `-- --require-corpus` additionally demands the committed upgrade fixture, which is what the tag gate wants |
+| `release:preflight` | Read-only release input checks; each call names one mode. `-- --static` checks version projections, the changelog section, update keys, the platform catalog, product URLs and recovery metadata without a build; the PR `static` job and the release's `classify` job run it. `-- --require-corpus` builds the development engine and verifies the committed upgrade fixture, which is what the tag gate wants. `-- --compatibility-only` checks a candidate checkout against the published stable baseline from the release controller |
 | `upgrade:corpus:prepare` / `upgrade:corpus:boot` | `prepare` writes an immutable fixture under `lycaon/testdata/upgrade-corpus/<VERSION>/` that you **review and commit with the candidate**; the release workflow uploads that reviewed tree rather than minting evidence after the tag. `boot` proves the committed fixtures locally |
 | `openapi:diff` | Report wire differences against the committed baseline, or `-- --baseline-ref <commit>` for a pinned stable release. Release CI retains the report automatically; permitted bundle differences succeed and tool failures block release |
 
@@ -1126,14 +1126,15 @@ back from the signed file.
 
 ```mermaid
 flowchart TD
-    tag["Push tag v*<br/>(must equal v + VERSION)"] --> classify["Classify qualified source and release inputs"]
-    classify --> checks["Independent catalog verification jobs"]
-    classify --> desktop["Desktop end-to-end tests"]
-    classify --> upgrade["Prior-release upgrade rehearsal"]
+    tag["Push tag v*<br/>(must equal v + VERSION)"] --> classify["Classify qualified source<br/>and check static release metadata"]
+    classify --> probe["Prove every credential and both protected environments"]
+    probe --> checks["Independent catalog verification jobs"]
+    probe --> desktop["Desktop end-to-end tests"]
+    probe --> upgrade["Prior-release upgrade rehearsal"]
     checks --> gates["ship-gates: require every result"]
     desktop --> gates
     upgrade --> gates
-    classify --> build["build-release public matrix<br/>Apple Silicon macOS and both Linux architectures"]
+    probe --> build["build-release public matrix<br/>Apple Silicon macOS and both Linux architectures"]
     build --> verify["Native structure and signature checks<br/>macOS notarization"]
     verify --> aggregate["aggregate-release<br/>Collect every public platform build"]
     aggregate --> plan["Select one retained monotonic channel plan"]
@@ -1343,7 +1344,7 @@ The user provisions these additional secrets before the release. Private materia
 | `release-signing` | `LINUX_PACKAGE_SIGNING_KEY` | [`signing/keys.json`](../packaging/linux/signing/keys.json) |
 | `release-publication` | `NIX_CACHE_SIGNING_KEY` | Key name `paintedwolf-cache-1`, matching `nix-cache-trust.json` |
 
-The existing R2 and feed credentials remain in `release-publication` (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`, `FEED_SIGNING_KEYS_JSON`); its existing `WWW_DISPATCH_TOKEN` and `HOMEBREW_TAP_TOKEN` notify the website and update the tap. The trailing mirror rereads the same retained plan and negative ledger using the existing Cloudflare/R2 credentials before creating a GitHub Release. `DOWNLOAD_BASE_URL` and `HOMEBREW_TAP_REPO` remain environment variables. `release-secrets-check` refuses missing delivery credentials or unmatched public trust.
+The existing R2 and feed credentials remain in `release-publication` (`CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `R2_BUCKET`, `FEED_SIGNING_KEYS_JSON`); its existing `WWW_DISPATCH_TOKEN` and `HOMEBREW_TAP_TOKEN` notify the website and update the tap. The trailing mirror rereads the same retained plan and negative ledger using the existing Cloudflare/R2 credentials before creating a GitHub Release. `DOWNLOAD_BASE_URL` and `HOMEBREW_TAP_REPO` remain environment variables. `release-secrets-check` refuses missing delivery credentials or unmatched public trust. It also signs probes with the updater artifact key, the Linux package key and the Developer ID identity, verifying each against its committed public key, and queries the notary service with the API key. Every release calls it as the first job after `classify`, with both protected environments, so a missing secret or a refused environment stops the run before any build.
 
 | Channel | Regular release | Halt and recovery |
 |---|---|---|
@@ -1784,13 +1785,13 @@ With AWS CLI v2, bun, curl, jq, Python 3, and Ruby installed, run `./task releas
 
 The protected `release-rehearsal` GitHub environment uses `RELEASE_TEST_R2_ACCESS_KEY_ID` and `RELEASE_TEST_R2_SECRET_ACCESS_KEY` secrets, optional `RELEASE_TEST_R2_SESSION_TOKEN`, and `RELEASE_TEST_R2_ENDPOINT_URL`, `RELEASE_TEST_R2_BUCKET`, and `RELEASE_TEST_DOWNLOAD_BASE_URL` variables. These environment fields are the fallback when no local config file exists. Local execution clears inherited AWS profiles, role credentials, metadata discovery, and Cloudflare tokens before invoking S3. Production publication credentials are unchanged.
 
-Run `./task release:preflight -- --require-corpus` first, then run the `release` workflow from the Actions tab via `workflow_dispatch`. Manual dispatch with an empty `release_tag` validates production updater configuration, builds and signs every public platform, notarizes and staples macOS, and uploads review artifacts without publishing. To publish an existing tag using the current release controller, dispatch from `main` with `release_tag=v<version>`. Admission resolves the tag once, requires that commit to have landed on main and passed full exact-commit Qualification, and pins every build and publication checkout to that SHA. Later main merges do not change the selected source. Tag pushes also publish. Only public-platform artifacts enter either publication path.
+Run `./task release:preflight -- --static` and `./task release:preflight -- --require-corpus` first, then run the `release` workflow from the Actions tab via `workflow_dispatch`. Manual dispatch with an empty `release_tag` validates production updater configuration, builds and signs every public platform, notarizes and staples macOS, and uploads review artifacts without publishing. To publish an existing tag using the current release controller, dispatch from `main` with `release_tag=v<version>`. Admission resolves the tag once, requires that commit to have landed on main and passed full exact-commit Qualification, and pins every build and publication checkout to that SHA. Later main merges do not change the selected source. Tag pushes also publish. Only public-platform artifacts enter either publication path. A publishing run and `release-halt` share one concurrency group; an empty-tag dry run and a replay each get a group of their own, so neither waits behind the other nor delays a halt.
 
 The protected `release-signing` environment must allow `main` for the trusted manual controller, alongside release tags `v*`; `release-publication` uses the same ref policy. Feature branches cannot dispatch selected-tag publication. Admission, sidecar/store rehearsal, the [desktop self-upgrade gate](#desktop-self-upgrade-release-gate), signing, notarization, artifact verification, credential checks, and monotonic feed promotion remain mandatory. Historical tags whose embedded workflow predates this path can be published by the current controller without changing their tag or source. The trusted controller also supplies the macOS native notarization adapter: it retains Apple's accepted ticket contents and every staple/validation result, validates the app ticket before Tauri creates its updater archive, and refuses missing or failed operation receipts. Stapling gets at most three attempts, with 10- and 30-second delays; retries do not resubmit notarization or weaken final artifact verification. Evidence uploads even when packaging fails. Failed signed updater archives are retained for 14 days so ticket diagnosis can reuse their exact bytes without another build. This lets an unchanged, qualified application tag use repaired packaging control without replacing its source.
 
 ### Clean-Mac validation
 
-Every check that is decidable from the artifact already runs in the release workflow: `bundle:verify` (arch slices, macOS floor, dylib paths, nested signing, hardened runtime, entitlements, staple, Gatekeeper, and the packaged engine's probes, all blocking) and `bundle:smoke` (real LaunchServices launch, Keychain isolation probe, and a document edit; warn-only on hosted runners). This optional verification tests the artifact on a second Mac, ideally one that has never run a dev build:
+Every check that is decidable from the artifact already runs in the release workflow: `bundle:verify` (arch slices, macOS floor, dylib paths, nested signing, hardened runtime, entitlements, staple, Gatekeeper, and the packaged engine's probes, all blocking). `bundle:smoke` (real LaunchServices launch, Keychain isolation probe, and a document edit) needs a logged-in GUI session, which hosted runners lack, so it is part of this verification instead. This optional verification tests the artifact on a second Mac, ideally one that has never run a dev build:
 
 1. Download the DMG from the dry-run's build artifacts or public download.
 2. Re-run the structural audit on the downloaded copy:
@@ -1856,9 +1857,9 @@ Every release tag clears the same gate:
    SQLite `user_version` stay independent.
 3. `./task upgrade:corpus:prepare` has produced the versioned fixture and both corpus
    boot modes pass.
-4. `./task release:preflight -- --require-corpus` and passing CI checks (`check`, `e2e`) on the exact,
+4. `./task release:preflight -- --static`, `./task release:preflight -- --require-corpus` and passing CI checks (`check`, `e2e`) on the exact,
    clean source commit that landed on `main`.
-5. Automated CI build, code-signing, notarization, and `bundle:verify` pass during the release run, and `bundle:smoke` passes on a real Mac (it only warns on hosted runners).
+5. Automated CI build, code-signing, notarization, and `bundle:verify` pass during the release run, and `bundle:smoke` passes on a real Mac.
 6. The [desktop self-upgrade gate](#desktop-self-upgrade-release-gate) completes before publication, using the exact signed candidate and supported automatic-updater sources. Its receipt distinguishes tested paths from excluded or inapplicable sources.
 7. The updater public key is real, the private key is available to Actions, and
    both closed channel endpoints match the egress inventory.
@@ -1887,9 +1888,14 @@ and service qualification remains separate.
 
 Native package rehearsals are declared verification targets, each admitted under
 its own lock rather than through `release:live-test`.
-`./task release:rehearse:rpm-metadata -- --receipt PATH [--container]` builds and
+`./task release:rehearse:rpm-metadata -- [--receipt PATH] [--container]` builds and
 lints production RPM metadata around a tiny nonapplication payload with rpmlint
-2.5.0, and requires the historical spelling regression to fail.
+2.5.0, and requires a misspelled summary to fail.
+`./task release:rehearse:deb-metadata -- [--receipt PATH] [--container]` builds the
+production control file, conffiles and maintainer scripts around the same payload,
+lints it with lintian, and requires an unmarked `/etc` file to fail. A ready pull
+request runs both when it changes `packaging/`, `scripts/linux_release/` or the
+package assembler.
 `./task release:rehearse:pacman-construction -- --receipt PATH` builds and admits a
 sealed tiny fixture with native makepkg in the pinned substrate.
 `./task release:rehearse:package-probe -- --tree DIR` runs the extracted-package
