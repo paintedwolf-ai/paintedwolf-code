@@ -53,7 +53,8 @@ function activitySummaryState(view: BriefingView, held: HeldSummaryText | null):
   const recordId = snapshot?.result?.evidence_ref.record_id;
   if ((purpose || change) && recordId) {
     const changePending = snapshot?.status === "pending" && !view.stalled && snapshot.pending_sections.includes("change");
-    return { kind: "ready", purpose, change, recordId, changePending };
+    const purposePending = snapshot?.status === "pending" && !view.stalled && snapshot.pending_sections.includes("purpose");
+    return { kind: "ready", purpose: purpose ?? held?.purpose, change, recordId, changePending, purposePending };
   }
   const earlier = held?.purpose;
   return ended ? { kind: "missing", purpose: earlier } : { kind: "pending", purpose: earlier };

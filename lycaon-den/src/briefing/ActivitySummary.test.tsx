@@ -13,18 +13,19 @@ describe("ActivitySummary", () => {
   it("holds its box from a pending open through arrival, then fades the text in once", () => {
     const [state, setState] = createSignal<ActivitySummaryState>({ kind: "pending" });
     const view = render(() => <ActivitySummary state={state()} running={false} onRetry={() => {}} />);
-    expect(region(view.container).hasAttribute("data-held")).toBe(true);
+    expect(region(view.container).querySelector('[data-section="intent"]')?.hasAttribute("data-held")).toBe(true);
     expect(region(view.container).textContent).toContain(briefingCopy.waiting);
     setState({ kind: "ready", purpose: "Checks the `greet` test.", change: "All passed.", recordId: "r1", changePending: false });
     const box = region(view.container);
-    expect(box.hasAttribute("data-held")).toBe(true);
-    expect(box.textContent).toContain("Checks the greet test. All passed.");
+    expect(box.querySelector('[data-section="intent"]')?.hasAttribute("data-held")).toBe(true);
+    expect(box.querySelector('[data-section="intent"]')?.textContent).toContain("Intent: Checks the greet test.");
+    expect(box.querySelector('[data-section="outcome"]')?.textContent).toContain("Outcome: All passed.");
     expect(box.querySelector(".den-briefing-summary__code")?.textContent).toBe("greet");
-    expect(box.querySelectorAll(`.${SUMMARY_FADE_CLASS}`)).toHaveLength(1);
+    expect(box.querySelectorAll(`.${SUMMARY_FADE_CLASS}`)).toHaveLength(2);
     view.unmount();
 
     const reopened = render(() => <ActivitySummary state={state()} running={false} onRetry={() => {}} />);
-    expect(region(reopened.container).hasAttribute("data-held")).toBe(false);
+    expect(region(reopened.container).querySelector('[data-section="intent"]')?.hasAttribute("data-held")).toBe(false);
     expect(region(reopened.container).querySelector(`.${SUMMARY_FADE_CLASS}`)).toBeNull();
   });
 
