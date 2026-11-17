@@ -7,9 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// HoldsUnsavedText reports whether the person has unsaved text open for this
-// project-tree path. Inside a program it consults the program's view;
-// otherwise it asks for the path alone.
+// HoldsUnsavedText reuses the program’s inventory when available.
 func HoldsUnsavedText(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (bool, error) {
 	documents, ok := DocumentsFor(tctx, resolved)
 	if !ok {

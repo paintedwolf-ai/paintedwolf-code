@@ -23,8 +23,7 @@ type AgentEdit struct {
 	Turn             int
 	ToolCallID       string
 	ToolName         string
-	// Pin marks a program edit: anchored in its capture, refused when the file
-	// changed outside the document.
+	// Pin anchors the edit and checks for external changes.
 	Pin *ExecutionPin `json:",omitempty"`
 }
 

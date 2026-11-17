@@ -20,12 +20,8 @@ type AgentCall struct {
 	ToolName   string
 }
 
-// SaveForAgentOperation saves each unsaved document at path, or beneath it
-// with descendants, before an agent operation acts on the file: an agent
-// touching a file autosaves what the person has typed there. Every
-// contribution keeps its own author; the save names the call that caused it.
-// A document whose file changed outside it is not saved and returns an
-// ExecutionConflict, since saving would overwrite that change.
+// SaveForAgentOperation saves drafts before mutation, preserving authorship.
+// A draft whose disk base changed returns an ExecutionConflict.
 func (s *Service) SaveForAgentOperation(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string, descendants bool, call AgentCall) error {
 	if s == nil || s.store == nil {
 		return nil
@@ -73,7 +69,6 @@ func (s *Service) saveForAgent(ctx context.Context, p *project.Project, document
 	return nil
 }
 
-// fileChangedOutside names the base a document sits on and the file now on disk.
 func (s *Service) fileChangedOutside(p *project.Project, d *Document) error {
 	pinned := ExecutionPin{Revision: d.Revision, DiskSHA256: d.BaseSHA256, Absent: d.Absent}
 	if d.Absent {

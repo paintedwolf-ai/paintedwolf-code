@@ -7,9 +7,7 @@ import (
 
 type unsavedPathsKey struct{}
 
-// UnsavedPaths remembers, per root, which paths held unsaved text when a
-// program first read that root, so a walk over many files checks a map
-// instead of asking the document store for each one.
+// UnsavedPaths caches the draft inventory on each root’s first read.
 type UnsavedPaths struct {
 	mu    sync.Mutex
 	roots map[string]map[string]bool

@@ -24,10 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// ExecutionRevisions captures and rechecks the program-specific revisions that
-// native utilities read and publish through. A path the person has open with
-// unsaved text reads as that text; a file changed outside its open document
-// refuses with COMMAND_REVISION_CONFLICT.
+// ExecutionRevisions captures and rechecks native program inputs and destinations.
 type ExecutionRevisions struct {
 	Boundary *sandbox.Boundary
 	Literals *sourcecatalog.LiteralSearch
@@ -45,9 +42,7 @@ type ExecutionSource struct {
 	release  func()
 }
 
-// ExecutionRevisionConflict reports that a pinned source or destination moved
-// after capture, or that a file changed outside its open document. The
-// prepared change is stopped, never refreshed or rerun.
+// ExecutionRevisionConflict stops publication against a changed revision.
 type ExecutionRevisionConflict struct {
 	rejectOnce sync.Once
 	reject     *toolrejection.ToolReject
@@ -241,7 +236,6 @@ func captureDestinationRevision(ctx context.Context, tctx tools.ToolContext, res
 	if err != nil {
 		return sourceview.Text{}, toolcontract.ExecutionRevision{}, err
 	}
-	// A draft held over a file changed outside it cannot be written over.
 	if st.Editor != nil && st.Editor.Diverged {
 		return sourceview.Text{}, toolcontract.ExecutionRevision{}, divergedConflict(resolved, revision, st.Editor)
 	}
@@ -249,7 +243,7 @@ func captureDestinationRevision(ctx context.Context, tctx tools.ToolContext, res
 	if st.Editor != nil {
 		revision.Mode, revision.Representation = toolcontract.AcceptedDocumentRevision, toolcontract.LogicalUTF8LF
 		revision.DocumentID, revision.DocumentRevision, revision.DiskSHA256 = st.Editor.ID, st.Editor.Revision, st.Editor.BaseSHA256
-		// The edit anchors in this revision, so typing that follows can merge with it.
+		// Retaining the anchor lets later typing merge with the edit.
 		if documents, ok := sourceview.DocumentsFor(tctx, resolved); ok {
 			if err := documents.RetainRevision(ctx, tctx.Identity.ProjectID, st.Editor.ID, st.Editor.Revision); err != nil {
 				return sourceview.Text{}, toolcontract.ExecutionRevision{}, &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: revision, Cause: err}

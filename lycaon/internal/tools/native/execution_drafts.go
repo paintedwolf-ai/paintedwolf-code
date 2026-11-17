@@ -11,10 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// SaveDrafts saves the person's unsaved text at path, or in the subtree
-// beneath it, before an operation acts on the file: an agent touching a file
-// autosaves it. A document whose file changed outside it is a revision
-// conflict, since saving would overwrite that change.
+// SaveDrafts saves drafts at the admitted destination before mutation.
 func (e ExecutionRevisions) SaveDrafts(ctx context.Context, tctx tools.ToolContext, path string, descendants bool) error {
 	resolved, err := projectpaths.ResolveWrite(ctx, e.Boundary, tctx, path)
 	if err != nil {
@@ -23,8 +20,7 @@ func (e ExecutionRevisions) SaveDrafts(ctx context.Context, tctx tools.ToolConte
 	return SaveResolvedDrafts(ctx, tctx, resolved, descendants)
 }
 
-// SaveResolvedDrafts saves the drafts at an already-bound path, such as an
-// input a write carries elsewhere, whose own binding holds its authority.
+// SaveResolvedDrafts saves drafts under an existing path binding.
 func SaveResolvedDrafts(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, descendants bool) error {
 	documents, ok := sourceview.DocumentsFor(tctx, resolved)
 	if !ok {
@@ -48,8 +44,7 @@ func SaveResolvedDrafts(ctx context.Context, tctx tools.ToolContext, resolved pr
 	return err
 }
 
-// captureDocument pins the person's unsaved text at a path as the bytes a save
-// would write; ok is false when the path holds no unsaved text.
+// captureDocument pins the encoded bytes an unsaved draft would publish.
 func (e ExecutionRevisions) captureDocument(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, maxBytes int64) (data []byte, revision toolcontract.ExecutionRevision, release func(), ok bool, err error) {
 	unsaved, err := sourceview.HoldsUnsavedText(ctx, tctx, resolved)
 	if err != nil || !unsaved {
@@ -82,8 +77,6 @@ func (e ExecutionRevisions) captureDocument(ctx context.Context, tctx tools.Tool
 	return encoded, revision, release, true, nil
 }
 
-// divergedConflict reports a destination whose document holds a draft over a
-// file changed outside it: the base the draft sits on against the file now on disk.
 func divergedConflict(resolved projectpaths.Resolved, revision toolcontract.ExecutionRevision, doc *tools.EditorDocumentText) *ExecutionRevisionConflict {
 	changed := &tools.EditorFileChanged{RootID: resolved.Root.ID, Path: revision.Path, BaseSHA256: doc.BaseSHA256, BaseAbsent: doc.BaseSHA256 == "", DiskAbsent: true}
 	if _, disk, err := captureRawRevision(resolved, revision); err == nil {
@@ -94,8 +87,6 @@ func divergedConflict(resolved projectpaths.Resolved, revision toolcontract.Exec
 	return conflict
 }
 
-// fileChangedConflict states the base a document sits on and the file now on
-// disk as the destination's pinned and current revisions.
 func fileChangedConflict(resolved projectpaths.Resolved, changed *tools.EditorFileChanged) *ExecutionRevisionConflict {
 	root, _ := revisionLocation(resolved)
 	revision := func(sha string, absent bool) toolcontract.ExecutionRevision {
