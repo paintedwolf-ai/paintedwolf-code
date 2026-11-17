@@ -391,17 +391,17 @@ func TestGitWorktreeLandBusy(t *testing.T) {
 func TestGitWorktreeLandRefusalsKeepTheirCodes(t *testing.T) {
 	srv, _, projectID := contractfixture.NewWorktreeTestServer(t)
 	for _, tc := range []struct {
-		code  string
+		code  wire.ApiErrorCode
 		block func(*testing.T, string)
 	}{
-		{"worktree_dirty", func(t *testing.T, worktree string) {
+		{wire.ApiErrorCodeWorktreeDirty, func(t *testing.T, worktree string) {
 			testutil.FailErr(t, "dirty", os.WriteFile(filepath.Join(worktree, "d.txt"), []byte("d\n"), 0o644))
 		}},
-		{"worktree_stale", func(t *testing.T, worktree string) {
+		{wire.ApiErrorCodeWorktreeStale, func(t *testing.T, worktree string) {
 			testutil.FailErr(t, "remove", os.RemoveAll(worktree))
 		}},
 	} {
-		t.Run(tc.code, func(t *testing.T) {
+		t.Run(string(tc.code), func(t *testing.T) {
 			sess, _, _ := contractfixture.CreateBoundSession(t, srv, projectID)
 			binding, _, _ := srv.Sources.Workspace.SessionStore.GetWorktreeBinding(t.Context(), sess.ID)
 			tc.block(t, binding.WorktreePath)
