@@ -21,6 +21,7 @@ var (
 		"source_ref",
 		"leg_id",
 		"handle",
+		"tool",
 		"kind",
 		"shape",
 		"role",
