@@ -631,7 +631,7 @@
     "COMMAND_REVISION_CONFLICT": {
       "category": "recoverable",
       "emit": "guard:command_revision_pin",
-      "summary": "{% if paintedwolf.unsaved_draft %}{{ paintedwolf.path }} has unsaved editor changes.{% else %}{% if paintedwolf.revision_change_observed %}{{ paintedwolf.path }} no longer matches its captured revision.{% else %}The captured revision could not be used{% if paintedwolf.path %} at {{ paintedwolf.path }}{% endif %}.{% endif %}{% endif %} Publication at this path was refused."
+      "summary": "{% if paintedwolf.revision_change_observed %}{{ paintedwolf.path }} no longer matches its captured revision.{% else %}The captured revision could not be used{% if paintedwolf.path %} at {{ paintedwolf.path }}{% endif %}.{% endif %} Publication at this path was refused."
     },
     "COMMAND_SYNTAX_INVALID": {
       "branch_instruction": "{% if paintedwolf.diagnostic_top_level %}Resubmit the complete corrected command.{% else %}Inspect completed and uncertain operations before submitting the remaining work.{% endif %}",

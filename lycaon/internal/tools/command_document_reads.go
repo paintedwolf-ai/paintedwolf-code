@@ -5,7 +5,7 @@ import "context"
 type commandReadKey struct{}
 
 // WithCommandReadObserver binds a program-local observation of native file
-// inputs. It records a read for notices, never evidence of model delivery.
+// inputs. It records a read for provenance, never evidence of model delivery.
 func WithCommandReadObserver(ctx context.Context, observer func(context.Context, string, string) error) context.Context {
 	return context.WithValue(ctx, commandReadKey{}, observer)
 }

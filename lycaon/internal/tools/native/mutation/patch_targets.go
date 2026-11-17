@@ -56,7 +56,7 @@ func (o *Owners) CapturePatchTarget(ctx context.Context, tc tools.ToolContext, e
 			continue
 		}
 		checked[abs] = true
-		if err := o.Revisions.CheckUnsavedDraft(ctx, tc, abs, false); err != nil {
+		if err := o.Revisions.SaveDrafts(ctx, tc, abs, false); err != nil {
 			return target, err
 		}
 	}

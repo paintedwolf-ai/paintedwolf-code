@@ -24,9 +24,9 @@ import (
 )
 
 // ExecutionRevisions captures and rechecks the program-specific revisions that
-// native utilities read and publish through. Native reads always capture
-// published disk; destinations with unsaved editor drafts refuse with
-// COMMAND_REVISION_CONFLICT.
+// native utilities read and publish through. A path the person has open with
+// unsaved text reads as that text; a file changed outside its open document
+// refuses with COMMAND_REVISION_CONFLICT.
 type ExecutionRevisions struct {
 	Boundary *sandbox.Boundary
 	Literals *sourcecatalog.LiteralSearch
@@ -45,22 +45,18 @@ type ExecutionSource struct {
 }
 
 // ExecutionRevisionConflict reports that a pinned source or destination moved
-// after capture, or that a destination holds an unsaved editor draft. The
+// after capture, or that a file changed outside its open document. The
 // prepared change is stopped, never refreshed or rerun.
 type ExecutionRevisionConflict struct {
-	rejectOnce   sync.Once
-	reject       *toolrejection.ToolReject
-	Path         string
-	Pinned       toolcontract.ExecutionRevision
-	Current      toolcontract.ExecutionRevision
-	UnsavedDraft bool
-	Cause        error
+	rejectOnce sync.Once
+	reject     *toolrejection.ToolReject
+	Path       string
+	Pinned     toolcontract.ExecutionRevision
+	Current    toolcontract.ExecutionRevision
+	Cause      error
 }
 
 func (c *ExecutionRevisionConflict) Error() string {
-	if c.UnsavedDraft {
-		return fmt.Sprintf("program destination %s has unsaved changes in the editor", c.Path)
-	}
 	return fmt.Sprintf("program %s %s changed since it was captured", c.Pinned.Role, c.Path)
 }
 
@@ -69,9 +65,6 @@ func (c *ExecutionRevisionConflict) Unwrap() []error {
 		data := map[string]any{"path": c.Path}
 		if expected, observed := c.Pinned.Identity(), c.Current.Identity(); expected != "" && observed != "" && expected != observed {
 			data["expected_revision"], data["observed_revision"] = expected, observed
-		}
-		if c.UnsavedDraft {
-			data["unsaved_draft"] = true
 		}
 		c.reject = &toolrejection.ToolReject{Code: "COMMAND_REVISION_CONFLICT", Data: data}
 	})
@@ -205,11 +198,11 @@ func (e ExecutionRevisions) Verify(ctx context.Context, tctx tools.ToolContext, 
 		} else {
 			_, current, err = captureDestinationRevision(ctx, tctx, resolved)
 		}
+		var changed *ExecutionRevisionConflict
+		if errors.As(err, &changed) {
+			return changed
+		}
 		if errors.Is(err, fs.ErrNotExist) || toolrejection.AsToolReject(err) != nil {
-			var draftConflict *ExecutionRevisionConflict
-			if errors.As(err, &draftConflict) {
-				return draftConflict
-			}
 			return &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: pin, Cause: err}
 		}
 		if err != nil {
@@ -220,18 +213,6 @@ func (e ExecutionRevisions) Verify(ctx context.Context, tctx tools.ToolContext, 
 		}
 	}
 	return nil
-}
-
-func unsavedDraftConflict(resolved projectpaths.Resolved, doc tools.EditorDocumentState) *ExecutionRevisionConflict {
-	root, rel := revisionLocation(resolved)
-
-	pinned := toolcontract.ExecutionRevision{Role: toolcontract.DestinationRevision, Mode: toolcontract.PublishedDiskRevision, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel, DiskSHA256: doc.BaseSHA256, ContentSHA256: doc.BaseSHA256}
-	if doc.Absent || doc.BaseSHA256 == "" {
-		pinned.Mode = toolcontract.AbsentRevision
-
-	}
-	current := toolcontract.ExecutionRevision{Role: toolcontract.DestinationRevision, Mode: toolcontract.AcceptedDocumentRevision, Basis: toolcontract.CapturedRevision, RootID: root, Path: rel, DocumentID: doc.ID, DocumentRevision: doc.Revision, DiskSHA256: doc.BaseSHA256, ContentSHA256: ""}
-	return &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: pinned, Current: current, UnsavedDraft: true}
 }
 
 func captureDestinationRevision(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved) (sourceview.Text, toolcontract.ExecutionRevision, error) {
@@ -259,8 +240,9 @@ func captureDestinationRevision(ctx context.Context, tctx tools.ToolContext, res
 	if err != nil {
 		return sourceview.Text{}, toolcontract.ExecutionRevision{}, err
 	}
-	if st.Editor != nil && (st.Editor.Dirty || st.Editor.Diverged) {
-		return sourceview.Text{}, toolcontract.ExecutionRevision{}, unsavedDraftConflict(resolved, tools.EditorDocumentState{ID: st.Editor.ID, RootID: resolved.Root.ID, Path: resolved.ScopeRel, Revision: st.Editor.Revision, BaseSHA256: st.Editor.BaseSHA256, Absent: st.Editor.Absent})
+	// A draft held over a file changed outside it cannot be written over.
+	if st.Editor != nil && st.Editor.Diverged {
+		return sourceview.Text{}, toolcontract.ExecutionRevision{}, divergedConflict(resolved, revision, st.Editor)
 	}
 	revision.ContentSHA256, revision.ContentBytes = textfile.SHA256([]byte(st.Content)), int64(len(st.Content))
 	if st.Editor != nil {

@@ -26,9 +26,10 @@ type ExecutionPin struct {
 
 // ExecutionConflict names the pinned and current states of one document.
 type ExecutionConflict struct {
-	DocumentID string
-	Pinned     ExecutionPin
-	Current    ExecutionPin
+	DocumentID   string
+	RootID, Path string
+	Pinned       ExecutionPin
+	Current      ExecutionPin
 }
 
 func (e *ExecutionConflict) Error() string {
@@ -55,7 +56,7 @@ func (s *Service) admitExecutionPin(ctx context.Context, d *Document, in AgentEd
 		current.DiskSHA256 = ""
 	}
 	if current.Revision < in.Pin.Revision || d.Diverged {
-		return &ExecutionConflict{DocumentID: d.ID, Pinned: *in.Pin, Current: current}
+		return &ExecutionConflict{DocumentID: d.ID, RootID: d.RootID, Path: d.Path, Pinned: *in.Pin, Current: current}
 	}
 	p, err := s.projectBranch(ctx, d.ProjectID, d.BranchID)
 	if err != nil {
@@ -72,7 +73,7 @@ func (s *Service) admitExecutionPin(ctx context.Context, d *Document, in AgentEd
 		disk.Absent, disk.DiskSHA256 = false, read.SHA256
 	}
 	if disk.Absent != current.Absent || disk.DiskSHA256 != current.DiskSHA256 {
-		return &ExecutionConflict{DocumentID: d.ID, Pinned: *in.Pin, Current: disk}
+		return &ExecutionConflict{DocumentID: d.ID, RootID: d.RootID, Path: d.Path, Pinned: *in.Pin, Current: disk}
 	}
 	return nil
 }

@@ -112,7 +112,7 @@ func (inv *invocation) bind(operand string, write bool) (projectpaths.BoundPath,
 		return projectpaths.BoundPath{}, inv.usage(operand, "a filesystem path, not the null device")
 	}
 	if write {
-		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, bound.Resolved.Abs, false); err != nil {
+		if err := inv.owners.Revisions.SaveDrafts(inv.ctx, inv.tc, bound.Resolved.Abs, false); err != nil {
 			return projectpaths.BoundPath{}, err
 		}
 	}
@@ -224,7 +224,7 @@ func (inv *invocation) destinationEntry(dest string, source string, many bool) (
 	info, statErr := os.Stat(bound.Resolved.Abs)
 	if statErr == nil && info.IsDir() {
 		target := filepath.Join(bound.Resolved.Abs, filepath.Base(source))
-		if err := inv.owners.Revisions.CheckUnsavedDraft(inv.ctx, inv.tc, target, true); err != nil {
+		if err := inv.owners.Revisions.SaveDrafts(inv.ctx, inv.tc, target, true); err != nil {
 			return "", err
 		}
 		return target, nil

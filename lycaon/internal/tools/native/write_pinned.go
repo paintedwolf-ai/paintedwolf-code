@@ -132,7 +132,9 @@ func landPinnedText(ctx context.Context, tctx tools.ToolContext, resolved projec
 	if err := admitSources(); err != nil {
 		return landing{}, err
 	}
-	edit.ReviewedRevision = pin.DocumentRevision
+	// The review fences the revision it previewed; typing after the capture is
+	// already anchored in that preview.
+	edit.ReviewedRevision = preview.Before.Revision
 	applied, err := documents.ApplyAgentEdit(ctx, tctx.Identity.ProjectID, edit)
 	if err != nil {
 		return landing{}, err

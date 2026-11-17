@@ -27,12 +27,9 @@ type ProgramJobSpec struct {
 	Run           func(ctx context.Context, stdout, stderr io.Writer) (ProgramJobResult, error)
 }
 
-// ProgramJobResult carries host notice facts separately from command bytes.
-// The producing program collects them before releasing its lifetime hold.
+// ProgramJobResult is a native job's settled status.
 type ProgramJobResult struct {
-	ExitCode             int
-	UnsavedDocumentPaths []string
-	ReleaseNotices       func()
+	ExitCode int
 }
 
 // StartProgram registers a native job beside pipeline jobs under the same
@@ -95,8 +92,6 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 		cancel()
 		r.jobs.mu.Lock()
 		proc.running, proc.hasExit, proc.exitCode = false, true, exitCode
-		proc.resources.unsavedDocumentPaths = settled.UnsavedDocumentPaths
-		proc.resources.releaseNotices = settled.ReleaseNotices
 		proc.Stages[0].ExitCode, proc.Stages[0].Failed = &exitCode, exitCode != 0
 		proc.failure = hostcmd.ExecFailureOf(err)
 		proc.finishedAt = time.Now().UTC()

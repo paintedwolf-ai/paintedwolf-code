@@ -88,5 +88,5 @@ func (s *Service) fileChangedOutside(p *project.Project, d *Document) error {
 	default:
 		observed.Absent, observed.DiskSHA256 = false, read.SHA256
 	}
-	return &ExecutionConflict{DocumentID: d.ID, Pinned: pinned, Current: observed}
+	return &ExecutionConflict{DocumentID: d.ID, RootID: d.RootID, Path: d.Path, Pinned: pinned, Current: observed}
 }
