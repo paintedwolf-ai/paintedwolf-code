@@ -195,7 +195,7 @@ func TestParkedProgramInterruptions(t *testing.T) {
 		}},
 		{name: "replacement wait", end: func(t *testing.T, f *parkFixture) {
 			reg := tools.NewDefaultRegistry()
-			testutil.FailErr(t, "register wait", RegisterWaitTool(reg, f.loop.Subscriptions, WaitToolDeps{Store: f.store}))
+			testutil.FailErr(t, "register wait", RegisterWaitTool(reg, f.loop.Subscriptions, WaitToolDeps{Store: f.store, WorkerKnown: func(context.Context, string, string) bool { return true }}))
 			_, err := reg.Run(t.Context(), "wait", map[string]any{"timeout_ms": 60_000},
 				tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: parkSession, ProjectID: testdbseed.DefaultProjectID, ToolCallID: "wait-1", Agent: orchestration.ProfileCoordinator}})
 			testutil.FailErr(t, "replace the wait", err)

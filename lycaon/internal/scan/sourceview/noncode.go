@@ -6,10 +6,11 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lycaon/lycaon/internal/filekind"
-	"github.com/lycaon/lycaon/internal/tsparse"
 	"github.com/odvcencio/gotreesitter"
 	"github.com/odvcencio/gotreesitter/grammars"
+
+	"github.com/lycaon/lycaon/internal/filekind"
+	"github.com/lycaon/lycaon/internal/tsparse"
 )
 
 // NonCode identifies comment and literal spans from complete parses.
@@ -103,12 +104,6 @@ func hasSourceRecovery(node *gotreesitter.Node) bool {
 		}
 	}
 	return false
-}
-
-// Contains uses one-based line and byte-column coordinates.
-func (c *NonCode) Contains(line, column int) bool {
-	offset, ok := c.offset(line, column)
-	return ok && c.nonCodeAt(offset)
 }
 
 // CoversSpan suppresses only a complete match contained in non-executable text.

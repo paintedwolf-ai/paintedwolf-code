@@ -3,6 +3,7 @@ package httpaction
 import (
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"net/http"
@@ -123,8 +124,8 @@ func TestHTTPRequestReportsExchangeProvenanceForExternalAndLocalRequests(t *test
 		t.Fatalf("register http_request: %v", err)
 	}
 
-	var externalObs []ExchangeProvenance
-	extCtx := WithExchangeProvenanceObserver(t.Context(), func(p ExchangeProvenance) {
+	var externalObs []evidence.ExchangeProvenance
+	extCtx := evidence.WithExchangeProvenanceObserver(t.Context(), func(p evidence.ExchangeProvenance) {
 		externalObs = append(externalObs, p)
 	})
 	if _, err := registry.Run(extCtx, "http_request", map[string]any{
@@ -139,8 +140,8 @@ func TestHTTPRequestReportsExchangeProvenanceForExternalAndLocalRequests(t *test
 		t.Fatalf("external provenance = %+v, want External=true WrittenFiles=[tmp/external.json] ObservedURLs containing %s", externalObs, externalURL)
 	}
 
-	var localObs []ExchangeProvenance
-	localCtx := WithExchangeProvenanceObserver(t.Context(), func(p ExchangeProvenance) {
+	var localObs []evidence.ExchangeProvenance
+	localCtx := evidence.WithExchangeProvenanceObserver(t.Context(), func(p evidence.ExchangeProvenance) {
 		localObs = append(localObs, p)
 	})
 	if _, err := registry.Run(localCtx, "http_request", map[string]any{

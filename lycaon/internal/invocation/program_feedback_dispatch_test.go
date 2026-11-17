@@ -25,7 +25,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -45,12 +44,6 @@ type dispatchProgress struct{ content string }
 
 func (p dispatchProgress) ProgramProgressState(_ context.Context, id string) (progress.PrerequisiteState, error) {
 	return progress.PrerequisiteState{SessionID: id, RootSessionID: id, Content: p.content}, nil
-}
-
-type validatedEnvelope struct{ catalog string }
-
-func (v validatedEnvelope) ValidatedProgramIdentity(context.Context) (string, string, error) {
-	return strings.Repeat("a", 64), v.catalog, nil
 }
 
 type feedbackForbiddenStart struct{ called bool }
@@ -86,7 +79,7 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	f := newProgramReceiptFixture(t)
 	write := f.childFor(t, "write")
 	f.start(t, write)
-	testutil.FailErr(t, "record stated earlier completed effect", f.recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted}, OwnerInvoked: true, DetailReference: "output:earlier-effect"}))
+	testutil.FailErr(t, "record stated earlier completed effect", f.recorder.SettleChild(t.Context(), write.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted}, OwnerInvoked: true, DetailReference: "output:earlier-effect"}))
 	read := f.childFor(t, "read")
 	tc := tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: f.session, ToolCallID: "actual-model-call", Agent: "fixture"}}
 	parent := read.Invocation()
@@ -121,8 +114,8 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	if _, rendered := guidance.RefusalFromError(cause); rendered {
 		t.Fatal("policy rendered before recorder settlement")
 	}
-	testutil.FailErr(t, "settle actual policy-stopped child", f.recorder.SettleChild(t.Context(), read.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: result.Producer, DetailReference: "output:policy-stop"}))
-	testutil.FailErr(t, "settle stopped program", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "rejected", StopCode: code, DetailReference: "output:program-stop"}))
+	testutil.FailErr(t, "settle actual policy-stopped child", f.recorder.SettleChild(t.Context(), read.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: result.Producer, DetailReference: "output:policy-stop"}))
+	testutil.FailErr(t, "settle stopped program", f.recorder.SettleProgram(t.Context(), f.program, toolcontract.ProgramSettlement{State: "rejected", StopCode: code, DetailReference: "output:program-stop"}))
 	prepared, err := toolexecution.PrepareProgramFailure(t.Context(), frame, f.recorder, memory, diagnosticScreen(f), tc, read, cause)
 	testutil.FailErr(t, "prepare settled policy feedback", err)
 	defer prepared.Close()
@@ -140,42 +133,6 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	frame.Close()
 	if memory.InUse().State != 0 {
 		t.Fatal("settled policy feedback leaked captured frame or SQL leases")
-	}
-}
-
-func TestProgramProgressEnvelopeRefusalFeedbackThroughRealEntry(t *testing.T) {
-	f := newProgramReceiptFixture(t)
-	schemaDir := filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas")
-	schemas, err := toolschema.LoadSchemaDir(schemaDir)
-	testutil.FailErr(t, "load schemas", err)
-	registry, err := tools.NewCatalogRegistry(schemas)
-	testutil.FailErr(t, "catalog registry", err)
-	testutil.FailErr(t, "register update_progress", registry.Register("update_progress", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
-		return "", errors.New("unexpected json handler call")
-	}))
-	executor := toolexecution.NewExecutor(nil, registry, "fixture")
-	executor.Rejections.SetBlockPlane(stockFeedbackBlockPlane(t))
-	tc := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "fixture", SessionID: f.session, ToolCallID: "actual-model-call"}}
-	parent := toolcontract.OperationInvocation{Kind: toolcontract.ProgramChildInvocation, Identity: toolcontract.ExecutionIdentity{ProgramID: f.program, NodeID: "cat-node", ExecutionID: f.root}, ActorID: "fixture-person", SessionID: f.session, Scope: toolcontract.OperationScope{Kind: toolcontract.SessionOperationScope}, SourceUnitID: "submitted", Span: f.span, CatalogDigest: toolcontract.LanguageCatalogDigest()}
-	memory := feedbackMemory(t, 64<<20)
-	frame, err := toolexecution.FreezeProgramFrame(t.Context(), parent, tc, toolexecution.ProgramModelInvocation{ToolName: "command", Arguments: map[string]any{"command": "${op} arg"}}, memory)
-	testutil.FailErr(t, "freeze frame", err)
-	defer frame.Close()
-	proof := validatedEnvelope{catalog: parent.CatalogDigest}
-	update := &toolexecution.ProgramProgressUpdate{ExecutionID: "progress-exec-1", Arguments: map[string]any{"content": "- [ ] outer\n  - [ ] nested"}}
-	_, envErr := executor.PrepareProgramEnvelope(t.Context(), frame, proof, update, memory, tc)
-	reject := toolrejection.AsToolReject(envErr)
-	if reject == nil {
-		t.Fatalf("expected typed progress owner reject, got %v", envErr)
-	}
-	testutil.FailErr(t, "record progress refusal", f.recorder.RecordProgressRefusal(t.Context(), f.program, "output:progress-refused"))
-	testutil.FailErr(t, "settle program on progress refusal", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: "rejected", StopCode: reject.Code, DetailReference: "output:program-progress-refused"}))
-	prepared, err := toolexecution.PrepareProgramProgressFailure(t.Context(), f.recorder, memory, diagnosticScreen(f), frame, tc, envErr)
-	testutil.FailErr(t, "prepare progress failure feedback", err)
-	defer prepared.Close()
-	rendered := executor.Rejections.RenderProgramFailure(t.Context(), frame, tc, prepared)
-	if _, ok := guidance.RefusalFromError(rendered); !ok || prepared.Rejection.Data["program_progress_state"] != "rejected" || prepared.Rejection.Data["program_replay_available"] != true {
-		t.Fatalf("progress failure feedback lost state or replay: %v %+v", rendered, prepared.Rejection.Data)
 	}
 }
 
@@ -214,8 +171,8 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 
 	assertRenderedFeedback := func(t *testing.T, f programReceiptFixture, bound toolcontract.BoundOperation, res toolexecution.NativeInvocationResult, invokeErr error, executor *toolexecution.Executor, frame toolexecution.ProgramFrame, tc tools.ToolContext, memory *toolcontract.ProgramMemory, state, wantCode string) (*guidance.Refusal, string) {
 		t.Helper()
-		testutil.FailErr(t, "settle child", f.recorder.SettleChild(t.Context(), bound.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: res.Producer, OwnerInvoked: res.OwnerInvoked, DetailReference: "output:child"}))
-		testutil.FailErr(t, "settle program", f.recorder.SettleProgram(t.Context(), f.program, invocation.ProgramSettlement{State: state, StopCode: wantCode, DetailReference: "output:program"}))
+		testutil.FailErr(t, "settle child", f.recorder.SettleChild(t.Context(), bound.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: res.Producer, OwnerInvoked: res.OwnerInvoked, DetailReference: "output:child"}))
+		testutil.FailErr(t, "settle program", f.recorder.SettleProgram(t.Context(), f.program, toolcontract.ProgramSettlement{State: state, StopCode: wantCode, DetailReference: "output:program"}))
 		prepared, err := toolexecution.PrepareProgramFailure(t.Context(), frame, f.recorder, memory, diagnosticScreen(f), tc, bound, invokeErr)
 		testutil.FailErr(t, "prepare program failure", err)
 		t.Cleanup(prepared.Close)
@@ -276,7 +233,7 @@ func TestProgramNativeDispatchRealEntryFixtures(t *testing.T) {
 		return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectCompleted, Evidence: toolcontract.OperationEvidence{Owner: "filesystem", Kind: "journal", OwnerRef: "journal:w5", RecoveryRef: "journal:w5"}}, nil
 	})
 	testutil.FailErr(t, "completed write", errW)
-	testutil.FailErr(t, "settle completed write", f5.recorder.SettleChild(t.Context(), w5.Invocation().Identity.ExecutionID, invocation.ChildSettlement{Result: resW.Producer, OwnerInvoked: resW.OwnerInvoked, DetailReference: "output:w5", AcceptedRevision: "rev2", PublishedRevision: "rev2"}))
+	testutil.FailErr(t, "settle completed write", f5.recorder.SettleChild(t.Context(), w5.Invocation().Identity.ExecutionID, toolcontract.ProgramChildSettlement{Result: resW.Producer, OwnerInvoked: resW.OwnerInvoked, DetailReference: "output:w5", AcceptedRevision: "rev2", PublishedRevision: "rev2"}))
 	h5 := f5.childFor(t, "http_request")
 	resH, exH, frH, tcH, memH, errH := runNative(t, f5, "fixture", h5.Effects(), h5, []string{"curl", "input"}, nil, func(context.Context, tools.ToolContext) (toolcontract.ProducerResult, error) {
 		return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, StopCode: toolrejection.ToolOwnerFailedCode, EffectCertainty: toolcontract.EffectUnknown}, &toolrejection.ToolReject{Code: toolrejection.ToolOwnerFailedCode, Data: map[string]any{"reason": "transport dropped"}}

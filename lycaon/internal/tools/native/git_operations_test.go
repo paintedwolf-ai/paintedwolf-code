@@ -2,18 +2,18 @@ package native
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/toolrejection"
 
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -36,7 +36,8 @@ func TestGitCheckoutReviewsInstructionFilesBeforeChangingBranch(t *testing.T) {
 	testutil.FailErr(t, "change policy", os.WriteFile(path, []byte("second\n"), 0o644))
 	gittest.Run(t, dir, "add", "--", "content/sdk/agents.md")
 	gittest.Run(t, dir, "commit", "-m", "Feature")
-	tool := GitOperationTool{Git: git.NewManager(), Boundary: nativefixture.Boundary(t), Kind: "checkout"}
+	mutations := GitMutations{Git: git.NewManager(), Boundary: nativefixture.Boundary(t)}
+	checkout := git.OperationRequest{Kind: "checkout", Branch: "main"}
 	tc := nativefixture.Context(dir)
 	refused := errors.New("review declined")
 	reviewed := false
@@ -47,7 +48,7 @@ func TestGitCheckoutReviewsInstructionFilesBeforeChangingBranch(t *testing.T) {
 		}
 		return refused
 	}
-	_, err := tool.Run(t.Context(), map[string]any{"branch": "main"}, tc)
+	_, err := mutations.Operate(t.Context(), tc, checkout)
 	if !reviewed || !errors.Is(err, refused) {
 		t.Fatalf("approval did not protect checkout: %v reviewed=%v", err, reviewed)
 	}
@@ -55,7 +56,7 @@ func TestGitCheckoutReviewsInstructionFilesBeforeChangingBranch(t *testing.T) {
 		t.Fatalf("branch changed before approval: %q", branch)
 	}
 	tc.Files.FileChangeReview = func(context.Context, []tools.FileChange) error { return nil }
-	_, err = tool.Run(t.Context(), map[string]any{"branch": "main"}, tc)
+	_, err = mutations.Operate(t.Context(), tc, checkout)
 	testutil.FailErr(t, "approved checkout", err)
 	if branch := gittest.Run(t, dir, "branch", "--show-current"); branch != "main\n" {
 		t.Fatalf("checkout did not finish: %q", branch)
@@ -66,23 +67,6 @@ type partialOperationGit struct{ git.GitManager }
 
 func (partialOperationGit) Operate(context.Context, string, git.OperationRequest) (git.OperationResult, error) {
 	return git.OperationResult{Status: "conflicts", Attempted: true, AfterObserved: true, After: git.RepositoryState{MergeHead: "retained-merge", Conflicts: []string{"file.txt"}}, Paths: []string{"file.txt"}}, nil
-}
-
-func TestGitPartialOperationKeepsStateAndRaisesPolicyOccurrence(t *testing.T) {
-	tool := GitOperationTool{Git: partialOperationGit{}, Boundary: nativefixture.Boundary(t), Kind: "merge"}
-	out, err := tool.Run(t.Context(), map[string]any{}, nativefixture.Context(t.TempDir()))
-	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "GIT_OPERATION_FAILED" {
-		t.Fatalf("partial operation lost failure occurrence: %v", err)
-	}
-	var result git.OperationResult
-	testutil.FailErr(t, "decode retained partial state", json.Unmarshal([]byte(out), &result))
-	if !result.Attempted || result.After.MergeHead != "retained-merge" || len(result.After.Conflicts) != 1 {
-		t.Fatalf("partial state lost: %+v", result)
-	}
-	if reject.Data["git_merge_active"] != true || reject.Data["git_after_observed"] != true {
-		t.Fatalf("recovery lacks observed state: %#v", reject.Data)
-	}
 }
 
 func TestGitMutationAdmitsRootBeforePathlessOrDotOperations(t *testing.T) {
@@ -168,15 +152,14 @@ func verifyWorkerWriteLegGitTools(t *testing.T, adapter string) {
 	gitMgr := git.NewManager()
 
 	writeViewFile("README.md", "hello worker\n")
-	runOp := func(kind string, args map[string]any) string {
+	mutations := GitMutations{Git: gitMgr, Boundary: boundary, PrivateGit: mgr}
+	runOp := func(req git.OperationRequest) {
 		t.Helper()
-		tool := GitOperationTool{Git: gitMgr, Boundary: boundary, PrivateGit: mgr, Kind: kind}
-		out, opErr := tool.Run(t.Context(), args, tc)
-		testutil.FailErr(t, "git_"+kind, opErr)
-		return out
+		_, opErr := mutations.Operate(t.Context(), tc, req)
+		testutil.FailErr(t, "git "+req.Kind, opErr)
 	}
 
-	runOp("checkout", map[string]any{"branch": "worker-feature", "create": true})
+	runOp(git.OperationRequest{Kind: "checkout", Branch: "worker-feature", Create: true})
 	if out := gittest.Run(t, wtDir, "branch", "--show-current"); strings.TrimSpace(out) != "worker-feature" {
 		t.Fatalf("checkout did not reach the view's repository: %q", out)
 	}
@@ -184,59 +167,37 @@ func verifyWorkerWriteLegGitTools(t *testing.T, adapter string) {
 		t.Fatalf("view repository missing worker edit: %s", out)
 	}
 
-	runOp("stash", map[string]any{"action": "save", "message": "wip-stash", "paths": []any{"README.md"}})
+	runOp(git.OperationRequest{Kind: "stash", Action: "save", Message: "wip-stash", Paths: []string{"README.md"}})
 	if out := gittest.Run(t, wtDir, "stash", "list"); !strings.Contains(out, "wip-stash") {
 		t.Fatalf("stash list missing entry: %s", out)
 	}
-	runOp("stash", map[string]any{"action": "apply", "ref": "stash@{0}"})
-	runOp("stash", map[string]any{"action": "drop", "ref": "stash@{0}"})
+	runOp(git.OperationRequest{Kind: "stash", Action: "apply", Ref: "stash@{0}"})
+	runOp(git.OperationRequest{Kind: "stash", Action: "drop", Ref: "stash@{0}"})
 
-	verifyIntrospectionCommitAndRestoreTools(t, tc, gitMgr, boundary, writeViewFile)
+	verifyCommitAndRestore(t, tc, mutations, writeViewFile)
 
 	if gotTrunkHead := strings.TrimSpace(gittest.Run(t, trunkDir, "rev-parse", "HEAD")); gotTrunkHead != trunkHead {
 		t.Fatalf("trunk HEAD mutated by worker write leg: got %s, want %s", gotTrunkHead, trunkHead)
 	}
 }
 
-func verifyIntrospectionCommitAndRestoreTools(
-	t *testing.T,
-	tc tools.ToolContext,
-	gitMgr git.GitManager,
-	boundary *sandbox.Boundary,
-	writeViewFile func(string, string),
-) {
+func verifyCommitAndRestore(t *testing.T, tc tools.ToolContext, mutations GitMutations, writeViewFile func(string, string)) {
 	t.Helper()
-	writeViewFile("README.md", "introspection commit line\n")
-	commitTool := &GitCommitTool{Git: gitMgr, Boundary: boundary}
-	commitOut, err := commitTool.Run(t.Context(), map[string]any{
-		"message": "introspection tool commit",
-		"paths":   []any{"README.md"},
-	}, tc)
-	testutil.FailErr(t, "GitCommitTool.Run", err)
-	if !strings.Contains(commitOut, "README.md") {
-		t.Fatalf("expected README.md in GitCommitTool output: %s", commitOut)
+	writeViewFile("README.md", "worker commit line\n")
+	_, staging, err := mutations.Commit(t.Context(), tc, GitCommitRequest{Message: "worker commit", Paths: []string{"README.md"}})
+	testutil.FailErr(t, "commit", err)
+	if !slices.Contains(staging.Paths, "README.md") {
+		t.Fatalf("committed paths = %v, want README.md", staging.Paths)
 	}
-
-	showTool := &GitShowTool{Git: gitMgr, Boundary: boundary}
-	showOut, err := showTool.Run(t.Context(), map[string]any{"ref": "HEAD", "path": "README.md"}, tc)
-	testutil.FailErr(t, "GitShowTool.Run", err)
-	if !strings.Contains(showOut, "introspection commit line") {
-		t.Fatalf("expected committed line in GitShowTool output: %s", showOut)
-	}
-
-	blameTool := &GitBlameTool{Git: gitMgr, Boundary: boundary}
-	blameOut, err := blameTool.Run(t.Context(), map[string]any{"path": "README.md"}, tc)
-	testutil.FailErr(t, "GitBlameTool.Run", err)
-	if !strings.Contains(blameOut, "introspection commit line") {
-		t.Fatalf("expected committed line in GitBlameTool output: %s", blameOut)
+	if got := gittest.Run(t, tc.Source.WorkerBranchRoot, "show", "HEAD:README.md"); got != "worker commit line\n" {
+		t.Fatalf("committed README.md = %q", got)
 	}
 
 	writeViewFile("README.md", "dirty before restore\n")
-	restoreTool := &GitRestoreTool{Git: gitMgr, Boundary: boundary}
-	restoreOut, err := restoreTool.Run(t.Context(), map[string]any{"paths": []any{"README.md"}}, tc)
-	testutil.FailErr(t, "GitRestoreTool.Run", err)
-	if !strings.Contains(restoreOut, "README.md") {
-		t.Fatalf("expected README.md in GitRestoreTool output: %s", restoreOut)
+	restored, err := mutations.Restore(t.Context(), tc, git.GitRestoreOpts{Paths: []string{"README.md"}})
+	testutil.FailErr(t, "restore", err)
+	if !slices.Contains(restored, "README.md") {
+		t.Fatalf("restored paths = %v, want README.md", restored)
 	}
 }
 
@@ -251,8 +212,7 @@ func TestWorkerGitRejectsUnbranchedWriteLegAndBlocksNativeGitInternalsWrite(t *t
 	testutil.FailErr(t, "new privategit manager", err)
 	refused := func(name string, tc tools.ToolContext) {
 		t.Helper()
-		opTool := GitOperationTool{Git: git.NewManager(), Boundary: nativefixture.Boundary(t), PrivateGit: mgr, Kind: "checkout"}
-		_, opErr := opTool.Run(t.Context(), map[string]any{"branch": "main"}, tc)
+		_, opErr := GitMutations{Git: git.NewManager(), Boundary: nativefixture.Boundary(t), PrivateGit: mgr}.Operate(t.Context(), tc, git.OperationRequest{Kind: "checkout", Branch: "main"})
 		var reject *toolrejection.ToolReject
 		if !errors.As(opErr, &reject) || reject.Code != "GIT_OPERATION_PRECONDITION" {
 			t.Fatalf("%s: expected GIT_OPERATION_PRECONDITION, got %v", name, opErr)

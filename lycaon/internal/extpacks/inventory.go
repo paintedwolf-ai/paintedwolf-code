@@ -84,20 +84,6 @@ const (
 	ScopeDeviceOnly
 )
 
-// String returns the stable wire / docs token for a project-scope class.
-func (c ProjectScopeClass) String() string {
-	switch c {
-	case ScopeShared:
-		return "shared"
-	case ScopeAdditive:
-		return "additive"
-	case ScopeDeviceOnly:
-		return "device_only"
-	default:
-		return ""
-	}
-}
-
 // Every inventory root has one project-scope class.
 var projectScopeByKind = map[string]ProjectScopeClass{
 	"workflows": ScopeShared,
@@ -141,8 +127,8 @@ func ProjectDisableAllowed(kindRoot string, deviceResolved bool) bool {
 	return class == ScopeShared || (class == ScopeAdditive && !deviceResolved)
 }
 
-// kindRootForRel returns the longest matching inventory root.
-func kindRootForRel(rel string) string {
+// KindRootForUnitID returns the matching inventory root, or empty for unknown roots.
+func KindRootForUnitID(rel string) string {
 	rel = strings.TrimPrefix(filepath.ToSlash(strings.TrimSpace(rel)), "/")
 	best := ""
 	for _, root := range inventoryKindRoots {
@@ -156,21 +142,13 @@ func kindRootForRel(rel string) string {
 	return best
 }
 
-// KindRootForUnitID returns the matching inventory root, or empty for unknown roots.
-func KindRootForUnitID(unitID string) string { return kindRootForRel(unitID) }
-
-// UnitKindRoots returns the inventoried pack roots.
-func UnitKindRoots() []string {
-	return append([]string(nil), inventoryKindRoots...)
-}
-
 // Inventory roots distinguish unit ids from pack ids in disable lists.
 func isUnitID(id string) bool {
 	id = strings.TrimSpace(id)
 	if !strings.Contains(id, "/") {
 		return false
 	}
-	return kindRootForRel(id) != ""
+	return KindRootForUnitID(id) != ""
 }
 
 // InventoryPack assigns stable unit ids across a pack tree.
@@ -329,7 +307,7 @@ func UnitIDFor(packID, rel string) string {
 		return ""
 	}
 	parts := strings.Split(rel, "/")
-	kindRoot := kindRootForRel(rel)
+	kindRoot := KindRootForUnitID(rel)
 	if ProviderScoped(kindRoot) && strings.TrimSpace(packID) == "" {
 		return ""
 	}

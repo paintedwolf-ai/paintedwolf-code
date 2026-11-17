@@ -2,21 +2,15 @@
 package approvalregistry
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/lycaon/lycaon/config"
-	"github.com/lycaon/lycaon/internal/extpacks"
 	"gopkg.in/yaml.v3"
-)
 
-// DefaultDir is the platform pack approval registry, for callers that load that
-// one directory rather than the ListEffective union of pack approvals/ dirs.
-const DefaultDir = config.PlatformApprovals
+	"github.com/lycaon/lycaon/internal/extpacks"
+)
 
 // ExplainManifestName is the filename inside each approvals/<KEY>/ feature dir.
 const ExplainManifestName = "explain.yaml"
@@ -86,79 +80,12 @@ func approvalKeyForUnitID(id string) (string, bool) {
 	return parts[1], true
 }
 
-// List reads and validates all explain.yaml files under dir — a bundled pack
-// directory or a host directory (a project overlay).
-func List(dir extpacks.Source) ([]Entry, error) {
-	info, err := dir.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if !info.IsDir() {
-		return nil, fmt.Errorf("%s: approval registry path must be a directory", dir)
-	}
-	names, err := dir.List()
-	if err != nil {
-		return nil, err
-	}
-	seen := map[string]bool{}
-	var out []Entry
-	for _, ent := range names {
-		if !ent.IsDir() {
-			continue
-		}
-		path := dir.Join(ent.Name(), ExplainManifestName)
-		data, err := path.Read()
-		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
-				continue
-			}
-			return nil, err
-		}
-		key, err := keyFromFile(path, ent.Name(), data)
-		if err != nil {
-			return nil, err
-		}
-		if key != ent.Name() {
-			return nil, fmt.Errorf("%s: directory name must match explanation key %q", path, key)
-		}
-		if seen[key] {
-			return nil, fmt.Errorf("%s: duplicate explanation key %q", path, key)
-		}
-		seen[key] = true
-		out = append(out, Entry{Key: key, Path: path, Data: data})
-	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("%s: no approval explanation entries found", dir)
-	}
-	return out, nil
-}
-
 // WriteFile writes body to path with mode 0600.
 func WriteFile(path string, body []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o750); err != nil {
 		return err
 	}
 	return os.WriteFile(path, body, 0o600) // #nosec G306 -- config artifact in repo
-}
-
-// Prune removes feature dirs not listed in keepKeys.
-func Prune(dir string, keepKeys map[string]bool) error {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-	for _, ent := range entries {
-		if !ent.IsDir() {
-			continue
-		}
-		if keepKeys[ent.Name()] {
-			continue
-		}
-		if err := os.RemoveAll(filepath.Join(dir, ent.Name())); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func keyFromFile(path extpacks.Source, dirname string, data []byte) (string, error) {

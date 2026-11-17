@@ -530,8 +530,6 @@ host_facts:
    type: bool
  - name: paintedwolf.mime
    type: string
- - name: paintedwolf.worker_budget_at_max
-   type: bool
  - name: paintedwolf.search_provider_statuses
    type: list<string>
  - name: paintedwolf.period_max_year
@@ -782,6 +780,26 @@ host_facts:
    type: string
  - name: paintedwolf.grounding_reason
    type: string
+ - name: paintedwolf.closeout_unstarted
+   type: bool
+ - name: paintedwolf.closeout_round_active
+   type: bool
+ - name: paintedwolf.closeout_round_incomplete
+   type: bool
+ - name: paintedwolf.closeout_criteria_unmet
+   type: bool
+ - name: paintedwolf.closeout_changes_pending
+   type: bool
+ - name: paintedwolf.closeout_changes_shelved
+   type: bool
+ - name: paintedwolf.closeout_changes_rejected
+   type: bool
+ - name: paintedwolf.closeout_scan_pending
+   type: bool
+ - name: paintedwolf.closeout_scan_failed
+   type: bool
+ - name: paintedwolf.unmet_criteria
+   type: list<string>
  - name: paintedwolf.missing_paths
    type: list<string>
  - name: paintedwolf.can_request_tools
@@ -794,8 +812,6 @@ host_facts:
    type: bool
  - name: paintedwolf.tool_command_forms
    type: list<string>
- - name: paintedwolf.task_dispatchable
-   type: bool
  - name: paintedwolf.tool_discovery_available
    type: bool
  - name: paintedwolf.offered_tools
@@ -844,7 +860,9 @@ host_facts:
    type: bool
  - name: paintedwolf.supports_local_listen
    type: bool
- - name: paintedwolf.missing_summary_job_ids
+ - name: paintedwolf.missing_summary_count
+   type: int
+ - name: paintedwolf.missing_summary_workers
    type: list<string>
  - name: paintedwolf.supports_loopback_connect
    type: bool
@@ -871,8 +889,6 @@ host_facts:
  - name: paintedwolf.content_type
    type: string
  - name: paintedwolf.count
-   type: string
- - name: paintedwolf.current_max
    type: string
  - name: paintedwolf.cwd
    type: string
@@ -902,12 +918,6 @@ host_facts:
    type: list<string>
  - name: paintedwolf.extracted_paths_omitted
    type: int
- - name: paintedwolf.git_after_observed
-   type: bool
- - name: paintedwolf.git_merge_active
-   type: bool
- - name: paintedwolf.git_conflict_paths
-   type: list<string>
  - name: paintedwolf.http_method
    type: string
  - name: paintedwolf.http_requests_started
@@ -953,8 +963,6 @@ host_facts:
  - name: paintedwolf.handles_text
    type: string
  - name: paintedwolf.host
-   type: string
- - name: paintedwolf.host_max
    type: string
  - name: paintedwolf.hunk_count
    type: string
@@ -1012,8 +1020,6 @@ host_facts:
    type: string
  - name: paintedwolf.max_paths
    type: string
- - name: paintedwolf.max_tool_loops
-   type: string
  - name: paintedwolf.max_uncompressed_bytes
    type: string
  - name: paintedwolf.merge_status
@@ -1062,6 +1068,10 @@ host_facts:
    type: list<string>
  - name: paintedwolf.text_action_command_forms
    type: list<string>
+ - name: paintedwolf.unknown_cited_results
+   type: list<string>
+ - name: paintedwolf.earlier_results
+   type: list<string>
  - name: paintedwolf.unaccounted_group_ids
    type: list<string>
  - name: paintedwolf.unaccounted_omitted
@@ -1088,7 +1098,7 @@ host_facts:
    type: string
  - name: paintedwolf.original_bytes
    type: string
- - name: paintedwolf.overlap_job_ids
+ - name: paintedwolf.overlap_overlay_ids
    type: list<string>
  - name: paintedwolf.overlay_id
    type: string
@@ -1156,8 +1166,6 @@ host_facts:
    type: string
  - name: paintedwolf.period
    type: string
- - name: paintedwolf.prior_job_id
-   type: string
  - name: paintedwolf.progress
    type: string
  - name: paintedwolf.project_dir
@@ -1184,15 +1192,7 @@ host_facts:
    type: string
  - name: paintedwolf.requested
    type: string
- - name: paintedwolf.requested_max
-   type: string
  - name: paintedwolf.resource
-   type: string
- - name: paintedwolf.resume_field
-   type: string
- - name: paintedwolf.resume_recorded
-   type: string
- - name: paintedwolf.resume_requested
    type: string
  - name: paintedwolf.receipt_token
    type: string
@@ -1236,11 +1236,7 @@ host_facts:
    type: string
  - name: paintedwolf.step_fields
    type: string
- - name: paintedwolf.suggested_resume_max
-   type: string
  - name: paintedwolf.supplied
-   type: string
- - name: paintedwolf.threshold
    type: string
  - name: paintedwolf.timeout_ms
    type: string
@@ -1260,9 +1256,13 @@ host_facts:
    type: string
  - name: paintedwolf.window
    type: string
+ - name: paintedwolf.worker
+   type: string
  - name: paintedwolf.worker_leg
    type: bool
  - name: paintedwolf.workflow_id
+   type: string
+ - name: paintedwolf.workflow_work_id
    type: string
  - name: paintedwolf.year
    type: string

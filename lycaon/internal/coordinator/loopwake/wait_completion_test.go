@@ -41,7 +41,7 @@ func completionWaitFixture(t *testing.T) (*LoopEngine, *awaitstore.Store, *tools
 	}
 	loop.SetDeps(deps)
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register completion wait", RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
+	testutil.FailErr(t, "register completion wait", RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context(), WorkerKnown: func(context.Context, string, string) bool { return true }}))
 	return loop, store, reg
 }
 
@@ -164,7 +164,7 @@ func TestBoundedCompletionWaitResumesFromDurableLease(t *testing.T) {
 	t.Cleanup(func() { restarted.ForgetSession(context.Background(), "s1") })
 	restarted.SetDeps(loopDepsSnapshotForTest(loop))
 	restartedReg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register restarted wait", RegisterWaitTool(restartedReg, restarted.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context()}))
+	testutil.FailErr(t, "register restarted wait", RegisterWaitTool(restartedReg, restarted.Subscriptions, WaitToolDeps{Store: store, RuntimeContext: t.Context(), WorkerKnown: func(context.Context, string, string) bool { return true }}))
 	out, err := restartedReg.Run(t.Context(), "wait", map[string]any{"resume": true}, tctx)
 	testutil.FailErr(t, "resume bounded completion wait", err)
 	var result WaitToolResult

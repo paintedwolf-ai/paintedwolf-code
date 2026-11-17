@@ -83,14 +83,14 @@ func TestAttributedEgressCurrentActionDoesNotCoverSiblingChild(t *testing.T) {
 	defer SetEgressResolver(nil)
 	cmd := EgressCommand{SessionID: "child-session", ToolCallID: "actual-model-call", ActionID: "first-child"}
 	defer ForgetEgressAction(cmd.SessionID, cmd.ActionID)
-	first := DecideAttributedHost(t.Context(), cmd, "fixture.invalid")
-	second := DecideAttributedHost(t.Context(), cmd, "fixture.invalid")
+	first := DecideAttributedHTTPRequest(t.Context(), cmd, "fixture.invalid", "", "")
+	second := DecideAttributedHTTPRequest(t.Context(), cmd, "fixture.invalid", "", "")
 	if !first || !second || asks != 1 {
 		t.Fatalf("first child current-action verdict was not retained: asks%d", asks)
 	}
 	cmd.ActionID = "second-child"
 	defer ForgetEgressAction(cmd.SessionID, cmd.ActionID)
-	if !DecideAttributedHost(t.Context(), cmd, "fixture.invalid") || asks != 2 {
+	if !DecideAttributedHTTPRequest(t.Context(), cmd, "fixture.invalid", "", "") || asks != 2 {
 		t.Fatalf("current-action verdict crossed native children: asks%d", asks)
 	}
 }

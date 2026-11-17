@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"math"
 	"time"
 
@@ -53,7 +54,7 @@ func (a approvedAuthority) operation(checkpointID, sessionID string) (db.Prepare
 	}
 	return db.PrepareApprovalOperationParams{
 		CheckpointID: checkpointID, SessionID: sessionID, OptionID: a.display.ID, OptionJson: string(raw),
-		CreatedAt:       db.FormatTime(time.Now().UTC()),
+		CreatedAt:       timelayout.Format(time.Now().UTC()),
 		AuthorityFormat: authority.format, AuthorityDigest: authority.digest, AuthorityBody: authority.body,
 	}, nil
 }

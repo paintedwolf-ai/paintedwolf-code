@@ -347,6 +347,8 @@ func filterPredicate(field, value string, offset int) (string, []any, error) {
 		return pred, args, nil
 	case "session":
 		return "e.session_id = ?", []any{value}, nil
+	case "worker":
+		return "COALESCE(search_worker.name, '') = ?", []any{value}, nil
 	case "agent":
 		return "COALESCE(search_session.agent_type, '') = ?", []any{value}, nil
 	case "role":
@@ -419,12 +421,12 @@ func (st *compileState) decideExecutors() {
 
 const storeSelectCols = `e.id, e.project_id, e.hit_kind, e.source, e.session_id, e.source_ref, e.snippet, e.ts,
 		e.path, e.url, e.leg_id, e.handle, e.tool, e.trust, e.verified, e.hint_code, e.line,
-		COALESCE(search_session.agent_type, ''),
+		COALESCE(search_session.agent_type, ''), COALESCE(search_worker.name, ''),
 		e.tombstoned, COALESCE(e.untrusted, 0), COALESCE(e.kind, ''), e.message_id`
 
-// storeSessionJoin reads agent_type at query time rather than copying it into
-// the projection, so a row follows its session's current role.
-const storeSessionJoin = "\n\tLEFT JOIN sessions search_session ON search_session.id = e.session_id"
+// storeSessionJoin reads agent_type and worker name at query time rather than
+// copying them into the projection, so a row follows its session and worker.
+const storeSessionJoin = "\n\tLEFT JOIN sessions search_session ON search_session.id = e.session_id\n\tLEFT JOIN workers search_worker ON search_worker.child_session_id = e.session_id"
 
 func (st *compileState) buildCodeLeg() (*CodePlanLeg, error) {
 	roots, err := st.codePathRoots()

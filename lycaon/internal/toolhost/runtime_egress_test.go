@@ -3,10 +3,11 @@ package toolhost_test
 import (
 	"context"
 	"encoding/json"
-	"github.com/lycaon/lycaon/internal/configlayout"
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/configlayout"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
 	"github.com/lycaon/lycaon/internal/confine"
@@ -76,9 +77,9 @@ func TestEgressUsesEffectiveProjectApprovalConfig(t *testing.T) {
 	})
 	t.Cleanup(func() { confine.SetEgressResolver(nil) })
 
-	if !confine.DecideAttributedHost(t.Context(), confine.EgressCommand{
+	if !confine.DecideAttributedHTTPRequest(t.Context(), confine.EgressCommand{
 		SessionID: "global-balanced",
-	}, "content.global.test") {
+	}, "content.global.test", "", "") {
 		t.Fatal("global Balanced host was denied")
 	}
 	if asks.Load() != 0 {
@@ -86,13 +87,13 @@ func TestEgressUsesEffectiveProjectApprovalConfig(t *testing.T) {
 	}
 
 	projectCmd := confine.EgressCommand{SessionID: "project-strict", ProjectDir: projectDir}
-	if !confine.DecideAttributedHost(t.Context(), projectCmd, "content.project.test") {
+	if !confine.DecideAttributedHTTPRequest(t.Context(), projectCmd, "content.project.test", "", "") {
 		t.Fatal("approved project Strict host was denied")
 	}
 	if asks.Load() != 1 {
 		t.Fatalf("project Strict asks = %d, want 1", asks.Load())
 	}
-	if confine.DecideAttributedHost(t.Context(), projectCmd, "managed.blocked.test") {
+	if confine.DecideAttributedHTTPRequest(t.Context(), projectCmd, "managed.blocked.test", "", "") {
 		t.Fatal("extension host deny rule was ignored")
 	}
 	rows, err := authzStore.ListEvents(t.Context(), projectCmd.SessionID)
@@ -107,7 +108,7 @@ func TestEgressUsesEffectiveProjectApprovalConfig(t *testing.T) {
 	if len(detail.ApprovalRules) != 1 || detail.ApprovalRules[0].UnitID != "approvals/rules/managed-host" {
 		t.Fatalf("approval rule provenance = %#v", detail.ApprovalRules)
 	}
-	if confine.DecideAttributedHost(t.Context(), projectCmd, "blocked.project.test") {
+	if confine.DecideAttributedHTTPRequest(t.Context(), projectCmd, "blocked.project.test", "", "") {
 		t.Fatal("project host deny rule was ignored")
 	}
 	if asks.Load() != 1 {

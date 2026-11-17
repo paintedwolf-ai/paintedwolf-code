@@ -55,7 +55,6 @@ func TestCatalogHintFeaturesHaveManifest(t *testing.T) {
 		"PROGRESS_MISSING",
 		"WRITE_SCOPE_DENIED",
 		"READ_PATH_NOT_FOUND",
-		"GREP_SCOPE_REQUIRED",
 		"WORKFLOW_GATE_BLOCKED",
 	} {
 		if _, ok := cfg.HintCodes[code]; !ok {

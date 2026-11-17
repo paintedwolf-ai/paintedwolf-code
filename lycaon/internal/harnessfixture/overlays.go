@@ -215,7 +215,7 @@ func prepareOverlay(ctx context.Context, queue worker.WorkerQueue, sessions sess
 		status = "complete"
 	}
 	completed, err := queue.Complete(ctx, branch, api.WorkerResult{
-		Status: status, HostAssembled: true, Summary: overlay.Label,
+		Status: status, Summary: overlay.Label,
 		CompletionReport: &api.WorkerCompletionReport{LegStatus: status, FilesModified: paths,
 			RemainingRisk: []string{"Changes have not been integrated."}},
 	})

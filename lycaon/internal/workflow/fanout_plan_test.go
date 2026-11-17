@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/spawn"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -86,37 +85,6 @@ func TestParseFanoutPlanArgsThreatModel(t *testing.T) {
 	}
 	if plan.ThreatModel != "CLI; local user; no auth" || plan.Rationale != "one surface" {
 		t.Fatalf("plan = %+v", plan)
-	}
-}
-
-func TestFanoutPlanLegCarriesItsCeiling(t *testing.T) {
-	plan, err := parseFanoutPlanArgs(map[string]any{
-		"legs": []any{
-			map[string]any{"agent_type": "security-reviewer", "subject": "Confinement", "prompt": "Trace every spawn site", "max_tool_loops": float64(40)},
-			map[string]any{"agent_type": "security-reviewer", "subject": "Egress", "prompt": "Trace the broker"},
-		},
-	})
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if plan.Legs[0].MaxToolLoops != 40 || plan.Legs[1].MaxToolLoops != 0 {
-		t.Fatalf("leg ceilings = %d, %d want 40 and the default", plan.Legs[0].MaxToolLoops, plan.Legs[1].MaxToolLoops)
-	}
-	vars := runstate.StampFanoutPlan(nil, runstate.FanoutPlan{Phase: "execute", Legs: plan.Legs})
-	stamped, ok := runstate.FanoutPlanForPhase(vars, workflowdef.PhaseDef{ID: "execute", Gates: []string{"worker_cycle_ready"}})
-	if !ok || stamped.Legs[0].MaxToolLoops != 40 {
-		t.Fatalf("stamped plan = %+v ok=%v want the ceiling to survive stamping", stamped, ok)
-	}
-	if got := runstate.FormatFanoutPlan(stamped); !strings.Contains(got, "ceiling: 40 tool rounds") {
-		t.Fatalf("formatted plan = %q want the leg ceiling", got)
-	}
-	budget := spawn.WorkerToolBudget{Default: 20, Min: 2, Max: 30}
-	if err := validateFanoutLegBudgets(plan, budget); err == nil || !strings.Contains(err.Error(), "legs[0].max_tool_loops") {
-		t.Fatalf("validate = %v want legs[0] above the host maximum rejected", err)
-	}
-	budget.Max = 120
-	if err := validateFanoutLegBudgets(plan, budget); err != nil {
-		t.Fatalf("validate = %v want in-range ceilings accepted", err)
 	}
 }
 

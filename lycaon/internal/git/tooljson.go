@@ -2,12 +2,10 @@ package git
 
 import (
 	"errors"
-	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/gitexec"
-	"github.com/lycaon/lycaon/internal/paginate"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
@@ -146,147 +144,6 @@ type StatusToolPage struct {
 	Ignored    bool
 }
 
-// BuildStatusToolResponse selects the exact file page returned to the caller.
-func BuildStatusToolResponse(status *GitStatus, page StatusToolPage) StatusToolResponse {
-	if status == nil {
-		return StatusToolResponse{Files: []GitStatusEntry{}}
-	}
-
-	selected := selectStatusFiles(status.Files, page.Paths)
-	resp := StatusToolResponse{
-		Available:     true,
-		Summary:       page.Summary,
-		Branch:        status.Branch,
-		HeadShort:     status.HeadShort,
-		Upstream:      status.Upstream,
-		Ahead:         status.Ahead,
-		Behind:        status.Behind,
-		Dirty:         status.Dirty,
-		Paths:         page.Paths,
-		Offset:        max(page.Offset, 0),
-		Limit:         max(page.Limit, 0),
-		RecentCommits: status.RecentCommits,
-	}
-	resp.StagedCount, resp.UnstagedCount, resp.UntrackedCount = countStatusFiles(selected)
-	resp.Files, resp.FilesTotal, resp.FilesTruncated, resp.NextOffset = paginate.Slice(selected, resp.Offset, resp.Limit)
-	if resp.Files == nil {
-		resp.Files = []GitStatusEntry{}
-	}
-	if page.Summary {
-		resp.Files = []GitStatusEntry{}
-		resp.FilesTruncated = false
-		resp.NextOffset = nil
-		if page.GroupDepth == 0 {
-			page.GroupDepth = 1
-		}
-	}
-	if page.GroupDepth > 0 {
-		resp.GroupDepth = page.GroupDepth
-		groups := groupStatusFiles(selected, page.GroupDepth)
-		resp.Groups, resp.GroupsTotal, resp.GroupsTruncated, _ = paginate.Slice(groups, 0, resp.Limit)
-	}
-	return resp
-}
-
-func MarshalStatusToolResponse(resp StatusToolResponse, err error) (string, error) {
-	if err != nil {
-		return MarshalToolFailure(err)
-	}
-	raw, err := surveyjson.Marshal(resp)
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
-}
-
-// groupStatusFiles tallies entries by their first depth path segments, largest
-// groups first and ties by prefix so the order is stable across calls.
-func groupStatusFiles(files []GitStatusEntry, depth int) []StatusToolGroup {
-	index := map[string]int{}
-	var groups []StatusToolGroup
-	for _, f := range files {
-		prefix := pathPrefix(f.Path, depth)
-		i, ok := index[prefix]
-		if !ok {
-			i = len(groups)
-			index[prefix] = i
-			groups = append(groups, StatusToolGroup{Prefix: prefix})
-		}
-		staged, unstaged, untracked := countStatusFiles([]GitStatusEntry{f})
-		groups[i].Files++
-		groups[i].Staged += staged
-		groups[i].Unstaged += unstaged
-		groups[i].Untracked += untracked
-	}
-	sort.SliceStable(groups, func(a, b int) bool {
-		if groups[a].Files != groups[b].Files {
-			return groups[a].Files > groups[b].Files
-		}
-		return groups[a].Prefix < groups[b].Prefix
-	})
-	return groups
-}
-
-// pathPrefix keeps the first depth segments of a slash path; a shorter path is
-// its own prefix.
-func pathPrefix(path string, depth int) string {
-	rest := path
-	end := 0
-	for i := 0; i < depth; i++ {
-		idx := strings.IndexByte(rest, '/')
-		if idx < 0 {
-			return path
-		}
-		end += idx + 1
-		rest = rest[idx+1:]
-	}
-	return path[:end-1]
-}
-
-// selectStatusFiles keeps the entries under any of the prefixes, in status order.
-func selectStatusFiles(files []GitStatusEntry, prefixes []string) []GitStatusEntry {
-	cleaned := make([]string, 0, len(prefixes))
-	for _, p := range prefixes {
-		p = strings.Trim(strings.TrimSpace(p), "/")
-		if p == "" || p == "." {
-			return files
-		}
-		cleaned = append(cleaned, p)
-	}
-	if len(cleaned) == 0 {
-		return files
-	}
-	out := make([]GitStatusEntry, 0, len(files))
-	for _, f := range files {
-		for _, p := range cleaned {
-			if f.Path == p || strings.HasPrefix(f.Path, p+"/") {
-				out = append(out, f)
-				break
-			}
-		}
-	}
-	return out
-}
-
-// countStatusFiles counts untracked entries as unstaged alongside porcelain XY changes.
-func countStatusFiles(files []GitStatusEntry) (staged, unstaged, untracked int) {
-	for _, f := range files {
-		if len(f.Status) != 2 {
-			continue
-		}
-		if f.Status == "??" {
-			untracked++
-		}
-		if f.Status[0] != ' ' && f.Status[0] != '?' {
-			staged++
-		}
-		if f.Status[1] != ' ' && f.Status[1] != '!' {
-			unstaged++
-		}
-	}
-	return staged, unstaged, untracked
-}
-
 // DiffToolEntry carries one file; DiffTruncated marks hunks cut at a line boundary.
 type DiffToolEntry struct {
 	DiffSpillPath string `json:"diff_spill_path,omitempty"`
@@ -343,53 +200,6 @@ func MarshalDiffToolResponse(resp DiffToolResponse, err error) (string, error) {
 		return "", err
 	}
 	return string(raw), nil
-}
-
-// SplitDiffBlocks uses file headers; hunk lines carry a distinct leading marker.
-func SplitDiffBlocks(text string) []string {
-	const header = "diff --git "
-	var blocks []string
-	start := -1
-	for pos := 0; pos < len(text); {
-		end := strings.IndexByte(text[pos:], '\n')
-		lineEnd := len(text)
-		if end >= 0 {
-			lineEnd = pos + end + 1
-		}
-		if strings.HasPrefix(text[pos:], header) {
-			if start >= 0 {
-				blocks = append(blocks, text[start:pos])
-			}
-			start = pos
-		}
-		pos = lineEnd
-	}
-	if start >= 0 {
-		blocks = append(blocks, text[start:])
-	}
-	return blocks
-}
-
-// CountHunkLines tallies added and removed lines in one file's hunks; the
-// `+++`/`---` file headers are not counted.
-func CountHunkLines(diff string) (insertions, deletions int) {
-	inHunk := false
-	for _, line := range strings.Split(diff, "\n") {
-		if strings.HasPrefix(line, "@@") {
-			inHunk = true
-			continue
-		}
-		if !inHunk {
-			continue
-		}
-		switch {
-		case strings.HasPrefix(line, "+"):
-			insertions++
-		case strings.HasPrefix(line, "-"):
-			deletions++
-		}
-	}
-	return insertions, deletions
 }
 
 // FitDiffPage keeps whole entries and clips an oversized first entry at a line boundary.
@@ -470,76 +280,4 @@ type CommitToolResponse struct {
 	ExitCode         int      `json:"exit_code,omitempty"`
 	OutputTail       string   `json:"output_tail,omitempty"`
 	Hint             string   `json:"hint,omitempty"`
-}
-
-func MarshalShowToolResponse(show *GitShowResult, err error) (string, error) {
-	if err != nil {
-		return MarshalToolFailure(err)
-	}
-	raw, err := surveyjson.Marshal(ShowToolResponse{Available: true, Show: show})
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
-}
-
-func MarshalBlameToolResponse(lines []GitBlameLine, err error) (string, error) {
-	if err != nil {
-		return MarshalToolFailure(err)
-	}
-	raw, err := surveyjson.Marshal(BlameToolResponse{Available: true, Lines: lines})
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
-}
-
-func MarshalRestoreToolResponse(restored []string, err error) (string, error) {
-	if err != nil {
-		return MarshalToolFailure(err)
-	}
-	raw, err := surveyjson.Marshal(RestoreToolResponse{Available: true, Restored: restored})
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
-}
-
-func MarshalCommitToolResponse(hash string, staging CommitStaging, err error) (string, error) {
-	// A committed hash remains evidence when subsequent history recording fails.
-	if hash != "" && err != nil {
-		raw, marshalErr := surveyjson.Marshal(CommitToolResponse{
-			Available: true, Hash: hash, Paths: staging.Paths, Error: err.Error(),
-			UncommittedPaths: staging.Excluded, UncommittedCount: staging.ExcludedCount,
-		})
-		return string(raw), errors.Join(err, marshalErr)
-	}
-	if err != nil {
-		var cf *CommitFailed
-		if errors.As(err, &cf) {
-			raw, mErr := surveyjson.Marshal(CommitToolResponse{
-				Available:  false,
-				Error:      cf.Summary(),
-				ExitCode:   cf.ExitCode,
-				OutputTail: cf.Tail(),
-				Hint:       cf.Hint(),
-			})
-			if mErr != nil {
-				return "", mErr
-			}
-			return string(raw), err
-		}
-		return MarshalToolFailure(err)
-	}
-	raw, err := surveyjson.Marshal(CommitToolResponse{
-		Available:        true,
-		Hash:             hash,
-		Paths:            staging.Paths,
-		UncommittedPaths: staging.Excluded,
-		UncommittedCount: staging.ExcludedCount,
-	})
-	if err != nil {
-		return "", err
-	}
-	return string(raw), nil
 }

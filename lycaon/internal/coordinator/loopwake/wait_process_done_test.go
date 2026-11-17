@@ -122,7 +122,7 @@ func TestWaitProcessDoneAlreadySatisfiedWhenNothingRunning(t *testing.T) {
 	loop := NewLoopEngine()
 	loop.SetDeps(processCycleLoopDeps(false))
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
@@ -148,7 +148,7 @@ func TestWaitProcessDoneArmsSleepWhileRunning(t *testing.T) {
 	loop := NewLoopEngine()
 	loop.SetDeps(processCycleLoopDeps(true))
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	invocationOut := &tools.ToolInvocationOut{}
@@ -177,7 +177,7 @@ func TestWaitProcessDoneOnlyAutoAddsTimerBackstop(t *testing.T) {
 	loop := NewLoopEngine()
 	loop.SetDeps(processCycleLoopDeps(true))
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
@@ -221,7 +221,7 @@ func TestWaitProcessDoneFastPathUsesExactHandles(t *testing.T) {
 	}
 	loop.SetDeps(deps)
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
@@ -253,7 +253,7 @@ func TestWaitResumePreservesExactProcessHandles(t *testing.T) {
 	)
 	loop.Waits.breakSleep(t.Context(), "s1", "process.finished", true)
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	out, err := reg.Run(context.Background(), "wait", map[string]any{
@@ -276,7 +276,7 @@ func TestWaitRejectsHandlesOutsideProcessDoneCondition(t *testing.T) {
 	loop := NewLoopEngine()
 	loop.SetDeps(idleWaitLoopDeps())
 	reg := tools.NewDefaultRegistry()
-	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{}); err != nil {
+	if err := RegisterWaitTool(reg, loop.Subscriptions, WaitToolDeps{WorkerKnown: func(context.Context, string, string) bool { return true }}); err != nil {
 		t.Fatalf("RegisterWaitTool: %v", err)
 	}
 	_, err := resolveConditions([]any{map[string]any{"kind": "scan_done", "handles": []any{"command-1"}}})

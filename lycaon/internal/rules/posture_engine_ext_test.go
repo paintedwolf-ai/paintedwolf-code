@@ -14,7 +14,7 @@ import (
 
 func TestPostureRuleEngineSpecDeniesDelegation(t *testing.T) {
 	engine := newBundledPostureEngine(t)
-	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "delegate_dispatch"}})
+	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint"}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if out.Allowed {
 		t.Fatal("expected deny")
@@ -26,7 +26,7 @@ func TestPostureRuleEngineSpecDeniesDelegation(t *testing.T) {
 
 func TestPostureRuleEngineBuildAllowsDelegation(t *testing.T) {
 	engine := newBundledPostureEngine(t)
-	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureBuild, ToolName: "delegate_dispatch"}})
+	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureBuild, ToolName: "plan_from_blueprint"}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if !out.Allowed {
 		t.Fatalf("expected allow, got deny %q", out.Code)
@@ -59,7 +59,7 @@ func TestPostureRuleEngineOrchestrateDeniesPlanWriter(t *testing.T) {
 
 func TestPostureRuleEngineVetDeniesDelegation(t *testing.T) {
 	engine := newBundledPostureEngine(t)
-	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureVet, ToolName: "delegate_dispatch"}})
+	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureVet, ToolName: "plan_from_blueprint"}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if out.Allowed {
 		t.Fatal("expected deny")
@@ -82,7 +82,7 @@ func TestPostureRuleEngineVetLeavesWriteToTheSurface(t *testing.T) {
 
 func TestPostureRuleEngineUnknownPostureFailClosed(t *testing.T) {
 	engine := newBundledPostureEngine(t)
-	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: "", ToolName: "delegate_dispatch"}})
+	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: "", ToolName: "plan_from_blueprint"}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if out.Allowed {
 		t.Fatal("expected deny for unresolved posture")
@@ -103,13 +103,13 @@ func TestPostureRuleEngineUsesBuildRulesNotSpec(t *testing.T) {
 
 func TestPostureRuleEngineAppendsManifestRules(t *testing.T) {
 	engine := newBundledPostureEngine(t)
-	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureBuild, ToolName: "delegate_dispatch"}, PostureRules: []string{"config/packs/painted-wolf/platform/host/posture-rules/build.yaml"}, ManifestRules: []string{"config/packs/painted-wolf/platform/host/posture-rules/spec.yaml"}})
+	out, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureBuild, ToolName: "plan_from_blueprint"}, PostureRules: []string{"config/packs/painted-wolf/platform/host/posture-rules/build.yaml"}, ManifestRules: []string{"config/packs/painted-wolf/platform/host/posture-rules/spec.yaml"}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if !out.Allowed {
 		t.Fatalf("build posture should not apply spec delegation rule, got %q", out.Code)
 	}
 
-	deny, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "delegate_dispatch"}, PostureRules: []string{"config/packs/painted-wolf/platform/host/posture-rules/spec.yaml"}, ManifestRules: []string{"config/packs/painted-wolf/platform/host/posture-rules/spec.yaml"}})
+	deny, err := engine.Evaluate(context.Background(), rules.EvalContext{EvalContext: conditions.EvalContext{SessionPosture: api.SessionPostureSpec, ToolName: "plan_from_blueprint"}, PostureRules: []string{"config/packs/painted-wolf/platform/host/posture-rules/spec.yaml"}, ManifestRules: []string{"config/packs/painted-wolf/platform/host/posture-rules/spec.yaml"}})
 	testutil.FailErr(t, "engine.Evaluate failed", err)
 	if deny.Allowed {
 		t.Fatal("expected spec delegation deny with deduped manifest rules")
@@ -129,10 +129,10 @@ func TestPostureEngineEachRulesFileDenyRuleReachable(t *testing.T) {
 		allowed []string
 		code    string
 	}{
-		{api.SessionPostureSpec, "delegate_dispatch", nil, nil, "SPEC_POSTURE_DELEGATION_FORBIDDEN"},
+		{api.SessionPostureSpec, "plan_from_blueprint", nil, nil, "SPEC_POSTURE_DELEGATION_FORBIDDEN"},
 		{api.SessionPostureBuild, "task", map[string]any{"agent_type": "sentinel"}, []string{"implementer"}, "DISALLOWED_AGENT"},
 		{api.SessionPostureOrchestrate, "task", map[string]any{"agent_type": "plan-writer"}, nil, "ORCHESTRATE_POSTURE_NO_PLAN_WRITER"},
-		{api.SessionPostureVet, "delegate_dispatch", nil, nil, "VET_POSTURE_DELEGATION_FORBIDDEN"},
+		{api.SessionPostureVet, "plan_from_blueprint", nil, nil, "VET_POSTURE_DELEGATION_FORBIDDEN"},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.posture)+"/"+tc.tool, func(t *testing.T) {

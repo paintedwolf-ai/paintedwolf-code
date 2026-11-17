@@ -45,6 +45,9 @@ type Props = {
   testId?: string;
   /** Display name override for specialized cards. */
   name?: string;
+  /** Row outcome and status the card's descriptor states. */
+  outcome?: string;
+  status?: ToolPartStatus;
   /** Briefing placed around the card body; cards that place it themselves omit it. */
   slots?: ToolBriefingSlots;
   /** What the call ran, drawn first in the opened details. */
@@ -87,6 +90,7 @@ export function ToolPartShell(props: Props) {
   );
   const summary = () => {
     processRevision();
+    if (props.status) return { status: props.status, title: props.part.title ?? props.name ?? props.part.tool };
     const activity = props.part.commandActivity;
     if (!activity) return toolSummaryFields(props.part, props.sessionId);
     return { status: toolPartDisplayStatus(props.part, props.sessionId), title: activity.fact.subject };
@@ -99,7 +103,7 @@ export function ToolPartShell(props: Props) {
     const target = title !== toolName() && title !== toolLabel() ? title : "";
     return [toolLabel(), target, completion(), statusDot(summary().status)].filter(Boolean).join(", ");
   };
-  const completion = () => { processRevision(); return toolCompletionLabel(props.part, props.sessionId); };
+  const completion = () => { processRevision(); return props.outcome ?? toolCompletionLabel(props.part, props.sessionId); };
   const [hostEl, setHostEl] = createSignal<HTMLElement | null>(null);
   const [summaryEl, setSummaryEl] = createSignal<HTMLElement | null>(null);
   const findId = () =>
@@ -241,8 +245,7 @@ export function ToolPartShell(props: Props) {
         }}>
           <Show when={open()}>
             {props.target}
-            <Show when={props.slots?.purpose}>{(purpose) => <div class="den-activity-purpose" data-testid="activity-purpose">{purpose()}</div>}</Show>
-            <Show when={props.slots?.result}>{(result) => <div class="den-activity-result" data-testid="activity-result">{result()}</div>}</Show>
+            {props.slots?.summary}
             {props.children}
             <Show when={props.slots?.evidence}>{(evidence) => <nav class="den-activity-footer" aria-label="Activity records">{evidence()}</nav>}</Show>
           </Show>

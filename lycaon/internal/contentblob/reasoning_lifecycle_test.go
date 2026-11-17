@@ -3,6 +3,7 @@ package contentblob_test
 import (
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
@@ -49,7 +50,7 @@ func TestReasoningRetentionAndChatTreeDeletionUseProjectBlobLifecycle(t *testing
 	settleReasoning(t, history, other)
 	var sha string
 	testutil.FailErr(t, "read canonical identity", database.QueryRowContext(t.Context(), `SELECT content_blob_sha256 FROM model_outputs WHERE id=?`, rootOutput).Scan(&sha))
-	old := db.FormatTime(time.Now().AddDate(-2, 0, 0))
+	old := timelayout.Format(time.Now().AddDate(-2, 0, 0))
 	_, err = database.ExecContext(t.Context(), `UPDATE model_outputs SET created_at=?,settled_at=?`, old, old)
 	testutil.FailErr(t, "age retained outputs", err)
 	_, err = db.RunRetention(t.Context(), database, db.DefaultRetention())

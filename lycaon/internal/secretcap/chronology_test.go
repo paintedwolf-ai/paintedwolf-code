@@ -2,6 +2,7 @@ package secretcap
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
@@ -40,7 +41,7 @@ func TestUseChronologyAcrossFractionalSecondPrecision(t *testing.T) {
 	}
 	listed, err := service.ListProject(t.Context(), testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "read use summary", err)
-	want := db.FormatTime(start.Add(100 * time.Millisecond))
+	want := timelayout.Format(start.Add(100 * time.Millisecond))
 	if len(listed) != 1 || listed[0].LastUsedAt == nil || *listed[0].LastUsedAt != want {
 		t.Fatalf("last-use summary = %+v, want %s", listed, want)
 	}
@@ -56,7 +57,7 @@ func TestUseRetentionBreaksTimestampTiesByAdmission(t *testing.T) {
 		err := service.queries.CreateManagedSecretUse(t.Context(), db.CreateManagedSecretUseParams{
 			ID: fmt.Sprintf("00000000-0000-4000-8000-%012d", total-i), SecretID: secretID,
 			ToolName: "command", ToolCallID: nullable(fmt.Sprintf("call-%d", i)),
-			Outcome: UseResolved, Delivery: DeliveryPending, UsedAt: db.FormatTime(service.now()),
+			Outcome: UseResolved, Delivery: DeliveryPending, UsedAt: timelayout.Format(service.now()),
 		})
 		testutil.FailErr(t, "insert equal-time use", err)
 		err = service.queries.TrimManagedSecretUses(t.Context(), db.TrimManagedSecretUsesParams{SecretID: secretID, Keep: maxUseHistory})
@@ -89,7 +90,7 @@ func TestRevealSummaryAcrossFractionalSecondPrecision(t *testing.T) {
 	}
 	listed, err := service.ListProject(t.Context(), testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "read reveal summary", err)
-	want := db.FormatTime(start.Add(100 * time.Millisecond))
+	want := timelayout.Format(start.Add(100 * time.Millisecond))
 	if len(listed) != 1 || listed[0].RevealCount != 2 || listed[0].LastRevealedAt == nil || *listed[0].LastRevealedAt != want {
 		t.Fatalf("last-reveal summary = %+v, want %s", listed, want)
 	}

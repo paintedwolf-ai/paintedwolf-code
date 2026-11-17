@@ -1,12 +1,12 @@
 tags: [workers]
-description: Cancel a pending or running worker job; preserve accepted observations in its partial closeout report
+description: Stop a worker. A working or asking worker's round stops and keeps its work under a result handle; a waiting or planned worker that never started is withdrawn.
 schema:
   type: object
   properties:
-    job_id:
+    worker:
       type: string
-      description: Worker job id from task() enqueue or pulse roster
+      description: The worker's name.
     reason:
       type: string
-      description: Optional cancellation reason for the transcript
-  required: [job_id]
+      description: Optional reason for the transcript
+  required: [worker]

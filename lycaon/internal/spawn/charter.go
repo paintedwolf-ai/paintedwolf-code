@@ -8,6 +8,9 @@ import (
 // MaxTaskCharterRunes bounds the assignment retained from plan through dispatch.
 const MaxTaskCharterRunes = 4096
 
+// CharterGoalHeader opens a formatted charter, before its goal.
+const CharterGoalHeader = "Goal:\n"
+
 func TaskCharterRunes(charter api.WorkerTaskCharter) int {
 	total := utf8.RuneCountInString(charter.Goal)
 	for _, values := range [][]string{charter.KnownFacts, charter.Constraints, charter.DoneWhen, charter.ContextRefs} {

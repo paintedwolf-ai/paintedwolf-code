@@ -5,9 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/testdbseed"
-
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -29,16 +28,17 @@ func TestDelegationSpawnWorkerPromptHygiene(t *testing.T) {
 		"Code: SPEC_SCOPE_MISSING",
 	}, "\n")
 
-	testdbseed.InsertProjectRoot(t, h.DB, testdbseed.DefaultProjectID, t.TempDir())
-	r, err := h.Delegations.Manager.Create(ctx, api.CreateDelegationRequest{
-		ProjectID: testdbseed.DefaultProjectID,
-		Task:      dirtyTask,
-		Strategy:  api.HuntStrategyFileBased,
-	})
-	testutil.FailErr(t, "h.Delegations.Manager.Create failed", err)
-	if _, err := h.Delegations.Manager.DispatchLeg(ctx, r.ID, r.Legs[0].ID, ""); err != nil {
-		testutil.FailErr(t, "h.Delegations.Manager.DispatchLeg failed", err)
-	}
+	dir := t.TempDir()
+	parent, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, dir)
+	testutil.FailErr(t, "CreateHarnessSession failed", err)
+	h.SeedProgress(t, ctx, parent.ID)
+	_, err = h.ToolRegistry.Run(
+		ctx,
+		"task",
+		wiring.TaskToolArgs(orchestration.ProfileRepoResearcher, dirtyTask),
+		h.CoordinatorToolContext(t, ctx, parent, dir),
+	)
+	testutil.FailErr(t, "task tool failed", err)
 
 	testutil.WaitFor(t, "the worker sends a request", func() bool {
 		return len(rec.AllRequests()) > 0

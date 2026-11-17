@@ -22,7 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/decide"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/detectionpack"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/events"
@@ -120,7 +119,6 @@ type Deps struct {
 	AgentPresence  *agentpresence.Tracker
 	Workers        worker.WorkerQueue
 	WorkerCancel   *worker.CancelService
-	Delegations    *delegation.Manager
 	Board          *board.SnapshotBuilder
 	WebResearch    webresearch.Runtime
 	WebDiscoverer  webresearch.DirectDiscovererFactory
@@ -284,11 +282,8 @@ func fillWorkers(t *testing.T, d *Deps) {
 	if d.WorkerCancel == nil {
 		d.WorkerCancel = &worker.CancelService{Queue: d.Workers, Events: d.Sessions.Coordinator.Workers, Graceful: d.Sessions.Workers.Cancel, Cancellations: d.Sessions.Workers.Cancellations}
 	}
-	if d.Delegations == nil {
-		d.Delegations = delegation.NewManager(delegation.NewMemoryStore(), d.Workers, nil, nil)
-	}
 	if d.Board == nil {
-		d.Board = &board.SnapshotBuilder{Delegations: d.Delegations.Store, Workers: d.Workers}
+		d.Board = &board.SnapshotBuilder{Workers: d.Workers}
 	}
 	if d.Board.Git == nil {
 		d.Board.Git = git.NewManager()

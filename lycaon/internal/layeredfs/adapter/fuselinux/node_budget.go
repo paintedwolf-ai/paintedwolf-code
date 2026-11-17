@@ -3,7 +3,6 @@
 package fuselinux
 
 import (
-	"container/list"
 	"path"
 )
 
@@ -100,5 +99,3 @@ func (s *Server) wakeEvictor() {
 	default:
 	}
 }
-
-func newNodeLRU() *list.List { return list.New() }

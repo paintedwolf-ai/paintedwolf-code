@@ -40,8 +40,8 @@ func TestKindRootIncludesSkills(t *testing.T) {
 	if !found {
 		t.Fatal("UnitKindRoots must contain skills")
 	}
-	if kindRootForRel("skills/foo/SKILL.md") != "skills" {
-		t.Fatalf("kindRootForRel = %q", kindRootForRel("skills/foo/SKILL.md"))
+	if KindRootForUnitID("skills/foo/SKILL.md") != "skills" {
+		t.Fatalf("kindRootForRel = %q", KindRootForUnitID("skills/foo/SKILL.md"))
 	}
 	if ProjectScope("skills") != ScopeDeviceOnly {
 		t.Fatalf("skills scope = %v want ScopeDeviceOnly", ProjectScope("skills"))

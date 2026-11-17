@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -206,6 +208,64 @@ func TestStoredResultsCompleteWithoutAModelCall(t *testing.T) {
 	}
 }
 
+type recordedLog struct {
+	mu      sync.Mutex
+	records []slog.Record
+}
+
+func (l *recordedLog) Enabled(context.Context, slog.Level) bool { return true }
+func (l *recordedLog) WithAttrs([]slog.Attr) slog.Handler       { return l }
+func (l *recordedLog) WithGroup(string) slog.Handler            { return l }
+func (l *recordedLog) Handle(_ context.Context, record slog.Record) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.records = append(l.records, record)
+	return nil
+}
+
+func (l *recordedLog) requests() []map[string]string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	var out []map[string]string
+	for _, record := range l.records {
+		if record.Message != "briefing request" {
+			continue
+		}
+		attrs := map[string]string{}
+		record.Attrs(func(attr slog.Attr) bool { attrs[attr.Key] = attr.Value.String(); return true })
+		out = append(out, attrs)
+	}
+	return out
+}
+
+// Each request leaves one line saying, per section, how it is produced and
+// whether its text was already stored.
+func TestRequestLogExplainsEachSection(t *testing.T) {
+	scheduler := NewScheduler(context.Background())
+	t.Cleanup(func() { scheduler.Stop(); scheduler.Wait(context.Background()) })
+	recorded := &recordedLog{}
+	snapshots := &snapshotLog{seen: make(chan Snapshot, 4)}
+	engine := NewEngine(scheduler, newMemStore(), &countingGenerator{text: "Clear the cached token."}, snapshots, slog.New(recorded))
+	ask := func() Snapshot {
+		snap, err := engine.Request(t.Context(), request("card", false, purposeSection("sign out", Generated), outcomeSection("exit 0")))
+		testutil.FailErr(t, "request", err)
+		return snap
+	}
+	ask()
+	receive(t, snapshots.seen)
+	ask()
+	lines := recorded.requests()
+	if len(lines) != 2 {
+		t.Fatalf("%d request lines", len(lines))
+	}
+	if got := lines[0]["sections"]; got != "purpose:generated:missing,outcome:deterministic:stored" || lines[0]["status"] != string(StatusPending) {
+		t.Fatalf("first request logged %v", lines[0])
+	}
+	if got := lines[1]["sections"]; got != "purpose:generated:stored,outcome:deterministic:stored" || lines[1]["status"] != string(StatusComplete) {
+		t.Fatalf("second request logged %v", lines[1])
+	}
+}
+
 func TestLookupSectionsNeverAdmitWork(t *testing.T) {
 	generator := &countingGenerator{text: "unused"}
 	engine, _, _ := newTestEngine(t, generator)
@@ -342,5 +402,48 @@ func TestJobProfileReadsOnlyEngineJobs(t *testing.T) {
 	}
 	if got := JobProfile(Job{Key: "file\x00p\x00tool_activity\x00x"}); got != "" {
 		t.Fatalf("another kind's job read as %q", got)
+	}
+}
+
+func TestResultQualityFollowsTheReasoningInput(t *testing.T) {
+	excerpt := func(truncated, shared bool) ReasoningInput {
+		return ReasoningInput{Excerpt: &Reasoning{Text: "Tag after the push.", Ref: "message:out", Truncated: truncated, Shared: shared}}
+	}
+	unavailable := []string{QualityReasoningUnavailable}
+	cases := []struct {
+		name  string
+		input ReasoningInput
+		want  []string
+	}{
+		{"whole", excerpt(false, false), []string{QualityReasoningIncluded}},
+		{"suffix", excerpt(true, false), []string{QualityReasoningIncluded, QualityReasoningTruncated}},
+		{"shared", excerpt(false, true), []string{QualityReasoningIncluded, QualityReasoningShared}},
+		{"absent", ReasoningInput{}, nil},
+		{"details only", ReasoningInput{Gap: string(ReasoningDetailsOnly)}, unavailable},
+		{"oversized", ReasoningInput{Gap: string(ReasoningOversized)}, unavailable},
+		{"malformed", ReasoningInput{Gap: string(ReasoningMalformed)}, unavailable},
+		{"output not found", ReasoningInput{Gap: "the action's model output was not found"}, unavailable},
+	}
+	for _, tc := range cases {
+		for _, fallback := range []bool{false, true} {
+			ev := liveEvidence()
+			ev.Reasoning = tc.input
+			section, err := PurposeSection(t.Context(), ev)
+			testutil.FailErr(t, "build "+tc.name, err)
+			var generator Generator = &countingGenerator{text: "Pushes the release before tagging it."}
+			if fallback {
+				generator, section.Fallback = nil, "Ran a command."
+			}
+			engine, _, log := newTestEngine(t, generator)
+			_, err = engine.Request(t.Context(), request(tc.name, false, section))
+			testutil.FailErr(t, "request "+tc.name, err)
+			done := receive(t, log.seen)
+			if done.Status != StatusComplete || done.Sections[0].Result == nil {
+				t.Fatalf("%s (fallback %v): %+v", tc.name, fallback, done)
+			}
+			if got := done.Sections[0].Result.Quality; !slices.Equal(got, tc.want) {
+				t.Fatalf("%s (fallback %v): quality %v, want %v", tc.name, fallback, got, tc.want)
+			}
+		}
 	}
 }

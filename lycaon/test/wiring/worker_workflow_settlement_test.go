@@ -53,7 +53,7 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 				_, err = h.ToolRegistry.Run(ctx, "task", args, call)
 				testutil.FailErr(t, "dispatch survey worker", err)
 			}
-			tasks, err := h.Delegations.Queue.ListByWorkflowRunID(ctx, run.ID)
+			tasks, err := h.Workers.Queue.ListByWorkflowRunID(ctx, run.ID)
 			testutil.FailErr(t, "load dispatched workers", err)
 			if len(tasks) != 5 {
 				t.Fatalf("workers=%d, want five", len(tasks))
@@ -65,20 +65,20 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 			}
 			changed := tasks[0]
 			changed.ID, changed.SourceToolCallID, changed.AgentType = uuid.NewString(), uuid.NewString(), "implementer"
-			reject := toolrejection.AsToolReject(h.Delegations.Queue.PrepareEnqueue(ctx, sess.ProjectID, &changed))
+			reject := toolrejection.AsToolReject(h.Workers.Queue.PrepareEnqueue(ctx, sess.ProjectID, &changed))
 			if reject == nil || reject.Data["reason"] != "planned_agent_mismatch" {
 				t.Fatalf("queue accepted changed planned agent: %v", reject)
 			}
 			for range tasks {
-				task, err := h.Delegations.Queue.ClaimNext(ctx, worker.ClaimRequest{ProjectID: sess.ProjectID, ClaimedBy: "fixture", ExecutionTarget: api.ExecutionTargetLocal})
+				task, err := h.Workers.Queue.ClaimNext(ctx, worker.ClaimRequest{ProjectID: sess.ProjectID, ClaimedBy: "fixture", ExecutionTarget: api.ExecutionTargetLocal})
 				testutil.FailErr(t, "claim worker", err)
 				if task == nil {
 					t.Fatal("worker was not claimable")
 				}
 				child, err := h.Store.CreateChild(ctx, sess, api.SpawnChildRequest{AgentType: task.AgentType, Prompt: task.Prompt})
 				testutil.FailErr(t, "create worker session", err)
-				testutil.FailErr(t, "bind worker session", h.Delegations.Queue.SetChildSessionID(ctx, task.ID, child.ID))
-				won, err := h.Delegations.Queue.Complete(ctx, task, api.WorkerResult{Status: "complete", Summary: "Assigned boundary reviewed.", Grounding: &api.CitationGrounding{}, CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete", Brief: "Assigned boundary reviewed."}})
+				testutil.FailErr(t, "bind worker session", h.Workers.Queue.SetChildSessionID(ctx, task.ID, child.ID))
+				won, err := h.Workers.Queue.Complete(ctx, task, api.WorkerResult{Status: "complete", Summary: "Assigned boundary reviewed.", Grounding: &api.CitationGrounding{}, CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete", Brief: "Assigned boundary reviewed."}})
 				testutil.FailErr(t, "commit worker result", err)
 				if !won {
 					t.Fatal("worker claim was lost")
@@ -87,14 +87,14 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 			if recovered {
 				// Recreate acknowledged delivery with the production summary projector.
 				for _, original := range tasks {
-					task, _ := h.Delegations.Queue.Get(original.ID)
+					task, _ := h.Workers.Queue.Get(original.ID)
 					input, ok := h.Sessions.Manager.Workers.Results.TaskByID(task.ID)
 					if !ok {
 						t.Fatal("worker identity missing")
 					}
 					_, err := h.Sessions.Manager.Workers.Results.ProjectResult(ctx, input, *task.Result)
 					testutil.FailErr(t, "project retained result", err)
-					testutil.FailErr(t, "acknowledge retained result", h.Delegations.Queue.MarkOutcomeDelivered(ctx, task.ID))
+					testutil.FailErr(t, "acknowledge retained result", h.Workers.Queue.MarkOutcomeDelivered(ctx, task.ID))
 				}
 				testutil.FailErr(t, "reconcile before coordinator request", h.Sessions.Manager.Coordinator.Control.AssertRunnable(ctx, sess.ID))
 			} else {
@@ -104,12 +104,12 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 			waitWorkflowPhase(t, ctx, h.Workflows.Manager, run.ID, "claims")
 			stale := tasks[0]
 			stale.ID, stale.SourceToolCallID = uuid.NewString(), uuid.NewString()
-			reject = toolrejection.AsToolReject(h.Delegations.Queue.PrepareEnqueue(ctx, sess.ProjectID, &stale))
+			reject = toolrejection.AsToolReject(h.Workers.Queue.PrepareEnqueue(ctx, sess.ProjectID, &stale))
 			if reject == nil || reject.Data["reason"] != "workflow_phase_changed" {
 				t.Fatalf("queue accepted stale workflow phase: %v", reject)
 			}
 			testutil.WaitFor(t, "no worker outcome is pending", func() bool {
-				pending, err := h.Delegations.Queue.ListPendingOutcomes(ctx)
+				pending, err := h.Workers.Queue.ListPendingOutcomes(ctx)
 				return err == nil && len(pending) == 0
 			})
 			summaries, err := h.Sessions.Manager.Workers.Summaries.Tags(ctx, sess.ID)
@@ -125,7 +125,7 @@ func TestWorkerOutcomesAdvancePlannedWorkflow(t *testing.T) {
 			if after.Revision != before.Revision {
 				t.Fatal("reconciliation repeated a settled transition")
 			}
-			tasks, err = h.Delegations.Queue.ListByWorkflowRunID(ctx, run.ID)
+			tasks, err = h.Workers.Queue.ListByWorkflowRunID(ctx, run.ID)
 			testutil.FailErr(t, "read retained work", err)
 			if len(tasks) != 5 {
 				t.Fatal("completion created duplicate work")

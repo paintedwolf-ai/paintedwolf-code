@@ -9,7 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -295,7 +294,7 @@ func TestPollerReplaysUnacknowledgedTerminalOutcome(t *testing.T) {
 	}
 }
 
-func TestPollerDeliversTerminalOutcomeBeforeParentBecomesIdle(t *testing.T) {
+func TestPollerDeliversTerminalOutcomeOutsideTheCanceledExecution(t *testing.T) {
 	queue := NewInMemoryQueue(1)
 	parent := "parent-outcome-order"
 	_, err := queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{
@@ -310,9 +309,7 @@ func TestPollerDeliversTerminalOutcomeBeforeParentBecomesIdle(t *testing.T) {
 
 	parentCtx, cancelParent := context.WithCancel(t.Context())
 	recorder := &blockingOutcomeRecorder{started: make(chan struct{}), release: make(chan struct{})}
-	waiter := NewParentWorkerWaiter()
 	poller := NewLocalWorkerPoller(queue, cancelThenCompleteExecutor{cancel: cancelParent}, DefaultWorkersConfig(), recorder)
-	poller.ParentWaiter = waiter
 	executeDone := make(chan struct{})
 	go func() {
 		poller.execute(parentCtx, task)
@@ -324,32 +321,7 @@ func TestPollerDeliversTerminalOutcomeBeforeParentBecomesIdle(t *testing.T) {
 		t.Fatal("terminal outcome delivery did not start")
 	}
 
-	waitCtx := t.Context()
-	waitDone := make(chan error, 1)
-	go func() {
-		waitDone <- AwaitParentSessionWorkers(waitCtx, queue, waiter, testdbseed.DefaultProjectID, parent, settings.DefaultSessionLimits())
-	}()
-	for t.Context().Err() == nil {
-		waiter.mu.Lock()
-		n := len(waiter.waiters[parent])
-		waiter.mu.Unlock()
-		if n == 1 {
-			break
-		}
-		time.Sleep(time.Millisecond)
-	}
-	select {
-	case err := <-waitDone:
-		t.Fatalf("parent became idle before terminal projection: %v", err)
-	default:
-	}
 	close(recorder.release)
-	select {
-	case err := <-waitDone:
-		testutil.FailErr(t, "await delivered outcome", err)
-	case <-t.Context().Done():
-		t.Fatal("parent did not resume after terminal outcome acknowledgement")
-	}
 	<-executeDone
 	if recorder.sawCanceled.Load() {
 		t.Fatal("terminal outcome inherited the canceled worker execution context")

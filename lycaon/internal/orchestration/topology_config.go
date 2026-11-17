@@ -87,9 +87,6 @@ func ParseTopology(data []byte) (*TopologySpec, error) {
 	if err := validateWorkspaceMode(spec.WorkspaceMode); err != nil {
 		return nil, fmt.Errorf("topology %q: %w", raw.ID, err)
 	}
-	if spec.IterationCap == 0 {
-		spec.IterationCap = DefaultIterationCap
-	}
 	if raw.Supervisor != nil {
 		spec.Supervisor = &SupervisorSpec{
 			Strategy:   raw.Supervisor.Strategy,

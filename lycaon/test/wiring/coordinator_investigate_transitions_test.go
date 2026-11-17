@@ -163,7 +163,7 @@ func TestInvestigateReturnsAfterWorkersCompleteAndNoQueuedPromotion(t *testing.T
 
 	if followProfile.SurfaceID != toolcontract.SurfaceImplementInvestigate {
 		runCtx, _ := h.Sessions.Manager.Coordinator.Context.RunContext(ctx, sess.ID)
-		jobs, _ := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID)
+		jobs, _ := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID)
 		t.Fatalf("visible user follow-up surface = %q want investigate; state=%+v run=%+v jobs=%+v", followProfile.SurfaceID, state, runCtx, jobs)
 	}
 

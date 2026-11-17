@@ -4,7 +4,7 @@ import type { BriefingRequest, BriefingSnapshot } from "../api/types.ts";
 import type { BriefingsClient } from "../api/http-capabilities/briefings.ts";
 import {
   BRIEFING_DEBOUNCE_MS, BRIEFING_INACTIVE_LIMIT, applyBriefingEvent, briefingEntryCountForTests, requestBriefing, requestBriefingResync,
-  resetBriefingLiveForTests, setBriefingClient, setBriefingClockForTests, useBriefing, type BriefingTarget,
+  resetBriefingLiveForTests, retryBriefing, setBriefingClient, setBriefingClockForTests, useBriefing, type BriefingTarget,
 } from "./briefing-live.ts";
 
 class FakeClock {
@@ -221,5 +221,42 @@ describe("briefing live store", () => {
     clock.advance(BRIEFING_DEBOUNCE_MS);
     await settle();
     expect(client.calls).toHaveLength(0);
+  });
+
+  it("asks again on the next open when the last attempt ended without an answer", async () => {
+    const clock = new FakeClock();
+    setBriefingClockForTests(clock);
+    const failed = snapshot({ status: "failed", error_code: "queue_expired" });
+    const client = stubClient([failed, snapshot({ status: "pending", target_key: "card" }), snapshot({ status: "complete" })]);
+    setBriefingClient(() => client);
+    const first = watch("p", target);
+    clock.advance(BRIEFING_DEBOUNCE_MS);
+    await settle();
+    expect(first.view().snapshot?.status).toBe("failed");
+    first.dispose();
+    const reopened = watch("p", target);
+    clock.advance(BRIEFING_DEBOUNCE_MS);
+    await settle();
+    expect(client.calls).toHaveLength(2);
+    reopened.dispose();
+    const answered = watch("p", target);
+    clock.advance(BRIEFING_DEBOUNCE_MS);
+    await settle();
+    expect(client.calls).toHaveLength(2);
+    answered.dispose();
+  });
+
+  it("asks again once, at once, when a person retries", async () => {
+    const clock = new FakeClock();
+    setBriefingClockForTests(clock);
+    const client = stubClient([snapshot({ status: "failed", error_code: "queue_expired" }), snapshot({ status: "pending" })]);
+    setBriefingClient(() => client);
+    const view = watch("p", target);
+    clock.advance(BRIEFING_DEBOUNCE_MS);
+    await settle();
+    retryBriefing("p", target);
+    await settle();
+    expect(client.calls.map((call) => call.trigger)).toEqual(["automatic", "manual"]);
+    view.dispose();
   });
 });

@@ -3,6 +3,7 @@ package execution
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -61,7 +62,7 @@ func TestSpillResultJSON_RoundTrip(t *testing.T) {
 		t.Fatalf("warnings = %d", len(stub.Warnings))
 	}
 
-	loaded, err := scanbase.LoadSpilledResult(dir, stub.ResultSpillPath)
+	loaded, err := loadSpilledResult(dir, stub.ResultSpillPath)
 	testutil.FailErr(t, "load spill", err)
 	if loaded.FindingsCount != len(findings) || len(loaded.Findings) != len(findings) {
 		t.Fatalf("loaded = counts %d/%d", loaded.FindingsCount, len(loaded.Findings))
@@ -122,9 +123,23 @@ func TestMarkCompleteSpillKeepsDatabaseResultSmall(t *testing.T) {
 		t.Fatal("expected spill path on stub")
 	}
 	evidenceRoot := project.PathKeyedHostDataDir(dataDir, canonical)
-	loaded, err := scanbase.LoadSpilledResult(evidenceRoot, stub.ResultSpillPath)
+	loaded, err := loadSpilledResult(evidenceRoot, stub.ResultSpillPath)
 	testutil.FailErr(t, "hydrate", err)
 	if len(loaded.Findings) != len(findings) {
 		t.Fatalf("hydrated findings = %d", len(loaded.Findings))
 	}
+}
+
+// loadSpilledResult reads a spilled result back as a consumer of the spill
+// path would.
+func loadSpilledResult(evidenceRoot, spillRel string) (*scanoutput.Result, error) {
+	raw, err := os.ReadFile(filepath.Join(evidenceRoot, filepath.FromSlash(spillRel))) // #nosec G304 -- test spill
+	if err != nil {
+		return nil, err
+	}
+	var out scanoutput.Result
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }

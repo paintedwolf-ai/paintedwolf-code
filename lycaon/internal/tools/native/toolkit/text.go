@@ -2,7 +2,6 @@ package toolkit
 
 import (
 	"strings"
-	"unicode/utf8"
 )
 
 // SplitLines splits text into logical lines. A trailing newline does not produce
@@ -21,17 +20,4 @@ func SplitLines(text string) []string {
 // CountLines returns the number of logical lines in text.
 func CountLines(text string) int {
 	return len(SplitLines(text))
-}
-
-// TrimPartialTrailingRune drops a multi-byte rune that a byte-offset cut left
-// half-written. Only the last UTFMax-1 bytes can belong to such a rune, so the
-// bound keeps a genuinely invalid tail from being trimmed away.
-func TrimPartialTrailingRune(prefix []byte) []byte {
-	for i := 0; i < utf8.UTFMax-1 && len(prefix) > 0; i++ {
-		if r, size := utf8.DecodeLastRune(prefix); r != utf8.RuneError || size > 1 {
-			break
-		}
-		prefix = prefix[:len(prefix)-1]
-	}
-	return prefix
 }

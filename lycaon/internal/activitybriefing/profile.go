@@ -18,7 +18,7 @@ import (
 
 const (
 	ProfileID      = "tool_activity"
-	profileVersion = "1"
+	profileVersion = "2"
 	// maxMembers bounds the activities and calls one card may explain.
 	maxMembers = 64
 	// pageLimit bounds the receipts read for one activity.

@@ -1,7 +1,6 @@
 package batch
 
 import (
-	"sort"
 	"strings"
 )
 
@@ -25,31 +24,4 @@ func ToWirePhase(hostPhase string) string {
 		return w
 	}
 	return ""
-}
-
-// HostPhases returns every host phase key in the map, sorted.
-func HostPhases() []string {
-	out := make([]string, 0, len(hostToWirePhase))
-	for p := range hostToWirePhase {
-		out = append(out, p)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// WirePhases returns the mapped host phases that appear on the wire, sorted.
-func WirePhases() []string {
-	set := map[string]struct{}{}
-	for _, w := range hostToWirePhase {
-		if w == "" {
-			continue
-		}
-		set[w] = struct{}{}
-	}
-	out := make([]string, 0, len(set))
-	for w := range set {
-		out = append(out, w)
-	}
-	sort.Strings(out)
-	return out
 }

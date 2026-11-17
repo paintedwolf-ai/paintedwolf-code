@@ -9,8 +9,8 @@ import (
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/config/configtest"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/scan"
@@ -53,9 +53,8 @@ func TestSnapshotBuilderWithholdsProgressiveRepoBrief(t *testing.T) {
 
 func TestSnapshotBuilderBuild_Empty(t *testing.T) {
 	b := &SnapshotBuilder{
-		Delegations: delegation.NewMemoryStore(),
-		Workers:     worker.NewInMemoryQueue(10),
-		Repo:        repotest.NewProvider(t),
+		Workers: worker.NewInMemoryQueue(10),
+		Repo:    repotest.NewProvider(t),
 	}
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -71,13 +70,12 @@ func TestSnapshotBuilderBuild_Empty(t *testing.T) {
 	if snap.DetailLevel != api.BoardDetailLevelCompact {
 		t.Fatalf("DetailLevel = %q", snap.DetailLevel)
 	}
-	if snap.Delegation == nil || snap.Workers == nil {
-		t.Fatal("Delegation or Workers slice is nil")
+	if snap.Workers == nil {
+		t.Fatal("Workers slice is nil")
 	}
-	delegations, _ := (*snap.Delegation)["delegations"].([]api.Delegation)
 	tasks, _ := (*snap.Workers)["tasks"].([]api.WorkerTask)
-	if len(delegations) != 0 || len(tasks) != 0 {
-		t.Fatalf("delegations = %d tasks = %d, want 0 each", len(delegations), len(tasks))
+	if len(tasks) != 0 {
+		t.Fatalf("tasks = %d, want 0", len(tasks))
 	}
 }
 
@@ -90,10 +88,9 @@ func TestSnapshotBuilderBuild_NilStores(t *testing.T) {
 	if snap.Repo.FileCount != 0 {
 		t.Fatalf("Repo.FileCount = %d, want 0", snap.Repo.FileCount)
 	}
-	delegations, _ := (*snap.Delegation)["delegations"].([]api.Delegation)
 	tasks, _ := (*snap.Workers)["tasks"].([]api.WorkerTask)
-	if len(delegations) != 0 || len(tasks) != 0 {
-		t.Fatalf("delegations = %d tasks = %d, want 0 each", len(delegations), len(tasks))
+	if len(tasks) != 0 {
+		t.Fatalf("tasks = %d, want 0", len(tasks))
 	}
 }
 
@@ -108,20 +105,13 @@ func TestSnapshotBuilderBuild_DefaultDetailLevel(t *testing.T) {
 	}
 }
 
-func TestSnapshotBuilderBuild_IncludesDelegationsAndWorkers(t *testing.T) {
-	delegationStore := delegation.NewMemoryStore()
+func TestSnapshotBuilderBuild_IncludesWorkers(t *testing.T) {
 	queue := worker.NewInMemoryQueue(10)
-	b := &SnapshotBuilder{Delegations: delegationStore, Workers: queue, Repo: repotest.NewProvider(t)}
+	b := &SnapshotBuilder{Workers: queue, Repo: repotest.NewProvider(t)}
 	ctx := context.Background()
 	dir := t.TempDir()
 	otherDir := t.TempDir()
 
-	if _, err := delegationStore.Create(ctx, api.Delegation{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir, Task: "ship it"}, "sess-1", []api.Leg{{}}); err != nil {
-		testutil.FailErr(t, "delegationStore.Create failed", err)
-	}
-	if _, err := delegationStore.Create(ctx, api.Delegation{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: otherDir, Task: "other"}, "sess-2", []api.Leg{{}}); err != nil {
-		testutil.FailErr(t, "delegationStore.Create failed", err)
-	}
 	if _, err := queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		ParentSessionID: "sess-1",
 		AgentType:       orchestration.ProfileImplementer,
@@ -149,17 +139,6 @@ func TestSnapshotBuilderBuild_IncludesDelegationsAndWorkers(t *testing.T) {
 	testutil.FailErr(t, "b.Build failed", err)
 	if snap.DetailLevel != api.BoardDetailLevelFull {
 		t.Fatalf("DetailLevel = %q", snap.DetailLevel)
-	}
-
-	delegations, ok := (*snap.Delegation)["delegations"].([]api.Delegation)
-	if !ok {
-		t.Fatal("delegations has unexpected type")
-	}
-	if len(delegations) != 1 {
-		t.Fatalf("delegations = %d, want 1", len(delegations))
-	}
-	if delegations[0].Task != "ship it" {
-		t.Fatalf("delegation task = %q", delegations[0].Task)
 	}
 
 	tasks, ok := (*snap.Workers)["tasks"].([]api.WorkerTask)
@@ -221,34 +200,6 @@ func TestSnapshotBuilderBuild_WorkersScopedToSession(t *testing.T) {
 	}
 }
 
-func TestSnapshotBuilderBuild_DelegationsScopedToSession(t *testing.T) {
-	delegationStore := delegation.NewMemoryStore()
-	b := &SnapshotBuilder{Delegations: delegationStore, Repo: repotest.NewProvider(t)}
-	ctx := context.Background()
-	dir := t.TempDir()
-
-	if _, err := delegationStore.Create(ctx, api.Delegation{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir, Task: "alpha"}, "sess-a", []api.Leg{{}}); err != nil {
-		testutil.FailErr(t, "delegationStore.Create alpha", err)
-	}
-	if _, err := delegationStore.Create(ctx, api.Delegation{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir, Task: "beta"}, "sess-b", []api.Leg{{}}); err != nil {
-		testutil.FailErr(t, "delegationStore.Create beta", err)
-	}
-
-	snapFresh, err := b.Build(ctx, testdbseed.DefaultProjectID, dir, "sess-new", api.BoardDetailLevelCompact, nil)
-	testutil.FailErr(t, "b.Build sess-new failed", err)
-	delegations, _ := (*snapFresh.Delegation)["delegations"].([]api.Delegation)
-	if len(delegations) != 0 {
-		t.Fatalf("sess-new delegations = %d, want 0", len(delegations))
-	}
-
-	snapA, err := b.Build(ctx, testdbseed.DefaultProjectID, dir, "sess-a", api.BoardDetailLevelCompact, nil)
-	testutil.FailErr(t, "b.Build sess-a failed", err)
-	delegationsA, _ := (*snapA.Delegation)["delegations"].([]api.Delegation)
-	if len(delegationsA) != 1 || delegationsA[0].Task != "alpha" {
-		t.Fatalf("sess-a delegations = %#v, want single alpha delegation", delegationsA)
-	}
-}
-
 type stubWorkflowRunSource struct {
 	active func(ctx context.Context, sessionID string) (*api.WorkflowRun, error)
 }
@@ -292,9 +243,8 @@ func TestSnapshotBuilderBuild_WorkflowRunScopedToSession(t *testing.T) {
 
 func TestSnapshotBuilderBuild_CanceledContext(t *testing.T) {
 	b := &SnapshotBuilder{
-		Delegations: delegation.NewMemoryStore(),
-		Workers:     worker.NewInMemoryQueue(10),
-		Repo:        repotest.NewProvider(t),
+		Workers: worker.NewInMemoryQueue(10),
+		Repo:    repotest.NewProvider(t),
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -499,11 +449,7 @@ func TestSnapshotBuilderBuildEnrichesActiveReservations(t *testing.T) {
 	}
 	snap, err := b.Build(ctx, testdbseed.DefaultProjectID, dir, "sess-1", api.BoardDetailLevelCompact, nil)
 	testutil.FailErr(t, "Build", err)
-	view := BuildBoardView(snap, "sess-1", api.BoardDetailLevelCompact, time.Now().UTC())
-	if len(view.Roster) != 1 {
-		t.Fatalf("roster = %d want 1", len(view.Roster))
-	}
-	if got := view.Roster[0].Reservations; len(got) != 1 || got[0] != "pkg/foo.go" {
+	if got := packboard.ReservationsFromSnapshot(*snap); len(got) != 1 || got[0].Path != "pkg/foo.go" || got[0].JobID != "job-a" {
 		t.Fatalf("reservations = %#v", got)
 	}
 }

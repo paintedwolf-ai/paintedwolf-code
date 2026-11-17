@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -29,13 +30,16 @@ func (q *sqlQueueClaims) completeAdmitted(ctx context.Context, claimed *api.Work
 	}
 	task, mergeStatus, teardown := q.resolveWriteCompletionTarget(ctx, claimed, result)
 	jobID := claimed.ID
-	overlayPath := ""
+	overlayPath, checkpointID := "", ""
 	// A view publishes its checkpoint; an earlier-format branch seals an overlay against its baseline.
 	// A budget-exceeded overlay stays unsealed for review.
 	if mergeStatus == api.WorkerMergeStatusPending && strings.TrimSpace(task.WorkspaceOverlayPath) == "" {
 		published, err := workspace.PublishBranchCheckpoint(ctx, task.WorkspaceRoot)
 		if err != nil {
 			return false, fmt.Errorf("worker %s: publish checkpoint: %w", task.ID, err)
+		}
+		if published {
+			_, checkpointID, _ = workspace.BranchCheckpoint(task.WorkspaceRoot)
 		}
 		if !published && strings.TrimSpace(task.WorkspaceBaselinePath) != "" {
 			captured, err := q.captureOverlay(ctx, task)
@@ -51,7 +55,8 @@ func (q *sqlQueueClaims) completeAdmitted(ctx context.Context, claimed *api.Work
 			}
 		}
 	}
-	completion, err := q.store.CompleteJob(ctx, jobID, result, claimed.ClaimToken, mergeStatus, teardown, overlayPath)
+	criteriaJSON := q.evaluateRoundCriteria(ctx, task, strings.TrimSpace(result.Status) != "needs_decision", result.Summary, result.ChangeReport)
+	completion, err := q.store.CompleteJob(ctx, jobID, result, claimed.ClaimToken, mergeStatus, teardown, overlayPath, checkpointID, criteriaJSON)
 	if err != nil || !completion.Committed || completion.Suspended {
 		q.discardOverlay(ctx, overlayPath)
 	}
@@ -62,6 +67,9 @@ func (q *sqlQueueClaims) completeAdmitted(ctx context.Context, claimed *api.Work
 		q.destroyWorkerWorkspace(ctx, task)
 	}
 	q.refreshBoardByID(ctx, jobID)
+	if !completion.Suspended {
+		q.notifyRoundSettled(ctx, task)
+	}
 	return true, nil
 }
 
@@ -95,6 +103,28 @@ func (q *sqlQueueClaims) resolveWriteCompletionTarget(ctx context.Context, claim
 	}
 }
 
+// keptCheckpoint publishes the checkpoint of a write round that ends
+// without delivering, so its changes stay under its result.
+func (q *sqlQueueClaims) keptCheckpoint(ctx context.Context, task *api.WorkerTask) string {
+	if task == nil || !task.EffectiveScope().IsWrite() || strings.TrimSpace(task.WorkspaceRoot) == "" ||
+		strings.TrimSpace(task.WorkspaceOverlayPath) != "" {
+		return ""
+	}
+	if _, status, _ := q.resolveWriteCompletionTarget(ctx, task, api.WorkerResult{}); status != api.WorkerMergeStatusPending {
+		return ""
+	}
+	published, err := workspace.PublishBranchCheckpoint(ctx, task.WorkspaceRoot)
+	if err != nil {
+		workerWorkspaceLog.Warn("ended round kept its branch without a checkpoint", "job_id", task.ID, "error", err)
+		return ""
+	}
+	if !published {
+		return ""
+	}
+	_, checkpointID, _ := workspace.BranchCheckpoint(task.WorkspaceRoot)
+	return checkpointID
+}
+
 // Fail commits a failure only while the claim remains current.
 func (q *sqlQueueClaims) Fail(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
 	return admitWorkerTransition(ctx, q.self, claimed, func() (bool, error) {
@@ -122,17 +152,20 @@ func (q *sqlQueueClaims) failAdmitted(ctx context.Context, claimed *api.WorkerTa
 			task = loaded
 		}
 	}
-	won, err := q.store.FailJob(ctx, claimed, msg, failure)
+	kept := q.keptCheckpoint(ctx, task)
+	criteriaJSON := q.evaluateRoundCriteria(ctx, task, false, "", nil)
+	won, err := q.store.FailJob(ctx, claimed, msg, failure, kept, criteriaJSON)
 	if err != nil {
 		return false, err
 	}
 	if !won {
 		return false, nil
 	}
-	if task != nil {
+	if task != nil && kept == "" {
 		q.destroyWorkerWorkspace(ctx, task)
 	}
 	q.refreshBoardByID(ctx, claimed.ID)
+	q.notifyRoundSettled(ctx, task)
 	return true, nil
 }
 
@@ -181,7 +214,7 @@ func (q *sqlQueueClaims) parkAdmitted(ctx context.Context, claimed *api.WorkerTa
 
 // ResumeReadyWaits atomically expires deadlines and makes every resolved worker runnable.
 func (q *sqlQueueClaims) ResumeReadyWaits(ctx context.Context) (int, error) {
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	tx, err := q.db.BeginTx(ctx, nil)
 	if err != nil {
 		return 0, err
@@ -234,4 +267,50 @@ func hasLayeredOverlayDivergence(ctx context.Context, task *api.WorkerTask) (boo
 		return false, false
 	}
 	return err != nil || len(paths) > 0, true
+}
+
+func (q *sqlQueueClaims) evaluateRoundCriteria(
+	ctx context.Context,
+	task *api.WorkerTask,
+	jobComplete bool,
+	summary string,
+	report *api.WorkerChangeReport,
+) string {
+	if task == nil {
+		return ""
+	}
+	q.mu.Lock()
+	eval := q.criteriaEvaluator
+	projects := q.projects
+	q.mu.Unlock()
+	if eval == nil {
+		return ""
+	}
+	var diverged []string
+	if strings.TrimSpace(task.WorkspaceRoot) != "" {
+		if paths, handled, err := workspace.OverlayWorkspaceDivergencePaths(ctx, task.WorkspaceRoot); handled && err == nil {
+			diverged = paths
+		} else {
+			diverged = session.OverlayWorkspaceDivergencePaths(task, TaskRootRefs(ctx, task, projects)) //nolint:contextcheck // Divergence summary inspects baseline snapshots synchronously.
+		}
+	}
+	projectDir := strings.TrimSpace(task.WorkspacePath)
+	if projectDir == "" {
+		if refs := TaskRootRefs(ctx, task, projects); len(refs) > 0 {
+			projectDir = strings.TrimSpace(refs[0].Path)
+		}
+	}
+	return eval(ctx, task, projectDir, jobComplete, summary, diverged, report)
+}
+
+func (q *sqlQueueClaims) notifyRoundSettled(ctx context.Context, task *api.WorkerTask) {
+	if task == nil || strings.TrimSpace(task.ParentSessionID) == "" {
+		return
+	}
+	q.mu.Lock()
+	onSettled := q.onRoundSettled
+	q.mu.Unlock()
+	if onSettled != nil {
+		onSettled(ctx, task.ParentSessionID)
+	}
 }

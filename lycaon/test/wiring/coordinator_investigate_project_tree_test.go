@@ -160,7 +160,7 @@ func TestInvestigateCoordinatorWriteLandsOnProjectTree(t *testing.T) {
 		t.Fatal("merge reconcile must not open investigate product path without promote conflict")
 	}
 
-	jobs, err := h.Delegations.Queue.List(ctx, testdbseed.DefaultProjectID, api.WorkerStatusPending, api.WorkerStatusRunning)
+	jobs, err := h.Workers.Queue.List(ctx, testdbseed.DefaultProjectID, api.WorkerStatusPending, api.WorkerStatusRunning)
 	testutil.FailErr(t, "WorkerQueue.List", err)
 	if len(jobs) != 0 {
 		t.Fatalf("investigate coordinator write must not enqueue worker jobs: %+v", jobs)

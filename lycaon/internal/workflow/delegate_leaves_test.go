@@ -1,7 +1,6 @@
 package workflow
 
 import (
-	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"testing"
 
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -45,12 +44,5 @@ func TestRegisteredGateLeafIDsIncludesDelegateLeaves(t *testing.T) {
 		if !found[id] {
 			t.Fatalf("RegisteredGateLeafIDs missing %q", id)
 		}
-	}
-}
-
-func TestImplementWorkLegKey(t *testing.T) {
-	key := runstate.ImplementWorkLegKey("sess-abc")
-	if key != "implement-work:sess-abc" {
-		t.Fatalf("leg key = %q", key)
 	}
 }

@@ -246,26 +246,31 @@ type PromoteOverlayInput struct {
 // WorkerMergeResult is the promote_overlay / preview_overlay tool response.
 type WorkerMergeResult struct {
 	// OverlayPromotion is host-only transcript metadata.
-	OverlayPromotion *OverlayPromotion             `json:"-"`
-	JobID            string                        `json:"job_id"`
-	Mode             string                        `json:"mode"`
-	Status           WorkerMergeStatus             `json:"merge_status,omitempty"`
-	AgentType        string                        `json:"agent_type,omitempty"`
-	Paths            []string                      `json:"paths,omitempty"`
-	ChangedPaths     []string                      `json:"changed_paths,omitempty"`
-	CleanPaths       []string                      `json:"clean_paths,omitempty"`
-	Applied          []string                      `json:"applied,omitempty"`
-	PathStatus       []WorkerPromotePathStatus     `json:"path_status,omitempty"`
-	OverlapJobIDs    []string                      `json:"overlap_job_ids,omitempty"`
-	PromoteOrder     WorkerPromoteOrderKind        `json:"promote_order,omitempty"`
-	PromoteAfter     []string                      `json:"promote_after,omitempty"`
-	BlockedBy        []string                      `json:"blocked_by,omitempty"`
-	ConflictDigest   []WorkerPromoteConflictDigest `json:"conflict_digest,omitempty"`
-	Conflicts        []WorkerMergeConflict         `json:"conflicts,omitempty"`
-	OverlayIntent    *WorkerOverlayIntent          `json:"overlay_intent,omitempty"`
-	SpillPath        string                        `json:"spill_path,omitempty"` // host-data-relative (promote-spills/…); never absolute ~/.config/paintedwolf
-	ReadyResolutions []WorkerReadyResolution       `json:"ready_resolutions,omitempty"`
-	Error            string                        `json:"error,omitempty"`
+	OverlayPromotion *OverlayPromotion `json:"-"`
+	// JobID is host identity; the coordinator addresses the result by handle.
+	JobID        string                    `json:"-"`
+	ResultHandle string                    `json:"result_handle"`
+	Mode         string                    `json:"mode"`
+	Status       WorkerMergeStatus         `json:"merge_status,omitempty"`
+	AgentType    string                    `json:"agent_type,omitempty"`
+	Paths        []string                  `json:"paths,omitempty"`
+	ChangedPaths []string                  `json:"changed_paths,omitempty"`
+	CleanPaths   []string                  `json:"clean_paths,omitempty"`
+	Applied      []string                  `json:"applied,omitempty"`
+	PathStatus   []WorkerPromotePathStatus `json:"path_status,omitempty"`
+	// OverlapJobIDs are the sibling jobs whose pending changes share paths.
+	OverlapJobIDs []string `json:"-"`
+	// OverlapOverlayIDs are the result handles of those siblings.
+	OverlapOverlayIDs []string                      `json:"overlap_overlay_ids,omitempty"`
+	PromoteOrder      WorkerPromoteOrderKind        `json:"promote_order,omitempty"`
+	PromoteAfter      []string                      `json:"promote_after,omitempty"`
+	BlockedBy         []string                      `json:"blocked_by,omitempty"`
+	ConflictDigest    []WorkerPromoteConflictDigest `json:"conflict_digest,omitempty"`
+	Conflicts         []WorkerMergeConflict         `json:"conflicts,omitempty"`
+	OverlayIntent     *WorkerOverlayIntent          `json:"overlay_intent,omitempty"`
+	SpillPath         string                        `json:"spill_path,omitempty"` // host-data-relative (promote-spills/…); never absolute ~/.config/paintedwolf
+	ReadyResolutions  []WorkerReadyResolution       `json:"ready_resolutions,omitempty"`
+	Error             string                        `json:"error,omitempty"`
 	// Rebased lists children rebased after this overlay lands.
 	Rebased []OverlayRebaseOutcome `json:"rebased,omitempty"`
 	// SourceEvidence describes current verification requirements.
@@ -273,11 +278,15 @@ type WorkerMergeResult struct {
 }
 
 // OverlayRejectOutcome reports the result of explicitly rejecting an overlay,
-// including any stacked children that were orphaned by the rejection.
+// with the later results and stacked children the rejection reached.
 type OverlayRejectOutcome struct {
-	OverlayID string   `json:"overlay_id"`
-	Reason    string   `json:"reason,omitempty"`
-	Orphaned  []string `json:"orphaned_job_ids,omitempty"`
+	OverlayID string `json:"overlay_id"`
+	Reason    string `json:"reason,omitempty"`
+	// Later names the worker's later results rejected with it, whose rounds
+	// carried these changes.
+	Later []string `json:"later_overlay_ids,omitempty"`
+	// Orphaned names the stacked results the rejection orphaned.
+	Orphaned []string `json:"orphaned_overlay_ids,omitempty"`
 }
 
 // WorkspaceNotClonableReason says why a worker branch cannot clone its source.
@@ -302,26 +311,35 @@ const (
 )
 
 type WorkerTask struct {
-	Dependencies     []WorkerDependency `json:"dependencies,omitempty"`
-	AfterWorkers     []string           `json:"after_workers,omitempty"`
-	ID               string             `json:"id"`
-	ChildSessionID   string             `json:"child_session_id,omitempty"`
-	ProjectID        string             `json:"project_id,omitempty"`
-	WorkspaceRootID  string             `json:"workspace_root_id,omitempty"`
-	WorkspacePath    string             `json:"workspace_path,omitempty"`
-	DelegationID     string             `json:"delegation_id,omitempty"`
-	LegID            string             `json:"leg_id,omitempty"`
-	ParentSessionID  string             `json:"parent_session_id,omitempty"`
-	SourceToolCallID string             `json:"-"`
-	SourceArgsDigest string             `json:"-"`
-	WorkflowRunID    string             `json:"workflow_run_id,omitempty"`
-	WorkflowPhase    string             `json:"workflow_phase,omitempty"`
-	WorkflowWorkID   string             `json:"workflow_work_id,omitempty"`
-	AgentType        string             `json:"agent_type"`
-	Status           WorkerStatus       `json:"status"`
-	ExecutionTarget  ExecutionTarget    `json:"execution_target,omitempty"`
-	RunnerID         string             `json:"runner_id,omitempty"`
-	ClaimedBy        string             `json:"claimed_by,omitempty"`
+	Dependencies      []WorkerDependency      `json:"dependencies,omitempty"`
+	AfterWorkers      []string                `json:"after_workers,omitempty"`
+	ID                string                  `json:"id"`
+	WorkerRecordID    string                  `json:"worker_record_id,omitempty"`
+	WorkerName        string                  `json:"worker_name,omitempty"`
+	Round             int                     `json:"round,omitempty"`
+	ResultHandle      string                  `json:"result_handle,omitempty"`
+	ResultDisposition WorkerResultDisposition `json:"result_disposition,omitempty"`
+	ShelveReason      string                  `json:"shelve_reason,omitempty"`
+	ReviewOf          string                  `json:"review_of,omitempty"`
+	ParkedReason      string                  `json:"parked_reason,omitempty"`
+	ParkedUntilAt     string                  `json:"parked_until_at,omitempty"`
+	ChildSessionID    string                  `json:"child_session_id,omitempty"`
+	ProjectID         string                  `json:"project_id,omitempty"`
+	WorkspaceRootID   string                  `json:"workspace_root_id,omitempty"`
+	WorkspacePath     string                  `json:"workspace_path,omitempty"`
+	DelegationID      string                  `json:"delegation_id,omitempty"`
+	LegID             string                  `json:"leg_id,omitempty"`
+	ParentSessionID   string                  `json:"parent_session_id,omitempty"`
+	SourceToolCallID  string                  `json:"-"`
+	SourceArgsDigest  string                  `json:"-"`
+	WorkflowRunID     string                  `json:"workflow_run_id,omitempty"`
+	WorkflowPhase     string                  `json:"workflow_phase,omitempty"`
+	WorkflowWorkID    string                  `json:"workflow_work_id,omitempty"`
+	AgentType         string                  `json:"agent_type"`
+	Status            WorkerStatus            `json:"status"`
+	ExecutionTarget   ExecutionTarget         `json:"execution_target,omitempty"`
+	RunnerID          string                  `json:"runner_id,omitempty"`
+	ClaimedBy         string                  `json:"claimed_by,omitempty"`
 	// Claim metadata binds updates to one durable attempt.
 	ClaimToken     string      `json:"-"`
 	Attempt        int         `json:"-"`
@@ -343,16 +361,16 @@ type WorkerTask struct {
 	// changes; with the baseline it rebuilds the branch tree on demand.
 	WorkspaceOverlayPath string `json:"-"`
 	// OverlayID identifies a write overlay and its stacked children.
-	OverlayID    string `json:"overlay_id,omitempty"`
-	MaxToolLoops int    `json:"max_tool_loops,omitempty"`
-	// BudgetRequest is the worker's unanswered ask for a higher ceiling.
-	BudgetRequest *WorkerBudgetRequest `json:"budget_request,omitempty"`
-	ToolLoopsUsed int                  `json:"tool_loops_used,omitempty"`
+	OverlayID     string `json:"overlay_id,omitempty"`
+	ToolLoopsUsed int    `json:"tool_loops_used,omitempty"`
 	// ToolCallsUsed counts settled calls across all rounds.
 	ToolCallsUsed int `json:"tool_calls_used,omitempty"`
 	// TurnToolCalls and TurnToolsDone describe the active batch.
 	TurnToolCalls int `json:"turn_tool_calls,omitempty"`
 	TurnToolsDone int `json:"turn_tools_done,omitempty"`
+	// TurnTools and TurnStartedAt name the active batch and when it began.
+	TurnTools     []string   `json:"turn_tools,omitempty"`
+	TurnStartedAt *time.Time `json:"turn_started_at,omitempty"`
 	// ContextUsage is the worker's live context occupancy.
 	ContextUsage         *WorkerContextUsage   `json:"context_usage,omitempty"`
 	WorkspacePreparation *WorkspacePreparation `json:"workspace_preparation,omitempty"`

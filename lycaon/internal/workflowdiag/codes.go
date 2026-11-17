@@ -21,12 +21,3 @@ func MustCode(s string) Code {
 	}
 	return c
 }
-
-// AllCodes returns every code from the default catalog, sorted for stability.
-func AllCodes() []Code {
-	cat, err := Default()
-	if err != nil {
-		panic(fmt.Sprintf("workflowdiag: load default catalog: %v", err))
-	}
-	return cat.Codes()
-}

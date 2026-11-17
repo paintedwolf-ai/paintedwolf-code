@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"sort"
 	"strings"
 	"time"
@@ -114,7 +115,7 @@ func insertTeardownTx(ctx context.Context, tx *sql.Tx, op *runstate.TeardownInte
 	if op == nil {
 		return nil
 	}
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	return db.New(tx).InsertWorkflowTeardownOperation(ctx, db.InsertWorkflowTeardownOperationParams{
 		ID: op.ID, RunID: op.RunID, SourceRevision: op.SourceRevision,
 		CancelScope: string(op.CancelScope), AbortDelegation: boolInt64(op.AbortDelegation),

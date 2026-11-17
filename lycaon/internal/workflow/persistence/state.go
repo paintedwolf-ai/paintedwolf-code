@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -59,7 +60,7 @@ func (s *State) Update(ctx context.Context, run *api.WorkflowRun) error {
 		CurrentPhase: run.CurrentPhase,
 		PauseReason:  db.NullString(run.PauseReason),
 		FailureJson:  failureJSON,
-		UpdatedAt:    db.FormatTime(run.UpdatedAt),
+		UpdatedAt:    timelayout.Format(run.UpdatedAt),
 		PausedAt:     db.NullTimePtr(run.PausedAt),
 		CompletedAt:  db.NullTimePtr(run.CompletedAt),
 		ID:           run.ID,
@@ -121,7 +122,7 @@ func (s *State) CommitState(ctx context.Context, run *api.WorkflowRun, projectDi
 		VarsJson:     string(raw),
 		PauseReason:  db.NullString(run.PauseReason),
 		FailureJson:  failureJSON,
-		UpdatedAt:    db.FormatTime(run.UpdatedAt),
+		UpdatedAt:    timelayout.Format(run.UpdatedAt),
 		PausedAt:     db.NullTimePtr(run.PausedAt),
 		CompletedAt:  db.NullTimePtr(run.CompletedAt),
 		ID:           run.ID,
@@ -168,7 +169,7 @@ func (s *State) UpdateVars(ctx context.Context, run *api.WorkflowRun, projectDir
 	n, err := db.New(tx).UpdateWorkflowRunVars(ctx, db.UpdateWorkflowRunVarsParams{
 		ProjectDir: projectDir,
 		VarsJson:   string(b),
-		UpdatedAt:  db.FormatTime(now),
+		UpdatedAt:  timelayout.Format(now),
 		ID:         run.ID,
 		Revision:   run.Revision,
 	})

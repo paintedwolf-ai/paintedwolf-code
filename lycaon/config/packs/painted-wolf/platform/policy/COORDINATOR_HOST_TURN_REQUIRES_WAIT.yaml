@@ -10,10 +10,10 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
 message: 'Host cycle turn ended with prose only — call `wait()` or actionable work'
 what: A host cycle turn ([host:loop-wake], or a turn the host opened to report a worker finished) ended with assistant prose and no tool calls
-cause: 'The host cycle still has open checklist work, workers in flight, pending overlays, or a surface that requires a tool action'
-why: 'Finishing one wave does not complete the remaining checklist. An explicit action keeps progress and wake conditions aligned'
-fix: 'Reconcile completed legs and overlays, repair partial work, and dispatch the next independent ready legs. Wait only for an actual outstanding condition. End with synthesis only when workers are idle, overlays are settled, no blocking checklist work remains, and the surface permits it'
-instead: 'Actionable work → reconcile or dispatch; outstanding work → wait; settled work on a synthesis surface → user prose'
+cause: 'The host cycle still has open checklist work, a worker working or asking, an unaccounted complete result, unresolved changes, or a surface that requires a tool action; shelved changes and waiting workers do not count as open work'
+why: 'Finishing one wave does not settle the remaining batch. An explicit action keeps progress and wake conditions aligned'
+fix: 'Account for completed results, resolve open changes (promote, reject, or shelve), instruct workers on partial work, and dispatch ready independent workers. Wait only for an actual outstanding condition. End with synthesis only when no worker is working or asking, open changes are resolved, no blocking checklist work remains, and the surface permits it'
+instead: 'Actionable work → account, instruct, or dispatch; outstanding work → wait; settled work on a synthesis surface → user prose'
 x-paintedwolf-scenarios:
   - id: default
     vars:

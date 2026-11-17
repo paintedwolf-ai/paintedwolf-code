@@ -100,7 +100,7 @@ The Files code editor is a source-aware editing surface. Its context menu may of
 | Live selection in the transcript selectable island | Context menu | Copy, Select all, Add to chat; Cut and Paste remain visible but disabled |
 | Worker card | Context menu | Open worker, Copy job ID, Open evidence when present, and grounded touched-path attachments |
 | Tool spill path | Context menu | Copy path and Add to chat as selected text with spill-path provenance; never Reveal or a project file reference |
-| Expanded structured-tool raw-output chrome | Visible links | Raw output in Files opens the complete recorded output; Find related tool calls searches other calls to the same tool in this chat; Add to chat only as a `search-hit` when project ID, chat ID, and tool-call ID are all present |
+| Action card records row | Drag | Dragging attaches the call's output as a `search-hit` when project ID, chat ID, and tool-call ID are all present |
 | Collapsed tool chicklet | — | No raw-output attachment action |
 | Project artifact tiles | Context menu | Reference-impact header, Add to chat where supported, and confirmed Delete artifact…; deletion leaves historical references visible and marked deleted |
 | Transcript artifact tiles | Context menu | Add to chat |

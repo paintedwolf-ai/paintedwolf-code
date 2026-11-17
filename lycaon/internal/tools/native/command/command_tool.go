@@ -110,14 +110,6 @@ func (t *CommandTool) confined() ConfinedForeground {
 	}
 }
 
-// BoundaryNetworkMode returns the applied egress label.
-func BoundaryNetworkMode(b confine.Boundary) string {
-	if !b.Applied {
-		return ""
-	}
-	return confine.NetworkLabel(b.Network)
-}
-
 // CommandConfinementReport builds the process boundary report.
 func CommandConfinementReport(
 	boundary confine.Boundary, posture string, local confine.LocalNetworkGrant,

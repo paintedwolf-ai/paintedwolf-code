@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -50,7 +51,7 @@ func newLedgerFilter(canonicalPath string, req api.FindingLedgerQueryRequest) (d
 		filter.Text = likeContains(strings.ToLower(text))
 	}
 	if req.IntroducedSinceAt != nil {
-		filter.IntroducedSince = db.FormatTime(req.IntroducedSinceAt.UTC())
+		filter.IntroducedSince = timelayout.Format(req.IntroducedSinceAt.UTC())
 	}
 	raw, err := surveyjson.Marshal(filter)
 	if err != nil {

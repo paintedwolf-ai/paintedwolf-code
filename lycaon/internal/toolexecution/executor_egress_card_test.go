@@ -47,7 +47,7 @@ func gatherExecutor(t *testing.T) (*toolexecution.Executor, *gatherHITL) {
 	mgr.approve()
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
 	exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
-	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: approvalstate.NewToolApprovalCoalesce()})
+	exec.Approvals.SetToolApprovalCoalesce(approvalstate.NewToolApprovalCoalesce())
 	// The ingestion producer reports "read untrusted content": at Balanced that
 	// is what turns new-host cards on.
 	exec.Secrets.SetUntrustedIngestionSource(func(context.Context, string) (bool, error) { return true, nil })
@@ -163,7 +163,7 @@ func TestCheckpointOwnerReleaseKeepsCurrentBrokerApproval(t *testing.T) {
 		t.Fatalf("release old checkpoint owner: %v", err)
 	}
 	cmd := confine.EgressCommand{SessionID: "current-owner", RootSessionID: "current-owner", ToolCallID: "current-dial"}
-	if !confine.DecideAttributedHost(t.Context(), cmd, "owner-approval.test") {
+	if !confine.DecideAttributedHTTPRequest(t.Context(), cmd, "owner-approval.test", "", "") {
 		t.Fatal("current checkpoint owner did not approve its broker dial")
 	}
 	if len(oldManager.requests()) != 0 || len(currentManager.requests()) != 1 {
@@ -173,7 +173,7 @@ func TestCheckpointOwnerReleaseKeepsCurrentBrokerApproval(t *testing.T) {
 		t.Fatalf("release current checkpoint owner: %v", err)
 	}
 	cmd.ToolCallID = "closed-dial"
-	if confine.DecideAttributedHost(t.Context(), cmd, "closed-owner.test") {
+	if confine.DecideAttributedHTTPRequest(t.Context(), cmd, "closed-owner.test", "", "") {
 		t.Fatal("closed checkpoint owner authorized a new broker dial")
 	}
 	if len(currentManager.requests()) != 1 {

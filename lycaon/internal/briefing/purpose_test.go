@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -81,33 +82,89 @@ func TestPurposeSectionClampsAsTheApprovalCardAlwaysHas(t *testing.T) {
 	}
 }
 
+// tailRead is what the store returns for text: its length and at most the
+// last ReasoningTailChars characters.
+func tailRead(text string) ReasoningRead {
+	runes := []rune(text)
+	tail := runes[max(0, len(runes)-ReasoningTailChars):]
+	return ReasoningRead{Present: true, TextChars: int64(len(runes)), Tail: string(tail)}
+}
+
 func TestReasoningIsRedactedBeforeItsSuffixIsKept(t *testing.T) {
 	secret := "ghp_" + strings.Repeat("1", 36)
 	filler := strings.Repeat("x", reasoningRunes-10)
-	text := "start " + secret + " " + filler
-	read := CausalRead{Found: true, OutputID: "out", ReasoningJSON: `{"text":"` + text + `"}`, ReasoningBytes: int64(len(text)), CallsInOutput: 2}
-	reasoning, state := ReasoningExcerpt(read)
-	if state != ReasoningAvailable || reasoning == nil {
-		t.Fatalf("state %s", state)
+	got := ReasoningExcerpt(tailRead("start "+secret+" "+filler), "message:out", true)
+	if got.State != ReasoningAvailable || got.Excerpt == nil {
+		t.Fatalf("state %s", got.State)
 	}
-	if strings.Contains(reasoning.Text, "1111111111") {
+	if strings.Contains(got.Excerpt.Text, "1111111111") {
 		t.Fatal("a secret crossing the suffix cut survived")
 	}
-	if !reasoning.Truncated || !reasoning.Shared || len([]rune(reasoning.Text)) > reasoningRunes {
-		t.Fatalf("flags or bound wrong: %+v", reasoning)
+	if !got.Excerpt.Truncated || !got.Excerpt.Shared || got.Excerpt.Ref != "message:out" || len([]rune(got.Excerpt.Text)) > reasoningRunes {
+		t.Fatalf("flags or bound wrong: %+v", got.Excerpt)
+	}
+}
+
+// A secret the catalog matches is redacted before the cut wherever it sits:
+// whole-text redaction for traces the tail holds whole, and any secret that
+// fits in the window before the excerpt for longer traces.
+func TestRedactionPrecedesTheCut(t *testing.T) {
+	var secrets []string
+	release := observability.SetCaptureRedactor(func(s string) string {
+		for _, secret := range secrets {
+			s = strings.ReplaceAll(s, secret, "[catalog]")
+		}
+		return s
+	})
+	defer release()
+	place := func(length, secretLen, start int) (string, string) {
+		secret := strings.Repeat("S", secretLen)
+		secrets = []string{secret}
+		return strings.Repeat("x", start) + secret + strings.Repeat("x", length-start-secretLen), secret
+	}
+	short := 5000
+	for _, start := range []int{short - 100 - 50, short - reasoningRunes - 20, short - 2000} {
+		text, _ := place(short, 50, start)
+		got := ReasoningExcerpt(tailRead(text), "message:out", false)
+		redacted := []rune(observability.RedactCaptureText(text))
+		if want := string(redacted[len(redacted)-reasoningRunes:]); got.Excerpt == nil || got.Excerpt.Text != want {
+			t.Fatalf("short trace, secret at %d: excerpt is not the end of the whole redacted text", start)
+		}
+	}
+	long := 40000
+	for _, secretLen := range []int{50, 5000, ReasoningTailChars - reasoningRunes} {
+		for _, start := range []int{long - reasoningRunes - secretLen/2, long - ReasoningTailChars, long - ReasoningTailChars - 10} {
+			if start+secretLen > long {
+				continue
+			}
+			text, _ := place(long, secretLen, start)
+			got := ReasoningExcerpt(tailRead(text), "message:out", false)
+			if got.Excerpt == nil || !got.Excerpt.Truncated || strings.Contains(got.Excerpt.Text, "S") {
+				t.Fatalf("long trace, %d-character secret at %d reached the excerpt: %+v", secretLen, start, got)
+			}
+		}
 	}
 }
 
 func TestReasoningGapsAreOptionalAbsence(t *testing.T) {
-	cases := map[ReasoningState]CausalRead{
-		ReasoningAbsent:      {Found: true},
-		ReasoningOversized:   {Found: true, ReasoningBytes: ReasoningReadBytes + 1},
-		ReasoningMalformed:   {Found: true, ReasoningBytes: 5, ReasoningJSON: "{not"},
-		ReasoningDetailsOnly: {Found: true, ReasoningBytes: 30, ReasoningJSON: `{"details":[{"opaque":true}]}`},
+	cases := []struct {
+		want ReasoningState
+		read ReasoningRead
+	}{
+		{ReasoningAbsent, ReasoningRead{}},
+		{ReasoningAbsent, ReasoningRead{Present: true}},
+		{ReasoningAbsent, ReasoningRead{Present: true, TextChars: 3, Tail: "   "}},
+		{ReasoningOversized, ReasoningRead{Present: true, OverCeiling: true}},
+		{ReasoningDetailsOnly, ReasoningRead{Present: true, Details: 1}},
+		{ReasoningMalformed, ReasoningRead{Present: true, TextChars: 4, Tail: "ok \xff"}},
 	}
-	for want, read := range cases {
-		if reasoning, got := ReasoningExcerpt(read); got != want || reasoning != nil {
-			t.Fatalf("%s: got %s %+v", want, got, reasoning)
+	for _, tc := range cases {
+		got := ReasoningExcerpt(tc.read, "message:out", false)
+		if got.State != tc.want || got.Excerpt != nil {
+			t.Fatalf("%+v: got %+v, want %s", tc.read, got, tc.want)
+		}
+		if input := got.Input(); input.Excerpt != nil || (input.Gap == "") != (tc.want == ReasoningAbsent) {
+			t.Fatalf("%s gave input %+v", tc.want, input)
 		}
 	}
 }

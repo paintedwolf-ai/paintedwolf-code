@@ -140,7 +140,7 @@ func TestWorkerEntryPointsAgreeOnReaderFacts(t *testing.T) {
 
 					personaVars, err := prompts.PersonaVars(t.Context(), engine, agent.ID, reader, nil)
 					contractcheck.FailErr(t, "persona vars", err)
-					skillVars := prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
+					skillVars := prompts.SkillVars(reader)
 
 					entryPoints := map[string]map[string]any{
 						"persona": personaVars,

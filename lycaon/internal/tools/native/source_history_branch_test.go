@@ -159,28 +159,6 @@ func TestSourceHistoryBranchScope(t *testing.T) {
 		}
 	})
 
-	t.Run("AC-BR-05 read stamp names the newest effect on the reading branch", func(t *testing.T) {
-		f := newBranchScopeFixture(t)
-		f.record(sourcebranch.Trunk, 2)
-		f.record(branchScopeWorker, 1)
-		read := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
-		for _, tc := range []struct {
-			name  string
-			tctx  tools.ToolContext
-			actor string
-		}{
-			{"trunk", f.tc, "user"},
-			{"worker", f.workerContext(), "agent"},
-		} {
-			out, err := read.Run(t.Context(), map[string]any{"path": "main.go"}, tc.tctx)
-			testutil.FailErr(t, "read on "+tc.name, err)
-			change, _ := receiptSource(t, out)["last_change"].(map[string]any)
-			if change["actor"] != tc.actor {
-				t.Fatalf("%s last_change = %v, want actor %q", tc.name, change, tc.actor)
-			}
-		}
-	})
-
 	t.Run("AC-BR-06 edit reject counts only same-branch foreign changes", func(t *testing.T) {
 		f := newBranchScopeFixture(t)
 		f.record(sourcebranch.Trunk, 1)

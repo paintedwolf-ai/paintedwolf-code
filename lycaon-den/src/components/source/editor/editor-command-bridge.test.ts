@@ -10,7 +10,7 @@ import { liveKeymapSource } from "../../../contributions/frame-keymap.ts";
 import { nativeCommandId } from "../../../contributions/dispatch.ts";
 import { resolveKeymap } from "../../../shortcuts/keymap.ts";
 import { setShortcutPlatformForTests } from "../../../shortcuts/platform.ts";
-import { denSrc } from "../../../shell/den-client-state-invariants.ts";
+import { denSrc } from "../../../shell/invariants/common.ts";
 import { readSourceText } from "../../../test/stylesheet-source.ts";
 import {
   registerCommandHandler,

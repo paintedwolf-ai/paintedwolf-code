@@ -87,17 +87,6 @@ func LastUserIntentMessage(history []Message) (Message, bool) {
 	return Message{}, false
 }
 
-// UserTurnOrdinal counts visible user intents; zero means no turn has started.
-func UserTurnOrdinal(history []Message) int {
-	n := 0
-	for _, msg := range history {
-		if IsUserIntentMessage(msg) {
-			n++
-		}
-	}
-	return n
-}
-
 // IsTranscriptChromeMessage reports UI transcript rows that do not enter
 // model-facing history. Classification is structural rather than content shape.
 func IsTranscriptChromeMessage(msg Message) bool {
