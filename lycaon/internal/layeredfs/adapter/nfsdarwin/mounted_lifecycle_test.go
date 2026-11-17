@@ -169,7 +169,7 @@ func TestReleaseNeverDeletesThroughAMountItDoesNotRecognize(t *testing.T) {
 	srv := other.adp.ServerForView(other.id)
 	facts, _ := other.adp.MountFactsForView(other.id)
 	exportPath := extraTestExport(t, srv, other.id)
-	out, err := exec.Command(nfsdarwin.DefaultMountNFSBin, "-o", nfsdarwin.FormatMountOptions(facts.ServerPort), "127.0.0.1:"+exportPath, nested).CombinedOutput()
+	out, err := exec.Command(nfsdarwin.DefaultMountNFSBin, "-o", facts.MountOptions, "127.0.0.1:"+exportPath, nested).CombinedOutput()
 	if err != nil {
 		t.Fatalf("foreign mount: %v (%s)", err, out)
 	}

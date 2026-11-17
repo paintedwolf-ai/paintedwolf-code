@@ -1,0 +1,11 @@
+{"hint_codes": {
+  "LIVE_CODE": {"emit": "guard:x"},
+  "DEAD_CODE": {"emit": "guard:x"},
+  "TOOL_ONLY_CODE": {"emit": "guard:x"},
+  "ONLY_COMPARED": {"emit": "guard:x"},
+  "SELF_FIRING": {"emit": "rule:x"},
+  "ECHOED": {"emit": "guard:x"},
+  "UNFIRED_POLICY": {"emit": "rule:x"},
+  "BANNER_SHOWN": {"emit": "banner"},
+  "RULE_DATA": {"emit": "rule:x"}
+}}

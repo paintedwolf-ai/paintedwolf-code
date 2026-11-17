@@ -45,61 +45,6 @@
   padding: var(--den-chat-chrome-top) 0 0;
 }
 
-/* The header at the window's left edge clears the overlay traffic lights. */
-.den-custom-chrome .den-shell-header--window-leading.den-shell-header-chat .tabs__rail-leading {
-  padding-left: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
-}
-
-.den-custom-chrome
-  .den-shell-header--window-leading.den-shell-header-chat
-  .tabs__rail:has(.tabs__rail-leading):not(:has(.tabs__rail-trailing)) {
-  --tabs-rail-side: calc(
-    var(--den-traffic-light-clearance, var(--den-chat-gutter-x)) +
-      var(--den-unified-chrome-row) + 0.25rem
-  );
-}
-
-/* Without a leading slot, the chips themselves start past the lights. */
-.den-custom-chrome
-  .den-shell-header--window-leading.den-shell-header-chat
-  .tabs__rail:not(:has(.tabs__rail-leading)) {
-  --tabs-strip-inset-start: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
-}
-
-/* A hidden split stage leaves the conversation against the window controls. */
-.den-custom-chrome
-  .den-shell-nav-collapsed
-  .den-shell-stage-host--split:where([data-host-band~="max-900"]):not(
-    [data-conversation-hidden]
-  )
-  .den-shell-header-chat
-  .tabs__rail-leading {
-  padding-left: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
-}
-
-.den-custom-chrome
-  .den-shell-nav-collapsed
-  .den-shell-stage-host--split:where([data-host-band~="max-900"]):not(
-    [data-conversation-hidden]
-  )
-  .den-shell-header-chat
-  .tabs__rail:has(.tabs__rail-leading):not(:has(.tabs__rail-trailing)) {
-  --tabs-rail-side: calc(
-    var(--den-traffic-light-clearance, var(--den-chat-gutter-x)) +
-      var(--den-unified-chrome-row) + 0.25rem
-  );
-}
-
-.den-custom-chrome
-  .den-shell-nav-collapsed
-  .den-shell-stage-host--split:where([data-host-band~="max-900"]):not(
-    [data-conversation-hidden]
-  )
-  .den-shell-header-chat
-  .tabs__rail:not(:has(.tabs__rail-leading)) {
-  --tabs-strip-inset-start: var(--den-traffic-light-clearance, var(--den-chat-gutter-x));
-}
-
 /* Dock rows keep their header height; an open panel slides them below itself. */
 .tabs__dock {
   /* Above the panel wash, below the open panel in the strip. */
@@ -424,4 +369,46 @@
   color: var(--den-text-muted);
 }
 
-
+/* Stage title bar: icon chips at the pane-control size, and a popover panel. */
+.tabs--stage {
+  align-self: auto;
+  flex: none;
+}
+.tabs--stage .tabs__rail {
+  width: auto;
+}
+/* The chips reach down to the stage's first rule, so the selection mark sits on it. */
+.tabs--stage .tabs__chips,
+.tabs--stage .tabs__rail:not(.tabs__rail--compact) .tabs__chips {
+  width: auto;
+  min-height: 0;
+  height: calc(var(--den-titlebar-edge-control) + var(--den-stage-tabs-rule-drop, 0px));
+  gap: 2px;
+  border-bottom: 0;
+  container-type: normal;
+}
+.tabs--stage .tabs__chip {
+  flex: 0 0 auto;
+  min-width: var(--den-titlebar-edge-control);
+  margin-bottom: 0;
+  padding: 0 0.3rem var(--den-stage-tabs-rule-drop, 0px);
+}
+.tabs--stage .tabs__chip-label {
+  display: none;
+}
+.tabs--stage .tabs__panel-shell {
+  left: auto;
+  right: 0;
+  width: min(25.7143rem, calc(100vw - 2rem));
+  padding-top: 6px;
+  z-index: 2;
+}
+/* No transcript sits behind this panel, so it lifts off the stage as a popover. */
+.tabs--stage .tabs__panel-clip,
+.tabs--stage .tabs__rail:not(.tabs__rail--compact) .tabs__panel-clip {
+  max-height: 60dvh;
+  border: 1px solid var(--den-line);
+  border-radius: var(--den-radius);
+  background: var(--den-surface-elevated);
+  box-shadow: var(--den-shadow-lg);
+}

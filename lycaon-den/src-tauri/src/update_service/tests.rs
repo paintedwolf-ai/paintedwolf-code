@@ -189,6 +189,15 @@ fn feed_endpoints_bind_the_trusted_origin_channel_and_key_generation() {
     );
     assert_eq!(trust.feed_name(UpdateChannel::Preview), "latest-preview-key-7.json");
 }
+
+#[test]
+fn embedded_artifact_and_feed_keys_are_valid_and_distinct() {
+    let trust = Trust::embedded();
+    assert!(trust.generation > 0);
+    verification::decode_key(&trust.artifact_key).expect("artifact key decodes");
+    verification::decode_key(&trust.feed_key).expect("feed key decodes");
+    assert_ne!(trust.artifact_key, trust.feed_key);
+}
 #[test]
 fn automatic_retry_is_bounded() {
     assert_eq!(scheduler::retry_delay(1), 1800);

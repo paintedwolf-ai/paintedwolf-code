@@ -56,7 +56,7 @@ func TestWorkerLegPromptAppendsSummary(t *testing.T) {
 	if !ok {
 		t.Fatalf("checkpoint manager = %T, want approval option resolver", h.Sessions.Checkpoints)
 	}
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the worker summary is appended", func() bool {
 		jobs, listErr := h.Workers.Queue.ListBySession(ctx, parent.ProjectID, parentID)
 		if listErr != nil || len(jobs) == 0 {
 			return false

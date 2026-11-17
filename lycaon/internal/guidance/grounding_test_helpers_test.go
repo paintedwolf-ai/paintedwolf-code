@@ -3,6 +3,7 @@ package guidance_test
 import (
 	"context"
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/evidence"
 
 	"github.com/lycaon/lycaon/internal/guidance"

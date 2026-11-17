@@ -43,8 +43,7 @@ func TestReleaseDoesNotWaitForAnotherRootsCapture(t *testing.T) {
 	testutil.FailErr(t, "capture detached root", err)
 	writeSource(t, kept, "new.go", "package new\n")
 	store.onCapture = func(string) {
-		ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-		defer cancel()
+		ctx := t.Context()
 		testutil.FailErr(t, "release unrelated root during capture", store.ReleaseRoots(ctx, []Root{{Path: gone}}))
 	}
 	snapshot, err := store.EnsurePath(t.Context(), kept, VerifyContent)

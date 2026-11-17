@@ -4,15 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"os"
-	"path/filepath"
-	"strings"
 )
 
 func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.ToolContext, branch, modelPath string, op sandbox.PathOp) (Resolved, error) {
@@ -54,8 +55,8 @@ func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.Too
 		abs, err = b.ResolveAbs(branch, branchRel)
 	} else {
 		abs, _, err = projectroot.ResolveAbs([]projectroot.RootRef{{
-			ID: "worker-branch", Path: branch, IsPrimary: true,
-		}}, "worker-branch", branchRel)
+			ID: projectroot.WorkerBranchRootID, Path: branch, IsPrimary: true,
+		}}, projectroot.WorkerBranchRootID, branchRel)
 	}
 	if err != nil {
 		return Resolved{}, rootResolveErr(tctx, err, modelPath)
@@ -75,7 +76,7 @@ func resolveUnderBranch(ctx context.Context, b *sandbox.Boundary, tctx tools.Too
 			}
 		}
 	}
-	root = projectroot.RootRef{ID: "worker-branch", Path: branch, IsPrimary: true}
+	root = projectroot.RootRef{ID: projectroot.WorkerBranchRootID, Path: branch, IsPrimary: true}
 	if b != nil {
 		switch op {
 		case sandbox.PathOpRead:

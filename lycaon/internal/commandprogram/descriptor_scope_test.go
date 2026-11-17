@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -95,9 +96,7 @@ func TestDeferredDescriptorLivesThroughBackgroundChildren(t *testing.T) {
 				t.Fatalf("published before child completed: %v", f.publication.published)
 			}
 			result, err := f.jobs.runs[0](context.Background(), Streams{Input: NullInput(), Output: io.Discard, Error: io.Discard})
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "run the queued child", err)
 			if command == "echo late" && (result.Status != 0 || f.publication.published["out"] != "late\n") {
 				t.Fatalf("result=%+v published=%v", result, f.publication.published)
 			}

@@ -97,17 +97,11 @@ func TestDetectionResolvedSurvivesRestart(t *testing.T) {
 	restarted.SetCheckpointExpiry(func() time.Duration { return time.Nanosecond })
 	testutil.FailErr(t, "RestorePending", restarted.RestorePending(ctx))
 
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the restored checkpoint expires", func() bool {
 		final, err := restarted.PollCheckpoint(ctx, resp.CheckpointID)
 		testutil.FailErr(t, "PollCheckpoint", err)
-		if final.Status == hitl.DecisionStatusExpired {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	if t.Context().Err() != nil {
-		t.Fatal("restored checkpoint did not expire")
-	}
+		return final.Status == hitl.DecisionStatusExpired
+	})
 	rows := sessionEvents(t, sqlDB, sessionID)
 	decisions := eventsByAction(rows, authzcontext.EventActionApprovalDecision)
 	if len(decisions) != 1 || decisions[0].Outcome != authzcontext.EventOutcomeDenied || decisions[0].ResolvedBy != authzcontext.ResolvedByExpiry {

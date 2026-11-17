@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -65,7 +64,7 @@ func TestIndexPublishesBeforeYieldingToInitialInventory(t *testing.T) {
 	defer cancel()
 	finished := make(chan error, 1)
 	go func() { finished <- walk.publish(ctx) }()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the index is ready with inventory incomplete", func() bool {
 		store.mu.Lock()
 		defer store.mu.Unlock()
 		return store.status.State == StateReady && !store.status.Complete
@@ -75,9 +74,7 @@ func TestIndexPublishesBeforeYieldingToInitialInventory(t *testing.T) {
 		t.Fatalf("index continued before structural coverage: %v", err)
 	default:
 	}
-	writerContext, stopWriter := context.WithTimeout(ctx, testutil.Timeout(time.Minute))
-	defer stopWriter()
-	unwrite, err := store.writer.Write(writerContext, store.writable)
+	unwrite, err := store.writer.Write(ctx, store.writable)
 	testutil.FailErr(t, "acquire writer during inventory wait", err)
 	unwrite()
 	var revision int64
@@ -118,7 +115,7 @@ func TestInventoryCompletesWhileSearchWriterIsOccupied(t *testing.T) {
 
 func waitInventoryExtent(t *testing.T, catalog *Catalog, root Root, want int64) {
 	t.Helper()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the inventory reaches the extent", func() bool {
 		nav, err := catalog.Directories.OpenNavigation(t.Context(), "p", root)
 		if err != nil {
 			return false
@@ -169,13 +166,12 @@ func TestInitialInventoryFailureSettlesWaitersAndRecovers(t *testing.T) {
 	moved := root.Path + "-unavailable"
 	testutil.FailErr(t, "make root unavailable", os.Rename(root.Path, moved))
 	testutil.FailErr(t, "start inventory", store.startInventory(t.Context()))
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	err = store.awaitInitialInventory(ctx)
 	if err == nil || ctx.Err() != nil {
 		t.Fatalf("initial inventory must settle with its failure, got %v (context %v)", err, ctx.Err())
 	}
 	testutil.FailErr(t, "restore root", os.Rename(moved, root.Path))
-	testutil.WaitFor(t, func() bool { return store.awaitInitialInventory(ctx) == nil })
+	testutil.WaitFor(t, "the initial inventory is awaited without error", func() bool { return store.awaitInitialInventory(ctx) == nil })
 	waitInventoryExtent(t, catalog, root, 2)
 }

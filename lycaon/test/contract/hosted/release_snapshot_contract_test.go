@@ -198,8 +198,9 @@ func TestReleaseCompatibilityCannotBeSkippedForEitherChannel(t *testing.T) {
 	}
 	for _, step := range jobs["validate-source"].Steps {
 		if strings.Contains(step.Run, "release:preflight") {
-			if step.Env["BASELINE_SHA"] != "${{ needs.classify.outputs.baseline_sha }}" || strings.Count(step.Run, `--baseline-ref "${BASELINE_SHA}"`) < 2 {
-				t.Fatal("preflight does not pass pinned baseline_sha to both publish and dry-run paths")
+			// A dry run has no frozen corpus; a publishing run cannot skip it.
+			if step.If != "${{ needs.classify.outputs.publish == 'true' }}" || step.Continue {
+				t.Fatal("a publishing release can skip its upgrade corpus")
 			}
 			corpus = corpus || strings.Contains(step.Run, "--require-corpus")
 		}

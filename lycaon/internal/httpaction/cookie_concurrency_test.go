@@ -7,8 +7,9 @@ import (
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"net/http"
 	"net/http/httptest"
+	"slices"
+	"sync"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -20,9 +21,16 @@ func TestParallelHTTPRequestWorkersShareOneCookieJarWithoutSerializingNetwork(t 
 	approveDials(t)
 	secrets, _ := testSecrets(t)
 	const count = 4
-	arrived, release := make(chan struct{}, count), make(chan struct{})
+	// A worker reports twice: when its request reaches the server and when its call returns.
+	type report struct {
+		worker   string
+		returned bool
+		out      string
+		err      error
+	}
+	reports, release := make(chan report, 2*count), make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		arrived <- struct{}{}
+		reports <- report{worker: r.URL.Query().Get("worker")}
 		select {
 		case <-release:
 		case <-r.Context().Done():
@@ -32,18 +40,16 @@ func TestParallelHTTPRequestWorkersShareOneCookieJarWithoutSerializingNetwork(t 
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	t.Cleanup(server.Close)
-	defer close(release)
+	releaseAll := sync.OnceFunc(func() { close(release) })
+	defer releaseAll()
 	reg := tools.NewDefaultRegistry()
 	testutil.FailErr(t, "register", Register(reg, Deps{Boundary: testBoundary(), Secrets: secrets}))
-	type response struct {
-		out string
-		err error
-	}
-	results := make(chan response, count)
 	capability := loopbackCapability(t, server.URL)
+	var outstanding []string
 	for i := range count {
+		name := fmt.Sprintf("worker%d", i)
+		outstanding = append(outstanding, name)
 		go func() {
-			name := fmt.Sprintf("worker%d", i)
 			out, err := reg.Run(t.Context(), "http_request", map[string]any{
 				"url": server.URL + "?worker=" + name, "cookie_jar": "shared", "capability_request": capability,
 			}, tools.ToolContext{
@@ -53,25 +59,24 @@ func TestParallelHTTPRequestWorkersShareOneCookieJarWithoutSerializingNetwork(t 
 					ParentSessionID: "root-1",
 					ToolCallID:      "request"},
 			})
-			results <- response{out, err}
+			reports <- report{worker: name, returned: true, out: out, err: err}
 		}()
 	}
-	for range count {
-		select {
-		case <-arrived:
-		case res := <-results:
-			t.Fatalf("a request finished before all arrived: err=%v out=%s", res.err, res.out)
-		case <-t.Context().Done():
-			t.Fatal("requests did not overlap; a cookie lock spans network traffic")
+	// Every request must be at the server at once: a cookie lock spanning network traffic
+	// would hold all but one back, and this wait would then name them.
+	waiting := slices.Clone(outstanding)
+	for len(waiting) > 0 {
+		got := testutil.Receive(t, fmt.Sprintf("requests of %v reach the server", waiting), reports)
+		if got.returned {
+			t.Fatalf("%s returned before %v reached the server: err=%v out=%s", got.worker, waiting, got.err, got.out)
 		}
+		waiting = slices.DeleteFunc(waiting, func(name string) bool { return name == got.worker })
 	}
-	// Broadcast without closing so cleanup can release blocked handlers on failure.
-	for range count {
-		release <- struct{}{}
-	}
+	releaseAll()
 	var reference string
-	for range count {
-		res := <-results
+	for len(outstanding) > 0 {
+		res := testutil.Receive(t, fmt.Sprintf("calls of %v return", outstanding), reports)
+		outstanding = slices.DeleteFunc(outstanding, func(name string) bool { return name == res.worker })
 		testutil.FailErr(t, "parallel HTTP request", res.err)
 		var decoded result
 		testutil.FailErr(t, "decode HTTP response", json.Unmarshal([]byte(res.out), &decoded))
@@ -97,7 +102,12 @@ func TestCookieJarSavesCookiesReceivedBeforeBodyCancellation(t *testing.T) {
 	secrets, _ := testSecrets(t)
 	received := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.SetCookie(w, &http.Cookie{Name: "sid", Value: "private-session-value", Path: "/"})
+		if r.URL.Path != "/body" {
+			// The request for the next hop shows this hop's headers, and its cookie, were taken.
+			http.SetCookie(w, &http.Cookie{Name: "sid", Value: "private-session-value", Path: "/"})
+			http.Redirect(w, r, "/body", http.StatusFound)
+			return
+		}
 		w.Header().Set("Content-Length", "100")
 		w.WriteHeader(http.StatusOK)
 		w.(http.Flusher).Flush()
@@ -109,13 +119,13 @@ func TestCookieJarSavesCookiesReceivedBeforeBodyCancellation(t *testing.T) {
 	testutil.FailErr(t, "register", Register(reg, Deps{Boundary: testBoundary(), Secrets: secrets}))
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	// The client exposes no event for headers arriving, so allow their delivery after the server flushes.
 	go func() {
 		<-received
-		time.AfterFunc(testutil.Timeout(2*time.Second), cancel)
+		cancel()
 	}()
 	_, err := reg.Run(ctx, "http_request", map[string]any{
-		"url": server.URL, "cookie_jar": "session", "capability_request": loopbackCapability(t, server.URL),
+		"url": server.URL, "redirects": "safe", "cookie_jar": "session",
+		"capability_request": loopbackCapability(t, server.URL),
 	}, sessionContext(t.TempDir(), "canceled-body"))
 	if err == nil {
 		t.Fatal("unfinished body unexpectedly succeeded")
@@ -123,7 +133,7 @@ func TestCookieJarSavesCookiesReceivedBeforeBodyCancellation(t *testing.T) {
 	select {
 	case <-received:
 	default:
-		t.Fatal("request never received response headers")
+		t.Fatal("request never reached the stalled body")
 	}
 	jar, err := secrets.OpenCookieJar(t.Context(), secretcap.CookieJarRequest{
 		ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1", OperationID: "read", Name: "session",

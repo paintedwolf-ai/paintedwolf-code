@@ -8,6 +8,8 @@ import { DenInput } from "../../components/primitives/DenInput.tsx";
 import { SettingsEditorTitle, TestsIcon } from "../../components/settings/SettingsEditorTitle.tsx";
 import { overlayRel } from "../../platform/files/overlay-dir.ts";
 import { VERIFY_SETTINGS_COPY } from "../../settings/extensions/verify-settings-copy.ts";
+import { ProjectSettingsRejected } from "../../components/settings/ProjectSettingsRejected.tsx";
+import { PROJECT_SETTINGS_REJECTED_COPY } from "../../settings/project-settings-rejected-copy.ts";
 
 type Props = {
   client: LycaonClient;
@@ -32,6 +34,8 @@ export function VerifyEditor(props: Props) {
   const error = () => actionError() ?? query.error();
 
   const backendLive = () => doc()?.backend_configured === true;
+  const rejected = () => doc()?.rejected ?? [];
+  const locked = () => saving() || rejected().length > 0;
   const dirty = () => draft().trim() !== (doc()?.test ?? "").trim();
 
   let priorTest: string | undefined;
@@ -97,13 +101,19 @@ export function VerifyEditor(props: Props) {
         </p>
       </Show>
 
+      <ProjectSettingsRejected
+        rows={rejected()}
+        consequence={PROJECT_SETTINGS_REJECTED_COPY.verify}
+        testId="verify-editor-rejected"
+      />
+
       <Show when={!loading() && backendLive()}>
         <DenField label="Test command">
           <DenInput
             class="verify-editor__command-input"
             data-testid="verify-editor-command"
             value={draft()}
-            disabled={saving()}
+            disabled={locked()}
             onInput={(e) => setDraft(e.currentTarget.value)}
           />
         </DenField>
@@ -134,7 +144,7 @@ export function VerifyEditor(props: Props) {
           <DenButton
             variant="primary"
             data-testid="verify-editor-save"
-            disabled={saving() || !dirty()}
+            disabled={locked() || !dirty()}
             onClick={() => void save(draft().trim())}
           >
             {saving() ? "Saving…" : "Save"}
@@ -142,7 +152,7 @@ export function VerifyEditor(props: Props) {
           <DenButton
             variant="secondary"
             data-testid="verify-editor-clear"
-            disabled={saving() || !doc()?.test.trim()}
+            disabled={locked() || !doc()?.test.trim()}
             onClick={() => void save("")}
           >
             Clear

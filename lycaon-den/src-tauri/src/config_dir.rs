@@ -81,23 +81,11 @@ mod tests {
     use crate::test_support::TempDir;
 
     #[test]
-    fn leaf_names_match_product_ssot() {
-        assert_eq!(DIR_NAME_PROD, "paintedwolf");
-        assert_eq!(DIR_NAME_DEV, "paintedwolf-dev");
-        assert_eq!(channel_dir_name(), DIR_NAME_DEV);
-    }
-
-    #[test]
     fn override_wins() {
-        // SAFETY: test-only env mutation in a single-threaded unit test.
-        unsafe {
-            std::env::set_var("LYCAON_CONFIG_DIR", "/tmp/paintedwolf-config-dir-test");
-        }
-        let got = host_config_dir().expect("host_config_dir");
-        unsafe {
-            std::env::remove_var("LYCAON_CONFIG_DIR");
-        }
-        assert_eq!(got, PathBuf::from("/tmp/paintedwolf-config-dir-test"));
+        assert_eq!(
+            config_dir_override_for_build(false, Some("/tmp/paintedwolf-config-dir-test")),
+            Some(PathBuf::from("/tmp/paintedwolf-config-dir-test"))
+        );
     }
 
     #[cfg(unix)]

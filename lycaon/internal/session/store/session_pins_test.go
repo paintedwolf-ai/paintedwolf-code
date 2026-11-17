@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -138,38 +139,40 @@ func TestPinStateFollowsLifecycle(t *testing.T) {
 func TestActivityFollowsVisibleTranscript(t *testing.T) {
 	for name, st := range pinTestStores(t) {
 		t.Run(name, func(t *testing.T) {
-			ctx := t.Context()
-			ids := createPinTestChats(t, st, 1)
-			id := ids[0]
-			activity := func() time.Time {
-				t.Helper()
-				sess, err := st.Get(ctx, id)
-				testutil.FailErr(t, "get chat", err)
-				return sess.ActivityAt
-			}
-			created := activity()
+			synctest.Test(t, func(t *testing.T) {
+				ctx := t.Context()
+				ids := createPinTestChats(t, st, 1)
+				id := ids[0]
+				activity := func() time.Time {
+					t.Helper()
+					sess, err := st.Get(ctx, id)
+					testutil.FailErr(t, "get chat", err)
+					return sess.ActivityAt
+				}
+				created := activity()
 
-			time.Sleep(2 * time.Millisecond)
-			testutil.FailErr(t, "append internal row", st.AppendMessages(ctx, id, api.Message{
-				Role: api.MessageRoleUser, Content: "host note", Visibility: api.MessageVisibilityInternal,
-			}))
-			testutil.FailErr(t, "mark seen", st.UpdateSession(ctx, id, func(sess *api.Session) {
-				now := time.Now().UTC()
-				sess.SeenAt = &now
-				sess.Title = "renamed"
-			}))
-			testutil.FailErr(t, "pin", st.PinSession(ctx, id))
-			if got := activity(); !got.Equal(created) {
-				t.Fatalf("record changes moved activity_at from %s to %s", created, got)
-			}
+				time.Sleep(2 * time.Millisecond)
+				testutil.FailErr(t, "append internal row", st.AppendMessages(ctx, id, api.Message{
+					Role: api.MessageRoleUser, Content: "host note", Visibility: api.MessageVisibilityInternal,
+				}))
+				testutil.FailErr(t, "mark seen", st.UpdateSession(ctx, id, func(sess *api.Session) {
+					now := time.Now().UTC()
+					sess.SeenAt = &now
+					sess.Title = "renamed"
+				}))
+				testutil.FailErr(t, "pin", st.PinSession(ctx, id))
+				if got := activity(); !got.Equal(created) {
+					t.Fatalf("record changes moved activity_at from %s to %s", created, got)
+				}
 
-			time.Sleep(2 * time.Millisecond)
-			testutil.FailErr(t, "append visible row", st.AppendMessages(ctx, id, api.Message{
-				Role: api.MessageRoleUser, Content: "hello",
-			}))
-			if got := activity(); !got.After(created) {
-				t.Fatalf("a visible message left activity_at at %s", got)
-			}
+				time.Sleep(2 * time.Millisecond)
+				testutil.FailErr(t, "append visible row", st.AppendMessages(ctx, id, api.Message{
+					Role: api.MessageRoleUser, Content: "hello",
+				}))
+				if got := activity(); !got.After(created) {
+					t.Fatalf("a visible message left activity_at at %s", got)
+				}
+			})
 		})
 	}
 }

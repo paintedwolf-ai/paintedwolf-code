@@ -24,8 +24,9 @@ const seams = vi.hoisted(() => ({
   protection: null as unknown as ComponentProps<typeof SessionProtectionBanners>, promote: null as unknown as ComponentProps<typeof DraftPromoteBanner>,
   folder: null as unknown as ComponentProps<typeof NoFolderBanner>, provider: null as unknown as ComponentProps<typeof NoProviderCard>,
   verify: null as unknown as ComponentProps<typeof VerifyTestNudge>, limits: vi.fn(async () => ({ project: "host" })),
+  chatThrows: false,
 }));
-vi.mock("../chatview/ChatView.tsx", () => ({ ChatView: (p: typeof seams.chat) => { createEffect(() => { seams.chat = { ...p }; }); return <div data-testid="chat-boundary">{p.sessionId}</div>; } }));
+vi.mock("../chatview/ChatView.tsx", () => ({ ChatView: (p: typeof seams.chat) => { if (seams.chatThrows) throw new Error("render failed"); createEffect(() => { seams.chat = { ...p }; }); return <div data-testid="chat-boundary">{p.sessionId}</div>; } }));
 vi.mock("../nav/ChatTabRail.tsx", () => ({ ChatTabRail: (p: typeof seams.rail) => { createEffect(() => { seams.rail = { ...p }; }); return <>{p.dock}</>; } }));
 vi.mock("../nav/ChatTopChromeStack.tsx", () => ({ ChatTopChromeStack: (p: typeof seams.stack) => {
   createEffect(() => { seams.stack = { ...p }; });
@@ -51,43 +52,54 @@ function mountChat() {
   const settingsStore = createSettingsStore();
   const [active, setActive] = createSignal(true);
   const [pending, setPending] = createSignal(false);
+  const [presented, setPresented] = createSignal(true);
   const actions = { sendPrompt: vi.fn(async () => undefined), stopChat: vi.fn(async () => undefined), resumeSpendLimitedChat: vi.fn(async () => undefined) };
-  const workerDrawer = { selectedWorkerId: () => "worker", workersOpen: () => true, workerDrawerFocus: () => null,
-    closeWorkers: vi.fn(), acknowledgeDrawerFocus: vi.fn(() => null), openWorkers: vi.fn() };
+  const sessionDrawer = { selectedWorkerId: () => "worker", worklogOpen: () => true, openWorklog: vi.fn(), openWorkers: vi.fn() };
   const callbacks = { onPromote: vi.fn(), dismissDraftPromoteBanner: vi.fn(), dismissNoFolderBanner: vi.fn(),
     addFolderToActiveProject: vi.fn(async () => undefined), onOpenBudgets: vi.fn(), onOpenProviders: vi.fn(), onOpenTests: vi.fn(), onOpenFiles: vi.fn() };
   const notices = { index: () => new Map(), dismiss: vi.fn(), dismissScope: vi.fn() };
   const showWindowNav = vi.fn(async () => true);
   render(() => <ChatWorkspace shell={shell} appStore={appStore} recents={{} as never} projects={{} as never}
-    chat={{ projectId: "project", sessionId: "session" }} pending={pending} surfaceActive={active}
+    chat={{ projectId: "project", sessionId: "session" }} pending={pending} surfaceActive={active} sessionPresented={presented}
     settingsStore={settingsStore} costStore={{ state: { session: { estimated_nano_usd: 3e9 } } } as never} notices={notices as never}
-    actions={actions as never} workerDrawer={workerDrawer} panes={{ chatHeaderLeadsWindow: () => true, windowNavCollapsed: () => true,
+    actions={actions as never} sessionDrawer={sessionDrawer} panes={{  windowNavCollapsed: () => true,
       navTouchesChat: () => false, navAutomaticallyCollapsed: () => false, contextHidden: () => false, navSide: () => "left",
       showWindowNav, conversationSeam: () => false,
-      windowEdgeClaims: () => [{ side: "right", owner: true, narrow: true }] } as never}
+      windowEdgeClaims: () => [{ side: "right", chrome: "drawn", owner: true, narrow: true }] } as never}
     onboarding={{ showNoProviderBanner: () => true, providerGap: () => "missing-provider" as never }}
-    projectDirForChat={() => "/garden"} nav={() => "projects"} splitLive={() => true} notificationStack={() => <div>Shared notice</div>}
+    projectDirForChat={() => "/garden"} splitLive={() => true} notificationStack={() => <div>Shared notice</div>}
     showPromoteNudge={() => true} showNoFolderBanner={() => true} {...callbacks} />);
-  return { appStore, settingsStore, actions, workerDrawer, callbacks, notices, setActive, setPending, showWindowNav };
+  return { appStore, settingsStore, actions, sessionDrawer, callbacks, notices, setActive, setPending, setPresented, showWindowNav };
 }
 
 beforeEach(() => vi.clearAllMocks());
 describe("chat workspace composition", () => {
   it("preserves the chat and worker binding while visibility changes", () => {
-    const { setActive, setPending, workerDrawer, actions, showWindowNav } = mountChat();
+    const { setActive, setPending, sessionDrawer, actions, showWindowNav } = mountChat();
     expect(seams.chat.sessionId).toBe("session"); expect(seams.chat.projectId).toBe("project");
     expect(seams.chat.projectDir).toBe("/garden"); expect(seams.chat.hasInitialPrompt).toBe(true);
-    expect(seams.chat.workersDrawerOpen).toBe(true); expect(seams.chat.workersBackgroundHydrate).toBe(true);
     expect(seams.chat.onSend).toBe(actions.sendPrompt); expect(seams.chat.onStop).toBe(actions.stopChat);
-    expect(seams.chat.onOpenWorker).toBe(workerDrawer.openWorkers); expect(seams.chat.onWorkersClose).toBe(workerDrawer.closeWorkers);
-    setActive(false); expect(seams.chat.workersDrawerOpen).toBe(false); expect(seams.chat.surfaceActive).toBe(false);
+    expect(seams.chat.onOpenWorker).toBe(sessionDrawer.openWorkers);
+    expect(seams.rail.worklogOpen).toBe(true); expect(seams.rail.onOpenWorklog).toBe(sessionDrawer.openWorklog);
+    setActive(false); expect(seams.chat.surfaceActive).toBe(false);
     setPending(true); expect(document.querySelector('.den-shell-stage--chat')?.getAttribute("data-boot")).toBe("ready");
     expect(seams.rail.navCollapsed).toBe(true); expect(seams.rail.navSplitFallback).toBe(true);
     seams.rail.onNavExpand?.(); expect(showWindowNav).toHaveBeenCalledOnce();
   });
 
+  it("has the hidden chat serve its session's tabs until the store holds another session", () => {
+    const { setActive, setPresented } = mountChat();
+    setActive(false);
+    expect(seams.chat.servesSessionTabs).toBe(true);
+    setPresented(false);
+    expect(seams.chat.servesSessionTabs).toBe(false);
+  });
+
   it("routes notices, recovery limits, and project nudges to their owning scope", async () => {
-    const { notices, settingsStore, callbacks, actions } = mountChat();
+    const { appStore, notices, settingsStore, callbacks, actions } = mountChat();
+    expect(seams.notices.announceLive).toBe(true);
+    appStore.actions.setLLMCallStatus({ call_id: "c1", session_id: "session", provider: "mock", model: "mock", status: "active", tokens: {} } as never);
+    expect(seams.notices.announceLive).toBe(false);
     seams.notices.onDismiss?.("notice");
     expect(notices.dismiss).toHaveBeenCalledWith("notice");
     await seams.reached.onResume?.(); expect(actions.resumeSpendLimitedChat).toHaveBeenCalledWith({ projectId: "project", sessionId: "session" });
@@ -106,5 +118,19 @@ describe("chat workspace composition", () => {
     expect(callbacks.onOpenProviders).toHaveBeenCalledOnce(); expect(callbacks.onOpenTests).toHaveBeenCalledOnce();
     expect(seams.stack.provider?.present()).toBe(false);
     seams.protection.onDismiss?.("isolation_degraded" as never);
+  });
+
+  it("scopes a failed chat render to its stage and keeps the tab rail", () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    seams.chatThrows = true;
+    try {
+      seams.rail = null as never;
+      mountChat();
+      expect(document.querySelector('[data-testid="critical-stop"]')?.getAttribute("data-code")).toBe("VIEW_RENDER_FAILED");
+      expect(seams.rail).not.toBeNull();
+    } finally {
+      seams.chatThrows = false;
+      logged.mockRestore();
+    }
   });
 });

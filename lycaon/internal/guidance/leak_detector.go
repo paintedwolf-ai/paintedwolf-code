@@ -2,9 +2,10 @@ package guidance
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/evidence"
 	"path/filepath"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/evidence"
 )
 
 const (
