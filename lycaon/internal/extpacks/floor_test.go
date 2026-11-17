@@ -7,6 +7,10 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+func AllDiagnosticCodes() []string {
+	return append([]string(nil), allDiagnosticCodes...)
+}
+
 func TestProjectDisableCapabilityMatchesEveryInventoryFloor(t *testing.T) {
 	for _, kind := range append(UnitKindRoots(), "unknown/future-kind") {
 		for _, deviceResolved := range []bool{false, true} {

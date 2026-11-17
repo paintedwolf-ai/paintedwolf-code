@@ -37,7 +37,7 @@ const SCREENSAVERS: [(&str, &str); 2] = [
     ("org.gnome.ScreenSaver", "/org/gnome/ScreenSaver"),
 ];
 
-/// The monitor that serves `vault_lock_status` and presence confirmation.
+/// The monitor that serves presence confirmation.
 static OBSERVED: OnceLock<Arc<Mutex<LockSources>>> = OnceLock::new();
 
 pub(crate) fn status() -> LockSources {

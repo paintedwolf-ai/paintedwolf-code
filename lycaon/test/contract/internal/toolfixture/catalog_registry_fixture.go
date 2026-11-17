@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/heldcall"
@@ -33,10 +32,8 @@ import (
 	scancfg "github.com/lycaon/lycaon/internal/scan/configuration"
 	scantoolapi "github.com/lycaon/lycaon/internal/scan/toolapi"
 	"github.com/lycaon/lycaon/internal/secretcap"
-	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
-	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil/scantest"
@@ -50,6 +47,10 @@ import (
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerplan"
+	"github.com/lycaon/lycaon/internal/workerplan/plantest"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
@@ -70,11 +71,6 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	if err := parse.RegisterParseTools(reg, parseSvc); err != nil {
 		contractcheck.FailErr(t, "parse.RegisterParseTools failed", err)
 	}
-	delegationStore := delegation.NewMemoryStore()
-	delegationMgr := delegation.NewManager(delegationStore, worker.NewInMemoryQueue(2), session.NewHost(store.NewMemory(), session.Models{Limits: settings.DefaultSessionLimits()}, tools.NewStubRegistry()), nil)
-	if err := delegation.RegisterDelegationTools(reg, delegationMgr); err != nil {
-		contractcheck.FailErr(t, "delegation.RegisterDelegationTools failed", err)
-	}
 	sqlDB := testdbfixture.Open(t, "wf-contract.db")
 	workflowMgr := workflow.NewManager(workflowpersistence.New(sqlDB), store.NewMemory(), contractcheck.CatalogRegistry(t), nil)
 	if err := workflowstatetools.RegisterStateTools(reg, workflowstatetools.StateToolDeps{Runs: workflowMgr.Store.Runs, Vars: workflowMgr.Phases.Vars, Journal: workflowMgr.Phases.Journal, Resolver: &workflowMgr.Resolver, Starts: workflowMgr.Starts, Controls: workflowMgr.Controls, Scaffold: workflowMgr.Blueprints.Scaffold, Sessions: store.NewMemory()}); err != nil {
@@ -84,6 +80,12 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	if err := blueprint.RegisterPlanTools(reg, blueprintMgr); err != nil {
 		contractcheck.FailErr(t, "blueprint.RegisterPlanTools failed", err)
 	}
+	planDeps := plantest.Deps(workerrecords.New(sqlDB))
+	planDeps.Plans, planDeps.Approvals = blueprintMgr, blueprintMgr
+	planSvc := plantest.New(t, planDeps)
+	if err := workerplan.RegisterPlanFromBlueprintTool(reg, planSvc); err != nil {
+		contractcheck.FailErr(t, "workerplan.RegisterPlanFromBlueprintTool failed", err)
+	}
 	boardSnap := &board.SnapshotBuilder{Repo: repotest.NewProvider(t)}
 	if err := board.RegisterBoardTools(reg, board.ToolDeps{Builder: boardSnap}); err != nil {
 		contractcheck.FailErr(t, "board.RegisterBoardTools failed", err)
@@ -92,6 +94,17 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 		return t.TempDir()
 	}); err != nil {
 		contractcheck.FailErr(t, "native.RegisterRecordFindingTool failed", err)
+	}
+	if err := native.RegisterMessageCoordinatorTool(reg, workertools.MessageCoordinatorDeps{}); err != nil {
+		contractcheck.FailErr(t, "native.RegisterMessageCoordinatorTool failed", err)
+	}
+	if err := worker.RegisterWorkerTools(reg, worker.WorkerToolDeps{
+		Ops:     &workerops.Service{},
+		Queue:   worker.NewInMemoryQueue(2),
+		Workers: worker.DefaultWorkersConfig(),
+		Plan:    planSvc,
+	}); err != nil {
+		contractcheck.FailErr(t, "worker.RegisterWorkerTools failed", err)
 	}
 	if err := native.RegisterUpdateProgressTool(reg, progress.NewMemoryStore(), func(_ context.Context, id string) string {
 		return id
@@ -109,19 +122,6 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}
 	if err := native.RegisterRequestDecisionTool(reg, workertools.RequestDecisionDeps{}); err != nil {
 		contractcheck.FailErr(t, "native.RegisterRequestDecisionTool failed", err)
-	}
-	// Registration only: the budget tools never run against this ledger.
-	budgetQueue, budgetLedger := worker.NewInMemoryQueue(1), worker.NewSQLBudgetLedger(nil, nil)
-	if err := worker.RegisterRequestBudgetTool(reg, worker.RequestBudgetToolDeps{
-		Queue: budgetQueue, Ledger: budgetLedger, Notify: func(context.Context, api.WorkerTask) {},
-	}); err != nil {
-		contractcheck.FailErr(t, "worker.RegisterRequestBudgetTool failed", err)
-	}
-	if err := worker.RegisterExtendWorkerBudgetTool(reg, worker.ExtendBudgetToolDeps{Queue: budgetQueue, Ledger: budgetLedger}); err != nil {
-		contractcheck.FailErr(t, "worker.RegisterExtendWorkerBudgetTool failed", err)
-	}
-	if err := worker.RegisterDeclineWorkerBudgetTool(reg, worker.DeclineBudgetToolDeps{Queue: budgetQueue, Ledger: budgetLedger}); err != nil {
-		contractcheck.FailErr(t, "worker.RegisterDeclineWorkerBudgetTool failed", err)
 	}
 	webRT, err := webresearch.WireRuntime(t.Context())
 	contractcheck.FailErr(t, "webresearch.WireRuntime", err)
@@ -154,6 +154,9 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}
 	if err := workflowreview.RegisterSubmitVerdictTool(reg, workflowMgr.Verdicts); err != nil {
 		contractcheck.FailErr(t, "workflowreview.RegisterSubmitVerdictTool failed", err)
+	}
+	if err := workflowreview.RegisterReadReviewTool(reg, workflowMgr.Assignments.View); err != nil {
+		contractcheck.FailErr(t, "workflowreview.RegisterReadReviewTool failed", err)
 	}
 	c := workflowfixture.ContractWorkflowComposer(t)
 	c.Templates = templates
@@ -210,14 +213,28 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 
 	agents := orchestration.NewMemoryAgentRegistry()
 	contractcheck.FailErr(t, "LoadRequiredAgentRegistry", orchestration.LoadRequiredAgentRegistry(context.Background(), agents))
+	planSvc := plantest.New(t, plantest.Deps(workerrecords.New(sqlDB)))
 	if err := worker.RegisterTaskTool(rt.Registry, worker.TaskToolDeps{
-		Queue:   worker.NewInMemoryQueue(2),
-		Agents:  agents,
-		Workers: worker.DefaultWorkersConfig(),
+		Queue:         worker.NewInMemoryQueue(2),
+		Agents:        agents,
+		Workers:       worker.DefaultWorkersConfig(),
+		WorkerRecords: workerrecords.New(sqlDB),
+		Reviews:       &workerops.Service{},
+		Plan:          planSvc,
 	}); err != nil {
 		contractcheck.FailErr(t, "worker.RegisterTaskTool failed", err)
 	}
-	if err := loopwake.RegisterWaitTool(rt.Registry, loopwake.NewLoopEngine().Subscriptions, loopwake.WaitToolDeps{}); err != nil {
+	if err := worker.RegisterWorkerTools(rt.Registry, worker.WorkerToolDeps{
+		Ops:     &workerops.Service{},
+		Queue:   worker.NewInMemoryQueue(2),
+		Workers: worker.DefaultWorkersConfig(),
+		Plan:    planSvc,
+	}); err != nil {
+		contractcheck.FailErr(t, "worker.RegisterWorkerTools failed", err)
+	}
+	if err := loopwake.RegisterWaitTool(rt.Registry, loopwake.NewLoopEngine().Subscriptions, loopwake.WaitToolDeps{
+		WorkerKnown: func(context.Context, string, string) bool { return true },
+	}); err != nil {
 		contractcheck.FailErr(t, "loopwake.RegisterWaitTool failed", err)
 	}
 	renderBudgets, err := browser.LoadRenderBudgets()

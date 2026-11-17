@@ -2,12 +2,12 @@ package sourcebrief
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"math"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -28,7 +28,7 @@ func newBriefLedger(t *testing.T) *briefLedger {
 	t.Helper()
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProject(t, sqlDB, "p1")
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	_, err := sqlDB.ExecContext(t.Context(), `INSERT INTO project_roots
  (id, project_id, path, label, is_primary, added_at, kind)
  VALUES ('r1','p1','/tmp/brief-root','root',1,?,'attached')`, now)

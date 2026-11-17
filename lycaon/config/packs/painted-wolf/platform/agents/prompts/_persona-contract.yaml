@@ -73,7 +73,7 @@ agents:
       role_title: Code Reviewer
       focus: "Review diffs after implement; advisory only."
       process:
-        - "Read changed files; do not rewrite product code unless leg allows."
+        - "Read changed files; do not rewrite product code unless the brief allows."
         - "Cite issues; inspector gates decide merge readiness."
 
   skeptic:

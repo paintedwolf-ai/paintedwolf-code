@@ -134,6 +134,26 @@ func (s *Store) SettleLease(ctx context.Context, leaseID, status string, winner 
 	return n == 1, err
 }
 
+// SettleWorkerWait resolves the armed wait of a parked worker's job with
+// winner, so the worker resumes with that outcome.
+func (s *Store) SettleWorkerWait(ctx context.Context, workerJobID string, winner Condition) (bool, error) {
+	if s == nil || s.DB == nil {
+		return false, nil
+	}
+	encoded, err := json.Marshal(winner)
+	if err != nil {
+		return false, err
+	}
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	result, err := s.DB.ExecContext(ctx, `UPDATE wait_leases SET status = 'resolved', winner_json = ?, updated_at = ?, resolved_at = ? WHERE worker_job_id = ? AND status = 'armed'`,
+		string(encoded), now, now, strings.TrimSpace(workerJobID))
+	if err != nil {
+		return false, err
+	}
+	n, err := result.RowsAffected()
+	return n > 0, err
+}
+
 const leaseColumns = `id, session_id, root_session_id, project_id, project_dir, tool_call_id,
 	COALESCE(worker_job_id, ''), profile_id, status, deadline_at, until_complete, conditions_json, loopback_ports_json, reason`
 

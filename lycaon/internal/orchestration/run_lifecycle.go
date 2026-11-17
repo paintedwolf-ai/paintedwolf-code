@@ -7,7 +7,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// Cancel asks the owning workflow and delegation to settle; their terminal state wins.
+// Cancel asks the owning workflow and worker batch to settle; their terminal state wins.
 func (o *OrchestratorImpl) Cancel(ctx context.Context, runID string, reason TerminationReason) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -23,8 +23,8 @@ func (o *OrchestratorImpl) Cancel(ctx context.Context, runID string, reason Term
 		state.cancelReason = reason
 	}
 	reason = state.cancelReason
-	delegationID, workflowRunID := state.delegationID, state.workflowRunID
-	if delegationID == "" {
+	batchID, workflowRunID := state.batchID, state.workflowRunID
+	if batchID == "" {
 		state.active, state.phase = false, string(reason)
 	}
 	o.mu.Unlock()
@@ -43,62 +43,59 @@ func (o *OrchestratorImpl) Cancel(ctx context.Context, runID string, reason Term
 			o.mu.Unlock()
 		}
 	}
-	if o.delegation != nil && delegationID != "" {
-		return o.abortRunDelegation(ctx, state, delegationID, reason)
+	if o.workers != nil && batchID != "" {
+		return o.abortRunBatch(ctx, state, batchID, reason)
 	}
 	return nil
 }
 
-// bindRunDelegation closes the setup window before any leg can be dispatched.
-func (o *OrchestratorImpl) bindRunDelegation(ctx context.Context, state *runState, delegationID string) error {
+func (o *OrchestratorImpl) bindRunBatch(ctx context.Context, state *runState, batchID string) error {
 	o.mu.Lock()
-	state.delegationID = delegationID
+	state.batchID = batchID
 	reason, canceled := state.cancelReason, state.cancelRequested
 	o.mu.Unlock()
 	if !canceled {
 		return nil
 	}
-	if err := o.abortRunDelegation(ctx, state, delegationID, reason); err != nil {
+	if err := o.abortRunBatch(ctx, state, batchID, reason); err != nil {
 		return err
 	}
 	return context.Canceled
 }
 
-func (o *OrchestratorImpl) abortRunDelegation(ctx context.Context, state *runState, delegationID string, reason TerminationReason) error {
-	settled, err := o.store.Get(ctx, delegationID)
+func (o *OrchestratorImpl) abortRunBatch(ctx context.Context, state *runState, batchID string, reason TerminationReason) error {
+	settled, err := o.workers.GetBatch(ctx, batchID)
 	if err != nil {
 		return err
 	}
-	if settled.Status == api.DelegationStatusActive {
-		if err := o.delegation.Abort(ctx, delegationID, string(reason)); err != nil {
+	if settled.Status == TopologyBatchActive {
+		if err := o.workers.AbortBatch(ctx, batchID, string(reason)); err != nil {
 			return err
 		}
-		settled, err = o.store.Get(ctx, delegationID)
+		settled, err = o.workers.GetBatch(ctx, batchID)
 		if err != nil {
 			return err
 		}
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	// Abort and worker settlement race at the delegation store's atomic transition.
 	switch settled.Status {
-	case api.DelegationStatusAborted:
+	case TopologyBatchAborted:
 		state.active = false
 		if state.workflowRunID == "" {
 			state.phase = settled.Reason
 		}
-	case api.DelegationStatusDone, api.DelegationStatusFailed, api.DelegationStatusCanceled:
+	case TopologyBatchDone, TopologyBatchFailed:
 		state.active = false
 		if state.workflowRunID == "" {
 			state.phase = "done"
 		}
-	case api.DelegationStatusActive:
-		return fmt.Errorf("delegation %q remained active after cancellation", delegationID)
+	case TopologyBatchActive:
+		return fmt.Errorf("topology batch %q remained active after cancellation", batchID)
 	}
 	return nil
 }
 
-// workflowStatusPhase keeps a terminal workflow from presenting an executable phase.
 func workflowStatusPhase(run *api.WorkflowRun) (phase string, terminal bool) {
 	switch run.Status {
 	case api.WorkflowRunStatusComplete, api.WorkflowRunStatusFailed, api.WorkflowRunStatusCanceled, api.WorkflowRunStatusInterrupted:

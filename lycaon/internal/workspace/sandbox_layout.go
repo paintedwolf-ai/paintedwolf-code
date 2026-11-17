@@ -61,10 +61,9 @@ func (m *Manager) CreateWorkerWorkspaceSelected(
 func applyWorkspaceSelectionToLayout(
 	layout, sources SandboxLayout,
 	selection adapter.WorkspaceSelection,
-	taskPathHints []string,
 	activeRootID string,
 ) (SandboxLayout, SandboxLayout, string, error) {
-	narrowedGrants, narrowedSources, err := ResolveDispatchWorkspaceSelection(sources.Roots, selection, taskPathHints)
+	narrowedGrants, narrowedSources, err := ResolveDispatchWorkspaceSelection(sources.Roots, selection)
 	if err != nil {
 		return SandboxLayout{}, SandboxLayout{}, "", err
 	}
@@ -153,9 +152,9 @@ func createWorkerWorkspaceFromSources(
 			return nil, SandboxLayout{}, fmt.Errorf("workspace source root %d identity mismatch", i)
 		}
 	}
-	if sel, hints, ok := workspaceSelectionFromContext(ctx); ok {
+	if sel, _, ok := workspaceSelectionFromContext(ctx); ok {
 		var selErr error
-		layout, sources, activeRootID, selErr = applyWorkspaceSelectionToLayout(layout, sources, sel, hints, activeRootID)
+		layout, sources, activeRootID, selErr = applyWorkspaceSelectionToLayout(layout, sources, sel, activeRootID)
 		if selErr != nil {
 			return nil, SandboxLayout{}, selErr
 		}

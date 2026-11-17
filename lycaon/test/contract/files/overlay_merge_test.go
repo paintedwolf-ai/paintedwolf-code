@@ -43,8 +43,9 @@ phases:
 `)
 	contractcheck.FailErr(t, "write overlay workflow", os.WriteFile(filepath.Join(overlayDir, "workflow.yaml"), wfYAML, 0o600))
 
-	merged, err := workflowdef.MergeManifestOverlay(bundled, projectDir)
-	contractcheck.FailErr(t, "MergeManifestOverlay", err)
+	registry, _, err := workflowdef.RegistryFromDirsWithSources(projectDir)
+	contractcheck.FailErr(t, "load registry with project overlay", err)
+	merged := registry.All()
 	if _, ok := merged["overlay-test@1.0.0"]; !ok {
 		t.Fatalf("overlay workflow not merged (have %d entries)", len(merged))
 	}
@@ -60,11 +61,6 @@ phases:
 func TestFlatProjectWorkflowOverlayIsNotAManifest(t *testing.T) {
 	t.Parallel()
 	projectDir := t.TempDir()
-
-	catalog, err := extpacks.CatalogForConsumers()
-	contractcheck.FailErr(t, "catalog for consumers", err)
-	bundled, _, err := workflowdef.LoadManifestsFromCatalog(catalog)
-	contractcheck.FailErr(t, "load bundled workflows", err)
 
 	overlayDir := filepath.Join(projectDir, settingsoverlay.DirName(), "workflows")
 	contractcheck.FailErr(t, "mkdir overlay dir", os.MkdirAll(overlayDir, 0o750))
@@ -82,8 +78,9 @@ phases:
 `)
 	contractcheck.FailErr(t, "write flat overlay", os.WriteFile(filepath.Join(overlayDir, "flat-overlay-test.yaml"), wfYAML, 0o600))
 
-	merged, err := workflowdef.MergeManifestOverlay(bundled, projectDir)
-	contractcheck.FailErr(t, "MergeManifestOverlay", err)
+	registry, _, err := workflowdef.RegistryFromDirsWithSources(projectDir)
+	contractcheck.FailErr(t, "load registry with project overlay", err)
+	merged := registry.All()
 	if _, ok := merged["flat-overlay-test@1.0.0"]; ok {
 		t.Fatal("flat .paintedwolf/workflows/<name>.yaml loaded as a manifest — the layout is <name>/workflow.yaml")
 	}

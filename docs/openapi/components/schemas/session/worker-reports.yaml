@@ -71,6 +71,20 @@ components:
         leg_id:
           type: string
           format: uuid
+        worker_record_id:
+          type: string
+          format: uuid
+        worker_name:
+          type: string
+        round:
+          type: integer
+          minimum: 1
+        result_handle:
+          type: string
+          format: uuid
+        review_of:
+          type: string
+          format: uuid
         worker_id:
           type: string
           format: uuid

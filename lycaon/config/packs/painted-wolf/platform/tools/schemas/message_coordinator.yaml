@@ -1,0 +1,16 @@
+description: Tell your coordinator something while you keep working, such as evidence against your instructions or a finding that changes the plan. Set needs_reply when you want an answer; the coordinator is woken and its reply reaches you as a message. You never stop or wait here; use request_decision when you cannot proceed without an answer.
+schema:
+  type: object
+  properties:
+    text:
+      type: string
+      description: The message, with the evidence it rests on.
+    needs_reply:
+      type: boolean
+      description: Ask the coordinator to answer. Leave unset for information it can read at its next turn.
+    reply_to:
+      type: integer
+      minimum: 1
+      description: The number of the coordinator message you are answering.
+  required: [text]
+  additionalProperties: false

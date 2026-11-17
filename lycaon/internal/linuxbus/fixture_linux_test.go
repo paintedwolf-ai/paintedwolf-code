@@ -5,13 +5,10 @@ package linuxbus
 import (
 	"bufio"
 	"bytes"
-	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
-
-	"github.com/godbus/dbus/v5"
 )
 
 // fixtureBus starts a private session bus daemon and returns its socket path.
@@ -45,101 +42,6 @@ func fixtureBus(t *testing.T) string {
 		t.Fatalf("wait for isolated bus readiness: %v", err)
 	}
 	return path
-}
-
-type fixtureLoginManager struct {
-	sessionPath dbus.ObjectPath
-	fail        bool
-}
-
-func (f *fixtureLoginManager) GetSessionByPID(uint32) (dbus.ObjectPath, *dbus.Error) {
-	if f.fail {
-		return "", dbus.NewError("org.freedesktop.login1.NoSessionForPID", nil)
-	}
-	return f.sessionPath, nil
-}
-
-// seatRecord marshals as the login manager's (so) seat property.
-type seatRecord struct {
-	ID   string
-	Path dbus.ObjectPath
-}
-
-type fixtureLoginSession struct {
-	properties map[string]dbus.Variant
-}
-
-func (f *fixtureLoginSession) GetAll(string) (map[string]dbus.Variant, *dbus.Error) {
-	return f.properties, nil
-}
-
-func TestCurrentLoginSessionReadsTheSessionOwningThisProcess(t *testing.T) {
-	path := fixtureBus(t)
-	server, err := Connect(t.Context(), path)
-	if err != nil {
-		t.Fatalf("connect fixture service: %v", err)
-	}
-	defer func() { _ = server.Close() }()
-	manager := &fixtureLoginManager{sessionPath: "/org/freedesktop/login1/session/_32"}
-	if err := server.Export(manager, Login1Path, Login1Name+".Manager"); err != nil {
-		t.Fatalf("export manager: %v", err)
-	}
-	session := &fixtureLoginSession{properties: map[string]dbus.Variant{
-		"Id":     dbus.MakeVariant("2"),
-		"Type":   dbus.MakeVariant("wayland"),
-		"Class":  dbus.MakeVariant("user"),
-		"Active": dbus.MakeVariant(true),
-		"Seat":   dbus.MakeVariant(seatRecord{ID: "seat0", Path: "/org/freedesktop/login1/seat/seat0"}),
-	}}
-	if err := server.Export(session, manager.sessionPath, "org.freedesktop.DBus.Properties"); err != nil {
-		t.Fatalf("export session: %v", err)
-	}
-	if reply, err := server.RequestName(Login1Name, dbus.NameFlagDoNotQueue); err != nil || reply != dbus.RequestNameReplyPrimaryOwner {
-		t.Fatalf("own login manager name: %v, %v", reply, err)
-	}
-	client, err := Connect(t.Context(), path)
-	if err != nil {
-		t.Fatalf("connect client: %v", err)
-	}
-	defer func() { _ = client.Close() }()
-	state, err := DiscoverName(t.Context(), client, Login1Name)
-	if err != nil || state.Owner != server.Names()[0] {
-		t.Fatalf("login manager ownership = %+v, %v", state, err)
-	}
-	if state, err := DiscoverName(t.Context(), client, "org.freedesktop.absent"); err != nil || state != (NameState{}) {
-		t.Fatalf("absent name ownership = %+v, %v", state, err)
-	}
-	got, err := CurrentLoginSession(t.Context(), client)
-	if err != nil {
-		t.Fatalf("current login session: %v", err)
-	}
-	want := LoginSession{ID: "2", Path: manager.sessionPath, Type: "wayland", Class: "user", Seat: "seat0", Active: true}
-	if got != want {
-		t.Fatalf("login session = %+v, want %+v", got, want)
-	}
-	if err := server.Export(&fixtureLoginManager{fail: true}, Login1Path, Login1Name+".Manager"); err != nil {
-		t.Fatalf("export manager without a session: %v", err)
-	}
-	if _, err := CurrentLoginSession(t.Context(), client); err == nil {
-		t.Fatal("a process outside every session resolved one")
-	}
-	missingID := maps.Clone(session.properties)
-	delete(missingID, "Id")
-	if err := server.Export(&fixtureLoginSession{properties: missingID}, manager.sessionPath, "org.freedesktop.DBus.Properties"); err != nil {
-		t.Fatalf("export session without an identifier: %v", err)
-	}
-	if err := server.Export(manager, Login1Path, Login1Name+".Manager"); err != nil {
-		t.Fatalf("restore manager with a session: %v", err)
-	}
-	if _, err := CurrentLoginSession(t.Context(), client); err == nil {
-		t.Fatal("a session without an identifier was accepted")
-	}
-	if _, err := DiscoverName(t.Context(), nil, Login1Name); err == nil {
-		t.Fatal("nil bus was accepted")
-	}
-	if _, err := CurrentLoginSession(t.Context(), nil); err == nil {
-		t.Fatal("nil bus was accepted for session lookup")
-	}
 }
 
 func TestSessionConnectTriesAlternativesAndReportsStaleSockets(t *testing.T) {

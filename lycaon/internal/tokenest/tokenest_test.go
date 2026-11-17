@@ -37,9 +37,6 @@ func TestEstimateCountsRunes(t *testing.T) {
 	if got := tokenest.EstimateDefault(four); got != 1 {
 		t.Fatalf("EstimateDefault(%q) = %d want 1", four, got)
 	}
-	if got := tokenest.EstimateBytes([]byte(four), tokenest.DefaultDivisor); got != 1 {
-		t.Fatalf("EstimateBytes(%q) = %d want 1", four, got)
-	}
 }
 
 // The three entry points are one formula: a budget one caller computes is spent
@@ -48,10 +45,6 @@ func TestAllEntryPointsAgree(t *testing.T) {
 	t.Parallel()
 	for _, s := range []string{"", "a", "hello world", "日本語で書かれた文章", "mixed ascii と日本語"} {
 		text := tokenest.EstimateDefault(s)
-		raw := tokenest.EstimateBytes([]byte(s), tokenest.DefaultDivisor)
-		if text != raw {
-			t.Errorf("%q: EstimateDefault=%d EstimateBytes=%d", s, text, raw)
-		}
 		if got := tokenest.Estimate(s, tokenest.DefaultDivisor); got != text {
 			t.Errorf("%q: Estimate=%d EstimateDefault=%d", s, got, text)
 		}

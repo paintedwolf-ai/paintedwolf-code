@@ -16,13 +16,6 @@
       "parameterized": false
     },
     {
-      "id": "all_legs_complete",
-      "layer": "core",
-      "domain": "—",
-      "status": "shipped",
-      "parameterized": false
-    },
-    {
       "id": "baseline_scan_complete",
       "layer": "domain",
       "domain": "scan",
@@ -51,42 +44,7 @@
       "parameterized": false
     },
     {
-      "id": "completion_criteria_met",
-      "layer": "core",
-      "domain": "—",
-      "status": "shipped",
-      "parameterized": false
-    },
-    {
-      "id": "delegation_active",
-      "layer": "core",
-      "domain": "—",
-      "status": "shipped",
-      "parameterized": false
-    },
-    {
       "id": "delegation_closeout_complete",
-      "layer": "core",
-      "domain": "—",
-      "status": "shipped",
-      "parameterized": false
-    },
-    {
-      "id": "delegation_phase_done",
-      "layer": "core",
-      "domain": "—",
-      "status": "shipped",
-      "parameterized": false
-    },
-    {
-      "id": "delegation_phase_setup",
-      "layer": "core",
-      "domain": "—",
-      "status": "shipped",
-      "parameterized": false
-    },
-    {
-      "id": "delegation_phase_worker",
       "layer": "core",
       "domain": "—",
       "status": "shipped",
@@ -126,13 +84,6 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true
-    },
-    {
-      "id": "file_modified_since_base",
-      "layer": "core",
-      "domain": "—",
-      "status": "shipped",
-      "parameterized": false
     },
     {
       "id": "findings_triaged",
@@ -199,20 +150,6 @@
     },
     {
       "id": "iteration_cap_near",
-      "layer": "core",
-      "domain": "—",
-      "status": "shipped",
-      "parameterized": false
-    },
-    {
-      "id": "leg_failed",
-      "layer": "core",
-      "domain": "—",
-      "status": "shipped",
-      "parameterized": false
-    },
-    {
-      "id": "leg_pending",
       "layer": "core",
       "domain": "—",
       "status": "shipped",
@@ -518,13 +455,6 @@
       "domain": "—",
       "status": "shipped",
       "parameterized": true
-    },
-    {
-      "id": "worker_jobs_pending",
-      "layer": "core",
-      "domain": "—",
-      "status": "shipped",
-      "parameterized": false
     },
     {
       "id": "workflow_active",

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"sort"
 	"strings"
 	"time"
@@ -45,7 +46,7 @@ func writeModelOutputBlob(ctx context.Context, s *sqlCore, q *db.Queries, projec
 	}
 	if err := q.UpsertContentBlobObject(ctx, db.UpsertContentBlobObjectParams{
 		ProjectID: projectID, Sha256: sha, ByteSize: byteSize, StoredSize: storedSize,
-		CreatedAt: db.FormatTime(time.Now().UTC()),
+		CreatedAt: timelayout.Format(time.Now().UTC()),
 	}); err != nil {
 		return "", fmt.Errorf("upsert content blob object: %w", err)
 	}
@@ -121,27 +122,6 @@ func sameSettledModelOutputRow(committed db.ModelOutputs, proposed ModelOutput, 
 		committed.FinishReason == proposed.FinishReason && (committed.Scripted != 0) == proposed.Scripted
 }
 
-func (t *memoryTurns) ProjectLiveModelOutput(ctx context.Context, out LiveModelOutput) error {
-	s := t.core
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if out.ID == "" || out.TurnAttemptID == "" || out.SessionID == "" || out.MessageID == "" || out.Iteration <= 0 {
-		return fmt.Errorf("live model output identity required")
-	}
-	now := time.Now().UTC()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if existing, ok := s.liveModelOutputs[out.ID]; ok {
-		out.CreatedAt = existing.CreatedAt
-	} else if out.CreatedAt.IsZero() {
-		out.CreatedAt = now
-	}
-	out.UpdatedAt = now
-	s.liveModelOutputs[out.ID] = out
-	return nil
-}
-
 func (t *memoryTurns) SettleModelOutput(ctx context.Context, out ModelOutput) (ModelOutput, error) {
 	return settleModelOutputMemory(ctx, t.core, out)
 }
@@ -181,7 +161,6 @@ func settleModelOutputMemory(ctx context.Context, s *memoryCore, out ModelOutput
 		}
 	}
 	s.modelOutputs[out.ID] = out
-	delete(s.liveModelOutputs, out.ID)
 	return out, nil
 }
 

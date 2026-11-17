@@ -41,16 +41,6 @@ func TestRenderCopyJoinsListsAndOmitsZero(t *testing.T) {
 	}
 }
 
-func TestValidateRuleCopyUnknownName(t *testing.T) {
-	err := ValidateRuleCopy(&Rule{
-		ID:   "GHOST",
-		Copy: Copy{What: "hello {{ ghost_field }}"},
-	})
-	if err == nil || !strings.Contains(err.Error(), "[OAR-COPY-2]") {
-		t.Fatalf("err=%v", err)
-	}
-}
-
 func TestCopyDoesNotChangeDecisionCode(t *testing.T) {
 	r := &Rule{ID: "X", Effect: EffectBlock, Copy: Copy{What: "blocked {{ tool }}"}}
 	gc := NewGuardContext()

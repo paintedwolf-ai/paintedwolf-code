@@ -1,9 +1,9 @@
 package hostcontracts
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/cost/costtest"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session"
@@ -31,23 +30,26 @@ func TestBoardRequiresProjectID(t *testing.T) {
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "reg.Open failed", err)
 
-	delStore := delegation.NewMemoryStore()
 	queue := worker.NewInMemoryQueue(2)
-	snap := &board.SnapshotBuilder{Delegations: delStore, Workers: queue, Repo: repotest.NewProvider(t)}
+	snap := &board.SnapshotBuilder{Workers: queue, Repo: repotest.NewProvider(t)}
 	sessionStore := store.NewMemory()
 	coord, err := sessionStore.Create(t.Context(), wire.CreateSessionRequest{ProjectID: p.ID, Posture: wire.SessionPostureBuild}, p.ID)
 	testutil.FailErr(t, "create coordinator session", err)
-	// The board joins delegations by their canonical workspace path.
-	_, err = delStore.Create(t.Context(), wire.Delegation{
-		ProjectID: p.ID, WorkspacePath: project.PrimaryRootPath(p),
-		Task:     "t",
-		Strategy: wire.HuntStrategyFileBased,
-	}, coord.ID, []wire.Leg{{Title: "leg"}})
-	testutil.FailErr(t, "create session in store", err)
+	_, err = queue.Enqueue(t.Context(), wire.WorkerTask{
+		ID:              "w-board-1",
+		ParentSessionID: coord.ID,
+		ProjectID:       p.ID,
+		WorkspacePath:   project.PrimaryRootPath(p),
+		AgentType:       "implementer",
+		Prompt:          "implement feature",
+		Brief:           "implement feature",
+		Status:          wire.WorkerStatusRunning,
+	})
+	testutil.FailErr(t, "enqueue worker", err)
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: sessionStore, Projects: reg}, Workflow: hostapi.WorkflowDependencies{
-		Delegations: delegation.NewManager(delStore, queue, nil, nil), Workers: queue, Board: snap}}), nil, hostapi.TestAPIToken)
+		Workers: queue, Board: snap}}), nil, hostapi.TestAPIToken)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+p.ID+"/board?session_id="+coord.ID, nil)
 	w := httptest.NewRecorder()
@@ -55,8 +57,10 @@ func TestBoardRequiresProjectID(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), `"delegation":[{`) {
-		t.Fatalf("expected non-empty delegation roster, body = %s", w.Body.String())
+	var view wire.BoardView
+	testutil.FailErr(t, "decode board", json.Unmarshal(w.Body.Bytes(), &view))
+	if view.SessionID != coord.ID {
+		t.Fatalf("board is for session %q, want %q", view.SessionID, coord.ID)
 	}
 }
 
@@ -68,8 +72,7 @@ func TestBoardRequiresSessionIDMissing(t *testing.T) {
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store.NewMemory(), Projects: reg}, Workflow: hostapi.WorkflowDependencies{
-		Delegations: delegation.NewManager(delegation.NewMemoryStore(), worker.NewInMemoryQueue(2), nil, nil),
-		Workers:     worker.NewInMemoryQueue(2), Board: &board.SnapshotBuilder{Repo: repotest.NewProvider(t)}}}), nil, hostapi.TestAPIToken)
+		Workers: worker.NewInMemoryQueue(2), Board: &board.SnapshotBuilder{Repo: repotest.NewProvider(t)}}}), nil, hostapi.TestAPIToken)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/projects/"+p.ID+"/board", nil)
 	w := httptest.NewRecorder()
@@ -87,8 +90,7 @@ func TestWorkersRequiresSessionID(t *testing.T) {
 
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
 		Store: store.NewMemory(), Projects: reg}, Workflow: hostapi.WorkflowDependencies{
-		Delegations: delegation.NewManager(delegation.NewMemoryStore(), worker.NewInMemoryQueue(2), nil, nil),
-		Workers:     worker.NewInMemoryQueue(2)}}), nil, hostapi.TestAPIToken)
+		Workers: worker.NewInMemoryQueue(2)}}), nil, hostapi.TestAPIToken)
 
 	req := contractfixture.NewAuthedRequest(http.MethodGet, "/v1/workers?project_id="+p.ID, nil)
 	w := httptest.NewRecorder()

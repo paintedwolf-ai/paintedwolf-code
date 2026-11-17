@@ -4,7 +4,7 @@ import {
   allSpans,
   redactionMarkModifier,
   redactionMarkTitle,
-  redactionSummary,
+  redactionRuleTitles,
   segmentBySpans,
   spansForField,
 } from "./redaction-spans.ts";
@@ -62,20 +62,12 @@ describe("redaction spans", () => {
     expect(allSpans(message)).toHaveLength(2);
   });
 
-  it("summarises secrets and masks separately", () => {
+  it("collects distinct rule titles across secrets, masks, and references", () => {
     const message = messageWith([
       secretSpan(),
       secretSpan({ start: 20, kind: "observer_mask", source: "policy", rule_title: undefined }),
-    ]);
-    const summary = redactionSummary(message);
-    expect(summary).toEqual({ secrets: 1, references: 0, masked: 1, titles: ["Gitea Access Token"] });
-  });
-
-  it("counts a protected value written as its reference apart from a removal", () => {
-    const message = messageWith([
-      secretSpan(),
       secretSpan({
-        start: 20,
+        start: 40,
         length: 58,
         kind: "managed_reference",
         source: "remembered_match",
@@ -83,12 +75,9 @@ describe("redaction spans", () => {
         rule_title: "A managed secret",
       }),
     ]);
-    expect(redactionSummary(message)).toEqual({
-      secrets: 1,
-      references: 1,
-      masked: 0,
-      titles: ["Gitea Access Token", "A managed secret"],
-    });
+    expect(redactionRuleTitles(message)).toEqual(["Gitea Access Token", "A managed secret"]);
+    expect(redactionRuleTitles({ host_secret_redaction: undefined })).toEqual([]);
+    expect(redactionRuleTitles(undefined)).toEqual([]);
   });
 
   it("gives each kind of mark its own claim", () => {
@@ -97,10 +86,5 @@ describe("redaction spans", () => {
     expect(redactionMarkModifier(secretSpan({ kind: "observer_mask" }))).toBe("den-redaction-mark--mask");
     expect(redactionMarkModifier(secretSpan())).toBeUndefined();
     expect(redactionMarkTitle(secretSpan())).toContain("Gitea Access Token");
-  });
-
-  it("has no summary when nothing was replaced", () => {
-    expect(redactionSummary({ host_secret_redaction: undefined })).toBeUndefined();
-    expect(redactionSummary(undefined)).toBeUndefined();
   });
 });

@@ -13,8 +13,6 @@ values:
     payload: checkpoint.yaml#/components/schemas/CheckpointEvent
   - id: board
     payload: events.yaml#/components/schemas/BoardEvent
-  - id: delegation
-    payload: events.yaml#/components/schemas/DelegationEvent
   - id: cost
     payload: cost.yaml#/components/schemas/CostEvent
   - id: llm

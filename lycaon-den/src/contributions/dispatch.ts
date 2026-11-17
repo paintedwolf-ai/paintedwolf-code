@@ -228,10 +228,6 @@ export function nativeCommandId(handlerId: string): string | null {
   return frame.commands.find((row) => row.handler_id === handlerId)?.id ?? null;
 }
 
-export function contributionCommands(): readonly ContributionCommand[] {
-  return contributionFrame()?.commands ?? [];
-}
-
 export type CrossbarCommandState =
   | { phase: "loading" | "unavailable"; commands: readonly [] }
   | { phase: "ready"; commands: readonly ContributionCommand[] };

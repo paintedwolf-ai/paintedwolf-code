@@ -11,7 +11,7 @@ func TestObservedKind(t *testing.T) {
 		{[]string{"read", "grep"}, KindInspect},
 		{[]string{"read", "command"}, KindRun},
 		{[]string{"command", "edit"}, KindChange},
-		{[]string{"edit", "delegate_dispatch"}, KindDelegate},
+		{[]string{"edit", "instruct_worker"}, KindDelegate},
 		{[]string{"task"}, KindDelegate},
 	}
 	for _, c := range cases {

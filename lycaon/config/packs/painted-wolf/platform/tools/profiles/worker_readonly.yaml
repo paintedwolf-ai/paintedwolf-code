@@ -13,6 +13,8 @@ tools:
   view_video: sticky
   record_finding: sticky
   pack_board: sticky
+  read_findings: sticky
+  read_review: sticky
   source_history: sticky
   wait: sticky
   held_result: true
@@ -32,7 +34,7 @@ deny_tools:
   - git_checkout
   - git_merge
   - git_stash
-  - delegate_*
+  - plan_from_blueprint
   - state_*
   - handoff_*
-wait_conditions: [http_ready, port_ready]
+wait_conditions: [process_done, http_ready, port_ready]

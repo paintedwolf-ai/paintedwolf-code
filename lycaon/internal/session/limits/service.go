@@ -85,7 +85,7 @@ func (m *Service) Effective(ctx context.Context, sess *api.Session) settings.Ses
 		lim = provider.SessionLimits(projectDir)
 	}
 	_, derived := m.ResolveRoots(rootPaths)
-	return ApplyWorkerMaxToolLoops(settings.ApplyDerivedSessionLimits(lim, derived), sess)
+	return settings.ApplyDerivedSessionLimits(lim, derived)
 }
 
 func (m *Service) Compaction(ctx context.Context, sess *api.Session) compaction.CompactionConfig {

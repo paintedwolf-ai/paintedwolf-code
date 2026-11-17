@@ -1,0 +1,22 @@
+spec_version: "1.0"
+id: DECISION_NOT_SHOWN
+kind: policy
+on: tool.rejected
+selector:
+  tools:
+    - answer_decision
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.worker]
+when: paintedwolf.rejection_code == "DECISION_NOT_SHOWN"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+message: 'You have not been shown worker {{ paintedwolf.worker }}''s current question yet'
+what: 'You have not been shown worker {{ paintedwolf.worker }}''s current question yet.'
+cause: 'This answer was written before the question reached you, or the question was already answered.'
+why: 'An answer has to respond to the question the worker is actually asking, once.'
+fix: '{{ paintedwolf.next_steps }}'
+instead: 'Answer a question once it is on the roster'
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      worker: parser-fix

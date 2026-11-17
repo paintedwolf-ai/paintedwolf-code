@@ -69,7 +69,6 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 		LoadedTools:      sortedLoadedSet(e.loadedTools(sess)),
 		ExecutionMode:    transition.ExecutionMode,
 		VerifyCommand:    strings.TrimSpace(implState.VerifyCommand),
-		WorkerToolBudget: e.workerToolBudget(ctx, sess),
 	}.withReader(reader)
 	stableKey, err := in.cacheKey()
 	if err != nil {
@@ -99,71 +98,6 @@ func (e *promptSurface) loadExecutionModeState(sessionID string) surface.Executi
 		return surface.ExecutionModeState{}
 	}
 	return e.deps.ExecutionModes.Load(sessionID)
-}
-
-func (e *promptSurface) renderTripartiteCoordinatorPrompt(
-	ctx context.Context,
-	pe prompts.PromptTemplateEngine,
-	sess *api.Session,
-	frame inject.CoordinatorTurnFrame,
-	history []api.Message,
-	userPrompt string,
-	turn *TurnAssemblyScratch,
-	vars map[string]any,
-) (string, surface.TurnProfile, surface.TransitionVars, error) {
-	if e == nil || pe == nil {
-		return "", surface.TurnProfile{}, surface.TransitionVars{}, errPromptEngineNotConfigured
-	}
-	profile, implState := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
-	webSearchEnabled := true
-	if fn := e.deps.WebSearchEnabled; fn != nil {
-		webSearchEnabled = fn()
-	}
-	_, rootCount, _, _, ok := e.workspaceRootsForTurn(ctx, sess, turn)
-	if !ok && sess != nil && strings.TrimSpace(sess.WorkspacePath) != "" {
-		rootCount = 1
-	}
-	roster := frame.Roster
-	if roster == nil {
-		declared := frame.RunContext.AllowedAgents
-		if len(declared) == 0 {
-			declared = spawn.AmbientAllowedAgents()
-		}
-		resolved := inject.ResolveAgentRoster(profile.SurfaceID, declared, rootCount, false, webSearchEnabled)
-		roster = &resolved
-	}
-	previous := e.loadExecutionModeState(sess.ID).LastFamily
-	current := surface.ExecutionModeFamily(profile.SurfaceID)
-	causes := []surface.ModeTransitionCause(nil)
-	if turn != nil {
-		causes = turn.ModeTransitionCauses
-	}
-	transition := surface.ComputeModeTransition(previous, current, causes)
-
-	reader, err := e.turnReader(ctx, sess, frame, history, turn, rootCount)
-	if err != nil {
-		return "", profile, transition, err
-	}
-	in := standingPromptInputs{
-		Profile: standingProfileInputs{
-			SurfaceID:       profile.SurfaceID,
-			SurfaceTemplate: profile.SurfaceTemplate,
-			ModeRefs:        profile.ModeRefs,
-		},
-		Vars:             vars,
-		RootCount:        reader.RootCount(),
-		EffectiveAgents:  roster.Effective,
-		WebSearchEnabled: webSearchEnabled,
-		LoadedTools:      sortedLoadedSet(e.loadedTools(sess)),
-		ExecutionMode:    transition.ExecutionMode,
-		VerifyCommand:    strings.TrimSpace(implState.VerifyCommand),
-		WorkerToolBudget: e.workerToolBudget(ctx, sess),
-	}.withReader(reader)
-	rendered, err := renderStandingPrompt(ctx, pe, in)
-	if err != nil {
-		return "", profile, transition, err
-	}
-	return rendered, profile, transition, nil
 }
 
 func copyPromptVarsSorted(dst, src map[string]any) {

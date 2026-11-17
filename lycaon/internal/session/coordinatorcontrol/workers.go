@@ -6,11 +6,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/session/batchcontrol"
 	"github.com/lycaon/lycaon/internal/session/turnadmission"
 	"github.com/lycaon/lycaon/internal/session/turnsettlement"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type Workers struct {
@@ -20,6 +21,11 @@ type Workers struct {
 	Admission  *turnadmission.Service
 	Digests    *workeroutcomes.Digests
 	Results    *workeroutcomes.Results
+	// Names names the worker a round notice is about.
+	Names workercompletion.WorkerNames
+	// RoundProvenance resolves a job's worker name, round ordinal, workflow
+	// work ID, and latest sent message seq in one lookup when set.
+	RoundProvenance func(ctx context.Context, jobID string) (worker string, ordinal int64, workID string, latestSent int64, ok bool, err error)
 }
 
 func (m *Workers) Terminal(ctx context.Context, parentID, completingJobID string) {
@@ -33,13 +39,55 @@ func (m *Workers) Terminal(ctx context.Context, parentID, completingJobID string
 	m.Admission.MaybePromote(ctx, parentID)
 	m.Digests.Forget(completingJobID)
 }
-func (m *Workers) BudgetRequested(ctx context.Context, task api.WorkerTask) {
-	parentID := strings.TrimSpace(task.ParentSessionID)
-	if m == nil || parentID == "" || task.BudgetRequest == nil {
+
+// RoundNotice tells a worker's coordinator about its running round.
+func (m *Workers) RoundNotice(ctx context.Context, parentID string, facts kick.WorkerRoundNoticeFacts) {
+	parentID = strings.TrimSpace(parentID)
+	if m == nil || parentID == "" || strings.TrimSpace(facts.JobID) == "" {
 		return
 	}
-	facts := workeroutcomes.BudgetFacts(&task, m.Results.BudgetForTask(ctx, &task))
-	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerBudgetRequested(ctx, parentID, task.ID, anchor.Envelope{WorkerBudget: &facts})
+	facts = m.addressed(ctx, facts)
+	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerRoundNotice(ctx, parentID, facts.JobID, anchor.Envelope{WorkerRoundNotice: &facts})
+}
+
+// addressed adds what the coordinator knows the round's worker by: its name,
+// round ordinal, workflow work ID, and latest message.
+func (m *Workers) addressed(ctx context.Context, facts kick.WorkerRoundNoticeFacts) kick.WorkerRoundNoticeFacts {
+	if m.RoundProvenance == nil {
+		return facts
+	}
+	if worker, ord, workID, latest, ok, err := m.RoundProvenance(ctx, facts.JobID); err == nil && ok {
+		facts.Worker = worker
+		facts.RoundOrdinal = ord
+		if facts.WorkflowWorkID == "" {
+			facts.WorkflowWorkID = workID
+		}
+		facts.LatestMessageSeq = latest
+	}
+	return facts
+}
+
+// PrerequisiteBlocked tells a coordinator that a waiting worker's
+// prerequisite can no longer be met, naming both workers and why.
+func (m *Workers) PrerequisiteBlocked(ctx context.Context, parentID, consumerJobID, producerJobID, reason string) {
+	parentID = strings.TrimSpace(parentID)
+	if m == nil || parentID == "" || strings.TrimSpace(consumerJobID) == "" {
+		return
+	}
+	env := anchor.Envelope{Vars: map[string]any{
+		"worker": m.Names.Name(ctx, consumerJobID), "producer": m.Names.Name(ctx, producerJobID), "producer_state": reason,
+	}}
+	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerPrerequisiteBlocked(ctx, parentID, consumerJobID, env)
+}
+
+// MessageNeedsReply wakes a coordinator for a running worker's message that
+// asks for an answer.
+func (m *Workers) MessageNeedsReply(ctx context.Context, parentID, jobID string) {
+	parentID = strings.TrimSpace(parentID)
+	if m == nil || parentID == "" || strings.TrimSpace(jobID) == "" {
+		return
+	}
+	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerMessage(ctx, parentID, strings.TrimSpace(jobID))
 }
 
 func (m *Workers) AfterTerminal(

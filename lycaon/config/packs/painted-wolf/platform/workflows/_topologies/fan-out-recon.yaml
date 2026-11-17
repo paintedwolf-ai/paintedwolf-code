@@ -1,6 +1,5 @@
 id: fan-out-recon
 pattern: fan_out
-iteration_cap: 8
 task: Parallel repository recon
 fan_out:
   profile: path-explorer

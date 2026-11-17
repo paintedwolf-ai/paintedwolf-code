@@ -149,18 +149,15 @@ func TestJobMetaRejectsUnrecognizedFormat(t *testing.T) {
 		if _, err := workspace.LoadJobMeta(dir); err == nil {
 			t.Fatalf("accepted metadata format %d", version)
 		}
-		if _, _, err := workspace.UpgradeJobMetaToV2(dir); err == nil {
-			t.Fatalf("UpgradeJobMetaToV2 accepted metadata format %d", version)
-		}
 		after, err := os.ReadFile(path)
-		testutil.FailErr(t, "read after failed upgrade", err)
+		testutil.FailErr(t, "read after refused load", err)
 		if string(after) != raw {
-			t.Fatalf("failed upgrade mutated state.json: got %q want %q", after, raw)
+			t.Fatalf("refused load mutated state.json: got %q want %q", after, raw)
 		}
 	}
 }
 
-func TestJobMetaFormatV1BackwardCompatibilityAndV2Persistence(t *testing.T) {
+func TestJobMetaLoadsReleasedFormatV1AndPersistsV2(t *testing.T) {
 	v1Dir := t.TempDir()
 	v1Raw := `{"format_version":1,"roots":[{"id":"app","path":"/project/app","label":"app","is_primary":true}],"snapshot_complete":true}`
 	testutil.FailErr(t, "write v1 metadata", os.WriteFile(filepath.Join(v1Dir, "state.json"), []byte(v1Raw), 0o600))
@@ -182,15 +179,6 @@ func TestJobMetaFormatV1BackwardCompatibilityAndV2Persistence(t *testing.T) {
 	), 0o600))
 	if _, err := workspace.LoadJobMeta(badV1); err == nil {
 		t.Fatal("expected Format-v1 metadata with mounted preparation_kind to be rejected")
-	}
-
-	upgraded, didUpgrade, err := workspace.UpgradeJobMetaToV2(v1Dir)
-	testutil.FailErr(t, "UpgradeJobMetaToV2", err)
-	if !didUpgrade || upgraded.FormatVersion != workspace.JobMetaFormatV2 ||
-		upgraded.AdapterID != adapter.AdapterEagerCopy ||
-		upgraded.PreparationKind != adapter.PreparationMaterialized ||
-		upgraded.VisibilityMode != adapter.VisibilityFixed {
-		t.Fatalf("expected upgraded v2 metadata to retain materialized fixed semantics, got didUpgrade=%v meta=%+v", didUpgrade, upgraded)
 	}
 
 	v2Dir := t.TempDir()
@@ -231,5 +219,16 @@ func TestJobMetaFormatV1BackwardCompatibilityAndV2Persistence(t *testing.T) {
 		len(gotV2.ParentCheckpointIDs) != 1 ||
 		len(gotV2.FocusPathHints) != 1 {
 		t.Fatalf("unexpected v2 round-trip metadata: %+v", gotV2)
+	}
+
+	branchRoot := filepath.Join(t.TempDir(), "worker-lane")
+	if got := workspace.BranchViewKind(branchRoot); got != "" {
+		t.Fatalf("unprepared BranchViewKind = %q, want empty", got)
+	}
+	testutil.FailErr(t, "mkdir lane", os.MkdirAll(branchRoot, 0o750))
+	v2Meta.AdapterFacts = &adapter.AdapterFacts{AdapterID: adapter.AdapterNFSDarwin, PreparationKind: adapter.PreparationMounted}
+	testutil.FailErr(t, "write lane meta", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branchRoot), v2Meta))
+	if got := workspace.BranchViewKind(branchRoot); got != string(adapter.PreparationMounted) {
+		t.Fatalf("prepared BranchViewKind = %q, want %q", got, adapter.PreparationMounted)
 	}
 }

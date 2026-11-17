@@ -132,7 +132,7 @@ func upgradeExistingUsing(ctx context.Context, path string, hooks UpgradeHooks, 
 			}
 		}()
 	}
-	reader, err := openReader(ctx, path)
+	reader, err := OpenReadOnly(ctx, path)
 	if err != nil {
 		return ClassifyStoreFailure(err)
 	}

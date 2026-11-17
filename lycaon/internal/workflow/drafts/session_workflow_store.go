@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"sort"
 	"strings"
 	"time"
@@ -89,7 +90,7 @@ func (s *SQL) Upsert(ctx context.Context, sessionID string, manifestYAML []byte,
 		Version:              m.Version,
 		ManifestYaml:         string(manifestYAML),
 		EffectiveSummaryJson: summaryJSON,
-		CreatedAt:            db.FormatTime(time.Now().UTC()),
+		CreatedAt:            timelayout.Format(time.Now().UTC()),
 		CreatedBy:            string(createdBy),
 		CreatedByPersonID:    db.NullString(personID),
 	})

@@ -14,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/board"
-	"github.com/lycaon/lycaon/internal/delegation"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
@@ -33,9 +32,8 @@ func boardToolFixture(t *testing.T) (*toolexecution.Executor, *tools.DefaultRegi
 	rt, err := NewRuntime(RuntimeConfig{ConfigRoot: root, Catalog: extpackstest.StockCatalog(t)})
 	testutil.FailErr(t, "NewRuntime failed", err)
 	builder := &board.SnapshotBuilder{
-		Delegations: delegation.NewMemoryStore(),
-		Workers:     worker.NewInMemoryQueue(10),
-		Repo:        repotest.NewProvider(t),
+		Workers: worker.NewInMemoryQueue(10),
+		Repo:    repotest.NewProvider(t),
 	}
 	if err := board.RegisterBoardTools(rt.Registry, board.ToolDeps{
 		Builder: builder,

@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -34,7 +33,6 @@ func TestAssemble_sortsAndHashes(t *testing.T) {
 			AgentType:       "implementer",
 			Posture:         api.SessionPostureBuild,
 			ParentSessionID: "parent-1",
-			MaxToolLoops:    40,
 		},
 		ProfileID: "implement",
 		Profile:   profile,
@@ -51,8 +49,7 @@ func TestAssemble_sortsAndHashes(t *testing.T) {
 		MCPInventory: authzcontext.MCPInventory{
 			ProviderIDs: []string{"foo"},
 		},
-		SpawnAllowlist:   []string{"implementer", "repo-researcher"},
-		WorkerToolBudget: spawn.DefaultWorkerToolBudget(),
+		SpawnAllowlist: []string{"implementer", "repo-researcher"},
 	})
 	if c.SessionID != "sess-1" || c.ToolProfile != "implement" {
 		t.Fatalf("identity = %+v", c)
@@ -71,7 +68,7 @@ func TestAssemble_sortsAndHashes(t *testing.T) {
 		t.Fatalf("grant snapshot = %+v", c.Grants)
 	}
 	again := authzcontext.Assemble(authzcontext.AssembleInput{
-		Session:   &api.Session{ID: "other", ProjectID: "proj-1", AgentType: "implementer", Posture: api.SessionPostureBuild, MaxToolLoops: 40},
+		Session:   &api.Session{ID: "other", ProjectID: "proj-1", AgentType: "implementer", Posture: api.SessionPostureBuild},
 		ProfileID: "implement",
 		Profile: sandbox.ToolProfile{
 			ID: "implement", Tools: map[string]bool{"write": true, "read": true, "command": true},
@@ -86,8 +83,7 @@ func TestAssemble_sortsAndHashes(t *testing.T) {
 				Effect:   settings.ApprovalEffectAsk,
 			}},
 		},
-		SpawnAllowlist:   []string{"implementer", "repo-researcher"},
-		WorkerToolBudget: spawn.DefaultWorkerToolBudget(),
+		SpawnAllowlist: []string{"implementer", "repo-researcher"},
 	})
 	if again.ConfigHash == c.ConfigHash {
 		t.Fatal("expected distinct config_hash for different session id")
@@ -108,8 +104,7 @@ func TestSeal_idempotentAndDrift(t *testing.T) {
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("rows = %d err = %v", len(rows), err)
 	}
-	sess.MaxToolLoops = 99
-	if err := sealer.Seal(context.Background(), sess, "implement", ""); err != nil {
+	if err := sealer.Seal(context.Background(), sess, "review", ""); err != nil {
 		testutil.FailErr(t, "drift seal", err)
 	}
 	rows, err = mem.ListContexts(context.Background(), "sess-a")

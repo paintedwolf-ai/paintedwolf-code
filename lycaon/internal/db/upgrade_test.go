@@ -147,7 +147,7 @@ func TestUpgradeSkippedReleasesPreservesHistoryAndSnapshot(t *testing.T) {
 	if !committed || len(phases) < 4 || phases[0] != migrations.Inspecting || phases[1] != migrations.Snapshotting {
 		t.Fatalf("upgrade lifecycle incomplete: committed=%v phases=%v", committed, phases)
 	}
-	reader, err := openReader(t.Context(), path)
+	reader, err := OpenReadOnly(t.Context(), path)
 	testutil.FailErr(t, "open upgraded history", err)
 	defer func() { _ = reader.Close() }()
 	var body, label string
@@ -160,7 +160,7 @@ func TestUpgradeSkippedReleasesPreservesHistoryAndSnapshot(t *testing.T) {
 	if applied != 2 {
 		t.Fatalf("applied steps = %d", applied)
 	}
-	previous, err := openReader(t.Context(), snapshot)
+	previous, err := OpenReadOnly(t.Context(), snapshot)
 	testutil.FailErr(t, "open retained snapshot", err)
 	defer func() { _ = previous.Close() }()
 	identity, err := inspectSchema(t.Context(), previous)
@@ -191,7 +191,7 @@ func TestUpgradeCancellationRollsBackWholeChain(t *testing.T) {
 	if err := upgradeExistingUsing(ctx, path, hooks, true, registry); err == nil {
 		t.Fatal("canceled upgrade succeeded")
 	}
-	reader, err := openReader(t.Context(), path)
+	reader, err := OpenReadOnly(t.Context(), path)
 	testutil.FailErr(t, "reopen interrupted upgrade", err)
 	defer func() { _ = reader.Close() }()
 	identity, err := inspectSchema(t.Context(), reader)
@@ -296,7 +296,7 @@ func TestUpgradeRefusesRecordedDamageButAllowsPendingAudit(t *testing.T) {
 			if !errors.As(err, &failure) || failure.Reason != RecoveryReasonIntegrityFailed {
 				t.Fatalf("recorded damage error = %v", err)
 			}
-			reader, err := openReader(t.Context(), path)
+			reader, err := OpenReadOnly(t.Context(), path)
 			testutil.FailErr(t, "read refused source", err)
 			defer func() { _ = reader.Close() }()
 			actual, err := inspectSchema(t.Context(), reader)
@@ -328,7 +328,7 @@ func TestUpgradeClassifiesSQLiteDamageDuringMigration(t *testing.T) {
 	if !errors.As(err, &failure) || failure.Reason != RecoveryReasonIntegrityFailed {
 		t.Fatalf("SQLite damage was not classified as integrity failure: %v", err)
 	}
-	reader, err := openReader(t.Context(), path)
+	reader, err := OpenReadOnly(t.Context(), path)
 	testutil.FailErr(t, "open rolled back source", err)
 	defer func() { _ = reader.Close() }()
 	actual, err := inspectSchema(t.Context(), reader)

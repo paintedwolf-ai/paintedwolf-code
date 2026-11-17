@@ -3,9 +3,7 @@ import type { LycaonClient } from "../../api/client.ts";
 import { LycaonApiError } from "../../api/http.ts";
 import type { ProjectSourceLifecycleResponse } from "../../api/types.ts";
 import type { SourceChange } from "../../api/types.ts";
-import {
-  closeFilesBuffersUnderPath,
-} from "../documents/project-files-buffers.ts";
+import { closeFilesBuffersUnderPath } from "../documents/project-files-buffer-lifecycle.ts";
 import { childTreePath, fileDisplayName } from "../components/project-files-model.ts";
 import { retargetOpenFilesUnderPath } from "./project-files-retarget.ts";
 

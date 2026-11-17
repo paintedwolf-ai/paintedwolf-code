@@ -47,6 +47,7 @@ var invocationOutRules = map[string]mergeRule{
 	"CommandProgram":   outerEnvelope,
 	"SourceRun":        outerEnvelope,
 	"RetrievedFrom":    outerEnvelope,
+	"CardFacts":        outerEnvelope,
 }
 
 func sourceTarget(path string) api.NavigationTarget {

@@ -21,7 +21,6 @@ func TestDebounceForTopic(t *testing.T) {
 		{api.EventTopicSettings, DebounceLLM},
 		{api.EventTopicMessage, DebounceImmediate},
 		{api.EventTopicWorker, DebounceImmediate},
-		{api.EventTopicDelegation, DebounceImmediate},
 		{api.EventTopicCheckpoint, DebounceImmediate},
 		{api.EventTopicScan, DebounceImmediate},
 		{api.EventTopicWorkflow, DebounceImmediate},

@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
@@ -18,7 +20,7 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	if r == nil {
 		return "", fmt.Errorf("background registry not configured")
 	}
-	sessionID := trim(spec.SessionID)
+	sessionID := strings.TrimSpace(spec.SessionID)
 	if sessionID == "" {
 		return "", fmt.Errorf("session id required")
 	}
@@ -32,7 +34,7 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	if err := spec.Runner.ValidateStages(ctx, req.Stages); err != nil {
 		return "", err
 	}
-	if trim(req.ProjectDir) == "" {
+	if strings.TrimSpace(req.ProjectDir) == "" {
 		return "", fmt.Errorf("project dir is required")
 	}
 	projectDir, err := filepath.Abs(req.ProjectDir)
@@ -56,8 +58,8 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	proc := &Process{
 		Handle:        handle,
 		SessionID:     sessionID,
-		ProjectID:     trim(spec.ProjectID),
-		RootSessionID: trim(spec.RootSessionID),
+		ProjectID:     strings.TrimSpace(spec.ProjectID),
+		RootSessionID: strings.TrimSpace(spec.RootSessionID),
 		mode:          spec.Mode,
 		running:       true,
 		silent:        spec.Mode == JobModeAwaited,
@@ -69,15 +71,15 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 		},
 		processIOState: processIOState{
 			buffer:     NewRingBuffer(r.ringBufferBytes),
-			originTool: trim(spec.OriginTool),
-			toolCallID: trim(spec.ToolCallID),
+			originTool: strings.TrimSpace(spec.OriginTool),
+			toolCallID: strings.TrimSpace(spec.ToolCallID),
 		},
 		processConfinementState: processConfinementState{
 			isCheck:          spec.IsCheck,
 			sourceRevision:   spec.SourceRevision,
 			sourceRootDigest: spec.SourceRootDigest,
 			cwd:              spec.Cwd,
-			runID:            trim(spec.RunID),
+			runID:            strings.TrimSpace(spec.RunID),
 			runKey:           runKey,
 			boundary:         confine.BoundaryOf(req.Launch.Confinement),
 			facts:            spec.Facts,
@@ -89,7 +91,7 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 	proc.Stages = hostcmd.StagePlaceholders(req.Stages)
 
 	workDir := projectDir
-	if c := trim(spec.Cwd); filepath.IsAbs(c) {
+	if c := strings.TrimSpace(spec.Cwd); filepath.IsAbs(c) {
 		workDir = filepath.Clean(c)
 	}
 

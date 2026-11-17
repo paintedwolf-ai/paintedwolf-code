@@ -71,10 +71,7 @@ func (r *memoryRewind) SetRewindPhase(ctx context.Context, id, status, detail st
 }
 
 func (r *memoryRewind) CommitRewind(ctx context.Context, id, sessionID, anchorMessageID string, response api.RewindSessionResponse) (int, error) {
-	return commitRewindMemory(ctx, r.core, id, sessionID, anchorMessageID, response)
-}
-
-func commitRewindMemory(ctx context.Context, s *memoryCore, id, sessionID, anchorMessageID string, response api.RewindSessionResponse) (int, error) {
+	s := r.core
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
@@ -99,20 +96,8 @@ func commitRewindMemory(ctx context.Context, s *memoryCore, id, sessionID, ancho
 			continue
 		}
 		removed := len(msgs) - i
-		for _, removedMessage := range msgs[i:] {
-			delete(s.chunkProjections[sessionID], removedMessage.ID)
-		}
+		commitRewindMemory(s, sessionID, msgs[i:])
 		s.messages[sessionID] = append([]api.Message(nil), msgs[:i]...)
-		now := time.Now().UTC()
-		for submissionID, row := range s.promptSubmissions {
-			if row.SessionID != sessionID || row.Status != PromptSubmissionQueued {
-				continue
-			}
-			row.Status = PromptSubmissionCanceled
-			row.Error = "next-turn queue discarded before it ran"
-			row.CompletedAt = &now
-			s.promptSubmissions[submissionID] = row
-		}
 		response.TruncatedMessageCount = removed
 		raw, err := json.Marshal(response)
 		if err != nil {
@@ -125,6 +110,48 @@ func commitRewindMemory(ctx context.Context, s *memoryCore, id, sessionID, ancho
 		return removed, nil
 	}
 	return 0, ErrMessageNotFound
+}
+
+func commitRewindMemory(s *memoryCore, sessionID string, removedMsgs []api.Message) {
+	removedIDs := make(map[string]struct{}, len(removedMsgs))
+	for _, removedMessage := range removedMsgs {
+		removedIDs[removedMessage.ID] = struct{}{}
+		delete(s.chunkProjections[sessionID], removedMessage.ID)
+	}
+	for openingID := range s.turnClocks[sessionID] {
+		if _, ok := removedIDs[openingID]; ok {
+			delete(s.turnClocks[sessionID], openingID)
+		}
+	}
+	for submissionID, turnID := range s.turnSubmissions {
+		if _, ok := removedIDs[submissionID]; ok {
+			deleteTurnLocked(s, turnID)
+		}
+	}
+	for outputID, output := range s.modelOutputs {
+		if _, ok := removedIDs[output.MessageID]; !ok {
+			continue
+		}
+		delete(s.modelOutputs, outputID)
+		delete(s.projectedModelOutputs, outputID)
+		for turnID, attempts := range s.turnAttempts {
+			for _, attempt := range attempts {
+				if attempt.ID == output.TurnAttemptID {
+					deleteTurnLocked(s, turnID)
+				}
+			}
+		}
+	}
+	now := time.Now().UTC()
+	for submissionID, row := range s.promptSubmissions {
+		if row.SessionID != sessionID || row.Status != PromptSubmissionQueued {
+			continue
+		}
+		row.Status = PromptSubmissionCanceled
+		row.Error = "next-turn queue discarded before it ran"
+		row.CompletedAt = &now
+		s.promptSubmissions[submissionID] = row
+	}
 }
 
 func (r *memoryRewind) RewindOperationsForRecovery(ctx context.Context) ([]RewindOperation, error) {

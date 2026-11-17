@@ -94,12 +94,12 @@ func TestListIndexSkipsHiddenDirectories(t *testing.T) {
 	assertPathSetEqual(t, "index paths", got, want)
 }
 
-func TestResolveChainAppliesHiddenTreeWhenWorkingThere(t *testing.T) {
+func TestResolveChainMetadataAppliesHiddenTreeWhenWorkingThere(t *testing.T) {
 	root := t.TempDir()
 	writeAgentsMD(t, root, "AGENTS.md", "# Root\n")
 	writeAgentsMD(t, root, ".claude/worktrees/wt/AGENTS.md", "# Worktree policy\n")
 
-	chain, err := governance.ResolveChain(root, ".claude/worktrees/wt/main.go")
+	chain, err := governance.ResolveChainMetadata(root, ".claude/worktrees/wt/main.go")
 	testutil.FailErr(t, "ResolveChain", err)
 	got := chainPaths(chain)
 	want := []string{"AGENTS.md", ".claude/worktrees/wt/AGENTS.md"}
@@ -120,12 +120,12 @@ func TestListIndexOmitsTestdataAndNodeModules(t *testing.T) {
 	assertPathSetEqual(t, "index paths", got, want)
 }
 
-func TestResolveChainAppliesTestdataWhenWorkingThere(t *testing.T) {
+func TestResolveChainMetadataAppliesTestdataWhenWorkingThere(t *testing.T) {
 	root := t.TempDir()
 	writeAgentsMD(t, root, "AGENTS.md", "# Root\n")
 	writeAgentsMD(t, root, "internal/testdata/agentsmd/monorepo/AGENTS.md", "# Fixture policy\n")
 
-	chain, err := governance.ResolveChain(root, "internal/testdata/agentsmd/monorepo/x.go")
+	chain, err := governance.ResolveChainMetadata(root, "internal/testdata/agentsmd/monorepo/x.go")
 	testutil.FailErr(t, "ResolveChain", err)
 	got := chainPaths(chain)
 	want := []string{"AGENTS.md", "internal/testdata/agentsmd/monorepo/AGENTS.md"}
@@ -143,27 +143,27 @@ func writeAgentsMD(t *testing.T, root, rel, content string) {
 	}
 }
 
-func TestResolveChainRootOnly(t *testing.T) {
+func TestResolveChainMetadataRootOnly(t *testing.T) {
 	root := agentsMDFixture(t, "monorepo")
-	chain, err := governance.ResolveChain(root, "lycaon/foo.go")
+	chain, err := governance.ResolveChainMetadata(root, "lycaon/foo.go")
 	testutil.FailErr(t, "resolve chain root only", err)
 	got := chainPaths(chain)
 	want := []string{"AGENTS.md", "lycaon/AGENTS.md"}
 	assertPathSetEqual(t, "chain paths", got, want)
 }
 
-func TestResolveChainNestedAccumulation(t *testing.T) {
+func TestResolveChainMetadataNestedAccumulation(t *testing.T) {
 	root := agentsMDFixture(t, "monorepo")
-	chain, err := governance.ResolveChain(root, "lycaon/internal/x.go")
+	chain, err := governance.ResolveChainMetadata(root, "lycaon/internal/x.go")
 	testutil.FailErr(t, "resolve nested chain", err)
 	got := chainPaths(chain)
 	want := []string{"AGENTS.md", "lycaon/AGENTS.md"}
 	assertPathSetEqual(t, "chain paths", got, want)
 }
 
-func TestResolveChainJurisdictionExcludesSibling(t *testing.T) {
+func TestResolveChainMetadataJurisdictionExcludesSibling(t *testing.T) {
 	root := agentsMDFixture(t, "monorepo")
-	chain, err := governance.ResolveChain(root, "lycaon/internal/x.go")
+	chain, err := governance.ResolveChainMetadata(root, "lycaon/internal/x.go")
 	testutil.FailErr(t, "resolve jurisdiction chain", err)
 	for _, item := range chain {
 		if item.Path == "lycaon-den/AGENTS.md" {
@@ -172,18 +172,18 @@ func TestResolveChainJurisdictionExcludesSibling(t *testing.T) {
 	}
 }
 
-func TestResolveChainLycaonOverlay(t *testing.T) {
+func TestResolveChainMetadataLycaonOverlay(t *testing.T) {
 	root := agentsMDFixture(t, "monorepo_lycaon")
-	chain, err := governance.ResolveChain(root, "README.md")
+	chain, err := governance.ResolveChainMetadata(root, "README.md")
 	testutil.FailErr(t, "resolve overlay chain", err)
 	got := chainPaths(chain)
 	want := []string{"AGENTS.md", settingsoverlay.Rel("AGENTS.md")}
 	assertPathSetEqual(t, "chain paths", got, want)
 }
 
-func TestResolveChainMissingFilesSkipped(t *testing.T) {
+func TestResolveChainMetadataMissingFilesSkipped(t *testing.T) {
 	root := agentsMDFixture(t, "monorepo")
-	chain, err := governance.ResolveChain(root, "missing/deep/file.go")
+	chain, err := governance.ResolveChainMetadata(root, "missing/deep/file.go")
 	testutil.FailErr(t, "resolve chain with missing intermediates", err)
 	if len(chain) == 0 {
 		t.Fatal("expected root AGENTS.md in chain")
@@ -207,21 +207,6 @@ func TestListIndexFindsAll(t *testing.T) {
 	}
 }
 
-func TestResolveChainPreservesFrontmatterAsMarkdown(t *testing.T) {
-	root := t.TempDir()
-	body := "---\ndescription: ordinary markdown\n---\n# Policy\n"
-	writeAgentsMD(t, root, "AGENTS.md", body)
-
-	chain, err := governance.ResolveChain(root, "README.md")
-	testutil.FailErr(t, "resolve chain", err)
-	if len(chain) != 1 {
-		t.Fatalf("chain len = %d, want 1", len(chain))
-	}
-	if chain[0].Content != body {
-		t.Fatalf("content = %q want %q", chain[0].Content, body)
-	}
-}
-
 func TestListIndexSkipsSymlinkedAndSpecialFiles(t *testing.T) {
 	root := t.TempDir()
 	outside := filepath.Join(t.TempDir(), "outside.md")
@@ -237,59 +222,27 @@ func TestListIndexSkipsSymlinkedAndSpecialFiles(t *testing.T) {
 	if len(index) != 0 {
 		t.Fatalf("symlinked AGENTS.md must not be indexed: %+v", index)
 	}
-	chain, err := governance.ResolveChain(root, "README.md")
+	chain, err := governance.ResolveChainMetadata(root, "README.md")
 	testutil.FailErr(t, "ResolveChain", err)
 	if len(chain) != 0 {
 		t.Fatalf("symlinked AGENTS.md must not be loaded: %+v", chain)
 	}
 }
 
-func TestResolveChainReadsFullBodyUnderStructuralCeiling(t *testing.T) {
-	root := t.TempDir()
-	body := strings.Repeat("x", governance.DefaultAgentsMDInjectMaxBodyBytes*2)
-	writeAgentsMD(t, root, "AGENTS.md", body)
-
-	chain, err := governance.ResolveChain(root, "README.md")
-	testutil.FailErr(t, "ResolveChain", err)
-	if len(chain) != 1 {
-		t.Fatalf("chain len = %d, want 1", len(chain))
-	}
-	// A heading digest needs the whole document, not just the inject budget's
-	// worth of it, so a body several times over that budget still reads in full.
-	if got, want := len(chain[0].Content), len(body); got != want {
-		t.Fatalf("body read %d bytes, want the full %d-byte body", got, want)
-	}
-}
-
-func TestResolveChainBoundsRepositoryReadAtStructuralCeiling(t *testing.T) {
-	root := t.TempDir()
-	body := strings.Repeat("x", governance.AgentsMDReadMaxBytes*2)
-	writeAgentsMD(t, root, "AGENTS.md", body)
-
-	chain, err := governance.ResolveChain(root, "README.md")
-	testutil.FailErr(t, "ResolveChain", err)
-	if len(chain) != 1 {
-		t.Fatalf("chain len = %d, want 1", len(chain))
-	}
-	if got, max := len(chain[0].Content), governance.AgentsMDReadMaxBytes+1; got > max {
-		t.Fatalf("body read %d bytes, want at most %d", got, max)
-	}
-}
-
-func TestResolveChainTreatsExistingScopeDirectoryAsWorkUnderIt(t *testing.T) {
+func TestResolveChainMetadataTreatsExistingScopeDirectoryAsWorkUnderIt(t *testing.T) {
 	root := t.TempDir()
 	writeAgentsMD(t, root, "AGENTS.md", "root\n")
 	writeAgentsMD(t, root, "pkg/AGENTS.md", "package\n")
 
-	chain, err := governance.ResolveChain(root, "pkg")
+	chain, err := governance.ResolveChainMetadata(root, "pkg")
 	testutil.FailErr(t, "ResolveChain", err)
 	got := chainPaths(chain)
 	want := []string{"AGENTS.md", "pkg/AGENTS.md"}
 	assertPathSetEqual(t, "directory scope chain", got, want)
 }
-func TestResolveChainPrecedenceOrderNearestLast(t *testing.T) {
+func TestResolveChainMetadataPrecedenceOrderNearestLast(t *testing.T) {
 	root := agentsMDFixture(t, "monorepo")
-	chain, err := governance.ResolveChain(root, "lycaon/foo.go")
+	chain, err := governance.ResolveChainMetadata(root, "lycaon/foo.go")
 	testutil.FailErr(t, "resolve precedence chain", err)
 	if len(chain) < 2 {
 		t.Fatal("expected at least two entries")
@@ -299,9 +252,9 @@ func TestResolveChainPrecedenceOrderNearestLast(t *testing.T) {
 	}
 }
 
-func TestResolveChainEscapesRoot(t *testing.T) {
+func TestResolveChainMetadataEscapesRoot(t *testing.T) {
 	root := agentsMDFixture(t, "monorepo")
-	_, err := governance.ResolveChain(root, "../outside.go")
+	_, err := governance.ResolveChainMetadata(root, "../outside.go")
 	if err == nil {
 		t.Fatal("expected escape error")
 	}

@@ -1,10 +1,10 @@
-import { For, Show, createEffect, createSignal, on, type JSX } from "solid-js";
+import { For, Show, createEffect, on, type JSX } from "solid-js";
 import type { BriefingEvidenceRef, BriefingSnapshot, BriefingSummarySection } from "../api/types.ts";
-import { RandomLetterReveal, markLetterRevealOnceKey } from "../components/primitives/RandomLetterReveal.tsx";
 import { announce } from "../platform/interaction/announcer.tsx";
 import { briefingCopy } from "./briefing-copy.ts";
 import { openBriefingEvidence, type BriefingReturnAnchor } from "./briefing-evidence.ts";
-import { briefingRevealText, splitBriefingInline } from "./briefing-inline.ts";
+import { splitBriefingInline } from "./briefing-inline.ts";
+import { SUMMARY_FADE_CLASS, claimSummaryFade, markSummaryShown } from "./summary-fade.ts";
 
 /** One section as a surface shows it; no text means it is still being written. */
 export type SummarySection = {
@@ -60,15 +60,10 @@ function Inline(props: { text: string }) {
   );
 }
 
-// The reveal animates plain characters; code spans take their style once it ends.
-function RevealedText(props: { text: string; onceKey: string }) {
-  const [revealed, setRevealed] = createSignal(false);
-  createEffect(on(() => props.text, () => setRevealed(false), { defer: true }));
-  return (
-    <Show when={revealed()} fallback={<RandomLetterReveal text={briefingRevealText(props.text)} onceKey={props.onceKey} onRevealed={() => setRevealed(true)} />}>
-      <Inline text={props.text} />
-    </Show>
-  );
+/** Text that arrives while watched fades in once; code spans keep their style throughout. */
+function ArrivingText(props: { text: string; onceKey: string }) {
+  const fade = claimSummaryFade(props.onceKey);
+  return <span class={fade ? SUMMARY_FADE_CLASS : undefined}><Inline text={props.text} /></span>;
 }
 
 // The label flows with its text so a narrow pane wraps the sentence, not the label.
@@ -115,8 +110,8 @@ export function BriefingSummary(props: Props) {
                 <Labelled label={section.label}>
                   {(() => {
                     // Text already settled when this view opened shows at once.
-                    if (!watched.has(section.id)) markLetterRevealOnceKey(onceKey(section.id));
-                    return <RevealedText text={section.text ?? ""} onceKey={onceKey(section.id)} />;
+                    if (!watched.has(section.id)) markSummaryShown(onceKey(section.id));
+                    return <ArrivingText text={section.text ?? ""} onceKey={onceKey(section.id)} />;
                   })()}
                 </Labelled>
               </Show>

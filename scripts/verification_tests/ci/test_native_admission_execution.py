@@ -6,10 +6,9 @@ from ci_policy import native_admission, native_verify, hosted_plan
 
 
 class NativeAdmissionTests(unittest.TestCase):
-    def test_native_compilation_occurs_only_in_complete_landing_checks(self):
+    def test_admission_runs_supervisor_and_script_checks_without_native_compilation(self):
         for scope in (None, {'full': True}, {'full': False, 'paths': ['lycaon-den/src-tauri/src/main.rs']},
                       {'full': False, 'paths': ['lycaon/internal/decide/native/src/main.rs']}):
-            self.assertEqual(native_admission.targets(scope), [])
             expected = [['./task', 'test:confine:linux', '--', 'supervisor']] if scope is None or scope['full'] else []
             if scope and scope['full']:
                 expected = [*expected, ['./task', 'scripts:coverage:changes']]

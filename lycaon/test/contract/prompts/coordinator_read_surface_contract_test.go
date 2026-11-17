@@ -13,7 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
-	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"github.com/lycaon/lycaon/test/contract/internal/toolfixture"
 )
@@ -87,64 +87,26 @@ func TestCoordinatorProfileToolsIncludeCommandDiscovery(t *testing.T) {
 	}
 }
 
-func TestCoordinatorReadProductPathAllowed(t *testing.T) {
+func TestCoordinatorReadsProductAndPlanPaths(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
-	srcDir := filepath.Join(root, "src")
-	if err := os.MkdirAll(srcDir, 0o755); err != nil {
-		contractcheck.FailErr(t, "create directory", err)
+	for _, rel := range []string{"src/main.go", settingsoverlay.Rel("blueprints/game.md")} {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		contractcheck.FailErr(t, "create directory", os.MkdirAll(filepath.Dir(path), 0o755))
+		contractcheck.FailErr(t, "write file", os.WriteFile(path, []byte("content\n"), 0o644))
 	}
-	srcPath := filepath.Join(srcDir, "main.go")
-	if err := os.WriteFile(srcPath, []byte("package main\n"), 0o644); err != nil {
-		contractcheck.FailErr(t, "write file", err)
-	}
-
 	b := loadBundledSandboxBoundary(t)
-	read := &surveytools.ReadTool{Boundary: b}
-	out, err := read.Run(context.Background(), map[string]any{
-		"path": "src/main.go",
-	}, tools.ToolContext{
+	tctx := tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "coordinator"},
-	})
-	if err != nil {
-		t.Fatalf("coordinator read product path: %v", err)
 	}
-	if !strings.Contains(out, "package main") {
-		t.Fatalf("unexpected read output: %q", out)
-	}
-	if !strings.Contains(out, `"receipt"`) {
-		t.Fatalf("expected survey receipt in output: %q", out)
-	}
-}
-
-func TestCoordinatorReadPlanPathAllowed(t *testing.T) {
-	t.Parallel()
-	root := t.TempDir()
-	planDir := filepath.Join(root, settingsoverlay.DirName(), "blueprints")
-	if err := os.MkdirAll(planDir, 0o755); err != nil {
-		contractcheck.FailErr(t, "create directory", err)
-	}
-	planPath := filepath.Join(planDir, "game.md")
-	if err := os.WriteFile(planPath, []byte("# plan"), 0o644); err != nil {
-		contractcheck.FailErr(t, "write file", err)
-	}
-
-	b := loadBundledSandboxBoundary(t)
-	read := &surveytools.ReadTool{Boundary: b}
-	out, err := read.Run(context.Background(), map[string]any{
-		"path": settingsoverlay.Rel("blueprints/game.md"),
-	}, tools.ToolContext{
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: root, IsPrimary: true}},
-			ActiveRootID: "r1"},
-		Identity: tools.InvocationIdentity{Agent: "coordinator"},
-	})
-	if err != nil {
-		t.Fatalf("coordinator read plan path: %v", err)
-	}
-	if !strings.Contains(out, "plan") {
-		t.Fatalf("unexpected read output: %q", out)
+	for _, rel := range []string{"src/main.go", settingsoverlay.Rel("blueprints/game.md")} {
+		resolved, err := projectpaths.ResolveRead(context.Background(), b, tctx, rel)
+		contractcheck.FailErr(t, "coordinator read "+rel, err)
+		if resolved.Abs != filepath.Join(root, filepath.FromSlash(rel)) {
+			t.Fatalf("coordinator read %s resolved to %s", rel, resolved.Abs)
+		}
 	}
 }
 

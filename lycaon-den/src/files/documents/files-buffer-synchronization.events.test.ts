@@ -8,7 +8,8 @@ import { bindFilesBufferSynchronization } from "./files-buffer-synchronization.t
 import { observeEditorDocument } from "./editor-document.ts";
 import { refreshOpenFormatSettings, loadFormatSettingsForBuffer } from "../../components/source/editor/format-settings-load.ts";
 import { setFilesStore } from "./files-buffer-state.ts";
-import { applyFilesBufferDraft, resetProjectFilesForTests } from "./project-files-buffers.ts";
+import { applyFilesBufferDraft } from "./project-files-buffer-io.ts";
+import { resetProjectFilesForTests } from "./project-files-buffer-lifecycle.ts";
 vi.mock("./editor-document.ts", async (original) => ({ ...await original<typeof import("./editor-document.ts")>(), observeEditorDocument: vi.fn() }));
 vi.mock("../../components/source/editor/format-settings-load.ts", () => ({ refreshOpenFormatSettings: vi.fn(), loadFormatSettingsForBuffer: vi.fn() }));
 const disposers: Array<() => void> = [];

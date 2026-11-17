@@ -154,29 +154,6 @@ func (m *failOnceHITL) PatchPendingToolApprovalJoined(context.Context, string, i
 	return nil
 }
 
-type coalesceAdapter struct {
-	rt *approvalstate.ToolApprovalCoalesce
-}
-
-func (a coalesceAdapter) Begin(chat, key string) (toolapproval.ToolApprovalCoalesceBegin, string) {
-	b, id := a.rt.Begin(chat, key)
-	return toolapproval.ToolApprovalCoalesceBegin(b), id
-}
-func (a coalesceAdapter) RegisterPending(chat, key, id, tc string) {
-	a.rt.RegisterPending(chat, key, id, tc)
-}
-func (a coalesceAdapter) AbortMint(chat, key string) { a.rt.AbortMint(chat, key) }
-func (a coalesceAdapter) ClearPending(chat, key string) {
-	a.rt.ClearPending(chat, key)
-}
-func (a coalesceAdapter) NoteJoin(chat, key, tc string) int {
-	return a.rt.NoteJoin(chat, key, tc)
-}
-func (a coalesceAdapter) JoinedCount(chat, key string) int { return a.rt.JoinedCount(chat, key) }
-func (a coalesceAdapter) JoinedToolCallIDs(chat, key string) []string {
-	return a.rt.JoinedToolCallIDs(chat, key)
-}
-
 func TestExecutorCoalesceIdenticalPendingSharesCheckpoint(t *testing.T) {
 	tmp := t.TempDir()
 	stageApprovals(t, settings.ApprovalEffectAsk)
@@ -200,7 +177,7 @@ func TestExecutorCoalesceIdenticalPendingSharesCheckpoint(t *testing.T) {
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
-	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: rt})
+	exec.Approvals.SetToolApprovalCoalesce(rt)
 	exec.Approvals.SetAIRationaleAttacher(rationale)
 
 	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
@@ -278,7 +255,7 @@ func TestExecutorCoalesceDifferentArgsMintTwo(t *testing.T) {
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
-	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: rt})
+	exec.Approvals.SetToolApprovalCoalesce(rt)
 
 	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
@@ -343,7 +320,7 @@ func TestExecutorCoalesceAbortMintAllowsRetry(t *testing.T) {
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
 	exec.Approvals.SetCheckpointManager(t.Context(), mgr, gate)
-	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: rt})
+	exec.Approvals.SetToolApprovalCoalesce(rt)
 
 	tc := tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: tmp, IsPrimary: true}},
@@ -384,7 +361,7 @@ func TestExecutorNetworkCoalesceCrossWorkerRootSession(t *testing.T) {
 	rt := approvalstate.NewToolApprovalCoalesce()
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
 	exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
-	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: rt})
+	exec.Approvals.SetToolApprovalCoalesce(rt)
 
 	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()

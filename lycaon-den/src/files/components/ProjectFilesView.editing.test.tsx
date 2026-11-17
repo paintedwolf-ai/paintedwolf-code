@@ -7,7 +7,9 @@ import { ProjectFilesView } from "./ProjectFilesView.tsx";
 import { editorReplica, receiveEditorDocumentEvent } from "../documents/editor-document.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
-import { filesBufferText, filesBufferBase, openFilesBuffer, applyFilesBufferLoad } from "../documents/project-files-buffers.ts";
+import { filesBufferText, filesBufferBase } from "../documents/files-buffer-state.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
+import { applyFilesBufferLoad } from "../documents/project-files-buffer-io.ts";
 import { required } from "../../test/at.ts";
 import { assertNamedControl } from "../../test/controls.ts";
 

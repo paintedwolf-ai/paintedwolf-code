@@ -2,6 +2,7 @@ package projectsource
 
 import (
 	"bytes"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"os"
 	"path/filepath"
 	"testing"
@@ -99,7 +100,7 @@ func seedRetainedEntry(t *testing.T, root, kind string) (func(), string) {
 	default:
 		var body []byte
 		if kind == "binary" {
-			body = bytes.Repeat([]byte{0, 1, 255, 42}, sourceledger.MaxRevisionContentBytes/2)
+			body = bytes.Repeat([]byte{0, 1, 255, 42}, sourceblob.MaxRevisionContentBytes/2)
 		}
 		testutil.FailErr(t, "seed file", os.WriteFile(path, body, 0o750))
 		return func() {

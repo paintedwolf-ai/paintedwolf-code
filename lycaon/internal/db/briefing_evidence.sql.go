@@ -13,61 +13,78 @@ import (
 const briefingActionOutput = `-- name: BriefingActionOutput :one
 SELECT m.id, m.ord,
        CAST(substr(m.content, 1, CAST(?1 AS INTEGER)) AS TEXT) AS prose,
-       CAST(COALESCE(length(CAST(m.reasoning_json AS BLOB)), 0) AS INTEGER) AS reasoning_bytes,
-       CAST(CASE WHEN m.reasoning_json IS NOT NULL AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(?2 AS INTEGER)
-            THEN m.reasoning_json ELSE '' END AS TEXT) AS reasoning_payload,
+       CAST(m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AS INTEGER) AS reasoning_present,
+       CAST(COALESCE(length(CAST(m.reasoning_json AS BLOB)), 0) > CAST(?2 AS INTEGER) AS INTEGER) AS reasoning_over_ceiling,
+       CAST(CASE WHEN m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(?2 AS INTEGER)
+            THEN CASE WHEN json_type(m.reasoning_json, '$.text') = 'text' THEN length(json_extract(m.reasoning_json, '$.text')) ELSE 0 END
+            ELSE 0 END AS INTEGER) AS reasoning_text_chars,
+       CAST(CASE WHEN m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(?2 AS INTEGER)
+            THEN COALESCE(json_array_length(m.reasoning_json, '$.details'), 0)
+            ELSE 0 END AS INTEGER) AS reasoning_details,
+       CAST(CASE WHEN m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(?2 AS INTEGER)
+            THEN CASE WHEN json_type(m.reasoning_json, '$.text') = 'text'
+                      THEN substr(json_extract(m.reasoning_json, '$.text'),
+                                  max(1, length(json_extract(m.reasoning_json, '$.text')) - CAST(?3 AS INTEGER) + 1)) ELSE '' END
+            ELSE '' END AS TEXT) AS reasoning_tail,
        CAST(json_array_length(CASE WHEN m.tool_calls_json IS NULL OR m.tool_calls_json = '' THEN '[]' ELSE m.tool_calls_json END) AS INTEGER) AS call_count,
        CAST(COALESCE((
            SELECT json_extract(c.value, '$.name') FROM json_each(CASE WHEN m.tool_calls_json IS NULL OR m.tool_calls_json = '' THEN '[]' ELSE m.tool_calls_json END) c
-           WHERE json_extract(c.value, '$.id') = CAST(?3 AS TEXT)
+           WHERE json_extract(c.value, '$.id') = CAST(?4 AS TEXT)
        ), '') AS TEXT) AS call_name,
        CAST(substr(COALESCE((
            SELECT json_extract(c.value, '$.args') FROM json_each(CASE WHEN m.tool_calls_json IS NULL OR m.tool_calls_json = '' THEN '[]' ELSE m.tool_calls_json END) c
-           WHERE json_extract(c.value, '$.id') = CAST(?3 AS TEXT)
-       ), ''), 1, CAST(?4 AS INTEGER)) AS TEXT) AS call_args
+           WHERE json_extract(c.value, '$.id') = CAST(?4 AS TEXT)
+       ), ''), 1, CAST(?5 AS INTEGER)) AS TEXT) AS call_args
 FROM messages AS m
-WHERE m.session_id = ?5 AND m.role = 'assistant' AND m.ord < ?6
-  AND (CAST(?7 AS TEXT) = '' OR m.worker_job_id = CAST(?7 AS TEXT))
+WHERE m.session_id = ?6 AND m.role = 'assistant' AND m.ord < ?7
+  AND (CAST(?8 AS TEXT) = '' OR m.worker_job_id = CAST(?8 AS TEXT))
   AND m.ord >= COALESCE((
       SELECT floor.ord FROM messages AS floor
-      WHERE floor.session_id = ?5 AND floor.role = 'assistant' AND floor.ord < ?6
+      WHERE floor.session_id = ?6 AND floor.role = 'assistant' AND floor.ord < ?7
       ORDER BY floor.ord DESC
       LIMIT 1 OFFSET 63
   ), -1)
   AND EXISTS (
       SELECT 1 FROM json_each(CASE WHEN m.tool_calls_json IS NULL OR m.tool_calls_json = '' THEN '[]' ELSE m.tool_calls_json END) k
-      WHERE json_extract(k.value, '$.id') = CAST(?3 AS TEXT)
+      WHERE json_extract(k.value, '$.id') = CAST(?4 AS TEXT)
   )
 ORDER BY m.ord DESC
 LIMIT 1
 `
 
 type BriefingActionOutputParams struct {
-	ProseBytes   int64  `json:"prose_bytes"`
-	ReasoningCap int64  `json:"reasoning_cap"`
-	ToolCallID   string `json:"tool_call_id"`
-	ArgsBytes    int64  `json:"args_bytes"`
-	SessionID    string `json:"session_id"`
-	BeforeOrd    int64  `json:"before_ord"`
-	WorkerJobID  string `json:"worker_job_id"`
+	ProseBytes         int64  `json:"prose_bytes"`
+	ReasoningCeiling   int64  `json:"reasoning_ceiling"`
+	ReasoningTailChars int64  `json:"reasoning_tail_chars"`
+	ToolCallID         string `json:"tool_call_id"`
+	ArgsBytes          int64  `json:"args_bytes"`
+	SessionID          string `json:"session_id"`
+	BeforeOrd          int64  `json:"before_ord"`
+	WorkerJobID        string `json:"worker_job_id"`
 }
 
 type BriefingActionOutputRow struct {
-	ID               string `json:"id"`
-	Ord              int64  `json:"ord"`
-	Prose            string `json:"prose"`
-	ReasoningBytes   int64  `json:"reasoning_bytes"`
-	ReasoningPayload string `json:"reasoning_payload"`
-	CallCount        int64  `json:"call_count"`
-	CallName         string `json:"call_name"`
-	CallArgs         string `json:"call_args"`
+	ID                   string `json:"id"`
+	Ord                  int64  `json:"ord"`
+	Prose                string `json:"prose"`
+	ReasoningPresent     int64  `json:"reasoning_present"`
+	ReasoningOverCeiling int64  `json:"reasoning_over_ceiling"`
+	ReasoningTextChars   int64  `json:"reasoning_text_chars"`
+	ReasoningDetails     int64  `json:"reasoning_details"`
+	ReasoningTail        string `json:"reasoning_tail"`
+	CallCount            int64  `json:"call_count"`
+	CallName             string `json:"call_name"`
+	CallArgs             string `json:"call_args"`
 }
 
 // Only the 64 latest assistant rows before the bound are searched for the call.
+// Reasoning returns at most a tail of its text; JSON functions run only on a
+// present row at or below the ceiling.
 func (q *Queries) BriefingActionOutput(ctx context.Context, arg BriefingActionOutputParams) (BriefingActionOutputRow, error) {
 	row := q.db.QueryRowContext(ctx, briefingActionOutput,
 		arg.ProseBytes,
-		arg.ReasoningCap,
+		arg.ReasoningCeiling,
+		arg.ReasoningTailChars,
 		arg.ToolCallID,
 		arg.ArgsBytes,
 		arg.SessionID,
@@ -79,8 +96,11 @@ func (q *Queries) BriefingActionOutput(ctx context.Context, arg BriefingActionOu
 		&i.ID,
 		&i.Ord,
 		&i.Prose,
-		&i.ReasoningBytes,
-		&i.ReasoningPayload,
+		&i.ReasoningPresent,
+		&i.ReasoningOverCeiling,
+		&i.ReasoningTextChars,
+		&i.ReasoningDetails,
+		&i.ReasoningTail,
 		&i.CallCount,
 		&i.CallName,
 		&i.CallArgs,
@@ -198,8 +218,9 @@ type BriefingToolResultOrdParams struct {
 	ToolCallID sql.NullString `json:"tool_call_id"`
 }
 
-// Bounded reads anchored on one tool call. Every query limits rows and the
-// bytes it returns, so a large transcript or record cannot widen a briefing.
+// Bounded reads anchored on one tool call or one worker job. Every query limits
+// rows and the bytes it returns, so a large transcript or record cannot widen a
+// briefing.
 func (q *Queries) BriefingToolResultOrd(ctx context.Context, arg BriefingToolResultOrdParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, briefingToolResultOrd, arg.SessionID, arg.ToolCallID)
 	var ord int64
@@ -235,5 +256,63 @@ func (q *Queries) BriefingUserIntentBefore(ctx context.Context, arg BriefingUser
 	row := q.db.QueryRowContext(ctx, briefingUserIntentBefore, arg.IntentBytes, arg.SessionID, arg.BeforeOrd)
 	var i BriefingUserIntentBeforeRow
 	err := row.Scan(&i.ID, &i.Ord, &i.Intent)
+	return i, err
+}
+
+const briefingWorkerFinalOutput = `-- name: BriefingWorkerFinalOutput :one
+SELECT m.id,
+       CAST(m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AS INTEGER) AS reasoning_present,
+       CAST(COALESCE(length(CAST(m.reasoning_json AS BLOB)), 0) > CAST(?1 AS INTEGER) AS INTEGER) AS reasoning_over_ceiling,
+       CAST(CASE WHEN m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(?1 AS INTEGER)
+            THEN CASE WHEN json_type(m.reasoning_json, '$.text') = 'text' THEN length(json_extract(m.reasoning_json, '$.text')) ELSE 0 END
+            ELSE 0 END AS INTEGER) AS reasoning_text_chars,
+       CAST(CASE WHEN m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(?1 AS INTEGER)
+            THEN COALESCE(json_array_length(m.reasoning_json, '$.details'), 0)
+            ELSE 0 END AS INTEGER) AS reasoning_details,
+       CAST(CASE WHEN m.reasoning_json IS NOT NULL AND m.reasoning_json <> '' AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(?1 AS INTEGER)
+            THEN CASE WHEN json_type(m.reasoning_json, '$.text') = 'text'
+                      THEN substr(json_extract(m.reasoning_json, '$.text'),
+                                  max(1, length(json_extract(m.reasoning_json, '$.text')) - CAST(?2 AS INTEGER) + 1)) ELSE '' END
+            ELSE '' END AS TEXT) AS reasoning_tail
+FROM messages AS m
+WHERE m.session_id = ?3 AND m.worker_job_id = ?4 AND m.role = 'assistant'
+ORDER BY m.ord DESC
+LIMIT 1
+`
+
+type BriefingWorkerFinalOutputParams struct {
+	ReasoningCeiling   int64          `json:"reasoning_ceiling"`
+	ReasoningTailChars int64          `json:"reasoning_tail_chars"`
+	SessionID          string         `json:"session_id"`
+	WorkerJobID        sql.NullString `json:"worker_job_id"`
+}
+
+type BriefingWorkerFinalOutputRow struct {
+	ID                   string `json:"id"`
+	ReasoningPresent     int64  `json:"reasoning_present"`
+	ReasoningOverCeiling int64  `json:"reasoning_over_ceiling"`
+	ReasoningTextChars   int64  `json:"reasoning_text_chars"`
+	ReasoningDetails     int64  `json:"reasoning_details"`
+	ReasoningTail        string `json:"reasoning_tail"`
+}
+
+// A worker job's newest assistant row in its own session, with the same
+// bounded reasoning read as BriefingActionOutput.
+func (q *Queries) BriefingWorkerFinalOutput(ctx context.Context, arg BriefingWorkerFinalOutputParams) (BriefingWorkerFinalOutputRow, error) {
+	row := q.db.QueryRowContext(ctx, briefingWorkerFinalOutput,
+		arg.ReasoningCeiling,
+		arg.ReasoningTailChars,
+		arg.SessionID,
+		arg.WorkerJobID,
+	)
+	var i BriefingWorkerFinalOutputRow
+	err := row.Scan(
+		&i.ID,
+		&i.ReasoningPresent,
+		&i.ReasoningOverCeiling,
+		&i.ReasoningTextChars,
+		&i.ReasoningDetails,
+		&i.ReasoningTail,
+	)
 	return i, err
 }

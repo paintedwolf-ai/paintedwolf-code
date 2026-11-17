@@ -8,4 +8,4 @@ tier: builtin
 invariants:
   trigger_class: overlay_state
   fires_in:
-  - implement overlay-promote surface ends with zero pending write overlays
+  - implement overlay-promote surface ends with no unresolved worker changes

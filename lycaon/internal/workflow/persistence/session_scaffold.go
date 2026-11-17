@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -57,6 +58,6 @@ func (s *SessionScaffoldSQLStore) UpsertVars(ctx context.Context, sessionID stri
 	return s.queries.UpsertSessionScaffoldVars(ctx, db.UpsertSessionScaffoldVarsParams{
 		SessionID: sessionID,
 		VarsJson:  string(payload),
-		UpdatedAt: db.FormatTime(time.Now().UTC()),
+		UpdatedAt: timelayout.Format(time.Now().UTC()),
 	})
 }

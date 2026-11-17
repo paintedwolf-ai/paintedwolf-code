@@ -44,7 +44,7 @@ rules:
   - id: spec_posture_disallowed_agent
     when:
       posture_is: spec
-      tool_is_task: true
+      tool_names_agent: true
       disallowed_agent: true
     then:
       deny:
@@ -58,7 +58,7 @@ rules:
       plan_awaiting_approval: true
     then:
       deny:
-        tools: [delegate_dispatch, delegate_init, delegate_decompose]
+        tools: [plan_from_blueprint, instruct_worker]
         code: SPEC_POSTURE_NOT_APPROVED
         phase_required: "6"
         phase_required_name: Plan approval
@@ -72,7 +72,7 @@ rules:
       plan_awaiting_approval: false
     then:
       deny:
-        tools: [delegate_dispatch, delegate_init, delegate_decompose]
+        tools: [plan_from_blueprint, instruct_worker]
         code: SPEC_POSTURE_DELEGATION_FORBIDDEN
         phase_required: "1"
         min_required: complete the plan workflow before delegation tools
@@ -81,7 +81,7 @@ rules:
   - id: spec_posture_stub_required_plan_writer
     when:
       posture_is: spec
-      tool_is_task: true
+      tool_names_agent: true
       stub_invalid: true
       agent_is_plan_writer: true
     then:

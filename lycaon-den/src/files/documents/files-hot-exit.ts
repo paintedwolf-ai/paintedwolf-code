@@ -1,7 +1,8 @@
 import { clientIdentity } from "../../platform/connection/client-identity.ts";
 import { documentOutbox } from "./document-outbox.ts";
 /** Hot exit persists tab presentation. */
-import { openFilesBuffer, setFilesActiveBuffer } from "./project-files-buffers.ts";
+import { openFilesBuffer } from "./project-files-buffer-lifecycle.ts";
+import { setFilesActiveBuffer } from "./project-files-buffers.ts";
 import { openFilesProjectIds, projectFilesState } from "./files-buffer-state.ts";
 import { isComposedBufferKind } from "./project-files-buffer-kind.ts";
 import { flushFilesDraftSync } from "./files-draft-sync.ts";

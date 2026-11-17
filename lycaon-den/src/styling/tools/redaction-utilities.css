@@ -38,17 +38,3 @@ display: inline;
   overflow-wrap: anywhere;
   box-decoration-break: clone;
 }
-
-
-/* Summarizes a card's host replacements. */
-@utility den-redaction-chicklet {
-display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 0.12em 0.45em;
-  border-radius: var(--den-radius-sm);
-  border: 1px solid var(--den-chip-border);
-  color: var(--den-text-muted);
-  font-size: var(--text-den-caption);
-  white-space: nowrap;
-}

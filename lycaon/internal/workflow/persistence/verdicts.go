@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"log/slog"
 	"time"
 
@@ -32,7 +33,7 @@ func (s *Verdicts) GetVerdictOperation(ctx context.Context, toolCallID string) (
 }
 
 func (s *Verdicts) PrepareVerdictOperation(ctx context.Context, op runstate.VerdictOperation) (*runstate.VerdictOperation, bool, error) {
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	rows, err := s.transactions.queries.PrepareWorkflowVerdictOperation(ctx, db.PrepareWorkflowVerdictOperationParams{
 		ToolCallID: op.ToolCallID, RunID: op.RunID, SourceRevision: op.SourceRevision,
 		Phase: op.Phase, InputDigest: op.InputDigest, EvidenceRecordID: op.EvidenceRecordID,
@@ -61,7 +62,7 @@ func (s *Verdicts) PrepareVerdictOperation(ctx context.Context, op runstate.Verd
 
 func (s *Verdicts) ResolveVerdictOperationDiverged(ctx context.Context, toolCallID, reason string) error {
 	rows, err := s.transactions.queries.ResolveWorkflowVerdictOperationDiverged(ctx, db.ResolveWorkflowVerdictOperationDivergedParams{
-		Error: reason, UpdatedAt: db.FormatTime(time.Now().UTC()), ToolCallID: toolCallID,
+		Error: reason, UpdatedAt: timelayout.Format(time.Now().UTC()), ToolCallID: toolCallID,
 	})
 	if err != nil {
 		return err
@@ -75,7 +76,7 @@ func (s *Verdicts) ResolveVerdictOperationDiverged(ctx context.Context, toolCall
 
 func (s *Verdicts) RebaseVerdictOperation(ctx context.Context, toolCallID string, sourceRevision int64) error {
 	_, err := s.transactions.queries.RebaseWorkflowVerdictOperation(ctx, db.RebaseWorkflowVerdictOperationParams{
-		SourceRevision: sourceRevision, UpdatedAt: db.FormatTime(time.Now().UTC()), ToolCallID: toolCallID,
+		SourceRevision: sourceRevision, UpdatedAt: timelayout.Format(time.Now().UTC()), ToolCallID: toolCallID,
 	})
 	return err
 }
@@ -123,7 +124,7 @@ func (s *Verdicts) CommitVerdictOperation(ctx context.Context, op runstate.Verdi
 			return marshalErr
 		}
 		changed, updateErr := db.New(tx).UpdateWorkflowRunVars(ctx, db.UpdateWorkflowRunVarsParams{
-			ProjectDir: projectDir, VarsJson: string(raw), UpdatedAt: db.FormatTime(now),
+			ProjectDir: projectDir, VarsJson: string(raw), UpdatedAt: timelayout.Format(now),
 			ID: run.ID, Revision: op.SourceRevision,
 		})
 		if updateErr != nil {
@@ -143,7 +144,7 @@ func (s *Verdicts) CommitVerdictOperation(ctx context.Context, op runstate.Verdi
 		return err
 	}
 	rows, err := db.New(tx).CommitWorkflowVerdictOperation(ctx, db.CommitWorkflowVerdictOperationParams{
-		ResponseJson: db.NullString(string(response)), UpdatedAt: db.FormatTime(time.Now().UTC()), ToolCallID: op.ToolCallID,
+		ResponseJson: db.NullString(string(response)), UpdatedAt: timelayout.Format(time.Now().UTC()), ToolCallID: op.ToolCallID,
 	})
 	if err != nil {
 		return err
@@ -162,6 +163,6 @@ func (s *Verdicts) CommitVerdictOperation(ctx context.Context, op runstate.Verdi
 }
 func (s *Verdicts) MarkVerdictEvidencePublished(ctx context.Context, toolCallID string) error {
 	return s.transactions.queries.MarkWorkflowVerdictEvidencePublished(ctx, db.MarkWorkflowVerdictEvidencePublishedParams{
-		UpdatedAt: db.FormatTime(time.Now().UTC()), ToolCallID: toolCallID,
+		UpdatedAt: timelayout.Format(time.Now().UTC()), ToolCallID: toolCallID,
 	})
 }

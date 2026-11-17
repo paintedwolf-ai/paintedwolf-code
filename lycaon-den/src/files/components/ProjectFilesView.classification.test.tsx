@@ -1,6 +1,6 @@
 import "../../test/document-outbox-fixture.ts";
 import { required } from "../../test/at.ts";
-import { filesBufferText } from "../documents/project-files-buffers.ts";
+import { filesBufferText } from "../documents/files-buffer-state.ts";
 import { PROJECT, ROOTS, loadedBuffer, editorDocumentFixtureFor, resetProjectFilesViewTest } from "./project-files-view-test-harness.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
@@ -14,7 +14,8 @@ import { createAppStore } from "../../store/app-state.ts";
 import { ProjectFilesView } from "./ProjectFilesView.tsx";
 import { applyBufferSourceChanged } from "../documents/buffer-live.ts";
 import { editorReplica, resolveEditorDocument } from "../documents/editor-document.ts";
-import { applyFilesBufferDraft, applyFilesBufferEditorDocument, applyFilesBufferLoad, applyFilesBufferUnsupportedEncoding, openFilesBuffer } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferDraft, applyFilesBufferEditorDocument, applyFilesBufferLoad, applyFilesBufferUnsupportedEncoding } from "../documents/project-files-buffer-io.ts";
+import { openFilesBuffer } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 
 const PATH = "crates/hello_registry/Cargo.toml";

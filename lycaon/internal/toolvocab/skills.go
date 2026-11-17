@@ -17,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/skills"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
@@ -75,9 +74,9 @@ func AgentSurfaces(agents []agentdef.Profile, profiles []sandbox.ToolProfile) ([
 	return out, surfaces, nil
 }
 
-// ReachCommandMutation marks a reader able to run mutating command programs.
-const ReachCommandMutation = toolcontract.ReachCommandMutation
-
+// profileHasCapabilityAliases lists the capability aliases behind
+// profile_has_<alias> template facts that describe a surface capability rather
+// than a single tool name.
 var profileHasCapabilityAliases = map[string]bool{
 	"write_tools":      true,
 	"terminal_capture": true,
@@ -391,7 +390,7 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 			continue
 		}
 		held := reader.Held()
-		vars := prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
+		vars := prompts.SkillVars(reader)
 		defaultKey := varsDigestKey(vars)
 		variants := skillRenderVarVariants(vars)
 		variantKeys := make([]string, len(variants))
@@ -595,7 +594,7 @@ func offeredSkillVars(offered map[string]bool) (string, map[string]any, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	vars := prompts.SkillVars(reader, spawn.DefaultWorkerToolBudget())
+	vars := prompts.SkillVars(reader)
 	offeredSkillVarsCache.Store(cacheKey, vars)
 	return cacheKey, vars, nil
 }

@@ -8,12 +8,12 @@ when: paintedwolf.tool_is_task && !paintedwolf.profile_mutation_capable && paint
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-message: read-only profiles cannot take scope.mode write
+message: Read-only profiles cannot take scope.mode write
 what: '**{{ paintedwolf.agent_type }}** uses a read-only tool profile and cannot take **`scope.mode: write`**.'
-cause: You dispatched a write-scoped task to an agent whose profile has no mutation tools (no file edits, command, or git commit).
-why: Write scope provisions an overlay and expects mutations; a read-only profile cannot author overlay changes or report files.
-fix: 'Survey/analysis → keep this agent with `scope.mode: read`. Authoring a report or product edits → use a mutation-capable profile with `scope.mode: write`.'
-instead: 'Branch on Code: pick a mutation-capable profile for write overlays; keep read-only profiles on read scope.'
+cause: You started a write-scoped worker with an agent profile that has no mutation tools (no file edits, command execution, or git commit).
+why: Write scope provisions a worker workspace and overlay for file changes; a read-only profile cannot author workspace edits or report files.
+fix: 'Survey or review → keep this profile with `scope.mode: read`. Authoring file changes → use a mutation-capable profile with `scope.mode: write`.'
+instead: 'Branch on Code: pick a mutation-capable profile for write workspaces; keep read-only profiles on read scope.'
 x-paintedwolf-scenarios:
   - id: default
     vars:

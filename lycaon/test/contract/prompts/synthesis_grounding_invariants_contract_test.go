@@ -75,9 +75,6 @@ func TestSynthesisGroundingInvariants_lastUserTurnBoundarySkipsInternalRows(t *t
 		if !calls(bodies["IsUserIntentMessage"], "IsInternalTranscriptMessage") {
 			t.Fatal("IsUserIntentMessage must skip api.IsInternalTranscriptMessage rows")
 		}
-		if !calls(bodies["UserTurnOrdinal"], "IsUserIntentMessage") {
-			t.Fatal("UserTurnOrdinal must count the same rows UserIntentBoundary slices on")
-		}
 	default:
 		t.Fatal("UserIntentBoundary must skip api.IsInternalTranscriptMessage rows")
 	}

@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
-	"github.com/lycaon/lycaon/internal/tools/safecmd"
 )
 
 type findWalkParams struct {
@@ -118,21 +117,4 @@ func (p findWalkParams) collect(result findResult) {
 		return
 	}
 	p.resp.Results = append(p.resp.Results, result)
-}
-
-func parseFindEntryType(args map[string]any) (findEntryType, error) {
-	entryType := findTypeAny
-	if raw, ok := args["type"].(string); ok {
-		switch strings.TrimSpace(strings.ToLower(raw)) {
-		case "file":
-			entryType = findTypeFile
-		case "dir":
-			entryType = findTypeDir
-		case "any", "":
-			entryType = findTypeAny
-		default:
-			return findTypeAny, safecmd.Reject("FIND_INVALID_TYPE", map[string]any{"type": raw})
-		}
-	}
-	return entryType, nil
 }

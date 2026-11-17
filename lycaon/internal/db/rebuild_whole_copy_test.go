@@ -50,7 +50,7 @@ func TestRetainedCompleteSourceUsesWholeFileAndCarriesSharing(t *testing.T) {
 	if !bytes.Equal(before, after) {
 		t.Fatal("private whole-file preparation changed original")
 	}
-	reader, err := openReader(t.Context(), destination)
+	reader, err := OpenReadOnly(t.Context(), destination)
 	testutil.FailErr(t, "open private image", err)
 	storage, err := InspectUpgradeStorage(t.Context(), reader, destination, true, prepared.sharedOriginal)
 	testutil.FailErr(t, "account staged sharing", err)
@@ -83,7 +83,7 @@ func TestRetainedCompleteSourceUsesWholeFileAndCarriesSharing(t *testing.T) {
 
 func TestRetainedIncompleteSelectionKeepsRowReconstruction(t *testing.T) {
 	source, _ := seedLegacyManifestStore(t, t.TempDir(), map[string]int{"/work/a": 3})
-	reader, err := openReader(t.Context(), source)
+	reader, err := OpenReadOnly(t.Context(), source)
 	testutil.FailErr(t, "open incomplete source", err)
 	plan, err := PlanUpgrade(t.Context(), reader)
 	testutil.FailErr(t, "plan incomplete source", err)
@@ -116,7 +116,7 @@ func TestRetainedCompleteMalformedCountsStillRefuse(t *testing.T) {
 
 func TestRetainedCompleteCopyDefersObsoleteSecondaryIndexAudit(t *testing.T) {
 	source, _ := completeRetainedFixture(t)
-	reader, err := openReader(t.Context(), source)
+	reader, err := OpenReadOnly(t.Context(), source)
 	testutil.FailErr(t, "open complete source", err)
 	var page, size int64
 	testutil.FailErr(t, "locate secondary index", reader.QueryRow("SELECT rootpage FROM sqlite_schema WHERE name='idx_source_manifest_entries_path'").Scan(&page))
@@ -127,7 +127,7 @@ func TestRetainedCompleteCopyDefersObsoleteSecondaryIndexAudit(t *testing.T) {
 	_, err = file.WriteAt(make([]byte, size), (page-1)*size)
 	testutil.FailErr(t, "damage secondary page", err)
 	testutil.FailErr(t, "close index bytes", file.Close())
-	reader, err = openReader(t.Context(), source)
+	reader, err = OpenReadOnly(t.Context(), source)
 	testutil.FailErr(t, "open damaged source", err)
 	plan, err := PlanUpgrade(t.Context(), reader)
 	testutil.FailErr(t, "plan damaged source", err)
@@ -140,7 +140,7 @@ func TestRetainedCompleteCopyDefersObsoleteSecondaryIndexAudit(t *testing.T) {
 	if !prepared.wholeFile || prepared.preparedIdentity == "" {
 		t.Fatal("complete source paid for an exhaustive pre-capture index audit")
 	}
-	reader, err = openReader(t.Context(), destination)
+	reader, err = OpenReadOnly(t.Context(), destination)
 	testutil.FailErr(t, "open rebuilt image", err)
 	defer reader.Close()
 	if err := auditSnapshot(t.Context(), reader, nil); err == nil {

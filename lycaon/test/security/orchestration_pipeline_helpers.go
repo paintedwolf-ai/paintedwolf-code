@@ -34,7 +34,7 @@ func startBugcommandRun(t *testing.T, h *orchestrationPipelineHarness) wire.Work
 
 func newOrchestrationPipelineServer(t *testing.T, projectDir string) *orchestrationPipelineHarness {
 	t.Helper()
-	h := wiring.BuildForTest(t, wiring.WithAutoCompleteDelegation())
+	h := wiring.BuildForTest(t, wiring.WithAutoCompleteLegs())
 	sess := createSessionHTTP(t, h.Server, projectDir)
 	return &orchestrationPipelineHarness{
 		srv:         h.Server,

@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/pkg/api"
 	"net/url"
 	"path"
 	"strings"
@@ -154,6 +155,7 @@ func fetchURLTextTool(ctx context.Context, a fetchURLToolArgs, rawURL string) (s
 		_ = tooloutput.WriteFetchCache(rawURL, fetchResultCacheEntry(res, ext))
 		ingestFetchedPage(ctx, a.Index, res)
 	}
+	stateFetchStatus(a.Tctx, res.Status)
 	if a.Offset > 0 && a.Limit > 0 {
 		noteRetrievedFrom(a.Tctx, res.URL)
 		return FormatFetchRange(res.URL, res.Text, a.Offset, a.Limit), fetched, nil
@@ -253,4 +255,11 @@ func rawURLPath(raw string) string {
 		return ""
 	}
 	return u.Path
+}
+
+// stateFetchStatus puts the page's HTTP status on the call's action card.
+func stateFetchStatus(tctx tools.ToolContext, status int) {
+	if status > 0 {
+		tctx.Effects.Out.StateCardFact(api.ActionFact{Kind: api.ActionFactResult, Outcome: "completed", HTTPStatus: &status})
+	}
 }

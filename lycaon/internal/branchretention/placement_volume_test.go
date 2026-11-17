@@ -4,6 +4,7 @@ package branchretention
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
@@ -26,7 +27,7 @@ func TestRetentionAndInventoryFindABranchOnAnotherVolume(t *testing.T) {
 	state, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve state", err)
 	branchRoot := enginepaths.WorkerBranchesRootUnder(state)
-	mgr := workspace.NewManager(branchRoot)
+	mgr := workspace.NewManager(branchRoot, platform.NewSelector(platform.Config{}))
 	binding, err := mgr.CreateWorkerWorkspace(t.Context(), project, "job")
 	testutil.FailErr(t, "create", err)
 

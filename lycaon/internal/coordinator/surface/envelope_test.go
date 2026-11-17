@@ -339,3 +339,27 @@ func TestResolveTurnProfilePathExplorerUsesSynthesisWhenBatchReady(t *testing.T)
 		t.Fatalf("surface = %q want implement_synthesis", profile.SurfaceID)
 	}
 }
+
+// A delivered worker brings the review surface, also beside workers in flight;
+// a read-only posture reviews on its observe surface.
+func TestResolveTurnProfileDeliveredWorkerSurface(t *testing.T) {
+	for _, tc := range []struct {
+		posture  api.SessionPosture
+		inFlight int
+		want     string
+	}{
+		{api.SessionPostureBuild, 0, surface.SurfaceImplementOverlayPromote},
+		{api.SessionPostureBuild, 2, surface.SurfaceImplementOverlayPromote},
+		{api.SessionPostureVet, 0, "observe_investigate"},
+	} {
+		profile := surface.ResolveTurnProfile(
+			api.CoordinatorRunContext{},
+			&api.Session{Posture: tc.posture},
+			hostLoopHistory(completeImplementerHistory()),
+			surface.ImplementSessionState{WorkersDelivered: 1, WorkersInFlight: tc.inFlight},
+		)
+		if profile.SurfaceID != tc.want {
+			t.Fatalf("posture %s in flight %d: surface = %q want %q", tc.posture, tc.inFlight, profile.SurfaceID, tc.want)
+		}
+	}
+}
