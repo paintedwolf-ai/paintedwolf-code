@@ -16,12 +16,16 @@ import (
 // autosaves it. A document whose file changed outside it is a revision
 // conflict, since saving would overwrite that change.
 func (e ExecutionRevisions) SaveDrafts(ctx context.Context, tctx tools.ToolContext, path string, descendants bool) error {
-	// The save is the person's text reaching its own file; the operation's
-	// write authority is checked where it binds its paths.
-	resolved, err := projectpaths.ResolveRead(ctx, e.Boundary, tctx, path)
+	resolved, err := projectpaths.ResolveWrite(ctx, e.Boundary, tctx, path)
 	if err != nil {
 		return err
 	}
+	return SaveResolvedDrafts(ctx, tctx, resolved, descendants)
+}
+
+// SaveResolvedDrafts saves the drafts at an already-bound path, such as an
+// input a write carries elsewhere, whose own binding holds its authority.
+func SaveResolvedDrafts(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, descendants bool) error {
 	documents, ok := sourceview.DocumentsFor(tctx, resolved)
 	if !ok {
 		return nil

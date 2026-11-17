@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -57,6 +58,7 @@ func ProbeGrepBatchRecords(
 	defer reads.Close()
 	searches := make([]*grepSearch, len(specs))
 	accumulators := make([]surveyGrepAccumulator, len(specs))
+	drafts := sourceview.DraftsFor(ctx, tctx)
 	for i, spec := range specs {
 		opts, err := parseGrepArgs(map[string]any{
 			"pattern": spec.Pattern, "path": relPath, "max_matches": maxMatches,
@@ -69,7 +71,7 @@ func ProbeGrepBatchRecords(
 			return nil, stats, err
 		}
 		searches[i] = &grepSearch{
-			ctx: ctx, boundary: boundary, tctx: tctx, reads: reads, pattern: opts.pattern, re: re,
+			ctx: ctx, boundary: boundary, tctx: tctx, reads: reads, drafts: drafts, pattern: opts.pattern, re: re,
 			structural: opts.structural, lang: opts.lang, maxMatches: maxMatches,
 			contextLines: 0, require: litprefilter.Extract(opts.pattern, opts.caseInsensitive),
 			resp: &grepResponse{Matches: []grepMatch{}},
@@ -114,7 +116,7 @@ func scanSurveyProbeTarget(
 		return grepRootStatErr(target.displayRoot, err)
 	}
 	if !info.IsDir() {
-		return scanSurveyProbeFile(ctx, reads, target.fullRoot, target.displayRoot, grepFileIdentity{rootID: target.root.ID, scopeRel: projectroot.ScopeRel(target.root, target.fullRoot)}, info, searches, stats)
+		return scanSurveyProbeFile(ctx, target.fullRoot, target.displayRoot, grepFileIdentity{rootID: target.root.ID, scopeRel: projectroot.ScopeRel(target.root, target.fullRoot)}, info, searches, stats)
 	}
 	if tctx.Source.WorkerBranchRoot != "" {
 		return scanSurveyProbeTree(ctx, tool, reads, tctx, target, searches, stats)
@@ -125,7 +127,7 @@ func scanSurveyProbeTarget(
 		if statErr != nil || info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
 			return true
 		}
-		scanErr = scanSurveyProbeFile(ctx, reads, job.abs, job.rel, grepFileIdentity{rootID: job.rootID, scopeRel: job.scopeRel}, info, searches, stats)
+		scanErr = scanSurveyProbeFile(ctx, job.abs, job.rel, grepFileIdentity{rootID: job.rootID, scopeRel: job.scopeRel}, info, searches, stats)
 		return scanErr == nil
 	})
 	if err != nil {
@@ -159,7 +161,7 @@ func scanSurveyProbeTree(
 			return sandbox.SurveyContinue, nil
 		}
 		rel := projectpaths.QualifyAbs(tctx, target.root, entry.Abs)
-		if scanErr := scanSurveyProbeFile(ctx, reads, entry.Abs, rel, grepFileIdentity{rootID: target.root.ID, scopeRel: projectroot.ScopeRel(target.root, entry.Abs)}, info, searches, stats); scanErr != nil {
+		if scanErr := scanSurveyProbeFile(ctx, entry.Abs, rel, grepFileIdentity{rootID: target.root.ID, scopeRel: projectroot.ScopeRel(target.root, entry.Abs)}, info, searches, stats); scanErr != nil {
 			return sandbox.SurveyStop, scanErr
 		}
 		return sandbox.SurveyContinue, nil
@@ -168,14 +170,17 @@ func scanSurveyProbeTree(
 
 func scanSurveyProbeFile(
 	ctx context.Context,
-	reads *projectpaths.ReadSession,
 	abs, rel string,
 	ident grepFileIdentity,
 	info os.FileInfo,
 	searches []*grepSearch,
 	stats *SurveyGrepBatchStats,
 ) error {
-	content, binary, bytesTruncated, err := readGrepFile(ctx, reads, abs, info)
+	if len(searches) == 0 {
+		return nil
+	}
+	// Every search shares one overlay, so the person's text is read once.
+	content, binary, bytesTruncated, err := searches[0].loadGrepFile(ctx, abs, info)
 	if err != nil {
 		if ctx.Err() != nil {
 			return ctx.Err()

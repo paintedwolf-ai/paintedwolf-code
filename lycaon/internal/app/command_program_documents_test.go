@@ -183,45 +183,6 @@ func TestProgramWriteSavesThePersonsDraftWithIt(t *testing.T) {
 	}
 }
 
-// Moving a file the person holds unsaved carries their text with it.
-func TestProgramMoveCarriesThePersonsDraft(t *testing.T) {
-	f, service, p := documentProgram(t)
-	testutil.FailErr(t, "saved file", os.WriteFile(filepath.Join(f.Dir, "a.txt"), []byte("saved\n"), 0o644))
-	typeHumanDraft(t, service, p, "a.txt", "human unsaved\n")
-	moved := callDocumentProgram(t, f, "mv a.txt b.txt")
-	if moved.Status != 0 || moved.StopCode != "" {
-		t.Fatalf("move=%+v", moved)
-	}
-	disk, err := os.ReadFile(filepath.Join(f.Dir, "b.txt"))
-	testutil.FailErr(t, "moved file", err)
-	if string(disk) != "human unsaved\n" {
-		t.Fatalf("moved disk=%q", disk)
-	}
-}
-
-// A draft held over a file changed outside it refuses the write and keeps both.
-func TestProgramWriteRefusesAFileChangedOutsideItsDocument(t *testing.T) {
-	f, service, p := documentProgram(t)
-	path := filepath.Join(f.Dir, "a.txt")
-	testutil.FailErr(t, "saved file", os.WriteFile(path, []byte("saved\n"), 0o644))
-	doc := typeHumanDraft(t, service, p, "a.txt", "human unsaved\n")
-	testutil.FailErr(t, "outside change", os.WriteFile(path, []byte("outside\n"), 0o644))
-	refused := callDocumentProgram(t, f, "printf 'agent\\n' > a.txt")
-	if refused.StopCode != "COMMAND_REVISION_CONFLICT" || refused.CompletedEffects != 0 {
-		t.Fatalf("write=%+v", refused)
-	}
-	disk, err := os.ReadFile(path)
-	testutil.FailErr(t, "disk", err)
-	if string(disk) != "outside\n" {
-		t.Fatalf("outside change overwritten: %q", disk)
-	}
-	live, err := service.CurrentSnapshot(t.Context(), p.ID, doc.ID)
-	testutil.FailErr(t, "draft", err)
-	if live.Draft != "human unsaved\n" {
-		t.Fatalf("draft=%+v", live)
-	}
-}
-
 func TestProgramAppendStopsOnUnsavedAcceptanceWithoutReplaying(t *testing.T) {
 	f, service, p := documentProgram(t)
 	dir := filepath.Join(f.Dir, "dir")

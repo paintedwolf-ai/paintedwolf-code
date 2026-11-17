@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -127,7 +128,7 @@ func (inv *invocation) bindInput(operand string) (projectpaths.BoundPath, error)
 	if err != nil {
 		return projectpaths.BoundPath{}, err
 	}
-	if err := inv.owners.Revisions.SaveDrafts(inv.ctx, inv.tc, bound.Resolved.Abs, true); err != nil {
+	if err := native.SaveResolvedDrafts(inv.ctx, inv.tc, bound.Resolved, true); err != nil {
 		return projectpaths.BoundPath{}, err
 	}
 	return bound, nil

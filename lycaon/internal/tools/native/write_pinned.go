@@ -73,7 +73,8 @@ func conflictsWithPin(err error) bool {
 	if err == nil || errors.As(err, &conflict) {
 		return false
 	}
-	if errors.Is(err, tools.ErrEditorExecutionConflict) || errors.Is(err, errMutationSnapshotMoved) {
+	// A document moved during review no longer holds the text that was reviewed.
+	if errors.Is(err, tools.ErrEditorExecutionConflict) || errors.Is(err, tools.ErrEditorDocumentMoved) || errors.Is(err, errMutationSnapshotMoved) {
 		return true
 	}
 	reject := toolrejection.AsToolReject(err)
