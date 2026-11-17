@@ -63,4 +63,9 @@ var Family = laws.Family{Name: "forbidden-calls", Rules: slices.Concat(
 	serveWiring,
 	prompts,
 	promptInputs,
+	egressSeams,
+	security,
+	approvalMint,
+	programFloor,
+	runnerNeutrality,
 )}

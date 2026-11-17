@@ -173,3 +173,27 @@ func (r *Run) FuncDecl(dir, name string) *ast.FuncDecl {
 	}
 	return fn
 }
+
+// FuncNamed returns the one production function or method named name in a
+// module directory, whatever its receiver. None or several ends the check.
+func (r *Run) FuncNamed(dir, name string) (*GoFile, *ast.FuncDecl) {
+	var file *GoFile
+	var found *ast.FuncDecl
+	for _, f := range r.Go().files {
+		if f.IsTest || f.Dir != dir {
+			continue
+		}
+		for _, decl := range f.AST.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil && fn.Name.Name == name {
+				if found != nil {
+					r.Fatalf("%s declares %s more than once", dir, name)
+				}
+				file, found = f, fn
+			}
+		}
+	}
+	if found == nil {
+		r.Fatalf("%s declares no function %s", dir, name)
+	}
+	return file, found
+}
