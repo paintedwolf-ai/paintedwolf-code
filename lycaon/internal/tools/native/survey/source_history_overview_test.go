@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"path/filepath"
 	"testing"
@@ -47,7 +48,7 @@ func newHistoryHarness(t *testing.T) *historyHarness {
 	testdbseed.InsertProject(t, sqlDB, historyProject)
 	dir := t.TempDir()
 	second := t.TempDir()
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	_, err := sqlDB.ExecContext(t.Context(), `
 		INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
 		VALUES ('r1', 'p1', ?, 'root', 1, ?, 'attached'), ('r2', 'p1', ?, 'docs', 0, ?, 'attached')

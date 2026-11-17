@@ -12,7 +12,7 @@ const { openBuffer, pushJump, getView, markPending, clearPending } = vi.hoisted(
   openBuffer: vi.fn(() => "destination"), pushJump: vi.fn(), getView: vi.fn(),
   markPending: vi.fn(), clearPending: vi.fn(),
 }));
-vi.mock("../documents/project-files-buffers.ts", () => ({ openFilesBuffer: openBuffer }));
+vi.mock("../documents/project-files-buffer-lifecycle.ts", () => ({ openFilesBuffer: openBuffer }));
 vi.mock("../components/project-files-jump-bridge.ts", () => ({ pushProjectJump: pushJump }));
 vi.mock("./files-editor-host.ts", () => ({ getFilesEditorView: getView }));
 vi.mock("../../components/source/editor/codemirror-theme.ts", () => ({

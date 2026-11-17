@@ -56,7 +56,7 @@ func TestFileSystemUsesCheckoutInventory(t *testing.T) {
 	if !slices.Equal(files, want) {
 		t.Fatalf("files = %v, want %v", files, want)
 	}
-	graph, err := buildGraph(tree)
+	graph, err := BuildGraph(tree)
 	if err != nil {
 		t.Fatalf("build graph: %v", err)
 	}

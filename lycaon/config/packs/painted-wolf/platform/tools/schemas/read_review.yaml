@@ -1,0 +1,16 @@
+description: "Read workflow review summary, sealed assignments, or a reviewer's assigned subject page."
+schema:
+  type: object
+  required: [view]
+  properties:
+    view:
+      type: string
+      enum: [summary, assignments, subject]
+      description: "summary: active review phase status and work identities. assignments: sealed review bindings. subject: paged facts and candidate claims for one assignment_id."
+    assignment_id:
+      type: string
+      description: Exact assignment identity required when view is subject.
+    cursor:
+      type: string
+      description: Continuation token returned by assignments or subject.
+  additionalProperties: false

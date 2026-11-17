@@ -32,7 +32,7 @@ import {
 import type { ContributionCommand, ContributionFrameResponse, SourceSearchResponse } from "../../api/types.ts";
 import { stubClient } from "../../test/client-fixture.ts";
 import { CROSSBAR_GROUP_HIT_CAP } from "../../search/crossbar-model.ts";
-import { openFilesBuffer, resetProjectFilesForTests } from "../../files/documents/project-files-buffers.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../../files/documents/project-files-buffer-lifecycle.ts";
 
 vi.mock("../../platform/connection/app-connection.ts", async (importOriginal) => {
   const actual =

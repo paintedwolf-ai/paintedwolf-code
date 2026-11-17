@@ -1,0 +1,7 @@
+steps:
+  - when: "paintedwolf.worker != ''"
+    tool: "instruct_worker"
+    args:
+      worker: "{{ paintedwolf.worker }}"
+    say: "To give that worker this work, call {{ call }}."
+    otherwise: "Choose another name, or leave name out."

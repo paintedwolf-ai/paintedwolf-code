@@ -3,6 +3,7 @@ package httpaction
 
 import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/socketref"
 
 	"context"
@@ -143,7 +144,7 @@ func Register(reg *tools.DefaultRegistry, deps Deps) error {
 		} else if out.BodySpillPath != "" {
 			writtenFiles = []string{out.BodySpillPath}
 		}
-		ReportExchangeProvenance(ctx, ExchangeProvenance{
+		evidence.ReportExchangeProvenance(ctx, evidence.ExchangeProvenance{
 			External:     len(extURLs) > 0,
 			ObservedURLs: extURLs,
 			WroteStdout:  out.ResponsePath == "" && !ex.spec.disposition.discard && !out.BodyUnavailable,

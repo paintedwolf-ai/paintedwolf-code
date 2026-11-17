@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/boolexpr"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/rules"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -31,7 +30,7 @@ func TestHintWhenExpressionsValidate(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	contractcheck.FailErr(t, "install catalog", anchorcatalog.InstallFile(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "host", "anchors", "catalog.yaml")))
 	schemaDir := filepath.Join(root, "schemas")
-	hintsAt := extpacks.Bundled(hintregistry.DefaultDir)
+	hintsAt := extpacks.Bundled(config.PlatformPolicy)
 	loader, err := oar.NewLoader(schemaDir)
 	contractcheck.FailErr(t, "oar loader", err)
 	rs, err := loader.LoadDir(hintsAt)

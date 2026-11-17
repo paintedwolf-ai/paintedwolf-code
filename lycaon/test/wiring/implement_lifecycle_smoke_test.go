@@ -158,7 +158,7 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 	var pending []wire.WorkerTask
 	testutil.WaitFor(t, func() bool {
 		var err error
-		pending, err = h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
+		pending, err = h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(pending) == 1
 	})
 	testutil.FailErr(t, "ListBySession pending", err)
@@ -175,10 +175,10 @@ func TestImplementLifecycleSmokePathsForward(t *testing.T) {
 	// Complete repair and wait for closeout.
 	stage2Start := time.Now()
 	testutil.WaitFor(t, func() bool {
-		tasks, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
+		tasks, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 		return err == nil && len(tasks) >= 1
 	})
-	pending2, err := h.Delegations.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
+	pending2, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID, wire.WorkerStatusPending)
 	testutil.FailErr(t, "ListBySession follow-up pending", err)
 	if len(pending2) != 1 {
 		t.Fatalf("follow-up pending jobs = %d want 1", len(pending2))
@@ -208,7 +208,7 @@ func completeWorkerWrite(t *testing.T, h *Harness, sess *wire.Session, job wire.
 	ctx := context.Background()
 	child, err := h.Store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: job.Prompt})
 	testutil.FailErr(t, "CreateChild "+callID, err)
-	testutil.FailErr(t, "SetChildSessionID "+callID, h.Delegations.Queue.SetChildSessionID(ctx, job.ID, child.ID))
+	testutil.FailErr(t, "SetChildSessionID "+callID, h.Workers.Queue.SetChildSessionID(ctx, job.ID, child.ID))
 	testutil.FailErr(t, "AppendMessages child "+callID, h.Store.AppendMessages(ctx, child.ID,
 		wire.Message{
 			Role: wire.MessageRoleAssistant,

@@ -1,0 +1,27 @@
+spec_version: "1.0"
+id: COMPLETE_LEG_RESULT_NOT_EARLIER
+kind: policy
+on: tool.rejected
+selector:
+  tools:
+    - complete_leg
+requires_facts: [paintedwolf.earlier_results, paintedwolf.rejection_code, paintedwolf.unknown_cited_results]
+when: paintedwolf.rejection_code == "COMPLETE_LEG_RESULT_NOT_EARLIER"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
+message: 'cited_results lists handles that are not results of your earlier rounds: {{ paintedwolf.unknown_cited_results }}'
+what: 'cited_results lists handles that are not results of your earlier rounds: {{ paintedwolf.unknown_cited_results }}'
+cause: 'cited_results takes only the results of your own settled rounds.'
+why: 'A cited result is kept as the provenance of this report, so it must be one the host can trace to you.'
+fix: '{% if paintedwolf.earlier_results %}Your earlier results are {{ paintedwolf.earlier_results }}; cite only those{% else %}You have no earlier results yet; leave cited_results empty{% endif %}, keep the rest of the report, and send it again.'
+instead: 'Branch on Code; cite only results your round lists'
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      earlier_results: [res-1]
+      unknown_cited_results: [res-9]
+  - id: first_round
+    vars:
+      earlier_results: []
+      unknown_cited_results: [res-9]

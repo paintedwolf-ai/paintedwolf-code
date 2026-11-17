@@ -3,6 +3,7 @@ package sourcecontracts
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -17,7 +18,6 @@ import (
 	"github.com/google/uuid"
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
-	"github.com/lycaon/lycaon/internal/db"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -276,7 +276,7 @@ func TestWorkerChangesReturnsLedgerRowsByRoot(t *testing.T) {
 	_, err := ledgerDB.ExecContext(t.Context(), `
 		INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at)
 		VALUES ('r1', 'p1', '/tmp/api-ledger-root', 'api-ledger-root', 1, ?)
-	`, db.FormatTime(time.Now().UTC()))
+	`, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert ledger root", err)
 
 	q := worker.NewInMemoryQueue(1)

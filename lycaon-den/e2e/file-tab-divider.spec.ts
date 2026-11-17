@@ -9,8 +9,8 @@ modelIndependentWebE2e("selected tabs meet the overflow divider at fractional wi
     seed: root => writeFileSync(path.join(root, "README.md"), "# Tab divider\n"),
   });
   await page.evaluate(async ({ projectId, rootId }) => {
-    const url = "/src/files/documents/project-files-buffers.ts";
-    const { openFilesBuffer } = await import(/* @vite-ignore */ url) as typeof import("../src/files/documents/project-files-buffers.ts");
+    const url = "/src/files/documents/project-files-buffer-lifecycle.ts";
+    const { openFilesBuffer } = await import(/* @vite-ignore */ url) as typeof import("../src/files/documents/project-files-buffer-lifecycle.ts");
     for (let index = 0; index < 10; index++) {
       openFilesBuffer(projectId, {
         rootId, rootLabel: "Project root", path: "", name: `Review step ${index + 1}`,

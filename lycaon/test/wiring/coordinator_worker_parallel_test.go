@@ -23,7 +23,7 @@ func TestCoordinatorParallelTaskCapMixedAgents(t *testing.T) {
 	}, dir)
 	testutil.FailErr(t, "create session", err)
 
-	q := h.Delegations.Queue
+	q := h.Workers.Queue
 	deps := workeradmission.WorkerCycleGuardDeps{Workers: q}
 	agents := []string{"repo-researcher", "path-explorer", "implementer", "code-reviewer", "web-researcher"}
 	cap := spawn.MaxInFlightTaskWorkers

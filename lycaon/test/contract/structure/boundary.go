@@ -8,7 +8,7 @@ import (
 )
 
 // validateBoundary gates explicit package access promises, not inferred cohesion.
-func validateBoundary(graph *Graph, key string, d declaration) error {
+func validateBoundary(graph *Graph, key string, d Declaration) error {
 	if err := validate(key, d); err != nil {
 		return err
 	}

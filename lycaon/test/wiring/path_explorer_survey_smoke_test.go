@@ -71,9 +71,9 @@ func TestPathExplorerSurveyUsesNativeFindAndGrep(t *testing.T) {
 	testutil.FailErr(t, "worker defaults", worker.ApplyEnqueueDefaults(
 		&task, project.ProjectScope{ProjectID: parent.ProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig(),
 	))
-	_, err = h.Delegations.Queue.Enqueue(ctx, task)
+	_, err = h.Workers.Queue.Enqueue(ctx, task)
 	testutil.FailErr(t, "enqueue worker", err)
-	claimed, err := h.Delegations.Queue.ClaimNext(ctx, worker.ClaimRequest{
+	claimed, err := h.Workers.Queue.ClaimNext(ctx, worker.ClaimRequest{
 		ProjectID: parent.ProjectID, ExecutionTarget: api.ExecutionTargetLocal, ClaimedBy: "path-explorer-test",
 	})
 	testutil.FailErr(t, "claim worker", err)
@@ -88,7 +88,7 @@ func TestPathExplorerSurveyUsesNativeFindAndGrep(t *testing.T) {
 	if len(invoked) != 3 || invoked[0] != "command" || invoked[1] != "command" || invoked[2] != "complete_leg" {
 		t.Fatalf("survey calls=%v", invoked)
 	}
-	stored, ok := h.Delegations.Queue.Get(task.ID)
+	stored, ok := h.Workers.Queue.Get(task.ID)
 	if !ok || stored == nil || stored.ChildSessionID == "" {
 		t.Fatal("worker child session missing")
 	}

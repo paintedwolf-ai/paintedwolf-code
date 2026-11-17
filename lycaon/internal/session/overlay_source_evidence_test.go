@@ -36,7 +36,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native/survey"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -370,7 +371,7 @@ func TestAppendWorkerSummaryCarriesStructuredDecisionRequest(t *testing.T) {
 }
 
 func TestWorkerProjectionWaitsForOriginalDispatchResponse(t *testing.T) {
-	for _, tool := range []string{"task", "delegate_dispatch"} {
+	for _, tool := range []string{"task"} {
 		t.Run(tool, func(t *testing.T) {
 			ctx := context.Background()
 			messages := store.NewMemory()
@@ -457,25 +458,27 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 		t.Fatal("expected Enrich to provision a scoped observation.Tracker on mgr.Workers.Workspaces")
 	}
 	unboundFacts := tracker.Facts()
-	if unboundFacts.Mode != observation.VisibilityModeUnknown || unboundFacts.LiveVisible || unboundFacts.SupportsInvalidation || unboundFacts.Completeness != observation.CompletenessUnknown {
+	if unboundFacts.UntouchedVisibility != observation.VisibilityUnknown || unboundFacts.SupportsInvalidation || unboundFacts.AttributionCompleteness != observation.CompletenessUnknown {
 		t.Fatalf("expected unbound tracker to default to conservative unknown visibility/completeness, got %+v", unboundFacts)
 	}
 	_, err = mgr.Workers.Workspaces.BindViewCapabilities(
-		observation.MountedAdapterViewCapabilities(jobID, "fuselinux", true, true, true, observation.CompletenessComplete),
+		observation.ViewCapabilityDescriptor{ViewID: jobID, Facts: observation.VisibilityFacts{AdapterName: "fuselinux", UntouchedVisibility: observation.VisibilityLive, SupportsInvalidation: true, SupportsNegativeLookupInvalidation: true, SupportsDirCookieInvalidation: true, AttributionCompleteness: observation.CompletenessComplete}},
 		jobID,
 	)
 	testutil.FailErr(t, "BindViewCapabilities job", err)
 
-	// Execute ordinary ReadTool calls (without workerharness.Service.Read and without calling ObserveReadPath).
-	_, err = reg.Run(workerCtx, "read", map[string]any{"path": "game.py"}, tctx)
-	testutil.FailErr(t, "ordinary ReadTool game.py", err)
-	_, err = reg.Run(workerCtx, "read", map[string]any{"path": "pkg/dep.py"}, tctx)
-	testutil.FailErr(t, "ordinary ReadTool pkg/dep.py", err)
+	// Shipped source reads record worker observations without workerharness.Service.Read.
+	for _, path := range []string{"game.py", "pkg/dep.py"} {
+		resolved, err := projectpaths.ResolveRead(workerCtx, nil, tctx, path)
+		testutil.FailErr(t, "resolve "+path, err)
+		_, err = sourceview.LoadText(workerCtx, "read", sourceview.AccessRead, tctx, resolved)
+		testutil.FailErr(t, "load "+path, err)
+	}
 
 	depPath := layeredfs.QualifiedPath{RootID: "primary", Rel: "pkg/dep.py"}
 	depObs, ok := tracker.LatestObservationForPath(depPath)
 	if !ok || depObs.SHA256 != textfile.SHA256([]byte("dep = 1\n")) || depObs.Completeness != observation.CompletenessComplete || depObs.Layer != layeredfs.LayerTrunk {
-		t.Fatalf("expected ordinary ReadTool to record complete structured observation for pkg/dep.py, got %+v (ok=%v)", depObs, ok)
+		t.Fatalf("expected the source read to record a complete structured observation for pkg/dep.py, got %+v (ok=%v)", depObs, ok)
 	}
 
 	// Perform a worker write on dirty_upper.py so it is pinned in LayerPrivate.
@@ -499,7 +502,7 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	childHistory, err := mem.GetMessages(ctx, child.ID)
 	testutil.FailErr(t, "GetMessages", err)
 
-	// 1. Unobserved lower source change via real repochange.Notify keeps GateState and OverlaySourceProof valid.
+	// 1. Unobserved lower source change via real repochange.Notify keeps GateState and the source proof valid.
 	testutil.FailErr(t, "WriteFile unrelated", os.WriteFile(filepath.Join(primary, "unrelated.py"), []byte("u = 2\n"), 0o644))
 	repochange.Notify(ctx, repochange.Event{
 		ProjectDir: primary,
@@ -512,7 +515,7 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	}
 	proofFresh := session.OverlaySourceProofWithWorkspaces(workerCtx, mgr.Workers.Workspaces, task, childHistory, "selected-check", curRev)
 	if status, _, _ := workercompletion.SourceEvidenceView(proofFresh); status != workercompletion.EvidenceStatusSatisfied {
-		t.Fatalf("expected unobserved lower change to preserve satisfied OverlaySourceProof, got %s", status)
+		t.Fatalf("expected unobserved lower change to preserve a satisfied source proof, got %s", status)
 	}
 
 	// 2. Lower source change on a dirty upper override (dirty_upper.py) via repochange.Notify stays pinned and immune.
@@ -531,7 +534,7 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 	}
 
 	// 3. Lower source change on observed pkg/dep.py via real repochange.Notify invalidates GateState &
-	// OverlaySourceProof and queues trunk.changed.
+	// the source proof and queues trunk.changed.
 	testutil.FailErr(t, "WriteFile dep v2", os.WriteFile(filepath.Join(primary, "pkg", "dep.py"), []byte("dep = 2\n"), 0o644))
 	repochange.Notify(ctx, repochange.Event{
 		ProjectDir: primary,
@@ -585,8 +588,6 @@ func newObservationHost(t *testing.T) (*store.Memory, *tools.StubRegistry, *sess
 	t.Helper()
 	mem := store.NewMemory()
 	reg := tools.NewStubRegistry()
-	readTool := &survey.ReadTool{}
-	testutil.FailErr(t, "Register read tool", reg.Register(readTool.Name(), readTool.Run))
 
 	mgr := session.NewHost(
 		mem,
@@ -634,7 +635,7 @@ func provisionUnrelatedWorker(
 	otherTask, _ := q.Get(otherJobID)
 	otherCtx := workercontext.WithJob(ctx, otherJobID)
 	_, err = mgr.Workers.Workspaces.BindViewCapabilities(
-		observation.MountedAdapterViewCapabilities(otherJobID, "fuselinux", true, true, true, observation.CompletenessComplete),
+		observation.ViewCapabilityDescriptor{ViewID: otherJobID, Facts: observation.VisibilityFacts{AdapterName: "fuselinux", UntouchedVisibility: observation.VisibilityLive, SupportsInvalidation: true, SupportsNegativeLookupInvalidation: true, SupportsDirCookieInvalidation: true, AttributionCompleteness: observation.CompletenessComplete}},
 		otherJobID,
 	)
 	testutil.FailErr(t, "BindViewCapabilities other", err)
@@ -665,9 +666,9 @@ func assertObservedChangeInvalidatesProof(
 	depPath layeredfs.QualifiedPath,
 ) {
 	t.Helper()
-	proofStale := session.OverlaySourceProof(workerworkspace.WithService(workerCtx, mgr.Workers.Workspaces), task, childHistory, "selected-check", curRev)
+	proofStale := session.OverlaySourceProofWithWorkspaces(workerCtx, mgr.Workers.Workspaces, task, childHistory, "selected-check", curRev)
 	if status, _, _ := workercompletion.SourceEvidenceView(proofStale); status == workercompletion.EvidenceStatusSatisfied {
-		t.Fatalf("expected observed dependency change via repochange.Notify to invalidate OverlaySourceProof receipt, got %s", status)
+		t.Fatalf("expected observed dependency change via repochange.Notify to invalidate the source proof receipt, got %s", status)
 	}
 	assessment, ok := session.OverlayObservationAssessmentWithWorkspaces(mgr.Workers.Workspaces, task)
 	if !ok || !assessment.VerificationInvalidated || !assessment.Freshness.Stale || assessment.Freshness.StaleReason != observation.StaleReasonObservedDependencyChanged {
@@ -706,7 +707,7 @@ func TestWorkerReadAndWriteStructuredFactsWithoutSecondReadAndUnknownEvidence(t 
 	// to prove neither method re-reads the file with os.ReadFile.
 	testutil.FailErr(t, "WriteFile mutated", os.WriteFile(diskFile, []byte("disk-bytes-never-read-by-worker\n"), 0o644))
 
-	// Before view capabilities are bound, a native read digest alone must not claim CompletenessComplete or LiveVisible.
+	// Before view capabilities are bound, a native read digest alone must not claim CompletenessComplete or a live view.
 	unboundObs, ok := svc.ObserveReadWithFacts("job-unbound", "sess-unbound", dir, "", nil, tools.WorkerFileObservationFacts{
 		RootID:   "primary",
 		RelPath:  "mutated.py",
@@ -720,7 +721,7 @@ func TestWorkerReadAndWriteStructuredFactsWithoutSecondReadAndUnknownEvidence(t 
 	}
 
 	_, err := svc.BindViewCapabilities(
-		observation.MountedAdapterViewCapabilities("job-facts", "fuselinux", true, true, true, observation.CompletenessComplete),
+		observation.ViewCapabilityDescriptor{ViewID: "job-facts", Facts: observation.VisibilityFacts{AdapterName: "fuselinux", UntouchedVisibility: observation.VisibilityLive, SupportsInvalidation: true, SupportsNegativeLookupInvalidation: true, SupportsDirCookieInvalidation: true, AttributionCompleteness: observation.CompletenessComplete}},
 		"job-facts",
 	)
 	testutil.FailErr(t, "BindViewCapabilities job-facts", err)
@@ -758,20 +759,20 @@ func TestWorkerReadAndWriteStructuredFactsWithoutSecondReadAndUnknownEvidence(t 
 		t.Fatalf("expected upper write observation to preserve exact write-time facts, got %+v (ok=%v)", writeObs, ok)
 	}
 
-	// When digest facts are unavailable (ObserveReadPath / Complete: false), explicit unknown/partial
+	// When digest facts are unavailable (Complete: false), explicit unknown/partial
 	// evidence is preserved without reading the file from disk, and receipt freshness refuses to certify.
-	unknownObs, ok := svc.ObserveReadPath("job-facts", "sess-facts", dir, "", nil, "mutated.py")
+	unknownObs, ok := svc.ObserveReadWithFacts("job-facts", "sess-facts", dir, "", nil, tools.WorkerFileObservationFacts{RelPath: "mutated.py"})
 	if !ok {
-		t.Fatal("expected ObserveReadPath to succeed")
+		t.Fatal("expected ObserveReadWithFacts to succeed")
 	}
-	if unknownObs.SHA256 != "" || unknownObs.Completeness != observation.CompletenessPartial || !unknownObs.Uncertain {
+	if unknownObs.SHA256 != "" || unknownObs.Completeness != observation.CompletenessPartialKernelCached || !unknownObs.Uncertain {
 		t.Fatalf("expected unavailable digest facts to preserve explicit unknown/partial evidence, got %+v", unknownObs)
 	}
 	binding, ok := svc.BindVerificationReceipt("job-facts", "sess-facts", dir, "", "check-unknown", "ckpt-1", []string{"primary"})
 	if !ok {
 		t.Fatal("expected BindVerificationReceipt to succeed")
 	}
-	if binding.ReadAttributionCompleteness != observation.CompletenessPartial {
+	if binding.ReadAttributionCompleteness != observation.CompletenessPartialKernelCached {
 		t.Fatalf("expected binding completeness to downgrade to partial when observation lacks digest facts, got %s", binding.ReadAttributionCompleteness)
 	}
 	freshness := tr.EvaluateReceiptFreshness(binding, "ckpt-1")

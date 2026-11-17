@@ -98,16 +98,6 @@ func (m *Summaries) Append(ctx context.Context, parentID string, in SummaryInput
 		}
 		summary = eval.Summary
 	}
-	budget := m.budget.BudgetForTask(ctx, task)
-	if exhaustCode, exhaustData := BudgetExhaustedHint(status, task, childMessages, budget); exhaustCode != "" && feedback == nil {
-		hintCode = exhaustCode
-		if m.workflowHints != nil {
-			formatted, err := guidance.FormatWorkerSummaryFeedback(m.workflowHints, hintCode, exhaustData)
-			if err == nil && strings.TrimSpace(formatted) != "" {
-				summary = formatted
-			}
-		}
-	}
 	body := ""
 	if feedback != nil {
 		rendered, err := guidance.RenderPolicyCopy(ctx, feedback.Code, feedback.Effect, feedback.Copy, feedback.Details)
@@ -167,19 +157,20 @@ func (m *Summaries) completeWorkerSummary(
 	}
 	proof := draft.proof
 	draft.report = workercompletion.EnrichWorkerCompletionReport(draft.report, proof, draft.status)
-	draft.report = workercompletion.AnnotateWorkerReportForBranch(draft.report, draft.task)
 	if decisionReq == nil {
 		draft.status = string(m.overlayStatus(
 			ctx, api.WorkerSummaryStatus(draft.status), draft.task,
 		))
 	}
+	worker := m.names.Name(ctx, draft.input.JobID)
 	digest := workercompletion.FormatWorkerDigest(
-		draft.input.AgentType, draft.input.JobID, draft.status, draft.summary, proof, draft.report,
+		draft.input.AgentType, worker, draft.status, draft.summary, proof, draft.report,
 	)
 	if decisionReq != nil {
 		digest = workercompletion.AppendWorkerDecisionDigest(digest, *decisionReq)
 	}
 	env := workercompletion.WorkerCompletionEnvelope{
+		Worker:          worker,
 		JobID:           draft.input.JobID,
 		ChildSessionID:  draft.input.ChildSessionID,
 		AgentType:       draft.input.AgentType,

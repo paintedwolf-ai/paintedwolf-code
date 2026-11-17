@@ -17,9 +17,6 @@ const CATALOG_OK_TOOLS = [
   "state_close",
   "state_start",
   "state_query",
-  "delegate_init",
-  "delegate_decompose",
-  "delegate_status",
   "scan_pack",
   "scan_list",
   "scan_summary",
@@ -33,14 +30,15 @@ const CATALOG_OK_TOOLS = [
   "workflow_advance",
   "workflow_transition",
   "fanout_plan",
+  "plan_from_blueprint",
+  "read_findings",
+  "read_review",
   "submit_verdict",
   "skills_read",
   "plan_append_review_evidence",
   "parse_extract_json",
   "parse_validate",
   "parse_evaluation",
-  "parse_decomposition",
-  "parse_delegation_plan",
   "wait",
   "worker_cancel",
   "answer_decision",
@@ -396,7 +394,7 @@ export const TOOL_STRUCTURED_OUTPUT_FIXTURES: Record<string, string> = {
   handoff_release_all: JSON.stringify({ released: 2 }),
   handoff_health: JSON.stringify({ healthy: true, conflicts: [] }),
   promote_overlay: JSON.stringify({
-    job_id: "overlay-1",
+    result_handle: "result-1",
     merge_status: "merged",
     applied: ["main.go", "util.go"],
     clean_paths: ["main.go", "util.go"],
@@ -407,7 +405,7 @@ export const TOOL_STRUCTURED_OUTPUT_FIXTURES: Record<string, string> = {
     status: "rejected",
   }),
   preview_overlay: JSON.stringify({
-    job_id: "overlay-1",
+    result_handle: "result-1",
     merge_status: "pending",
     path_status: [{ path: "main.go", status: "clean" }],
     clean_paths: ["main.go"],
@@ -424,26 +422,6 @@ export const TOOL_STRUCTURED_OUTPUT_FIXTURES: Record<string, string> = {
   request_decision: JSON.stringify({
     status: "decision_requested",
     options: 2,
-  }),
-  extend_worker_budget: JSON.stringify({
-    job_id: "job-1",
-    child_session_id: "child-1",
-    previous_max: 40,
-    new_max: 80,
-    requested_max: 60,
-    tool_loops_used: 32,
-  }),
-  request_budget: JSON.stringify({
-    status: "requested",
-    max_tool_loops: 40,
-    requested_max: 60,
-    tool_loops_used: 32,
-  }),
-  decline_worker_budget: JSON.stringify({
-    job_id: "job-1",
-    max_tool_loops: 40,
-    requested_max: 60,
-    tool_loops_used: 32,
   }),
   record_finding: JSON.stringify({ status: "appended", kind: "note" }),
   recall: JSON.stringify({
@@ -644,6 +622,33 @@ export const TOOL_STRUCTURED_OUTPUT_FIXTURES: Record<string, string> = {
     prompt: "Which API style?",
     response_type: "text",
   }),
+  instruct_worker: JSON.stringify({
+    worker: "implementer",
+    outcome: "started",
+    round: 2,
+    seq: 1,
+    job_id: "job-2",
+  }),
+  message_coordinator: JSON.stringify({
+    sent: true,
+    seq: 1,
+    needs_reply: false,
+  }),
+  shelve_overlay: JSON.stringify({
+    overlay_id: "result-1",
+    status: "shelved",
+    reason: "defer until migration",
+    accounted: true,
+  }),
+  worker_history: JSON.stringify({
+    worker: "implementer",
+    agent_type: "implementer",
+    scope_mode: "write",
+    state: "delivered",
+    brief: "Implement feature",
+    rounds: [{ round: 1, settled: true, overlay_id: "result-1", changed: true }],
+    messages: [{ seq: 1, from: "coordinator", round: 1, text: "Check edge cases." }],
+  }),
   ...Object.fromEntries(CATALOG_OK_TOOLS.map((tool) => [tool, OK])),
 };
 
@@ -734,7 +739,7 @@ export const TOOL_COMPACTION_FIXTURES: Record<string, string> = {
 /** Spill-path-only payloads (no compaction banner) — overlay promote, etc. */
 export const TOOL_SPILL_FIXTURES: Record<string, string> = {
   promote_overlay_spill: JSON.stringify({
-    job_id: "overlay-1",
+    result_handle: "result-1",
     merge_status: "pending",
     spill_path: "promote-spills/job-mix.json",
     path_status: [{ path: "main.go", status: "conflict", hunk_count: 2 }],

@@ -2,6 +2,7 @@ package contentblob_test
 
 import (
 	"github.com/lycaon/lycaon/internal/bloblifecycle"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"path/filepath"
 	"testing"
@@ -23,7 +24,7 @@ func TestPublicationLeaseProtectsReusedDigestAcrossRootAliases(t *testing.T) {
 	sha, size, stored, err := contentblob.Write(t.Context(), store, []byte("reused historical body"))
 	testutil.FailErr(t, "write body", err)
 	q := db.New(database)
-	testutil.FailErr(t, "record body", q.UpsertContentBlobObject(t.Context(), db.UpsertContentBlobObjectParams{ProjectID: projectID, Sha256: sha, ByteSize: size, StoredSize: stored, CreatedAt: db.FormatTime(time.Now())}))
+	testutil.FailErr(t, "record body", q.UpsertContentBlobObject(t.Context(), db.UpsertContentBlobObjectParams{ProjectID: projectID, Sha256: sha, ByteSize: size, StoredSize: stored, CreatedAt: timelayout.Format(time.Now())}))
 	_, err = database.ExecContext(t.Context(), `INSERT OR IGNORE INTO content_blob_reclaim_queue(project_id,sha256) VALUES(?,?)`, projectID, sha)
 	testutil.FailErr(t, "queue old body", err)
 	release := bloblifecycle.AcquirePublication(alias)
@@ -51,7 +52,7 @@ func TestFailedUnlinkPreservesReclaimReceipt(t *testing.T) {
 	sha, size, stored, err := contentblob.Write(t.Context(), store, []byte("queued body"))
 	testutil.FailErr(t, "write body", err)
 	q := db.New(database)
-	testutil.FailErr(t, "record body", q.UpsertContentBlobObject(t.Context(), db.UpsertContentBlobObjectParams{ProjectID: projectID, Sha256: sha, ByteSize: size, StoredSize: stored, CreatedAt: db.FormatTime(time.Now())}))
+	testutil.FailErr(t, "record body", q.UpsertContentBlobObject(t.Context(), db.UpsertContentBlobObjectParams{ProjectID: projectID, Sha256: sha, ByteSize: size, StoredSize: stored, CreatedAt: timelayout.Format(time.Now())}))
 	_, err = database.ExecContext(t.Context(), `INSERT OR IGNORE INTO content_blob_reclaim_queue(project_id,sha256) VALUES(?,?)`, projectID, sha)
 	testutil.FailErr(t, "queue body", err)
 	rel, err := contentblob.RelPath(sha)

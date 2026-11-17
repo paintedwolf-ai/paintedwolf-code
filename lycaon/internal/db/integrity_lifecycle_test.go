@@ -123,7 +123,7 @@ func reopenAuditLifecycleStore(t *testing.T, path string) *Store {
 	t.Helper()
 	writer, err := openWriter(t.Context(), path, StoreOptions{FastTestSync: true})
 	testutil.FailErr(t, "open audit lifecycle writer", err)
-	reader, err := openReader(t.Context(), path)
+	reader, err := OpenReadOnly(t.Context(), path)
 	testutil.FailErr(t, "open audit lifecycle reader", err)
 	store := newStore(writer, reader)
 	testutil.FailErr(t, "bind physical audit custody", bindStoreHealth(store, path))

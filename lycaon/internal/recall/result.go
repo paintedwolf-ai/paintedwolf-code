@@ -54,8 +54,9 @@ type Hit struct {
 	HitID string `json:"hit_id"`
 	Kind  string `json:"kind"`
 	Tool  string `json:"tool,omitempty"`
-	// SessionID and AgentType attribute the row to the leg that observed it.
+	// SessionID, Worker, and AgentType attribute the row to the worker that observed it.
 	SessionID string `json:"session_id,omitempty"`
+	Worker    string `json:"worker,omitempty"`
 	AgentType string `json:"agent_type,omitempty"`
 	LegID     string `json:"leg_id,omitempty"`
 	// Mine marks rows this caller observed itself.
@@ -78,10 +79,11 @@ type Hit struct {
 
 // Facets are counted dimensions over the answered generation.
 type Facets struct {
-	ByAgent map[string]int `json:"by_agent,omitempty"`
-	ByLeg   map[string]int `json:"by_leg,omitempty"`
-	ByKind  map[string]int `json:"by_kind,omitempty"`
-	ByTool  map[string]int `json:"by_tool,omitempty"`
+	ByWorker map[string]int `json:"by_worker,omitempty"`
+	ByAgent  map[string]int `json:"by_agent,omitempty"`
+	ByLeg    map[string]int `json:"by_leg,omitempty"`
+	ByKind   map[string]int `json:"by_kind,omitempty"`
+	ByTool   map[string]int `json:"by_tool,omitempty"`
 	// Exhaustive is false when facets were counted over a truncated generation.
 	Exhaustive bool `json:"exhaustive"`
 }

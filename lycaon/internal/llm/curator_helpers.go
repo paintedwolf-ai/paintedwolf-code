@@ -2,10 +2,11 @@ package llm
 
 import (
 	"context"
+	"strings"
+
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"strings"
 )
 
 // GlossLine is a capped navigation hint with no handle and no groundable claim.
@@ -112,10 +113,6 @@ func (f CurationFocus) PromptFocus() string {
 		out += "Task: " + task
 	}
 	return out
-}
-
-func SearchFocus(ctx context.Context, tool, target string) CurationFocus {
-	return curationFocus(ctx, tool, "matches", target)
 }
 
 func curationFocus(ctx context.Context, tool, view, target string) CurationFocus {

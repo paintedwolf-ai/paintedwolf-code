@@ -296,7 +296,7 @@ describe("SessionTranscript workers and synthesis", () => {
       ).length,
     ).toBe(1);
     expect(screen.getByTestId("citation-evidence-chicklet")).toBeTruthy();
-    expect(container.querySelector('[data-testid="tool-part-card"]')).toBeTruthy();
+    expect(container.querySelector('[data-testid="action-card"]')).toBeTruthy();
 
     const kinds = messagesToTranscriptItems(messages, {
       layout: "chat",

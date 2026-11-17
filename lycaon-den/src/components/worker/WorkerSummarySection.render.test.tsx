@@ -33,10 +33,13 @@ class FakeClock {
   }
 }
 
+const RESULT_HANDLE = "00000000-0000-4000-8000-0000000000a1";
+
 const finishedWorker: WorkerTask = {
   id: "00000000-0000-4000-8000-000000000099",
   agent_type: "implementer",
   status: "complete",
+  result_handle: RESULT_HANDLE,
   created_at: "2026-11-11T00:00:00Z",
   completed_at: "2026-11-11T00:01:00Z",
   project_id: "proj-1",
@@ -46,9 +49,9 @@ function makeSnapshot(partial: Partial<BriefingSnapshot>): BriefingSnapshot {
   return {
     profile_id: "worker_result",
     profile_version: "1",
-    target_key: finishedWorker.id,
+    target_key: RESULT_HANDLE,
     scope_fingerprint: "fp",
-    target: {},
+    target: { result_handle: RESULT_HANDLE },
     cache_epoch: "1",
     revision: "1",
     status: "idle",
@@ -63,35 +66,40 @@ function makeSnapshot(partial: Partial<BriefingSnapshot>): BriefingSnapshot {
 afterEach(() => resetBriefingLiveForTests());
 
 describe("WorkerSummarySection render", () => {
-  it("shows its three labelled blocks waiting while pending, then settled with evidence", async () => {
+  it("requests its briefing by result handle and shows three labelled blocks waiting, then settled with evidence", async () => {
     const clock = new FakeClock();
     setBriefingClockForTests(clock);
-    let nextSnapshot = makeSnapshot({ status: "pending", pending_sections: ["summary"] });
+    const requestBriefing = vi.fn(async () =>
+      makeSnapshot({ status: "pending", pending_sections: ["summary"] }),
+    );
     setBriefingClient(() => ({
-      requestBriefing: async () => nextSnapshot,
+      requestBriefing,
       getBriefingRecord: async () => {
         throw new Error("unused");
       },
     }));
     const onPresence = vi.fn();
-    const pending = render(() => (
+    const pendingView = render(() => (
       <WorkerSummarySection worker={() => finishedWorker} onSelect={vi.fn()} onPresence={onPresence} />
     ));
     const blocks = () => [...screen.getByTestId("worker-summary").querySelectorAll<HTMLElement>("[data-section]")]
       .map((block) => [block.dataset.section, block.dataset.state ?? block.dataset.source]);
-
     clock.advance(BRIEFING_DEBOUNCE_MS);
     await waitFor(() => expect(blocks()).toEqual([
       ["Contribution", "waiting"], ["Verification", "waiting"], ["Remaining", "waiting"],
     ]));
-    expect(onPresence).toHaveBeenCalledWith(true);
     expect(screen.queryByTestId("briefing-evidence-link")).toBeNull();
-    pending.unmount();
+    expect(requestBriefing).toHaveBeenCalledWith("proj-1", {
+      profile_id: "worker_result",
+      target_ref: { result_handle: RESULT_HANDLE },
+      trigger: "automatic",
+    });
+    expect(onPresence).toHaveBeenCalledWith(true);
+    pendingView.unmount();
 
-    // A fresh view of the same worker reads the settled briefing.
     resetBriefingLiveForTests();
     setBriefingClockForTests(clock);
-    nextSnapshot = makeSnapshot({
+    const settledSnapshot = makeSnapshot({
       result: {
         summary: [{
           section_id: "summary",
@@ -108,7 +116,7 @@ describe("WorkerSummarySection render", () => {
       },
     });
     setBriefingClient(() => ({
-      requestBriefing: async () => nextSnapshot,
+      requestBriefing: async () => settledSnapshot,
       getBriefingRecord: async () => {
         throw new Error("unused");
       },
@@ -119,5 +127,61 @@ describe("WorkerSummarySection render", () => {
       ["Contribution", "summarizer"], ["Verification", "summarizer"], ["Remaining", "summarizer"],
     ]));
     expect(screen.queryByTestId("briefing-evidence-link")).not.toBeNull();
+  });
+
+  it("skips briefing when no result_handle is present and supports inline round summaries", async () => {
+    const clock = new FakeClock();
+    setBriefingClockForTests(clock);
+    const requestBriefing = vi.fn(async () =>
+      makeSnapshot({
+        result: {
+          summary: [{
+            section_id: "summary",
+            text: "Contribution: Earlier round summary.",
+            manifest_hash: "b".repeat(64),
+            source: "summarizer",
+            reused: true,
+            provider_id: "p",
+            model: "m",
+            evidence_quality: [],
+            created_at: "2026-11-11T00:01:00Z",
+          }],
+          evidence_ref: { project_id: "proj-1", record_id: "b".repeat(64) },
+        },
+      }),
+    );
+    setBriefingClient(() => ({
+      requestBriefing,
+      getBriefingRecord: async () => {
+        throw new Error("unused");
+      },
+    }));
+    const unsealed = render(() => (
+      <WorkerSummarySection
+        worker={() => ({ ...finishedWorker, result_handle: undefined })}
+        onSelect={vi.fn()}
+        onPresence={vi.fn()}
+      />
+    ));
+    clock.advance(BRIEFING_DEBOUNCE_MS);
+    expect(requestBriefing).not.toHaveBeenCalled();
+    unsealed.unmount();
+
+    const earlierHandle = "00000000-0000-4000-8000-0000000000a0";
+    render(() => (
+      <WorkerSummarySection
+        inline
+        resultHandle={() => earlierHandle}
+        projectId={() => "proj-1"}
+      />
+    ));
+    clock.advance(BRIEFING_DEBOUNCE_MS);
+    await waitFor(() => expect(screen.getByTestId("worker-round-summary")).toBeTruthy());
+    expect(requestBriefing).toHaveBeenCalledWith("proj-1", {
+      profile_id: "worker_result",
+      target_ref: { result_handle: earlierHandle },
+      trigger: "automatic",
+    });
+    expect(screen.getByText(/Earlier round summary\./)).toBeTruthy();
   });
 });

@@ -3,11 +3,9 @@ package native
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -15,9 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
-	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
-	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // fakeSourceLedger supplies recording and history fixtures without a database.
@@ -159,122 +154,6 @@ func provenanceCtx(dir string, ledger *fakeSourceLedger) tools.ToolContext {
 	tctx.Source.SourceLedger = ledger
 	tctx.Source.History = tools.SourceHistory{Files: ledger, Comparison: ledger, Git: ledger, Authorship: ledger}
 	return tctx
-}
-
-func receiptSource(t *testing.T, out string) map[string]any {
-	t.Helper()
-	var payload struct {
-		Receipt struct {
-			Source map[string]any `json:"source"`
-		} `json:"receipt"`
-	}
-	testutil.FailErr(t, "decode receipt", json.Unmarshal([]byte(out), &payload))
-	return payload.Receipt.Source
-}
-
-func TestReadReceiptStatesRecordedSourceIdentity(t *testing.T) {
-	dir := t.TempDir()
-	_, sha := writeProvenanceFile(t, dir, "main.go", "package main\n")
-	ledger := &fakeSourceLedger{
-		heads: map[string]sourceledger.BranchHead{
-			"r1/main.go": {FileID: "f1", VersionID: "v9", SHA256: sha, State: "content"},
-		},
-		effects: map[string][]sourceledger.Effect{
-			"f1": {{Origin: api.SourceChangeOriginUser, Op: api.SourceChangeOpWrite, Ordinal: 4, TS: time.Date(2026, 8, 26, 14, 2, 0, 0, time.UTC)}},
-		},
-	}
-	read := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
-	out, err := read.Run(context.Background(), map[string]any{"path": "main.go"}, provenanceCtx(dir, ledger))
-	testutil.FailErr(t, "read", err)
-	source := receiptSource(t, out)
-	if source["navigation"] != "source://r1/main.go" {
-		t.Fatalf("navigation = %v", source["navigation"])
-	}
-	if source["recorded"] != true || source["version_id"] != "v9" {
-		t.Fatalf("source stamp = %v, want recorded v9", source)
-	}
-	change, _ := source["last_change"].(map[string]any)
-	if change["actor"] != "user" || change["at"] != "2026-08-26 14:02 UTC" {
-		t.Fatalf("last_change = %v, want user at 14:02 UTC", change)
-	}
-}
-
-func TestReadReceiptStatesUnrecordedBytesAsUnknown(t *testing.T) {
-	dir := t.TempDir()
-	writeProvenanceFile(t, dir, "main.go", "package main\n")
-	ledger := &fakeSourceLedger{
-		heads: map[string]sourceledger.BranchHead{
-			"r1/main.go": {FileID: "f1", VersionID: "v9", SHA256: "different", State: "content"},
-		},
-	}
-	read := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
-	out, err := read.Run(context.Background(), map[string]any{"path": "main.go"}, provenanceCtx(dir, ledger))
-	testutil.FailErr(t, "read", err)
-	source := receiptSource(t, out)
-	if source["recorded"] != false || source["note"] == nil || source["version_id"] != nil {
-		t.Fatalf("unrecorded stamp = %v, want recorded=false with note and no version", source)
-	}
-}
-
-func TestMixedPublicationRemainsVisibleToPublishingAgent(t *testing.T) {
-	dir := t.TempDir()
-	_, sha := writeProvenanceFile(t, dir, "main.go", "package main\n")
-	ledger := &fakeSourceLedger{
-		heads: map[string]sourceledger.BranchHead{"r1/main.go": {FileID: "f1", VersionID: "v2", SHA256: sha, State: "content"}},
-		effects: map[string][]sourceledger.Effect{"f1": {{
-			Origin: api.SourceChangeOriginAgent, SessionID: "test-session", Turn: 9, Ordinal: 2,
-			Contributors: []sourceledger.Contributor{
-				{Origin: api.SourceChangeOriginAgent, SessionID: "test-session", Turn: 9},
-				{Origin: api.SourceChangeOriginUser, SessionID: "test-session", Turn: 9},
-			},
-		}}},
-	}
-	tctx := provenanceCtx(dir, ledger)
-	read := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
-	out, err := read.Run(t.Context(), map[string]any{"path": "main.go"}, tctx)
-	testutil.FailErr(t, "read mixed publication", err)
-	change, _ := receiptSource(t, out)["last_change"].(map[string]any)
-	if change["actor"] != "mixed" || change["detail"] != "you; user" {
-		t.Fatalf("mixed receipt lost authors: %v", change)
-	}
-}
-
-func TestReadReceiptUntrackedPathStatesNoHistory(t *testing.T) {
-	dir := t.TempDir()
-	writeProvenanceFile(t, dir, "main.go", "package main\n")
-	read := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
-	out, err := read.Run(context.Background(), map[string]any{"path": "main.go"}, provenanceCtx(dir, &fakeSourceLedger{}))
-	testutil.FailErr(t, "read", err)
-	source := receiptSource(t, out)
-	if source["recorded"] != false || source["note"] == nil {
-		t.Fatalf("untracked stamp = %v, want recorded=false with note", source)
-	}
-}
-
-func TestReadReceiptWithoutLedgerMakesNoClaim(t *testing.T) {
-	dir := t.TempDir()
-	writeProvenanceFile(t, dir, "main.go", "package main\n")
-	read := &surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}
-	tctx := nativefixture.Context(dir)
-	tctx.Identity.ProjectID = "p1"
-	out, err := read.Run(context.Background(), map[string]any{"path": "main.go"}, tctx)
-	testutil.FailErr(t, "read", err)
-	if source := receiptSource(t, out); source != nil {
-		t.Fatalf("no-ledger read stamped %v, want absent", source)
-	}
-}
-
-func TestReadSourceStampPreservesWorkerDestination(t *testing.T) {
-	dir := t.TempDir()
-	abs, sha := writeProvenanceFile(t, dir, "a #b.go", "file")
-	ctx := provenanceCtx(dir, &fakeSourceLedger{})
-	ctx.Identity.WorkerJobID = "worker-1"
-	ctx.Source.WorkerBranchRoot = dir
-	ctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
-	stamp := sourceview.ReadStamp(t.Context(), ctx, abs, sha)
-	if stamp == nil || stamp.Navigation != "source://r1/a%20%23b.go?job_id=worker-1" {
-		t.Fatalf("worker source stamp=%+v", stamp)
-	}
 }
 
 type preparedCapture func(context.Context, *sql.Tx) (sourceledger.TrackedFile, error)

@@ -134,7 +134,6 @@ describe("scalable layout chrome", () => {
       "components/checkpoint/CheckpointDecisionChicklet.tsx",
       "components/workflow/WorkflowFeedbackChicklet.tsx",
       "components/tool/ActivitySpanCard.tsx",
-      "components/tool/NetworkChicklet.tsx",
       "components/tool/ToolPartShell.tsx",
       "components/citation/CitationEvidenceChicklet.tsx",
       "components/transcript/IndexWarmingChicklet.tsx",

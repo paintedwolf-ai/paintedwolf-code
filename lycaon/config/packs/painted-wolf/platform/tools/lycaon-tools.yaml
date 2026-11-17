@@ -18,12 +18,6 @@ tools:
   - handoff_release_all
   - handoff_health
 
-  # delegate_* multi-worker orchestration
-  - delegate_init
-  - delegate_decompose
-  - delegate_dispatch
-  - delegate_status
-
   # scan_* host security scans and drill-down
   - scan_pack
   - scan_list
@@ -42,11 +36,14 @@ tools:
   - fanout_plan
   - submit_verdict
 
-  # plan_* markdown helpers
+  # plan_* markdown and blueprint seeding helpers
   - plan_append_review_evidence
+  - plan_from_blueprint
 
-  # pack_* coordinator orientation board
+  # pack_board, read_findings, and read_review orientation and review readers
   - pack_board
+  - read_findings
+  - read_review
 
   # record_finding agent feed writer (grounded)
   - record_finding
@@ -54,12 +51,16 @@ tools:
   # request_decision worker escalation (resumable)
   - request_decision
 
-  # request_budget worker ask for a higher tool-round ceiling
-  - request_budget
+  # message_coordinator worker note to its coordinator
+  - message_coordinator
 
-  # parse_* delegation plan parsing
+  # instruct_worker, shelve_overlay, worker_history: long-lived worker control
+  - instruct_worker
+  - shelve_overlay
+  - worker_history
+
+
+  # parse_* structured JSON extraction and validation
   - parse_extract_json
   - parse_validate
   - parse_evaluation
-  - parse_decomposition
-  - parse_delegation_plan

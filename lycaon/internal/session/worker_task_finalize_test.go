@@ -7,14 +7,12 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerresults"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -281,46 +279,9 @@ func TestProjectWorkerCardRejectsInvalidSummaryContract(t *testing.T) {
 	}
 
 	mismatchedEnvelope := workerSummaryFixture(jobID, "child-1", "implementer", api.WorkerSummaryStatusComplete)
-	mismatchedEnvelope.ChildSessionID = "child-2"
+	mismatchedEnvelope.AgentType = "reviewer"
 	if err := mgr.Workers.Cards.Project(ctx, parent.ID, jobID, mismatchedEnvelope); err == nil {
 		t.Fatal("mismatched envelope identity accepted")
-	}
-}
-
-func TestProjectWorkerCardWithTaskQueuedBanner(t *testing.T) {
-	ctx := context.Background()
-	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
-	parent, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
-	testutil.FailErr(t, "create session", err)
-	jobID := "550e8400-e29b-41d4-a716-446655440000"
-	enqueueJSON := `{"agent_type":"implementer","job_id":"` + jobID + `","status":"enqueued"}`
-	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-	toolContent := enqueueJSON
-	banner, err := guidance.RenderTaskQueuedBanner(ctx, guidance.TaskQueuedBannerOpts{
-		AgentType: "implementer", JobID: jobID, MaxInFlight: spawn.MaxInFlightTaskWorkers,
-	})
-	testutil.FailErr(t, "RenderTaskQueuedBanner", err)
-	toolContent += banner
-	tr := guidance.ComposeToolResult(toolContent, guidance.ToolResultFacts{}, nil)
-	guidance.ApplyTaskDispatchMetadata("task", tr, &api.WorkerDispatch{WorkerID: jobID, AgentType: "implementer"})
-	toolMsg := api.Message{
-		ID:         "tool-1",
-		Role:       api.MessageRoleTool,
-		Content:    toolContent,
-		ToolResult: tr,
-	}
-	if err := store.AppendMessages(ctx, parent.ID, toolMsg); err != nil {
-		testutil.FailErr(t, "AppendMessages", err)
-	}
-	if err := mgr.Workers.Cards.Project(ctx, parent.ID, jobID,
-		workerSummaryFixture(jobID, "child-1", "implementer", api.WorkerSummaryStatusComplete)); err != nil {
-		testutil.FailErr(t, "ProjectWorkerCard", err)
-	}
-	msgs, err := store.GetMessages(ctx, parent.ID)
-	testutil.FailErr(t, "GetMessages", err)
-	if !strings.Contains(msgs[0].Content, "<task ") {
-		t.Fatalf("content = %q want the completion envelope as the model-facing body", msgs[0].Content)
 	}
 }
 

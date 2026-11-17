@@ -6,7 +6,7 @@ import { selectProjectNoticeGroups } from "../../notices/notice-select.ts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SourceWalkEffect } from "../../api/types.ts";
 import { WalkStepPage, walkPageTitle } from "./WalkStepPage.tsx";
-import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffers.ts";
+import { openFilesBuffer, resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import type { WalkCommandStep, WalkGitStep, WalkGroupStep, WalkOutsideStep } from "./walk-model.ts";
 import { resetWalkForTests } from "./walk-store.ts";

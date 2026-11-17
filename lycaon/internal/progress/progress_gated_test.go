@@ -23,36 +23,14 @@ func TestTurnHasProgressGatedTool(t *testing.T) {
 }
 
 func TestFirstProgressGatedTool(t *testing.T) {
-	if got := FirstProgressGatedTool([]string{"read", "delegate_dispatch"}); got != "delegate_dispatch" {
-		t.Fatalf("got %q want delegate_dispatch", got)
+	if got := FirstProgressGatedTool([]string{"read", "write"}); got != "write" {
+		t.Fatalf("got %q want write", got)
 	}
 	if got := FirstProgressGatedTool([]string{"read", "web_search"}); got != "task" {
 		t.Fatalf("got %q want task default when no progress-gated tool", got)
 	}
 	if got := FirstProgressGatedTool([]string{"read"}); got != "task" {
 		t.Fatalf("default = %q want task", got)
-	}
-}
-
-func TestProgressGatedToolSinceBoundary(t *testing.T) {
-	history := []api.Message{
-		{Role: api.MessageRoleUser, Content: "research libraries"},
-		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "task", Outcome: api.ToolResultOutcomeCompleted}},
-	}
-	if !ProgressGatedToolSinceBoundary(history, 0) {
-		t.Fatal("expected progress-gated tool since boundary")
-	}
-	if ProgressGatedToolSinceBoundary(history, len(history)) {
-		t.Fatal("sinceIdx at end must not match prior call")
-	}
-}
-
-func TestProgressGatedToolSinceBoundary_ignoresRejectedTask(t *testing.T) {
-	history := []api.Message{
-		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: "task", Outcome: api.ToolResultOutcomeRejected}},
-	}
-	if ProgressGatedToolSinceBoundary(history, 0) {
-		t.Fatal("rejected task must not count as completed")
 	}
 }
 

@@ -1,6 +1,10 @@
 export const briefingCopy = {
   disclaimer: "Written by AI from the evidence shown. It can be incomplete or wrong.",
   waiting: "Summarizing…",
+  notArrived: "Summary did not arrive.",
+  retry: "Try again",
+  showAll: "Show all",
+  resultPending: "Result once it settles.",
   evidenceLink: "Summary evidence",
   evidenceLinkName: "Open summary evidence in Files",
   evidence: {

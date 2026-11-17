@@ -3,7 +3,7 @@ id: COMPLETE_LEG_REVIEW_ASSIGNMENT_MISSING
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.workflow_work_id]
 when: paintedwolf.rejection_code == "COMPLETE_LEG_REVIEW_ASSIGNMENT_MISSING"
 effect: block
 x-paintedwolf-category: recoverable
@@ -16,4 +16,5 @@ fix: '{{ paintedwolf.next_steps }}'
 instead: Preserve the evidence already gathered and report this dependency; do not invent a revision.
 x-paintedwolf-scenarios:
   - id: missing
-    vars: {}
+    vars:
+      workflow_work_id: review/skeptic

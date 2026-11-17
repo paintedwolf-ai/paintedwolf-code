@@ -13,12 +13,11 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
-	"github.com/lycaon/lycaon/internal/tools/native/survey"
 	"github.com/lycaon/lycaon/pkg/api"
 	"golang.org/x/sys/unix"
 )
 
-func TestSourcePathKindsRejectedConsistently(t *testing.T) {
+func TestWriteRejectsDirectoriesAndEscapes(t *testing.T) {
 	adapter, _, project, rootID := newAdapterFixture(t)
 	root := project.Roots[0].Path
 	testutil.FailErr(t, "mkdir", os.Mkdir(filepath.Join(root, "src"), 0o755))
@@ -26,7 +25,7 @@ func TestSourcePathKindsRejectedConsistently(t *testing.T) {
 	outside := t.TempDir()
 	testutil.FailErr(t, "outside", os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("x"), 0o644))
 	testutil.FailErr(t, "link", os.Symlink(filepath.Join(outside, "secret.txt"), filepath.Join(root, "escape.txt")))
-	names := map[string]bool{"read": true, "write": true}
+	names := map[string]bool{"write": true}
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "coordinator", Tools: names}})
 	for _, withDocs := range []bool{false, true} {
 		tctx := tools.ToolContext{
@@ -36,42 +35,19 @@ func TestSourcePathKindsRejectedConsistently(t *testing.T) {
 		if withDocs {
 			tctx.Source.EditorDocuments = adapter
 		}
-		type runner func(path string) error
-		runners := map[string]runner{
-			"read": func(p string) error {
-				_, err := (&survey.ReadTool{Boundary: boundary}).Run(context.Background(), map[string]any{"path": p}, tctx)
-				return err
-			},
-			"write": func(p string) error {
-				_, err := (&native.WriteTool{Boundary: boundary}).Run(context.Background(), map[string]any{"path": p, "content": "x\n"}, tctx)
-				return err
-			},
+		write := func(p string) error {
+			_, err := (&native.WriteTool{Boundary: boundary}).Run(context.Background(), map[string]any{"path": p, "content": "x\n"}, tctx)
+			return err
 		}
 		for _, p := range []string{".", "src"} {
-			for name, run := range runners {
-				err := run(p)
-				var reject *toolrejection.ToolReject
-				if !errors.As(err, &reject) || reject.Code != "READ_IS_DIRECTORY" {
-					t.Fatalf("docs=%v %s %q: want READ_IS_DIRECTORY, got err=%v", withDocs, name, p, err)
-				}
+			var reject *toolrejection.ToolReject
+			if err := write(p); !errors.As(err, &reject) || reject.Code != "READ_IS_DIRECTORY" {
+				t.Fatalf("docs=%v write %q: want READ_IS_DIRECTORY, got err=%v", withDocs, p, err)
 			}
 		}
-		for name, run := range runners {
-			err := run("escape.txt")
-			var reject *toolrejection.ToolReject
-			if !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
-				t.Fatalf("docs=%v %s escape.txt: want SURVEY_PATH_ESCAPE, got err=%v", withDocs, name, err)
-			}
-		}
-		for name, run := range runners {
-			if name == "write" {
-				continue
-			}
-			err := run("missing.txt")
-			var reject *toolrejection.ToolReject
-			if !errors.As(err, &reject) || reject.Code != "READ_PATH_NOT_FOUND" {
-				t.Fatalf("docs=%v %s missing.txt: want READ_PATH_NOT_FOUND, got err=%v", withDocs, name, err)
-			}
+		var reject *toolrejection.ToolReject
+		if err := write("escape.txt"); !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
+			t.Fatalf("docs=%v write escape.txt: want SURVEY_PATH_ESCAPE, got err=%v", withDocs, err)
 		}
 	}
 }

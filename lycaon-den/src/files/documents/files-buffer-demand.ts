@@ -1,6 +1,7 @@
 import { createEffect, createMemo, onCleanup, untrack } from "solid-js";
 import { filesBufferNeedsBody, type FileBuffer } from "./files-buffer-state.ts";
-import { markFilesBufferLoading, presentFilesBufferVersion } from "./project-files-buffers.ts";
+import { markFilesBufferLoading } from "./project-files-buffer-io.ts";
+import { presentFilesBufferVersion } from "./project-files-buffers.ts";
 import { scheduleFilesHotExitPersist } from "./files-hot-exit.ts";
 import { bufferRequestIdentity, sharedBufferLoadRequests } from "./files-buffer-request-tracking.ts";
 import { parseFilesPaneKey } from "../components/files-pane-key.ts";

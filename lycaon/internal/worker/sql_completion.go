@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"strings"
 	"time"
 
@@ -20,15 +21,17 @@ type JobCompletion struct {
 	Suspended bool
 }
 
-// CompleteJob commits the result, overlay manifest, and merge status together.
-func (s *SQLStore) CompleteJob(ctx context.Context, id string, result api.WorkerResult, claimToken string, mergeStatus api.WorkerMergeStatus, clearWorkspace bool, overlayPath string) (JobCompletion, error) {
+// CompleteJob commits a job's result. A job that runs a worker round settles
+// that round in the same transaction, linking the checkpoint its changes
+// published; a job suspended on a decision leaves its round open.
+func (s *SQLStore) CompleteJob(ctx context.Context, id string, result api.WorkerResult, claimToken string, mergeStatus api.WorkerMergeStatus, clearWorkspace bool, overlayPath, checkpointID, criteriaOutcomesJSON string) (JobCompletion, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return JobCompletion{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	q := s.queries.WithTx(tx)
-	completedAt := db.FormatTime(time.Now().UTC())
+	completedAt := timelayout.Format(time.Now().UTC())
 	_, decisionErr := q.GetWorkerDecisionByJob(ctx, id)
 	if decisionErr != nil && !db.IsNoRows(decisionErr) {
 		return JobCompletion{}, decisionErr
@@ -95,9 +98,25 @@ func (s *SQLStore) CompleteJob(ctx context.Context, id string, result api.Worker
 		return JobCompletion{}, fmt.Errorf("running worker %s missing active attempt", id)
 	}
 	if !suspended {
+		resultID := uuid.NewString()
 		if err := q.InsertWorkerResult(ctx, db.InsertWorkerResultParams{
-			ID: uuid.NewString(), WorkerJobID: id, Status: "complete", ResultJson: resultJSON,
+			ID: resultID, WorkerJobID: id, Status: "complete", ResultJson: resultJSON,
 			Error: "", FailureJson: sql.NullString{}, CreatedAt: completedAt, ClaimToken: claimToken,
+		}); err != nil {
+			return JobCompletion{}, err
+		}
+		if criteriaOutcomesJSON != "" && criteriaOutcomesJSON != "[]" {
+			if _, err := q.RecordWorkerResultCriteriaOutcomes(ctx, db.RecordWorkerResultCriteriaOutcomesParams{
+				CriteriaOutcomesJson: criteriaOutcomesJSON, ResultID: resultID,
+			}); err != nil {
+				return JobCompletion{}, err
+			}
+		}
+		if mergeStatus != api.WorkerMergeStatusPending {
+			checkpointID = ""
+		}
+		if _, err := q.SettleWorkerRoundByJob(ctx, db.SettleWorkerRoundByJobParams{
+			SettledAt: db.NullString(completedAt), CheckpointID: checkpointID, JobID: id,
 		}); err != nil {
 			return JobCompletion{}, err
 		}
@@ -129,8 +148,9 @@ func (s *SQLStore) CompleteJob(ctx context.Context, id string, result api.Worker
 	return JobCompletion{Committed: true, Suspended: suspended}, nil
 }
 
-// FailJob atomically fails the active claim.
-func (s *SQLStore) FailJob(ctx context.Context, claimed *api.WorkerTask, errMsg string, failure *api.WorkerFailure) (bool, error) {
+// FailJob atomically fails the active claim. A non-empty keptCheckpoint is
+// the checkpoint the round's branch published; its changes stay pending.
+func (s *SQLStore) FailJob(ctx context.Context, claimed *api.WorkerTask, errMsg string, failure *api.WorkerFailure, keptCheckpoint, criteriaOutcomesJSON string) (bool, error) {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("claimed worker task required")
 	}
@@ -144,13 +164,14 @@ func (s *SQLStore) FailJob(ctx context.Context, claimed *api.WorkerTask, errMsg 
 	}
 	defer func() { _ = tx.Rollback() }()
 	q := s.queries.WithTx(tx)
-	completedAt := db.FormatTime(time.Now().UTC())
+	completedAt := timelayout.Format(time.Now().UTC())
 	n, err := q.FailWorkerJob(ctx, db.FailWorkerJobParams{
-		Error:       db.NullString(errMsg),
-		FailureJson: failureJSON,
-		CompletedAt: sql.NullString{String: completedAt, Valid: true},
-		ID:          claimed.ID,
-		ClaimToken:  db.NullString(claimed.ClaimToken),
+		Error:          db.NullString(errMsg),
+		FailureJson:    failureJSON,
+		CompletedAt:    sql.NullString{String: completedAt, Valid: true},
+		KeptCheckpoint: keptCheckpoint,
+		ID:             claimed.ID,
+		ClaimToken:     db.NullString(claimed.ClaimToken),
 	})
 	if err != nil || n != 1 {
 		return n == 1, err
@@ -166,11 +187,22 @@ func (s *SQLStore) FailJob(ctx context.Context, claimed *api.WorkerTask, errMsg 
 	if attemptRows != 1 {
 		return false, fmt.Errorf("running worker %s missing active attempt", claimed.ID)
 	}
+	resultID := uuid.NewString()
 	if err := q.InsertWorkerResult(ctx, db.InsertWorkerResultParams{
-		ID: uuid.NewString(), WorkerJobID: claimed.ID, Status: "failed",
+		ID: resultID, WorkerJobID: claimed.ID, Status: "failed",
 		ResultJson: sql.NullString{}, Error: errMsg, FailureJson: failureJSON,
 		CreatedAt: completedAt, ClaimToken: claimed.ClaimToken,
 	}); err != nil {
+		return false, err
+	}
+	if criteriaOutcomesJSON != "" && criteriaOutcomesJSON != "[]" {
+		if _, err := q.RecordWorkerResultCriteriaOutcomes(ctx, db.RecordWorkerResultCriteriaOutcomesParams{
+			CriteriaOutcomesJson: criteriaOutcomesJSON, ResultID: resultID,
+		}); err != nil {
+			return false, err
+		}
+	}
+	if _, err := q.SettleWorkerRoundByJob(ctx, db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(completedAt), CheckpointID: keptCheckpoint, JobID: claimed.ID}); err != nil {
 		return false, err
 	}
 	if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, claimed.ID); err != nil {
@@ -205,7 +237,7 @@ func (s *SQLStore) RetryJob(ctx context.Context, claimed *api.WorkerTask, errMsg
 	if err != nil || rows != 1 {
 		return rows == 1, err
 	}
-	completedAt := db.FormatTime(time.Now().UTC())
+	completedAt := timelayout.Format(time.Now().UTC())
 	attemptRows, err := q.CompleteWorkerAttempt(ctx, db.CompleteWorkerAttemptParams{
 		Status: "retryable_failed", Error: errMsg, FailureJson: failureJSON,
 		CompletedAt: sql.NullString{String: completedAt, Valid: true},
@@ -237,7 +269,7 @@ func (s *SQLStore) ParkJob(ctx context.Context, claimed *api.WorkerTask) (bool, 
 		return false, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	q := s.queries.WithTx(tx)
 	rows, err := q.ParkWorkerJob(ctx, db.ParkWorkerJobParams{
 		ID: claimed.ID, ClaimToken: sql.NullString{String: claimed.ClaimToken, Valid: true},

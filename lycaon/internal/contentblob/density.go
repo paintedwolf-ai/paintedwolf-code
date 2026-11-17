@@ -3,6 +3,7 @@ package contentblob
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"path/filepath"
 	"time"
@@ -45,7 +46,7 @@ func RunDensityPass(ctx context.Context, deps DensityDeps, cfg DensityConfig) er
 		return nil
 	}
 	defer lifecycle.Unlock()
-	cutoff := db.FormatTime(time.Now().UTC().Add(-cfg.IdleThreshold()))
+	cutoff := timelayout.Format(time.Now().UTC().Add(-cfg.IdleThreshold()))
 	projectIDs, err := deps.Queries.ListIdleHotProjects(ctx, db.ListIdleHotProjectsParams{
 		LastOpenedAt: cutoff, Limit: int64(cfg.ProjectsPerTick()),
 	})

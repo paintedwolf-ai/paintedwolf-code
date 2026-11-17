@@ -1,0 +1,5 @@
+steps:
+  - tool: "pack_board"
+    complete: true
+    say: "Read the worker's current question with {{ call }}, then answer that."
+    otherwise: "Answer the worker's current question."

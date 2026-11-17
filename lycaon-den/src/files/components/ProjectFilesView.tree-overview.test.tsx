@@ -6,7 +6,7 @@ import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import type { ProjectRoot } from "../../api/types.ts";
 import { ProjectFilesView } from "./ProjectFilesView.tsx";
 import { createAppStore } from "../../store/app-state.ts";
-import { resetProjectFilesForTests } from "../documents/project-files-buffers.ts";
+import { resetProjectFilesForTests } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { fileBufferKey } from "./project-files-model.ts";

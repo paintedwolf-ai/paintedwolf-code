@@ -8,7 +8,6 @@ import (
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestExplicitCheckGateUsesCurrentSource(t *testing.T) {
@@ -17,9 +16,9 @@ func TestExplicitCheckGateUsesCurrentSource(t *testing.T) {
 			passed := false
 			var failure error
 			deps := conditions.RegistryDeps{
-				DelegationStore:    stubDelegationStore{"dep": {id: "dep", legs: []api.Leg{{ID: "leg", Status: api.LegStatusComplete}}}},
-				Evidence:           stubEvidence{"dep/leg/verify": &evidence.Record{GateType: "verify", GateVerdict: "passed", Artifacts: map[string]any{"exit_code": 0, "command": "old-check"}}},
-				DelegationCloseout: func(context.Context, string) (bool, error) { return true, nil },
+				SessionWorkIDs:     func(context.Context, string) ([]string, error) { return []string{"leg"}, nil },
+				Evidence:           stubEvidence{"session/leg/verify": &evidence.Record{GateType: "verify", GateVerdict: "passed", Artifacts: map[string]any{"exit_code": 0, "command": "old-check"}}},
+				PlanCloseout:       func(context.Context, string) (bool, error) { return true, nil },
 				SourceVerifyPassed: func(context.Context, string) (bool, error) { return passed, failure },
 			}
 			reg, err := conditions.NewDefaultRegistry(deps)

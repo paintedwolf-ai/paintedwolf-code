@@ -2,6 +2,7 @@ package toolhost
 
 import (
 	"fmt"
+
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 
@@ -20,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/survey"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/fileage"
 )
 
 // Runtime composes native services with tool dispatch and confinement.
@@ -29,7 +29,6 @@ type Runtime struct {
 	Registry  *tools.DefaultRegistry
 	Executor  *toolexecution.Executor
 	Skills    *SkillServices
-	Survey    *SurveyServices
 	Commands  *CommandServices
 	Mutations *MutationServices
 	Web       *WebServices
@@ -81,12 +80,10 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 	commandRunner := hostcmd.NewRunner()
 
 	gitMgr := git.NewManager()
-	statusCache := git.NewStatusCache(gitMgr)
 	surveyCat, err := survey.LoadCatalog(survey.CatalogDir())
 	if err != nil {
 		return nil, fmt.Errorf("survey catalog: %w", err)
 	}
-	ageProvider := fileage.New(gitMgr)
 	schemaCfg, err := extpacks.LoadEffectiveRegistrySchemas(cfg.Catalog)
 	if err != nil {
 		return nil, fmt.Errorf("tool schemas: %w", err)
@@ -95,25 +92,21 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 	if activation == nil {
 		activation = tools.NewMemoryActivation()
 	}
-	statusPointer := newStatusCacheBinding(statusCache)
 	runtime := &Runtime{Boundary: boundary, Web: &WebServices{boundary: boundary}, Authority: &AuthorityServices{}}
 	registry, mutationTools, err := buildNativeRegistry(buildDeps{
 		boundary:      boundary,
 		git:           gitMgr,
 		privateGit:    cfg.PrivateGit,
-		statusCache:   statusPointer,
 		command:       commandRunner,
 		nativeConfig:  nativeCfg,
 		toolSchemas:   schemaCfg,
 		surveyCatalog: surveyCat,
-		fileAge:       ageProvider,
 		rerank:        cfg.Rerank,
 	})
 	if err != nil {
 		return nil, err
 	}
 	runtime.Registry = registry
-	runtime.Survey = mutationTools.Survey
 	runtime.Mutations = mutationTools.Mutations
 	runtime.Commands = mutationTools.Commands
 	runtime.Skills = mutationTools.Skills

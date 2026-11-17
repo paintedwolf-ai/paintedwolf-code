@@ -1,6 +1,7 @@
 package kick
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -10,28 +11,26 @@ import (
 type KickOption func(*kickMeta)
 
 type kickMeta struct {
-	subject                   string
-	completedAt               *time.Time
-	workerDigest              string
-	evidenceDigest            string
-	commandCompletion         string
-	commandRefusal            string
-	topologyOutput            string
-	pendingOverlayPromoteJobs []string
-	partialWorkerJobs         []string
-	promotedPaths             []string
-	scanID                    string
-	scanStatus                string
-	scanCategories            string
-	scanFindingsCount         int
-	workerBudget              *WorkerBudgetFacts
-	batchSeq                  int
-	batchSeqSet               bool
-	vars                      map[string]any
-	designForkCriterion       string
-	fanoutPlanText            string
-	maxFanoutLegs             int
-	workerDecisionRequest     map[string]any
+	subject               string
+	completedAt           *time.Time
+	workerDigest          string
+	evidenceDigest        string
+	commandCompletion     string
+	commandRefusal        string
+	topologyOutput        string
+	promotedPaths         []string
+	scanID                string
+	scanStatus            string
+	scanCategories        string
+	scanFindingsCount     int
+	workerRoundNotice     *WorkerRoundNoticeFacts
+	batchSeq              int
+	batchSeqSet           bool
+	vars                  map[string]any
+	designForkCriterion   string
+	fanoutPlanText        string
+	maxFanoutLegs         int
+	workerDecisionRequest map[string]any
 }
 
 // WithSubject names the job, leg, scan, or process a kick reports, so kicks
@@ -109,7 +108,7 @@ func WithWorkerDigest(digest string) KickOption {
 }
 
 // WithWorkerDecisionRequest passes a structured worker request_decision into coordinator kicks.
-func WithWorkerDecisionRequest(req api.WorkerDecisionRequest) KickOption {
+func WithWorkerDecisionRequest(req api.WorkerDecisionRequest, worker string) KickOption {
 	return func(m *kickMeta) {
 		question := strings.TrimSpace(req.Question)
 		if question == "" {
@@ -126,6 +125,7 @@ func WithWorkerDecisionRequest(req api.WorkerDecisionRequest) KickOption {
 			class = string(api.WorkerBlockerDecision)
 		}
 		m.workerDecisionRequest = map[string]any{
+			"worker":           strings.TrimSpace(worker),
 			"job_id":           strings.TrimSpace(req.WorkerID),
 			"child_session_id": strings.TrimSpace(req.ChildSessionID),
 			"question":         question,
@@ -203,20 +203,6 @@ func WorkerDecisionRequestFromOptions(opts []KickOption) (api.WorkerDecisionRequ
 	return api.WorkerDecisionRequest{}, false
 }
 
-// WithPendingOverlayPromote records overlays awaiting review.
-func WithPendingOverlayPromote(jobIDs []string) KickOption {
-	return func(m *kickMeta) {
-		m.pendingOverlayPromoteJobs = append([]string(nil), jobIDs...)
-	}
-}
-
-// WithPartialWorkerJobs lists implementer job ids whose envelopes are still partial.
-func WithPartialWorkerJobs(jobIDs []string) KickOption {
-	return func(m *kickMeta) {
-		m.partialWorkerJobs = append([]string(nil), jobIDs...)
-	}
-}
-
 // WithScanFinished passes terminal scan facts into the scan-finished kick template.
 func WithScanFinished(scanID, status, categories string, findingsCount int) KickOption {
 	return func(m *kickMeta) {
@@ -227,48 +213,89 @@ func WithScanFinished(scanID, status, categories string, findingsCount int) Kick
 	}
 }
 
-// WorkerBudgetFacts describes one worker's tool-round ceiling for coordinator guidance.
-type WorkerBudgetFacts struct {
-	JobID          string
-	ChildSessionID string
-	Used           int
-	Max            int
-	HostMax        int
-	// Request is the worker's unanswered ask for more rounds.
-	Request *api.WorkerBudgetRequest
-	// Exhausted marks a partial finish at the ceiling.
-	Exhausted bool
-	// ResumeMax is the ceiling a resume of an exhausted worker should carry.
-	ResumeMax int
+// Round notice kinds.
+const (
+	// RoundNoticeConsumption reports a round's measured consumption.
+	RoundNoticeConsumption = "consumption"
+	// RoundNoticeQuiet reports a round with no durable progress for a while.
+	RoundNoticeQuiet = "quiet"
+)
+
+// Round in-flight states a quiet notice names.
+const (
+	RoundInFlightQueued    = "queued"
+	RoundInFlightModelCall = "model_call"
+	RoundInFlightTools     = "tools"
+)
+
+// WorkerRoundNoticeFacts are the measurements a round notice carries to the
+// coordinator. They inform; nothing in them stops or judges the round.
+type WorkerRoundNoticeFacts struct {
+	JobID string
+	// Worker is the name the coordinator addresses the worker by.
+	Worker         string
+	AgentType      string
+	RoundOrdinal   int64
+	WorkflowWorkID string
+	Kind           string
+	// ModelCalls, Tokens and SpendNanoUSD measure the round so far.
+	ModelCalls   int
+	Tokens       int
+	SpendNanoUSD int64
+	SpendPriced  bool
+	// QuietFor and InFlight describe a quiet round; Tools and ToolsFor name
+	// its in-flight batch and how long it has run.
+	QuietFor  time.Duration
+	InFlight  string
+	ToolCalls int
+	ToolsDone int
+	Tools     []string
+	ToolsFor  time.Duration
+	// LatestMessageSeq is the seq of the worker's latest message; zero when
+	// it has sent none.
+	LatestMessageSeq int64
 }
 
-// WithWorkerBudget passes one worker's ceiling facts into budget and finish kicks.
-func WithWorkerBudget(facts WorkerBudgetFacts) KickOption {
+// WithWorkerRoundNotice passes one round notice's measurements into its kick.
+func WithWorkerRoundNotice(facts WorkerRoundNoticeFacts) KickOption {
 	return func(m *kickMeta) {
 		facts.JobID = strings.TrimSpace(facts.JobID)
-		facts.ChildSessionID = strings.TrimSpace(facts.ChildSessionID)
-		m.workerBudget = &facts
+		m.workerRoundNotice = &facts
 	}
 }
 
-// renderData projects budget facts under the names budget templates read.
-func (f WorkerBudgetFacts) renderData(data map[string]any) {
-	data["job_id"] = f.JobID
-	data["tool_loops_used"] = f.Used
-	data["max_tool_loops"] = f.Max
-	data["host_max_tool_loops"] = f.HostMax
-	if f.ChildSessionID != "" {
-		data["child_session_id"] = f.ChildSessionID
+const nanoUSDPerCent = 10_000_000
+
+// renderData projects round notice facts under the names the template reads.
+func (f WorkerRoundNoticeFacts) renderData(data map[string]any) {
+	data["worker"] = f.Worker
+	data["agent_type"] = f.AgentType
+	if f.RoundOrdinal > 0 {
+		data["round_ordinal"] = f.RoundOrdinal
 	}
-	if f.Request != nil {
-		data["budget_request_open"] = true
-		data["requested_max"] = f.Request.RequestedMax
-		data["requested_rounds"] = f.Request.Rounds
-		data["remaining_work"] = append([]string(nil), f.Request.RemainingWork...)
+	if f.WorkflowWorkID != "" {
+		data["workflow_work_id"] = f.WorkflowWorkID
 	}
-	if f.Exhausted {
-		data["worker_budget_exhausted"] = true
-		data["suggested_resume_max"] = f.ResumeMax
+	data["notice_kind"] = f.Kind
+	data["model_calls"] = f.ModelCalls
+	data["tokens"] = f.Tokens
+	data["latest_message_seq"] = f.LatestMessageSeq
+	// A priced round that cost nothing has no spend to report; one under a
+	// cent would round to a misleading $0.00.
+	switch {
+	case !f.SpendPriced || f.SpendNanoUSD <= 0:
+	case f.SpendNanoUSD < nanoUSDPerCent:
+		data["spend_under_cent"] = true
+	default:
+		data["estimated_spend_usd"] = fmt.Sprintf("%.2f", float64(f.SpendNanoUSD)/1e9)
+	}
+	if f.Kind == RoundNoticeQuiet {
+		data["quiet_minutes"] = int(f.QuietFor / time.Minute)
+		data["in_flight"] = f.InFlight
+		data["tool_calls"] = f.ToolCalls
+		data["tools_done"] = f.ToolsDone
+		data["tools"] = f.Tools
+		data["tools_minutes"] = int(f.ToolsFor / time.Minute)
 	}
 }
 
@@ -329,26 +356,15 @@ func cloneKickMeta(m kickMeta) kickMeta {
 		t := m.completedAt.UTC()
 		out.completedAt = &t
 	}
-	if m.workerBudget != nil {
-		facts := *m.workerBudget
-		if facts.Request != nil {
-			req := *facts.Request
-			req.RemainingWork = append([]string(nil), req.RemainingWork...)
-			facts.Request = &req
-		}
-		out.workerBudget = &facts
+	if m.workerRoundNotice != nil {
+		facts := *m.workerRoundNotice
+		out.workerRoundNotice = &facts
 	}
 	if len(m.workerDecisionRequest) > 0 {
 		out.workerDecisionRequest = make(map[string]any, len(m.workerDecisionRequest))
 		for k, v := range m.workerDecisionRequest {
 			out.workerDecisionRequest[k] = v
 		}
-	}
-	if len(m.pendingOverlayPromoteJobs) > 0 {
-		out.pendingOverlayPromoteJobs = append([]string(nil), m.pendingOverlayPromoteJobs...)
-	}
-	if len(m.partialWorkerJobs) > 0 {
-		out.partialWorkerJobs = append([]string(nil), m.partialWorkerJobs...)
 	}
 	if len(m.promotedPaths) > 0 {
 		out.promotedPaths = append([]string(nil), m.promotedPaths...)

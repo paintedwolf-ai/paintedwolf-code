@@ -193,7 +193,6 @@ func recordInlineCodeLiteral(out *guidanceEmissionScan, fset *token.FileSet, rel
 		return
 	}
 	if !strings.HasPrefix(rel, "internal/session/") &&
-		!strings.HasPrefix(rel, "internal/delegation/") &&
 		!strings.HasPrefix(rel, "internal/coordinator/") {
 		return
 	}

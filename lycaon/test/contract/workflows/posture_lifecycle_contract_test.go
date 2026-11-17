@@ -85,11 +85,11 @@ func TestPostureRuleBehaviorMatrix(t *testing.T) {
 		wantDeny bool
 		wantCode string
 	}{
-		{"spec/delegate", api.SessionPostureSpec, "delegate_dispatch", nil, nil, true, "SPEC_POSTURE_DELEGATION_FORBIDDEN"},
+		{"spec/delegate", api.SessionPostureSpec, "plan_from_blueprint", nil, nil, true, "SPEC_POSTURE_DELEGATION_FORBIDDEN"},
 		{"spec/state", api.SessionPostureSpec, "state_create", nil, nil, true, "SPEC_POSTURE_STATE_FORBIDDEN"},
-		{"build/delegate", api.SessionPostureBuild, "delegate_dispatch", nil, nil, false, ""},
+		{"build/delegate", api.SessionPostureBuild, "plan_from_blueprint", nil, nil, false, ""},
 		{"build/disallowed-agent", api.SessionPostureBuild, "task", map[string]any{"agent_type": "sentinel"}, []string{"implementer"}, true, "DISALLOWED_AGENT"},
-		{"vet/delegate", api.SessionPostureVet, "delegate_dispatch", nil, nil, true, "VET_POSTURE_DELEGATION_FORBIDDEN"},
+		{"vet/delegate", api.SessionPostureVet, "plan_from_blueprint", nil, nil, true, "VET_POSTURE_DELEGATION_FORBIDDEN"},
 		// A vet turn resolves to an observe_ surface that offers no write.
 		{"vet/write", api.SessionPostureVet, "write", nil, nil, false, ""},
 		{"spec/write", api.SessionPostureSpec, "write", nil, nil, false, ""},

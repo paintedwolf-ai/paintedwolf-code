@@ -73,10 +73,10 @@ modelIndependentWebE2e("Walk publishes a delayed file selection and can reselect
     await page.evaluate(async ({ projectId, rootId, sessionId, pinId }) => {
       const connectionUrl = "/src/platform/connection/app-connection.ts";
       const walkUrl = "/src/files/walk/walk-store.ts";
-      const buffersUrl = "/src/files/documents/project-files-buffers.ts";
+      const buffersUrl = "/src/files/documents/project-files-buffer-lifecycle.ts";
       const connection = await import(/* @vite-ignore */ connectionUrl) as typeof import("../src/platform/connection/app-connection.ts");
       const walk = await import(/* @vite-ignore */ walkUrl) as typeof import("../src/files/walk/walk-store.ts");
-      const buffers = await import(/* @vite-ignore */ buffersUrl) as typeof import("../src/files/documents/project-files-buffers.ts");
+      const buffers = await import(/* @vite-ignore */ buffersUrl) as typeof import("../src/files/documents/project-files-buffer-lifecycle.ts");
       const client = connection.getLycaonClient()!;
       for (const name of ["a.ts", "unrelated.ts"]) {
         buffers.openFilesBuffer(projectId, { rootId, rootLabel: "Project root", path: name, intent: "permanent" });

@@ -83,11 +83,6 @@ func isStale(err error) bool {
 	return errors.As(err, &stale)
 }
 
-// currentExtensionRevision reads the optimistic token for GET responses.
-func (s *Mutations) currentExtensionRevision(projectDir string) (string, error) {
-	return s.Owner.CurrentRevision(projectDir)
-}
-
 func (s *Mutations) InvalidateEffectiveCatalog(ctx context.Context, projectID string) {
 	s.Sessions.Catalog.InvalidateEffectiveCatalog(projectID)
 	s.Contributions.invalidateDeviceContributionFrame()

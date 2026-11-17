@@ -2,12 +2,14 @@ package packboard
 
 import (
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// MaxOrientationWorkers bounds named worker rows rendered inline on the board.
+const MaxOrientationWorkers = 12
 
 // WorkerOutcomeCounts separates returned delivery from execution lifecycle.
 type WorkerOutcomeCounts map[string]int
@@ -47,35 +49,65 @@ func (counts WorkerOutcomeCounts) Labels() []string {
 	return labels
 }
 
-// partialWorkerLines pairs the latest returned partial with its exact child identity.
-func partialWorkerLines(tasks []api.WorkerTask) []string {
-	latest := make(map[string]api.WorkerTask)
-	for _, task := range tasks {
-		child := strings.TrimSpace(task.ChildSessionID)
-		if child == "" {
-			continue
-		}
-		prior, found := latest[child]
-		if !found || task.CreatedAt.After(prior.CreatedAt) || (task.CreatedAt.Equal(prior.CreatedAt) && task.ID > prior.ID) {
-			latest[child] = task
+// FormatNamedWorkerLine renders one orientation row for a named worker.
+func FormatNamedWorkerLine(w api.BoardWorker, includeDetail bool) string {
+	name := strings.TrimSpace(w.Name)
+	if name == "" {
+		return ""
+	}
+	agent := strings.TrimSpace(w.AgentType)
+	if agent == "" {
+		agent = "worker"
+	}
+	state := strings.TrimSpace(string(w.State))
+	if r := strings.TrimSpace(string(w.Reason)); r != "" {
+		state += ":" + r
+	}
+	parts := []string{"Worker: " + name, agent, state}
+	if ws := strings.TrimSpace(w.WorkspaceState); ws != "" {
+		parts = append(parts, ws)
+	}
+	if h := strings.TrimSpace(w.ResultHandle); h != "" {
+		if d := strings.TrimSpace(string(w.ResultDisposition)); d != "" {
+			parts = append(parts, h+":"+d)
+		} else {
+			parts = append(parts, h)
 		}
 	}
-	var lines []string
-	for child, task := range latest {
-		if !task.Status.IsTerminal() || api.WorkerTaskLegStatus(task) != "partial" || strings.TrimSpace(task.ID) == "" {
-			continue
-		}
-		lines = append(lines, fmt.Sprintf("Partial: job_id=%s · child_session_id=%s", task.ID, child))
+	if q := strings.TrimSpace(w.Question); q != "" {
+		parts = append(parts, "ask: "+q)
 	}
-	sort.Strings(lines)
-	return lines
+	if includeDetail {
+		if len(w.ChangedPaths) > 0 {
+			seg := "changed: " + strings.Join(w.ChangedPaths, ",")
+			if w.ChangedOmitted > 0 {
+				seg += fmt.Sprintf(" (+%d)", w.ChangedOmitted)
+			}
+			parts = append(parts, seg)
+		}
+		if about := strings.TrimSpace(w.About); about != "" {
+			parts = append(parts, about)
+		}
+	}
+	return strings.Join(parts, " · ")
 }
 
-// workerStateLines keeps completed execution distinct from pending integration.
-func workerStateLines(snapshot api.BoardSnapshot, now time.Time) []string {
+// workerStateLinesWithDetail keeps completed execution distinct from pending integration.
+func workerStateLinesWithDetail(snapshot api.BoardSnapshot, now time.Time, includeDetail bool) []string {
 	tasks := WorkerTasksFromSnapshot(snapshot)
+	named := NamedWorkersFromSnapshot(snapshot)
 	var lines []string
-	if work := FormatWorkLine(tasks, now); work != "" {
+	if len(named) > 0 {
+		shown := named
+		if len(shown) > MaxOrientationWorkers {
+			shown = shown[:MaxOrientationWorkers]
+		}
+		for _, w := range shown {
+			if line := FormatNamedWorkerLine(w, includeDetail); line != "" {
+				lines = append(lines, line)
+			}
+		}
+	} else if work := FormatWorkLine(tasks, now); work != "" {
 		lines = append(lines, work)
 	}
 	if merge := FormatBranchMergeLine(tasks); merge != "" {
@@ -84,9 +116,5 @@ func workerStateLines(snapshot api.BoardSnapshot, now time.Time) []string {
 	if planLine := FormatOverlayMergePlanLine(OverlayMergePlanFromSnapshot(snapshot)); planLine != "" {
 		lines = append(lines, planLine)
 	}
-	if pathLine := FormatPromotePathStatusLine(PromotePathsFromSnapshot(snapshot)); pathLine != "" {
-		lines = append(lines, pathLine)
-	}
-	lines = append(lines, partialWorkerLines(tasks)...)
 	return lines
 }

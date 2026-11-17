@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"os"
 	"path/filepath"
 	"testing"
@@ -82,7 +83,7 @@ func TestLargeStreamRecordsDigestAndSizeWithoutRetainingBody(t *testing.T) {
 	tctx.Source.GitMutations = ledger.Git
 	tctx.Source.SourceMutations = projectsource.NewSourceMutationService(ledger.LedgerDB(), ledger)
 
-	body := bytes.Repeat([]byte("x"), sourceledger.MaxRevisionContentBytes+1)
+	body := bytes.Repeat([]byte("x"), sourceblob.MaxRevisionContentBytes+1)
 	path := filepath.Join(dir, "large.txt")
 	_, err := applyAgentStream(t.Context(), tctx, agentStreamRequest{
 		Target: testMutationTarget(path), Source: bytes.NewReader(body),
@@ -130,7 +131,7 @@ func TestDeleteRecordsPreImageAndRenameRecordsTip(t *testing.T) {
 	from := filepath.Join(dir, "from.txt")
 	to := filepath.Join(dir, "to.txt")
 	testutil.FailErr(t, "seed rename", os.WriteFile(from, []byte("moved\n"), 0o644))
-	testutil.FailErr(t, "rename", renameAgentPath(t.Context(), tctx, testMutationTarget(from), testMutationTarget(to), programDoorMemory(t)))
+	testutil.FailErr(t, "rename", renameAgentEntry(t.Context(), tctx, testMutationTarget(from), testMutationTarget(to), 0, programDoorMemory(t), nil))
 	res, err := st.Walk.QueryWalk(t.Context(), "p1",
 		sourceledger.Baseline{Kind: sourceledger.BaselineSession, SessionID: "s1"},
 		10, 0, sourceledger.CommitLens{})

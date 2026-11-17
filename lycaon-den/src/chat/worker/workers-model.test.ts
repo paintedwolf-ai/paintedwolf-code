@@ -22,7 +22,6 @@ import {
   workerDependencyLabel,
   workerStoreFingerprint,
   workerTasksSliceEqual,
-  workerEventFromTaskToolMessage,
   failedDispatchWorkersFromMessages,
   failedDispatchWorkerId,
   sessionWorkerRows,
@@ -78,8 +77,8 @@ describe("workers-model", () => {
     ).toBe(false);
     expect(
       workerTasksSliceEqual(
-        [{ ...row, max_tool_loops: 40, tool_loops_used: 1 }],
-        [{ ...row, max_tool_loops: 40, tool_loops_used: 2 }],
+        [{ ...row, tool_loops_used: 1 }],
+        [{ ...row, tool_loops_used: 2 }],
       ),
     ).toBe(false);
     expect(
@@ -101,7 +100,6 @@ describe("workers-model", () => {
   it("reconcileWorkerFromListRefresh keeps higher live tool_loops_used", () => {
     const existing: WorkerTask = {
       ...worker("job-1", "running"),
-      max_tool_loops: 40,
       tool_loops_used: 12,
       context_usage: {
         prompt_tokens: 8000,
@@ -123,14 +121,12 @@ describe("workers-model", () => {
     const existing = [
       {
         ...worker("job-1", "running"),
-        max_tool_loops: 40,
         tool_loops_used: 7,
       },
     ];
     const incoming = [
       {
         ...worker("job-1", "running"),
-        max_tool_loops: 40,
       },
     ];
     expect(reconcileSessionWorkersFromList(existing, incoming)[0]?.tool_loops_used).toBe(
@@ -279,7 +275,6 @@ describe("workers-model", () => {
                 agent_type: "path-explorer",
                 brief: { goal: "Map src/ layout", done_when: ["Return results."] },
                 scope: { mode: "read", paths: ["src/"] },
-                max_tool_loops: 12,
               },
             },
           ],
@@ -301,7 +296,6 @@ describe("workers-model", () => {
               agent_type: "path-explorer",
               brief: { goal: "Map src/ layout", done_when: ["Return results."] },
               scope: { mode: "read", paths: ["src/"] },
-              max_tool_loops: 12,
             },
           },
           created_at: "t",
@@ -387,48 +381,6 @@ describe("workers-model", () => {
         "sess-1",
       ).parent_session_id,
     ).toBe("sess-1");
-  });
-
-  it("workerEventFromTaskToolMessage seeds max_tool_loops from task() args", () => {
-    const messages = [
-      {
-        id: "a1",
-        role: "assistant" as const, origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const,
-        content: "",
-        tool_calls: [
-          {
-            id: "tc1",
-            name: "task",
-            args: {
-              agent_type: "implementer",
-              brief: { goal: "Build feature", done_when: ["Return results."] },
-              max_tool_loops: 25,
-            },
-          },
-        ],
-        created_at: "t",
-      },
-      {
-        id: "t1",
-        role: "tool" as const, origin: "tool" as const, authority: "none" as const, trust_tier: "untrusted" as const,
-        content: '{"job_id":"job-1","status":"enqueued"}',
-        tool_result: {
-          content: '{"job_id":"job-1","status":"enqueued"}',
-          dispatch: { worker_id: "job-1", agent_type: "implementer" },
-          tool: "task",
-          tool_call_id: "tc1",
-          assistant_message_id: "a1",
-          tool_args: {
-            agent_type: "implementer",
-            brief: { goal: "Build feature", done_when: ["Return results."] },
-            max_tool_loops: 25,
-          },
-        },
-        created_at: "t",
-      },
-    ];
-    const ev = workerEventFromTaskToolMessage("sess-1", messages, messages[1]!);
-    expect(ev?.max_tool_loops).toBe(25);
   });
 
   it("matchWorkerForTask returns undefined without wire job_id or child_session_id", () => {

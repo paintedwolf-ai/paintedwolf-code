@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 
@@ -74,7 +75,7 @@ func seedWalkGit(t *testing.T, store *Store, id, session string, turn int, branc
 	testutil.FailErr(t, "allocate movement ordinal", err)
 	err = q.InsertSourceGitTransition(t.Context(), db.InsertSourceGitTransitionParams{
 		ID: id, ProjectID: "p1", RootID: "r1", BranchID: branch, Kind: "commit", ToCommit: id,
-		Ordinal: ordinal, ObservedTs: db.FormatTime(ts), SessionID: session, Turn: int64(turn), ToolName: "git_commit",
+		Ordinal: ordinal, ObservedTs: timelayout.Format(ts), SessionID: session, Turn: int64(turn), ToolName: "git_commit",
 	})
 	testutil.FailErr(t, "insert movement", err)
 	testutil.FailErr(t, "commit movement", tx.Commit())
@@ -125,7 +126,7 @@ func TestWalkGitRespectsSessionTurnWorkspaceAndArchive(t *testing.T) {
 	seedWalkGit(t, store, "external", "", 0, "", now)
 	seedWalkGit(t, store, "worktree", "s1", 1, "worktree:other", now)
 	seedWalkGit(t, store, "after", "", 0, "", now.Add(time.Hour))
-	_, err := store.sqlDB.ExecContext(ctx, `UPDATE sessions SET archived_at=? WHERE id='s1'`, db.FormatTime(now.Add(time.Minute)))
+	_, err := store.sqlDB.ExecContext(ctx, `UPDATE sessions SET archived_at=? WHERE id='s1'`, timelayout.Format(now.Add(time.Minute)))
 	testutil.FailErr(t, "archive session", err)
 	for _, tc := range []struct {
 		name     string

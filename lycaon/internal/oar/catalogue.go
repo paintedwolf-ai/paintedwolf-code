@@ -18,14 +18,6 @@ const (
 	FactTierHost     FactTier = "host"     // published under the host namespace
 )
 
-// Standard profile names. A profile is provided whole or not at all
-// ([OAR-FACT-13]).
-const (
-	ProfileFilesystem    = oarcopy.ProfileFilesystem
-	ProfileContentSafety = oarcopy.ProfileContentSafety
-	ProfileMCP           = oarcopy.ProfileMCP
-)
-
 // factDecl is one typed fact in the closed environment.
 type factDecl struct {
 	name    string
@@ -183,9 +175,9 @@ var factDecls = []factDecl{
 	{"last_audit_ungrounded", oarcore.TypeBool, FactTierHost, ""},
 	{"grounding_escalated", oarcore.TypeBool, FactTierHost, ""},
 	{"command_not_argv", oarcore.TypeBool, FactTierHost, ""},
-	{"is_directory", oarcore.TypeBool, FactTierStandard, ProfileFilesystem},
-	{"not_found", oarcore.TypeBool, FactTierStandard, ProfileFilesystem},
-	{"path_outside_scope", oarcore.TypeBool, FactTierStandard, ProfileFilesystem},
+	{"is_directory", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileFilesystem},
+	{"not_found", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileFilesystem},
+	{"path_outside_scope", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileFilesystem},
 	{"path_denied", oarcore.TypeBool, FactTierHost, ""},
 	{"bulk_denied", oarcore.TypeBool, FactTierHost, ""},
 	{"binary_denied", oarcore.TypeBool, FactTierHost, ""},
@@ -206,21 +198,21 @@ var factDecls = []factDecl{
 	{"selector_ambiguous", oarcore.TypeBool, FactTierHost, ""},
 	{"reject_observation", oarcore.TypeString, FactTierHost, ""},
 	{"rejection_code", oarcore.TypeString, FactTierHost, ""},
-	{"prompt_injection_score", oarcore.TypeDouble, FactTierStandard, ProfileContentSafety},
-	{"jailbreak_score", oarcore.TypeDouble, FactTierStandard, ProfileContentSafety},
-	{"pii_entities", oarcore.TypeListMap, FactTierStandard, ProfileContentSafety},
-	{"secret_matches", oarcore.TypeListMap, FactTierStandard, ProfileContentSafety},
-	{"mcp_server_id", oarcore.TypeString, FactTierStandard, ProfileMCP},
-	{"mcp_tool_name", oarcore.TypeString, FactTierStandard, ProfileMCP},
-	{"mcp_qualified_tool", oarcore.TypeString, FactTierStandard, ProfileMCP},
-	{"mcp_server_configured", oarcore.TypeBool, FactTierStandard, ProfileMCP},
-	{"mcp_server_enabled", oarcore.TypeBool, FactTierStandard, ProfileMCP},
-	{"mcp_configured_servers", oarcore.TypeListString, FactTierStandard, ProfileMCP},
-	{"mcp_enabled_servers", oarcore.TypeListString, FactTierStandard, ProfileMCP},
-	{"mcp_call_ok", oarcore.TypeBool, FactTierStandard, ProfileMCP},
-	{"mcp_error_code", oarcore.TypeString, FactTierStandard, ProfileMCP},
-	{"mcp_schema_matched", oarcore.TypeBool, FactTierStandard, ProfileMCP},
-	{"mcp_result", oarcore.TypeMap, FactTierStandard, ProfileMCP},
+	{"prompt_injection_score", oarcore.TypeDouble, FactTierStandard, oarcopy.ProfileContentSafety},
+	{"jailbreak_score", oarcore.TypeDouble, FactTierStandard, oarcopy.ProfileContentSafety},
+	{"pii_entities", oarcore.TypeListMap, FactTierStandard, oarcopy.ProfileContentSafety},
+	{"secret_matches", oarcore.TypeListMap, FactTierStandard, oarcopy.ProfileContentSafety},
+	{"mcp_server_id", oarcore.TypeString, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_tool_name", oarcore.TypeString, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_qualified_tool", oarcore.TypeString, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_server_configured", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_server_enabled", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_configured_servers", oarcore.TypeListString, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_enabled_servers", oarcore.TypeListString, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_call_ok", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_error_code", oarcore.TypeString, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_schema_matched", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileMCP},
+	{"mcp_result", oarcore.TypeMap, FactTierStandard, oarcopy.ProfileMCP},
 	{"credential_length", oarcore.TypeInt, FactTierHost, ""},
 	{"credential_distinct_words", oarcore.TypeInt, FactTierHost, ""},
 	{"credential_longest_run", oarcore.TypeInt, FactTierHost, ""},
@@ -270,100 +262,15 @@ var observationFns = []observationFn{
 		return EvalToolArgBool(h.get(), s), nil
 	}},
 	// The members of mcp_result that selection cannot type.
-	{"mcp_field_bool", oarcore.TypeBool, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) (any, error) {
+	{"mcp_field_bool", oarcore.TypeBool, FactTierStandard, oarcopy.ProfileMCP, func(h *evalHolder, s string) (any, error) {
 		return mcpMember[bool](h.get(), s)
 	}},
-	{"mcp_field_int", oarcore.TypeInt, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) (any, error) {
+	{"mcp_field_int", oarcore.TypeInt, FactTierStandard, oarcopy.ProfileMCP, func(h *evalHolder, s string) (any, error) {
 		return mcpMember[int64](h.get(), s)
 	}},
 }
 
-// Fact classes identify counter, detector, lazy-provider, and structural sources.
-var engineCounterFacts = map[string]struct{}{
-	"fire_count": {}, "breaker_count": {}, "same_code_reject_run": {}, "same_call_run": {},
-	"paintedwolf.repeat_count": {}, "paintedwolf.fruitless_search_run": {},
-	"paintedwolf.code_reject_responses": {}, "paintedwolf.credential_decisions": {},
-}
-
-var detectorFacts = map[string]struct{}{
-	"secret_matches": {},
-}
-
-// FactInfo is the docs-facing projection of one catalogue fact.
-type FactInfo struct {
-	Name          string
-	Type          string   // OAR fact type
-	Class         string   // structural | derived | engine_counter | detector
-	Tier          FactTier // core | standard | host
-	Profile       string   // standard profile name; empty unless Tier is standard
-	PublishedName string   // qualified host fact name; empty for portable facts
-}
-
-// FunctionInfo is the docs-facing projection of one observation function.
-type FunctionInfo struct {
-	Name          string
-	Signature     string // e.g. (string) -> bool
-	Tier          FactTier
-	Profile       string
-	PublishedName string
-}
-
-// FactCatalogue returns facts in declaration order.
-func FactCatalogue() []FactInfo {
-	out := make([]FactInfo, 0, len(factDecls))
-	for _, d := range factDecls {
-		out = append(out, FactInfo{
-			Name:          d.name,
-			Type:          factTypeString(d.typ),
-			Class:         factClass(d.name),
-			Tier:          d.tier,
-			Profile:       d.profile,
-			PublishedName: publishedHostName(d.name, d.tier),
-		})
-	}
-	return out
-}
-
-// ObservationFunctionCatalogue returns the parameterized observation
-// functions in declaration order, for docs codegen.
-func ObservationFunctionCatalogue() []FunctionInfo {
-	out := make([]FunctionInfo, 0, len(observationFns))
-	for _, f := range observationFns {
-		out = append(out, FunctionInfo{
-			Name:          f.name,
-			Signature:     "(string) -> " + factTypeString(f.ret),
-			Tier:          f.tier,
-			Profile:       f.profile,
-			PublishedName: publishedHostName(f.name, f.tier),
-		})
-	}
-	return out
-}
-
-func factClass(name string) string {
-	// expensiveFacts and engineCounterFacts are keyed by the published name,
-	// which is the name a rule writes ([OAR-FACT-15]).
-	name = PublishedFactName(name)
-	if _, ok := engineCounterFacts[name]; ok {
-		return "engine_counter"
-	}
-	if _, ok := detectorFacts[name]; ok {
-		return "detector"
-	}
-	if _, ok := expensiveFacts[name]; ok {
-		return "derived"
-	}
-	return "structural"
-}
-
 func factTypeString(t oarcore.FactType) string { return string(t) }
-
-func publishedHostName(name string, tier FactTier) string {
-	if tier != FactTierHost {
-		return ""
-	}
-	return oarcopy.HostFactNamespace + "." + name
-}
 
 func buildFactTiers() map[string]FactTier {
 	out := make(map[string]FactTier, len(factDecls)+len(occurrenceFactDecls)+len(observationFns))
@@ -374,15 +281,7 @@ func buildFactTiers() map[string]FactTier {
 	return out
 }
 
-// PublishedFactName namespaces host facts and leaves standard names bare ([OAR-FACT-15]).
-func PublishedFactName(name string) string {
-	if published := publishedHostName(name, bareFactTiers[name]); published != "" {
-		return published
-	}
-	return name
-}
-
-// BareFactName is the inverse of PublishedFactName.
+// BareFactName strips the host namespace prefix when present.
 func BareFactName(published string) string {
 	return strings.TrimPrefix(published, oarcopy.HostFactNamespace+".")
 }

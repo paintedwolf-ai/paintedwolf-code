@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"sync"
@@ -113,7 +114,7 @@ func TestWorkerBranchEditRecordsAgainstWorkerBranch(t *testing.T) {
 				testutil.FailErr(t, "write root file", os.WriteFile(filepath.Join(root.Path, "internal", "app", "routes.go"), []byte("package app\n"), 0o644))
 			}
 			const jobID = "job-worker-edit"
-			manager := workspace.NewManager(filepath.Join(base, "branches"))
+			manager := workspace.NewManager(filepath.Join(base, "branches"), platform.NewSelector(platform.Config{}))
 			binding, _, err := manager.CreateWorkerWorkspaceFromSources(ctx, roots, roots, "primary", jobID)
 			testutil.FailErr(t, "create worker branch", err)
 			branch, err := newBranchWorkspace(binding.Root)
@@ -178,6 +179,8 @@ func (p preparedCapture) CommitTx(ctx context.Context, tx *sql.Tx) (sourceledger
 func (p preparedCapture) Close() {}
 
 type noopWorkerBranchClaim struct{}
+
+func (noopWorkerBranchClaim) ReviewsWorker(context.Context, *api.WorkerTask) bool { return false }
 
 func (noopWorkerBranchClaim) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error) {
 	return nil, fmt.Errorf("worker branch claim not available")

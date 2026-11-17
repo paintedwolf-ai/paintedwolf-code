@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/hintregistry"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -22,7 +22,7 @@ func schemaDir(t *testing.T) string {
 // a host path — the tests below load the same tree the binary ships.
 func hintsDir(t *testing.T) extpacks.Source {
 	t.Helper()
-	return extpacks.Bundled(hintregistry.DefaultDir)
+	return extpacks.Bundled(config.PlatformPolicy)
 }
 
 func loadStockRules(t *testing.T) *RuleSet {
@@ -236,7 +236,6 @@ func TestSyncRegistryFromStockIncludesNonPlatformPack(t *testing.T) {
 	// Non-platform packs must land; a platform-only DefaultDir sync drops these.
 	for _, code := range []string{
 		"ASK_USER_ALREADY_PENDING",      // hitl
-		"BANNER_PROMOTE_HIGH_CONFLICT",  // implement
 		"BROWSER_UNAVAILABLE",           // browser
 		"SECURITY_DISABLED",             // scan-guidance
 		"POLICY_WRITE_REQUIRES_COMMAND", // platform
@@ -260,7 +259,7 @@ func TestRetiredRiskFactRequiresExplicitToolCategories(t *testing.T) {
 		tool string
 		want bool
 	}{
-		{"state_start", true}, {"delegate_dispatch", true}, {"handoff_complete", true}, {"task", true}, {"read", false}, {"command", false},
+		{"state_start", true}, {"plan_from_blueprint", true}, {"handoff_complete", true}, {"task", true}, {"read", false}, {"command", false},
 	} {
 		t.Run(tc.tool, func(t *testing.T) {
 			t.Parallel()

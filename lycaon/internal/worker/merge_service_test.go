@@ -2,17 +2,22 @@ package worker_test
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/enginepaths"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/workerrecords"
+
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workerworkspace"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -90,6 +95,10 @@ func (s *mergeStoreStub) SetMergeStatuses(_ context.Context, updates []worker.Me
 	return nil
 }
 
+func (s *mergeStoreStub) LaterRounds(context.Context, string) ([]string, bool, error) {
+	return nil, false, nil
+}
+
 func (s *mergeStoreStub) CommitPromotion(ctx context.Context, _ string, _ string, commit worker.PromotionCommit) error {
 	if commit.Documents != nil {
 		if err := commit.Documents.CommitTx(ctx, nil); err != nil {
@@ -135,8 +144,9 @@ func workspaceBaselinePath(t *testing.T, dir string) string {
 	return raw
 }
 
-func TestPreviewForSessionListsPaths(t *testing.T) {
-	ctx := context.Background()
+// verifiedOverlayService holds one finished worker whose passing receipt matches its current source.
+func verifiedOverlayService(t *testing.T, workspaces *workerworkspace.Service) *worker.MergeService {
+	t.Helper()
 	dir := t.TempDir()
 	branch := filepath.Join(dir, settingsoverlay.DirName(), "overlays", "job-1")
 	testutil.FailErr(t, "MkdirAll", os.MkdirAll(branch, 0o755))
@@ -177,10 +187,17 @@ func TestPreviewForSessionListsPaths(t *testing.T) {
 		},
 	}
 	svc.Evidence = worker.SourceEvidenceContext{
+		Workspaces: workspaces,
 		SourceRevision: func(context.Context, *api.WorkerTask) workercompletion.SourceRevision {
 			return workercompletion.SourceRevision{Revision: revision, RootDigest: rootDigest}
 		},
 	}
+	return svc
+}
+
+func TestPreviewForSessionListsPaths(t *testing.T) {
+	ctx := context.Background()
+	svc := verifiedOverlayService(t, workerworkspace.New(nil, nil, nil))
 	out, err := svc.PreviewForSession(ctx, "parent-1", "job-1", "hunks", nil)
 	testutil.FailErr(t, "PreviewForSession", err)
 	if out.Status != api.WorkerMergeStatusPending {
@@ -191,6 +208,16 @@ func TestPreviewForSessionListsPaths(t *testing.T) {
 	}
 	if out.SourceEvidence == nil || out.SourceEvidence.Status != "satisfied" {
 		t.Fatalf("preview evidence=%+v", out.SourceEvidence)
+	}
+}
+
+// Without workspace observations no receipt can be shown current, so evidence stays unmet.
+func TestPreviewForSessionWithoutWorkspacesIsUnmet(t *testing.T) {
+	svc := verifiedOverlayService(t, nil)
+	out, err := svc.PreviewForSession(context.Background(), "parent-1", "job-1", "hunks", nil)
+	testutil.FailErr(t, "PreviewForSession", err)
+	if out.SourceEvidence == nil || out.SourceEvidence.Status != "unmet" {
+		t.Fatalf("source_evidence = %+v want unmet", out.SourceEvidence)
 	}
 }
 
@@ -214,9 +241,9 @@ func TestPreviewForSessionPublishesUnmetEvidence(t *testing.T) {
 		Status:                api.WorkerStatusComplete,
 	}
 	svc := &worker.MergeService{
-		Queue: &mergeQueueStub{task: task},
-
-		Reject: mergeRejectFmt(t),
+		Queue:    &mergeQueueStub{task: task},
+		Reject:   mergeRejectFmt(t),
+		Evidence: worker.SourceEvidenceContext{Workspaces: workerworkspace.New(nil, nil, nil)},
 	}
 	out, err := svc.PreviewForSession(ctx, "parent-1", "job-unmet", "hunks", nil)
 	testutil.FailErr(t, "PreviewForSession", err)
@@ -572,5 +599,30 @@ func TestPromoteOverlayInvalidResolutionLeavesCleanPathsUntouched(t *testing.T) 
 	}
 	if _, statErr := os.Stat(filepath.Join(dir, "safe.go")); !os.IsNotExist(statErr) {
 		t.Fatalf("clean path changed before conflict resolution: %v", statErr)
+	}
+}
+
+type mergeNamesStub map[string]workerrecords.JobNames
+
+func (n mergeNamesStub) NamesByJob(_ context.Context, jobID string) (workerrecords.JobNames, bool, error) {
+	names, ok := n[jobID]
+	return names, ok, nil
+}
+
+// Refusing a result that is no longer pending names the worker and its result handle, never the job.
+func TestRejectOverlayNotPendingNamesTheResult(t *testing.T) {
+	task := &api.WorkerTask{ID: "job-9", ParentSessionID: "parent-1", MergeStatus: api.WorkerMergeStatusMerged}
+	svc := &worker.MergeService{
+		Queue:  &mergeQueueStub{task: task},
+		Reject: mergeRejectFmt(t),
+		Names:  mergeNamesStub{"job-9": {Worker: "parser-fix", Handle: "result-9"}},
+	}
+	_, err := svc.RejectOverlay(t.Context(), "parent-1", "job-9", "no longer needed")
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != worker.OverlayPromoteNotPendingCode {
+		t.Fatalf("err = %v, want %s", err, worker.OverlayPromoteNotPendingCode)
+	}
+	if reject.Data["overlay_id"] != "result-9" || reject.Data["worker"] != "parser-fix" || reject.Data["job_id"] != nil {
+		t.Fatalf("reject data = %v, want the worker and result handle without the job", reject.Data)
 	}
 }

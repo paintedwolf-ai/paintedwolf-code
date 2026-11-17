@@ -1,6 +1,7 @@
 package workflowadmin
 
 import (
+	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	"sort"
 	"strings"
 	"time"
@@ -15,7 +16,7 @@ import (
 
 // projectVerdicts writes the phases' records in order, and returns beside
 // them the citation channels each record carried, keyed by phase.
-func projectVerdicts(records []workflowpresentation.PhaseVerdict) ([]report.ReportVerdict, map[string][]citation, map[string][]string) {
+func projectVerdicts(records []runstate.PhaseVerdict) ([]report.ReportVerdict, map[string][]citation, map[string][]string) {
 	var out []report.ReportVerdict
 	channels := map[string][]citation{}
 	urls := map[string][]string{}

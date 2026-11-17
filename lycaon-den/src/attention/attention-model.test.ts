@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { AttentionRow } from "../api/types.ts";
 import {
   attentionAgeLabel,
-  attentionFor,
   attentionRank,
   blockingRows,
   compareAttention,
@@ -88,12 +87,8 @@ describe("compareAttention", () => {
 describe("indexing", () => {
   it("looks a session up by id", () => {
     const index = indexAttention([row({ session_id: "a" }), row({ session_id: "b" })]);
-    expect(attentionFor(index, "b")?.session_id).toBe("b");
-    expect(attentionFor(index, "missing")).toBeUndefined();
-  });
-
-  it("returns undefined for a missing index rather than throwing", () => {
-    expect(attentionFor(undefined, "a")).toBeUndefined();
+    expect(index.get("b")?.session_id).toBe("b");
+    expect(index.get("missing")).toBeUndefined();
   });
 
   it("keeps only the rows that are asking something of the human", () => {
@@ -107,7 +102,7 @@ describe("withoutReadFinish", () => {
 
   it("drops the finished row for the conversation on screen", () => {
     const source = index(row({ session_id: "reading", class: "finished" }));
-    expect(attentionFor(withoutReadFinish(source, "reading"), "reading")).toBeUndefined();
+    expect(withoutReadFinish(source, "reading").get("reading")).toBeUndefined();
   });
 
   it("leaves other sessions' finished rows alone", () => {
@@ -116,16 +111,16 @@ describe("withoutReadFinish", () => {
       row({ session_id: "elsewhere", class: "finished" }),
     );
     const shown = withoutReadFinish(source, "reading");
-    expect(attentionFor(shown, "elsewhere")?.class).toBe("finished");
+    expect(shown.get("elsewhere")?.class).toBe("finished");
   });
 
   it("still shows a question or a failure in the chat being read", () => {
     const asking = index(row({ session_id: "reading", class: "needs_you" }));
-    expect(attentionFor(withoutReadFinish(asking, "reading"), "reading")?.class).toBe(
+    expect(withoutReadFinish(asking, "reading").get("reading")?.class).toBe(
       "needs_you",
     );
     const failed = index(row({ session_id: "reading", class: "error" }));
-    expect(attentionFor(withoutReadFinish(failed, "reading"), "reading")?.class).toBe(
+    expect(withoutReadFinish(failed, "reading").get("reading")?.class).toBe(
       "error",
     );
   });

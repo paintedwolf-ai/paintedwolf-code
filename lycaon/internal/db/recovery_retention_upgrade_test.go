@@ -28,7 +28,7 @@ func TestReleasedRecoveryManifestsEnterBoundedReclamation(t *testing.T) {
 			testutil.FailErr(t, "close released store", source.Close())
 			for boot := 0; boot < 2; boot++ {
 				testutil.FailErr(t, "upgrade released recovery", UpgradeStaged(t.Context(), path))
-				reader, err := openReader(t.Context(), path)
+				reader, err := OpenReadOnly(t.Context(), path)
 				testutil.FailErr(t, "open upgraded store", err)
 				if got := namespaceTableContents(t, reader, "source_recovery_entries"); got != before {
 					t.Fatal("upgrade changed retained manifest")

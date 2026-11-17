@@ -4,7 +4,8 @@ import { putBufferViewState, rememberClosedBufferForProject, scheduleSessionFide
 import { dropFilesEditorHandlers, getFilesEditorView } from "../editor/files-editor-host.ts";
 import { type CloseFamily } from "./files-tab-strip.ts";
 import { type JumpEntry } from "../history/jump-history.ts";
-import { moveFilesBuffer, closeFilesBuffer, filesCloseTargetKeys, openFilesBuffer, setFilesActiveBuffer, type FilesBufferRelease } from "../documents/project-files-buffers.ts";
+import { moveFilesBuffer, setFilesActiveBuffer } from "../documents/project-files-buffers.ts";
+import { closeFilesBuffer, filesCloseTargetKeys, openFilesBuffer, type FilesBufferRelease } from "../documents/project-files-buffer-lifecycle.ts";
 import { type FileBufferKey } from "../components/project-files-model.ts";
 import type { FileBuffer } from "../documents/files-buffer-state.ts";
 import type { ConfirmTarget, BulkCloseState } from "../commands/file-confirmations.ts";

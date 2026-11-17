@@ -169,7 +169,7 @@ The export contract is `pw-decide-corpus/3`: tool options come from the current
 callable schemas, including worker tools, and the corpus is identified by the
 effective catalog revision the turn receipts record. Re-export with the current
 host; retain old corpora with the artifacts they qualified. Training,
-calibration, replay, skill discovery and parity checks reject offered
+calibration, replay and parity checks reject offered
 candidates or scored labels absent from the selected corpus, and rows of
 another schema, before model work. Unknown names in requests remain
 observations, not invented candidate labels.

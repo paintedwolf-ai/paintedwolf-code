@@ -32,18 +32,6 @@ func NormalizeLedgerPath(token string) string {
 	return strings.TrimPrefix(strings.ReplaceAll(token, `\`, "/"), "./")
 }
 
-// LedgerPathToken is the ByPath key when token is path-shaped. Empty for kind#N.
-func LedgerPathToken(token string) string {
-	token = strings.TrimSpace(token)
-	if token == "" || strings.Contains(token, "#") {
-		return ""
-	}
-	if !strings.ContainsAny(token, `/\.`) {
-		return ""
-	}
-	return NormalizeLedgerPath(token)
-}
-
 // NormalizeCitationPath maps a citation token to a repo-relative path using sandbox jail rules.
 func NormalizeCitationPath(projectDir, token string) (string, bool) {
 	_, rel, ok := ResolveCitationAbs(projectDir, token)

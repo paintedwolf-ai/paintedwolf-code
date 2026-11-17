@@ -45,17 +45,17 @@ func TestHandoffReserveVisibleOnPackBoardAndPeerLegWiring(t *testing.T) {
 	}
 	testutil.FailErr(t, "defaults", worker.ApplyEnqueueDefaults(&taskA, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
 	testutil.FailErr(t, "defaults", worker.ApplyEnqueueDefaults(&taskB, project.ProjectScope{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: dir}, worker.DefaultWorkersConfig()))
-	_, err = h.Delegations.Queue.Enqueue(ctx, taskA)
+	_, err = h.Workers.Queue.Enqueue(ctx, taskA)
 	testutil.FailErr(t, "enqueue a", err)
-	_, err = h.Delegations.Queue.Enqueue(ctx, taskB)
+	_, err = h.Workers.Queue.Enqueue(ctx, taskB)
 	testutil.FailErr(t, "enqueue b", err)
 
 	childA, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "Timer leg"})
 	testutil.FailErr(t, "create child a", err)
 	childB, err := h.Store.CreateChild(ctx, parent, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "Parser leg"})
 	testutil.FailErr(t, "create child b", err)
-	testutil.FailErr(t, "link a", h.Delegations.Queue.SetChildSessionID(ctx, taskA.ID, childA.ID))
-	testutil.FailErr(t, "link b", h.Delegations.Queue.SetChildSessionID(ctx, taskB.ID, childB.ID))
+	testutil.FailErr(t, "link a", h.Workers.Queue.SetChildSessionID(ctx, taskA.ID, childA.ID))
+	testutil.FailErr(t, "link b", h.Workers.Queue.SetChildSessionID(ctx, taskB.ID, childB.ID))
 
 	_, err = h.ToolRegistry.Run(ctx, "handoff_reserve", map[string]any{
 		"paths": []string{"shellsim/builtins.py"},
@@ -81,7 +81,7 @@ func TestHandoffReserveVisibleOnPackBoardAndPeerLegWiring(t *testing.T) {
 	}
 
 	peer := h.Sessions.Manager.Workers.Workspaces.PeerReservations(ctx, childB.ID)
-	if len(peer) != 1 || peer[0].Path != "shellsim/builtins.py" || peer[0].JobID != "job-a" {
+	if len(peer) != 1 || peer[0].Path != "shellsim/builtins.py" {
 		t.Fatalf("peer reservations = %+v", peer)
 	}
 	if peer[0].LegLabel != "timer-leg" {
@@ -98,11 +98,11 @@ func TestRenderWorkerLegInjectReservedPaths(t *testing.T) {
 		LegTools:  []string{"read"},
 		Checklist: []string{"work"},
 		ReservedPaths: []inject.ReservedPath{{
-			Path: "shellsim/builtins.py", JobID: "job-a", LegLabel: "Timer leg",
+			Path: "shellsim/builtins.py", Worker: "timer", LegLabel: "Timer leg",
 		}},
 	})
 	testutil.FailErr(t, "render", err)
-	if !strings.Contains(block, "shellsim/builtins.py") {
+	if !strings.Contains(block, "shellsim/builtins.py") || !strings.Contains(block, "`timer`") {
 		t.Fatalf("block = %q", block)
 	}
 }

@@ -278,7 +278,6 @@ func TestNoSQLStringInterpolation(t *testing.T) {
 // storeLayerSQLPackages persist through generated database methods.
 var storeLayerSQLPackages = []string{
 	"lycaon/internal/call/",
-	"lycaon/internal/delegation/",
 	"lycaon/internal/findings/",
 	"lycaon/internal/hitl/",
 	"lycaon/internal/progress/",

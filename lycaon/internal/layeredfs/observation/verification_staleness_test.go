@@ -9,7 +9,7 @@ import (
 
 func TestCrossDirectoryAndCrossRootDependencyInvalidatesReceipt(t *testing.T) {
 	t.Parallel()
-	facts := LiveMountVisibilityFacts("fuse-linux", true, true, true, CompletenessComplete)
+	facts := VisibilityFacts{AdapterName: "fuse-linux", UntouchedVisibility: VisibilityLive, SupportsInvalidation: true, SupportsNegativeLookupInvalidation: true, SupportsDirCookieInvalidation: true, AttributionCompleteness: CompletenessComplete}
 	fx := newTestFixture(t, facts)
 
 	qpA := func(rel string) layeredfs.QualifiedPath {
@@ -86,7 +86,7 @@ func TestCrossDirectoryAndCrossRootDependencyInvalidatesReceipt(t *testing.T) {
 func TestIncompleteAttributionAndScopeGenerationValidity(t *testing.T) {
 	t.Parallel()
 	// NFS or kernel-cached mount where server request log is not a complete read set.
-	facts := LiveMountVisibilityFacts("nfs-loopback", false, false, false, CompletenessPartialKernelCached)
+	facts := VisibilityFacts{AdapterName: "nfs-loopback", UntouchedVisibility: VisibilityLive, AttributionCompleteness: CompletenessPartialKernelCached}
 	fx := newTestFixture(t, facts)
 
 	qpA := func(rel string) layeredfs.QualifiedPath {
@@ -131,7 +131,7 @@ func TestIncompleteAttributionAndScopeGenerationValidity(t *testing.T) {
 
 func TestTrunkChangedNoticeAndPromotionPreviewHintsContract(t *testing.T) {
 	t.Parallel()
-	facts := LiveMountVisibilityFacts("fuse-linux", true, true, true, CompletenessComplete)
+	facts := VisibilityFacts{AdapterName: "fuse-linux", UntouchedVisibility: VisibilityLive, SupportsInvalidation: true, SupportsNegativeLookupInvalidation: true, SupportsDirCookieInvalidation: true, AttributionCompleteness: CompletenessComplete}
 	fx := newTestFixture(t, facts)
 	qpA := func(rel string) layeredfs.QualifiedPath {
 		return layeredfs.QualifiedPath{RootID: "root-a", Rel: rel}
