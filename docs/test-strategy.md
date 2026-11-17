@@ -85,13 +85,14 @@ observable behavior; they do not freeze prompt wording.
 - A suite that needs a provisioned host — applied Seatbelt, a staged scanner engine — derives its gated inventory from source and fails when the declared CI scope does not reach a member. Where a job promises the suite, its `*_REQUIRED` flag makes a missing dependency fatal instead of a skip.
   Applied Seatbelt recipes live in `scripts/verification-plan.json`: the complete confinement package, the exact packages owning gated consumers with their integration build tag, and the scanner stress suite. The existing source-derived inventory checks these declarations. Each stage enters through `./task test:seatbelt` and retains its own captured-source evidence.
 - A test belongs in the cheapest layer that can prove its promise. Unit/component tests exercise one domain boundary with in-process collaborators; repository contracts prove a durable cross-tree invariant; wiring tests prove assembled managers; HTTP and browser tiers prove a user-visible journey. Do not use a repository scan to stand in for behavior, or an end-to-end journey to prove a parser branch.
-- `test:short` is only the unit/component feedback loop. Repository contracts run beside it as their own `test:contract` stage of `check-fast`, because they are cheap and are the boundary changes most often cross. External integration, wiring, process smoke tests, and HTTP journeys remain mandatory but run as named closeout/release tiers, where their failure names the boundary rather than making every edit wait on a source-tree crawl.
+- `test:short` is only the unit/component feedback loop. Repository contracts run beside it as their own `test:contract` stage of `check-fast`, because they are cheap and are the boundary changes most often cross. `test:integration:changes` runs the integration-tagged tests of the packages a change edits directly; the merge queue runs the packages that import them. External integration, wiring, process smoke tests, and HTTP journeys remain mandatory but run as named closeout/release tiers, where their failure names the boundary rather than making every edit wait on a source-tree crawl.
 - Files classified as internal integration carry the `integration` build tag and stay out of `test:short`; `test:integration`, `test:full`, and `test:race` opt in explicitly and run without `-short`. Source-content limit journeys, document compaction/reload scenarios, full checkpoint-cap capture, and archive entry-limit extraction assemble real stores and filesystems, so they belong to this tier with their exact limit and editing-history fixtures intact. Randomized SQLite lifecycle properties in `test/property` use the same tag; pure in-memory properties remain in the normal suite.
 - Keep scale sweeps separate from boundary proofs. Routine source-tree tests exercise first and late pages and indexed edits at 1,000 and 4,096 rows; stress runs repeat the same assertions at 100,000, one million, and ten million rows. Do not shrink a fixture below a real page, spill, or byte-limit boundary merely to save time.
   Scanner output and contention checks use a declared Swift finding corpus: dense output returns 2,400 findings and exceeds the console capture size, while contention proves simultaneous engine work. These fixtures enforce host RSS of 256 MiB, aggregate RSS of 256 MiB plus 768 MiB per scan, and a 32 MiB dense-output budget. They do not impose a product report-size limit. Cancellation and shutdown retain their sustained mixed-language workloads.
 - A test must invoke the production transition it claims to prove. Test-local copies of draft settlement or retention deletion are not lifecycle coverage.
 - Use virtual clocks for in-process timers (`testing/synctest` in Go and Vitest fake timers in Den). Mutex-contention tests need real bounded deadlines: a mutex wait prevents Go virtual time from advancing. Synchronize queue tests on admission and completion; use a required barrier when the queue deliberately drops writes.
-- Den follows the same cadence: `den:test:fast` proves a representative model-and-DOM seam canary, while exhaustive model tests, component fixtures, accessibility checks, and repository scans run in full `den:test`. Browser journeys remain their own explicit tier.
+- A Go test never sleeps a fixed span to wait for something: it waits on the event, through `testutil.WaitFor`, `Receive` or `AwaitClosed`, or runs in a `synctest` bubble where `synctest.Wait` shows every goroutine is blocked. `test:fail-messages:check` refuses a `time.Sleep` statement in a `_test.go` file outside a loop, a bubble or a helper process that its parent test starts and kills.
+- Den runs its complete suite whenever its inputs change: model tests, component fixtures, accessibility checks, and repository scans run in `den:test`, which `den:coverage:changes` runs with the changed-coverage floor. Browser journeys remain their own explicit tier.
 
 ## Shared test infrastructure
 
@@ -594,7 +595,8 @@ each host type-checks are declared in `scripts/arch-lint-policy.json`. A Linux
 host cannot type-check the darwin build of cgo-only packages, so Linux judges
 the Linux build alone: code only darwin files call can look unreachable there,
 and belongs in a darwin file. Reachability cannot see reflection or
-`go:linkname`; code reached only that way is a defect to fix at its source.
+`go:linkname`; code reached only that way is a defect to fix at its source. Functions in generated files are judged through their generator, so a
+generator's uniform surface does not fail the ratchet one enum at a time.
 
 ### The change base
 
@@ -750,8 +752,7 @@ that reservation and assigns unused package slots to `GOMAXPROCS` for small
 scopes; race runs default to two runtime workers per package. Parallel tests per
 package obey the same per-process share; Vitest uses at most four workers.
 Fuzzing and Rust builds share the same budget. Runners use the worker limits
-assigned at admission; host load only adjusts timeouts, and race runs scale
-scheduler-dependent waits at least 3×. Hosted CI sets
+assigned at admission. Hosted CI sets
 `PW_TEST_HOST=dedicated`: one lane owns the runner, so the budget is every CPU
 (still at most eight) and a shared operation reserves all of it.
 
@@ -777,9 +778,19 @@ Locks and worker reservations are inherited by child processes and remain held
 after a parent crash until its surviving children exit. Pause stops new batch
 and invocation admission; already admitted batches finish their stages.
 
-Scheduler-dependent waits and watchdogs scale 1×–4× with host
-load. `PW_TEST_TIMEOUT_SCALE` selects an explicit scale; production deadlines
-and polling intervals remain unchanged.
+No test, package or lane fails because time passed. `go test` runs with
+`-timeout 0` in every recipe, and tests wait on events through
+`testutil.WaitFor`, `Receive` and `AwaitClosed`, which list the test and step
+they wait on for as long as they wait. Each run has one time limit, which exists
+to end a hang and never judges a slow run: the minutes of the CI lane that
+declares the target in `scripts/verification-plan.json`, or of the longest lane
+for a target no lane names, with no host-load scale. A hosted lane counts those
+minutes once across its phases. When the limit passes, the watchdog signals the
+run's Go test binaries with `SIGUSR1`, which prints each pending wait as
+`pending wait: <test>: <step>`, then with `SIGQUIT`, which prints every
+goroutine stack, and then ends the run. Digests and CI annotations name the
+pending waits. Nothing scales with host load: a test bounds its waits by the
+test, and a timeout handed to product code is the literal the test is about.
 
 Compilation artifacts use the persistent Go cache across snapshots, tests,
 fuzzing, and lint. Snapshot worktrees reuse leased directory slots, preserving
@@ -841,7 +852,6 @@ Run every task from the repository root through `./task`.
 | `./task test:security` | Authenticated HTTP journeys |
 | `./task test:runner` | Verification runner tests in `scripts/verification_tests/` |
 | `./task den:test:digest -- src/path/file.test.ts` | Scoped Den iteration |
-| `./task den:test:fast` | Representative Den model and DOM seam canaries |
 | `./task den:test` | Full Den Vitest suite |
 | `./task e2e:den` | Browser user journeys |
 | `./task e2e:den:desktop` | Tauri desktop journeys |
@@ -850,7 +860,7 @@ Run every task from the repository root through `./task`.
 | `./task perf:soak` | Long mixed workload with graceful restart, task recovery, SSE cursor reset, and leak checks |
 | `./task budgets` | Prompt and code size budgets for what the change touches |
 | `./task coverage:changes` / `./task den:coverage:changes` / `./task scripts:coverage:changes` | Coverage of the Go, Den, and scripts Python statements a change adds or modifies |
-| `./task check-fast` | Local handoff gate: build, lint:full, size budgets, unit/component Go suite, repository contracts, Den typecheck, lint, den:test:fast, notices, comment and failure-message checks, and documentation links |
+| `./task check-fast` | Local handoff gate: build and cross-platform build, lint:full, size budgets, changed coverage, unit/component Go suite, integration tests of edited packages, repository contracts, Den typecheck, lint and complete suite, notices, comment and failure-message checks, and documentation links |
 | `./task check` | Full local and qualification gate: cross-compile, drift, complete Go and scanner suites, full Den and Rust correctness suites, size budgets, changed coverage, lint, and vulnerability checks |
 
 Each gate runs once per change. A pushed change runs affected-scope integration in CI and daily full nightly verification, so it runs neither local gate first; a change handed off without a push runs `./task check-fast`. Each gate uses one stable source snapshot. Digest runners keep failure captures under `last-run/` in the [artifact root](dev-tasks.md#build-outputs-caches-and-locks); `./task test:failed` replays the latest failed Go run from its retained source commit with the recorded arguments and timeouts, bounded by the current worker budget. A passing scoped run does not erase that failure.
@@ -904,12 +914,19 @@ A ready pull request runs the `fast` profile; the merge queue runs the
 the newest suite on the head, so the job deletes skipped CI runs a draft push left
 there; a failed deletion warns without failing `check`. A `static` job reports
 formatting, comment, failure-message and documentation-link errors within a minute
-while the rest keep running. The fast tier runs its other jobs side by side.
-`ready-lint` runs complete `lint:full` analysis on its own runner, whose compile output would otherwise share one disk with the rest.
-`ready-tests` splits repository contracts and affected short Go tests across two
-shards, balanced by measured package durations. `ready` runs size budgets and
-changed Go coverage first, plus script coverage when scripts or workflows changed, then compiles the host and runs Den typecheck,
-Den lint, and frontend seam canaries.
+while the rest keep running. A change of documentation prose alone runs nothing
+else. Otherwise the fast tier runs its other jobs side by side.
+`ready-lint` runs whole-module golangci-lint and workflow analysis on its own runner, whose compile output would otherwise share one disk with the rest;
+whole-program dead-code analysis needs the whole tree and runs nightly.
+`ready-tests` splits repository contracts, affected short Go tests, and the
+integration-tagged tests of directly edited packages across four shards,
+balanced by measured package durations. `ready` runs size budgets and changed Go
+coverage first, plus the script suites and their changed coverage when a path
+under `scripts/`, `.github/` or `packaging/`, `Taskfile.yml` or `task` changed,
+then compiles the host, and cross-compiles it when Go source or modules changed.
+`frontend` runs Den typecheck, lint, unused-export analysis, and the complete Den
+suite with its changed-coverage floor when a path under `lycaon-den/` or
+`docs/openapi/`, `CHANGELOG.md`, or a frontend runtime pin changed.
 Coverage executes eligible changed packages' own short tests, so `ready-tests`
 omits those packages from its identical short recipe. Test-only, generated,
 exempt, and untested packages keep their affected short selection. Unknown recipes
@@ -1329,7 +1346,7 @@ Each Linux Go test process has a 3.5 GiB RSS ceiling, declared in
 16 GiB and run four packages at once, so the ceiling keeps one package from
 exhausting the runner while leaving room for the toolchain. A package that needs
 more declares its own ceiling with a tracking issue. A race build gets
-`race_scale` times its ceiling, the way its timeouts are scaled: the detector's
+`race_scale` times its ceiling: the detector's
 shadow memory and instrumented heap are overhead the ordinary ceiling does not
 describe, and the largest contract packages reach 1.1 times it under the detector.
 Unless a run sets `GOMEMLIMIT`, the test binary gets a soft limit at 80% of its
@@ -1487,7 +1504,7 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 | Release rehearsals | release dry runs and replays, the weekly release-system live test, a dispatched release secrets check | one group per dry run or replay; `release-system-live-test`; none for the read-only secrets check | a dry run as a release; 1 otherwise |
 | Maintenance | dispatch-only Linux desktop environment and installed rehearsals, Linux candidate requests, dependency inventory, queue health, issue staleness, the issue sweep | `maintenance`, shared | 1 |
 | Merge queue | CI of merge groups | one run per group, two groups at once | 12: two groups × the `integration` cap of six |
-| Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 3 per pull request, with a two-hour execution ceiling |
+| Ready pull requests | CI of pull requests | one run per pull request; a newer push cancels it | 6 per pull request beside the static job: the `fast` cap, with a two-hour execution ceiling |
 
 Nightly replaces its pending snapshot while a started run finishes. Qualification
 retains explicit release requests; both use one executor at a time. Maintenance

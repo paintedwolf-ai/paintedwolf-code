@@ -11,21 +11,17 @@ import (
 
 	"github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // awaitEngineRunning blocks until this process owns a live engine descendant,
 // so an interrupt lands inside real engine work rather than during startup.
-func awaitEngineRunning(t *testing.T, within time.Duration) bool {
+func awaitEngineRunning(t *testing.T) {
 	t.Helper()
-	_ = within
-	for t.Context().Err() == nil {
-		if len(engineProcesses(descendants(processTable(t), os.Getpid()))) > 0 {
-			return true
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	return false
+	testutil.WaitFor(t, "an engine starts below the test", func() bool {
+		return len(engineProcesses(descendants(processTable(t), os.Getpid()))) > 0
+	})
 }
 
 // TestCancellationTerminatesEngineTree cancels a scan already executing engine
@@ -45,14 +41,8 @@ func TestCancellationTerminatesEngineTree(t *testing.T) {
 		errCh <- err
 	}()
 
-	if !awaitEngineRunning(t, 3*time.Minute) {
-		cancel()
-		<-errCh
-		obs.finish()
-		t.Fatal("engine never started; nothing to cancel")
-	}
-	// Let the engine reach steady-state work before the interrupt.
-	time.Sleep(5 * time.Second)
+	awaitEngineRunning(t)
+	awaitEngineWorking(t, os.Getpid())
 	engineBefore := engineProcesses(descendants(processTable(t), os.Getpid()))
 	cancelAt := time.Now()
 	cancel()
@@ -73,10 +63,7 @@ func TestCancellationTerminatesEngineTree(t *testing.T) {
 	if !errors.Is(runErr, context.Canceled) {
 		reportf(t, "cancel error does not wrap context.Canceled: %v", runErr)
 	}
-	drain, survivors := awaitNoEngineProcesses(t, 30*time.Second)
-	if len(survivors) > 0 {
-		t.Errorf("engine processes survived cancellation after %s: %+v", drain, survivors)
-	}
+	drain := awaitNoEngineProcesses(t)
 	owned := obs.seenRunDirs()
 	if leaked := survivingDirs(owned); len(leaked) > 0 {
 		t.Errorf("run directories leaked on the cancel path: %v", leaked)
@@ -116,10 +103,7 @@ func TestHardLimitTimeoutTerminatesEngineTree(t *testing.T) {
 		t.Fatal("hard limit fired before any engine process existed; the test measured startup, not a timeout")
 	}
 	overshoot := elapsed - time.Duration(hard)*time.Second
-	drain, survivors := awaitNoEngineProcesses(t, 30*time.Second)
-	if len(survivors) > 0 {
-		t.Errorf("engine processes survived the hard limit after %s: %+v", drain, survivors)
-	}
+	drain := awaitNoEngineProcesses(t)
 	owned := obs.seenRunDirs()
 	if leaked := survivingDirs(owned); len(leaked) > 0 {
 		t.Errorf("run directories leaked on the timeout path: %v", leaked)

@@ -85,7 +85,7 @@ directory owned by that run. Print a location from the repository root with
 `python3 scripts/artifact_paths.py artifacts|build|bin|locks`; the examples
 below use `BUILD_DIR="$(python3 scripts/artifact_paths.py build)"`.
 
-The repository ships no pre-commit hook. **Closeout:** a change pushed for a pull request closes out in CI; a change handed off without a push runs `./task check-fast`; `./task check` is full local verification on request. **CI** (`ci.yml`) runs the fast tier for a ready PR and the affected-scope integration gate for its merge group, both behind required `check`; enabling auto-merge on a ready PR adds it to the queue once its fast tier passes. Drafts do not verify. Broad changes run the full check profile in the queue. `qualification.yml` runs full check, platform, and E2E only on manual dispatch for an exact release commit. The daily nightly covers the complete main verification signal; dispatching it with `source-sha` runs the same stages on that exact commit. Dispatching it with `suite: release` runs only the release rehearsal and the published installed upgrade. Manual CI dispatch runs full check and platform, or the fast tier with `profile: fast`, and reports the required `check` on the dispatched commit as a commit status, because a pull request's checks leave out dispatch runs. Nightly also covers race, fuzz, stress, WebKit, performance, and quarantine observation. See [hosted admission and qualification](test-strategy.md#hosted-admission-and-qualification) for scope, offline execution, recovery, and queue rollout.
+The repository ships no pre-commit hook. **Closeout:** a change pushed for a pull request closes out in CI; a change handed off without a push runs `./task check-fast`; `./task check` is full local verification on request. **CI** (`ci.yml`) runs the fast tier for a ready PR and the affected-scope integration gate for its merge group, both behind required `check`; enabling auto-merge on a ready PR adds it to the queue once its fast tier passes. Drafts do not verify. Broad changes run the full check profile in the queue. `qualification.yml` runs full check, platform, and E2E only on manual dispatch for an exact release commit. The daily nightly covers the complete main verification signal; dispatching it with `source-sha` runs the same stages on that exact commit. Dispatching it with `suite: release` runs only the release rehearsal and the published installed upgrade. Manual CI dispatch runs full check and platform, or the fast tier with `profile: fast`, and reports the required `check` on the dispatched commit as a commit status, because a pull request's checks leave out dispatch runs. Nightly also covers race, fuzz, stress, WebKit, and performance. See [hosted admission and qualification](test-strategy.md#hosted-admission-and-qualification) for scope, offline execution, recovery, and queue rollout.
 
 For an isolated hosted diagnostic, select an existing catalog lane, for example
 `gh workflow run ci.yml --ref <branch> -f profile=check -f lane=runner`.
@@ -139,7 +139,7 @@ Project evaluation flags for `test:lycaon-rules`:
 
 - `-opengrep /absolute/path/to/opengrep` evaluates an offline candidate engine for that conformance invocation only; the normal resolver still verifies the checked-in release before the runner starts, and neither the pin nor production analysis mode changes. An executable launcher is usable for development measurement but not held-out artifact admission: retain its native-core identity separately.
 - `-mode intrafile` or `-mode intraprocedural` evaluates one mode; the default runs both and the output contains only executed modes.
-- `-project-timeout 20m` changes the ten-minute base deadline per project. `PW_TEST_TIMEOUT_SCALE` (1 through 4) multiplies it once; the JSONL identity records both the base and effective deadline. Large projects can need several minutes without host contention, so a timeout is not a clean scan or a performance measurement.
+- `-project-timeout 20m` changes the ten-minute deadline per project; the JSONL identity records it. Large projects can need several minutes without host contention, so a timeout is not a clean scan or a performance measurement.
 - `-repeats 1` gives one measured run; the default two repetitions check stability.
 - `-rules /absolute/path/candidate-rules.yaml` compares a complete candidate bundle, including a separate guarded-signature experiment. The companion `ordinary-helper-variants.yaml` and `helper-dead-closures.yaml` corpora cover pinned-project derivatives and dead-closure controls.
 
@@ -420,7 +420,7 @@ PERF_BENCH_BASELINE="$(python3 scripts/artifact_paths.py artifacts)/perf/old.jso
 
 `perf:soak` gracefully restarts the exact engine it started against the same store, proves the persisted task and transcript recover, confirms the old in-memory SSE cursor receives `event_replay_unavailable`, reconnects from the new generation, and continues paced mixed concurrent reads and prompts. It finishes with `PRAGMA quick_check`, zero duplicate event ids, settled/replay parity, no dropped performance records, and bounded steady-state growth. Reports and embedded budgets live under `perf/` in the artifact root; the nightly job retains them for 30 days and runs a ten-minute soak.
 
-`perf:bench` discovers benchmark packages from source, records package-qualified medians plus allocation counts in the artifact root's `perf/go-bench.json`, and compares with any prior report through `PERF_BENCH_BASELINE`. Machine-to-machine timing is not a universal baseline; budgets are deliberately generous for the supported macOS runner.
+`perf:bench` discovers benchmark packages from source, records package-qualified medians plus allocation counts in the artifact root's `perf/go-bench.json`, and compares with any prior report through `PERF_BENCH_BASELINE`. Gated benchmarks fail on their median bytes or allocations per operation; time per operation, and its change against a baseline, is reported and never judged.
 
 ### Sidecar profiling
 
@@ -681,11 +681,11 @@ Gate composition lives in `scripts/verification-plan.json`.
 
 | Task | Composition |
 |------|-------------|
-| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `lint:full`, `budgets`, `den:typecheck`, `den:lint`, `den:test:fast`, `test:short`, `test:contract`, `licenses:notices`, `comments:check`, `test:fail-messages:check`, and `docs:links`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs a subset of these stages |
+| `check-fast` | Local handoff gate on one stable source snapshot: `build`, `build:cross`, `lint:full`, `budgets`, `coverage:changes`, `arch-lint:changes`, `den:knip:changes`, `den:typecheck`, `den:lint`, `den:coverage:changes` (the complete Den suite), `test:short`, `test:integration:changes`, `test:contract`, `licenses:notices`, `comments:check`, `test:fail-messages:check`, and `docs:links`, each starting once its declared resources allow. CI's `fast` profile, the ready pull request tier, runs these stages for the paths the change touches |
 | `check` | Full local and qualification gate on one stable source snapshot, run exactly by CI's `check` profile: `build`, `build:cross`, `check:drift`, `openapi:lint`, `validate:workflows`, `oar:verify` (`test:oar` and `oar:conformance`), the runtime checks (`test:full` including required bundled scanners, `den:typecheck`, `den:lint`, `den:test:rust`, `decide:test`), with complete script/frontend assertions supplied by coverage stages, `test:fail-messages:check`, `comments:check`, `lint:full`, `budgets`, `coverage:changes`, `scripts:coverage:changes`, `den:coverage:changes`, and `lint:vuln`. Stages start as their declared resources allow, longest expected first, and the first failure ends the gate. Active fuzzing, transcript performance, stress, race, and coverage sweeps run separately in `nightly.yml` and the release workflow; ordinary Go tests still execute saved fuzz cases |
 | `check:drift` | Internal to `check`: every `codegen:*:check`, `openapi:bundle:check`, `db:sqlc:check`, `db:sqlc:vet`, the vendored-corpus checks (`oar:vendor:check`, `scan:rules:vendor:check`, `secret-mint:vendor:check`, `lint:vuln:vendor:check`), and `docs:links`. A stale generated surface fails here, not at compile time |
-| `check:digest` | Summarized local pass — build, `lint:fast`, unit/component Go tests, `den:test:fast`, and the harness canary. `FULL=1` delegates to `test:full`, including integration tags and required bundled scanners |
-| Contention controls | Up to eight batches overlap across checkouts; stages within a request and across requests overlap wherever resource locks and worker slots allow. Shared operations reserve slots within a global budget of three quarters of host CPUs, rounded down and bounded between one and eight workers; `PW_TEST_HOST=dedicated` (hosted CI) uses every CPU and lets shared operations reserve all of it. `PW_TEST_WORKERS` caps each invocation; runner-specific settings may reduce it. Scheduler-dependent waits and lint deadlines scale 1×–4× from host load, with `PW_TEST_TIMEOUT_SCALE` as an explicit override |
+| `check:digest` | Summarized local pass — build, `lint:fast`, unit/component Go tests, `den:test`, and the harness canary. `FULL=1` delegates to `test:full`, including integration tags and required bundled scanners |
+| Contention controls | Up to eight batches overlap across checkouts; stages within a request and across requests overlap wherever resource locks and worker slots allow. Shared operations reserve slots within a global budget of three quarters of host CPUs, rounded down and bounded between one and eight workers; `PW_TEST_HOST=dedicated` (hosted CI) uses every CPU and lets shared operations reserve all of it. `PW_TEST_WORKERS` caps each invocation; runner-specific settings may reduce it. No wait or deadline scales with host load |
 
 ### Targets with behavior the description cannot carry
 
@@ -699,7 +699,7 @@ Gate composition lives in `scripts/verification-plan.json`.
 | `test:pause` / `test:resume` / `test:status` / `test:cancel` | Manage the shared verification queue. Status shows active batches/stages, sharing requests, worker slots, resource locks, blocking reasons, rendered ages, advisory process health, and queue advisories. Pause holds new admissions while active work finishes. `./task test:pause -- --reason "Host in use"` records a reason. `./task test:cancel -- <ticket> --reason "<why>"` withdraws one request, including another agent's or human's, [without asking](../AGENTS.md#stuck-verification) if there are signs of a problem |
 | `test:stress` | Opt-in correctness checks for 100,000- through ten-million-row source trees and a 50,000-message session tree; included in nightly performance and release gates |
 | `test:runner` | Bounded subprocess fixtures for batching, stage overlap, source snapshots, package outcomes and reuse, FIFO order and backfill, early failures, cancellation, crash recovery, nested admission, and worker limits |
-| `lint:fast` / `lint:full` | Both run vet and security checks. Interprocedural dead-code analysis belongs to `lint:full`. Arguments after `--` go to golangci-lint; `./task lint:full -- --timeout=40m` raises that analysis deadline |
+| `lint:fast` / `lint:full` / `lint:deadcode` | `lint:fast` and `lint:full` run vet and security checks. Whole-program dead-code analysis is `lint:deadcode`, which the nightly runs. Arguments after `--` go to golangci-lint; `./task lint:full -- --timeout=40m` raises that analysis deadline |
 | `db:wipe` | Clears the store and every store-keyed host tree; preserves Den app preferences, device configuration, credentials, debug captures, and upgrade recovery archives. Refuses while any process holds the store open — stop the engine first |
 | `budgets` / `coverage:changes` / `den:coverage:changes` / `scripts:coverage:changes` | Hold what a change touches to its limits and test the statements it adds; warnings arrive before the limit, and `PW_BUDGETS_INSPECT="<path>"` shows a file or directory's standing before editing it. `scripts:coverage:changes` shares the `runner` resource with `test:runner` and installs the pinned coverage.py once per interpreter under the [bin directory](#build-outputs-caches-and-locks); `./task setup-dev -- --ci-inputs` provisions it before an offline CI lane. See [Size budgets and changed coverage](test-strategy.md#size-budgets-and-changed-coverage) |
 | `check:coverage` / `check:coverage:packages` | `check:coverage` produces aggregate and package reports from one test run. Floors come from `scripts/coverage-policy.json`: `COVERAGE_MIN` overrides the aggregate floor; the per-package report is advisory until `COVERAGE_PKG_ENFORCE=1`, with `COVERAGE_PKG_MIN` overriding its floor and exemptions in `lycaon/coverage-exempt.txt`. Floors must be finite percentages from 0 through 100; fractional floors are compared without truncation. Go and Den coverage runs use the digest runners and retain failure diagnostics |
@@ -858,7 +858,7 @@ was queued`.
 
 Declared Go targets take the same package and flag grammar as `test:digest`,
 narrowed to packages inside their own declared scope — `./task test:integration
--- ./internal/api/...` keeps the integration recipe's tags and timeout and runs
+-- ./internal/api/...` keeps the integration recipe's tags and runs
 one subtree, sharing package outcomes with any other request for the same
 recipe. A selection outside the target's scope names what that target covers;
 use `test:digest` for packages no declared target owns. `den:test:digest` takes
@@ -872,7 +872,9 @@ request's failures.
 
 Declared grammars are checked against the tree before admission: Go package
 directories and `.go` files must exist under `lycaon/`; `-p`, `-parallel`,
-`-count`, `-cpu`, `-timeout`, and `-shuffle` must hold values `go test` accepts;
+`-count`, `-cpu`, and `-shuffle` must hold values `go test` accepts; `-timeout`
+is refused, because every recipe runs with `-timeout 0` and the run's one limit
+is its lane's declared minutes;
 each Vitest filter must match a test file under `lycaon-den/src`, and each
 Playwright filter a web-project spec under `lycaon-den/e2e`, by the same rules
 those tools apply. Arguments that passthrough targets and non-catalog targets
@@ -880,9 +882,10 @@ forward are still parsed by their own scripts when the run starts.
 
 Go lint accepts repeatable `--scope <package-pattern>` arguments, for example
 `./task lint:full -- --scope ./internal/launchguard`. Golangci-lint, which covers
-vet in full mode, and fast mode's Go vet receive that scope; full mode retains its
-whole-program deadcode check. Without
-`--scope`, analysis still covers `./...`. Other golangci-lint flags remain forwarded.
+vet in full mode, and fast mode's Go vet receive that scope. Without `--scope`,
+analysis covers `./...`. Other golangci-lint flags remain forwarded. The
+whole-program `lint:deadcode` check takes no scope; it runs in its own nightly
+lane.
 
 ### Health and queue advisories
 
@@ -1044,7 +1047,7 @@ shared batch, holding the Go resource for their whole run. They never replay a
 recorded result and do not emit a shared batch snapshot receipt; retain their
 digest and raw results separately when recording verification evidence.
 
-Go failures retain a directory under the artifact root's `last-run/failures/` containing the raw report, failed package list, and a JSON replay manifest. The manifest records the exact digest arguments, effective `go test` arguments, contention settings, and source commit. Replay (`./task test:failed`) preserves the selection and timeouts while clamping workers to the current admission budget. `last-run/latest-go-failure` changes only on failure, so later passing or scoped runs cannot erase the replay target. The newest ten failures and their source refs are retained.
+Go failures retain a directory under the artifact root's `last-run/failures/` containing the raw report, failed package list, and a JSON replay manifest. The manifest records the exact digest arguments, effective `go test` arguments, contention settings, and source commit. Replay (`./task test:failed`) preserves the selection and the run limit while clamping workers to the current admission budget. `last-run/latest-go-failure` changes only on failure, so later passing or scoped runs cannot erase the replay target. The newest ten failures and their source refs are retained.
 
 Vitest failures retain the JSON, console, and runner-outcome reports. The outcome report includes runner errors and complete assertion values, so collection audits show their paths and entries instead of collapsed array placeholders.
 

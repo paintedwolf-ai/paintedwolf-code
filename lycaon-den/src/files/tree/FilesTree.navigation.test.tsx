@@ -8,6 +8,9 @@ import { resetFilesTreeViewStateForTests } from "./files-tree-view-state.ts";
 import { createNoticeStore, registerNoticePublisher } from "../../notices/notice-store.ts";
 import { selectProjectNoticeGroups } from "../../notices/notice-select.ts";
 import { flushScrollportFrameForTests } from "../../platform/scrolling/scrollport-frame.ts";
+import { useElapsableClock } from "../../test/elapse.ts";
+
+const elapse = useElapsableClock();
 
 afterEach(() => { cleanup(); resetFilesTreeViewStateForTests(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
@@ -69,7 +72,7 @@ async function recordReveal(view: Awaited<ReturnType<typeof mount>>, mode: Mode,
     view.navigate(mode, target);
     await waitFor(() => expect(paintedRows(view.scroll).some(row => row.index === target)).toBe(true));
     // Observe completion, including any delayed scroll or anchor restoration.
-    await new Promise(resolve => setTimeout(resolve, 100));
+    await elapse(100);
   } finally { cancelAnimationFrame(frame); }
   return samples;
 }
@@ -114,7 +117,7 @@ it.each(["automatic", "explicit"] as const)("cancels a pending %s reveal when th
   fireEvent.pointerDown(view.scroll);
   const position = view.scroll.scrollTop;
   release();
-  await new Promise(resolve => setTimeout(resolve, 400));
+  await elapse(400);
   expect(view.scroll.scrollTop).toBe(position);
   expect(paintedRows(view.scroll)[0]!.index).toBe(0);
   expect(view.selection()).toBeNull();
@@ -157,7 +160,7 @@ it.each(["hide", "unmount"] as const)("abandons an outstanding reveal on %s", as
   await waitFor(() => expect(reading).toBe(true));
   if (action === "hide") view.setVisible(false); else view.unmount();
   release();
-  await new Promise(resolve => setTimeout(resolve, 300));
+  await elapse(300);
   expect(view.scroll.scrollTop).toBe(0);
   expect(view.selection()).toBeNull();
 });
@@ -186,7 +189,7 @@ it("keeps keyboard navigation when an earlier editor target arrives late", async
   fireEvent.keyDown(first, { key: "End" });
   await waitFor(() => expect(document.activeElement?.getAttribute("data-path")).toBe("file-200000.ts"));
   view.setActive({ rootId: "r1", path: "file-1.ts", revision: 1 });
-  await new Promise(resolve => setTimeout(resolve, 400));
+  await elapse(400);
   expect(paintedRows(view.scroll).some(row => row.index === 200000)).toBe(true);
   expect(document.activeElement?.getAttribute("data-path")).toBe("file-200000.ts");
   await recordReveal(view, "automatic", 50);
@@ -270,7 +273,7 @@ it("animates scroll to center a newly revealed file when disclosing a closed fol
     reveal("r1", "folder/target.ts", false);
     await waitFor(() => expect(scroll.querySelector('[data-path="folder/target.ts"]')).not.toBeNull());
     await waitFor(() => expect(scroll.scrollTop).toBeGreaterThan(0));
-    await new Promise(resolve => setTimeout(resolve, 150));
+    await elapse(150);
   } finally { cancelAnimationFrame(frame); }
   expect(samples.filter(s => s > 0).length).toBeGreaterThan(3);
 });
@@ -287,7 +290,7 @@ it.each([0, 700])("keeps painted rows at the browser's landed offset when a reve
   });
   view.navigate("automatic", 1500);
   await waitFor(() => expect(writes).toBeGreaterThan(0));
-  await new Promise(resolve => setTimeout(resolve, 100));
+  await elapse(100);
   expect(paintedRows(view.scroll).length).toBeGreaterThan(0);
   expect(paintedRows(view.scroll)[0]!.top).toBeLessThanOrEqual(0);
 });

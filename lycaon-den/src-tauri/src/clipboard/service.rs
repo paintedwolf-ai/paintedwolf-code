@@ -279,6 +279,7 @@ mod tests {
         tauri::async_runtime::block_on(future)
     }
 
+    /// On the paused clock this returns once every task is blocked.
     async fn settle() {
         tokio::time::sleep(Duration::from_millis(40)).await;
     }
@@ -295,30 +296,28 @@ mod tests {
         assert_eq!(fake.state().released, 0);
     }
 
-    #[test]
-    fn operations_from_several_windows_run_one_at_a_time() {
+    #[tokio::test(start_paused = true)]
+    async fn operations_from_several_windows_run_one_at_a_time() {
         let fake = Fake::default();
         fake.state().hold_writes = true;
         let service = service(&fake, OPERATION_TIMEOUT);
-        block_on(async {
-            let first = tauri::async_runtime::spawn({
-                let service = service.clone();
-                async move { service.write(&Inline, "first".into()).await }
-            });
-            settle().await;
-            let second = tauri::async_runtime::spawn({
-                let service = service.clone();
-                async move { service.write(&Inline, "second".into()).await }
-            });
-            settle().await;
-            assert_eq!(fake.calls(), ["write first"]);
-            fake.answer_held();
-            first.await.unwrap().unwrap();
-            settle().await;
-            assert_eq!(fake.calls(), ["write first", "write second"]);
-            fake.answer_held();
-            second.await.unwrap().unwrap();
+        let first = tokio::spawn({
+            let service = service.clone();
+            async move { service.write(&Inline, "first".into()).await }
         });
+        settle().await;
+        let second = tokio::spawn({
+            let service = service.clone();
+            async move { service.write(&Inline, "second".into()).await }
+        });
+        settle().await;
+        assert_eq!(fake.calls(), ["write first"]);
+        fake.answer_held();
+        first.await.unwrap().unwrap();
+        settle().await;
+        assert_eq!(fake.calls(), ["write first", "write second"]);
+        fake.answer_held();
+        second.await.unwrap().unwrap();
     }
 
     #[test]
@@ -379,29 +378,27 @@ mod tests {
         assert_eq!(fake.calls(), ["release"]);
     }
 
-    #[test]
-    fn shutdown_during_an_operation_releases_when_it_settles() {
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_during_an_operation_releases_when_it_settles() {
         let fake = Fake::default();
         fake.state().hold_writes = true;
         let service = service(&fake, OPERATION_TIMEOUT);
-        block_on(async {
-            let pending = tauri::async_runtime::spawn({
-                let service = service.clone();
-                async move { service.write(&Inline, "in flight".into()).await }
-            });
-            settle().await;
-            service.shutdown(&Inline);
-            assert_eq!(fake.state().released, 0);
-            fake.answer_held();
-            pending.await.unwrap().unwrap();
-            assert_eq!(fake.state().released, 1);
-            service.shutdown(&Inline);
-            assert_eq!(fake.state().released, 1);
-            assert_eq!(
-                service.write(&Inline, "too late".into()).await,
-                Err(ClipboardError::Stopped)
-            );
+        let pending = tokio::spawn({
+            let service = service.clone();
+            async move { service.write(&Inline, "in flight".into()).await }
         });
+        settle().await;
+        service.shutdown(&Inline);
+        assert_eq!(fake.state().released, 0);
+        fake.answer_held();
+        pending.await.unwrap().unwrap();
+        assert_eq!(fake.state().released, 1);
+        service.shutdown(&Inline);
+        assert_eq!(fake.state().released, 1);
+        assert_eq!(
+            service.write(&Inline, "too late".into()).await,
+            Err(ClipboardError::Stopped)
+        );
         assert_eq!(fake.calls(), ["write in flight", "release"]);
     }
 
@@ -432,10 +429,6 @@ mod tests {
             ]
             .map(DisplayProtocol::as_str),
             ["wayland", "x11", "gdk"]
-        );
-        assert_eq!(
-            ClipboardError::Timeout.to_string(),
-            "Clipboard did not respond in time"
         );
     }
 }

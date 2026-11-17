@@ -32,7 +32,7 @@ class HostedPlanTests(unittest.TestCase):
 
     def test_fast_tier_runs_each_handoff_stage_once(self):
         rows = ci.matrix("fast")["include"]
-        self.assertEqual({row["lane"] for row in rows}, {"ready", "ready-lint", "ready-tests"})
+        self.assertEqual({row["lane"] for row in rows}, {"ready", "ready-lint", "ready-tests", "frontend"})
         stages = [stage["name"] for name in {row["lane"] for row in rows}
                   for stage in planning.expand(ci.lanes()[name]["targets"])]
         self.assertEqual(sorted(stages), sorted(set(stages)))
@@ -86,7 +86,7 @@ class HostedPlanTests(unittest.TestCase):
     def test_nightly_selection_includes_only_requested_and_unconditional_jobs(self):
         lanes = ci.lanes()
         nightly = {target for row in ci.matrix("nightly")["include"] for target in lanes[row["lane"]]["targets"]}
-        self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "lint:vuln:fresh",
+        self.assertEqual(nightly, {"test:full", "test:race", "test:fuzz", "test:stress", "lint:vuln:fresh", "lint:deadcode",
                                    "perf:bench", "perf:sidecar", "perf:soak", "den:webkit:scroll",
                                    "den:webkit:atspi", "test:confine:linux", "nix:check", "test:userlands", "test:conformance:live",
                                    "budgets", "coverage:changes", "arch-lint:changes", "den:knip:changes", "den:coverage:changes", "scripts:coverage:changes",
@@ -176,7 +176,7 @@ class HostedPlanTests(unittest.TestCase):
         self.assertFalse({"den:webkit:scroll", "den:webkit:atspi"} & set(gate))
         self.assertFalse({"webkit", "webkit-gtk"} & {row["lane"] for row in ci.matrix("check")["include"]})
         self.assertEqual({row["lane"] for row in ci.matrix("nightly", "e2e")["include"]},
-                         {"webkit", "webkit-gtk", "vulnerability-freshness"})
+                         {"webkit", "webkit-gtk", "vulnerability-freshness", "deadcode"})
         # Only a platform lane takes an end-to-end check into merge admission.
         admitted = {row["lane"] for row in ci.matrix("integration")["include"]}
         self.assertEqual({name for name in admitted if ci.lanes()[name]["suite"] == "e2e"}, {"webkit-gtk"})
@@ -337,7 +337,7 @@ class HostedPlanTests(unittest.TestCase):
                 targets = ci.lanes()[row["lane"]]["targets"]
                 self.assertEqual(row["notices"], "licenses:notices" in targets)
                 if row["analysis"] == "lint":
-                    self.assertTrue(set(targets) & {"lint:fast", "lint:full"})
+                    self.assertTrue(set(targets) & {"lint:fast", "lint:full", "lint:deadcode"})
                 elif row["analysis"] == "vulnerabilities":
                     self.assertTrue(set(targets) & {"lint:vuln", "lint:vuln:fresh"})
                 else:

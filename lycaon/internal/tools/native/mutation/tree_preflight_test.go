@@ -89,9 +89,7 @@ func TestMutationTreePreflightCountsRootAndPreservesReadPolicy(t *testing.T) {
 func TestVerboseRemovalSurveysMetadataDirectories(t *testing.T) {
 	h := newHarness(t, map[string]string{"tree/.hidden/file": "a", "tree/.git/config": "b", "tree/.paintedwolf/settings": "c"})
 	argv, err := (commandprogram.CatalogBinder{}).Bind(h.owners.specs["rm"], commandprogram.Fields{{Value: "rm"}, {Value: "-v"}, {Value: "tree"}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "bind rm argv", err)
 	inv := &invocation{ctx: t.Context(), owners: h.owners, argv: argv}
 	dirs, err := inv.directoriesUnder(filepath.Join(h.root, "tree"))
 	testutil.FailErr(t, "inventory removal directories", err)

@@ -1,10 +1,12 @@
 """Select early checks before a pull request enters integration."""
+from ci_policy.impact import script_change
 from verification_plan import catalog
 
 
 def runs_script_coverage(scope):
-    """A script or workflow change gets its own suites before the queue, not only inside it."""
-    return bool(scope) and (scope['full'] or any(path.startswith(('.github/', 'scripts/')) for path in scope['paths']))
+    """A change to what the script suites read gets those suites before the queue; a scope without a base
+    runs them too."""
+    return bool(scope) and (not scope.get('paths') or script_change(scope['paths']))
 
 
 # Inputs of the production Linux package metadata that the tiny-payload rehearsals lint.

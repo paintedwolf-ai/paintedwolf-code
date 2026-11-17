@@ -11,6 +11,9 @@ import { setFilesTreeScrollTop } from "./files-tree-view-state.ts";
 import { findFileRow, getFileRow, queryFileRow } from "../../test/files-tree-queries.ts";
 
 import { installFilesTreeCleanup, queryButton, mount, button } from "./files-tree-test-fixture.tsx";
+import { useElapsableClock } from "../../test/elapse.ts";
+
+const elapse = useElapsableClock();
 installFilesTreeCleanup();
 
 describe("Files presentation lifecycle", () => {
@@ -73,7 +76,7 @@ describe("Files presentation lifecycle", () => {
     expect(pending.signal?.aborted).toBe(false);
     release();
     await waitFor(() => expect(document.querySelector('[data-display-key="pending:11"]')).toBeNull());
-    await new Promise(resolve => setTimeout(resolve, 40));
+    await elapse(40);
     expect(scroll.scrollTop).toBe(286);
   });
 
@@ -534,7 +537,7 @@ describe("complete presentation handoff", () => {
     fixture.preparing(true);
     fixture.large(1_001, rowAt);
     fixture.notify();
-    await new Promise(resolve => setTimeout(resolve, 350));
+    await elapse(350);
     expect(Number.parseFloat(virtual.style.height)).toBe(201 * 26);
     expect(getFileRow("file-1.ts")).toBe(original);
     expect(screen.queryByTestId("files-tree-counting")).toBeNull();
@@ -574,7 +577,7 @@ it("publishes a filesystem change after direct input settles without another scr
   motion.input.noteNativeInput("wheel");
   fixture.rows([treeRow(".", "directory", true), treeRow("added.txt"), treeRow("README.md")]);
   fixture.notify();
-  await new Promise(resolve => setTimeout(resolve, 350));
+  await elapse(350);
   expect(queryFileRow("added.txt")).toBeNull();
   await findFileRow("added.txt");
 });

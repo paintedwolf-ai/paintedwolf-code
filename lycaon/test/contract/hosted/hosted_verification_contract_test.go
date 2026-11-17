@@ -120,8 +120,12 @@ func TestReusableVerificationFailsWithItsPlanOrAnyMatrixJob(t *testing.T) {
 	}
 	plan, planOK := jobs["plan"]
 	verify, verifyOK := jobs["verify"]
-	if !planOK || !verifyOK || plan.Continue || verify.Continue || verify.If != "" {
+	if !planOK || !verifyOK || plan.Continue || verify.Continue {
 		t.Fatal("planning and every selected matrix job must contribute to the reusable workflow verdict")
+	}
+	// The planner refuses an empty selection except for a pull request of prose alone.
+	if verify.If != `needs.plan.outputs.matrix != '{"include":[]}'` {
+		t.Fatalf("matrix execution may be skipped only for an empty selection, got %q", verify.If)
 	}
 	if !slices.Equal(hostedNeeds(t, verify), []string{"plan"}) {
 		t.Fatal("matrix execution must depend on successful planning")

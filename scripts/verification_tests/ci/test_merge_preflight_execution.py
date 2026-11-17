@@ -17,20 +17,33 @@ class MergePreflightTests(unittest.TestCase):
         scope.start()
         self.addCleanup(scope.stop)
 
-    def test_landing_frontend_and_script_assertions_run_without_changed_statements(self):
+    def test_landing_frontend_assertions_run_without_changed_statements(self):
         import coverage_changes as coverage
         for paths in (['docs/README.md'], ['lycaon/internal/example.go'], ['scripts/example.sh'],
                       ['lycaon-den/src/model.test.ts', 'lycaon-den/src/style.css']):
-            with self.subTest(paths=paths), patch.object(coverage.subprocess, 'call', return_value=0) as call, \
-                    patch.object(coverage.python_coverage, 'run', return_value=[]) as suites, \
-                    patch.object(coverage.python_coverage, 'measure') as measure:
+            with self.subTest(paths=paths), patch.object(coverage.subprocess, 'call', return_value=0) as call:
                 scope = SimpleNamespace(paths=paths)
                 self.assertEqual(coverage.run_den(scope), ([], False, 'complete frontend tests; no changed source to measure'))
-                self.assertEqual(coverage.run_python(scope), ([], False, 'the runner suite; no changed source to measure'))
                 self.assertEqual(call.call_count, 1)
-                measure.assert_not_called()
                 self.assertNotIn('--changed', call.call_args_list[0].args[0])
+
+    def test_script_suites_run_only_for_a_change_to_what_they_read(self):
+        import coverage_changes as coverage
+        for paths in (['scripts/example.sh'], ['.github/workflows/nightly.yml'], ['packaging/nix/flake.nix'],
+                      ['Taskfile.yml'], ['task'], ['lycaon/internal/example.go', 'scripts/verification-plan.json']):
+            with self.subTest(paths=paths), patch.object(coverage.python_coverage, 'run', return_value=[]) as suites, \
+                    patch.object(coverage.python_coverage, 'measure') as measure:
+                self.assertEqual(coverage.run_python(SimpleNamespace(paths=paths)),
+                                 ([], False, 'the runner suite; no changed source to measure'))
+                measure.assert_not_called()
                 self.assertEqual(list(suites.call_args.args[1]), ['test:runner'])
+        for paths in (['docs/README.md'], ['lycaon/internal/example.go'], ['lycaon-den/src/model.ts']):
+            with self.subTest(paths=paths), patch.object(coverage.python_coverage, 'run') as suites, \
+                    patch.object(coverage.python_coverage, 'measure') as measure:
+                self.assertEqual(coverage.run_python(SimpleNamespace(paths=paths)),
+                                 ([], False, 'no change to scripts, workflows, packaging or the task runner'))
+                suites.assert_not_called()
+                measure.assert_not_called()
 
     def test_a_commit_with_no_change_runs_every_declared_script_suite(self):
         import coverage_changes as coverage
@@ -55,7 +68,7 @@ class MergePreflightTests(unittest.TestCase):
         with patch.object(coverage.subprocess, 'call', return_value=1), \
                 patch.object(coverage.python_coverage.python_tools, 'provision', side_effect=lambda requirements: requirements):
             for run in (coverage.run_den, coverage.run_python):
-                findings, failed, _ = run(SimpleNamespace(paths=['docs/README.md']))
+                findings, failed, _ = run(SimpleNamespace(paths=['lycaon-den/src/app.ts', '.github/workflows/nightly.yml']))
                 self.assertTrue(failed)
                 self.assertEqual(findings[0].level, 'error')
 

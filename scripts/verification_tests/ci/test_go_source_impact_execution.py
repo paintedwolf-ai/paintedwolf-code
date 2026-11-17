@@ -41,6 +41,42 @@ class GoSourceImpactTests(unittest.TestCase):
                 self.assertEqual(impact.broad_scope([path]), (False, []))
                 self.assertEqual(impact.selected_lanes(dict(full=False, paths=[path]), lanes), baseline | {"runner"})
 
+    def test_a_broad_change_runs_the_script_suites_only_when_it_touches_what_they_read(self):
+        lanes = hosted_plan.lanes()
+        for paths in (["lycaon/config/prompt.md"], ["lycaon/pkg/api/types.go", "docs/openapi/paths.yaml"]):
+            with self.subTest(paths=paths):
+                self.assertEqual(impact.selected_lanes(dict(full=True, paths=paths), lanes), set(lanes) - {"runner"})
+                rows = hosted_plan.matrix("integration", scope=dict(full=True, paths=paths))["include"]
+                self.assertNotIn("runner", {row["lane"] for row in rows})
+        for paths in ([], ["scripts/verification-plan.json"], ["packaging/nix/flake.nix", "lycaon/config/prompt.md"],
+                      ["Taskfile.yml"], ["task"]):
+            with self.subTest(paths=paths):
+                self.assertEqual(impact.selected_lanes(dict(full=True, paths=paths), lanes), set(lanes))
+
+    def test_a_pull_request_runs_the_den_suite_only_when_its_inputs_change(self):
+        def fast(paths, full=False):
+            return {row["lane"] for row in hosted_plan.matrix("fast", scope=dict(full=full, paths=paths))["include"]}
+        go = {"ready", "ready-lint", "ready-tests"}
+        for paths in (["lycaon-den/src/components/card.tsx"], ["docs/openapi/paths.yaml"], ["CHANGELOG.md"],
+                      [".bun-version"], ["lycaon/internal/a/a.go", "lycaon-den/package.json"]):
+            with self.subTest(paths=paths):
+                self.assertEqual(fast(paths, impact.broad_scope(paths)[0]), go | {"frontend"})
+        for paths in (["lycaon/internal/a/a.go"], ["scripts/ci_policy/health.py"], ["lycaon/config/prompt.md"]):
+            with self.subTest(paths=paths):
+                self.assertEqual(fast(paths, impact.broad_scope(paths)[0]), go)
+        self.assertEqual(fast([], full=True), go | {"frontend"})
+
+    def test_a_pull_request_of_prose_alone_leaves_the_static_job_as_its_only_check(self):
+        for paths in (["docs/git.md"], ["README.md", "lycaon/AGENTS.md", "docs/operations/release.md"]):
+            with self.subTest(paths=paths):
+                self.assertEqual(hosted_plan.matrix("fast", scope=dict(full=False, paths=paths)), {"include": []})
+                # The merge queue still runs its own lanes for the same change.
+                self.assertTrue(hosted_plan.matrix("integration", scope=dict(full=False, paths=paths))["include"])
+        for paths in (["docs/git.md", "lycaon/internal/a/a.go"], ["docs/openapi/paths.yaml"], ["CHANGELOG.md"]):
+            with self.subTest(paths=paths):
+                self.assertFalse(impact.docs_only(paths))
+                self.assertTrue(hosted_plan.matrix("fast", scope=dict(full=impact.broad_scope(paths)[0], paths=paths))["include"])
+
     def test_files_that_run_every_lane_widen(self):
         for path in [".github/workflows/ci.yml", ".github/workflows/verification.yml",
                      "scripts/ci_policy/hosted_execution.py", "scripts/ci_policy/hosted_plan.py"]:

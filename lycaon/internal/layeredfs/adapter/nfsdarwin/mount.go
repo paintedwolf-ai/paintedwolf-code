@@ -17,11 +17,11 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 )
 
-// FormatMountOptions returns the explicit macOS /sbin/mount_nfs options for port.
-func FormatMountOptions(port int) string {
+// mountOptions returns the explicit macOS /sbin/mount_nfs options for port.
+func (a *Adapter) mountOptions(port int) string {
 	return fmt.Sprintf(
 		"vers=3,tcp,port=%d,mountport=%d,locallocks,nodev,nosuid,nobrowse,%s,retrans=%d,timeo=%d,soft,rsize=%d,wsize=%d",
-		port, port, DefaultCachePolicy, DefaultRetrans, DefaultTimeo, DefaultRSize, DefaultWSize,
+		port, port, DefaultCachePolicy, a.cfg.Retrans, a.cfg.Timeo, DefaultRSize, DefaultWSize,
 	)
 }
 
@@ -214,7 +214,7 @@ func (a *Adapter) mountSingleRoot(
 		return nil, &adapter.AdapterError{AdapterID: adapter.AdapterNFSDarwin, Op: "prepare", ReasonCode: adapter.ReasonTransientStartupFailure, Diagnostic: "invalid loopback TCP port"}
 	}
 	port := tcpAddr.Port
-	mountOpts := FormatMountOptions(port)
+	mountOpts := a.mountOptions(port)
 	exportSource := "127.0.0.1:" + capCfg.ExportPath
 
 	// The identity lands before the mount exists, so a crash inside this function leaves a record to
@@ -282,8 +282,8 @@ func (a *Adapter) mountSingleRoot(
 		ServerPort:     port,
 		MountPort:      port,
 		CachePolicy:    DefaultCachePolicy,
-		RetryPolicy:    fmt.Sprintf("retrans=%d,soft", DefaultRetrans),
-		Timeout:        fmt.Sprintf("timeo=%d", DefaultTimeo),
+		RetryPolicy:    fmt.Sprintf("retrans=%d,soft", a.cfg.Retrans),
+		Timeout:        fmt.Sprintf("timeo=%d", a.cfg.Timeo),
 		RSize:          DefaultRSize,
 		WSize:          DefaultWSize,
 		MountOptions:   mountOpts,

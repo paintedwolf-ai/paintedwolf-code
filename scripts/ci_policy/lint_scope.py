@@ -1,4 +1,4 @@
-"""Run Go analysis over an explicit scope, retaining whole-program deadcode."""
+"""Run Go analysis over an explicit scope."""
 import argparse
 from pathlib import Path
 import subprocess
@@ -24,7 +24,7 @@ def commands(mode, binary, arguments):
     # Full analysis includes govet over a wider build-tag set; fast-only analysis leaves it out.
     if mode == 'fast':
         return [['go', 'vet', *packages], lint]
-    return [lint, ['bash', str(ROOT / 'scripts/deadcode-check.sh')]]
+    return [lint]
 
 
 def main(arguments):

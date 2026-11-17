@@ -57,6 +57,29 @@ describe("PreflightNudge", () => {
     expect(baseElement.querySelector('[data-testid="preflight-nudge"]')).toBeNull();
   });
 
+  it("partitions on the host tier, whatever the probe status", async () => {
+    setPreflightReport(
+      report({ id: "os_version", status: "blocked", tier: "non_catastrophic", code: "OS_BELOW_FLOOR", title: "t", message: "m" }),
+    );
+    const shown = render(() => <PreflightNudge />);
+    await findByTestId(shown.baseElement as HTMLElement, "preflight-nudge");
+    shown.unmount();
+
+    setPreflightReport(
+      report({ id: "config_dir", status: "degraded", tier: "catastrophic", code: "CONFIG_DIR_UNWRITABLE", title: "t", message: "m" }),
+    );
+    const hidden = render(() => <PreflightNudge />);
+    expect(hidden.baseElement.querySelector('[data-testid="preflight-nudge"]')).toBeNull();
+  });
+
+  it("leaves a project-scoped condition to its project", async () => {
+    setPreflightReport(
+      report({ id: "git_engine", status: "degraded", tier: "non_catastrophic", scope: "project", code: "GIT_ENGINE_UNAVAILABLE", title: "t", message: "m" }),
+    );
+    const { baseElement } = render(() => <PreflightNudge />);
+    expect(baseElement.querySelector('[data-testid="preflight-nudge"]')).toBeNull();
+  });
+
   // Blocked must not mask a degraded probe the card is still responsible for.
   it("shows a non-catastrophic probe even when another is catastrophic", async () => {
     setPreflightReport(

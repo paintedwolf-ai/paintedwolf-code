@@ -254,6 +254,7 @@ function CheckRow(props: {
       }}
       data-testid="citation-grounding-check"
       data-check-id={props.check.id}
+      data-status={props.check.status}
     >
       <div class="den-citation-grounding-check-head">
         <span class="den-citation-grounding-check-mark" aria-hidden="true">

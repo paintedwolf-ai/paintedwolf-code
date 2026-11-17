@@ -32,7 +32,7 @@ def main(directory):
                for package in packages}
     receipt = {"names": ["check-fast"], "status": "failed", "exit_code": 201,
                "evidence": [{"stage": "test:short", "results": results}],
-               "unverified_stages": ["lint:full", "budgets", "den:typecheck", "den:test:fast"]}
+               "unverified_stages": ["lint:full", "budgets", "den:typecheck", "den:coverage:changes"]}
     path = directory / "00000000000000000001-0123456789abcdef0123456789abcdef.json"
     path.write_text(json.dumps(receipt))
     notice = f"test execution: check-fast: failed (source 0123456789abcdef0123456789abcdef01234567; receipt {path})"

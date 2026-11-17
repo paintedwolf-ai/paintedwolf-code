@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/watchfd"
@@ -14,39 +15,37 @@ import (
 // A running timer callback must observe closure.
 func TestScheduleHeadNotifyStaysSilentOnceClosed(t *testing.T) {
 	t.Cleanup(ResetObserversForTest)
-
 	root := t.TempDir()
-	w, err := newWorktreeWatcher(t.Context(), root, watchfd.MaxDirs, watchfd.NewProcessBudget())
-	if err != nil {
-		t.Fatalf("new watcher: %v", err)
-	}
-	t.Cleanup(w.close)
+	synctest.Test(t, func(t *testing.T) {
+		var moved atomic.Int32
+		unbind := RegisterObserver(func(_ context.Context, ev Event) {
+			if ev.Kind == HeadMoved {
+				moved.Add(1)
+			}
+		})
+		defer unbind()
+		refs := &refObserver{root: root, physicalRoot: root}
 
-	var moved atomic.Int32
-	RegisterObserver(func(_ context.Context, ev Event) {
-		if ev.Kind == HeadMoved {
-			moved.Add(1)
+		// Leave the timer running to exercise the callback fence.
+		refs.schedule(context.Background())
+		refs.mu.Lock()
+		refs.closed = true
+		refs.mu.Unlock()
+		time.Sleep(2 * refNotifyDebounce)
+		synctest.Wait()
+		if moved.Load() != 0 {
+			t.Fatalf("closed watcher emitted HeadMoved x%d", moved.Load())
+		}
+
+		// A ref event arriving after the close arms nothing at all.
+		refs.schedule(context.Background())
+		refs.mu.Lock()
+		armed := refs.timer != nil
+		refs.mu.Unlock()
+		if armed {
+			t.Fatal("closed watcher armed a fresh HeadMoved timer")
 		}
 	})
-
-	// Leave the timer running to exercise the callback fence.
-	w.refs.schedule(context.Background())
-	w.refs.mu.Lock()
-	w.refs.closed = true
-	w.refs.mu.Unlock()
-	time.Sleep(refNotifyDebounce + 150*time.Millisecond)
-	if moved.Load() != 0 {
-		t.Fatalf("closed watcher emitted HeadMoved x%d", moved.Load())
-	}
-
-	// A ref event arriving after the close arms nothing at all.
-	w.refs.schedule(context.Background())
-	w.refs.mu.Lock()
-	armed := w.refs.timer != nil
-	w.refs.mu.Unlock()
-	if armed {
-		t.Fatal("closed watcher armed a fresh HeadMoved timer")
-	}
 }
 
 // The root reaches its repository through a symlink, as macOS temp and home

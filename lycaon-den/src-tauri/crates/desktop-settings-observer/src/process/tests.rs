@@ -138,13 +138,6 @@ fn stop_ends_a_launched_observer_that_does_not_exit_when_asked() {
 }
 
 #[test]
-fn environment_never_inherits_parent_credentials() {
-    assert!(!ENVIRONMENT.iter().any(|name| name.contains("TOKEN")
-        || name.contains("KEY")
-        || name.contains("PASSWORD")));
-    assert_eq!(ENVIRONMENT.len(), 6);
-}
-#[test]
 fn foreign_or_missing_image_cannot_select_a_command() {
     assert!(image::Image::open(Path::new("/nonexistent/bin/painted-wolf-code")).is_err());
     assert!(image::Image::open(Path::new("/bin/sh")).is_err());

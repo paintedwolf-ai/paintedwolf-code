@@ -30,6 +30,7 @@ const {
   normalizeWindowChromeLayout,
   setWindowChromeLayoutForTests,
   windowChromeControls,
+  windowEdgeChrome,
   trackWindowChromeLayout,
   windowChromeLayout,
   WINDOW_CHROME_LAYOUT_CHANGED_EVENT,
@@ -130,6 +131,18 @@ describe("trackWindowChromeLayout", () => {
     expect(invoke).not.toHaveBeenCalled();
     expect(listen).not.toHaveBeenCalled();
     expect(drawsWindowControls()).toBe(false);
+  });
+
+  it("reports drawn controls only on the sides the desktop puts them", () => {
+    setWindowChromeLayoutForTests({ left: [], right: ["close"], source: "portal" });
+    expect([windowEdgeChrome("left"), windowEdgeChrome("right")]).toEqual([null, "drawn"]);
+    setWindowChromeLayoutForTests({ left: ["close"], right: ["appmenu"], source: "portal" });
+    expect([windowEdgeChrome("left"), windowEdgeChrome("right")]).toEqual(["drawn", "drawn"]);
+  });
+
+  it("reports the OS's own buttons on the left edge of a macOS window", () => {
+    platform = "macos";
+    expect([windowEdgeChrome("left"), windowEdgeChrome("right")]).toEqual(["native", null]);
   });
 
   it("asks nothing outside the desktop runtime", async () => {

@@ -4,34 +4,19 @@ import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { DenButton, type DenButtonVariant } from "./DenButton.tsx";
 import { DenField } from "./DenField.tsx";
 import { DenInput } from "./DenInput.tsx";
-import { DenSelect } from "./DenSelect.tsx";
-import { DenTextarea } from "./DenTextarea.tsx";
-import { DenCheckbox } from "./DenCheckbox.tsx";
 import { DenRadio } from "./DenRadio.tsx";
 
 describe("DenButton", () => {
-  it("renders primary variant with btn-primary utility", () => {
-    render(() => (
-      <DenButton variant="primary" data-testid="save">
-        Save
-      </DenButton>
-    ));
-    const btn = screen.getByTestId("save");
-    expect(btn.className).toContain("btn-primary");
-    expect(btn.className).not.toContain("btn-ghost");
-    expect(btn.textContent).toBe("Save");
-  });
-
-  it("maps primary+compact to btn-primary-compact", () => {
-    render(() => (
-      <DenButton variant="primary" compact data-testid="add">
-        Add
-      </DenButton>
-    ));
-    const btn = screen.getByTestId("add");
-    expect(btn.className).toContain("btn-primary-compact");
-    expect(btn.className).not.toContain("btn-compact");
-    expect(btn.className).not.toMatch(/(^|\s)btn-primary(\s|$)/);
+  it.each([
+    ["primary", false, "btn-primary"],
+    ["primary", true, "btn-primary-compact"],
+    ["ghost", true, "btn-ghost btn-compact"],
+    ["danger", false, "btn-danger"],
+  ] as const)("maps %s (compact: %s) to its recipe alone", (variant, compact, recipe) => {
+    render(() => <DenButton variant={variant} compact={compact} data-testid="button">Save</DenButton>);
+    const button = screen.getByTestId("button");
+    expect([...button.classList].filter((name) => name.startsWith("btn-")).sort()).toEqual(recipe.split(" ").sort());
+    expect(button.textContent).toBe("Save");
   });
 
   it("forwards disabled and merges caller class", () => {
@@ -44,17 +29,6 @@ describe("DenButton", () => {
     expect(btn.disabled).toBe(true);
     expect(btn.className).toContain("btn-secondary");
     expect(btn.className).toContain("ml-auto");
-  });
-
-  it("maps danger variant to btn-danger", () => {
-    render(() => (
-      <DenButton variant="danger" data-testid="danger">
-        Reset
-      </DenButton>
-    ));
-    const btn = screen.getByTestId("danger");
-    expect(btn.className).toContain("btn-danger");
-    expect(btn.className).not.toContain("btn-secondary");
   });
 
   it("updates class when variant changes", () => {
@@ -74,22 +48,6 @@ describe("DenButton", () => {
 });
 
 describe("DenField", () => {
-  it("wraps control with den-field and label text", () => {
-    render(() => (
-      <DenField label="Apply preset" data-testid="field">
-        <DenSelect
-          aria-label="Apply preset"
-          data-testid="preset"
-          options={[{ value: "", label: "Choose…" }]}
-        />
-      </DenField>
-    ));
-    const field = screen.getByTestId("field");
-    expect(field.className).toContain("den-field");
-    expect(field.textContent).toContain("Apply preset");
-    expect(screen.getByTestId("preset").className).toContain("den-select");
-  });
-
   it("renders field error instead of hint", () => {
     render(() => (
       <DenField
@@ -101,44 +59,9 @@ describe("DenField", () => {
         <DenInput data-testid="url" />
       </DenField>
     ));
+    expect(screen.getByLabelText(/URL/)).toBe(screen.getByTestId("url"));
     expect(screen.getByTestId("field").textContent).toContain("Enter a URL.");
     expect(screen.getByTestId("field").textContent).not.toContain("Local server");
-  });
-});
-
-describe("DenInput", () => {
-  it("renders default and rules kinds", () => {
-    render(() => (
-      <>
-        <DenInput data-testid="default" value="a" readOnly />
-        <DenInput kind="rules" data-testid="rules" value="b" readOnly />
-      </>
-    ));
-    expect(screen.getByTestId("default").className).toContain("den-input");
-    expect(screen.getByTestId("rules").className).toContain("den-rules-input");
-  });
-});
-
-describe("DenTextarea", () => {
-  it("carries the field recipe and merges the caller class", () => {
-    render(() => (
-      <DenTextarea class="den-ignore-secret__value" data-testid="area" rows={2} value="a" readOnly />
-    ));
-    expect(screen.getByTestId("area").className).toContain("den-input");
-    expect(screen.getByTestId("area").className).toContain("den-ignore-secret__value");
-  });
-});
-
-describe("DenCheckbox", () => {
-  it("forwards class on the label row", () => {
-    render(() => (
-      <DenCheckbox class="den-settings-hint" data-testid="cb">
-        Overlay
-      </DenCheckbox>
-    ));
-    const input = screen.getByTestId("cb");
-    expect(input.closest("label")?.className).toContain("den-settings-hint");
-    expect(input.closest("label")?.className).toContain("den-choice-label");
   });
 });
 

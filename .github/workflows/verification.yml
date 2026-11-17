@@ -102,6 +102,8 @@ jobs:
   verify:
     name: ${{ matrix.lane }}${{ matrix.shard != '' && format(' ({0})', matrix.shard) || '' }}
     needs: plan
+    # A pull request of prose alone selects no lane; the static job verifies it.
+    if: needs.plan.outputs.matrix != '{"include":[]}'
     strategy:
       # One failed run reports every failing lane, so repairs need not rediscover them a cycle at a time.
       fail-fast: false

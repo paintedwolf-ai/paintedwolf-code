@@ -1,8 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@solidjs/testing-library";
 import { BrowseChrome } from "./BrowseChrome.tsx";
+
+vi.mock("../../platform/runtime.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../platform/runtime.ts")>()),
+  usesCustomWindowChrome: () => true,
+  tauriDragRegionProps: () => ({ "data-tauri-drag-region": "" }),
+}));
 
 const denSrc = join(import.meta.dirname, "../..");
 
@@ -12,15 +18,17 @@ function read(rel: string): string {
 
 describe("BrowseChrome", () => {
   it("uses the chat-style drag surface behind its controls", () => {
-    expect(read("components/browse/BrowseChrome.tsx")).toMatch(
-      /<ChromeDragSurface\s+class="den-browse-chrome__drag-surface"/,
-    );
+    render(() => <BrowseChrome primary={<input />} />);
+    const header = screen.getByTestId("browse-chrome");
+    const surface = header.firstElementChild;
+    expect(surface?.classList.contains("den-browse-chrome__drag-surface")).toBe(true);
+    expect(surface?.hasAttribute("data-tauri-drag-region")).toBe(true);
+    expect(surface?.nextElementSibling?.classList.contains("den-browse-chrome__primary")).toBe(true);
+
     const css = read("browse-stage-domain.css");
-    expect(css).toMatch(
-      /\.den-browse-chrome__drag-surface\[data-tauri-drag-region\][\s\S]*?-webkit-app-region:\s*drag/,
-    );
-    expect(css).toMatch(/\.den-browse-chrome__primary[\s\S]*?pointer-events:\s*none/);
-    expect(css).toMatch(/\.den-browse-chrome__chips[\s\S]*?pointer-events:\s*none/);
+    expect(css).toMatch(/\.den-browse-chrome__drag-surface\[data-tauri-drag-region\]\s*\{[^}]*app-region:\s*drag/);
+    expect(css).toMatch(/\.den-browse-chrome__primary\s*\{[^}]*pointer-events:\s*none/);
+    expect(css).toMatch(/\.den-browse-chrome__chips\s*\{[^}]*pointer-events:\s*none/);
   });
 
   it("renders primary row only when primary+overflow without chips", () => {

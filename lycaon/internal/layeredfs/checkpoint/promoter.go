@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"maps"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -84,6 +85,8 @@ type PreviewRequest struct {
 type PromoterConfig struct {
 	Store       *Store
 	TargetRoots map[string]string
+	// PrimaryRoot is the target root that receives the manifest's top-level Git refs.
+	PrimaryRoot string
 	// RetainedGitObjects are the engine's retained object stores the checkpoint's Git history builds on.
 	RetainedGitObjects []string
 }
@@ -100,6 +103,9 @@ type Promoter struct {
 func NewPromoter(cfg PromoterConfig) (*Promoter, error) {
 	if cfg.Store == nil || len(cfg.TargetRoots) == 0 {
 		return nil, fmt.Errorf("checkpoint: Store and TargetRoots are required")
+	}
+	if strings.TrimSpace(cfg.TargetRoots[cfg.PrimaryRoot]) == "" {
+		return nil, fmt.Errorf("checkpoint: PrimaryRoot %q names no target root", cfg.PrimaryRoot)
 	}
 	cfg.TargetRoots = maps.Clone(cfg.TargetRoots)
 	return &Promoter{cfg: cfg, targets: &promotionTargets{store: cfg.Store, roots: cfg.TargetRoots, ops: &SourceOps{}}}, nil
