@@ -45,7 +45,8 @@
       "den:typecheck",
       "den:lint",
       "den:test:rust",
-      "decide:test"
+      "decide:test",
+      "test:lycaon-rules"
     ],
     "check:drift": [
       "codegen:wire-enums:check",
@@ -410,6 +411,9 @@
     ],
     "validate:workflows": [
       "validate:workflows"
+    ],
+    "test:lycaon-rules": [
+      "test:lycaon-rules"
     ],
     "lint:vuln:vendor:check": [
       "lint:vuln:vendor:check"
@@ -807,6 +811,15 @@
       "locks": [],
       "workers": "shared"
     },
+    "test:lycaon-rules": {
+      "locks": [
+        "go"
+      ],
+      "workers": "shared",
+      "shared_locks": [
+        "go"
+      ]
+    },
     "build:lycaon-dev": {
       "locks": [
         "dev-engine",
@@ -1139,7 +1152,8 @@
         "check:drift",
         "openapi:lint",
         "validate:workflows",
-        "oar:verify"
+        "oar:verify",
+        "test:lycaon-rules"
       ],
       "minutes": 120,
       "profiles": [

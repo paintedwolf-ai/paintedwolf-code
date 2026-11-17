@@ -53,6 +53,24 @@ func requireBundledEngine(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 }
 
+// requireBundledLFS returns the bundled git-lfs, failing when parity is required.
+func requireBundledLFS(t *testing.T) string {
+	t.Helper()
+	path, err := gitengine.LFSPath()
+	if err == nil {
+		if st, statErr := os.Stat(path); statErr != nil || st.IsDir() || st.Mode()&0o111 == 0 {
+			err = os.ErrNotExist
+		}
+	}
+	if err != nil {
+		if parityRequired() {
+			t.Fatalf("bundled git-lfs required for parity: %v (run ./task gitengine:fetch)", err)
+		}
+		t.Skip("bundled git-lfs missing — run ./task gitengine:fetch")
+	}
+	return path
+}
+
 func parityRequired() bool {
 	v := strings.TrimSpace(strings.ToLower(os.Getenv(envParityRequired)))
 	return v == "1" || v == "true" || v == "yes"
@@ -554,11 +572,7 @@ func TestLFSSmudgeWithoutInstall(t *testing.T) {
 	skipIfShort(t)
 	ref := requireReferenceGit(t)
 	requireBundledEngine(t)
-	if p, err := gitengine.LFSPath(); err != nil {
-		t.Skip("bundled git-lfs missing")
-	} else if st, err := os.Stat(p); err != nil || st.IsDir() || st.Mode()&0o111 == 0 {
-		t.Skip("bundled git-lfs missing")
-	}
+	requireBundledLFS(t)
 
 	f := buildFixture(t, ref, fixLFS)
 	cfgPath := filepath.Join(f.home, ".gitconfig")
@@ -572,11 +586,9 @@ func TestLFSSmudgeWithoutInstall(t *testing.T) {
 		"clone", "--local", f.dir, dest,
 	}, gitexec.Opts{Profile: gitexec.ProfileNetwork, Timeout: 2 * time.Minute})
 	if err != nil || code != 0 {
-		t.Logf("clone via gitexec: err=%v code=%d out=%s — copying tree instead", err, code, out)
-		copyTree(t, f.dir, dest)
-	} else {
-		copyDirIfExists(t, filepath.Join(f.dir, ".git", "lfs"), filepath.Join(dest, ".git", "lfs"))
+		t.Fatalf("clone: err=%v code=%d out=%s", err, code, out)
 	}
+	copyDirIfExists(t, filepath.Join(f.dir, ".git", "lfs"), filepath.Join(dest, ".git", "lfs"))
 
 	out, code, err = gitexec.Run(t.Context(), dest, []string{"checkout", "-f", "HEAD"}, gitexec.Opts{
 		Timeout: 2 * time.Minute,
@@ -604,13 +616,7 @@ func TestLFSSmudgeWithoutInstall(t *testing.T) {
 func TestLFSFromEnginePathWithSpaces(t *testing.T) {
 	skipIfShort(t)
 	requireBundledEngine(t)
-	realLFS, err := gitengine.LFSPath()
-	if err != nil {
-		t.Skip("bundled git-lfs missing")
-	}
-	if st, statErr := os.Stat(realLFS); statErr != nil || st.IsDir() || st.Mode()&0o111 == 0 {
-		t.Skip("bundled git-lfs missing")
-	}
+	realLFS := requireBundledLFS(t)
 
 	spaced := filepath.Join(t.TempDir(), "Painted Wolf Code.app", "bin")
 	testutil.FailErr(t, "mkdir spaced engine dir", os.MkdirAll(spaced, 0o755))
@@ -703,6 +709,7 @@ func TestRepoAttributesStillApply(t *testing.T) {
 	}
 }
 
+// Read operations on a 50 MiB file fit the default output cap and match the reference.
 func TestLargeFileWithinCaps(t *testing.T) {
 	skipIfShort(t)
 	ref := requireReferenceGit(t)
@@ -713,46 +720,64 @@ func TestLargeFileWithinCaps(t *testing.T) {
 		MaxOutput: int64(exec.DefaultMaxOutputBytes),
 		Timeout:   5 * time.Minute,
 	}
-	out, code, err := gitexec.Run(t.Context(), f.dir, []string{"status", "--porcelain=v2"}, opts)
-	if err != nil {
-		if strings.Contains(err.Error(), "truncat") || strings.Contains(string(out), "truncat") {
-			t.Fatalf("output truncated: %v\n%s", err, out)
-		}
-		t.Fatalf("status: %v code=%d out=%s", err, code, out)
-	}
-	if code != 0 {
-		t.Fatalf("status code=%d out=%s", code, out)
-	}
-	out, code, err = gitexec.Run(t.Context(), f.dir, []string{"rev-parse", "HEAD"}, opts)
-	if err != nil || code != 0 {
-		t.Fatalf("rev-parse: err=%v code=%d out=%s", err, code, out)
-	}
-	out, code, err = gitexec.Run(t.Context(), f.dir, []string{"ls-files", "-s"}, opts)
-	if err != nil || code != 0 {
-		t.Fatalf("ls-files: err=%v code=%d out=%s", err, code, out)
-	}
+	compareReadOps(t, ref, f, opts, [][]string{
+		{"status", "--porcelain=v2"},
+		{"rev-parse", "HEAD"},
+		{"ls-files", "-s"},
+	})
 }
 
+// Read operations without the LFS helper match the reference, and the helper is
+// really absent: an lfs-attributed file stages as raw bytes, not as a pointer.
 func TestLFSAbsentDegradesGracefully(t *testing.T) {
 	skipIfShort(t)
 	ref := requireReferenceGit(t)
 	requireBundledEngine(t)
 
 	f := buildFixture(t, ref, fixPlain)
+	t.Setenv("HOME", f.home)
 	t.Setenv(gitengine.EnvTest, "1")
 	t.Setenv(gitexec.EnvLFSForceAbsent, "1")
 
-	ops := [][]string{
+	compareReadOps(t, ref, f, gitexec.Opts{}, [][]string{
 		{"status", "--porcelain=v2"},
 		{"log", "--format=%H%x09%s", "-n", "5"},
 		{"diff", "--stat"},
 		{"rev-parse", "HEAD"},
 		{"ls-files", "-s"},
+	})
+
+	dir := t.TempDir()
+	if out, code := engineRun(t, dir, []string{"init"}, gitexec.Opts{}); code != 0 {
+		t.Fatalf("init: code=%d out=%s", code, out)
 	}
+	writeFileBytes(t, dir, ".gitattributes", []byte("*.bin filter=lfs diff=lfs merge=lfs -text\n"))
+	content := bytes.Repeat([]byte{0x05, 0x06, 0x07, 0x08}, 256)
+	writeFileBytes(t, dir, "blob.bin", content)
+	if out, code := engineRun(t, dir, []string{"add", "-A"}, gitexec.Opts{}); code != 0 {
+		t.Fatalf("add with LFS absent: code=%d out=%s", code, out)
+	}
+	staged, code := engineRun(t, dir, []string{"show", ":blob.bin"}, gitexec.Opts{})
+	if code != 0 {
+		t.Fatalf("show staged blob: code=%d out=%s", code, staged)
+	}
+	if staged != string(content) {
+		t.Fatalf("staged blob is %d bytes, want the raw %d bytes (helper still active?)", len(staged), len(content))
+	}
+}
+
+// compareReadOps runs each read operation through the engine and the reference
+// git on the same fixture and requires equal exit codes and output.
+func compareReadOps(t *testing.T, ref string, f fixture, opts gitexec.Opts, ops [][]string) {
+	t.Helper()
+	env := []string{"HOME=" + f.home, "GIT_CONFIG_NOSYSTEM=1", "GIT_TERMINAL_PROMPT=0"}
+	tempRoots := []string{f.dir, f.home}
 	for _, args := range ops {
-		out, code, err := gitexec.Run(t.Context(), f.dir, args, gitexec.Opts{})
-		if err != nil || code != 0 {
-			t.Fatalf("%v with LFS absent: err=%v code=%d out=%s", args, err, code, out)
+		eOut, eCode := engineRun(t, f.dir, args, opts)
+		rOut, rCode := refRunAllowFail(t, ref, f.dir, env, args...)
+		if eCode != 0 || eCode != rCode {
+			t.Fatalf("%v: exit engine=%d ref=%d\nengine=%s\nref=%s", args, eCode, rCode, eOut, rOut)
 		}
+		compareOp(t, strings.Join(args, " "), eOut, rOut, args[0] == "status" || args[0] == "ls-files", tempRoots)
 	}
 }

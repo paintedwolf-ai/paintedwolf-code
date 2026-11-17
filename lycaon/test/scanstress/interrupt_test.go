@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -16,9 +17,8 @@ import (
 
 // awaitEngineRunning blocks until this process owns a live engine descendant,
 // so an interrupt lands inside real engine work rather than during startup.
-func awaitEngineRunning(t *testing.T, within time.Duration) bool {
+func awaitEngineRunning(t *testing.T) bool {
 	t.Helper()
-	_ = within
 	for t.Context().Err() == nil {
 		if len(engineProcesses(descendants(processTable(t), os.Getpid()))) > 0 {
 			return true
@@ -45,35 +45,24 @@ func TestCancellationTerminatesEngineTree(t *testing.T) {
 		errCh <- err
 	}()
 
-	if !awaitEngineRunning(t, 3*time.Minute) {
+	if !awaitEngineRunning(t) {
 		cancel()
 		<-errCh
 		obs.finish()
 		t.Fatal("engine never started; nothing to cancel")
 	}
-	// Let the engine reach steady-state work before the interrupt.
-	time.Sleep(5 * time.Second)
 	engineBefore := engineProcesses(descendants(processTable(t), os.Getpid()))
 	cancelAt := time.Now()
 	cancel()
 
-	var runErr error
-	select {
-	case runErr = <-errCh:
-	case <-t.Context().Done():
-		obs.finish()
-		t.Fatal("Run did not return within 2m after cancellation")
-	}
+	runErr := <-errCh
 	returnLatency := time.Since(cancelAt)
 	samples := obs.finish()
 
-	if runErr == nil {
-		t.Error("canceled scan returned a nil error; an interrupted scan must not read as a completed one")
-	}
 	if !errors.Is(runErr, context.Canceled) {
-		reportf(t, "cancel error does not wrap context.Canceled: %v", runErr)
+		t.Errorf("canceled scan returned %v; an interrupted scan must report context.Canceled", runErr)
 	}
-	drain, survivors := awaitNoEngineProcesses(t, 30*time.Second)
+	drain, survivors := awaitNoEngineProcesses(t)
 	if len(survivors) > 0 {
 		t.Errorf("engine processes survived cancellation after %s: %+v", drain, survivors)
 	}
@@ -101,8 +90,12 @@ func TestHardLimitTimeoutTerminatesEngineTree(t *testing.T) {
 	elapsed := time.Since(start)
 	samples := obs.finish()
 
-	if err == nil {
-		t.Fatalf("scan completed in %s under a %ds hard limit; the limit did not bind", elapsed, hard)
+	var timeout *exec.TimeoutError
+	if !errors.As(err, &timeout) || !timeout.CommandDeadline {
+		t.Fatalf("scan under a %ds hard limit returned %v after %s; want the engine's own deadline", hard, err, elapsed)
+	}
+	if elapsed < time.Duration(hard)*time.Second {
+		t.Fatalf("hard limit of %ds fired after %s", hard, elapsed)
 	}
 	// The engine must have been doing work when the limit fired.
 	sawEngine := false
@@ -116,7 +109,7 @@ func TestHardLimitTimeoutTerminatesEngineTree(t *testing.T) {
 		t.Fatal("hard limit fired before any engine process existed; the test measured startup, not a timeout")
 	}
 	overshoot := elapsed - time.Duration(hard)*time.Second
-	drain, survivors := awaitNoEngineProcesses(t, 30*time.Second)
+	drain, survivors := awaitNoEngineProcesses(t)
 	if len(survivors) > 0 {
 		t.Errorf("engine processes survived the hard limit after %s: %+v", drain, survivors)
 	}

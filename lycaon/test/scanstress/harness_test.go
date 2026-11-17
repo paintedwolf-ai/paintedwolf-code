@@ -193,9 +193,8 @@ func peakProcs(samples []treeSample) int {
 
 // awaitNoEngineProcesses waits for every engine descendant of this process to
 // leave the process table, returning the time it took and what survived.
-func awaitNoEngineProcesses(t *testing.T, within time.Duration) (time.Duration, []procRow) {
+func awaitNoEngineProcesses(t *testing.T) (time.Duration, []procRow) {
 	t.Helper()
-	_ = within
 	self := os.Getpid()
 	start := time.Now()
 	var last []procRow

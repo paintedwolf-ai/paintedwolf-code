@@ -42,14 +42,20 @@ func serve(root string, in io.Reader, out io.Writer) error {
 		}
 		return encoder.Encode(inv)
 	}
+	// A refused case refuses the whole batch before any program runs.
+	for i, c := range req.Cases {
+		if err := c.validate(); err != nil {
+			return fmt.Errorf("case %d: %w", i, err)
+		}
+	}
+	if len(req.Cases) == 0 {
+		return nil
+	}
 	d := &driver{root: root, privileged: os.Geteuid() == 0, scratch: filepath.Join(root, driverScratch)}
 	if err := os.MkdirAll(d.scratch, 0o700); err != nil {
 		return err
 	}
 	for i, c := range req.Cases {
-		if err := c.validate(); err != nil {
-			return fmt.Errorf("case %d: %w", i, err)
-		}
 		result, err := d.run(req.Shell, c)
 		if err != nil {
 			return fmt.Errorf("case %d: %w", i, err)

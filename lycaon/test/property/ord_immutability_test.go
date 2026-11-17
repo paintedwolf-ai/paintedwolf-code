@@ -68,13 +68,11 @@ func TestOrdCreatedAtImmutabilityAcrossPatches(t *testing.T) {
 			t.Fatalf("seq did not advance across patch: was %d, now %d — seq is the mutation clock", before.Seq, after.Seq)
 		}
 
-		// Hydration follows the immutable ordinal.
+		// The patch rewrites the row in place; it never adds or removes one.
 		all, err := store.GetMessages(ctx, sess.ID)
 		failErr(t, "get messages", err)
-		for i := 1; i < len(all); i++ {
-			if all[i].Ord <= all[i-1].Ord {
-				t.Fatalf("hydration not in ord order at %d: ord %d <= %d — every ordering path reads ord", i, all[i].Ord, all[i-1].Ord)
-			}
+		if len(all) != 1 || all[0].ID != id || all[0].Ord != before.Ord {
+			t.Fatalf("session holds %d rows after patch, want only %s at ord %d", len(all), id, before.Ord)
 		}
 	})
 }

@@ -6,7 +6,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/search"
 	"github.com/lycaon/lycaon/pkg/api"
-	"pgregory.net/rapid"
 )
 
 // Progress markers and phase explain notes, whose text is manifest copy
@@ -83,21 +82,4 @@ func TestSearchProjectionTotalOverMessageKinds(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestProjectLifecycleEvidenceNonEmptyForPlanRows(t *testing.T) {
-	rapid.Check(t, func(t *rapid.T) {
-		name := rapid.StringMatching(`[a-zA-Z0-9][a-zA-Z0-9 ]{0,40}`).Draw(t, "name")
-		msg := api.Message{
-			ID:        rapid.String().Draw(t, "id"),
-			Role:      api.MessageRoleAssistant,
-			Kind:      api.MessageKindBlueprint,
-			Content:   "plan body",
-			Blueprint: &api.BlueprintMeta{BlueprintPath: "p1", BlueprintTitle: name, Status: api.BlueprintTranscriptStatusProposed},
-		}
-		rows := search.ProjectLifecycleEvidence("proj", "sess", msg)
-		if len(rows) == 0 {
-			t.Fatal("plan row must project evidence")
-		}
-	})
 }

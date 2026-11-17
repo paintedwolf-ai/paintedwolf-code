@@ -50,7 +50,7 @@ func TestBaselineScanCost(t *testing.T) {
 	reportf(t, "peak_aggregate_rss_mib=%.1f peak_self_rss_mib=%.1f peak_descendants=%d samples=%d",
 		float64(top.AggregateRSS)/1024, float64(top.SelfRSS)/1024, peakProcs(samples), len(samples))
 
-	drain, survivors := awaitNoEngineProcesses(t, 10*time.Second)
+	drain, survivors := awaitNoEngineProcesses(t)
 	if len(survivors) > 0 {
 		t.Errorf("engine processes survived a completed scan after %s: %+v", drain, survivors)
 	}

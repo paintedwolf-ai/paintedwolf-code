@@ -73,7 +73,7 @@ observable behavior; they do not freeze prompt wording.
 
 ## Test rules
 
-- Tests make no real LLM calls. Use fixtures, stub providers, fake MCP servers, and `LYCAON_LLM_MOCK=1`. Live provider smoke tests require the `live_llm` build tag in addition to credentials; they never run in normal, full, race, or coverage suites and still require separate authorization for paid calls.
+- Tests make no real LLM calls. Use fixtures, stub providers, fake MCP servers, and `LYCAON_LLM_MOCK=1`. Live provider runs belong to the coordinator benchmark under `scripts/coordinator-benchmark`, which requires separate authorization for paid calls.
 - Invalid manifests, unknown vocabulary ids, and forbidden ids fail at load or transition time.
 - New HTTP routes carry a contract test and an authenticated HTTP journey.
 - Durable encoding tests compare exact bytes, BOM state, line endings, and raw hashes.
