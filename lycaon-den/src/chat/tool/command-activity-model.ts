@@ -202,6 +202,16 @@ export function commandActivityHeadline(entries: readonly ActivitySpanEntry[], f
  return headline;
 }
 
+const MAX_SEQUENCE_LABELS = 3;
+
+export function commandActivitySequence(entries: readonly ActivitySpanEntry[]): string {
+  const groups = [...new Set(activityFacts(entries).map(fact => fact.group).filter(Boolean))];
+  if (groups.length < 2) return "";
+  const sequence = groups.slice(0, MAX_SEQUENCE_LABELS).join(" → ");
+  const remaining = groups.length - MAX_SEQUENCE_LABELS;
+  return remaining > 0 ? `${sequence} · +${remaining}` : sequence;
+}
+
 /** Receipts without an activity snapshot use the same card and retain all operations. */
 export function commandActivityPart(part: ToolPartView): ToolPartView {
  if (part.commandActivity || !part.commandProgram) return part;

@@ -34,6 +34,7 @@ import type { VirtualListMatch } from "../../find/virtual-list-find.ts";
 
 export type ActivitySpanCardProps = {
   label: string;
+  sequence?: string;
   entries: readonly ActivitySpanEntry[];
   layout: TranscriptLayout;
   sessionId?: string;
@@ -258,6 +259,9 @@ export function ActivitySpanCard(props: ActivitySpanCardProps) {
             <ActivityFailureChip failed={failed()} />
           </span>
           <span class="den-tool-chicklet-caret" aria-hidden="true" />
+          <Show when={props.sequence}>
+            {(sequence) => <span class="den-activity-span-hint" data-tip={sequence()} data-tip-when-clipped="">{sequence()}</span>}
+          </Show>
         </span>
       </TranscriptDisclosureToggle>
       <TranscriptDisclosurePanel disclosure={disclosure} class="den-activity-span-items">

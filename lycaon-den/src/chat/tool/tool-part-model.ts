@@ -289,8 +289,7 @@ export function toolDrawsWhileRunning(toolName: string, options: ToolPartTranscr
   return !shouldOmitToolPartFromTranscript(undefined, toolName, options);
 }
 
-/** One-line label for collapsed group hints and card summaries. */
-export function toolPartSummaryTitle(part: ToolPartView): string {
+function toolPartSummaryTitle(part: ToolPartView): string {
   // The host-stamped skill identifies the activation reliably.
   const activated = part.skill?.name?.trim();
   const resource = skillReadResource(part);

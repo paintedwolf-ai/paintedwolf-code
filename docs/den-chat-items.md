@@ -110,7 +110,7 @@ Activity-span principles:
 - retain stable constituent ids and expansion state;
 - show zero-net-change rather than erase the activity;
 - keep worker branches separate because their paths resolve in different workspaces;
-- show the group headline, status, and applicable action and failure counts in a single header row.
+- show the group headline, status, and applicable action and failure counts in the header. Command groups with multiple distinct activity labels show the first three in order, joined by arrows, followed by the number of additional labels.
 
 A large set of file folds may receive a manifest group. That is presentation over the same rows, not a new source of change history.
 
