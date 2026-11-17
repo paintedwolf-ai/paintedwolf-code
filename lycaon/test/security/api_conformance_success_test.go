@@ -48,7 +48,7 @@ type successInputs struct {
 
 // successRecipes holds the operations whose success needs more than fixture
 // ids and a schema-valid body, one map per domain.
-var successRecipes = mergeRecipes(hostWideRecipes)
+var successRecipes = mergeRecipes(hostWideRecipes, projectRecipes)
 
 // hostWideRecipes end the host's ordinary service, so they run last.
 var hostWideRecipes = map[string]successRecipe{
@@ -153,7 +153,9 @@ func (s *conformanceSweep) successRequest(ctx context.Context, op *conformanceOp
 		}
 		return conformanceRequest{op: op, probe: "success", params: params, query: query}, nil
 	}
-	body := s.values.body(op.JSONBody, nil)
+	// Write-only fields hold fresh secrets the sweep scans for, so no shared
+	// value becomes a protected secret that screens fixture text.
+	body := s.values.body(op.JSONBody, func(name string) string { return s.secrets.issue(op.ID + "." + name) })
 	if len(in.fields) > 0 {
 		fields, ok := body.(map[string]any)
 		if !ok {

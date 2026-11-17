@@ -44,6 +44,8 @@ const (
 // for a subscriber that stays, one that resumes, and one whose cursor
 // expires; a subscriber that watched from the start agrees with both.
 func TestBootstrapPlusEventsConverges(t *testing.T) {
+	// Every generated case creates two chats; admission limits are their own contract.
+	t.Setenv("LYCAON_RATE_SESSIONS_PER_MIN", "100000000")
 	h := wiring.BuildForTest(t, wiring.WithoutCoordinatorLoop())
 	srv := httptest.NewServer(h.Server)
 	t.Cleanup(srv.Close)
@@ -72,11 +74,14 @@ func TestBootstrapPlusEventsConverges(t *testing.T) {
 		}
 		world.settle()
 		late := map[string]convergeState{}
+		// A client holding two bootstraps resumes from the earlier cursor.
 		var cursor string
 		for _, chat := range chats {
 			boot := world.bootstrap(chat)
 			late[chat] = stateFromBootstrap(boot)
-			cursor = boot.EventCursor
+			if cursor == "" {
+				cursor = boot.EventCursor
+			}
 		}
 		stream := world.subscribe(cursor)
 		var delivered []wire.EventEnvelope
@@ -86,12 +91,17 @@ func TestBootstrapPlusEventsConverges(t *testing.T) {
 				stream.close()
 				if mode == resumeExpired {
 					world.expireReplay(early)
-					rebooted := world.resubscribeExpired(lastCursor(delivered, cursor))
+					world.resubscribeExpired(lastCursor(delivered, cursor))
+					cursor = ""
 					for _, chat := range chats {
-						late[chat] = stateFromBootstrap(world.bootstrap(chat))
+						boot := world.bootstrap(chat)
+						late[chat] = stateFromBootstrap(boot)
+						if cursor == "" {
+							cursor = boot.EventCursor
+						}
 					}
 					delivered = nil
-					stream = world.subscribe(rebooted)
+					stream = world.subscribe(cursor)
 				} else {
 					stream = world.subscribe(lastCursor(delivered, cursor))
 				}
@@ -321,9 +331,9 @@ func (w *convergeWorld) expireReplay(watching *convergeStream) {
 	}
 }
 
-// resubscribeExpired requires the stream to refuse an expired cursor with
-// the cursor to continue from.
-func (w *convergeWorld) resubscribeExpired(expired string) string {
+// resubscribeExpired requires the stream to refuse an expired cursor and name
+// the cursor it would continue from; the client bootstraps again instead.
+func (w *convergeWorld) resubscribeExpired(expired string) {
 	resp := w.openStream(w.t.Context(), expired)
 	defer resp.Body.Close()
 	var refusal struct {
@@ -336,7 +346,6 @@ func (w *convergeWorld) resubscribeExpired(expired string) string {
 	if resp.StatusCode != http.StatusConflict || refusal.Code != wire.ApiErrorCodeEventReplayUnavailable || refusal.Details.EventCursor == "" {
 		w.t.Fatalf("expired cursor answered %d %s with cursor %q, want 409 %s naming one", resp.StatusCode, refusal.Code, refusal.Details.EventCursor, wire.ApiErrorCodeEventReplayUnavailable)
 	}
-	return refusal.Details.EventCursor
 }
 
 func (w *convergeWorld) openStream(ctx context.Context, after string) *http.Response {

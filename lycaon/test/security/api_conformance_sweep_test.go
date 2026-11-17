@@ -3,6 +3,9 @@ package security
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -21,6 +24,7 @@ import (
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/presence"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -69,6 +73,10 @@ func TestAPIConformance(t *testing.T) {
 		// Admission limits are their own contract; the sweep sends many writes.
 		t.Setenv(key, "100000000")
 	}
+	// The sweep signs presence proofs as the desktop shell would.
+	presencePublic, presenceKey, err := ed25519.GenerateKey(rand.Reader)
+	testutil.FailErr(t, "generate a presence key", err)
+	t.Setenv(presence.PublicKeyEnv, base64.RawURLEncoding.EncodeToString(presencePublic))
 	h := wiring.BuildForTest(t)
 	hub := h.MemoryHub()
 	if hub == nil {
@@ -101,7 +109,7 @@ func TestAPIConformance(t *testing.T) {
 	// A keyed web research provider.
 	sweep.values.bind("/v1/web-research/providers/{provider_id}", "", string(wire.WebSearchProviderTavily))
 	sweep.host = h
-	sweep.fixture = conformanceFixture{t: t, projectDir: projectDir, project: project, session: sess}
+	sweep.fixture = conformanceFixture{t: t, presenceKey: presenceKey, projectDir: projectDir, project: project, session: sess}
 	hostIDs := conformanceHostLookup(t, h)
 	sweep.beforeDeletes = hostIDs.remember
 	sweep.runAll(t.Context())
@@ -434,8 +442,9 @@ func (s *conformanceSweep) recordOutcome(ex conformanceExchange, valid bool) {
 // conformanceFixture is the project and chat every sweep starts from, and
 // the test that owns them, for recipes that start servers or write files.
 type conformanceFixture struct {
-	t          *testing.T
-	projectDir string
-	project    wire.Project
-	session    wire.Session
+	t           *testing.T
+	presenceKey ed25519.PrivateKey
+	projectDir  string
+	project     wire.Project
+	session     wire.Session
 }
