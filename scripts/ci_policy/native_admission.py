@@ -6,7 +6,7 @@ from verification_plan import catalog
 def runs_script_coverage(scope):
     """A change to what the script suites read gets those suites before the queue; a scope without a base
     runs them too."""
-    return bool(scope) and (not scope['paths'] or script_change(scope['paths']))
+    return bool(scope) and (not scope.get('paths') or script_change(scope['paths']))
 
 
 def commands(scope):

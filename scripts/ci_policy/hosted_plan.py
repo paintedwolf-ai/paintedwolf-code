@@ -177,7 +177,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
     if profile in {"fast", "integration"} and scope is not None:
         from ci_policy.impact import docs_only, fast_lanes, selected_lanes
         selected &= (fast_lanes if profile == "fast" else selected_lanes)(scope, values)
-        prose = profile == "fast" and docs_only(scope["paths"])
+        prose = profile == "fast" and docs_only(scope.get("paths", []))
     result = []
     for name, lane in values.items():
         if name not in selected:

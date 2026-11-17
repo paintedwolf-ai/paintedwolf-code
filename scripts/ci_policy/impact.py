@@ -119,16 +119,18 @@ def broad_scope(paths):
 def fast_lanes(scope, lanes):
     """A pull request's lanes. Prose alone leaves the static job, which checks its links, the only check;
     the Den suite runs when its inputs change. A scope without a base runs every lane."""
-    if docs_only(scope["paths"]):
+    paths = scope.get("paths", [])
+    if docs_only(paths):
         return set()
-    if scope["paths"] and not frontend_change(scope["paths"]):
+    if paths and not frontend_change(paths):
         return set(lanes) - {"frontend"}
     return set(lanes)
 
 
 def selected_lanes(scope, lanes):
     if scope["full"]:
-        return set(lanes) if not scope["paths"] or script_change(scope["paths"]) else set(lanes) - {"runner"}
+        paths = scope.get("paths", [])
+        return set(lanes) if not paths or script_change(paths) else set(lanes) - {"runner"}
     paths = [path for path in scope["paths"] if not prose(path) and not tooling(path)]
     native = [native_dependencies(path) for path in paths if native_dependencies(path) is not None]
     ordinary = [path for path in paths if native_dependencies(path) is None]
