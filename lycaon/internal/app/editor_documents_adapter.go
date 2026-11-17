@@ -34,6 +34,11 @@ func (a editorDocumentsAdapter) VisitUnsavedDocuments(ctx context.Context, proje
 	})
 }
 
+func (a editorDocumentsAdapter) RetainRevision(ctx context.Context, projectID, documentID string, revision int64) error {
+	_, err := a.service.Pin(ctx, projectID, documentID, revision)
+	return documentEditError(err)
+}
+
 func (a editorDocumentsAdapter) SaveForAgentOperation(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string, descendants bool, call tools.EditorAgentCall) error {
 	return documentEditError(a.service.SaveForAgentOperation(ctx, projectID, branch, rootID, path, descendants,
 		editordoc.AgentCall{SessionID: call.SessionID, Turn: call.Turn, ToolCallID: call.ToolCallID, ToolName: call.ToolName}))

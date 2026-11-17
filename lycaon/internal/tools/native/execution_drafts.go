@@ -16,7 +16,9 @@ import (
 // autosaves it. A document whose file changed outside it is a revision
 // conflict, since saving would overwrite that change.
 func (e ExecutionRevisions) SaveDrafts(ctx context.Context, tctx tools.ToolContext, path string, descendants bool) error {
-	resolved, err := projectpaths.ResolveWrite(ctx, e.Boundary, tctx, path)
+	// The save is the person's text reaching its own file; the operation's
+	// write authority is checked where it binds its paths.
+	resolved, err := projectpaths.ResolveRead(ctx, e.Boundary, tctx, path)
 	if err != nil {
 		return err
 	}

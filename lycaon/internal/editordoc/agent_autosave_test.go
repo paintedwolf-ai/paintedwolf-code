@@ -23,7 +23,10 @@ func (f agentFixture) typeDraft(t *testing.T, d *Document, content string) *Docu
 // An agent operation saves the person's draft first, and the saved bytes stay
 // the person's own contribution.
 func TestSaveForAgentOperationSavesThePersonsDraftUnderTheirAuthorship(t *testing.T) {
-	f := newAgentFixture(t, map[string]string{"dir/a.txt": "saved\n", "dir/b.txt": "clean\n", "other.txt": "outside\n"})
+	f := newAgentFixture(t, map[string]string{"other.txt": "outside\n"})
+	testutil.FailErr(t, "make directory", os.Mkdir(filepath.Join(f.root, "dir"), 0o755))
+	f.write(t, "dir/a.txt", "saved\n")
+	f.write(t, "dir/b.txt", "clean\n")
 	a := f.typeDraft(t, f.open(t, "dir/a.txt"), "typed by the person\n")
 	other := f.typeDraft(t, f.open(t, "other.txt"), "untouched draft\n")
 	f.open(t, "dir/b.txt")

@@ -131,6 +131,10 @@ func (f *fakeEditorDocuments) VisitUnsavedDocuments(_ context.Context, _ string,
 	return nil
 }
 
+func (f *fakeEditorDocuments) RetainRevision(context.Context, string, string, int64) error {
+	return nil
+}
+
 // SaveForAgentOperation saves each matching draft as its base, as a save would.
 func (f *fakeEditorDocuments) SaveForAgentOperation(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string, descendants bool, _ tools.EditorAgentCall) error {
 	return f.VisitUnsavedDocuments(ctx, projectID, branch, rootID, path, descendants, func(state tools.EditorDocumentState) error {

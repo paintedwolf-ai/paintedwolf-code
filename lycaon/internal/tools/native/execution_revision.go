@@ -248,6 +248,12 @@ func captureDestinationRevision(ctx context.Context, tctx tools.ToolContext, res
 	if st.Editor != nil {
 		revision.Mode, revision.Representation = toolcontract.AcceptedDocumentRevision, toolcontract.LogicalUTF8LF
 		revision.DocumentID, revision.DocumentRevision, revision.DiskSHA256 = st.Editor.ID, st.Editor.Revision, st.Editor.BaseSHA256
+		// The edit anchors in this revision, so typing that follows can merge with it.
+		if documents, ok := sourceview.DocumentsFor(tctx, resolved); ok {
+			if err := documents.RetainRevision(ctx, tctx.Identity.ProjectID, st.Editor.ID, st.Editor.Revision); err != nil {
+				return sourceview.Text{}, toolcontract.ExecutionRevision{}, &ExecutionRevisionConflict{Path: resolved.DisplayPath, Pinned: revision, Cause: err}
+			}
+		}
 	} else {
 		revision.Mode, revision.Representation = toolcontract.PublishedDiskRevision, toolcontract.UTF8SourceBytes
 		revision.DiskSHA256 = st.Disk.RawSHA256()

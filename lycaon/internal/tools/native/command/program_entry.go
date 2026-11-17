@@ -31,7 +31,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 )
 
 // ProgramRuntime holds the host services every command program composes.
@@ -216,7 +215,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	}
 	run.windows = &tools.ProgramWindows{}
 	ctx = tools.WithProgramWindows(ctx, run.windows)
-	ctx = sourceview.WithUnsavedPaths(ctx)
+	ctx = tools.WithUnsavedPaths(ctx)
 	ctx = tools.WithCommandReadObserver(ctx, func(ctx context.Context, root, path string) error {
 		run.observeProvenanceFileRead(ctx, root, path)
 		return nil

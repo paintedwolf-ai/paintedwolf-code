@@ -36,8 +36,11 @@ func TestPinnedEditPublishesWithoutAgentReadAtCapturedRevision(t *testing.T) {
 func TestPinnedEditMergesTypingAfterCapture(t *testing.T) {
 	f := newAgentFixture(t, map[string]string{"a.txt": "one\ntwo\nthree\n"})
 	document := f.open(t, "a.txt")
-	edit := pinnedEdit(document, "ONE\ntwo\nthree\n")
-	_, err := f.service.ReplaceSnapshot(t.Context(), document.ID, f.project.ID, SnapshotReplacement{DocumentCommand: DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: document.Revision}, Content: "one\ntwo\nthree\nhuman\n", EOL: "lf"})
+	// The capture retains its revision, as a program's destination capture does.
+	captured, err := f.service.Pin(t.Context(), f.project.ID, document.ID, document.Revision)
+	testutil.FailErr(t, "retain captured revision", err)
+	edit := pinnedEdit(captured, "ONE\ntwo\nthree\n")
+	_, err = f.service.ReplaceSnapshot(t.Context(), document.ID, f.project.ID, SnapshotReplacement{DocumentCommand: DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: document.Revision}, Content: "one\ntwo\nthree\nhuman\n", EOL: "lf"})
 	testutil.FailErr(t, "type after capture", err)
 	previews, err := f.service.PreviewAgentEdits(t.Context(), []AgentEdit{edit})
 	testutil.FailErr(t, "preview anchored edit", err)
@@ -93,7 +96,7 @@ func TestPinnedEditConflictsWhenTheFileChangedOutside(t *testing.T) {
 
 func TestPinnedEditRefusesReviewBehindItsCapture(t *testing.T) {
 	f := newAgentFixture(t, map[string]string{"a.txt": "base\n"})
-	document := f.open(t, "a.txt")
+	document := f.typeDraft(t, f.open(t, "a.txt"), "typed\n")
 	edit := pinnedEdit(document, "next\n")
 	edit.ReviewedRevision = document.Revision - 1
 	if _, err := f.service.ApplyAgentEdit(t.Context(), edit); !errors.Is(err, ErrOperationConflict) {
@@ -108,6 +111,7 @@ func TestPinnedEditRefusesReviewBehindItsCapture(t *testing.T) {
 		t.Fatal("refused edit published")
 	}
 }
+
 
 func TestPublishAgentEditsSavesHeldAgentDraftWithoutTouchingHumanDraft(t *testing.T) {
 	f := newAgentFixture(t, nil)
