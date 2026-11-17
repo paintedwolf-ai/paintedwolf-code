@@ -161,6 +161,19 @@ jobs:
           -run '^(TestBrowserProcessCancellationSettlesBeforeReturning|TestBrowserProcessUsesOwnedNativeDoorInBothPostures|TestHeadlessLauncherPinsSubprocessPath|TestLaunchHeadlessUnderBrowserConfinement|TestProbeUsabilityUnderBrowserConfinement|TestPoolNewPageUnderBrowserConfinement|TestCaptureURLReachesHostLoopback|TestConfinedBrowserFloorReachesHostLoopback|TestConfinedBrowserCannotReadDeniedFiles|TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt|TestLaunchHeadlessRefusesUnsafeCacheDir)$'
           -count=1
 
+      # Release custody refusal needs the unsigned release build, which only
+      # this job prepares; ordinary macOS test runs skip it.
+      - name: Unsigned release custody
+        if: ${{ !cancelled() }}
+        timeout-minutes: 30
+        run: |
+          set -euo pipefail
+          release="$RUNNER_TEMP/unsigned-release"
+          (cd lycaon && go build -tags=paintedwolf_release -o "$release/pw" ./cmd/lycaon)
+          (cd lycaon && go build -tags=paintedwolf_release -o "$release/macosreleaseprobe" ./cmd/lycaon/testdata/macosreleaseprobe)
+          PW_UNSIGNED_RELEASE_DIR="$release" ./task test:digest -- ./cmd/lycaon \
+            -run '^TestMacOSUnsignedReleaseCustodyRefusalPreservesLegacyFilesAndRefusesTokenPrint$' -count=1
+
       - name: Git engine parity matrix
         if: ${{ !cancelled() }}
         timeout-minutes: 30
