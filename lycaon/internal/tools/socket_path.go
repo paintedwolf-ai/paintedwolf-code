@@ -1,8 +1,9 @@
 package tools
 
 import (
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"path/filepath"
+
+	"github.com/lycaon/lycaon/internal/projectroot"
 
 	"strings"
 )
@@ -39,8 +40,8 @@ func ApprovalFilePath(tc ToolContext, path string) (string, error) {
 			return "", err
 		}
 		path = rel
-		roots = []projectroot.RootRef{{ID: "worker-branch", Path: branch, IsPrimary: true}}
-		active = "worker-branch"
+		roots = []projectroot.RootRef{{ID: projectroot.WorkerBranchRootID, Path: branch, IsPrimary: true}}
+		active = projectroot.WorkerBranchRootID
 	}
 	abs, _, err := projectroot.ResolveAbs(roots, active, path)
 	return abs, err

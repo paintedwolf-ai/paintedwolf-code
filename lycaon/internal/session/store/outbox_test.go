@@ -6,7 +6,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/eventoutbox"
@@ -63,12 +62,9 @@ func TestSQLMutationOutboxCommitsObserverEvents(t *testing.T) {
 
 func waitOutboxEmpty(t *testing.T, database db.Handle) {
 	t.Helper()
-	for t.Context().Err() == nil {
+	testutil.WaitFor(t, "the event outbox drains", func() bool {
 		var count int
-		if err := database.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM event_outbox").Scan(&count); err == nil && count == 0 {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	t.Fatal("event outbox did not drain")
+		err := database.QueryRowContext(t.Context(), "SELECT COUNT(*) FROM event_outbox").Scan(&count)
+		return err == nil && count == 0
+	})
 }

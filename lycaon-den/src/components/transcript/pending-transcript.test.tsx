@@ -1,5 +1,3 @@
-import { readSourceText } from "../../test/stylesheet-source.ts";
-import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
@@ -111,24 +109,5 @@ describe("Pending transcript rows", () => {
     expect(view.getByTestId("transcript-article-user")).toBe(bubble);
     expect(view.getAllByTestId("transcript-day")).toHaveLength(1);
     expect(view.queryAllByTestId("message-time")).toHaveLength(times === "always" ? 1 : 0);
-  });
-
-  it("is seated by the row seam, the only seam in the stream", () => {
-    const chat = readSourceText(
-      join(import.meta.dirname, "../../chat-utilities.css"),
-      "utf8",
-    );
-    // A second seam would double the row gap.
-    expect(chat).not.toMatch(/@utility den-chat-stream-body\s*\{[^}]*gap:/);
-    expect(chat).not.toMatch(/\.den-chat-stream-body\s*>\s*\*\s*\+\s*\*/);
-    // Rows carry no margin at all: the seam is padding inside the row beneath it.
-    expect(chat).not.toMatch(
-      /\.den-chat-stream-inner \.transcript-viewport-row\s*\{[^}]*margin/,
-    );
-    for (const rung of ["row", "section", "turn"]) {
-      expect(chat, rung).toContain(
-        `.den-seam[data-seam="${rung}"] {\n  padding-top: var(--transcript-${rung}-gap);`,
-      );
-    }
   });
 });

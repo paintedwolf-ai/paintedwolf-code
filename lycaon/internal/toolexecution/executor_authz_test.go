@@ -38,7 +38,7 @@ func TestExecutorSilentAutoAllowEmitsNoAuthzEvent(t *testing.T) {
 	if err := reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "ok", nil
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "reg.Register failed", err)
 	}
 	exec := toolexecution.NewExecutor(stubPolicy{decision: &platform.PolicyDecision{Allowed: true}}, reg, "implement")
 	exec.Approvals.SetAuthzRecorder(rec)
@@ -61,7 +61,7 @@ func TestExecutorPolicyBlockEmitsToolDenied(t *testing.T) {
 	if err := reg.Register("write", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "ok", nil
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "reg.Register failed", err)
 	}
 	exec := toolexecution.NewExecutor(stubPolicy{decision: &platform.PolicyDecision{
 		Blocked:     true,

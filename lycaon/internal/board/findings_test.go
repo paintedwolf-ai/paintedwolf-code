@@ -8,13 +8,14 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/findings"
+	"github.com/lycaon/lycaon/internal/findings/findingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestFindingPagesAndDetailsAreRootScoped(t *testing.T) {
-	store := findings.NewMemoryStore()
+	store := findingstest.New(t, "root", "other")
 	for i := 0; i < 19; i++ {
 		_, err := store.Append(t.Context(), "root", "peer", fmt.Sprint(i), "source.go", "large private detail")
 		testutil.FailErr(t, "append finding", err)
@@ -65,7 +66,7 @@ func TestFindingPagesAndDetailsAreRootScoped(t *testing.T) {
 }
 
 func TestReadFindingsToolRegistrationAndValidation(t *testing.T) {
-	store := findings.NewMemoryStore()
+	store := findingstest.New(t, "root", "other")
 	_, err := store.Append(t.Context(), "root", "scout", "note-1", "a.go", "full body")
 	testutil.FailErr(t, "append finding", err)
 

@@ -15,8 +15,9 @@ type needleCursor struct {
 // needleMatchesVisit is the exact-match policy shared by complete-field and
 // incremental screening. stop admits candidate starts, not candidate ends.
 func (m *Matcher) needleMatchesVisit(s string, n needle, v HarvestedValue, state *needleCursor, stop int, visit func(Match, int, int) error) error {
+	// A match may already carry the cursor past stop; it never moves back.
 	if n.text == "" || len(n.text) > len(s) {
-		state.byteAt = stop
+		state.byteAt = max(state.byteAt, stop)
 		return nil
 	}
 	shape := ""
@@ -28,12 +29,12 @@ func (m *Matcher) needleMatchesVisit(s string, n needle, v HarvestedValue, state
 		}
 		rel := strings.Index(s[state.byteAt:], n.text)
 		if rel < 0 {
-			state.byteAt = stop
+			state.byteAt = max(state.byteAt, stop)
 			break
 		}
 		at := state.byteAt + rel
 		if at >= stop {
-			state.byteAt = stop
+			state.byteAt = max(state.byteAt, stop)
 			break
 		}
 		state.byteAt = at + len(n.text)

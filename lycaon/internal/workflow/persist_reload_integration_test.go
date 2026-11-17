@@ -51,7 +51,7 @@ phases:
 		Confirm:    true,
 		Trigger:    "/hotfix-reload",
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "p.Persist failed", err)
 	}
 	resolver := workflowcatalog.Resolver{SessionStore: store, ProjectTierApplies: func(context.Context, string) bool { return true }}
 	summaries, err := resolver.ListResolved(context.Background(), projectDir, sessionID)
@@ -132,7 +132,7 @@ phases:
 		// with bundled plan.
 		Trigger: "/hotfix",
 	}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "p.Persist failed", err)
 	}
 	before, err := workflowcatalog.Resolver{SessionStore: store, ProjectTierApplies: func(context.Context, string) bool { return true }}.ListResolved(context.Background(), projectDir, "")
 	testutil.FailErr(t, "operation failed", err)

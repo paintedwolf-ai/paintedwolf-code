@@ -226,7 +226,7 @@ export function CheckpointDecisionChicklet(props: Props) {
       fallback={
         <div
           ref={bindTranscriptEntry}
-          class="den-checkpoint-decision-chicklet"
+          class="den-transcript-card den-checkpoint-decision-chicklet"
           classList={statusClass()}
           data-testid="checkpoint-decision-chicklet"
           data-status={status()}
@@ -249,7 +249,7 @@ export function CheckpointDecisionChicklet(props: Props) {
       <TranscriptDisclosureShell
         disclosure={disclosure}
         ref={bindTranscriptEntry}
-        class="den-checkpoint-decision-chicklet den-checkpoint-decision-chicklet--expandable den-transcript-disclosure-card"
+        class="den-checkpoint-decision-chicklet den-checkpoint-decision-chicklet--expandable den-transcript-card den-transcript-disclosure-card"
         classList={statusClass()}
         data-testid="checkpoint-decision-chicklet"
         data-status={status()}

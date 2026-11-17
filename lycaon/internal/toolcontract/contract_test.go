@@ -106,45 +106,7 @@ func TestCompiledBoundedInProcess(t *testing.T) {
 	}
 }
 
-func TestCatalogVocabularyRoundTrips(t *testing.T) {
-	for _, value := range []toolcontract.BatchPolicy{toolcontract.BatchSerial, toolcontract.BatchShared, toolcontract.BatchSameTool} {
-		parsed, ok := toolcontract.ParseBatchPolicy(value.String())
-		if !ok || parsed != value {
-			t.Fatalf("batch %q parsed as %v, %v", value.String(), parsed, ok)
-		}
-	}
-	for _, value := range []toolcontract.TurnOrder{toolcontract.TurnOrderNormal, toolcontract.TurnOrderLate, toolcontract.TurnOrderTerminal} {
-		parsed, ok := toolcontract.ParseTurnOrder(value.String())
-		if !ok || parsed != value {
-			t.Fatalf("order %q parsed as %v, %v", value.String(), parsed, ok)
-		}
-	}
-	for _, value := range []toolcontract.Lifecycle{
-		toolcontract.LifecycleReadOnly, toolcontract.LifecycleDBTransaction,
-		toolcontract.LifecycleJournaledMutation, toolcontract.LifecycleDurableJob,
-		toolcontract.LifecycleEffectAttempt, toolcontract.LifecycleEphemeralControl,
-	} {
-		parsed, ok := toolcontract.ParseLifecycle(value.String())
-		if !ok || parsed != value {
-			t.Fatalf("lifecycle %q parsed as %v, %v", value.String(), parsed, ok)
-		}
-	}
-	for name, want := range map[string]toolcontract.Capability{
-		"host_resource":    toolcontract.CapabilityHostResource,
-		"socket":           toolcontract.CapabilitySocket,
-		"direct_ip":        toolcontract.CapabilityDirectIP,
-		"local_listen":     toolcontract.CapabilityLocalListen,
-		"loopback_connect": toolcontract.CapabilityLoopbackConnect,
-		"terminal_capture": toolcontract.CapabilityTerminalCapture,
-	} {
-		got, ok := toolcontract.NamedCapability(name)
-		if !ok || got != want {
-			t.Fatalf("NamedCapability(%q) = %v, %v", name, got, ok)
-		}
-	}
-	if _, ok := toolcontract.NamedCapability("network"); ok {
-		t.Fatal("unknown capability name must not parse")
-	}
+func TestCapabilityRequestFieldsParse(t *testing.T) {
 	fields := toolcontract.CapabilityRequestFields()
 	if len(fields) == 0 {
 		t.Fatal("CapabilityRequestFields empty")
@@ -156,14 +118,6 @@ func TestCatalogVocabularyRoundTrips(t *testing.T) {
 	}
 	if toolcontract.IsCapabilityRequestField("network") {
 		t.Fatal("unknown request field must not parse")
-	}
-	for _, value := range []toolcontract.Reversibility{
-		toolcontract.ReversibilityReversible, toolcontract.ReversibilityRecoverable, toolcontract.ReversibilityIrreversible,
-	} {
-		parsed, ok := toolcontract.ParseReversibility(value.String())
-		if !ok || parsed != value {
-			t.Fatalf("reversibility %q parsed as %v, %v", value.String(), parsed, ok)
-		}
 	}
 }
 

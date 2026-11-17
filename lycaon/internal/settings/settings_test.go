@@ -86,7 +86,7 @@ func TestApprovalStorePostureAndMerge(t *testing.T) {
 		Pattern:  "write",
 		Effect:   settings.ApprovalEffectDeny,
 	}}}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.PutProject failed", err)
 	}
 	projectEffective := store.Get(llm.SettingsScopeProject, settings.ProjectRef{Dir: projectDir})
 	for _, r := range projectEffective.Rules {
@@ -105,7 +105,7 @@ func TestApprovalFileMode0600(t *testing.T) {
 		Pattern:  "command",
 		Effect:   settings.ApprovalEffectAsk,
 	}}}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "store.PutGlobal failed", err)
 	}
 	info, err := os.Stat(global)
 	testutil.FailErr(t, "stat path", err)

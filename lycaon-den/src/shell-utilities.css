@@ -53,6 +53,11 @@ display: flex;
   margin-left: auto;
 }
 
+/* Draws the session tabs in to 8px from the reopen control, inside the bar's 12px gap. */
+.den-shell-header-titlebar__edge--trailing ~ .den-shell-header-titlebar__tabs {
+  margin-left: -4px;
+}
+
 
 @utility den-shell-main {
 position: relative;

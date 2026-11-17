@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
@@ -59,12 +60,7 @@ func TestGuardianWaitidObservationNeverConsumesOriginalWaitStatus(t *testing.T) 
 			}
 			_, err = write.Write([]byte{1})
 			testutil.FailErr(t, "release only owned child to actual exit", err)
-			polls := []unix.PollFd{{Fd: int32(pin), Events: unix.POLLIN}}
-			_, err = unix.Poll(polls, 5000)
-			testutil.FailErr(t, "await original child pidfd death", err)
-			if polls[0].Revents&unix.POLLIN == 0 {
-				t.Fatal("owned waitid child did not exit")
-			}
+			pollReadableIgnoringEINTR(t, "await original child pidfd death", "owned waitid child did not exit", pin, 5*time.Second)
 			expected := &guardianExitFact{Code: 1, Status: 3, WaitStatus: 3 << 8}
 			if mode == "signal" {
 				expected = &guardianExitFact{Code: 2, Status: 9, WaitStatus: 9}
@@ -76,9 +72,7 @@ func TestGuardianWaitidObservationNeverConsumesOriginalWaitStatus(t *testing.T) 
 			if observeGuardianExit(pin, pid+1, uid) != nil || observeGuardianExit(pin, pid, uid^1) != nil {
 				t.Fatal("observed exit accepted a foreign role PID or UID")
 			}
-			var status unix.WaitStatus
-			actual, err := unix.Wait4(pid, &status, 0, nil)
-			testutil.FailErr(t, "original Wait4 remains sole reap/status authority", err)
+			actual, status := wait4IgnoringEINTR(t, "original Wait4 remains sole reap/status authority", pid)
 			reaped = true
 			if actual != pid || uint32(status) != expected.WaitStatus {
 				t.Fatalf("diagnostic consumed or changed original wait: pid=%d status=%d", actual, status)
@@ -120,12 +114,7 @@ func TestGuardianWaitidRetainsActualIntakeFailurePhase(t *testing.T) {
 			pin, err := unix.PidfdOpen(command.Process.Pid, 0)
 			testutil.FailErr(t, "pin exact intake phase child", err)
 			defer unix.Close(pin)
-			polls := []unix.PollFd{{Fd: int32(pin), Events: unix.POLLIN}}
-			_, err = unix.Poll(polls, 5000)
-			testutil.FailErr(t, "observe owned intake child exit", err)
-			if polls[0].Revents&unix.POLLIN == 0 {
-				t.Fatal("owned intake child did not exit")
-			}
+			pollReadableIgnoringEINTR(t, "observe owned intake child exit", "owned intake child did not exit", pin, 5*time.Second)
 			expected := &guardianExitFact{Code: 1, Status: int32(code), WaitStatus: uint32(code << 8)}
 			for range 2 {
 				if actual := observeGuardianExit(pin, command.Process.Pid, uint32(os.Getuid())); !reflect.DeepEqual(actual, expected) {

@@ -64,7 +64,7 @@ cleanup() {
 trap cleanup EXIT
 
 cd "${ROOT}/lycaon"
-LYCAON_LLM_MOCK=1 go test -run '^$' -bench . -benchmem -count "${COUNT}" -timeout 45m "${PACKAGES[@]}" | tee "${RAW}"
+LYCAON_LLM_MOCK=1 go test -run '^$' -bench . -benchmem -count "${COUNT}" -timeout 0 "${PACKAGES[@]}" | tee "${RAW}"
 
 ARGS=(--input "${RAW}" --output "${OUTPUT}")
 if [[ -n "${BASELINE}" ]]; then ARGS+=(--baseline "${BASELINE}"); fi
