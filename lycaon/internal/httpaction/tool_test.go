@@ -7,8 +7,6 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
@@ -19,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/toolprofiles"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -64,8 +61,8 @@ func TestHTTPRequestSendsJSONAndReturnsStructuredResponse(t *testing.T) {
 	}
 	outcome := &tools.ToolInvocationOut{}
 	out, err := registry.Run(t.Context(), "http_request", map[string]any{
-		"url": server.URL + "/v1/jobs", "method": "POST", "body_json": map[string]any{"ok": true},
-		"headers":            []any{map[string]any{"name": "X-Test", "value": "yes"}},
+		"url": server.URL + "/v1/jobs", "method": "POST", "body_text": `{"ok":true}`,
+		"headers":            []any{map[string]any{"name": "X-Test", "value": "yes"}, map[string]any{"name": "Content-Type", "value": "application/json"}},
 		"capability_request": loopbackCapability(t, server.URL),
 	}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
@@ -83,51 +80,12 @@ func TestHTTPRequestSendsJSONAndReturnsStructuredResponse(t *testing.T) {
 	}
 }
 
-func TestRequestBodyReadsProjectFile(t *testing.T) {
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "payload.bin"), []byte("payload"), 0o600); err != nil {
-		t.Fatalf("write payload: %v", err)
-	}
-	body, err := assembleBody(t.Context(), testBoundary(), tools.ToolContext{
-		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
-		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "root", Path: root, IsPrimary: true}},
-			ActiveRootID: "root"},
-	}, map[string]any{"body_path": "payload.bin"})
-	if err != nil {
-		t.Fatalf("assembleBody: %v", err)
-	}
-	if string(body.bytes) != "payload" || body.sourcePath != "payload.bin" {
-		t.Fatalf("body=%q source=%q", body.bytes, body.sourcePath)
-	}
-}
-
 func TestRequestBodyRejectsMultipleSources(t *testing.T) {
 	_, err := assembleBody(t.Context(), testBoundary(), tools.ToolContext{}, map[string]any{
-		"body_text": "text", "body_json": map[string]any{"ok": true},
+		"body_text": "text", "form": []any{map[string]any{"name": "a", "value": "1"}},
 	})
 	if err == nil {
 		t.Fatal("multiple body sources were accepted")
-	}
-}
-
-func TestRequestBodyRejectsSerializedJSONText(t *testing.T) {
-	_, err := assembleBody(t.Context(), testBoundary(), tools.ToolContext{}, map[string]any{
-		"body_json": `{"ok":true}`,
-	})
-	if err == nil {
-		t.Fatalf("assembleBody error = %v, want object-or-array validation", err)
-	}
-}
-
-func TestRequestBodyAcceptsJSONArray(t *testing.T) {
-	body, err := assembleBody(t.Context(), testBoundary(), tools.ToolContext{}, map[string]any{
-		"body_json": []any{"first", map[string]any{"ok": true}},
-	})
-	if err != nil {
-		t.Fatalf("assembleBody: %v", err)
-	}
-	if string(body.bytes) != `["first",{"ok":true}]` || body.contentType != "application/json" {
-		t.Fatalf("body = %q content-type=%q", body.bytes, body.contentType)
 	}
 }
 

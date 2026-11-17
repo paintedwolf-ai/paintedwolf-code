@@ -93,8 +93,7 @@ func TestFinalURLStatesSecretReferencesAndKeepsTheRedirectChain(t *testing.T) {
 	defer server.Close()
 
 	args := map[string]any{
-		"url": server.URL + "/start", "redirects": "safe",
-		"query":              []any{map[string]any{"name": "key", "value": meta.Reference}},
+		"url": server.URL + "/start?key=" + meta.Reference, "redirects": "safe",
 		"capability_request": loopbackCapability(t, server.URL),
 	}
 	registry := tools.NewDefaultRegistry()

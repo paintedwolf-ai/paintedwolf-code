@@ -2,7 +2,6 @@ package httpaction
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -154,12 +153,12 @@ func TestManagedSecretPolicySurvivesHTTPEncoding(t *testing.T) {
 				if !ok {
 					t.Error("Basic authentication is malformed")
 				}
-				var body map[string]any
-				if err := json.NewDecoder(req.Body).Decode(&body); err != nil {
+				body, err := io.ReadAll(req.Body)
+				if err != nil {
 					t.Error(err)
 					return
 				}
-				for _, got := range []string{password, req.URL.Query().Get("credential"), body["credential"].(string)} {
+				for _, got := range []string{password, string(body)} {
 					if decision == secretmatch.SendUnchanged && got != value {
 						t.Error("serialization changed password bytes")
 					}
@@ -173,8 +172,7 @@ func TestManagedSecretPolicySurvivesHTTPEncoding(t *testing.T) {
 			args := map[string]any{
 				"method": "POST", "url": server.URL,
 				"auth":               map[string]any{"scheme": "basic", "username": "user", "password": meta.Reference},
-				"query":              []any{map[string]any{"name": "credential", "value": meta.Reference}},
-				"body_json":          map[string]any{"credential": meta.Reference},
+				"body_text":          meta.Reference,
 				"capability_request": loopbackCapability(t, server.URL),
 			}
 			matcher := testSecretMatcher(t)

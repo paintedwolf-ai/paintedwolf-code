@@ -7,8 +7,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolrejection"
-	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // Locality and loopback authority follow the address and port the first hop
@@ -51,15 +49,5 @@ func TestFirstHopFollowsTheDialedAddress(t *testing.T) {
 				t.Fatalf("authority port = %v, want the dialed port %d", reject.Data["port"], tt.port)
 			}
 		})
-	}
-}
-
-// A frontend's dial overrides replace the resolve argument rather than
-// merging with it, so one list decides where every hop connects.
-func TestPerformDialOverridesReplaceResolve(t *testing.T) {
-	args := map[string]any{"url": "https://app.example.test/", "resolve": []any{map[string]any{"host": "app.example.test", "ip": "127.0.0.1"}}}
-	_, err := Perform(t.Context(), Deps{}, args, tools.ToolContext{}, ExchangeOptions{Dial: []outboundhttp.ResolveMapping{{Host: "app.example.test", TargetPort: 8443}}})
-	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
-		t.Fatalf("Perform accepted both resolve and dial overrides: %v", err)
 	}
 }

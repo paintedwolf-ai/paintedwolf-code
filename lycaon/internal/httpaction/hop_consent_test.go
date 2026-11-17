@@ -31,7 +31,7 @@ func TestCookieApprovalConsentsToItsConnection(t *testing.T) {
 
 	for i, decision := range []secretmatch.Decision{secretmatch.SendUnchanged, secretmatch.Withhold} {
 		store := httpcookies.New(nil)
-		store.SetCookies(target, []*http.Cookie{{Name: "session", Value: "private-cookie-4411", Path: "/"}})
+		store.SetCookies(target, []*http.Cookie{{Name: "session", Value: secretShapedCookie, Path: "/"}})
 		jar := &secretcap.CookieJar{Name: "jar", Reference: "secret://cookie-jar", Store: store}
 		// The exchange records each allowed review's recipient at the ask.
 		deps := Deps{SecretMatcher: testSecretMatcher(t), SecretAsk: recordReviewedRecipient(func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {

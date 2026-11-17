@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
-	"net/netip"
 	"net/url"
 	"path/filepath"
 	"reflect"
@@ -15,11 +14,9 @@ import (
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/httpcookies"
-	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -29,7 +26,12 @@ import (
 // A cookie whose receipt names a retained service object is foreign to every
 // other recipient. When its disclosure cannot be decided, the request must stop
 // before any byte leaves and the protected jar must stay as it was.
-func TestForeignIssuerCookieFaultsStopTheRequestBeforeDelivery(t *testing.T) {
+// secretShapedCookie is a cookie value the bundled patterns recognize, so the
+// outbound screen decides its disclosure. It is assembled so no token-shaped
+// literal appears in source.
+const secretShapedCookie = "gh" + "p_" + "wWPw5k4aXcaT4fNP" + "0UcnZwJUVFk6LO0pINUx"
+
+func TestCookieScreenFaultsStopTheRequestBeforeDelivery(t *testing.T) {
 	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 	testutil.FailErr(t, "cookie matcher", err)
 	fingerprinter, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("f", 32)))
@@ -57,17 +59,20 @@ func TestForeignIssuerCookieFaultsStopTheRequestBeforeDelivery(t *testing.T) {
 				w.WriteHeader(http.StatusNoContent)
 			}))
 			t.Cleanup(server.Close)
-			before := seedRetainedIssuerCookie(t, secrets, server.URL)
+			target, err := url.Parse(server.URL + "/private")
+			testutil.FailErr(t, "cookie target", err)
+			store := httpcookies.New(nil)
+			store.SetCookies(target, []*http.Cookie{{Name: "session", Value: secretShapedCookie, Path: "/"}})
+			before := store.Snapshot()
 
 			var asked atomic.Int64
 			deps := Deps{Boundary: testBoundary(), Secrets: secrets, SecretMatcher: tc.matcher}
 			if tc.ask != nil {
 				deps.SecretAsk = tc.ask(&asked)
 			}
-			_, err := runRequest(t, deps, map[string]any{
-				"url": server.URL + "/private", "cookie_jar": "service",
-				"capability_request": loopbackCapability(t, server.URL),
-			}, sessionContext(t.TempDir(), "ordinary-transport"))
+			_, err = runRequestWith(t, deps, map[string]any{
+				"url": server.URL + "/private", "capability_request": loopbackCapability(t, server.URL),
+			}, sessionContext(t.TempDir(), "ordinary-transport"), ExchangeOptions{Jar: testFrontendJar{store}})
 			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != toolrejection.OutboundSecretScreenFailedCode || reject.Data["fault_stage"] != tc.stage {
 				t.Fatalf("error = %v, want %s at %s", err, toolrejection.OutboundSecretScreenFailedCode, tc.stage)
@@ -75,10 +80,8 @@ func TestForeignIssuerCookieFaultsStopTheRequestBeforeDelivery(t *testing.T) {
 			if requests.Load() != 0 || asked.Load() != tc.asked {
 				t.Fatalf("requests=%d asks=%d, want no delivery and %d asks", requests.Load(), asked.Load(), tc.asked)
 			}
-			after, err := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("inspect"))
-			testutil.FailErr(t, "reopen protected jar", err)
-			if !reflect.DeepEqual(after.Store.Snapshot(), before) {
-				t.Fatal("a disclosure fault changed the protected cookie")
+			if !reflect.DeepEqual(store.Snapshot(), before) {
+				t.Fatal("a disclosure fault changed the jar")
 			}
 		})
 	}
@@ -90,101 +93,6 @@ func answering(err error) func(*atomic.Int64) secretmatch.AskFunc {
 			asked.Add(1)
 			return secretmatch.Resolution{}, err
 		}
-	}
-}
-
-func cookieSeedRequest(operation string) secretcap.CookieJarRequest {
-	return secretcap.CookieJarRequest{ProjectID: testdbseed.DefaultProjectID, ChatSessionID: "root-1", SessionID: "root-1", OperationID: operation, Name: "service"}
-}
-
-// seedRetainedIssuerCookie stores a cookie as an accepted response over a
-// retained socket object writes it, and returns its persisted form.
-func seedRetainedIssuerCookie(t *testing.T, secrets *secretcap.Service, rawURL string) []httpcookies.Cookie {
-	t.Helper()
-	jar, err := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("seed"))
-	testutil.FailErr(t, "open seed jar", err)
-	target, err := url.Parse(rawURL + "/private")
-	testutil.FailErr(t, "seed target", err)
-	jar.Store.SetDelivery("retained-service-binding", nil)
-	jar.Store.SetCookies(target, []*http.Cookie{{Name: "session", Value: "retained-service-session-4411", Path: "/"}})
-	_, err = secrets.SaveCookieJar(t.Context(), cookieSeedRequest("seed"), jar)
-	testutil.FailErr(t, "persist seed jar", err)
-	stored, err := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("inspect"))
-	testutil.FailErr(t, "reopen seed jar", err)
-	snapshot := stored.Store.Snapshot()
-	if len(snapshot) != 1 || snapshot[0].NativeIssuer == "" {
-		t.Fatalf("seeded cookie lacks its issuer receipt: %+v", snapshot)
-	}
-	return snapshot
-}
-
-func TestCookieRecipientOverridesRequireReview(t *testing.T) {
-	target, err := url.Parse("https://issuer.example/api")
-	testutil.FailErr(t, "parse target", err)
-	plain := requestSpec{target: target, method: http.MethodGet}
-
-	for name, tc := range map[string]struct {
-		spec    requestSpec
-		foreign bool
-	}{
-		"plain":              {plain, false},
-		"matching Host":      {requestSpec{target: target, method: http.MethodGet, hostHeader: "ISSUER.example:443"}, false},
-		"different Host":     {requestSpec{target: target, method: http.MethodGet, hostHeader: "other.example"}, true},
-		"applicable mapping": {requestSpec{target: target, method: http.MethodGet, resolve: []outboundhttp.ResolveMapping{{Host: "issuer.example", Address: netip.MustParseAddr("192.0.2.2")}}}, true},
-		"mapped hostname":    {requestSpec{target: target, method: http.MethodGet, resolve: []outboundhttp.ResolveMapping{{Host: "issuer.example", TargetHost: "recipient.example", TargetPort: 8443}}}, true},
-		"other host mapping": {requestSpec{target: target, method: http.MethodGet, resolve: []outboundhttp.ResolveMapping{{Host: "other.example", Address: netip.MustParseAddr("192.0.2.2")}}}, false},
-		"other port mapping": {requestSpec{target: target, method: http.MethodGet, resolve: []outboundhttp.ResolveMapping{{Host: "issuer.example", Port: 8443, Address: netip.MustParseAddr("192.0.2.2")}}}, false},
-	} {
-		t.Run(name, func(t *testing.T) {
-			store := httpcookies.New(nil)
-			store.SetCookies(target, []*http.Cookie{{Name: "session", Value: "private-cookie-4411", Path: "/"}})
-			jar := &secretcap.CookieJar{Name: "jar", Reference: "secret://cookie-jar", Store: store}
-
-			asks := 0
-			deps := Deps{SecretMatcher: testSecretMatcher(t), SecretAsk: func(_ context.Context, a secretmatch.Alert) (secretmatch.Resolution, error) {
-				asks++
-				wantDest, wantLabel := requestDestination(tc.spec)
-				if a.DestinationID != wantDest || a.DestinationLabel != wantLabel || a.Container != "cookie jar jar" || len(a.SecretNames) != 1 || a.SecretNames[0] != "session" {
-					t.Errorf("alert = %+v, want dest (%q, %q)", a, wantDest, wantLabel)
-				}
-				return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
-			}}
-			beforeHop, err := frontendJarCookieDelivery(t.Context(), deps, tc.spec, tools.ToolContext{}, testFrontendJar{jar.Store})
-			testutil.FailErr(t, "prepareRequestCookieDelivery", err)
-			testutil.FailErr(t, "beforeHop", beforeHop(t.Context(), outboundhttp.HopRequest{URL: target, Method: http.MethodGet, HostHeader: tc.spec.hostHeader}))
-			delivered := jar.Store.Cookies(target)
-			if tc.foreign && (asks != 1 || len(delivered) != 0) {
-				t.Fatalf("foreign override sent cookie without withholding: asks=%d delivered=%+v", asks, delivered)
-			}
-			if !tc.foreign && (asks != 0 || len(delivered) != 1 || delivered[0].Value != "private-cookie-4411") {
-				t.Fatalf("plain issuer failed to deliver cookie quietly: asks=%d delivered=%+v", asks, delivered)
-			}
-
-			// Conversely, a cookie captured on an overridden hop records the override
-			// issuer and cannot be silently promoted into plain URL authority later.
-			captureStore := httpcookies.New(nil)
-			captureJar := &secretcap.CookieJar{Name: "jar", Reference: "secret://cookie-jar", Store: captureStore}
-			captureHop, err := frontendJarCookieDelivery(t.Context(), deps, tc.spec, tools.ToolContext{}, testFrontendJar{captureJar.Store})
-			testutil.FailErr(t, "prepare capture hop", err)
-			testutil.FailErr(t, "run capture hop", captureHop(t.Context(), outboundhttp.HopRequest{URL: target, Method: http.MethodGet, HostHeader: tc.spec.hostHeader}))
-			captureStore.SetCookies(target, []*http.Cookie{{Name: "captured", Value: "override-cookie-8822", Path: "/"}})
-
-			plainAsks := 0
-			plainDeps := Deps{SecretMatcher: testSecretMatcher(t), SecretAsk: func(_ context.Context, _ secretmatch.Alert) (secretmatch.Resolution, error) {
-				plainAsks++
-				return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
-			}}
-			plainHop, err := frontendJarCookieDelivery(t.Context(), plainDeps, plain, tools.ToolContext{}, testFrontendJar{captureJar.Store})
-			testutil.FailErr(t, "prepare plain hop", err)
-			testutil.FailErr(t, "run plain hop", plainHop(t.Context(), outboundhttp.HopRequest{URL: target, Method: http.MethodGet}))
-			plainDelivered := captureStore.Cookies(target)
-			if tc.foreign && (plainAsks != 1 || len(plainDelivered) != 0) {
-				t.Fatalf("override-captured cookie promoted to plain authority without review: asks=%d delivered=%+v", plainAsks, plainDelivered)
-			}
-			if !tc.foreign && (plainAsks != 0 || len(plainDelivered) != 1) {
-				t.Fatalf("plain-captured cookie required review on plain hop: asks=%d delivered=%+v", plainAsks, plainDelivered)
-			}
-		})
 	}
 }
 

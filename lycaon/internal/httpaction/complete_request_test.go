@@ -118,8 +118,9 @@ func resultOf(ex Exchange) result {
 	}
 }
 
-// registerPerform serves http_request through Perform in a test registry, so
-// executor-level tests reach the exchange core curl uses.
+// registerPerform serves http_request through Perform in a test registry and
+// reports the listener as curl does, so executor-level tests reach the
+// exchange core curl uses.
 func registerPerform(registry *tools.DefaultRegistry, deps Deps) error {
 	return registry.Register("http_request", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		ex, err := Perform(ctx, deps, args, tctx, ExchangeOptions{MaxBodyBytes: 4 << 20})
@@ -130,6 +131,7 @@ func registerPerform(registry *tools.DefaultRegistry, deps Deps) error {
 		if err != nil {
 			return "", err
 		}
+		ReportLoopbackListener(tctx, ex.Listener)
 		out, err := json.Marshal(resultOf(ex))
 		return string(out), err
 	})
