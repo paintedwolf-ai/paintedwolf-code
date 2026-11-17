@@ -47,24 +47,20 @@ type Harness struct {
 	dbPath    string
 }
 
-// BuildForTest constructs a production-parity server via app.Build with test
-// defaults, on a directory removed after the test.
+// BuildForTest assembles a host in a temporary directory.
 func BuildForTest(t *testing.T, opts ...Option) *Harness {
 	t.Helper()
 	return BuildForTestAt(t, t.TempDir(), opts...)
 }
 
-// BuildForTestAt builds a host on dir, which holds its store, device
-// configuration and fixtures. A directory a closed host left behind is opened
-// as that host's next boot finds it; the caller keeps dir.
+// BuildForTestAt boots on a caller-owned directory, including an existing store.
 func BuildForTestAt(t *testing.T, dir string, opts ...Option) *Harness {
 	t.Helper()
 	requirePreparedHostProcess(t)
 	configDir := filepath.Join(dir, "config")
 	testutil.FailErr(t, "create device configuration", os.MkdirAll(configDir, 0o700))
 	t.Setenv("LYCAON_CONFIG_DIR", configDir)
-	// The process source catalog caches trees under <config>/cache; its builds
-	// outlive the app, so finish and retire them before the directory goes.
+	// Retire process-wide cached trees before removing their directory.
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
