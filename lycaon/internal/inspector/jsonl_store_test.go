@@ -30,3 +30,17 @@ func TestEvidenceStoreReadsLargeRecordsAndRejectsDamagedTail(t *testing.T) {
 		t.Fatal("damaged evidence was silently omitted")
 	}
 }
+
+func TestEvidencePathFormat(t *testing.T) {
+	for _, tc := range []struct {
+		gate evidence.GateType
+		want string
+	}{
+		{evidence.GateTypeVerify, "evidence/dep-1/task-1/verify.jsonl"},
+		{evidence.GateTypeReview, "evidence/dep-1/task-1/review.jsonl"},
+	} {
+		if got := EvidencePath(DefaultEvidenceDir, "dep-1", "task-1", tc.gate); got != tc.want {
+			t.Fatalf("EvidencePath(%s) = %q, want %q", tc.gate, got, tc.want)
+		}
+	}
+}

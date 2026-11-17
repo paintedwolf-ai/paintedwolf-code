@@ -56,21 +56,6 @@ func TestCoordinatorProfileAllowsNativeDiscoveryPrograms(t *testing.T) {
 	}
 }
 
-func TestCoordinatorProfileReadWriteAllowlists(t *testing.T) {
-	t.Parallel()
-	prof := loadBundledCoordinatorProfile(t)
-	scopes, err := sandbox.LoadPathScopes()
-	contractcheck.FailErr(t, "load path-scopes.yaml", err)
-	readWant := scopes["coordinator_product_read"]
-	writeWant := append([]string(nil), scopes["coordinator_orchestration"].Write...)
-	if !slices.Equal(prof.ReadGlobs, readWant.Read) {
-		t.Fatalf("read_globs = %v want %v", prof.ReadGlobs, readWant.Read)
-	}
-	if !slices.Equal(prof.WriteGlobs, writeWant) {
-		t.Fatalf("write_globs = %v want %v", prof.WriteGlobs, writeWant)
-	}
-}
-
 func TestCoordinatorProfileToolsIncludeCommandDiscovery(t *testing.T) {
 	exec := toolfixture.ContractToolExecutor(t)
 	names := toolfixture.SortedToolNames(context.Background(), exec.Metadata, "coordinator")

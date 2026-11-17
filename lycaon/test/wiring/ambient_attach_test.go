@@ -1,4 +1,4 @@
-package contract
+package wiring
 
 import (
 	"bytes"
@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/api/apitest"
 	"github.com/lycaon/lycaon/internal/api/contractfixture"
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -22,7 +23,6 @@ import (
 	workflowpersistence "github.com/lycaon/lycaon/internal/workflow/persistence"
 	"github.com/lycaon/lycaon/internal/workflow/runstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 // ambientAttachFixture is a server wired for session creation whose workflow
@@ -48,10 +48,10 @@ func newAmbientAttachFixture(t *testing.T, startsAdmitted bool) ambientAttachFix
 	sessions := store.NewSQL(sqlDB)
 	projects := project.NewSQLRegistry(sqlDB)
 	p, err := project.CreateWithRoot(t.Context(), projects, t.TempDir())
-	contractcheck.FailErr(t, "create project", err)
+	testutil.FailErr(t, "create project", err)
 
 	registry, err := workflowdef.RegistryFromDirs("")
-	contractcheck.FailErr(t, "workflow.RegistryFromDirs", err)
+	testutil.FailErr(t, "workflow.RegistryFromDirs", err)
 	runs := workflowpersistence.New(sqlDB)
 	store := runs
 	if !startsAdmitted {
@@ -60,7 +60,7 @@ func newAmbientAttachFixture(t *testing.T, startsAdmitted bool) ambientAttachFix
 	mgr := workflow.NewManager(store, sessions, registry, nil)
 	deps := apitest.Dependencies(t, api.Dependencies{
 		Core:     api.CoreDependencies{Store: sessions, Projects: projects},
-		Storage:  api.StorageDependencies{ModuleRoot: filepath.Join(contractcheck.RepoRoot(t), "lycaon")},
+		Storage:  api.StorageDependencies{ModuleRoot: configlayout.FindModuleRoot()},
 		Workflow: api.WorkflowDependencies{Workflows: mgr, WorkflowRuns: store},
 	})
 	srv := api.NewServer(deps, nil, api.TestAPIToken)
@@ -72,7 +72,7 @@ func newAmbientAttachFixture(t *testing.T, startsAdmitted bool) ambientAttachFix
 func (f ambientAttachFixture) createSession(t *testing.T, posture wire.SessionPosture) wire.Session {
 	t.Helper()
 	body, err := json.Marshal(wire.CreateSessionRequest{ProjectID: f.projectID, Posture: posture})
-	contractcheck.FailErr(t, "marshal create session", err)
+	testutil.FailErr(t, "marshal create session", err)
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions", bytes.NewReader(body))
 	req.Header.Set("Authorization", api.TestAuthHeader())
 	req.Header.Set("Content-Type", "application/json")
@@ -82,7 +82,7 @@ func (f ambientAttachFixture) createSession(t *testing.T, posture wire.SessionPo
 		t.Fatalf("POST /v1/sessions status = %d body = %s", w.Code, w.Body.String())
 	}
 	var sess wire.Session
-	contractcheck.FailErr(t, "decode created session", json.Unmarshal(w.Body.Bytes(), &sess))
+	testutil.FailErr(t, "decode created session", json.Unmarshal(w.Body.Bytes(), &sess))
 	return sess
 }
 
@@ -117,7 +117,7 @@ func TestBuildChatSessionAlwaysHasLeafRun(t *testing.T) {
 		t.Fatalf("prepared build session status = %q want %q", prepared.Status, wire.SessionStatusIdle)
 	}
 	run, err := fixture.runs.Runs.ActiveBySession(context.Background(), sess.ID)
-	contractcheck.FailErr(t, "active run by session", err)
+	testutil.FailErr(t, "active run by session", err)
 	if run == nil {
 		t.Fatal("prepared build chat session has no active workflow run — ambient attach must fail closed, not skip")
 	}
@@ -154,7 +154,7 @@ func TestNonBuildPosturesPrepareWithoutRun(t *testing.T) {
 				t.Fatalf("prepared %s session status = %q want %q", posture, prepared.Status, wire.SessionStatusIdle)
 			}
 			run, err := fixture.runs.Runs.ActiveBySession(context.Background(), sess.ID)
-			contractcheck.FailErr(t, "active run by session", err)
+			testutil.FailErr(t, "active run by session", err)
 			if run != nil {
 				t.Fatalf("%s session attached workflow run %q; ambient attach is build-only", posture, run.ID)
 			}

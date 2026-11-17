@@ -70,7 +70,6 @@ func surfaceLiteralAllowlist(lycaonRoot string) map[string]bool {
 		"internal/coordinator/surface/profile.go",
 		"internal/coordinator/surface/flow_eval.go",
 		"internal/coordinator/surface/flow_loader.go",
-		"internal/coordinator/surface/flow_parity.go",
 		"internal/coordinator/surface/surface_profiles.go",
 		"internal/coordinator/surface/envelope.go",
 		"internal/coordinator/surface/execution_mode_state.go",
