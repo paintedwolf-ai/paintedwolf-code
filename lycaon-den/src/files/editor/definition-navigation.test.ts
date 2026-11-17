@@ -92,3 +92,28 @@ describe("definition navigation request lifetime", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe("definition jump history", () => {
+  it("records the origin before opening the destination, then the destination", async () => {
+    const subject = navigation(vi.fn(async () => ({ candidates: [candidate("target.ts")], truncated: false })));
+    try {
+      await subject.runGoToDefinition();
+      expect(pushJump).toHaveBeenCalledTimes(2);
+      const [origin, destination] = pushJump.mock.invocationCallOrder;
+      const opened = openBuffer.mock.invocationCallOrder[0]!;
+      expect(origin).toBeLessThan(opened);
+      // Jump back from the destination returns to the origin, so the destination sits at the stack tip.
+      expect(destination).toBeGreaterThan(opened);
+    } finally { subject.dispose(); }
+  });
+
+  it("keeps a miss in the editor: a notice and no navigation", async () => {
+    const subject = navigation(vi.fn(async () => ({ candidates: [], truncated: false })));
+    try {
+      await subject.runGoToDefinition();
+      expect(subject.definitionNotice()).not.toBeNull();
+      expect(openBuffer).not.toHaveBeenCalled();
+      expect(pushJump).not.toHaveBeenCalled();
+    } finally { subject.dispose(); }
+  });
+});

@@ -1,3 +1,4 @@
+import { expectPaneChrome } from "./files-pane-chrome-test.ts";
 import { fireEvent, render, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import type { ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
@@ -37,6 +38,7 @@ describe("chat content Files pane", () => {
     await waitFor(() => expect(view.container.querySelector(".cm-content")?.textContent).toContain('"row":0'));
     expect(get).toHaveBeenCalledTimes(1);
     expect(get.mock.calls[0]?.slice(1, 3)).toEqual([["program:activity"], { offset: 0, limit: 64 }]);
+    expectPaneChrome(view.container, "chat");
     expect(view.container.querySelector(".den-files-editor__status-language")?.textContent).toBe(languageLabelForDetectedLanguage("jsonl", ""));
     expect(view.queryByTestId("chat-process-pretty-snapshot")).toBeNull();
   });

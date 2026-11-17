@@ -1,3 +1,4 @@
+import { expectPaneChrome } from "../components/files-pane-chrome-test.ts";
 import { sourceEffectFixture } from "../source/source-effect-fixture.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createNoticeStore, registerNoticePublisher } from "../../notices/notice-store.ts";
@@ -101,6 +102,7 @@ describe("WalkStepPage", () => {
   it("keeps a group page mounted when the same step receives fresh facts", () => {
     const first = outsideStep([effectOf("o1", "a.ts")]);
     mount(first);
+    expectPaneChrome(document.body, "walk");
     const article = screen.getByTestId("walk-page").querySelector("article");
     const heading = screen.getByTestId("walk-page-title");
     const updated = { ...first, effects: [...first.effects, effectOf("o2", "b.ts")] };

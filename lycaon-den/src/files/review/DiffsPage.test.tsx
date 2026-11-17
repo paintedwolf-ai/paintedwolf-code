@@ -1,3 +1,4 @@
+import { expectPaneChrome } from "../components/files-pane-chrome-test.ts";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";
 import { invokeCommand } from "../../shortcuts/dispatcher.ts";
@@ -101,6 +102,7 @@ describe("the diffs page", () => {
     render(() => <DiffsPage projectId="p1" client={client} address={TURN} onWalkTurn={() => {}} />);
 
     await waitFor(() => expect(screen.getByTestId("diffs-page-title").textContent).toBe("2 files changed"));
+    expectPaneChrome(document.body, "diffs");
     expect(screen.getByTestId("diffs-page-stat").textContent).toContain("3 writes");
     await waitFor(() => expect(screen.getAllByTestId("diffs-section-header")).toHaveLength(2));
     for (const section of screen.getAllByTestId("diffs-section-header")) {
