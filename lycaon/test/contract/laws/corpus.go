@@ -112,7 +112,12 @@ func (o *onceValue[T]) get(load func() (T, error)) (T, error) {
 	return o.value, o.err
 }
 
-// part memoizes a derived input, such as a parsed document, under name.
+// Part memoizes a derived input, such as a loaded catalog, under name. A
+// load error ends the check.
+func Part[T any](c *Corpus, name string, load func() (T, error)) T {
+	return part(c, name, load)
+}
+
 func part[T any](c *Corpus, name string, load func() (T, error)) T {
 	raw, _ := c.parts.LoadOrStore(name, &onceValue[any]{})
 	value, err := raw.(*onceValue[any]).get(func() (any, error) { return load() })

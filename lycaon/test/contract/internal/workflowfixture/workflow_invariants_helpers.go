@@ -2,6 +2,11 @@ package workflowfixture
 
 import (
 	"context"
+	"fmt"
+	"path/filepath"
+	"strings"
+	"testing"
+
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/conditions"
 	"github.com/lycaon/lycaon/internal/extpacks"
@@ -11,9 +16,6 @@ import (
 	workflowdrafts "github.com/lycaon/lycaon/internal/workflow/drafts"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"path/filepath"
-	"strings"
-	"testing"
 )
 
 func ContractWorkflowComposer(t *testing.T) *workflowcomposition.Composer {
@@ -50,11 +52,26 @@ func ContractBundledManifests(t *testing.T) map[string]workflowdef.Manifest {
 	return reg.All()
 }
 
-func contractResolvedTemplateManifests(t *testing.T) map[string]workflowdef.Manifest {
+func ContractAllResolvedManifests(t *testing.T) map[string]workflowdef.Manifest {
 	t.Helper()
-	bundled := ContractBundledManifests(t)
-	templates := ContractWorkflowTemplates(t)
-	out := map[string]workflowdef.Manifest{}
+	out, err := AllResolvedManifests()
+	contractcheck.FailErr(t, "resolve workflow manifests", err)
+	return out
+}
+
+// AllResolvedManifests returns the bundled manifests and every bundled
+// template expanded and resolved against them, keyed "template:<id>".
+func AllResolvedManifests() (map[string]workflowdef.Manifest, error) {
+	reg, err := workflowdef.RegistryFromDirs("")
+	if err != nil {
+		return nil, err
+	}
+	bundled := reg.All()
+	templates, err := workflowcomposition.LoadTemplatesFromDir(extpacks.Bundled(config.PlatformFlows.Join("_templates")))
+	if err != nil {
+		return nil, err
+	}
+	out := reg.All()
 	for id, tpl := range templates {
 		params := map[string]any{"workflow_id": "contract-" + id}
 		if id == "clarify-then-implement-template" {
@@ -62,34 +79,24 @@ func contractResolvedTemplateManifests(t *testing.T) map[string]workflowdef.Mani
 		}
 		yaml, err := tpl.Expand(params)
 		if err != nil {
-			t.Fatalf("template %q expand: %v", id, err)
+			return nil, fmt.Errorf("template %q expand: %w", id, err)
 		}
 		raw, err := workflowdef.ParseManifestYAML(yaml)
 		if err != nil {
-			t.Fatalf("template %q parse: %v", id, err)
+			return nil, fmt.Errorf("template %q parse: %w", id, err)
 		}
-		parentCatalog := bundled
 		merged := map[string]workflowdef.Manifest{}
-		for k, v := range parentCatalog {
+		for k, v := range bundled {
 			merged[k] = v
 		}
 		merged[raw.ID+"@"+raw.Version] = raw
 		resolved, err := workflowdef.ResolveManifestChain(raw, merged)
 		if err != nil {
-			t.Fatalf("template %q resolve: %v", id, err)
+			return nil, fmt.Errorf("template %q resolve: %w", id, err)
 		}
 		out["template:"+id] = resolved
 	}
-	return out
-}
-
-func ContractAllResolvedManifests(t *testing.T) map[string]workflowdef.Manifest {
-	t.Helper()
-	out := ContractBundledManifests(t)
-	for k, v := range contractResolvedTemplateManifests(t) {
-		out[k] = v
-	}
-	return out
+	return out, nil
 }
 
 func templateComposeParams(id string) map[string]any {

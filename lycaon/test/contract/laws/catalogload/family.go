@@ -14,6 +14,8 @@ import (
 var Family = laws.Family{Name: "catalog-load", Rules: slices.Concat(
 	guidanceCodes,
 	toolCatalog,
+	configYAML,
+	bindingClosure,
 )}
 
 var errNotRegistered = errors.New("not registered")
