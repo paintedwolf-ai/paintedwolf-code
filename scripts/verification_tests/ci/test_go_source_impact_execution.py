@@ -59,7 +59,7 @@ class GoSourceImpactTests(unittest.TestCase):
         module = "github.com/lycaon/lycaon/"
         edges = {"test/support": {}, "test/security": {"TestImports": ["test/support"]},
                  "cmd/tool": {"XTestImports": ["test/support"]}, "internal/unrelated": {},
-                 "test/contract/release": {}, "test/contract/hosted": {}, "test/smoke": {}}
+                 "test/contract/tools": {}, "test/contract/wire": {}, "test/smoke": {}}
         output = "\n".join(json.dumps({
             "ImportPath": module + directory, "Dir": str(impact.ROOT / "lycaon" / directory),
             **{kind: [module + dependency for dependency in dependencies]
@@ -70,7 +70,7 @@ class GoSourceImpactTests(unittest.TestCase):
             self.assertEqual(impact.go_scope(dict(full=False, paths=["lycaon/test/support/fixture.go"])),
                              sorted("./" + directory for directory in edges if directory != "internal/unrelated"))
             self.assertEqual(impact.go_scope(dict(full=False, paths=["lycaon/cmd/tool/main.go"])),
-                             ["./cmd/tool", "./test/contract/hosted", "./test/contract/release", "./test/smoke"])
+                             ["./cmd/tool", "./test/contract/tools", "./test/contract/wire", "./test/smoke"])
             for path in ["lycaon/test/deleted/old_test.go", "lycaon/cmd/deleted/main.go"]:
                 with self.subTest(path=path):
                     self.assertIsNone(impact.go_scope(dict(full=False, paths=[path])))
