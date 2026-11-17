@@ -13,6 +13,10 @@ SCHEMA = "pw-behavior-reference/1"
 NEW_TOKENS = 16
 # Logit margin under which a different greedy token is attributed to the artifact's precision.
 TOLERANCE = {"F16": 0.5, "Q4_K_M": 2.0, "Q5_K_M": 2.0, "Q8_0": 1.0, "affine-group64-f16": 2.0}
+# Greatest logit difference between an adapter applied and merged. The two compute one
+# function in a different order of fp32 operations, so they differ by rounding; a tenth of
+# the narrowest artifact tolerance keeps the merge from moving any decision an artifact is held to.
+MERGE_TOLERANCE = 0.05
 
 
 def served_cases():
@@ -47,6 +51,15 @@ def reference(model, tokenizer, cases=None, new_tokens=NEW_TOKENS):
             prompt["margins"].append(float(top[0] - top[1]))
     return {"schema": SCHEMA, "template_sha256": template_sha256(tokenizer.chat_template),
             "new_tokens": new_tokens, "prompts": prompts}
+
+
+def merge_difference(before, after):
+    """The greatest logit difference between the adapter applied and the merged
+    checkpoint on one prompt. Raises beyond MERGE_TOLERANCE, and on a value that is not a number."""
+    difference = float((before.float() - after.float()).abs().max())
+    if not difference <= MERGE_TOLERANCE:
+        raise ValueError("merged checkpoint departs from its adapter: greatest logit difference %r" % difference)
+    return difference
 
 
 def compare(expected, observed, precision):
