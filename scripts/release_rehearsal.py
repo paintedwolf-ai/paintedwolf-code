@@ -223,7 +223,6 @@ def install_cask(dmg: Path, release: str, work: Path) -> dict:
             run(["bash", str(ROOT / "scripts/release-render-cask.sh"), "--token", token, "--channel", "preview",
                  "--version", release, "--sha256", hashlib.sha256(dmg.read_bytes()).hexdigest(),
                  "--base-url", base, "--output", str(directory / f"{token}.rb")])
-            run(["brew", "style", "--cask", f"{tap}/{token}"], env=environment)
             run(["brew", "install", "--cask", f"{tap}/{token}"], env=environment)
             installed = plistlib.loads((application / "Contents/Info.plist").read_bytes())["CFBundleShortVersionString"]
             recorded = json.loads(marker.read_text())

@@ -181,7 +181,7 @@ class MacosTests(unittest.TestCase):
             result = rehearsal.install_cask(self.dmg, rehearsal.version(), self.root / "work")
         self.assertEqual(result, {"token": "painted-wolf-code@preview", "installed_version": rehearsal.version(), "uninstalled": True})
         verbs = [command[1] for command in commands if command[0] == "brew"]
-        self.assertEqual(verbs, ["tap-new", "--repository", "style", "install", "uninstall", "untap"])
+        self.assertEqual(verbs, ["tap-new", "--repository", "install", "uninstall", "untap"])
         cask = (self.taps / "Casks/painted-wolf-code@preview.rb").read_text()
         self.assertIn(hashlib.sha256(self.dmg.read_bytes()).hexdigest(), cask)
 
