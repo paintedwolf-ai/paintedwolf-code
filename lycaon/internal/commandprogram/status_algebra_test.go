@@ -74,6 +74,7 @@ func evaluateWithStubOwners(t *testing.T, program string, workspace map[string]r
 		Dispatch:    stubOwners{files: files},
 		Binder:      commandprogram.CatalogBinder{},
 		Files:       noGlobFiles{},
+		Publication: discardedOutputs{},
 		Supervision: &runningJobs{},
 		Predicates:  commandprogram.PredicateRuntime{Files: stubPaths{files: files}},
 		Memory:      memory,
@@ -220,6 +221,26 @@ func (j *runningJobs) StartJob(ctx context.Context, _ toolcontract.OperationInvo
 	}()
 	return job, nil
 }
+
+// discardedOutputs owns the only redirect targets the corpus names, /dev/null.
+type discardedOutputs struct{}
+
+func (discardedOutputs) Open(_ context.Context, destination commandprogram.OutputDestination) (commandprogram.StagedOutput, error) {
+	if destination.Target.Value != "/dev/null" {
+		return nil, fmt.Errorf("no stub output owner for %q", destination.Target.Value)
+	}
+	return discardedOutput{}, nil
+}
+
+type discardedOutput struct{}
+
+func (discardedOutput) Write(b []byte) (int, error) { return len(b), nil }
+
+func (discardedOutput) Publish(context.Context) (commandprogram.OutputPublished, error) {
+	return commandprogram.OutputPublished{}, nil
+}
+
+func (discardedOutput) Abandon(context.Context) error { return nil }
 
 // stubPaths answers test -f against the workspace's regular files.
 type stubPaths struct{ files map[string]string }

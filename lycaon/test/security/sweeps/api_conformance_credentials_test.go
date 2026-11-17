@@ -30,15 +30,16 @@ var refusedCredentials = []struct {
 
 // probeCredentials sends every operation that requires a credential with none
 // and with a wrong one, addressed at real fixtures. Each must answer 401
-// unauthorized with nothing but the error envelope and change no host state,
-// so a route registered without the bearer check fails here by name.
+// unauthorized with nothing but the error envelope, and the whole batch must
+// change no host state, so a route registered without the bearer check fails
+// here by name.
 func (s *conformanceSweep) probeCredentials(ctx context.Context) {
+	var reqs []conformanceRequest
 	for _, op := range s.ops {
 		if !op.Authenticated {
 			continue
 		}
 		params, _ := s.values.pathParams(op)
-		var reqs []conformanceRequest
 		for _, refused := range refusedCredentials {
 			req := conformanceRequest{op: op, probe: refused.probe, params: params, query: s.values.requiredQuery(op), credential: refused.credential}
 			if op.JSONBody != nil {
@@ -46,37 +47,32 @@ func (s *conformanceSweep) probeCredentials(ctx context.Context) {
 			}
 			reqs = append(reqs, req)
 		}
-		changes := s.observed(ctx, op, "refused credentials", func() {
-			for _, ex := range s.sendAll(ctx, reqs) {
-				s.checkRefusedCredential(ex)
-			}
-		})
-		if len(changes) > 0 {
-			s.findings.add(ruleRequestsNeedTheBearer, op.ID, "refused credentials", "changed host state: %s", strings.Join(changes, ", "))
-		}
 	}
-}
-
-// observed runs send between a mark and a since and names what changed.
-func (s *conformanceSweep) observed(ctx context.Context, op *conformanceOp, probe string, send func()) []string {
+	const probe = "unauthenticated requests"
 	if s.effects == nil {
-		send()
-		return nil
+		s.checkRefusedCredentials(ctx, reqs)
+		return
 	}
 	mark, err := s.effects.mark(ctx)
 	if err != nil {
-		s.findings.add(ruleRequestsNeedTheBearer, op.ID, probe, "could not observe host state: %v", err)
-		send()
-		return nil
+		s.findings.add(ruleRequestsNeedTheBearer, "sweep", probe, "could not observe host state: %v", err)
+		return
 	}
-	send()
+	s.checkRefusedCredentials(ctx, reqs)
 	changes, err := s.effects.since(ctx, mark)
-	if err != nil {
-		s.findings.add(ruleRequestsNeedTheBearer, op.ID, probe, "could not observe host state: %v", err)
-		return nil
+	switch {
+	case err != nil:
+		s.findings.add(ruleRequestsNeedTheBearer, "sweep", probe, "could not observe host state: %v", err)
+	case len(changes) > 0:
+		slices.Sort(changes)
+		s.findings.add(ruleRequestsNeedTheBearer, "sweep", probe, "changed host state: %s", strings.Join(slices.Compact(changes), ", "))
 	}
-	slices.Sort(changes)
-	return slices.Compact(changes)
+}
+
+func (s *conformanceSweep) checkRefusedCredentials(ctx context.Context, reqs []conformanceRequest) {
+	for _, ex := range s.sendAll(ctx, reqs) {
+		s.checkRefusedCredential(ex)
+	}
 }
 
 func (s *conformanceSweep) checkRefusedCredential(ex conformanceExchange) {
