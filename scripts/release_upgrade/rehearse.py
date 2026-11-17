@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path, PurePosixPath
 import shutil
 import signal
@@ -58,6 +59,7 @@ def rehearse(root: Path, evidence: Path, case_id: str):
     try:
         plan = verify_inventory(root)
         receipt.update({"source_sha": plan["source_sha"], "candidate_version": plan["candidate"]["version"],
+                        "candidate_source": plan["candidate_source"],
                         "excluded_sources": plan["excluded_sources"], "plan_case_count": len(plan["cases"]), "inventory_sha256": file_digest(root / "inventory.json")})
         shutil.copyfile(root / "plan.json", evidence / "plan.json")
         if not plan["cases"]:
@@ -101,6 +103,18 @@ def rehearse(root: Path, evidence: Path, case_id: str):
         raise
     finally:
         (evidence / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
+        summarize(receipt)
+
+
+def summarize(receipt: dict):
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path or receipt.get("candidate_source") != "published":
+        return
+    case = receipt["case_id"]
+    with open(path, "a") as summary:
+        summary.write(f"### Installed upgrade {case} to published {receipt['candidate_version']}: {receipt['result']}\n\n"
+                      "Both releases are published builds signed with production keys. This run shows that the "
+                      "upgrade harness and those releases work; it shows nothing about the current source.\n")
 
 
 def main():

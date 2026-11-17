@@ -18,7 +18,7 @@ class GateTests(unittest.TestCase):
         self.root = Path(temporary.name)
         self.fixtures = self.root / "fixtures"
         self.fixtures.mkdir()
-        self.plan = {"format_version": 1, "source_sha": "a" * 40, "candidate": {"version": "1.1.0"},
+        self.plan = {"format_version": 1, "source_sha": "a" * 40, "candidate": {"version": "1.1.0"}, "candidate_source": "release",
                      "cases": [], "excluded_sources": [{"source_version": "1.0.1"}],
                      "skip_reason": "no_automatic_upgrade_source"}
         self.evidence = self.root / "evidence"
@@ -268,3 +268,16 @@ class GateTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "case identity"):
                 gate.rehearse(self.fixtures, self.evidence, "../escape")
             guard.assert_not_called()
+
+    def test_a_published_candidate_says_it_shows_nothing_about_the_source(self):
+        summary = self.root / "summary.md"
+        for source, expected in (("release", False), ("published", True)):
+            with self.subTest(source=source):
+                summary.unlink(missing_ok=True)
+                self.plan["candidate_source"] = source
+                self.inventory()
+                evidence = self.root / f"evidence-{source}"
+                with patch.dict(gate.os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}):
+                    gate.rehearse(self.fixtures, evidence, self.case_id)
+                self.assertEqual(json.loads((evidence / "receipt.json").read_text())["candidate_source"], source)
+                self.assertEqual(summary.exists(), expected)
