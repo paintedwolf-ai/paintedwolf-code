@@ -46,6 +46,9 @@ func TestPersistedFixturePassesVocabularyLoad(t *testing.T) {
 	}
 	manifests, err := workflowdef.RegistryFromDirs(projectDir)
 	contractcheck.FailErr(t, "workflow.RegistryFromDirs failed", err)
+	if _, err := manifests.Get("hotfix", "1.0.0"); err != nil {
+		t.Fatalf("persisted overlay hotfix@1.0.0 not in the registry: %v", err)
+	}
 	reg, err := conditions.NewDefaultRegistry(conditions.RegistryDeps{})
 	contractcheck.FailErr(t, "build conditions registry", err)
 	if err := rules.RegisterRuleConditions(reg); err != nil {
