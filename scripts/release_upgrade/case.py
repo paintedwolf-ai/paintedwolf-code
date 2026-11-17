@@ -10,6 +10,7 @@ import sqlite3
 import subprocess
 import sys
 
+from release_upgrade.plan import activation
 from release_upgrade.prepare import archive_path, file_digest
 from release_upgrade.process import Installation, read_json, wait_for
 
@@ -103,6 +104,25 @@ def confirmed(transaction: dict | None, version: str, app: Path) -> bool:
     return not previous.exists()
 
 
+def committed_handoff(records: Path, version: str, installation) -> bool:
+    """The source committed the staged release and its app has exited."""
+    transaction = read_json(records / "transaction.json")
+    if not transaction or transaction.get("phase") != "committed":
+        return False
+    if transaction.get("candidate", {}).get("version") != version:
+        raise ValueError("the committed transaction belongs to another release")
+    return not installation.app_running()
+
+
+def probe_helper(executable: Path) -> dict:
+    """Run helper mode inside the installed bundle; an argument refusal proves it executes there."""
+    result = subprocess.run([str(executable), "--apply-update", "probe", "0" * 64],
+                            capture_output=True, check=False, timeout=60)
+    if result.returncode != 1:
+        raise ValueError(f"in-bundle update helper ended with status {result.returncode}, not its refusal")
+    return {"exit_code": result.returncode}
+
+
 def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evidence: Path):
     if case["protocol"] != "native-v2":
         raise ValueError("desktop gate covers automatic updater clients only")
@@ -132,6 +152,7 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
         if before["health"].get("schema_version") != plan["schemas"][case["source_version"]]:
             raise ValueError("prior engine does not match its exact corpus schema")
         verify_semantics(config, fixture, before, evidence, "prior")
+        installed = case["source_version"]
         for step in case["steps"]:
             version = step["version"]
             ready = wait_for(f"{version} was not automatically staged", lambda: staged(records, diagnostics, diagnostic_offset), 600)
@@ -145,6 +166,12 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
             if app.stat().st_ino != prior_inode:
                 raise ValueError("the staged source activated before its startup rehearsal")
             installation.launch()
+            trigger = "startup_after_staging"
+            if activation(installed) == "next_launch":
+                wait_for(f"{installed} did not commit {version} and exit",
+                         lambda: committed_handoff(records, version, installation), 180)
+                installation.launch()
+                trigger = "next_launch_after_committed_handoff"
             after = installation.healthy(version)
             verify_preferences(preferences, case["channel"])
             wait_for(f"{version} did not confirm startup and remove the previous bundle",
@@ -160,15 +187,19 @@ def run_case(case: dict, plan: dict, root: Path, work: Path, config: Path, evide
             if after["health"].get("schema_version") != expected:
                 raise ValueError("upgraded engine has an unexpected schema")
             (evidence / f"{version}-transaction.json").write_text(json.dumps(transaction, indent=2) + "\n")
-            observations.append({"version": version, "health": after["health"], "transaction_id": transaction["id"]})
+            observations.append({"version": version, "activation_trigger": trigger, "health": after["health"],
+                                 "transaction_id": transaction["id"]})
+            installed = version
         verify_semantics(config, fixture, after, evidence, "activated")
         installation.stop()
         installation.launch()
         restart = installation.healthy(plan["candidate"]["version"])
         verify_preferences(preferences, case["channel"])
         verify_semantics(config, fixture, restart, evidence, "restarted")
-        return {"id": case["id"], "result": "passed", "activation_trigger": "startup_after_staging",
-                "steps": observations, "restart_health": restart["health"]}
+        installation.stop()
+        helper = probe_helper(installation.executable)
+        return {"id": case["id"], "result": "passed", "steps": observations,
+                "restart_health": restart["health"], "helper_probe": helper}
     finally:
         finish_case(installation, config, records, evidence, sys.exc_info()[1])
 
@@ -202,28 +233,3 @@ def retain_state(config, records, evidence):
     for name in ("engine.log", "engine.log.1", "updates.log", "updates.log.1", "desktop-launch.log"):
         if (config / name).is_file():
             shutil.copyfile(config / name, evidence / name)
-
-
-def probe_committed_recovery(case, plan, root, work, config, evidence):
-    """Diagnose next-launch recovery without changing the failed upgrade result."""
-    transaction = read_json(evidence.parent / case["id"] / "final-transaction.json")
-    if not transaction or transaction.get("phase") != "committed":
-        return {"result": "not_applicable", "reason": "no_committed_transaction"}
-    app = Path(transaction["target"])
-    if app.parent != work.resolve() or app.suffix != ".app" or app.is_symlink() or not app.is_dir():
-        raise ValueError("recovery target differs from the retained rehearsal installation")
-    records = config / "updates/installations" / hashlib.sha256(str(app).encode()).hexdigest()
-    evidence.mkdir()
-    installation = Installation(app, config)
-    try:
-        installation.launch()
-        version = plan["candidate"]["version"]
-        observation = installation.healthy(version)
-        wait_for("next-launch recovery did not confirm the installed candidate",
-                 lambda: confirmed(read_json(records / "transaction.json"), version, app))
-        verify_semantics(config, root / "fixtures" / case["source_version"], observation, evidence, "recovery")
-        return {"result": "passed", "trigger": "explicit_next_launch", "health": observation["health"]}
-    except Exception as error:
-        return {"result": "failed", "error": str(error)}
-    finally:
-        finish_case(installation, config, records, evidence, sys.exc_info()[1])

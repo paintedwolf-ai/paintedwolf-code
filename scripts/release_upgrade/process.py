@@ -45,10 +45,23 @@ class Installation:
         self.launched_at = time.time()
 
     def launch(self):
+        self.clear_stale_daemon()
         self.launched_at = time.time()
         subprocess.run(["/usr/bin/open", "-n", "-j", "--env", "LYCAON_LLM_MOCK=1",
                         "--stdout", str(self.config / "desktop-launch.log"),
                         "--stderr", str(self.config / "desktop-launch.log"), str(self.app)], check=True, timeout=30)
+
+    def clear_stale_daemon(self):
+        """Forget a daemon record whose process has exited, so observation waits for the next engine."""
+        record = self.config / "daemon.json"
+        daemon = read_json(record)
+        pid = daemon.get("pid") if isinstance(daemon, dict) else None
+        if type(pid) is int and pid > 1 and process_identity(pid) is None:
+            record.unlink(missing_ok=True)
+
+    def app_running(self) -> bool:
+        self.capture_owned()
+        return any(kind == 1 and process_identity(pid) == identity for pid, (identity, kind) in self.owned.items())
 
     def capture_owned(self):
         helpers = self.config.glob("updates/installations/*/staging/*/update-helper")
