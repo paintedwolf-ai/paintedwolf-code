@@ -1,14 +1,11 @@
-package contract
+package specsync
 
 import (
-	"os"
-	"path/filepath"
+	"fmt"
 	"regexp"
 	"strings"
-	"testing"
 
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
+	"github.com/lycaon/lycaon/test/contract/laws"
 )
 
 var (
@@ -55,14 +52,19 @@ func asBool(v any) bool {
 	return false
 }
 
-func loadInvariantDoc(t *testing.T) *invariantOpenAPIDoc {
-	t.Helper()
-	root := contractcheck.RepoRoot(t)
-	raw, err := os.ReadFile(filepath.Join(root, "docs", "openapi.yaml"))
-	contractcheck.FailErr(t, "read docs/openapi.yaml", err)
-	var doc invariantOpenAPIDoc
-	contractcheck.FailErr(t, "unmarshal openapi.yaml", yaml.Unmarshal(raw, &doc))
-	return &doc
+// invariantDoc is the generic view of the OpenAPI document the convention
+// and invariant laws walk, decoded once per corpus.
+func invariantDoc(r *laws.Run) *invariantOpenAPIDoc {
+	return laws.Part(r.Corpus, "openapi document", func() (*invariantOpenAPIDoc, error) {
+		var doc invariantOpenAPIDoc
+		if err := spec(r).Decode(&doc); err != nil {
+			return nil, err
+		}
+		if len(doc.Paths) == 0 {
+			return nil, fmt.Errorf("%s declares no paths", openAPIPath)
+		}
+		return &doc, nil
+	})
 }
 
 func resolveParamMap(p map[string]any, compParams map[string]map[string]any) map[string]any {
@@ -75,10 +77,9 @@ func resolveParamMap(p map[string]any, compParams map[string]map[string]any) map
 	return p
 }
 
-// TestOpenAPIPathParameterInvariants verifies path parameter naming and template-parameter parity.
-func TestOpenAPIPathParameterInvariants(t *testing.T) {
-	t.Parallel()
-	doc := loadInvariantDoc(t)
+// openAPIPathParameterInvariants verifies path parameter naming and template-parameter parity.
+func openAPIPathParameterInvariants(r *laws.Run) {
+	doc := invariantDoc(r)
 
 	forbiddenBareNouns := map[string]bool{
 		"job":     true,
@@ -97,10 +98,10 @@ func TestOpenAPIPathParameterInvariants(t *testing.T) {
 			expectedInPath[paramName] = true
 
 			if !rxSnakeCase.MatchString(paramName) {
-				t.Errorf("%s: path parameter %q must be lowercase snake_case", path, paramName)
+				r.Report("%s: path parameter %q must be lowercase snake_case", path, paramName)
 			}
 			if forbiddenBareNouns[paramName] {
-				t.Errorf("%s: path parameter %q is a bare noun; use %s_id", path, paramName, paramName)
+				r.Report("%s: path parameter %q is a bare noun; use %s_id", path, paramName, paramName)
 			}
 		}
 
@@ -130,27 +131,26 @@ func TestOpenAPIPathParameterInvariants(t *testing.T) {
 					name := asString(resolved["name"])
 					declaredPathParams[name] = true
 					if !expectedInPath[name] {
-						t.Errorf("%s %s: declared path parameter %q does not exist in URL template", methodUpper, path, name)
+						r.Report("%s %s: declared path parameter %q does not exist in URL template", methodUpper, path, name)
 					}
 					if !asBool(resolved["required"]) {
-						t.Errorf("%s %s: path parameter %q must be required: true", methodUpper, path, name)
+						r.Report("%s %s: path parameter %q must be required: true", methodUpper, path, name)
 					}
 				}
 			}
 
 			for p := range expectedInPath {
 				if !declaredPathParams[p] {
-					t.Errorf("%s %s: template parameter {%s} is missing from operation parameter declarations", methodUpper, path, p)
+					r.Report("%s %s: template parameter {%s} is missing from operation parameter declarations", methodUpper, path, p)
 				}
 			}
 		}
 	}
 }
 
-// TestOpenAPIQueryParameterInvariants verifies query parameter naming, scoping, and search conventions.
-func TestOpenAPIQueryParameterInvariants(t *testing.T) {
-	t.Parallel()
-	doc := loadInvariantDoc(t)
+// openAPIQueryParameterInvariants verifies query parameter naming, scoping, and search conventions.
+func openAPIQueryParameterInvariants(r *laws.Run) {
+	doc := invariantDoc(r)
 
 	forbiddenScoping := map[string]string{
 		"project":     "project_id",
@@ -192,23 +192,22 @@ func TestOpenAPIQueryParameterInvariants(t *testing.T) {
 				}
 
 				if !rxSnakeCase.MatchString(name) {
-					t.Errorf("%s %s: query parameter %q must be lowercase snake_case", methodUpper, path, name)
+					r.Report("%s %s: query parameter %q must be lowercase snake_case", methodUpper, path, name)
 				}
 				if canonical, bad := forbiddenScoping[name]; bad {
-					t.Errorf("%s %s: query parameter %q is forbidden; use canonical %q", methodUpper, path, name, canonical)
+					r.Report("%s %s: query parameter %q is forbidden; use canonical %q", methodUpper, path, name, canonical)
 				}
 				if canonical, bad := forbiddenSearch[name]; bad {
-					t.Errorf("%s %s: query parameter %q is forbidden; use canonical %q", methodUpper, path, name, canonical)
+					r.Report("%s %s: query parameter %q is forbidden; use canonical %q", methodUpper, path, name, canonical)
 				}
 			}
 		}
 	}
 }
 
-// TestOpenAPIStatusCodeAndBodyInvariants verifies response status codes and body shapes.
-func TestOpenAPIStatusCodeAndBodyInvariants(t *testing.T) {
-	t.Parallel()
-	doc := loadInvariantDoc(t)
+// openAPIStatusCodeAndBodyInvariants verifies response status codes and body shapes.
+func openAPIStatusCodeAndBodyInvariants(r *laws.Run) {
+	doc := invariantDoc(r)
 
 	for path, methods := range doc.Paths {
 		for method, rawOp := range methods {
@@ -229,7 +228,7 @@ func TestOpenAPIStatusCodeAndBodyInvariants(t *testing.T) {
 
 			if resp204 := asMap(responses["204"]); resp204 != nil {
 				if content := asMap(resp204["content"]); len(content) > 0 {
-					t.Errorf("%s %s: status 204 No Content must not define a response body", methodUpper, path)
+					r.Report("%s %s: status 204 No Content must not define a response body", methodUpper, path)
 				}
 			}
 
@@ -237,17 +236,16 @@ func TestOpenAPIStatusCodeAndBodyInvariants(t *testing.T) {
 				content := asMap(resp201["content"])
 				ref := asString(resp201["$ref"])
 				if len(content) == 0 && ref == "" {
-					t.Errorf("%s %s: status 201 Created must define a response body schema", methodUpper, path)
+					r.Report("%s %s: status 201 Created must define a response body schema", methodUpper, path)
 				}
 			}
 		}
 	}
 }
 
-// TestOpenAPISchemaPropertiesInvariants verifies schema property casing.
-func TestOpenAPISchemaPropertiesInvariants(t *testing.T) {
-	t.Parallel()
-	doc := loadInvariantDoc(t)
+// openAPISchemaPropertiesInvariants verifies schema property casing.
+func openAPISchemaPropertiesInvariants(r *laws.Run) {
+	doc := invariantDoc(r)
 
 	for schemaName, rawSchema := range doc.Components.Schemas {
 		schemaMap := asMap(rawSchema)
@@ -257,16 +255,15 @@ func TestOpenAPISchemaPropertiesInvariants(t *testing.T) {
 		props := asMap(schemaMap["properties"])
 		for propName := range props {
 			if !rxSnakeCase.MatchString(propName) {
-				t.Errorf("schema %s: property %q must be lowercase snake_case", schemaName, propName)
+				r.Report("schema %s: property %q must be lowercase snake_case", schemaName, propName)
 			}
 		}
 	}
 }
 
-// TestOpenAPIOperationIDInvariants verifies operationId presence, format, and uniqueness.
-func TestOpenAPIOperationIDInvariants(t *testing.T) {
-	t.Parallel()
-	doc := loadInvariantDoc(t)
+// openAPIOperationIDInvariants verifies operationId presence, format, and uniqueness.
+func openAPIOperationIDInvariants(r *laws.Run) {
+	doc := invariantDoc(r)
 
 	seenIDs := make(map[string]string)
 
@@ -284,19 +281,27 @@ func TestOpenAPIOperationIDInvariants(t *testing.T) {
 
 			opID := asString(opMap["operationId"])
 			if opID == "" {
-				t.Errorf("%s %s: missing operationId", methodUpper, path)
+				r.Report("%s %s: missing operationId", methodUpper, path)
 				continue
 			}
 
 			if !rxLowerCamelCase.MatchString(opID) {
-				t.Errorf("%s %s: operationId %q must be lowerCamelCase", methodUpper, path, opID)
+				r.Report("%s %s: operationId %q must be lowerCamelCase", methodUpper, path, opID)
 			}
 
 			route := methodUpper + " " + path
 			if prior, exists := seenIDs[opID]; exists {
-				t.Errorf("duplicate operationId %q on %s (first seen on %s)", opID, route, prior)
+				r.Report("duplicate operationId %q on %s (first seen on %s)", opID, route, prior)
 			}
 			seenIDs[opID] = route
 		}
 	}
+}
+
+var invariantRules = []laws.Rule{
+	{Name: "openapi-path-parameters", Anchors: []laws.Anchor{openAPI}, Check: openAPIPathParameterInvariants},
+	{Name: "openapi-query-parameters", Anchors: []laws.Anchor{openAPI}, Check: openAPIQueryParameterInvariants},
+	{Name: "openapi-status-codes-and-bodies", Anchors: []laws.Anchor{openAPI}, Check: openAPIStatusCodeAndBodyInvariants},
+	{Name: "openapi-property-casing", Anchors: []laws.Anchor{openAPI}, Check: openAPISchemaPropertiesInvariants},
+	{Name: "openapi-operation-ids", Anchors: []laws.Anchor{openAPI}, Check: openAPIOperationIDInvariants},
 }

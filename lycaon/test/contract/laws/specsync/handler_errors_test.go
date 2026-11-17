@@ -1,181 +1,13 @@
-package contract
+package specsync
 
 import (
-	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
-	"slices"
-	"sort"
-	"strconv"
-	"strings"
 	"testing"
-	"time"
 
-	"github.com/lycaon/lycaon/internal/usernotice"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/wirespec"
+	"github.com/lycaon/lycaon/test/contract/laws"
 )
-
-func repoHandlerErrorTree(root string) handlerErrorTree {
-	const module = "github.com/lycaon/lycaon"
-	return handlerErrorTree{
-		dir:       filepath.Join(root, "lycaon"),
-		patterns:  []string{"./internal/...", "./pkg/..."},
-		httpLayer: module + "/internal/api",
-		register: map[string]bool{
-			"(*" + module + "/internal/api.Server).registerV1Operation": true,
-			module + "/internal/api.registerRootOperation":              true,
-		},
-		codeType:  module + "/pkg/api.ApiErrorCode",
-		errorBody: module + "/pkg/api.ErrorResponse",
-	}
-}
-
-// TestAPIHandlersEmitOnlyDeclaredErrors checks handler error codes, statuses,
-// and detail keys against the operation and notice contracts.
-func TestAPIHandlersEmitOnlyDeclaredErrors(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	started := time.Now()
-	prog, err := repoHandlerErrorTree(root).load()
-	contractcheck.FailErr(t, "load the lycaon program", err)
-	handlers, problems := prog.scan()
-	t.Logf("scanned %d handlers over %d functions in %s", len(handlers), len(prog.funcs), time.Since(started).Round(time.Millisecond))
-	for _, problem := range problems {
-		t.Errorf("registration %s", problem)
-	}
-	t.Run("statuses", func(t *testing.T) {
-		t.Parallel()
-		operations, err := wirespec.GeneratedOperations(root)
-		contractcheck.FailErr(t, "load the generated operation table", err)
-		routes, err := wirespec.LoadOpenAPIRoutes(root)
-		contractcheck.FailErr(t, "load the OpenAPI routes", err)
-		declared := map[string][]string{}
-		for _, route := range routes {
-			declared[route.OperationID] = route.DocumentedStatuses
-		}
-		var violations []string
-		unresolved := map[string][]string{}
-		for _, h := range handlers {
-			id := operations[h.operation].OperationID
-			if id == "" {
-				violations = append(violations, fmt.Sprintf("%s: registered with no generated operation", h.operation))
-				continue
-			}
-			for _, site := range h.unresolved {
-				unresolved[site] = append(unresolved[site], id)
-			}
-			violations = append(violations, undeclaredErrorViolations(id, h, declared[id], vocabularyStatus)...)
-		}
-		sites := make([]string, 0, len(unresolved))
-		for site := range unresolved {
-			sites = append(sites, site)
-		}
-		sort.Strings(sites)
-		for _, site := range sites {
-			violations = append(violations, fmt.Sprintf("%s: error code at %s does not resolve to a vocabulary constant (%d operations)",
-				unresolved[site][0], site, len(unresolved[site])))
-		}
-		sort.Strings(violations)
-		for _, v := range violations {
-			t.Errorf("%s", v)
-		}
-	})
-	t.Run("details", func(t *testing.T) {
-		t.Parallel()
-		cfg, err := usernotice.LoadNoticeDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "host", "user-notices"))
-		contractcheck.FailErr(t, "load the platform notice catalog", err)
-		emitted := prog.detailsOf(handlers)
-		violations := undeclaredDetailViolations(emitted, noticeContextSchema(cfg))
-		violations = append(violations, unansweredContextViolations(emitted, cfg)...)
-		for _, v := range violations {
-			t.Errorf("%s", v)
-		}
-	})
-}
-
-// unansweredContextViolations reports each render variable an HTTP-only notice
-// declares that no handler answers its code with: handler details are that
-// notice's only producer.
-func unansweredContextViolations(emitted detailEmissions, cfg *usernotice.Config) []string {
-	schema := noticeContextSchema(cfg)
-	var out []string
-	for code, entry := range cfg.UserNotices {
-		if len(entry.Surfaces) != 1 || !entry.HasSurface("http") {
-			continue
-		}
-		keys, _ := schema(code)
-		for key := range keys {
-			if !emitted.keys[code][key] {
-				out = append(out, fmt.Sprintf("%s: context_schema key %s is never answered in details", code, key))
-			}
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-// noticeContextSchema answers the render variables a code's notice declares.
-func noticeContextSchema(cfg *usernotice.Config) func(string) (map[string]bool, bool) {
-	return func(code string) (map[string]bool, bool) {
-		notice, ok := cfg.UserNotices[code]
-		if !ok {
-			return nil, false
-		}
-		out := map[string]bool{}
-		for _, group := range []string{"required", "optional"} {
-			list, _ := notice.ContextSchema[group].([]any)
-			for _, item := range list {
-				if name, ok := item.(string); ok {
-					out[strings.TrimSpace(name)] = true
-				}
-			}
-		}
-		return out, true
-	}
-}
-
-// vocabularyStatus is the one status the vocabulary declares for code, or 0
-// when code is not in the vocabulary.
-func vocabularyStatus(code string) int {
-	if !slices.Contains(wire.AllApiErrorCodeValues(), wire.ApiErrorCode(code)) {
-		return 0
-	}
-	return wire.ApiErrorCode(code).HTTPStatus()
-}
-
-// undeclaredErrorViolations reports each code whose status the operation does
-// not declare. `default` covers only 500, the failure no request causes.
-func undeclaredErrorViolations(id string, h *handlerErrors, statuses []string, status func(string) int) []string {
-	declared := map[int]bool{}
-	for _, key := range statuses {
-		if key == "default" {
-			declared[http.StatusInternalServerError] = true
-			continue
-		}
-		if n, err := strconv.Atoi(key); err == nil {
-			declared[n] = true
-		}
-	}
-	var out []string
-	for code := range h.codes {
-		switch s := status(code); {
-		case s == 0:
-			out = append(out, fmt.Sprintf("%s: %s emits %s, which is not in the ApiErrorCode vocabulary", id, h.handler, code))
-		case !declared[s]:
-			out = append(out, fmt.Sprintf("%s: %s emits %s (%d) but declares %s", id, h.handler, code, s, strings.Join(sortedStatuses(statuses), " ")))
-		}
-	}
-	return out
-}
-
-func sortedStatuses(statuses []string) []string {
-	out := append([]string(nil), statuses...)
-	sort.Strings(out)
-	return out
-}
 
 // handlerErrorFixture is a module whose handlers use each pattern the scan
 // resolves: a constant through a responder, a code-returning mapper and a
@@ -184,8 +16,8 @@ func sortedStatuses(statuses []string) []string {
 // codes, a closure, a handler registered through a wrapper, and details built
 // by a wrapper and returned by a helper that adds a key conditionally.
 var handlerErrorFixture = map[string]string{
-	"go.mod": "module example.com/errscan\n\ngo 1.26\n",
-	"pkg/api/api.go": `package api
+	"lycaon/go.mod": "module github.com/lycaon/lycaon\n\ngo 1.26\n",
+	"lycaon/pkg/api/api.go": `package api
 
 type ApiErrorCode string
 
@@ -205,12 +37,12 @@ type ErrorResponse struct {
 	Details map[string]any
 }
 `,
-	"internal/api/httpio/respond.go": `package httpio
+	"lycaon/internal/api/httpio/respond.go": `package httpio
 
 import (
 	"net/http"
 
-	"example.com/errscan/pkg/api"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type Responder struct{}
@@ -231,9 +63,9 @@ func (s Responder) FailReason(w http.ResponseWriter, code api.ApiErrorCode, reas
 	s.FailDetails(w, code, map[string]any{"reason": reason})
 }
 `,
-	"internal/domain/domain.go": `package domain
+	"lycaon/internal/domain/domain.go": `package domain
 
-import "example.com/errscan/pkg/api"
+import "github.com/lycaon/lycaon/pkg/api"
 
 // Error carries the code the HTTP layer answers.
 type Error struct{ Code api.ApiErrorCode }
@@ -262,15 +94,15 @@ type Label struct{ Code api.ApiErrorCode }
 
 var Unused = Label{Code: api.CodeUnused}
 `,
-	"internal/api/widgetadmin/handler.go": `package widgetadmin
+	"lycaon/internal/api/widgetadmin/handler.go": `package widgetadmin
 
 import (
 	"errors"
 	"io"
 	"net/http"
 
-	"example.com/errscan/internal/domain"
-	"example.com/errscan/pkg/api"
+	"github.com/lycaon/lycaon/internal/domain"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type failer interface {
@@ -305,14 +137,14 @@ func (h *Handler) HandlePut(w http.ResponseWriter, r *http.Request) {
 	func() { h.Responses.Fail(w, api.CodeLimited) }()
 }
 `,
-	"internal/api/server.go": `package api
+	"lycaon/internal/api/server.go": `package api
 
 import (
 	"net/http"
 
-	"example.com/errscan/internal/api/httpio"
-	"example.com/errscan/internal/api/widgetadmin"
-	wire "example.com/errscan/pkg/api"
+	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/api/widgetadmin"
+	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 type operation struct{ ID string }
@@ -395,19 +227,17 @@ func TestHandlerErrorScanResolvesEachPattern(t *testing.T) {
 		contractcheck.FailErr(t, "mkdir "+rel, os.MkdirAll(filepath.Dir(path), 0o755))
 		contractcheck.FailErr(t, "write "+rel, os.WriteFile(path, []byte(body), 0o600))
 	}
-	const module = "example.com/errscan"
-	tree := handlerErrorTree{
-		dir: dir, patterns: []string{"./..."}, httpLayer: module + "/internal/api",
-		register:  map[string]bool{"(*" + module + "/internal/api.Server).registerV1Operation": true},
-		codeType:  module + "/pkg/api.ApiErrorCode",
-		errorBody: module + "/pkg/api.ErrorResponse",
-		env:       append(os.Environ(), "GOFLAGS=-mod=mod", "GOWORK=off"),
-	}
-	prog, err := tree.load()
-	contractcheck.FailErr(t, "load the fixture module", err)
-	handlers, problems := prog.scan()
-	if len(problems) > 0 {
-		t.Fatalf("registration problems: %v", problems)
+	tree := lycaonHandlers
+	tree.register = map[string]bool{"(*" + lycaonModule + "/internal/api.Server).registerV1Operation": true}
+	var prog *handlerErrorProgram
+	var handlers []*handlerErrors
+	res := laws.Evaluate(laws.LoadFixture(dir), laws.Rule{
+		Name:    "scan",
+		Anchors: []laws.Anchor{laws.Dir("lycaon/internal/api")},
+		Check:   func(r *laws.Run) { prog, handlers = handlerScan(r, tree) },
+	})
+	if res.Failed() {
+		t.Fatalf("scan the fixture module:\n%s", res)
 	}
 	got := map[string][]string{}
 	for _, h := range handlers {

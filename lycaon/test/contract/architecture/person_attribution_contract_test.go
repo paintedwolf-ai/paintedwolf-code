@@ -2,15 +2,11 @@ package contract
 
 import (
 	"go/ast"
-	"os"
 	"path/filepath"
 	"slices"
-	"sort"
-	"strings"
 	"testing"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
 )
 
 const peoplePkg = "github.com/lycaon/lycaon/internal/people"
@@ -65,42 +61,6 @@ func callsFunction(body ast.Node, name string) bool {
 		return !found
 	})
 	return found
-}
-
-func TestEveryOperationDeclaresWhetherItIsAPersonAction(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	data, err := os.ReadFile(filepath.Join(root, "docs", "openapi.yaml"))
-	contractcheck.FailErr(t, "read docs/openapi.yaml", err)
-	var doc struct {
-		Paths map[string]map[string]yaml.Node `yaml:"paths"`
-	}
-	contractcheck.FailErr(t, "parse docs/openapi.yaml", yaml.Unmarshal(data, &doc))
-	var offences []string
-	for path, item := range doc.Paths {
-		for method, node := range item {
-			var op struct {
-				OperationID  string `yaml:"operationId"`
-				PersonAction string `yaml:"x-person-action"`
-			}
-			if node.Decode(&op) != nil || op.OperationID == "" {
-				continue
-			}
-			label := strings.ToUpper(method) + " " + path + " (" + op.OperationID + ")"
-			switch strings.ToUpper(method) {
-			case "GET", "HEAD", "OPTIONS":
-				if op.PersonAction != "" {
-					offences = append(offences, label+": reads are never recorded")
-				}
-			default:
-				if op.PersonAction != "record" && op.PersonAction != "none" {
-					offences = append(offences, label+": declare x-person-action: record or none")
-				}
-			}
-		}
-	}
-	sort.Strings(offences)
-	contractcheck.FailViolations(t, "operations without a person-action declaration", offences)
 }
 
 func funcDecls(f *ast.File) []*ast.FuncDecl {

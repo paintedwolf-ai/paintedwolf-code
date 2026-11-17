@@ -1,111 +1,14 @@
 package contract
 
 import (
-	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
-	"os"
 	"path/filepath"
-	"regexp"
-	"strconv"
-	"strings"
 	"testing"
 
-	"gopkg.in/yaml.v3"
-
-	wire "github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
-
-// declaredAPIErrorCodes returns the generated code set.
-func declaredAPIErrorCodes() map[string]string {
-	out := make(map[string]string)
-	for _, code := range wire.AllApiErrorCodeValues() {
-		out[string(code)] = "declared in docs/openapi/vocab/ApiErrorCode.yaml"
-	}
-	return out
-}
-
-// apiErrorCodeVocabValue is one ApiErrorCode vocabulary entry as authored.
-type apiErrorCodeVocabValue struct {
-	ID     string
-	Status []int
-	Keys   []string
-}
-
-func loadAPIErrorCodeVocab(t *testing.T) []apiErrorCodeVocabValue {
-	t.Helper()
-	path := filepath.Join(contractcheck.RepoRoot(t), "docs", "openapi", "vocab", "ApiErrorCode.yaml")
-	raw, err := os.ReadFile(path) // #nosec G304 -- repository fixture
-	contractcheck.FailErr(t, "read ApiErrorCode vocabulary", err)
-	var doc struct {
-		Values []yaml.Node `yaml:"values"`
-	}
-	contractcheck.FailErr(t, "decode ApiErrorCode vocabulary", yaml.Unmarshal(raw, &doc))
-	out := make([]apiErrorCodeVocabValue, 0, len(doc.Values))
-	for _, node := range doc.Values {
-		var value apiErrorCodeVocabValue
-		for i := 0; i+1 < len(node.Content); i += 2 {
-			key, val := node.Content[i].Value, node.Content[i+1]
-			value.Keys = append(value.Keys, key)
-			switch key {
-			case "id":
-				value.ID = val.Value
-			case "status":
-				status, err := strconv.Atoi(val.Value)
-				contractcheck.FailErr(t, "parse status of "+value.ID, err)
-				value.Status = append(value.Status, status)
-			}
-		}
-		out = append(out, value)
-	}
-	return out
-}
-
-// TestAPIErrorCodeStatus proves each code maps to exactly one HTTP error
-// status and that the generated lookup agrees with the vocabulary.
-func TestAPIErrorCodeStatus(t *testing.T) {
-	t.Parallel()
-	vocab := loadAPIErrorCodeVocab(t)
-	var violations []string
-	for _, value := range vocab {
-		if len(value.Status) != 1 {
-			violations = append(violations, fmt.Sprintf("%s declares %d statuses; exactly one is required", value.ID, len(value.Status)))
-			continue
-		}
-		status := value.Status[0]
-		if status < 400 || status > 599 {
-			violations = append(violations, fmt.Sprintf("%s declares non-error status %d", value.ID, status))
-		}
-		if got := wire.ApiErrorCode(value.ID).HTTPStatus(); got != status {
-			violations = append(violations, fmt.Sprintf("%s: generated HTTPStatus() = %d, vocabulary says %d", value.ID, got, status))
-		}
-		if status == 404 && value.ID != "not_found" && !strings.HasSuffix(value.ID, "_not_found") {
-			violations = append(violations, value.ID+" answers 404 but is not named <resource>_not_found")
-		}
-		for _, key := range value.Keys {
-			if key == "deprecated" || key == "successor" {
-				violations = append(violations, value.ID+" carries "+key+"; retired codes are deleted, not deprecated")
-			}
-		}
-	}
-	if len(vocab) != len(wire.AllApiErrorCodeValues()) {
-		violations = append(violations, fmt.Sprintf("vocabulary lists %d codes but Go declares %d", len(vocab), len(wire.AllApiErrorCodeValues())))
-	}
-	contractcheck.FailViolations(t, "API error code status drift", violations)
-}
-
-// TestAPIErrorCodeStyle requires lowercase snake_case codes.
-func TestAPIErrorCodeStyle(t *testing.T) {
-	t.Parallel()
-	snake := regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
-	for code := range declaredAPIErrorCodes() {
-		if !snake.MatchString(code) {
-			t.Errorf("error code %q is not lowercase snake_case", code)
-		}
-	}
-}
 
 // scanAPIErrorCodes finds literal codes at handler emission sites.
 func scanAPIErrorCodes(t *testing.T, apiDir string) map[string]bool {

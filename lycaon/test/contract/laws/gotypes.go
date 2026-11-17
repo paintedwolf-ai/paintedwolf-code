@@ -37,6 +37,15 @@ type TypedPackage struct {
 	Files []*GoFile
 }
 
+// Syntax returns the package's parsed files.
+func (p *TypedPackage) Syntax() []*ast.File {
+	files := make([]*ast.File, len(p.Files))
+	for i, f := range p.Files {
+		files[i] = f.AST
+	}
+	return files
+}
+
 // Types returns the type-checked program; a failure ends the check.
 func (c *Corpus) Types() *Program {
 	g := c.Go()
@@ -186,10 +195,13 @@ func checkPackage(g *GoCorpus, imp *programImporter, pkg listedPackage) (*TypedP
 		return nil, err
 	}
 	typed := &TypedPackage{Path: pkg.ImportPath, Info: &types.Info{
-		Types:      map[ast.Expr]types.TypeAndValue{},
-		Defs:       map[*ast.Ident]types.Object{},
-		Uses:       map[*ast.Ident]types.Object{},
-		Selections: map[*ast.SelectorExpr]*types.Selection{},
+		Types:        map[ast.Expr]types.TypeAndValue{},
+		Defs:         map[*ast.Ident]types.Object{},
+		Uses:         map[*ast.Ident]types.Object{},
+		Selections:   map[*ast.SelectorExpr]*types.Selection{},
+		Implicits:    map[ast.Node]types.Object{},
+		Instances:    map[*ast.Ident]types.Instance{},
+		FileVersions: map[*ast.File]string{},
 	}}
 	var files []*ast.File
 	for _, name := range append(append([]string(nil), pkg.GoFiles...), pkg.CgoFiles...) {

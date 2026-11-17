@@ -1,24 +1,26 @@
-package contract
+package specsync
 
 import (
 	"fmt"
+	"go/ast"
 	"go/token"
 	"go/types"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 
-	"golang.org/x/tools/go/packages"
+	"github.com/lycaon/lycaon/test/contract/laws"
 	"golang.org/x/tools/go/ssa"
 	"golang.org/x/tools/go/ssa/ssautil"
 )
 
-// handlerErrorTree names a Go module whose HTTP handlers the declared-errors
-// contract scans: the repository's lycaon module, or a fixture module that
-// proves the scan's sensitivity.
+// handlerErrorTree names the HTTP handler layer of a module the
+// declared-errors law scans.
 type handlerErrorTree struct {
-	dir      string
-	patterns []string
+	// scope lists the import-path prefixes of the packages whose named types
+	// are candidates for dispatch.
+	scope []string
 	// httpLayer is the import-path prefix the handler call graph stays within.
 	httpLayer string
 	// register lists the registration functions (types.Func.FullName) whose
@@ -28,7 +30,6 @@ type handlerErrorTree struct {
 	// struct whose Code field every error response is built through.
 	codeType  string
 	errorBody string
-	env       []string
 }
 
 // handlerErrors is what one registered handler can answer.
@@ -44,9 +45,10 @@ type handlerErrors struct {
 // handlerErrorProgram is the SSA program of one module with the indexes the
 // code resolution consults.
 type handlerErrorProgram struct {
-	tree  handlerErrorTree
-	prog  *ssa.Program
-	funcs map[*ssa.Function]bool
+	tree      handlerErrorTree
+	moduleDir string
+	prog      *ssa.Program
+	funcs     map[*ssa.Function]bool
 	// layerTypes are the named types declared in the HTTP layer, the
 	// candidates for an interface call made inside it; programTypes are every
 	// named type with bodies, the candidates when a code is returned.
@@ -99,42 +101,50 @@ func (c *codeSet) merge(other *codeSet) {
 	}
 }
 
-func (tree handlerErrorTree) load() (*handlerErrorProgram, error) {
-	cfg := &packages.Config{Mode: packages.LoadSyntax, Dir: tree.dir, Env: tree.env}
-	pkgs, err := packages.Load(cfg, tree.patterns...)
-	if err != nil {
-		return nil, err
-	}
-	var loadErrs []string
-	for _, pkg := range pkgs {
-		for _, e := range pkg.Errors {
-			loadErrs = append(loadErrs, e.Error())
-		}
-	}
-	if len(loadErrs) > 0 {
-		return nil, fmt.Errorf("packages did not type-check:\n  %s", strings.Join(loadErrs[:min(len(loadErrs), 20)], "\n  "))
-	}
-	prog, ssaPkgs := ssautil.Packages(pkgs, ssa.InstantiateGenerics)
+// load builds the SSA program from the type-checked corpus.
+func (tree handlerErrorTree) load(typed *laws.Program, moduleDir string) *handlerErrorProgram {
+	prog := ssa.NewProgram(typed.Fset, ssa.InstantiateGenerics)
 	created := map[*types.Package]bool{}
-	var createDeps func(*types.Package)
-	createDeps = func(tp *types.Package) {
-		if tp == nil || created[tp] {
+	var create func(*types.Package)
+	create = func(tp *types.Package) {
+		if created[tp] {
 			return
 		}
 		created[tp] = true
 		for _, imp := range tp.Imports() {
-			createDeps(imp)
+			create(imp)
 		}
-		if prog.Package(tp) == nil {
-			prog.CreatePackage(tp, nil, nil, true)
+		if pkg, ok := typed.Packages[tp.Path()]; ok && tree.inScope(tp.Path()) {
+			files, info := ssaSyntax(pkg)
+			prog.CreatePackage(tp, files, info, true)
+			return
 		}
+		prog.CreatePackage(tp, nil, nil, true)
 	}
-	for _, pkg := range pkgs {
-		createDeps(pkg.Types)
+	var ssaPkgs []*ssa.Package
+	for _, path := range typed.Order {
+		if !tree.inScope(path) {
+			continue
+		}
+		pkg := typed.Packages[path]
+		create(pkg.Types)
+		ssaPkgs = append(ssaPkgs, prog.Package(pkg.Types))
+		// Export data reaches packages no import lists, such as the package
+		// of a method called on a value another package returns.
+		for _, obj := range pkg.Info.Uses {
+			if obj.Pkg() != nil {
+				create(obj.Pkg())
+			}
+		}
+		for _, sel := range pkg.Info.Selections {
+			if sel.Obj().Pkg() != nil {
+				create(sel.Obj().Pkg())
+			}
+		}
 	}
 	prog.Build()
 	p := &handlerErrorProgram{
-		tree: tree, prog: prog, funcs: ssautil.AllFunctions(prog),
+		tree: tree, moduleDir: moduleDir, prog: prog, funcs: ssautil.AllFunctions(prog),
 		fieldStores: map[string][]storedValue{}, mapStores: map[string][]storedValue{},
 		globalStores: map[*ssa.Global][]storedValue{},
 		flows:        map[*ssa.Function]map[int]bool{}, flowing: map[*ssa.Function]bool{},
@@ -159,7 +169,55 @@ func (tree handlerErrorTree) load() (*handlerErrorProgram, error) {
 		}
 	}
 	p.indexStores()
-	return p, nil
+	return p
+}
+
+// ssaSyntax is a package's syntax and type information for the SSA builder.
+// The checker leaves C untyped, so a function whose body reaches C is built
+// as an external function and a package variable whose initializer reaches C
+// starts zero. The corpus syntax itself is not changed.
+func ssaSyntax(pkg *laws.TypedPackage) ([]*ast.File, *types.Info) {
+	if !slices.ContainsFunc(pkg.Files, func(f *laws.GoFile) bool { return f.Imports("C") }) {
+		return pkg.Syntax(), pkg.Info
+	}
+	files := make([]*ast.File, 0, len(pkg.Files))
+	for _, f := range pkg.Files {
+		file := *f.AST
+		file.Decls = slices.Clone(f.AST.Decls)
+		for i, decl := range file.Decls {
+			if fn, ok := decl.(*ast.FuncDecl); ok && fn.Body != nil && reachesC(fn.Body) {
+				external := *fn
+				external.Body = nil
+				file.Decls[i] = &external
+			}
+		}
+		files = append(files, &file)
+	}
+	info := *pkg.Info
+	info.InitOrder = slices.DeleteFunc(slices.Clone(info.InitOrder), func(init *types.Initializer) bool { return reachesC(init.Rhs) })
+	return files, &info
+}
+
+func reachesC(node ast.Node) bool {
+	found := false
+	ast.Inspect(node, func(n ast.Node) bool {
+		if sel, ok := n.(*ast.SelectorExpr); ok {
+			if id, ok := sel.X.(*ast.Ident); ok && id.Name == "C" {
+				found = true
+			}
+		}
+		return !found
+	})
+	return found
+}
+
+func (tree handlerErrorTree) inScope(path string) bool {
+	for _, prefix := range tree.scope {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *handlerErrorProgram) inLayer(pkg *types.Package) bool {
@@ -412,7 +470,7 @@ func (p *handlerErrorProgram) targets(common *ssa.CallCommon) []*ssa.Function {
 func (p *handlerErrorProgram) position(pos token.Pos) string {
 	position := p.prog.Fset.Position(pos)
 	file := position.Filename
-	if rel, err := filepath.Rel(p.tree.dir, file); err == nil {
+	if rel, err := filepath.Rel(p.moduleDir, file); err == nil {
 		file = filepath.ToSlash(rel)
 	}
 	return fmt.Sprintf("%s:%d", file, position.Line)

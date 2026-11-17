@@ -3,18 +3,14 @@ package wirespec
 import (
 	"fmt"
 	"go/ast"
-	"go/parser"
-	"go/token"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// wireField is one JSON field on a wire DTO with optionality.
-type wireField struct {
+// Field is one JSON field on a wire DTO with optionality.
+type Field struct {
 	Name     string
 	Optional bool
 }
@@ -24,7 +20,7 @@ type wireStructSpec struct {
 	GoName        string
 	OpenAPISchema string
 	TSInterface   string
-	Fields        []wireField
+	Fields        []Field
 }
 
 // wireStructGap is an exported pkg/api struct with JSON tags that reaches
@@ -49,8 +45,8 @@ func (g wireStructGap) Reason() string {
 	}
 }
 
-// wireStructCatalogResult separates covered structs from missing wire projections.
-type wireStructCatalogResult struct {
+// StructCatalogResult separates covered structs from missing wire projections.
+type StructCatalogResult struct {
 	Specs []wireStructSpec
 	Gaps  []wireStructGap
 }
@@ -71,10 +67,10 @@ func dtoSyncAliases() map[string]string {
 	}
 }
 
-// apiStructScan is the AST view of exported pkg/api struct types.
-type apiStructScan struct {
+// APIStructScan is the AST view of exported pkg/api struct types.
+type APIStructScan struct {
 	// Tagged holds structs with at least one JSON-tagged field, by Go name.
-	Tagged map[string][]wireField
+	Tagged map[string][]Field
 	// Untagged names structs whose fields carry no JSON tags at all.
 	Untagged []string
 	// Empty names field-less structs: published request bodies that carry {}.
@@ -83,24 +79,10 @@ type apiStructScan struct {
 	Embedded []string
 }
 
-func discoverAPIStructFields(repoRoot string) (apiStructScan, error) {
-	apiDir := filepath.Join(repoRoot, "lycaon", "pkg", "api")
-	entries, err := os.ReadDir(apiDir)
-	if err != nil {
-		return apiStructScan{}, err
-	}
-	fset := token.NewFileSet()
-	scan := apiStructScan{Tagged: make(map[string][]wireField)}
-	for _, ent := range entries {
-		name := ent.Name()
-		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		path := filepath.Join(apiDir, name)
-		file, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
-		if err != nil {
-			return apiStructScan{}, fmt.Errorf("parse %s: %w", name, err)
-		}
+// ScanAPIStructs reads the exported struct types of the pkg/api files.
+func ScanAPIStructs(files []*ast.File) APIStructScan {
+	scan := APIStructScan{Tagged: make(map[string][]Field)}
+	for _, file := range files {
 		ast.Inspect(file, func(n ast.Node) bool {
 			ts, ok := n.(*ast.TypeSpec)
 			if !ok || !ts.Name.IsExported() {
@@ -110,7 +92,7 @@ func discoverAPIStructFields(repoRoot string) (apiStructScan, error) {
 			if !ok || st.Fields == nil {
 				return true
 			}
-			var fields []wireField
+			var fields []Field
 			embedded := false
 			for _, f := range st.Fields.List {
 				if len(f.Names) == 0 {
@@ -125,7 +107,7 @@ func discoverAPIStructFields(repoRoot string) (apiStructScan, error) {
 				if !keep {
 					continue
 				}
-				fields = append(fields, wireField{Name: jsonName, Optional: optional})
+				fields = append(fields, Field{Name: jsonName, Optional: optional})
 			}
 			if embedded {
 				scan.Embedded = append(scan.Embedded, ts.Name.Name)
@@ -148,7 +130,7 @@ func discoverAPIStructFields(repoRoot string) (apiStructScan, error) {
 	sort.Strings(scan.Untagged)
 	sort.Strings(scan.Empty)
 	sort.Strings(scan.Embedded)
-	return scan, nil
+	return scan
 }
 
 func parseJSONTag(tag string) (name string, optional bool, keep bool) {
@@ -177,24 +159,18 @@ func parseJSONTag(tag string) (name string, optional bool, keep bool) {
 	return name, optional, true
 }
 
-func WireStructCatalog(repoRoot string) (wireStructCatalogResult, error) {
-	scan, err := CachedDiscoverAPIStructFields(repoRoot)
-	if err != nil {
-		return wireStructCatalogResult{}, err
-	}
+// StructCatalog pairs each tagged pkg/api struct with its OpenAPI and
+// types.ts schemas, and lists the structs missing either projection.
+func StructCatalog(scan APIStructScan, spec *Spec, tsContent string) (StructCatalogResult, error) {
 	openAPIName := dtoSyncAliases()
-	openAPISchemas, err := LoadOpenAPIObjectSchemas(repoRoot)
+	openAPISchemas, err := spec.ObjectSchemas()
 	if err != nil {
-		return wireStructCatalogResult{}, err
-	}
-	tsContent, err := cachedTSContent(repoRoot)
-	if err != nil {
-		return wireStructCatalogResult{}, err
+		return StructCatalogResult{}, err
 	}
 
 	// A field-less published request is tri-synced like any other: its schema
 	// must stay empty on all three sides.
-	discovered := make(map[string][]wireField, len(scan.Tagged)+len(scan.Empty))
+	discovered := make(map[string][]Field, len(scan.Tagged)+len(scan.Empty))
 	for goName, fields := range scan.Tagged {
 		discovered[goName] = fields
 	}
@@ -202,7 +178,7 @@ func WireStructCatalog(repoRoot string) (wireStructCatalogResult, error) {
 		discovered[goName] = nil
 	}
 
-	var out wireStructCatalogResult
+	var out StructCatalogResult
 	for goName, fields := range discovered {
 		if StructExempt(goName) {
 			continue
@@ -237,57 +213,31 @@ func WireStructCatalog(repoRoot string) (wireStructCatalogResult, error) {
 	return out, nil
 }
 
-func SyncWireStructFields(root string, spec wireStructSpec) error {
-	goFields := spec.Fields
-
-	openAPIFields, err := loadOpenAPISchemaFieldSpecs(root, spec.OpenAPISchema)
+// SyncWireStructFields compares one struct's fields and optionality with
+// its OpenAPI and types.ts schemas.
+func SyncWireStructFields(spec *Spec, tsContent string, s wireStructSpec) error {
+	openAPIFields, err := spec.SchemaFields(s.OpenAPISchema)
 	if err != nil {
-		return fmt.Errorf("%s: %w", spec.GoName, err)
+		return fmt.Errorf("%s: %w", s.GoName, err)
 	}
-	if diff := wireFieldDiff(spec.GoName+" Go vs OpenAPI "+spec.OpenAPISchema, goFields, openAPIFields); diff != "" {
+	if diff := wireFieldDiff(s.GoName+" Go vs OpenAPI "+s.OpenAPISchema, s.Fields, openAPIFields); diff != "" {
 		return fmt.Errorf("%s\nfix: align pkg/api %s JSON tags with docs/openapi.yaml schema %q",
-			diff, spec.GoName, spec.OpenAPISchema)
+			diff, s.GoName, s.OpenAPISchema)
 	}
-
-	tsFields, err := parseTSInterfaceFieldSpecs(root, spec.TSInterface)
+	tsFields, err := parseGeneratedSchemaFieldSpecs(tsContent, s.TSInterface)
 	if err != nil {
-		return fmt.Errorf("%s: %w", spec.GoName, err)
+		return fmt.Errorf("%s: %w", s.GoName, err)
 	}
-	if diff := wireFieldDiff(spec.GoName+" Go vs TS "+spec.TSInterface, goFields, tsFields); diff != "" {
+	sort.Slice(tsFields, func(i, j int) bool { return tsFields[i].Name < tsFields[j].Name })
+	if diff := wireFieldDiff(s.GoName+" Go vs TS "+s.TSInterface, s.Fields, tsFields); diff != "" {
 		return fmt.Errorf("%s\nfix: align pkg/api %s JSON tags with generated lycaon-den/src/api/types.ts schema %q",
-			diff, spec.GoName, spec.TSInterface)
+			diff, s.GoName, s.TSInterface)
 	}
 	return nil
 }
 
-func loadOpenAPISchemaFieldSpecs(repoRoot, schema string) ([]wireField, error) {
-	props, err := CachedOpenAPIPropertySpecs(repoRoot, schema)
-	if err != nil {
-		return nil, err
-	}
-	var out []wireField
-	for name, optional := range props {
-		out = append(out, wireField{Name: name, Optional: optional})
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out, nil
-}
-
-func parseTSInterfaceFieldSpecs(repoRoot, name string) ([]wireField, error) {
-	content, err := cachedTSContent(repoRoot)
-	if err != nil {
-		return nil, err
-	}
-	fields, err := parseGeneratedSchemaFieldSpecs(content, name)
-	if err != nil {
-		return nil, err
-	}
-	sort.Slice(fields, func(i, j int) bool { return fields[i].Name < fields[j].Name })
-	return fields, nil
-}
-
-func wireFieldDiff(label string, want, got []wireField) string {
-	wantByName := make(map[string]wireField, len(want))
+func wireFieldDiff(label string, want, got []Field) string {
+	wantByName := make(map[string]Field, len(want))
 	for _, f := range want {
 		wantByName[f.Name] = f
 	}
@@ -333,7 +283,7 @@ func wireFieldDiff(label string, want, got []wireField) string {
 	return b.String()
 }
 
-func wireFieldNames(fields []wireField) []string {
+func wireFieldNames(fields []Field) []string {
 	out := make([]string, len(fields))
 	for i, f := range fields {
 		out[i] = f.Name

@@ -1,16 +1,15 @@
-package contract
+package specsync
 
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
-	"testing"
 	"unicode"
 
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/test/contract/laws"
+
 	"gopkg.in/yaml.v3"
 )
 
@@ -43,9 +42,14 @@ type conventionSpec struct {
 	ops []conventionOp
 }
 
-func loadConventionSpec(t *testing.T) *conventionSpec {
-	t.Helper()
-	doc := loadInvariantDoc(t)
+// conventions indexes the operations of the document once per corpus.
+func conventions(r *laws.Run) *conventionSpec {
+	return laws.Part(r.Corpus, "openapi conventions", func() (*conventionSpec, error) {
+		return indexConventions(invariantDoc(r)), nil
+	})
+}
+
+func indexConventions(doc *invariantOpenAPIDoc) *conventionSpec {
 	spec := &conventionSpec{invariantOpenAPIDoc: doc}
 	for path, item := range doc.Paths {
 		pathParams := asSlice(item["parameters"])
@@ -68,15 +72,6 @@ func loadConventionSpec(t *testing.T) *conventionSpec {
 	}
 	sort.Slice(spec.ops, func(i, j int) bool { return spec.ops[i].ID < spec.ops[j].ID })
 	return spec
-}
-
-// reportConventionViolations prints every violation, sorted, without stopping early.
-func reportConventionViolations(t *testing.T, violations []string) {
-	t.Helper()
-	sort.Strings(violations)
-	for _, v := range violations {
-		t.Errorf("%s", v)
-	}
 }
 
 // resolve follows component schema references.
@@ -284,12 +279,11 @@ func (s *conventionSpec) properties() []schemaProperty {
 	return out
 }
 
-// TestAPIConventionListEnvelope: a 2xx JSON body is never a bare array and never
+// apiConventionListEnvelope: a 2xx JSON body is never a bare array and never
 // carries `items` or `count`; a list operation (verb list, or a cursor, before,
 // or after parameter) answers an object with exactly one plural array.
-func TestAPIConventionListEnvelope(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+func apiConventionListEnvelope(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	for _, op := range spec.ops {
 		params := queryParams(op)
@@ -324,7 +318,7 @@ func TestAPIConventionListEnvelope(t *testing.T) {
 			}
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
 var forbiddenPageParameters = map[string]bool{
@@ -343,14 +337,13 @@ var forbiddenContinuationProperties = map[string]bool{
 
 var continuationProperties = map[string]bool{"next_cursor": true, "before_cursor": true, "after_cursor": true}
 
-// TestAPIConventionPaginationParameters: forward pages take `cursor` + `limit`,
+// apiConventionPaginationParameters: forward pages take `cursor` + `limit`,
 // bidirectional windows take `before`/`after` + `limit`, and `offset` appears
 // only on operations marked `x-positional-window: true`. Every `limit`
 // declares a minimum and maximum. Query parameters and request body fields
 // follow the same vocabulary.
-func TestAPIConventionPaginationParameters(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+func apiConventionPaginationParameters(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	for _, op := range spec.ops {
 		inputs := map[string]map[string]any{}
@@ -365,7 +358,7 @@ func TestAPIConventionPaginationParameters(t *testing.T) {
 		}
 		violations = append(violations, paginationInputViolations(spec, op, inputs)...)
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
 func paginationInputViolations(spec *conventionSpec, op conventionOp, inputs map[string]map[string]any) []string {
@@ -410,12 +403,11 @@ func paginationInputViolations(spec *conventionSpec, op conventionOp, inputs map
 	return out
 }
 
-// TestAPIConventionContinuationFields: responses continue with `next_cursor`,
+// apiConventionContinuationFields: responses continue with `next_cursor`,
 // `before_cursor`, or `after_cursor` (opaque strings) and no other
 // continuation or has-more vocabulary.
-func TestAPIConventionContinuationFields(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+func apiConventionContinuationFields(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	for _, prop := range spec.properties() {
 		if forbiddenContinuationProperties[prop.Name] {
@@ -425,7 +417,7 @@ func TestAPIConventionContinuationFields(t *testing.T) {
 			violations = append(violations, fmt.Sprintf("%s: continuation-fields: %q must be an opaque string cursor", prop.Owner, prop.Name))
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
 // instantNames are the names an instant takes instead of `*_at`.
@@ -434,12 +426,11 @@ var instantNames = map[string]bool{
 	"first_seen": true, "last_seen": true, "last_used": true, "last_updated": true,
 }
 
-// TestAPIConventionInstantFields: `*_at` properties are date-time strings,
+// apiConventionInstantFields: `*_at` properties are date-time strings,
 // every date-time property is `*_at`, every date property is `*_on`, and no
 // instant goes by another name (`ts`, `*_ts`, `mtime`, `since`, …).
-func TestAPIConventionInstantFields(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+func apiConventionInstantFields(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	for _, prop := range spec.properties() {
 		schema := spec.effective(prop.Schema)
@@ -465,7 +456,7 @@ func TestAPIConventionInstantFields(t *testing.T) {
 			}
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
 // identityNames maps a name to the one name its identity takes in the API:
@@ -483,12 +474,11 @@ var identityNames = map[string]string{
 	"plan_name":     "blueprint_title",
 }
 
-// TestAPIConventionIdentityNames: one identity has one name on every
+// apiConventionIdentityNames: one identity has one name on every
 // operation and event. Tool results follow their tool's vocabulary.
-func TestAPIConventionIdentityNames(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
-	api := spec.reachable(apiRoots(t, spec))
+func apiConventionIdentityNames(r *laws.Run) {
+	spec := conventions(r)
+	api := spec.reachable(apiRoots(r, spec))
 	var violations []string
 	for _, prop := range spec.properties() {
 		if _, component := spec.Components.Schemas[prop.Owner]; component && !api["schemas/"+prop.Owner] {
@@ -505,18 +495,17 @@ func TestAPIConventionIdentityNames(t *testing.T) {
 			}
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
 // canceledSpellings finds the doubled-l spellings; the API spells canceled,
 // canceling, and cancelable with one l.
 var canceledSpellings = regexp.MustCompile(`cancell(ed|ing|able)`)
 
-// TestAPIConventionCanceledSpelling: no operationId, parameter, property, or
+// apiConventionCanceledSpelling: no operationId, parameter, property, or
 // enum value spells canceled with two l's.
-func TestAPIConventionCanceledSpelling(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+func apiConventionCanceledSpelling(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	add := func(owner, what, value string) {
 		if canceledSpellings.MatchString(strings.ToLower(value)) {
@@ -540,7 +529,7 @@ func TestAPIConventionCanceledSpelling(t *testing.T) {
 			add(name, "enum value", asString(value))
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
 func isIdentifierName(name string) bool {
@@ -556,11 +545,10 @@ func identifierIsDeclared(schema map[string]any) bool {
 	return asString(schema["format"]) == "uuid" || schema["pattern"] != nil || schema["enum"] != nil || schema["const"] != nil
 }
 
-// TestAPIConventionIdentifierFormats: every `id` / `*_id` property and
+// apiConventionIdentifierFormats: every `id` / `*_id` property and
 // path/query parameter declares format uuid or a pattern.
-func TestAPIConventionIdentifierFormats(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+func apiConventionIdentifierFormats(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	for _, prop := range spec.properties() {
 		if isIdentifierName(prop.Name) && !identifierIsDeclared(spec.effective(prop.Schema)) {
@@ -575,7 +563,7 @@ func TestAPIConventionIdentifierFormats(t *testing.T) {
 			}
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
 func durationSuffixViolation(name string) bool {
@@ -587,10 +575,9 @@ func durationSuffixViolation(name string) bool {
 	return false
 }
 
-// TestAPIConventionDurationFields: durations are integer `*_ms`; no seconds suffixes.
-func TestAPIConventionDurationFields(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+// apiConventionDurationFields: durations are integer `*_ms`; no seconds suffixes.
+func apiConventionDurationFields(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	for _, prop := range spec.properties() {
 		if durationSuffixViolation(prop.Name) {
@@ -607,13 +594,12 @@ func TestAPIConventionDurationFields(t *testing.T) {
 			}
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
-// TestAPIConventionMoneyFields: money is integer `*_nano_usd`; no other `*_usd`.
-func TestAPIConventionMoneyFields(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+// apiConventionMoneyFields: money is integer `*_nano_usd`; no other `*_usd`.
+func apiConventionMoneyFields(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	for _, prop := range spec.properties() {
 		switch {
@@ -625,13 +611,12 @@ func TestAPIConventionMoneyFields(t *testing.T) {
 			violations = append(violations, fmt.Sprintf("%s: money-fields: property %q; money is integer *_nano_usd", prop.Owner, prop.Name))
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
-// TestAPIConventionPutReplacesWholeDocument: a PUT body requires every property it declares.
-func TestAPIConventionPutReplacesWholeDocument(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+// apiConventionPutReplacesWholeDocument: a PUT body requires every property it declares.
+func apiConventionPutReplacesWholeDocument(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	for _, op := range spec.ops {
 		body := jsonRequestSchema(op.Op)
@@ -649,14 +634,13 @@ func TestAPIConventionPutReplacesWholeDocument(t *testing.T) {
 			violations = append(violations, fmt.Sprintf("%s: put-full-body: PUT replaces the whole document but %v are optional", op.ID, optional))
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
-// TestAPIConventionPatchMerges: a PATCH body requires nothing but the
+// apiConventionPatchMerges: a PATCH body requires nothing but the
 // optimistic-concurrency `expected_revision` and the idempotency `operation_id`.
-func TestAPIConventionPatchMerges(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+func apiConventionPatchMerges(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	for _, op := range spec.ops {
 		body := jsonRequestSchema(op.Op)
@@ -674,14 +658,13 @@ func TestAPIConventionPatchMerges(t *testing.T) {
 			violations = append(violations, fmt.Sprintf("%s: patch-merges: PATCH merges but requires %v", op.ID, fields))
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
-// TestAPIConventionNoToggleSubresources: on/off state is PATCH {enabled}, never
+// apiConventionNoToggleSubresources: on/off state is PATCH {enabled}, never
 // an `enabled` or `disabled` path segment.
-func TestAPIConventionNoToggleSubresources(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+func apiConventionNoToggleSubresources(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	for _, op := range spec.ops {
 		for _, segment := range strings.Split(op.Path, "/") {
@@ -690,7 +673,7 @@ func TestAPIConventionNoToggleSubresources(t *testing.T) {
 			}
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
 // operationVerb is the leading lowercase word of a lowerCamel operationId.
@@ -721,12 +704,11 @@ var crudSynonyms = map[string]string{
 	"fetch": "get", "retrieve": "get",
 }
 
-// TestAPIConventionOperationVerbs: operationIds never use an HTTP method name
+// apiConventionOperationVerbs: operationIds never use an HTTP method name
 // or a CRUD synonym as the verb, and never a CRUD verb belonging to another
 // method.
-func TestAPIConventionOperationVerbs(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+func apiConventionOperationVerbs(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	for _, op := range spec.ops {
 		verb := operationVerb(op.ID)
@@ -739,14 +721,13 @@ func TestAPIConventionOperationVerbs(t *testing.T) {
 			violations = append(violations, fmt.Sprintf("%s: operation-verbs: verb %q contradicts %s", op.ID, verb, strings.ToUpper(op.Method)))
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
-// TestAPIConventionDeclaredErrors: authenticated operations declare 401 and
+// apiConventionDeclaredErrors: authenticated operations declare 401 and
 // operations with a request body declare 415.
-func TestAPIConventionDeclaredErrors(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+func apiConventionDeclaredErrors(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	for _, op := range spec.ops {
 		responses := asMap(op.Op["responses"])
@@ -762,16 +743,15 @@ func TestAPIConventionDeclaredErrors(t *testing.T) {
 			violations = append(violations, fmt.Sprintf("%s: declared-errors: operation with a request body does not declare 415", op.ID))
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
-// TestAPIConventionClosedRequestSchemas: a request body schema and every object
+// apiConventionClosedRequestSchemas: a request body schema and every object
 // schema inside it set `additionalProperties: false` (a composite may use
 // `unevaluatedProperties: false`). Map-typed objects declare their value schema
 // in additionalProperties and are closed by construction.
-func TestAPIConventionClosedRequestSchemas(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+func apiConventionClosedRequestSchemas(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	for _, op := range spec.ops {
 		seen := map[string]bool{}
@@ -781,7 +761,7 @@ func TestAPIConventionClosedRequestSchemas(t *testing.T) {
 			})
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
 func (s *conventionSpec) walkRequestObjects(node map[string]any, label string, member bool, seen map[string]bool, open func(string)) {
@@ -843,11 +823,10 @@ func (s *conventionSpec) composesObject(members []any) bool {
 	return false
 }
 
-// TestAPIConventionStatusCodes: 201 answers only POST, and DELETE answers 204,
+// apiConventionStatusCodes: 201 answers only POST, and DELETE answers 204,
 // or 202 for a durable operation that outlives the response.
-func TestAPIConventionStatusCodes(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+func apiConventionStatusCodes(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	for _, op := range spec.ops {
 		responses := asMap(op.Op["responses"])
@@ -863,34 +842,32 @@ func TestAPIConventionStatusCodes(t *testing.T) {
 			}
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
-// TestAPIConventionReachableComponents: every component schema is reachable
+// apiConventionReachableComponents: every component schema is reachable
 // from an operation, an event topic payload, the event envelope, or a tool
 // result schema that declares x-tool-output.
-func TestAPIConventionReachableComponents(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
-	roots, violations := toolOutputRoots(t, spec.Components.Schemas)
-	reached := spec.reachable(append(apiRoots(t, spec), schemaRefs(roots)...))
+func apiConventionReachableComponents(r *laws.Run) {
+	spec := conventions(r)
+	roots, violations := toolOutputRoots(r, spec.Components.Schemas)
+	reached := spec.reachable(append(apiRoots(r, spec), schemaRefs(roots)...))
 	for _, name := range sortedNames(spec.Components.Schemas) {
 		if !reached["schemas/"+name] {
 			violations = append(violations, fmt.Sprintf("%s: reachable-components: schema is not reachable from any operation or event", name))
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
 }
 
 // apiRoots are the operations, every EventTopic payload, and the event
 // envelope: the surface the API conventions govern.
-func apiRoots(t *testing.T, spec *conventionSpec) []any {
-	t.Helper()
+func apiRoots(r *laws.Run, spec *conventionSpec) []any {
 	roots := make([]any, 0, len(spec.Paths))
 	for _, item := range spec.Paths {
 		roots = append(roots, item)
 	}
-	return append(roots, schemaRefs(eventSchemaRoots(t))...)
+	return append(roots, schemaRefs(eventSchemaRoots(r))...)
 }
 
 func schemaRefs(names []string) []any {
@@ -946,9 +923,8 @@ func visitComponent[V any](reached map[string]bool, key string, component V, vis
 // toolOutputRoots names the schemas that declare `x-tool-output`: the JSON a
 // named agent tool returns, which Den parses from tool results. Each named tool
 // must have a tool schema under the platform pack.
-func toolOutputRoots(t *testing.T, schemas map[string]map[string]any) ([]string, []string) {
-	t.Helper()
-	toolDir := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas")
+func toolOutputRoots(r *laws.Run, schemas map[string]map[string]any) ([]string, []string) {
+	const toolDir = "lycaon/config/packs/painted-wolf/platform/tools/schemas"
 	var roots, violations []string
 	for _, name := range sortedNames(schemas) {
 		raw, ok := schemas[name]["x-tool-output"]
@@ -962,7 +938,7 @@ func toolOutputRoots(t *testing.T, schemas map[string]map[string]any) ([]string,
 		}
 		for _, tool := range tools {
 			tool := asString(tool)
-			if _, err := os.Stat(filepath.Join(toolDir, tool+".yaml")); tool == "" || err != nil {
+			if _, err := os.Stat(r.Path(toolDir + "/" + tool + ".yaml")); tool == "" || err != nil {
 				violations = append(violations, fmt.Sprintf("%s: reachable-components: x-tool-output names %q, which is not a platform tool", name, tool))
 			}
 		}
@@ -972,13 +948,9 @@ func toolOutputRoots(t *testing.T, schemas map[string]map[string]any) ([]string,
 }
 
 // eventSchemaRoots names the event envelope and every EventTopic payload schema.
-func eventSchemaRoots(t *testing.T) []string {
-	t.Helper()
-	root := contractcheck.RepoRoot(t)
-	data, err := os.ReadFile(filepath.Join(root, "docs", "openapi", "vocab", "EventTopic.yaml"))
-	contractcheck.FailErr(t, "read EventTopic vocabulary", err)
+func eventSchemaRoots(r *laws.Run) []string {
 	var vocab eventTopicVocab
-	contractcheck.FailErr(t, "decode EventTopic vocabulary", yaml.Unmarshal(data, &vocab))
+	must(r, "decode EventTopic vocabulary", yaml.Unmarshal(r.Bytes("docs/openapi/vocab/EventTopic.yaml"), &vocab))
 	roots := []string{"EventEnvelope"}
 	for _, topic := range vocab.Values {
 		if _, name, ok := strings.Cut(topic.Payload, schemaRefPrefix); ok {
@@ -988,11 +960,10 @@ func eventSchemaRoots(t *testing.T) []string {
 	return roots
 }
 
-// TestAPIConventionBodyCarriesNoProjectScope: a route under /v1/projects/{id}
+// apiConventionBodyCarriesNoProjectScope: a route under /v1/projects/{id}
 // takes its project from the path, never from a body `project_id`.
-func TestAPIConventionBodyCarriesNoProjectScope(t *testing.T) {
-	t.Parallel()
-	spec := loadConventionSpec(t)
+func apiConventionBodyCarriesNoProjectScope(r *laws.Run) {
+	spec := conventions(r)
 	var violations []string
 	for _, op := range spec.ops {
 		if op.Path != projectRoutePrefix && !strings.HasPrefix(op.Path, projectRoutePrefix+"/") {
@@ -1004,5 +975,26 @@ func TestAPIConventionBodyCarriesNoProjectScope(t *testing.T) {
 			}
 		}
 	}
-	reportConventionViolations(t, violations)
+	reportAll(r, violations)
+}
+
+var conventionRules = []laws.Rule{
+	{Name: "convention-list-envelope", Anchors: []laws.Anchor{openAPI}, Check: apiConventionListEnvelope},
+	{Name: "convention-pagination-parameters", Anchors: []laws.Anchor{openAPI}, Check: apiConventionPaginationParameters},
+	{Name: "convention-continuation-fields", Anchors: []laws.Anchor{openAPI}, Check: apiConventionContinuationFields},
+	{Name: "convention-instant-fields", Anchors: []laws.Anchor{openAPI}, Check: apiConventionInstantFields},
+	{Name: "convention-identity-names", Anchors: []laws.Anchor{openAPI}, Check: apiConventionIdentityNames},
+	{Name: "convention-canceled-spelling", Anchors: []laws.Anchor{openAPI}, Check: apiConventionCanceledSpelling},
+	{Name: "convention-identifier-formats", Anchors: []laws.Anchor{openAPI}, Check: apiConventionIdentifierFormats},
+	{Name: "convention-duration-fields", Anchors: []laws.Anchor{openAPI}, Check: apiConventionDurationFields},
+	{Name: "convention-money-fields", Anchors: []laws.Anchor{openAPI}, Check: apiConventionMoneyFields},
+	{Name: "convention-put-replaces-whole-document", Anchors: []laws.Anchor{openAPI}, Check: apiConventionPutReplacesWholeDocument},
+	{Name: "convention-patch-merges", Anchors: []laws.Anchor{openAPI}, Check: apiConventionPatchMerges},
+	{Name: "convention-no-toggle-subresources", Anchors: []laws.Anchor{openAPI}, Check: apiConventionNoToggleSubresources},
+	{Name: "convention-operation-verbs", Anchors: []laws.Anchor{openAPI}, Check: apiConventionOperationVerbs},
+	{Name: "convention-declared-errors", Anchors: []laws.Anchor{openAPI}, Check: apiConventionDeclaredErrors},
+	{Name: "convention-closed-request-schemas", Anchors: []laws.Anchor{openAPI}, Check: apiConventionClosedRequestSchemas},
+	{Name: "convention-status-codes", Anchors: []laws.Anchor{openAPI}, Check: apiConventionStatusCodes},
+	{Name: "convention-reachable-components", Anchors: []laws.Anchor{openAPI, laws.File("docs/openapi/vocab/EventTopic.yaml"), laws.Dir("lycaon/config/packs/painted-wolf/platform/tools/schemas")}, Check: apiConventionReachableComponents},
+	{Name: "convention-body-carries-no-project-scope", Anchors: []laws.Anchor{openAPI}, Check: apiConventionBodyCarriesNoProjectScope},
 }

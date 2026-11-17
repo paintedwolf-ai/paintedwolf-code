@@ -53,7 +53,7 @@ func TestHumanGateSatisfyPathParity(t *testing.T) {
 	profileData, err := os.ReadFile(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "profiles", "coordinator.yaml"))
 	contractcheck.FailErr(t, "read file", err)
 	profileText := string(profileData)
-	clientMethods, err := wirespec.ParseTSClientMethods(filepath.Join(root, "lycaon-den", "src", "api", "client.ts"))
+	clientMethods, err := wirespec.ParseTSClientMethods(os.ReadFile, filepath.Join(root, "lycaon-den", "src", "api", "client.ts"))
 	contractcheck.FailErr(t, "parse the Den client methods", err)
 
 	for _, spec := range specs {

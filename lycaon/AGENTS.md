@@ -41,7 +41,7 @@ OpenAPI is the source of truth for wire types and operations. Den wire types, or
 4. Update handwritten `lycaon/pkg/api/` behavior only when a custom union or JSON implementation changes. Ordinary object schemas use `x-go-generate: true`; Go representation annotations are documented in [`../docs/dev-tasks.md`](../docs/dev-tasks.md#generated-surface-write-paths).
 5. Register each `/v1` handler with its generated operation through `Server.registerV1Operation`. This keeps authorization, rate limits, and person-action recording on one route seam. Non-read operations declare `x-person-action: record` or `none` beside `operationId`; reads omit it.
 
-Do those steps in the **same** change. Contract tests in `test/contract/wire/` (`openapi_dto_sync_test.go`, `enum_sync_test.go`, `openapi_routes_sync_test.go`) and `codegen:den-types:check` enforce generated parity. `internal/api/operations_contract_test.go` checks that each generated operation is registered exactly once.
+Do those steps in the **same** change. The `spec-sync` laws in [`test/contract/laws/specsync`](test/contract/laws/specsync), `test/contract/wire/openapi_routes_sync_test.go` and `codegen:den-types:check` enforce generated parity. `internal/api/operations_contract_test.go` checks that each generated operation is registered exactly once.
 
 Never edit `docs/openapi.yaml`, `lycaon-den/src/api/types.ts`, `lycaon-den/src/api/operations.generated.ts`, `lycaon/pkg/api/types.generated.go`, or `lycaon/internal/api/operations.generated.go` directly — all are generated.
 
