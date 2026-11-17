@@ -160,7 +160,8 @@ test_run_prune_abandoned
         self.assertNotEqual(second.stdout.strip(), first_path)
         with release.open("w") as releasing:
             releasing.write("release\n")
-        self.assertEqual(first.wait(), 0, first.stderr.read())
+        _, errors = first.communicate()
+        self.assertEqual(first.returncode, 0, errors)
         reused = self.snapshot("pwd")
         self.assertEqual(reused.returncode, 0, reused.stderr)
         self.assertEqual(reused.stdout.strip(), first_path)
