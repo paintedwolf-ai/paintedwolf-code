@@ -2,10 +2,13 @@
 facts a lane fixes (GOOS, GOARCH, -short, the environment) and judged in three values."""
 
 import os
+import re
 
-from ci_policy.go_source import BARE_RETURN, Walker, test_kind, parse_file
+from ci_policy.tier_reach.source import BARE_RETURN, parse_file, test_kind
+from ci_policy.tier_reach.walk import Walker, statement_end
 
 UNKNOWN = ("unknown",)
+REEXEC = re.compile(r"""-test\.run(?:=|\s|"\s*,\s*")['"]?\^?(\w+)""")
 MAX_DEPTH = 6
 STRING_FUNCTIONS = {"TrimSpace": lambda value: value.strip(), "ToLower": str.lower}
 
@@ -20,6 +23,7 @@ class Index:
         self.files = []
         self.clauses_memo = {}
         self._may_skip = None
+        self.reexecuted_memo = {}
         for directory, names, files in os.walk(module_root):
             relative = os.path.relpath(directory, module_root)
             names[:] = sorted(n for n in names if n != "testdata" and not n.startswith((".", "_"))
@@ -42,6 +46,16 @@ class Index:
                 names = grown
             self._may_skip = names
         return self._may_skip
+
+    def reexecuted(self, directory):
+        """Tests a package's own tests start as helper processes (`-test.run=^TestX$`): fixtures of the test
+        that starts them, reached with it whatever their own gates say."""
+        if directory not in self.reexecuted_memo:
+            files = [f for (d, _), group in self.packages.items() if d == directory for f in group]
+            texts = [f.text for file in files for f in file.functions]
+            texts += [value for file in files for value in file.constants.values()]
+            self.reexecuted_memo[directory] = {name for text in texts for name in REEXEC.findall(text)}
+        return self.reexecuted_memo[directory]
 
     def tests(self):
         for file in self.files:
@@ -284,7 +298,6 @@ class Expression:
 
 
 def split_statements(body):
-    from ci_policy.go_source import statement_end
     result, index = [], 0
     while index < len(body):
         if body[index].text == ";":

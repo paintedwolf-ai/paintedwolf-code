@@ -37,7 +37,7 @@ func requireLiveBoundary(t *testing.T) string {
 			caps, _ := confine.LinuxCapabilities()
 			t.Fatalf("linux confinement unavailable on this host: %+v", caps)
 		}
-	} else if runtime.GOOS != "darwin" || testing.Short() || !confine.Available() {
+	} else if runtime.GOOS != "darwin" || testing.Short() {
 		t.Skip("darwin + seatbelt sandbox required")
 	}
 	self, err := os.Executable()

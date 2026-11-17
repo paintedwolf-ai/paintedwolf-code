@@ -11,6 +11,7 @@ import (
 
 	lyexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/scan/rules"
+	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -176,9 +177,7 @@ func TestVendorRuleFilesAreTracked(t *testing.T) {
 	cmd.Dir = root
 	cmd.Env = lyexec.LocalGitEnv()
 	out, err := cmd.Output()
-	if err != nil {
-		t.Skipf("git ls-files unavailable: %v", err)
-	}
+	testutil.FailErr(t, "git ls-files", err)
 
 	tracked := make(map[string]struct{})
 	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {

@@ -140,9 +140,7 @@ func TestFailClosedBrokerStartup(t *testing.T) {
 	t.Cleanup(confine.SetBrokerUnavailableForTest(os.ErrInvalid))
 
 	c, ok := confine.DefaultConfinement(confine.Request{Roots: []string{t.TempDir()}})
-	if !confine.Available() {
-		t.Skip("confine unavailable on this platform")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	if !ok || c == nil {
 		t.Fatal("confinement must still apply under broker failure")
 	}
@@ -160,9 +158,7 @@ func TestDirectIPRequestSelectsDirectMode(t *testing.T) {
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
-	if !confine.Available() {
-		t.Skip("confine unavailable on this platform")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	c, ok := confine.DefaultConfinement(confine.Request{
 		Roots:  []string{t.TempDir()},
 		Egress: confine.EgressDirectIP,
@@ -183,9 +179,7 @@ func TestDefaultConfinementCredentialStorePropagation(t *testing.T) {
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
-	if !confine.Available() {
-		t.Skip("confine unavailable on this platform")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	dir := t.TempDir()
 	c, ok := confine.DefaultConfinement(confine.Request{
 		Roots:           []string{dir},

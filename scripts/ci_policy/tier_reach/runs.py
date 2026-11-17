@@ -1,21 +1,10 @@
-"""Every Go test runs in a scheduled tier, or the declared not-run set names it.
-
-A tier's runs come from the catalog's CI lanes and from `./task` steps of the workflows events start
-(and Qualification). A test is reached when one run builds its file (GOOS, GOARCH, tags), selects its
-package and name, and no skip site of the test or of a function it calls is certain to be taken under
-that run's -short mode and the environment the scheduler passes on."""
+"""The Go runs a tier performs: catalog lanes and the `./task` steps of tier workflows, each with the
+platform, tags, mode, package and name selection, and environment its tests see."""
 
 from dataclasses import dataclass, field
-from pathlib import Path
 import re
 import shlex
-import sys
 
-if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from ci_policy.go_source import Token
-from ci_policy.skip_conditions import Expression, Index, evaluate
 from verification_plan import CATALOG, GO_MODULE, catalog, execution_environment, expand
 
 ROOT = CATALOG.parent.parent
@@ -110,16 +99,129 @@ def declared(environment):
                                   for k, v in environment.items()})
 
 
-def go_runs(names, cli, label, goos, goarch, environment, module):
+def go_runs(names, cli, label, goos, goarch, environment, module, taskfile):
+    """Go runs of the named targets: catalog recipes, and the digest calls of scripted tasks."""
     plan = catalog()
-    names = [n for n in names if n in plan["go"] or n in plan["groups"]]
-    if not names:
+    recipes = [n for n in names if n in plan["go"] or n in plan["groups"]]
+    runs = [stage_runs(label, stage, goos, goarch, environment, module)
+            for stage in (expand(recipes, cli) if recipes else []) if stage["kind"] == "go"]
+    for name in names:
+        if name not in recipes:
+            runs += [Run(f"{label}: {name}", goos, goarch, tags, short, {**environment, **assigned}, packages,
+                         "", run, None, module)
+                     for tags, short, assigned, packages, run in scripted_runs(name, taskfile)]
+    return runs
+
+
+def scripted_runs(task, taskfile, seen=None):
+    """`go-test-digest.sh` calls a Taskfile task makes, directly, through the scripts it runs, or through
+    the tasks it calls. A value only known when the script runs selects anything."""
+    seen = seen or set()
+    if task in seen or task not in taskfile:
         return []
-    return [stage_runs(label, stage, goos, goarch, environment, module)
-            for stage in expand(names, cli) if stage["kind"] == "go"]
+    seen.add(task)
+    runs = []
+    for command in taskfile[task].get("cmds", []):
+        if isinstance(command, dict):
+            runs += scripted_runs(command.get("task", ""), taskfile, seen)
+            continue
+        runs += digest_calls(command)
+        for script in re.findall(r"\{\{\.SCRIPTS_DIR\}\}/([\w./-]+\.(?:sh|py))", command):
+            path = ROOT / "scripts" / script
+            if script != "go-test-digest.sh" and path.is_file():
+                runs += digest_calls(path.read_text(), literal=script.endswith(".py"))
+        for program in re.findall(r"\bgo run (\./[\w./-]+)", command):
+            runs += program_calls(GO_MODULE / program)
+    return runs
 
 
-def lane_runs(workflows, module):
+def program_calls(directory):
+    """Digest calls a Go program builds, in its own package or in a module package it imports."""
+    sources = [p for p in directory.glob("*.go") if not p.name.endswith("_test.go")]
+    prefix = f'"{module_path()}/'
+    imported = {line.strip()[len(prefix):-1] for p in sources for line in p.read_text().splitlines()
+                if line.strip().startswith(prefix) and line.strip().endswith('"')}
+    for path in imported:
+        sources += [p for p in (GO_MODULE / path).glob("*.go") if not p.name.endswith("_test.go")]
+    return [call for p in sources for call in digest_calls(p.read_text(), literal=True)]
+
+
+def list_elements(text, start):
+    """The remaining elements of a list literal from start: string values, and `${dynamic}` for the rest."""
+    elements, depth, position, element = [], 0, start, ""
+    while position < len(text):
+        character = text[position]
+        if character in "\"'" and depth == 0:
+            end = text.index(character, position + 1)
+            element += text[position:end + 1]
+            position = end
+        elif character in "([{":
+            depth += 1
+            element += character
+        elif character in ")]}" and depth > 0:
+            depth -= 1
+            element += character
+        elif character in ")]}" or character == "," and depth == 0:
+            element = element.strip()
+            if element:
+                quoted = re.fullmatch(r"[\"']([^\"']*)[\"']", element)
+                elements.append(quoted.group(1) if quoted else "${dynamic}")
+            element = ""
+            if character != ",":
+                break
+        else:
+            element += character
+        position += 1
+    return elements
+
+
+def digest_calls(text, literal=False):
+    """Digest calls written as shell lines, or (literal) as argument list literals in Python or Go source."""
+    calls = []
+    if literal:
+        for match in re.finditer(r"go-test-digest\.sh[\"']\)?\s*,", text):
+            words = list_elements(text, match.end())
+            calls.append(interpret({}, words, False))
+        return calls
+    for line in re.sub(r"\\\n", " ", text).splitlines():
+        if "go-test-digest.sh" not in line or line.lstrip().startswith("#"):
+            continue
+        try:
+            before, after = re.split(r"\S*go-test-digest\.sh\S*", line, maxsplit=1)
+            words, before = shlex.split(after), shlex.split(before)
+        except ValueError:
+            continue
+        cut = next((i for i, w in enumerate(words) if w in {"|", "||", "&&", ";", ")"}), len(words))
+        assigned = dict(w.split("=", 1) for w in before if re.fullmatch(r"[A-Z_][A-Z0-9_]*=.*", w))
+        calls.append(interpret(assigned, words[:cut], "with-bundled-scanners.sh" in line))
+    return calls
+
+
+def interpret(assigned, words, bundled):
+    options, rest = (words[:words.index("--")], words[words.index("--") + 1:]) if "--" in words else (words, [])
+    tags = {t for i, w in enumerate(options) if w == "--tags" for t in options[i + 1].split(",")}
+    packages, run, index = [], None, 0
+    dynamic = any("$" in w or "{" in w for w in rest)
+    while index < len(rest):
+        word = rest[index]
+        name, _, value = word.partition("=")
+        if name in {"-run", "-tags"} and not value and index + 1 < len(rest):
+            index += 1
+            value = rest[index]
+        if name == "-run":
+            run = None if "$" in value or "{" in value else value
+        elif name == "-tags":
+            tags.update(value.split(","))
+        elif word.startswith("./"):
+            packages.append(word)
+        index += 1
+    environment = {k: (None if "$" in v else v) for k, v in assigned.items()}
+    if bundled:
+        environment.update(BUNDLED_ENVIRONMENT)
+    return frozenset(tags), "--full" not in options, environment, packages or (["./..."] if dynamic or not rest else []), run
+
+
+def lane_runs(workflows, module, taskfile):
     """The catalog's CI lanes, run by the verification workflow's matrix job with its environment."""
     job = workflows["verification.yml"]["jobs"]["verify"]
     environment = declared({**workflows["verification.yml"].get("env", {}), **job.get("env", {})})
@@ -128,7 +230,7 @@ def lane_runs(workflows, module):
         goos, goarch = platform(lane.get("runner", "ubuntu-24.04"))
         for target in lane["targets"]:
             cli = lane.get("arguments", []) if len(lane["targets"]) == 1 else []
-            runs += go_runs([target], cli, f"lane {name}", goos, goarch, environment, module)
+            runs += go_runs([target], cli, f"lane {name}", goos, goarch, environment, module, taskfile)
     return runs
 
 
@@ -172,7 +274,7 @@ def task_invocations(script):
         yield assignments, [n for n in names if not n.startswith("-")], cli
 
 
-def workflow_runs(workflows, module):
+def workflow_runs(workflows, module, taskfile):
     runs = []
     for name in tier_workflows(workflows):
         document = workflows[name]
@@ -187,105 +289,9 @@ def workflow_runs(workflows, module):
                 for assignments, names, cli in task_invocations(str(step.get("run", ""))):
                     environment = declared({**base, **step.get("env", {}), **assignments})
                     label = f"{name} {job_name}: {step.get('name', names)}"
-                    runs += go_runs(names, cli, label, *target, environment, module)
+                    runs += go_runs(names, cli, label, *target, environment, module, taskfile)
     return runs
 
 
-class Reach:
-    def __init__(self, index, runs):
-        self.index = index
-        self.runs = runs
-        self.compiled = {}
-
-    def condition(self, condition, file, run):
-        if isinstance(condition, tuple):
-            return condition[1].builds(run.goos, run.goarch, run.tags)
-        key = id(condition)
-        if key not in self.compiled:
-            tree = Expression(self.index, file, condition.bindings).parse(condition.tokens)
-            self.compiled[key] = ("not", tree) if condition.negated else tree
-        return evaluate(self.compiled[key], run)
-
-    def skipped(self, clauses, run):
-        for clause in clauses:
-            if all(self.condition(c, f, run) is True for c, f in clause):
-                return True
-        return False
-
-    def judge(self, file, function):
-        """None when some run reaches the test, else the furthest gate it passed."""
-        runs = [r for r in self.runs if r.selects_package(file.directory)]
-        if not runs:
-            return "no run selects its package"
-        runs = [r for r in runs if file.builds(r.goos, r.goarch, r.tags)]
-        if not runs:
-            return f"no run builds it ({file.path.name}: {file.build or 'file name'})"
-        runs = [r for r in runs if r.selects_name(function.name)]
-        if not runs:
-            return "no run's -run selects it"
-        clauses = self.index.clauses(function, test=True)
-        if all(self.skipped(clauses, r) for r in runs):
-            return "every run that builds it skips it"
-        return None
-
-
-def load_workflows():
-    from toolchain import python_tools
-    sys.path.insert(0, str(python_tools.provision(ROOT / "scripts" / "workflow_lint" / "requirements.txt")))
-    import yaml
-    return {path.name: yaml.safe_load(path.read_text()) for path in sorted(WORKFLOWS.glob("*.yml"))}
-
-
-def not_run(index):
-    """The declared not-run set: whole build tags, and individual Go and Rust tests named by path."""
-    declaration = catalog().get("not_run", {"tags": {}, "go": {}, "rust": {}})
-    return declaration["tags"], declaration["go"], declaration["rust"]
-
-
-def unreached(index, runs, tags, named):
-    reach = Reach(index, runs)
-    findings, matched = [], set()
-    for file, function in index.tests():
-        key = f"{file.directory}/{file.path.name}:{function.name}"
-        reason = reach.judge(file, function)
-        exempt = key in named or (file.build is not None
-                                  and any(re.search(rf"(?<![!\w]){re.escape(t)}\b", file.build) for t in tags))
-        if exempt:
-            matched.add(key)
-        if reason and not exempt:
-            findings.append(f"{key}: {reason}")
-        elif not reason and key in named:
-            findings.append(f"{key}: declared not run, yet {next(r.label for r in runs if r.selects_package(file.directory))} reaches it")
-    for key in sorted(set(named) - matched):
-        findings.append(f"{key}: declared not run but no such test")
-    return findings
-
-
-def missing_rust(named):
-    findings = []
-    for key in sorted(named):
-        path, _, name = key.partition(":")
-        source = ROOT / path
-        if not source.is_file() or not re.search(rf"\bfn {re.escape(name)}\b", source.read_text()):
-            findings.append(f"{key}: declared not run but no such Rust test")
-    return findings
-
-
-def main():
-    module = re.search(r"^module (\S+)", (GO_MODULE / "go.mod").read_text(), re.M).group(1)
-    workflows = load_workflows()
-    runs = lane_runs(workflows, module) + workflow_runs(workflows, module)
-    index = Index(GO_MODULE, module)
-    tags, named, rust = not_run(index)
-    findings = unreached(index, runs, tags, named) + missing_rust(rust)
-    for finding in findings:
-        print(f"lycaon/{finding}" if not finding.startswith("lycaon-den/") else finding, file=sys.stderr)
-    if findings:
-        print(f"{len(findings)} tests run in no tier and are not declared not run "
-              "(scripts/verification-plan.json not_run)", file=sys.stderr)
-        return 1
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+def module_path():
+    return re.search(r"^module (\S+)", (GO_MODULE / "go.mod").read_text(), re.M).group(1)

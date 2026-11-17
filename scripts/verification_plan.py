@@ -84,7 +84,7 @@ def execution_environment(environment, declaration=None):
 def catalog():
     value = json.loads(CATALOG.read_text())
     if set(value) != {"groups", "go", "tasks", "private", "selection", "resources", "environment", "ci",
-                      "capacity"}:
+                      "capacity", "not_run"}:
         raise ValueError("invalid verification catalog")
     names = set()
     for section in ("groups", "go", "tasks"):
@@ -125,6 +125,13 @@ def catalog():
             or not all(isinstance(items, list) and all(isinstance(item, str) and item for item in items)
                        for items in environment.values())):
         raise ValueError("the verification environment declares names and prefixes")
+    not_run = value["not_run"]
+    if (not isinstance(not_run, dict) or set(not_run) != {"tags", "tests"}
+            or not all(isinstance(reason, str) and reason for reason in not_run["tags"].values())
+            or not all(isinstance(group, dict) and set(group) - {"go", "rust"} == {"reason"} and group["reason"]
+                       and all(isinstance(group.get(kind, []), list) for kind in ("go", "rust"))
+                       for group in not_run["tests"])):
+        raise ValueError("the not-run set declares build tags and test groups, each with its reason")
     for name, spec in value["resources"].items():
         # Catalog stages and invocations outside the catalog declare resources by Task name.
         if name in value["groups"] or name in value["go"]:

@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/socketref"
+	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -41,9 +42,7 @@ func TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack(t *testing.T) {
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
-	if !confine.Available() {
-		t.Skip("confine unavailable on this platform")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	t.Cleanup(confine.SetBrokerUnavailableForTest(os.ErrInvalid))
 	c, ok := confine.DefaultConfinement(confine.Request{Roots: []string{t.TempDir()}})
 	if !ok || c == nil || c.Network != confine.NetworkProxyOnly {
@@ -193,9 +192,7 @@ func TestNonHTTPContractContainedDerivesFromSameRequestAsProfile(t *testing.T) {
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
-	if !confine.Available() {
-		return
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	req := confine.Request{
 		Roots:        []string{dir},
 		SocketGrants: []confine.SocketGrant{grant},

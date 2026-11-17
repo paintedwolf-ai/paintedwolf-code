@@ -1,3 +1,5 @@
+//go:build live_web
+
 package webresearch
 
 import (
@@ -18,11 +20,9 @@ type liveQueryCase struct {
 }
 
 // TestDirectLiveSearchQuality runs live searches with fixed seed plans.
-// Run with LYCAON_LIVE_DIRECT_FETCH=1:
-// ./task test:digest -- ./internal/webresearch -run LiveSearchQuality -count=1 -timeout=5m
+// It fetches from the network, so it builds only with the live_web tag:
+// ./task test:digest -- ./internal/webresearch -tags live_web -run LiveSearchQuality -count=1
 func TestDirectLiveSearchQuality(t *testing.T) {
-	skipUnlessLiveDirectFetch(t)
-
 	cases := []liveQueryCase{
 		{
 			name:     "fresh_reviews_with_leads",
@@ -97,7 +97,6 @@ func TestDirectLiveSearchQuality(t *testing.T) {
 }
 
 func TestDirectLiveIndexFindsReviewFromHostLeads(t *testing.T) {
-	skipUnlessLiveDirectFetch(t)
 	resetDirectState(1)
 	seedJSON := `{"seeds":["https://www.theverge.com"],"fresh":true,"expand":["Steam Machine review"],"leads":[{"title":"The Steam Machine review","host":"www.theverge.com"}]}`
 	plan, err := parseSeedsJSON(seedJSON)

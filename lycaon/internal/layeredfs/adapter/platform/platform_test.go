@@ -64,9 +64,7 @@ func TestSelectionRefusesOverLimitWorkWithoutEnforcement(t *testing.T) {
 // stays mounted and usable afterward.
 func TestRealEnforcerSelectsAndVerifiesAMountedView(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
-	if !confine.Available() {
-		t.Skip("this host applies no confinement")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve base", err)
 	// A worker's storage sits under the engine's state root, as it does in production.

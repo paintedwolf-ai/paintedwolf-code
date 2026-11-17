@@ -14,7 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-func TestRecursiveCopyAndDeleteScale50000Files(t *testing.T) {
+func TestStressRecursiveCopyAndDeleteScale50000Files(t *testing.T) {
 	h := newHarness(t, nil)
 	const totalFiles = 50000
 	const buckets = 100

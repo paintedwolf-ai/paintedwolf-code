@@ -46,6 +46,12 @@ jobs:
 
       - uses: ./.github/actions/setup-bialy
 
+      # Release builds refuse candidate and independent scanner authority.
+      - name: Release build behaviour
+        id: release-build
+        timeout-minutes: 15
+        run: ./task test:digest -- ./cmd/opengrep-artifact ./internal/scan/bundled -tags=paintedwolf_release -run '^TestRelease'
+
       - name: Applied Linux launch boundary
         id: launch
         timeout-minutes: 90
@@ -102,12 +108,15 @@ jobs:
           name: confinement-linux-amd64-${{ github.run_attempt }}
           status: ${{ steps.confinement.outcome }}
 
-  # Applied Seatbelt profiles, the managed browser under Seatbelt, and the owned
-  # Git engine's parity matrix (darwin-arm64 only) share one macOS runner and one
-  # sidecar build. Each suite runs even when an earlier one fails.
+  # Applied Seatbelt profiles, the managed browser under Seatbelt, the owned
+  # Git engine's parity matrix (darwin-arm64 only) and the packages whose tests
+  # build only on macOS share one macOS runner and one sidecar build. Each suite
+  # runs even when an earlier one fails.
   confinement:
     runs-on: macos-15
     timeout-minutes: 150
+    env:
+      PW_CONFINE_REQUIRED: '1'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -160,6 +169,32 @@ jobs:
           ./task test:digest -- ./internal/browser
           -run '^(TestBrowserProcessCancellationSettlesBeforeReturning|TestBrowserProcessUsesOwnedNativeDoorInBothPostures|TestHeadlessLauncherPinsSubprocessPath|TestLaunchHeadlessUnderBrowserConfinement|TestProbeUsabilityUnderBrowserConfinement|TestPoolNewPageUnderBrowserConfinement|TestCaptureURLReachesHostLoopback|TestConfinedBrowserFloorReachesHostLoopback|TestConfinedBrowserCannotReadDeniedFiles|TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt|TestLaunchHeadlessRefusesUnsafeCacheDir)$'
           -count=1
+
+      # Every package holding a test that builds only on macOS. Linux lanes run
+      # the rest of each package.
+      - name: macOS Go packages
+        if: ${{ !cancelled() }}
+        timeout-minutes: 60
+        run: >
+          ./task test:full --
+          ./cmd/lycaon
+          ./internal/credentialstore
+          ./internal/documentcore
+          ./internal/fspath
+          ./internal/fssync
+          ./internal/hostpower
+          ./internal/layeredfs/adapter/nfsdarwin
+          ./internal/layeredfs/claim
+          ./internal/lineage
+          ./internal/repochange
+          ./internal/session/approvalstate
+          ./internal/socketref
+          ./internal/systemproxy
+          ./internal/testvolume
+          ./internal/toolhost
+          ./internal/tools/native/command
+          ./internal/workspace
+          ./test/smoke
 
       - name: Git engine parity matrix
         if: ${{ !cancelled() }}

@@ -17,7 +17,7 @@ import (
 // Applying Seatbelt is slow enough to stay out of short runs.
 func requireLiveBoundary(t *testing.T) string {
 	t.Helper()
-	if runtime.GOOS != "darwin" || testing.Short() || !confine.Available() {
+	if runtime.GOOS != "darwin" || testing.Short() {
 		t.Skip("darwin + seatbelt sandbox required")
 	}
 	warmPythonShim.Do(func() {

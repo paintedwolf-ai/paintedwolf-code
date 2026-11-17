@@ -115,6 +115,8 @@ jobs:
       LYCAON_GIT_REFERENCE: /usr/bin/git
       # Hosted runners run one lane each, so admission may use every CPU.
       PW_TEST_HOST: dedicated
+      # Every hosted runner provides confinement and process lineage.
+      PW_CONFINE_REQUIRED: '1'
       SOAK: 10m
       PW_CI_AFFECTED: ${{ inputs.affected && '1' || '0' }}
       PW_CHANGE_BASE: ${{ needs.plan.outputs.change-base }}

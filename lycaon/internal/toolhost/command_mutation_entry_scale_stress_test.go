@@ -1,9 +1,9 @@
-//go:build stress && darwin
+//go:build stress && (darwin || linux)
 
 package toolhost
 
 import "testing"
 
-func TestComposedMutationEntryScale50000Files(t *testing.T) {
+func TestStressComposedMutationEntryScale50000Files(t *testing.T) {
 	runMutationEntryTree(t, 50000)
 }

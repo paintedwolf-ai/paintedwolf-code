@@ -17,9 +17,7 @@ import (
 func requireConfinement(t *testing.T) {
 	t.Helper()
 	confine.TestingSetAutoConfine(t)
-	if !confine.Available() {
-		t.Skip("this host applies no confinement")
-	}
+	testutil.RequireConfinement(t, confine.Available())
 }
 
 func TestAvailabilityIsRefusedWhereNoBoundaryApplies(t *testing.T) {
