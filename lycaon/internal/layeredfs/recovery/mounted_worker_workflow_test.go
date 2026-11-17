@@ -21,8 +21,10 @@ import (
 
 // TestMountedWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion runs on the host's real mounted
 // adapter. Its views live under the test temp directory, so a killed run leaves them where the test
-// runner reclaims them.
+// runner reclaims them. It runs in full mode: in short mode the mount-free recovery tests and the
+// adapters' own real-mount workflow tests cover its parts.
 func TestMountedWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t *testing.T) {
+	testutil.SkipIfShort(t, "three real mounts; mount-free recovery and the adapters' mounted workflows cover it")
 	baseDir := t.TempDir()
 	host := newMountedWorkflowHost()
 	adp := host.adapter
