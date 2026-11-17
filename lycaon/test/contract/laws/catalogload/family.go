@@ -13,6 +13,7 @@ import (
 // Family is the catalog-load rule table.
 var Family = laws.Family{Name: "catalog-load", Rules: slices.Concat(
 	guidanceCodes,
+	toolCatalog,
 )}
 
 var errNotRegistered = errors.New("not registered")
