@@ -77,10 +77,10 @@ func TestSARIFExportRoundTripOpenGrepIngest(t *testing.T) {
 	}
 	result := report.Runs[0].Results[0]
 	if result.RuleID == nil || *result.RuleID != "opengrep:lycaon.ruby.sql-string-concat" {
-		t.Fatalf("rule id = %v, want the opengrep check id", result.RuleID)
+		t.Fatalf("rule id = %q, want the opengrep check id", deref(result.RuleID))
 	}
 	if result.Level == nil || *result.Level != "error" {
-		t.Fatalf("level = %v, want error for an ERROR finding", result.Level)
+		t.Fatalf("level = %q, want error for an ERROR finding", deref(result.Level))
 	}
 	if len(result.Locations) != 1 {
 		t.Fatalf("locations = %d, want 1", len(result.Locations))
@@ -92,4 +92,11 @@ func TestSARIFExportRoundTripOpenGrepIngest(t *testing.T) {
 	if physical.Region == nil || physical.Region.StartLine == nil || *physical.Region.StartLine != 12 {
 		t.Fatalf("region = %#v, want start line 12", physical.Region)
 	}
+}
+
+func deref(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
