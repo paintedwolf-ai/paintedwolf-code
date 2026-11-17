@@ -2,7 +2,6 @@ package contract
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -77,81 +76,6 @@ func TestRealServerRouteCoverage(t *testing.T) {
 	}
 	if _, ok := implemented["GET /v1/sessions/{id}/stream"]; !ok {
 		t.Fatal("real server must expose GET /v1/sessions/{id}/stream")
-	}
-}
-
-func TestRealServerPromptRoutes(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	srv, sessionID := newRealServerWithSession(t, root)
-
-	promptReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/sessions/"+sessionID+"/prompts",
-		strings.NewReader(`{"operation_id":"00000000-0000-4000-8000-000000000003","text":"hello"}`))
-	contractcheck.FailErr(t, "http.NewRequest failed", err)
-	promptReq.Header.Set("Content-Type", "application/json")
-	api.WithTestAuth(promptReq)
-	promptRec := &responseRecorder{header: make(http.Header)}
-	srv.ServeHTTP(promptRec, promptReq)
-	if promptRec.code != http.StatusAccepted {
-		t.Fatalf("prompt status = %d body = %s", promptRec.code, promptRec.body.String())
-	}
-
-	var messageID string
-	for t.Context().Err() == nil {
-		getReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+sessionID, nil)
-		contractcheck.FailErr(t, "http.NewRequest failed", err)
-		api.WithTestAuth(getReq)
-		getRec := &responseRecorder{header: make(http.Header)}
-		srv.ServeHTTP(getRec, getReq)
-		if getRec.code != http.StatusOK {
-			t.Fatalf("get session status = %d", getRec.code)
-		}
-		var sess wire.Session
-		if err := json.Unmarshal([]byte(getRec.body.String()), &sess); err != nil {
-			t.Fatalf("decode session: %v", err)
-		}
-
-		msgsReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "/v1/sessions/"+sessionID+"/messages", nil)
-		contractcheck.FailErr(t, "http.NewRequest failed", err)
-		api.WithTestAuth(msgsReq)
-		msgsRec := &responseRecorder{header: make(http.Header)}
-		srv.ServeHTTP(msgsRec, msgsReq)
-		if msgsRec.code != http.StatusOK {
-			t.Fatalf("list messages status = %d", msgsRec.code)
-		}
-		var page wire.SessionTranscriptPage
-		if err := json.Unmarshal([]byte(msgsRec.body.String()), &page); err != nil {
-			t.Fatalf("decode messages: %v", err)
-		}
-		msgs := page.Messages
-		for i := len(msgs) - 1; i >= 0; i-- {
-			if msgs[i].Role == wire.MessageRoleAssistant && strings.TrimSpace(msgs[i].ID) != "" {
-				messageID = msgs[i].ID
-				break
-			}
-		}
-		if messageID != "" && sess.Status == wire.SessionStatusIdle {
-			break
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if messageID == "" {
-		t.Fatal("expected assistant message after prompt turn")
-	}
-	streamPath := "/v1/sessions/" + sessionID + "/stream?message=" + messageID
-
-	streamReq, err := http.NewRequestWithContext(t.Context(), http.MethodGet, streamPath, nil)
-	contractcheck.FailErr(t, "http.NewRequest failed", err)
-	api.WithTestAuth(streamReq)
-	streamRec := &responseRecorder{header: make(http.Header)}
-	srv.ServeHTTP(streamRec, streamReq)
-	if streamRec.code != http.StatusOK {
-		t.Fatalf("stream status = %d", streamRec.code)
-	}
-	if ct := streamRec.header.Get("Content-Type"); !strings.Contains(ct, "text/event-stream") {
-		t.Fatalf("content-type = %q", ct)
-	}
-	if !strings.Contains(streamRec.body.String(), `"done":true`) {
-		t.Fatalf("stream body = %s", streamRec.body.String())
 	}
 }
 

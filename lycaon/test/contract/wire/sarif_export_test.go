@@ -33,8 +33,8 @@ func TestSARIFExportRoundTripOpenGrepIngest(t *testing.T) {
 }`)
 	parsed, err := parser.Parse(raw)
 	contractcheck.FailErr(t, "parse opengrep fixture", err)
-	if len(parsed.Findings) == 0 {
-		t.Fatal("expected opengrep fixture findings")
+	if len(parsed.Findings) != 1 {
+		t.Fatalf("parsed %d findings, want 1", len(parsed.Findings))
 	}
 
 	sqlDB := testdbfixture.Open(t, "store.db")
@@ -72,10 +72,24 @@ func TestSARIFExportRoundTripOpenGrepIngest(t *testing.T) {
 	contractcheck.FailErr(t, "ExportScanSARIF", err)
 	report, err := sarif.FromBytes(data)
 	contractcheck.FailErr(t, "sarif.FromBytes", err)
-	if len(report.Runs) == 0 || len(report.Runs[0].Results) == 0 {
-		t.Fatalf("expected SARIF results, got %#v", report)
+	if len(report.Runs) != 1 || len(report.Runs[0].Results) != 1 {
+		t.Fatalf("exported %d runs, want one run with one result: %#v", len(report.Runs), report.Runs)
 	}
-	if report.Runs[0].Results[0].RuleID == nil || *report.Runs[0].Results[0].RuleID == "" {
-		t.Fatal("missing rule id in exported SARIF")
+	result := report.Runs[0].Results[0]
+	if result.RuleID == nil || *result.RuleID != "opengrep:lycaon.ruby.sql-string-concat" {
+		t.Fatalf("rule id = %v, want the opengrep check id", result.RuleID)
+	}
+	if result.Level == nil || *result.Level != "error" {
+		t.Fatalf("level = %v, want error for an ERROR finding", result.Level)
+	}
+	if len(result.Locations) != 1 {
+		t.Fatalf("locations = %d, want 1", len(result.Locations))
+	}
+	physical := result.Locations[0].PhysicalLocation
+	if physical == nil || physical.ArtifactLocation == nil || physical.ArtifactLocation.URI == nil || *physical.ArtifactLocation.URI != "app/models/user.rb" {
+		t.Fatalf("location = %#v, want app/models/user.rb", physical)
+	}
+	if physical.Region == nil || physical.Region.StartLine == nil || *physical.Region.StartLine != 12 {
+		t.Fatalf("region = %#v, want start line 12", physical.Region)
 	}
 }

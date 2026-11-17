@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
-	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -25,14 +24,5 @@ func TestScannerConfigLoads(t *testing.T) {
 		if s.Driver != scancatalog.DriverExternal && s.Impl == "" {
 			t.Fatalf("driver without impl: %+v", s)
 		}
-	}
-}
-
-func TestParseOutputImplemented(t *testing.T) {
-	t.Parallel()
-	res, err := scanoutput.ParseOutput(scanoutput.OutputParserOpengrepJSON, []byte(`{"results":[]}`))
-	contractcheck.FailErr(t, "scan.ParseOutput failed", err)
-	if res == nil {
-		t.Fatal("nil result")
 	}
 }

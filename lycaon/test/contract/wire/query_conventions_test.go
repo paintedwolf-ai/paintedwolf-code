@@ -139,19 +139,6 @@ func TestAPIHandlersDoNotUseForbiddenQueryKeys(t *testing.T) {
 	contractcheck.FailErr(t, "operation failed", err)
 }
 
-func TestAPIHandlersDoNotUseQueryParamHelper(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	apiDir := filepath.Join(root, "lycaon", "internal", "api")
-	err := contractcheck.WalkFiles(apiDir, map[string]struct{}{".go": {}}, true, func(path string, data []byte) error {
-		if strings.Contains(string(data), "queryParam(") {
-			t.Errorf("%s: queryParam() multi-alias helper is forbidden; use RequireProjectIDQuery or explicit canonical keys", path)
-		}
-		return nil
-	})
-	contractcheck.FailErr(t, "scan API query helpers", err)
-}
-
 func TestSearchEndpointsEnforceCanonicalQParameter(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)

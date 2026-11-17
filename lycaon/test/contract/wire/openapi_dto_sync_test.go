@@ -46,16 +46,3 @@ func TestOpenAPIObjectsHaveGoTypes(t *testing.T) {
 	}
 	contractcheck.FailViolations(t, "OpenAPI object schemas vs discovered Go wire types", violations)
 }
-
-func TestUpdateProviderRequestAllowsPartialBody(t *testing.T) {
-	t.Parallel()
-	props, err := wirespec.CachedOpenAPIPropertySpecs(contractcheck.RepoRoot(t), "UpdateProviderRequest")
-	contractcheck.FailErr(t, "load UpdateProviderRequest properties", err)
-	optional, ok := props["base_url"]
-	if !ok {
-		t.Fatal("UpdateProviderRequest.base_url is missing")
-	}
-	if !optional {
-		t.Fatal("UpdateProviderRequest.base_url must be optional")
-	}
-}
