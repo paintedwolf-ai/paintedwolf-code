@@ -82,7 +82,7 @@ func TestSubscribeReplaysProjectEventsThenContinuesLive(t *testing.T) {
 func TestSubscribeRejectsExpiredForeignAndTamperedCursors(t *testing.T) {
 	hub := NewMemoryHub()
 	expired := hub.CurrentCursor()
-	for i := 0; i <= replayCapacity; i++ {
+	for i := 0; i <= ReplayCapacity; i++ {
 		testutil.FailErr(t, "publish retained event", hub.Publish(t.Context(), api.EventTopicProgress, PublishKey{Project: "54f6d2ef-89c3-56e9-9a76-f6b1a2a54476"}, api.ProgressEvent{Revision: uint64(i + 1)}))
 	}
 	foreign := NewMemoryHub().CurrentCursor()
