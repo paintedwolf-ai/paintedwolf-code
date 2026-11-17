@@ -13,7 +13,7 @@ The six read-only analysis tools (`jq`, `grep`, `find`, `list_dir`, `stat`, `wc`
 | First-party Go tools | [`internal/tools/native`](../lycaon/internal/tools/native) and its [family subpackages](package-layering.md#native-tool-family-subpackages) |
 | Shared envelope | [`internal/tools/safecmd`](../lycaon/internal/tools/safecmd) |
 | Confined MCP | [`internal/mcp`](../lycaon/internal/mcp) (`prepareStdioCommand` + per-call caps, shape, and `mcp_error_code`) |
-| Contract guards | `test/contract/architecture/safecmd_envelope_contract_test.go` · `mcp_error_bridge_contract_test.go` |
+| Contract guards | [`forbidden-calls/envelope-only-tools-use-safecmd`](../lycaon/test/contract/laws/forbiddencalls/test_infrastructure.go) · [`forbidden-calls/mcp-error-bridge-reads-codes`](../lycaon/test/contract/laws/forbiddencalls/guidance.go) |
 
 ## Envelope contract
 
@@ -49,7 +49,7 @@ Choose path resolution in `projectpaths` by the effect on the source file. `Reso
 
 ## Classification: which tools may use the envelope
 
-Membership rule, enforced by an AST scan (`TestEnvelopeOnlyToolsUseSafecmdAST`):
+Membership rule, enforced by an AST scan (`forbidden-calls/envelope-only-tools-use-safecmd`):
 
 > A tool is **envelope-only** iff its only host dependencies are the `sandbox.Boundary` and `tctx.Roots` (read scope): it reads or analyzes and returns a rendered result. It is **host-coupled** iff it touches live in-process state such as `WorkerCoord`, `tctx.Out.FileEdit`, the session ledger, or the background-process registry.
 
