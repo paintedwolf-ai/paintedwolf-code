@@ -36,13 +36,35 @@ func TestStatusAlgebraMatchesBash(t *testing.T) {
 			testutil.FailErr(t, "stored snapshots", err)
 			want := refs[referenceuserland.GNU]
 			status, stdout := evaluateWithStubOwners(t, c.Program, c.Workspace(seed))
-			if status != want.Status || stdout != string(want.Stdout) {
-				t.Fatalf("status %d, want %d; stdout:\n%s\nwant:\n%s", status, want.Status, stdout, want.Stdout)
+			if status != want.Status {
+				t.Errorf("program status %d, want %d", status, want.Status)
+			}
+			for _, diff := range reportDiffs(stdout, string(want.Stdout)) {
+				t.Error(diff)
 			}
 			fragments += strings.Count(stdout, " status=") - 1
 		})
 	}
 	t.Logf("compared %d status fragments in %d compositions", fragments, len(cases))
+}
+
+// reportDiffs names each report line that differs from bash's.
+func reportDiffs(got, want string) []string {
+	gotLines, wantLines := strings.Split(got, "\n"), strings.Split(want, "\n")
+	var diffs []string
+	for i := range max(len(gotLines), len(wantLines)) {
+		var g, w string
+		if i < len(gotLines) {
+			g = gotLines[i]
+		}
+		if i < len(wantLines) {
+			w = wantLines[i]
+		}
+		if g != w {
+			diffs = append(diffs, fmt.Sprintf("line %d: got %q, bash %q", i+1, g, w))
+		}
+	}
+	return diffs
 }
 
 func evaluateWithStubOwners(t *testing.T, program string, workspace map[string]referenceuserland.Entry) (int, string) {
