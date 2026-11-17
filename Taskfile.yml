@@ -1882,25 +1882,9 @@ tasks:
       - python3 -m scripts.linux_release.candidate_diagnostics {{.CLI_ARGS}}
 
   release:live-test:
-    desc: 'Isolated release:live-test rehearsal; --local-nix-cache uses disposable local keys, default uses test R2 credentials'
+    desc: 'Isolated release rehearsal; --assembly, --macos and local Nix modes use disposable keys, default uses test R2 credentials'
     cmds:
       - bash {{.SCRIPTS_DIR}}/release-r2-live-test.sh {{.CLI_ARGS}}
-
-  release:rehearse:assembly:
-    desc: 'Workflow environment names, updater upload limits and release assembly on tiny platform results signed with a disposable key; each seeded fault must be refused (-- --receipt PATH)'
-    preconditions:
-      - sh: command -v minisign && command -v jq && command -v git
-        msg: minisign, jq, and git required for release:rehearse:assembly
-    cmds:
-      - python3 {{.SCRIPTS_DIR}}/release_rehearsal.py assembly {{.CLI_ARGS}}
-
-  release:rehearse:macos:
-    desc: 'Updater limits and disposable signature of an unsigned den:bundle build, then its rendered cask installed and removed on a disposable hosted runner (-- --app PATH --dmg PATH --public-key KEY --receipt PATH)'
-    preconditions:
-      - sh: '[ "$(uname -s)" = "Darwin" ] && command -v brew && command -v cargo'
-        msg: release:rehearse:macos needs macOS with Homebrew and cargo
-    cmds:
-      - python3 {{.SCRIPTS_DIR}}/release_rehearsal.py macos {{.CLI_ARGS}}
 
   release:rehearse:linux-signing:
     desc: 'Local Linux signature rehearsal with disposable keys and a tiny RPM fixture; never reads production credentials or R2 (-- --receipt PATH [--candidate-dir DIR --require-architectures x86_64,aarch64])'

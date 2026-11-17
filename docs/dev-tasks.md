@@ -1908,7 +1908,7 @@ production control file, conffiles and maintainer scripts around the same payloa
 lints it with lintian, and requires an unmarked `/etc` file to fail. A ready pull
 request runs both when it changes `packaging/`, `scripts/linux_release/` or the
 package assembler.
-`./task release:rehearse:assembly -- --receipt PATH` checks that no workflow sets
+`./task release:live-test -- --assembly --receipt PATH` checks that no workflow sets
 an environment name the runner overwrites, holds a tiny updater archive to the
 client's download and expansion limits, and runs the release's aggregate script on
 one tiny signed result per public platform: manifest assembly and validation, the
@@ -1916,7 +1916,7 @@ public artifact set and both casks, with every updater signature verified agains
 a disposable key. Each check also requires its seeded fault to be refused: a
 `RUNNER_NAME` step variable, an archive over the download limit, and a signature
 bound to another version.
-`./task release:rehearse:macos -- --app PATH --dmg PATH --public-key KEY --receipt PATH`
+`./task release:live-test -- --macos --app PATH --dmg PATH --public-key KEY --receipt PATH`
 takes an unsigned `den:bundle` build whose updater archive was signed with a
 disposable key, checks the archive's limits and signature, then renders the preview
 cask for its disk image, installs it from a local tap and origin, and uninstalls it.

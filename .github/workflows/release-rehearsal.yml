@@ -38,7 +38,7 @@ jobs:
           packages: minisign jq
 
       - name: Rehearse workflow names, upload limits and release assembly
-        run: ./task release:rehearse:assembly -- --receipt "$RUNNER_TEMP/rehearsal/assembly.json"
+        run: ./task release:live-test -- --assembly --receipt "$RUNNER_TEMP/rehearsal/assembly.json"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
@@ -206,7 +206,7 @@ jobs:
         run: |
           set -euo pipefail
           bundle="$(find lycaon-den/src-tauri/target -maxdepth 4 -path '*/release/bundle' -type d -print -quit)"
-          ./task release:rehearse:macos -- --app "$(find "$bundle/macos" -maxdepth 1 -name '*.app' -print -quit)" \
+          ./task release:live-test -- --macos --app "$(find "$bundle/macos" -maxdepth 1 -name '*.app' -print -quit)" \
             --dmg "$(find "$bundle/dmg" -maxdepth 1 -name '*.dmg' -print -quit)" \
             --public-key "$(cat "$RUNNER_TEMP/updater/rehearsal.key.pub")" --receipt "$RUNNER_TEMP/rehearsal/macos.json"
 

@@ -55,15 +55,14 @@ jobs:
     with:
       source-sha: ${{ inputs.source-sha }}
 
-  # The newest published release upgrades the one before it, from public signed bytes.
-  # Both trust only their compiled-in keys, so this shows the harness works and says
-  # nothing about the current source; the release gate qualifies the candidate.
+  # Published builds exercise the upgrade harness with their compiled-in keys.
   installed-upgrade-fixtures:
-    if: ${{ contains(fromJSON('["all", "release"]'), inputs.suite || 'all') }}
+    if: ${{ contains(fromJSON('["all", "release"]'), inputs.suite) }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
       matrix: ${{ steps.prepare.outputs.matrix }}
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -87,6 +86,7 @@ jobs:
             --source "$GITHUB_WORKSPACE" --output "$RUNNER_TEMP/installed-upgrade-fixtures"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: upload
         with:
           name: nightly-installed-upgrade-fixtures-${{ github.run_attempt }}
           path: ${{ runner.temp }}/installed-upgrade-fixtures
@@ -123,7 +123,7 @@ jobs:
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: nightly-installed-upgrade-fixtures-${{ github.run_attempt }}
+          artifact-ids: ${{ needs.installed-upgrade-fixtures.outputs.artifact-id }}
           path: ${{ runner.temp }}/installed-upgrade-fixtures
 
       - name: Upgrade the installed published release
