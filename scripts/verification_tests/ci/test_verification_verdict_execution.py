@@ -39,6 +39,7 @@ class VerificationVerdictTests(unittest.TestCase):
                    event="workflow_dispatch", display_title=f"Qualification {sha}")
         proof = dict(version=1, repository="owner/repo", run_id=42, run_attempt=1, event="workflow_dispatch",
                      source_sha=sha, source_tree="c" * 40, controller_sha=controller,
+                     nightly_run_id=42, preparation_run_id=43,
                      checks={name: "success" for name in qualification_receipt.CHECKS})
         for changed in ({}, {"run_attempt": 2}, {"source_sha": controller}, {"controller_sha": sha},
                         {"repository": "foreign/repo"}, {"event": "push"}):
@@ -46,7 +47,7 @@ class VerificationVerdictTests(unittest.TestCase):
                     patch.object(qualification_receipt, "aggregate_passed", return_value=True), \
                     patch.object(qualification_receipt, "from_run", return_value={**proof, **changed}):
                 if not changed:
-                    self.assertEqual(ci.require_qualification("owner/repo", sha), run)
+                    self.assertEqual(ci.require_qualification("owner/repo", sha), {**run, "receipt": proof})
                 else:
                     with self.assertRaises(ValueError):
                         ci.require_qualification("owner/repo", sha)

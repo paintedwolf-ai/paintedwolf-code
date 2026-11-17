@@ -111,7 +111,7 @@ func TestE2EWorkflowsAlwaysRunCleanup(t *testing.T) {
 	workflows := []string{
 		filepath.Join(root, ".github", "workflows", "e2e-verification.yml"),
 	}
-	nightly := readFile(t, filepath.Join(root, ".github", "workflows", "nightly.yml"))
+	nightly := readFile(t, filepath.Join(root, ".github", "workflows", "nightly-verification.yml"))
 	if !strings.Contains(nightly, "uses: ./.github/workflows/e2e-verification.yml") {
 		t.Fatal("nightly workflow must invoke end-to-end verification")
 	}

@@ -54,7 +54,6 @@ jobs:
         id: plan
         env:
           PROFILE: ${{ inputs.profile }}
-          SOURCE_SHA: ${{ inputs.source-sha || github.sha }}
           SUITE: ${{ inputs.suite }}
           AFFECTED: ${{ inputs.affected }}
           PLATFORM: ${{ inputs.platform }}

@@ -6,6 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # shellcheck source=scripts/artifact-paths.sh
 source "${ROOT}/scripts/artifact-paths.sh"
 MODE=""
+REUSE_SIDECAR=0
 BASELINE_REF=""
 SOURCE_ROOT=""
 PUBLISHED_VERSIONS="[]"
@@ -13,7 +14,7 @@ PUBLISHED_VERSIONS="[]"
 usage() {
   cat >&2 <<'EOF'
 Usage: release-preflight.sh --static
-       release-preflight.sh --require-corpus
+       release-preflight.sh --require-corpus [--reuse-sidecar]
        release-preflight.sh --compatibility-only --source-root DIR --baseline-ref COMMIT
                             [--published-versions JSON]
 
@@ -38,6 +39,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --static) select_mode static; shift ;;
     --require-corpus) select_mode corpus; shift ;;
+    --reuse-sidecar) REUSE_SIDECAR=1; shift ;;
     --compatibility-only) select_mode compatibility; shift ;;
     --baseline-ref) [[ $# -ge 2 && -n "$2" ]] || usage; BASELINE_REF="$2"; shift 2 ;;
     --published-versions) [[ $# -ge 2 && -n "$2" ]] || usage; PUBLISHED_VERSIONS="$2"; shift 2 ;;
@@ -172,7 +174,9 @@ check_corpus() {
     echo "error: ${corpus}/MANIFEST.json missing" >&2
     fail=1
   else
-    "${ROOT}/task" build:lycaon-dev
+    if ((REUSE_SIDECAR == 0)); then
+      "${ROOT}/task" build:lycaon-dev
+    fi
     python3 "${ROOT}/scripts/upgrade-fixture-files.py" candidate "${corpus}" \
       --sidecar "${PW_BUILD_DIR}/lycaon-dev" --version "${version}" \
       --inventory-root "${ROOT}/lycaon/testdata/upgrade-corpus" || fail=1
@@ -180,6 +184,7 @@ check_corpus() {
 }
 
 [[ "${MODE}" == compatibility || -z "${SOURCE_ROOT}${BASELINE_REF}" ]] || usage
+[[ "${MODE}" == corpus || "${REUSE_SIDECAR}" == 0 ]] || usage
 case "${MODE}" in
   compatibility) check_compatibility ;;
   static) check_static ;;

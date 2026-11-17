@@ -109,12 +109,13 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("ref: ${{ github.workflow_sha }}", prepare)
         self.assertIn("if: always()", execution)
 
-    def test_nightly_installs_the_same_rehearsal_dependencies_before_execution(self):
-        workflow = (ROOT / ".github/workflows/nightly.yml").read_text()
-        upgrade = workflow.split("  upgrade-path:\n", 1)[1].split("  nightly:\n", 1)[0]
-        self.assertLess(upgrade.index("uses: ./.github/actions/setup-verification"), upgrade.index("run: ./task upgrade:rehearse"))
-        self.assertLess(upgrade.index("brew install minisign"), upgrade.index("run: ./task upgrade:rehearse"))
-        self.assertNotIn("run: ./task build:lycaon-dev", upgrade)
+    def test_platform_rehearsal_checks_the_corpus_with_its_existing_engine(self):
+        workflow = (ROOT / ".github/workflows/platform-verification.yml").read_text()
+        confinement = workflow.split("  confinement:\n", 1)[1]
+        self.assertEqual(confinement.count("./task build:lycaon-dev"), 1)
+        engine = confinement.index("./task build:lycaon-dev")
+        self.assertLess(engine, confinement.index("./task release:preflight -- --require-corpus --reuse-sidecar"))
+        self.assertLess(engine, confinement.index("./task upgrade:rehearse -- --reuse-sidecar"))
 
     def test_release_rehearsal_builds_its_candidate_only_inside_the_managed_target(self):
         workflow = (ROOT / ".github/workflows/release.yml").read_text()
