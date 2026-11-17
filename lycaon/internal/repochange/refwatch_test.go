@@ -54,7 +54,7 @@ func TestRefWatchEmitsHeadMovedForOutsideCommit(t *testing.T) {
 		}
 	})
 
-	repochange.EnsureRoot(t.Context(), root)
+	ensureLiveRoot(t, root)
 	// The seeded layout predates the stream; only changes after this point count.
 	repochange.ResetDebouncerForTest(t.Context())
 	mu.Lock()
@@ -94,7 +94,7 @@ func TestRefWatchReportsIndexChanges(t *testing.T) {
 		}
 	})
 
-	repochange.EnsureRoot(t.Context(), root)
+	ensureLiveRoot(t, root)
 
 	// `git add` traffic reaches status through the platform stream.
 	gitDir := filepath.Join(root, ".git")
@@ -128,7 +128,7 @@ func TestRefWatchEmitsForLinkedWorktreeCommonDirectory(t *testing.T) {
 			headMoved.Add(1)
 		}
 	})
-	repochange.EnsureRoot(t.Context(), root)
+	ensureLiveRoot(t, root)
 	testutil.FailErr(t, "move shared branch", os.WriteFile(branch, []byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"), 0o644))
 	testutil.WaitFor(t, "the head move is reported", func() bool { return headMoved.Load() > 0 })
 }

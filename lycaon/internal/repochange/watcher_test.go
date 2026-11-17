@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -19,6 +20,28 @@ func canonicalTestDir(t *testing.T, dir string) string {
 	abs, err := filepath.Abs(dir)
 	testutil.FailErr(t, "abs", err)
 	return filepath.Clean(abs)
+}
+
+// ensureLiveRoot binds a watch on dir and returns once its stream reports a
+// write, so a test's own writes are not made while the platform stream is
+// still starting.
+func ensureLiveRoot(t *testing.T, dir string) {
+	t.Helper()
+	root := canonicalTestDir(t, dir)
+	const barrier = ".watch-barrier"
+	var seen atomic.Bool
+	unbind := repochange.RegisterObserver(func(_ context.Context, ev repochange.Event) {
+		if ev.ProjectDir == root && ev.Kind == repochange.WorktreeChanged && slices.Contains(ev.Paths, barrier) {
+			seen.Store(true)
+		}
+	})
+	defer unbind()
+	repochange.EnsureRoot(t.Context(), dir)
+	testutil.FailErr(t, "write the watch barrier", os.WriteFile(filepath.Join(dir, barrier), nil, 0o644))
+	testutil.WaitFor(t, "the watch reports its barrier write", func() bool {
+		repochange.ResetDebouncerForTest(t.Context())
+		return seen.Load()
+	})
 }
 
 func TestWatcher_EmitsWorktreeChanged(t *testing.T) {
@@ -37,13 +60,13 @@ func TestWatcher_EmitsWorktreeChanged(t *testing.T) {
 		if ev.ProjectDir != root {
 			return
 		}
-		if ev.Kind == repochange.WorktreeChanged && ev.Source == repochange.SourceWatcher {
+		if ev.Kind == repochange.WorktreeChanged && ev.Source == repochange.SourceWatcher && slices.Contains(ev.Paths, "watched.txt") {
 			n.Add(1)
 			src = ev.Source
 		}
 	})
 
-	repochange.EnsureRoot(t.Context(), dir)
+	ensureLiveRoot(t, dir)
 	testutil.FailErr(t, "write file", os.WriteFile(filepath.Join(dir, "watched.txt"), []byte("hi"), 0o644))
 	testutil.WaitFor(t, "the watcher reports WorktreeChanged", func() bool {
 		repochange.ResetDebouncerForTest(t.Context())
@@ -78,7 +101,7 @@ func TestWatcherEmitsForFilesNamedLikeDirectories(t *testing.T) {
 		}
 	})
 
-	repochange.EnsureRoot(t.Context(), dir)
+	ensureLiveRoot(t, dir)
 
 	want := []string{"build", "vendor", "target", "out", "coverage", "dist", ".git", ".paintedwolf"}
 	for _, name := range want {
@@ -136,7 +159,7 @@ func TestWatcherObservesHiddenAndMetadataChildren(t *testing.T) {
 			seen[path] = true
 		}
 	})
-	repochange.EnsureRoot(t.Context(), dir)
+	ensureLiveRoot(t, dir)
 	repochange.SeedWatch(t.Context(), dir, directories)
 	for _, name := range []string{".hidden/new.txt", ".paintedwolf/new.txt", ".git/objects/new.txt", ".git/config"} {
 		testutil.FailErr(t, "write metadata child", os.WriteFile(filepath.Join(dir, name), nil, 0600))
