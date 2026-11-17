@@ -382,7 +382,7 @@ jobs:
           APPLE_API_KEY_P8: ${{ secrets.APPLE_API_KEY_P8 }}
           APPLE_ENGINE_PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_ENGINE_PROVISIONING_PROFILE_BASE64 }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-        run: bash scripts/macos-signing-import.sh
+        run: bash scripts/macos-notary-tools/signing.sh import
 
       - name: Restore the decision engine build
         if: ${{ matrix.goos == 'darwin' }}
