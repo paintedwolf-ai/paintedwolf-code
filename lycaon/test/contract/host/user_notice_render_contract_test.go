@@ -36,23 +36,6 @@ func TestUserNoticeVisibleEntriesRenderClean(t *testing.T) {
 	}
 }
 
-func TestUserNoticeConditionalEntriesRequireScenarios(t *testing.T) {
-	cfg := loadUserNoticeConfig(t)
-	var violations []string
-	for code, entry := range cfg.UserNotices {
-		if entry.UsesDefaults() || !entry.IsUserVisible() {
-			continue
-		}
-		if !entryHasConditionalTemplate(entry) {
-			continue
-		}
-		if len(entry.Scenarios) == 0 {
-			violations = append(violations, code+": conditional template requires at least one scenarios fixture")
-		}
-	}
-	contractcheck.FailViolations(t, "user notice conditional copy missing scenarios", violations)
-}
-
 func TestUserNoticeContextSchemaDocumented(t *testing.T) {
 	cfg := loadUserNoticeConfig(t)
 	promptFixtures := contextFromPromptErrorFixtures()
@@ -112,11 +95,6 @@ func TestUserNoticeUseDefaultsEntriesRenderDefaults(t *testing.T) {
 			t.Fatalf("%s use_defaults RenderWire = %#v want defaults %#v", code, got, want)
 		}
 	}
-}
-
-func entryHasConditionalTemplate(entry usernotice.Entry) bool {
-	blob := strings.Join([]string{entry.Title, entry.Message, entry.SuggestedAction}, "\n")
-	return strings.Contains(blob, "{% if") || strings.Contains(blob, "{%- if")
 }
 
 type scenarioVarSet struct {

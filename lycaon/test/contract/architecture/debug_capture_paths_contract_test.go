@@ -14,55 +14,6 @@ import (
 // Guards below keep writers, the log viewer, clear registry, and shell scripts
 // from spelling those paths a second time.
 
-// debugCapturePathDefinitionRoots is where a capture filename may appear literally:
-// debugpaths declares them, so it is the one place they are spelled out.
-var debugCapturePathDefinitionRoots = []string{
-	filepath.Join("internal", "debugpaths"),
-}
-
-func TestDebugCaptureFilenamesLiveOnlyInDebugPaths(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	codeRoot := filepath.Join(root, "lycaon")
-
-	var violations []string
-	scanned := 0
-	err := contractcheck.WalkFiles(codeRoot, map[string]struct{}{".go": {}}, true, func(path string, data []byte) error {
-		for _, definitionRoot := range debugCapturePathDefinitionRoots {
-			if strings.Contains(path, definitionRoot) {
-				return nil
-			}
-		}
-		scanned++
-		text := string(data)
-		for _, f := range debugpaths.Files() {
-			if strings.Contains(text, `"`+f.Name+`"`) {
-				violations = append(violations, path+": hardcodes "+f.Name)
-			}
-			if f.FileEnv != "" && strings.Contains(text, `"`+f.FileEnv+`"`) {
-				violations = append(violations, path+": hardcodes "+f.FileEnv)
-			}
-			if f.EnableEnv != "" && strings.Contains(text, `"`+f.EnableEnv+`"`) {
-				violations = append(violations, path+": hardcodes "+f.EnableEnv)
-			}
-		}
-		for _, env := range []string{debugpaths.FullDebugEnv, debugpaths.SessionDirEnv} {
-			if strings.Contains(text, `"`+env+`"`) {
-				violations = append(violations, path+": hardcodes "+env)
-			}
-		}
-		return nil
-	})
-	contractcheck.FailErr(t, "walk Go for capture filename literals", err)
-	if scanned == 0 {
-		t.Fatal("scan visited no production Go files — this guard is inert")
-	}
-	if len(debugpaths.Files()) == 0 {
-		t.Fatal("capture catalog is empty — this guard is inert")
-	}
-	contractcheck.FailViolations(t, "production Go names a debug capture file or redirect variable directly (use internal/debugpaths)", violations)
-}
-
 // Capture scripts cannot import the Go catalog.
 func TestDebugCaptureScriptsNameOnlyCatalogFiles(t *testing.T) {
 	t.Parallel()

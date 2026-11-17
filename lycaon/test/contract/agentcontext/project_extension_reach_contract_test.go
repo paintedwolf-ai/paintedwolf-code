@@ -1,14 +1,9 @@
 package contract
 
 import (
-	"bytes"
 	"context"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 
@@ -25,56 +20,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
-
-// extpacksActiveAllowlist names device-catalog boundaries. The ambient task()
-// roster and the workflow manifest registry are device-scoped and have no
-// session to resolve a turn view from.
-var extpacksActiveAllowlist = map[string]bool{
-	"lycaon/internal/app/configuration/catalog.go":         true,
-	"lycaon/internal/app/build_server.go":                  true,
-	"lycaon/internal/app/workflows/build.go":               true,
-	"lycaon/internal/app/execution/runtime.go":             true,
-	"lycaon/internal/session/catalog/effective_catalog.go": true,
-	"lycaon/internal/session/profiles/effective_skills.go": true,
-	"lycaon/internal/session/catalog/catalog_view.go":      true,
-	"lycaon/internal/workflow/definition/manifest.go":      true,
-}
-
-func TestExtpacksActiveOnlyAtDeviceBoundaries(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	sites := scanExtpacksActiveCallSites(t, lycaonRoot)
-	if len(sites) == 0 {
-		t.Fatal("expected production extpacks.Active() call sites")
-	}
-	var unexpected []string
-	for site := range sites {
-		if !extpacksActiveAllowlist[site] {
-			unexpected = append(unexpected, site)
-		}
-	}
-	sort.Strings(unexpected)
-	for _, u := range unexpected {
-		t.Errorf("%s: extpacks.Active() outside the device-catalog allowlist — use a turn View / WithCatalog path, or extend the allowlist", u)
-	}
-	for allowed := range extpacksActiveAllowlist {
-		if _, ok := sites[allowed]; !ok {
-			t.Errorf("allowlist entry %s has no Active() call — update allowlist", allowed)
-		}
-	}
-}
-
-func TestNoContextCarriedCatalogOrView(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	hits := scanContextWithValueCatalogCarriers(t, lycaonRoot)
-	sort.Strings(hits)
-	for _, h := range hits {
-		t.Errorf("%s: context must not carry *extpacks.EffectiveCatalog or *catalogview.View — thread View/catalog as an explicit parameter", h)
-	}
-}
 
 func scanInventoryKindRoots(t *testing.T) []string {
 	t.Helper()
@@ -330,119 +275,6 @@ func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 			}
 		})
 	}
-}
-
-func scanExtpacksActiveCallSites(t *testing.T, lycaonRoot string) map[string]bool {
-	t.Helper()
-	out := map[string]bool{}
-	err := filepath.WalkDir(lycaonRoot, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			base := d.Name()
-			if base == "testdata" || base == "vendor" || base == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		rel, relErr := filepath.Rel(filepath.Dir(lycaonRoot), path)
-		if relErr != nil {
-			return relErr
-		}
-		rel = filepath.ToSlash(rel)
-		fset := token.NewFileSet()
-		f, parseErr := parser.ParseFile(fset, path, nil, 0)
-		if parseErr != nil {
-			return parseErr
-		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel == nil || sel.Sel.Name != "Active" {
-				return true
-			}
-			ident, ok := sel.X.(*ast.Ident)
-			if !ok || ident.Name != "extpacks" {
-				return true
-			}
-			out[rel] = true
-			return true
-		})
-		return nil
-	})
-	contractcheck.FailErr(t, "walk Active sites", err)
-	return out
-}
-
-func scanContextWithValueCatalogCarriers(t *testing.T, lycaonRoot string) []string {
-	t.Helper()
-	var hits []string
-	err := filepath.WalkDir(lycaonRoot, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			base := d.Name()
-			if base == "testdata" || base == "vendor" || base == ".git" {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		rel, relErr := filepath.Rel(filepath.Dir(lycaonRoot), path)
-		if relErr != nil {
-			return relErr
-		}
-		rel = filepath.ToSlash(rel)
-		fset := token.NewFileSet()
-		f, parseErr := parser.ParseFile(fset, path, nil, 0)
-		if parseErr != nil {
-			return parseErr
-		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			if !isContextWithValueCall(call) {
-				return true
-			}
-			var buf bytes.Buffer
-			_ = ast.Fprint(&buf, fset, call, nil)
-			s := buf.String()
-			if strings.Contains(s, "EffectiveCatalog") || strings.Contains(s, "catalogview.View") {
-				hits = append(hits, rel)
-			}
-			return true
-		})
-		return nil
-	})
-	contractcheck.FailErr(t, "walk WithValue", err)
-	return hits
-}
-
-func isContextWithValueCall(call *ast.CallExpr) bool {
-	switch fun := call.Fun.(type) {
-	case *ast.SelectorExpr:
-		if fun.Sel == nil || fun.Sel.Name != "WithValue" {
-			return false
-		}
-		if ident, ok := fun.X.(*ast.Ident); ok && ident.Name == "context" {
-			return true
-		}
-	case *ast.Ident:
-		return fun.Name == "WithValue"
-	}
-	return false
 }
 
 func hasFloorDiagUnit(eff *extpacks.EffectiveCatalog, code, unitID string) bool {

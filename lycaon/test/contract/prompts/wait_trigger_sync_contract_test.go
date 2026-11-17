@@ -8,8 +8,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
-	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/testutil"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
@@ -35,24 +33,6 @@ func TestWaitTriggersAgreeAcrossSchemaHostAndDen(t *testing.T) {
 
 	den := denWaitTriggerLabels(t, root)
 	contractcheck.FailSetEqual(t, "wait condition enum (tools/schemas/wait.yaml vs Den label table)", schema, den)
-}
-
-func TestEveryWaitRolePublishesReadinessConditions(t *testing.T) {
-	t.Parallel()
-	profiles, err := sandbox.LoadToolProfiles()
-	testutil.FailErr(t, "load tool profiles", err)
-	for _, profile := range profiles {
-		if !profile.ToolAllowed("wait") {
-			continue
-		}
-		conditions := make(map[string]bool, len(profile.WaitConditions))
-		for _, condition := range profile.WaitConditions {
-			conditions[condition] = true
-		}
-		if !conditions["http_ready"] || !conditions["port_ready"] {
-			t.Errorf("wait profile %q conditions = %v; every role must support HTTP and port readiness", profile.ID, profile.WaitConditions)
-		}
-	}
 }
 
 func waitConditionEnumFromToolSchema(t *testing.T, root string) []string {

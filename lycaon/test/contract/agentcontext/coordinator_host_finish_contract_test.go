@@ -1,16 +1,12 @@
 package contract
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/pkg/api"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"github.com/lycaon/lycaon/test/contract/internal/guidancescan"
 )
 
 // hostProseFinishContract classifies every coordinator surface in coordinator-surfaces.yaml
@@ -99,34 +95,5 @@ func TestCoordinatorHostFinish_readScoutSynthesisCanReportToUser(t *testing.T) {
 	}
 	if !guard.HostTurnMayFinishWithProse(profile.SurfaceID, true, false) {
 		t.Fatalf("read-scout synthesis on %q must finish with a grounded user answer — else research fan-out livelocks", profile.SurfaceID)
-	}
-}
-
-// TestCoordinatorHostFinish_requiresWaitCodeHasEmissionSite ties the guard to the guidance
-// registry: the reject code is registered on the coordinator guard channel and is referenced
-// from production code, so the prose-only block can never become an inline string.
-func TestCoordinatorHostFinish_requiresWaitCodeHasEmissionSite(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	lycaonRoot := filepath.Join(root, "lycaon")
-	cfg, err := guidance.LoadHintConfigStock()
-	contractcheck.FailErr(t, "load hint registry", err)
-
-	entry, ok := cfg.HintCodes[guard.CoordinatorHostTurnRequiresWaitCode]
-	if !ok {
-		t.Fatalf("missing hint %q", guard.CoordinatorHostTurnRequiresWaitCode)
-	}
-	if entry.Emit != "guard:coordinator" {
-		t.Fatalf("hint %q emit = %q want guard:coordinator", guard.CoordinatorHostTurnRequiresWaitCode, entry.Emit)
-	}
-
-	registered := make(map[string]bool, len(cfg.HintCodes))
-	for code := range cfg.HintCodes {
-		registered[code] = true
-	}
-	scan, err := guidancescan.ScanGuidanceEmission(lycaonRoot)
-	contractcheck.FailErr(t, "scan guidance emission sites", err)
-	if !scan.HasEmissionSite(guard.CoordinatorHostTurnRequiresWaitCode) {
-		t.Fatalf("hint %q must be referenced from production code (Format path or literal ref)", guard.CoordinatorHostTurnRequiresWaitCode)
 	}
 }

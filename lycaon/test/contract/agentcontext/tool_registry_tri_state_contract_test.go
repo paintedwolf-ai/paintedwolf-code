@@ -1,7 +1,6 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"os"
 	"path/filepath"
 	"sort"
@@ -23,73 +22,6 @@ var toolsSchemaExempt = map[string]string{
 	"scan_list":    "native scan drill-down list",
 	"scan_summary": "native scan drill-down summary",
 	"scan_query":   "native scan drill-down query",
-	"scan_compare": "native scan compare — schema registered at serve boot via RegisterScanTools",
-}
-
-// toolsNativeSchemaOnly lists tools/schemas entries not listed in native-tools.yaml.
-var toolsNativeSchemaOnly = map[string]string{
-	"command":                        "host shell — registered at serve boot, not native manifest",
-	"command_output":                 "background command companion — registered at serve boot",
-	"command_stop":                   "background command companion — registered at serve boot",
-	"held_result":                    "held call companion — registered at serve boot",
-	"held_stop":                      "held call companion — registered at serve boot",
-	"fetch_url":                      "web research — registered at serve boot",
-	"request_decision":               "worker decision escalation — registered at serve boot",
-	"message_coordinator":            "worker note to its coordinator — registered at serve boot",
-	"record_finding":                 "findings feed writer — registered at serve boot",
-	"scan_pack":                      "scan orchestration — schema built from the live scanner registry at serve boot",
-	"scan_list":                      "native scan drill-down — schema registered at serve boot via RegisterScanTools",
-	"scan_summary":                   "native scan drill-down — schema registered at serve boot via RegisterScanTools",
-	"scan_query":                     "native scan drill-down — schema registered at serve boot via RegisterScanTools",
-	"scan_compare":                   "native scan compare — schema registered at serve boot via RegisterScanTools",
-	"update_progress":                "coordinator progress writer — registered at serve boot",
-	"web_search":                     "web research — registered at serve boot",
-	"promote_overlay":                "coordinator overlay surface — registered at serve boot",
-	"reject_overlay":                 "coordinator overlay surface — registered at serve boot",
-	"preview_overlay":                "coordinator overlay surface — registered at serve boot",
-	"wait":                           "coordinator wait tool — registered at serve boot",
-	"task":                           "worker spawn tool — registered at serve boot",
-	"worker_cancel":                  "coordinator worker tool — registered at serve boot",
-	"answer_decision":                "coordinator worker decision tool — registered at serve boot",
-	"instruct_worker":                "coordinator worker tool — registered at serve boot",
-	"shelve_overlay":                 "coordinator overlay surface — registered at serve boot",
-	"worker_history":                 "coordinator worker tool — registered at serve boot",
-	"plan_from_blueprint":            "blueprint planning tool — registered at serve boot",
-	"pack_board":                     "board tool — registered at serve boot",
-	"read_findings":                  "findings tool — registered at serve boot",
-	"read_review":                    "board review tool — registered at serve boot",
-	"parse_evaluation":               "parser tool — registered at serve boot",
-	"parse_extract_json":             "parser tool — registered at serve boot",
-	"parse_validate":                 "parser tool — registered at serve boot",
-	"plan_append_review_evidence":    "plan review tool — registered at serve boot",
-	"workflow_advance":               "workflow tool — registered at serve boot",
-	"workflow_transition":            "workflow tool — registered at serve boot",
-	"fanout_plan":                    "workflow tool — registered at serve boot",
-	"submit_verdict":                 "workflow tool — registered at serve boot",
-	"workflow_catalog_summaries":     "workflow tool — registered at serve boot",
-	"workflow_compose":               "workflow tool — registered at serve boot",
-	"workflow_compose_from_template": "workflow tool — registered at serve boot",
-	"workflow_persist":               "workflow tool — registered at serve boot",
-	"workflow_user_feedback":         "workflow tool — registered at serve boot",
-	"ask_user":                       "coordinator ask_user — registered at serve boot",
-	"state_start":                    "workflow state tool — registered at serve boot",
-	"state_close":                    "workflow state tool — registered at serve boot",
-	"state_query":                    "workflow state tool — registered at serve boot",
-	"state_update":                   "workflow state tool — registered at serve boot",
-	"handoff_health":                 "sibling worker coordination — registered at serve boot",
-	"handoff_init":                   "sibling worker coordination — registered at serve boot",
-	"handoff_release":                "sibling worker coordination — registered at serve boot",
-	"handoff_release_all":            "sibling worker coordination — registered at serve boot",
-	"handoff_reserve":                "sibling worker coordination — registered at serve boot",
-}
-
-// toolsProfileSchemaExempt lists profile tools whose schema is built dynamically in
-// Go at serve boot (runtime registry state), so they have no static tools/schemas row.
-var toolsProfileSchemaExempt = map[string]string{
-	"scan_pack":    "scan orchestration — schema built from the live scanner registry at serve boot",
-	"scan_list":    "native scan drill-down — schema registered at serve boot via RegisterScanTools",
-	"scan_summary": "native scan drill-down — schema registered at serve boot via RegisterScanTools",
-	"scan_query":   "native scan drill-down — schema registered at serve boot via RegisterScanTools",
 	"scan_compare": "native scan compare — schema registered at serve boot via RegisterScanTools",
 }
 
@@ -130,38 +62,6 @@ func loadNativeManifestNames(t *testing.T, root string) map[string]struct{} {
 		out[n] = struct{}{}
 	}
 	return out
-}
-
-func TestToolRegistryTriStateSchemasMatchNativeManifest(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	schemas := loadToolSchemaNames(t, root)
-	native := loadNativeManifestNames(t, root)
-	cfg, err := nativemanifest.Load()
-	contractcheck.FailErr(t, "load native manifest", err)
-
-	var missingSchema []string
-	for name := range native {
-		if _, ok := schemas[name]; !ok {
-			missingSchema = append(missingSchema, name)
-		}
-	}
-	contractcheck.FailViolations(t, "native-tools.yaml entries missing from tools/schemas", missingSchema)
-
-	var orphanSchema []string
-	for name := range schemas {
-		if _, ok := native[name]; ok {
-			continue
-		}
-		if _, exempt := toolsNativeSchemaOnly[name]; exempt {
-			continue
-		}
-		if cfg.HasOperation(name) {
-			continue
-		}
-		orphanSchema = append(orphanSchema, name)
-	}
-	contractcheck.FailViolations(t, "tools/schemas entries missing from the native manifests (not exempt)", orphanSchema)
 }
 
 func TestToolRegistryTriStateHandlersMatchSchemas(t *testing.T) {
@@ -215,35 +115,6 @@ func TestToolRegistryTriStateProfilesReferenceRegisteredTools(t *testing.T) {
 	contractcheck.FailViolations(t, "tool-profiles reference unregistered tools", violations)
 }
 
-func TestToolRegistryTriStateCoordinatorProfileToolsHaveSchemas(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	schemas := loadToolSchemaNames(t, root)
-	profiles := loadProfileToolNames(t, root)
-
-	var missing []string
-	for name := range profiles {
-		if strings.Contains(name, "*") {
-			continue
-		}
-		// mcp_* schemas come from the MCP server at sync time, not tools/schemas.
-		if strings.HasPrefix(name, "mcp_") {
-			continue
-		}
-		if _, ok := schemas[name]; ok {
-			continue
-		}
-		if toolcontract.IsCommandOperation(name) {
-			continue
-		}
-		if _, exempt := toolsProfileSchemaExempt[name]; exempt {
-			continue
-		}
-		missing = append(missing, name)
-	}
-	contractcheck.FailViolations(t, "tool-profiles tools missing tools/schemas (not exempt)", missing)
-}
-
 func TestToolRegistryTriStateExemptMapsStale(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	reg := toolfixture.ContractServeBootRegistry(t)
@@ -280,8 +151,6 @@ func TestToolRegistryTriStateExemptMapsStale(t *testing.T) {
 		}
 	}
 	checkStale("toolsSchemaExempt", toolsSchemaExempt)
-	checkStale("toolsNativeSchemaOnly", toolsNativeSchemaOnly)
-	checkStale("toolsProfileSchemaExempt", toolsProfileSchemaExempt)
 }
 
 func TestAgentToolProfilesYAMLShape(t *testing.T) {

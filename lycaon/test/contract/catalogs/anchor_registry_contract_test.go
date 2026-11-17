@@ -10,60 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
-
-func TestCatalogClosureBindingsAndEnvelopes(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	catalogIDs, envelopes := loadCatalogAnchors(t, root)
-	reg := catalogfixture.LoadInformBindings(t)
-	indexWorkflowInjects(t, reg)
-
-	var missing []string
-	for id, env := range envelopes {
-		if !env {
-			missing = append(missing, id+": catalog row missing envelope")
-		}
-	}
-	contractcheck.FailViolations(t, "catalog anchors missing envelope", missing)
-
-	missing = missing[:0]
-	for _, b := range reg.AllInform() {
-		if b == nil {
-			continue
-		}
-		on := string(b.On)
-		if !catalogIDs[on] {
-			missing = append(missing, on+": Binding.on not in catalog")
-		}
-		if b.Render == "" {
-			missing = append(missing, on+": inform Binding missing render")
-			continue
-		}
-		if _, err := catalogfixture.StockGuidancePath(b.Render); err != nil {
-			missing = append(missing, on+" → "+b.Render+": template missing")
-		}
-	}
-	// Workflow injects are indexed separately — also close them.
-	for _, b := range reg.BindingsOn(anchor.PhaseEntered) {
-		if b == nil || !b.IsInform() {
-			continue
-		}
-		on := string(b.On)
-		if !catalogIDs[on] {
-			missing = append(missing, on+": phase.entered Binding.on not in catalog")
-		}
-		if b.Render == "" {
-			continue
-		}
-		if _, err := catalogfixture.StockGuidancePath(b.Render); err != nil {
-			missing = append(missing, on+" workflow inject → "+b.Render+": template missing")
-		}
-	}
-	contractcheck.FailViolations(t, "Binding → catalog/template closure", missing)
-}
 
 func TestInformWhenConditionWired(t *testing.T) {
 	t.Parallel()

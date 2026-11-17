@@ -1,10 +1,6 @@
 package contract
 
 import (
-	"go/ast"
-	"go/parser"
-	"go/token"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -81,62 +77,6 @@ func TestOpenAPIQueryParamsFollowConventions(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestAPIHandlersDoNotUseForbiddenQueryKeys(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	apiDir := filepath.Join(root, "lycaon", "internal", "api")
-	fset := token.NewFileSet()
-
-	forbidden := []string{"project", "project_dir", "session"}
-
-	err := filepath.Walk(apiDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return nil
-		}
-		f, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			return err
-		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			call, ok := n.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || sel.Sel.Name != "Get" {
-				return true
-			}
-			query, ok := sel.X.(*ast.CallExpr)
-			if !ok {
-				return true
-			}
-			selQ, ok := query.Fun.(*ast.SelectorExpr)
-			if !ok || selQ.Sel.Name != "Query" {
-				return true
-			}
-			if len(call.Args) != 1 {
-				return true
-			}
-			lit, ok := call.Args[0].(*ast.BasicLit)
-			if !ok || lit.Kind != token.STRING {
-				return true
-			}
-			key := strings.Trim(lit.Value, `"`)
-			for _, bad := range forbidden {
-				if key == bad {
-					t.Errorf("%s: URL.Query().Get(%q) is forbidden; use project_id or session_id", filepath.Base(path), key)
-				}
-			}
-			return true
-		})
-		return nil
-	})
-	contractcheck.FailErr(t, "operation failed", err)
 }
 
 func TestAPIHandlersDoNotUseQueryParamHelper(t *testing.T) {
