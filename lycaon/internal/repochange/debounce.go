@@ -60,7 +60,7 @@ func (d *Debouncer) WaitQuiet(ctx context.Context, dir string, grace, maxWait ti
 		}
 		pause := grace - quietFor
 		if busy || pause <= 0 {
-			pause = d.delay / 4
+			pause = d.currentDelay() / 4
 		}
 		if pause > remaining {
 			pause = remaining
@@ -91,6 +91,27 @@ func NewDebouncer(delay time.Duration) *Debouncer {
 }
 
 var globalDebounce = NewDebouncer(DefaultDebounce)
+
+func (d *Debouncer) currentDelay() time.Duration {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.delay
+}
+
+// UseDebounceForTest sets the process coalesce window, after delivering every
+// pending burst, until the returned restore runs.
+func UseDebounceForTest(ctx context.Context, delay time.Duration) (restore func()) {
+	flushCtx := context.WithoutCancel(ctx)
+	set := func(next time.Duration) {
+		globalDebounce.FlushForTest(flushCtx)
+		globalDebounce.mu.Lock()
+		globalDebounce.delay = next
+		globalDebounce.mu.Unlock()
+	}
+	previous := globalDebounce.currentDelay()
+	set(delay)
+	return func() { set(previous) }
+}
 
 // NotifyWorktreeDebounced merges paths for dir and fires one WorktreeChanged after delay.
 func NotifyWorktreeDebounced(ctx context.Context, dir string, paths []string, source Source) {

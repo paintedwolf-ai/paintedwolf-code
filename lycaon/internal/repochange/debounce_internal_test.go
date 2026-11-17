@@ -45,3 +45,27 @@ func TestClassifyWatcherWriteUsesStatFacts(t *testing.T) {
 		t.Fatalf("missing write = %v, want unknown", got)
 	}
 }
+
+func TestUseDebounceForTestDeliversPendingBurstsAcrossTheSwap(t *testing.T) {
+	t.Cleanup(ResetObserversForTest)
+	var delivered []string
+	RegisterObserver(func(_ context.Context, ev Event) { delivered = append(delivered, ev.ProjectDir) })
+	previous := globalDebounce.currentDelay()
+	dir := t.TempDir()
+
+	restore := UseDebounceForTest(t.Context(), time.Hour)
+	if got := globalDebounce.currentDelay(); got != time.Hour {
+		t.Fatalf("delay = %v, want the hour set for the test", got)
+	}
+	NotifyWorktreeDebounced(t.Context(), dir, []string{"a.txt"}, SourceWatcher)
+	if len(delivered) != 0 {
+		t.Fatalf("a burst inside the window was delivered early: %v", delivered)
+	}
+	restore()
+	if len(delivered) != 1 {
+		t.Fatalf("restoring the window delivered %d bursts, want the one pending", len(delivered))
+	}
+	if got := globalDebounce.currentDelay(); got != previous {
+		t.Fatalf("restored delay = %v, want %v", got, previous)
+	}
+}

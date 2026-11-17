@@ -65,7 +65,7 @@ func TestAPIConformance(t *testing.T) {
 		// Admission limits are their own contract; the sweep sends many writes.
 		t.Setenv(key, "100000000")
 	}
-	h := wiring.BuildForTest(t)
+	h := wiring.BuildForTest(t, wiring.WithChangeDebounce(conformanceDebounce))
 	hub := h.MemoryHub()
 	if hub == nil {
 		t.Fatal("conformance sweep needs the in-memory event hub")
@@ -87,7 +87,7 @@ func TestAPIConformance(t *testing.T) {
 
 	sweep := newConformanceSweep(doc, validator, h.Server, usernotice.NewCatalog(noticeCfg))
 	settleSourceWatcher(t, h.Server.WaitForBackground, hub, projectDir)
-	sweep.effects = openConformanceEffects(t, h, hub, projectDir)
+	sweep.effects = openConformanceEffects(t, h, hub, projectDir, conformanceDebounce)
 	bindConformanceFixtures(sweep.values, project, sess, "README.md")
 	sweep.values.bind("/v1/providers/{provider_id}", "", provider)
 	// A keyed web research provider.

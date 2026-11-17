@@ -19,10 +19,11 @@ type replaySession struct {
 	config *llm.MockConfig
 }
 
-func newReplaySession(t *testing.T) *replaySession {
+// replay starts a session whose model calls whatever tool the test names next.
+func (p *programHost) replay(t *testing.T) *replaySession {
 	t.Helper()
 	config := &llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: "run the program", FollowUpText: "Done."}}}
-	base := startCommandProgramSessionWithClient(t, llm.NewMockProvider(config))
+	base := p.withClient(t, llm.NewMockProvider(config), wire.CreateSessionRequest{}, "")
 	base.h.SeedProgress(t, t.Context(), base.session)
 	return &replaySession{commandProgramSession: base, config: config}
 }
@@ -78,8 +79,9 @@ func (s *replaySession) followExactCalls(t *testing.T, calls []toolreach.Call) i
 }
 
 func TestOfferedCallsWorkWhenFollowed(t *testing.T) {
+	p := newProgramHost(t)
 	t.Run("an image call on a directory offers a listing that runs", func(t *testing.T) {
-		s := newReplaySession(t)
+		s := p.replay(t)
 		testutil.FailErr(t, "seed directory", os.Mkdir(filepath.Join(s.dir, "sub.png"), 0o755))
 		result := s.call(t, "view_image", map[string]any{"path": "sub.png"})
 		if s.followExactCalls(t, nextCalls(t, result)) == 0 {
@@ -87,7 +89,7 @@ func TestOfferedCallsWorkWhenFollowed(t *testing.T) {
 		}
 	})
 	t.Run("a restore with no history offers a history call that runs once finished", func(t *testing.T) {
-		s := newReplaySession(t)
+		s := p.replay(t)
 		result := s.call(t, "restore_version", map[string]any{"path": "notes.txt"})
 		calls := nextCalls(t, result)
 		if len(calls) != 1 || calls[0].Tool != "source_history" {
@@ -103,7 +105,7 @@ func TestOfferedCallsWorkWhenFollowed(t *testing.T) {
 
 // Advisories raised by a native operation reach the reader through command.
 func TestProgramOperationAdvisoriesReachTheReader(t *testing.T) {
-	s := newReplaySession(t)
+	s := newProgramHost(t).replay(t)
 	testutil.FailErr(t, "seed editorconfig", os.WriteFile(filepath.Join(s.dir, ".editorconfig"), []byte("root = true\n[*]\ntrim_trailing_whitespace = true\n"), 0o644))
 	result := s.call(t, "command", map[string]any{"command": "edit --path notes.txt --old-string 'first note' --new-string 'first note  '"})
 	if result.Outcome == wire.ToolResultOutcomeRejected {

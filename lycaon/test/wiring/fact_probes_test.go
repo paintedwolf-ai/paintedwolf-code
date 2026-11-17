@@ -1,43 +1,131 @@
 package wiring
 
 import (
+	"encoding/json"
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-// probeProgram runs one native program as the given agent and reports whether
-// the host refused it for its effects or a profile deny.
-func probeProgram(t *testing.T, s *replaySession, program string) bool {
-	t.Helper()
-	result := s.call(t, "command", map[string]any{"command": program})
-	for _, code := range []string{"COMMAND_EFFECT_NOT_ALLOWED", "COMMAND_OPERATION_NOT_ALLOWED"} {
-		if strings.Contains(result.Content, code) || slicesHasCode(result, code) {
-			return true
-		}
-	}
-	return false
+// programProbe asks the executor one question about a native program. Effect
+// reports whether the program did what it was asked, read from the outcome or
+// from the session's directory.
+type programProbe struct {
+	program, source string
+	// seed names the files the probe works on, so a mutating probe never
+	// touches what a later probe reads.
+	seed   map[string]string
+	effect func(dir string, out command.ProgramOutcome) bool
 }
 
-func slicesHasCode(result *wire.ToolResult, code string) bool {
-	for _, feedback := range result.Feedback {
-		if feedback.Code == code {
-			return true
-		}
+const probeNotes = "first note\nsecond note\n"
+
+// programProbes lists the read-only probes first; each mutating probe works on
+// its own file.
+var programProbes = []programProbe{
+	{program: "ls", source: "ls .", effect: stdoutHas("notes.txt")},
+	{program: "cat", source: "cat notes.txt", effect: stdoutIs(probeNotes)},
+	{program: "grep", source: "grep note notes.txt", effect: stdoutIs(probeNotes)},
+	{program: "stat", source: "stat notes.txt", effect: stdoutHas("notes.txt")},
+	{program: "code-rewrite", source: "code-rewrite --path notes.txt --pattern '$A' --rewrite '$A' --dry-run",
+		effect: func(dir string, out command.ProgramOutcome) bool {
+			return out.Status == 0 && fileIs(dir, "notes.txt", probeNotes)
+		}},
+	{program: "repo-map", source: "repo-map", effect: stdoutHas("notes.txt")},
+	{program: "summarize", source: "summarize --path notes.txt", effect: func(_ string, out command.ProgramOutcome) bool {
+		return out.Status == 0 && strings.TrimSpace(out.Stdout) != ""
+	}},
+	{program: "mkdir", source: "mkdir made", effect: func(dir string, _ command.ProgramOutcome) bool {
+		info, err := os.Stat(filepath.Join(dir, "made"))
+		return err == nil && info.IsDir()
+	}},
+	{program: "rm", source: "rm rm-probe.txt", seed: map[string]string{"rm-probe.txt": "remove me\n"},
+		effect: func(dir string, _ command.ProgramOutcome) bool {
+			_, err := os.Stat(filepath.Join(dir, "rm-probe.txt"))
+			return errors.Is(err, fs.ErrNotExist)
+		}},
+	{program: "tee", source: "printf 'x' | tee tee-probe.txt", effect: func(dir string, _ command.ProgramOutcome) bool {
+		return fileIs(dir, "tee-probe.txt", "x")
+	}},
+	{program: "edit", source: "edit --path edit-probe.txt --old-string first --new-string changed",
+		seed: map[string]string{"edit-probe.txt": "first note\n"},
+		effect: func(dir string, _ command.ProgramOutcome) bool {
+			return fileIs(dir, "edit-probe.txt", "changed note\n")
+		}},
+}
+
+func stdoutIs(want string) func(string, command.ProgramOutcome) bool {
+	return func(_ string, out command.ProgramOutcome) bool { return out.Status == 0 && out.Stdout == want }
+}
+
+func stdoutHas(want string) func(string, command.ProgramOutcome) bool {
+	return func(_ string, out command.ProgramOutcome) bool {
+		return out.Status == 0 && strings.Contains(out.Stdout, want)
 	}
-	return false
+}
+
+func fileIs(dir, name, want string) bool {
+	data, err := os.ReadFile(filepath.Join(dir, name))
+	return err == nil && string(data) == want
+}
+
+// profileRefusals are the typed answers for a program the agent may not run.
+var profileRefusals = []string{"COMMAND_EFFECT_NOT_ALLOWED", "COMMAND_OPERATION_NOT_ALLOWED"}
+
+// probeProgram runs one probe and reports whether the host refused it. A run
+// must show its effect and a refusal must be typed and leave the world as it
+// was; anything else fails the test.
+func probeProgram(t *testing.T, s *replaySession, probe programProbe) (refused bool) {
+	t.Helper()
+	for name, body := range probe.seed {
+		testutil.FailErr(t, "seed "+name, os.WriteFile(filepath.Join(s.dir, name), []byte(body), 0o644))
+	}
+	result := s.call(t, "command", map[string]any{"command": probe.source})
+	out, hasOutcome := probeOutcome(t, result)
+	typed := slices.ContainsFunc(result.Feedback, func(f wire.ToolFeedback) bool { return slices.Contains(profileRefusals, f.Code) }) ||
+		(hasOutcome && out.Refusal != nil && slices.Contains(profileRefusals, out.Refusal.Code))
+	switch {
+	case typed:
+		if hasOutcome && probe.effect(s.dir, out) {
+			t.Fatalf("%s was refused but its effect happened: %+v", probe.source, out)
+		}
+		return true
+	case hasOutcome && out.State == "completed" && out.Refusal == nil && probe.effect(s.dir, out):
+		return false
+	default:
+		t.Fatalf("%s neither ran with its effect nor was refused by profile: outcome %+v, feedback %+v", probe.source, out, result.Feedback)
+		return false
+	}
+}
+
+// probeOutcome decodes the program outcome a command result carries.
+func probeOutcome(t *testing.T, result *wire.ToolResult) (command.ProgramOutcome, bool) {
+	t.Helper()
+	_, body, _, ok := hostmarker.SplitToolJSONBody(result.Content)
+	if !ok {
+		return command.ProgramOutcome{}, false
+	}
+	var out command.ProgramOutcome
+	if json.Unmarshal([]byte(body), &out) != nil || out.ProgramID == "" {
+		return command.ProgramOutcome{}, false
+	}
+	return out, true
 }
 
 // The probe below is only worth anything if the profiles disagree about something.
 func TestProgramReachDistinguishesProfiles(t *testing.T) {
-	s := newReplaySession(t)
-	guards := s.h.Sessions.Manager.Coordinator.Guards
+	guards := newProgramHost(t).h.Sessions.Manager.Coordinator.Guards
 	implement, readonly := guards.ProgramReach(t.Context(), "implement", ""), guards.ProgramReach(t.Context(), "explore_readonly", "")
 	if !implement("rm") || readonly("rm") || !readonly("cat") {
 		t.Fatalf("rm implement=%v readonly=%v, cat readonly=%v", implement("rm"), readonly("rm"), readonly("cat"))
@@ -50,36 +138,36 @@ func TestProgramReachDistinguishesProfiles(t *testing.T) {
 
 // What reach says about a native program is what the executor then does with it.
 func TestProgramReachMatchesTheExecutor(t *testing.T) {
-	probes := map[string]string{
-		"ls": "ls .", "cat": "cat notes.txt", "grep": "grep note notes.txt", "stat": "stat notes.txt",
-		"mkdir": "mkdir made", "rm": "rm notes.txt", "tee": "printf 'x' | tee made.txt", "edit": "edit --path notes.txt --old-string first --new-string changed",
-		"code-rewrite": "code-rewrite --path notes.txt --pattern '$A' --rewrite '$A' --dry-run",
-		"repo-map":     "repo-map",
-		"summarize":    "summarize --path notes.txt",
-	}
-	for _, agent := range []struct{ id, profile string }{
+	agents := []struct{ id, profile string }{
 		{"implementer", "implement"},
 		{"path-explorer", "explore_readonly"},
 		{"plan-writer", "plan_write_only"},
 		{"plan-reviewer", "plan_review_readonly"},
-	} {
+	}
+	p := newProgramHost(t)
+	asserted := 0
+	for _, agent := range agents {
 		t.Run(agent.id, func(t *testing.T) {
-			for program, source := range probes {
-				t.Run(program, func(t *testing.T) {
-					s := newReplaySession(t)
-					testutil.FailErr(t, "set agent", s.h.Sessions.Manager.Chats.SetAgentType(t.Context(), s.session, agent.id))
-					reach := s.h.Sessions.Manager.Coordinator.Guards.ProgramReach(t.Context(), agent.profile, "")
-					if reach == nil {
-						t.Fatal("no reach answer")
+			s := p.replay(t)
+			testutil.FailErr(t, "set agent", p.h.Sessions.Manager.Chats.SetAgentType(t.Context(), s.session, agent.id))
+			reach := p.h.Sessions.Manager.Coordinator.Guards.ProgramReach(t.Context(), agent.profile, "")
+			if reach == nil {
+				t.Fatal("no reach answer")
+			}
+			for _, probe := range programProbes {
+				t.Run(probe.program, func(t *testing.T) {
+					if refused := probeProgram(t, s, probe); reach(probe.program) == refused {
+						t.Fatalf("reach says %v, executor refused = %v", reach(probe.program), refused)
 					}
-					refused := probeProgram(t, s, source)
-					if reach(program) == refused {
-						t.Fatalf("reach says %v, executor refused = %v", reach(program), refused)
-					}
+					asserted++
 				})
 			}
 		})
 	}
+	if want := len(agents) * len(programProbes); asserted != want {
+		t.Fatalf("asserted %d of %d agent and program cells", asserted, want)
+	}
+	t.Logf("asserted %d agent and program cells on one host", asserted)
 }
 
 // A retired tool's answer names native forms; each must be a real program.
@@ -128,6 +216,7 @@ func TestOfferedProgramsParseAndRun(t *testing.T) {
 		collectStepPrograms(entry.Steps, &programs)
 	}
 	fill := strings.NewReplacer("{{ paintedwolf.path }}", "notes.txt", "{{ paintedwolf.spill_path }}", "notes.txt", "FILE", "notes.txt", "PATH", "notes.txt", "SYMBOL", "note", "A,Bp", "1,2p")
+	p := newProgramHost(t)
 	seen := map[string]bool{}
 	for _, words := range programs {
 		// Signaling needs a live job, and nothing here should be signaled.
@@ -140,7 +229,7 @@ func TestOfferedProgramsParseAndRun(t *testing.T) {
 		}
 		seen[source] = true
 		t.Run(source, func(t *testing.T) {
-			s := newReplaySession(t)
+			s := p.replay(t)
 			result := s.call(t, "command", map[string]any{"command": source})
 			if result.Outcome == wire.ToolResultOutcomeRejected {
 				t.Fatalf("refused: %+v", result.Feedback)
@@ -153,4 +242,5 @@ func TestOfferedProgramsParseAndRun(t *testing.T) {
 	if len(seen) == 0 {
 		t.Fatal("no programs probed")
 	}
+	t.Logf("ran %d offered programs on one host", len(seen))
 }
