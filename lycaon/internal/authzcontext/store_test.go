@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/authzcontext/authztest"
 	"github.com/lycaon/lycaon/internal/authzledger"
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/sandbox"
@@ -91,8 +92,8 @@ func TestAssemble_sortsAndHashes(t *testing.T) {
 }
 
 func TestSeal_idempotentAndDrift(t *testing.T) {
-	mem := authzcontext.NewMemoryStore()
-	sealer := &authzcontext.Sealer{Store: mem}
+	ledgerStore := authztest.NewStore(t, "sess-a")
+	sealer := &authzcontext.Sealer{Store: ledgerStore}
 	sess := &api.Session{ID: "sess-a", ProjectID: "p1", AgentType: "implementer", Posture: api.SessionPostureBuild}
 	if err := sealer.Seal(context.Background(), sess, "implement", ""); err != nil {
 		testutil.FailErr(t, "first seal", err)
@@ -100,14 +101,14 @@ func TestSeal_idempotentAndDrift(t *testing.T) {
 	if err := sealer.Seal(context.Background(), sess, "implement", ""); err != nil {
 		testutil.FailErr(t, "second seal same hash", err)
 	}
-	rows, err := mem.ListContexts(context.Background(), "sess-a")
+	rows, err := ledgerStore.ListContexts(context.Background(), "sess-a")
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("rows = %d err = %v", len(rows), err)
 	}
 	if err := sealer.Seal(context.Background(), sess, "review", ""); err != nil {
 		testutil.FailErr(t, "drift seal", err)
 	}
-	rows, err = mem.ListContexts(context.Background(), "sess-a")
+	rows, err = ledgerStore.ListContexts(context.Background(), "sess-a")
 	if err != nil || len(rows) != 2 {
 		t.Fatalf("after drift rows = %d err = %v", len(rows), err)
 	}
@@ -120,9 +121,9 @@ func TestSeal_idempotentAndDrift(t *testing.T) {
 }
 
 func TestSealOpenWorldSnapshotsRegisteredTools(t *testing.T) {
-	mem := authzcontext.NewMemoryStore()
+	ledgerStore := authztest.NewStore(t, "sess-open")
 	sealer := &authzcontext.Sealer{
-		Store: mem,
+		Store: ledgerStore,
 		Profiles: map[string]sandbox.ToolProfile{
 			"implement": {ID: "implement", Tools: map[string]bool{"read": true}, DenyTools: []string{"blocked_*"}},
 		},
@@ -133,7 +134,7 @@ func TestSealOpenWorldSnapshotsRegisteredTools(t *testing.T) {
 	if err := sealer.Seal(context.Background(), sess, "implement", ""); err != nil {
 		t.Fatalf("seal open-world context: %v", err)
 	}
-	rows, err := mem.ListContexts(context.Background(), sess.ID)
+	rows, err := ledgerStore.ListContexts(context.Background(), sess.ID)
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("contexts = %d err = %v", len(rows), err)
 	}
@@ -146,9 +147,18 @@ func TestSealOpenWorldSnapshotsRegisteredTools(t *testing.T) {
 }
 
 func TestSeal_failClosed(t *testing.T) {
-	sealer := &authzcontext.Sealer{Store: authzcontext.FailStore{}}
+	database := testdbfixture.Open(t, "authorization.db")
+	insertSession(t, database, "sess-fail", time.Now().UTC())
+	_, err := database.ExecContext(t.Context(), `
+		CREATE TRIGGER reject_authorization_context BEFORE INSERT ON authorization_contexts
+		BEGIN
+			SELECT RAISE(ABORT, 'authorization context rejected by fixture');
+		END
+	`)
+	testutil.FailErr(t, "reject authorization contexts", err)
+	sealer := &authzcontext.Sealer{Store: authzcontext.NewSQLStore(database)}
 	sess := &api.Session{ID: "sess-fail"}
-	err := sealer.Seal(context.Background(), sess, "implement", "")
+	err = sealer.Seal(context.Background(), sess, "implement", "")
 	if err == nil || !errors.Is(err, authzledger.ErrSealFailed) {
 		t.Fatalf("want ErrSealFailed, got %v", err)
 	}

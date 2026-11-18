@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/authzcontext"
+	"github.com/lycaon/lycaon/internal/authzcontext/authztest"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -32,8 +33,8 @@ func testApprovalStore(t *testing.T) *settings.ApprovalStore {
 }
 
 func TestExecutorSilentAutoAllowEmitsNoAuthzEvent(t *testing.T) {
-	mem := authzcontext.NewMemoryStore()
-	rec := authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: mem}}
+	ledgerStore := authztest.NewStore(t, "sess-auto")
+	rec := authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: ledgerStore}}
 	reg := tools.NewDefaultRegistry()
 	if err := reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "ok", nil
@@ -49,14 +50,16 @@ func TestExecutorSilentAutoAllowEmitsNoAuthzEvent(t *testing.T) {
 	if err != nil {
 		testutil.FailErr(t, "invoke", err)
 	}
-	if mem.EventCount("sess-auto") != 0 {
-		t.Fatalf("silent auto-allow must emit no authz event, got %d", mem.EventCount("sess-auto"))
+	rows, err := ledgerStore.ListEvents(t.Context(), "sess-auto")
+	testutil.FailErr(t, "list events", err)
+	if len(rows) != 0 {
+		t.Fatalf("silent auto-allow emitted %d authorization events", len(rows))
 	}
 }
 
 func TestExecutorPolicyBlockEmitsToolDenied(t *testing.T) {
-	mem := authzcontext.NewMemoryStore()
-	rec := authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: mem}}
+	ledgerStore := authztest.NewStore(t, "sess-deny")
+	rec := authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: ledgerStore}}
 	reg := tools.NewDefaultRegistry()
 	if err := reg.Register("write", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "ok", nil
@@ -76,12 +79,12 @@ func TestExecutorPolicyBlockEmitsToolDenied(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected policy block")
 	}
-	if mem.EventCount("sess-deny") != 1 {
-		t.Fatalf("policy deny must emit one tool_denied event, got %d", mem.EventCount("sess-deny"))
-	}
-	rows, err := mem.ListEvents(context.Background(), "sess-deny")
+	rows, err := ledgerStore.ListEvents(context.Background(), "sess-deny")
 	if err != nil {
 		testutil.FailErr(t, "list events", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("policy deny emitted %d authorization events, want 1", len(rows))
 	}
 	if rows[0].Action != authzcontext.EventActionToolDenied {
 		t.Fatalf("action = %q", rows[0].Action)
@@ -91,9 +94,7 @@ func TestExecutorPolicyBlockEmitsToolDenied(t *testing.T) {
 	}
 }
 
-func TestApprovalGateAutoAllowNoEvent(t *testing.T) {
-	mem := authzcontext.NewMemoryStore()
-	_ = authzcontext.LedgerRecorder{Ledger: &authzcontext.Ledger{Store: mem}}
+func TestApprovalGateAutoAllow(t *testing.T) {
 	store := testApprovalStore(t)
 	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
 	res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
@@ -110,8 +111,5 @@ func TestApprovalGateAutoAllowNoEvent(t *testing.T) {
 	}
 	if !res.AutoApproved() {
 		t.Fatalf("expected auto-approve at balanced, got %+v", res)
-	}
-	if mem.EventCount("sess-gate") != 0 {
-		t.Fatal("gate auto-approve must not append authz events")
 	}
 }
