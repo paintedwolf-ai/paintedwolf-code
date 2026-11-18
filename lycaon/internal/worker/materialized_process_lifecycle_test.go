@@ -126,7 +126,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 		MountReconciler: recovery.ConnectionReconciler{Recoveries: platform.ConnectionRecoveries()},
 	})
 	testutil.FailErr(t, "open recovery coordinator", err)
-	manager := workspace.NewManager(branches, selector).WithPrivateGit(gitManager).WithRecovery(coordinator)
+	manager := workspace.NewManager(branches, selector, nil).WithPrivateGit(gitManager).WithRecovery(coordinator)
 	queue := NewSQLQueue(database, 4)
 	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(root, "source-content")).Baselines)
 	queue.Branches.SetWorkerWorkspaceManager(manager)

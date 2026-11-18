@@ -21,13 +21,12 @@ func TestRetentionAndInventoryFindABranchOnAnotherVolume(t *testing.T) {
 	if ran {
 		return
 	}
-	t.Cleanup(workspace.UseCopyAsCloneForTest())
 	project := volume.Dir(t, "project")
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(project, "a.txt"), []byte("hello"), 0o600))
 	state, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve state", err)
 	branchRoot := enginepaths.WorkerBranchesRootUnder(state)
-	mgr := workspace.NewManager(branchRoot, platform.NewSelector(platform.Config{}))
+	mgr := workspace.NewManager(branchRoot, platform.NewSelector(platform.Config{}), testvolume.CopyAsClone)
 	binding, err := mgr.CreateWorkerWorkspace(t.Context(), project, "job")
 	testutil.FailErr(t, "create", err)
 

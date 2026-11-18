@@ -30,7 +30,6 @@ func TestPlacedWorkerSurvivesEjectAndRelocatesThroughBackup(t *testing.T) {
 	if ran {
 		return
 	}
-	t.Cleanup(workspace.UseCopyAsCloneForTest())
 	ctx := t.Context()
 	project := volume.Dir(t, "project")
 	testutil.FailErr(t, "seed source", os.WriteFile(filepath.Join(project, "main.go"), []byte("package before\n"), 0o600))
@@ -39,7 +38,7 @@ func TestPlacedWorkerSurvivesEjectAndRelocatesThroughBackup(t *testing.T) {
 	dataDir := testbaseline.DataDir(t, database)
 	queue := NewSQLQueue(database, 1)
 	queue.Branches.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
-	queue.Branches.SetWorkerWorkspaceManager(workspace.NewManager(enginepaths.WorkerBranchesRootUnder(dataDir), platform.NewSelector(platform.Config{})))
+	queue.Branches.SetWorkerWorkspaceManager(workspace.NewManager(enginepaths.WorkerBranchesRootUnder(dataDir), platform.NewSelector(platform.Config{}), testvolume.CopyAsClone))
 	id, err := queue.Enqueue(ctx, api.WorkerTask{ProjectID: testdbseed.DefaultProjectID, WorkspacePath: project, WorkspaceRootID: "root-id", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}}, AgentType: "implementer", Prompt: "edit", Brief: "edit"})
 	testutil.FailErr(t, "enqueue", err)
 	_, err = queue.ClaimNext(ctx, ClaimRequest{ProjectID: testdbseed.DefaultProjectID, ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})

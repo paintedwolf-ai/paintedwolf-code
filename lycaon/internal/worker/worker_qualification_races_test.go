@@ -144,7 +144,7 @@ func newRaceQualificationEnv(t *testing.T) *raceQualificationEnv {
 	ledger := sourceledger.New(sqlDB, filepath.Join(dataDir, "source-content"))
 	queue.Branches.SetBaselineStore(ledger.Baselines)
 
-	mgr := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}))
+	mgr := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}), nil)
 	rec, err := mgr.CheckpointCoordinator()
 	testutil.FailErr(t, "open checkpoint coordinator", err)
 	mgr.WithRecovery(rec)

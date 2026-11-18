@@ -327,7 +327,7 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 	selector := workspace.HostSelector()
 	selector.BudgetFor = adapter.ZeroBudget
 	skipWithoutMount(t, selector)
-	manager := workspace.NewManager(branches, selector).WithPrivateGit(privateGit)
+	manager := workspace.NewManager(branches, selector, nil).WithPrivateGit(privateGit)
 	binding, _, err := manager.CreateWorkerBranch(workspace.WithWorkspaceProject(t.Context(), testdbseed.DefaultProjectID), roots, "p", "job-roots")
 	testutil.FailErr(t, "create branch", err)
 	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(t.Context(), binding) })

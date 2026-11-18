@@ -29,7 +29,7 @@ func TestClaimNextDoesNotProvisionBranch(t *testing.T) {
 
 	q := NewSQLQueue(sqlDB, 4)
 	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)
-	q.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), platform.NewSelector(platform.Config{})))
+	q.Branches.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), platform.NewSelector(platform.Config{}), nil))
 
 	id, err := q.Enqueue(context.Background(), api.WorkerTask{
 		ProjectID:       testdbseed.DefaultProjectID,
@@ -112,7 +112,7 @@ func TestClaimWorkerBranchMountedViewSkipsBaselineTreeWalkAndExposesWorkspaceSta
 	sel := adapter.NewSelector(runtime.GOOS, mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter())
 	sel.BudgetFor = adapter.ZeroBudget
 	sel.Confinement = fixtureConfinement{}
-	wsMgr := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), sel)
+	wsMgr := workspace.NewManager(filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches"), sel, nil)
 
 	q := NewSQLQueue(sqlDB, 4)
 	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content")).Baselines)

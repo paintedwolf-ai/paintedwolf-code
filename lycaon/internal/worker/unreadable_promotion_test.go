@@ -42,7 +42,7 @@ func TestEntryLeftOutOfTheBranchIsNotAWorkerDeletion(t *testing.T) {
 	sqlDB := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRootWithID(t, sqlDB, testdbseed.DefaultProjectID, "root-id", project)
 	dataDir := testbaseline.DataDir(t, sqlDB)
-	mgr := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}))
+	mgr := workspace.NewManager(filepath.Join(dataDir, "worker-branches"), platform.NewSelector(platform.Config{}), nil)
 	q := NewSQLQueue(sqlDB, 4)
 	q.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(dataDir, "source-content")).Baselines)
 	q.Branches.SetWorkerWorkspaceManager(mgr)
