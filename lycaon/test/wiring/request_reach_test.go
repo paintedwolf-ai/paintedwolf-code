@@ -121,15 +121,22 @@ var backtickedIdent = regexp.MustCompile("`([A-Za-z_][A-Za-z0-9_]*(?:\\.[A-Za-z_
 
 // check lists what one request's host text names that the request does not
 // offer: a tool, operation or command program outside its tools and command
-// reach, and, in a refused call's recovery, an argument that neither the
-// refused tool nor any tool the recovery names accepts as sent.
+// reach; an argument attributed to a tool, as `tool(arg=…)` or `tool.arg`,
+// that the tool's schema as sent lacks; and, in a refused call's recovery, a
+// bare argument that neither the refused tool nor any tool it names accepts.
 func (o *reachOracle) check(t *testing.T, req modelcall.CompletionRequest, profiles []sandbox.ToolProfile) []string {
 	t.Helper()
 	offered := map[string]bool{}
 	schemas := map[string]map[string]bool{}
+	sent := map[string]map[string]any{}
 	for _, meta := range req.Tools {
 		offered[meta.Name] = true
 		schemas[meta.Name] = argFields(meta.ArgsSchema)
+		sent[meta.Name] = meta.ArgsSchema
+	}
+	schemaSent := func(tool string) (map[string]any, bool) {
+		s, ok := sent[tool]
+		return s, ok
 	}
 	maps.Copy(offered, commandReach(t, profiles, req.Debug.ProfileID, req.Debug.Surface))
 	var out []string
@@ -137,6 +144,9 @@ func (o *reachOracle) check(t *testing.T, req modelcall.CompletionRequest, profi
 		for _, text := range hostText(m) {
 			for _, name := range toolvocab.UnreachableNames(o.names, text, offered) {
 				out = append(out, fmt.Sprintf("message %d (%s %s) names %s, which the request does not offer: %s", i, m.Role, m.Kind, name, lineWith(text, name)))
+			}
+			for _, claim := range toolvocab.UnacceptedArgs(o.names, text, schemaSent) {
+				out = append(out, fmt.Sprintf("message %d (%s %s) gives %s argument `%s`, which its schema as sent lacks: %s", i, m.Role, m.Kind, claim.Tool, claim.Arg, lineWith(text, claim.Arg)))
 			}
 			if m.ToolResult == nil || m.ToolResult.Outcome != api.ToolResultOutcomeRejected {
 				continue
@@ -405,12 +415,15 @@ func TestRequestReachFailsOnSeededRequests(t *testing.T) {
 		message api.Message
 		want    int
 	}{
-		"guide names an unoffered tool":      {message: system("Store the checklist, then call `promote_overlay`."), want: 1},
-		"guide reworded":                     {message: system("Keep the checklist current with `update_progress`."), want: 0},
-		"recovery names an unoffered tool":   {message: refused("Rejected: stale revision.\nFix: call `edit` on the board."), want: 1},
-		"recovery names an unknown argument": {message: refused("Rejected: stale revision.\nFix: pass `path` to `update_progress`."), want: 1},
-		"recovery reworded":                  {message: refused("Rejected: stale revision.\nFix: resend `update_progress` with the current `expected_revision`."), want: 0},
-		"user text is not host text":         {message: api.Message{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "call `promote_overlay`"}, want: 0},
+		"guide names an unoffered tool":       {message: system("Store the checklist, then call `promote_overlay`."), want: 1},
+		"guide reworded":                      {message: system("Keep the checklist current with `update_progress`."), want: 0},
+		"recovery names an unoffered tool":    {message: refused("Rejected: stale revision.\nFix: call `edit` on the board."), want: 1},
+		"recovery names an unknown argument":  {message: refused("Rejected: stale revision.\nFix: pass `path` to `update_progress`."), want: 1},
+		"recovery reworded":                   {message: refused("Rejected: stale revision.\nFix: resend `update_progress` with the current `expected_revision`."), want: 0},
+		"user text is not host text":          {message: api.Message{Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "call `promote_overlay`"}, want: 0},
+		"guide gives a call a stale argument": {message: system("Retry with `update_progress(content=…, timeout_ms=500)`."), want: 1},
+		"guide names a stale dotted argument": {message: system("Set `update_progress.timeout_ms` for slow boards."), want: 1},
+		"guide call reworded":                 {message: system("Retry with `update_progress(content=…, expected_revision=…)`."), want: 0},
 	} {
 		t.Run(name, func(t *testing.T) {
 			req := modelcall.CompletionRequest{Tools: offered, Messages: []api.Message{tc.message}, Debug: modelcall.RequestDebug{ProfileID: prompts.CoordinatorProfileID, Surface: surface.SurfaceImplementPark}}
