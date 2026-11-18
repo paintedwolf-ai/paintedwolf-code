@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/toolvocab"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -15,12 +16,15 @@ func promptBudgetSkillRosterVarsForSet(
 	selector skills.Selector,
 ) map[string]any {
 	t.Helper()
-	loaded, _ := extpacks.LoadEffectiveSkills(extpacks.Active())
+	loaded, err := extpacks.LoadEffectiveSkills(contractcheck.StockCatalog(t))
+	contractcheck.FailErr(t, "load stock skills", err)
 	if len(loaded) == 0 {
 		return nil
 	}
-	loaded = selector.Select(loaded)
-	// Measure the complete applicable catalog exposed without selection.
+	return skillRosterVars(selector.Select(loaded))
+}
+
+func skillRosterVars(loaded []skills.Skill) map[string]any {
 	surface := prompts.AgentPromptSurface{FullCatalog: true}
 	for _, sk := range loaded {
 		surface.Skills = append(surface.Skills, prompts.AgentSkillView{
@@ -53,6 +57,21 @@ func mergePromptBudgetSkillRoster(t *testing.T, vars map[string]any) {
 	)
 }
 
+func mergeReachableSkillRoster(t *testing.T, vars map[string]any, reader prompts.Reader) {
+	t.Helper()
+	loaded, err := extpacks.LoadEffectiveSkills(contractcheck.StockCatalog(t))
+	contractcheck.FailErr(t, "load stock skills", err)
+	reachable := make([]skills.Skill, 0, len(loaded))
+	for _, skill := range loaded {
+		if toolvocab.SkillToolsOffered(skill, reader.Held()) {
+			reachable = append(reachable, skill)
+		}
+	}
+	for key, value := range skillRosterVars(reachable) {
+		vars[key] = value
+	}
+}
+
 func requirePromptBudgetSkillAvailability(t *testing.T, vars map[string]any, what string) {
 	t.Helper()
 	list, ok := vars["agent_skills"].([]map[string]any)
@@ -62,7 +81,6 @@ func requirePromptBudgetSkillAvailability(t *testing.T, vars map[string]any, wha
 }
 
 func TestPromptBudgetFixtureIncludesBundledSkillAvailability(t *testing.T) {
-	contractcheck.ActivateStockCatalog(t)
 	vars := map[string]any{}
 	mergePromptBudgetSkillRoster(t, vars)
 
