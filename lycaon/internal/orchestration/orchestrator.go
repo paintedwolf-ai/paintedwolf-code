@@ -26,6 +26,11 @@ var allTopologyPatterns = []TopologyPattern{
 	TopologyPack,
 }
 
+// AllTopologyPatterns returns a copy of the patterns OrchestratorImpl.Run dispatches.
+func AllTopologyPatterns() []TopologyPattern {
+	return append([]TopologyPattern(nil), allTopologyPatterns...)
+}
+
 // TopologySpec is the config-driven run definition (loaded from YAML or built in code).
 type TopologySpec struct {
 	ID            string
