@@ -12,7 +12,8 @@ import (
 // model: a successful result past the spill cap that carries no truncation
 // receipt is refused, and every other result is fitted to the session wire,
 // whole, truncated with a receipt, or refused.
-func (l *toolBatch) fitToolOutput(ctx context.Context, sess *api.Session, tool string, args map[string]any, content string, succeeded bool) toolResultProjection {
+// ownerRef names the call whose spill an overlay promotion files under.
+func (l *toolBatch) fitToolOutput(ctx context.Context, sess *api.Session, tool, ownerRef string, args map[string]any, content string, succeeded bool) toolResultProjection {
 	maxBytes, maxSpillBytes := l.toolResultLimits(ctx, sess)
 	if succeeded {
 		if code, data := tooloutput.ClassifyEmitReject(tool, args, content, maxSpillBytes); code != "" {
@@ -22,5 +23,5 @@ func (l *toolBatch) fitToolOutput(ctx context.Context, sess *api.Session, tool s
 	}
 	// Compact only after stamping evidence handles.
 	storage := l.Projection.projectToolResultForStorage(ctx, content, args)
-	return l.Tools.truncateToolResultForSession(ctx, tool, storage, content, maxBytes, maxSpillBytes, sess)
+	return l.Tools.truncateToolResultForSession(ctx, tool, ownerRef, storage, content, maxBytes, maxSpillBytes, sess)
 }

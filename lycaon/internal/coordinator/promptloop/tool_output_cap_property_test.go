@@ -58,7 +58,7 @@ func TestEveryCatalogToolResultIsFittedToItsCap(t *testing.T) {
 	for _, tool := range ids {
 		for name, size := range sizes {
 			content := capPropertyOutput(size)
-			got := loop.Batch.fitToolOutput(t.Context(), sess, tool, map[string]any{}, content, true)
+			got := loop.Batch.fitToolOutput(t.Context(), sess, tool, "cap-call", map[string]any{}, content, true)
 			if problem := capPropertyViolation(tool, content, got, hostDir); problem != "" {
 				t.Errorf("%s, %s its cap (%d bytes): %s", tool, name, size, problem)
 			}
