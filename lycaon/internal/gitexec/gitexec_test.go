@@ -15,8 +15,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/gitengine"
-	"github.com/lycaon/lycaon/internal/hostproxy"
-	"github.com/lycaon/lycaon/internal/systemproxy"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -27,19 +25,7 @@ func TestMain(m *testing.M) {
 func useBundledGit(t *testing.T) string {
 	t.Helper()
 	bin := bundledGitBinary(t)
-	binaryPathFn = func() (string, error) { return bin, nil }
-	proxyConfigurationFn = func() hostproxy.Configuration {
-		return hostproxy.Configuration{System: systemproxy.Configuration{Source: systemproxy.SourceNone, Mode: systemproxy.ModeNone}}
-	}
-	t.Cleanup(func() {
-		proxyConfigurationFn = hostproxy.Current
-		binaryPathFn = gitengine.BinaryPath
-		emptyHooksDirFn = gitengine.EmptyHooksDir
-		lfsPathFn = resolveLFSPath
-		SetHostConfig(nil)
-		agentSocketResolver = defaultAgentSocket
-		executablePath = os.Executable
-	})
+	gitengine.TestingEnableBundledBinary()
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	t.Setenv("HOME", t.TempDir()) // isolate ~/.gitconfig
 	return bin
@@ -71,8 +57,9 @@ func bundledGitLFSBinary(t *testing.T) string {
 }
 
 func initRepo(t *testing.T, dir string) {
+	e := productionExecution()
 	t.Helper()
-	out, code, err := Run(t.Context(), dir, []string{"init"}, Opts{})
+	out, code, err := e.run(t.Context(), dir, []string{"init"}, Opts{}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("git init: err=%v code=%d out=%s", err, code, out)
 	}
@@ -86,14 +73,15 @@ func writeFile(t *testing.T, dir, rel, body string) {
 }
 
 func commitWithIdentity(t *testing.T, dir, msg string) {
+	e := productionExecution()
 	t.Helper()
-	out, code, err := Run(t.Context(), dir, []string{"add", "-A"}, Opts{})
+	out, code, err := e.run(t.Context(), dir, []string{"add", "-A"}, Opts{}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("git add: err=%v code=%d out=%s", err, code, out)
 	}
-	out, code, err = Run(t.Context(), dir, []string{"commit", "-m", msg}, Opts{
+	out, code, err = e.run(t.Context(), dir, []string{"commit", "-m", msg}, Opts{
 		Identity: &Identity{Name: "Test User", Email: "test@example.com"},
-	})
+	}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("git commit: err=%v code=%d out=%s", err, code, out)
 	}
@@ -114,9 +102,10 @@ func writeExecutable(t *testing.T, path, body string) {
 }
 
 func TestNeutralizePrefixOrder(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 
-	prefix, err := neutralizeArgs(defaultSSHCommand)
+	prefix, err := e.neutralizeArgs(defaultSSHCommand)
 	testutil.FailErr(t, "neutralizeArgs", err)
 	if len(prefix) != len(neutralizePrefixKeys)*2 {
 		t.Fatalf("prefix len=%d, want %d", len(prefix), len(neutralizePrefixKeys)*2)
@@ -131,12 +120,12 @@ func TestNeutralizePrefixOrder(t *testing.T) {
 		}
 	}
 
-	argv, _, err := buildArgv(t.Context(), t.TempDir(), Opts{
+	argv, _, err := e.buildArgv(t.Context(), t.TempDir(), Opts{
 		ExtraConfig: []string{"foo.bar=baz", "a.b=c"},
 	}, []string{"status", "--porcelain"})
 	testutil.FailErr(t, "buildArgv", err)
 
-	wantTail := append(lfsFilterArgs(), "-c", "foo.bar=baz", "-c", "a.b=c", "status", "--porcelain")
+	wantTail := append(e.lfsFilterArgs(), "-c", "foo.bar=baz", "-c", "a.b=c", "status", "--porcelain")
 	gotTail := argv[len(prefix):]
 	if strings.Join(gotTail, "\x00") != strings.Join(wantTail, "\x00") {
 		t.Fatalf("argv after prefix =\n%q\nwant\n%q", gotTail, wantTail)
@@ -147,16 +136,16 @@ func TestNeutralizePrefixOrder(t *testing.T) {
 }
 
 func TestLFSFilterPrefixWhenPresent(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	lfs := bundledGitLFSBinary(t)
 	st, err := os.Stat(lfs)
 	if err != nil || st.IsDir() || st.Mode()&0o111 == 0 {
 		t.Skip("bundled git-lfs missing — run ./task gitengine:fetch")
 	}
-	lfsPathFn = func() (string, error) { return lfs, nil }
-	t.Cleanup(func() { lfsPathFn = resolveLFSPath })
+	e.lfsPath = func() (string, error) { return lfs, nil }
 
-	args := lfsFilterArgs()
+	args := e.lfsFilterArgs()
 	if len(args) != 8 {
 		t.Fatalf("lfsFilterArgs len=%d, want 8", len(args))
 	}
@@ -174,9 +163,9 @@ func TestLFSFilterPrefixWhenPresent(t *testing.T) {
 		}
 	}
 
-	argv, _, err := buildArgv(t.Context(), t.TempDir(), Opts{}, []string{"status"})
+	argv, _, err := e.buildArgv(t.Context(), t.TempDir(), Opts{}, []string{"status"})
 	testutil.FailErr(t, "buildArgv", err)
-	prefix, err := neutralizeArgs(defaultSSHCommand)
+	prefix, err := e.neutralizeArgs(defaultSSHCommand)
 	testutil.FailErr(t, "neutralizeArgs", err)
 	got := argv[len(prefix) : len(prefix)+len(args)]
 	if strings.Join(got, "\x00") != strings.Join(args, "\x00") {
@@ -255,16 +244,16 @@ func TestLinuxGitTrustsTheFirstReadableHostCABundle(t *testing.T) {
 }
 
 func TestLFSFilterOmittedWhenAbsent(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
-	lfsPathFn = func() (string, error) {
+	e.lfsPath = func() (string, error) {
 		return "", &gitengine.UnavailableError{Reason: "missing"}
 	}
-	t.Cleanup(func() { lfsPathFn = resolveLFSPath })
 
-	if got := lfsFilterArgs(); len(got) != 0 {
+	if got := e.lfsFilterArgs(); len(got) != 0 {
 		t.Fatalf("lfsFilterArgs = %v, want nil when LFS absent", got)
 	}
-	argv, _, err := buildArgv(t.Context(), t.TempDir(), Opts{}, []string{"status"})
+	argv, _, err := e.buildArgv(t.Context(), t.TempDir(), Opts{}, []string{"status"})
 	testutil.FailErr(t, "buildArgv", err)
 	for i := 0; i+1 < len(argv); i++ {
 		if argv[i] == "-c" && strings.HasPrefix(argv[i+1], "filter.lfs.") {
@@ -274,14 +263,14 @@ func TestLFSFilterOmittedWhenAbsent(t *testing.T) {
 }
 
 func TestEngineUnavailablePropagates(t *testing.T) {
+	e := productionExecution()
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	binaryPathFn = func() (string, error) {
+	e.binaryPath = func() (string, error) {
 		return "", &gitengine.UnavailableError{Reason: "missing"}
 	}
-	t.Cleanup(func() { binaryPathFn = gitengine.BinaryPath })
 
 	dir := t.TempDir()
-	_, _, err := Run(t.Context(), dir, []string{"status"}, Opts{})
+	_, _, err := e.run(t.Context(), dir, []string{"status"}, Opts{}, nil)
 	var ue *gitengine.UnavailableError
 	if !errors.As(err, &ue) {
 		t.Fatalf("err = %v (%T), want *gitengine.UnavailableError", err, err)
@@ -292,10 +281,11 @@ func TestEngineUnavailablePropagates(t *testing.T) {
 }
 
 func TestNilHostConfig(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
-	SetHostConfig(nil)
+	e.hostConfig = nil
 
-	argv, _, err := buildArgv(t.Context(), t.TempDir(), Opts{
+	argv, _, err := e.buildArgv(t.Context(), t.TempDir(), Opts{
 		Profile:   ProfileNetwork,
 		RemoteURL: "https://example.com/repo.git",
 	}, []string{"ls-remote", "https://example.com/repo.git"})
@@ -310,33 +300,34 @@ func TestNilHostConfig(t *testing.T) {
 
 	dir := t.TempDir()
 	initRepo(t, dir)
-	out, code, err := Run(t.Context(), dir, []string{"status", "--porcelain"}, Opts{Profile: ProfileNetwork})
+	out, code, err := e.run(t.Context(), dir, []string{"status", "--porcelain"}, Opts{Profile: ProfileNetwork}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("status: err=%v code=%d out=%s", err, code, out)
 	}
 }
 
 func TestIdentityFromEnv(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
 	writeFile(t, dir, "a.txt", "hello\n")
 
-	out, code, err := Run(t.Context(), dir, []string{"add", "a.txt"}, Opts{})
+	out, code, err := e.run(t.Context(), dir, []string{"add", "a.txt"}, Opts{}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("add: err=%v code=%d out=%s", err, code, out)
 	}
-	out, code, err = Run(t.Context(), dir, []string{"commit", "-m", "init"}, Opts{
+	out, code, err = e.run(t.Context(), dir, []string{"commit", "-m", "init"}, Opts{
 		Identity: &Identity{
 			Name:      "Ada Lovelace",
 			Email:     "ada@example.com",
 			Timestamp: time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC),
 		},
-	})
+	}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("commit without configured identity: err=%v code=%d out=%s", err, code, out)
 	}
-	out, code, err = Run(t.Context(), dir, []string{"log", "-1", "--format=%an <%ae>%n%aI%n%cI"}, Opts{})
+	out, code, err = e.run(t.Context(), dir, []string{"log", "-1", "--format=%an <%ae>%n%aI%n%cI"}, Opts{}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("log: err=%v code=%d out=%s", err, code, out)
 	}
@@ -348,6 +339,7 @@ func TestIdentityFromEnv(t *testing.T) {
 }
 
 func TestHooksDoNotRun(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	dir := t.TempDir()
 	initRepo(t, dir)
@@ -362,12 +354,12 @@ func TestHooksDoNotRun(t *testing.T) {
 
 	writeFile(t, dir, "f.txt", "y\n")
 	commitWithIdentity(t, dir, "c2")
-	out, code, err := Run(t.Context(), dir, []string{"rev-parse", "HEAD~1"}, Opts{})
+	out, code, err := e.run(t.Context(), dir, []string{"rev-parse", "HEAD~1"}, Opts{}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("rev-parse: err=%v code=%d out=%s", err, code, out)
 	}
 	sha := strings.TrimSpace(string(out))
-	out, code, err = Run(t.Context(), dir, []string{"checkout", sha}, Opts{})
+	out, code, err = e.run(t.Context(), dir, []string{"checkout", sha}, Opts{}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("checkout: err=%v code=%d out=%s", err, code, out)
 	}
@@ -405,6 +397,7 @@ func TestRepoLocalHooksPathOverridden(t *testing.T) {
 }
 
 func TestPoisonedGlobalConfigInert(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 
 	home := t.TempDir()
@@ -435,8 +428,8 @@ func TestPoisonedGlobalConfigInert(t *testing.T) {
 		{"diff", "HEAD"},
 	}
 	for _, args := range ops {
-		a, codeA, errA := Run(t.Context(), clean, args, Opts{})
-		b, codeB, errB := Run(t.Context(), poisoned, args, Opts{})
+		a, codeA, errA := e.run(t.Context(), clean, args, Opts{}, nil)
+		b, codeB, errB := e.run(t.Context(), poisoned, args, Opts{}, nil)
 		if errA != nil || errB != nil || codeA != 0 || codeB != 0 {
 			t.Fatalf("%v: clean(err=%v code=%d) poisoned(err=%v code=%d)", args, errA, codeA, errB, codeB)
 		}
@@ -456,6 +449,7 @@ func TestPoisonedGlobalConfigInert(t *testing.T) {
 }
 
 func TestNoConfigMutation(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
@@ -470,11 +464,11 @@ func TestNoConfigMutation(t *testing.T) {
 
 	writeFile(t, dir, "a.txt", "1\n")
 	commitWithIdentity(t, dir, "c1")
-	out, code, err := Run(t.Context(), dir, []string{"status"}, Opts{})
+	out, code, err := e.run(t.Context(), dir, []string{"status"}, Opts{}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("status: err=%v code=%d out=%s", err, code, out)
 	}
-	out, code, err = Run(t.Context(), dir, []string{"checkout", "-b", "topic"}, Opts{})
+	out, code, err = e.run(t.Context(), dir, []string{"checkout", "-b", "topic"}, Opts{}, nil)
 	if err != nil || code != 0 {
 		t.Fatalf("checkout: err=%v code=%d out=%s", err, code, out)
 	}
@@ -488,12 +482,13 @@ func TestNoConfigMutation(t *testing.T) {
 }
 
 func TestExtProtocolDenied(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
 	parent := t.TempDir()
 	dest := filepath.Join(parent, "clone-dest")
-	out, code, err := Run(t.Context(), parent, []string{
+	out, code, err := e.run(t.Context(), parent, []string{
 		"clone", "ext::sh -c 'echo pwned >" + filepath.Join(parent, "pwned") + "'", dest,
-	}, Opts{Profile: ProfileNetwork})
+	}, Opts{Profile: ProfileNetwork}, nil)
 	if err != nil {
 		return
 	}
@@ -506,12 +501,12 @@ func TestExtProtocolDenied(t *testing.T) {
 }
 
 func TestHostConfigInjectsHelper(t *testing.T) {
+	e := productionExecution()
 	useBundledGit(t)
-	SetHostConfig(stubHostConfig{helper: "osxkeychain"})
-	executablePath = func() (string, error) { return "/Applications/Painted Wolf Code.app/Contents/MacOS/pw", nil }
-	t.Cleanup(func() { executablePath = os.Executable })
+	e.hostConfig = stubHostConfig{helper: "osxkeychain"}
+	e.executablePath = func() (string, error) { return "/Applications/Painted Wolf Code.app/Contents/MacOS/pw", nil }
 
-	argv, _, err := buildArgv(context.Background(), t.TempDir(), Opts{
+	argv, _, err := e.buildArgv(context.Background(), t.TempDir(), Opts{
 		Profile:   ProfileNetwork,
 		RemoteURL: "https://example.com/r.git",
 	}, []string{"fetch"})
@@ -529,13 +524,10 @@ func TestHostConfigInjectsHelper(t *testing.T) {
 }
 
 func TestBuildEnvRestoresResolvedSSHAgentSocket(t *testing.T) {
-	emptyHooksDirFn = func() (string, error) { return t.TempDir(), nil }
-	t.Cleanup(func() {
-		emptyHooksDirFn = gitengine.EmptyHooksDir
-		agentSocketResolver = defaultAgentSocket
-	})
-	agentSocketResolver = func(context.Context) string { return "/private/tmp/launchd/agent.sock" }
-	env, err := buildEnv(t.Context(), "/bundle/bin/git", Opts{Profile: ProfileNetwork})
+	e := productionExecution()
+	e.emptyHooksDir = func() (string, error) { return t.TempDir(), nil }
+	e.agentSocket = func(context.Context) string { return "/private/tmp/launchd/agent.sock" }
+	env, err := e.buildEnv(t.Context(), "/bundle/bin/git", Opts{Profile: ProfileNetwork})
 	testutil.FailErr(t, "buildEnv", err)
 	found := false
 	for _, entry := range env {

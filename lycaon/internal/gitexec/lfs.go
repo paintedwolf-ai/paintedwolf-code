@@ -5,19 +5,10 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/gitengine"
 )
 
-// EnvLFSForceAbsent simulates an absent helper in tests.
-const EnvLFSForceAbsent = "LYCAON_GIT_LFS_FORCE_ABSENT"
-
-var lfsPathFn = resolveLFSPath
-
 func resolveLFSPath() (string, error) {
-	if lfsForceAbsentArmed() {
-		return "", os.ErrNotExist
-	}
 	path, err := gitengine.LFSPath()
 	if err != nil {
 		return "", err
@@ -32,21 +23,9 @@ func resolveLFSPath() (string, error) {
 	return path, nil
 }
 
-func lfsForceAbsentArmed() bool {
-	return configdir.EnvTruthy(os.Getenv(gitengine.EnvTest)) &&
-		configdir.EnvTruthy(os.Getenv(EnvLFSForceAbsent))
-}
-
-// TestingUseLFSPath sets the helper path for tests.
-func TestingUseLFSPath(path string) (restore func()) {
-	prev := lfsPathFn
-	lfsPathFn = func() (string, error) { return path, nil }
-	return func() { lfsPathFn = prev }
-}
-
 // lfsFilterArgs returns transient filter settings when the helper is available.
-func lfsFilterArgs() []string {
-	path, err := lfsPathFn()
+func (e execution) lfsFilterArgs() []string {
+	path, err := e.lfsPath()
 	if err != nil || path == "" {
 		return nil
 	}
