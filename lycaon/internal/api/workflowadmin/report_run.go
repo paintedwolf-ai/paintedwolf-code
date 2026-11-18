@@ -56,7 +56,7 @@ func (s *Reports) BuildRunReportInput(ctx context.Context, runID string) (report
 			return input, ok, err
 		}
 	}
-	msgs, err := s.Store.Transcript.GetMessages(ctx, run.SessionID)
+	msgs, err := s.TranscriptStore.GetMessages(ctx, run.SessionID)
 	if err != nil {
 		return report.ReportInput{}, false, err
 	}
@@ -64,7 +64,7 @@ func (s *Reports) BuildRunReportInput(ctx context.Context, runID string) (report
 	if completion == nil {
 		return report.ReportInput{}, false, nil
 	}
-	sess, _ := s.Store.Sessions.Get(ctx, run.SessionID)
+	sess, _ := s.SessionStore.Get(ctx, run.SessionID)
 
 	name := strings.TrimSpace(manifest.Name)
 	if name == "" {

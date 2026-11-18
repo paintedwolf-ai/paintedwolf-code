@@ -40,7 +40,7 @@ func TestBuildRegisteredTurnToolsUseSessionLoading(t *testing.T) {
 			if err != nil && toolrejection.AsToolReject(err) == nil {
 				testutil.FailErr(t, "run registered turn tool", err)
 			}
-			receipt, found, err := app.Sessions.Store.Turns.LatestTurnLoadReceipt(t.Context(), sess.ID)
+			receipt, found, err := store.NewSQL(app.DB).Turns.LatestTurnLoadReceipt(t.Context(), sess.ID)
 			testutil.FailErr(t, "read durable turn receipt", err)
 			if !found || receipt.Trigger != route.trigger || receipt.ToolCallID != callID {
 				t.Fatalf("registered %s bypassed session loading: receipt=%+v, found=%v", route.tool, receipt, found)

@@ -41,7 +41,7 @@ func (s *RunControl) HandleStartWorkflowRun(w http.ResponseWriter, r *http.Reque
 		s.responses.Fail(w, wire.ApiErrorCodeInvalidRequest, "workflow_id and workflow_version are required")
 		return
 	}
-	sess, ok := requestscope.Session(s.Store.Sessions, s.responses, w, r, sessionID)
+	sess, ok := requestscope.Session(s.SessionStore, s.responses, w, r, sessionID)
 	if !ok {
 		return
 	}
@@ -88,7 +88,7 @@ func (s *RunControl) HandleExitWorkflowRun(w http.ResponseWriter, r *http.Reques
 
 func (s *RunControl) HandleGetActiveWorkflowRun(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	if !requestscope.SessionExists(s.Store.Sessions, s.responses, w, r, sessionID) {
+	if !requestscope.SessionExists(s.SessionStore, s.responses, w, r, sessionID) {
 		return
 	}
 	run, err := s.Workflows.Store.Runs.ActiveBySession(r.Context(), sessionID)

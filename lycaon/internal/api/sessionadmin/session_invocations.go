@@ -15,7 +15,7 @@ var invocationLimitBounds = httpio.MustPageLimit(50, 1, 500)
 
 func (s *Transcript) HandleListSessionInvocations(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	if _, err := s.Store.Sessions.Get(r.Context(), sessionID); err != nil {
+	if _, err := s.SessionStore.Get(r.Context(), sessionID); err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")
 			return

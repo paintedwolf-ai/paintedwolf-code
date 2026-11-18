@@ -36,7 +36,7 @@ func (s *Inventory) listAskQuiets(ctx context.Context, chat string) map[string]w
 		if q.ChatSessionID != "" {
 			if cached, ok := titles[q.ChatSessionID]; ok {
 				title = cached
-			} else if sess, err := s.Store.Sessions.Get(ctx, q.ChatSessionID); err == nil && sess != nil {
+			} else if sess, err := s.SessionStore.Get(ctx, q.ChatSessionID); err == nil && sess != nil {
 				title = sess.Title
 				titles[q.ChatSessionID] = title
 			}
@@ -62,7 +62,7 @@ func (s *Inventory) fillGrantSessionTitles(ctx context.Context, grants []wire.Ap
 		}
 		title, seen := titles[id]
 		if !seen {
-			if sess, err := s.Store.Sessions.Get(ctx, id); err == nil && sess != nil {
+			if sess, err := s.SessionStore.Get(ctx, id); err == nil && sess != nil {
 				title = sess.Title
 			}
 			titles[id] = title

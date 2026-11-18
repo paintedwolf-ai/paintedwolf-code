@@ -51,7 +51,7 @@ func (s *Inventory) HandleListApprovalAsks(w http.ResponseWriter, r *http.Reques
 			if _, seen := sessions[ev.SessionID]; seen {
 				continue
 			}
-			sess, err := s.Store.Sessions.Get(r.Context(), ev.SessionID)
+			sess, err := s.SessionStore.Get(r.Context(), ev.SessionID)
 			sessions[ev.SessionID] = err == nil && sess != nil && strings.TrimSpace(sess.ProjectID) == projectID
 		}
 	}

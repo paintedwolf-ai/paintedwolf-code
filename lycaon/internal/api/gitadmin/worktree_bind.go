@@ -124,7 +124,7 @@ func (s *Handler) HandleGitWorktreeBind(w http.ResponseWriter, r *http.Request) 
 		CreatedAt:    time.Now().UTC(),
 	}
 	// Persist the binding first so partial creation remains recoverable.
-	if err := s.SessionStore.Sessions.PutWorktreeBinding(r.Context(), row); err != nil {
+	if err := s.SessionStore.PutWorktreeBinding(r.Context(), row); err != nil {
 		s.responses.InternalError(w, r, err)
 		return
 	}
@@ -133,7 +133,7 @@ func (s *Handler) HandleGitWorktreeBind(w http.ResponseWriter, r *http.Request) 
 		_, statErr := os.Stat(path)
 		createdNothing := branchErr == nil && !branchExists && errors.Is(statErr, os.ErrNotExist)
 		if createdNothing {
-			if deleteErr := s.SessionStore.Sessions.DeleteWorktreeBinding(r.Context(), scope.sess.ID); deleteErr != nil {
+			if deleteErr := s.SessionStore.DeleteWorktreeBinding(r.Context(), scope.sess.ID); deleteErr != nil {
 				s.responses.Logger.ErrorContext(r.Context(), "worktree bind row rollback failed", "session_id", scope.sess.ID, "cause", err, "rollback_error", deleteErr)
 			}
 		} else {

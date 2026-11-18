@@ -106,7 +106,7 @@ func (s *Lifecycle) createPreparingSession(ctx context.Context, req wire.CreateS
 		}
 		req.WorkspaceRootID = rootID
 	}
-	sess, err := s.Store.Sessions.CreateWithStatus(ctx, req, projectID, wire.SessionStatusPreparing)
+	sess, err := s.SessionStore.CreateWithStatus(ctx, req, projectID, wire.SessionStatusPreparing)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func (s *Lifecycle) prepareCreatedSession(parent context.Context, req wire.Creat
 			notice := wire.NewSessionHostError(wire.NoticeCodeSessionPreparationFailed)
 			hostError = &notice
 		}
-		updateErr := s.Store.Sessions.SetSessionStatusEvent(ctx, sess.ID, status, hostError)
+		updateErr := s.SessionStore.SetSessionStatusEvent(ctx, sess.ID, status, hostError)
 		if updateErr != nil {
 			slog.ErrorContext(ctx, "finish session preparation", "session_id", sess.ID, "err", updateErr)
 			return
@@ -179,7 +179,7 @@ func (s *Lifecycle) publishSessionPrepared(ctx context.Context, sess *wire.Sessi
 	if s.Events == nil || sess == nil {
 		return
 	}
-	if sessionMutationEventsOutboxed(s.Store) {
+	if s.SessionStore.SessionEventsOutboxed() {
 		return
 	}
 	event := wire.SessionEvent{
@@ -224,7 +224,7 @@ func (s *Lifecycle) MaterializeSession(
 	}
 	projectview.PublishTouch(s.Projects, s.Events, ctx, projectID)
 
-	sess, err := s.Store.Sessions.Create(ctx, req, projectID)
+	sess, err := s.SessionStore.Create(ctx, req, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +235,7 @@ func (s *Lifecycle) MaterializeSession(
 	}()
 	s.SessionView.HydrateSessionWorkspace(ctx, sess)
 	if path := strings.TrimSpace(sess.WorkspacePath); path != "" {
-		if err := s.Store.Sessions.UpdateSession(ctx, sess.ID, func(st *wire.Session) {
+		if err := s.SessionStore.UpdateSession(ctx, sess.ID, func(st *wire.Session) {
 			st.WorkspacePath = path
 			st.WorkspaceRootID = strings.TrimSpace(sess.WorkspaceRootID)
 		}); err != nil {
@@ -247,7 +247,7 @@ func (s *Lifecycle) MaterializeSession(
 
 func (s *Lifecycle) DiscardMaterializedSession(ctx context.Context, sessionID string) {
 	cleanupCtx := context.WithoutCancel(ctx)
-	if err := s.Store.Sessions.Delete(cleanupCtx, sessionID); err != nil {
+	if err := s.SessionStore.Delete(cleanupCtx, sessionID); err != nil {
 		slog.WarnContext(cleanupCtx, "discard incomplete session", "session_id", sessionID, "err", err)
 	}
 }
@@ -279,7 +279,7 @@ func (s *Lifecycle) PublishSessionCreated(ctx context.Context, sess *wire.Sessio
 	if s.Events == nil || sess == nil {
 		return
 	}
-	if sessionMutationEventsOutboxed(s.Store) {
+	if s.SessionStore.SessionEventsOutboxed() {
 		return
 	}
 	key := events.PublishKey{Project: strings.TrimSpace(sess.ProjectID), Session: sess.ID}
@@ -290,10 +290,6 @@ func (s *Lifecycle) PublishSessionCreated(ctx context.Context, sess *wire.Sessio
 		Title:     sess.Title,
 		Status:    sess.Status,
 	})
-}
-
-func sessionMutationEventsOutboxed(store *sessionstore.Repositories) bool {
-	return store != nil && store.Sessions.SessionEventsOutboxed()
 }
 
 func (s *Lifecycle) WriteSessionCreationError(w http.ResponseWriter, r *http.Request, err error) {

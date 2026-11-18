@@ -72,20 +72,21 @@ type Composition struct {
 	Persister      *workflowcomposition.Persister
 	SessionView    *sessionview.Projector
 	Sessions       *session.Host
-	Store          *sessionstore.Repositories
+	SessionStore   sessionstore.SessionRepository
 	responses      *httpio.Responder
 }
 
 type Reports struct {
-	RunControl  *RunControl
-	Projects    project.Registry
-	Runs        *runstate.Repository
-	Scans       scan.ScanCoordinator
-	Store       *sessionstore.Repositories
-	VisualStore visual.Store
-	Workers     worker.WorkerQueue
-	Workflows   *workflow.RunManager
-	responses   *httpio.Responder
+	RunControl      *RunControl
+	Projects        project.Registry
+	Runs            *runstate.Repository
+	Scans           scan.ScanCoordinator
+	SessionStore    sessionstore.SessionRepository
+	TranscriptStore sessionstore.TranscriptRepository
+	VisualStore     visual.Store
+	Workers         worker.WorkerQueue
+	Workflows       *workflow.RunManager
+	responses       *httpio.Responder
 }
 
 type RunControl struct {
@@ -95,7 +96,7 @@ type RunControl struct {
 	Runs           *runstate.Repository
 	SessionView    *sessionview.Projector
 	Sessions       *session.Host
-	Store          *sessionstore.Repositories
+	SessionStore   sessionstore.SessionRepository
 	Topology       *Topology
 	Workflows      *workflow.RunManager
 	responses      *httpio.Responder
@@ -105,7 +106,7 @@ type Topology struct {
 	Requests           *workflowinputs.Requests
 	Orchestrator       orchestration.Orchestrator
 	Runs               *runstate.Repository
-	Store              *sessionstore.Repositories
+	SessionStore       sessionstore.SessionRepository
 	activeTopologyRuns sync.Map // workflow run id → struct{} while topology settlement is executing
 	background         *taskgroup.Group
 }
@@ -118,15 +119,16 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 		httpio.Required{Name: "Projects", Present: deps.Projects != nil},
 		httpio.Required{Name: "Runs", Present: deps.Runs != nil},
 		httpio.Required{Name: "Sessions", Present: deps.Sessions != nil},
-		httpio.Required{Name: "Store", Present: deps.Store != nil},
+		httpio.Required{Name: "Store.Sessions", Present: deps.Store != nil && deps.Store.Sessions != nil},
+		httpio.Required{Name: "Store.Transcript", Present: deps.Store != nil && deps.Store.Transcript != nil},
 		httpio.Required{Name: "Workflows", Present: deps.Workflows != nil},
 	)
 	h := Handler{}
 	h.BlueprintRoutes = &BlueprintRoutes{Runs: deps.Runs, Blueprints: deps.Blueprints, Catalog: deps.Catalog, Projects: deps.Projects, SessionAdmin: deps.SessionAdmin.Lifecycle, Workflows: deps.Workflows, responses: responses}
-	h.Composition = &Composition{Composer: deps.Composer, EventPublisher: deps.EventPublisher, Persister: deps.Persister, SessionView: deps.SessionView, Sessions: deps.Sessions, Store: deps.Store, responses: responses}
-	h.Reports = &Reports{Runs: deps.Runs, Projects: deps.Projects, Scans: deps.Scans, Store: deps.Store, VisualStore: deps.VisualStore, Workers: deps.Workers, Workflows: deps.Workflows, responses: responses}
-	h.RunControl = &RunControl{Runs: deps.Runs, Catalog: deps.Catalog, ManagedSecrets: deps.ManagedSecrets, Projects: deps.Projects, SessionView: deps.SessionView, Sessions: deps.Sessions, Store: deps.Store, Workflows: deps.Workflows, responses: responses}
-	h.Topology = &Topology{Requests: deps.Workflows.Requests, Runs: deps.Runs, Orchestrator: deps.Orchestrator, Store: deps.Store, background: background}
+	h.Composition = &Composition{Composer: deps.Composer, EventPublisher: deps.EventPublisher, Persister: deps.Persister, SessionView: deps.SessionView, Sessions: deps.Sessions, SessionStore: deps.Store.Sessions, responses: responses}
+	h.Reports = &Reports{Runs: deps.Runs, Projects: deps.Projects, Scans: deps.Scans, SessionStore: deps.Store.Sessions, TranscriptStore: deps.Store.Transcript, VisualStore: deps.VisualStore, Workers: deps.Workers, Workflows: deps.Workflows, responses: responses}
+	h.RunControl = &RunControl{Runs: deps.Runs, Catalog: deps.Catalog, ManagedSecrets: deps.ManagedSecrets, Projects: deps.Projects, SessionView: deps.SessionView, Sessions: deps.Sessions, SessionStore: deps.Store.Sessions, Workflows: deps.Workflows, responses: responses}
+	h.Topology = &Topology{Requests: deps.Workflows.Requests, Runs: deps.Runs, Orchestrator: deps.Orchestrator, SessionStore: deps.Store.Sessions, background: background}
 
 	h.BlueprintRoutes.Topology = h.Topology
 

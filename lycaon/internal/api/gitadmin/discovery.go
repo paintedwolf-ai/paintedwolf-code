@@ -89,7 +89,7 @@ func (s *Handler) requireGitRepoQuery(w http.ResponseWriter, r *http.Request) (g
 		return git.RepoRef{}, nil, false
 	}
 	repoID := strings.TrimSpace(chi.URLParam(r, "repo_id"))
-	scope, err := requestscope.ResolveSessionProject(s.SessionStore.Sessions, r.Context(), p, sessionID)
+	scope, err := requestscope.ResolveSessionProject(s.SessionStore, r.Context(), p, sessionID)
 	if err != nil {
 		s.WriteGitReposLoadError(w, r, err)
 		return git.RepoRef{}, nil, false
@@ -114,7 +114,7 @@ func (s *Handler) LoadOrderedRepos(ctx context.Context, p *project.Project, root
 	var bindingRepoID string
 	var bindingPath string
 	if sessionID != "" {
-		scope, err := requestscope.ResolveSessionProject(s.SessionStore.Sessions, ctx, p, sessionID)
+		scope, err := requestscope.ResolveSessionProject(s.SessionStore, ctx, p, sessionID)
 		if err != nil {
 			return nil, err
 		}
@@ -192,7 +192,7 @@ func (s *Handler) activeRootIDFromSession(ctx context.Context, sessionID string)
 	if sessionID == "" {
 		return ""
 	}
-	sess, err := s.SessionStore.Sessions.Get(ctx, sessionID)
+	sess, err := s.SessionStore.Get(ctx, sessionID)
 	if err != nil || sess == nil {
 		return ""
 	}

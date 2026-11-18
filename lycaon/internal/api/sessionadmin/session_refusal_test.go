@@ -142,10 +142,10 @@ func TestSessionReadsAndAbortRefuseMissingChatBeforeProjection(t *testing.T) {
 	deps := apitestdeps.Deps{}
 	apitestdeps.Fill(t, &deps)
 	responses := &httpio.Responder{Logger: slog.New(slog.DiscardHandler)}
-	bootstrap := &Bootstrap{Store: deps.Store, responses: responses}
-	transcript := &Transcript{Store: deps.Store, Invocations: deps.Invocations, responses: responses}
+	bootstrap := &Bootstrap{SessionStore: deps.Store.Sessions, responses: responses}
+	transcript := &Transcript{SessionStore: deps.Store.Sessions, Invocations: deps.Invocations, responses: responses}
 	lifecycle := &Lifecycle{Sessions: deps.Sessions, responses: responses}
-	navigation := &Navigation{Store: deps.Store, responses: responses}
+	navigation := &Navigation{SessionStore: deps.Store.Sessions, responses: responses}
 	for _, tc := range []struct {
 		handle http.HandlerFunc
 		body   string
@@ -178,10 +178,10 @@ func TestSessionReadsAndAbortRefuseMissingChatBeforeProjection(t *testing.T) {
 		route.URLParams.Add("program_id", "missing")
 		req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, route))
 		rec := httptest.NewRecorder()
-		(&Transcript{Store: deps.Store, Invocations: deps.Invocations, responses: responses}).HandleGetCommandProgramReceipt(rec, req)
+		(&Transcript{SessionStore: deps.Store.Sessions, Invocations: deps.Invocations, responses: responses}).HandleGetCommandProgramReceipt(rec, req)
 		if tc.invocations == nil {
 			rec = httptest.NewRecorder()
-			(&Transcript{Store: deps.Store, responses: responses}).HandleGetCommandProgramReceipt(rec, req)
+			(&Transcript{SessionStore: deps.Store.Sessions, responses: responses}).HandleGetCommandProgramReceipt(rec, req)
 		}
 		if rec.Code != tc.wantStatus {
 			t.Fatalf("target=%s status=%d want=%d", tc.target, rec.Code, tc.wantStatus)

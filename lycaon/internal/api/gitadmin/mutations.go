@@ -50,7 +50,7 @@ func (s *Handler) HandleGitCheckout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if sessionID := strings.TrimSpace(r.URL.Query().Get("session_id")); sessionID != "" {
-		_, bound, err := s.SessionStore.Sessions.GetWorktreeBinding(r.Context(), sessionID)
+		_, bound, err := s.SessionStore.GetWorktreeBinding(r.Context(), sessionID)
 		if err != nil {
 			s.responses.InternalError(w, r, err)
 			return

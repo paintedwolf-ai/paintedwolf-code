@@ -33,7 +33,7 @@ func TestSessionSeenOffersPreparationAfterSuccessfulLookup(t *testing.T) {
 		preparation.Stop()
 		testutil.FailErr(t, "join preparation", preparation.Wait(context.Background()))
 	})
-	handler := &Transcript{Store: deps.Store, Sessions: deps.Sessions, Projects: deps.Projects, responses: &httpio.Responder{}}
+	handler := &Transcript{SessionStore: deps.Store.Sessions, Sessions: deps.Sessions, Projects: deps.Projects, responses: &httpio.Responder{}}
 	req := httptest.NewRequest(http.MethodPost, "/v1/sessions/"+sess.ID+"/seen", nil)
 	route := chi.NewRouteContext()
 	route.URLParams.Add("id", sess.ID)

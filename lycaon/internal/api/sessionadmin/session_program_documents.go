@@ -96,7 +96,7 @@ func (s *Transcript) HandleSearchCommandReceiptDocument(w http.ResponseWriter, r
 }
 
 func (s *Transcript) receiptDocumentRequest(w http.ResponseWriter, r *http.Request) (invocation.ProgramReader, []invocation.ReceiptScope, bool) {
-	if _, err := s.Store.Sessions.Get(r.Context(), chi.URLParam(r, "id")); err != nil {
+	if _, err := s.SessionStore.Get(r.Context(), chi.URLParam(r, "id")); err != nil {
 		if errors.Is(err, store.ErrSessionNotFound) {
 			s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")
 			return nil, nil, false

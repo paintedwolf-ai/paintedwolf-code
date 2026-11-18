@@ -140,7 +140,7 @@ func PostWorktreeJSON(t *testing.T, srv *hostapi.Server, path string, body any) 
 }
 
 type PutFailStore struct {
-	*store.Repositories
+	store.SessionRepository
 	FailPut bool
 }
 
@@ -148,7 +148,7 @@ func (s *PutFailStore) PutWorktreeBinding(ctx context.Context, b store.WorktreeB
 	if s.FailPut {
 		return errors.New("injected put failure")
 	}
-	return s.Store.PutWorktreeBinding(ctx, b)
+	return s.SessionRepository.PutWorktreeBinding(ctx, b)
 }
 
 func RemoveWorktree(t *testing.T, srv *hostapi.Server, sessionID string) *httptest.ResponseRecorder {

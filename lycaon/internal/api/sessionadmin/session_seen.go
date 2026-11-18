@@ -18,7 +18,7 @@ import (
 func (s *Transcript) HandleMarkSessionSeen(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	seenAt := time.Now().UTC()
-	err := s.Store.Sessions.UpdateSession(r.Context(), id, func(sess *wire.Session) {
+	err := s.SessionStore.UpdateSession(r.Context(), id, func(sess *wire.Session) {
 		sess.SeenAt = &seenAt
 	})
 	if err != nil {
@@ -31,7 +31,7 @@ func (s *Transcript) HandleMarkSessionSeen(w http.ResponseWriter, r *http.Reques
 	}
 	// Complete the response lookup after client disconnect.
 	ctx := context.WithoutCancel(r.Context())
-	sess, err := s.Store.Sessions.Get(ctx, id)
+	sess, err := s.SessionStore.Get(ctx, id)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return

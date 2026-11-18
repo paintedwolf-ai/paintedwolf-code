@@ -201,15 +201,15 @@ func TestGitWorktreeBindRollsBack(t *testing.T) {
 
 	dir := contractfixture.InitCommittedRepoDir(t)
 	sessionStore := sessionFixture
-	failing := &contractfixture.PutFailStore{Store: sessionStore, FailPut: true}
+	sessionStore.Sessions = &contractfixture.PutFailStore{SessionRepository: sessionStore.Sessions, FailPut: true}
 	mock := llm.NewMockProvider(contractfixture.TestMockConfig(t))
-	mgr := session.NewHost(failing, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
+	mgr := session.NewHost(sessionStore, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	contractfixture.WireTestBindingRegistry(t)
 	reg := project.NewSQLRegistry(sessionFixture.DB())
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
 	testutil.FailErr(t, "open", err)
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{
-		Store: failing, Projects: reg, Sessions: mgr, UserNotices: contractfixture.TestUserNotices(t)}, Storage: hostapi.StorageDependencies{DataDir: t.TempDir()}, Workflow: hostapi.WorkflowDependencies{
+		Store: sessionStore, Projects: reg, Sessions: mgr, UserNotices: contractfixture.TestUserNotices(t)}, Storage: hostapi.StorageDependencies{DataDir: t.TempDir()}, Workflow: hostapi.WorkflowDependencies{
 		Board: contractfixture.NewGitBoard(), RepoSetCache: git.NewRepoSetCache(git.DefaultStatusCacheTTL)}}), nil, hostapi.TestAPIToken)
 
 	body := `{"project_id":"` + p.ID + `","posture":"build"}`

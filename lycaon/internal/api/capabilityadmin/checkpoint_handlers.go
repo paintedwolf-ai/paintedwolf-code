@@ -22,7 +22,7 @@ import (
 
 func (s *CheckpointActions) HandleListCheckpoints(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	if !requestscope.SessionExists(s.Store.Sessions, s.responses, w, r, sessionID) {
+	if !requestscope.SessionExists(s.SessionStore, s.responses, w, r, sessionID) {
 		return
 	}
 	status := strings.TrimSpace(r.URL.Query().Get("status"))
@@ -70,7 +70,7 @@ func (s *CheckpointActions) HandleListCheckpoints(w http.ResponseWriter, r *http
 
 func (s *CheckpointActions) HandleResolveCheckpoint(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	if !requestscope.SessionExists(s.Store.Sessions, s.responses, w, r, sessionID) {
+	if !requestscope.SessionExists(s.SessionStore, s.responses, w, r, sessionID) {
 		return
 	}
 	checkpointID := chi.URLParam(r, "checkpoint_id")
@@ -80,7 +80,7 @@ func (s *CheckpointActions) HandleResolveCheckpoint(w http.ResponseWriter, r *ht
 		return
 	}
 	req.Guidance = observability.RedactCaptureText(req.Guidance)
-	secretBlock, err := secretview.ReferenceBlock(s.Store.Sessions, s.ManagedSecrets, r.Context(), sessionID, req.Secrets)
+	secretBlock, err := secretview.ReferenceBlock(s.SessionStore, s.ManagedSecrets, r.Context(), sessionID, req.Secrets)
 	if err != nil {
 		secretview.WriteError(s.responses, w, r, err)
 		return
@@ -127,7 +127,7 @@ func (s *CheckpointActions) HandleResolveCheckpoint(w http.ResponseWriter, r *ht
 // answer it.
 func (s *CheckpointActions) HandleBeginUnlockChallenge(w http.ResponseWriter, r *http.Request) {
 	sessionID := chi.URLParam(r, "id")
-	if !requestscope.SessionExists(s.Store.Sessions, s.responses, w, r, sessionID) {
+	if !requestscope.SessionExists(s.SessionStore, s.responses, w, r, sessionID) {
 		return
 	}
 	var body wire.BeginUnlockChallengeRequest

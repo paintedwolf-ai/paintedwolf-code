@@ -31,7 +31,14 @@ type Deps struct {
 }
 
 type Handler struct {
-	Deps
+	Board           *board.SnapshotBuilder
+	CommitDrafter   compaction.Summarizer
+	LLMService      *llm.Service
+	ProjectRegistry project.Registry
+	RepoSetCache    *git.RepoSetCache
+	SessionStore    sessionstore.SessionRepository
+	Sessions        *session.Host
+	DataDir         string
 	// git is the board's Git manager; worktree verbs need the concrete manager.
 	git       *git.Manager
 	responses *httpio.Responder
@@ -50,10 +57,15 @@ func New(responses *httpio.Responder, deps Deps) Handler {
 		httpio.Required{Name: "Board.StatusCache", Present: deps.Board != nil && deps.Board.StatusCache != nil},
 		httpio.Required{Name: "LLMService", Present: deps.LLMService != nil},
 		httpio.Required{Name: "ProjectRegistry", Present: deps.ProjectRegistry != nil},
-		httpio.Required{Name: "SessionStore", Present: deps.SessionStore != nil},
+		httpio.Required{Name: "SessionStore.Sessions", Present: deps.SessionStore != nil && deps.SessionStore.Sessions != nil},
 		httpio.Required{Name: "Sessions", Present: deps.Sessions != nil},
 	)
-	return Handler{Deps: deps, git: manager, responses: responses}
+	return Handler{
+		Board: deps.Board, CommitDrafter: deps.CommitDrafter, LLMService: deps.LLMService,
+		ProjectRegistry: deps.ProjectRegistry, RepoSetCache: deps.RepoSetCache,
+		SessionStore: deps.SessionStore.Sessions, Sessions: deps.Sessions, DataDir: deps.DataDir,
+		git: manager, responses: responses,
+	}
 }
 
 // Manager returns the board's Git manager, the one every read goes through.
