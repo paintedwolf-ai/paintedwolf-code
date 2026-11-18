@@ -48,7 +48,7 @@ func artifactEvidenceFixture(t *testing.T) (desktopArtifact, string) {
 		sum := sha256.Sum256(raw)
 		return path, hex.EncodeToString(sum[:])
 	}
-	_, manifestHash := write("manifest.json", pkgmanifest.Manifest{FormatVersion: pkgmanifest.FormatVersion, Package: "painted-wolf-code", Version: "1.0.3", Architecture: fixtureArchitecture(), InstallRoot: "/opt/painted-wolf-code", Executables: executables, Payload: payload})
+	_, manifestHash := write("manifest.json", pkgmanifest.Manifest{FormatVersion: pkgmanifest.FormatVersion, Package: "painted-wolf-code", Version: "1.0.3", Architecture: fixtureArchitecture(t), InstallRoot: "/opt/painted-wolf-code", Executables: executables, Payload: payload})
 	job, jobHash := write("job.json", map[string]any{"job_id": "own-build", "arguments": []string{"den:bundle"}})
 	result, resultHash := write("result.json", map[string]any{"job_id": "own-build", "state": "completed", "exit_code": 0})
 	tree := strings.Repeat("a", 40)

@@ -26,8 +26,8 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
-	"github.com/lycaon/lycaon/internal/platformfloor"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -199,9 +199,13 @@ func stageFixtureGeneration(dir, version string, binaries []string, extra []byte
 		digest, length := sum, size
 		payload = append(payload, pkgmanifest.PayloadEntry{Path: "bin/" + role.name, Kind: "file", Mode: 0o755, SHA256: &digest, Size: &length})
 	}
+	arch, err := releaseFixtureArchitecture()
+	if err != nil {
+		return err
+	}
 	manifest := pkgmanifest.Manifest{
 		FormatVersion: pkgmanifest.FormatVersion, Package: "painted-wolf-code", Version: version,
-		Architecture: fixtureArchitecture(), InstallRoot: install, Executables: executables, Payload: payload,
+		Architecture: arch, InstallRoot: install, Executables: executables, Payload: payload,
 	}
 	raw, err := json.Marshal(manifest)
 	if err != nil {
@@ -308,9 +312,35 @@ func runVaultServer(dir, vaultBin, uidStr, gidStr string) error {
 	return syscall.Exec(vaultBin, args, []string{"PATH=/usr/bin:/bin"})
 }
 
-func fixtureArchitecture() string {
-	arch, _ := platformfloor.ELFArchForGoArch(runtime.GOARCH)
+func fixtureArchitecture(t *testing.T) string {
+	t.Helper()
+	arch, err := releaseFixtureArchitecture()
+	testutil.FailErr(t, "read release architecture", err)
 	return arch
+}
+
+func releaseFixtureArchitecture() (string, error) {
+	path := filepath.Join(configlayout.FindModuleRoot(), "..", "packaging", "release-platforms.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	var catalog struct {
+		Platforms []struct {
+			OperatingSystem string `json:"goos"`
+			GoArch          string `json:"goarch"`
+			ArtifactArch    string `json:"artifact_arch"`
+		} `json:"platforms"`
+	}
+	if err := json.Unmarshal(data, &catalog); err != nil {
+		return "", err
+	}
+	for _, platform := range catalog.Platforms {
+		if platform.OperatingSystem == runtime.GOOS && platform.GoArch == runtime.GOARCH && platform.ArtifactArch != "" {
+			return platform.ArtifactArch, nil
+		}
+	}
+	return "", fmt.Errorf("release catalog has no architecture for %s/%s", runtime.GOOS, runtime.GOARCH)
 }
 
 // sudoFixture runs this test binary's fixture mode as root.
