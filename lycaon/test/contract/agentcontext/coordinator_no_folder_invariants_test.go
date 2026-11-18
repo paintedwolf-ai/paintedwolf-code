@@ -128,7 +128,7 @@ func renderCoordinatorTripartiteForRunContextWithRoots(
 	t.Helper()
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	var profile surface.TurnProfile
-	runCtx = surface.EnrichRunContextForWorkflow(runCtx)
+	runCtx = bindFixturePhase(t, runCtx)
 	if strings.TrimSpace(forcedSurfaceID) != "" {
 		profile = surface.ResolveTurnProfileForSurface(forcedSurfaceID, runCtx, sess)
 	} else {

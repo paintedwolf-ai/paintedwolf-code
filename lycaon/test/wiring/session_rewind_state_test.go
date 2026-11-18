@@ -180,13 +180,10 @@ func TestRewindPastAWorkerDispatchLeavesNoGhostState(t *testing.T) {
 	if paths := h.Sessions.Manager.Workers.Workspaces.Touches.Paths(jobID); len(paths) != 0 {
 		t.Fatalf("touch ledger still holds %v for a job whose dispatch was rewound", paths)
 	}
-	// Pending-overlay state is derived from the transcript, so the truncate is
-	// what clears it — assert the derived view, not a private field.
-	msgs := mustMessages(t, h, ctx, sess.ID)
-	if ids := surface.PendingOverlaySummaryIDs(msgs); len(ids) != 0 {
-		t.Fatalf("overlays still pending after rewind: %v", ids)
-	}
 	state := implementState(t, h, ctx, sess.ID)
+	if len(state.PendingOverlayIDs) != 0 {
+		t.Fatalf("overlays still pending after rewind: %v", state.PendingOverlayIDs)
+	}
 	if state.BatchPhase != "pre_dispatch" {
 		t.Fatalf("batch_phase = %q, want pre_dispatch", state.BatchPhase)
 	}

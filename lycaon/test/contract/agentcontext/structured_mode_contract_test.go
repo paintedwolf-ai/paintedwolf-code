@@ -12,8 +12,8 @@ import (
 
 func TestTurnProfileActiveVsInactivePlan(t *testing.T) {
 	t.Parallel()
-	inactive := surface.ResolveTurnProfile(surface.EnrichRunContextForWorkflow(api.CoordinatorRunContext{}), &api.Session{Posture: api.SessionPostureBuild}, coordinatorTurnHistory(nil, "Hello"))
-	active := surface.ResolveTurnProfile(surface.EnrichRunContextForWorkflow(api.CoordinatorRunContext{
+	inactive := surface.ResolveTurnProfile(bindFixturePhase(t, api.CoordinatorRunContext{}), &api.Session{Posture: api.SessionPostureBuild}, coordinatorTurnHistory(nil, "Hello"))
+	active := surface.ResolveTurnProfile(bindFixturePhase(t, api.CoordinatorRunContext{
 		WorkflowID: "plan", WorkflowVersion: "1.0.0", SurfaceProfile: "plan",
 		RunID: "run-1", CurrentPhase: "expand",
 	}), &api.Session{Posture: api.SessionPostureSpec}, coordinatorTurnHistory(nil, surface.HostLoopWakeSentinel))
@@ -31,8 +31,8 @@ func TestTurnProfileActiveVsInactivePlan(t *testing.T) {
 
 func TestCoordinatorTripartiteRenderDiffersActiveVsInactive(t *testing.T) {
 	t.Parallel()
-	inactive := renderCoordinatorTripartiteForRunContext(t, surface.EnrichRunContextForWorkflow(api.CoordinatorRunContext{}), &api.Session{Posture: api.SessionPostureBuild}, surface.HostLoopWakeSentinel, nil, "")
-	active := renderCoordinatorTripartiteForRunContext(t, surface.EnrichRunContextForWorkflow(api.CoordinatorRunContext{
+	inactive := renderCoordinatorTripartiteForRunContext(t, bindFixturePhase(t, api.CoordinatorRunContext{}), &api.Session{Posture: api.SessionPostureBuild}, surface.HostLoopWakeSentinel, nil, "")
+	active := renderCoordinatorTripartiteForRunContext(t, bindFixturePhase(t, api.CoordinatorRunContext{
 		WorkflowID: "plan", WorkflowVersion: "1.0.0", SurfaceProfile: "plan",
 		RunID: "run-1", CurrentPhase: "expand",
 	}), &api.Session{Posture: api.SessionPostureSpec}, surface.HostLoopWakeSentinel, nil, "")

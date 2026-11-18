@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
-	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -51,15 +50,9 @@ func phaseExitChannels(m workflowdef.Manifest, phase workflowdef.PhaseDef) []pha
 // resolvePhaseSurface returns the explicit or profile binding.
 func resolvePhaseSurface(t *testing.T, m workflowdef.Manifest, phase workflowdef.PhaseDef) string {
 	t.Helper()
-	if s := strings.TrimSpace(phase.CoordinatorSurface); s != "" {
-		return s
-	}
-	runCtx := surface.EnrichRunContextForWorkflow(api.CoordinatorRunContext{
-		WorkflowID:     m.ID,
-		CurrentPhase:   phase.ID,
-		SurfaceProfile: m.SurfaceProfile,
-	})
-	return strings.TrimSpace(runCtx.PhaseCoordinatorSurface)
+	binding, err := workflowdef.ResolveSurfaceBinding(m, phase.ID, m.ID)
+	contractcheck.FailErr(t, "resolve phase surface", err)
+	return strings.TrimSpace(binding.CoordinatorSurface)
 }
 
 func TestWorkflowPhaseExitChannelsAreOnTheBoundSurface(t *testing.T) {
