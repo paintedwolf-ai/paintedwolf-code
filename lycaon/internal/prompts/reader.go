@@ -147,14 +147,9 @@ func NewReader(in ReaderInput) (Reader, error) {
 		commandOnFloor = slices.Contains(offered, "command") && !profile.ToolDeferred("command")
 	}
 
-	toolSet := make(map[string]bool, len(offered)+len(requestable))
-	for _, name := range offered {
-		toolSet[name] = true
-	}
-	for _, name := range requestable {
-		toolSet[name] = true
-	}
-	held := readerHeldSet(toolSet, effects)
+	// A requestable tool is not held until it loads: copy that names it would
+	// name a tool the request does not offer.
+	held := readerHeldSet(toolNameSet(offered), effects)
 	mints := evidenceMints(held)
 	mode := strings.TrimSpace(in.Mode)
 	if mode == "" && surfaceID != "" {
@@ -253,7 +248,7 @@ func (r Reader) Requestable() []string { return slices.Clone(r.requestable) }
 // Effects returns the command effects admitted for this reader.
 func (r Reader) Effects() toolcontract.CommandEffects { return r.effects }
 
-// Held returns the reach set: offered and requestable tools plus command reach marks.
+// Held returns the reach set: offered tools plus command reach marks.
 func (r Reader) Held() map[string]bool { return maps.Clone(r.held) }
 
 // Mints returns the evidence-kind reach map for this reader.

@@ -10,7 +10,7 @@ hosts: [coordinator, worker]
 ---
 ### Visual evidence
 
-When building, changing, or showing an interface, run its real entry point, exercise the affected flow, and capture it running before closing. Check normal use and relevant repeat/reset behavior. Routine test/build output needs no snapshot. {% if profile_has_update_progress %}Use `update_progress` to track{% else %}Track{% endif %} behavior verification and the UI or terminal snapshot separately; captures establish appearance, not interaction correctness.{% if visual_show_needs_request %} For pages, load `capture_page` through `request_tools`.{% endif %}
+When building, changing, or showing an interface, run its real entry point, exercise the affected flow, and capture it running before closing. Check normal use and relevant repeat/reset behavior. Routine test/build output needs no snapshot. {% if profile_has_update_progress %}Use `update_progress` to track{% else %}Track{% endif %} behavior verification and the UI or terminal snapshot separately; captures establish appearance, not interaction correctness.{% if visual_show_needs_request %} For pages, load page capture through `request_tools`.{% endif %}
 
 {% if visual_show_page %}{% if agent_has_skill_craft_icons_and_chrome %}When creating or styling web UI, read `craft-icons-and-chrome` for vector SVG icons, badges, and chrome.{% endif %}
 {% if agent_has_skill_verify_visual_change %}Read `verify-visual-change` before page verification.{% endif %}
