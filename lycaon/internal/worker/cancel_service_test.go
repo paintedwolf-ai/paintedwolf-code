@@ -82,6 +82,7 @@ func TestCancelServiceReturnsChangeReportAndEnvelope(t *testing.T) {
 func TestCancelServiceRejectsForeignSession(t *testing.T) {
 	ctx := context.Background()
 	_, queue, _, _ := newExecutionStack(t)
+	testdbseed.InsertSession(t, queue.db, "other-session", testdbseed.DefaultProjectID)
 	dir := t.TempDir()
 	jobID, err := queue.EnqueueWithProjectID(ctx, testdbseed.DefaultProjectID, api.WorkerTask{
 		ParentSessionID: "other-session",

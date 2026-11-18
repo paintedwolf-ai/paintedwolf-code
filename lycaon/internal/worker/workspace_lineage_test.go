@@ -3,6 +3,7 @@ package worker
 import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
+	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"os"
 	"path/filepath"
@@ -35,6 +36,11 @@ func TestDecisionBranchStaysAttachedButCannotBePromoted(t *testing.T) {
 	claimed, err := queue.ClaimWorkerBranch(t.Context(), id)
 	testutil.FailErr(t, "claim worker branch", err)
 	testutil.FailErr(t, "edit decision branch", os.WriteFile(filepath.Join(claimed.WorkspaceRoot, "main.go"), []byte("package undecided\n"), 0o644))
+	testdbseed.InsertSession(t, queue.db, "child", p.ID)
+	testutil.FailErr(t, "bind child", queue.SetChildSessionID(t.Context(), id, "child"))
+	testutil.FailErr(t, "request decision", sessiondecisions.NewSQL(queue.db).Put(t.Context(), api.WorkerDecisionRequest{
+		ChildSessionID: "child", WorkerID: id, Question: "Choose the implementation", Options: []string{"A", "B"},
+	}))
 	won, err := queue.Complete(t.Context(), claimed, api.WorkerResult{Status: "needs_decision"})
 	testutil.FailErr(t, "complete decision turn", err)
 	if !won {
