@@ -2,6 +2,7 @@ package evidence_test
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -232,7 +233,7 @@ func TestVerificationAndOverlayOutcomesProduceCitableReceipts(t *testing.T) {
 			if !evidence.ExcerptMatchesHandle(ev, tc.handle, "", 0, tc.body) {
 				t.Fatal("receipt lost the recorded outcome")
 			}
-			if evidence.PathObserved(ev, "status.py") {
+			if slices.Contains(evidence.ObservedPathsSorted(ev), "status.py") {
 				t.Fatal("operation receipt invented a file observation")
 			}
 			child := evidence.NamespaceLedger(ev, "worker")

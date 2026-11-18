@@ -52,16 +52,6 @@ func ledgerPaths(ev Ledger) map[string]struct{} {
 	return out
 }
 
-// PathObserved reports whether path is in ByPath.
-func PathObserved(ev Ledger, relPath string) bool {
-	relPath = NormalizeLedgerPath(relPath)
-	if relPath == "" {
-		return false
-	}
-	_, ok := ledgerPaths(ev)[relPath]
-	return ok
-}
-
 // ObservedURLsFromEvidence collects every URL recorded on ledger handles — the primary
 // plus every URL the result body named, so a citation of any search result grounds.
 func ObservedURLsFromEvidence(ev Ledger) map[string]struct{} {

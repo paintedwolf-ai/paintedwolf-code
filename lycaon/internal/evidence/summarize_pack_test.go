@@ -1,6 +1,7 @@
 package evidence_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -49,7 +50,7 @@ func TestBuildLedgerFromTranscript_summarizePackOnly(t *testing.T) {
 		{Role: api.MessageRoleTool, Content: content, ToolResult: &api.ToolResult{Content: content, Outcome: api.ToolResultOutcomeCompleted}},
 	}
 	ev := ledgertest.BuildFromMessages(t.TempDir(), msgs)
-	if !evidence.PathObserved(ev, "packages/app/package.json") {
+	if !slices.Contains(evidence.ObservedPathsSorted(ev), "packages/app/package.json") {
 		t.Fatalf("expected packages/app/package.json observed, got %v", evidence.ObservedPathsSorted(ev))
 	}
 	rec, ok := evidence.ResolveHandle(ev, "summarize#1")
