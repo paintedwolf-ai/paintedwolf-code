@@ -108,7 +108,10 @@ func appendActivityStep(a *api.CommandActivity, g activityGroup) {
 	c := g.counts
 	state := activityStepState(c)
 	outcome := activityStateOutcome(state)
-	if state == "completed" || (state == "failed" && c.total == 1) {
+	switch {
+	case state == "running" && g.input.receipt.State == "prepared":
+		outcome = activityOutcome("prepared", nil)
+	case state == "completed", state == "failed" && c.total == 1:
 		outcome = activityOutcome(state, g.input.receipt.StatusCode)
 	}
 	a.ExecutionCount += c.total

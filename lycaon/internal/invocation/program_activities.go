@@ -21,7 +21,7 @@ func activityOutcome(state string, status *int) string {
 	case "prepared":
 		return "Preparing"
 	case "completed", "failed":
-		if status != nil {
+		if status != nil && (state == "completed" || *status != 0) {
 			return fmt.Sprintf("Exited %d", *status)
 		}
 		return activityStateOutcome(state)
