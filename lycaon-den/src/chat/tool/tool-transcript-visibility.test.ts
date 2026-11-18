@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
-import { noteToolCallShownInFlight, wasToolCallShownInFlight } from "./program-tool-visibility.ts";
+import type { Message } from "../../api/types.ts";
+import { noteToolCallShownInFlight, shouldOmitToolPartFromTranscript, wasToolCallShownInFlight } from "./tool-transcript-visibility.ts";
 
 it("evicts the least recently used call within its session", () => {
   const session = "call-capacity";
@@ -20,4 +21,16 @@ it("keeps eight recent sessions and isolates matching call IDs", () => {
   expect(wasToolCallShownInFlight(session(1), "shared")).toBe(false);
   expect(wasToolCallShownInFlight(session(0), "shared")).toBe(true);
   expect(wasToolCallShownInFlight(session(8), "shared")).toBe(true);
+});
+
+it("keeps a benign result with a live process visible", () => {
+  const result: Message = {
+    role: "tool", id: "result", content: "", origin: "tool", authority: "none",
+    trust_tier: "untrusted", created_at: "t1",
+    tool_result: { content: "", ui_visibility: "benign", process: { handle: "job", running: true } },
+  };
+  const quiet = { verboseMode: false };
+  expect(shouldOmitToolPartFromTranscript(result, "command", quiet)).toBe(false);
+  result.tool_result!.process!.running = false;
+  expect(shouldOmitToolPartFromTranscript(result, "command", quiet)).toBe(true);
 });

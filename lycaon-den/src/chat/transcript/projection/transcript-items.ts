@@ -2,12 +2,12 @@ import type { Message } from "../../../api/types.ts";
 import { enrichCheckpointDecision } from "../../checkpoint/approval-display.ts";
 import { blueprintCardViewFromMeta } from "../../../blueprint/blueprint-card-view.ts";
 import { hasLiveCommandActivities } from "../../tool/command-activity-live.ts";
-import { noteToolCallShownInFlight, PROGRAM_ACTIVITY_TOOLS, wasToolCallShownInFlight } from "../../tool/program-tool-visibility.ts";
+import { noteToolCallShownInFlight, PROGRAM_ACTIVITY_TOOLS, shouldOmitToolPartFromTranscript, wasToolCallShownInFlight } from "../../tool/tool-transcript-visibility.ts";
 import { foldFileEdits } from "../../file-edit/file-edit-fold.ts";
 import { omitIndexWarmingFromTranscript, projectActivitySpans } from "../../tool/activity-span-model.ts";
 import { shouldShowIndexWarmingInTranscript } from "./index-warming-copy.ts";
 import type { TranscriptLayout } from "../layout/transcript-layout.ts";
-import { shouldOmitToolPartFromTranscript, toolPartFromCall, toolPartStableId } from "../../tool/tool-part-model.ts";
+import { toolPartFromCall, toolPartStableId } from "../../tool/tool-part-model.ts";
 import { isCoordinatorDraftWire } from "./draft-model.ts";
 import { isDenTranscriptMessage, isInternalTranscriptUserMessage, isWorkflowBoundaryMessage } from "./message-transcript.ts";
 import { workflowBoundaryLabel } from "../../workflow/workflow-boundary-label.ts";
@@ -144,7 +144,7 @@ function appendToolResultRow(
       kind: "checkpoint",
       key: `checkpoint:${decision.checkpoint_id}`,
       parentMessageId: assistantMessageId,
-      call: { tool: toolName, index: Math.max(callIndex, 0), resultMessageId: msg.id, shownInFlight },
+      call: { tool: toolName, index: Math.max(callIndex, 0), resultMessageId: msg.id },
       meta: enrichCheckpointDecision(decision, call, msg.tool_result),
     });
   }

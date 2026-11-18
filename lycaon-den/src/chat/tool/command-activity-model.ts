@@ -1,4 +1,4 @@
-import { FORM_PROGRAM_TOOLS } from "./program-tool-visibility.ts";
+import { FORM_PROGRAM_TOOLS } from "./tool-transcript-visibility.ts";
 import type { CommandActivity, CommandProgramReceipt } from "../../api/types.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
 import type { ToolPartView } from "./tool-part-model.ts";

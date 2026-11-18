@@ -18,20 +18,14 @@ import type {
   ToolFeedback,
   ToolResultOutcome,
 } from "../../api/types.ts";
-import type { TranscriptLayout } from "../transcript/layout/transcript-layout.ts";
 import {
   REDACTION_FIELD_TOOL_RESULT_ARGS,
   toolCallArgsRedactionField,
   type ToolArgsRedaction,
 } from "../transcript/content/redaction-spans.ts";
-import { PROGRAM_ACTIVITY_TOOLS } from "./program-tool-visibility.ts";
 import { resolveChickletTitle } from "./tool-chicklet-titles.ts";
 import { skillReadResource, skillResourceTitle } from "../skill/skill-read.ts";
-import {
-  COORDINATOR_INTERNAL_TOOLS,
-  LONG_RUNNING_COORDINATOR_TOOLS,
-  TOOL_CARD_KINDS,
-} from "./tool-presentation.generated.ts";
+import { TOOL_CARD_KINDS } from "./tool-presentation.generated.ts";
 import {
   getBackgroundProcessSnapshot,
   hasHydratedBackgroundProcesses,
@@ -144,33 +138,9 @@ export function classifyToolKind(toolName: string): ToolPartKind {
   return kind && TOOL_PART_KINDS.has(kind) ? (kind as ToolPartKind) : "generic";
 }
 
-const LONG_RUNNING_TOOL_SET = new Set<string>(LONG_RUNNING_COORDINATOR_TOOLS);
-const COORDINATOR_INTERNAL_TOOL_SET = new Set<string>(
-  COORDINATOR_INTERNAL_TOOLS,
-);
-
 /** Worker dispatch tools — TaskCard routing, roster binding, worker transcript. */
 export function isTaskToolName(tool: string): boolean {
   return classifyToolKind(tool) === "task";
-}
-
-/** Settled benign results remain visible for lifecycle tools. */
-function isLifecycleVisibleTool(tool: string): boolean {
-  const name = tool.toLowerCase();
-  return LONG_RUNNING_TOOL_SET.has(name) && !PROGRAM_ACTIVITY_TOOLS.has(name);
-}
-
-/** Membership for parent-chat orientation tools (see shouldHideCoordinatorInternalTool). */
-export function isCoordinatorInternalTool(toolName: string): boolean {
-  return COORDINATOR_INTERNAL_TOOL_SET.has(toolName.toLowerCase());
-}
-
-/** Parent chat hides orientation tools; worker drawer shows full child-session activity. */
-export function shouldHideCoordinatorInternalTool(
-  toolName: string,
-  layout: TranscriptLayout = "chat",
-): boolean {
-  return layout === "chat" && isCoordinatorInternalTool(toolName);
 }
 
 function toolOutputText(msg?: Message): string | null {
@@ -243,57 +213,6 @@ export function toolPartDisplayStatus(
   }
   if (hasHydratedBackgroundProcesses(sid)) return "completed";
   return live.running ? "running" : "completed";
-}
-
-/** Host-stamped quiet chrome (`tool_result.ui_visibility === "benign"`). */
-export function isBenignToolResult(resultMsg?: Message): boolean {
-  return resultMsg?.tool_result?.ui_visibility === "benign";
-}
-
-type ToolPartTranscriptOmitOptions = {
-  verboseMode: boolean;
-  layout?: TranscriptLayout;
-  shownInFlight?: boolean;
-};
-
-type ToolTranscriptVisibility =
-  | "visible"
-  | "verbose_only"
-  | "hidden";
-
-/** Resolve transcript visibility before a tool surface mounts. */
-function toolTranscriptVisibility(
-  resultMsg: Message | undefined,
-  toolName: string,
-  layout: TranscriptLayout,
-  shownInFlight: boolean,
-): ToolTranscriptVisibility {
-  if (shouldHideCoordinatorInternalTool(toolName, layout)) return "hidden";
-  if (layout === "worker") return "visible";
-  if (shownInFlight || isLifecycleVisibleTool(toolName)) return "visible";
-  if (!resultMsg) return "verbose_only";
-  const result = resultMsg.tool_result;
-  if (withHandle(result?.process)?.running) return "visible";
-  if (result?.file_edit_previews?.some((edit) => edit.path.trim() !== "") || (result?.file_edits_omitted ?? 0) > 0) return "visible";
-  return isBenignToolResult(resultMsg) ? "verbose_only" : "visible";
-}
-
-/** Quiet chat defers ordinary tools until they settle. */
-export function shouldOmitToolPartFromTranscript(
-  resultMsg: Message | undefined,
-  toolName: string,
-  options: ToolPartTranscriptOmitOptions,
-): boolean {
-  const layout = options.layout ?? "chat";
-  const visibility = toolTranscriptVisibility(resultMsg, toolName, layout, options.shownInFlight ?? false);
-  if (visibility === "visible") return false;
-  if (visibility === "hidden") return true;
-  return !options.verboseMode;
-}
-
-/** Whether the row is placed at the assistant call. */
-export function toolDrawsWhileRunning(toolName: string, options: ToolPartTranscriptOmitOptions): boolean {
-  return !shouldOmitToolPartFromTranscript(undefined, toolName, options);
 }
 
 /** One-line label for collapsed group hints and card summaries. */

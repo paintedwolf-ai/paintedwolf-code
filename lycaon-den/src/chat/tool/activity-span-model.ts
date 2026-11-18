@@ -1,10 +1,10 @@
+import { toolDrawsWhileRunning } from "./tool-transcript-visibility.ts";
 import { partHasFileEdits } from "../file-edit/file-edit-model.ts";
 import { collectSegmentFolds } from "../file-edit/file-edit-fold.ts";
 import { indexWarmingChickletTitle } from "../transcript/projection/index-warming-copy.ts";
 import {
   isLoopbackTarget,
   isTaskToolName,
-  toolDrawsWhileRunning,
   toolPartDisplayStatus,
   toolPartSummaryTitle,
 } from "./tool-part-model.ts";

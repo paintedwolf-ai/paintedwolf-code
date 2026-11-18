@@ -1,3 +1,4 @@
+import { isCoordinatorInternalTool } from "../tool/tool-transcript-visibility.ts";
 import type {
   ActivityEvent,
   CoordinatorBatchPhase,
@@ -16,7 +17,6 @@ import { resolveChickletTitle } from "../tool/tool-chicklet-titles.ts";
 import { TOOL_CHICKLET_RUNNING_LABELS } from "../tool/tool-presentation.generated.ts";
 import {
   classifyToolKind,
-  isCoordinatorInternalTool,
   isLoopbackTarget,
   toolPartFromCall,
   type ToolPartKind,

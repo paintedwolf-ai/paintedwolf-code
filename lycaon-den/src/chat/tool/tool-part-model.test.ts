@@ -1,13 +1,10 @@
+import { isBenignToolResult, isCoordinatorInternalTool, shouldHideCoordinatorInternalTool, shouldOmitToolPartFromTranscript } from "./tool-transcript-visibility.ts";
 import { beforeEach, describe, expect, it } from "vitest";
 import { at, keyAt } from "../../test/at.ts";
 import fixtures from "../fixtures/tool-messages.json";
 import type { CommandActivity, CommandActivityStep, CommandProgramReceipt, Message } from "../../api/types.ts";
 import {
   classifyToolKind,
-  isBenignToolResult,
-  isCoordinatorInternalTool,
-  shouldHideCoordinatorInternalTool,
-  shouldOmitToolPartFromTranscript,
   toolPartDisplayStatus,
   toolPartFromCall,
   toolCompletionLabel,

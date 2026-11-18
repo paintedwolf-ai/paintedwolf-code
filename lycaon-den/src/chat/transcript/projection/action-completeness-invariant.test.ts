@@ -5,7 +5,7 @@ import { type ActivitySpanEntry, type TranscriptItem } from "./transcript-item-m
 import { createTranscriptDisplayProjector } from "./transcript-display-projection.ts";
 import { taskCardStatus } from "../../task/task-card-model.ts";
 import { isTaskToolName } from "../../tool/tool-part-model.ts";
-import { PROGRAM_ACTIVITY_TOOLS } from "../../tool/program-tool-visibility.ts";
+import { PROGRAM_ACTIVITY_TOOLS } from "../../tool/tool-transcript-visibility.ts";
 
 function taskJobMessages(status: string): Message[] {
   return [

@@ -2,11 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { CommandActivity, CommandProgramReceipt, Message, ToolResultUiVisibility } from "../../../api/types.ts";
 import { clearCommandActivities, observeCommandActivity } from "../../tool/command-activity-live.ts";
 import { activitySpanToolParts } from "../../tool/activity-span-model.ts";
-import { PROGRAM_ACTIVITY_TOOLS } from "../../tool/program-tool-visibility.ts";
+import { PROGRAM_ACTIVITY_TOOLS, shouldOmitToolPartFromTranscript } from "../../tool/tool-transcript-visibility.ts";
 import { buildChatTranscriptBlocks } from "../../workflow/workflow-spans.ts";
 import { visibleRowContinuity, withdrawnRows } from "../presentation/row-withdrawal-watch.ts";
 import { createTranscriptDisplayProjector } from "./transcript-display-projection.ts";
-import { shouldOmitToolPartFromTranscript } from "../../tool/tool-part-model.ts";
 import { TOOL_CHICKLET_TITLE_KEYS } from "../../tool/tool-presentation.generated.ts";
 import {
   loadVisibilityFixture,
