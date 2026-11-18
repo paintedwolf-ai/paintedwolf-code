@@ -8,11 +8,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -54,20 +58,71 @@ func hostText(m api.Message) []string {
 }
 
 // requestReach lists what one recorded request names that it does not offer.
-func requestReach(names *toolvocab.Catalog, req modelcall.CompletionRequest) []string {
+// A deferred schema is not offered: its tool must be requested first.
+func requestReach(t *testing.T, names *toolvocab.Catalog, req modelcall.CompletionRequest, posture api.SessionPosture) []string {
 	offered := map[string]bool{}
+	var deferred []string
 	for _, meta := range req.Tools {
+		if meta.Deferred {
+			deferred = append(deferred, meta.Name)
+			continue
+		}
 		offered[meta.Name] = true
+	}
+	for marker := range commandReach(t, req.Debug.ProfileID, req.Debug.Surface, posture) {
+		offered[marker] = true
 	}
 	var out []string
 	for i, m := range req.Messages {
 		for _, text := range hostText(m) {
 			for _, name := range toolvocab.UnreachableNames(names, text, offered) {
-				out = append(out, fmt.Sprintf("message %d (%s/%s/%s) names %s: %s", i, m.Role, m.Origin, m.Kind, name, lineWith(text, name)))
+				state := "not offered"
+				if slices.Contains(deferred, name) {
+					state = "deferred"
+				}
+				out = append(out, fmt.Sprintf("message %d (%s/%s/%s) names %s (%s): %s", i, m.Role, m.Origin, m.Kind, name, state, lineWith(text, name)))
 			}
 		}
 	}
 	return out
+}
+
+// commandReach is what the executor admits through command for a profile on
+// a surface in a posture, as the reach markers the vocabulary reads.
+func commandReach(t *testing.T, profileID, surfaceID string, posture api.SessionPosture) map[string]bool {
+	t.Helper()
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load tool profiles", err)
+	postures, err := sessionprofiles.LoadPostureRegistry()
+	testutil.FailErr(t, "load postures", err)
+	if posture == "" {
+		posture = api.SessionPostureBuild
+	}
+	p, err := postures.Get(posture)
+	testutil.FailErr(t, "posture", err)
+	for i := range profiles {
+		profiles[i].CommandEffects &= p.CommandEffects
+	}
+	if profileID == "" {
+		profileID = prompts.CoordinatorProfileID
+	}
+	effects, err := surfacecatalog.AdmittedCommandEffects(profiles, profileID, surfaceID)
+	testutil.FailErr(t, "admitted command effects", err)
+	held := map[string]bool{}
+	for class, markers := range map[toolcontract.CommandEffectClass][]string{
+		toolcontract.CommandMutation:      {toolcontract.ReachCommandMutation},
+		toolcontract.CommandExternalExec:  {toolcontract.ReachCommandExternalExec, toolcontract.ReachCommandExternalExecSelector},
+		toolcontract.CommandNetworkEgress: {toolcontract.ReachCommandNetworkEgress},
+	} {
+		want, err := toolcontract.NewCommandEffects(class)
+		testutil.FailErr(t, "command effect", err)
+		if effects.Allows(want) {
+			for _, m := range markers {
+				held[m] = true
+			}
+		}
+	}
+	return held
 }
 
 func lineWith(text, name string) string {
@@ -111,14 +166,22 @@ func TestEveryRequestNamesOnlyWhatItOffers(t *testing.T) {
 	for i, req := range rec.AllRequests() {
 		tools := make([]string, 0, len(req.Tools))
 		for _, meta := range req.Tools {
-			tools = append(tools, meta.Name)
+			if meta.Deferred {
+				tools = append(tools, meta.Name+"(deferred)")
+			} else {
+				tools = append(tools, meta.Name)
+			}
 		}
 		sort.Strings(tools)
-		t.Logf("request %d composition=%q tooluse=%d tools=%v messages=%d", i, req.Composition, req.ToolUse, tools, len(req.Messages))
+		t.Logf("request %d surface=%q profile=%q iter=%d composition=%q tooluse=%d tools=%v messages=%d", i, req.Debug.Surface, req.Debug.ProfileID, req.Debug.Iteration, req.Composition, req.ToolUse, tools, len(req.Messages))
 		for j, m := range req.Messages {
-			t.Logf("  msg %d role=%s origin=%s kind=%s authority=%s parts=%d len=%d host=%d", j, m.Role, m.Origin, m.Kind, m.Authority, len(m.ContentParts), len(m.Content), len(hostText(m)))
+			head := m.Content
+			if len(head) > 300 {
+				head = head[:300]
+			}
+			t.Logf("  msg %d role=%s origin=%s kind=%s authority=%s parts=%d len=%d host=%d %q", j, m.Role, m.Origin, m.Kind, m.Authority, len(m.ContentParts), len(m.Content), len(hostText(m)), head)
 		}
-		for _, v := range requestReach(names, req) {
+		for _, v := range requestReach(t, names, req, api.SessionPostureBuild) {
 			violations = append(violations, fmt.Sprintf("request %d: %s", i, v))
 		}
 	}
