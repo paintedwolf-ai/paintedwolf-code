@@ -88,7 +88,7 @@
   background: var(--den-tint-3);
 }
 
-/* The opener is the whole row; the words sit beneath it. */
+/* The opener covers the row and draws its focus ring. */
 .progress-strip__opener {
   position: absolute;
   inset: 0;

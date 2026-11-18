@@ -11,6 +11,7 @@ import { SourceChangeChip } from "./SourceChangeChip.tsx";
 import { LineStat, WholeFileDetails } from "./SourceDiffParts.tsx";
 import { wholeFileChange } from "../reader/source-reader-change.ts";
 import { animateHeightToggle, heightToggleTargetFor } from "../../../ui/height-toggle-motion.ts";
+import { bindDisclosureSummary } from "../../../ui/disclosure-summary.ts";
 import { SOURCE_COMPARISON_FAILURE, SOURCE_SEARCH_FAILURE, SourceReader, type SourceReaderHandle } from "../reader/SourceReader.tsx";
 import { observeSurfaceFailure } from "../../../notices/surface-failure.ts";
 import { bindReaderFind } from "../reader/source-reader-find.ts";
@@ -55,6 +56,7 @@ export function SourceDiffRow(props: Props) {
   const [findRoot, setFindRoot] = createSignal<HTMLElement | null>(null);
   let root: HTMLElement | undefined;
   let header: HTMLElement | undefined;
+  let toggle: HTMLButtonElement | undefined;
 
   const asRow = () => props.chrome === "row";
   // Rows start closed; cards follow the display preference.
@@ -179,11 +181,12 @@ export function SourceDiffRow(props: Props) {
       data-disclosure-key={props.disclosureKey}
     >
       <div
-        ref={(el) => { header = el; }}
+        ref={(el) => {
+          header = el;
+          bindDisclosureSummary(el, { open: bodyOpen, toggle: () => toggle });
+        }}
         class="den-file-edit-diff-header"
-        onClick={toggleDiff}
       >
-        {/* The path handles clicks separately. */}
         <SourcePathLink
           truncate
           strong
@@ -220,15 +223,13 @@ export function SourceDiffRow(props: Props) {
           </span>
         </Show>
         <button
+          ref={(el) => { toggle = el; }}
           type="button"
           class="den-file-edit-diff-disclosure"
           aria-expanded={bodyOpen()}
           aria-label={`${bodyOpen() ? "Collapse" : "Show"} diff for ${path()}`}
           data-testid="file-edit-diff-toggle"
-          onClick={(event) => {
-            event.stopPropagation();
-            toggleDiff();
-          }}
+          onClick={toggleDiff}
         >
           <Show when={asRow()} fallback={<DisclosureCaret open={bodyOpen()} />}>
             <span class="den-row-mark" aria-hidden="true" />

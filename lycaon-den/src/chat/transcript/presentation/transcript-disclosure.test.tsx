@@ -12,6 +12,7 @@ import {
   TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT,
   TranscriptDisclosurePanel,
   TranscriptDisclosureShell,
+  TranscriptDisclosureSummary,
   TranscriptDisclosureToggle,
   useTranscriptDisclosure,
 } from "./transcript-disclosure.tsx";
@@ -194,27 +195,28 @@ describe("transcript disclosure leases", () => {
     expect(layouts).toHaveBeenCalled();
   });
 
-  it("lets a toggle beside other header controls and custom click handlers drive the card", () => {
+  it("routes a click anywhere in a closed summary to the toggle it holds", () => {
     const onClick = vi.fn();
     const view = render(() => {
       const disclosure = useTranscriptDisclosure();
       return (
         <TranscriptDisclosureShell disclosure={disclosure} data-testid="shell">
-          <div data-testid="header">
-            <TranscriptDisclosureToggle disclosure={disclosure} inHeader data-testid="toggle-open">Open</TranscriptDisclosureToggle>
-            <TranscriptDisclosureToggle disclosure={disclosure} inHeader onClick={onClick} data-testid="toggle-custom">Custom</TranscriptDisclosureToggle>
-          </div>
+          <TranscriptDisclosureSummary disclosure={disclosure} data-testid="summary">
+            <TranscriptDisclosureToggle disclosure={disclosure} onClick={(event) => { onClick(); disclosure.onToggleClick(event); }} data-testid="toggle">
+              Open
+            </TranscriptDisclosureToggle>
+            <span data-testid="words">Subject</span>
+          </TranscriptDisclosureSummary>
           <TranscriptDisclosurePanel disclosure={disclosure}>Body</TranscriptDisclosurePanel>
         </TranscriptDisclosureShell>
       );
     });
-    const toggle = assertNamedControl(view.getByTestId("toggle-open"), "button");
+    const toggle = assertNamedControl(view.getByTestId("toggle"), "button");
     expect(toggle.classList.contains("den-transcript-disclosure-header")).toBe(false);
-    fireEvent.click(toggle);
-    expect(view.getByTestId("shell").getAttribute("data-expanded") === "true").toBe(true);
-    fireEvent.click(assertNamedControl(view.getByTestId("toggle-custom"), "button"));
+    fireEvent.click(view.getByTestId("words"));
     expect(onClick).toHaveBeenCalledOnce();
-    expect(view.getByTestId("shell").getAttribute("data-expanded") === "true").toBe(true);
+    expect(view.getByTestId("shell").getAttribute("data-expanded")).toBe("true");
+    expect(view.getByTestId("summary").getAttribute("data-disclosure-summary")).toBe("open");
   });
 
   it("ignores a toggle outside any disclosure card", () => {

@@ -1,5 +1,14 @@
 import { useTranscriptDisclosureStore } from "./disclosure-state.tsx";
-import { Show, createSignal, createUniqueId, splitProps, type Accessor, type JSX } from "solid-js";
+import {
+  Show,
+  createContext,
+  createSignal,
+  createUniqueId,
+  splitProps,
+  useContext,
+  type Accessor,
+  type JSX,
+} from "solid-js";
 import { useTranscriptViewport } from "../../stream/transcript-viewport.tsx";
 import { webkitAtspiWorkaroundActive } from "../../../platform/desktop/webkit-atspi-workaround.ts";
 import {
@@ -7,6 +16,7 @@ import {
   heightToggleDirectionFor,
   type HeightToggleDirection,
 } from "../../../ui/height-toggle-motion.ts";
+import { bindDisclosureSummary } from "../../../ui/disclosure-summary.ts";
 import type { TranscriptDisclosureKey } from "./transcript-disclosure-key.ts";
 import { isTranscriptDisclosureOpen, isTranscriptDisclosureShell } from "./transcript-disclosure-shell.ts";
 
@@ -162,25 +172,46 @@ export function TranscriptDisclosureShell(props: ShellProps) {
   );
 }
 
+/** Registers the toggle of the summary that holds it. */
+const SummaryToggleContext = createContext<(toggle: HTMLElement) => void>();
+
+type SummaryProps = Omit<JSX.HTMLAttributes<HTMLDivElement>, "ref"> & { disclosure: TranscriptDisclosure };
+
+/** A card header that holds its toggle beside other content; a click anywhere in it reaches the toggle. */
+export function TranscriptDisclosureSummary(props: SummaryProps) {
+  const [local, rest] = splitProps(props, ["disclosure", "children"]);
+  const [toggle, setToggle] = createSignal<HTMLElement>();
+  return (
+    <SummaryToggleContext.Provider value={setToggle}>
+      <div {...rest} ref={(element) => bindDisclosureSummary(element, { open: local.disclosure.open, toggle })}>
+        {local.children}
+      </div>
+    </SummaryToggleContext.Provider>
+  );
+}
+
 type ToggleProps = Omit<JSX.ButtonHTMLAttributes<HTMLButtonElement>, "ref" | "type" | "class"> & {
   disclosure: TranscriptDisclosure;
   ref?: (element: HTMLButtonElement) => void;
   class?: string;
-  /** True when a header row holds the toggle beside other controls. */
-  inHeader?: boolean;
 };
 
-/** The button that opens a transcript card; it is the card header unless `inHeader`. */
+/** The button that opens a transcript card; it is the card header unless a summary holds it. */
 export function TranscriptDisclosureToggle(props: ToggleProps) {
-  const [local, rest] = splitProps(props, ["disclosure", "ref", "class", "inHeader", "onClick", "children"]);
+  const [local, rest] = splitProps(props, ["disclosure", "ref", "class", "onClick", "children"]);
+  const registerInSummary = useContext(SummaryToggleContext);
   const classes = () =>
-    ["den-transcript-disclosure-toggle", local.inHeader ? "" : "den-transcript-disclosure-header", local.class ?? ""]
+    ["den-transcript-disclosure-toggle", registerInSummary ? "" : "den-transcript-disclosure-header", local.class ?? ""]
       .filter(Boolean)
       .join(" ");
   return (
     <button
       {...rest}
-      ref={(element) => local.ref?.(element)}
+      ref={(element) => {
+        local.ref?.(element);
+        if (registerInSummary) registerInSummary(element);
+        else bindDisclosureSummary(element, { open: local.disclosure.open, toggle: () => element });
+      }}
       type="button"
       class={classes()}
       aria-expanded={local.disclosure.open()}
