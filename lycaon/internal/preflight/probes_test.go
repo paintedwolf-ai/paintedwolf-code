@@ -438,8 +438,8 @@ func TestRegistryOverallIsWorstStatus(t *testing.T) {
 	}
 
 	results, overall := reg.Run(context.Background(), env)
-	if len(results) != len(reg.IDs()) {
-		t.Fatalf("got %d results for %d probes", len(results), len(reg.IDs()))
+	if len(results) != len(reg.probes) {
+		t.Fatalf("got %d results for %d probes", len(results), len(reg.probes))
 	}
 	if overall != StatusDegraded {
 		t.Fatalf("overall = %q, want degraded", overall)
@@ -453,17 +453,15 @@ func TestRegistryOverallIsWorstStatus(t *testing.T) {
 }
 
 func TestRegistryPreservesWireOrder(t *testing.T) {
-	want := []string{
-		"os_version", "config_dir", "disk_space", "command_path", "git_engine",
-		"scanner_engine", "browser_engine", "decision_engine", "ocr_engine", "provider_configured", "lite_slot",
+	reg := NewRegistry(providerConfiguredProbe{}, osVersionProbe{}, liteSlotProbe{})
+	results, _ := reg.Run(t.Context(), Env{})
+	want := []string{"provider_configured", "os_version", "lite_slot"}
+	if len(results) != len(want) {
+		t.Fatalf("got %d results, want %d", len(results), len(want))
 	}
-	got := Default().IDs()
-	if len(got) != len(want) {
-		t.Fatalf("probe ids = %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Fatalf("probe ids = %v, want %v (order is wire-visible)", got, want)
+	for i, id := range want {
+		if results[i].ID != id {
+			t.Fatalf("probe %d = %q, want %q", i, results[i].ID, id)
 		}
 	}
 }

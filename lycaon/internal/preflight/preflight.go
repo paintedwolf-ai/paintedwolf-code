@@ -172,15 +172,6 @@ func (r *Registry) Run(ctx context.Context, env Env) ([]Result, Status) {
 	return results, overall
 }
 
-// IDs returns the registered probe ids, in wire order.
-func (r *Registry) IDs() []string {
-	out := make([]string, 0, len(r.probes))
-	for _, p := range r.probes {
-		out = append(out, p.ID())
-	}
-	return out
-}
-
 // Default returns the shipped registry, in wire order.
 func Default() *Registry {
 	return NewRegistry(

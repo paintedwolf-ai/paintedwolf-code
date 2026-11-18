@@ -39,7 +39,7 @@ func TestPresenceLiveThenGoesQuiet(t *testing.T) {
 	hub := NewMemoryHub()
 	p := NewPresence(hub, 50*time.Millisecond)
 	clock := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
-	p.setClock(func() time.Time { return clock })
+	p.now = func() time.Time { return clock }
 	_, unsubscribe, err := hub.Subscribe(context.Background(), Subscription{Project: "", Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe", err)
 	defer unsubscribe()
@@ -96,12 +96,12 @@ func TestPresenceStampCarriesNoMonotonicReading(t *testing.T) {
 func TestPresenceWindowCountsSuspendedTime(t *testing.T) {
 	hub := NewMemoryHub()
 	p := NewPresence(hub, 15*time.Minute)
+	clock := time.Date(2026, 7, 31, 22, 0, 0, 0, time.UTC)
+	p.now = func() time.Time { return clock }
 	_, unsubscribe, err := hub.Subscribe(context.Background(), Subscription{Project: "", Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe", err)
 	defer unsubscribe()
 
-	clock := time.Date(2026, 7, 31, 22, 0, 0, 0, time.UTC)
-	p.setClock(func() time.Time { return clock })
 	p.MarkUserAction()
 	if !p.Live() {
 		t.Fatal("Live() = false right after a user action")
@@ -117,12 +117,12 @@ func TestPresenceWindowCountsSuspendedTime(t *testing.T) {
 func TestPresenceNotLiveWhenClockJumpsBackwards(t *testing.T) {
 	hub := NewMemoryHub()
 	p := NewPresence(hub, 15*time.Minute)
+	clock := time.Date(2026, 7, 31, 22, 0, 0, 0, time.UTC)
+	p.now = func() time.Time { return clock }
 	_, unsubscribe, err := hub.Subscribe(context.Background(), Subscription{Project: "", Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe", err)
 	defer unsubscribe()
 
-	clock := time.Date(2026, 7, 31, 22, 0, 0, 0, time.UTC)
-	p.setClock(func() time.Time { return clock })
 	p.MarkUserAction()
 
 	// A backward clock adjustment does not renew activity.
