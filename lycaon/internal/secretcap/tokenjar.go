@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/google/uuid"
@@ -15,7 +16,7 @@ import (
 
 const tokenJarPurpose = "HTTP token jar"
 
-// TokenJarRequest identifies the jar one http_request call opens.
+// TokenJarRequest identifies the jar one HTTP exchange opens.
 type TokenJarRequest struct {
 	ProjectID, ChatSessionID, SessionID, OperationID, Name string
 }
@@ -35,6 +36,7 @@ type TokenJar struct {
 	Name      string
 	Reference string
 	Tokens    map[string]Token
+	changes   map[string]Token
 	id        string
 	request   TokenJarRequest
 	issuer    *Jars
@@ -78,6 +80,10 @@ func (j *TokenJar) Set(name string, token Token) {
 	if j.Tokens == nil {
 		j.Tokens = make(map[string]Token)
 	}
+	if j.changes == nil {
+		j.changes = make(map[string]Token)
+	}
+	j.changes[name] = token
 	j.Tokens[name] = token
 }
 
@@ -104,28 +110,34 @@ func (s *Jars) OpenTokenJar(ctx context.Context, req TokenJarRequest) (*TokenJar
 	}
 	jar.id, jar.Reference = row.ID, secretmatch.ReferenceToken(row.ID)
 	access := ResolveContext{ProjectID: req.ProjectID, ChatSessionID: req.ChatSessionID, SessionID: req.SessionID, ToolName: jarTool}
-	current, hasCurrent, err := s.repository.currentVersion(ctx, row.ID)
+	current, tokens, err := s.tokenJarCurrent(ctx, row.ID)
 	if err != nil {
+		s.repository.recordUse(ctx, row.ID, current.Version, UseUnavailable, access)
 		return nil, err
-	}
-	if !hasCurrent {
-		s.repository.recordUse(ctx, row.ID, 0, UseUnavailable, access)
-		return nil, ErrValueMissing
-	}
-	entry, ok := s.repository.values.get(current.ID)
-	if !ok {
-		s.repository.recordUse(ctx, row.ID, current.Version, UseUnavailable, access)
-		return nil, ErrValueMissing
-	}
-	var tokens map[string]Token
-	if err := json.Unmarshal([]byte(entry.Value), &tokens); err != nil {
-		s.repository.recordUse(ctx, row.ID, current.Version, UseUnavailable, access)
-		return nil, fmt.Errorf("%w: stored token jar is unreadable", ErrValueMissing)
 	}
 	jar.Tokens = tokens
 	s.repository.recordUse(ctx, row.ID, current.Version, UseResolved, access)
 	s.rememberJarValues(req.ChatSessionID, "token", row.ID, jar.Values())
 	return jar, nil
+}
+
+func (s *Jars) tokenJarCurrent(ctx context.Context, id string) (db.ManagedSecretVersions, map[string]Token, error) {
+	current, found, err := s.repository.currentVersion(ctx, id)
+	if err != nil {
+		return current, nil, err
+	}
+	if !found {
+		return current, nil, ErrValueMissing
+	}
+	entry, ok := s.repository.values.get(current.ID)
+	if !ok {
+		return current, nil, ErrValueMissing
+	}
+	var tokens map[string]Token
+	if err := json.Unmarshal([]byte(entry.Value), &tokens); err != nil || tokens == nil {
+		return current, nil, fmt.Errorf("%w: stored token jar is unreadable", ErrValueMissing)
+	}
+	return current, tokens, nil
 }
 
 // SaveTokenJar commits token changes and saves the operation receipt.
@@ -137,7 +149,7 @@ func (s *Jars) SaveTokenJar(ctx context.Context, req TokenJarRequest, jar *Token
 	if jar.issuer != s || jar.request != req || jar.Tokens == nil {
 		return nil, ErrInvalidPut
 	}
-	if len(jar.Tokens) == 0 {
+	if len(jar.changes) == 0 {
 		return nil, nil
 	}
 	defer s.repository.invalidateScreening(ctx, req.ProjectID)
@@ -152,7 +164,16 @@ func (s *Jars) SaveTokenJar(ctx context.Context, req TokenJarRequest, jar *Token
 	if err != nil {
 		return nil, err
 	}
-	encoded, err := json.Marshal(jar.Tokens)
+	var current db.ManagedSecretVersions
+	merged := jar.changes
+	if found {
+		current, merged, err = s.tokenJarCurrent(ctx, row.ID)
+		if err != nil {
+			return nil, err
+		}
+		maps.Copy(merged, jar.changes)
+	}
+	encoded, err := json.Marshal(merged)
 	if err != nil {
 		return nil, err
 	}
@@ -161,10 +182,6 @@ func (s *Jars) SaveTokenJar(ctx context.Context, req TokenJarRequest, jar *Token
 	}
 	if !found {
 		return s.createTokenJar(ctx, req, jar, string(encoded))
-	}
-	current, _, err := s.repository.currentVersion(ctx, row.ID)
-	if err != nil {
-		return nil, err
 	}
 	record := s.tokenJarSaveRecorder(ctx, req, row.ID)
 	err = s.repository.replaceOnto(ctx, row, current, true, CustodyHost, string(encoded), record)
@@ -220,11 +237,18 @@ func (s *Jars) tokenJarSavedOperation(ctx context.Context, req TokenJarRequest, 
 		}
 		return nil, false, err
 	}
+	if save.ChatSessionID != req.ChatSessionID || save.Name != req.Name ||
+		(save.SecretID.Valid && jar.id != "" && jar.id != save.SecretID.String) {
+		return nil, true, ErrInvalidPut
+	}
 	if !save.SecretID.Valid || save.SecretID.String == "" {
 		return nil, true, nil
 	}
 	row, err := s.repository.rowForReference(ctx, secretmatch.ReferenceToken(save.SecretID.String))
 	if err != nil {
+		return nil, true, err
+	}
+	if err := s.jarAccess(row, OriginTokenJar, ErrInvalidPut, req.ProjectID, req.ChatSessionID); err != nil {
 		return nil, true, err
 	}
 	jar.id, jar.Reference = row.ID, secretmatch.ReferenceToken(row.ID)
