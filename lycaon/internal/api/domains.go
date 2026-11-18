@@ -60,7 +60,6 @@ type Activity struct {
 	responses           *httpio.Responder
 	scheduleSourceWatch func(context.Context, string)
 	sessionStore        sessionstore.SessionRepository
-	transcriptStore     sessionstore.TranscriptRepository
 	settingsSvc         *settings.Service
 }
 
@@ -73,12 +72,13 @@ type Artifacts struct {
 }
 
 type Conversation struct {
-	ShuttingDown  func() <-chan struct{}
-	preview       *preview.Controller
-	progressStore progress.Store
-	responses     *httpio.Responder
-	sessionStore  sessionstore.SessionRepository
-	sessions      *session.Host
+	transcriptStore sessionstore.TranscriptRepository
+	ShuttingDown    func() <-chan struct{}
+	preview         *preview.Controller
+	progressStore   progress.Store
+	responses       *httpio.Responder
+	sessionStore    sessionstore.SessionRepository
+	sessions        *session.Host
 }
 
 type Findings struct {
@@ -101,12 +101,12 @@ type HarnessControl struct {
 	router             chi.Router
 	sessionStore       sessionstore.SessionRepository
 	transcriptStore    sessionstore.TranscriptRepository
-	turnsStore         sessionstore.TurnRepository
 	sessions           *session.Host
 	visualStore        visual.Store
 }
 
 type HarnessPreparation struct {
+	turnsStore      sessionstore.TurnRepository
 	Workflow        *workflow.RunManager
 	dataDir         string
 	database        db.Handle
@@ -161,12 +161,12 @@ type Workers struct {
 }
 
 func composeDomains(s *Server, deps Dependencies) {
-	s.Routes.Activity = &Activity{attachmentCaps: s.Admin.Prompt.Submission.Caps, ShuttingDown: s.ShuttingDown, editorClients: s.Sources.Editor.EditorClients, agentPresence: deps.Source.AgentPresence, attention: deps.Host.Attention, costTracker: deps.Providers.CostTracker, dataDir: s.dataDir, events: s.events, healthPayload: s.healthPayload, hostIdentity: deps.Host.HostIdentity, hostResources: deps.Host.HostResources, preflightEnv: deps.Host.PreflightEnv, projectLiveness: deps.Source.ProjectLiveness, projectRegistry: deps.Core.Projects, responses: &s.responses, scheduleSourceWatch: s.Sources.Watch.ScheduleSourceWatch, sessionStore: deps.Core.Store.Sessions, transcriptStore: deps.Core.Store.Transcript, settingsSvc: deps.Core.Settings}
+	s.Routes.Activity = &Activity{attachmentCaps: s.Admin.Prompt.Submission.Caps, ShuttingDown: s.ShuttingDown, editorClients: s.Sources.Editor.EditorClients, agentPresence: deps.Source.AgentPresence, attention: deps.Host.Attention, costTracker: deps.Providers.CostTracker, dataDir: s.dataDir, events: s.events, healthPayload: s.healthPayload, hostIdentity: deps.Host.HostIdentity, hostResources: deps.Host.HostResources, preflightEnv: deps.Host.PreflightEnv, projectLiveness: deps.Source.ProjectLiveness, projectRegistry: deps.Core.Projects, responses: &s.responses, scheduleSourceWatch: s.Sources.Watch.ScheduleSourceWatch, sessionStore: deps.Core.Store.Sessions, settingsSvc: deps.Core.Settings}
 	s.Routes.Artifacts = &Artifacts{projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: deps.Core.Store.Sessions, transcriptStore: deps.Core.Store.Transcript, visualStore: deps.Source.VisualStore}
-	s.Routes.Conversation = &Conversation{ShuttingDown: s.ShuttingDown, preview: deps.Host.Preview, progressStore: deps.Source.ProgressStore, responses: &s.responses, sessionStore: deps.Core.Store.Sessions, sessions: s.sessions}
+	s.Routes.Conversation = &Conversation{ShuttingDown: s.ShuttingDown, preview: deps.Host.Preview, progressStore: deps.Source.ProgressStore, responses: &s.responses, sessionStore: deps.Core.Store.Sessions, transcriptStore: deps.Core.Store.Transcript, sessions: s.sessions}
 	s.Routes.Findings = &Findings{Scan: &s.Admin.Scan, projectRegistry: deps.Core.Projects, responses: &s.responses, scanCadence: deps.Scans.ScanCadence}
-	s.Routes.HarnessControl = &HarnessControl{Workflow: deps.Workflow.Workflows, checkpoints: deps.Approvals.Checkpoints, eventPublisher: s.eventPublisher, harness: &s.harness, manualLLM: deps.Harness.ManualLLM, requireClientAuth: s.requireClientAuth, responses: &s.responses, router: s.router, sessionStore: deps.Core.Store.Sessions, transcriptStore: deps.Core.Store.Transcript, turnsStore: deps.Core.Store.Turns, sessions: s.sessions, visualStore: deps.Source.VisualStore}
-	s.Routes.HarnessPreparation = &HarnessPreparation{Workflow: deps.Workflow.Workflows, dataDir: s.dataDir, database: deps.Core.Database, harness: &s.harness, harnessWorkers: deps.Harness.HarnessWorkers, llmSvc: deps.Providers.LLM, projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: deps.Core.Store.Sessions, evidenceStore: deps.Core.Store.Evidence, transcriptStore: deps.Core.Store.Transcript, sessions: s.sessions, workers: deps.Workflow.Workers}
+	s.Routes.HarnessControl = &HarnessControl{Workflow: deps.Workflow.Workflows, checkpoints: deps.Approvals.Checkpoints, eventPublisher: s.eventPublisher, harness: &s.harness, manualLLM: deps.Harness.ManualLLM, requireClientAuth: s.requireClientAuth, responses: &s.responses, router: s.router, sessionStore: deps.Core.Store.Sessions, transcriptStore: deps.Core.Store.Transcript, sessions: s.sessions, visualStore: deps.Source.VisualStore}
+	s.Routes.HarnessPreparation = &HarnessPreparation{Workflow: deps.Workflow.Workflows, dataDir: s.dataDir, database: deps.Core.Database, harness: &s.harness, harnessWorkers: deps.Harness.HarnessWorkers, llmSvc: deps.Providers.LLM, projectRegistry: deps.Core.Projects, responses: &s.responses, sessionStore: deps.Core.Store.Sessions, turnsStore: deps.Core.Store.Turns, evidenceStore: deps.Core.Store.Evidence, transcriptStore: deps.Core.Store.Transcript, sessions: s.sessions, workers: deps.Workflow.Workers}
 	s.Routes.HarnessProviders = &HarnessProviders{costTracker: deps.Providers.CostTracker, llmSvc: deps.Providers.LLM, responses: &s.responses}
 	s.Routes.LocalData = &LocalData{extensionOwner: s.Admin.Extensions.Mutations.Owner, dataDir: s.dataDir, responses: &s.responses, sessions: s.sessions, sourceLedger: s.Sources.Workspace.SourceLedger, webIndex: deps.External.WebIndex, workerBranchRoot: s.workerBranchRoot, workers: deps.Workflow.Workers}
 	s.Routes.Storage = &Storage{dataDir: s.dataDir, database: deps.Core.Database, markRestorePending: s.markRestorePending, recovery: s.recovery, responses: &s.responses, storePath: s.storePath}
