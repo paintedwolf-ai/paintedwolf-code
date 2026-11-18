@@ -1,6 +1,10 @@
 package secretcap_test
 
 import (
+	"net/url"
+	"path/filepath"
+	"testing"
+
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/backup"
 	"github.com/lycaon/lycaon/internal/credentialstore"
@@ -8,10 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
-	"net/url"
-	"path/filepath"
-	"testing"
-
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
