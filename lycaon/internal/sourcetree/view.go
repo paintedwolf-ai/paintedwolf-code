@@ -55,8 +55,8 @@ func New(ctx context.Context, scope pagedview.Scope, roots []Root, catalog *sour
 			context.AfterFunc(lifetime, release)
 		}
 	}
-	view.startLive()
 	view.rules.roots = view.roots
+	view.startLive()
 	for _, root := range roots {
 		if root.OnDemand {
 			view.holdDemandRoot(lifetime, root)

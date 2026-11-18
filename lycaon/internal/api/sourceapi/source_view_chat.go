@@ -20,6 +20,10 @@ func (s *Trees) selectTreeChat(ctx context.Context, view *sourceView, chatID str
 	if err != nil {
 		return nil, err
 	}
+	project, err = s.Views.sourceViewProject(ctx, project, view)
+	if err != nil {
+		return nil, err
+	}
 	locations, err := s.chatLocations(ctx, view.scope, project, chatID)
 	if err != nil {
 		return nil, err

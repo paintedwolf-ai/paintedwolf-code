@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -92,13 +93,14 @@ func chatLocationFromRow(row db.SourceChatLocations) ChatLocation {
 // placeChatLocation makes the location covering rel visible for the chat,
 // adding one when none covers it.
 func placeChatLocation(ctx context.Context, q *db.Queries, chat, rel string, ts time.Time) error {
+	anchor, kind := locationAnchor(rel)
 	rows, err := q.ListSourceChatLocations(ctx, chat)
 	if err != nil {
 		return err
 	}
 	for _, row := range rows {
 		location := chatLocationFromRow(row)
-		if !location.Covers(rel) {
+		if !location.Covers(rel) || kind == ChatLocationFile && location.Kind != ChatLocationFile {
 			continue
 		}
 		if !location.Available() {
@@ -109,7 +111,6 @@ func placeChatLocation(ctx context.Context, q *db.Queries, chat, rel string, ts 
 		}
 		return nil
 	}
-	anchor, kind := locationAnchor(rel)
 	location := ChatLocation{Anchor: anchor, Kind: kind}
 	identity, _ := projectroot.OutsideDirectoryIdentity(location.Directory())
 	return q.InsertSourceChatLocation(ctx, db.InsertSourceChatLocationParams{
@@ -132,23 +133,30 @@ func (s *Store) ChatLocations(ctx context.Context, sessionID string) ([]ChatLoca
 		return nil, err
 	}
 	all := make([]ChatLocation, 0, len(rows))
+	folders := make(map[string]struct{}, len(rows))
 	for _, row := range rows {
-		all = append(all, chatLocationFromRow(row))
+		location := chatLocationFromRow(row)
+		all = append(all, location)
+		if !location.Hidden && location.Kind != ChatLocationFile && location.Available() {
+			folders[location.Anchor] = struct{}{}
+		}
 	}
 	locations := make([]ChatLocation, 0, len(all))
 	for _, location := range all {
-		covered := false
-		for _, outer := range all {
-			if outer.ID != location.ID && !outer.Hidden && outer.Kind != ChatLocationFile && outer.Covers(location.Anchor) {
-				covered = true
-				break
-			}
-		}
-		if !covered {
+		if location.Kind == ChatLocationFile || !hasAncestorLocation(location.Anchor, folders) {
 			locations = append(locations, location)
 		}
 	}
 	return locations, nil
+}
+
+func hasAncestorLocation(anchor string, folders map[string]struct{}) bool {
+	for parent := path.Dir(anchor); parent != "."; parent = path.Dir(parent) {
+		if _, ok := folders[parent]; ok {
+			return true
+		}
+	}
+	return false
 }
 
 // ChatLocationCovering answers the chat's visible location covering rel.
@@ -156,6 +164,11 @@ func (s *Store) ChatLocationCovering(ctx context.Context, sessionID, rel string)
 	locations, err := s.ChatLocations(ctx, sessionID)
 	if err != nil {
 		return ChatLocation{}, false, err
+	}
+	for _, location := range locations {
+		if location.Kind == ChatLocationFile && location.Covers(rel) {
+			return location, true, nil
+		}
 	}
 	for _, location := range locations {
 		if location.Covers(rel) {

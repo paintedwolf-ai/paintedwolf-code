@@ -82,12 +82,16 @@ func (s *Store) recordBatchIdentityTx(ctx context.Context, q *db.Queries, inputs
 	if err != nil {
 		return recorded, err
 	}
+	sessionID, err := s.outsideOperationSession(ctx, q, first)
+	if err != nil {
+		return recorded, err
+	}
 	operationID := newID()
 	ts := first.TS.Format(time.RFC3339Nano)
 	if err := q.InsertSourceOperation(ctx, db.InsertSourceOperationParams{
 		ID: operationID, ProjectID: first.ProjectID, BranchID: first.BranchID.String(),
 		Origin: string(first.Origin), PersonID: db.NullString(personID),
-		Cause: first.Cause, ActorLabel: first.ActorLabel, SessionID: first.SessionID,
+		Cause: first.Cause, ActorLabel: first.ActorLabel, SessionID: sessionID,
 		JobID: first.JobID, Turn: int64(first.Turn), ToolCallID: first.ToolCallID,
 		ToolName: first.ToolName,
 		BatchID:  first.BatchID, OperationKey: first.OperationID,
