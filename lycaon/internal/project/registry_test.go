@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 )
 
 func TestProjectRegistryCreateAndGet(t *testing.T) {
@@ -128,9 +129,9 @@ func TestProjectRegistryListRecentFirst(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Create second: %v", err)
 	}
-	reg.mu.Lock()
-	reg.projects[first.ID].LastOpenedAt = second.LastOpenedAt.Add(-time.Hour)
-	reg.mu.Unlock()
+	_, err = reg.db.ExecContext(ctx, "UPDATE projects SET last_opened_at = ? WHERE id = ?",
+		timelayout.Format(second.LastOpenedAt.Add(-time.Hour)), first.ID)
+	testutil.FailErr(t, "seed earlier project access", err)
 
 	list, err := reg.List(ctx)
 	if err != nil {
