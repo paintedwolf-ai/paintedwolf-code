@@ -61,39 +61,26 @@ func TestCoordinatorHostFinish_surfaceClassificationExhaustive(t *testing.T) {
 	}
 }
 
-// Read-only fan-out synthesis must be allowed to finish with user prose.
-func TestCoordinatorHostFinish_readScoutFanoutCanReportToUser(t *testing.T) {
+// A read-only scout fan-out (path explorers, repo researchers) resolves to
+// synthesis on its idle loop wake, and that turn must be able to close with a
+// grounded user answer, or the coordinator livelocks re-emitting its summary.
+func TestCoordinatorHostFinish_readScoutsCanReportToUser(t *testing.T) {
 	t.Parallel()
-	history := WorkerCompletionHistory(orchestration.ProfilePathExplorer)
-	profile := surface.ResolveTurnProfile(
-		api.CoordinatorRunContext{},
-		&api.Session{Posture: api.SessionPostureBuild},
-		coordinatorTurnHistory(history, surface.HostLoopWakeSentinel),
-		surface.WithWrapupGates(surface.ImplementSessionState{}, true, false),
-	)
-	if profile.SurfaceID != "implement_synthesis" {
-		t.Fatalf("path-explorer loop wake resolved to surface %q, want implement_synthesis", profile.SurfaceID)
-	}
-	if !guard.HostTurnMayFinishWithProse(profile.SurfaceID, true, false) {
-		t.Fatalf("read-scout fan-out resolved to %q, which cannot finish with user prose — the coordinator would livelock re-emitting its summary", profile.SurfaceID)
-	}
-}
-
-// TestCoordinatorHostFinish_readScoutSynthesisCanReportToUser is the resolver-level guard
-// against a read-only research fan-out livelock: research/review scouts resolve to synthesis
-// on idle loop wakes, and that turn must be able to close with a grounded user answer.
-func TestCoordinatorHostFinish_readScoutSynthesisCanReportToUser(t *testing.T) {
-	t.Parallel()
-	history := WorkerCompletionHistory(orchestration.ProfileRepoResearcher)
-	sess := &api.Session{Posture: api.SessionPostureBuild}
-	profile := surface.ResolveTurnProfile(
-		api.CoordinatorRunContext{}, sess, coordinatorTurnHistory(history, surface.HostLoopWakeSentinel),
-		surface.WithWrapupGates(surface.ImplementSessionState{}, true, false),
-	)
-	if profile.SurfaceID != "implement_synthesis" {
-		t.Fatalf("repo-researcher loop wake resolved to surface %q, want implement_synthesis", profile.SurfaceID)
-	}
-	if !guard.HostTurnMayFinishWithProse(profile.SurfaceID, true, false) {
-		t.Fatalf("read-scout synthesis on %q must finish with a grounded user answer — else research fan-out livelocks", profile.SurfaceID)
+	for _, scout := range []string{orchestration.ProfilePathExplorer, orchestration.ProfileRepoResearcher} {
+		t.Run(scout, func(t *testing.T) {
+			t.Parallel()
+			profile := surface.ResolveTurnProfile(
+				api.CoordinatorRunContext{},
+				&api.Session{Posture: api.SessionPostureBuild},
+				coordinatorTurnHistory(WorkerCompletionHistory(scout), surface.HostLoopWakeSentinel),
+				surface.WithWrapupGates(surface.ImplementSessionState{}, true, false),
+			)
+			if profile.SurfaceID != "implement_synthesis" {
+				t.Fatalf("%s loop wake resolved to surface %q, want implement_synthesis", scout, profile.SurfaceID)
+			}
+			if !guard.HostTurnMayFinishWithProse(profile.SurfaceID, true, false) {
+				t.Fatalf("%s synthesis on %q cannot finish with a grounded user answer", scout, profile.SurfaceID)
+			}
+		})
 	}
 }
