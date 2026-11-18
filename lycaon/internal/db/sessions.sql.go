@@ -3489,14 +3489,14 @@ UPDATE sessions SET
     project_id = ?1, posture = ?2, agent_type = ?3,
     provider_id = ?4, model = ?5,
     title = ?6, status = ?7, compaction_generation = ?8,
-    archived_at = ?9, seen_at = ?10, updated_at = ?11,
+    archived_at = ?9, updated_at = ?10,
     status_changed_at = CASE
-        WHEN status = ?7 THEN status_changed_at ELSE ?11
+        WHEN status = ?7 THEN status_changed_at ELSE ?10
     END,
     pin_rank = CASE
         WHEN project_id = ?1 AND ?9 IS NULL THEN pin_rank
     END
-WHERE id = ?12
+WHERE id = ?11
 `
 
 type UpdateSessionParams struct {
@@ -3509,7 +3509,6 @@ type UpdateSessionParams struct {
 	Status               string         `json:"status"`
 	CompactionGeneration int64          `json:"compaction_generation"`
 	ArchivedAt           sql.NullString `json:"archived_at"`
-	SeenAt               sql.NullString `json:"seen_at"`
 	UpdatedAt            string         `json:"updated_at"`
 	ID                   string         `json:"id"`
 }
@@ -3526,7 +3525,6 @@ func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) er
 		arg.Status,
 		arg.CompactionGeneration,
 		arg.ArchivedAt,
-		arg.SeenAt,
 		arg.UpdatedAt,
 		arg.ID,
 	)

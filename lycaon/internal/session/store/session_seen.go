@@ -25,11 +25,11 @@ func (s *sqlSessions) MarkSessionSeen(ctx context.Context, id string, seenAt tim
 	if err != nil {
 		return err
 	}
-	sess, err := sessionFromRow(row)
+	previous, err := db.TimePtrFromNull(row.SeenAt)
 	if err != nil {
 		return err
 	}
-	if sess.SeenAt != nil && !seenAt.After(*sess.SeenAt) {
+	if previous != nil && !seenAt.After(*previous) {
 		return nil
 	}
 	stamp := db.NullTimePtr(&seenAt)
@@ -43,6 +43,10 @@ func (s *sqlSessions) MarkSessionSeen(ctx context.Context, id string, seenAt tim
 		return err
 	}
 	if crossed != 0 {
+		sess, err := sessionFromRow(row)
+		if err != nil {
+			return err
+		}
 		if err := enqueueSessionEvent(ctx, core, tx, sess, api.SessionEventActionUpdated); err != nil {
 			return err
 		}

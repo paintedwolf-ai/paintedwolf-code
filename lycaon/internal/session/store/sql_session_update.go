@@ -84,7 +84,6 @@ func updateSession(
 		Status:               string(sess.Status),
 		CompactionGeneration: int64(sess.CompactionGeneration),
 		ArchivedAt:           db.NullTimePtr(sess.ArchivedAt),
-		SeenAt:               db.NullTimePtr(sess.SeenAt),
 		UpdatedAt:            timelayout.Format(sess.UpdatedAt),
 		ID:                   id,
 	}); err != nil {
@@ -176,8 +175,8 @@ func (s *memorySessions) UpdateSession(ctx context.Context, id string, fn func(*
 	if !api.CanTransitionSessionStatus(sess.Status, updated.Status) {
 		return &SessionStatusTransitionError{From: sess.Status, To: updated.Status}
 	}
-	// Pins and activity have their own writers; archiving or moving project clears the pin.
 	updated.ActivityAt = sess.ActivityAt
+	updated.SeenAt = sess.SeenAt
 	updated.PinRank = sess.PinRank
 	if updated.ProjectID != sess.ProjectID || updated.ArchivedAt != nil {
 		updated.PinRank = nil

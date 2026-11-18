@@ -308,6 +308,12 @@ func TestQueuedReceiptClaimDoesNotDeadlockSessionSeenPublication(t *testing.T) {
 	manager := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
+	execution, err := st.BeginTurn(t.Context(), store.TurnStart{
+		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}",
+	})
+	testutil.FailErr(t, "begin turn", err)
+	finished, err := st.FinishTurn(t.Context(), execution.Turn.ID, execution.Attempt.ID, store.TurnStatusComplete, "", "{}", "")
+	testutil.FailErr(t, "finish turn", err)
 	row, _, err := manager.Submissions.AdmitPrompt(t.Context(), sess.ID, uuid.NewString(), "queued", promptinput.Input{Text: "queued"})
 	testutil.FailErr(t, "admit queued prompt", err)
 	manager.Resources.Queue.AppendOrdered(sess.ID, row.ID, row.SubmittedBy, "queued", row.AdmissionSeq, row.CreatedAt)
@@ -317,7 +323,7 @@ func TestQueuedReceiptClaimDoesNotDeadlockSessionSeenPublication(t *testing.T) {
 	defer cancel()
 	seen := make(chan error, 1)
 	go func() {
-		seen <- st.UpdateSession(ctx, sess.ID, func(s *api.Session) { now := time.Now(); s.SeenAt = &now })
+		seen <- st.MarkSessionSeen(ctx, sess.ID, *finished.CompletedAt)
 	}()
 	select {
 	case <-pending.writerHeld:

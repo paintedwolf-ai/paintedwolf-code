@@ -16,6 +16,7 @@ import (
 type attentionTurnStore interface {
 	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
 	UpdateSession(context.Context, string, func(*api.Session)) error
+	MarkSessionSeen(context.Context, string, time.Time) error
 	BeginTurn(context.Context, TurnStart) (TurnExecution, error)
 	FinishTurn(context.Context, string, string, TurnStatus, string, string, string) (Turn, error)
 	LatestFinishes(context.Context) (map[string]time.Time, error)
@@ -55,7 +56,7 @@ func TestAttentionCompletedTurnParity(t *testing.T) {
 			if len(candidates) != 1 || candidates[0].SessionID != sess.ID {
 				t.Fatalf("unread candidates = %+v", candidates)
 			}
-			testutil.FailErr(t, "mark completed turn seen", st.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.SeenAt = completed.CompletedAt }))
+			testutil.FailErr(t, "mark completed turn seen", st.MarkSessionSeen(ctx, sess.ID, *completed.CompletedAt))
 			candidates, err = st.ListAttentionCandidates(ctx)
 			testutil.FailErr(t, "read seen candidates", err)
 			if len(candidates) != 0 {
@@ -112,7 +113,7 @@ func TestAttentionCandidateStatusSinceParity(t *testing.T) {
 
 				time.Sleep(2 * time.Millisecond)
 				testutil.FailErr(t, "rename", st.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.Title = "Renamed" }))
-				testutil.FailErr(t, "read", st.UpdateSession(ctx, sess.ID, func(s *api.Session) { s.SeenAt = new(time.Now().UTC()) }))
+				testutil.FailErr(t, "read", st.MarkSessionSeen(ctx, sess.ID, time.Now()))
 				if got := since(); !got.Equal(failedAt) {
 					t.Fatalf("record writes moved status since: %v -> %v", failedAt, got)
 				}

@@ -58,7 +58,7 @@ UPDATE sessions SET
     project_id = sqlc.arg(project_id), posture = sqlc.arg(posture), agent_type = sqlc.arg(agent_type),
     provider_id = sqlc.arg(provider_id), model = sqlc.arg(model),
     title = sqlc.arg(title), status = sqlc.arg(status), compaction_generation = sqlc.arg(compaction_generation),
-    archived_at = sqlc.narg(archived_at), seen_at = sqlc.narg(seen_at), updated_at = sqlc.arg(updated_at),
+    archived_at = sqlc.narg(archived_at), updated_at = sqlc.arg(updated_at),
     status_changed_at = CASE
         WHEN status = sqlc.arg(status) THEN status_changed_at ELSE sqlc.arg(updated_at)
     END,
