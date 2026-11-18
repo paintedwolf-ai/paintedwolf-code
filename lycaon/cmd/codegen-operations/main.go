@@ -16,15 +16,17 @@ import (
 )
 
 type operationSpec struct {
-	OperationID  string `yaml:"operationId"`
-	PersonAction string `yaml:"x-person-action"`
+	OperationID  string      `yaml:"operationId"`
+	PersonAction string      `yaml:"x-person-action"`
+	Parameters   []yaml.Node `yaml:"parameters"`
 }
 
 type document struct {
 	Info struct {
 		Version string `yaml:"version"`
 	} `yaml:"info"`
-	Paths map[string]map[string]yaml.Node `yaml:"paths"`
+	Paths      map[string]map[string]yaml.Node `yaml:"paths"`
+	Components componentDefinitions            `yaml:"components"`
 }
 
 type operation struct {
@@ -32,6 +34,7 @@ type operation struct {
 	Method string
 	Path   string
 	Params []string
+	Query  []queryParameter
 	// RecordsPersonAction is the operation's x-person-action declaration.
 	RecordsPersonAction bool
 }
@@ -101,6 +104,12 @@ func loadOperations(spec document) ([]operation, error) {
 	var out []operation
 	seen := make(map[string]struct{})
 	for path, item := range spec.Paths {
+		var pathParams []yaml.Node
+		if node, ok := item["parameters"]; ok {
+			if err := node.Decode(&pathParams); err != nil {
+				return nil, fmt.Errorf("%s parameters: %w", path, err)
+			}
+		}
 		for method, node := range item {
 			method = strings.ToUpper(method)
 			switch method {
@@ -129,7 +138,11 @@ func loadOperations(spec document) ([]operation, error) {
 			for _, match := range matches {
 				params = append(params, match[1])
 			}
-			out = append(out, operation{ID: id, Method: method, Path: path, Params: params, RecordsPersonAction: records})
+			query, err := spec.Components.queryParameters(pathParams, candidate.Parameters)
+			if err != nil {
+				return nil, fmt.Errorf("%s %s (%s): %w", method, path, id, err)
+			}
+			out = append(out, operation{ID: id, Method: method, Path: path, Params: params, Query: query, RecordsPersonAction: records})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
