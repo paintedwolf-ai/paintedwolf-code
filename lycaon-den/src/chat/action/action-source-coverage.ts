@@ -4,7 +4,7 @@ import { LycaonApiError } from "../../api/http.ts";
 import type { ActionFact } from "../../api/types.ts";
 import { subscribeSourceInvalidation } from "../../files/source/source-invalidation.ts";
 import { BOUNDARY_REASONS, GAP_REASONS } from "../../files/source/source-command-window.ts";
-import type { CardAction } from "./action-merge.ts";
+import { withSourceObservation, type CardAction } from "./action-merge.ts";
 
 type FolderCoverage = NonNullable<ActionFact["source_coverage"]>[number];
 
@@ -67,13 +67,7 @@ export function useActionCoverage(
     if (!fact?.source_windows?.length) return current;
     const resolved = loaded();
     const coverage = [...(fact.source_coverage ?? []), ...(resolved && resolved.address === address() ? resolved.coverage : [])];
-    const facts = coverage.length
-      ? current.facts.map((entry) => entry === fact ? { ...fact, source_coverage: coverage } : entry)
-      : current.facts.filter((entry) => entry !== fact);
-    const row = coverage.length && !current.row.includes("source_observation")
-      ? [...current.row.slice(0, 1), "source_observation" as const]
-      : current.row;
-    return { ...current, facts, row };
+    return withSourceObservation(current, coverage.length ? { ...fact, source_coverage: coverage } : undefined);
   });
 }
 

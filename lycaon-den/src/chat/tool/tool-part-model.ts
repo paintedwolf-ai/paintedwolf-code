@@ -1,6 +1,7 @@
 import type { CommandActivityView } from "./command-activity-model.ts";
 import type {
   ActionDescriptor,
+  ActionFact,
   Message,
   ChatContentReference,
   ToolCall,
@@ -108,6 +109,7 @@ export interface ToolPartView {
   /** Host program receipt; present only for portable command programs. */
   commandProgram?: CommandProgramReceipt | null;
   commandActivity?: CommandActivityView;
+  sourceObservation?: ActionFact;
   /** Host provenance for redacted result spans. */
   redaction?: HostSecretRedactionMeta | null;
   /** Host provenance for rendered argument spans. */
@@ -373,6 +375,7 @@ export function toolPartFromCall(
     process: resultMsg?.tool_result?.process ?? null,
     invocation: resultMsg?.tool_result?.invocation ?? null,
     commandProgram: resultMsg?.tool_result?.command_program ?? null,
+    sourceObservation: resultMsg?.tool_result?.card_facts?.find((fact) => fact.kind === "source_observation"),
     verdict: resultMsg?.tool_result?.verdict ?? null,
     outcome: resultMsg?.tool_result?.outcome,
     codes: resultMsg?.tool_result?.codes,
