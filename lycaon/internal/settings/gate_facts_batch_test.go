@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -30,7 +31,7 @@ func TestDeclaredFileTargetDisclosesBatchWorstCase(t *testing.T) {
 
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	sources.Locations = cat
 	g := settings.NewRuleApprovalGate(store, sources)
 

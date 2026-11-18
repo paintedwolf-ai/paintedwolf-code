@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -27,7 +28,7 @@ func (r *secretInstallRecorder) ApplyGrant(grant hitl.ApprovalGrant) (bool, erro
 func TestServicePermissionFailureRollsBackSecretAuthority(t *testing.T) {
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "open store", err)
-	authority := settings.NewRuleApprovalGate(store, settings.NoSources())
+	authority := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	recipients := []secretmatch.Recipient{{ID: "service", Label: "http://localhost:8080", Surface: secretmatch.SurfaceHTTPRequest, Kind: secretmatch.DestinationService}}
 	secret := hitl.ApprovalGrant{ID: "secret", Scope: hitl.ApprovalGrantScopeChat, ChatSessionID: "task", ProjectID: "project",
 		Predicate:          hitl.ApprovalGrantPredicate{Category: hitl.ApprovalGrantCategorySecret, Pattern: secretmatch.FingerprintDigest([]secretmatch.SecretFingerprint{"value"})},

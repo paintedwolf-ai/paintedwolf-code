@@ -44,7 +44,7 @@ func ladderGate(t *testing.T) *RuleApprovalGate {
 	t.Helper()
 	store, err := NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
-	return &RuleApprovalGate{store: store, grants: newSessionGrants(), quiets: newAskQuiets(), sources: NoSources()}
+	return &RuleApprovalGate{store: store, grants: newSessionGrants(), quiets: newAskQuiets(), sources: emptySources()}
 }
 
 func ladderAction() hitl.ProposedAction {

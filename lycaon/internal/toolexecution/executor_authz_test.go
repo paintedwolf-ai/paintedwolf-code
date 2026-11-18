@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -96,7 +97,7 @@ func TestExecutorPolicyBlockEmitsToolDenied(t *testing.T) {
 
 func TestApprovalGateAutoAllow(t *testing.T) {
 	store := testApprovalStore(t)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	res, err := gate.Evaluate(context.Background(), hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "read",

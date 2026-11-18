@@ -26,6 +26,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -244,7 +245,7 @@ func TestCheckpointGrantOfferCreatesProjectLease(t *testing.T) {
 	pub := &events.Publisher{Hub: hub}
 	chkMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
 
-	approvals := settings.NewRuleApprovalGate(svc.Approvals, settings.NoSources())
+	approvals := settings.NewRuleApprovalGate(svc.Approvals, settingstest.EmptySources())
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{
 		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil),
 		Settings: svc}, Host: api.HostDependencies{Events: hub}, Approvals: api.ApprovalsDependencies{Checkpoints: chkMgr, ApprovalGate: approvals}}), nil, api.TestAPIToken)
@@ -341,7 +342,7 @@ func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
 	pub := &events.Publisher{Hub: hub}
 	chkMgr := hitl.NewCheckpoints(hitl.NewSQLStore(sqlDB), pub, authzcontext.SQLRecorder(sqlDB))
 
-	approvals := settings.NewRuleApprovalGate(svc.Approvals, settings.NoSources())
+	approvals := settings.NewRuleApprovalGate(svc.Approvals, settingstest.EmptySources())
 	writeRootRT := approvalstate.NewSandboxPathGrantRuntime()
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{
 		Store: store, Projects: reg, Sessions: session.NewHost(store, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil),

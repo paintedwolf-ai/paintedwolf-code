@@ -1,4 +1,4 @@
-package contract
+package startupprotocol
 
 import (
 	"os"
@@ -8,23 +8,21 @@ import (
 	"testing"
 	"unicode"
 
-	"github.com/lycaon/lycaon/internal/startupprotocol"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestDesktopStartupProtocolPhasesStayInSync(t *testing.T) {
 	t.Parallel()
-	root := contractcheck.RepoRoot(t)
+	root := filepath.Join("..", "..", "..")
 	rustRaw, err := os.ReadFile(filepath.Join(root, "lycaon-den/src-tauri/src/sidecar/startup.rs"))
-	contractcheck.FailErr(t, "read Rust startup protocol", err)
+	testutil.FailErr(t, "read Rust startup protocol", err)
 	tsRaw, err := os.ReadFile(filepath.Join(root, "lycaon-den/src/platform/connection/engine-startup.ts"))
-	contractcheck.FailErr(t, "read TypeScript startup protocol", err)
+	testutil.FailErr(t, "read TypeScript startup protocol", err)
 
 	rust := startupRustPhases(t, string(rustRaw))
 	ts := startupTypeScriptPhases(t, string(tsRaw))
-	goPhases := startupprotocol.Phases()
-	want := make([]string, len(goPhases))
-	for i, phase := range goPhases {
+	want := make([]string, len(phases))
+	for i, phase := range phases {
 		want[i] = string(phase)
 	}
 	if strings.Join(rust, ",") != strings.Join(want, ",") {

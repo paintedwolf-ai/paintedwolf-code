@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 )
 
 // Every transcript event carries the ordinal minted by its store write.
@@ -99,7 +100,7 @@ func appendSSEOrdCases() []sseOrdCase {
 			ToolResult: &wire.ToolResult{Content: `{"ok":true}`, Outcome: wire.ToolResultOutcomeCompleted},
 		}},
 	}
-	for _, kind := range wire.AllMessageKinds() {
+	for _, kind := range apitest.AllMessageKinds() {
 		msg := wire.Message{
 			Role:       wire.MessageRoleSystem,
 			Kind:       kind,

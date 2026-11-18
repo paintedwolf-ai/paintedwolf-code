@@ -7,6 +7,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -15,7 +16,7 @@ func TestListGrantsUnqualifiedReturnsTaskLeasesAcrossChats(t *testing.T) {
 	stageBundledApprovals(t, nil)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	gate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 
 	chatGrant := func(id, chat string) hitl.ApprovalGrant {
 		return hitl.ApprovalGrant{

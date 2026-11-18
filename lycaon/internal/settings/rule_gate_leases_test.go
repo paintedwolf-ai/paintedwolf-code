@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/packageexec"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -21,7 +22,7 @@ func TestRuleApprovalGateExactActionSetLease(t *testing.T) {
 	}})
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	proj := filepath.Join(tmp, "project")
 
 	action := hitl.ProposedAction{
@@ -94,7 +95,7 @@ func TestRemotePackageExecutionApprovalBindsResolvedVersion(t *testing.T) {
 	stageBundledApprovalsPosture(t, gate.PostureLight)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 	testutil.FailErr(t, "create approval store", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	project := t.TempDir()
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
@@ -143,7 +144,7 @@ func TestGateRemotePackageExecutionDurableProjectGrant(t *testing.T) {
 	approvalsPath := filepath.Join(t.TempDir(), "approvals.yaml")
 	store, err := settings.NewApprovalStoreAt(approvalsPath)
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	project := t.TempDir()
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
@@ -196,7 +197,7 @@ func TestGateRemotePackageExecutionDurableProjectGrant(t *testing.T) {
 
 	reloadedStore, err := settings.NewApprovalStoreAt(approvalsPath)
 	testutil.FailErr(t, "reloaded NewApprovalStoreAt", err)
-	reloadedGate := settings.NewRuleApprovalGate(reloadedStore, settings.NoSources())
+	reloadedGate := settings.NewRuleApprovalGate(reloadedStore, settingstest.EmptySources())
 	afterReload, err := reloadedGate.Evaluate(t.Context(), action)
 	testutil.FailErr(t, "check package action after reload", err)
 	if !afterReload.AutoApproved() {
@@ -213,7 +214,7 @@ func TestDurableExactActionLeaseRoundTrips(t *testing.T) {
 	path := filepath.Join(tmp, "global.yaml")
 	store, err := settings.NewApprovalStoreAt(path)
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	proj := filepath.Join(tmp, "project")
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
@@ -250,7 +251,7 @@ func TestDurableExactActionLeaseRoundTrips(t *testing.T) {
 
 	reloaded, err := settings.NewApprovalStoreAt(path)
 	testutil.FailErr(t, "reload approval store", err)
-	gate2 := settings.NewRuleApprovalGate(reloaded, settings.NoSources())
+	gate2 := settings.NewRuleApprovalGate(reloaded, settingstest.EmptySources())
 	repeat, err := gate2.Evaluate(context.Background(), action)
 	testutil.FailErr(t, "gate.Evaluate after reload", err)
 	if !repeat.AutoApproved() || repeat.Required() {
@@ -279,7 +280,7 @@ rules:
 `)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "new approval store", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "chown",
@@ -345,7 +346,7 @@ rules:
 `)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "new approval store", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	result, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "read",
@@ -369,7 +370,7 @@ func TestRuleApprovalGateCapabilityLeasesComposeWithoutWidening(t *testing.T) {
 `)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "new approval store", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	contained := hitl.Contained{FSJailed: true, Egress: hitl.ContainedEgressProxy, Roots: []string{tmp}}
 	for _, id := range []string{"docker", "local-db"} {
 		action := hitl.ProposedAction{
@@ -447,7 +448,7 @@ rules:
 `)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "new approval store", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	result, err := approvalGate.Evaluate(context.Background(), hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "command",
@@ -478,7 +479,7 @@ func TestHostResourceDeviceLeaseCoversOtherProject(t *testing.T) {
 `)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "new approval store", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	first := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "command",
@@ -549,7 +550,7 @@ func TestHostResourceLeaseDoesNotSatisfyToolAsk(t *testing.T) {
 `)
 	store, err := settings.NewApprovalStoreAt(filepath.Join(tmp, "global.yaml"))
 	testutil.FailErr(t, "new approval store", err)
-	approvalGate := settings.NewRuleApprovalGate(store, settings.NoSources())
+	approvalGate := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
 			Tool: "chown",

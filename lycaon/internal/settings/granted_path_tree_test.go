@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/sensitivepath"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -116,7 +117,7 @@ func TestTaskReadGrantSilencesLaterReadsInTheFolder(t *testing.T) {
 	testutil.FailErr(t, "PutGlobal strict", store.PutGlobal(settings.ApprovalConfig{Posture: gate.PostureStrict}))
 	locations, err := sensitivepath.Load(sensitivepath.Bundled())
 	testutil.FailErr(t, "sensitivepath.Load", err)
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	sources.Locations = locations
 	g := settings.NewRuleApprovalGate(store, sources)
 
@@ -200,7 +201,7 @@ func TestOutsideReadAsksWithFileAccessAtEveryPosture(t *testing.T) {
 		store, err := settings.NewApprovalStoreAt(filepath.Join(t.TempDir(), "global.yaml"))
 		testutil.FailErr(t, "NewApprovalStoreAt", err)
 		testutil.FailErr(t, "PutGlobal "+string(posture), store.PutGlobal(settings.ApprovalConfig{Posture: posture}))
-		g := settings.NewRuleApprovalGate(store, settings.NoSources())
+		g := settings.NewRuleApprovalGate(store, settingstest.EmptySources())
 
 		for _, tool := range []string{"list_dir", "read", "grep", "find"} {
 			res, err := g.Evaluate(context.Background(), hitl.ProposedAction{
@@ -241,7 +242,7 @@ func TestTreeGrantDoesNotCoverSensitiveChildren(t *testing.T) {
 	testutil.FailErr(t, "PutGlobal strict", store.PutGlobal(settings.ApprovalConfig{Posture: gate.PostureStrict}))
 	locations, err := sensitivepath.Load(sensitivepath.Bundled())
 	testutil.FailErr(t, "sensitivepath.Load", err)
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	sources.Locations = locations
 	g := settings.NewRuleApprovalGate(store, sources)
 
@@ -332,7 +333,7 @@ func TestDurableTreeGrantSurvivesReloadAndSilencesReads(t *testing.T) {
 	testutil.FailErr(t, "PutGlobal strict", store.PutGlobal(settings.ApprovalConfig{Posture: gate.PostureStrict}))
 	locations, err := sensitivepath.Load(sensitivepath.Bundled())
 	testutil.FailErr(t, "sensitivepath.Load", err)
-	sources := settings.NoSources()
+	sources := settingstest.EmptySources()
 	sources.Locations = locations
 	g := settings.NewRuleApprovalGate(store, sources)
 

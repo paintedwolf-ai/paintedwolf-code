@@ -1,9 +1,9 @@
 package api_test
 
 import (
-	"testing"
-
 	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/pkg/api/apitest"
+	"testing"
 )
 
 func TestWorkerSummaryLegSucceeded(t *testing.T) {
@@ -22,7 +22,7 @@ func TestWorkerResultStatusReactable(t *testing.T) {
 	if api.WorkerResultStatusReactable("running") {
 		t.Fatal("queue running is not a terminal result")
 	}
-	for _, status := range api.AllWorkerSummaryStatuses() {
+	for _, status := range apitest.AllWorkerSummaryStatuses() {
 		got := api.WorkerResultStatusReactable(string(status))
 		switch status {
 		case api.WorkerSummaryStatusCanceled, api.WorkerSummaryStatusHeld:

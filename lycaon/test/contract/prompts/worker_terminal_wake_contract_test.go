@@ -1,18 +1,19 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/pkg/api/apitest"
 	"go/ast"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestWorkerResultStatusReactableClosesOverSummaryEnum(t *testing.T) {
 	t.Parallel()
-	for _, status := range api.AllWorkerSummaryStatuses() {
+	for _, status := range apitest.AllWorkerSummaryStatuses() {
 		got := api.WorkerResultStatusReactable(string(status))
 		switch status {
 		case api.WorkerSummaryStatusCanceled, api.WorkerSummaryStatusHeld:

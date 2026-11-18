@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -34,7 +35,7 @@ func elevatedTestHandler(t *testing.T) (*Handler, *wire.Session) {
 	testutil.FailErr(t, "create project", err)
 	chat, err := sessions.Create(t.Context(), wire.CreateSessionRequest{}, p.ID)
 	testutil.FailErr(t, "create chat", err)
-	handler := New(&httpio.Responder{Logger: slog.Default()}, withHost(t, Deps{Projects: projects, Settings: &settings.Service{Approvals: approvals}, Gate: settings.NewRuleApprovalGate(approvals, settings.NoSources()), Store: sessions}))
+	handler := New(&httpio.Responder{Logger: slog.Default()}, withHost(t, Deps{Projects: projects, Settings: &settings.Service{Approvals: approvals}, Gate: settings.NewRuleApprovalGate(approvals, settingstest.EmptySources()), Store: sessions}))
 	return &handler, chat
 }
 

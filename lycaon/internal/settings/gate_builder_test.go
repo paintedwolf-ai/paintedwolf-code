@@ -33,7 +33,7 @@ func TestGateBuilderSealPreservesSessionState(t *testing.T) {
 
 func TestGateBuilderRejectsLateProducers(t *testing.T) {
 	t.Parallel()
-	sources := NoSources()
+	sources := emptySources()
 	cases := map[string]func(*GateBuilder){
 		"detections":     func(b *GateBuilder) { b.WithDetections(sources.Detections) },
 		"pins":           func(b *GateBuilder) { b.WithPins(sources.Pins) },

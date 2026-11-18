@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/platform"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolprofiles"
@@ -31,7 +32,7 @@ func TestBoundaryAuthorityRevalidatesLiveDenyWithoutBlockingRecovery(t *testing.
 			}})
 			engine := toolexecution.NewApprovalPolicyEngine(
 				toolprofiles.NewProfilePolicyEngine(boundary),
-				settings.NewRuleApprovalGate(store, settings.NoSources()),
+				settings.NewRuleApprovalGate(store, settingstest.EmptySources()),
 			)
 			action := platform.PolicyContext{
 				ProfileID: "implement", ToolName: "command", ProjectDir: root,

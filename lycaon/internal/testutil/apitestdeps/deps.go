@@ -50,6 +50,7 @@ import (
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	repoinfotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
@@ -155,7 +156,7 @@ func Fill(t *testing.T, d *Deps) {
 	fillSessions(t, d)
 	fillSettings(t, d)
 	if d.ApprovalGate == nil {
-		d.ApprovalGate = settings.NewRuleApprovalGate(d.Settings.Approvals, settings.NoSources())
+		d.ApprovalGate = settings.NewRuleApprovalGate(d.Settings.Approvals, settingstest.EmptySources())
 	}
 	if d.Invocations == nil {
 		d.Invocations = invocation.NewSQLRecorder(d.Database)

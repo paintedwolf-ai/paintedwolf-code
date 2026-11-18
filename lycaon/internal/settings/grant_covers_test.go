@@ -16,7 +16,7 @@ func TestGrantCoversRequiresAnActualLease(t *testing.T) {
 	store, err := NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
 	testutil.FailErr(t, "PutGlobal strict", store.PutGlobal(ApprovalConfig{Posture: gate.PostureStrict}))
-	approvalGate := NewRuleApprovalGate(store, NoSources())
+	approvalGate := NewRuleApprovalGate(store, emptySources())
 
 	action := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
@@ -64,7 +64,7 @@ func TestDeviceWriteRootLeaseCoversOtherProject(t *testing.T) {
 	store, err := NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
 	testutil.FailErr(t, "PutGlobal balanced", store.PutGlobal(ApprovalConfig{Posture: gate.PostureBalanced}))
-	approvalGate := NewRuleApprovalGate(store, NoSources())
+	approvalGate := NewRuleApprovalGate(store, emptySources())
 
 	first := hitl.ProposedAction{
 		Invocation: hitl.ActionInvocation{
@@ -143,7 +143,7 @@ func TestPackageCoordinateLeaseCoversFlagAndEnvVariants(t *testing.T) {
 	store, err := NewApprovalStoreAt(filepath.Join(t.TempDir(), "approvals.yaml"))
 	testutil.FailErr(t, "NewApprovalStoreAt", err)
 	testutil.FailErr(t, "PutGlobal balanced", store.PutGlobal(ApprovalConfig{Posture: gate.PostureBalanced}))
-	approvalGate := NewRuleApprovalGate(store, NoSources())
+	approvalGate := NewRuleApprovalGate(store, emptySources())
 
 	pkgExecBase := &packageexec.Execution{
 		Manager:   "npm",

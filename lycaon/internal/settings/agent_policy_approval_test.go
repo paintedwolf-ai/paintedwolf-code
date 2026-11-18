@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -23,7 +24,7 @@ func agentPolicyGate(t *testing.T, posture gate.Posture) (hitl.ApprovalGate, str
 	testutil.FailErr(t, "approval store", err)
 	project := t.TempDir()
 	testutil.FailErr(t, "create overlay", os.MkdirAll(filepath.Join(project, settingsoverlay.DirName()), 0o700))
-	return settings.NewRuleApprovalGate(store, settings.NoSources()), project
+	return settings.NewRuleApprovalGate(store, settingstest.EmptySources()), project
 }
 
 func agentPolicyWrite(t *testing.T, project, rel string) hitl.ProposedAction {

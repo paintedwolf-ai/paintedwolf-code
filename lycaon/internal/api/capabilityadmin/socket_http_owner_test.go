@@ -30,6 +30,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -146,7 +147,7 @@ func testUnixSocketRecipientLifetime(t *testing.T, tokens bool) {
 	approvals, err := settings.NewApprovalStoreAt(filepath.Join(root, "approvals.yaml"))
 	testutil.FailErr(t, "approval store", err)
 	defer approvals.Close()
-	authority := settings.NewRuleApprovalGate(approvals, settings.NoSources())
+	authority := settings.NewRuleApprovalGate(approvals, settingstest.EmptySources())
 	runtime := approvalstate.NewSocketCapabilityRuntime()
 	defer runtime.Close()
 	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))

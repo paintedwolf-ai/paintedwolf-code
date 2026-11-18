@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -97,7 +98,7 @@ func TestUnixSocketPendingRestartWithdrawsStaleCardAndFreshApprovalExecutes(t *t
 	approvals, err := settings.NewApprovalStoreAt(filepath.Join(root, "approvals.yaml"))
 	testutil.FailErr(t, "restart approval store", err)
 	defer approvals.Close()
-	gate := settings.NewRuleApprovalGate(approvals, settings.NoSources())
+	gate := settings.NewRuleApprovalGate(approvals, settingstest.EmptySources())
 	runtime := approvalstate.NewSocketCapabilityRuntime()
 	defer runtime.Close()
 	installer := &Installation{Gate: gate, Sockets: runtime, authorityMu: &sync.Mutex{}}

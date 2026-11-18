@@ -35,6 +35,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/settings/settingstest"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -71,7 +72,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	approvals, err := settings.NewApprovalStoreAt(filepath.Join(root, "approvals.yaml"))
 	testutil.FailErr(t, "cookie approvals", err)
 	defer approvals.Close()
-	authority := settings.NewRuleApprovalGate(approvals, settings.NoSources())
+	authority := settings.NewRuleApprovalGate(approvals, settingstest.EmptySources())
 	runtime := approvalstate.NewSocketCapabilityRuntime()
 	defer runtime.Close()
 	checkpoints := hitl.NewCheckpoints(hitl.NewSQLStore(database), &events.Publisher{Hub: events.NewMemoryHub()}, authzcontext.SQLRecorder(database))
@@ -164,7 +165,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	approvals, err = settings.NewApprovalStoreAt(filepath.Join(root, "approvals.yaml"))
 	testutil.FailErr(t, "reopen approvals", err)
 	defer approvals.Close()
-	authority = settings.NewRuleApprovalGate(approvals, settings.NoSources())
+	authority = settings.NewRuleApprovalGate(approvals, settingstest.EmptySources())
 	runtime = approvalstate.NewSocketCapabilityRuntime()
 	defer runtime.Close()
 	service = secretcap.NewWithStore(database, values, nil)

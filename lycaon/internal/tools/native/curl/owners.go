@@ -88,15 +88,6 @@ type Prepared struct {
 	transfer      *Transfer
 }
 
-// Transfer reports the completed exchange's received and emitted identities
-// after InvokeOwner returns; it is zero when no response arrived.
-func (p Prepared) Transfer() Transfer {
-	if p.transfer == nil {
-		return Transfer{}
-	}
-	return *p.transfer
-}
-
 // SelectMode names the effect mode argv selects, as Prepare does.
 func (o *Owners) SelectMode(argv commandprogram.Fields) (string, bool) {
 	bound, err := commandprogram.CatalogBinder{}.Bind(o.spec, argv)
