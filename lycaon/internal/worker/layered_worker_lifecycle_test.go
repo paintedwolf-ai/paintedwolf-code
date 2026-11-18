@@ -69,6 +69,7 @@ type layeredWorkerFixture struct {
 	queue      *SQLQueue
 	promotions *PromotionStore
 	manager    *workspace.Manager
+	views      *adapter.ActiveViewRegistry
 	source     string
 	branches   string
 }
@@ -93,7 +94,7 @@ func newLayeredWorkerFixture(t *testing.T, selector *adapter.Selector) *layeredW
 	queue := services.Queue
 	queue.Branches.SetBaselineStore(sourceledger.New(sqlDB, filepath.Join(testbaseline.DataDir(t, sqlDB), "source-content"), sourceledger.Timing{}).Baselines)
 	queue.Branches.SetWorkerWorkspaceManager(manager)
-	return &layeredWorkerFixture{db: sqlDB, queue: queue, promotions: services.Promotions, manager: manager, source: source, branches: branches}
+	return &layeredWorkerFixture{db: sqlDB, queue: queue, promotions: services.Promotions, manager: manager, views: selector.Registry, source: source, branches: branches}
 }
 
 // claim runs the ordinary production path: enqueue, ClaimNext, ClaimWorkerBranch.
@@ -337,13 +338,10 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 	if !ok {
 		t.Fatal("claim registered no consumer engine")
 	}
-	view, cvOK := workspace.LookupBranchClaimedView(root)
-	if !cvOK {
-		t.Fatal("claim recorded no claimed view")
-	}
-	rootID := view.Prepared.PrimaryRootID
+	view := requireMountedView(t, fixture.views, root)
+	rootID := view.PrimaryRootID
 	for name, path := range map[string]string{
-		"backing store": filepath.Join(view.Prepared.BackingDir, "journal"),
+		"backing store": filepath.Join(view.BackingDir, "journal"),
 		"source tree":   filepath.Join(fixture.source, "main.go"),
 	} {
 		if err := engine.GuardLiveConsumerPath(rootID, path); !errors.Is(err, consumer.ErrDirectBackingAccessForbidden) {
@@ -351,7 +349,7 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 		}
 	}
 
-	assertWorkerProcessIsDenied(t, root, fixture.source, view.Prepared)
+	assertWorkerProcessIsDenied(t, root, fixture.source, view)
 
 	testutil.FailErr(t, "create on mount", os.WriteFile(filepath.Join(root, "added.go"), []byte("package added\n"), 0o644))
 	testutil.FailErr(t, "edit on mount", os.WriteFile(filepath.Join(root, "main.go"), []byte("package changed\n"), 0o644))
@@ -526,14 +524,24 @@ func fixtureMountedSelector() *adapter.Selector {
 	return selector
 }
 
-func writeThroughClaimedView(t *testing.T, task *api.WorkerTask, rel, content string) {
+func requireMountedView(t *testing.T, views *adapter.ActiveViewRegistry, root string) *adapter.PreparedView {
 	t.Helper()
-	view, ok := workspace.LookupBranchClaimedView(task.WorkspaceRoot)
+	state, _, ok := workspace.BranchWorkspaceState(root)
 	if !ok {
-		t.Fatalf("no claimed view for %s", task.ID)
+		t.Fatalf("no workspace state for %s", root)
 	}
-	path := layeredfs.QualifiedPath{RootID: view.Prepared.PrimaryRootID, Rel: rel}
-	_, err := view.Prepared.Core.WriteFile(path, []byte(content), 0o644)
+	_, view, ok := views.AdapterForView(state.Identity.ViewID)
+	if !ok || view == nil {
+		t.Fatalf("no registered view for %s", root)
+	}
+	return view
+}
+
+func writeThroughClaimedView(t *testing.T, views *adapter.ActiveViewRegistry, task *api.WorkerTask, rel, content string) {
+	t.Helper()
+	view := requireMountedView(t, views, task.WorkspaceRoot)
+	path := layeredfs.QualifiedPath{RootID: view.PrimaryRootID, Rel: rel}
+	_, err := view.Core.WriteFile(path, []byte(content), 0o644)
 	testutil.FailErr(t, "write through view", err)
 }
 
@@ -543,8 +551,8 @@ func TestCompletionPublishesEachWorkerIntoTheRecoveryStoreAndDestroyDropsItsRete
 	fixture := newLayeredWorkerFixture(t, fixtureMountedSelector())
 	first := fixture.claim(t)
 	second := fixture.claim(t)
-	writeThroughClaimedView(t, first, "first.go", "package first\n")
-	writeThroughClaimedView(t, second, "second.go", "package second\n")
+	writeThroughClaimedView(t, fixture.views, first, "first.go", "package first\n")
+	writeThroughClaimedView(t, fixture.views, second, "second.go", "package second\n")
 	for _, task := range []*api.WorkerTask{first, second} {
 		if won, err := fixture.queue.Complete(t.Context(), task, api.WorkerResult{Status: "complete"}); err != nil || !won {
 			t.Fatalf("Complete %s: won=%v err=%v", task.ID, won, err)
@@ -648,10 +656,7 @@ func TestEngineLaunchesInAViewAreRecordedLikeCommands(t *testing.T) {
 	t.Cleanup(func() {
 		_ = fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot})
 	})
-	view, ok := workspace.LookupBranchClaimedView(task.WorkspaceRoot)
-	if !ok {
-		t.Fatal("no claimed view")
-	}
+	view := requireMountedView(t, fixture.views, task.WorkspaceRoot)
 	coordinator := openFixtureRecovery(t, fixture.branches)
 	recorded := func() []adapter.ProcessIdentity {
 		identity, found, err := coordinator.LoadMountIdentity(task.ID, task.ID)
@@ -674,7 +679,7 @@ func TestEngineLaunchesInAViewAreRecordedLikeCommands(t *testing.T) {
 		t.Fatalf("a launch outside the view was recorded: %+v", recorded())
 	}
 
-	_, code, err = gitexec.Run(t.Context(), view.Prepared.PrimaryWorkPath, []string{"--version"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
+	_, code, err = gitexec.Run(t.Context(), view.PrimaryWorkPath, []string{"--version"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
 	if err != nil || code != 0 {
 		t.Fatalf("git in the view: code=%d err=%v", code, err)
 	}
@@ -683,7 +688,7 @@ func TestEngineLaunchesInAViewAreRecordedLikeCommands(t *testing.T) {
 	}
 
 	server, cleanup, err := lexec.PrepareCommand(t.Context(), "/usr/bin/true", nil, lexec.ExecOpts{
-		Launch: lexec.AgentLaunch(lexec.LaunchLocalMCP, "fixture", nil), Dir: view.Prepared.PrimaryWorkPath,
+		Launch: lexec.AgentLaunch(lexec.LaunchLocalMCP, "fixture", nil), Dir: view.PrimaryWorkPath,
 	})
 	testutil.FailErr(t, "prepare MCP", err)
 	defer cleanup()
@@ -699,18 +704,15 @@ func TestEngineLaunchesInAViewAreRecordedLikeCommands(t *testing.T) {
 func TestAWorkerRepositoryIsPrivateAndLeavesTheCheckpoint(t *testing.T) {
 	fixture := newLayeredWorkerFixture(t, fixtureMountedSelector())
 	task := fixture.claim(t)
-	view, ok := workspace.LookupBranchClaimedView(task.WorkspaceRoot)
-	if !ok {
-		t.Fatal("no claimed view")
-	}
-	core, rootID := view.Prepared.Core, view.Prepared.PrimaryRootID
+	view := requireMountedView(t, fixture.views, task.WorkspaceRoot)
+	core, rootID := view.Core, view.PrimaryRootID
 	_, err := core.Mkdir(layeredfs.QualifiedPath{RootID: rootID, Rel: "nested"}, 0o755)
 	testutil.FailErr(t, "mkdir nested", err)
 	_, err = core.Mkdir(layeredfs.QualifiedPath{RootID: rootID, Rel: "nested/.git"}, 0o755)
 	testutil.FailErr(t, "mkdir nested .git", err)
 	_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: rootID, Rel: "nested/.git/HEAD"}, []byte("ref: refs/heads/main\n"), 0o644)
 	testutil.FailErr(t, "write nested HEAD", err)
-	writeThroughClaimedView(t, task, "nested/file.go", "package nested\n")
+	writeThroughClaimedView(t, fixture.views, task, "nested/file.go", "package nested\n")
 	if won, err := fixture.queue.Complete(t.Context(), task, api.WorkerResult{Status: "complete"}); err != nil || !won {
 		t.Fatalf("Complete: won=%v err=%v", won, err)
 	}

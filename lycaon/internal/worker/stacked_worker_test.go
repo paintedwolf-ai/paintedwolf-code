@@ -210,11 +210,8 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 	t.Cleanup(func() {
 		_ = fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: child.ID, Root: child.WorkspaceRoot})
 	})
-	view, ok := workspace.LookupBranchClaimedView(child.WorkspaceRoot)
-	if !ok {
-		t.Fatal("child has no claimed view")
-	}
-	seen, err := view.Prepared.Core.ReadFile(layeredfs.QualifiedPath{RootID: view.Prepared.PrimaryRootID, Rel: "main.go"})
+	view := requireMountedView(t, fixture.views, child.WorkspaceRoot)
+	seen, err := view.Core.ReadFile(layeredfs.QualifiedPath{RootID: view.PrimaryRootID, Rel: "main.go"})
 	testutil.FailErr(t, "read through child view", err)
 	if string(seen) != "package parent\n" {
 		t.Fatalf("child view holds %q, not its parent's checkpoint", seen)
@@ -292,10 +289,12 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 }
 
 func TestStackedWorkerClaimsAndPromotesThroughTheOneTransaction(t *testing.T) {
-	writeCore := func(t *testing.T, task *api.WorkerTask, rel, content string) {
-		writeThroughClaimedView(t, task, rel, content)
-	}
-	t.Run("fixture view", func(t *testing.T) { testStackedWorkerPromotion(t, fixtureMountedSelector(), writeCore) })
+	t.Run("fixture view", func(t *testing.T) {
+		selector := fixtureMountedSelector()
+		testStackedWorkerPromotion(t, selector, func(t *testing.T, task *api.WorkerTask, rel, content string) {
+			writeThroughClaimedView(t, selector.Registry, task, rel, content)
+		})
+	})
 	t.Run("real mount", func(t *testing.T) {
 		selector := workspace.HostSelector()
 		selector.BudgetFor = adapter.ZeroBudget

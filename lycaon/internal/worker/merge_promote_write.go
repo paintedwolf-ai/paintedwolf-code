@@ -293,8 +293,8 @@ func assessCheckpointTask(ctx context.Context, svc *MergeService, sessionID stri
 	promote := PromoteRootsForTask(task, roots)
 	out := PromoteAssessment{checkpointID: manifest.CheckpointID, checkpointPreview: cpPreview, primary: make(map[string]promotePrimarySnapshot, len(mergePaths))}
 	for _, rel := range mergePaths {
-		if primaryAbs, _, fErr := promote.fileAbs(task, rel); fErr == nil {
-			b, ex, mode, _ := readOptionalPromoteFile(primaryAbs)
+		if identity, fErr := promote.locateIdentity(task, rel); fErr == nil {
+			b, ex, mode, _ := readOptionalPromoteFile(identity.Primary)
 			out.primary[rel] = promotePrimarySnapshot{content: b, exists: ex, mode: mode}
 		}
 	}

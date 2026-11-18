@@ -21,7 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workspace"
 )
 
-func fixtureMountedManager(t *testing.T, unmount func(context.Context, string, string) error) *workspace.Manager {
+func fixtureMountedManager(t *testing.T, unmount func(context.Context, string, string) error) (*workspace.Manager, *adapter.ActiveViewRegistry) {
 	t.Helper()
 	mounted := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
 		AdapterID: adapter.AdapterFUSELinux,
@@ -36,7 +36,7 @@ func fixtureMountedManager(t *testing.T, unmount func(context.Context, string, s
 	branches := t.TempDir()
 	privateGit, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	return workspace.NewManager(branches, selector, workspace.Filesystem{}).WithPrivateGit(privateGit)
+	return workspace.NewManager(branches, selector, workspace.Filesystem{}).WithPrivateGit(privateGit), selector.Registry
 }
 
 func singleRoot(t *testing.T) []projectroot.RootRef {
@@ -49,7 +49,7 @@ func singleRoot(t *testing.T) []projectroot.RootRef {
 // Fixture evidence: settlement fails in the fixture adapter's unmount step, not a kernel unmount.
 func TestFailedSettlementKeepsTheBranchAndItsMetadataInCustody(t *testing.T) {
 	failing := true
-	manager := fixtureMountedManager(t, func(context.Context, string, string) error {
+	manager, views := fixtureMountedManager(t, func(context.Context, string, string) error {
 		if failing {
 			return errors.New("still mounted")
 		}
@@ -72,8 +72,8 @@ func TestFailedSettlementKeepsTheBranchAndItsMetadataInCustody(t *testing.T) {
 	if _, live := consumer.LookupBranchEngine(binding.Root); !live {
 		t.Fatal("a view still in custody lost its engine")
 	}
-	if _, live := workspace.LookupBranchClaimedView(binding.Root); !live {
-		t.Fatal("a view still in custody lost its claim record")
+	if _, _, live := views.AdapterForView(binding.View.ViewID); !live {
+		t.Fatal("a view still in custody lost its registered view")
 	}
 
 	failing = false
@@ -87,7 +87,7 @@ func TestFailedSettlementKeepsTheBranchAndItsMetadataInCustody(t *testing.T) {
 }
 
 func TestRebuildRefusesABranchHoldingALiveView(t *testing.T) {
-	manager := fixtureMountedManager(t, nil)
+	manager, views := fixtureMountedManager(t, nil)
 	roots := singleRoot(t)
 	binding, _, err := manager.CreateWorkerBranch(t.Context(), roots, "primary", "job-live")
 	testutil.FailErr(t, "create workspace", err)
@@ -100,7 +100,7 @@ func TestRebuildRefusesABranchHoldingALiveView(t *testing.T) {
 	if !errors.Is(err, workspace.ErrBranchInUse) {
 		t.Fatalf("rebuild over a live view = %v, want ErrBranchInUse", err)
 	}
-	if _, live := workspace.LookupBranchClaimedView(binding.Root); !live {
+	if _, _, live := views.AdapterForView(binding.View.ViewID); !live {
 		t.Fatal("rebuild disturbed the live view")
 	}
 }
