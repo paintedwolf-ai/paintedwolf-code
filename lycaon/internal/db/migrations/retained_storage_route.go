@@ -26,7 +26,8 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// rewrites and index sync through declared Writes estimates, adding no
 	// sorters or rebuilds. Discarding live_model_outputs drops a table without
 	// rewriting rows. The outside namespace rebuilds the measured root indexes
-	// and inserts one row per project. Chat locations add empty indexes and one editor metadata column.
+	// and inserts one row per project. Chat locations and observation coverage
+	// add empty tables. Existing editor rows use the binding column's default.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
 		p.steps[0].Checksum == "b277cbcfdb3b3c0cb5fe291b8ce2a4482f4d7dfd243a2f39cb898b0be2fcc4b6"
 }
