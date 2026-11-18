@@ -4,6 +4,7 @@ package mcp
 
 import (
 	"bytes"
+	"net"
 	"os"
 	"os/exec"
 	"os/user"
@@ -23,7 +24,7 @@ func TestLinuxStdioMCPAppliedBoundary(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
-	_, err := confine.StartEgressBroker(t.TempDir())
+	_, err := confine.StartEgressBroker(t.TempDir(), net.Listen)
 	testutil.FailErr(t, "start MCP egress broker", err)
 	t.Cleanup(func() { _ = confine.StopEgressBroker() })
 	python, err := exec.LookPath("python3")

@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/confinetest"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/socketref"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -44,7 +45,7 @@ func TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack(t *testing.T) {
 	if !confine.Available() {
 		t.Skip("confine unavailable on this platform")
 	}
-	t.Cleanup(confine.SetBrokerUnavailableForTest(os.ErrInvalid))
+	confinetest.FailBrokerStartup(t, os.ErrInvalid)
 	c, ok := confine.DefaultConfinement(confine.Request{Roots: []string{t.TempDir()}})
 	if !ok || c == nil || c.Network != confine.NetworkProxyOnly {
 		t.Fatalf("default must still compile the proxy-only intent, got ok=%v c=%+v", ok, c)

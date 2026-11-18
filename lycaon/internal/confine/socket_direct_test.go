@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/confinetest"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -207,7 +208,7 @@ func TestBoundaryFailClosedStartupMatrix(t *testing.T) {
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
-	t.Cleanup(confine.SetBrokerUnavailableForTest(fmt.Errorf("injected broker failure")))
+	confinetest.FailBrokerStartup(t, fmt.Errorf("injected broker failure"))
 
 	proj := t.TempDir()
 	c, ok := confine.DefaultConfinement(confine.Request{Roots: []string{proj}})

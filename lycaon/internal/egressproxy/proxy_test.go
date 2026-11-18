@@ -39,11 +39,9 @@ func brokerWith(decide egressproxy.EndpointDecider, resolve egressproxy.PeerReso
 	return b
 }
 
-func allowLocalDial(p *egressproxy.Broker) {
-	p.SetDialEndpointForTest(func(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, error) {
-		var d net.Dialer
-		return d.DialContext(ctx, "tcp", ep.DialAddr())
-	})
+func dialLocalEndpoint(ctx context.Context, ep egressproxy.Endpoint) (net.Conn, error) {
+	var d net.Dialer
+	return d.DialContext(ctx, "tcp", ep.DialAddr())
 }
 
 func TestProxyAllowsAndDeniesByHost(t *testing.T) {
@@ -57,8 +55,7 @@ func TestProxyAllowsAndDeniesByHost(t *testing.T) {
 		asked = append(asked, endpoint.Host)
 		return endpoint.Host == "127.0.0.1"
 	}, leasedPeer("cmd"))
-	allowLocalDial(p)
-	if _, err := p.Start(); err != nil {
+	if _, err := p.Start(egressproxy.Options{DialEndpoint: dialLocalEndpoint}); err != nil {
 		testutil.FailErr(t, "p.Start failed", err)
 	}
 	defer func() { _ = p.Close() }()
@@ -104,12 +101,11 @@ func TestBrokerRefusesCallersItCannotAttribute(t *testing.T) {
 		deciderCalled = true
 		return true
 	}, unresolvable)
-	allowLocalDial(p)
 	var refused []egressproxy.Refusal
 	p.SetRefusalReporter(func(_ egressproxy.Peer, _ egressproxy.Endpoint, r egressproxy.Refusal) {
 		refused = append(refused, r)
 	})
-	if _, err := p.Start(); err != nil {
+	if _, err := p.Start(egressproxy.Options{DialEndpoint: dialLocalEndpoint}); err != nil {
 		testutil.FailErr(t, "p.Start failed", err)
 	}
 	defer func() { _ = p.Close() }()
@@ -183,8 +179,7 @@ func TestBrokerPassesTheResolvedLineageToTheDecider(t *testing.T) {
 		gotLineage = lineage
 		return true
 	}, leasedPeer("action-lineage-123"))
-	allowLocalDial(p)
-	if _, err := p.Start(); err != nil {
+	if _, err := p.Start(egressproxy.Options{DialEndpoint: dialLocalEndpoint}); err != nil {
 		testutil.FailErr(t, "p.Start failed", err)
 	}
 	defer func() { _ = p.Close() }()
@@ -222,11 +217,11 @@ func TestHTTPRechecksTheLeaseAfterAParkedDecision(t *testing.T) {
 		return true
 	}, leasedPeer("live"))
 	p.SetLeaseCheck(func(string) bool { return live.Load() })
-	p.SetDialEndpointForTest(func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
 		dialed = true
 		return nil, io.EOF
-	})
-	if _, err := p.Start(); err != nil {
+	}
+	if _, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	defer func() { _ = p.Close() }()
@@ -262,13 +257,13 @@ func TestHTTPClosesConnectionWhenTheLeaseEndsDuringDial(t *testing.T) {
 	live.Store(true)
 	p := brokerWith(func(context.Context, string, egressproxy.Endpoint) bool { return true }, leasedPeer("live"))
 	p.SetLeaseCheck(func(string) bool { return live.Load() })
-	p.SetDialEndpointForTest(func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
+	dialEndpoint := func(context.Context, egressproxy.Endpoint) (net.Conn, error) {
 		client, server := net.Pipe()
 		_ = server.Close()
 		live.Store(false)
 		return client, nil
-	})
-	if _, err := p.Start(); err != nil {
+	}
+	if _, err := p.Start(egressproxy.Options{DialEndpoint: dialEndpoint}); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
 	defer func() { _ = p.Close() }()
