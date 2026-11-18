@@ -43,7 +43,7 @@ func discovererSeedingURLs(t *testing.T, seedURLs ...string) *directDiscoverer {
 			Provider: id,
 		})
 	}
-	reg := NewRegistry(testCatalog(t))
+	reg := NewRegistry(testCatalog(t), nil)
 	reg.Register(&stubSeedProvider{id: id, hits: hits})
 	return &directDiscoverer{
 		summarizer: &failIfCalledSummarizer{},
@@ -85,7 +85,7 @@ func discovererSeedingURLsWithIndex(t *testing.T, index *webindex.Store, seedURL
 // titled hit at liveURL. Summarizer is failIfCalled.
 func providerBackedDiscoverer(t *testing.T, providerID, queryTitle, liveURL string) *directDiscoverer {
 	t.Helper()
-	reg := NewRegistry(testCatalog(t))
+	reg := NewRegistry(testCatalog(t), nil)
 	reg.Register(&stubSeedProvider{
 		id: providerID,
 		hits: []WebHit{{

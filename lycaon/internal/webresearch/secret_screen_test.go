@@ -43,7 +43,7 @@ func googleCSETestSettings() Settings {
 
 func TestWebSearchScreenAsksAndDenies(t *testing.T) {
 	var hits atomic.Int32
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": []any{}})
 	})
@@ -51,7 +51,7 @@ func TestWebSearchScreenAsksAndDenies(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?q=" + url.QueryEscape(query), nil
 	}
-	p := NewRESTSearchProvider(spec, KindKeyedExtra)
+	p := NewRESTSearchProvider(spec, KindKeyedExtra, srv.exchange)
 
 	var askCalls atomic.Int32
 	var lastFinding secretmatch.Alert
@@ -99,7 +99,7 @@ func TestWebSearchScreenAsksAndDenies(t *testing.T) {
 func TestWebSearchScreenApproveSendsVerbatim(t *testing.T) {
 	query := "docs about " + plantedAWS
 	var gotQ string
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		gotQ = r.URL.Query().Get("q")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"items": []map[string]string{{"title": "Hit", "link": "https://example.com/", "snippet": "s"}},
@@ -109,7 +109,7 @@ func TestWebSearchScreenApproveSendsVerbatim(t *testing.T) {
 	spec.BuildURL = func(s Settings, q string, max int) (string, error) {
 		return srv.URL + "?q=" + url.QueryEscape(q), nil
 	}
-	p := NewRESTSearchProvider(spec, KindKeyedExtra)
+	p := NewRESTSearchProvider(spec, KindKeyedExtra, srv.exchange)
 	ask := func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
 		return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
 	}
@@ -126,7 +126,7 @@ func TestWebSearchScreenApproveSendsVerbatim(t *testing.T) {
 func TestWebSearchScreenRedactsTransientQuery(t *testing.T) {
 	query := "docs about " + plantedAWS
 	var gotQ string
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		gotQ = r.URL.Query().Get("q")
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": []any{}})
 	})
@@ -134,7 +134,7 @@ func TestWebSearchScreenRedactsTransientQuery(t *testing.T) {
 	spec.BuildURL = func(_ Settings, q string, _ int) (string, error) {
 		return srv.URL + "?q=" + url.QueryEscape(q), nil
 	}
-	p := NewRESTSearchProvider(spec, KindKeyedExtra)
+	p := NewRESTSearchProvider(spec, KindKeyedExtra, srv.exchange)
 	ctx := withSecretScreen(context.Background(), testSecretMatcher(t), func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
 		return secretmatch.Resolution{Decision: secretmatch.SendRedacted}, nil
 	}, "", screenDestination{})
@@ -219,7 +219,7 @@ func TestFetchURLScreenRedactsTransientURL(t *testing.T) {
 
 func TestScreenInertMatcherByteIdentical(t *testing.T) {
 	var hits atomic.Int32
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"items": []map[string]string{{"title": "Hit", "link": "https://example.com/", "snippet": "s"}},
@@ -229,7 +229,7 @@ func TestScreenInertMatcherByteIdentical(t *testing.T) {
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?q=" + url.QueryEscape(query), nil
 	}
-	p := NewRESTSearchProvider(spec, KindKeyedExtra)
+	p := NewRESTSearchProvider(spec, KindKeyedExtra, srv.exchange)
 
 	var askCalls atomic.Int32
 	ask := func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
@@ -254,14 +254,14 @@ func TestScreenInertMatcherByteIdentical(t *testing.T) {
 
 func TestScreenOneAskPerInvocation(t *testing.T) {
 	query := plantedAWS + " and " + plantedAWS
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"items": []any{}})
 	})
 	spec := googleCseRESTSpec()
 	spec.BuildURL = func(s Settings, q string, max int) (string, error) {
 		return srv.URL + "?q=" + url.QueryEscape(q), nil
 	}
-	p := NewRESTSearchProvider(spec, KindKeyedExtra)
+	p := NewRESTSearchProvider(spec, KindKeyedExtra, srv.exchange)
 	var askCalls atomic.Int32
 	ask := func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
 		askCalls.Add(1)
@@ -287,7 +287,7 @@ func TestScreenPayloadsNeverCarryValue(t *testing.T) {
 		t.Fatal("BuildURL must not run on deny")
 		return "", nil
 	}
-	p := NewRESTSearchProvider(spec, KindKeyedExtra)
+	p := NewRESTSearchProvider(spec, KindKeyedExtra, nil)
 	_ = searchTestProvider(t, ctx, p, googleCSETestSettings(), plantedAWS, 5)
 }
 

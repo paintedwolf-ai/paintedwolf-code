@@ -24,26 +24,26 @@ func testIndex(t *testing.T) *webindex.Store {
 	return store
 }
 
-func braveTestServer(t *testing.T, hits ...map[string]string) *httptest.Server {
+func braveTestServer(t *testing.T, hits ...map[string]string) *providerHTTPFixture {
 	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"web": map[string]any{"results": hits},
 		})
-	}))
+	})
 	t.Cleanup(srv.Close)
 	return srv
 }
 
-func customBraveOptions(t *testing.T, srv *httptest.Server, index *webindex.Store) SearchOptions {
+func customBraveOptions(t *testing.T, srv *providerHTTPFixture, index *webindex.Store) SearchOptions {
 	t.Helper()
 	spec := braveRESTSpec()
 	spec.BuildURL = func(s Settings, query string, max int) (string, error) {
 		return srv.URL + "?q=" + url.QueryEscape(query), nil
 	}
-	reg := NewRegistry(testCatalog(t))
-	reg.Register(NewRESTSearchProvider(spec, KindKeyed))
-	injectProviderHTTPClient(t, srv.Client())
+	reg := NewRegistry(testCatalog(t), srv.exchange)
+	reg.Register(NewRESTSearchProvider(spec, KindKeyed, srv.exchange))
+
 	return SearchOptions{
 		Settings: Settings{
 			Keys:             map[string]string{"brave": "brave-key"},

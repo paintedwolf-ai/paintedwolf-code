@@ -49,7 +49,7 @@ func TestBackoffQueryVariantsEmpty(t *testing.T) {
 // backoffServer returns hits for one query and counts calls.
 func backoffServer(t *testing.T, hitQuery string, calls *int) string {
 	t.Helper()
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		*calls++
 		if r.URL.Query().Get("s") == hitQuery {
 			_ = json.NewEncoder(w).Encode([]map[string]any{{
@@ -70,7 +70,7 @@ func TestCatalogQueryBackoffRetriesShorterQueries(t *testing.T) {
 	shortQuery := "Steam Machine 2025 mini PC review quiet"
 	calls := 0
 	endpoint := backoffServer(t, shortQuery, &calls)
-	provider := testRegistry(t).Get("mwmbl")
+	provider := testRegistry(t, nil).Get("mwmbl")
 	out := provider.Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"mwmbl": {"endpoint": endpoint}},
 		PerProviderTimeoutSec: 5,
@@ -87,7 +87,7 @@ func TestCatalogQueryBackoffMarginaliaLongQuery(t *testing.T) {
 	longQuery := "best web based chess libraries 2024 2025 JavaScript React Vue HTML5"
 	shortQuery := "best web based chess libraries 2024 2025 JavaScript React Vue"
 	calls := 0
-	srv := withMockProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
+	srv := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		calls++
 		if r.URL.Query().Get("query") == shortQuery {
 			_ = json.NewEncoder(w).Encode(map[string]any{
@@ -110,7 +110,7 @@ func TestCatalogQueryBackoffMarginaliaLongQuery(t *testing.T) {
 		u.RawQuery = q.Encode()
 		return u.String(), nil
 	}
-	reg := NewRegistry(testCatalog(t))
+	reg := NewRegistry(testCatalog(t), srv.exchange)
 	reg.registerREST(spec, KindKeyed)
 	out := reg.Get("marginalia").Search(context.Background(), Settings{
 		Keys:                  map[string]string{"marginalia": "secret"},
@@ -127,7 +127,7 @@ func TestCatalogQueryBackoffMarginaliaLongQuery(t *testing.T) {
 func TestCatalogQueryBackoffShortQuerySearchesOnce(t *testing.T) {
 	calls := 0
 	endpoint := backoffServer(t, "Steam Machine", &calls)
-	provider := testRegistry(t).Get("mwmbl")
+	provider := testRegistry(t, nil).Get("mwmbl")
 	out := provider.Search(context.Background(), Settings{
 		Config:                map[string]map[string]string{"mwmbl": {"endpoint": endpoint}},
 		PerProviderTimeoutSec: 5,
@@ -154,7 +154,7 @@ providers:
 	cat, err := LoadCatalog()
 	testutil.FailErr(t, "load catalog", err)
 	quota := &memQuotaStore{}
-	reg := NewRegistry(cat)
+	reg := NewRegistry(cat, nil)
 	reg.AttachQuotaStore(quota)
 	testutil.FailErr(t, "RegisterCatalogProviders", RegisterCatalogProviders(t.Context(), reg))
 	calls := 0

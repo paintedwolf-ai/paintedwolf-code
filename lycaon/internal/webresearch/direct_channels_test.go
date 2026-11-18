@@ -48,7 +48,7 @@ func testSeedSettings(enabled ...string) Settings {
 }
 
 func TestWarmOriginSkipsProviderChannels(t *testing.T) {
-	reg := testRegistry(t)
+	reg := testRegistry(t, nil)
 	d := &directDiscoverer{
 		registry:   reg,
 		settings:   testSeedSettings("hn", "wikipedia"),
@@ -66,7 +66,7 @@ func TestWarmOriginSkipsProviderChannels(t *testing.T) {
 }
 
 func TestUserOriginConstructsProviderChannels(t *testing.T) {
-	reg := testRegistry(t)
+	reg := testRegistry(t, nil)
 	d := &directDiscoverer{
 		registry:   reg,
 		settings:   testSeedSettings("hn"),
@@ -129,7 +129,7 @@ func TestProviderSeedChannelDedupesURL(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	pageURL := srv.URL + "/guide"
-	reg := NewRegistry(testCatalog(t))
+	reg := NewRegistry(testCatalog(t), nil)
 	reg.Register(&stubSeedProvider{
 		id: "hn",
 		hits: []WebHit{{
@@ -233,7 +233,7 @@ func TestProviderHitIngestedToIndex(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	reg := NewRegistry(testCatalog(t))
+	reg := NewRegistry(testCatalog(t), nil)
 	reg.Register(&stubSeedProvider{
 		id: "hn",
 		hits: []WebHit{{
@@ -299,7 +299,7 @@ func TestPacedProviderSeedChannelSoftSkips(t *testing.T) {
 }
 
 func TestResolveSeedProvidersCatalogDriven(t *testing.T) {
-	reg := testRegistry(t)
+	reg := testRegistry(t, nil)
 	ids := resolveSeedProviders(Settings{}, reg)
 	if len(ids) == 0 {
 		t.Fatal("expected default_enabled seed providers from the catalog")

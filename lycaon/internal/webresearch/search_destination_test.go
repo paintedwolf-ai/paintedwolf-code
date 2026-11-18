@@ -32,7 +32,7 @@ func TestSearchQueryReachesOnlySelectedProviders(t *testing.T) {
 	result := countingServer(t, &inResult)
 
 	var received atomic.Value
-	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	provider := withProviderHTTP(t, func(w http.ResponseWriter, r *http.Request) {
 		atProvider.Add(1)
 		received.Store(r.URL.Query().Get("q"))
 		_ = json.NewEncoder(w).Encode(map[string]any{
@@ -40,15 +40,14 @@ func TestSearchQueryReachesOnlySelectedProviders(t *testing.T) {
 				"url": result.URL + "/hit", "title": "Hit", "description": "snippet",
 			}}},
 		})
-	}))
+	})
 	t.Cleanup(provider.Close)
 	spec := braveRESTSpec()
 	spec.BuildURL = func(_ Settings, query string, _ int) (string, error) {
 		return provider.URL + "?q=" + url.QueryEscape(query), nil
 	}
-	reg := NewRegistry(testCatalog(t))
-	reg.Register(NewRESTSearchProvider(spec, KindKeyed))
-	injectProviderHTTPClient(t, provider.Client())
+	reg := NewRegistry(testCatalog(t), provider.exchange)
+	reg.Register(NewRESTSearchProvider(spec, KindKeyed, provider.exchange))
 
 	gate := recordGate(t, true)
 	query := "notes " + named.URL + "/collect?d=payload"

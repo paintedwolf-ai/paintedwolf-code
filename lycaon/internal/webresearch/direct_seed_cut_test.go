@@ -56,7 +56,7 @@ providers:
 `)
 	cat, err := LoadCatalog()
 	testutil.FailErr(t, "LoadCatalog", err)
-	reg := NewRegistry(cat)
+	reg := NewRegistry(cat, nil)
 	reg.Register(&stubSeedProvider{
 		id: "fast_seed",
 		hits: []WebHit{{

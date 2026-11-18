@@ -49,7 +49,7 @@ func TestCompactProviderQueryShortensLongQueries(t *testing.T) {
 }
 
 func TestProviderSeedCacheRoundTrip(t *testing.T) {
-	providerSeedCache = newTTLCache[providerOutcome](providerSeedCacheTTL, providerSeedCacheMax)
+	registry := NewRegistry(nil, nil)
 	out := providerOutcome{
 		providerID: "github",
 		ok:         true,
@@ -60,28 +60,28 @@ func TestProviderSeedCacheRoundTrip(t *testing.T) {
 		Keys:   map[string]string{"github": "first"},
 		Config: map[string]map[string]string{"github": {"endpoint": "https://one.example"}},
 	}
-	storeProviderSeed("github", "AdGuard Home", 5, settings, out)
-	got, ok := cachedProviderSeed("github", "AdGuard Home", 5, settings)
+	registry.storeProviderSeed("github", "AdGuard Home", 5, settings, out)
+	got, ok := registry.cachedProviderSeed("github", "AdGuard Home", 5, settings)
 	if !ok || !got.ok || len(got.hits) != 1 {
 		t.Fatalf("cache miss/got = ok=%v %+v", ok, got)
 	}
 	got.hits[0].URL = "mutated"
-	again, _ := cachedProviderSeed("github", "AdGuard Home", 5, settings)
+	again, _ := registry.cachedProviderSeed("github", "AdGuard Home", 5, settings)
 	if again.hits[0].URL != "https://github.com/example/repo" {
 		t.Fatal("cached hits must be cloned")
 	}
-	if _, hit := cachedProviderSeed("github", "AdGuard Home", 5, Settings{Keys: map[string]string{"github": "second"}}); hit {
+	if _, hit := registry.cachedProviderSeed("github", "AdGuard Home", 5, Settings{Keys: map[string]string{"github": "second"}}); hit {
 		t.Fatal("credential changes must select a different cache entry")
 	}
 	changedEndpoint := Settings{
 		Keys:   map[string]string{"github": "first"},
 		Config: map[string]map[string]string{"github": {"endpoint": "https://two.example"}},
 	}
-	if _, hit := cachedProviderSeed("github", "AdGuard Home", 5, changedEndpoint); hit {
+	if _, hit := registry.cachedProviderSeed("github", "AdGuard Home", 5, changedEndpoint); hit {
 		t.Fatal("endpoint changes must select a different cache entry")
 	}
-	storeProviderSeed("github", "fail", 5, settings, providerOutcome{ok: false, reason: "http_error"})
-	if _, hit := cachedProviderSeed("github", "fail", 5, settings); hit {
+	registry.storeProviderSeed("github", "fail", 5, settings, providerOutcome{ok: false, reason: "http_error"})
+	if _, hit := registry.cachedProviderSeed("github", "fail", 5, settings); hit {
 		t.Fatal("errors must not be cached")
 	}
 }

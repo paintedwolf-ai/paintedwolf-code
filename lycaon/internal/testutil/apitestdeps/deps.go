@@ -178,7 +178,7 @@ func fillWebResearch(t *testing.T, d *Deps) {
 		d.WebResearch.Catalog = catalog
 	}
 	if d.WebResearch.Registry == nil {
-		registry := webresearch.NewRegistry(d.WebResearch.Catalog)
+		registry := webresearch.NewRegistry(d.WebResearch.Catalog, nil)
 		testutil.FailErr(t, "web research providers", webresearch.RegisterCatalogProviders(t.Context(), registry))
 		d.WebResearch.Registry = registry
 	}

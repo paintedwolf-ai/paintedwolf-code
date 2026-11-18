@@ -41,6 +41,7 @@ import (
 
 // Dependencies holds the domain runtimes and services needed by boards.
 type Dependencies struct {
+	WebResearchExchange      webresearch.Exchange
 	Storage                  persistence.Runtime
 	Sessions                 *sessions.Runtime
 	Workers                  *workerruntime.Runtime
@@ -132,7 +133,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	r.deps.Sessions.Manager.Coordinator.Loading.SetDecider(r.deps.Decisions.Decider)
 	r.deps.Sessions.Manager.Coordinator.Loading.SetSkillBodyRenderer(r.deps.Execution.Host.Skills.RenderSkillBody)
 
-	r.WebRuntime, err = webresearch.WireRuntime(ctx)
+	r.WebRuntime, err = webresearch.WireRuntime(ctx, r.deps.WebResearchExchange)
 	if err != nil {
 		return fmt.Errorf("web research runtime: %w", err)
 	}

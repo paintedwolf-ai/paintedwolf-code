@@ -14,7 +14,6 @@ func resetDirectState(parallel int) {
 	activeUserSearches.Store(0)
 	resetPoliteness(5 * time.Millisecond)
 	siteIndexCache.reset()
-	providerSeedCache.reset()
 	resetDirectMemory()
 }
 

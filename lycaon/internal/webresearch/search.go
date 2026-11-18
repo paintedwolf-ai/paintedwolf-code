@@ -70,7 +70,7 @@ func Search(ctx context.Context, opts SearchOptions) WebSearchResult {
 
 	start := time.Now()
 	if !opts.SkipResultCache {
-		if cached, ok := cachedWholeSearch(q, opts.Period, maxResults, opts.Settings, explicit); ok {
+		if cached, ok := opts.Registry.cachedWholeSearch(q, opts.Period, maxResults, opts.Settings, explicit); ok {
 			result := WebSearchResult{
 				OK:               true,
 				Query:            q,
@@ -117,7 +117,7 @@ func Search(ctx context.Context, opts SearchOptions) WebSearchResult {
 		result.directParticipated = true
 	}
 	if !opts.SkipResultCache {
-		storeWholeSearch(q, opts.Period, maxResults, opts.Settings, explicit, result)
+		opts.Registry.storeWholeSearch(q, opts.Period, maxResults, opts.Settings, explicit, result)
 	}
 	logSearchSummary(stats, start, explicit, opts.SessionID, q, outcomes, result, false)
 	return result
