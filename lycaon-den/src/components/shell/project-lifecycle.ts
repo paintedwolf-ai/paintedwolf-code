@@ -9,7 +9,7 @@ import { forgetProjectThumbnail } from "../../home/thumbnail-store.ts";
 import { APP_SCOPE } from "../../notices/notice-scope.ts";
 import { getEntityRetire, getLycaonClient, noticeReporterFor } from "../../platform/connection/app-connection.ts";
 import { confirmDestructive } from "../../platform/interaction/confirm-dialog.ts";
-import { prepareFilesRootDetach, dropFilesBuffersForRoot } from "../../files/documents/project-files-buffers.ts";
+import { prepareFilesRootDetach, dropFilesBuffersForRoot } from "../../files/documents/project-files-buffer-lifecycle.ts";
 import { type Project } from "../../api/types.ts";
 import { LycaonApiError } from "../../api/http.ts";
 import { pickProjectFolder } from "../../platform/files/folder.ts";

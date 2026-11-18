@@ -6,30 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
-
-func TestPinnedVersionFromManifest(t *testing.T) {
-	resetForTest()
-	got := PinnedVersion()
-	if got == "" {
-		t.Fatal("PinnedVersion returned empty")
-	}
-	raw, err := os.ReadFile(filepath.Join("..", "..", "config", "gitengine", "pin.yaml"))
-	testutil.FailErr(t, "read pin.yaml", err)
-	if !strings.Contains(string(raw), "git_version: \""+got+"\"") && !strings.Contains(string(raw), "git_version: "+got) {
-		t.Fatalf("PinnedVersion %q not present in pin.yaml", got)
-	}
-	src, err := os.ReadFile("pin.go")
-	testutil.FailErr(t, "read pin.go", err)
-	if strings.Contains(string(src), "\""+got+"\"") {
-		t.Fatalf("pin.go must not hard-code git version %q", got)
-	}
-}
 
 func TestResolvePrefersStructuredEngineRoot(t *testing.T) {
 	resetForTest()

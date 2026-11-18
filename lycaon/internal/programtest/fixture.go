@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"sync"
 	"testing"
@@ -182,7 +183,7 @@ func New(t testing.TB, options Options) *Fixture {
 func (f *Fixture) AttachLedger(t testing.TB) *sourceledger.Store {
 	t.Helper()
 	_, err := f.Database.ExecContext(context.Background(), `INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
-		VALUES ('r1', ?, ?, 'root', 1, ?, 'attached')`, testdbseed.DefaultProjectID, f.Dir, db.FormatTime(time.Now().UTC()))
+		VALUES ('r1', ?, ?, 'root', 1, ?, 'attached')`, testdbseed.DefaultProjectID, f.Dir, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert fixture root", err)
 	ledger := sourceledger.New(f.Database, t.TempDir())
 	configure := f.Configure

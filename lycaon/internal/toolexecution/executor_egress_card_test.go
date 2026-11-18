@@ -47,7 +47,7 @@ func gatherExecutor(t *testing.T) (*toolexecution.Executor, *gatherHITL) {
 	mgr.approve()
 	exec := toolexecution.NewExecutor(nil, tools.NewDefaultRegistry(), "implement")
 	exec.Approvals.SetCheckpointManager(t.Context(), mgr, nil)
-	exec.Approvals.SetToolApprovalCoalesce(coalesceAdapter{rt: approvalstate.NewToolApprovalCoalesce()})
+	exec.Approvals.SetToolApprovalCoalesce(approvalstate.NewToolApprovalCoalesce())
 	// The ingestion producer reports "read untrusted content": at Balanced that
 	// is what turns new-host cards on.
 	exec.Secrets.SetUntrustedIngestionSource(func(context.Context, string) (bool, error) { return true, nil })
@@ -58,8 +58,7 @@ func gatherExecutor(t *testing.T) (*toolexecution.Executor, *gatherHITL) {
 // raise one card each, and each card names its host alone.
 func TestConcurrentHostsFromOneCommandAskSeparately(t *testing.T) {
 	exec, mgr := gatherExecutor(t)
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	cmd := confine.EgressCommand{SessionID: "chat-1", RootSessionID: "chat-1", ToolCallID: "tc-pytest", CommandLine: "pytest -n auto", ProjectID: "proj", ProjectDir: "/tmp/proj"}
 
 	hosts := []string{"api.osv.dev", "attack.mitre.org"}
@@ -164,7 +163,7 @@ func TestCheckpointOwnerReleaseKeepsCurrentBrokerApproval(t *testing.T) {
 		t.Fatalf("release old checkpoint owner: %v", err)
 	}
 	cmd := confine.EgressCommand{SessionID: "current-owner", RootSessionID: "current-owner", ToolCallID: "current-dial"}
-	if !confine.DecideAttributedHost(t.Context(), cmd, "owner-approval.test") {
+	if !confine.DecideAttributedHTTPRequest(t.Context(), cmd, "owner-approval.test", "", "") {
 		t.Fatal("current checkpoint owner did not approve its broker dial")
 	}
 	if len(oldManager.requests()) != 0 || len(currentManager.requests()) != 1 {
@@ -174,7 +173,7 @@ func TestCheckpointOwnerReleaseKeepsCurrentBrokerApproval(t *testing.T) {
 		t.Fatalf("release current checkpoint owner: %v", err)
 	}
 	cmd.ToolCallID = "closed-dial"
-	if confine.DecideAttributedHost(t.Context(), cmd, "closed-owner.test") {
+	if confine.DecideAttributedHTTPRequest(t.Context(), cmd, "closed-owner.test", "", "") {
 		t.Fatal("closed checkpoint owner authorized a new broker dial")
 	}
 	if len(currentManager.requests()) != 1 {
@@ -184,8 +183,7 @@ func TestCheckpointOwnerReleaseKeepsCurrentBrokerApproval(t *testing.T) {
 
 func TestSiblingProgramChildrenKeepSeparateObservedEgressReviews(t *testing.T) {
 	executor, manager := gatherExecutor(t)
-	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	results := make(chan bool, 2)
 	for i, child := range []string{"first-child", "second-child"} {
 		cmd := confine.EgressCommand{SessionID: "child-session", RootSessionID: "child-session", ToolCallID: "actual-model-call", ActionID: child, ProjectID: "project", ProjectDir: "/fixture/project"}
@@ -250,8 +248,7 @@ func TestDisplayedLinkBecomesTheChatsOwnDialOnceACredentialIsHeld(t *testing.T) 
 			if tc.exposure != nil {
 				exec.Secrets.SetSecretExposureSource(tc.exposure)
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-			defer cancel()
+			ctx := t.Context()
 			cmd := confine.EgressCommand{
 				SessionID: "chat", RootSessionID: "chat", ToolCallID: "call", ProjectID: "proj", ProjectDir: "/tmp/proj",
 				Image: ingestion.ToolFetchURL, Origin: tc.origin,
@@ -305,8 +302,7 @@ func TestCleanContactsDoNotVouchAfterUntrustedContent(t *testing.T) {
 	var untrusted atomic.Bool
 	exec.Secrets.SetUntrustedIngestionSource(func(context.Context, string) (bool, error) { return untrusted.Load(), nil })
 	exec.Network.SetSessionHostLedger(&memoryContacts{contacts: map[string]evidence.Contact{}})
-	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
-	defer cancel()
+	ctx := t.Context()
 	cmd := confine.EgressCommand{SessionID: "chat-clean", RootSessionID: "chat-clean", ToolCallID: "tc-curl", CommandLine: "curl https://evil.example/page", ProjectID: "proj", ProjectDir: "/tmp/proj"}
 
 	if !exec.ResolveEgressForTest(ctx, cmd, "evil.example") || len(mgr.requests()) != 0 {

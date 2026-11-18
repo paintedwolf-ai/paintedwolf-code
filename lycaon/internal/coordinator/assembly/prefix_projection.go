@@ -28,7 +28,6 @@ func (p *promptSurface) renderSystemPrefix(ctx context.Context, sess *api.Sessio
 	if coordinator {
 		vars["skills_heading"] = "##"
 	}
-	p.applyToolBudgetVars(ctx, sess, coordinator, vars)
 	coordinatorSurface := coordinator && (!frame.Machine.Compiled() || frame.Machine.ProfileID == orchestration.ProfileCoordinator)
 	if !coordinatorSurface {
 		p.mergeVisibleTools(ctx, sess, frame, vars)

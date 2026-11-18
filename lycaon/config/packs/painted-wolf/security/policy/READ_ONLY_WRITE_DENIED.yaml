@@ -1,0 +1,20 @@
+spec_version: "1.0"
+id: READ_ONLY_WRITE_DENIED
+kind: policy
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.path, paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "READ_ONLY_WRITE_DENIED"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_write
+message: 'Writing **{{ paintedwolf.path }}** is not allowed: this work is read-only'
+what: 'Writing **{{ paintedwolf.path }}** is not allowed: this work is read-only.'
+cause: 'This work may read project files but not change them.'
+why: 'Changes here would alter what is being read, such as the result under review.'
+fix: 'Keep reading, and put what you would change in your report or a finding instead.'
+instead: 'Report the change you would make'
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      path: src/main.go

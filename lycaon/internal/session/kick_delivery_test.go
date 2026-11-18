@@ -29,25 +29,27 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// budgetJobs serves fixed worker jobs by id.
-type budgetJobs map[string]*api.WorkerTask
+// fixedJobs serves fixed worker jobs by id.
+type fixedJobs map[string]*api.WorkerTask
 
-func (budgetJobs) ListBySession(context.Context, string, string, ...api.WorkerStatus) ([]api.WorkerTask, error) {
+func (fixedJobs) ListBySession(context.Context, string, string, ...api.WorkerStatus) ([]api.WorkerTask, error) {
 	return nil, nil
 }
 
-func (budgetJobs) ListPendingOutcomes(context.Context) ([]api.WorkerTask, error) { return nil, nil }
+func (fixedJobs) ListPendingOutcomes(context.Context) ([]api.WorkerTask, error) { return nil, nil }
 
-func (j budgetJobs) Get(jobID string) (*api.WorkerTask, bool) {
+func (j fixedJobs) Get(jobID string) (*api.WorkerTask, bool) {
 	task, ok := j[jobID]
 	return task, ok
 }
 
-func (budgetJobs) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error) {
+func (fixedJobs) ReviewsWorker(context.Context, *api.WorkerTask) bool { return false }
+
+func (fixedJobs) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error) {
 	return nil, nil
 }
 
-func TestTurnDeliversEveryQueuedKickAndDropsAnsweredBudgetRequests(t *testing.T) {
+func TestTurnDeliversEveryQueuedKickAndDropsNoticesForFinishedRounds(t *testing.T) {
 	t.Setenv("LYCAON_LLM_MOCK", "1")
 	st := store.NewMemory()
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
@@ -56,19 +58,18 @@ func TestTurnDeliversEveryQueuedKickAndDropsAnsweredBudgetRequests(t *testing.T)
 	wirePromptTestManager(t, mgr)
 	testutil.FailErr(t, "install anchor registry", mgr.Coordinator.Guidance.InstallAnchorRegistry())
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))
-	request := &api.WorkerBudgetRequest{Rounds: 4, RequestedMax: 24, RemainingWork: []string{"trace the alternate callers"}, ToolLoopsUsed: 15, RequestedAt: time.Now().UTC()}
-	mgr.SetWorkerQueue(budgetJobs{
-		"job-open":     {ID: "job-open", Status: api.WorkerStatusRunning, MaxToolLoops: 20, BudgetRequest: request},
-		"job-answered": {ID: "job-answered", Status: api.WorkerStatusRunning, MaxToolLoops: 24},
+	mgr.SetWorkerQueue(fixedJobs{
+		"job-running":  {ID: "job-running", Status: api.WorkerStatusRunning},
+		"job-finished": {ID: "job-finished", Status: api.WorkerStatusComplete},
 	})
 
 	ctx := context.Background()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.ComposeDone, anchor.Envelope{})
-	for _, job := range []string{"job-answered", "job-open"} {
-		facts := kick.WorkerBudgetFacts{JobID: job, Used: 15, Max: 20, HostMax: 120, Request: request}
-		mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.WorkerBudgetRequested, anchor.Envelope{Subject: job, WorkerBudget: &facts})
+	for _, job := range []string{"job-finished", "job-running"} {
+		facts := kick.WorkerRoundNoticeFacts{JobID: job, Worker: job, AgentType: "implementer", Kind: kick.RoundNoticeConsumption, ModelCalls: 40}
+		mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.WorkerRoundNotice, anchor.Envelope{Subject: job, WorkerRoundNotice: &facts})
 	}
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err != nil {
 		testutil.FailErr(t, "prompt", err)
@@ -78,14 +79,14 @@ func TestTurnDeliversEveryQueuedKickAndDropsAnsweredBudgetRequests(t *testing.T)
 		switch {
 		case strings.Contains(msg.Content, "Compose succeeded"):
 			delivered = append(delivered, "compose")
-		case strings.Contains(msg.Content, "Worker `job-open` asked"):
-			delivered = append(delivered, "job-open")
-		case strings.Contains(msg.Content, "Worker `job-answered` asked"):
-			delivered = append(delivered, "job-answered")
+		case strings.Contains(msg.Content, "`job-running`"):
+			delivered = append(delivered, "job-running")
+		case strings.Contains(msg.Content, "`job-finished`"):
+			delivered = append(delivered, "job-finished")
 		}
 	}
-	if strings.Join(delivered, ",") != "compose,job-open" {
-		t.Fatalf("delivered kicks = %v, want the older compose kick and job-open's open request", delivered)
+	if strings.Join(delivered, ",") != "compose,job-running" {
+		t.Fatalf("delivered kicks = %v, want the older compose kick and the running round's notice", delivered)
 	}
 	if id, ok := mgr.Runner.Coordinator.Kicks().PeekPendingKickID(sess.ID); ok {
 		t.Fatalf("kick %q still queued after the turn", id)
@@ -178,10 +179,10 @@ func TestAppendWorkerSummaryDoesNotEchoEnvelopeInAssistantProse(t *testing.T) {
 		if msg.Role != api.MessageRoleTool {
 			continue
 		}
-		if !strings.Contains(msg.Content, `<task job_id="`+jobID+`"`) {
-			t.Fatalf("tool body must carry the completion envelope, got %q", msg.Content)
+		if !strings.Contains(msg.Content, `<task `) || strings.Contains(msg.Content, jobID) {
+			t.Fatalf("tool body must carry the completion envelope without the job, got %q", msg.Content)
 		}
-		if msg.WorkerSummary != nil && strings.Contains(msg.WorkerSummary.Envelope, `<task job_id="`+jobID+`"`) {
+		if msg.WorkerSummary != nil && msg.WorkerSummary.WorkerID == jobID && strings.Contains(msg.WorkerSummary.Envelope, `<task `) {
 			if msg.WorkerSummary.ChildSessionID != child.ID {
 				t.Fatalf("worker_summary child_session_id = %q want %q", msg.WorkerSummary.ChildSessionID, child.ID)
 			}
@@ -228,12 +229,12 @@ func TestAppendWorkerSummaryProjectsEnvelopeToModel(t *testing.T) {
 	projected := transcript.Project(msgs)
 	var body string
 	for _, msg := range projected {
-		if msg.Role == api.MessageRoleTool && strings.Contains(msg.Content, jobID) {
+		if msg.Role == api.MessageRoleTool && strings.Contains(msg.Content, "<task ") {
 			body = msg.Content
 		}
 	}
 	if body == "" {
-		t.Fatal("no projected tool message carried the worker job")
+		t.Fatal("no projected tool message carried the worker completion")
 	}
 	if !strings.Contains(body, finding) {
 		t.Fatalf("projected worker result dropped the summary; body = %q", body)

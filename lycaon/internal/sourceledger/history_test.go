@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,7 +28,7 @@ func openLedger(t *testing.T) (*Store, context.Context) {
 	_, err := sqlDB.ExecContext(t.Context(), `
 		INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at, kind)
 		VALUES ('r1', 'p1', '/tmp/source-ledger-test', 'source-ledger-test', 1, ?, 'attached')
-	`, db.FormatTime(time.Now().UTC()))
+	`, timelayout.Format(time.Now().UTC()))
 	testutil.FailErr(t, "insert root", err)
 	return New(sqlDB, t.TempDir()), context.Background()
 }
@@ -375,7 +376,7 @@ func TestMaintenancePreservesReferencedVersionContent(t *testing.T) {
 			truncated, error, updated_at, last_accessed_at_ms
 		) VALUES ('p1', 'r1', 'a.txt', 'version-summary', '00000000-0000-0000-0000-000000000001', 'version', ?,
 			'automatic', 'complete', '{"line_count":1}', '[]', '[]', 0, '', ?, ?)
-	`, available.Before.SHA256, db.FormatTime(time.Now()), time.Now().UnixMilli())
+	`, available.Before.SHA256, timelayout.Format(time.Now()), time.Now().UnixMilli())
 	testutil.FailErr(t, "insert version briefing", err)
 	testutil.FailErr(t, "maintain blobs", store.Retention.SweepBlobs(ctx))
 	comparison, err := store.Comparisons.CompareEffect(ctx, "p1", effectID)

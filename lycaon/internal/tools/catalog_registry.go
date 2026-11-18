@@ -41,13 +41,8 @@ var bootToolClaimNames = []string{
 	"workflow_compose", "workflow_compose_from_template", "workflow_persist",
 	"workflow_catalog_summaries", "workflow_user_feedback", "ask_user", "workflow_advance", "fanout_plan", "submit_verdict",
 	"wait",
-	"pack_board",
+	"pack_board", "read_findings", "read_review", "plan_from_blueprint",
 	"web_search", "fetch_url",
-}
-
-// BootToolClaimNames returns a copy of the tools BootRegisteredToolSet treats as available beyond native-tools.yaml.
-func BootToolClaimNames() []string {
-	return append([]string(nil), bootToolClaimNames...)
 }
 
 // ValidateBootToolClaimsHonest fails when a boot claim is not registered on the registry.

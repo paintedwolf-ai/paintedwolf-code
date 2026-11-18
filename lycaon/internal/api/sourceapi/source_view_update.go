@@ -1,9 +1,11 @@
 package sourceapi
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/google/uuid"
+
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/pagedview"
 	"github.com/lycaon/lycaon/internal/sourcetree"
@@ -39,7 +41,7 @@ func (s *Trees) HandleApplySourceViewIntent(w http.ResponseWriter, r *http.Reque
 		s.Views.writeSourceViewError(w, r, rejectedSourceIntent("The command kind must match the source view."))
 		return
 	}
-	canonical, err := sourceViewCanonical(request)
+	canonical, err := json.Marshal(request)
 	if err != nil {
 		s.Views.writeSourceViewError(w, r, err)
 		return

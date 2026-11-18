@@ -84,7 +84,7 @@ pub fn signed_comment(signature: &Signature) -> Result<SignedComment, String> {
 fn decode_signature(encoded_signature: &str) -> Result<Signature, String> {
     Signature::decode(&decode(encoded_signature)?).map_err(|e| e.to_string())
 }
-fn decode_key(encoded_key: &str) -> Result<PublicKey, String> {
+pub(super) fn decode_key(encoded_key: &str) -> Result<PublicKey, String> {
     PublicKey::decode(&decode(encoded_key)?).map_err(|e| e.to_string())
 }
 pub fn verify(

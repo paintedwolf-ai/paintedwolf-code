@@ -116,13 +116,13 @@ describe("transcript-items", () => {
     ).toBe(true);
   });
 
-  it("shows only long-running in-flight tools on an internal assistant row", () => {
+  it("shows only long-running in-flight tools on a committed assistant row", () => {
     const items = messagesToTranscriptItems(
       [
         {
           id: "a1",
           role: "assistant", origin: "model" as const, authority: "none" as const, trust_tier: "trusted" as const,
-          visibility: "internal",
+          visibility: "transcript",
           content: "",
           tool_calls: [
             { id: "tc-cmd", name: "command", args: { command: "ls" } },

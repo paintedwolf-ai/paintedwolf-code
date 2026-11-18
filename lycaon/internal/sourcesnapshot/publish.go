@@ -2,6 +2,7 @@ package sourcesnapshot
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"sort"
 	"strings"
 	"time"
@@ -50,7 +51,7 @@ func (s *Store) publish(ctx context.Context, req Request, roots []publishedRoot,
 	if err := q.UpsertSourceSnapshot(ctx, db.UpsertSourceSnapshotParams{
 		ID: out.ID, RootsKey: out.RootsKey, MerkleSha256: out.MerkleSHA256,
 		FileCount: int64(out.FileCount), TotalBytes: out.TotalBytes,
-		CaptureQuality: string(out.Quality), CreatedTs: db.FormatTime(out.CreatedAt),
+		CaptureQuality: string(out.Quality), CreatedTs: timelayout.Format(out.CreatedAt),
 	}); err != nil {
 		return Snapshot{}, err
 	}
@@ -72,7 +73,7 @@ func (s *Store) publish(ctx context.Context, req Request, roots []publishedRoot,
 	if !req.Unwatched {
 		if err := q.UpsertSourceSnapshotHead(ctx, db.UpsertSourceSnapshotHeadParams{
 			RootsKey: out.RootsKey, SnapshotID: out.ID,
-			PublishedTs: db.FormatTime(time.Now().UTC()),
+			PublishedTs: timelayout.Format(time.Now().UTC()),
 		}); err != nil {
 			return Snapshot{}, err
 		}

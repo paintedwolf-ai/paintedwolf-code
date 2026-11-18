@@ -75,7 +75,7 @@ func TestEngineEvaluateInvokeSpecDenyUsesToolRejectFormatter(t *testing.T) {
 		RejectFormatter: formatter,
 		BlockPlane:      phaseTestBlockPlane(t),
 	})
-	err := eng.EvaluateInvoke(context.Background(), &api.Session{ID: "s1", Posture: api.SessionPostureSpec}, "delegate_dispatch", nil)
+	err := eng.EvaluateInvoke(context.Background(), &api.Session{ID: "s1", Posture: api.SessionPostureSpec}, "plan_from_blueprint", nil)
 	if err == nil {
 		t.Fatal("expected deny")
 	}
@@ -252,8 +252,8 @@ func TestListInvokeParityEmptyArgs(t *testing.T) {
 	}
 }
 
-func TestListSpecHidesDelegateDispatch(t *testing.T) {
-	inv := listInvoker{metas: []tools.ToolMeta{{Name: "delegate_dispatch"}, {Name: "read"}}}
+func TestListSpecHidesPlanFromBlueprint(t *testing.T) {
+	inv := listInvoker{metas: []tools.ToolMeta{{Name: "plan_from_blueprint"}, {Name: "read"}}}
 	eng := NewEngine(EngineDeps{
 		ToolLister: inv,
 		Rules: staticRuleEvaluator{outcome: &rules.RuleOutcome{
@@ -263,8 +263,8 @@ func TestListSpecHidesDelegateDispatch(t *testing.T) {
 	})
 	listed := eng.ListForPrompt(context.Background(), &api.Session{ID: "s1", Posture: api.SessionPostureSpec}, "coordinator")
 	for _, meta := range listed {
-		if meta.Name == "delegate_dispatch" {
-			t.Fatal("delegate_dispatch should be filtered")
+		if meta.Name == "plan_from_blueprint" {
+			t.Fatal("plan_from_blueprint should be filtered")
 		}
 	}
 }

@@ -23,6 +23,7 @@ import sys
 from artifact_paths import artifact_root
 import change_report
 from change_report import Finding
+from ci_policy.impact import script_change
 import coverage_policy
 import python_coverage
 from toolchain import python_tools
@@ -302,11 +303,8 @@ def run_den(scope):
     include = [f"--coverage.include={Path(p).relative_to('lycaon-den').as_posix()}" for p in changed]
     arguments = (["--coverage", "--coverage.reporter=json",
                   f"--coverage.reportsDirectory={reports}", *include] if changed else [])
-    environment = {key: value for key, value in os.environ.items()
-                   if key not in {"LYCAON_VITEST_FAST", "PW_VITEST_CHANGED_ONLY"}}
     code = subprocess.call(["bash", str(ROOT / "scripts" / "vitest-digest.sh"),
-                            "--name", "den:coverage:changes", "--", *arguments],
-                           cwd=ROOT, env=environment)
+                            "--name", "den:coverage:changes", "--", *arguments], cwd=ROOT)
     if not changed:
         findings = [Finding("error", "den", "frontend tests failed; inspect the digest")] if code else []
         return findings, bool(code), "complete frontend tests; no changed source to measure"
@@ -338,11 +336,18 @@ def run_python(scope):
     floor = coverage_policy.changed("python")
     changed = python_coverage.sources(ROOT, scope.paths)
     if not changed:
-        if "test:runner" not in coverage_policy.python_suites():
+        if scope.paths and not script_change(scope.paths):
+            return [], False, "no change to scripts, workflows, packaging or the task runner"
+        suites = coverage_policy.python_suites()
+        # A commit with no change to measure, as nightly verifies, runs every declared suite; a change to
+        # workflows, packaging or the task runner runs the runner suite, which reads them.
+        selected = suites if not scope.paths else {name: suite for name, suite in suites.items() if name == "test:runner"}
+        if not selected:
             return [], False, "no changed scripts Python"
-        code = subprocess.call([sys.executable, str(ROOT / "scripts/ci_policy/runner_tests.py")], cwd=ROOT)
-        findings = [Finding("error", "python", "script tests failed; inspect the unittest output")] if code else []
-        return findings, bool(code), "complete script tests; no changed source to measure"
+        failed = python_coverage.run(ROOT, selected)
+        findings = [Finding("error", "python", f"{name} failed; inspect the unittest output") for name in failed]
+        measured = "the runner suite" if scope.paths else "every declared script suite"
+        return findings, bool(failed), f"{measured}; no changed source to measure"
     measured = f"{len(changed)} changed file(s)"
     measurements = python_coverage.measure(ROOT, changed, coverage_policy.python_suites(),
                                            artifact_root(ROOT) / "coverage" / "changes-python")

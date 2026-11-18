@@ -15,12 +15,6 @@ func TestMergeWorkerPolicyTemplateVars(t *testing.T) {
 	if err := prompts.MergeWorkerPolicyTemplateVars("path-explorer", vars); err != nil {
 		t.Fatalf("MergeWorkerPolicyTemplateVars: %v", err)
 	}
-	if vars["worker_tool_budget_default"] != spawn.DefaultWorkerMaxToolLoops {
-		t.Fatalf("worker default = %v want %d", vars["worker_tool_budget_default"], spawn.DefaultWorkerMaxToolLoops)
-	}
-	if _, exists := vars["max_tool_loops"]; exists {
-		t.Fatal("worker policy vars contain a task-specific max_tool_loops")
-	}
 	if vars["max_concurrent_tool_calls"] != spawn.MaxConcurrentToolCalls {
 		t.Fatalf("max_concurrent_tool_calls mismatch")
 	}

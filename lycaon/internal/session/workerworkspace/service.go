@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -22,6 +23,8 @@ type Workspace interface {
 type Tasks interface {
 	Get(string) (*api.WorkerTask, bool)
 	ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error)
+	// ReviewsWorker reports a read job that reviews a sealed result.
+	ReviewsWorker(context.Context, *api.WorkerTask) bool
 }
 type Calls interface {
 	Reserve(context.Context, string, []string, string) (*call.ReservationResult, error)
@@ -39,7 +42,11 @@ type Service struct {
 	Touches                *TouchLedger
 	branchState            func(string) (tools.BranchWorkspace, error)
 	unregisterRepoObserver func()
+	names                  workercompletion.WorkerNames
 }
+
+// SetWorkerNames names the siblings that hold reserved paths.
+func (m *Service) SetWorkerNames(names workercompletion.WorkerNames) { m.names = names }
 
 func New(sessions Sessions, workspace Workspace, branchState func(string) (tools.BranchWorkspace, error)) *Service {
 	s := &Service{store: sessions, workspace: workspace, branchState: branchState, Touches: NewTouchLedger()}

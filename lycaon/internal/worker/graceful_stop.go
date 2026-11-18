@@ -33,7 +33,7 @@ func (e *LocalWorkerExecutor) completeGracefulStop(
 		return api.WorkerResult{}, fmt.Errorf("worker task missing parent_session_id")
 	}
 
-	outcome, err := workercloseout.FinalizeWorkerSummaryForCanceled(ctx, e.Transcripts, e.Prompts, child.ID, task.AgentType, cancelReason, finalizeOpts)
+	outcome, err := workercloseout.FinalizeWorkerSummaryForCanceled(ctx, e.Transcripts, e.Prompts, child.ID, cancelReason, finalizeOpts)
 	if err != nil {
 		return api.WorkerResult{}, err
 	}
@@ -53,15 +53,16 @@ func (e *LocalWorkerExecutor) completeGracefulStop(
 		ChangeReport:   &report,
 	}
 
+	// A report delivered on the stop turn is a partial result; without one
+	// the round failed as stopped and the host writes no report for it.
 	completionReport := outcome.Report
-	if strings.TrimSpace(completionReport.Brief) == "" {
-		completionReport.Brief = summary
+	if outcome.Status != string(api.WorkerSummaryStatusFailed) {
+		if strings.TrimSpace(completionReport.Brief) == "" {
+			completionReport.Brief = summary
+		}
+		completionReport.LegStatus = "partial"
+		result.CompletionReport = workercompletion.ReportWire(completionReport)
 	}
-	if len(completionReport.ObjectivesMet) == 0 {
-		completionReport.ObjectivesMet = []string{"Worker leg canceled"}
-	}
-	completionReport.LegStatus = "partial"
-	result.CompletionReport = workercompletion.ReportWire(completionReport)
 
 	if err := e.WorkerCancellations.Append(ctx, parentID, workeroutcomes.CancellationInput{
 		JobID:            task.ID,

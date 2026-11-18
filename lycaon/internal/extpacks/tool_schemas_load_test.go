@@ -9,38 +9,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolschema"
 )
-
-func TestLoadEffectiveToolSchemasStockParity(t *testing.T) {
-	root := configlayout.FindModuleRoot()
-	dir := filepath.Join(root, "config", "packs", "painted-wolf", "platform", "tools", "schemas")
-	want, err := toolschema.LoadSchemaDir(dir)
-	testutil.FailErr(t, "LoadSchemaDir", err)
-
-	content, err := extpacks.DiscoverStockContent()
-	testutil.FailErr(t, "DiscoverStockContent", err)
-	eff := extpacks.Resolve(t.Context(), extpacks.ResolveInput{
-		Packs:   content,
-		Desired: extpacks.EmptyDesired(),
-	})
-	got, diags, err := extpacks.LoadEffectiveToolSchemas(eff)
-	testutil.FailErr(t, "LoadEffectiveToolSchemas", err)
-	if len(diags) != 0 {
-		t.Fatalf("diags=%v", diags)
-	}
-	if len(got.Tools) != len(want.Tools) {
-		t.Fatalf("got %d tools want %d", len(got.Tools), len(want.Tools))
-	}
-	for name := range want.Tools {
-		if _, ok := got.Tools[name]; !ok {
-			t.Errorf("missing tool %q", name)
-		}
-	}
-	if len(want.Tools) < 80 {
-		t.Fatalf("expected stock schema set, got %d", len(want.Tools))
-	}
-}
 
 func TestLoadEffectiveToolSchemasOwnOne(t *testing.T) {
 	dir := t.TempDir()

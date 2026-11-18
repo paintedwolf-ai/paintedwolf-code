@@ -25,6 +25,7 @@ func (s *Service) decorate(ctx context.Context, caller Caller, scope Scope, hits
 			Kind:      firstNonEmpty(h.Kind, h.HitKind),
 			Tool:      strings.TrimSpace(h.Tool),
 			SessionID: h.SessionID,
+			Worker:    strings.TrimSpace(h.WorkerName),
 			AgentType: h.AgentType,
 			LegID:     h.LegID,
 			Mine:      strings.TrimSpace(h.SessionID) == strings.TrimSpace(caller.SessionID),

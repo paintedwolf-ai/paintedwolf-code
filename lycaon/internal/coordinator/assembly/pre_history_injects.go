@@ -2,11 +2,11 @@ package assembly
 
 import (
 	"context"
+	"log/slog"
 	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -141,6 +141,17 @@ func (e *turnContextAssembler) buildTailSystemInjects(
 		}
 	}
 
+	if msg, ok, err := e.workerRoundInject(ctx, sess); err != nil {
+		return tail, err
+	} else if ok {
+		tail = append(tail, msg)
+	}
+	if msg, ok, err := e.workerMessagesInject(ctx, sess, turn); err != nil {
+		return tail, err
+	} else if ok {
+		tail = append(tail, msg)
+	}
+
 	if coordinator && !sess.IsWorkerChild() {
 		surfaceID := ""
 		if turn != nil {
@@ -252,26 +263,18 @@ func (e *turnContextAssembler) turnStateInject(
 		return "", false
 	}
 
-	partial := surface.PartialWorkerSummaryJobIDs(history)
-	pending := implState.PendingOverlayIDs
-	pendingSet := make(map[string]bool, len(pending))
-	for _, id := range pending {
-		pendingSet[id] = true
-	}
-	var partialWorkerJobs []string
-	for _, id := range partial {
-		if !pendingSet[id] {
-			partialWorkerJobs = append(partialWorkerJobs, id)
-		}
-	}
-
 	in := inject.TurnStateInjectInput{
-		Reader:             reader,
-		ProgressSnapshot:   implState.ProgressSnapshot,
-		ProgressMissing:    implState.ProgressMissing,
-		VerifyRequired:     frame.RequiresEvidence("verify"),
-		PendingOverlayJobs: pending,
-		PartialWorkerJobs:  partialWorkerJobs,
+		Reader:           reader,
+		ProgressSnapshot: implState.ProgressSnapshot,
+		ProgressMissing:  implState.ProgressMissing,
+		VerifyRequired:   frame.RequiresEvidence("verify"),
+	}
+	if e.deps.Workers.Roster != nil {
+		workers, omitted, err := e.deps.Workers.Roster(ctx, sess.ID)
+		if err != nil {
+			slog.WarnContext(ctx, "worker roster for turn state", "session_id", sess.ID, "error", err)
+		}
+		in.Workers, in.WorkersOmitted = workers, omitted
 	}
 
 	block, err := inject.RenderTurnStateBlock(ctx, e.deps.Injects, sess.ID, in)

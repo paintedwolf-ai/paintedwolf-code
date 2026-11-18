@@ -9,79 +9,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// SetObservationTracker registers an observation.Tracker for a session ID or workspace root.
-func (o *ObservationBindings) SetObservationTracker(key string, tracker *observation.Tracker) {
-	if o == nil || strings.TrimSpace(key) == "" {
-		return
-	}
-	key = strings.TrimSpace(key)
-	o.obsMu.Lock()
-	defer o.obsMu.Unlock()
-	if o.obsTrackers == nil {
-		o.obsTrackers = make(map[string]*observation.Tracker)
-	}
-	if tracker == nil {
-		delete(o.obsTrackers, key)
-		return
-	}
-	o.obsTrackers[key] = tracker
-}
-
-// ObservationTracker returns the registered observation.Tracker for key, if any.
-func (o *ObservationBindings) ObservationTracker(key string) *observation.Tracker {
-	if o == nil {
-		return nil
-	}
-	key = strings.TrimSpace(key)
-	o.obsMu.RLock()
-	tr := o.obsTrackers[key]
-	o.obsMu.RUnlock()
-	if tr != nil {
-		return tr
-	}
-	if o.workspaceTrackers != nil && key != "" {
-		tr, _ = o.workspaceTrackers.TrackerForSession(key, key, key, key)
-		return tr
-	}
-	return nil
-}
-
-// SetActiveCheckpoint records the active private checkpoint ID for a session ID or workspace root.
-func (o *ObservationBindings) SetActiveCheckpoint(key, checkpointID string) {
-	if o == nil || strings.TrimSpace(key) == "" {
-		return
-	}
-	o.obsMu.Lock()
-	defer o.obsMu.Unlock()
-	if o.obsCheckpoints == nil {
-		o.obsCheckpoints = make(map[string]string)
-	}
-	o.obsCheckpoints[strings.TrimSpace(key)] = strings.TrimSpace(checkpointID)
-}
-
-// BindCheckObservation snapshots and binds the current observed sources and scope generation
-// from the registered tracker to checkID and checkpointID.
-func (o *ObservationBindings) BindCheckObservation(
-	key string,
-	checkID string,
-	checkpointID string,
-	scopeRoots []string,
-) (observation.VerificationBinding, bool) {
-	tracker := o.ObservationTracker(key)
-	if tracker == nil || strings.TrimSpace(checkID) == "" {
-		return observation.VerificationBinding{}, false
-	}
-	binding := tracker.BindVerificationReceipt(strings.TrimSpace(checkID), strings.TrimSpace(checkpointID), scopeRoots)
-	o.RegisterCheckBinding(checkID, binding)
-	if checkpointID != "" {
-		o.SetActiveCheckpoint(key, checkpointID)
-	}
-	if o.workspaceTrackers != nil {
-		o.workspaceTrackers.BindVerificationReceipt(key, key, key, key, checkID, checkpointID, scopeRoots)
-	}
-	return binding, true
-}
-
 // RegisterCheckBinding records an explicit VerificationBinding for checkID.
 func (o *ObservationBindings) RegisterCheckBinding(checkID string, binding observation.VerificationBinding) {
 	if o == nil || strings.TrimSpace(checkID) == "" {
@@ -175,25 +102,10 @@ func resolveSessionTracker(m *Service, ctx context.Context, sess *api.Session) (
 	if m == nil || sess == nil {
 		return nil, ""
 	}
-	jobID := workercontext.Job(ctx)
-	root := m.SourceEvidenceRoot(ctx, sess)
-	m.obsMu.RLock()
-	for _, k := range []string{jobID, sess.ID, root, sess.WorkspacePath} {
-		k = strings.TrimSpace(k)
-		if k == "" {
-			continue
-		}
-		if tr := m.obsTrackers[k]; tr != nil {
-			ckpt := m.obsCheckpoints[k]
-			m.obsMu.RUnlock()
-			return tr, ckpt
-		}
+	if m.workspaceTrackers == nil {
+		return nil, ""
 	}
-	m.obsMu.RUnlock()
-	if m.workspaceTrackers != nil {
-		return m.workspaceTrackers.TrackerForSession(jobID, sess.ID, root, sess.WorkspacePath)
-	}
-	return nil, ""
+	return m.workspaceTrackers.TrackerForSession(workercontext.Job(ctx), sess.ID, m.SourceEvidenceRoot(ctx, sess), sess.WorkspacePath)
 }
 
 func autoBindPassingRun(m *Service, ctx context.Context, sess *api.Session, checkID, revision string) {

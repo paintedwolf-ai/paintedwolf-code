@@ -27,7 +27,7 @@ type Transcript interface {
 type CycleState interface {
 	ForSession(context.Context, *api.Session) surface.ImplementSessionState
 }
-type BudgetRequests interface{ BudgetRequestOpen(string) bool }
+type RoundNotices interface{ RoundRunning(string) bool }
 type WorkflowDomains struct {
 	Policy WorkflowPolicy
 	Runs   WorkflowRuns
@@ -51,7 +51,7 @@ type Service struct {
 	store        Sessions
 	transcript   Transcript
 	state        CycleState
-	budgets      BudgetRequests
+	rounds       RoundNotices
 	workers      workeroutcomes.CycleLedger
 	workflows    *WorkflowDomains
 	frame        inject.CoordinatorTurnFrameSource
@@ -64,8 +64,8 @@ type Service struct {
 	anchors      *anchor.Bus
 }
 
-func New(sessions Sessions, transcript Transcript, state CycleState, budgets BudgetRequests, closure Closure) *Service {
-	return &Service{store: sessions, transcript: transcript, state: state, budgets: budgets, closure: closure}
+func New(sessions Sessions, transcript Transcript, state CycleState, rounds RoundNotices, closure Closure) *Service {
+	return &Service{store: sessions, transcript: transcript, state: state, rounds: rounds, closure: closure}
 }
 func (m *Service) Bind(kicks *kick.KickEngine, anchors *anchor.Bus) {
 	m.kicks = kicks

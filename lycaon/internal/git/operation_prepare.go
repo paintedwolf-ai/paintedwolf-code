@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/sourceblob"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/gitrepo"
-	"github.com/lycaon/lycaon/internal/sourceledger"
 )
 
 type preparedOperation struct {
@@ -422,7 +422,7 @@ func (p *preparedOperation) prepareFiles(root, scratch string, paths []string) e
 
 func (p *preparedOperation) appendFile(file RestoreFile) error {
 	size := int64(len(file.Before.Bytes) + len(file.After.Bytes))
-	if size > sourceledger.MaxRevisionContentBytes-p.previewBytes {
+	if size > sourceblob.MaxRevisionContentBytes-p.previewBytes {
 		file.Before.Bytes, file.After.Bytes = nil, nil
 	} else {
 		p.previewBytes += size

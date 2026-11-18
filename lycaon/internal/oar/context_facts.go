@@ -1,8 +1,9 @@
 package oar
 
 import (
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"sync"
+
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 type InvocationFacts struct {

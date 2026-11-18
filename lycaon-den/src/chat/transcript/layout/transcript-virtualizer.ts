@@ -162,7 +162,6 @@ export type TranscriptUnmountedSpace = {
   beforePx: number;
   afterPx: number;
 };
-export type TranscriptVirtualRunway = TranscriptUnmountedSpace;
 
 function nonNegativeFinite(value: number): number {
   return Number.isFinite(value) ? Math.max(0, value) : 0;
@@ -183,7 +182,6 @@ export function transcriptUnmountedSpace(
     afterPx: nonNegativeFinite(total - nonNegativeFinite(last.end - originPx)),
   };
 }
-export const transcriptVirtualRunway = transcriptUnmountedSpace;
 
 /** Initial tail offset in the shared scrollport. */
 export function transcriptInitialEndOffset(

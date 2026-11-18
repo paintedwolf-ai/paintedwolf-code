@@ -3,13 +3,13 @@ package boards
 import (
 	"context"
 	"fmt"
-	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"path/filepath"
 	"strings"
 
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
+
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/app/decisions"
-	"github.com/lycaon/lycaon/internal/app/delegations"
 	"github.com/lycaon/lycaon/internal/app/eventing"
 	"github.com/lycaon/lycaon/internal/app/execution"
 	"github.com/lycaon/lycaon/internal/app/persistence"
@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/scanning"
 	"github.com/lycaon/lycaon/internal/app/security"
 	"github.com/lycaon/lycaon/internal/app/sessions"
+	"github.com/lycaon/lycaon/internal/app/workerruntime"
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/browser"
@@ -32,17 +33,17 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
-	"github.com/lycaon/lycaon/internal/toolscope"
 	"github.com/lycaon/lycaon/internal/visualscreen"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
+	workflowreview "github.com/lycaon/lycaon/internal/workflow/review"
 )
 
 // Dependencies holds the domain runtimes and services needed by boards.
 type Dependencies struct {
 	Storage                  persistence.Runtime
 	Sessions                 *sessions.Runtime
-	Delegations              *delegations.Runtime
+	Workers                  *workerruntime.Runtime
 	Workflows                *workflows.Runtime
 	Scanning                 *scanning.Runtime
 	Security                 *security.Runtime
@@ -75,7 +76,7 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	r.deps.Resources.Track("repo-provider", 70, func(context.Context) error { return provider.Close() })
 	r.deps.Resources.Track("source-catalog", 86, sourcecatalog.Process().Drain)
 	r.deps.Sessions.Manager.SetRepoProvider(r.RepoProvider)
-	r.deps.Delegations.SetRepoProvider(r.RepoProvider)
+	r.deps.Workers.SetRepoProvider(r.RepoProvider)
 
 	r.RepoProvider.SetOnSettled(func(projectDir string) {
 		if r.deps.Events.Publisher != nil {
@@ -83,15 +84,8 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 		}
 	})
 
-	scopeCfg, scopeErr := toolscope.Load()
-	if scopeErr != nil {
-		return fmt.Errorf("toolscope: %w", scopeErr)
-	}
-	r.deps.Execution.Host.Survey.SetScopeGuards(scopeCfg)
-
 	r.Snapshot = &board.SnapshotBuilder{
-		Delegations:            r.deps.Delegations.Store,
-		Workers:                r.deps.Delegations.Queue,
+		Workers:                r.deps.Workers.Queue,
 		Workflow:               &board.WorkflowRunSource{Runs: r.deps.Workflows.Manager.Store.Runs, Presentation: r.deps.Workflows.Manager.Presentation},
 		Repo:                   r.RepoProvider,
 		Git:                    r.deps.GitMgr,
@@ -119,8 +113,8 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	})
 
 	if err := board.RegisterBoardTools(r.deps.Execution.Host.Registry, board.ToolDeps{
-		ReviewView:         r.deps.Workflows.Manager.Assignments.View,
 		Builder:            r.Snapshot,
+		PlanWorkers:        r.deps.Workers.Plan.PlanWorkers,
 		Findings:           func() findings.Store { return r.Findings },
 		RootSession:        r.rootSessionKey,
 		PromotePaths:       r.deps.Sessions.Manager.Promotion.PromotePathBoardLines,
@@ -128,6 +122,9 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 		ActiveReservations: r.deps.Sessions.Manager.Workers.Workspaces.ReservationEntries,
 	}); err != nil {
 		return fmt.Errorf("board tools: %w", err)
+	}
+	if err := workflowreview.RegisterReadReviewTool(r.deps.Execution.Host.Registry, r.deps.Workflows.Manager.Assignments.View); err != nil {
+		return fmt.Errorf("read_review tool: %w", err)
 	}
 
 	r.deps.Sessions.Manager.Coordinator.Loading.SetLedger(r.deps.Execution.TurnLoads)

@@ -10,7 +10,7 @@ from ci_policy.hosted_plan import lanes
 from verification_plan import catalog
 
 # Change-relative reports and live observations require their own execution.
-REUSABLE = {"build", "contracts", "lint", "vulnerabilities", "runner", "behavior", "frontend", "native"}
+REUSABLE = {"contracts", "lint", "vulnerabilities", "runner", "behavior", "frontend", "native"}
 
 
 def recipe(name):

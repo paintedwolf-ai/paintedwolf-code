@@ -11,7 +11,7 @@ import {
   resetFilesStagePaneForTests,
   setSidebarScope,
 } from "../../files/review/review-pane.ts";
-import { resetProjectFilesForTests } from "../../files/documents/project-files-buffers.ts";
+import { resetProjectFilesForTests } from "../../files/documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../../files/documents/files-buffer-state.ts";
 
 const roots = [{ id: "r1", label: "repo", path: "/repo", is_primary: true }];

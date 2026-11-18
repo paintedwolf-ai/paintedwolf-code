@@ -3,7 +3,6 @@ package hostcontracts
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -205,47 +204,6 @@ func TestScanQueryUnknownIDReturnsSafe404Message(t *testing.T) {
 	}
 }
 
-// Invalid delegation strategies map to 400.
-
-func TestCreateDelegationInvalidStrategyReturns400(t *testing.T) {
-	srv := contractfixture.NewInMemoryDelegationServer(t)
-	dir := t.TempDir()
-	opened := contractfixture.CreateProjectForTest(t, srv, dir)
-
-	body := fmt.Sprintf(`{"operation_id":%q,"project_id":%q,"task":"do it","strategy":"single"}`, uuid.NewString(), opened.ID)
-	req := contractfixture.NewAuthedRequest(http.MethodPost, "/v1/delegations", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
-	}
-	var resp wire.ErrorResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if !strings.Contains(resp.Message, "strategy") {
-		t.Fatalf("error = %q, expected to mention strategy", resp.Message)
-	}
-}
-
-func TestCreateDelegationInvalidInspectModeReturns400(t *testing.T) {
-	srv := contractfixture.NewInMemoryDelegationServer(t)
-	dir := t.TempDir()
-	opened := contractfixture.CreateProjectForTest(t, srv, dir)
-
-	body := fmt.Sprintf(`{"project_id":%q,"task":"do it","strategy":"file-based","inspect_mode":"fast"}`, opened.ID)
-	req := contractfixture.NewAuthedRequest(http.MethodPost, "/v1/delegations", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("status = %d, want 400; body=%s", w.Code, w.Body.String())
-	}
-}
-
 // Provider base URLs require HTTP or HTTPS.
 
 func TestCreateProviderRejectsInvalidBaseURL(t *testing.T) {
@@ -277,7 +235,7 @@ func TestCreateProviderRejectsInvalidBaseURL(t *testing.T) {
 // List endpoints encode empty collections as arrays.
 
 func TestWorkersEmptyListReturnsArrayNotNull(t *testing.T) {
-	srv := contractfixture.NewInMemoryDelegationServer(t)
+	srv := contractfixture.NewInMemoryWorkersServer(t)
 	projectDir := t.TempDir()
 	opened := contractfixture.CreateProjectForTest(t, srv, projectDir)
 
@@ -296,39 +254,8 @@ func TestWorkersEmptyListReturnsArrayNotNull(t *testing.T) {
 	}
 }
 
-func TestDelegationLegsEmptyListReturnsArrayNotNull(t *testing.T) {
-	srv := contractfixture.NewInMemoryDelegationServer(t)
-	dir := t.TempDir()
-	opened := contractfixture.CreateProjectForTest(t, srv, dir)
-	body := fmt.Sprintf(`{"operation_id":%q,"project_id":%q,"task":"x","strategy":"file-based"}`, uuid.NewString(), opened.ID)
-	req := contractfixture.NewAuthedRequest(http.MethodPost, "/v1/delegations", strings.NewReader(body))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusCreated {
-		t.Fatalf("create status = %d body=%s", w.Code, w.Body.String())
-	}
-	var dep wire.Delegation
-	if err := json.Unmarshal(w.Body.Bytes(), &dep); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	w = httptest.NewRecorder()
-	req = contractfixture.NewAuthedRequest(http.MethodGet, "/v1/delegations/"+dep.ID+"/legs", nil)
-	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("legs status = %d body=%s", w.Code, w.Body.String())
-	}
-	var legRes wire.DelegationLegListResponse
-	if err := json.Unmarshal(w.Body.Bytes(), &legRes); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if legRes.Legs == nil {
-		t.Fatalf("/v1/delegations/{id}/legs returned nil legs slice")
-	}
-}
-
 func TestListWorkersFiltersBySessionID(t *testing.T) {
-	srv := contractfixture.NewInMemoryDelegationServer(t)
+	srv := contractfixture.NewInMemoryWorkersServer(t)
 	projectDir := t.TempDir()
 	opened := contractfixture.CreateProjectForTest(t, srv, projectDir)
 

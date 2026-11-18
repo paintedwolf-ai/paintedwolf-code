@@ -18,7 +18,7 @@ func TestBundledCatalogValidates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadCatalog: %v", err)
 	}
-	if cat.Version != Version || cat.Turn.Tools.LoadAt <= 0 || cat.Request.MaxLoads <= 0 {
+	if cat.Version != decide.CatalogVersion || cat.Turn.Tools.LoadAt <= 0 || cat.Request.MaxLoads <= 0 {
 		t.Fatalf("catalog = %+v", cat)
 	}
 	for _, kind := range Kinds() {

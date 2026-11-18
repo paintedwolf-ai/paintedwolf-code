@@ -2,9 +2,10 @@ package api
 
 import (
 	"context"
-	"github.com/go-chi/chi/v5"
 	"log/slog"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
 	"github.com/lycaon/lycaon/internal/api/extensionadmin"
@@ -84,7 +85,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 	})
 	s.Admin.SessionAdmin = sessionadmin.New(&s.responses, &s.background, sessionadmin.Deps{
 		Checkpoints: deps.Approvals.Checkpoints, EventPublisher: deps.Host.EventPublisher, Events: deps.Host.Events,
-		FileAgeWarmer: deps.Source.FileAgeWarmer, Invocations: deps.Core.Invocations, LLMService: deps.Providers.LLM, Preview: deps.Host.Preview,
+		Invocations: deps.Core.Invocations, LLMService: deps.Providers.LLM, Preview: deps.Host.Preview,
 		ProgressStore: deps.Source.ProgressStore, Projects: deps.Core.Projects, ProjectRules: deps.Source.ProjectRules, Store: deps.Core.Store,
 		Sessions: deps.Core.Sessions, Workers: deps.Workflow.Workers, Workflows: deps.Workflow.Workflows, Settings: deps.Core.Settings,
 		Sources: &s.Sources, SessionView: &s.Admin.SessionView, Git: &s.Admin.Git, Prompt: &s.Admin.Prompt,
@@ -150,7 +151,6 @@ func requireDependencies(deps Dependencies) {
 		httpio.Required{Name: "Checkpoints", Present: deps.Approvals.Checkpoints != nil},
 		httpio.Required{Name: "CostTracker", Present: deps.Providers.CostTracker != nil},
 		httpio.Required{Name: "Database", Present: deps.Core.Database != nil},
-		httpio.Required{Name: "Delegations", Present: deps.Workflow.Delegations != nil},
 		httpio.Required{Name: "EventPublisher", Present: deps.Host.EventPublisher != nil},
 		httpio.Required{Name: "Events", Present: deps.Host.Events != nil},
 		httpio.Required{Name: "HostIdentity", Present: deps.Host.HostIdentity.HostID != ""},

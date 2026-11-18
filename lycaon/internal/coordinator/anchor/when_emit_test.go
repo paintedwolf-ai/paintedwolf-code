@@ -6,11 +6,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"gopkg.in/yaml.v3"
 )
 
 func TestEmitHonorsConditionWhenFalse(t *testing.T) {
@@ -37,7 +38,7 @@ func TestEmitHonorsConditionWhenFalse(t *testing.T) {
 	bus := anchor.NewBus(kicks)
 	bus.SetRegistry(loaderReg)
 	bus.Emit(context.Background(), "sess-when", anchor.ComposeDone, anchor.Envelope{})
-	if id := kicks.TakePendingKickID("sess-when"); id != "" {
+	if id := kicks.TakePendingKickIDUnless("sess-when", nil); id != "" {
 		t.Fatalf("when:false must skip Emit, got pending %q", id)
 	}
 }
@@ -67,11 +68,11 @@ func TestEmitMatchHonorsConditionWhenPhase(t *testing.T) {
 	bus.SetRegistry(loaderReg)
 
 	bus.EmitMatch(context.Background(), "sess-phase", anchor.PhaseEntered, anchor.Envelope{}, anchor.MatchContext{Surface: "phase", Phase: "execute"})
-	if id := kicks.TakePendingKickID("sess-phase"); id != "" {
+	if id := kicks.TakePendingKickIDUnless("sess-phase", nil); id != "" {
 		t.Fatalf("when phase==plan must skip execute MatchContext, got %q", id)
 	}
 	bus.EmitMatch(context.Background(), "sess-phase", anchor.PhaseEntered, anchor.Envelope{}, anchor.MatchContext{Surface: "phase", Phase: "plan"})
-	if id := kicks.TakePendingKickID("sess-phase"); id != "coordinator-phase-advanced" {
+	if id := kicks.TakePendingKickIDUnless("sess-phase", nil); id != "coordinator-phase-advanced" {
 		t.Fatalf("when phase==plan must queue, got %q", id)
 	}
 }

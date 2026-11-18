@@ -88,7 +88,7 @@ func inspectSessionForwardProgress(ctx context.Context, h *Harness, sessionID st
 			st.pendingTrigger = string(trigger)
 		}
 		if sess, err := h.Store.Get(ctx, sessionID); err == nil && sess != nil {
-			tasks, err := workeroutcomes.ParentSessionInFlightWorkers(ctx, h.Delegations.Queue, sess.ProjectID, sessionID)
+			tasks, err := workeroutcomes.ParentSessionInFlightWorkers(ctx, h.Workers.Queue, sess.ProjectID, sessionID)
 			if err == nil {
 				st.inFlightWorkers = len(tasks)
 			}

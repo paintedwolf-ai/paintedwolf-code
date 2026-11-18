@@ -2,10 +2,10 @@ package worker
 
 import (
 	"context"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -20,8 +20,8 @@ type cycleOutcomeRecorder struct {
 }
 
 func (r *cycleOutcomeRecorder) OnWorkerComplete(ctx context.Context, jobID string, _ api.WorkerResult) error {
-	// Let peer deliveries contend while this projection is in flight.
-	time.Sleep(time.Millisecond)
+	// Yield so peer deliveries contend while this projection is in flight.
+	runtime.Gosched()
 	idle, err := workeroutcomes.ParentSessionWorkerCycleIdle(ctx, r.queue, testdbseed.DefaultProjectID, "parent", jobID)
 	if idle {
 		r.ready.Add(1)

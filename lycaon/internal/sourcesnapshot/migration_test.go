@@ -25,9 +25,11 @@ func TestMigratedManifestMatchesCapturedManifest(t *testing.T) {
 	legacy, err := sql.Open("sqlite", path)
 	testutil.FailErr(t, "open released store", err)
 	const root = "/work/tree"
+	tx, err := legacy.Begin()
+	testutil.FailErr(t, "begin seeding", err)
 	seed := func(query string, args ...any) {
 		t.Helper()
-		_, err := legacy.Exec(query, args...)
+		_, err := tx.Exec(query, args...)
 		testutil.FailErr(t, "seed legacy snapshot", err)
 	}
 	const files = 3000
@@ -49,6 +51,7 @@ func TestMigratedManifestMatchesCapturedManifest(t *testing.T) {
 			VALUES ('bucket', ?, ?, ?, ?, ?, ?, ?, ?, ?)`, i, root, entry.Path, entry.SHA256, entry.GitOID, string(entry.Identity), entry.Size, int64(entry.Mode), entry.ModifiedNS)
 		entries = append(entries, entry)
 	}
+	testutil.FailErr(t, "commit seeding", tx.Commit())
 	testutil.FailErr(t, "close legacy store", legacy.Close())
 	testutil.FailErr(t, "upgrade store", db.UpgradeStaged(t.Context(), path))
 

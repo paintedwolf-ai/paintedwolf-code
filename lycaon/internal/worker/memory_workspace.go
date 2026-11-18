@@ -7,15 +7,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourceblob"
-	"github.com/lycaon/lycaon/internal/workerplacement"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// ReviewsWorker is false: the memory queue runs no reviewer lanes.
+func (q *memoryQueueQuery) ReviewsWorker(context.Context, *api.WorkerTask) bool { return false }
 
 // ClaimWorkerBranch provisions a write-worker branch once.
 func (q *memoryQueueQuery) ClaimWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, error) {
@@ -182,36 +183,6 @@ func destroyWorkspaceRoot(ctx context.Context, q *InMemoryQueue, jobID, root str
 	_ = ws.DestroyWorkerWorkspace(cleanupCtx, &workspace.Binding{ID: jobID, Root: root})
 }
 
-func workerWorkspaceIdentity(ctx context.Context, database db.DBTX, root, baseline string) (string, string, error) {
-	dataDir, err := db.Directory(ctx, database)
-	if err != nil {
-		return "", "", err
-	}
-	// A branch captured by checkpoint records no baseline.
-	id := ""
-	if strings.TrimSpace(baseline) != "" {
-		id, err = workspacebaseline.ID(baseline)
-		if err != nil {
-			return "", "", err
-		}
-		resolved, err := workspacebaseline.Path(dataDir, id)
-		if err != nil {
-			return "", "", err
-		}
-		if filepath.Clean(baseline) != resolved {
-			return "", "", fmt.Errorf("worker baseline is outside the active installation")
-		}
-	}
-	rel, ok, err := workerplacement.LogicalFromPhysical(dataDir, root)
-	if err != nil {
-		return "", "", err
-	}
-	if !ok {
-		return "", "", fmt.Errorf("worker branch is outside the active installation")
-	}
-	return id, rel, nil
-}
-
 // TaskRootRefs returns a worker's captured or attached roots.
 func TaskRootRefs(ctx context.Context, task *api.WorkerTask, projects ProjectStore) []projectroot.RootRef {
 	if task == nil {
@@ -245,33 +216,63 @@ func TaskRootRefs(ctx context.Context, task *api.WorkerTask, projects ProjectSto
 	}}
 }
 
-// ReconcileProjectSandboxes removes sandboxes absent from current task state. Each candidate
-// settles first; a candidate that cannot keeps its data and its retry state. Live workers are
+// ReconcileProjectSandboxes removes branch trees no current state names. A
+// job names its own branch or the lane its round ran in; an open worker names
+// its current lane, which outlives each job. Each candidate settles first; a
+// candidate that cannot keeps its data and its retry state. Live workers are
 // retained, so this runs safely while the engine serves them.
 func ReconcileProjectSandboxes(
 	ctx context.Context,
 	sandboxRoot, primaryDir string,
 	settle workspace.SandboxSettler,
 	loadTasks func(context.Context) ([]api.WorkerTask, error),
+	laneRoots func(context.Context) ([]string, error),
 ) (removed int, err error) {
 	return workspace.ReconcileStaleSandboxes(ctx, sandboxRoot, primaryDir, settle, func(ctx context.Context) (map[string]struct{}, error) {
 		tasks, loadErr := loadTasks(ctx)
 		if loadErr != nil {
 			return nil, loadErr
 		}
-		retained := ActiveSandboxJobIDs(tasks)
+		retained := ActiveSandboxBranches(tasks)
 		for _, task := range tasks {
 			if task.EffectiveScope().IsWrite() && task.WorkspaceOverlayPath != "" && task.MergeStatus == api.WorkerMergeStatusPending {
-				retained[task.ID] = struct{}{}
+				retainTaskBranch(retained, task)
 			}
+		}
+		if err := RetainLanes(ctx, retained, laneRoots); err != nil {
+			return nil, err
 		}
 		return retained, nil
 	})
 }
 
-// ActiveSandboxJobIDs returns the worker job IDs whose on-disk sandboxes
-// project-open reconciliation keeps.
-func ActiveSandboxJobIDs(tasks []api.WorkerTask) map[string]struct{} {
+// RetainLanes adds every open worker's current lane to retained branch names.
+func RetainLanes(ctx context.Context, retained map[string]struct{}, laneRoots func(context.Context) ([]string, error)) error {
+	if laneRoots == nil {
+		return nil
+	}
+	roots, err := laneRoots(ctx)
+	if err != nil {
+		return err
+	}
+	for _, root := range roots {
+		if name := branchName(root); name != "" {
+			retained[name] = struct{}{}
+		}
+	}
+	return nil
+}
+
+func retainTaskBranch(retained map[string]struct{}, task api.WorkerTask) {
+	retained[task.ID] = struct{}{}
+	if name := branchName(task.WorkspaceRoot); name != "" {
+		retained[name] = struct{}{}
+	}
+}
+
+// ActiveSandboxBranches returns the branch names whose on-disk trees
+// project-open reconciliation keeps for live and pending jobs.
+func ActiveSandboxBranches(tasks []api.WorkerTask) map[string]struct{} {
 	out := make(map[string]struct{})
 	for _, task := range tasks {
 		if !task.EffectiveScope().IsWrite() {
@@ -290,7 +291,7 @@ func ActiveSandboxJobIDs(tasks []api.WorkerTask) map[string]struct{} {
 			continue
 		case api.WorkerStatusPending, api.WorkerStatusRunning, api.WorkerStatusWaiting, api.WorkerStatusComplete, api.WorkerStatusHeld:
 		}
-		out[task.ID] = struct{}{}
+		retainTaskBranch(out, task)
 	}
 	return out
 }

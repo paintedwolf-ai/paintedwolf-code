@@ -121,6 +121,29 @@ func (e *Engine) Request(ctx context.Context, request Request) (Snapshot, error)
 	if err != nil {
 		return Snapshot{}, err
 	}
+	snap, err := e.request(ctx, r)
+	e.logRequest(ctx, r, snap, err)
+	return snap, err
+}
+
+// logRequest records why a request produced what it did: each section's mode
+// and whether its text was already stored.
+func (e *Engine) logRequest(ctx context.Context, r resolved, snap Snapshot, err error) {
+	sections := make([]string, 0, len(r.request.Sections))
+	for i, section := range r.request.Sections {
+		state := "missing"
+		if _, ok := r.results[r.hashes[i].ManifestHash]; ok {
+			state = "stored"
+		}
+		sections = append(sections, section.ID+":"+section.Mode.String()+":"+state)
+	}
+	e.logger.InfoContext(ctx, "briefing request", "profile", r.request.ProfileID, "target", r.request.TargetKey,
+		"trigger", r.request.Trigger(), "status", string(snap.Status), "error_code", snap.ErrorCode,
+		"sections", strings.Join(sections, ","), "failed", err != nil)
+}
+
+func (e *Engine) request(ctx context.Context, r resolved) (Snapshot, error) {
+	request := r.request
 	stored := map[string]Result{}
 	for hash, result := range r.results {
 		stored[hash] = result
@@ -149,7 +172,11 @@ func (e *Engine) Request(ctx context.Context, request Request) (Snapshot, error)
 	if started.Joined && !e.scheduler.Has(jobKey(request)) {
 		// No run holds the attempt, so it can never settle: end it and start anew.
 		e.fail(ctx, r, attempt, Failure{Code: CodeInterrupted})
-		return e.Request(ctx, request)
+		again, err := e.resolve(ctx, request)
+		if err != nil {
+			return Snapshot{}, err
+		}
+		return e.request(ctx, again)
 	}
 	if started.Joined {
 		// A manual request promotes queued work it joins.
@@ -285,7 +312,7 @@ func (e *Engine) generateSection(ctx context.Context, r resolved, section Sectio
 		raw, provider, model, err := e.generator.Generate(ctx, Invocation{ProjectID: request.ProjectID, ProjectDir: request.ProjectDir, Purpose: request.ProfileID, Requested: request.Manual || request.Policy.Admission == Immediate, Prompt: section.Prompt})
 		if err == nil {
 			if text, parseErr := contract.Parse(observability.RedactCaptureText(raw)); parseErr == nil {
-				result := Result{Text: text, Source: SourceSummarizer, Provider: provider, Model: model, CreatedAt: time.Now().UTC()}
+				result := Result{Text: text, Source: SourceSummarizer, Provider: provider, Model: model, Quality: section.Quality, CreatedAt: time.Now().UTC()}
 				return result, e.store.PutResult(context.WithoutCancel(ctx), request.ProjectID, r.epoch, section.Manifest, hash, result)
 			}
 		} else if ctx.Err() != nil {
@@ -295,7 +322,7 @@ func (e *Engine) generateSection(ctx context.Context, r resolved, section Sectio
 	if section.Fallback == "" {
 		return Result{}, ErrNoText
 	}
-	result := Result{Text: section.Fallback, Source: SourceFallback, CreatedAt: time.Now().UTC()}
+	result := Result{Text: section.Fallback, Source: SourceFallback, Quality: section.Quality, CreatedAt: time.Now().UTC()}
 	return result, e.store.PutResult(context.WithoutCancel(ctx), request.ProjectID, r.epoch, section.Manifest, hash, result)
 }
 

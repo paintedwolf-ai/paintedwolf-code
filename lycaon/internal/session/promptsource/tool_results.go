@@ -20,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/toolpresentation"
 	"github.com/lycaon/lycaon/internal/session/turnguards"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -52,9 +51,6 @@ func (m *ToolResults) AfterTool(
 		if jobID := strings.TrimSpace(out.Dispatch.WorkerID); jobID != "" {
 			agentType, _ := args["agent_type"].(string)
 			m.Batch.TaskEnqueued(ctx, sess.ID, agentType)
-			out.Facts = out.Facts.WithFeedback("BANNER_TASK_QUEUED", map[string]any{
-				"agent_type": agentType, "job_id": jobID, "max_in_flight": spawn.MaxInFlightTaskWorkers,
-			}, &api.FeedbackSubject{Kind: "worker", ID: jobID})
 			out.Completion = &api.ToolCompletion{
 				Operation: "worker_dispatch", State: "enqueued", ResourceKind: "worker", ResourceID: jobID,
 			}

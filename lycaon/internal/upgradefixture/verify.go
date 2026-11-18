@@ -55,14 +55,14 @@ func Verify(ctx context.Context, dataDir, manifestPath string) error {
 	if err := VerifyEditorHistory(ctx, database, dataDir, manifest.ProjectID, manifest.Editor); err != nil {
 		return err
 	}
-	return VerifyWorkerHistory(ctx, database, manifest.ProjectID, manifest.Worker)
+	return VerifyWorkerHistory(ctx, database, dataDir, manifest.ProjectID, manifest.Worker)
 }
 
-func VerifyWorkerHistory(ctx context.Context, database db.Handle, projectID string, evidence WorkerEvidence) error {
+func VerifyWorkerHistory(ctx context.Context, database db.Handle, dataDir, projectID string, evidence WorkerEvidence) error {
 	if evidence.JobID == "" || evidence.ParentSessionID == "" || evidence.ChildSessionID == "" || len(evidence.Baseline) == 0 || len(evidence.Overlay) == 0 {
 		return fmt.Errorf("worker fixture evidence is incomplete")
 	}
-	tasks, err := worker.NewSQLStore(database).List(ctx, projectID)
+	tasks, err := worker.NewSQLStoreIn(database, dataDir).List(ctx, projectID)
 	if err != nil {
 		return err
 	}

@@ -150,11 +150,7 @@ func TestQuotaChangesWaitForAcceptedRemoval(t *testing.T) {
 		_, err := service.RemoveEntry(ctx, agentRemoval(t, project, "file", textfile.SHA256([]byte("body"))))
 		removed <- err
 	}()
-	select {
-	case <-reached:
-	case <-time.After(testutil.Timeout(time.Minute)):
-		t.Fatal("removal did not reach effect boundary")
-	}
+	testutil.AwaitClosed(t, "the removal reaches its effect boundary", reached)
 	changing, changed := make(chan struct{}), make(chan struct{})
 	go func() { close(changing); service.History.SetRecoveryQuotaBytes(1); close(changed) }()
 	<-changing

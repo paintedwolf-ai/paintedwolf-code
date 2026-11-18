@@ -15,7 +15,7 @@ func ReportWire(in WorkerCompletionReport) *api.WorkerCompletionReport {
 		ObjectivesMet:     append([]string(nil), in.ObjectivesMet...),
 		RemainingRisk:     append([]string(nil), in.RemainingRisk...),
 		SuggestedNextTask: in.SuggestedNextTask, Brief: in.Brief,
-		CitedURLs: append([]string(nil), in.CitedURLs...),
+		CitedURLs: append([]string(nil), in.CitedURLs...), CitedResults: append([]string(nil), in.CitedResults...),
 	}
 	if in.Verification != nil {
 		out.Verification = &api.CitationVerification{Method: in.Verification.Method, Reason: in.Verification.Reason}
@@ -49,7 +49,7 @@ func ReportFromWire(in *api.WorkerCompletionReport) WorkerCompletionReport {
 		ObjectivesMet:     append([]string(nil), in.ObjectivesMet...),
 		RemainingRisk:     append([]string(nil), in.RemainingRisk...),
 		SuggestedNextTask: in.SuggestedNextTask, Brief: in.Brief,
-		CitedURLs: append([]string(nil), in.CitedURLs...),
+		CitedURLs: append([]string(nil), in.CitedURLs...), CitedResults: append([]string(nil), in.CitedResults...),
 	}
 	if in.Verification != nil {
 		out.Verification = &verification.Assessment{Method: in.Verification.Method, Reason: in.Verification.Reason}

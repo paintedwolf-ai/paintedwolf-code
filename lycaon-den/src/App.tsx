@@ -16,10 +16,10 @@ import {
   getLycaonClient,
   onAttentionEvent,
   onAttentionResync,
-  onProjectBackgroundEvent,
   onProjectEvent,
   onSessionEvent,
 } from "./platform/connection/app-connection.ts";
+import { onProjectBackgroundEvent } from "./project/project-background-store.ts";
 import { startAppBoot } from "./platform/connection/app-boot.ts";
 import { rememberSessionChatFromStore } from "./chat/session/session-chat-cache.ts";
 import { flushTranscriptRowHeightsToDisk } from "./chat/transcript/layout/transcript-row-heights-persist.ts";

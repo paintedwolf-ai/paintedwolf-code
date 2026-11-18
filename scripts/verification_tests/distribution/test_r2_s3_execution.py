@@ -1,4 +1,6 @@
 """Offline contracts for private credentials and bucket-scoped object operations."""
+import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -53,6 +55,62 @@ class RehearsalCredentialsTests(unittest.TestCase):
                        {"download_base_url": "https://user:secret@test.example"}]:
             with self.subTest(change=change), self.assertRaises(ValueError):
                 rehearsal.validate({**self.config, **change})
+
+    def test_absent_environment_settings_are_reported_by_field_and_variable(self):
+        inherited = {"RELEASE_TEST_R2_BUCKET": "test-bucket", "RELEASE_TEST_DOWNLOAD_BASE_URL": "https://test.example.com",
+                     "RELEASE_TEST_R2_ENDPOINT_URL": "", "RELEASE_TEST_CONFIG": ""}
+        with patch.object(rehearsal, "DEFAULT_CONFIG", Path(os.devnull) / "absent"):
+            with self.assertRaises(rehearsal.MissingFields) as refusal:
+                rehearsal.environment(rehearsal.configuration(inherited), inherited)
+        self.assertEqual(refusal.exception.fields, ("access_key_id", "endpoint_url", "secret_access_key"))
+        root = Path(__file__).resolve().parents[3]
+        with tempfile.TemporaryDirectory() as home:
+            result = subprocess.run([sys.executable, str(root / "scripts/release_storage/rehearsal.py"), os.devnull],
+                                    env={**inherited, "HOME": home, "PATH": os.environ["PATH"]},
+                                    capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        for variable in ("RELEASE_TEST_R2_ACCESS_KEY_ID", "RELEASE_TEST_R2_ENDPOINT_URL", "RELEASE_TEST_R2_SECRET_ACCESS_KEY"):
+            self.assertIn(variable, result.stderr)
+        for variable in ("RELEASE_TEST_R2_BUCKET", "RELEASE_TEST_DOWNLOAD_BASE_URL"):
+            self.assertNotIn(variable, result.stderr)
+
+    def test_api_token_derives_s3_credentials_when_none_are_set(self):
+        account, token = "b" * 32, "token-value"
+        requests = []
+
+        def fetch(request, timeout):
+            requests.append(request.full_url)
+            if "/accounts/" in request.full_url:
+                raise OSError("user-owned token")
+            return io.BytesIO(json.dumps({"success": True, "result": {"id": "token-id"}}).encode())
+
+        inherited = {"RELEASE_TEST_R2_BUCKET": "test-bucket", "RELEASE_TEST_DOWNLOAD_BASE_URL": "https://test.example.com",
+                     "RELEASE_TEST_R2_ACCOUNT_ID": account, "RELEASE_TEST_R2_API_TOKEN": token}
+        with patch.object(rehearsal, "DEFAULT_CONFIG", Path(os.devnull) / "absent"):
+            configured = rehearsal.environment(rehearsal.configuration(inherited, fetch), inherited)
+        self.assertEqual((configured["R2_S3_ENDPOINT"], configured["AWS_ACCESS_KEY_ID"], configured["AWS_SECRET_ACCESS_KEY"]),
+                         (f"https://{account}.r2.cloudflarestorage.com", "token-id",
+                          hashlib.sha256(token.encode()).hexdigest()))
+        self.assertEqual(len(requests), 2)
+        self.assertNotIn("RELEASE_TEST_R2_API_TOKEN", configured)
+
+    def test_explicit_s3_settings_win_and_unverified_tokens_refuse_without_echo(self):
+        def unused(request, timeout):
+            raise AssertionError("explicit S3 settings must not call Cloudflare")
+
+        explicit = {f"RELEASE_TEST_R2_{name}": value for name, value in
+                    (("ENDPOINT_URL", self.config["endpoint_url"]), ("ACCESS_KEY_ID", "access"),
+                     ("SECRET_ACCESS_KEY", "secret"), ("ACCOUNT_ID", "b" * 32), ("API_TOKEN", "token-value"))}
+        with patch.object(rehearsal, "DEFAULT_CONFIG", Path(os.devnull) / "absent"):
+            self.assertEqual(rehearsal.configuration(explicit, unused)["access_key_id"], "access")
+
+            def refused(request, timeout):
+                return io.BytesIO(json.dumps({"success": False, "errors": [{"message": "Invalid"}]}).encode())
+
+            with self.assertRaises(ValueError) as refusal:
+                rehearsal.configuration({"RELEASE_TEST_R2_ACCOUNT_ID": "b" * 32,
+                                         "RELEASE_TEST_R2_API_TOKEN": "token-value"}, refused)
+        self.assertNotIn("token-value", str(refusal.exception))
 
     def test_failed_harness_preserves_private_config_and_cleans_empty_keys(self):
         root = Path(__file__).resolve().parents[3]

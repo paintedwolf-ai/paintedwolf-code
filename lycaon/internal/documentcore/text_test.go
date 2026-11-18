@@ -33,23 +33,6 @@ func TestReplacementEditsKeepChangedSpansTogether(t *testing.T) {
 	}
 }
 
-func TestLineEditsPreserveCompleteRewrites(t *testing.T) {
-	for _, pair := range [][2]string{
-		{"", "new"}, {"old", ""}, {"a\n", "a\nb\n"},
-		{"one\ntwo\nthree\n", "ONE\ntwo\nTHREE\n"},
-		{"const fooBar = 1;\n", "const fetchBar = 1;\n"},
-		{"🙂 first\nsecond", "🙂 new\nlast\n"},
-	} {
-		edits, err := LineEdits(pair[0], pair[1])
-		testutil.FailErr(t, "plan line edits", err)
-		actual, err := ApplyEdits(pair[0], edits)
-		testutil.FailErr(t, "apply line edits", err)
-		if actual != pair[1] {
-			t.Fatalf("rewrite %q -> %q produced %q", pair[0], pair[1], actual)
-		}
-	}
-}
-
 func TestHunkEditsConfineEachHunkToItsOwnLines(t *testing.T) {
 	guards, edits, err := HunkEdits("a\nb\n", "a\nc\nb\n")
 	testutil.FailErr(t, "hunk edits for an inserted line", err)

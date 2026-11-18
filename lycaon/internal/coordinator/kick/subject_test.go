@@ -7,16 +7,16 @@ import (
 
 func TestKicksForDifferentSubjectsQueueSeparately(t *testing.T) {
 	engine := &stubEngine{render: func(name string, data map[string]any) (string, error) {
-		return name + ":" + data["job_id"].(string), nil
+		return name + ":" + data["worker"].(string), nil
 	}}
 	kicks := &KickEngine{}
 	kicks.SetPromptEngine(engine)
 	for _, job := range []string{"job-a", "job-b", "job-a"} {
-		kicks.QueueDeferred("s1", "coordinator-worker-budget-requested",
-			WithSubject(job), WithWorkerBudget(WorkerBudgetFacts{JobID: job}))
+		kicks.QueueDeferred("s1", "coordinator-worker-round-notice",
+			WithSubject(job), WithWorkerRoundNotice(WorkerRoundNoticeFacts{JobID: job, Worker: job}))
 	}
 	var rendered []string
-	for kicks.TakePendingKickID("s1") != "" {
+	for kicks.TakePendingKickIDUnless("s1", nil) != "" {
 		text, lease, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{})
 		if err != nil || !ok {
 			t.Fatalf("render = %v %v", ok, err)
@@ -24,7 +24,7 @@ func TestKicksForDifferentSubjectsQueueSeparately(t *testing.T) {
 		rendered = append(rendered, text)
 		kicks.AckPendingNudge("s1", lease)
 	}
-	want := []string{"coordinator-worker-budget-requested:job-a", "coordinator-worker-budget-requested:job-b"}
+	want := []string{"coordinator-worker-round-notice:job-a", "coordinator-worker-round-notice:job-b"}
 	if !slices.Equal(rendered, want) {
 		t.Fatalf("rendered = %v, want one kick per job in arrival order %v", rendered, want)
 	}
@@ -77,11 +77,11 @@ func TestProcessFinishedKicksQueuePerHandleAndSurviveClearPendingOnTurnAbort(t *
 	)
 
 	// Stage the first kick, then abort the turn (ClearPending).
-	_ = kicks.TakePendingKickID("s1")
+	_ = kicks.TakePendingKickIDUnless("s1", nil)
 	kicks.ClearPending("s1")
 
 	var rendered []string
-	for kicks.TakePendingKickID("s1") != "" {
+	for kicks.TakePendingKickIDUnless("s1", nil) != "" {
 		text, lease, ok, err := kicks.RenderPendingNudge(t.Context(), "s1", CoordinatorKickRenderContext{})
 		if err != nil || !ok {
 			t.Fatalf("render = %v %v", ok, err)

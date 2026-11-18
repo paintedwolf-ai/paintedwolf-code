@@ -498,7 +498,9 @@ it("drops a read whose source changed mid-load and reads the new source instead"
   let releaseStale!: () => void;
   const stalePresentation = new Promise<void>((resolve) => { releaseStale = resolve; });
   const closeStale = vi.fn(async () => {});
-  const stale = sourceWith(frameOf("v-stale", ["stale row\n"]), () => stalePresentation, closeStale);
+  let staleStarted!: () => void;
+  const staleReading = new Promise<void>((resolve) => { staleStarted = resolve; });
+  const stale = sourceWith(frameOf("v-stale", ["stale row\n"]), () => { staleStarted(); return stalePresentation; }, closeStale);
   const fresh = sourceWith(frameOf("v-fresh", ["fresh row\n"]), async () => {});
   let current = stale;
   const parent = document.createElement("div");
@@ -520,11 +522,10 @@ it("drops a read whose source changed mid-load and reads the new source instead"
     reader.mount(parent, { show: vi.fn(), hide: vi.fn() });
   });
   // The stale read is waiting on its presentation.
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await staleReading;
 
   current = fresh;
   reader.refresh();
-  await new Promise((resolve) => setTimeout(resolve, 20));
   releaseStale();
 
   await waitFor(() => expect(parent.querySelector(".cm-content")?.textContent).toContain("fresh row"));

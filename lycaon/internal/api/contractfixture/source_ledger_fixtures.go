@@ -2,6 +2,7 @@ package contractfixture
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -56,7 +57,7 @@ func MirrorLedgerProject(t *testing.T, sqlDB db.Handle, p wire.Project) {
 		_, err := sqlDB.ExecContext(t.Context(), `
 			INSERT INTO project_roots (id, project_id, path, label, is_primary, added_at)
 			VALUES (?, ?, ?, ?, ?, ?)
-		`, root.ID, p.ID, root.Path, root.Label, isPrimary, db.FormatTime(time.Now().UTC()))
+		`, root.ID, p.ID, root.Path, root.Label, isPrimary, timelayout.Format(time.Now().UTC()))
 		testutil.FailErr(t, "mirror ledger project root", err)
 	}
 }

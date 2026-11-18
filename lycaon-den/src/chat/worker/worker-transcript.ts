@@ -7,6 +7,7 @@ import {
   workerShowsAcceptedBranchEdits,
 } from "./worker-branch-model.ts";
 import { taskJobIdFromToolMessage } from "../task/task-result-model.ts";
+import { findSessionWorker } from "./worker-identity.ts";
 
 /** One worker's resident transcript: a live tail plus older pages, rows materialized in Ord order. */
 export type WorkerTranscript = {
@@ -125,9 +126,9 @@ export function workersColdCacheRevision(
     .join(",");
   const selected = selectedWorkerId?.trim();
   if (!selected) return cold;
-  const row = workers.find((w) => w.id === selected);
+  const row = findSessionWorker(workers, selected);
   const progress =
-    row && !cache[selected]?.rows.length
+    row && !cache[row.id]?.rows.length
       ? `${row.status}\0${row.tool_loops_used ?? 0}\0${row.child_session_id ?? ""}`
       : "";
   return `${selected}\0${progress}\0${cold}`;
@@ -152,16 +153,29 @@ function workersReferencedInParentMessages(
   workers: readonly WorkerTask[],
 ): WorkerTask[] {
   const ids = new Set<string>();
+  const childIds = new Set<string>();
   for (const msg of parentMessages) {
     const summaryJob = msg.worker_summary?.worker_id?.trim();
     if (summaryJob) ids.add(summaryJob);
+    const recordId = msg.worker_summary?.worker_record_id?.trim();
+    if (recordId) ids.add(recordId);
+    const workerName = msg.worker_summary?.worker_name?.trim();
+    if (workerName) ids.add(workerName);
     if (msg.role === "tool") {
       const jobId = taskJobIdFromToolMessage(msg);
       if (jobId) ids.add(jobId);
+      const childId = msg.tool_result?.dispatch?.child_session_id?.trim();
+      if (childId) childIds.add(childId);
     }
   }
-  if (ids.size === 0) return [];
-  return workers.filter((w) => ids.has(w.id));
+  if (ids.size === 0 && childIds.size === 0) return [];
+  return workers.filter(
+    (w) =>
+      ids.has(w.id) ||
+      (w.worker_record_id ? ids.has(w.worker_record_id.trim()) : false) ||
+      (w.worker_name ? ids.has(w.worker_name.trim()) : false) ||
+      (w.child_session_id ? childIds.has(w.child_session_id.trim()) : false),
+  );
 }
 
 export function inflightWorkerPrefetchTargets(
@@ -208,7 +222,7 @@ export function workersNeedingTranscriptHydrate(
   const selected = opts?.selectedWorkerId?.trim();
 
   if (selected) {
-    const row = workers.find((w) => w.id === selected);
+    const row = findSessionWorker(workers, selected);
     if (row && workerNeedsChildTranscriptHydrate(row, cache)) {
       byId.set(row.id, row);
     }
@@ -229,9 +243,10 @@ export function workersNeedingTranscriptHydrate(
   }
 
   if (selected) {
-    const first = byId.get(selected);
+    const row = findSessionWorker(workers, selected);
+    const first = row ? byId.get(row.id) : byId.get(selected);
     if (first) {
-      byId.delete(selected);
+      byId.delete(first.id);
       return [first, ...byId.values()];
     }
   }

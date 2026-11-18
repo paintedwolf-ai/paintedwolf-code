@@ -6,7 +6,6 @@ import type { operations } from "./types.ts";
 export const API_CONTRACT_VERSION = "1.0.0";
 
 export const API_OPERATIONS = {
-  abortDelegation: { method: "POST", path: "/v1/delegations/{id}/abort" },
   abortSession: { method: "POST", path: "/v1/sessions/{id}/abort" },
   acceptExtensionSuggestions: { method: "POST", path: "/v1/extensions/suggestions/accept" },
   advanceWorkflowRun: { method: "POST", path: "/v1/workflow-runs/{id}/advance" },
@@ -43,7 +42,6 @@ export const API_OPERATIONS = {
   createApprovalGrant: { method: "POST", path: "/v1/approval-grants" },
   createBlueprint: { method: "POST", path: "/v1/projects/{id}/blueprints" },
   createComposerSecret: { method: "POST", path: "/v1/sessions/{id}/composer-secrets" },
-  createDelegation: { method: "POST", path: "/v1/delegations" },
   createEditorDocumentSnapshot: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/snapshots" },
   createGitRepo: { method: "POST", path: "/v1/projects/{id}/git/repos" },
   createHistoryProtection: { method: "POST", path: "/v1/history-storage/protections" },
@@ -84,7 +82,6 @@ export const API_OPERATIONS = {
   discardEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/discard" },
   discardGit: { method: "POST", path: "/v1/projects/{id}/git/repos/{repo_id}/discard" },
   dismissVerifySettings: { method: "POST", path: "/v1/settings/verify/dismiss" },
-  dispatchDelegationLeg: { method: "POST", path: "/v1/delegations/{id}/dispatch" },
   draftGitCommitMessage: { method: "POST", path: "/v1/projects/{id}/git/repos/{repo_id}/commit-message" },
   exitWorkflowRun: { method: "POST", path: "/v1/workflow-runs/{id}/exit" },
   exportBackup: { method: "GET", path: "/v1/backup" },
@@ -110,7 +107,6 @@ export const API_OPERATIONS = {
   getContributions: { method: "GET", path: "/v1/contributions" },
   getCoordinatorContext: { method: "GET", path: "/v1/sessions/{id}/coordinator-context" },
   getCostSummary: { method: "GET", path: "/v1/cost/summary" },
-  getDelegation: { method: "GET", path: "/v1/delegations/{id}" },
   getElevatedAccess: { method: "GET", path: "/v1/sessions/{id}/elevated-access" },
   getExtensionPackUpdate: { method: "GET", path: "/v1/extensions/packs/{pack_id}/update" },
   getExtensionSuggestions: { method: "GET", path: "/v1/extensions/suggestions" },
@@ -168,6 +164,7 @@ export const API_OPERATIONS = {
   getWebResearchProviders: { method: "GET", path: "/v1/web-research/providers" },
   getWebResearchSettings: { method: "GET", path: "/v1/settings/web-research" },
   getWorkerChanges: { method: "GET", path: "/v1/workers/{id}/changes" },
+  getWorkerHistory: { method: "GET", path: "/v1/workers/history" },
   getWorkflowRun: { method: "GET", path: "/v1/workflow-runs/{id}" },
   getWorkflowRunReport: { method: "GET", path: "/v1/workflow-runs/{id}/report" },
   holdProjectManagedSecret: { method: "POST", path: "/v1/projects/{id}/secrets/{secret_id}/hold" },
@@ -184,7 +181,6 @@ export const API_OPERATIONS = {
   listBlueprints: { method: "GET", path: "/v1/projects/{id}/blueprints" },
   listCheckpoints: { method: "GET", path: "/v1/sessions/{id}/checkpoints" },
   listCodeScans: { method: "GET", path: "/v1/projects/{id}/scans" },
-  listDelegationLegs: { method: "GET", path: "/v1/delegations/{id}/legs" },
   listDetectionPacks: { method: "GET", path: "/v1/detection-packs" },
   listDraftVersions: { method: "GET", path: "/v1/sessions/{id}/drafts/{slot_id}/versions" },
   listEditorDocumentChanges: { method: "GET", path: "/v1/projects/{id}/editor-documents/{document_id}/changes" },
@@ -357,7 +353,6 @@ export type OperationRequestBody<Id extends OperationId> = operations[Id] extend
 export type OperationQuery<Id extends OperationId> = operations[Id] extends { parameters: { query?: infer Query } } ? Query : never;
 
 export type OperationPathParameters = {
-  abortDelegation: { id: string | number; };
   abortSession: { id: string | number; };
   acceptExtensionSuggestions: Record<string, never>;
   advanceWorkflowRun: { id: string | number; };
@@ -394,7 +389,6 @@ export type OperationPathParameters = {
   createApprovalGrant: Record<string, never>;
   createBlueprint: { id: string | number; };
   createComposerSecret: { id: string | number; };
-  createDelegation: Record<string, never>;
   createEditorDocumentSnapshot: { id: string | number; document_id: string | number; };
   createGitRepo: { id: string | number; };
   createHistoryProtection: Record<string, never>;
@@ -435,7 +429,6 @@ export type OperationPathParameters = {
   discardEditorDocument: { id: string | number; document_id: string | number; };
   discardGit: { id: string | number; repo_id: string | number; };
   dismissVerifySettings: Record<string, never>;
-  dispatchDelegationLeg: { id: string | number; };
   draftGitCommitMessage: { id: string | number; repo_id: string | number; };
   exitWorkflowRun: { id: string | number; };
   exportBackup: Record<string, never>;
@@ -461,7 +454,6 @@ export type OperationPathParameters = {
   getContributions: Record<string, never>;
   getCoordinatorContext: { id: string | number; };
   getCostSummary: Record<string, never>;
-  getDelegation: { id: string | number; };
   getElevatedAccess: { id: string | number; };
   getExtensionPackUpdate: { pack_id: string | number; };
   getExtensionSuggestions: Record<string, never>;
@@ -519,6 +511,7 @@ export type OperationPathParameters = {
   getWebResearchProviders: Record<string, never>;
   getWebResearchSettings: Record<string, never>;
   getWorkerChanges: { id: string | number; };
+  getWorkerHistory: Record<string, never>;
   getWorkflowRun: { id: string | number; };
   getWorkflowRunReport: { id: string | number; };
   holdProjectManagedSecret: { id: string | number; secret_id: string | number; };
@@ -535,7 +528,6 @@ export type OperationPathParameters = {
   listBlueprints: { id: string | number; };
   listCheckpoints: { id: string | number; };
   listCodeScans: { id: string | number; };
-  listDelegationLegs: { id: string | number; };
   listDetectionPacks: Record<string, never>;
   listDraftVersions: { id: string | number; slot_id: string | number; };
   listEditorDocumentChanges: { id: string | number; document_id: string | number; };

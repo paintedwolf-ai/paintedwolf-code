@@ -1,0 +1,13 @@
+description: "Read one shared finding's retained body by ID, or page ordered finding summaries after a sequence number."
+schema:
+  type: object
+  properties:
+    finding_id:
+      type: integer
+      minimum: 1
+      description: Read the retained body of one finding from this coordination session.
+    findings_after:
+      type: integer
+      minimum: 0
+      description: Page finding summaries in sequence; use 0 to start and next_after to continue.
+  additionalProperties: false

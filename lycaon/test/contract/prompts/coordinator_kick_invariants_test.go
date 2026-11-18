@@ -43,9 +43,8 @@ func TestWorkerKickTemplateExists(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	kickDir := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "security", "guidance")
 	for _, name := range []string{
-		"worker-leg-started.md", "worker-task-started.md", "worker-closeout.md",
-		"worker-cancel-closeout.md", "worker-iterations-low.md",
-		"worker-citation-grounding.md", "worker-budget-raised.md",
+		"worker-task-started.md", "worker-closeout.md",
+		"worker-cancel-closeout.md", "worker-citation-grounding.md",
 	} {
 		path := filepath.Join(kickDir, name)
 		data, err := os.ReadFile(path)
@@ -56,9 +55,8 @@ func TestWorkerKickTemplateExists(t *testing.T) {
 	}
 	reg := catalogfixture.LoadInformBindings(t)
 	for _, id := range []string{
-		"worker.task.started", "worker.leg.started", "worker.closeout",
-		"worker.cancel.closeout", "worker.iterations.low",
-		"worker.citation.grounding", "worker.budget.raised",
+		"worker.task.started", "worker.closeout",
+		"worker.cancel.closeout", "worker.citation.grounding",
 	} {
 		b, ok := reg.Inform(catalogfixture.MustParseAnchor(t, id))
 		if !ok || b == nil || b.Render == "" {

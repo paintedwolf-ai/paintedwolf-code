@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/lycaon/lycaon/internal/advisory"
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -286,7 +285,6 @@ func TestPreviousCompleteDelegationPreferred(t *testing.T) {
 		categories:   categories,
 		delegationID: "dep-1",
 	})
-	time.Sleep(10 * time.Millisecond)
 	second := seedCompareScan(t, store, compareSeedOpts{
 		projectDir:   projectDir,
 		categories:   categories,
@@ -310,12 +308,10 @@ func TestPreviousCompleteProjectFallbackSkipsOtherCategories(t *testing.T) {
 		projectDir: projectDir,
 		categories: []api.ScanCategory{api.ScanCategorySecurity},
 	})
-	time.Sleep(10 * time.Millisecond)
 	_ = seedCompareScan(t, store, compareSeedOpts{
 		projectDir: projectDir,
 		categories: []api.ScanCategory{api.ScanCategorySecret},
 	})
-	time.Sleep(10 * time.Millisecond)
 	securityLatest := seedCompareScan(t, store, compareSeedOpts{
 		projectDir: projectDir,
 		categories: []api.ScanCategory{api.ScanCategorySecurity},

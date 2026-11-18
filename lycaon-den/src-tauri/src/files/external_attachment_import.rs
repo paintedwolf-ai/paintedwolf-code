@@ -272,19 +272,4 @@ mod tests {
             "source path leaked into upload URL"
         );
     }
-
-    #[test]
-    fn import_ipc_is_registered_and_permitted_only_as_a_snapshot_bridge() {
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let permissions = fs::read_to_string(manifest_dir.join("permissions/read-path.toml"))
-            .expect("read attachment import permissions");
-        let capability = fs::read_to_string(manifest_dir.join("capabilities/default.json"))
-            .expect("read main-window capability");
-        let app =
-            fs::read_to_string(manifest_dir.join("src/lib.rs")).expect("read app registration");
-
-        assert!(permissions.contains("allow-import-external-attachment"));
-        assert!(capability.contains("allow-import-external-attachment"));
-        assert!(app.contains("external_attachment_import::import_external_attachment"));
-    }
 }

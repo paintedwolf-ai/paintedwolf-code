@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/lycaon/lycaon/internal/hostcmd"
 )
 
@@ -41,17 +43,17 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 	if r == nil {
 		return "", fmt.Errorf("background registry not configured")
 	}
-	sessionID := trim(spec.SessionID)
+	sessionID := strings.TrimSpace(spec.SessionID)
 	if sessionID == "" || spec.Run == nil {
 		return "", fmt.Errorf("program job requires session and body")
 	}
 	handle := uuid.NewString()
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	proc := &Process{
-		Handle: handle, SessionID: sessionID, ProjectID: trim(spec.ProjectID), RootSessionID: trim(spec.RootSessionID),
+		Handle: handle, SessionID: sessionID, ProjectID: strings.TrimSpace(spec.ProjectID), RootSessionID: strings.TrimSpace(spec.RootSessionID),
 		running: true, mode: JobModeBackground, kind: processKindProgram,
 		processRuntimeState:     processRuntimeState{done: make(chan struct{}), cancel: cancel, startedAt: time.Now().UTC()},
-		processIOState:          processIOState{buffer: NewRingBuffer(r.ringBufferBytes), originTool: trim(spec.OriginTool), toolCallID: trim(spec.ToolCallID)},
+		processIOState:          processIOState{buffer: NewRingBuffer(r.ringBufferBytes), originTool: strings.TrimSpace(spec.OriginTool), toolCallID: strings.TrimSpace(spec.ToolCallID)},
 		processConfinementState: processConfinementState{cwd: spec.Cwd},
 		Stages:                  []hostcmd.StageResult{{Command: spec.CommandLine}},
 	}

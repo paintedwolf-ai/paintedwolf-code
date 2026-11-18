@@ -20,6 +20,8 @@ var nonPathMutatingAck = map[string]string{
 	"terminal_snapshot": "reads terminal state",
 	"terminal_close":    "closes a terminal session",
 
+	"instruct_worker": "records an instruction for a worker; no filesystem destination",
+
 	"chmod": "changes mode, not content — a sink's bytes are unaffected",
 	"chown": "changes ownership, not content",
 

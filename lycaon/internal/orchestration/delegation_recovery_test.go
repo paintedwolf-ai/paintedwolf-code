@@ -9,66 +9,59 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type recoveryLegStore struct{ *pipelineStoreStub }
-
-func (s recoveryLegStore) DelegationByWorkflowRunID(_ context.Context, runID string) (string, bool, error) {
-	for id, d := range s.delegations {
-		if d.WorkflowRunID == runID {
-			return id, true, nil
-		}
-	}
-	return "", false, nil
-}
-
-func TestTopologyRecoveryReusesStoredLegs(t *testing.T) {
+func TestTopologyRecoveryReusesStoredUnits(t *testing.T) {
 	for _, pattern := range []string{"fan_out", "pack", "pipeline"} {
 		t.Run(pattern, func(t *testing.T) {
 			ctx := context.Background()
-			store := recoveryLegStore{newPipelineStoreStub()}
-			o := &OrchestratorImpl{store: store}
+			workers := NewMemoryTopologyWorkers()
+			o := &OrchestratorImpl{workers: workers}
 			wf := &workflowRunContext{runID: "workflow-run", id: "workflow", version: "1.0.0"}
 			req := RunRequest{Input: map[string]any{"project_id": "project"}}
 			setup := func() (string, []string, *runState, error) {
-				state := &runState{stageLegs: map[string]string{}, completed: map[string]bool{}, outputs: map[string]string{}, workflowRunID: wf.runID}
+				state := &runState{stageUnits: map[string]string{}, completed: map[string]bool{}, outputs: map[string]string{}, workflowRunID: wf.runID}
 				var id string
-				var legs []string
+				var units []string
 				var err error
 				switch pattern {
 				case "fan_out":
-					id, legs, err = o.setupFanOutDelegation(ctx, req, wf, "session", "/repo", "task", "agent", FanOutSpec{Subtasks: []string{"first", "second"}}, state)
+					id, units, err = o.setupFanOutBatch(ctx, req, wf, "session", "/repo", "task", "agent", FanOutSpec{Subtasks: []string{"first", "second"}}, state)
 				case "pack":
-					id, legs, err = o.setupPackDelegation(ctx, req, wf, "session", "/repo", "task", "agent", 2, nil, state)
+					id, units, err = o.setupPackBatch(ctx, req, wf, "session", "/repo", "task", "agent", 2, nil, state)
 				default:
 					stages := []PipelineStage{{Name: "first", AgentProfile: "agent"}, {Name: "second", AgentProfile: "agent"}}
-					id, err = o.setupPipelineDelegation(ctx, req, "session", "/repo", stages, state)
-					legs = []string{state.stageLegs["first"], state.stageLegs["second"]}
+					id, err = o.setupPipelineBatch(ctx, req, "session", "/repo", stages, state)
+					units = []string{state.stageUnits["first"], state.stageUnits["second"]}
 				}
-				return id, legs, state, err
+				return id, units, state, err
 			}
-			id, legs, _, err := setup()
+			id, unitIDs, _, err := setup()
 			testutil.FailErr(t, "create topology", err)
-			store.legs[id][0].Status = api.LegStatusComplete
-			store.legs[id][1].Status = api.LegStatusRunning
+			workers.mu.Lock()
+			workers.units[id][0].Status = api.LegStatusComplete
+			workers.units[id][1].Status = api.LegStatusRunning
 			// Storage order does not define topology work order.
-			store.legs[id][0], store.legs[id][1] = store.legs[id][1], store.legs[id][0]
-			resumedID, resumedLegs, state, err := setup()
+			workers.units[id][0], workers.units[id][1] = workers.units[id][1], workers.units[id][0]
+			workers.mu.Unlock()
+			resumedID, resumedUnits, state, err := setup()
 			testutil.FailErr(t, "restore topology", err)
-			if resumedID != id || !reflect.DeepEqual(resumedLegs, legs) || len(store.delegations) != 1 {
-				t.Fatalf("recovery changed identities: %s %v; original %s %v", resumedID, resumedLegs, id, legs)
+			if resumedID != id || !reflect.DeepEqual(resumedUnits, unitIDs) || len(workers.batches) != 1 {
+				t.Fatalf("recovery changed identities: %s %v; original %s %v", resumedID, resumedUnits, id, unitIDs)
 			}
-			if len(state.completed) != 1 || len(state.stageLegs) != 2 {
+			if len(state.completed) != 1 || len(state.stageUnits) != 2 {
 				t.Fatalf("restored state = %+v", state)
 			}
-			for i, legID := range resumedLegs {
+			for _, unitID := range resumedUnits {
 				switch pattern {
 				case "fan_out":
-					err = o.dispatchFanOutLeg(ctx, req, "run", id, legID, "agent", i, wf.runID)
+					err = o.dispatchFanOutUnit(ctx, id, unitID, wf.runID)
 				case "pack":
-					err = o.dispatchPackLeg(ctx, req, "run", id, legID, "agent", i, wf.runID)
+					err = o.dispatchPackUnit(ctx, id, unitID, wf.runID)
 				}
-				testutil.FailErr(t, "reuse already dispatched leg", err)
+				testutil.FailErr(t, "reuse already dispatched unit", err)
 			}
-			store.legs[id][0].Title = "unexpected-work"
+			workers.mu.Lock()
+			workers.units[id][0].WorkID = "unexpected-work"
+			workers.mu.Unlock()
 			if _, _, _, err := setup(); err == nil {
 				t.Fatal("accepted incompatible stored topology")
 			}

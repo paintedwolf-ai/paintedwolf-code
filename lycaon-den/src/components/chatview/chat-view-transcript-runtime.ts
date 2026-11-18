@@ -23,7 +23,7 @@ const RUN_JUMP_RETRY_MS = 60;
 const RUN_JUMP_RETRIES = 8;
 
 export function createChatViewTranscript(props: ChatViewProps, viewport: Viewport, chrome: ChatTabChromeValue, activity: Activity, surfaceActive: Accessor<boolean>, resetComposer: () => void) {
-  const { workers, spanBlocks } = activity;
+  const { spanBlocks } = activity;
   const [streamEl, setStreamEl] = createSignal<HTMLDivElement>();
   const chatFocusClaim = {};
 
@@ -102,15 +102,6 @@ export function createChatViewTranscript(props: ChatViewProps, viewport: Viewpor
     client: () => getLycaonClient(),
     sessionId: () => props.sessionId,
     hydrationLock: () => props.appStore.state.chatHydrationLock,
-    paintedWorker: () => {
-      if (props.workersDrawerOpen !== true) return null;
-      const workerId = props.selectedWorkerId?.trim();
-      if (!workerId) return null;
-      const row = workers().find((w) => w.id === workerId);
-      const childSessionId = row?.child_session_id?.trim();
-      if (!childSessionId) return null;
-      return { workerId, childSessionId };
-    },
   });
 
 

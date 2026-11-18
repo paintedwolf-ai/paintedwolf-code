@@ -10,6 +10,7 @@ type Service struct {
 	mu                sync.Mutex
 	mergeReconcile    scopedstore.LRU[map[string]struct{}]
 	promotePathStatus scopedstore.LRU[*promotePathSessionStore]
+	latestResults     LatestResults
 }
 
 func New() *Service { return &Service{} }

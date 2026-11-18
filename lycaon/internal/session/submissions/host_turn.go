@@ -20,7 +20,7 @@ func (m *Service) PromptHostTurn(ctx context.Context, sessionID string, origin s
 	if origin == store.PromptSubmissionOriginWorkerCloseout {
 		in.ProseFinish = true
 	}
-	return m.runHostTurn(ctx, sessionID, origin, in)
+	return m.HostTurnWithAdmission(ctx, sessionID, origin, in, nil)
 }
 
 func hostSignalForOrigin(origin store.PromptSubmissionOrigin) *promptinput.HostSignal {
@@ -34,16 +34,7 @@ func hostSignalForOrigin(origin store.PromptSubmissionOrigin) *promptinput.HostS
 	}
 }
 
-// runHostTurn admits and executes one host receipt.
-func (m *Service) runHostTurn(
-	ctx context.Context,
-	sessionID string,
-	origin store.PromptSubmissionOrigin,
-	in promptinput.Input,
-) (*promptresult.Result, error) {
-	return m.HostTurnWithAdmission(ctx, sessionID, origin, in, nil)
-}
-
+// HostTurnWithAdmission admits and executes one host receipt; onAdmitted, when set, runs once it is admitted.
 func (m *Service) HostTurnWithAdmission(
 	ctx context.Context,
 	sessionID string,

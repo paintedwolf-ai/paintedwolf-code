@@ -151,7 +151,7 @@ func TestProgramWindowACCW03JobTheProgramWaitsOnIsObserved(t *testing.T) {
 wait`)
 		done <- callResult{content, err}
 	}()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the job writes job.txt", func() bool {
 		_, err := os.Stat(filepath.Join(f.Dir, "job.txt"))
 		return err == nil
 	})
@@ -186,7 +186,7 @@ until [ -e job.txt ]; do sleep 0.01; done`)
 		t.Fatalf("open windows with only a detached job left = %+v", listed)
 	}
 	testutil.FailErr(t, "release job", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the detached job finishes", func() bool {
 		_, err := os.Stat(filepath.Join(f.Dir, "finished"))
 		return err == nil
 	})
@@ -211,7 +211,7 @@ until [ -e server.txt ]; do sleep 0.01; done`)
 	}
 	defer func() {
 		testutil.FailErr(t, "release job", os.WriteFile(filepath.Join(f.Dir, "release"), nil, 0o600))
-		testutil.WaitFor(t, func() bool {
+		testutil.WaitFor(t, "the detached job finishes", func() bool {
 			_, err := os.Stat(filepath.Join(f.Dir, "finished"))
 			return err == nil
 		})
@@ -441,7 +441,7 @@ func TestTimeoutDoesNotReportExpiryForALaunchTheOpenDelayed(t *testing.T) {
 	for testutil.Receive(t, "the launch's wait timer", clock.requested) != 5*time.Second {
 	}
 	clock.Advance(5 * time.Second)
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the launch writes ran.txt", func() bool {
 		_, err := os.Stat(filepath.Join(f.Dir, "ran.txt"))
 		return err == nil
 	})
@@ -508,7 +508,7 @@ func TestProgramWindowIsActiveWhileAnyLaunchIsLive(t *testing.T) {
 				content, err := f.Call(t, t.Context(), source+`; touch finished; until [ -e end ]; do sleep 0.01; done`)
 				done <- callResult{content, err}
 			}()
-			testutil.WaitFor(t, func() bool {
+			testutil.WaitFor(t, "the launch starts", func() bool {
 				_, err := os.Stat(filepath.Join(f.Dir, "started"))
 				return err == nil
 			})
@@ -571,7 +571,7 @@ func TestLaunchAfterEvaluationEndedRunsUnobservedAndOpensNothing(t *testing.T) {
 		t.Fatalf("outcome = %+v, want no window with no launch by the result", outcome)
 	}
 	testutil.FailErr(t, "continue the job", os.WriteFile(filepath.Join(f.Dir, "go"), nil, 0o600))
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the launch finishes", func() bool {
 		_, err := os.Stat(filepath.Join(f.Dir, "finished"))
 		return err == nil
 	})
@@ -598,7 +598,7 @@ wait`)
 		t.Fatalf("parked result %s", raw)
 	}
 	parked := testutil.Receive(t, "the program parks", parking.parked)
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the launch writes gen.txt", func() bool {
 		_, err := os.Stat(filepath.Join(f.Dir, "gen.txt"))
 		return err == nil
 	})
@@ -629,7 +629,7 @@ func TestProgramWindowSpansAPark(t *testing.T) {
 		t.Fatalf("parked result %s", raw)
 	}
 	parked := testutil.Receive(t, "the program parks", parking.parked)
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the launch writes gen.txt", func() bool {
 		_, err := os.Stat(filepath.Join(f.Dir, "gen.txt"))
 		return err == nil
 	})
@@ -698,7 +698,7 @@ func TestLaunchAfterAGapDoesNotClaimTheGap(t *testing.T) {
 		content, err := f.Call(t, t.Context(), writeGen+`; until [ -e go ]; do sleep 0.01; done; external -- /bin/sh -c 'echo second > second.txt'`)
 		done <- callResult{content, err}
 	}()
-	testutil.WaitFor(t, func() bool {
+	testutil.WaitFor(t, "the launch writes gen.txt", func() bool {
 		_, err := os.Stat(filepath.Join(f.Dir, "gen.txt"))
 		return err == nil
 	})

@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"testing"
 	"time"
 )
@@ -18,7 +19,7 @@ func TestSessionScaffoldRejectsWrongJSONShape(t *testing.T) {
 	err := scaffold.queries.UpsertSessionScaffoldVars(context.Background(), db.UpsertSessionScaffoldVarsParams{
 		SessionID: sessionID,
 		VarsJson:  "[]",
-		UpdatedAt: db.FormatTime(time.Now().UTC()),
+		UpdatedAt: timelayout.Format(time.Now().UTC()),
 	})
 	testutil.FailErr(t, "UpsertSessionScaffoldVars", err)
 	if _, err := scaffold.GetVars(context.Background(), sessionID); err == nil {

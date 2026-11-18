@@ -24,12 +24,10 @@ type turnTestStore interface {
 	CheckpointTurn(context.Context, string, string, TurnPhase, string) error
 	RecoverTurns(context.Context) ([]Turn, error)
 	RecoverTurnsForSession(context.Context, string) ([]Turn, error)
-	ProjectLiveModelOutput(context.Context, LiveModelOutput) error
 	SettleModelOutput(context.Context, ModelOutput) (ModelOutput, error)
 	ListPendingModelOutputProjections(context.Context) ([]PendingModelOutputProjection, error)
 	AppendMessages(context.Context, string, ...api.Message) error
 	MarkModelOutputProjected(context.Context, string) error
-	TruncateMessagesFrom(context.Context, string, string) (int, error)
 }
 
 func TestTurnAttemptRecoveryParity(t *testing.T) {
@@ -154,10 +152,6 @@ func TestSettledModelOutputRepairsProjectionParity(t *testing.T) {
 			})
 			testutil.FailErr(t, "begin turn", err)
 			outputID := uuid.NewString()
-			testutil.FailErr(t, "project live output", st.ProjectLiveModelOutput(ctx, LiveModelOutput{
-				ID: outputID, TurnAttemptID: execution.Attempt.ID, SessionID: sess.ID,
-				Iteration: 1, MessageID: outputID, Content: "partial",
-			}))
 			settled, err := st.SettleModelOutput(ctx, ModelOutput{
 				ID: outputID, TurnAttemptID: execution.Attempt.ID, SessionID: sess.ID,
 				Iteration: 1, MessageID: outputID, Content: "complete", FinishReason: "stop",
@@ -178,8 +172,7 @@ func TestSettledModelOutputRepairsProjectionParity(t *testing.T) {
 			if len(pending) != 0 {
 				t.Fatalf("pending after ack = %+v", pending)
 			}
-			removed, err := st.TruncateMessagesFrom(ctx, sess.ID, outputID)
-			testutil.FailErr(t, "truncate output turn", err)
+			removed := rewindFrom(t, st.(rewindStore), sess.ID, outputID)
 			if removed != 1 {
 				t.Fatalf("removed = %d want 1", removed)
 			}
@@ -362,5 +355,34 @@ func TestReadModelOutputsReturnsASessionsOutputsWithTheirBodies(t *testing.T) {
 	}
 	if _, err := ReadModelOutputs(t.Context(), st.queries, t.TempDir(), "reader"); err == nil {
 		t.Fatal("an output whose body is missing was read")
+	}
+}
+
+// A running turn's progress advances when a model response or tool result
+// is accounted; a finished turn's does not move.
+func TestTouchTurnProgressAdvancesOnlyARunningTurn(t *testing.T) {
+	ctx := t.Context()
+	handle := testdbfixture.Open(t, "turns.db")
+	testdbseed.InsertProjectRoot(t, handle, testdbseed.DefaultProjectID, t.TempDir())
+	st := NewSQL(handle)
+	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	turn, err := st.BeginTurn(ctx, TurnStart{ID: uuid.NewString(), SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: `{}`})
+	testutil.FailErr(t, "begin turn", err)
+	const old = "2026-01-01T00:00:00Z"
+	_, err = handle.ExecContext(ctx, `UPDATE turns SET progressed_at = ? WHERE id = ?`, old, turn.Turn.ID)
+	testutil.FailErr(t, "age progress", err)
+	testutil.FailErr(t, "touch", st.TouchTurnProgress(ctx, turn.Turn.ID))
+	var progressed string
+	testutil.FailErr(t, "read progress", handle.QueryRowContext(ctx, `SELECT progressed_at FROM turns WHERE id = ?`, turn.Turn.ID).Scan(&progressed))
+	if progressed <= old {
+		t.Fatalf("progress did not advance: %s", progressed)
+	}
+	_, err = handle.ExecContext(ctx, `UPDATE turns SET status = 'complete', completed_at = ?, progressed_at = ? WHERE id = ?`, old, old, turn.Turn.ID)
+	testutil.FailErr(t, "finish turn", err)
+	testutil.FailErr(t, "touch finished", st.TouchTurnProgress(ctx, turn.Turn.ID))
+	testutil.FailErr(t, "read finished progress", handle.QueryRowContext(ctx, `SELECT progressed_at FROM turns WHERE id = ?`, turn.Turn.ID).Scan(&progressed))
+	if progressed != old {
+		t.Fatalf("a finished turn's progress moved: %s", progressed)
 	}
 }

@@ -103,7 +103,7 @@ func runCommandSnapshotCapture(
 
 	outcome, err := runCommandForeground(
 		ctx, registry, tracker, runner, boundary, argsCopy, tctx,
-		commandWaitBudget(argsCopy), true, extraWriteRoots, toolName,
+		WaitBudget(argsCopy), true, extraWriteRoots, toolName,
 	)
 	if err != nil {
 		return RunOutcome{}, err

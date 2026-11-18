@@ -1,6 +1,7 @@
 import { createEffect, createSignal, onCleanup, untrack, type Accessor } from "solid-js";
 import type { BriefingEvent, BriefingRequest, BriefingSnapshot } from "../api/types.ts";
 import type { BriefingsClient } from "../api/http-capabilities/briefings.ts";
+import { clearSummaryFades } from "./summary-fade.ts";
 
 export type BriefingProfileId = BriefingRequest["profile_id"];
 
@@ -228,6 +229,15 @@ export function requestBriefing(projectId: string, target: BriefingTarget, opts:
   }, BRIEFING_DEBOUNCE_MS);
 }
 
+function needsAsking(view: BriefingView): boolean {
+  return !view.snapshot || view.stalled || view.snapshot.status === "failed";
+}
+
+/** Asks again at once for a target whose summary did not arrive. */
+export function retryBriefing(projectId: string, target: BriefingTarget): void {
+  requestBriefing(projectId, target, { manual: true });
+}
+
 /**
  * Watches a target while the caller's owner lives; the request outlives it.
  * A changed target, such as a card settling while open, is asked for anew.
@@ -255,9 +265,10 @@ export function useBriefing(projectId: Accessor<string | undefined>, target: Acc
     untrack(() => {
       if (!id || !wanted) return attach(null);
       const entry = ensureEntry(id, wanted);
-      // A held answer stays current through events and reconnect, so only a
-      // target never answered here is asked for.
-      if (attach(entry) && !entry.view().snapshot) requestBriefing(id, wanted, { fresh: true });
+      // A held answer stays current through events and reconnect, so a target
+      // is asked for again only when it has no answer or its attempt ended
+      // without one.
+      if (attach(entry) && needsAsking(entry.view())) requestBriefing(id, wanted, { fresh: true });
     });
   });
   onCleanup(() => attach(null));
@@ -267,6 +278,7 @@ export function useBriefing(projectId: Accessor<string | undefined>, target: Acc
 /** Applies one `briefing` topic event. */
 export function applyBriefingEvent(projectId: string, event: BriefingEvent): void {
   if (event.kind === "reset" && event.cache_epoch) {
+    clearSummaryFades();
     const floor = BigInt(event.cache_epoch);
     for (const profileId of event.profile_ids ?? []) store.resets.set(`${projectId}\0${profileId}`, floor);
     for (const entry of store.entries.values()) {
@@ -303,13 +315,5 @@ export function requestBriefingResync(): void {
   // Asking moves each entry to the most recent end, so walk a copy.
   for (const entry of [...store.entries.values()]) {
     if (entry.users > 0) requestBriefing(entry.projectId, entry.target, { fresh: true });
-  }
-}
-
-/** Drops every target, as when summaries are turned off. */
-export function clearBriefings(): void {
-  for (const entry of store.entries.values()) {
-    clearTimers(entry);
-    entry.setView({ snapshot: null, stalled: false });
   }
 }

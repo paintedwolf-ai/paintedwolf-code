@@ -1,0 +1,3 @@
+id: ECHOED
+on: anchor.fired
+requires_facts: [paintedwolf.rejection_code]

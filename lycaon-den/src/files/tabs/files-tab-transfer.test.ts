@@ -5,7 +5,9 @@ import type { FileTabTransferSettled, FileTabWindowDrag } from "../../platform/w
 import { createShellPeerWindows } from "../../components/shell/shell-peer-windows.ts";
 import { createFilesTabTransfers } from "./files-tab-transfer.ts";
 import { createFilesTabDrag } from "./files-tab-drag.ts";
-import { applyFilesBufferDraft, applyFilesBufferLoad, filesBufferText, openFilesBuffer, resetProjectFilesForTests, type FilesBufferRelease } from "../documents/project-files-buffers.ts";
+import { applyFilesBufferDraft, applyFilesBufferLoad } from "../documents/project-files-buffer-io.ts";
+import { filesBufferText } from "../documents/files-buffer-state.ts";
+import { openFilesBuffer, resetProjectFilesForTests, type FilesBufferRelease } from "../documents/project-files-buffer-lifecycle.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { scheduleFilesDraftSync } from "../documents/files-draft-sync.ts";
 import { required } from "../../test/at.ts";

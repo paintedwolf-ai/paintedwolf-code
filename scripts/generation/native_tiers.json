@@ -1,0 +1,5 @@
+{
+  "schema": "pw-native-tiers/1",
+  "mlx": ["e4b"],
+  "vulkan": ["e4b"]
+}

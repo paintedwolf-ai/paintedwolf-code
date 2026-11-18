@@ -15,8 +15,6 @@ var (
 	ErrApprovalOptionUnavailable = errors.New("approval option is not available")
 	// ErrApprovalOptionRequired requires an explicit grant option.
 	ErrApprovalOptionRequired = errors.New("approval option required")
-	// ErrApprovalResolverInvalid rejects a policy resolution without a complete policy identity.
-	ErrApprovalResolverInvalid = errors.New("approval resolver is invalid")
 	// ErrContentApplyHunkNotFound indicates an unknown planned hunk.
 	ErrContentApplyHunkNotFound = errors.New("content_apply hunk not found")
 	// ErrContentApplySelectionInvalid indicates a malformed decision/hunk pairing.

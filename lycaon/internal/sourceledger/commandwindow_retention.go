@@ -98,7 +98,7 @@ func (r *startRetention) Retain(ctx context.Context, windowID string, held *reta
 // storeObjects adds to pins what it stores, including when it stops early with
 // an error. Objects held already count once.
 func (r *startRetention) storeObjects(ctx context.Context, windowID, snapshotID string, held *retainedSet, pins []retainedObject) ([]retainedObject, error) {
-	entries, err := r.snapshots.HashedEntries(ctx, snapshotID, MaxRevisionContentBytes, r.files+1)
+	entries, err := r.snapshots.HashedEntries(ctx, snapshotID, sourceblob.MaxRevisionContentBytes, r.files+1)
 	if err != nil {
 		return pins, err
 	}

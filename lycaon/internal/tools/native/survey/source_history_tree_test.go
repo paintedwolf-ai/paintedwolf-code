@@ -596,24 +596,6 @@ func TestSourceHistoryDiffACDF21FollowsAChainOfDirectoryMoves(t *testing.T) {
 	}
 }
 
-// A move's base text keeps its origin: its exposure is recorded at the old name.
-func TestSourceHistoryACDF19MovedCredentialFileOnAWriteLeg(t *testing.T) {
-	h := newHistoryHarness(t)
-	h.record(effectSeed{path: ".env", content: "TOKEN=old\n", session: "s0", op: api.SourceChangeOpCreate})
-	h.recordOnWorker(effectSeed{path: "settings.txt", fromPath: ".env", content: "TOKEN=old\n", op: api.SourceChangeOpRename})
-	h.writeFile("settings.txt", "TOKEN=new\n")
-	worker := h.workerWith(&fakeTree{path: created("TOKEN=new\n"), source: map[string]workspacebaseline.PathComparison{
-		".env": {Kind: workspacebaseline.ChangeDeleted, Before: "TOKEN=old\n", HasBefore: true, HasAfter: true},
-	}})
-	recorder := &deliveredRecorder{}
-	worker.Effects.CredentialFiles = recorder
-	_, err := h.tool.Run(t.Context(), map[string]any{"path": "settings.txt", "mode": "diff"}, worker)
-	testutil.FailErr(t, "diff", err)
-	if len(recorder.reads) != 1 || recorder.reads[0].Path != ".env" || recorder.reads[0].Content != "TOKEN=old\n" {
-		t.Fatalf("delivered %+v, want the old name's text", recorder.reads)
-	}
-}
-
 // Lost bytes say nothing about whether the live file moved past its record.
 func TestSourceHistoryDiffACDF23LostRecordIsNotCalledAChange(t *testing.T) {
 	h := newHistoryHarness(t)
@@ -766,5 +748,23 @@ func TestSourceHistoryDiffACDF18CeilingAdmitsOrdinaryFiles(t *testing.T) {
 				t.Fatalf("diff %d bytes, note %q, want the diff", len(result.Diff), result.Note)
 			}
 		})
+	}
+}
+
+// A move's base text keeps its origin: its exposure is recorded at the old name.
+func TestSourceHistoryACDF19MovedCredentialFileOnAWriteLeg(t *testing.T) {
+	h := newHistoryHarness(t)
+	h.record(effectSeed{path: ".env", content: "TOKEN=old\n", session: "s0", op: api.SourceChangeOpCreate})
+	h.recordOnWorker(effectSeed{path: "settings.txt", fromPath: ".env", content: "TOKEN=old\n", op: api.SourceChangeOpRename})
+	h.writeFile("settings.txt", "TOKEN=new\n")
+	worker := h.workerWith(&fakeTree{path: created("TOKEN=new\n"), source: map[string]workspacebaseline.PathComparison{
+		".env": {Kind: workspacebaseline.ChangeDeleted, Before: "TOKEN=old\n", HasBefore: true, HasAfter: true},
+	}})
+	recorder := &deliveredRecorder{}
+	worker.Effects.CredentialFiles = recorder
+	_, err := h.tool.Run(t.Context(), map[string]any{"path": "settings.txt", "mode": "diff"}, worker)
+	testutil.FailErr(t, "diff", err)
+	if len(recorder.reads) != 1 || recorder.reads[0].Path != ".env" || recorder.reads[0].Content != "TOKEN=old\n" {
+		t.Fatalf("delivered %+v, want the old name's text", recorder.reads)
 	}
 }

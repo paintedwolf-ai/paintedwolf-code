@@ -30,10 +30,10 @@ func TestTransactionRefUndoPreservesExternalRefs(t *testing.T) {
 			testutil.FailErr(t, "publish", err)
 			roots := map[string]string{"primary": primary}
 			if state == "preexisting" {
-				_, err := ImportAndValidateCheckpointGitRefs(t.Context(), GitObjectSources{StoreDir: store.RootDir()}, "checkpoint", "worker", snapshot, roots)
+				_, err := ImportAndValidateCheckpointGitRefs(t.Context(), GitObjectSources{StoreDir: store.RootDir()}, "checkpoint", "worker", snapshot, roots, "primary")
 				testutil.FailErr(t, "existing refs", err)
 			}
-			promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: roots})
+			promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: roots, PrimaryRoot: "primary"})
 			testutil.FailErr(t, "promoter", err)
 			preview, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "checkpoint"})
 			testutil.FailErr(t, "preview", err)
@@ -102,7 +102,7 @@ func TestTransactionImportsAndRestoresRefsPerRoot(t *testing.T) {
 	}}
 	_, err = publisher.Publish(t.Context(), PublishRequest{CheckpointID: "checkpoint", Trigger: TriggerWorkerCompletion, PrivateGit: snapshot})
 	testutil.FailErr(t, "publish", err)
-	promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: roots})
+	promoter, err := NewPromoter(PromoterConfig{Store: store, TargetRoots: roots, PrimaryRoot: "primary"})
 	testutil.FailErr(t, "promoter", err)
 	preview, err := promoter.Preview(t.Context(), PreviewRequest{CheckpointID: "checkpoint"})
 	testutil.FailErr(t, "preview", err)

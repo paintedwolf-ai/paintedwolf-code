@@ -2,6 +2,7 @@ package worker
 
 import (
 	"errors"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"os"
 	"path/filepath"
 	"testing"
@@ -83,13 +84,19 @@ func TestPrerequisitesWaitForPromotedSuccessfulOutput(t *testing.T) {
 				} else {
 					transition(pid, outcome.status, outcome.merge)
 				}
+				// An unusable producer leaves its consumers waiting for the
+				// coordinator to replace or withdraw them; nothing cancels them.
 				_, err = q.RecoverExpiredClaims(t.Context())
-				testutil.FailErr(t, "settle dependency chain", err)
+				testutil.FailErr(t, "recover", err)
+				if claim, err := q.ClaimNext(t.Context(), ClaimRequest{}); !errors.Is(err, ErrNoPendingJobs) || claim != nil {
+					t.Fatalf("claimed a blocked consumer: %+v, %v", claim, err)
+				}
 				for _, blocked := range []string{first, second} {
 					task, ok := q.Get(blocked)
-					if !ok || task.Status != api.WorkerStatusCanceled || task.Result == nil || task.Result.Status != "canceled" {
-						t.Fatalf("unsettled consumer %s: %+v", blocked, task)
+					if !ok || task.Status != api.WorkerStatusPending {
+						t.Fatalf("blocked consumer %s: %+v", blocked, task)
 					}
+					testutil.FailErr(t, "withdraw blocked consumer", q.Cancel(t.Context(), blocked, &api.WorkerResult{Status: "canceled"}))
 				}
 			}
 		})
@@ -121,7 +128,7 @@ func TestConsumerCapturesPrimaryAfterProducerPromotion(t *testing.T) {
 	testutil.FailErr(t, "create project", err)
 	q := NewInMemoryQueue(2)
 	q.SetProjectStore(projects)
-	q.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(t.TempDir(), "branches")))
+	q.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(t.TempDir(), "branches"), platform.NewSelector(platform.Config{})))
 	producer := api.WorkerTask{ProjectID: p.ID, WorkspaceRootID: p.Roots[0].ID, WorkspacePath: canonical, ParentSessionID: "parent", AgentType: "implementer", Prompt: "produce", Brief: "produce", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}}
 	id, err := q.Enqueue(t.Context(), producer)
 	testutil.FailErr(t, "enqueue producer", err)

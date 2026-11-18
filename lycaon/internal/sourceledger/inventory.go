@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/timelayout"
 	"log/slog"
 	"strings"
 	"sync"
@@ -230,7 +231,7 @@ func (s *Inventory) releaseInventoryJob(projectID string, job *inventoryJob) {
 }
 
 func (s *Inventory) runInventoryGeneration(ctx context.Context, req InventoryRequest) error {
-	now := db.FormatTime(time.Now().UTC())
+	now := timelayout.Format(time.Now().UTC())
 	if err := s.queries.QueueSourceInventory(ctx, db.QueueSourceInventoryParams{
 		ProjectID: req.ProjectID, BranchID: inventoryBranch(req.Roots).String(), RequestedGeneration: int64(req.RootsGeneration),
 		RequestedEpoch: req.requestedEpoch, RequestedTs: now,
@@ -250,7 +251,7 @@ func (s *Inventory) runInventoryGeneration(ctx context.Context, req InventoryReq
 	slog.InfoContext(ctx, "source inventory scanning",
 		"project_id", req.ProjectID, "roots_generation", req.RootsGeneration, "roots", len(req.Roots))
 	outcome, snapshotID, completedEpoch, scanErr := s.reconcileInventoryRequest(ctx, req)
-	completed := db.FormatTime(time.Now().UTC())
+	completed := timelayout.Format(time.Now().UTC())
 	if scanErr != nil {
 		_, markErr := s.queries.MarkSourceInventoryError(ctx, db.MarkSourceInventoryErrorParams{
 			CompletedTs: completed, LastError: inventoryErrorText(scanErr),
@@ -310,7 +311,7 @@ func (s *Inventory) reconcileInventoryRequest(
 	}
 	// Preserve a changed token for the next inventory signal.
 	if snapshot.Quality != sourcesnapshot.CaptureExact {
-		now := db.FormatTime(time.Now().UTC())
+		now := timelayout.Format(time.Now().UTC())
 		if err := s.queries.QueueSourceInventory(ctx, db.QueueSourceInventoryParams{
 			ProjectID: req.ProjectID, BranchID: inventoryBranch(req.Roots).String(), RequestedGeneration: int64(req.RootsGeneration),
 			RequestedEpoch: sourcesnapshot.ChangeToken(snapshotRoots(req.Roots)), RequestedTs: now,

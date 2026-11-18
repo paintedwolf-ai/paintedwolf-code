@@ -8,10 +8,6 @@ DROP TRIGGER worker_jobs_workspace_root_project_insert;
 
 DROP TRIGGER worker_jobs_workspace_root_project_update;
 
-DROP TRIGGER delegations_workspace_root_project_insert;
-
-DROP TRIGGER delegations_workspace_root_project_update;
-
 CREATE TRIGGER IF NOT EXISTS sessions_workspace_root_project_insert
 BEFORE INSERT ON sessions
 WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
@@ -46,24 +42,6 @@ WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
 )
 BEGIN
     SELECT RAISE(ABORT, 'worker_jobs workspace_root_id outside project');
-END;
-
-CREATE TRIGGER IF NOT EXISTS delegations_workspace_root_project_insert
-BEFORE INSERT ON delegations
-WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id AND kind != 'outside'
-)
-BEGIN
-    SELECT RAISE(ABORT, 'delegations workspace_root_id outside project');
-END;
-
-CREATE TRIGGER IF NOT EXISTS delegations_workspace_root_project_update
-BEFORE UPDATE OF project_id, workspace_root_id ON delegations
-WHEN new.workspace_root_id IS NOT NULL AND NOT EXISTS (
-    SELECT 1 FROM project_roots WHERE id = new.workspace_root_id AND project_id = new.project_id AND kind != 'outside'
-)
-BEGIN
-    SELECT RAISE(ABORT, 'delegations workspace_root_id outside project');
 END;
 
 DROP INDEX idx_project_roots_label;
