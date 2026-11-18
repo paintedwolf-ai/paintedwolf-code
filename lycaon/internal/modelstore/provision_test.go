@@ -194,3 +194,28 @@ func TestRejectUnsafeArchives(t *testing.T) {
 		t.Fatalf("inspect canceled archive: %v", err)
 	}
 }
+
+func TestSelectedRoleWriteRecoversAcrossRestart(t *testing.T) {
+	s, dir, signed := bundleFixture(t)
+	s.signer = acceptSigner{}
+	target := Slot{Model: signed.Manifest.Model, Device: signed.Manifest.Device}
+	testutil.FailErr(t, "import selected tier", s.ImportFromBundlePath(t.Context(), dir, target, nil))
+	interrupted := errors.New("policy write interrupted")
+	if err := s.BindSelectedRoles(func(string) error { return interrupted }); !errors.Is(err, interrupted) {
+		t.Fatalf("write error: %v", err)
+	}
+	restarted := New(s.root, acceptSigner{})
+	calls := 0
+	bind := func(model string) error {
+		calls++
+		if model != target.Model {
+			t.Fatal("bound another tier")
+		}
+		return nil
+	}
+	testutil.FailErr(t, "replay pending selection", restarted.BindSelectedRoles(bind))
+	testutil.FailErr(t, "read completed selection", New(s.root, acceptSigner{}).BindSelectedRoles(bind))
+	if calls != 1 {
+		t.Fatalf("policy writes after restart: %d", calls)
+	}
+}

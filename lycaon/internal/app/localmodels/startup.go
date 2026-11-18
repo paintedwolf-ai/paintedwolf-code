@@ -87,7 +87,7 @@ func Start(ctx context.Context, fixture bool) Startup {
 
 func (s *Startup) Generation() *nativegen.Availability {
 	if s.Runtime != nil {
-		return &nativegen.Availability{Runtime: s.Runtime.Generation, OfflineInstaller: s.OfflineInstaller, OfflineTier: s.OfflineTier}
+		return &nativegen.Availability{Runtime: s.Runtime.Generation, Store: s.Runtime.Store, OfflineInstaller: s.OfflineInstaller, OfflineTier: s.OfflineTier}
 	}
 	if s.Issue == nil {
 		return nil

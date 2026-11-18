@@ -94,6 +94,12 @@ func (s *Store) parseRecords(raw []byte) (journalHistory, int, error) {
 
 func (h *journalHistory) apply(record journalRecord, signer Signer) error {
 	switch {
+	case record.Version == 2 && record.Selection == "roles_bound":
+		if !h.selection.BindingPending || record.Signed.Manifest.Model != "" || record.Signed.Signature != "" {
+			return errors.New("modelstore: invalid role binding acknowledgement")
+		}
+		h.selection.BindingPending = false
+		return nil
 	case record.Version == 2 && (record.Selection == "opted_out" || record.Selection == "evicted"):
 		if record.Signed.Manifest.Model != "" || record.Signed.Signature != "" {
 			return errors.New("modelstore: unexpected opt-out manifest")
@@ -119,7 +125,7 @@ func (h *journalHistory) apply(record journalRecord, signer Signer) error {
 	h.all = append(h.all, m)
 	if record.Version == 2 {
 		h.visible = nil
-		h.selection = Selection{State: "selected", Model: m.Model, Device: m.Device, Revision: m.Revision}
+		h.selection = Selection{BindingPending: true, State: "selected", Model: m.Model, Device: m.Device, Revision: m.Revision}
 	}
 	h.visible = append(h.visible, m)
 	return nil

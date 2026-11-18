@@ -92,13 +92,13 @@ func (p *Runtime) StartSelection(req api.LocalModelSelectionRequest, installed f
 	go func() {
 		defer cancel()
 		err := p.importSelection(ctx, req, pin, job)
-		if err == nil && installed != nil {
-			err = installed(req.Model)
+		if installed != nil {
+			err = errors.Join(err, p.config.ModelStore.BindSelectedRoles(installed))
 		}
 		p.transfers.Lock()
 		p.transfers.active = nil
 		if err != nil && !errors.Is(err, context.Canceled) {
-			p.readiness.Store(&Readiness{State: "unavailable", Action: "retry", Detail: err.Error()})
+			p.ReportSelectionError(err)
 		}
 		close(job.done)
 		p.transfers.Unlock()
@@ -187,6 +187,6 @@ func (p *Runtime) SetupInstaller(model string, installed func(string) error, set
 		err = p.StartSelection(api.LocalModelSelectionRequest{Model: model, PackagedSeed: true}, installed, settled)
 	}
 	if err != nil {
-		p.readiness.Store(&Readiness{State: "unavailable", Action: "retry", Detail: err.Error()})
+		p.ReportSelectionError(err)
 	}
 }

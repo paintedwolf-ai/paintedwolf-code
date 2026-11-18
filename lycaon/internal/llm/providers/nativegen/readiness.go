@@ -88,3 +88,7 @@ func (p *Runtime) settleReadiness(err error) {
 	}
 	p.readiness.Store(&result)
 }
+
+func (p *Runtime) ReportSelectionError(err error) {
+	p.readiness.Store(&Readiness{State: "unavailable", Action: "retry", Detail: err.Error()})
+}

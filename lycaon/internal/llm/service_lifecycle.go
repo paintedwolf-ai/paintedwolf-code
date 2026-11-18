@@ -68,6 +68,15 @@ func NewService(ctx context.Context, mock modelcall.LLMClient, local *nativegen.
 		Capacity:               NewCapacityGate(catalog.CapacityPolicy()),
 		Refusals:               providerretry.NewModelRefusalGate(),
 	}
+	if local != nil && local.Store != nil {
+		if err := local.Store.BindSelectedRoles(svc.initializeLocalRoles); err != nil {
+			if local.Runtime != nil {
+				local.Runtime.ReportSelectionError(err)
+			} else {
+				registry.localStartup.Detail = err.Error()
+			}
+		}
+	}
 	if local != nil && local.OfflineInstaller && local.Runtime != nil {
 		local.Runtime.SetupInstaller(local.OfflineTier, svc.initializeLocalRoles, func() { registry.RefreshDiscovery(IncludedProviderID); svc.ResetPlanes() })
 	}
