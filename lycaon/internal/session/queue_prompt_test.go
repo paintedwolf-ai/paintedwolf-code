@@ -229,7 +229,7 @@ func TestMalformedReceiptFailsThenDispatcherRunsNextReceipt(t *testing.T) {
 	firstID := uuid.NewString()
 	first, _, err := st.PutPromptSubmission(ctx, store.PromptSubmission{
 		ID: firstID, SessionID: sess.ID, ProjectID: sess.ProjectID,
-		InputDigest: firstID, InputJSON: "{", Origin: store.PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID,
+		InputDigest: firstID, InputJSON: `"invalid prompt input"`, Origin: store.PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID,
 	})
 	testutil.FailErr(t, "put malformed receipt", err)
 	second, _, err := mgr.Submissions.AdmitPrompt(ctx, sess.ID, uuid.NewString(), "second", promptinput.Input{Text: "second"})

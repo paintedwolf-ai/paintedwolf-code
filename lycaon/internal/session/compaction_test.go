@@ -382,9 +382,9 @@ func TestWorkerSpawnDoesNotGrowParentMessages(t *testing.T) {
 			t.Fatalf("child parent = %q, want %q", child.ParentSessionID, parent.ID)
 		}
 		if err := store.AppendMessages(ctx, child.ID,
-			api.Message{ID: "tool1", Role: api.MessageRoleTool, Content: transcript},
-			api.Message{ID: "tool2", Role: api.MessageRoleTool, Content: transcript},
-			api.Message{ID: "a1", Role: api.MessageRoleAssistant, Content: "done details " + transcript},
+			api.Message{ID: fmt.Sprintf("tool1-%d", i), Role: api.MessageRoleTool, Content: transcript},
+			api.Message{ID: fmt.Sprintf("tool2-%d", i), Role: api.MessageRoleTool, Content: transcript},
+			api.Message{ID: fmt.Sprintf("a1-%d", i), Role: api.MessageRoleAssistant, Content: "done details " + transcript},
 		); err != nil {
 			testutil.FailErr(t, "store.AppendMessages failed", err)
 		}
@@ -454,7 +454,7 @@ func TestCompactOversizedSplitReadsInSession(t *testing.T) {
 	readB := strings.Repeat("b", 34000)
 	if err := store.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "physics feel flat"},
-		api.Message{ID: "a1", Role: api.MessageRoleAssistant, Content: "Let me survey the repo."},
+		api.Message{ID: fmt.Sprintf("a1-%d", i), Role: api.MessageRoleAssistant, Content: "Let me survey the repo."},
 		api.Message{ID: "t1", Role: api.MessageRoleTool, Content: `{"entries":[]}`},
 		api.Message{ID: "t2", Role: api.MessageRoleTool, Content: readA},
 		api.Message{ID: "t3", Role: api.MessageRoleTool, Content: readB},
@@ -529,7 +529,7 @@ func TestCompactOversizedPreservesBoundedReadPagesInSession(t *testing.T) {
 		strings.Repeat("1|line of python code here\n", 400))
 	if err := store.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "run the game"},
-		api.Message{ID: "a1", Role: api.MessageRoleAssistant, Content: "Let me read the sources."},
+		api.Message{ID: fmt.Sprintf("a1-%d", i), Role: api.MessageRoleAssistant, Content: "Let me read the sources."},
 		api.Message{ID: "t1", Role: api.MessageRoleTool, Content: readPage},
 		api.Message{ID: "t2", Role: api.MessageRoleTool, Content: readPage},
 	); err != nil {
@@ -575,7 +575,7 @@ func TestWorkerChildSessionDietsOversizedToolResultsInView(t *testing.T) {
 	readB := strings.Repeat("b", 34000)
 	if err := store.AppendMessages(ctx, child.ID,
 		api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "fix crash"},
-		api.Message{ID: "a1", Role: api.MessageRoleAssistant, Content: "survey"},
+		api.Message{ID: fmt.Sprintf("a1-%d", i), Role: api.MessageRoleAssistant, Content: "survey"},
 		api.Message{ID: "t1", Role: api.MessageRoleTool, Content: readA},
 		api.Message{ID: "t2", Role: api.MessageRoleTool, Content: readB},
 		api.Message{ID: "a2", Role: api.MessageRoleAssistant, Content: "aged past hot"},

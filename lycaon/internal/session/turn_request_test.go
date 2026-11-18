@@ -76,6 +76,7 @@ func TestTurnRequestKeepsADecidedRequestAcrossHostTurns(t *testing.T) {
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "persist opening message", st.AppendMessages(t.Context(), sess.ID, api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "inspect the logs"}))
 	_, err = st.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{SessionID: sess.ID, OpeningMessageID: "u1", Trigger: store.TurnLoadTriggerTurn})
 	testutil.FailErr(t, "put receipt", err)
 	history := []api.Message{{ID: "u1", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "add a flag"}}
@@ -123,6 +124,7 @@ func TestTurnOptimizationRunsWithoutWorkflowOptIn(t *testing.T) {
 		mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 		sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 		testutil.FailErr(t, "create session", err)
+		testutil.FailErr(t, "persist opening message", st.AppendMessages(t.Context(), sess.ID, api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "inspect the logs"}))
 		engine := &decidetest.Fake{Unavailable: unavailable}
 		mgr.Coordinator.Loading.SetDecider(engine)
 		mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
@@ -180,6 +182,7 @@ func TestTurnOptimizationFailureClearsTheStaleSkill(t *testing.T) {
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "persist opening message", st.AppendMessages(t.Context(), sess.ID, api.Message{ID: "u1", Role: api.MessageRoleUser, Content: "inspect the logs"}))
 	mgr.Coordinator.Loading.SetDecider(&decidetest.Fake{Err: errors.New("engine failed")})
 	ledger := turnload.NewLedger()
 	ledger.Restore(sess.ID, turnload.Standing{Skill: &turnload.SkillPreload{Name: "old", Body: "old"}}, nil)
@@ -214,6 +217,9 @@ func TestWorkflowStartDecisionUsesItsBoundRequestOnce(t *testing.T) {
 			t.Fatalf("workflow start = %q %q %v", opening, text, ok)
 		}
 	}
+	testdbseed.InsertWorkflowRun(t, st.DB(), "old-run", sess.ID, sess.ProjectID)
+	testdbseed.InsertWorkflowRun(t, st.DB(), "new-run", sess.ID, sess.ProjectID)
+	testutil.FailErr(t, "persist workflow opening", st.AppendMessages(t.Context(), sess.ID, history...))
 	_, err = st.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{SessionID: sess.ID, OpeningMessageID: "start", Trigger: store.TurnLoadTriggerTurn})
 	testutil.FailErr(t, "record start decision", err)
 	if _, _, ok := mgr.Coordinator.Loading.Request(t.Context(), wake, history, "", request); ok {

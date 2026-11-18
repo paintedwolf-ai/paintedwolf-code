@@ -71,7 +71,7 @@ func spendRunwayHost(t *testing.T, tracker cost.CostTracker, ceilingUSD float64,
 	lim := settings.DefaultSessionLimits()
 	lim.SpendCeilingEnabled = enabled
 	lim.SessionSpendCeilingUSD = ceilingUSD
-	mem := storetest.New(t, testdbseed.DefaultProjectID)
+	mem := storetest.New(t, testdbseed.DefaultProjectID, "project")
 	mgr := NewHost(mem, Models{Client: llm.NewMockProvider(&llm.MockConfig{}), Provider: nil, Limits: lim, Cost: tracker}, tools.NewStubRegistry())
 	hints, err := guidance.LoadHintConfigStock()
 	testutil.FailErr(t, "LoadHintConfigStock", err)

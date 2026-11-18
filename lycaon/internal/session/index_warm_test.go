@@ -244,6 +244,10 @@ func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
 		},
 	}
 	const content = "See `same.go`."
+	if err := mem.AppendMessages(t.Context(), sess.ID, api.Message{ID: "invalid", Role: api.MessageRoleAssistant, Content: content, NavigationRefs: []api.NavigationReference{ref}}); err == nil {
+		t.Fatal("cross-project candidate was persisted")
+	}
+	ref.Candidates = ref.Candidates[:2]
 	testutil.FailErr(t, "append ambiguous message", mem.AppendMessages(t.Context(), sess.ID, api.Message{ID: "m", Role: api.MessageRoleAssistant, Content: content, NavigationRefs: []api.NavigationReference{ref}}))
 	index := 1
 	req := api.ResolveMessageNavigationRequest{MessageID: "m", ContentSHA256: sessionstore.NavigationContentHash(content), ReferenceID: ref.ID, CandidateIndex: &index}
@@ -263,7 +267,7 @@ func TestNavigationCandidateRechecksOnlyTheSelectedStoredAddress(t *testing.T) {
 	}
 	stored, err := mem.GetMessage(t.Context(), sess.ID, "m")
 	testutil.FailErr(t, "read original reference", err)
-	if stored.NavigationRefs[0].Status != api.NavigationAmbiguous || len(stored.NavigationRefs[0].Candidates) != 3 {
+	if stored.NavigationRefs[0].Status != api.NavigationAmbiguous || len(stored.NavigationRefs[0].Candidates) != 2 {
 		t.Fatal("candidate selection rewrote durable binding")
 	}
 	for _, invalid := range []int{-1, 2, 3, 32} {

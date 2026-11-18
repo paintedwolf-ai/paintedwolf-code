@@ -76,6 +76,7 @@ func TestHostTurnWritesReceipt(t *testing.T) {
 	mgr, sessions := newReceiptTestManager(t)
 	ctx := workercontext.WithJob(context.Background(), "worker-job-1")
 	sess := newReceiptTestSession(t, mgr, sessions)
+	testdbseed.InsertWorkerJob(t, sessions.DB(), "worker-job-1", sess.ID)
 
 	_, err := mgr.Submissions.PromptHostTurn(ctx, sess.ID, store.PromptSubmissionOriginWorkerCloseout, "closeout kick")
 	testutil.FailErr(t, "run host turn", err)

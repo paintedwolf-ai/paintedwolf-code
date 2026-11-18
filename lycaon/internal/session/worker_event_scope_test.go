@@ -21,6 +21,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/store/storetest"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
@@ -118,6 +119,9 @@ func TestWorkflowDeliveryRequiresAcceptedCurrentPhaseCloseout(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			mgr, sess, _ := verifyGateHarness(t, "")
+			database := mgr.Coordinator.Context.Sessions.(*store.SQL).DB()
+			testdbseed.InsertWorkflowRun(t, database, "run", sess.ID, sess.ProjectID)
+			testdbseed.InsertWorkflowRun(t, database, "old-run", sess.ID, sess.ProjectID)
 			ready, err := mgr.Runner.Transcript.DeliveredWorkflowPhase(t.Context(), sess.ID, "run", "work")
 			testutil.FailErr(t, "read initial delivery state", err)
 			if ready {

@@ -63,7 +63,10 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 	m.Runner.Closeouts.RecordGroundingFriction(t.Context(), sid)
 	m.Runner.Closeouts.NoteCloseoutGroundingReject(t.Context(), sid, "citation", "offender", guidance.ParseCloseoutDraft("draft", citationmd.Options{}), nil)
 	m.Coordinator.Batch.AcceptSynthesis(t.Context(), sid)
-	checkpoints := sessioncheckpoint.New(t.TempDir(), t.TempDir(), storetest.New(t, testdbseed.DefaultProjectID))
+	checkpointSessions := storetest.New(t)
+	checkpointRoot := t.TempDir()
+	testdbseed.InsertSessionWithRoot(t, checkpointSessions.DB(), sid, testdbseed.DefaultProjectID, checkpointRoot)
+	checkpoints := sessioncheckpoint.New(t.TempDir(), checkpointRoot, checkpointSessions)
 	testutil.FailErr(t, "open checkpoint capture", m.Chats.Captures.Capture.Open(t.Context(), checkpoints, sid, "anchor"))
 	m.Promotion.SetMergeReconcilePaths(sid, []string{"a.go"})
 	calibrationSession := &api.Session{ID: sid}

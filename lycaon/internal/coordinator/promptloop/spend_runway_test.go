@@ -180,7 +180,7 @@ func TestPromptLoopSoftStopAllowsOneToolRoundThenClosesOut(t *testing.T) {
 		{ToolCalls: []api.ToolCall{{Name: "read", ID: "landing", Args: map[string]any{"path": "b"}}}},
 		{Content: "Landed with the best usable result."},
 	}}
-	messages := storetest.New(t, testdbseed.DefaultProjectID)
+	messages := storetest.New(t, testdbseed.DefaultProjectID, "project")
 	deps := StoreDeps(messages)
 	deps.Model.LLM = client
 	deps.Context.Policy = softStopToolPolicy{}
