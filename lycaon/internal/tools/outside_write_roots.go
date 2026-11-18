@@ -9,18 +9,13 @@ import (
 	"github.com/lycaon/lycaon/internal/fspath"
 )
 
-// OutsideWriteRoot is a folder beyond the project that this call's commands
-// may write, with the folders under it source history records elsewhere or
-// never.
+// OutsideWriteRoot pairs a granted folder with its excluded subtrees.
 type OutsideWriteRoot struct {
 	Path string
 	Omit []string
 }
 
-// OutsideWriteRoots are the write roots of this call's confinement profile that
-// the outside namespace records: its granted and durable grants, less scratch,
-// caches, host state and the attached roots, nested roots collapsed to the
-// outermost.
+// OutsideWriteRoots keeps non-overlapping recordable folders in the confinement profile.
 func (tc ToolContext) OutsideWriteRoots() []OutsideWriteRoot {
 	if tc.Source.OutsideRoot.ID == "" {
 		return nil

@@ -45,9 +45,7 @@ func (p *Provider) Capture(ctx context.Context, root string) *Scope {
 	return New(root, Options{Plane: plane, Floor: p.floor, Declared: declared})
 }
 
-// Outside applies the exclusion floor and the outside budgets to a write root
-// beyond the project. Ignore files there belong to whatever the folder holds,
-// so they exclude nothing; omit lists absolute folders under root to skip.
+// Outside applies the floor and outside budgets without reading ignore files.
 func (p *Provider) Outside(root string, omit []string) *Scope {
 	var plane Plane
 	var floor []string

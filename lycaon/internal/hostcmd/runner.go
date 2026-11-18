@@ -91,10 +91,7 @@ func StagePlaceholders(stages []exec.Stage) []StageResult {
 	return out
 }
 
-// SourceWindow is the command's source observation window. Until Settled, the
-// window may not have recorded all of the command's changes. Coverage states
-// each folder the window covered once that folder is decided; with no ID, no
-// window opened and every folder it was due to cover is not observed.
+// SourceWindow reports decided folder coverage. A missing ID means the window never opened.
 type SourceWindow struct {
 	ID       string                      `json:"id,omitempty"`
 	Settled  bool                        `json:"settled"`

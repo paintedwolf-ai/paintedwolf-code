@@ -12,12 +12,10 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// maxCoverageBoundaries bounds the boundaries one folder's coverage lists; the
-// rest are counted.
+// Keep a count for boundaries beyond the display limit.
 const maxCoverageBoundaries = 64
 
-// CoverageBoundary is one folder a partial observation did not enter, relative
-// to the covered folder.
+// CoverageBoundary names an unobserved subtree relative to the covered folder.
 type CoverageBoundary struct {
 	Path   string                         `json:"path"`
 	Reason api.SourceWindowBoundaryReason `json:"reason"`
@@ -26,8 +24,7 @@ type CoverageBoundary struct {
 // FolderCoverage is how much of one folder a window compared.
 type FolderCoverage struct {
 	RootID string
-	// Path is the folder within RootID: empty for an attached root's tree, the
-	// outside-namespace path of an outside write root.
+	// Path is empty for an entire attached root and relative to RootID otherwise.
 	Path string
 	// Folder is the folder's host path.
 	Folder            string
@@ -41,8 +38,6 @@ func notObserved(rootID, path, folder string, reason api.SourceWindowGapReason) 
 	return FolderCoverage{RootID: rootID, Path: path, Folder: folder, State: api.SourceWindowCoverageNotObserved, Reason: reason}
 }
 
-// gapReason classifies what stopped an observation. expired is the reason a
-// deadline stands for at that point.
 func gapReason(err error, expired, otherwise api.SourceWindowGapReason) api.SourceWindowGapReason {
 	switch {
 	case errors.Is(err, context.DeadlineExceeded):
@@ -54,8 +49,7 @@ func gapReason(err error, expired, otherwise api.SourceWindowGapReason) api.Sour
 	}
 }
 
-// observedCoverage is complete unless a boundary left part of the folder out.
-// Folders the window omitted on purpose are covered elsewhere or never recorded.
+// Intentional omissions belong to another observation or fall outside source history.
 func observedCoverage(rootID, path, folder string, boundaries []sourcesnapshot.Boundary) FolderCoverage {
 	out := FolderCoverage{RootID: rootID, Path: path, Folder: folder, State: api.SourceWindowCoverageComplete}
 	for _, boundary := range boundaries {
@@ -72,8 +66,6 @@ func observedCoverage(rootID, path, folder string, boundaries []sourcesnapshot.B
 	return out
 }
 
-// attachedCoverage states the window's attached roots once its final pass has
-// run; passErr is that pass's failure.
 func (w *openCommandWindow) attachedCoverage(passErr error) []FolderCoverage {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -157,8 +149,7 @@ func (s *Commands) windowCoverage(ctx context.Context, idsJSON string) (map[stri
 	return out, nil
 }
 
-// Coverage is what the window has decided so far, one entry per folder; a
-// folder still being observed is absent.
+// Coverage lists folders whose comparison has a verdict.
 func (o *OpenCommandWindow) Coverage() []FolderCoverage {
 	if o == nil || o.window == nil {
 		return nil
@@ -177,8 +168,7 @@ func (o *OpenCommandWindow) Coverage() []FolderCoverage {
 	return out
 }
 
-// NoteMissedLaunch records that a process of the window's program ran while
-// the window was not watching, so no folder can be stated complete.
+// NoteMissedLaunch marks coverage incomplete for a process that ran without a window.
 func (o *OpenCommandWindow) NoteMissedLaunch() {
 	if o == nil || o.window == nil {
 		return
@@ -189,8 +179,7 @@ func (o *OpenCommandWindow) NoteMissedLaunch() {
 	o.window.outside.noteMissed()
 }
 
-// MarkUnconfined records that a process of the window ran without confinement:
-// it could write anywhere beyond the project, so nothing there is observed.
+// MarkUnconfined replaces outside folders with one host-wide observation gap.
 func (o *OpenCommandWindow) MarkUnconfined() {
 	if o == nil || o.window == nil {
 		return
