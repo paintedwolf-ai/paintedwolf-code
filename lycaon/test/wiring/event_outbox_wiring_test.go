@@ -28,7 +28,7 @@ func TestOutboxBearingStoresDeliverThroughTheServedHubWiring(t *testing.T) {
 	defer unsubscribe()
 
 	before := outboxRowsEverWritten(t, h)
-	testutil.FailErr(t, "append message", h.Store.AppendMessages(ctx, sess.ID, wire.Message{
+	testutil.FailErr(t, "append message", h.Sessions.Store.AppendMessages(ctx, sess.ID, wire.Message{
 		Role: wire.MessageRoleUser, Content: "outbox probe",
 	}))
 	before = requireOutboxRow(t, h, before, "session store")

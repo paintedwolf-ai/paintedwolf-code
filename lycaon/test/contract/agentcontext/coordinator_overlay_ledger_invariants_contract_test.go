@@ -34,18 +34,6 @@ func stalePendingEnvelopeHistory(jobIDs ...string) []api.Message {
 	return msgs
 }
 
-func completeImplementerHostCycleHistory() []api.Message {
-	return append(stalePendingEnvelopeHistory(), api.Message{
-		Role:    api.MessageRoleAssistant,
-		Content: `<task job_id="j-done" agent_type="implementer" state="complete"><summary>done</summary></task>`,
-		WorkerSummary: &api.WorkerSummaryMeta{
-			WorkerID:  "j-done",
-			AgentType: "implementer",
-			Status:    api.WorkerSummaryStatusComplete,
-		},
-	})
-}
-
 func ledgerResolved(ids ...string) surface.ImplementSessionState {
 	out := make([]string, 0, len(ids))
 	for _, id := range ids {
@@ -59,22 +47,6 @@ func ledgerResolved(ids ...string) surface.ImplementSessionState {
 
 func ledgerResolvedEmpty() surface.ImplementSessionState {
 	return ledgerResolved()
-}
-
-func sameStringSet(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	seen := make(map[string]struct{}, len(a))
-	for _, s := range a {
-		seen[s] = struct{}{}
-	}
-	for _, s := range b {
-		if _, ok := seen[s]; !ok {
-			return false
-		}
-	}
-	return true
 }
 
 func TestCoordinatorOverlayLedgerInvariants_rejectedOverlaysLeavePromoteSurface(t *testing.T) {

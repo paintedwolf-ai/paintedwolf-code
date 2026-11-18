@@ -116,5 +116,3 @@ func TestPromptPartialsAreReachable(t *testing.T) {
 	sort.Strings(violations)
 	contractcheck.FailViolations(t, "prompt partials nothing renders", contractcheck.DedupeStrings(violations))
 }
-
-const progressClosureProcedure = packRoot + "/platform/shared/units/coordinator-progress-procedure.md"
