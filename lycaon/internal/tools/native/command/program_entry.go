@@ -79,7 +79,6 @@ type ProgramRuntime struct {
 	mu        sync.Mutex
 	outputs   map[string]*invocation.ProgramOutputRetention
 	resources map[string]*sessionOutputResources
-	disabled  atomic.Bool
 }
 
 func (r *ProgramRuntime) clock() commandprogram.Clock {
@@ -149,9 +148,6 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	source, _ := args["command"].(string)
 	if source == "" {
 		return "", toolrejection.RejectInvalidArguments("COMMAND_ARGV_REQUIRED", map[string]any{"field": "command"})
-	}
-	if r != nil && r.disabled.Load() {
-		return "", toolrejection.RejectInvalidArguments("COMMAND_PROGRAMS_DISABLED", map[string]any{"tool": tool})
 	}
 	if r == nil || r.Executor == nil || r.Recorder == nil || r.Evaluate == nil || r.Supervisor == nil || r.Sessions == nil || r.Projector == nil || r.Provenance == nil || r.SourceObserver == nil {
 		return "", fmt.Errorf("command program runtime is not configured")
