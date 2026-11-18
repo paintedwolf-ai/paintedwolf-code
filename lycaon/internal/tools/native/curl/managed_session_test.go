@@ -46,12 +46,15 @@ func TestCurlScreensManagedValuesAcrossCompressedTransferAndPublication(t *testi
 			t.Error(err)
 		}
 	})
-	common := []string{"-s", "-v", "--compressed", "--managed-cookie-jar", "browser", "--managed-token-jar", "api"}
+	withJars := func(args ...string) run {
+		common := []string{"-s", "-v", "--compressed", "--managed-cookie-jar", "browser", "--managed-token-jar", "api"}
+		return h.curl(t.Context(), append(common, args...)...)
+	}
 	h.tc.Identity.ToolCallID = "compressed-login"
-	login := h.curl(t.Context(), append(append([]string{}, common...), "--capture-token", "session=json:session", "-D", "login.headers", server.URL+"/login")...)
+	login := withJars("--capture-token", "session=json:session", "-D", "login.headers", server.URL+"/login")
 	testutil.FailErr(t, "capture compressed response", login.err)
 	h.tc.Identity.ToolCallID = "compressed-use"
-	use := h.curl(t.Context(), append(append([]string{}, common...), "-H", "X-Session: {{token:session}}", "--data-raw", "session={{token:session}}", "-i", "-o", "reply.json", "-w", "%{http_code}", server.URL+"/use")...)
+	use := withJars("-H", "X-Session: {{token:session}}", "--data-raw", "session={{token:session}}", "-i", "-o", "reply.http", "-w", "%{http_code}", server.URL+"/use")
 	testutil.FailErr(t, "publish screened response", use.err)
 	if len(delivered) != 1 || !<-delivered || use.stdout != "200" {
 		t.Fatal("issuer did not receive the scoped request and return success")
@@ -61,7 +64,7 @@ func TestCurlScreensManagedValuesAcrossCompressedTransferAndPublication(t *testi
 			t.Fatal("exchange lost managed jar evidence")
 		}
 	}
-	reply := h.read("reply.json")
+	reply := h.read("reply.http")
 	if !strings.Contains(reply, `"confirmed":true`) || !strings.Contains(login.stdout, `"confirmed":true`) {
 		t.Fatal("decoded public response fields did not survive screening")
 	}
