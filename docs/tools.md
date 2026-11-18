@@ -906,7 +906,7 @@ Results count searched text files, binary skips, unreadable files, byte-capped f
 
 ## The open document is the file
 
-A file the person has open in the editor is its editor document, for the agent as for the person. Agent reads of that path serve the document's draft, unsaved edits included; agent writes land in the document and save it. Inside `command` the native utilities follow the same rule. Whatever the agent launches that reads the tree from disk starts from the person's saved drafts. There is one text per open file, and it is the one the person is looking at.
+A file the person has open in the editor is its editor document, for the agent as for the person. Agent reads of that path serve the document's draft, unsaved edits included; agent writes land in the document and save it. Inside `command` the native utilities follow the same rule. A program, Git command or terminal the agent launches reads disk, so it starts from the person's saved drafts. There is one text per open file, and it is the one the person is looking at.
 
 | Tool | With an open document |
 |------|-----------------------|
@@ -916,6 +916,7 @@ A file the person has open in the editor is its editor document, for the agent a
 | Native utilities inside `command` | Read the draft. An operation that changes, moves or removes the path saves the draft first, then acts on the file |
 | Installed programs in `command` and `verify`, Git forms that read or stage the working tree, `terminal_open`, `terminal_send` | Read saved bytes. Once the launch is admitted and before the process starts, every unsaved document of the project is saved, each contribution keeping its author; a call refused before its process starts saves nothing. A draft that cannot be saved never stops the launch: the process reads that file's earlier bytes and the result names it in `unsaved_documents` (below) |
 | Git forms that read only history, refs, configuration or a remote; `terminal_read`, `terminal_snapshot` | Save nothing |
+| Page tools given a `project_dir`, `scan_pack`, MCP tools | Read saved bytes through host services with their own lifetimes; drafts are not saved for them |
 
 `unsaved_documents` lists up to 16 drafts as `path` and `cause`, and `omitted_unsaved_documents` counts the rest. It is absent when every draft was saved. A `command` or `verify` result states the drafts any of its launches left unsaved, Git's among them; `terminal_open` and `terminal_send` state their own.
 
