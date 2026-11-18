@@ -14,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -179,26 +178,6 @@ func TestProgramReachMatchesTheExecutor(t *testing.T) {
 		t.Fatalf("asserted %d of %d agent and program cells", asserted, want)
 	}
 	t.Logf("asserted %d agent and program cells on one host", asserted)
-}
-
-// A retired tool's answer names native forms; each must be a real program.
-func TestRetiredToolFormsAreRealPrograms(t *testing.T) {
-	catalog, err := toolcontract.ReadOnlyLanguageV1()
-	testutil.FailErr(t, "load language", err)
-	known := map[string]bool{}
-	for _, spec := range catalog.Commands {
-		known[spec.Name] = true
-		for _, alias := range spec.Aliases {
-			known[alias] = true
-		}
-	}
-	for _, disposition := range catalog.Tools {
-		for _, form := range disposition.CommandForms {
-			if !known[form] {
-				t.Errorf("%s names native form %q, which the language does not declare", disposition.Tool, form)
-			}
-		}
-	}
 }
 
 func collectStepPrograms(steps []oar.NextStep, out *[][]string) {

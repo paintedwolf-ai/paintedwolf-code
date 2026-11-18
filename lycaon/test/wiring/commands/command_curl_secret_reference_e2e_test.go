@@ -73,9 +73,16 @@ func TestCommandCurlUnsupportedFormDoesNotLaunchInstalledCurl(t *testing.T) {
 	_, err := run.h.Sessions.Manager.Submissions.Prompt(t.Context(), run.session, "call the service")
 	testutil.FailErr(t, "prompt", err)
 	outcomes := run.outcomes(t)
-	if len(outcomes) != 1 || outcomes[0].stopCode == "" {
+	if len(outcomes) != 1 || outcomes[0].stopCode != "COMMAND_OPTION_UNSUPPORTED" {
 		run.logResults(t)
-		t.Fatalf("outcomes = %+v", outcomes)
+		t.Fatalf("outcomes = %+v, want one COMMAND_OPTION_UNSUPPORTED refusal", outcomes)
+	}
+	var gaps int
+	testutil.FailErr(t, "count native gap launches", run.h.DB.QueryRowContext(t.Context(), `SELECT count(*) FROM invocation_program_executions e
+		JOIN invocation_programs p ON p.id = e.program_id JOIN invocation_receipts r ON r.id = p.parent_receipt_id
+		WHERE r.session_id = ? AND e.native_gap_json != ''`, run.session).Scan(&gaps))
+	if gaps != 0 {
+		t.Fatalf("an unsupported curl form launched the installed program %d times", gaps)
 	}
 	if got := seen(); len(got) != 0 {
 		t.Fatalf("an unsupported form reached the service %d times", len(got))

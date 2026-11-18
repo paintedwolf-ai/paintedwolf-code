@@ -5,17 +5,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/test/wiring"
-
-	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
@@ -23,9 +18,11 @@ import (
 	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/worker"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/promotefix"
+	"github.com/lycaon/lycaon/test/wiring"
 	workerpeercoord "github.com/lycaon/lycaon/test/wiring/fixtures/worker_peer_coordination"
 )
 
@@ -73,34 +70,6 @@ func TestCoordinatorParallelWorkersReplayRootSessionKeyParity(t *testing.T) {
 	}
 }
 
-func TestCoordinatorParallelWorkersReplayOverlayPathReadForbidden(t *testing.T) {
-	fix := workerpeercoord.Load(t)
-	cfg, err := guidance.LoadHintConfigStock()
-	testutil.FailErr(t, "load hints", err)
-	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	rejectFmt := guidance.NewStaticRejectFormatter(cfg)
-
-	sess := &wire.Session{ID: "parent-replay", AgentType: "coordinator"}
-	gc := oar.NewGuardContext()
-	guard.ObserveCoordinatorWorkerBranchPath(
-		sess,
-		"read",
-		map[string]any{"path": fix.OverlayReadPath},
-		gc)
-
-	if _, observed := gc.RejectData[guard.CoordinatorOverlayPathReadForbiddenCode]; !observed {
-		t.Fatalf("guard did not stamp reject data; facts: worker_branch_path=%v", gc.Workers.PathIsWorkerBranch)
-	}
-	if !gc.Workers.PathIsWorkerBranch {
-		t.Fatal("path_is_worker_branch fact is unset")
-	}
-	formatted, err := rejectFmt.Format(guard.CoordinatorOverlayPathReadForbiddenCode, gc.RejectData[guard.CoordinatorOverlayPathReadForbiddenCode])
-	testutil.FailErr(t, "format", err)
-	if !strings.Contains(formatted, guard.CoordinatorOverlayPathReadForbiddenCode) {
-		t.Fatalf("reject = %v", formatted)
-	}
-}
-
 func TestCoordinatorParallelWorkersReplayLineShiftAtomicRejection(t *testing.T) {
 	fix := workerpeercoord.Load(t)
 	cfg, err := guidance.LoadHintConfigStock()
@@ -145,8 +114,8 @@ func TestCoordinatorParallelWorkersReplayLineShiftAtomicRejection(t *testing.T) 
 			}},
 		}},
 	})
-	if mergeErr == nil {
-		t.Fatal("expected atomic promote to reject invalid resolution")
+	if reject := toolrejection.AsToolReject(mergeErr); reject == nil || reject.Code != worker.OverlayPromoteResolutionsRequiredCode {
+		t.Fatalf("promote error = %v, want typed %s refusal for the out-of-range hunk", mergeErr, worker.OverlayPromoteResolutionsRequiredCode)
 	}
 	if _, statErr := os.Stat(filepath.Join(dir, "safe.go")); !os.IsNotExist(statErr) {
 		t.Fatalf("rejected promote changed safe.go: %v", statErr)

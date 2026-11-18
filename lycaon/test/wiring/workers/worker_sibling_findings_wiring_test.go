@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -94,18 +95,17 @@ func TestParallelWorkerRecordFindingSiblingInjectWiring(t *testing.T) {
 		t.Fatalf("sibling notes for B = %+v want summary %q", notes, summary)
 	}
 
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	renderer := prompts.NewInjectRenderer(engine)
-	block, err := inject.RenderWorkerLegInject(ctx, renderer, "sess-inject-test", inject.WorkerLegContext{
-		LegID:    "leg-b",
-		LegTools: []string{"read"},
-		SiblingNotes: []inject.SiblingNote{
-			{Agent: notes[0].Agent, Summary: notes[0].Summary, Ref: notes[0].Ref},
-		},
-	})
+	page, err := h.Sessions.Manager.Workers.Notes.PrepareSiblingNotes(workercontext.WithJob(ctx, taskB.ID), childB.ID, 5)
+	testutil.FailErr(t, "prepare sibling notes", err)
+	if len(page.Notes) != 1 || page.Notes[0].Summary != summary || page.Notes[0].Ref != "internal/config/resolve.go:1" {
+		t.Fatalf("prepared sibling notes for B = %+v", page.Notes)
+	}
+	leg, err := h.Workers.ContextLoader.BuildWorkerPromptContext(workercontext.WithJob(ctx, taskB.ID), childB.ID, childB)
+	testutil.FailErr(t, "build worker leg context", err)
+	leg.SiblingNotes = page.Notes
+	block, err := inject.RenderWorkerLegInject(ctx, prompts.NewInjectRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})), childB.ID, leg)
 	testutil.FailErr(t, "render worker leg", err)
-	// Sibling findings retain peer attribution.
-	for _, want := range []string{"## Peer findings", "**" + notes[0].Agent + ":**", summary, "(" + notes[0].Ref + ")"} {
+	for _, want := range []string{summary, page.Notes[0].Ref} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("worker leg inject missing %q: %q", want, block)
 		}

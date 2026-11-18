@@ -23,6 +23,13 @@ func TestToolProfilesListForPromptHaveProviderArgsSchema(t *testing.T) {
 
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "LoadToolProfiles", err)
+	hasImplement := false
+	for _, prof := range profiles {
+		hasImplement = hasImplement || prof.ID == "implement"
+	}
+	if !hasImplement {
+		t.Fatalf("bundled tool profiles %d lack the implement profile", len(profiles))
+	}
 
 	policy := h.Sessions.Manager.Coordinator.Guards.Policy()
 	for _, prof := range profiles {

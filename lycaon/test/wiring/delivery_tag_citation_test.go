@@ -205,16 +205,15 @@ func TestPipelineCoordinateRepairsThroughACommandExcerpt(t *testing.T) {
 	h, session := deliveryTagSession(t, script)
 	_, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), session, "read the file")
 	testutil.FailErr(t, "prompt", err)
-	msgs, err := h.Sessions.Manager.Runner.Transcript.GetMessages(t.Context(), session)
-	testutil.FailErr(t, "read messages", err)
-	var last wire.Message
-	for _, msg := range msgs {
-		if msg.Role == wire.MessageRoleAssistant && len(msg.ToolCalls) == 0 && !wire.IsAgentNoteMessage(msg) {
-			last = msg
-		}
+	if script.next != len(script.steps) {
+		t.Fatalf("the bare coordinate was accepted after %d of %d steps", script.next, len(script.steps))
 	}
-	if last.Grounding == nil || !last.Grounding.Traced || last.Grounding.HostAssembled {
-		t.Fatalf("the excerpt on the command did not ground: %q %+v", last.Content, last.Grounding)
+	g := lastAnswerGrounding(t, h, session)
+	if g == nil || !g.Traced || g.HostAssembled || len(g.CitedEvidence) != 1 {
+		t.Fatalf("the excerpt on the command did not ground: %+v", g)
+	}
+	if cited := g.CitedEvidence[0]; cited.Handle != "command#1" || cited.Excerpt != "bravo" || cited.Verdict == wire.CitationVerdictUnverifiable {
+		t.Fatalf("cited evidence = %+v, want the command#1 excerpt grounded", cited)
 	}
 }
 

@@ -25,6 +25,9 @@ func TestObserveCoordinatorWorkerBranchPathBlocksSandboxPath(t *testing.T) {
 	if gc.RejectData[guard.CoordinatorOverlayPathReadForbiddenCode]["path"] != "shellsim/builtins.py" {
 		t.Fatalf("reject path = %#v want repo-relative", gc.RejectData[guard.CoordinatorOverlayPathReadForbiddenCode])
 	}
+	if !gc.Workers.PathIsWorkerBranch {
+		t.Fatal("path_is_worker_branch fact is unset")
+	}
 }
 
 func TestObserveCoordinatorWorkerBranchPathBlocksCommandCwd(t *testing.T) {

@@ -53,7 +53,7 @@ func TestCoordinatorBatchPhaseAdvancesOnTaskDispatch(t *testing.T) {
 	}
 }
 
-func TestCoordinatorBatchPhaseSynthesizeAfterWorkerDrain(t *testing.T) {
+func TestCoordinatorBatchPhaseIntegrateAfterWorkerDrain(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{
 			Pattern: "TODO comment",

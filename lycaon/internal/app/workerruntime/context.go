@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workercontext"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
@@ -96,8 +97,13 @@ func (r *Runtime) wireWorkerContext(deps Dependencies) error {
 		if sess == nil {
 			return nil
 		}
+		metas := policy.ListForPrompt(ctx, sess, profileID)
+		// The leg names exactly what the worker's request offers.
+		if machine := deps.Sessions.Manager.Profiles.ProjectMachine(ctx, sess, profileID); machine.Compiled() {
+			metas = tools.HideSkillsReadWhenEmpty(metas, machine.SkillCount)
+		}
 		var names []string
-		for _, meta := range policy.ListForPrompt(ctx, sess, profileID) {
+		for _, meta := range metas {
 			if strings.TrimSpace(meta.Name) != "" {
 				names = append(names, meta.Name)
 			}

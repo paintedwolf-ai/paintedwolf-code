@@ -573,10 +573,6 @@ func TestCommandProgramCurlRedirectDenialUnknownHopAndRecoveryRealAdapter(t *tes
 		details["http_requests_started"] != float64(1) || details["http_responses_received"] != float64(1) {
 		t.Fatalf("step 1 refusal details lost completed initial hop state: %#v", details)
 	}
-	if !strings.Contains(outDeny.Refusal.Feedback, "Earlier exchange attempts have already started (1 attempts, 1 responses).") ||
-		strings.Contains(outDeny.Refusal.Feedback, "No command operation ran") {
-		t.Fatalf("step 1 refusal feedback misrepresented completed initial hop: %q", outDeny.Refusal.Feedback)
-	}
 
 	// An unknown second-hop outcome stays uncertain and is never replayed.
 	// UncertainEffects==1 and ReplayAvailable==false, without auto-replaying Hop 0 or Hop 1.

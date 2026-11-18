@@ -2,7 +2,7 @@ package workflows
 
 import (
 	"context"
-	"strings"
+	"slices"
 	"testing"
 	"time"
 
@@ -84,18 +84,21 @@ func TestWorkflowResumption_100RetainsPromptRulesAndGateFeedback(t *testing.T) {
 		t.Fatalf("expected render coordinator-security-challenge for 1.0.0, got %q", binding.Render)
 	}
 
-	// Gate feedback resolution for 1.0.0 resolves the archived copy of
-	// evidence_passed:survey_challenged, which accepts only CHALLENGED and never
-	// mentions NEEDS_INVESTIGATION (the live 2.0.0 feedback adds it).
-	archiveCatalog := runGateFeedback(t, h, sess.ID)
-	obs := archiveCatalog.ProjectObligations(ctx, []string{"evidence_passed:survey_challenged"}, "", map[string]any{})
-	if len(obs) == 0 {
-		t.Fatal("expected obligation for evidence_passed:survey_challenged")
+	// Gate feedback for a 1.0.0 run resolves the archived copy of
+	// evidence_passed:survey_challenged, which differs from the live catalog's.
+	gate := []string{"evidence_passed:survey_challenged"}
+	archived := runGateFeedback(t, h, sess.ID).ProjectObligations(ctx, gate, "", map[string]any{})
+	if len(archived) == 0 || len(archived[0].Satisfy) == 0 {
+		t.Fatalf("archived obligation for %s = %+v, want satisfy steps", gate[0], archived)
 	}
-	for _, step := range obs[0].Satisfy {
-		if strings.Contains(step, "NEEDS_INVESTIGATION") {
-			t.Fatalf("sealed 1.0.0 gate feedback should not mention NEEDS_INVESTIGATION, got: %s", step)
-		}
+	live, err := feedback.LoadGateFeedbackCatalog()
+	testutil.FailErr(t, "LoadGateFeedbackCatalog", err)
+	current := live.ProjectObligations(ctx, gate, "", map[string]any{})
+	if len(current) == 0 {
+		t.Fatalf("live catalog has no obligation for %s", gate[0])
+	}
+	if slices.Equal(archived[0].Satisfy, current[0].Satisfy) {
+		t.Fatal("1.0.0 run reads the live gate feedback instead of its archived copy")
 	}
 }
 

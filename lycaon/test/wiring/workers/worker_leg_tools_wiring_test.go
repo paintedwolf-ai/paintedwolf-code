@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/test/wiring"
-
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
+	"github.com/lycaon/lycaon/test/wiring"
 )
 
 var implementDefaultAgents = []string{
@@ -31,7 +31,7 @@ func TestWorkerLegToolsMatchListForPrompt(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{}, dir)
 	testutil.FailErr(t, "create session", err)
 	policy := h.Sessions.Manager.Coordinator.Guards.Policy()
-	builder := wiring.CompositeWorkerWithPolicy(h.AgentRegistry, policy)
+	builder := h.Workers.ContextLoader
 
 	for _, agentType := range implementDefaultAgents {
 		t.Run(agentType, func(t *testing.T) {
@@ -42,10 +42,22 @@ func TestWorkerLegToolsMatchListForPrompt(t *testing.T) {
 			testutil.FailErr(t, "SpawnChild", err)
 			prof, err := h.AgentRegistry.Get(agentType)
 			testutil.FailErr(t, "agents.Get", err)
-			schema := wiring.SortedToolNamesFromMeta(policy.ListForPrompt(ctx, child, prof.ToolProfile))
-			leg, err := builder.BuildWorkerPromptContext(t.Context(), child.ID, child)
+			// skills_read follows the profile's skill catalog, which the explore
+			// leg test checks against the offered request; compare the rest.
+			var schema []string
+			for _, name := range wiring.SortedToolNamesFromMeta(policy.ListForPrompt(ctx, child, prof.ToolProfile)) {
+				if name != "skills_read" {
+					schema = append(schema, name)
+				}
+			}
+			leg, err := builder.BuildWorkerPromptContext(workercontext.WithJob(t.Context(), "leg-tools-"+agentType), child.ID, child)
 			testutil.FailErr(t, "BuildWorkerPromptContext", err)
-			got := append([]string(nil), leg.LegTools...)
+			var got []string
+			for _, name := range leg.LegTools {
+				if name != "skills_read" {
+					got = append(got, name)
+				}
+			}
 			sort.Strings(got)
 			if !reflect.DeepEqual(got, schema) {
 				t.Fatalf("LegTools %v != schema %v", got, schema)

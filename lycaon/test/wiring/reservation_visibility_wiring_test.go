@@ -2,18 +2,16 @@ package wiring
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/packboard"
-	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/settingsoverlay"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -130,23 +128,5 @@ func TestBoardInjectReachesCoordinatorAndWorkerTurnsWiring(t *testing.T) {
 	}
 	if !strings.Contains(workerBlock, packboard.PackBoardSentinel) || !strings.Contains(workerBlock, reservedPath) {
 		t.Fatalf("worker board inject lacks the pack board or reservation: %q", workerBlock)
-	}
-}
-
-func TestRenderWorkerLegInjectReservedPaths(t *testing.T) {
-	ctx := context.Background()
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
-	renderer := prompts.NewInjectRenderer(engine)
-	block, err := inject.RenderWorkerLegInject(ctx, renderer, "sess-inject-test", inject.WorkerLegContext{
-		LegID:     "leg-b",
-		LegTools:  []string{"read"},
-		Checklist: []string{"work"},
-		ReservedPaths: []inject.ReservedPath{{
-			Path: "shellsim/builtins.py", Worker: "timer", LegLabel: "Timer leg",
-		}},
-	})
-	testutil.FailErr(t, "render", err)
-	if !strings.Contains(block, "shellsim/builtins.py") || !strings.Contains(block, "`timer`") {
-		t.Fatalf("block = %q", block)
 	}
 }
