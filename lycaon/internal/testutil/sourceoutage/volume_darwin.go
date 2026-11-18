@@ -4,13 +4,13 @@ package sourceoutage
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -21,6 +21,8 @@ import (
 	"github.com/go-git/go-billy/v5/osfs"
 	nfs "github.com/willscott/go-nfs"
 	nfshelper "github.com/willscott/go-nfs/helpers"
+
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 )
 
 // Mode is how the kernel treats a call the outage interrupts.
@@ -70,7 +72,7 @@ func Mount(t *testing.T, mode Mode) *Volume {
 		options += ",soft,timeo=10,retrans=2"
 	}
 	dir := t.TempDir()
-	if out, err := exec.Command("/sbin/mount_nfs", "-o", options, "127.0.0.1:/", dir).CombinedOutput(); err != nil {
+	if out, err := host(t, "/sbin/mount_nfs", "-o", options, "127.0.0.1:/", dir); err != nil {
 		r.close()
 		_ = server.Close()
 		t.Fatalf("mount_nfs: %v: %s", err, out)
@@ -88,7 +90,7 @@ func Mount(t *testing.T, mode Mode) *Volume {
 	t.Cleanup(func() {
 		_ = commands.Close()
 		r.restore()
-		if out, err := exec.Command("/sbin/umount", "-f", dir).CombinedOutput(); err != nil {
+		if out, err := host(t, "/sbin/umount", "-f", dir); err != nil {
 			t.Errorf("unmount %s: %v: %s", dir, err, out)
 		}
 		r.close()
@@ -96,6 +98,16 @@ func Mount(t *testing.T, mode Mode) *Volume {
 		_ = os.RemoveAll(control)
 	})
 	return volume
+}
+
+// host runs a mount helper through the launch door, as the mounted adapter does.
+func host(t *testing.T, bin string, args ...string) ([]byte, error) {
+	out, code, err := execpkg.Run(context.WithoutCancel(t.Context()), bin, args,
+		execpkg.ExecOpts{Launch: execpkg.HostLaunch("source outage volume"), NoTimeout: true})
+	if err == nil && code != 0 {
+		err = fmt.Errorf("%s exited %d", filepath.Base(bin), code)
+	}
+	return out, err
 }
 
 // Stop cuts the transport: open connections close, and new ones are held
