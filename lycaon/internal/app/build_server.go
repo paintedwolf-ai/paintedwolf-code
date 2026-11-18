@@ -181,6 +181,10 @@ func (b *serveBuilder) wireServer() error {
 		return err
 	}
 	b.server.Server = api.NewServer(deps, b.startup.logger, b.identity.Token)
+	b.startup.resources.Track("contribution-frames", 160, func(context.Context) error {
+		b.server.Server.Admin.Extensions.Contributions.ReleaseFrames()
+		return nil
+	})
 	watch := b.server.Server.Sources.Watch
 	b.startup.resources.Track("api-source-watches", 22, func(ctx context.Context) error { watch.Stop(ctx); return watch.Wait(ctx) })
 	return registerServerHooks(b, extensionJournal)
