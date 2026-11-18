@@ -189,7 +189,7 @@ func testUnixSocketCookieIssuerReplacement(t *testing.T, value string) {
 	testOrdinaryCookieTransport(t, ctx, executor, review, &tc, args, invoke, decoyServer.Handler, observed, &reissue, value)
 }
 
-// startCookieIssuer owns the original endpoint and counts cookies returned to it.
+// startCookieIssuer counts cookies returned to the original endpoint.
 func startCookieIssuer(t *testing.T, path, value string) (*http.Server, *atomic.Int64) {
 	t.Helper()
 	listener, err := net.Listen("unix", path)
@@ -207,8 +207,7 @@ func startCookieIssuer(t *testing.T, path, value string) (*http.Server, *atomic.
 	return server, requests
 }
 
-// The journal records the authenticated human disclosure, not a socket lease
-// standing in for secret authority.
+// The journal records authenticated human disclosure.
 func assertCookieDecisionLedger(t *testing.T, ctx context.Context, store *authzcontext.SQLStore, call string, outcome authzcontext.EventOutcome) {
 	t.Helper()
 	rows, err := store.ListEvents(ctx, "chat")

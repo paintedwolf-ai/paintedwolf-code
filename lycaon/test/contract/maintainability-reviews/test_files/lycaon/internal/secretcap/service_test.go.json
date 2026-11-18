@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/secretcap/service_test.go",
+  "kind": "test_suite",
+  "workstream": "credential-fixture-boundaries",
+  "disposition": "retain",
+  "reason": "Retain 457 lines of managed secret lifecycle contracts. Creation, exact protected values, scoped resolution, revocation and cleanup exercise the same persisted capability and vault boundary. Real encrypted opens replace unloaded fixtures; the assertions remain intact. Keep this bounded suite at its measured size.",
+  "reviewed_commit": "d771f280c226a3a8412f7aca8a5a2b7d9647b9fb",
+  "ceiling": 457,
+  "boundaries": {
+    "lycaon/internal/secretcap/service_test.go": "75f462ba3a869e4670feea334a75372638e0356c49b8756e79341a51c566a660"
+  }
+}
