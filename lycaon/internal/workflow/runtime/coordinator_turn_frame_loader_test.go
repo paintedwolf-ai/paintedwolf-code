@@ -2,6 +2,7 @@ package runtime_test
 
 import (
 	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
+	"github.com/lycaon/lycaon/internal/workflow/workflowtest"
 
 	"context"
 	"encoding/json"
@@ -85,7 +86,7 @@ phases:
 	testutil.FailErr(t, "workflow.RegistryFromDirs failed", err)
 	wfMgr := workflow.NewManager(workflowpersistence.New(sqlDB), store, manifestReg, nil)
 	wfMgr.Resolver.SessionStore = sessionWF
-	workflow.WireBlueprintDepsForTest(wfMgr, dir)
+	workflowtest.WireBlueprintDeps(wfMgr, dir)
 	if _, err := wfMgr.Starts.StartHuman(context.Background(), sess.ID, wire.StartWorkflowRunRequest{
 		WorkflowID: "hotfix-session", WorkflowVersion: "1.0.0",
 	}); err != nil {

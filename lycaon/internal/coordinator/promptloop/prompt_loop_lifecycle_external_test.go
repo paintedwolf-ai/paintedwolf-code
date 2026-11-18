@@ -3,6 +3,7 @@ package promptloop_test
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
@@ -21,7 +22,7 @@ func TestSendWithdrawsObsoleteToolProposalAndContinuesSameLoop(t *testing.T) {
 		{Content: "I will read the old path.", ToolCalls: []api.ToolCall{{ID: "tc-old", Name: "read", Args: map[string]any{"path": "old.go"}}}},
 		{Content: "Understood. I will use the new path."},
 	}}
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	toolRan := false
 	testutil.FailErr(t, "register read", reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		toolRan = true

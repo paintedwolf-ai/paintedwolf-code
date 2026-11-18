@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -96,7 +97,7 @@ func TestPromptLoopOpenAIProviderTwoTurns(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	if err := reg.Register("read", func(_ context.Context, _ map[string]any, _ tools.ToolContext) (string, error) {
 		return "file-body", nil
 	}); err != nil {
@@ -189,7 +190,7 @@ func TestPromptLoopReassignsCollidingToolCallIDsAcrossTurns(t *testing.T) {
 	}))
 	defer mockServer.Close()
 
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	if err := reg.Register("read", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 		return "body-of-" + fmt.Sprint(args["path"]), nil
 	}); err != nil {

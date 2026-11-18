@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,7 +43,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 				response.FollowUpText = "complete"
 			}
 			recorder := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{response}}))
-			registry := tools.NewStubRegistry()
+			registry := toolstest.NewRegistry()
 			testutil.FailErr(t, "register command tool", registry.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				return "", nil
 			}))
@@ -198,7 +199,7 @@ func TestCoordinatorPromptIncludesPackBoardInject(t *testing.T) {
 	}
 	rec := llm.NewRecordingClient(llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}}))
 	store := store.NewMemory()
-	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(store, session.Models{Client: rec, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	oartest.InstallCloseoutPolicy(t, mgr)
 	wirePromptTestManager(t, mgr)
 	mgr.SetPromptEngine(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}))

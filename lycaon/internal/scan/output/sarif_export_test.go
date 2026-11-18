@@ -1,6 +1,7 @@
 package output
 
 import (
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	"reflect"
 	"strings"
 	"testing"
@@ -13,7 +14,7 @@ import (
 
 func TestExportSARIFBuildsRuns(t *testing.T) {
 	data, err := ExportSARIF([]api.SecurityFinding{
-		scanfindings.FixtureFinding("opengrep:test-rule", api.FindingLevelHigh, "example finding", "src/a.go", 10),
+		findingstest.Finding("opengrep:test-rule", api.FindingLevelHigh, "example finding", "src/a.go", 10),
 	}, false)
 	if err != nil {
 		t.Fatalf("ExportSARIF: %v", err)
@@ -27,7 +28,7 @@ func TestExportSARIFBuildsRuns(t *testing.T) {
 }
 
 func TestExportSARIFPreservesCriticalExtension(t *testing.T) {
-	finding := scanfindings.FixtureFinding("critical", api.FindingLevelCritical, "critical", "a.go", 1)
+	finding := findingstest.Finding("critical", api.FindingLevelCritical, "critical", "a.go", 1)
 	data, err := ExportSARIF([]api.SecurityFinding{finding}, false)
 	if err != nil {
 		t.Fatalf("ExportSARIF: %v", err)
@@ -105,7 +106,7 @@ func TestExportSARIFPreservesNormalizedFindingShape(t *testing.T) {
 
 func TestExportSARIFGroupsRunsByDriver(t *testing.T) {
 	data, err := ExportSARIF([]api.SecurityFinding{
-		scanfindings.FixtureFinding("r1", api.FindingLevelHigh, "a", "a.go", 1),
+		findingstest.Finding("r1", api.FindingLevelHigh, "a", "a.go", 1),
 		scanfindings.BuildSecurityFinding(scanfindings.FindingBuildOpts{
 			DriverID: "gitleaks", ToolName: "Gitleaks", RuleID: "gitleaks:pat",
 			Level: api.FindingLevelHigh, Message: "secret", Kind: api.FindingKindSecret,

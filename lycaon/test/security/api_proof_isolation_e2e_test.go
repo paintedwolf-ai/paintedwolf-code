@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -24,7 +25,7 @@ func TestSharedTreeFanOutAdvisoryOnly(t *testing.T) {
 func TestIsolatedFanOutRequiresWorkspaceBinder(t *testing.T) {
 	ctx := context.Background()
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
-		Agents: orchestration.NewMemoryAgentRegistryForTest(),
+		Agents: orchestrationtest.Registry(t),
 	})
 	_, err := orch.Run(ctx, orchestration.RunRequest{
 		SessionID: "sess-e2e",

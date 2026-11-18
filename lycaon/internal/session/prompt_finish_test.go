@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 	"time"
 
@@ -16,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -43,7 +43,7 @@ func TestFinishPromptExecutionPropagatesIdlePersistenceFailure(t *testing.T) {
 	ctx := context.Background()
 	wantErr := errors.New("status store unavailable")
 	st := &sessionStatusFailStore{Memory: store.NewMemory(), err: wantErr}
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark visible turn busy", st.Memory.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
@@ -60,7 +60,7 @@ func TestFinishPromptExecutionPropagatesTopologyReportFailure(t *testing.T) {
 	ctx := context.Background()
 	wantErr := errors.New("topology store unavailable")
 	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	view := &recordingWorkflowView{topologyErr: wantErr}
 	workflowFixture1 := view
 	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture1, Policy: workflowFixture1, Ambient: workflowFixture1, Blueprints: workflowFixture1, Batch: workflowFixture1, Slash: workflowFixture1, Requests: workflowFixture1, Feedback: workflowFixture1, Transcript: workflowFixture1, Asks: workflowFixture1, Fanout: workflowFixture1, Phases: workflowFixture1, Reports: workflowFixture1, Recovery: workflowFixture1, Cleanup: workflowFixture1})
@@ -80,7 +80,7 @@ func TestFinishPromptExecutionReconcilesWorkflowCompletion(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
 	view := &recordingWorkflowView{}
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	workflowFixture2 := view
 	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture2, Policy: workflowFixture2, Ambient: workflowFixture2, Blueprints: workflowFixture2, Batch: workflowFixture2, Slash: workflowFixture2, Requests: workflowFixture2, Feedback: workflowFixture2, Transcript: workflowFixture2, Asks: workflowFixture2, Fanout: workflowFixture2, Phases: workflowFixture2, Reports: workflowFixture2, Recovery: workflowFixture2, Cleanup: workflowFixture2})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -95,7 +95,7 @@ func TestFinishPromptExecutionReconcilesWorkflowCompletion(t *testing.T) {
 func TestFinishPromptExecutionKeepsUserTurnBusyAcrossHostContinuation(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	hub := events.NewMemoryHub()
 	mgr.SetEventPublisher(&events.Publisher{Hub: hub})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -161,7 +161,7 @@ func assertNoSessionIdleEvent(t *testing.T, eventCh <-chan api.EventEnvelope) {
 func TestFinishPromptExecutionKeepsUserTurnBusyWhileWaitIsArmed(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark visible turn busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
@@ -191,7 +191,7 @@ func TestFinishPromptExecutionPropagatesCompletionReconciliationFailure(t *testi
 	ctx := t.Context()
 	wantErr := errors.New("workflow completion unavailable")
 	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	workflowFixture3 := &recordingWorkflowView{completionErr: wantErr}
 	mgr.SetWorkflowDomains(&WorkflowDomains{Runs: workflowFixture3, Policy: workflowFixture3, Ambient: workflowFixture3, Blueprints: workflowFixture3, Batch: workflowFixture3, Slash: workflowFixture3, Requests: workflowFixture3, Feedback: workflowFixture3, Transcript: workflowFixture3, Asks: workflowFixture3, Fanout: workflowFixture3, Phases: workflowFixture3, Reports: workflowFixture3, Recovery: workflowFixture3, Cleanup: workflowFixture3})
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
@@ -206,7 +206,7 @@ func TestFinishPromptExecutionPropagatesCompletionReconciliationFailure(t *testi
 func TestSettleDeferredUserTurnDefersWhileSessionLaneOccupied(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "mark visible turn busy", st.SetSessionStatus(ctx, sess.ID, api.SessionStatusBusy))
@@ -233,7 +233,7 @@ func TestSettleDeferredUserTurnDefersWhileSessionLaneOccupied(t *testing.T) {
 func TestSettleDeferredUserTurnDropsSettlementDuringStop(t *testing.T) {
 	ctx := t.Context()
 	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	mgr.Runner.Settlement.Defer(sess.ID, api.SessionIdleDispositionCompleted)
@@ -273,7 +273,7 @@ func TestTurnEndDispositionReportsShutdownAsInterrupted(t *testing.T) {
 func TestPromptWithoutAssistantReturnsNoInvalidResponse(t *testing.T) {
 	ctx := context.Background()
 	st := store.NewMemory()
-	mgr := NewHost(st, Models{Client: alwaysWithholdPromptLLM{}, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := NewHost(st, Models{Client: alwaysWithholdPromptLLM{}, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetDataDir(t.TempDir())
 	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)

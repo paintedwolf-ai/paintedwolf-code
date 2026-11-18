@@ -4,6 +4,8 @@ package orchestration_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/orchestration/orchestrationtest"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
@@ -13,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -33,7 +34,7 @@ func newPackTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestratio
 	t.Helper()
 	mem := orchestration.NewMemoryTopologyWorkers()
 	sessStore := store.NewMemory()
-	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	sessMgr := session.NewHost(sessStore, session.Models{Client: llm.NewMockProvider(nil), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	if rec == nil {
 		rec = &recordingWorkers{}
 	}
@@ -41,7 +42,7 @@ func newPackTestOrchestrator(t *testing.T, rec *recordingWorkers) (*orchestratio
 	if rec.order == nil {
 		rec.order = make([]string, 0, 8)
 	}
-	reg := orchestration.NewMemoryAgentRegistryForTest()
+	reg := orchestrationtest.Registry(t)
 	orch := orchestration.NewOrchestratorImpl(orchestration.OrchestratorDeps{
 		Workers: rec,
 		Agents:  reg,

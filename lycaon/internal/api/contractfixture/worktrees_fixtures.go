@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -22,7 +23,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
-	"github.com/lycaon/lycaon/internal/tools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -122,7 +122,7 @@ func NewWorktreeTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, *se
 	database := testdbfixture.Open(t, "worktree.db")
 	mem := store.NewSQL(database)
 	mock := llm.NewMockProvider(TestMockConfig(t))
-	mgr := session.NewHost(mem, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(mem, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	WireTestBindingRegistry(t)
 	reg := project.NewSQLRegistry(database)
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)

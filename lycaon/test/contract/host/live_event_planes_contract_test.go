@@ -3,6 +3,7 @@ package contract_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strconv"
 	"testing"
 	"time"
@@ -15,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -34,7 +34,7 @@ func TestParentOnlyProjectSubscriberCannotSeeWorkerLiveBodies(t *testing.T) {
 	st := store.NewSQL(sqlDB)
 	st.SetEventOutbox(outbox)
 	pub := &events.Publisher{Hub: hub}
-	mgr := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+	mgr := session.NewHost(st, session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 	mgr.SetEventPublisher(pub)
 
 	ctx := context.Background()

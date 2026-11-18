@@ -3,6 +3,7 @@
 package cadence
 
 import (
+	"github.com/lycaon/lycaon/internal/scan/scantest"
 	"strings"
 	"testing"
 
@@ -211,7 +212,7 @@ func TestFullPassGoesOnWithoutAMemberDeselectedWhileWaiting(t *testing.T) {
 	pass, err := cadence.RequestFull(t.Context(), dir, nil, api.ScanTriggerManual, scanbase.FullScanContext{})
 	testutil.FailErr(t, "request full", err)
 
-	registry := cadence.Registry.(*scanbase.MockRegistry)
+	registry := cadence.Registry.(*scantest.MockRegistry)
 	kept := registry.Scanners[:0]
 	for _, scanner := range registry.Scanners {
 		if scanner.ID() != "lycaon-sca" {

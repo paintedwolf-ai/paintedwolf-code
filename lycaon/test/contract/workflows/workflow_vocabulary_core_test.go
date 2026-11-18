@@ -1,19 +1,19 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/vocabulary/vocabularytest"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/vocabulary"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
 func TestWorkflowVocabularyCoreLayer(t *testing.T) {
 	t.Parallel()
-	for _, row := range vocabulary.ExportCatalog() {
+	for _, row := range vocabularytest.ExportCatalog() {
 		if row.Status != "shipped" {
 			continue
 		}
@@ -63,7 +63,7 @@ func TestCoreParameterizedFamiliesInCatalog(t *testing.T) {
 		"topology_stage_complete":  {},
 	}
 	seen := map[string]struct{}{}
-	for _, row := range vocabulary.ExportCatalog() {
+	for _, row := range vocabularytest.ExportCatalog() {
 		if row.Status == "shipped" {
 			seen[row.ID] = struct{}{}
 		}

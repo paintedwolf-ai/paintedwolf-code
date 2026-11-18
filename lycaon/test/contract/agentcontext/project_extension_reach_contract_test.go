@@ -3,6 +3,7 @@ package contract
 import (
 	"bytes"
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -21,7 +22,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/internal/tools"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	"gopkg.in/yaml.v3"
 )
@@ -286,7 +286,7 @@ func TestGateParitySurfaceOffResolvesDevice(t *testing.T) {
 				}(),
 				Desired: extpacks.EmptyDesired(),
 			})
-			m := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
+			m := session.NewHost(store.NewMemory(), session.Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, toolstest.NewRegistry())
 			m.SetEffectiveCatalogDeps(root, boot, surfaces)
 			m.Catalog.SetCatalogViewCache(catalogview.NewCache(root, nil))
 

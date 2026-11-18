@@ -2,6 +2,7 @@ package promptloop
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/tools/toolstest"
 	"strings"
 	"testing"
 
@@ -105,7 +106,7 @@ func TestEarlyWorkerCloseoutExecutesCompleteLeg(t *testing.T) {
 	sess.AgentType = "security-reviewer"
 
 	completeCalls := 0
-	reg := tools.NewStubRegistry()
+	reg := toolstest.NewRegistry()
 	testutil.FailErr(t, "register complete_leg", reg.Register("complete_leg", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		completeCalls++
 		return `{"recorded":true}`, nil
