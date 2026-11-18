@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
 
 func TestTransactionRecovery(t *testing.T) {
@@ -458,7 +459,7 @@ func TestTransactionRollbackPackedRefDelete(t *testing.T) {
 
 	store, err := NewStore(t.TempDir())
 	testutil.FailErr(t, "store", err)
-	blobOID, err := WriteLooseGitObject(CheckpointGitObjectsDir(store.RootDir(), "cp-packed", ""), "blob", []byte("packed-ref-blob\n"))
+	blobOID, err := gittest.WriteLooseObject(CheckpointGitObjectsDir(store.RootDir(), "cp-packed", ""), "blob", []byte("packed-ref-blob\n"))
 	testutil.FailErr(t, "write loose blob", err)
 
 	pub, err := NewPublisher(PublisherConfig{Core: core, Store: store, WorkerID: "w-packed", TaskID: "t-packed", ProjectID: "p-packed"})

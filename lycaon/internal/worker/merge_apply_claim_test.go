@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/gittest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -163,7 +164,7 @@ func TestMergeServicePreviewAndPromoteFromPublishedCheckpoint(t *testing.T) {
 			_, err = svc.PreviewForSession(ctx, "parent-cp", jobID, "summary", nil)
 			testutil.FailErr(t, "PreviewForSession refresh", err)
 			if publishLater {
-				_, err = checkpoint.WriteLooseGitObject(checkpoint.CheckpointGitObjectsDir(fixture.store.RootDir(), "chk-promote-later", ""), "blob", []byte("feature-snapshot\n"))
+				_, err = gittest.WriteLooseObject(checkpoint.CheckpointGitObjectsDir(fixture.store.RootDir(), "chk-promote-later", ""), "blob", []byte("feature-snapshot\n"))
 				testutil.FailErr(t, "export later checkpoint objects", err)
 				laterContent := strings.Replace(workerContent, "return 22", "return 33", 1)
 				_, err = core.WriteFile(lp, []byte(laterContent), 0o644)
@@ -379,8 +380,8 @@ func newPublishedCheckpointWorker(t *testing.T) publishedCheckpointWorker {
 	testutil.FailErr(t, "Symlink link.txt", err)
 
 	testutil.FailErr(t, "MkdirAll primary .git/objects", os.MkdirAll(filepath.Join(primary, ".git", "objects"), 0o755))
-	featureOID, err := checkpoint.WriteLooseGitObject(checkpoint.CheckpointGitObjectsDir(cpStoreDir, "chk-promote-1", ""), "blob", []byte("feature-snapshot\n"))
-	testutil.FailErr(t, "WriteLooseGitObject", err)
+	featureOID, err := gittest.WriteLooseObject(checkpoint.CheckpointGitObjectsDir(cpStoreDir, "chk-promote-1", ""), "blob", []byte("feature-snapshot\n"))
+	testutil.FailErr(t, "write loose object", err)
 
 	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
 		WorkerID:         jobID,
