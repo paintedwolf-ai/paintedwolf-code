@@ -71,9 +71,9 @@ func mergeReachableSkillRoster(t *testing.T, vars map[string]any, reader prompts
 			reachable = append(reachable, skill)
 		}
 	}
-	for key, value := range skillRosterVars(reachable) {
-		vars[key] = value
-	}
+	roster := skillRosterVars(reachable)
+	vars["agent_skills"] = roster["agent_skills"]
+	vars["full_skill_catalog"] = roster["full_skill_catalog"]
 }
 
 func requirePromptBudgetSkillAvailability(t *testing.T, vars map[string]any, what string) {
