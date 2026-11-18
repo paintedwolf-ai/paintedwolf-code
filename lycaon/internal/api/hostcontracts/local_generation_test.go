@@ -46,3 +46,43 @@ func TestLocalGenerationRepairRouteUsesHostState(t *testing.T) {
 		testutil.FailErr(t, "close repair response", response.Body.Close())
 	}
 }
+
+func TestLocalModelManagementRoutes(t *testing.T) {
+	discovery := contractfixture.NewProvADiscoveryServer(t)
+	catalog := contractfixture.FakeProvidersYAML(discovery.URL)
+	_, base := contractfixture.NewProviderTestServerWithCatalogs(t, catalog, catalog)
+	for _, tc := range []struct {
+		method, id, suffix, body string
+		code                     int
+	}{
+		{http.MethodGet, "nativegen", "", "", http.StatusOK},
+		{http.MethodGet, "absent", "", "", http.StatusNotFound},
+		{http.MethodPut, "nativegen", "", "{}", http.StatusBadRequest},
+		{http.MethodPut, "nativegen", "", "{", http.StatusBadRequest},
+		{http.MethodDelete, "nativegen", "", "", http.StatusBadRequest},
+		{http.MethodPost, "nativegen", "/cancel", "", http.StatusOK},
+	} {
+		req, err := http.NewRequestWithContext(t.Context(), tc.method, base+"/v1/providers/"+tc.id+"/local-model"+tc.suffix, strings.NewReader(tc.body))
+		testutil.FailErr(t, "prepare local model request", err)
+		hostapi.WithTestAuth(req)
+		req.Header.Set("Content-Type", "application/json")
+		res, err := http.DefaultClient.Do(req)
+		testutil.FailErr(t, "request model status", err)
+		if res.StatusCode != tc.code {
+			t.Fatalf("%s %s: %s", tc.method, req.URL.Path, contractfixture.ReadBody(t, res))
+		}
+		if tc.code == http.StatusOK {
+			var status wire.LocalGenerationStatus
+			testutil.FailErr(t, "read model options", json.NewDecoder(res.Body).Decode(&status))
+			if len(status.AvailableModels) != 3 || status.State != "unavailable" {
+				t.Fatalf("no-adapter status: %+v", status)
+			}
+			for _, tier := range status.AvailableModels {
+				if tier.Eligible || tier.Recommended {
+					t.Fatal("recommended a tier without an adapter")
+				}
+			}
+		}
+		testutil.FailErr(t, "close response", res.Body.Close())
+	}
+}
