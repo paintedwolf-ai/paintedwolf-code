@@ -34,7 +34,7 @@ void pw_generation::save_prefix() {
     if (!cache) throw std::runtime_error("model requires separate global and sliding caches");
     cache->get_base()->seq_cp(0, 1, -1, -1);
     // Only live sliding rows may be pinned by the retained prefix.
-    cache->get_swa()->seq_cp(0, 1, std::max(0, static_cast<int>(position) - 511), -1);
+    cache->get_swa()->seq_cp(0, 1, std::max(0, static_cast<int>(position) - static_cast<int>(sliding_window) + 1), -1);
     prefix_position = position;
     // Cold and reused tails start from the same live window and row layout.
     clear_sequence(0);

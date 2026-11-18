@@ -132,6 +132,7 @@ extern "C" int pw_generation_load(const char * path, const char * pci, uint32_t 
         engine->check_memory();
         engine->limit = context;
         engine->chunk = chunk;
+        engine->sliding_window = inventory.layers == 42 ? 512 : 1024;
         engine->prefix_limit = prefix;
         warm(engine.get());
         *result = engine.release();

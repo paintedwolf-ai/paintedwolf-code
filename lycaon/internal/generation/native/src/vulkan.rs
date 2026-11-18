@@ -158,7 +158,7 @@ impl Backend for Vulkan {
     fn forward(&mut self, tokens: &[u32], sampling: Option<&mut Sampling>) -> Result<Option<u32>> {
         let mut sampled = u32::MAX;
         let mode = sampling.as_ref().map_or(0, |s| {
-            if s.temperature == 0.0 && s.constraint.is_none() {
+            if s.temperature == 0.0 && s.constraint.is_none() && s.suppressed.is_empty() {
                 2
             } else {
                 1

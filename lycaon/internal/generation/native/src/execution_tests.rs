@@ -94,7 +94,7 @@ fn request(id: u64) -> Begin {
 }
 
 fn executor() -> Executor<Fake> {
-    Executor::new(Fake::default(), 64, 2, vec![1, 106]).unwrap()
+    Executor::new(Fake::default(), 64, 2, vec![1, 106], vec![]).unwrap()
 }
 
 #[test]
@@ -205,7 +205,7 @@ fn failed_step_discards_partial_state_and_checkpoint() {
 
 #[test]
 fn full_admitted_prefix_reuses_only_identical_tokens() {
-    let mut runner = Executor::new(Fake::default(), 16384, 256, vec![1]).unwrap();
+    let mut runner = Executor::new(Fake::default(), 16384, 256, vec![1], vec![]).unwrap();
     let make = |id| {
         let mut request = request(id);
         request.prompt_tokens = vec![2; 8193];

@@ -381,3 +381,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod model_tests;

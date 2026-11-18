@@ -27,6 +27,14 @@ pub struct Weights {
 }
 
 impl Weights {
+    #[cfg(test)]
+    pub(super) fn fixture(tensors: HashMap<String, Array>) -> Self {
+        Self {
+            tensors,
+            quantization: Value::Null,
+        }
+    }
+
     pub fn load(path: &Path, quantization: Value) -> Result<Self> {
         let loaded = Array::load_safetensors(path)?;
         let mut tensors: HashMap<_, _> = loaded

@@ -88,7 +88,10 @@ impl Mlx {
         };
         let logits = logits.ok_or_else(|| device_error("missing requested logits"))?;
         let logits = logits.index((0, -1, ..));
-        if sampling.temperature == 0.0 && sampling.constraint.is_none() {
+        if sampling.temperature == 0.0
+            && sampling.constraint.is_none()
+            && sampling.suppressed.is_empty()
+        {
             let token = argmax(&logits, None).map_err(device_error)?;
             let finite = logits
                 .is_finite()

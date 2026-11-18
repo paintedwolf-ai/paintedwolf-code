@@ -12,6 +12,7 @@ pub struct SamplingDefaults {
 
 pub struct Settings {
     pub eos: Vec<u32>,
+    pub suppressed: Vec<u32>,
     pub sampling: SamplingDefaults,
 }
 
@@ -33,6 +34,7 @@ impl Settings {
                 key.as_str(),
                 "bos_token_id"
                     | "eos_token_id"
+                    | "suppress_tokens"
                     | "pad_token_id"
                     | "do_sample"
                     | "temperature"
@@ -75,6 +77,20 @@ impl Settings {
                     .ok_or_else(invalid)
             })
             .collect::<Result<Vec<_>>>()?;
+        let suppressed = match fields.get("suppress_tokens") {
+            None => Vec::new(),
+            Some(Value::Array(tokens)) if tokens.len() <= 64 => tokens
+                .iter()
+                .map(|token| {
+                    token
+                        .as_u64()
+                        .filter(|&id| id < 262144 && !crate::output_contract::reserved(id as u32))
+                        .map(|id| id as u32)
+                        .ok_or_else(invalid)
+                })
+                .collect::<Result<_>>()?,
+            _ => return Err(invalid()),
+        };
         let temperature = value
             .get("temperature")
             .map_or(Some(1.0), Value::as_f64)
@@ -99,6 +115,7 @@ impl Settings {
         }
         Ok(Self {
             eos,
+            suppressed,
             sampling: SamplingDefaults {
                 temperature: if sample { temperature } else { 0.0 },
                 top_p,
@@ -119,14 +136,17 @@ mod tests {
     #[test]
     fn preserves_artifact_sampling_and_stop_tokens() {
         let settings = Settings::parse(
-            &json!({"eos_token_id":[1,106,50],"do_sample":true,"temperature":1.0,"top_p":0.95,"top_k":64}),
+            &json!({"eos_token_id":[1,106,50],"do_sample":true,"temperature":1.0,"top_p":0.95,"top_k":64,"suppress_tokens":[258883,258882]}),
         )
         .unwrap();
+        assert_eq!(settings.suppressed, [258883, 258882]);
         assert_eq!(settings.eos, [1, 106, 50]);
         assert_eq!(settings.sampling.top_k, 64);
         assert_eq!(settings.sampling.top_p, 0.95);
         for value in [
             json!({"eos_token_id":null}),
+            json!({"eos_token_id":1,"suppress_tokens":[262144]}),
+            json!({"eos_token_id":1,"suppress_tokens":[106]}),
             json!({"eos_token_id":[50]}),
             json!({"eos_token_id":1,"top_k":-1}),
             json!({"eos_token_id":1,"temperature":"1"}),
