@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   noteActivitySpanRowWithdrawals,
-  visibleActivitySpanRows,
   visibleRowContinuity,
   withdrawnRows,
   type RowWithdrawal,
@@ -116,7 +115,6 @@ describe("activity span row withdrawal", () => {
         commandActivity: { fact, members: [fact], calls: [source.part], receiptScopes: [] },
       },
     };
-    expect(visibleActivitySpanRows([source, child]).get(key)).toEqual({ kind: "tool", source: source.part.id });
     expect(noteActivitySpanRowWithdrawals("span", [source], [source, child])).toEqual([]);
     expect(noteActivitySpanRowWithdrawals("span", [source], [source])).toEqual([{ key, kind: "tool", source: source.part.id }]);
     expect(noteActivitySpanRowWithdrawals("span", [source], [source])).toEqual([]);
@@ -134,6 +132,21 @@ describe("activity span row withdrawal", () => {
     expect(noteActivitySpanRowWithdrawals("span", [b], [b])).toEqual([]);
     expect(noteActivitySpanRowWithdrawals("span", [], [])).toEqual([]);
     expect(denScrollDebugLog).not.toHaveBeenCalled();
+  });
+
+  it("evicts old scopes and old rendered rows", () => {
+    const entries = Array.from({ length: 4097 }, (_, index) => activityTool(`assistant:${index}`, "command"));
+    const first = entries[0]!;
+    const last = entries[entries.length - 1]!;
+    noteActivitySpanRowWithdrawals("row-bound", entries, entries);
+    expect(noteActivitySpanRowWithdrawals("row-bound", [first], [])).toEqual([]);
+    expect(noteActivitySpanRowWithdrawals("row-bound", [last], [])).toEqual([
+      { key: last.part.id, kind: "tool", source: last.part.id },
+    ]);
+
+    for (let scope = 0; scope < 9; scope++) noteActivitySpanRowWithdrawals(`scope-${scope}`, [first], [first]);
+    expect(noteActivitySpanRowWithdrawals("scope-0", [first], [])).toEqual([]);
+    expect(noteActivitySpanRowWithdrawals("scope-8", [first], [])).toHaveLength(1);
   });
 
   it("reports rows absorbed by the action fold after first sight only", () => {

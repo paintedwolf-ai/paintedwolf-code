@@ -56,7 +56,7 @@ it("takes its status from the settled receipt, not the program recorded while ru
   await waitFor(() => expect(group()?.getAttribute("data-status")).toBe("done"));
 });
 
-it("opens an attached decision and every folded program receipt in Files", async () => {
+it.each([true, false])("opens an attached decision and every folded program receipt in Files (host link: %s)", async hostLink => {
   const sink = vi.fn();
   const unregister = registerOpenFilesSurfaceSink(sink);
   const read = (id: string) => activityTool(id, "command", { commandProgram: activityProgram(id, {
@@ -64,14 +64,14 @@ it("opens an attached decision and every folded program receipt in Files", async
       action: {
         label: "Read files", status: "done", ran: { text: id, noun: "command" },
         facts: [{ kind: "steps", count: 1, sequence: [id] }], row: ["steps"],
-        links: [{ kind: "receipt", receipts: [{ program_id: `program-${id}`, activity_id: id }] }],
+        links: hostLink ? [{ kind: "receipt", receipts: [{ program_id: `program-${id}`, activity_id: id }] }] : [],
       },
     })],
   }) });
   try {
     const view = render(() => <CommandActivitySpan
       label="Reading files" entries={[activityDecision("turn-decision"), read("first"), read("next")]}
-      layout="chat" entryKey="command-record-links"
+      layout="chat" entryKey={`command-record-links-${hostLink}`}
       renderToolEntry={part => <ToolPartCard part={part()} layout="chat" projectId="project" slots={{}} />}
     />);
     const group = view.getByTestId("activity-span-card");

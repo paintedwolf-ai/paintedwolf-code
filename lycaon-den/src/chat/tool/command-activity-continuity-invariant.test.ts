@@ -242,3 +242,15 @@ describe.each([...FORM_PROGRAM_TOOLS])("%s activity continuity", tool => {
     expect(partAction(parts(ended)[0]!)?.status).toBe("done");
   });
 });
+
+it("bounds decisions that have no retained call", () => {
+  const project = freshProjector();
+  const decision = activityDecision("old-decision");
+  const call = pending("call", "command");
+  expect(project([decision, call])).toEqual([]);
+  const newer = Array.from({ length: 2048 }, (_, index) => activityDecision(`decision-${index}`));
+  expect(keys(project(newer))).toEqual(keys(newer));
+  const tail = activityDecision("tail");
+  expect(keys(project([...newer, tail]))).toEqual([...keys(newer), tail.key]);
+  expect(keys(project([decision]))).toEqual([decision.key]);
+});

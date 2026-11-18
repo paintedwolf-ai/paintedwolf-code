@@ -8,7 +8,7 @@ const MAX_BOOKKEEPING_ENTRIES = 2048;
 type RowAnchor = { key: string; order: number };
 type RowPlacement = { order: number; after?: RowAnchor; predecessor?: RowAnchor };
 
-export type ActivityMembership = {
+type ActivityMembership = {
   folded: boolean;
   rowKey: string;
   presentation: Pick<CommandActivity, "label" | "group" | "subject">;

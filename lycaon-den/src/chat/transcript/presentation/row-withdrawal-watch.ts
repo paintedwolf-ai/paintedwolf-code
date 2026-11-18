@@ -91,7 +91,7 @@ const MAX_ACTIVITY_SPAN_SCOPES = 8;
 const MAX_ACTIVITY_SPAN_ROWS = 4096;
 const lastActivityRowsByScope = new Map<string, Map<string, ActivitySpanRow>>();
 
-export function visibleActivitySpanRows(
+function visibleActivitySpanRows(
   entries: readonly ActivitySpanEntry[],
 ): Map<string, ActivitySpanRow> {
   return new Map(entries.map(entry => {
