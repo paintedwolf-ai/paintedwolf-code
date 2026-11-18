@@ -1,12 +1,12 @@
 import { createRenderEffect, onCleanup } from "solid-js";
 
 /** Marks a summary control that keeps its own action while its disclosure is closed. */
-export const DISCLOSURE_ACTION_ATTRIBUTE = "data-disclosure-action";
+const DISCLOSURE_ACTION_ATTRIBUTE = "data-disclosure-action";
 
 const CONTROL_SELECTOR =
   "a[href], button, input, select, textarea, summary, [role='button'], [role='link'], [contenteditable='true']";
 
-export type DisclosureSummaryOptions = {
+type DisclosureSummaryOptions = {
   open: () => boolean;
   /** The button that opens and closes the disclosure. */
   toggle: () => HTMLElement | undefined;
