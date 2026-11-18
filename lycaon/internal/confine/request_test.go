@@ -10,13 +10,14 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
 	"github.com/lycaon/lycaon/internal/confine/confinetest"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestDefaultConfinementRejectsSocketConflictAndCap(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	dir := shortTempDir(t)
 	a := filepath.Join(dir, "a.sock")
 	ga := socketGrant(t, a)
@@ -134,7 +135,7 @@ func TestSocketPathsDigestStable(t *testing.T) {
 }
 
 func TestFailClosedBrokerStartup(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
@@ -165,7 +166,7 @@ func TestFailClosedBrokerStartup(t *testing.T) {
 }
 
 func TestDirectIPRequestSelectsDirectMode(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
@@ -188,7 +189,7 @@ func TestDirectIPRequestSelectsDirectMode(t *testing.T) {
 }
 
 func TestDefaultConfinementCredentialStorePropagation(t *testing.T) {
-	confine.TestingSetAutoConfine(t)
+	admissionfixture.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")

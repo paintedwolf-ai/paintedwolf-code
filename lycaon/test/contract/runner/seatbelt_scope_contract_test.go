@@ -18,7 +18,13 @@ import (
 )
 
 // Engagement APIs require kernel confinement.
-var confineEngagementAPI = []string{"Available", "EnableAutoConfine", "TestingSetAutoConfine"}
+var confineEngagementAPIs = []struct {
+	path, qualifier string
+	names           []string
+}{
+	{"confine", "confine", []string{"Available", "EnableAutoConfine"}},
+	{"confine/admissionfixture", "admissionfixture", []string{"Enable"}},
+}
 
 const seatbeltWholePackageScope = "./internal/confine"
 
@@ -105,9 +111,24 @@ func TestSeatbeltScopeNamesLiveTests(t *testing.T) {
 
 func TestConfineEngagementAPIIsLive(t *testing.T) {
 	t.Parallel()
-	dir := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "internal", "confine")
+	root := contractcheck.RepoRoot(t)
+	var missing []string
+	for _, api := range confineEngagementAPIs {
+		dir := filepath.Join(root, "lycaon", "internal", api.path)
+		exported := exportedFunctions(t, dir)
+		for _, name := range api.names {
+			if !exported[name] {
+				missing = append(missing, api.qualifier+"."+name)
+			}
+		}
+	}
+	contractcheck.FailViolations(t, "seatbelt inventory references missing confinement functions", missing)
+}
+
+func exportedFunctions(t *testing.T, dir string) map[string]bool {
+	t.Helper()
 	entries, err := os.ReadDir(dir)
-	contractcheck.FailErr(t, "read internal/confine", err)
+	contractcheck.FailErr(t, "read confinement API package", err)
 
 	exported := map[string]bool{}
 	fset := token.NewFileSet()
@@ -129,14 +150,7 @@ func TestConfineEngagementAPIIsLive(t *testing.T) {
 		}
 	}
 
-	var missing []string
-	for _, name := range confineEngagementAPI {
-		if !exported[name] {
-			missing = append(missing, "confine."+name)
-		}
-	}
-	contractcheck.FailViolations(t, "confineEngagementAPI names functions internal/confine no longer exports — "+
-		"the seatbelt inventory derives from these, so a stale name empties it silently", missing)
+	return exported
 }
 
 func seatbeltGatedTests(t *testing.T, root string) map[string][]string {
@@ -167,11 +181,13 @@ func seatbeltGatedTests(t *testing.T, root string) map[string][]string {
 func seatbeltEngagedFuncs(funcs map[string]string) map[string]bool {
 	engaged := map[string]bool{}
 	for name, body := range funcs {
-		for _, api := range confineEngagementAPI {
-			// Package-local tests call the API without a qualifier.
-			if callsIdentifier(body, "confine."+api) || callsIdentifier(body, api) {
-				engaged[name] = true
-				break
+		for _, api := range confineEngagementAPIs {
+			for _, member := range api.names {
+				local := api.qualifier == "confine" && callsIdentifier(body, member)
+				if local || callsIdentifier(body, api.qualifier+"."+member) {
+					engaged[name] = true
+					break
+				}
 			}
 		}
 	}
