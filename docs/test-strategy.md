@@ -1426,7 +1426,7 @@ exhausting the runner while leaving room for the toolchain. A package that needs
 more declares its own ceiling with a tracking issue. A race build gets
 `race_scale` times its ceiling: the detector's
 shadow memory and instrumented heap are overhead the ordinary ceiling does not
-describe, and the largest contract packages reach 1.1 times it under the detector.
+describe, and the largest contract packages reach 1.6 times it under the detector.
 Unless a run sets `GOMEMLIMIT`, the test binary gets a soft limit at 80% of its
 ceiling, so the collector reclaims garbage before the ceiling instead of letting
 the heap reach twice its live size, and the guard measures retained memory
