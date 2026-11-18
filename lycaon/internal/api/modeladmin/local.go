@@ -62,8 +62,7 @@ func (s *Handler) SelectLocalModel(w http.ResponseWriter, r *http.Request) {
 
 func (s *Handler) selectLocalModel(ctx context.Context, req wire.LocalModelSelectionRequest) error {
 	ctx = context.WithoutCancel(ctx)
-	return s.service.Registry.SelectLocalModel(req, func() {
-		s.service.ResetPlanes()
+	return s.service.SelectLocalModel(req, func() {
 		s.publishProviderEvent(ctx, "models_refreshed", llm.IncludedProviderID)
 	})
 }

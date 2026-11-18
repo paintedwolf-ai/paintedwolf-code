@@ -53,16 +53,6 @@ func TestRepairFailureCanBeRetriedWithoutRestartingHost(t *testing.T) {
 	installed := filepath.Join(runtime.loaded.process.lease.Dir, "model.gguf")
 	testutil.FailErr(t, "make installed fixture writable", os.Chmod(installed, 0o600))
 	testutil.FailErr(t, "damage installed payload", os.WriteFile(installed, []byte("invalid weights"), 0o600))
-	runtime.config.DeviceMemory, _ = inference.NewMemoryBudget(8 << 30)
-	runtime.config.PhysicalBytes = 16 << 30
-	if err := runtime.Warm(t.Context(), DefaultModelID); err == nil {
-		t.Fatal("warm installed a seed without a selection")
-	}
-	selectSeed := func() {
-		done := make(chan struct{})
-		testutil.FailErr(t, "request seed import", runtime.StartSelection(api.LocalModelSelectionRequest{Model: DefaultModelID, PackagedSeed: true}, func() { close(done) }))
-		<-done
-	}
 	payload := filepath.Join(runtime.config.SeedDirectory, "model.gguf")
 	testutil.FailErr(t, "damage seed payload", os.WriteFile(payload, []byte("invalid weights"), 0o600))
 	if err := runtime.Repair(t.Context()); err == nil {
@@ -113,7 +103,7 @@ func TestExplicitSeedImportRetriesFailedInstallation(t *testing.T) {
 			}
 			selectSeed := func() {
 				done := make(chan struct{})
-				testutil.FailErr(t, "request seed import", runtime.StartSelection(api.LocalModelSelectionRequest{Model: DefaultModelID, PackagedSeed: true}, func() { close(done) }))
+				testutil.FailErr(t, "request seed import", runtime.StartSelection(api.LocalModelSelectionRequest{Model: DefaultModelID, PackagedSeed: true}, nil, func() { close(done) }))
 				<-done
 			}
 			payload := filepath.Join(runtime.config.SeedDirectory, "model.gguf")

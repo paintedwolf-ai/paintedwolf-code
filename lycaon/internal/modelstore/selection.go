@@ -150,3 +150,9 @@ func (s *Store) install(ctx context.Context, signed SignedManifest, resumable bo
 	}
 	return s.finishSelection()
 }
+
+// A failed low-space switch must not restore the installer tier on restart.
+func (s *Store) AwaitingInitialModel() (bool, error) {
+	h, err := s.history()
+	return h.selection.State == "unconfigured" && len(h.all) == 0, err
+}

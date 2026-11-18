@@ -22,9 +22,11 @@ type Readiness struct {
 
 // Availability carries startup facts when no runtime could be allocated.
 type Availability struct {
-	Store   *modelstore.Store
-	Runtime *Runtime
-	Initial Readiness
+	OfflineInstaller bool
+	OfflineTier      string
+	Store            *modelstore.Store
+	Runtime          *Runtime
+	Initial          Readiness
 }
 
 // Readiness does not wait for inference or read model payloads.
