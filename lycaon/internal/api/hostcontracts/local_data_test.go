@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/localdata"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -98,9 +99,16 @@ func TestExtensionCacheClearReplacesDerivedCatalog(t *testing.T) {
 	deps := hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessionstore.NewMemory()}, Storage: hostapi.StorageDependencies{DataDir: base}}
 	contractfixture.WithExtensionOwner(t)(&deps)
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, deps), nil, hostapi.TestAPIToken)
-	extpacks.SetActive(&extpacks.EffectiveCatalog{Desired: extpacks.DesiredState{
-		Disabled: []string{"sentinel/stale-catalog"},
-	}})
+	desired := extpacks.EmptyDesired()
+	unit := extpacks.GuidanceUnitID("coordinator-gate-blocked")
+	desired.Disabled = []string{unit}
+	previous, err := extpackstest.Resolve(t.Context(), desired, nil)
+	testutil.FailErr(t, "resolve previous catalog", err)
+	testutil.FailErr(t, "validate previous catalog", previous.BootError())
+	if previous.HasLoaded(unit) {
+		t.Fatal("previous catalog must exclude the disabled guidance")
+	}
+	extpacks.SetActive(previous)
 
 	body, err := json.Marshal(wire.LocalDataClearRequest{
 		Buckets: []wire.LocalDataBucketId{wire.LocalDataBucketExtensionCache},
@@ -114,7 +122,7 @@ func TestExtensionCacheClearReplacesDerivedCatalog(t *testing.T) {
 		t.Fatalf("clear status=%d body=%s", w.Code, w.Body.String())
 	}
 	active := extpacks.Active()
-	if active == nil || len(active.Desired.Disabled) != 0 {
+	if active == nil || len(active.Desired.Disabled) != 0 || !active.HasLoaded(unit) {
 		t.Fatalf("cache clear left stale active catalog: %+v", active)
 	}
 	entries, readErr := os.ReadDir(cache)
