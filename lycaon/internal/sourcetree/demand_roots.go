@@ -8,7 +8,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/pagedview"
-	"github.com/lycaon/lycaon/internal/sourcecatalog"
 )
 
 // ReplaceOnDemandRoots updates the appended roots while keeping project disclosures.
