@@ -13,6 +13,7 @@ func TestSanitizeEnvironStripsInjectionKeys(t *testing.T) {
 		"LD_PRELOAD=/evil.so",
 		"DYLD_INSERT_LIBRARIES=/evil.dylib",
 		"GIT_EXEC_PATH=/tmp/hook",
+		"GIT_DIR=/inherited/hook/state",
 		"NODE_OPTIONS=--require /evil",
 		"BASH_ENV=/tmp/bashrc",
 		"HOME=/home/user",

@@ -111,7 +111,7 @@ func Parse(dir, content string) File {
 	return f
 }
 
-// resolveContributors applies the nearest matching sections last and returns their directories nearest first.
+// resolveContributors applies nearer sections last and lists their directories nearest first.
 func resolveContributors(path string, configs []File) (Properties, []string) {
 	file := strings.TrimPrefix(strings.ReplaceAll(path, "\\", "/"), "./")
 	lowerFile := strings.ToLower(file)
