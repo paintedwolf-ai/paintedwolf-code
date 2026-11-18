@@ -36,11 +36,11 @@ func Restore(t testing.TB) {
 // request returns once the volume has carried out the command.
 func request(t testing.TB, command string) {
 	t.Helper()
-	conn, err := net.Dial("unix", os.Getenv(EnvControl))
+	conn, err := net.Dial("unix", os.Getenv(EnvControl)) // #nosec G704 -- the parent test names its own socket
 	if err != nil {
 		t.Fatalf("source outage control: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	if _, err := conn.Write([]byte(command + "\n")); err != nil {
 		t.Fatalf("source outage %s: %v", command, err)
 	}

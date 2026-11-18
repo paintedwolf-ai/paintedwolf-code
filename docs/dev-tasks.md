@@ -207,7 +207,7 @@ The native consumer integration uses the existing scoped digest with
 for `./cmd/opengrep-artifact`. It requires `PW_SCANNER_CONSUMER_RECIPE` and
 `PW_SCANNER_PRODUCER_DIRECTORY`; absent inputs fail that selected campaign.
 `./task nix:check` runs it nightly against the Nix-built `scanner-original` and
-`scanner-finalized` outputs (`scripts/nix-native-tests.sh`), with the Nix
+`scanner-finalized` outputs (`scripts/linux_release/native-tests.sh`), with the Nix
 registrar tests.
 Ordinary scanner tests continue to qualify unchanged producer resources.
 

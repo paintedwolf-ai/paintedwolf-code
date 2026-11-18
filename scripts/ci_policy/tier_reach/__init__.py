@@ -8,7 +8,8 @@ that run's -short mode and the environment the scheduler passes on."""
 import re
 import sys
 
-from ci_policy.tier_reach.conditions import Expression, Index, evaluate
+from ci_policy.tier_reach.conditions import Index
+from ci_policy.tier_reach.expression import Expression, evaluate
 from ci_policy.tier_reach.runs import GO_MODULE, ROOT, WORKFLOWS, lane_runs, module_path, workflow_runs
 from verification_plan import catalog
 
