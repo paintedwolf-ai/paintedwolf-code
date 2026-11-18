@@ -12,44 +12,26 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type turnTestStore interface {
-	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-	Get(context.Context, string) (*api.Session, error)
-	SetSessionStatus(context.Context, string, api.SessionStatus) error
-	PutPromptSubmission(context.Context, PromptSubmission) (*PromptSubmission, bool, error)
-	ClaimPromptSubmission(context.Context, string) (*PromptSubmission, bool, error)
-	GetPromptSubmission(context.Context, string) (*PromptSubmission, error)
-	RecoverPromptSubmissions(context.Context) ([]string, error)
-	BeginTurn(context.Context, TurnStart) (TurnExecution, error)
-	CheckpointTurn(context.Context, string, string, TurnPhase, string) error
-	RecoverTurns(context.Context) ([]Turn, error)
-	RecoverTurnsForSession(context.Context, string) ([]Turn, error)
-	SettleModelOutput(context.Context, ModelOutput) (ModelOutput, error)
-	ListPendingModelOutputProjections(context.Context) ([]PendingModelOutputProjection, error)
-	AppendMessages(context.Context, string, ...api.Message) error
-	MarkModelOutputProjected(context.Context, string) error
-}
-
 func TestTurnAttemptRecoveryParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(t *testing.T) turnTestStore
+		open func(t *testing.T) *Repositories
 	}{
 		{name: "sql", open: openTurnSQLStore},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			ctx := t.Context()
 			st := fixture.open(t)
-			sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			submissionID := uuid.NewString()
-			_, _, err = st.PutPromptSubmission(ctx, PromptSubmission{
+			_, _, err = st.Submissions.PutPromptSubmission(ctx, PromptSubmission{
 				ID: submissionID, SessionID: sess.ID, ProjectID: sess.ProjectID,
 				InputDigest: "digest", InputJSON: `{"text":"resume me"}`, Origin: PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID,
 			})
 			testutil.FailErr(t, "put submission", err)
 
-			first, err := st.BeginTurn(ctx, TurnStart{
+			first, err := st.Turns.BeginTurn(ctx, TurnStart{
 				SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser,
 				InputJSON: `{"text":"resume me"}`, SubmissionIDs: []string{submissionID},
 			})
@@ -58,12 +40,12 @@ func TestTurnAttemptRecoveryParity(t *testing.T) {
 				t.Fatalf("first attempt = %d", first.Attempt.Attempt)
 			}
 
-			recovered, err := st.RecoverTurns(ctx)
+			recovered, err := st.Turns.RecoverTurns(ctx)
 			testutil.FailErr(t, "recover turns", err)
 			if len(recovered) != 1 || recovered[0].ID != first.Turn.ID {
 				t.Fatalf("recovered = %+v", recovered)
 			}
-			second, err := st.BeginTurn(ctx, TurnStart{
+			second, err := st.Turns.BeginTurn(ctx, TurnStart{
 				SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser,
 				InputJSON: `{"text":"resume me"}`, SubmissionIDs: []string{submissionID},
 			})
@@ -79,32 +61,32 @@ func TestTurnAttemptRecoveryParity(t *testing.T) {
 func TestRecoverTurnsForSessionLeavesOtherSessionsAloneParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(t *testing.T) turnTestStore
+		open func(t *testing.T) *Repositories
 	}{
 		{name: "sql", open: openTurnSQLStore},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			ctx := t.Context()
 			st := fixture.open(t)
-			a, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			a, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session a", err)
-			b, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			b, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session b", err)
 
-			turnA, err := st.BeginTurn(ctx, TurnStart{
+			turnA, err := st.Turns.BeginTurn(ctx, TurnStart{
 				ID: uuid.NewString(), SessionID: a.ID, ProjectID: a.ProjectID,
 				Origin: TurnOriginUser, InputJSON: `{}`,
 			})
 			testutil.FailErr(t, "begin turn a", err)
-			turnB, err := st.BeginTurn(ctx, TurnStart{
+			turnB, err := st.Turns.BeginTurn(ctx, TurnStart{
 				ID: uuid.NewString(), SessionID: b.ID, ProjectID: b.ProjectID,
 				Origin: TurnOriginUser, InputJSON: `{}`,
 			})
 			testutil.FailErr(t, "begin turn b", err)
-			testutil.FailErr(t, "mark a busy", st.SetSessionStatus(ctx, a.ID, api.SessionStatusBusy))
-			testutil.FailErr(t, "mark b busy", st.SetSessionStatus(ctx, b.ID, api.SessionStatusBusy))
+			testutil.FailErr(t, "mark a busy", st.Sessions.SetSessionStatus(ctx, a.ID, api.SessionStatusBusy))
+			testutil.FailErr(t, "mark b busy", st.Sessions.SetSessionStatus(ctx, b.ID, api.SessionStatusBusy))
 
-			recovered, err := st.RecoverTurnsForSession(ctx, a.ID)
+			recovered, err := st.Turns.RecoverTurnsForSession(ctx, a.ID)
 			testutil.FailErr(t, "recover turns for session a", err)
 			if len(recovered) != 1 || recovered[0].ID != turnA.Turn.ID {
 				t.Fatalf("recovered = %+v, want only turn a (%s)", recovered, turnA.Turn.ID)
@@ -114,10 +96,10 @@ func TestRecoverTurnsForSessionLeavesOtherSessionsAloneParity(t *testing.T) {
 			// attempt — CheckpointTurn only succeeds against a 'running' attempt,
 			// so this fails if the scoped call fenced it to interrupted/recovering.
 			testutil.FailErr(t, "checkpoint still-running turn b",
-				st.CheckpointTurn(ctx, turnB.Turn.ID, turnB.Attempt.ID, TurnPhaseModel, `{}`))
+				st.Turns.CheckpointTurn(ctx, turnB.Turn.ID, turnB.Attempt.ID, TurnPhaseModel, `{}`))
 
 			// The global sweep still finds the other session; recovering rows may also include a.
-			globallyRecovered, err := st.RecoverTurns(ctx)
+			globallyRecovered, err := st.Turns.RecoverTurns(ctx)
 			testutil.FailErr(t, "recover turns global", err)
 			foundB := false
 			for _, turn := range globallyRecovered {
@@ -135,36 +117,36 @@ func TestRecoverTurnsForSessionLeavesOtherSessionsAloneParity(t *testing.T) {
 func TestSettledModelOutputRepairsProjectionParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(t *testing.T) turnTestStore
+		open func(t *testing.T) *Repositories
 	}{
 		{name: "sql", open: openTurnSQLStore},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			ctx := context.Background()
 			st := fixture.open(t)
-			sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
-			execution, err := st.BeginTurn(ctx, TurnStart{
+			execution, err := st.Turns.BeginTurn(ctx, TurnStart{
 				SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: `{}`,
 			})
 			testutil.FailErr(t, "begin turn", err)
 			outputID := uuid.NewString()
-			settled, err := st.SettleModelOutput(ctx, ModelOutput{
+			settled, err := st.Turns.SettleModelOutput(ctx, ModelOutput{
 				ID: outputID, TurnAttemptID: execution.Attempt.ID, SessionID: sess.ID,
 				Iteration: 1, MessageID: outputID, Content: "complete", FinishReason: "stop",
 			})
 			testutil.FailErr(t, "settle output", err)
-			pending, err := st.ListPendingModelOutputProjections(ctx)
+			pending, err := st.Turns.ListPendingModelOutputProjections(ctx)
 			testutil.FailErr(t, "list pending projections", err)
 			if len(pending) != 1 || pending[0].Output.Content != settled.Content {
 				t.Fatalf("pending = %+v", pending)
 			}
-			testutil.FailErr(t, "append transcript projection", st.AppendMessages(ctx, sess.ID, api.Message{
+			testutil.FailErr(t, "append transcript projection", st.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 				ID: outputID, Role: api.MessageRoleAssistant, Content: settled.Content,
 				Origin: api.MessageOriginModel, Authority: api.ContentAuthorityNone,
 			}))
-			testutil.FailErr(t, "ack projection", st.MarkModelOutputProjected(ctx, outputID))
-			pending, err = st.ListPendingModelOutputProjections(ctx)
+			testutil.FailErr(t, "ack projection", st.Turns.MarkModelOutputProjected(ctx, outputID))
+			pending, err = st.Turns.ListPendingModelOutputProjections(ctx)
 			testutil.FailErr(t, "list repaired projections", err)
 			if len(pending) != 0 {
 				t.Fatalf("pending after ack = %+v", pending)
@@ -173,7 +155,7 @@ func TestSettledModelOutputRepairsProjectionParity(t *testing.T) {
 			if removed != 1 {
 				t.Fatalf("removed = %d want 1", removed)
 			}
-			recovered, err := st.RecoverTurns(ctx)
+			recovered, err := st.Turns.RecoverTurns(ctx)
 			testutil.FailErr(t, "recover after truncate", err)
 			if len(recovered) != 0 {
 				t.Fatalf("truncated turn recovered = %+v", recovered)
@@ -185,46 +167,46 @@ func TestSettledModelOutputRepairsProjectionParity(t *testing.T) {
 func TestFinalizingTurnCompletesDuringRecoveryParity(t *testing.T) {
 	for _, fixture := range []struct {
 		name string
-		open func(t *testing.T) turnTestStore
+		open func(t *testing.T) *Repositories
 	}{
 		{name: "sql", open: openTurnSQLStore},
 	} {
 		t.Run(fixture.name, func(t *testing.T) {
 			ctx := t.Context()
 			st := fixture.open(t)
-			sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
 			submissionID := uuid.NewString()
-			_, _, err = st.PutPromptSubmission(ctx, PromptSubmission{
+			_, _, err = st.Submissions.PutPromptSubmission(ctx, PromptSubmission{
 				ID: submissionID, SessionID: sess.ID, ProjectID: sess.ProjectID,
 				InputDigest: "digest", InputJSON: `{}`, Origin: PromptSubmissionOriginUser, SubmittedBy: sess.OwnerPersonID,
 			})
 			testutil.FailErr(t, "put submission", err)
-			_, claimed, err := st.ClaimPromptSubmission(ctx, submissionID)
+			_, claimed, err := st.Submissions.ClaimPromptSubmission(ctx, submissionID)
 			testutil.FailErr(t, "claim submission", err)
 			if !claimed {
 				t.Fatal("submission was not claimed")
 			}
-			execution, err := st.BeginTurn(ctx, TurnStart{
+			execution, err := st.Turns.BeginTurn(ctx, TurnStart{
 				SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser,
 				InputJSON: `{}`, SubmissionIDs: []string{submissionID},
 			})
 			testutil.FailErr(t, "begin turn", err)
 			checkpoint := `{"final_output_id":"output-1","result":{"message_id":"message-1","stream_url":"/stream"}}`
-			testutil.FailErr(t, "checkpoint finalizing", st.CheckpointTurn(
+			testutil.FailErr(t, "checkpoint finalizing", st.Turns.CheckpointTurn(
 				ctx, execution.Turn.ID, execution.Attempt.ID, TurnPhaseFinalizing, checkpoint,
 			))
-			recovered, err := st.RecoverTurns(ctx)
+			recovered, err := st.Turns.RecoverTurns(ctx)
 			testutil.FailErr(t, "recover finalizing turn", err)
 			if len(recovered) != 0 {
 				t.Fatalf("finalizing turn was requeued = %+v", recovered)
 			}
-			submission, err := st.GetPromptSubmission(ctx, submissionID)
+			submission, err := st.Submissions.GetPromptSubmission(ctx, submissionID)
 			testutil.FailErr(t, "get recovered submission", err)
 			if submission.Status != PromptSubmissionComplete || submission.ResultJSON == "" {
 				t.Fatalf("recovered submission = %+v", submission)
 			}
-			queued, err := st.RecoverPromptSubmissions(ctx)
+			queued, err := st.Submissions.RecoverPromptSubmissions(ctx)
 			testutil.FailErr(t, "recover prompt submissions", err)
 			if len(queued) != 0 {
 				t.Fatalf("completed finalizing submission requeued = %v", queued)
@@ -236,17 +218,17 @@ func TestFinalizingTurnCompletesDuringRecoveryParity(t *testing.T) {
 func TestWorkerRetryStartsNewAttemptOnSameTurn(t *testing.T) {
 	ctx := t.Context()
 	st := newSQLTestStore(t)
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	testdbseed.InsertWorkerJob(t, st.DB(), "worker-job-1", sess.ID)
-	first, err := st.BeginTurn(ctx, TurnStart{
+	first, err := st.Turns.BeginTurn(ctx, TurnStart{
 		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginWorker,
 		WorkerJobID: "worker-job-1", InputJSON: `{}`,
 	})
 	testutil.FailErr(t, "begin worker turn", err)
-	_, err = st.FinishTurn(ctx, first.Turn.ID, first.Attempt.ID, TurnStatusFailed, "", "", "transient provider failure")
+	_, err = st.Turns.FinishTurn(ctx, first.Turn.ID, first.Attempt.ID, TurnStatusFailed, "", "", "transient provider failure")
 	testutil.FailErr(t, "fail worker attempt", err)
-	second, err := st.BeginTurn(ctx, TurnStart{
+	second, err := st.Turns.BeginTurn(ctx, TurnStart{
 		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginWorker,
 		WorkerJobID: "worker-job-1", InputJSON: `{}`,
 	})
@@ -258,24 +240,24 @@ func TestWorkerRetryStartsNewAttemptOnSameTurn(t *testing.T) {
 
 func TestWorkerTurnRecoveryIsScopedByOrigin(t *testing.T) {
 	ctx := t.Context()
-	st := openTurnSQLStore(t).(*SQL)
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	st := openTurnSQLStore(t)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	_, err = st.db.ExecContext(ctx, `
+	_, err = st.core.db.ExecContext(ctx, `
 		INSERT INTO worker_jobs (
 			id, project_id, child_session_id, agent_type, status, prompt, brief, created_at
 		) VALUES (?, ?, ?, 'repo-researcher', 'running', 'fixture', 'fixture', ?)
 	`, "worker-job-1", testdbseed.DefaultProjectID, sess.ID, time.Now().UTC().Format(time.RFC3339Nano))
 	testutil.FailErr(t, "insert worker job", err)
 
-	first, err := st.BeginTurn(ctx, TurnStart{
+	first, err := st.Turns.BeginTurn(ctx, TurnStart{
 		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginWorker,
 		WorkerJobID: "worker-job-1", InputJSON: `{}`,
 	})
 	testutil.FailErr(t, "begin worker turn", err)
-	_, err = st.FinishTurn(ctx, first.Turn.ID, first.Attempt.ID, TurnStatusFailed, "", "", "transient provider failure")
+	_, err = st.Turns.FinishTurn(ctx, first.Turn.ID, first.Attempt.ID, TurnStatusFailed, "", "", "transient provider failure")
 	testutil.FailErr(t, "fail worker turn", err)
-	closeout, err := st.BeginTurn(ctx, TurnStart{
+	closeout, err := st.Turns.BeginTurn(ctx, TurnStart{
 		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginWorkerCloseout,
 		WorkerJobID: "worker-job-1", InputJSON: `{}`,
 	})
@@ -283,9 +265,9 @@ func TestWorkerTurnRecoveryIsScopedByOrigin(t *testing.T) {
 	if closeout.Turn.ID == first.Turn.ID || closeout.Attempt.Attempt != 1 {
 		t.Fatalf("closeout = %+v, worker turn = %+v", closeout, first)
 	}
-	_, err = st.FinishTurn(ctx, closeout.Turn.ID, closeout.Attempt.ID, TurnStatusComplete, "", `{}`, "")
+	_, err = st.Turns.FinishTurn(ctx, closeout.Turn.ID, closeout.Attempt.ID, TurnStatusComplete, "", `{}`, "")
 	testutil.FailErr(t, "complete worker closeout", err)
-	retry, err := st.BeginTurn(ctx, TurnStart{
+	retry, err := st.Turns.BeginTurn(ctx, TurnStart{
 		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginWorker,
 		WorkerJobID: "worker-job-1", InputJSON: `{}`,
 	})
@@ -295,7 +277,7 @@ func TestWorkerTurnRecoveryIsScopedByOrigin(t *testing.T) {
 	}
 }
 
-func openTurnSQLStore(t *testing.T) turnTestStore {
+func openTurnSQLStore(t *testing.T) *Repositories {
 	t.Helper()
 	handle := testdbfixture.Open(t, "turns.db")
 	testdbseed.InsertProjectRoot(t, handle, testdbseed.DefaultProjectID, t.TempDir())
@@ -311,24 +293,24 @@ func TestReadModelOutputsReturnsASessionsOutputsWithTheirBodies(t *testing.T) {
 	for _, id := range []string{"reader", "other"} {
 		testdbseed.InsertSession(t, handle, id, testdbseed.DefaultProjectID)
 	}
-	turn, err := st.BeginTurn(t.Context(), TurnStart{SessionID: "reader", ProjectID: testdbseed.DefaultProjectID, Origin: TurnOriginUser, InputJSON: `{}`})
+	turn, err := st.Turns.BeginTurn(t.Context(), TurnStart{SessionID: "reader", ProjectID: testdbseed.DefaultProjectID, Origin: TurnOriginUser, InputJSON: `{}`})
 	testutil.FailErr(t, "begin turn", err)
 	for i, content := range []string{"First.", ""} {
-		_, err := st.SettleModelOutput(t.Context(), ModelOutput{ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: "reader",
+		_, err := st.Turns.SettleModelOutput(t.Context(), ModelOutput{ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: "reader",
 			Iteration: i + 1, MessageID: uuid.NewString(), Content: content, ToolCallsJSON: map[bool]string{true: `[{"id":"c1"}]`}[content == ""]})
 		testutil.FailErr(t, "settle output", err)
 	}
-	outputs, err := ReadModelOutputs(t.Context(), st.queries, dataDir, "reader")
+	outputs, err := ReadModelOutputs(t.Context(), st.core.queries, dataDir, "reader")
 	testutil.FailErr(t, "read outputs", err)
 	if len(outputs) != 2 || outputs[0].Content != "First." || outputs[1].ToolCallsJSON != `[{"id":"c1"}]` || outputs[0].SettledAt.IsZero() {
 		t.Fatalf("outputs = %+v", outputs)
 	}
-	none, err := ReadModelOutputs(t.Context(), st.queries, dataDir, "other")
+	none, err := ReadModelOutputs(t.Context(), st.core.queries, dataDir, "other")
 	testutil.FailErr(t, "read empty session", err)
 	if len(none) != 0 {
 		t.Fatalf("another session's outputs = %+v", none)
 	}
-	if _, err := ReadModelOutputs(t.Context(), st.queries, t.TempDir(), "reader"); err == nil {
+	if _, err := ReadModelOutputs(t.Context(), st.core.queries, t.TempDir(), "reader"); err == nil {
 		t.Fatal("an output whose body is missing was read")
 	}
 }
@@ -340,14 +322,14 @@ func TestTouchTurnProgressAdvancesOnlyARunningTurn(t *testing.T) {
 	handle := testdbfixture.Open(t, "turns.db")
 	testdbseed.InsertProjectRoot(t, handle, testdbseed.DefaultProjectID, t.TempDir())
 	st := NewSQL(handle)
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	turn, err := st.BeginTurn(ctx, TurnStart{ID: uuid.NewString(), SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: `{}`})
+	turn, err := st.Turns.BeginTurn(ctx, TurnStart{ID: uuid.NewString(), SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: `{}`})
 	testutil.FailErr(t, "begin turn", err)
 	const old = "2026-01-01T00:00:00Z"
 	_, err = handle.ExecContext(ctx, `UPDATE turns SET progressed_at = ? WHERE id = ?`, old, turn.Turn.ID)
 	testutil.FailErr(t, "age progress", err)
-	testutil.FailErr(t, "touch", st.TouchTurnProgress(ctx, turn.Turn.ID))
+	testutil.FailErr(t, "touch", st.Turns.TouchTurnProgress(ctx, turn.Turn.ID))
 	var progressed string
 	testutil.FailErr(t, "read progress", handle.QueryRowContext(ctx, `SELECT progressed_at FROM turns WHERE id = ?`, turn.Turn.ID).Scan(&progressed))
 	if progressed <= old {
@@ -355,7 +337,7 @@ func TestTouchTurnProgressAdvancesOnlyARunningTurn(t *testing.T) {
 	}
 	_, err = handle.ExecContext(ctx, `UPDATE turns SET status = 'complete', completed_at = ?, progressed_at = ? WHERE id = ?`, old, old, turn.Turn.ID)
 	testutil.FailErr(t, "finish turn", err)
-	testutil.FailErr(t, "touch finished", st.TouchTurnProgress(ctx, turn.Turn.ID))
+	testutil.FailErr(t, "touch finished", st.Turns.TouchTurnProgress(ctx, turn.Turn.ID))
 	testutil.FailErr(t, "read finished progress", handle.QueryRowContext(ctx, `SELECT progressed_at FROM turns WHERE id = ?`, turn.Turn.ID).Scan(&progressed))
 	if progressed != old {
 		t.Fatalf("a finished turn's progress moved: %s", progressed)

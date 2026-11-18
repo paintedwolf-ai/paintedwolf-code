@@ -1,7 +1,6 @@
 package store
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"path/filepath"
@@ -20,9 +19,7 @@ func TestSessionStoresRequireCompleteModelRef(t *testing.T) {
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "store.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 
-	stores := map[string]interface {
-		Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-	}{
+	stores := map[string]*Repositories{
 		"sql": NewSQL(sqlDB),
 	}
 	requests := map[string]api.CreateSessionRequest{
@@ -32,7 +29,7 @@ func TestSessionStoresRequireCompleteModelRef(t *testing.T) {
 	for storeName, sessionStore := range stores {
 		for requestName, req := range requests {
 			t.Run(storeName+"/"+requestName, func(t *testing.T) {
-				_, err := sessionStore.Create(t.Context(), req, testdbseed.DefaultProjectID)
+				_, err := sessionStore.Sessions.Create(t.Context(), req, testdbseed.DefaultProjectID)
 				if !errors.Is(err, ErrSessionModelRefIncomplete) {
 					t.Fatalf("Create error = %v, want %v", err, ErrSessionModelRefIncomplete)
 				}

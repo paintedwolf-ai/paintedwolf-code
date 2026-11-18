@@ -11,12 +11,12 @@ import (
 	"testing"
 )
 
-func reasoningStore(t *testing.T) (*SQL, string) {
+func reasoningStore(t *testing.T) (*Repositories, string) {
 	t.Helper()
 	sqlDB := testdbfixture.Open(t, "reasoning.db")
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	s := NewSQL(sqlDB)
-	sess, err := s.Create(context.Background(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := s.Sessions.Create(context.Background(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	return s, sess.ID
 }
@@ -38,9 +38,9 @@ func TestModelReasoningRoundTripsThroughTheStore(t *testing.T) {
 			Details:    []json.RawMessage{block},
 		},
 	}
-	testutil.FailErr(t, "append message", s.AppendMessages(ctx, sessionID, msg))
+	testutil.FailErr(t, "append message", s.Transcript.AppendMessages(ctx, sessionID, msg))
 
-	got, err := s.GetMessages(ctx, sessionID)
+	got, err := s.Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "get messages", err)
 	if len(got) != 1 {
 		t.Fatalf("messages = %d want 1", len(got))
@@ -67,8 +67,8 @@ func TestModelReasoningFollowsThePatchedRow(t *testing.T) {
 	s, sessionID := reasoningStore(t)
 
 	msg := api.Message{Role: api.MessageRoleAssistant, Content: "thinking"}
-	testutil.FailErr(t, "append message", s.AppendMessages(ctx, sessionID, msg))
-	got, err := s.GetMessages(ctx, sessionID)
+	testutil.FailErr(t, "append message", s.Transcript.AppendMessages(ctx, sessionID, msg))
+	got, err := s.Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "get messages", err)
 	if got[0].ModelReasoning != nil {
 		t.Fatalf("streaming row started with a trace: %+v", got[0].ModelReasoning)
@@ -77,9 +77,9 @@ func TestModelReasoningFollowsThePatchedRow(t *testing.T) {
 	settled := got[0]
 	settled.Content = "done"
 	settled.ModelReasoning = &api.ModelReasoning{ProviderID: "p", Model: "m", Text: "trace"}
-	_, err = s.UpdateMessage(ctx, sessionID, settled.ID, settled)
+	_, err = s.Transcript.UpdateMessage(ctx, sessionID, settled.ID, settled)
 	testutil.FailErr(t, "settle row", err)
-	got, err = s.GetMessages(ctx, sessionID)
+	got, err = s.Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "get settled messages", err)
 	if got[0].ModelReasoning == nil || got[0].ModelReasoning.Text != "trace" {
 		t.Fatalf("settled trace = %+v", got[0].ModelReasoning)
@@ -87,9 +87,9 @@ func TestModelReasoningFollowsThePatchedRow(t *testing.T) {
 
 	cleared := got[0]
 	cleared.ModelReasoning = nil
-	_, err = s.UpdateMessage(ctx, sessionID, cleared.ID, cleared)
+	_, err = s.Transcript.UpdateMessage(ctx, sessionID, cleared.ID, cleared)
 	testutil.FailErr(t, "clear trace", err)
-	got, err = s.GetMessages(ctx, sessionID)
+	got, err = s.Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "get cleared messages", err)
 	if got[0].ModelReasoning != nil {
 		t.Fatalf("cleared trace came back: %+v", got[0].ModelReasoning)
@@ -113,10 +113,10 @@ func TestModelReasoningStaysOffTheWire(t *testing.T) {
 
 func TestDeletingSessionRemovesReasoning(t *testing.T) {
 	s, id := reasoningStore(t)
-	testutil.FailErr(t, "append reasoning", s.AppendMessages(t.Context(), id, api.Message{Role: api.MessageRoleAssistant, ModelReasoning: &api.ModelReasoning{ProviderID: "p", Model: "m", Text: "private"}}))
-	testutil.FailErr(t, "delete session", s.Delete(t.Context(), id))
+	testutil.FailErr(t, "append reasoning", s.Transcript.AppendMessages(t.Context(), id, api.Message{Role: api.MessageRoleAssistant, ModelReasoning: &api.ModelReasoning{ProviderID: "p", Model: "m", Text: "private"}}))
+	testutil.FailErr(t, "delete session", s.Sessions.Delete(t.Context(), id))
 	var count int
-	testutil.FailErr(t, "count retained reasoning", s.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM messages WHERE session_id=? AND reasoning_json IS NOT NULL`, id).Scan(&count))
+	testutil.FailErr(t, "count retained reasoning", s.core.db.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM messages WHERE session_id=? AND reasoning_json IS NOT NULL`, id).Scan(&count))
 	if count != 0 {
 		t.Fatal("session deletion retained reasoning")
 	}

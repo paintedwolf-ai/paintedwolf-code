@@ -18,7 +18,7 @@ func TestSQLMutationOutboxCommitsObserverEvents(t *testing.T) {
 	database := testdbfixture.Open(t, "store.db")
 	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
 	hub := events.NewMemoryHub()
-	ch, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: testdbseed.DefaultProjectID, Viewer: testutil.HostOwner()})
+	ch, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Project: testdbseed.DefaultProjectID, Viewer: testutil.People.HostOwner()})
 	testutil.FailErr(t, "subscribe events", err)
 	defer unsubscribe()
 	outbox := eventoutbox.New(database, hub)
@@ -27,7 +27,7 @@ func TestSQLMutationOutboxCommitsObserverEvents(t *testing.T) {
 	store := NewSQL(database)
 	store.SetEventOutbox(outbox)
 
-	sess, err := store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	waitOutboxEmpty(t, database)
 	hub.FlushDebounced()
@@ -39,7 +39,7 @@ func TestSQLMutationOutboxCommitsObserverEvents(t *testing.T) {
 	message := api.Message{Role: api.MessageRoleAssistant, Content: "private tool-step explanation", ToolCalls: []api.ToolCall{{
 		Name: "terminal_send", Args: map[string]any{"input": "secret", "id": "pty"},
 	}}}
-	testutil.FailErr(t, "append message", store.AppendMessages(t.Context(), sess.ID, message))
+	testutil.FailErr(t, "append message", store.Transcript.AppendMessages(t.Context(), sess.ID, message))
 	waitOutboxEmpty(t, database)
 	envelope := testutil.Receive(t, "message observer event", ch)
 	var event api.MessageEvent
@@ -50,7 +50,7 @@ func TestSQLMutationOutboxCommitsObserverEvents(t *testing.T) {
 	if event.Message.ToolCalls[0].Args["input"] != messageview.RedactedToolArgPlaceholder {
 		t.Fatalf("observer input = %v", event.Message.ToolCalls[0].Args["input"])
 	}
-	stored, err := store.GetMessages(t.Context(), sess.ID)
+	stored, err := store.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read messages", err)
 	if stored[0].Content != message.Content {
 		t.Fatal("observer projection changed recorded tool-step prose")

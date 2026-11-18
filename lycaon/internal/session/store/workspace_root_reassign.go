@@ -117,10 +117,11 @@ func hydrateWorkspacePath(ctx context.Context, s *sqlCore, sess *api.Session) er
 }
 
 // HasActiveProjectSessions reports whether a project has unarchived active sessions.
-func (s *SQL) HasActiveProjectSessions(ctx context.Context, projectID string, activeSince time.Time) (bool, error) {
-	if s == nil || s.sqlCore == nil || s.db == nil {
+func (r *sqlSessions) HasActiveProjectSessions(ctx context.Context, projectID string, activeSince time.Time) (bool, error) {
+	if r == nil || r.core == nil || r.core.db == nil {
 		return false, nil
 	}
+	s := r.core
 	projectID = strings.TrimSpace(projectID)
 	if projectID == "" {
 		return false, nil
@@ -148,10 +149,11 @@ func (s *SQL) HasActiveProjectSessions(ctx context.Context, projectID string, ac
 }
 
 // ReassignSessionsWorkspaceRoot retargets sessions from one root.
-func (s *SQL) ReassignSessionsWorkspaceRoot(ctx context.Context, projectID, fromRootID, toRootID string) error {
-	if s == nil || s.sqlCore == nil || s.db == nil {
+func (r *sqlSessions) ReassignSessionsWorkspaceRoot(ctx context.Context, projectID, fromRootID, toRootID string) error {
+	if r == nil || r.core == nil || r.core.db == nil {
 		return nil
 	}
+	s := r.core
 	projectID = strings.TrimSpace(projectID)
 	fromRootID = strings.TrimSpace(fromRootID)
 	if projectID == "" || fromRootID == "" {

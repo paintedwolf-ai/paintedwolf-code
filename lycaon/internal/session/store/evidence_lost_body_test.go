@@ -15,7 +15,7 @@ import (
 )
 
 // lostBodyFixture stores one read record and returns its body file path.
-func lostBodyFixture(t *testing.T) (store *SQL, sessionID, bodyPath string) {
+func lostBodyFixture(t *testing.T) (store *Repositories, sessionID, bodyPath string) {
 	t.Helper()
 	dir := t.TempDir()
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "ledger.db"))
@@ -23,9 +23,9 @@ func lostBodyFixture(t *testing.T) (store *SQL, sessionID, bodyPath string) {
 	store = NewSQL(sqlDB)
 	store.SetDataDir(dir)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "Create", err)
-	testutil.FailErr(t, "UpsertEvidenceRecord", store.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
+	testutil.FailErr(t, "UpsertEvidenceRecord", store.Evidence.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
 		Handle: "read#1", Kind: "read", Shape: "file_region", Fidelity: "structured", SourceTool: "read",
 		Path: "src/foo.go", LineRanges: []evidence.LineRange{{Start: 42, End: 42}}, Body: []string{"line 42: token check"},
 	}))
@@ -42,7 +42,7 @@ func TestLoadLedgerKeepsARecordWhoseBodyFileIsMissing(t *testing.T) {
 	store, sessionID, bodyPath := lostBodyFixture(t)
 	testutil.FailErr(t, "remove body file", os.Remove(bodyPath))
 
-	ev, err := store.LoadLedger(context.Background(), sessionID)
+	ev, err := store.Evidence.LoadLedger(context.Background(), sessionID)
 	testutil.FailErr(t, "LoadLedger with a lost body", err)
 	got, ok := evidence.ResolveHandle(ev, "read#1")
 	if !ok {
@@ -64,7 +64,7 @@ func TestLoadLedgerReportsALostBodyOnce(t *testing.T) {
 	testutil.FailErr(t, "remove body file", os.Remove(bodyPath))
 
 	for range 3 {
-		_, err := store.LoadLedger(context.Background(), sessionID)
+		_, err := store.Evidence.LoadLedger(context.Background(), sessionID)
 		testutil.FailErr(t, "LoadLedger", err)
 	}
 	if got := store.lostBodies.Len(); got != 1 {
@@ -77,7 +77,7 @@ func TestLoadLedgerStillFailsOnADamagedBody(t *testing.T) {
 	store, sessionID, bodyPath := lostBodyFixture(t)
 	testutil.FailErr(t, "damage body file", os.WriteFile(bodyPath, []byte("not zstd"), 0o600))
 
-	if _, err := store.LoadLedger(context.Background(), sessionID); err == nil {
+	if _, err := store.Evidence.LoadLedger(context.Background(), sessionID); err == nil {
 		t.Fatal("a damaged body loaded as if it were fine")
 	}
 }

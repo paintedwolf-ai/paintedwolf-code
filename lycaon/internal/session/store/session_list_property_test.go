@@ -157,7 +157,7 @@ func nullableSummaryTime(value *time.Time) any {
 	return timelayout.Format(*value)
 }
 
-func assertSummaryPagesMatch(t *testing.T, sqlStore *SQL, fixtures []api.Session, q SummaryQuery) {
+func assertSummaryPagesMatch(t *testing.T, sqlStore *Repositories, fixtures []api.Session, q SummaryQuery) {
 	t.Helper()
 	var expected []api.Session
 	for _, row := range fixtures {
@@ -200,7 +200,7 @@ func assertSummaryPagesMatch(t *testing.T, sqlStore *SQL, fixtures []api.Session
 	}
 	actualIDs := make([]string, 0, len(expected))
 	for pageNumber := 0; pageNumber < 100; pageNumber++ {
-		page, err := sqlStore.ListProjectSummaries(t.Context(), q)
+		page, err := sqlStore.Sessions.ListProjectSummaries(t.Context(), q)
 		testutil.FailErr(t, "list SQL page", err)
 		if page.Total != len(expectedIDs) {
 			t.Fatalf("total = %d, want %d", page.Total, len(expectedIDs))

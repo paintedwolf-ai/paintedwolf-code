@@ -19,7 +19,7 @@ func TestHydrationReturnsOrdOrderUnderOutOfOrderTS(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	msgs := []api.Message{
@@ -27,7 +27,7 @@ func TestHydrationReturnsOrdOrderUnderOutOfOrderTS(t *testing.T) {
 		{ID: "m-2", Role: api.MessageRoleAssistant, Content: "second"},
 		{ID: "m-3", Role: api.MessageRoleTool, Content: "third"},
 	}
-	testutil.FailErr(t, "append", store.AppendMessages(ctx, sess.ID, msgs...))
+	testutil.FailErr(t, "append", store.Transcript.AppendMessages(ctx, sess.ID, msgs...))
 
 	// Physical rows and timestamps run opposite to creation order.
 	scramble := []struct {
@@ -44,7 +44,7 @@ func TestHydrationReturnsOrdOrderUnderOutOfOrderTS(t *testing.T) {
 		}
 	}
 
-	got, err := store.GetMessages(ctx, sess.ID)
+	got, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "get messages", err)
 	if len(got) != 3 {
 		t.Fatalf("got %d messages, want 3", len(got))
@@ -69,7 +69,7 @@ func TestHydrationReturnsOrdOrderUnderOutOfOrderTS(t *testing.T) {
 		{"before", api.TranscriptPageQuery{Limit: 2, Before: &before}, []string{"m-1", "m-2"}},
 		{"after", api.TranscriptPageQuery{Limit: 2, After: &after}, []string{"m-2", "m-3"}},
 	} {
-		page, err := store.GetTranscriptPage(ctx, sess.ID, tc.query)
+		page, err := store.Transcript.GetTranscriptPage(ctx, sess.ID, tc.query)
 		testutil.FailErr(t, tc.name+" page", err)
 		if len(page.Messages) != len(tc.ids) {
 			t.Fatalf("%s page has %d messages, want %d", tc.name, len(page.Messages), len(tc.ids))
@@ -87,13 +87,13 @@ func TestUpdateMessagePreservesCreationMetadata(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	st := NewSQL(sqlDB)
 	ctx := t.Context()
-	sess, err := st.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	created := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-	testutil.FailErr(t, "append messages", st.AppendMessages(ctx, sess.ID,
+	testutil.FailErr(t, "append messages", st.Transcript.AppendMessages(ctx, sess.ID,
 		api.Message{ID: "first", Role: api.MessageRoleAssistant, Content: "original", CreatedAt: created},
 		api.Message{ID: "second", Role: api.MessageRoleUser, Content: "neighbor", CreatedAt: created}))
-	before, err := st.GetMessages(ctx, sess.ID)
+	before, err := st.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read initial messages", err)
 	if len(before) != 2 {
 		t.Fatalf("initial transcript has %d messages, want 2", len(before))
@@ -102,9 +102,9 @@ func TestUpdateMessagePreservesCreationMetadata(t *testing.T) {
 		patch := before[0]
 		patch.Ord, patch.Seq, patch.CreatedAt = 999, 999, stamp
 		patch.Content, patch.DraftStatus = "revised", api.DraftStatusRejected
-		updated, err := st.UpdateMessage(ctx, sess.ID, patch.ID, patch)
+		updated, err := st.Transcript.UpdateMessage(ctx, sess.ID, patch.ID, patch)
 		testutil.FailErr(t, "patch message", err)
-		rows, err := st.GetMessages(ctx, sess.ID)
+		rows, err := st.Transcript.GetMessages(ctx, sess.ID)
 		testutil.FailErr(t, "read patched messages", err)
 		if len(rows) != 2 || rows[0].ID != "first" || rows[1].ID != "second" {
 			t.Fatalf("patch changed transcript membership or order: %+v", rows)
@@ -129,10 +129,10 @@ func TestAppendMessagesStampsStrictlyIncreasingOrdSQLOnly(t *testing.T) {
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	for i := 0; i < 4; i++ {
-		testutil.FailErr(t, "append", store.AppendMessages(ctx, sess.ID, api.Message{
+		testutil.FailErr(t, "append", store.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 			Role: api.MessageRoleUser, Content: "m", CreatedAt: time.Now().UTC(),
 		}))
 	}
@@ -173,11 +173,11 @@ func TestAppendMessagesOrdContiguous(t *testing.T) {
 	dir := t.TempDir()
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
 	store := NewSQL(sqlDB)
-	sess, err := store.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	for i := 0; i < 6; i++ {
-		if err := store.AppendMessages(ctx, sess.ID, api.Message{
+		if err := store.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 			ID:      fmt.Sprintf("m-%d", i+1),
 			Role:    api.MessageRoleUser,
 			Content: fmt.Sprintf("msg %d", i+1),
@@ -185,7 +185,7 @@ func TestAppendMessagesOrdContiguous(t *testing.T) {
 			testutil.FailErr(t, "append message", err)
 		}
 	}
-	msgs, err := store.GetMessages(ctx, sess.ID)
+	msgs, err := store.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(msgs) != 6 {
 		t.Fatalf("message count = %d want 6", len(msgs))

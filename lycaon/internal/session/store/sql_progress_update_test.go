@@ -21,7 +21,7 @@ func TestSQLStoreProgressUpdateRoundTrip(t *testing.T) {
 	store := NewSQL(sqlDB)
 	ctx := context.Background()
 
-	sess, err := store.Create(ctx, api.CreateSessionRequest{
+	sess, err := store.Sessions.Create(ctx, api.CreateSessionRequest{
 		Posture:   api.SessionPostureBuild,
 		ProjectID: testdbseed.DefaultProjectID,
 	}, testdbseed.DefaultProjectID)
@@ -42,7 +42,7 @@ func TestSQLStoreProgressUpdateRoundTrip(t *testing.T) {
 			{Kind: api.ProgressChangeDone, Label: "AI module", State: "done"},
 		},
 	}
-	testutil.FailErr(t, "append progress_update", store.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "append progress_update", store.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		ID:             "pu-1",
 		Role:           api.MessageRoleSystem,
 		Kind:           api.MessageKindProgressUpdate,
@@ -54,7 +54,7 @@ func TestSQLStoreProgressUpdateRoundTrip(t *testing.T) {
 
 	sqlDB2 := testdbfixture.OpenPath(t, dbPath)
 
-	msgs, err := NewSQL(sqlDB2).GetMessages(ctx, sess.ID)
+	msgs, err := NewSQL(sqlDB2).Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 	if len(msgs) != 1 {
 		t.Fatalf("messages len = %d, want 1", len(msgs))

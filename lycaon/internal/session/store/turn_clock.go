@@ -76,7 +76,7 @@ func (c TurnClock) Wire() api.TurnClock {
 // PutTurnClock records a visible user turn's clock. A clock whose opening
 // message is not yet in the transcript is not recorded; the next edge after
 // the message lands records it.
-func (t *sqlTurnTelemetry) PutTurnClock(ctx context.Context, clock TurnClock) error {
+func (t *sqlTurns) PutTurnClock(ctx context.Context, clock TurnClock) error {
 	clock = normalizeTurnClock(clock)
 	if clock.SessionID == "" || clock.OpeningMessageID == "" {
 		return fmt.Errorf("turn clock requires a session and opening message")
@@ -93,7 +93,7 @@ func (t *sqlTurnTelemetry) PutTurnClock(ctx context.Context, clock TurnClock) er
 }
 
 // LatestTurnClock returns the clock of the session's newest visible user turn.
-func (t *sqlTurnTelemetry) LatestTurnClock(ctx context.Context, sessionID string) (TurnClock, bool, error) {
+func (t *sqlTurns) LatestTurnClock(ctx context.Context, sessionID string) (TurnClock, bool, error) {
 	row, err := t.core.queries.GetLatestTurnClock(ctx, sessionID)
 	if db.IsNoRows(err) {
 		return TurnClock{}, false, nil
@@ -106,7 +106,7 @@ func (t *sqlTurnTelemetry) LatestTurnClock(ctx context.Context, sessionID string
 }
 
 // SettleAbandonedTurnClocks pauses clocks left running by process loss.
-func (t *sqlTurnTelemetry) SettleAbandonedTurnClocks(ctx context.Context) (int, error) {
+func (t *sqlTurns) SettleAbandonedTurnClocks(ctx context.Context) (int, error) {
 	s := t.core
 	settled := 0
 	for {
@@ -127,7 +127,7 @@ func (t *sqlTurnTelemetry) SettleAbandonedTurnClocks(ctx context.Context) (int, 
 }
 
 // LatestTurnProgress is when any of the session's turns last did durable work.
-func (t *sqlTurnTelemetry) LatestTurnProgress(ctx context.Context, sessionID string) (time.Time, error) {
+func (t *sqlTurns) LatestTurnProgress(ctx context.Context, sessionID string) (time.Time, error) {
 	return latestTurnProgressSQL(ctx, t.core, sessionID)
 }
 

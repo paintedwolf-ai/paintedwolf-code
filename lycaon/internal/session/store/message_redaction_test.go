@@ -39,14 +39,14 @@ func userMessage(id, content string) api.Message {
 func TestEveryTranscriptWritePathIsScreenedByTheStore(t *testing.T) {
 	installTestRedactor(t)
 	ctx := t.Context()
-	st := openTurnSQLStore(t).(*SQL)
-	sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	st := openTurnSQLStore(t)
+	sess, err := st.Sessions.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	t.Run("AppendMessages", func(t *testing.T) {
 		msg := userMessage("direct-append", "token "+storedCredential+" here")
 		batch := []api.Message{msg}
-		testutil.FailErr(t, "append", st.AppendMessages(ctx, sess.ID, batch...))
+		testutil.FailErr(t, "append", st.Transcript.AppendMessages(ctx, sess.ID, batch...))
 
 		// The caller's batch carries the screened row.
 		exposure.Absent(t, batch[0].Content, storedCredential)
@@ -55,27 +55,27 @@ func TestEveryTranscriptWritePathIsScreenedByTheStore(t *testing.T) {
 
 	t.Run("AppendMessagesWith", func(t *testing.T) {
 		msg := userMessage("tx-append", "token "+storedCredential+" here")
-		err := st.AppendMessagesWith(ctx, sess.ID, func(*sql.Tx) error { return nil }, msg)
+		err := st.Transcript.AppendMessagesWith(ctx, sess.ID, func(*sql.Tx) error { return nil }, msg)
 		testutil.FailErr(t, "append with mutation", err)
 		assertStoredRowIsScreened(t, ctx, st, sess.ID, "tx-append")
 	})
 
 	t.Run("UpdateMessage", func(t *testing.T) {
 		msg := userMessage("updated", "clean")
-		testutil.FailErr(t, "append", st.AppendMessages(ctx, sess.ID, msg))
+		testutil.FailErr(t, "append", st.Transcript.AppendMessages(ctx, sess.ID, msg))
 
 		replacement := msg
 		replacement.Content = "token " + storedCredential + " here"
-		got, err := st.UpdateMessage(ctx, sess.ID, msg.ID, replacement)
+		got, err := st.Transcript.UpdateMessage(ctx, sess.ID, msg.ID, replacement)
 		testutil.FailErr(t, "update", err)
 		exposure.Absent(t, got.Content, storedCredential)
 		assertStoredRowIsScreened(t, ctx, st, sess.ID, "updated")
 	})
 }
 
-func assertStoredRowIsScreened(t *testing.T, ctx context.Context, st *SQL, sessionID, messageID string) {
+func assertStoredRowIsScreened(t *testing.T, ctx context.Context, st *Repositories, sessionID, messageID string) {
 	t.Helper()
-	msgs, err := st.GetMessages(ctx, sessionID)
+	msgs, err := st.Transcript.GetMessages(ctx, sessionID)
 	testutil.FailErr(t, "read messages", err)
 	for _, msg := range msgs {
 		if msg.ID != messageID {
@@ -101,15 +101,15 @@ func TestMessageRedactorReleasePreservesReplacementOnDurableWrites(t *testing.T)
 	releaseCurrent := install("current-owner")
 	defer releaseOld()
 	defer releaseCurrent()
-	st := openTurnSQLStore(t).(*SQL)
-	sess, err := st.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	st := openTurnSQLStore(t)
+	sess, err := st.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create owner test session", err)
 	releaseOld()
 	releaseOld()
-	testutil.FailErr(t, "append through replacement", st.AppendMessages(t.Context(), sess.ID, userMessage("before-release", "owner-marker")))
+	testutil.FailErr(t, "append through replacement", st.Transcript.AppendMessages(t.Context(), sess.ID, userMessage("before-release", "owner-marker")))
 	releaseCurrent()
-	testutil.FailErr(t, "append after owner release", st.AppendMessages(t.Context(), sess.ID, userMessage("after-release", "owner-marker")))
-	messages, err := st.GetMessages(t.Context(), sess.ID)
+	testutil.FailErr(t, "append after owner release", st.Transcript.AppendMessages(t.Context(), sess.ID, userMessage("after-release", "owner-marker")))
+	messages, err := st.Transcript.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read screened durable rows", err)
 	if len(messages) != 2 || messages[0].Content != "current-owner" || messages[1].Content != "owner-marker" {
 		t.Fatalf("owner lifetime changed durable screening: %#v", messages)

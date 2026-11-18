@@ -27,7 +27,7 @@ func TestSQLSessionEventSharesRevisionWithDirectPublishPath(t *testing.T) {
 		t.Fatalf("direct path's first revision = %d, want 1", got)
 	}
 
-	sess, err := store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	var outboxRevision uint64
@@ -55,7 +55,7 @@ func TestSQLSessionEventUnwiredRevisionsLeavesZero(t *testing.T) {
 	store := NewSQL(database)
 	store.SetEventOutbox(outbox)
 
-	sess, err := store.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	sess, err := store.Sessions.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 
 	var outboxRevision uint64

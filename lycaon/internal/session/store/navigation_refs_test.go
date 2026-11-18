@@ -22,7 +22,7 @@ func TestNavigationReferencesRoundTripVersionedBlob(t *testing.T) {
 	rootID := testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
 	s := NewSQL(sqlDB)
 	ctx := context.Background()
-	sess, err := s.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
+	sess, err := s.Sessions.Create(ctx, api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	want := api.NavigationReference{
 		ID: "ref-0", Syntax: "code", Status: api.NavigationResolved, Explicit: true, Mention: "scripts",
@@ -31,11 +31,11 @@ func TestNavigationReferencesRoundTripVersionedBlob(t *testing.T) {
 		Path:      "scripts",
 		EntryKind: api.NavigationEntryKindFolder,
 	}
-	testutil.FailErr(t, "append message", s.AppendMessages(ctx, sess.ID, api.Message{
+	testutil.FailErr(t, "append message", s.Transcript.AppendMessages(ctx, sess.ID, api.Message{
 		ID: "assistant-1", Role: api.MessageRoleAssistant, Content: "scripts/",
 		NavigationRefs: []api.NavigationReference{want}, CreatedAt: time.Now().UTC(),
 	}))
-	msgs, err := s.GetMessages(ctx, sess.ID)
+	msgs, err := s.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read messages", err)
 	if len(msgs) != 1 || len(msgs[0].NavigationRefs) != 1 || !reflect.DeepEqual(msgs[0].NavigationRefs[0], want) {
 		t.Fatalf("navigation refs = %+v", msgs)
@@ -56,7 +56,7 @@ func TestNavigationReferencesRoundTripVersionedBlob(t *testing.T) {
 	if !errors.Is(err, jsonblob.ErrBlobTooNew) {
 		t.Fatalf("newer blob err = %v", err)
 	}
-	msgs, err = s.GetMessages(ctx, sess.ID)
+	msgs, err = s.Transcript.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read after rejected write", err)
 	if len(msgs) != 1 || len(msgs[0].NavigationRefs) != 1 || !reflect.DeepEqual(msgs[0].NavigationRefs[0], want) {
 		t.Fatal("rejected envelope changed the stored binding")

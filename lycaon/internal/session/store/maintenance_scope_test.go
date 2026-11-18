@@ -25,7 +25,7 @@ func TestMaintenanceScopesPageLiveIDsAndRetainArchivedOwners(t *testing.T) {
 	var after string
 	count := 0
 	for {
-		ids, err := s.WorkspaceNotificationIDs(t.Context(), root, after)
+		ids, err := s.Sessions.WorkspaceNotificationIDs(t.Context(), root, after)
 		testutil.FailErr(t, "page notification owners", err)
 		if len(ids) == 0 {
 			break
@@ -39,7 +39,7 @@ func TestMaintenanceScopesPageLiveIDsAndRetainArchivedOwners(t *testing.T) {
 	if count != 269 {
 		t.Fatalf("notification count=%d want269", count)
 	}
-	exists, err := s.ExistingSessionIDs(t.Context(), []string{"session-000", "session-001", "gone"})
+	exists, err := s.Sessions.ExistingSessionIDs(t.Context(), []string{"session-000", "session-001", "gone"})
 	testutil.FailErr(t, "query checkpoint ownership", err)
 	if !exists["session-000"] || !exists["session-001"] || exists["gone"] {
 		t.Fatalf("incorrect owners: %+v", exists)

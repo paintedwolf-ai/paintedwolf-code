@@ -24,7 +24,7 @@ func (s *sqlSessions) CreateWithStatus(ctx context.Context, req api.CreateSessio
 	if !api.IsInitialSessionStatus(status) {
 		return nil, &SessionStatusTransitionError{To: status}
 	}
-	owner, err := people.Acting(ctx, s.core)
+	owner, err := people.Acting(ctx, s.core.peopleStore)
 	if err != nil {
 		return nil, err
 	}
