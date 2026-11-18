@@ -30,8 +30,7 @@ const (
 )
 
 // Change is one path the branch tree no longer holds as the baseline recorded it.
-// RootID and ScopeRel carry the structured identity; Path is the display spelling
-// kept for legacy readers.
+// RootID and ScopeRel identify the file; Path is its display spelling.
 type Change struct {
 	RootID   string
 	ScopeRel string
@@ -324,6 +323,12 @@ func manifestRoot(roots []projectroot.RootRef, path string) (projectroot.RootRef
 // its place there. Multi-root trees keep one directory per root under the
 // branch; single-root trees keep the root's files at the branch top.
 func branchLocationAt(roots []projectroot.RootRef, branch, rootID, scopeRel string) (base, rel string, err error) {
+	if err := validateIdentity(rootID, scopeRel); err != nil {
+		return "", "", err
+	}
+	if _, err := rootForIdentity(roots, rootID); err != nil {
+		return "", "", err
+	}
 	base = branch
 	if len(roots) > 1 {
 		dir, err := projectroot.BranchDirForID(rootID)
@@ -405,18 +410,17 @@ func EachOverlayChange(ctx context.Context, baselinePath, overlayPath string, ro
 		err := blobs.CopySHA(ctx, sha, &content)
 		return content.Bytes(), err
 	}
-	return overlay.Each(ctx, func(path string, final File) error {
-		root, rel, err := manifestRoot(roots, path)
+	return overlay.EachIdentity(ctx, roots, func(entry Entry) error {
+		if _, err := rootForIdentity(roots, entry.RootID); err != nil {
+			return err
+		}
+		base, exists, err := baseline.LookupIdentity(ctx, roots, entry.RootID, entry.ScopeRel)
 		if err != nil {
 			return err
 		}
-		base, exists, err := baseline.Lookup(ctx, path)
-		if err != nil {
-			return err
+		if entry.File.Opaque && entry.File.LinkTarget == "" {
+			return fmt.Errorf("overlay body for %s was not captured", entry.Path)
 		}
-		if final.Opaque && final.LinkTarget == "" {
-			return fmt.Errorf("overlay body for %s was not captured", path)
-		}
-		return visit(OverlayChange{RootID: root.ID, Rel: rel, Final: final, Base: base, BaseExists: exists, Body: body})
+		return visit(OverlayChange{RootID: entry.RootID, Rel: entry.ScopeRel, Final: entry.File, Base: base, BaseExists: exists, Body: body})
 	})
 }

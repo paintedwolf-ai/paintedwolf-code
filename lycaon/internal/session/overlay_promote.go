@@ -132,6 +132,12 @@ func InspectOverlayChanges(ctx context.Context, task *api.WorkerTask, roots []pr
 		return nil, err
 	}
 	defer func() { _ = baseline.Close() }()
+	if len(roots) == 0 {
+		roots, err = workspace.LoadBranchRoots(task.WorkspaceRoot)
+		if err != nil {
+			return nil, err
+		}
+	}
 	changed, err := baseline.Changes(ctx, roots, task.WorkspaceRoot)
 	if err != nil {
 		return nil, err

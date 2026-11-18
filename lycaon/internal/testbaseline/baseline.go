@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
@@ -17,7 +18,7 @@ func Capture(t testing.TB, dir string) string {
 	t.Helper()
 	root := t.TempDir()
 	store := workspacebaseline.New(nil, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "manifests"))
-	path, err := store.Capture(t.Context(), "fixture", workspacebaseline.Branch(nil, dir))
+	path, err := store.Capture(t.Context(), "fixture", workspacebaseline.Branch(Roots(dir), dir))
 	testutil.FailErr(t, "capture workspace baseline", err)
 	return path
 }
@@ -47,7 +48,7 @@ func Durable(t testing.TB, database db.Handle, jobID, dir string) string {
 	t.Helper()
 	root := DataDir(t, database)
 	store := workspacebaseline.New(database, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "worker-baselines"))
-	path, err := store.Capture(t.Context(), jobID, workspacebaseline.Branch(nil, dir))
+	path, err := store.Capture(t.Context(), jobID, workspacebaseline.Branch(Roots(dir), dir))
 	testutil.FailErr(t, "capture durable baseline", err)
 	return path
 }
@@ -60,4 +61,9 @@ func DataDir(t testing.TB, database db.DBTX) string {
 		t.Fatal("fixture store has no data directory")
 	}
 	return root
+}
+
+// Roots identifies the single-root baseline fixture.
+func Roots(dir string) []projectroot.RootRef {
+	return []projectroot.RootRef{{ID: "root", Path: dir, IsPrimary: true}}
 }

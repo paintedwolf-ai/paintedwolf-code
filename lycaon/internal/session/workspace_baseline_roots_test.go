@@ -137,7 +137,7 @@ func TestOverlayTreeReadsThePathsPromotionConsiders(t *testing.T) {
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(branch, "main.go"), []byte("old\n"), 0o644))
 	blobs := sourceblob.New(filepath.Join(data, "source-content"))
 	store := workspacebaseline.New(nil, blobs, filepath.Join(data, "manifests"))
-	manifest, err := store.Capture(context.Background(), "job", workspacebaseline.Branch(nil, branch))
+	manifest, err := store.Capture(context.Background(), "job", workspacebaseline.Branch([]projectroot.RootRef{{ID: "root", Path: branch, IsPrimary: true}}, branch))
 	testutil.FailErr(t, "capture", err)
 
 	testutil.FailErr(t, "gen", os.WriteFile(filepath.Join(branch, "gen.txt"), []byte("gen\n"), 0o644))
@@ -169,7 +169,7 @@ func TestOverlayTreeNamesMovesWithUnchangedContent(t *testing.T) {
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(branch, "a", "y.go"), []byte("y\n"), 0o644))
 	blobs := sourceblob.New(filepath.Join(data, "source-content"))
 	store := workspacebaseline.New(nil, blobs, filepath.Join(data, "manifests"))
-	manifest, err := store.Capture(context.Background(), "job", workspacebaseline.Branch(nil, branch))
+	manifest, err := store.Capture(context.Background(), "job", workspacebaseline.Branch([]projectroot.RootRef{{ID: "root", Path: branch, IsPrimary: true}}, branch))
 	testutil.FailErr(t, "capture", err)
 	testutil.FailErr(t, "move", os.Rename(filepath.Join(branch, "a"), filepath.Join(branch, "b")))
 	testutil.FailErr(t, "edit", os.WriteFile(filepath.Join(branch, "b", "y.go"), []byte("z\n"), 0o644))
@@ -191,7 +191,7 @@ func TestOverlayTreeReportsAMissingBranch(t *testing.T) {
 	branch := filepath.Join(data, "branch")
 	testutil.FailErr(t, "mkdir", os.MkdirAll(branch, 0o755))
 	store := workspacebaseline.New(nil, sourceblob.New(filepath.Join(data, "source-content")), filepath.Join(data, "manifests"))
-	manifest, err := store.Capture(t.Context(), "job", workspacebaseline.Branch(nil, branch))
+	manifest, err := store.Capture(t.Context(), "job", workspacebaseline.Branch([]projectroot.RootRef{{ID: "root", Path: branch, IsPrimary: true}}, branch))
 	testutil.FailErr(t, "capture", err)
 	tree := tools.SourceTree{BaselinePath: manifest, BranchRoot: filepath.Join(data, "reclaimed")}
 	if _, err := (OverlayTree{}).TreeChanges(t.Context(), tree); err == nil {

@@ -40,7 +40,7 @@ type File struct {
 }
 
 // Entry is one manifest row with its structured identity. RootID and ScopeRel
-// key the entry; Path is the display spelling kept for legacy readers.
+// key the entry; Path is its captured display spelling.
 type Entry struct {
 	RootID   string
 	ScopeRel string
@@ -89,6 +89,14 @@ func Open(ctx context.Context, path string, blobs *sourceblob.Store) (*Reader, e
 		_ = d.Close()
 		return nil, fmt.Errorf("invalid workspace manifest shape: %w", err)
 	}
+	if format == 2 {
+		var invalid bool
+		err := d.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM files WHERE trim(root_id) = '' OR scope_rel = '')").Scan(&invalid)
+		if err != nil || invalid {
+			_ = d.Close()
+			return nil, fmt.Errorf("workspace manifest contains an invalid file identity: %v", err)
+		}
+	}
 	return &Reader{db: d, blobs: blobs, format: format}, nil
 }
 
@@ -122,11 +130,6 @@ func (r *Reader) LookupIdentity(ctx context.Context, roots []projectroot.RootRef
 		row := r.db.QueryRowContext(ctx, "SELECT "+fileColumns+" FROM files WHERE root_id = ? AND scope_rel = ?", rootID, scopeRel)
 		err := scanFile(row.Scan, &f)
 		if errors.Is(err, sql.ErrNoRows) {
-			// Capture and read can disagree about root attribution, so fall
-			// back to the display spelling the way format 1 rows are read.
-			if display, derr := displayPathFor(roots, rootID, scopeRel); derr == nil {
-				return r.Lookup(ctx, display)
-			}
 			return File{}, false, nil
 		}
 		return f, err == nil, err
@@ -172,14 +175,8 @@ func (r *Reader) EachIdentity(ctx context.Context, roots []projectroot.RootRef, 
 			if err := rows.Scan(&entry.RootID, &entry.ScopeRel, &entry.Path, &entry.File.Size, &entry.File.MtimeNano, &entry.File.SHA256, &entry.File.Opaque, &entry.File.Mode, &entry.File.LinkTarget, &entry.File.Deleted); err != nil {
 				return err
 			}
-			if entry.RootID == "" && len(roots) > 0 {
-				// Rows captured without root identity are read the way format
-				// 1 rows are: their display path names the root they belong to.
-				rootID, scopeRel, err := parseDisplayPath(roots, entry.Path)
-				if err != nil {
-					return err
-				}
-				entry.RootID, entry.ScopeRel = rootID, scopeRel
+			if err := validateIdentity(entry.RootID, entry.ScopeRel); err != nil {
+				return err
 			}
 			if err := visit(entry); err != nil {
 				return err
