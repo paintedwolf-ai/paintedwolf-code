@@ -28,10 +28,15 @@ function messageEventsBetween(sessionId: string, from: string, to: string): Mess
     .filter(event => event.session_id === sessionId);
 }
 
-/** Each folded row, read through the fields the host's last bootstrap answers. */
-function asHostRows(folded: readonly object[], host: readonly object[]) {
-  return folded.map((row, index) =>
-    Object.fromEntries(Object.keys(host[index] ?? row).map(key => [key, (row as Record<string, unknown>)[key]])));
+/** Live affordances the host stamps on a read; they are not row state. */
+const runtimeStamped = new Set(["status", "generating_tokens"]);
+
+/** Each row's stored fields, as the host's last bootstrap names them. */
+function rowState(rows: readonly object[], fields: readonly object[]) {
+  return rows.map((row, index) =>
+    Object.fromEntries(Object.keys(fields[index] ?? row)
+      .filter(key => !runtimeStamped.has(key))
+      .map(key => [key, (row as Record<string, unknown>)[key]])));
 }
 
 describe("host corpus transcript fold", () => {
@@ -44,6 +49,7 @@ describe("host corpus transcript fold", () => {
     for (const event of messageEventsBetween(sessionId, first.event_cursor, last.event_cursor)) {
       applyMessageEvent(store, event);
     }
-    expect(asHostRows(store.state.messages, last.transcript.messages)).toEqual(last.transcript.messages);
+    const host = last.transcript.messages;
+    expect(rowState(store.state.messages, host)).toEqual(rowState(host, host));
   });
 });
