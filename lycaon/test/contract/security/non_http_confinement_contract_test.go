@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/socketref"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -38,7 +38,7 @@ func TestNonHTTPContractProxyStartupFailureDeniesAndRollsBack(t *testing.T) {
 		t.Fatal("BindAction must refuse mediation where descendants cannot be observed")
 	}
 
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
@@ -182,7 +182,7 @@ func TestNonHTTPContractContainedDerivesFromSameRequestAsProfile(t *testing.T) {
 		t.Fatalf("Contained.Egress=%q want direct_ip", fromConf.Egress)
 	}
 
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")

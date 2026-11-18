@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -191,7 +191,7 @@ func TestBuildProfileConfinesWritesAndDeniesNetwork(t *testing.T) {
 }
 
 func TestDefaultConfinementPolicy(t *testing.T) {
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
 
@@ -717,7 +717,7 @@ func TestBoundarySignalSameSandboxOnly(t *testing.T) {
 func TestBoundaryBrowserProfileEnforces(t *testing.T) {
 	self := requireLiveBoundary(t)
 	proj := t.TempDir()
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	built, ok := confine.BrowserConfinement(confine.Request{Roots: []string{proj}})
 	if !ok || built == nil {
 		t.Fatal("expected BrowserConfinement where confinement is available")
@@ -751,7 +751,7 @@ func TestBoundaryBrowserProfileEnforces(t *testing.T) {
 // Development build roots under ~/.config/paintedwolf-dev must apply cleanly.
 func TestBoundaryBrowserProfileUnderDevelopmentBuild(t *testing.T) {
 	self := requireLiveBoundary(t)
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	home, err := os.UserHomeDir()
 	testutil.FailErr(t, "user home dir", err)
 
@@ -860,7 +860,7 @@ func TestBoundaryFSBlastBoundary(t *testing.T) {
 // Mediated and direct sockets retain separate boundaries.
 func TestBoundaryEgress(t *testing.T) {
 	self := requireLiveBoundary(t)
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
@@ -1002,7 +1002,7 @@ func TestBrowserConfinementIsLoopbackOnly(t *testing.T) {
 	// An empty value selects the default network mode.
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
 
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	if !confine.Available() {
 		if c, ok := confine.BrowserConfinement(confine.Request{Roots: []string{"/proj"}}); ok || c != nil {
 			t.Fatalf("expected nil when confinement is unavailable; got ok=%v c=%v", ok, c)
@@ -1056,7 +1056,7 @@ func TestBrowserConfinementIsLoopbackOnly(t *testing.T) {
 
 // Draft roots activate confinement.
 func TestDefaultConfinementEnabledForDraftScratchRoot(t *testing.T) {
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	home := t.TempDir()

@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/confine/denialprobe"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
@@ -17,7 +17,7 @@ import (
 
 func requireConfinement(t *testing.T) {
 	t.Helper()
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	if !confine.Available() {
 		t.Skip("this host applies no confinement")
 	}

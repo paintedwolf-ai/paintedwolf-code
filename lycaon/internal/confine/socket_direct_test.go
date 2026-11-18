@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -204,7 +204,7 @@ func TestBoundaryDirectIPSeparationMatrix(t *testing.T) {
 
 func TestBoundaryFailClosedStartupMatrix(t *testing.T) {
 	requireLiveBoundary(t)
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
@@ -434,7 +434,7 @@ func TestDirectIPPermitsNarrowOnly(t *testing.T) {
 // Direct-IP declarations flow through profile construction and execution.
 func TestDirectIPNarrowingEndToEnd(t *testing.T) {
 	self := requireLiveBoundary(t)
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")

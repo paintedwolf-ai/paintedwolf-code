@@ -7,13 +7,13 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/detectionpack"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestDefaultConfinementProtectsBundledKWalletStore(t *testing.T) {
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))

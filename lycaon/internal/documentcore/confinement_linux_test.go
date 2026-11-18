@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -15,7 +15,7 @@ func TestLinuxDocumentCoreAppliedBoundary(t *testing.T) {
 		caps, _ := confine.LinuxCapabilities()
 		t.Fatalf("required Linux document boundary is unavailable: %+v", caps)
 	}
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
 	verified, err := Verify(t.Context())

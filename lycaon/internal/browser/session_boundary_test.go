@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 )
 
 // enforceConfinement puts this test in the posture where the host applies a
@@ -22,7 +22,7 @@ func enforceConfinement(t *testing.T) {
 	}
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_BYPASS_APPROVALS", "")
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 }
 
 func TestBrowserBoundaryRefusesWhenConfinementCannotBeBuilt(t *testing.T) {

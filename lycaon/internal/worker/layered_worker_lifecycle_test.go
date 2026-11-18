@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/confine/admissionfixture"
+	"github.com/lycaon/lycaon/internal/confine/admissiontest"
 	"github.com/lycaon/lycaon/internal/confine/denialprobe"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
@@ -241,7 +241,7 @@ func TestUnderBudgetMaterializedWorkerRetainsGitAndCheckpointBases(t *testing.T)
 // The materialized path is the default selector's: a worker reads its pristine base and never writes
 // it, its own tree stays writable, and the branches and object store beside it stay out of reach.
 func TestMaterializedWorkerReachesOnlyItsOwnBranch(t *testing.T) {
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	if !confine.Available() {
 		t.Skip("this host applies no confinement")
 	}
@@ -299,7 +299,7 @@ func TestMaterializedWorkerReachesOnlyItsOwnBranch(t *testing.T) {
 // Runs on a real kernel mount through the host's selector, its production enforcer and real services.
 // Only a host with no way to mount skips; a host that mounts but does not enforce fails here.
 func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
-	admissionfixture.Enable(t)
+	admissiontest.Enable(t)
 	if !confine.Available() {
 		t.Skip("this host applies no confinement")
 	}
