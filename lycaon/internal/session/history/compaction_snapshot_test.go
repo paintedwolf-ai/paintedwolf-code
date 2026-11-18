@@ -2,6 +2,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"reflect"
 	"strings"
@@ -27,14 +28,14 @@ func TestSynthesisKeepsRecoveryAddressesOutsideItsCapturedPage(t *testing.T) {
 		}}
 	sc := compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), compaction.MockSummarizer{Text: "New observation"})
 	enriched, err := sc.EnrichContinuation(t.Context(), compaction.SessionInfo{PriorContinuation: record},
-		[]api.Message{{ID: "new-observation", Ord: 11, Role: api.MessageRoleAssistant, Content: "New observation"}}, record)
+		[]api.Message{{ID: "new-observation", Ord: 11, Role: api.MessageRoleAssistant, Content: "New observation"}}, record, nil)
 	testutil.FailErr(t, "enrich captured page", err)
 	if len(enriched.Sources) != 2 || enriched.Sources[0].MessageID != "original-result" || len(enriched.Sources[0].Handles) != 1 || enriched.SummaryThroughOrd != 11 {
 		t.Fatal("summary enrichment displaced an earlier canonical recovery address")
 	}
 }
 
-func TestDelayedSynthesisPreservesNewerCoverage(t *testing.T) {
+func TestDelayedSynthesisLeavesNewerProjectionIntact(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	for _, newerSummary := range []bool{false, true} {
 		t.Run(fmt.Sprint(newerSummary), func(t *testing.T) {
@@ -61,17 +62,15 @@ func TestDelayedSynthesisPreservesNewerCoverage(t *testing.T) {
 			enriched := &messageview.Continuation{ThroughOrd: rows[0].Ord, SummaryThroughOrd: rows[0].Ord,
 				Summary: messageview.ContinuationSummary{Facts: []string{"delayed clue"}}}
 			history := &Service{store: mem}
-			testutil.FailErr(t, "publish delayed synthesis", history.publishSynthesis(t.Context(), compaction.SessionInfo{ID: sess.ID}, snapshot, enriched))
+			if err := history.publishSynthesis(t.Context(), compaction.SessionInfo{ID: sess.ID}, snapshot, enriched); !errors.Is(err, synthesisStale) {
+				t.Fatalf("expected stale synthesis, got %v", err)
+			}
 			view, _, err := mem.GetCompactionView(t.Context(), sess.ID)
 			testutil.FailErr(t, "read enriched view", err)
 			if view.CoveredThroughOrd != rows[1].Ord || view.Continuation.Sources[0].MessageID != "two" {
 				t.Fatal("delayed synthesis replaced newer recovery coordinates")
 			}
-			want, generation := "delayed clue", 2
-			if newerSummary {
-				want, generation = "newer accepted clue", 1
-			}
-			if view.Generation != generation || view.Continuation.Summary.Facts[0] != want {
+			if view.Generation != 1 || !reflect.DeepEqual(view.Continuation.Summary, record.Summary) {
 				t.Fatalf("accepted summary = %+v, generation = %d", view.Continuation, view.Generation)
 			}
 		})
@@ -96,8 +95,9 @@ func TestDelayedSynthesisRejectsChangedCanonicalSource(t *testing.T) {
 	testutil.FailErr(t, "correct source", err)
 	enriched := &messageview.Continuation{ThroughOrd: source.Ord, SummaryThroughOrd: source.Ord,
 		Summary: messageview.ContinuationSummary{Facts: []string{"original fact"}}}
-	testutil.FailErr(t, "reject stale synthesis", (&Service{store: mem}).publishSynthesis(t.Context(),
-		compaction.SessionInfo{ID: sess.ID}, snapshot, enriched))
+	if err := (&Service{store: mem}).publishSynthesis(t.Context(), compaction.SessionInfo{ID: sess.ID}, snapshot, enriched); !errors.Is(err, synthesisStale) {
+		t.Fatalf("expected stale synthesis, got %v", err)
+	}
 	current, err := mem.Get(t.Context(), sess.ID)
 	testutil.FailErr(t, "read generation", err)
 	if current.CompactionGeneration != 1 {

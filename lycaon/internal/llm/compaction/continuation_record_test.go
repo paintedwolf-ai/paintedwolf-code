@@ -30,7 +30,7 @@ func TestContinuationRecordNamesRecallByHandle(t *testing.T) {
 		{Tool: "command", MessageID: "t2"},
 	}
 
-	withRecall, err := renderContinuationRecord(context.Background(), summary, sources, true)
+	withRecall, err := renderContinuation(context.Background(), summary, sources, true, nil, 0)
 	testutil.FailErr(t, "render continuation record with recall", err)
 	for _, want := range []string{"- registry listens on 127.0.0.1:8200", "### Completed", "### Pending", "- config.toml (read#4) before editing the registry block", "- `read#4` (read)", "- command, message `t2`", `recall(query="handle:read#4")`, "### Constraints", "- no pushes"} {
 		if !strings.Contains(withRecall, want) {
@@ -38,7 +38,7 @@ func TestContinuationRecordNamesRecallByHandle(t *testing.T) {
 		}
 	}
 
-	withoutRecall, err := renderContinuationRecord(context.Background(), summary, sources, false)
+	withoutRecall, err := renderContinuation(context.Background(), summary, sources, false, nil, 0)
 	testutil.FailErr(t, "render continuation record without recall", err)
 	if strings.Contains(withoutRecall, "recall") {
 		t.Fatalf("a profile without recall must not be told to call it:\n%s", withoutRecall)
@@ -214,7 +214,7 @@ func TestContinuationCarriesEarlierSummaryThroughFailedSynthesis(t *testing.T) {
 	prior := &messageview.Continuation{Format: 1, ThroughOrd: 10, RemovedRows: 8,
 		Summary: messageview.ContinuationSummary{Facts: []string{"sorting is descending"}, Pending: []string{"CLI still needs verification"}}}
 	summary, sources, err := NewSimpleCompactor(cfg, nil).summarizePrefix(t.Context(), SessionInfo{PriorContinuation: prior},
-		[]ContextMessage{{ID: "source", Ord: 11, Role: "assistant", Content: "new observation"}})
+		[]ContextMessage{{ID: "source", Ord: 11, Role: "assistant", Content: "new observation"}}, nil)
 	if err == nil || len(sources) != 1 || summary.Facts[0] != "sorting is descending" || summary.Pending[0] != "CLI still needs verification" {
 		t.Fatal("failed synthesis lost the earlier continuation")
 	}

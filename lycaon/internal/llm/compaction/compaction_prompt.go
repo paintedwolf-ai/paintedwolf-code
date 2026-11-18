@@ -29,6 +29,7 @@ func BuildCompactionInput(
 	if maxTokens <= 0 || maxMessageTokens <= 0 {
 		return CompactionInput{}, fmt.Errorf("compaction resume prompt requires positive token budgets")
 	}
+	info.PriorContinuation = synthesisContext(info.PriorContinuation, maxTokens/4)
 	limit := min(len(sliced), max(1, min(128, maxTokens/maxMessageTokens)))
 	rows, messages, err := compactionRecentMessages(sliced[:limit])
 	if err != nil {
@@ -51,7 +52,7 @@ func BuildCompactionInput(
 }
 
 func renderCompactionUserPrompt(ctx context.Context, info SessionInfo, rows []map[string]any) (string, error) {
-	prior := "No prior continuation."
+	prior := "No accepted clues supplied."
 	if info.PriorContinuation != nil {
 		raw, err := json.Marshal(info.PriorContinuation.Summary)
 		if err != nil {

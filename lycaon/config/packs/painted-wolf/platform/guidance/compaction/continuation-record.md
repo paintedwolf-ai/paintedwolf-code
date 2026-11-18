@@ -1,8 +1,8 @@
 {% if level == "references" %}{% if omitted_through_ord %}[host:omitted history ordinals {{ omitted_from_ord }} through {{ omitted_through_ord }}; no summary covers them]{% else %}[host:compacted history through ordinal {{ through_ord }}]{% endif %}
 {% if recall_available %}Recover recorded details with `recall(history={"after_ord":0,"through_ord":{{ through_ord }}})`. Use `search` for an index, `message_id` for a body, and `format="record"` for original tool arguments. Pass returned `next_request` to continue.{% else %}Reacquire omitted observations before relying on them.{% endif %}
 {% for s in compacted_sources %}{% if s.handles %}{% for h in s.handles %}`{{ h }}`{% if recall_available %}: `recall(query="handle:{{ h }}")`{% endif %}
-{% endfor %}{% elif s.message_id %}{% if recall_available and through_ord %}{{ s.tool }}: `recall(history={"through_ord":{{ through_ord }},"message_id":"{{ s.message_id }}","format":"record"})`
-{% else %}{{ s.tool }} message_id `{{ s.message_id }}`
+{% endfor %}{% elif s.message_id %}{% if recall_available and through_ord %}{% if s.tool %}{{ s.tool }}: {% endif %}`recall(history={"through_ord":{{ through_ord }},"message_id":"{{ s.message_id }}","format":"record"})`
+{% else %}{% if s.tool %}{{ s.tool }} {% endif %}message_id `{{ s.message_id }}`
 {% endif %}{% endif %}{% endfor %}
 {% else %}## Compacted continuation record
 {% if summary_through_ord %}Latest summarized observation: ordinal {{ summary_through_ord }}. This is a selective summary.{% if summary_through_ord < through_ord %} Newer covered observations remain references.{% endif %}
@@ -20,7 +20,7 @@
 ### Reacquire before relying on compacted details
 {% if not recall_available %}Reacquire the needed evidence through the reads this surface offers.{% endif %}
 {% for line in reacquire %}- {{ line }}
-{% endfor %}{% for s in compacted_sources %}- {% if s.handles %}`{% for h in s.handles %}{{ h }}{% if not forloop.Last %}`, `{% endif %}{% endfor %}`{% if s.tool %} ({{ s.tool }}){% endif %}{% if recall_available %}{% for h in s.handles %} · `recall(query="handle:{{ h }}")`{% endfor %}{% endif %}{% elif recall_available and through_ord and s.message_id %}{{ s.tool }} · `recall(history={"through_ord":{{ through_ord }},"message_id":"{{ s.message_id }}","format":"record"})`{% else %}{% if s.tool %}{{ s.tool }}, {% endif %}message `{{ s.message_id }}`{% endif %}
+{% endfor %}{% for s in compacted_sources %}- {% if s.handles %}`{% for h in s.handles %}{{ h }}{% if not forloop.Last %}`, `{% endif %}{% endfor %}`{% if s.tool %} ({{ s.tool }}){% endif %}{% if recall_available %}{% for h in s.handles %} · `recall(query="handle:{{ h }}")`{% endfor %}{% endif %}{% elif recall_available and through_ord and s.message_id %}{% if s.tool %}{{ s.tool }} · {% endif %}`recall(history={"through_ord":{{ through_ord }},"message_id":"{{ s.message_id }}","format":"record"})`{% else %}{% if s.tool %}{{ s.tool }}, {% endif %}message `{{ s.message_id }}`{% endif %}
 {% endfor %}{% if constraints %}
 ### Constraints
 {% for line in constraints %}- {{ line }}
@@ -28,9 +28,11 @@
 
 {% if through_ord %}### Covered history
 Canonical observations through ordinal {{ through_ord }} remain on record. {% if recall_available %}Use `recall(history={"after_ord":0,"through_ord":{{ through_ord }}})` to page their index. Supply a returned `message_id` to recover its body; `format="record"` includes original parts and tool arguments; `offset` and `next_offset` page long bodies. {% endif %}Recorded execution facts take precedence over summary prose. Re-read changed sources and reacquire missing verification.
+{% endif %}
 {% endif %}{% if reference_only %}Some covered observations have no accepted prose summary. Recover the relevant records before relying on their details.
 {% endif %}
+{% if recorded_details %}
+### Recorded observations
+{% for detail in recorded_details %}- {% if detail.handle %}`{{ detail.handle }}`{% else %}message `{{ detail.message_id }}`{% endif %}{% if detail.conclusion %} · completion report: {{ detail.conclusion }}{% else %}{% if detail.command %} · command: {{ detail.command }}{% endif %}{% if detail.exit_code %} · exit {{ detail.exit_code }}{% endif %}{% if detail.verdict %} · verification verdict: {{ detail.verdict }}{% endif %}{% if detail.program_state %} · program state: {{ detail.program_state }}{% endif %}{% if detail.stop_code %} · stop code: {{ detail.stop_code }}{% endif %}{% endif %}
+{% endfor %}{% endif %}{% if recorded_omitted %}Recorded observations omitted from this view: {{ recorded_omitted }}.
 {% endif %}
-{% for s in compacted_sources %}{% if s.execution %}
-Recorded execution (not current liveness): {{ s.execution }}
-{% endif %}{% endfor %}

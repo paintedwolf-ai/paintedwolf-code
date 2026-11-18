@@ -34,7 +34,7 @@ func (c *SimpleCompactor) summaryBudget(ctx context.Context) SummaryBudget {
 }
 
 // summarizePrefix accounts for every source even when synthesis is unavailable.
-func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo, prefix []ContextMessage) (compactionSummary, []messageview.ContinuationSource, error) {
+func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo, prefix []ContextMessage, beforeCall func(context.Context) error) (compactionSummary, []messageview.ContinuationSource, error) {
 	summary := priorSummary(info.PriorContinuation)
 	sources, segments, sourceErr := continuationSegments(prefix, c.cfg.SummaryMessageTokens)
 	if sourceErr != nil {
@@ -66,6 +66,11 @@ func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo,
 				err = buildErr
 				break
 			}
+			if beforeCall != nil {
+				if err := beforeCall(ctx); err != nil {
+					return compactionSummary{}, nil, err
+				}
+			}
 			calls++
 			callCtx := WithSummaryFormat(ctx)
 			raw, callErr := c.summary.Summarize(callCtx, system, input.Text, budget.Output)
@@ -88,7 +93,7 @@ func (c *SimpleCompactor) summarizePrefix(ctx context.Context, info SessionInfo,
 				continue
 			}
 			next.SourceContext = sourceref.ForResponse(input.Messages, raw)
-			summary = next
+			summary = appendSummaryPage(summary, next)
 			for _, segment := range segments[position : position+input.Consumed] {
 				remaining[segment.ID]--
 				for i := range sources {
@@ -132,12 +137,9 @@ func continuationSegments(rows []ContextMessage, tokens int) ([]messageview.Cont
 		}
 		source := messageview.ContinuationSource{MessageID: row.ID, Ord: row.Ord,
 			Tool: tool, Handles: append([]string(nil), row.EvidenceHandles...),
-			Disposition: "reference", Tokens: tokenest.EstimateDefault(content), Execution: row.Execution}
+			Disposition: "reference", Tokens: tokenest.EstimateDefault(content), Execution: row.Execution, Conclusion: row.CompletionOpening}
 		if row.ToolName == "command" {
 			source.Command = commands[row.ToolCallID]
-		}
-		if row.Kind == api.MessageKindCompletionReport && row.Role == string(api.MessageRoleAssistant) {
-			source.Conclusion = continuationExcerpt(row.Content)
 		}
 		sources = append(sources, source)
 		runes := []rune(content)

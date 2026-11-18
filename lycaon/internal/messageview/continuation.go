@@ -1,7 +1,7 @@
 package messageview
 
 // ContinuationFormat identifies a rebuildable history projection.
-const ContinuationFormat = 2
+const ContinuationFormat = 3
 
 // MaxCompactionRevisionLag bounds source validation before a projection is rebuilt.
 const MaxCompactionRevisionLag int64 = 4096

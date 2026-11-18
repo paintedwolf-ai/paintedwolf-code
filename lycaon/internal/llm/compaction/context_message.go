@@ -14,7 +14,6 @@ type ContextMessage struct {
 	Ord          int64
 	ID           string
 	Role         string
-	Kind         api.MessageKind
 	Content      string
 	ContentParts []api.MessageContentPart
 	ToolCalls    []api.ToolCall
@@ -32,6 +31,7 @@ type ContextMessage struct {
 type ContextMessageProvenance struct {
 	CommandResult       *transcript.CommandResultProvenance `json:"-"`
 	Execution           *messageview.ContinuationExecution  `json:"recorded_execution,omitempty"`
+	CompletionOpening   string                              `json:"completion_opening,omitempty"`
 	Seq                 int64
 	Origin              api.MessageOrigin
 	Authority           api.ContentAuthority
@@ -73,7 +73,6 @@ func ContextMessageFromAPI(m api.Message) ContextMessage {
 		Ord:             m.Ord,
 		ID:              m.ID,
 		Role:            string(m.Role),
-		Kind:            m.Kind,
 		Content:         m.Content,
 		ContentParts:    append([]api.MessageContentPart(nil), m.ContentParts...),
 		ToolCalls:       append([]api.ToolCall(nil), m.ToolCalls...),
@@ -97,6 +96,9 @@ func ContextMessageFromAPI(m api.Message) ContextMessage {
 			DietStamp:            m.DietStamp,
 			DietStampSource:      m.DietStampSource,
 		},
+	}
+	if m.Kind == api.MessageKindCompletionReport && m.Role == api.MessageRoleAssistant && m.CompactedChunk == nil {
+		out.CompletionOpening = continuationExcerpt(m.Content)
 	}
 	if m.ToolResult != nil {
 		out.CommandResult = transcript.CommandProvenance(m.ToolResult)
@@ -137,7 +139,6 @@ func ContextMessageToAPI(m ContextMessage) api.Message {
 		Seq:                   m.Seq,
 		ID:                    m.ID,
 		Role:                  api.MessageRole(m.Role),
-		Kind:                  m.Kind,
 		Content:               m.Content,
 		Origin:                m.Origin,
 		Authority:             m.Authority,

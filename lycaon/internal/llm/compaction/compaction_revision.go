@@ -12,7 +12,7 @@ import (
 )
 
 // compactionRevision keys memoized attempts and projections to the current summary and projection semantics.
-const compactionRevision = 5
+const compactionRevision = 6
 
 func (c *SimpleCompactor) summaryRevision(ctx context.Context) (string, error) {
 	if revision, ok := c.summary.(interface {
@@ -28,7 +28,7 @@ func (c *SimpleCompactor) sessionRevision(ctx context.Context, info SessionInfo,
 	if err != nil {
 		return "", err
 	}
-	record, err := renderContinuationRecord(ctx, compactionSummary{Facts: []string{"revision"}, Completed: []string{"revision"}, Pending: []string{"revision"}, Reacquire: []string{"revision"}, Constraints: []string{"revision"}}, compactedSources(messages, nil), info.RecallAvailable)
+	record, err := renderContinuation(ctx, compactionSummary{Facts: []string{"revision"}, Completed: []string{"revision"}, Pending: []string{"revision"}, Reacquire: []string{"revision"}, Constraints: []string{"revision"}}, compactedSources(messages, nil), info.RecallAvailable, nil, 0)
 	if err != nil {
 		return "", err
 	}
