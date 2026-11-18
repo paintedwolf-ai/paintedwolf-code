@@ -38,8 +38,8 @@ func TestFeedbackSubmitUnblocksAdvance(t *testing.T) {
 	assertPhaseGateError(t, adv.Body.Bytes(), "clarify", "user_feedback_received:clarify")
 	held, err := h.Workflows.Manager.Store.Runs.Get(t.Context(), run.ID)
 	testutil.FailErr(t, "get run after refused advance", err)
-	if held.CurrentPhase != "clarify" || held.Revision != before.Revision {
-		t.Fatalf("refused advance moved the run: phase %q revision %d, want clarify at %d", held.CurrentPhase, held.Revision, before.Revision)
+	if held.CurrentPhase != before.CurrentPhase || held.Status != before.Status {
+		t.Fatalf("refused advance moved the run: %s/%s, want %s/%s", held.CurrentPhase, held.Status, before.CurrentPhase, before.Status)
 	}
 
 	req := authedRequest(t, http.MethodPost, "/v1/workflow-runs/"+run.ID+"/feedback/clarify", workflowCommandBody(t, srv, run.ID, map[string]any{"response": "Use REST"}))

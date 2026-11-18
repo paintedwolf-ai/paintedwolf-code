@@ -17,6 +17,8 @@ func promptToolNames(t *testing.T, posture wire.SessionPosture) map[string]bool 
 	t.Helper()
 	h := wiring.BuildForTest(t, wiring.WithRecordingLLM())
 	sess := createSessionWithPostureHTTP(t, h.Server, t.TempDir(), posture)
+	// plan_from_blueprint is progress-gated; seed progress so only posture decides.
+	h.SeedProgress(t, context.Background(), sess.ID)
 	postPromptAndWaitIdle(t, h.Server, sess.ID, "review plan scope")
 	names := map[string]bool{}
 	for _, tool := range h.Recording.LastRequest().Tools {
@@ -48,8 +50,8 @@ func TestInvokeStillDeniesWhenToolNotListed(t *testing.T) {
 
 	err = policy.EvaluateInvoke(ctx, sessionRec, "plan_from_blueprint", nil)
 	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != "SPEC_POSTURE_UNRESOLVED" {
-		t.Fatalf("plan_from_blueprint in spec posture: err = %v, want SPEC_POSTURE_UNRESOLVED", err)
+	if !errors.As(err, &reject) || reject.Code != "SPEC_POSTURE_DELEGATION_FORBIDDEN" {
+		t.Fatalf("plan_from_blueprint in spec posture: err = %v, want SPEC_POSTURE_DELEGATION_FORBIDDEN", err)
 	}
 	if err := policy.EvaluateInvoke(ctx, sessionRec, "read", map[string]any{"path": "README.md"}); err != nil {
 		t.Fatalf("on-surface read in spec posture: %v", err)

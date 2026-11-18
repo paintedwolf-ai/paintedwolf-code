@@ -178,7 +178,7 @@ func TestIsolatedFanOutRequiresWorkspaceBinder(t *testing.T) {
 					Subtasks:  []string{"approach A", "approach B"},
 				},
 			},
-			Input: map[string]any{"project_dir": t.TempDir()},
+			Input: map[string]any{"project_dir": t.TempDir(), "project_id": "proj-1"},
 		}
 	}
 

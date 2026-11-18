@@ -78,6 +78,9 @@ func TestDetachThenReadDenied(t *testing.T) {
 		}
 	}
 	if result == nil {
+		for _, m := range msgs {
+			t.Logf("message role=%s kind=%s tool=%v content=%.160q", m.Role, m.Kind, m.ToolResult != nil, m.Content)
+		}
 		t.Fatal("the read after detach produced no tool result row")
 	}
 	if result.Outcome != wire.ToolResultOutcomeRejected || !slices.Contains(result.Codes, "PROJECT_HAS_NO_ROOTS") {

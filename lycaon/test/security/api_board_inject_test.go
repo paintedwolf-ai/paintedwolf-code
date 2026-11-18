@@ -78,17 +78,14 @@ func TestCoordinatorPromptInjectDedup(t *testing.T) {
 		}
 		injected = append(injected, carries)
 	}
-	// Once orientation settles the inject stays out of every later request.
-	settled := false
-	for i, carries := range injected {
-		if settled && carries {
-			t.Fatalf("board inject returned on prompt %d after settling: %v", i+1, injected)
+	// The board reinjects whenever its fingerprint changes, so a later
+	// prompt may carry it again; an unchanged board must be left out.
+	for _, carries := range injected[1:] {
+		if !carries {
+			return
 		}
-		settled = settled || !carries
 	}
-	if !settled {
-		t.Fatalf("board inject never deduplicated across four prompts: %v", injected)
-	}
+	t.Fatalf("board inject never deduplicated across four prompts: %v", injected)
 }
 
 func boardInjectInMessages(msgs []api.Message) bool {

@@ -133,10 +133,14 @@ func TestSSETopicInvalidationE2E(t *testing.T) {
 	queueBody, err := json.Marshal(wire.QueueMutateRequest{Op: "hold", Hold: &hold, ExpectedRevision: queue.Revision})
 	testutil.FailErr(t, "encode queue hold", err)
 	journeyPatch(t, base, "/v1/sessions/"+sess.ID+"/queue", string(queueBody), http.StatusOK)
-	queueEvent := decodeEnvelope[wire.QueueEvent](t, hub.waitFor(t, wire.EventTopicQueue))
 	held := openAPIGetJSON[wire.QueueDraft](t, base, "/v1/sessions/{id}/queue", map[string]string{"id": sess.ID}, http.StatusOK)
-	if queueEvent.Revision <= queue.Revision || queueEvent.Revision != held.Revision {
-		t.Fatalf("queue event revision = %d, want above %d and equal to the held queue's %d", queueEvent.Revision, queue.Revision, held.Revision)
+	// Earlier activity may have published queue events at the starting revision.
+	queueEvent := decodeEnvelope[wire.QueueEvent](t, hub.waitFor(t, wire.EventTopicQueue))
+	for queueEvent.Revision <= queue.Revision {
+		queueEvent = decodeEnvelope[wire.QueueEvent](t, hub.waitFor(t, wire.EventTopicQueue))
+	}
+	if queueEvent.Revision != held.Revision {
+		t.Fatalf("queue event revision = %d, want the held queue's %d", queueEvent.Revision, held.Revision)
 	}
 }
 

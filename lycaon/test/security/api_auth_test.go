@@ -194,7 +194,7 @@ func TestCreateProjectAllowsAnyExistingDirectoryWhileActionGuardStaysFailClosed(
 		{"dot-config directory", filepath.Join(home, ".config"), nil},
 		{"ssh directory", filepath.Join(home, ".ssh"), secretStore},
 		{"credential store", filepath.Join(home, "Library", "Keychains"), secretStore},
-		{"device config root", cfgRoot, &refusal{isolation.CodeControlPlaneDenied, confine.WriteRootCodeContainsState}},
+		{"device config root", cfgRoot, secretStore},
 		{"ordinary folder", t.TempDir(), nil},
 	}
 	for _, tc := range cases {
