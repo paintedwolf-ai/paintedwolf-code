@@ -23,9 +23,7 @@ func RetargetEditorDocument(ctx context.Context, q *Queries, projectID, branchID
 	return err
 }
 
-// AdoptOutsideTree moves the outside files under rel into a newly attached
-// root, keeping their file identities, history and editor documents. Recorded
-// versions keep the address they were recorded at.
+// AdoptOutsideTree moves current addresses into the new root and preserves recorded versions.
 func AdoptOutsideTree(ctx context.Context, q *Queries, projectID, rootID, rel string) error {
 	outside, err := q.GetProjectOutsideRootID(ctx, projectID)
 	if errors.Is(err, sql.ErrNoRows) {

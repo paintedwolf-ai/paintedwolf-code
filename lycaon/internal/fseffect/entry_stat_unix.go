@@ -35,8 +35,12 @@ func (r *ReadRoot) Stat(rel string, follow bool, admit func(string) error) (Entr
 		out.BirthTime = birthTime(r.root.fd, "", true, &st)
 		return out, nil
 	}
+	policy := followReadLinks
+	if !follow {
+		policy = retainFinalReadLink
+	}
 	var out EntryStat
-	_, err = walkReadContained(r.root, relative, follow, func(dir *os.File, name string, st *unix.Stat_t) (*os.File, error) {
+	_, err = walkReadContained(r.root, relative, policy, func(dir *os.File, name string, st *unix.Stat_t) (*os.File, error) {
 		if admit != nil {
 			if err := admit(filepath.Join(dir.Name(), name)); err != nil {
 				return nil, err
