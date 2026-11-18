@@ -51,7 +51,7 @@ func TestPrepareStartChecksAuthorityAndReachedExecutables(t *testing.T) {
 				},
 			}
 			req.PathExtra = []string{dir}
-			if tc.refuse == authorityChanged {
+			if errors.Is(tc.refuse, authorityChanged) {
 				req.Launch.CurrentAuthority = func(context.Context) error { return authorityChanged }
 			}
 			got, err := req.PrepareStart(ctx)
