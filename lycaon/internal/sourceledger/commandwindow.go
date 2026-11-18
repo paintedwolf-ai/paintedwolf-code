@@ -671,35 +671,6 @@ func (s *Commands) CommandWindows(ctx context.Context, ids []string) (map[string
 	return out, nil
 }
 
-// SetWindowSettleForTest replaces the settle period.
-func (s *Commands) SetWindowSettleForTest(period time.Duration) {
-	s.windowsMu.Lock()
-	defer s.windowsMu.Unlock()
-	s.windowSettle = func() <-chan time.Time { return time.After(period) }
-}
-
-// SetWindowStartQuietForTest replaces how long a window's start waits for
-// watcher events already on their way; a zero wait does not wait. Call it
-// before the first window opens.
-func (s *Commands) SetWindowStartQuietForTest(grace, maxWait time.Duration) {
-	s.startQuietGrace, s.startQuietWait = grace, maxWait
-}
-
-// SetWindowSettleGateForTest makes every settle period last until gate delivers
-// or closes, so a test decides when a window's grace or close moves on.
-func (s *Commands) SetWindowSettleGateForTest(gate <-chan time.Time) {
-	s.windowsMu.Lock()
-	defer s.windowsMu.Unlock()
-	s.windowSettle = func() <-chan time.Time { return gate }
-}
-
-// SetWindowIdledForTest observes each window whose settle grace has ended.
-func (s *Commands) SetWindowIdledForTest(observe func(id string)) {
-	s.windowsMu.Lock()
-	defer s.windowsMu.Unlock()
-	s.windowIdled = observe
-}
-
 // Commands attributes source observations to host command windows.
 type Commands struct {
 	now               func() time.Time
@@ -723,8 +694,6 @@ type Commands struct {
 	windowsMu    sync.Mutex
 	git          commandsGitPort
 	inventory    commandsInventoryPort
-	// windowIdled, when set, observes each window whose grace ended.
-	windowIdled func(id string)
 }
 
 type commandsInventoryPort interface {

@@ -47,8 +47,8 @@ func openDiskLedger(t *testing.T) diskLedger {
 	// These tests deliver the command's writes themselves, so a window neither
 	// waits at its start for events on their way nor, closed and still owing a
 	// pass, waits out the settle period.
-	store.Commands.SetWindowSettleForTest(0)
-	store.Commands.SetWindowStartQuietForTest(0, 0)
+	setWindowTimer(store.Commands, func() <-chan time.Time { return time.After(0) })
+	store.Commands.startQuietGrace, store.Commands.startQuietWait = 0, 0
 	return diskLedger{store: store, sqlDB: sqlDB, contentDir: contentDir, root: root}
 }
 
@@ -405,8 +405,8 @@ func TestInterruptedWindowsSettleWhenAFreshProcessOpensOne(t *testing.T) {
 
 	// A new process holds no memory of either window.
 	fresh := New(ledger.sqlDB, ledger.contentDir)
-	fresh.Commands.SetWindowSettleForTest(0)
-	fresh.Commands.SetWindowStartQuietForTest(0, 0)
+	setWindowTimer(fresh.Commands, func() <-chan time.Time { return time.After(0) })
+	fresh.Commands.startQuietGrace, fresh.Commands.startQuietWait = 0, 0
 	next, err := fresh.Commands.OpenCommandWindow(ctx, CommandWindowInput{
 		ProjectID: "p1", Roots: onDiskRoots(root), SessionID: "s2", Turn: 1,
 		ToolName: "command", CommandLine: "cargo build",
@@ -481,4 +481,10 @@ func TestCommandWindowReleasesItsStartRetentionWhenSettled(t *testing.T) {
 	if comparison.Before.Content != "before\n" || comparison.After.Content != "after\n" {
 		t.Fatalf("comparison = %+v", comparison)
 	}
+}
+
+func setWindowTimer(commands *Commands, timer func() <-chan time.Time) {
+	commands.windowsMu.Lock()
+	defer commands.windowsMu.Unlock()
+	commands.windowSettle = timer
 }
