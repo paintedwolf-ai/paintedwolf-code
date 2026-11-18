@@ -105,7 +105,7 @@ components:
       type: object
       required: [id]
       additionalProperties: false
-      properties: {id: {type: string, format: uuid}, label: {type: string}}
+      properties: {id: {type: string, format: uuid}, label: {type: [string, number]}}
     WidgetList:
       type: object
       required: [widgets]
@@ -159,7 +159,8 @@ type widgetFaults struct {
 	rowPerReplay     bool // renameWidget stores a row for every replay of a key
 	acceptsReuse     bool // renameWidget applies a different body under a used key
 	ignoresLimit     bool // listWidgets answers every row whatever the limit
-	labelsWidget     bool // getWidget answers a label the committed corpus never saw
+	labelsWidget     bool // getWidget answers a string label
+	numbersLabel     bool // getWidget answers its label as a number
 	unguardedRoute   bool // getPart is registered without the bearer check
 	writesPastEffect bool // getPart also writes widgets, beyond its declared index
 }
@@ -246,6 +247,9 @@ func (a *widgetAPI) getWidget(w http.ResponseWriter, r *http.Request) {
 	widget := map[string]any{"id": fixtureWidgetID}
 	if a.faults.labelsWidget {
 		widget["label"] = "relabelled"
+	}
+	if a.faults.numbersLabel {
+		widget["label"] = 7
 	}
 	if a.faults.echoesSecret {
 		a.mu.Lock()

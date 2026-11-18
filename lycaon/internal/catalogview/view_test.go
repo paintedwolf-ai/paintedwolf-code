@@ -408,3 +408,21 @@ func inventoryPack(t *testing.T, root, id string) extpacks.PackContent {
 	pc.Kind = extpacks.PackKindPath
 	return pc
 }
+
+// A cleared cache holds no view, and the next request builds afresh.
+func TestCacheClearDropsEveryView(t *testing.T) {
+	content, desired, root := cacheFixtureCatalog(t)
+	eff := extpacks.Resolve(t.Context(), extpacks.ResolveInput{Packs: content, Desired: desired})
+	cache := catalogview.NewCache(root, nil)
+	_, err := cache.For(t.Context(), eff)
+	testutil.FailErr(t, "For before clear", err)
+	cache.Clear()
+	if cache.Len() != 0 {
+		t.Fatalf("cleared cache holds %d views", cache.Len())
+	}
+	_, err = cache.For(t.Context(), eff)
+	testutil.FailErr(t, "For after clear", err)
+	if cache.BuildCount() != 2 {
+		t.Fatalf("builds = %d, want a fresh build after clear", cache.BuildCount())
+	}
+}

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/google/uuid"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	openapi "github.com/lycaon/lycaon/test/openapi"
 )
@@ -215,6 +216,10 @@ func addShape(shape map[string]string, path string, value any) {
 	case map[string]any:
 		kind = "object"
 		for key, field := range v {
+			// A map keyed by ids has one shape whatever ids a run made.
+			if uuid.Validate(key) == nil {
+				key = "{id}"
+			}
 			addShape(shape, path+"."+key, field)
 		}
 	case []any:
@@ -240,18 +245,27 @@ func addShape(shape map[string]string, path string, value any) {
 	shape[path] = strings.Join(kinds, "|")
 }
 
+// firstShapeDifference names the first path both recordings carry whose
+// value kinds share nothing. A path one run lacks, or saw only as null, is an
+// optional field the run's data left out, not a wire change; the contract
+// test catches a field the contract no longer declares.
 func firstShapeDifference(was, now map[string]string) (string, bool) {
-	paths := map[string]bool{}
-	for path := range was {
-		paths[path] = true
-	}
-	for path := range now {
-		paths[path] = true
-	}
-	for _, path := range slices.Sorted(maps.Keys(paths)) {
-		if was[path] != now[path] {
+	for _, path := range slices.Sorted(maps.Keys(was)) {
+		before, after := valueKinds(was[path]), valueKinds(now[path])
+		if len(before) > 0 && len(after) > 0 && !slices.ContainsFunc(before, func(kind string) bool { return slices.Contains(after, kind) }) {
 			return path, true
 		}
 	}
 	return "", false
+}
+
+// valueKinds is a shape entry's kinds other than null.
+func valueKinds(entry string) []string {
+	var kinds []string
+	for _, kind := range strings.Split(entry, "|") {
+		if kind != "" && kind != "null" {
+			kinds = append(kinds, kind)
+		}
+	}
+	return kinds
 }

@@ -87,5 +87,10 @@ func (b *serveBuilder) loadConfig() error {
 		return err
 	}
 	b.security.BindTrust(b.settings.Service.TrustSurfaces)
-	return b.catalog.Load(b.startup.ctx, b.startup.logger)
+	if err := b.catalog.Load(b.startup.ctx, b.startup.logger); err != nil {
+		return err
+	}
+	// Each compiled view holds megabytes; a closed host keeps none.
+	b.startup.resources.Track("catalog-views", 160, func(context.Context) error { b.catalog.ViewCache.Clear(); return nil })
+	return nil
 }

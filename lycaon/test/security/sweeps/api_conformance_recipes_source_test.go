@@ -1291,7 +1291,7 @@ func sourceChatContent(ctx context.Context, s *conformanceSweep) (map[string]str
 	if state.chatSHA == "" {
 		content := "conformance one\nconformance two\nconformance three"
 		id := uuid.NewString()
-		if err := s.host.Store.AppendMessages(ctx, s.fixture.session.ID, wire.Message{
+		if err := s.host.Sessions.Store.AppendMessages(ctx, s.fixture.session.ID, wire.Message{
 			ID: id, Role: wire.MessageRoleAssistant, Origin: wire.MessageOriginModel,
 			Content: content, Visibility: wire.MessageVisibilityTranscript,
 		}); err != nil {
