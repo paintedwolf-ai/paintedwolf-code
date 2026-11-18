@@ -53,7 +53,9 @@ func TestPinnedDownloadResumesAndPurges(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	download := func() error { return s.download(t.Context(), srv.URL, srv.Client(), pin, nil) }
+	download := func() error {
+		return s.download(t.Context(), modelBucket{base: srv.URL, client: srv.Client()}, pin, nil)
+	}
 	if err := download(); err == nil {
 		t.Fatal("short transport accepted")
 	}
@@ -119,7 +121,7 @@ func TestPinnedManifestRejectedBeforePayload(t *testing.T) {
 				_, _ = w.Write(raw)
 			}))
 			defer srv.Close()
-			if err := s.download(t.Context(), srv.URL, srv.Client(), pin, nil); err == nil {
+			if err := s.download(t.Context(), modelBucket{base: srv.URL, client: srv.Client()}, pin, nil); err == nil {
 				t.Fatal("accepted invalid pin or manifest")
 			}
 		})
@@ -192,5 +194,47 @@ func TestRejectUnsafeArchives(t *testing.T) {
 	cancel()
 	if _, err := BundleSlot(ctx, writeTarBundle(t, dir, []string{"manifest.json"})); !errors.Is(err, context.Canceled) {
 		t.Fatalf("inspect canceled archive: %v", err)
+	}
+}
+
+func TestResumedPayloadResponse(t *testing.T) {
+	for _, mode := range []string{"full", "bad_range", "bad_length", "absent"} {
+		t.Run(mode, func(t *testing.T) {
+			s, _, signed := bundleFixture(t)
+			pin, raw := pinnedBundle(t, signed)
+			root, err := s.openRoot()
+			testutil.FailErr(t, "open store", err)
+			testutil.FailErr(t, "partial directory", root.Mkdir("partials", 0700))
+			testutil.FailErr(t, "seed partial", root.WriteFile(filepath.Join("partials", signed.Manifest.Artifact.Digest), []byte("wei"), 0600))
+			testutil.FailErr(t, "close store", root.Close())
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if filepath.Base(r.URL.Path) == "manifest.json" {
+					_, _ = w.Write(raw)
+					return
+				}
+				if r.Header.Get("Range") != "bytes=3-" {
+					t.Errorf("request range %s", r.Header.Get("Range"))
+				}
+				switch mode {
+				case "full":
+					_, _ = w.Write([]byte("weights"))
+				case "bad_range":
+					w.Header().Set("Content-Range", "bytes 2-6/7")
+					w.WriteHeader(http.StatusPartialContent)
+					_, _ = w.Write([]byte("ights"))
+				case "bad_length":
+					_, _ = w.Write([]byte("x"))
+				case "absent":
+					http.NotFound(w, r)
+				}
+			}))
+			defer srv.Close()
+			err = s.download(t.Context(), modelBucket{base: srv.URL, client: srv.Client()}, pin, nil)
+			if mode == "full" {
+				testutil.FailErr(t, "restart full transfer", err)
+			} else if err == nil {
+				t.Fatal("accepted invalid response")
+			}
+		})
 	}
 }
