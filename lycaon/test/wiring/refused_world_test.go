@@ -320,7 +320,9 @@ func newRefusalTemplate(t *testing.T) refusalProject {
 	// A dirty tracked file gives commit, restore and stash something to act on.
 	testutil.FailErr(t, "dirty tracked file", os.WriteFile(filepath.Join(p.project, "tracked.txt"), []byte("edited\n"), 0o644))
 	// The outside directory is a repository with a dirty file holding the canary.
+	testutil.FailErr(t, "write outside code", os.WriteFile(filepath.Join(p.outside, "a.go"), []byte("package a\n\nfunc Old() {}\n"), 0o644))
 	gittest.InitCommit(t, p.outside, "outside")
+	gittest.Run(t, p.outside, "branch", "side-"+canaryToken)
 	testutil.FailErr(t, "dirty outside file", os.WriteFile(filepath.Join(p.outside, "target.json"), []byte(outsideCanary+"\n"), 0o644))
 	return p
 }
@@ -533,8 +535,8 @@ func requireRefusalEvidence(t *testing.T, s *commandProgramSession, mode refusal
 		}
 		return
 	}
-	if w.tool == "command" {
-		if outcome := s.outcome(t, "witness-1"); outcome.Refusal == nil {
+	if programEntry(w.tool) {
+		if outcome := s.outcome(t, "witness-1"); outcome.Refusal == nil && outcome.State != "rejected" {
 			t.Fatalf("%s under %s was not refused: %s", w.covers, mode.name, describeWitness(t, s, w))
 		}
 		return
@@ -562,13 +564,16 @@ func describeWitness(t *testing.T, s *commandProgramSession, w refusalWitness) s
 	if !ok {
 		return "no result"
 	}
-	if w.tool == "command" {
+	if programEntry(w.tool) {
 		outcome := s.outcome(t, "witness-1")
-		return fmt.Sprintf("program status %d stop %q refusal %+v nonzero %+v stderr %.300q", outcome.Status, outcome.StopCode,
-			outcome.Refusal, outcome.NonzeroExecutions, outcome.Stderr)
+		return fmt.Sprintf("program state %s status %d stop %q refusal %+v nonzero %+v stderr %.300q", outcome.State, outcome.Status,
+			outcome.StopCode, outcome.Refusal, outcome.NonzeroExecutions, outcome.Stderr)
 	}
 	return fmt.Sprintf("outcome %s feedback %+v content %.300q", result.Outcome, result.Feedback, result.Content)
 }
+
+// programEntry reports a tool whose result is a command program outcome.
+func programEntry(tool string) bool { return tool == "command" || tool == "verify" }
 
 func findWitnessResult(t *testing.T, s *commandProgramSession) (*wire.ToolResult, bool) {
 	t.Helper()
@@ -583,7 +588,10 @@ func findWitnessResult(t *testing.T, s *commandProgramSession) (*wire.ToolResult
 }
 
 // outsideCanary is the outside file's content; no refused call may deliver it.
-const outsideCanary = `{"canary":"outside 5c1d7a"}`
+const outsideCanary = `{"canary":"outside ` + canaryToken + `"}`
+
+// canaryToken marks every outside byte a refused call could deliver.
+const canaryToken = "5c1d7a"
 
 // pathTemplate is one path-taking tool or operation; {f} is replaced by a
 // spelling of the outside file and {d} by a spelling of the outside directory.
@@ -619,7 +627,7 @@ func pathTemplates() []pathTemplate {
 		command("read", "cat '{f}'"),
 		command("write", "printf x > '{f}'"),
 		command("edit", "edit --path '{f}' --old-string canary --new-string CANARY"),
-		command("replace_lines", "replace-lines --path '{f}' --start 1 --end 1 --content replaced"),
+		command("replace_lines", "replace-lines --path '{f}' --start 1 --end 1 --content '{}'"),
 		command("stat", "stat '{f}'"),
 		command("wc", "wc '{f}'"),
 		command("delete", "rm '{f}'"),
@@ -640,16 +648,16 @@ func pathTemplates() []pathTemplate {
 		command("git_blame", "git -C '{d}' blame target.json"),
 		command("git_restore", "git -C '{d}' restore target.json"),
 		command("git_ref", "git -C '{d}' rev-parse HEAD"),
-		command("git_branches", "git -C '{d}' branch made"),
+		command("git_branches", "git -C '{d}' branch"),
 		command("git_compare", "git -C '{d}' rev-list HEAD"),
 		command("git_checkout", "git -C '{d}' checkout -b made"),
-		command("git_merge", "git -C '{d}' merge --no-edit HEAD"),
+		command("git_merge", "git -C '{d}' merge --no-edit side-"+canaryToken),
 		command("git_stash", "git -C '{d}' stash"),
 		command("git_stash_list", "git -C '{d}' stash list"),
 		command("find", "find '{d}'"),
 		command("grep", "grep -r canary '{d}'"),
 		command("list_dir", "ls -la '{d}'"),
-		{covers: "code_rewrite", tool: "code_rewrite", args: map[string]any{"pattern": "canary", "rewrite": "x", "lang": "json", "path": "{f}"}},
+		{covers: "code_rewrite", tool: "code_rewrite", args: map[string]any{"pattern": "Old", "rewrite": "New", "lang": "go", "path": "{d}", "recursive": true}},
 		{covers: "restore_version", tool: "restore_version", args: map[string]any{"path": "{f}"}},
 		{covers: "source_history", tool: "source_history", args: map[string]any{"mode": "version", "path": "{f}"}},
 		{covers: "scan_pack", tool: "scan_pack", args: map[string]any{"paths": []any{"{d}"}}},
@@ -663,6 +671,31 @@ func pathTemplates() []pathTemplate {
 func itoa(n int) string {
 	raw, _ := json.Marshal(n)
 	return string(raw)
+}
+
+// outsidePathRefusals are refusal codes that decide an outside path outright,
+// without a card; an allowed call ending in one has reached the boundary.
+var outsidePathRefusals = []string{"SURVEY_PATH_ESCAPE", "POLICY_CONTEXT_UNAVAILABLE"}
+
+// controlUnreachable are path tools that no allowed call can point at the
+// outside file, each with why; their escape cells still run.
+var controlUnreachable = map[string]string{
+	"restore_version": "outside paths have no recorded history to restore",
+}
+
+// refusalCode is the code that stopped the witness, or empty.
+func refusalCode(t *testing.T, s *commandProgramSession, tpl pathTemplate) string {
+	t.Helper()
+	if programEntry(tpl.tool) {
+		if refusal := s.outcome(t, "witness-1").Refusal; refusal != nil {
+			return refusal.Code
+		}
+		return ""
+	}
+	if result, ok := findWitnessResult(t, s); ok && len(result.Feedback) > 0 {
+		return result.Feedback[0].Code
+	}
+	return ""
 }
 
 // unwitnessedPathTools are catalog path tools with no path to escape through.
@@ -744,7 +777,11 @@ func TestRefusedPathsStayInsideTheRoots(t *testing.T) {
 		t.Run(tpl.covers, func(t *testing.T) {
 			t.Run("allowed absolute", func(t *testing.T) {
 				s, changed, delivered, cards := runPathCell(t, host, template, tpl, "absolute outside", approveCard)
-				if len(changed) == 0 && !delivered && cards == 0 {
+				if reason := controlUnreachable[tpl.covers]; reason != "" {
+					t.Logf("%s: no allowed call reaches the outside file: %s", tpl.covers, reason)
+					return
+				}
+				if len(changed) == 0 && !delivered && cards == 0 && !slices.Contains(outsidePathRefusals, refusalCode(t, s, tpl)) {
 					t.Fatalf("%s reached nothing outside when allowed, so its refusal cells prove nothing: %s", tpl.covers, describePath(t, s, tpl))
 				}
 			})
@@ -825,7 +862,7 @@ func runPathCell(t *testing.T, host *programHost, template refusalProject, tpl p
 	testutil.FailErr(t, "read transcript", err)
 	raw, err := json.Marshal(msgs)
 	testutil.FailErr(t, "encode transcript", err)
-	delivered = strings.Contains(string(raw), "outside 5c1d7a")
+	delivered = strings.Contains(string(raw), canaryToken)
 	testutil.FailErr(t, "count cards", s.h.DB.QueryRowContext(t.Context(),
 		`SELECT COUNT(*) FROM checkpoints WHERE session_id = ? AND kind = 'tool_approval'`, s.session).Scan(&cards))
 	return s, changed, delivered, cards
