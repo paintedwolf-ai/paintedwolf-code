@@ -82,7 +82,8 @@ class AdmissionTests(unittest.TestCase):
     def test_confinement_changes_admit_the_other_architecture(self):
         for path in ['lycaon/internal/confine/boundary_linux.go', 'lycaon/internal/confine/linuxsandbox/seccomp_linux_arm64.go',
                      'lycaon/internal/confine/helper_main.go', 'lycaon/internal/exec/supervisor_tree_linux.go',
-                     'lycaon/internal/exec/nice_linux.go', 'lycaon/internal/exec/supervisor_other.go']:
+                     'lycaon/internal/exec/nice_linux.go', 'lycaon/internal/exec/supervisor_other.go',
+                     'lycaon/internal/sandboxmark/mark_darwin.go']:
             self.assertIn('confinement', impact.change_areas(dict(full=False, paths=[path])), path)
         for path in ['lycaon/internal/exec/runner.go', 'lycaon/internal/exec/sub/supervisor.go',
                      'lycaon/internal/execution/supervisor_linux.go', 'lycaon-den/src/a.ts']:

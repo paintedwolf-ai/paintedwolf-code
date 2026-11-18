@@ -214,7 +214,8 @@
         "--full"
       ],
       "packages": [
-        "./internal/confine/..."
+        "./internal/confine/...",
+        "./internal/sandboxmark"
       ]
     },
     "seatbelt:gated": {
