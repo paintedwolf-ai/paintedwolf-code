@@ -36,7 +36,7 @@ func newCorpusRecorder() *corpusRecorder {
 func (c *corpusRecorder) record(ex conformanceExchange) {
 	entry := openapi.CorpusExchange{
 		Operation: ex.req.op.ID, Method: ex.req.op.Method, Path: ex.req.op.Path,
-		Params: ex.req.params, Query: ex.req.query, Status: ex.status,
+		Params: ex.req.params, Query: ex.req.query, Status: ex.status, ContentType: ex.header.Get("Content-Type"),
 	}
 	if len(entry.Query) == 0 {
 		entry.Query = nil
