@@ -310,6 +310,41 @@ type reachResult struct {
 	violations []string
 }
 
+// loadSpan marks the conversation requests sent before, during and after the
+// turn that requests a deferred tool.
+type loadSpan struct {
+	tool          string
+	before, after int
+}
+
+// loadingTransitions lists where the requests themselves contradict the
+// loading states a scenario scripts: the tool is withheld until it is
+// requested, the request that asks for it does not carry it, the turn's last
+// request carries it, and every later turn keeps it.
+func loadingTransitions(requests []modelcall.CompletionRequest, span loadSpan) []string {
+	offers := func(req modelcall.CompletionRequest) bool {
+		return slices.ContainsFunc(req.Tools, func(meta tools.ToolMeta) bool { return meta.Name == span.tool })
+	}
+	var out []string
+	for i, req := range requests {
+		switch {
+		case i < span.before && offers(req):
+			out = append(out, fmt.Sprintf("request %d offers %s before it is requested", i, span.tool))
+		case i == span.before && offers(req):
+			out = append(out, fmt.Sprintf("request %d asks for %s while already offering it", i, span.tool))
+		case i == span.after-1 && !offers(req):
+			out = append(out, fmt.Sprintf("request %d, the last of the requesting turn, does not offer %s", i, span.tool))
+		case i >= span.after && !offers(req):
+			out = append(out, fmt.Sprintf("request %d, a later turn, no longer offers %s", i, span.tool))
+		}
+	}
+	// The requesting turn needs the asking request and one after its result.
+	if span.after-span.before < 2 || span.after >= len(requests) {
+		out = append(out, fmt.Sprintf("requests %d..%d of %d leave a loading state unrecorded", span.before, span.after, len(requests)))
+	}
+	return out
+}
+
 func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reachResult {
 	t.Helper()
 	config := &llm.MockConfig{Responses: reachResponses()}
@@ -332,22 +367,38 @@ func runReachScenario(t *testing.T, oracle *reachOracle, sc reachScenario) reach
 		testutil.FailErr(t, "start "+sc.workflow, err)
 		phase = run.CurrentPhase
 	}
+	conversation := func() []modelcall.CompletionRequest {
+		var out []modelcall.CompletionRequest
+		for _, req := range rec.AllRequests() {
+			if req.Composition == modelcall.CompositionConversation {
+				out = append(out, req)
+			}
+		}
+		return out
+	}
+	var span *loadSpan
 	for _, prompt := range sc.prompts {
-		if prompt == "@request" {
+		requesting := prompt == "@request"
+		if requesting {
+			span = &loadSpan{tool: requestableTool(t, rec), before: len(conversation())}
 			prompt = config.Responses[loadResponse].Pattern
-			config.Responses[loadResponse].ToolCalls = []llm.MockToolCall{{ID: "load", Name: "request_tools", Args: map[string]any{"need": requestableTool(t, rec)}}}
+			config.Responses[loadResponse].ToolCalls = []llm.MockToolCall{{ID: "load", Name: "request_tools", Args: map[string]any{"need": span.tool}}}
 		}
 		_, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID, prompt)
 		testutil.FailErr(t, "prompt "+prompt, err)
+		if requesting {
+			span.after = len(conversation())
+		}
 	}
 	stored, err := h.Store.Get(ctx, sess.ID)
 	testutil.FailErr(t, "read the session", err)
 	profiles := h.Sessions.Manager.Profiles.ForSession(ctx, stored)
 	out := reachResult{counts: map[reachCell]int{}}
-	for i, req := range rec.AllRequests() {
-		if req.Composition != modelcall.CompositionConversation {
-			continue
-		}
+	requests := conversation()
+	if span != nil {
+		out.violations = append(out.violations, loadingTransitions(requests, *span)...)
+	}
+	for i, req := range requests {
 		where := req.Debug.Surface
 		if where == "" {
 			where = req.Debug.AgentType
