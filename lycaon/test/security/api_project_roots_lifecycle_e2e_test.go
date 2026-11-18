@@ -5,11 +5,11 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
@@ -21,7 +21,8 @@ func TestDetachThenReadDenied(t *testing.T) {
 		ToolCalls:    []llm.MockToolCall{{ID: "call_read", Name: "command", Args: map[string]any{"command": "cat note.txt"}}},
 		FollowUpText: "done",
 	}}})
-	h := wiring.BuildForTest(t, wiring.WithLLMClient(mock))
+	rec := llm.NewRecordingClient(mock)
+	h := wiring.BuildForTest(t, wiring.WithLLMClient(rec))
 	srv := httptest.NewServer(h.Server)
 	t.Cleanup(srv.Close)
 	base := srv.URL
@@ -41,6 +42,13 @@ func TestDetachThenReadDenied(t *testing.T) {
 		ID string `json:"id"`
 	}](t, base, "/v1/sessions", nil,
 		`{"project_id":"`+project.ID+`","posture":"build"}`, http.StatusAccepted)
+
+	if _, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "hello"); err != nil {
+		testutil.FailErr(t, "prompt before detach", err)
+	}
+	if !offersTool(rec.LastRequest().Tools, "command") {
+		t.Fatal("the attached session's coordinator request does not offer command")
+	}
 
 	req := authedRequest(t, http.MethodDelete, "/v1/projects/"+project.ID+"/roots/"+rootID, nil)
 	w := httptest.NewRecorder()
@@ -69,26 +77,31 @@ func TestDetachThenReadDenied(t *testing.T) {
 	if _, err := h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "read the note"); err != nil {
 		testutil.FailErr(t, "prompt after detach", err)
 	}
+	if offersTool(rec.LastRequest().Tools, "command") {
+		t.Fatal("the detached session's coordinator request still offers command")
+	}
 	msgs, err := h.Store.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "get messages", err)
-	var result *wire.ToolResult
+	kicked := false
 	for _, m := range msgs {
-		if m.ToolResult != nil && m.ToolResult.ToolCallID == "call_read" {
-			result = m.ToolResult
+		kicked = kicked || m.Kind == wire.MessageKindHostKick
+		if m.ToolResult != nil && m.ToolResult.ToolCallID == "call_read" && m.ToolResult.Outcome != wire.ToolResultOutcomeRejected {
+			t.Fatalf("the read after detach ran: %+v", m.ToolResult)
 		}
-	}
-	if result == nil {
-		for _, m := range msgs {
-			t.Logf("message role=%s kind=%s tool=%v content=%.160q", m.Role, m.Kind, m.ToolResult != nil, m.Content)
-		}
-		t.Fatal("the read after detach produced no tool result row")
-	}
-	if result.Outcome != wire.ToolResultOutcomeRejected || !slices.Contains(result.Codes, "PROJECT_HAS_NO_ROOTS") {
-		t.Fatalf("read after detach = outcome %q codes %v, want rejected with PROJECT_HAS_NO_ROOTS", result.Outcome, result.Codes)
-	}
-	for _, m := range msgs {
 		if strings.Contains(m.Content, "detached-note-sentinel") {
 			t.Fatalf("the detached root's file content reached the transcript: %+v", m)
 		}
 	}
+	if !kicked {
+		t.Fatal("detaching the last root left no host kick in the transcript")
+	}
+}
+
+func offersTool(offered []tools.ToolMeta, name string) bool {
+	for _, tool := range offered {
+		if tool.Name == name {
+			return true
+		}
+	}
+	return false
 }

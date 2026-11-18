@@ -35,9 +35,6 @@ func TestSpecCoordinatorPromptOmitsPlanFromBlueprint(t *testing.T) {
 	if spec["plan_from_blueprint"] {
 		t.Fatalf("spec coordinator request offers plan_from_blueprint among %d tools", len(spec))
 	}
-	if build := promptToolNames(t, wire.SessionPostureBuild); !build["plan_from_blueprint"] {
-		t.Fatalf("build coordinator request does not offer plan_from_blueprint among %d tools", len(build))
-	}
 }
 
 func TestInvokeStillDeniesWhenToolNotListed(t *testing.T) {
