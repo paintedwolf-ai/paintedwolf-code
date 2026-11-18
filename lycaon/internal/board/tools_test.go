@@ -3,16 +3,16 @@ package board
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/packboard"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	repotest "github.com/lycaon/lycaon/internal/testsetup/repoinfo"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -96,18 +96,21 @@ func TestPackBoardToolRequiresProjectDir(t *testing.T) {
 	}
 }
 
-func TestPackBoardToolRejectsRetiredFindingsArgs(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
+func TestPackBoardSchemaRejectsUnknownArguments(t *testing.T) {
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	testutil.FailErr(t, "load tool schemas", err)
+	reg, err := tools.NewCatalogRegistry(schemas)
+	testutil.FailErr(t, "build catalog registry", err)
 	testutil.FailErr(t, "register board tools", RegisterBoardTools(reg, ToolDeps{
 		Builder: &SnapshotBuilder{Repo: repotest.NewProvider(t)},
 	}))
+	meta, ok := reg.Meta("pack_board")
+	if !ok || meta.ArgsSchema == nil {
+		t.Fatal("pack_board schema missing")
+	}
 	for _, field := range []string{"finding_id", "findings_after"} {
-		_, err := reg.Run(t.Context(), "pack_board", map[string]any{field: 1}, tools.ToolContext{})
-		var rej *toolrejection.ToolReject
-		if !errors.As(err, &rej) {
-			t.Fatalf("%s: err = %v, want ToolReject", field, err)
-		}
-		if rej.Code != "TOOL_ARGS_INVALID" || rej.Data["reason"] != "moved_to_read_findings" || rej.Data["replacement_tool"] != "read_findings" {
+		rej := tools.ValidateCallArguments("pack_board", map[string]any{field: 1}, meta.ArgsSchema, tools.ToolContext{})
+		if rej == nil || rej.Code != "TOOL_ARGS_INVALID" || rej.Data["argument_schema_tool"] != "pack_board" {
 			t.Fatalf("%s: reject = %+v", field, rej)
 		}
 	}
