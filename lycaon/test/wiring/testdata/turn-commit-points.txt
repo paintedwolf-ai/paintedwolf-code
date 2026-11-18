@@ -19,7 +19,6 @@ event_outbox:delete #17
 event_outbox:delete #18
 event_outbox:delete #19
 event_outbox:delete #2
-event_outbox:delete #20
 event_outbox:delete #3
 event_outbox:delete #4
 event_outbox:delete #5
@@ -31,7 +30,6 @@ event_outbox:insert evidence_index:delete evidence_index:insert history_storage_
 event_outbox:insert evidence_index:delete evidence_index:insert history_storage_clock:update messages:update sessions:update #2
 event_outbox:insert evidence_index:delete evidence_index:insert history_storage_clock:update messages:update sessions:update #3
 event_outbox:insert evidence_index:delete evidence_index:insert history_storage_clock:update messages:update sessions:update #4
-event_outbox:insert evidence_index:delete evidence_index:insert history_storage_clock:update messages:update sessions:update #5
 event_outbox:insert evidence_index:insert history_storage_clock:update messages:insert projects:update session_entries:insert session_source_turns:insert sessions:update #1
 event_outbox:insert evidence_index:insert history_storage_clock:update messages:insert projects:update session_entries:insert sessions:update #1
 event_outbox:insert evidence_index:insert history_storage_clock:update messages:insert projects:update session_entries:insert sessions:update #2
