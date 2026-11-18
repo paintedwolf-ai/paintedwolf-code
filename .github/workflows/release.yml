@@ -102,6 +102,7 @@ jobs:
       baseline_tag: ${{ steps.compatibility.outputs.baseline_tag }}
       published_versions: ${{ steps.compatibility.outputs.published_versions }}
       publish: ${{ steps.source.outputs.publish }}
+      preparation_run_id: ${{ steps.source.outputs.preparation_run_id }}
       version: ${{ steps.release.outputs.version }}
       channel: ${{ steps.release.outputs.channel }}
       prerelease: ${{ steps.release.outputs.prerelease }}
@@ -141,7 +142,7 @@ jobs:
             fi
             bash scripts/release-source-validate.sh \
               "${release_tag}" "${source_sha}" refs/remotes/origin/main
-            python3 scripts/ci_verification.py verified "${source_sha}"
+            python3 scripts/ci_verification.py verified "${source_sha}" >> "${GITHUB_OUTPUT}"
             publish=true
           fi
           echo "source_sha=${source_sha}" >> "${GITHUB_OUTPUT}"
@@ -257,7 +258,8 @@ jobs:
           name: release-compatibility-${{ github.run_attempt }}
           status: ${{ job.status }}
 
-  # Reuses the unsigned artifacts prepared for this exact source, or builds them without secrets.
+  # A publishing run signs exactly the preparation its Qualification checked; a dry run
+  # reuses this source's preparation or builds one without secrets.
   prepare:
     needs: [classify, credentials]
     uses: ./.github/workflows/release-prepare.yml
@@ -266,12 +268,13 @@ jobs:
       actions: read
     with:
       source_sha: ${{ needs.classify.outputs.source_sha }}
+      run_id: ${{ needs.classify.outputs.preparation_run_id }}
 
-  # A closure that fails identity or import stops the release before anything is public.
-  import-nix-closures:
+  # A closure that is not the receipt's stops the release before anything is public.
+  verify-nix-closures:
     needs: [classify, prepare]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     permissions:
       contents: read
       actions: read
@@ -280,25 +283,27 @@ jobs:
         with:
           ref: ${{ needs.classify.outputs.source_sha }}
           persist-credentials: false
-      - name: Install the pinned Nix
-        run: python3 -c 'from scripts.linux_release.nix_runner import install; print(install())' >> "${GITHUB_PATH}"
+      - name: Select the closures the receipt names
+        id: closures
+        env:
+          ARTIFACTS: ${{ needs.prepare.outputs.artifacts }}
+        run: echo "ids=$(jq -r '[to_entries[] | select(.key | startswith("prepared-nix-")) | .value.id] | join(",")' <<<"${ARTIFACTS}")" >> "${GITHUB_OUTPUT}"
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: prepared-nix-*
+          artifact-ids: ${{ steps.closures.outputs.ids }}
           path: ${{ runner.temp }}/prepared
           run-id: ${{ needs.prepare.outputs.run_id }}
           github-token: ${{ github.token }}
-      - name: Verify both closures against the source and import them
+      - name: Verify both closures against the source and the receipt
         env:
           SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          ARTIFACTS: ${{ needs.prepare.outputs.artifacts }}
         run: |
           set -euo pipefail
           for system in x86_64-linux aarch64-linux; do
-            closure="${RUNNER_TEMP}/prepared/prepared-nix-${system}"
-            python3 -m scripts.release_preparation verify --artifact "${closure}" --name "prepared-nix-${system}" \
-              --source-commit "${SOURCE_SHA}"
-            xargs nix copy --extra-experimental-features nix-command --no-check-sigs \
-              --from "file://${closure}/cache" < "${closure}/outputs.txt"
+            name="prepared-nix-${system}"
+            python3 -m scripts.release_preparation verify --artifact "${RUNNER_TEMP}/prepared/${name}" --name "${name}" \
+              --source-commit "${SOURCE_SHA}" --digest "$(jq -er --arg name "${name}" '.[$name].digest' <<<"${ARTIFACTS}")"
           done
 
   ship-gates:
@@ -337,21 +342,23 @@ jobs:
           ref: ${{ needs.classify.outputs.source_sha }}
           fetch-depth: 0
 
-      - name: Download the prepared artifact
+      - name: Download the prepared artifact the receipt names
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: prepared-${{ matrix.updater_key }}
+          artifact-ids: ${{ fromJSON(needs.prepare.outputs.artifacts)[format('prepared-{0}', matrix.updater_key)].id }}
+          merge-multiple: true
           path: ${{ runner.temp }}/prepared
           run-id: ${{ needs.prepare.outputs.run_id }}
           github-token: ${{ github.token }}
 
-      - name: Refuse an artifact prepared from another source
+      - name: Refuse an artifact prepared from another source or another preparation
         env:
           NAME: prepared-${{ matrix.updater_key }}
           SOURCE_SHA: ${{ needs.classify.outputs.source_sha }}
+          DIGEST: ${{ fromJSON(needs.prepare.outputs.artifacts)[format('prepared-{0}', matrix.updater_key)].digest }}
         run: |
           python3 -m scripts.release_preparation verify --artifact "${RUNNER_TEMP}/prepared" --name "${NAME}" \
-            --source-commit "${SOURCE_SHA}"
+            --source-commit "${SOURCE_SHA}" --digest "${DIGEST}"
           rm "${RUNNER_TEMP}/prepared/preparation.json"
 
       - name: Check out the trusted packaging controller
@@ -373,6 +380,11 @@ jobs:
         with:
           bun-version-file: .bun-version
           no-cache: true
+
+      # Staging audits the bundled scanner offline against its pinned release.
+      - name: Download or restore the pinned maintained scanner
+        if: ${{ matrix.goos == 'darwin' }}
+        uses: ./.github/actions/setup-opengrep
 
       - name: Install the pinned Rust toolchain
         if: ${{ matrix.goos == 'darwin' }}
@@ -772,7 +784,7 @@ jobs:
           status: ${{ job.status }}
 
   publish-artifacts:
-    needs: [classify, ship-gates, build-release, import-nix-closures, aggregate-release, linux-repositories, linux-pacman-repositories, bundle-upgrade]
+    needs: [classify, ship-gates, build-release, verify-nix-closures, aggregate-release, linux-repositories, linux-pacman-repositories, bundle-upgrade]
     if: ${{ needs.classify.outputs.publish == 'true' }}
     runs-on: ubuntu-latest
     environment: release-publication
@@ -949,6 +961,7 @@ jobs:
       version: ${{ needs.classify.outputs.version }}
       channel: ${{ needs.classify.outputs.channel }}
       preparation_run_id: ${{ needs.prepare.outputs.run_id }}
+      preparation_artifacts: ${{ needs.prepare.outputs.artifacts }}
 
   publish-immutable:
     needs: [classify, ship-gates, publish-artifacts, publish-linux-repositories, linux-delivery]

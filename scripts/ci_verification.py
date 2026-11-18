@@ -72,7 +72,8 @@ def main():
     elif args.command == "gate":
         verification_verdict.require_success(json.loads(os.environ["NEEDS_JSON"]), args.skipped, args.draft == "true")
     elif args.command == "verified":
-        verification_verdict.require_qualification(os.environ["GITHUB_REPOSITORY"], args.sha)
+        run = verification_verdict.require_qualification(os.environ["GITHUB_REPOSITORY"], args.sha)
+        print(f"preparation_run_id={run['receipt']['preparation_run_id']}")
     elif args.command == "release":
         # Cleanup still runs; a request that would not release is reported, not fatal.
         unreleased = hosted_execution.release_leftover_requests(args.step)

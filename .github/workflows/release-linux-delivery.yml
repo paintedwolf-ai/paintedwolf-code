@@ -19,6 +19,10 @@ on:
         description: Run that holds the source's preparation receipt and artifacts
         type: string
         required: true
+      preparation_artifacts:
+        description: Each prepared artifact's id and content digest by name, from that receipt
+        type: string
+        required: true
 
 permissions:
   contents: read
@@ -47,22 +51,29 @@ jobs:
           no-cache: true
       - name: Install the pinned Nix
         run: python3 -c 'from scripts.linux_release.nix_runner import install; print(install())' >> "${GITHUB_PATH}"
+      - name: Select the closures the receipt names
+        id: closures
+        env:
+          ARTIFACTS: ${{ inputs.preparation_artifacts }}
+        run: echo "ids=$(jq -r '[to_entries[] | select(.key | startswith("prepared-nix-")) | .value.id] | join(",")' <<<"${ARTIFACTS}")" >> "${GITHUB_OUTPUT}"
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: prepared-nix-*
+          artifact-ids: ${{ steps.closures.outputs.ids }}
           path: ${{ runner.temp }}/prepared
           run-id: ${{ inputs.preparation_run_id }}
           github-token: ${{ github.token }}
-      - name: Verify both closures against the source and import them
+      - name: Verify both closures against the source and the receipt and import them
         env:
           SOURCE_SHA: ${{ inputs.source_sha }}
+          ARTIFACTS: ${{ inputs.preparation_artifacts }}
         run: |
           set -euo pipefail
           mkdir -p "${RUNNER_TEMP}/nix-outputs"
           for system in x86_64-linux aarch64-linux; do
-            closure="${RUNNER_TEMP}/prepared/prepared-nix-${system}"
-            python3 -m scripts.release_preparation verify --artifact "${closure}" --name "prepared-nix-${system}" \
-              --source-commit "${SOURCE_SHA}"
+            name="prepared-nix-${system}"
+            closure="${RUNNER_TEMP}/prepared/${name}"
+            python3 -m scripts.release_preparation verify --artifact "${closure}" --name "${name}" \
+              --source-commit "${SOURCE_SHA}" --digest "$(jq -er --arg name "${name}" '.[$name].digest' <<<"${ARTIFACTS}")"
             cp "${closure}/outputs.txt" "${RUNNER_TEMP}/nix-outputs/${system}.txt"
             xargs nix copy --extra-experimental-features nix-command --no-check-sigs \
               --from "file://${closure}/cache" < "${closure}/outputs.txt"

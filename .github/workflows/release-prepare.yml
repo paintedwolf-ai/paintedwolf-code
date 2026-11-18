@@ -10,6 +10,10 @@ on:
         description: Full commit to prepare
         type: string
         required: true
+      run_id:
+        description: A preparation run to reuse exactly; refused, never rebuilt, when it is not retained
+        type: string
+        default: ''
     outputs:
       run_id:
         description: Run that holds the receipt and every prepared artifact
@@ -17,6 +21,9 @@ on:
       reused:
         description: Whether an earlier preparation of the same source was reused
         value: ${{ jobs.source.outputs.reused }}
+      artifacts:
+        description: Each prepared artifact's id and content digest by name, as the receipt records them
+        value: ${{ jobs.source.outputs.artifacts || jobs.receipt.outputs.artifacts }}
 
 permissions:
   contents: read
@@ -38,6 +45,7 @@ jobs:
       macos: ${{ steps.source.outputs.macos }}
       run_id: ${{ steps.resolve.outputs.run_id }}
       reused: ${{ steps.resolve.outputs.reused }}
+      artifacts: ${{ steps.resolve.outputs.artifacts }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -63,7 +71,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PLAN: ${{ steps.source.outputs.plan }}
-        run: python3 -m scripts.release_preparation resolve --source-commit "$(git rev-parse HEAD)" --plan "${PLAN}"
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          python3 -m scripts.release_preparation resolve --source-commit "$(git rev-parse HEAD)" --plan "${PLAN}" \
+            ${RUN_ID:+--run-id "${RUN_ID}"}
 
   # Package lint runs on a tiny payload before the compile and on the real packages after it.
   linux-packages:
@@ -326,6 +337,8 @@ jobs:
     needs: [source, linux-packages, nix-closures, macos-app]
     if: needs.source.outputs.reused == 'false'
     runs-on: ubuntu-24.04
+    outputs:
+      artifacts: ${{ steps.receipt.outputs.artifacts }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -336,6 +349,7 @@ jobs:
           pattern: preparation-stamp-*
           path: ${{ runner.temp }}/stamps
       - name: Record the preparation receipt
+        id: receipt
         env:
           GH_TOKEN: ${{ github.token }}
           PLAN: ${{ needs.source.outputs.plan }}

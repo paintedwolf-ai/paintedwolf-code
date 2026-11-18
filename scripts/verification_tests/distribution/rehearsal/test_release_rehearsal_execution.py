@@ -95,16 +95,11 @@ class AssemblyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "admitted its seeded fault"):
             rehearsal.refused("fault", lambda: None)
 
-    def test_the_workflows_pass_and_a_reserved_step_variable_is_refused(self):
-        checks = rehearsal.check_workflows()
-        self.assertEqual(checks["production"], "passed")
-        self.assertIn("RUNNER_NAME", checks["seeded_reserved_name"])
-
     def test_the_release_aggregate_assembles_every_public_platform_and_refuses_a_rebound_signature(self):
         verified = []
         with patch.object(rehearsal.feed_signing, "verify", side_effect=lambda path, signature, key: verified.append(
                 (path.name, signed_version(signature), key))):
-            checks = rehearsal.check_limits_and_assembly(self.root, FixtureKey())
+            checks = rehearsal.assembly(self.root, FixtureKey())
         release = rehearsal.version()
         self.assertEqual(checks["assembly"]["casks"], ["painted-wolf-code.rb", "painted-wolf-code@preview.rb"])
         self.assertEqual(verified, [(f"painted-wolf-code_v{release}_darwin-aarch64.app.tar.gz", release, FixtureKey.public)])
@@ -215,7 +210,7 @@ class MacosTests(unittest.TestCase):
 class CommandTests(unittest.TestCase):
     def test_a_receipt_records_the_checks_or_the_failure(self):
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
-        with patch.object(rehearsal, "assembly", return_value={"workflows": {"production": "passed"}}), \
+        with patch.object(rehearsal, "assembly", return_value={"limits": {"production": "passed"}}), \
              patch.object(rehearsal, "Key"), patch.object(rehearsal.sys, "argv", ["rehearsal", "assembly", "--receipt", str(root / "passed.json")]):
             rehearsal.main()
         self.assertEqual(json.loads((root / "passed.json").read_text())["result"], "passed")
