@@ -1811,8 +1811,7 @@
           "internal/exec/pty_test.go:TestStartPTYUnsupportedOnWindows",
           "internal/fseffect/ownership_windows_test.go:TestWindowsOwnershipIsAnExplicitUnavailableCapability",
           "internal/pagedview/storage_windows_test.go:TestStorageFullWindowsErrors",
-          "internal/confine/package_cache_roots_windows_test.go:TestStandardCacheDataRootsWindows",
-          "test/contract/tools/terminal_bounds_security_contract_test.go:TestTerminalUnsupportedMapsOnWindowsCI"
+          "internal/confine/package_cache_roots_windows_test.go:TestStandardCacheDataRootsWindows"
         ],
         "rust": [
           "lycaon-den/src-tauri/src/protected_launch/none.rs:non_unix_targets_are_never_protected",
