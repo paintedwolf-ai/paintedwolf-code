@@ -1,7 +1,9 @@
 package app
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,22 +16,24 @@ import (
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
 
-// diskReader is an installed program that writes a file's bytes as it finds
-// them on disk.
 const diskReader = `python3 -c 'import sys; sys.stdout.buffer.write(open(sys.argv[1],"rb").read())'`
 
-// launchShapes are the ways a program reaches an installed process. %[1]s is
-// the file as addressed from the program's directory.
+// %[1]s addresses the file from the program's working directory.
 var launchShapes = []struct {
 	name, source string
-	// dir is the directory the process runs in.
-	dir string
-	// detached marks a process whose output is not the program's.
+	dir          string
+	// Detached jobs report output separately from the program.
 	detached bool
 }{
 	{name: "alone", source: diskReader + " %[1]s"},
@@ -41,10 +45,8 @@ var launchShapes = []struct {
 	{name: "from a subdirectory", source: "cd nested && " + diskReader + " %[1]s", dir: "nested"},
 }
 
-// stdinThenDiskReader drains its input, then writes a file's bytes from disk.
 const stdinThenDiskReader = `python3 -c 'import sys; sys.stdin.buffer.read(); sys.stdout.buffer.write(open(sys.argv[1],"rb").read())'`
 
-// launchPlacements are where a draft sits relative to the program's directory.
 var launchPlacements = []struct {
 	path, eol string
 }{
@@ -77,9 +79,6 @@ func readTreeFile(t *testing.T, f *programtest.Fixture, path string) string {
 	return string(raw)
 }
 
-// Whatever shape launches an installed process, and wherever a draft sits
-// relative to the process's directory, the process reads the bytes a native
-// read serves, every draft in the tree is saved, and nothing is left unsaved.
 func TestProgramLaunchReadsTheBytesNativeReadsServe(t *testing.T) {
 	for _, shape := range launchShapes {
 		for _, read := range launchPlacements {
@@ -133,7 +132,73 @@ func TestProgramLaunchReadsTheBytesNativeReadsServe(t *testing.T) {
 	}
 }
 
-// refusedLaunches never start a process.
+func TestProgramLaunchPublishesEveryRootWithItsDocumentEncoding(t *testing.T) {
+	for _, tool := range []string{"command", "verify"} {
+		t.Run(tool, func(t *testing.T) {
+			f, service, p := documentProgram(t)
+			attached := t.TempDir()
+			testdbseed.InsertProjectRootWithID(t, f.Database, p.ID, "r2", attached)
+			p.Roots = append(p.Roots, project.Root{ID: "r2", ProjectID: p.ID, Path: attached, Label: "attached"})
+			f.Configure = func(tc *tools.ToolContext) {
+				tc.Source.Roots = append(tc.Source.Roots, projectroot.RootRef{ID: "r2", Label: "attached", Path: attached})
+			}
+			testutil.FailErr(t, "create launch directory", os.Mkdir(filepath.Join(f.Dir, "nested"), 0o755))
+
+			primary := typeEncodedLaunchDraft(t, service, p, p.Roots[0], textfile.UTF16LEBOM, "", "Primary 😀\n")
+			secondary := typeEncodedLaunchDraft(t, service, p, p.Roots[1], textfile.UTF16BE, textfile.UTF16BE, "Attached é\n")
+			secondaryPath := filepath.Join(attached, "draft.txt")
+			quotedPath := "'" + strings.ReplaceAll(secondaryPath, "'", `'\''`) + "'"
+			source := `cd nested && python3 -c 'import pathlib,sys; print(*(pathlib.Path(p).read_bytes().hex() for p in sys.argv[1:]))' ../draft.txt ` + quotedPath
+
+			var result command.ProgramOutcome
+			if tool == "verify" {
+				raw, err := f.Invoke(t, t.Context(), tool, map[string]any{"command": source}, (&native.VerifyTool{Programs: f.Runtime}).Run)
+				testutil.FailErr(t, "verify launch", err)
+				testutil.FailErr(t, "decode verify result", json.Unmarshal([]byte(raw), &result))
+			} else {
+				result = callDocumentProgram(t, f, source)
+			}
+
+			primaryBytes := assertEncodedLaunchDraftSaved(t, service, p, p.Roots[0], primary)
+			secondaryBytes := assertEncodedLaunchDraftSaved(t, service, p, p.Roots[1], secondary)
+			want := fmt.Sprintf("%x %x\n", primaryBytes, secondaryBytes)
+			if result.Status != 0 || result.StopCode != "" || result.Stdout != want || len(result.UnsavedDocuments) != 0 {
+				t.Fatalf("launch read = %+v, want %q", result, want)
+			}
+		})
+	}
+}
+
+func typeEncodedLaunchDraft(t *testing.T, service *editordoc.Service, p *project.Project, root project.Root, encoding, decodeAs, draft string) *editordoc.Document {
+	t.Helper()
+	disk := testutil.EncodeTextFixture(t, "saved\n", encoding)
+	testutil.FailErr(t, "write "+root.ID, os.WriteFile(filepath.Join(root.Path, "draft.txt"), disk, 0o644))
+	doc, err := service.Open(t.Context(), p, "draft.txt", root.ID, decodeAs, "window", nil)
+	testutil.FailErr(t, "open "+root.ID, err)
+	typed, err := service.ReplaceSnapshot(t.Context(), doc.ID, p.ID, editordoc.SnapshotReplacement{
+		DocumentCommand: editordoc.DocumentCommand{ClientID: "window", OperationID: uuid.NewString(), ExpectedRevision: doc.Revision},
+		Content:         draft, EOL: "lf",
+	})
+	testutil.FailErr(t, "type "+root.ID, err)
+	if typed.Encoding != encoding || !typed.Dirty {
+		t.Fatalf("%s draft encoding=%q dirty=%v", root.ID, typed.Encoding, typed.Dirty)
+	}
+	return typed
+}
+
+func assertEncodedLaunchDraftSaved(t *testing.T, service *editordoc.Service, p *project.Project, root project.Root, draft *editordoc.Document) []byte {
+	t.Helper()
+	live, err := service.CurrentSnapshot(t.Context(), p.ID, draft.ID)
+	testutil.FailErr(t, "read live document "+root.ID, err)
+	disk, err := os.ReadFile(filepath.Join(root.Path, "draft.txt"))
+	testutil.FailErr(t, "read disk at "+root.ID, err)
+	want := testutil.EncodeTextFixture(t, draft.Draft, draft.Encoding)
+	if live.Dirty || live.Draft != draft.Draft || live.Encoding != draft.Encoding || !bytes.Equal(disk, want) {
+		t.Fatalf("%s document after launch: dirty=%v text=%q encoding=%q disk=%x want=%x", root.ID, live.Dirty, live.Draft, live.Encoding, disk, want)
+	}
+	return disk
+}
+
 var refusedLaunches = []struct {
 	name, source string
 	arrange      func(t *testing.T, f *programtest.Fixture)
@@ -151,7 +216,6 @@ var refusedLaunches = []struct {
 	}},
 }
 
-// A program that starts no process saves nothing, whatever stopped it.
 func TestProgramWithoutALaunchSavesNoDraft(t *testing.T) {
 	for _, c := range refusedLaunches {
 		t.Run(c.name, func(t *testing.T) {
@@ -182,8 +246,7 @@ func TestProgramWithoutALaunchSavesNoDraft(t *testing.T) {
 	}
 }
 
-// unsavableDrafts are the drafts a launch must leave alone. arrange returns
-// what the process reads for the file.
+// arrange returns the bytes the process should read from disk.
 var unsavableDrafts = []struct {
 	dir, cause string
 	arrange    func(t *testing.T, f *programtest.Fixture, service *editordoc.Service, p *project.Project, path string) string
@@ -205,7 +268,6 @@ var unsavableDrafts = []struct {
 		testutil.FailErr(t, "open "+path, err)
 		dir := filepath.Join(f.Dir, filepath.Dir(path))
 		testutil.FailErr(t, "hold publication", os.Chmod(dir, 0o555))
-		// Another chat's edit is not this program's to publish.
 		applied, err := service.ApplyAgentEdit(t.Context(), editordoc.AgentEdit{ProjectID: p.ID, DocumentID: doc.ID, ExpectedRevision: doc.Revision, Content: "another chat's edit\n", OperationID: uuid.NewString(), SessionID: "another-chat", ToolCallID: "other-edit", ToolName: "edit"})
 		testutil.FailErr(t, "accept held edit", err)
 		testutil.FailErr(t, "release directory", os.Chmod(dir, 0o755))
@@ -216,9 +278,6 @@ var unsavableDrafts = []struct {
 	}},
 }
 
-// A launch leaves a draft it cannot save untouched, runs anyway, lets the
-// process read that file's disk bytes, saves every draft it can, and names
-// each unsaved draft on the result with its cause.
 func TestProgramLaunchNamesEveryDraftItCannotSave(t *testing.T) {
 	f, service, p := documentProgram(t)
 	writeTreeFile(t, f, "ok/f.txt", "saved\n")
@@ -255,7 +314,6 @@ func TestProgramLaunchNamesEveryDraftItCannotSave(t *testing.T) {
 	}
 }
 
-// A result names at most the bound of unsaved drafts and counts the rest.
 func TestProgramLaunchBoundsTheUnsavedDraftsItNames(t *testing.T) {
 	f, service, p := documentProgram(t)
 	total := toolcontract.MaxUnsavedDocuments + 5
@@ -276,11 +334,8 @@ func TestProgramLaunchBoundsTheUnsavedDraftsItNames(t *testing.T) {
 	}
 }
 
-// A draft one stage of a program is reading natively is that stage's: a launch
-// in the same statement leaves it unsaved and unreported, and neither stage is
-// refused for the other. The next statement's launch saves it.
 func TestProgramLaunchLeavesADraftItsOwnStageIsReading(t *testing.T) {
-	// The read and the launch race in every pipeline; each order must hold.
+	// Repeat to exercise both orders of the native read and process launch.
 	for round := range 12 {
 		t.Run(fmt.Sprint(round), programLaunchLeavesADraftItsOwnStageIsReading)
 	}
@@ -311,9 +366,6 @@ func programLaunchLeavesADraftItsOwnStageIsReading(t *testing.T) {
 	}
 }
 
-// A redirect into a draft from an installed process lands with the draft: the
-// launch leaves the destination to the write that pinned it, and the write
-// saves the person's text with the process's output.
 func TestProgramLaunchLeavesARedirectDestinationToItsWrite(t *testing.T) {
 	for _, c := range []struct{ name, source, want string }{
 		{"append", `python3 -c 'print("process line")' >> a.txt`, "human unsaved\nprocess line\n"},
@@ -339,9 +391,6 @@ func TestProgramLaunchLeavesARedirectDestinationToItsWrite(t *testing.T) {
 	}
 }
 
-// A process that rewrites a file replaces what the launch saved for it: the
-// document follows the disk, and the person's text is the version the launch
-// published, recorded under the launching call.
 func TestProgramProcessRewritesTheTextTheLaunchSaved(t *testing.T) {
 	f, service, p := documentProgram(t)
 	writeTreeFile(t, f, "a.txt", "one\ntwo\n")
@@ -350,7 +399,6 @@ func TestProgramProcessRewritesTheTextTheLaunchSaved(t *testing.T) {
 	if rewritten.Status != 0 || rewritten.StopCode != "" {
 		t.Fatalf("rewrite=%+v", rewritten)
 	}
-	// The process read the person's text, so its rewrite carries it.
 	if got := readTreeFile(t, f, "a.txt"); got != "ONE\nMY TWO\n" {
 		t.Fatalf("disk=%q", got)
 	}
