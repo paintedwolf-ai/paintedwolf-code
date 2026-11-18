@@ -21,7 +21,7 @@ func TestConfigRootFixturesCoverClassification(t *testing.T) {
 			continue
 		}
 		preserve := actual.Class == ClassDurableFile || actual.Class == ClassDurableDir || actual.Class == ClassArchiveExcluded
-		if fixture.IsDir != actual.IsDir || fixture.Preserve != preserve || fixture.IsSecret != actual.IsSecret || fixture.Diagnostics != (actual.IncludeInDiagnostics && !actual.IsSecret) {
+		if fixture.IsDir != actual.IsDir || fixture.Preserve != preserve || fixture.IsSecret != actual.IsSecret || fixture.Backup != actual.IncludeInBackup || fixture.Diagnostics != (actual.IncludeInDiagnostics && !actual.IsSecret) {
 			t.Errorf("config-root classification differs from fixture for %q: fixture=%+v actual=%+v", actual.Name, fixture, actual)
 		}
 		delete(expected, actual.Name)
