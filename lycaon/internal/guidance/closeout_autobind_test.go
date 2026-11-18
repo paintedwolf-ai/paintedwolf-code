@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/guidance/ledgertest"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -235,9 +236,7 @@ func TestBuildObservedAutobindGroundingDoesNotInventFromProse(t *testing.T) {
 		t.Fatalf("cited URLs = %v, want none", g.CitedURLs)
 	}
 	raw, err := json.Marshal(g)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "json.Marshal failed", err)
 	for _, invented := range []string{unobservedPath, unobservedURL} {
 		if strings.Contains(string(raw), invented) {
 			t.Fatalf("grounding carries %q from prose: %s", invented, raw)
