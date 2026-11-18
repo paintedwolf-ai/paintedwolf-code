@@ -90,14 +90,13 @@ describe("incremental block facts", () => {
     }
   });
 
-  it.each(["bundle.js", "bundle.ts", "bundle.tsx"])("matches a fresh build after each context edit in %s", path => {
+  it.each([
+    ["bundle.js", "function f(x){const h=x++ / 2;"],
+    ["bundle.ts", "function f(x?: number){const h=x! / 2;"],
+    ["bundle.tsx", "function f(x: number){const h=<Tag value={x! / 2}/>;"],
+  ])("matches a fresh build after each context edit in %s", (path, prelude) => {
     const words = ["retu", "rn", "typeof", "throw", "instanceof", "++", "!", "--", "/", "\\\n", "`", "${", "}", ";", "/*", "*/"];
     if (path.endsWith("tsx")) words.push("<Tag", "/>", "</", "{expr}");
-    const prelude = {
-      "bundle.js": "function f(x){const h=x++ / 2;",
-      "bundle.ts": "function f(x?: number){const h=x! / 2;",
-      "bundle.tsx": "function f(x: number){const h=<Tag value={x! / 2}/>;",
-    }[path];
     const doc = `${prelude}const table={${"k:12,".repeat(75)}v:retu /x;y/ + 1};return table}`;
     let seed = 7919;
     for (const char of path) seed = (Math.imul(seed, 31) + char.charCodeAt(0)) >>> 0;
