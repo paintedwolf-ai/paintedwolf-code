@@ -25,6 +25,8 @@ stdenvNoCC.mkDerivation {
     mkdir -p "$root/bin" "$out/bin" "$out/share/applications" "$out/share/icons/hicolor/128x128/apps" \
       "$out/share/polkit-1/actions"
     cp -r ${resources}/engine-root "$root/"
+    # Store copies keep their read-only directory modes; later steps add files.
+    chmod -R u+w "$root/engine-root"
     cp ${resources}/THIRD-PARTY-NOTICES.md "$root/"
     cp ${source}/VERSION "$root/release-version"
     install -m755 ${shell}/bin/painted-wolf-code "$root/bin/painted-wolf-code"
