@@ -44,6 +44,7 @@ type worktreeWatcher struct {
 	watchLimit    bool
 	limitReported bool
 	refs          refObserver
+	debounce      *Debouncer
 }
 
 func newWorktreeWatcher(ctx context.Context, root string, maxDirs int, budget *watchfd.Budget) (*worktreeWatcher, error) {
@@ -321,7 +322,7 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 			if filepath.Base(relSlash) == ".git" && filepath.Dir(relSlash) != "." && ev.Op&(fsnotify.Create|fsnotify.Remove|fsnotify.Rename) != 0 {
 				checkout := filepath.ToSlash(filepath.Dir(relSlash))
 				w.forgetRemovedTree(filepath.Join(w.root, filepath.FromSlash(checkout)))
-				NotifyWorktreeChangesDebounced(ctx, w.root, []WorktreeChange{{Path: checkout, Kind: WorktreeChangeStructural}}, SourceWatcher)
+				w.debounce.NotifyWorktreeChanges(ctx, w.root, []WorktreeChange{{Path: checkout, Kind: WorktreeChangeStructural}}, SourceWatcher)
 				continue
 			}
 			if w.scope.BoundaryPath(relSlash, false) != "" {
@@ -341,7 +342,7 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 					w.noteUnwatchedDir()
 				}
 			}
-			NotifyWorktreeChangesDebounced(ctx, w.root, []WorktreeChange{{Path: relSlash, Kind: classifyWatcherChange(ev.Op, isDir, statErr)}}, SourceWatcher)
+			w.debounce.NotifyWorktreeChanges(ctx, w.root, []WorktreeChange{{Path: relSlash, Kind: classifyWatcherChange(ev.Op, isDir, statErr)}}, SourceWatcher)
 		case err, ok := <-w.watcher.ErrorChannel():
 			if !ok {
 				return
@@ -354,13 +355,13 @@ func (w *worktreeWatcher) loop(ctx context.Context) {
 			w.faulted = true
 			w.mu.Unlock()
 			slog.WarnContext(ctx, "worktree watcher coverage interrupted", "root", w.root, "error", err)
-			NotifyWorktreeChangesDebounced(ctx, w.root, []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, SourceWatcher)
+			w.debounce.NotifyWorktreeChanges(ctx, w.root, []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, SourceWatcher)
 			w.refs.reconcile(ctx, w.addMeasuredDir)
 		case _, ok := <-w.watcher.ResyncChannel():
 			if !ok {
 				return
 			}
-			NotifyWorktreeChangesDebounced(ctx, w.root, []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, SourceWatcher)
+			w.debounce.NotifyWorktreeChanges(ctx, w.root, []WorktreeChange{{Path: ".", Kind: WorktreeChangeResync}}, SourceWatcher)
 			w.refs.reconcile(ctx, w.addMeasuredDir)
 		}
 	}

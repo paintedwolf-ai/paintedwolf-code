@@ -12,6 +12,7 @@ import (
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/lycaon/lycaon/internal/gitrepo"
+	"github.com/lycaon/lycaon/internal/workscope"
 )
 
 // Coalesces ref, lock, and reflog writes into one HeadMoved event.
@@ -29,11 +30,14 @@ type refObserver struct {
 	root         string
 	physicalRoot string
 
-	mu     sync.Mutex
-	dirs   map[string]struct{}
-	states map[string]refFileState
-	timer  *time.Timer
-	closed bool
+	mu       sync.Mutex
+	dirs     map[string]struct{}
+	states   map[string]refFileState
+	timer    *time.Timer
+	finish   func()
+	work     *workscope.Group
+	closed   bool
+	sequence uint64
 }
 
 // Roots without a repository re-arm when a .git entry appears.
@@ -265,31 +269,43 @@ func (w *refObserver) schedule(ctx context.Context) {
 	if w.closed {
 		return
 	}
-	if w.timer != nil {
-		w.timer.Reset(refNotifyDebounce)
+	if w.timer != nil && w.timer.Stop() {
+		w.finish()
+	}
+	if w.work == nil {
+		w.work = &workscope.Group{}
+	}
+	deliveryCtx, finish, err := w.work.Begin(context.WithoutCancel(ctx))
+	if err != nil {
 		return
 	}
+	w.sequence++
+	sequence := w.sequence
+	w.finish = finish
 	w.timer = time.AfterFunc(refNotifyDebounce, func() {
+		defer finish()
 		w.mu.Lock()
-		w.timer = nil
-		closed := w.closed
-		w.mu.Unlock()
-		if closed {
-			return
+		current := !w.closed && sequence == w.sequence
+		if sequence == w.sequence {
+			w.timer = nil
+			w.finish = nil
 		}
-		Notify(ctx, Event{ProjectDir: w.root, Kind: HeadMoved, Source: SourceWatcher})
+		w.mu.Unlock()
+		if current {
+			Notify(deliveryCtx, Event{ProjectDir: w.root, Kind: HeadMoved, Source: SourceWatcher})
+		}
 	})
 }
 
 func (w *refObserver) close() {
 	w.mu.Lock()
-	timer := w.timer
-	w.timer = nil
+	defer w.mu.Unlock()
 	w.closed = true
-	w.mu.Unlock()
-	if timer != nil {
-		timer.Stop()
+	if w.timer != nil && w.timer.Stop() {
+		w.finish()
 	}
+	w.timer = nil
+	w.finish = nil
 }
 
 func (w *refObserver) forget(path string) {

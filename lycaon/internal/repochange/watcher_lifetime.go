@@ -1,27 +1,56 @@
 package repochange
 
-import "sync"
+import (
+	"context"
+	"sync"
+)
 
 var watcherLifetimes struct {
 	sync.Mutex
-	owners int
+	leases  int
+	current *WatcherRegistry
 }
 
-// AcquireWatcherLifetime keeps shared filesystem streams alive while an engine uses them.
-// The final engine retires streams also started by shared inventories and caches.
-func AcquireWatcherLifetime() func() {
+func processWatchers() *WatcherRegistry {
 	watcherLifetimes.Lock()
-	watcherLifetimes.owners++
+	defer watcherLifetimes.Unlock()
+	return processWatchersLocked()
+}
+
+func processWatchersLocked() *WatcherRegistry {
+	if watcherLifetimes.current == nil {
+		watcherLifetimes.current = NewWatcherRegistry()
+	}
+	return watcherLifetimes.current
+}
+
+// AcquireWatcherLifetime shares streams until the final engine retires their delivery.
+func AcquireWatcherLifetime() func(context.Context) error {
+	watcherLifetimes.Lock()
+	processWatchersLocked()
+	watcherLifetimes.leases++
 	watcherLifetimes.Unlock()
 	var once sync.Once
-	return func() {
+	var retired *WatcherRegistry
+	return func(ctx context.Context) error {
 		once.Do(func() {
 			watcherLifetimes.Lock()
-			defer watcherLifetimes.Unlock()
-			watcherLifetimes.owners--
-			if watcherLifetimes.owners == 0 {
-				CloseWatchers()
+			watcherLifetimes.leases--
+			if watcherLifetimes.leases == 0 {
+				retired = watcherLifetimes.current
+				watcherLifetimes.current = nil
+			}
+			watcherLifetimes.Unlock()
+			if retired != nil {
+				retired.CloseAll()
 			}
 		})
+		if retired == nil {
+			return nil
+		}
+		if err := retired.work.Wait(ctx); err != nil {
+			return err
+		}
+		return retired.debounce.retire(ctx)
 	}
 }
