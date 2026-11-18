@@ -56,7 +56,10 @@ export function FileEditDiff(props: Props) {
     },
     path: (revision) => shown(revision).path,
     rootId: (revision) => shown(revision).root_id,
-    openable: (revision) => (shown(revision).deleted ? false : undefined),
+    openable: (revision) => {
+      const edit = shown(revision);
+      return !edit.deleted && Boolean(edit.root_id);
+    },
     change: (revision) => fileEditChange(shown(revision)),
     stat: (revision) => fileEditLineStat(shown(revision)),
     isNoop: (revision) => revision === null && fileEditFoldIsNoop(props.fold),
