@@ -7,7 +7,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
-	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/llmtest"
 	"io"
 	"net/http"
