@@ -54,8 +54,8 @@ func rejectLaunchPlansWithoutLandlock(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
 	for _, kind := range []LaunchKind{LaunchAgentCommand, LaunchBundledScanner, LaunchManagedBrowser, LaunchLocalMCP, LaunchDocumentCore, LaunchOCREngine} {
 		err := AgentLaunch(kind, "required boundary fixture", nil).validate()
-		u, typed := linuxsandbox.AsUnavailable(err)
-		if !errors.Is(err, confine.ErrNotConfined) || !typed || u.Code != linuxsandbox.UnavailableLandlock {
+		var unavailable *linuxsandbox.Unavailability
+		if !errors.Is(err, confine.ErrNotConfined) || !errors.As(err, &unavailable) || unavailable.Code != linuxsandbox.UnavailableLandlock {
 			t.Fatalf("launch kind %s lost required boundary refusal: %v", kind, err)
 		}
 	}

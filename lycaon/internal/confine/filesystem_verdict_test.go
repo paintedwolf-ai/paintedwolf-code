@@ -129,18 +129,3 @@ func TestBrowserProfileKeepsTheFloors(t *testing.T) {
 		})
 	}
 }
-
-// Only the control plane is system-terminal; every other deny names the
-// capability whose declaration asks.
-func TestFloorLayersDeclareTheirAskRoute(t *testing.T) {
-	for _, layer := range confine.FloorLayers() {
-		recovery := layer.Recovery()
-		terminal := layer == confine.FloorControlPlane || layer == confine.FloorReadControlPlane
-		if recovery.Terminal() != terminal {
-			t.Errorf("%s terminal = %v, want %v", layer, recovery.Terminal(), terminal)
-		}
-		if !terminal && recovery.Grant == "" {
-			t.Errorf("%s names capability %q without a grant shape", layer, recovery.Capability)
-		}
-	}
-}

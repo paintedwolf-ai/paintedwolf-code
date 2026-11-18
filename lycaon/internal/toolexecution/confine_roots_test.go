@@ -223,15 +223,8 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 
 	cfgRoot, err := configdir.Root()
 	testutil.FailErr(t, "resolve configdir root", err)
-	previousKeys := confine.KeyMaterialHomeRelPaths()
-	confine.SetKeyMaterialPathsSource(func() []string { return []string{"~/.ssh/"} })
-	t.Cleanup(func() {
-		if len(previousKeys) == 0 {
-			confine.SetKeyMaterialPathsSource(nil)
-			return
-		}
-		confine.SetKeyMaterialPathsSource(func() []string { return previousKeys })
-	})
+	previousKeys := confine.SetKeyMaterialPathsSource(func() []string { return []string{"~/.ssh/"} })
+	t.Cleanup(func() { confine.SetKeyMaterialPathsSource(previousKeys) })
 
 	cases := []struct {
 		name       string

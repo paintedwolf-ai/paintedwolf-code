@@ -3,6 +3,7 @@ package contract
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -20,8 +21,10 @@ func TestWriteRootRefusalCoversEveryCredentialStore(t *testing.T) {
 		t.Skip("no home directory; both lists are home-relative")
 	}
 
-	for _, rel := range confine.KeyMaterialHomeRelPaths() {
-		abs := filepath.Join(home, rel)
+	keys, err := detectionpack.BundledKeyMaterialPaths()
+	contractcheck.FailErr(t, "load key material floor", err)
+	for _, rel := range keys {
+		abs := filepath.Join(home, strings.TrimPrefix(rel, "~/"))
 		if refused, _ := confine.AttachedWriteRootRefused(abs); !refused {
 			t.Errorf("key material %q is not refused by AttachedWriteRootRefused", rel)
 		}
@@ -85,23 +88,26 @@ func TestKeyMaterialFloorIsPackDerived(t *testing.T) {
 		}
 	}
 
-	// Not parallel and restored below: the source is process-wide, and the check
-	// is that nothing answers when it is absent.
-	restore := func() []string { return catalogued }
-	confine.SetKeyMaterialPathsSource(nil)
-	residue := confine.KeyMaterialHomeRelPaths()
-	confine.SetKeyMaterialPathsSource(restore)
-	if len(residue) != 0 {
-		t.Fatalf("confine answers %v with no catalogue installed; the list must come from the catalogue", residue)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	previous := confine.SetKeyMaterialPathsSource(nil)
+	t.Cleanup(func() { confine.SetKeyMaterialPathsSource(previous) })
+	if paths := confine.KeyMaterialWritePaths(); len(paths) != 0 {
+		t.Fatalf("write floor with no pack = %v", paths)
 	}
 
-	installed := confine.KeyMaterialHomeRelPaths()
-	if len(installed) != len(catalogued) {
-		t.Fatalf("installed floor = %v, catalogue = %v", installed, catalogued)
+	confine.SetKeyMaterialPathsSource(func() []string { return catalogued })
+	path, err := filepath.EvalSymlinks(home)
+	contractcheck.FailErr(t, "resolve temporary home", err)
+	want := make([]string, 0, len(catalogued))
+	for _, p := range catalogued {
+		want = append(want, filepath.Join(path, strings.TrimPrefix(p, "~/")))
 	}
-	for _, rel := range installed {
-		if strings.HasPrefix(rel, "~") || strings.HasSuffix(rel, "/") {
-			t.Errorf("home-relative floor entry %q still carries catalogue syntax", rel)
-		}
+	slices.Sort(want)
+	got := slices.Clone(confine.KeyMaterialWritePaths())
+	slices.Sort(got)
+	if !slices.Equal(got, want) {
+		t.Fatalf("write floor = %v, want %v", got, want)
 	}
 }
