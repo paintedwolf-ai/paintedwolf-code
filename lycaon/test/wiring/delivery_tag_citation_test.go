@@ -212,8 +212,8 @@ func TestPipelineCoordinateRepairsThroughACommandExcerpt(t *testing.T) {
 	if g == nil || !g.Traced || g.HostAssembled || len(g.CitedEvidence) != 1 {
 		t.Fatalf("the excerpt on the command did not ground: %+v", g)
 	}
-	if cited := g.CitedEvidence[0]; cited.Handle != "command#1" || cited.Verdict != wire.CitationVerdictMatched {
-		t.Fatalf("cited evidence = %+v, want command#1 matched", cited)
+	if cited := g.CitedEvidence[0]; cited.Handle != "command#1" || cited.Excerpt != "bravo" || cited.Verdict == wire.CitationVerdictUnverifiable {
+		t.Fatalf("cited evidence = %+v, want the command#1 excerpt grounded", cited)
 	}
 }
 

@@ -160,8 +160,8 @@ func (r *implementLifecycleRun) awaitIdle(t *testing.T) {
 	})
 }
 
-// Before any worker finishes, the coordinator holds the worker in flight and
-// queues nothing further, whatever wakes it.
+// Before any worker finishes, the coordinator waits with the worker in flight
+// and queues nothing further.
 func TestImplementLifecycleWaitsForWorkerNotifications(t *testing.T) {
 	r := startImplementLifecycle(t)
 	ctx := context.Background()
@@ -169,7 +169,17 @@ func TestImplementLifecycleWaitsForWorkerNotifications(t *testing.T) {
 		testutil.FailErr(t, "user Prompt", err)
 	}
 	job := r.awaitPendingWorker(t)
-	r.awaitIdle(t)
+	// The coordinator parks on its worker by calling wait; the turn stays open.
+	testutil.WaitFor(t, "the coordinator waits on its worker", func() bool {
+		for _, msg := range mustMessages(t, r.h, ctx, r.sess.ID) {
+			for _, call := range msg.ToolCalls {
+				if call.Name == "wait" {
+					return true
+				}
+			}
+		}
+		return false
+	})
 
 	all, err := r.h.Workers.Queue.ListBySession(ctx, r.sess.ProjectID, r.sess.ID)
 	testutil.FailErr(t, "list session workers", err)

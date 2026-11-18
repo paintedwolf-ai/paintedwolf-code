@@ -11,15 +11,14 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-// refusedForReach reports whether the host refused a native program for its
-// effects or a profile deny.
-func refusedForReach(result *wire.ToolResult) bool {
-	for _, feedback := range result.Feedback {
-		if feedback.Code == "COMMAND_EFFECT_NOT_ALLOWED" || feedback.Code == "COMMAND_OPERATION_NOT_ALLOWED" {
-			return true
-		}
-	}
-	return false
+// reachRefusal reports the program's recorded state and whether the host
+// stopped it for its effects or a profile deny.
+func reachRefusal(t *testing.T, s *replaySession) (string, string, bool) {
+	t.Helper()
+	var state, stop string
+	testutil.FailErr(t, "read program", s.h.DB.QueryRowContext(t.Context(), `SELECT p.state, p.stop_code FROM invocation_programs p
+		JOIN invocation_receipts r ON r.id = p.parent_receipt_id WHERE r.session_id = ?`, s.session).Scan(&state, &stop))
+	return state, stop, state == "rejected" && (stop == "COMMAND_EFFECT_NOT_ALLOWED" || stop == "COMMAND_OPERATION_NOT_ALLOWED")
 }
 
 // The probe below is only worth anything if the profiles disagree about something.
@@ -60,18 +59,13 @@ func TestProgramReachMatchesTheExecutor(t *testing.T) {
 					if reach == nil {
 						t.Fatal("no reach answer")
 					}
-					result := s.call(t, "command", map[string]any{"command": source})
-					if !reach(program) {
-						if !refusedForReach(result) {
-							t.Fatalf("reach denies %s but the executor did not refuse it: outcome %s, feedback %+v", program, result.Outcome, result.Feedback)
-						}
-						return
+					s.call(t, "command", map[string]any{"command": source})
+					state, stop, refused := reachRefusal(t, s)
+					if !reach(program) && !refused {
+						t.Fatalf("reach denies %s but the executor recorded state %q, stop %q", program, state, stop)
 					}
-					if result.Outcome == wire.ToolResultOutcomeRejected {
-						t.Fatalf("reach admits %s but the executor rejected it: %+v", program, result.Feedback)
-					}
-					if state := s.programState(t); state != "completed" {
-						t.Fatalf("reach admits %s but the program state is %q, want completed", program, state)
+					if reach(program) && (refused || state != "completed") {
+						t.Fatalf("reach admits %s but the executor recorded state %q, stop %q", program, state, stop)
 					}
 				})
 			}

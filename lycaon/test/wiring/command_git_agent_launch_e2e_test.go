@@ -33,13 +33,13 @@ func TestCommandProgramGitRunsUnderTheAgentLaunch(t *testing.T) {
 
 	testutil.FailErr(t, "prompt", s.prompt(t.Context()))
 	result := s.result(t)
+	if state := s.programState(t); state != "completed" {
+		t.Fatalf("program state = %q, executions %v, result %q", state, s.executions(t), result)
+	}
 	head := strings.TrimSpace(gittest.Run(t, s.dir, "rev-parse", "HEAD"))
 	pushed := strings.TrimSpace(gittest.Run(t, filepath.Join(s.dir, "remote.git"), "rev-parse", "refs/heads/main"))
 	if pushed != head || !strings.Contains(result, head) {
 		t.Fatalf("remote main %q, local HEAD %q, result %q", pushed, head, result)
-	}
-	if state := s.programState(t); state != "completed" {
-		t.Fatalf("program state = %q, result %q", state, result)
 	}
 	// One completed git child receipt per statement shows each ran as a child
 	// of the agent's command program.

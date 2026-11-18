@@ -42,6 +42,12 @@ func TestContextDietRoutingToTaskDispatch(t *testing.T) {
 	queued, err := h.Workers.Queue.ListBySession(ctx, sess.ProjectID, sess.ID)
 	testutil.FailErr(t, "list session workers", err)
 	if len(queued) != 1 || queued[0].AgentType != "path-explorer" {
-		t.Fatalf("routing turn dispatched %+v, want one path-explorer worker", queued)
+		var results []any
+		for _, msg := range mustMessages(t, h, ctx, sess.ID) {
+			if msg.ToolResult != nil {
+				results = append(results, msg.ToolResult.Tool, msg.ToolResult.Outcome, msg.ToolResult.Feedback)
+			}
+		}
+		t.Fatalf("routing turn dispatched %+v, want one path-explorer worker; tool results %v", queued, results)
 	}
 }
