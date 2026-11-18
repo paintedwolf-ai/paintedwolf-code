@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
-
+	"github.com/lycaon/lycaon/internal/scan/findings/findingstest"
 	scanoutput "github.com/lycaon/lycaon/internal/scan/output"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/timelayout"
