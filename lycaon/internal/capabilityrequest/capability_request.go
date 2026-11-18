@@ -4,6 +4,7 @@ import (
 	"errors"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -40,6 +41,9 @@ type LoopbackConnectRequest struct {
 // MaxLocalListenPorts bounds capability_request.local_listen.ports.
 const MaxLocalListenPorts = 8
 
+// MaxReadPaths bounds the exact protected paths in one capability request.
+const MaxReadPaths = 8
+
 // MaxLoopbackConnectPorts bounds capability_request.loopback_connect.ports.
 const MaxLoopbackConnectPorts = 8
 
@@ -58,8 +62,8 @@ type CapabilityRequest struct {
 	LoopbackConnect *LoopbackConnectRequest
 	// WriteRoot is an explicit absolute root requested before the process starts.
 	WriteRoot string
-	// ReadPath is an explicit absolute protected path this invocation must read.
-	ReadPath string
+	// ReadPaths lists exact protected paths this invocation must read.
+	ReadPaths []string
 }
 
 // ParseCapabilityRequest canonicalizes capability_request from tool arguments.
@@ -158,13 +162,13 @@ func ParseCapabilityRequest(args map[string]any) (*CapabilityRequest, *toolrejec
 		out.WriteRoot = root
 	}
 	if pathRaw, ok := obj["read_path"]; ok {
-		path, reject := parseReadPath(pathRaw)
+		paths, reject := parseReadPaths(pathRaw)
 		if reject != nil {
 			return nil, reject
 		}
-		out.ReadPath = path
+		out.ReadPaths = paths
 	}
-	if !out.ProcessControl && !out.CredentialStore && !out.HostExecution && len(out.HostResources) == 0 && len(out.SocketPaths) == 0 && out.DirectIP == nil && out.LocalListen == nil && out.LoopbackConnect == nil && out.WriteRoot == "" && out.ReadPath == "" {
+	if !out.ProcessControl && !out.CredentialStore && !out.HostExecution && len(out.HostResources) == 0 && len(out.SocketPaths) == 0 && out.DirectIP == nil && out.LocalListen == nil && out.LoopbackConnect == nil && out.WriteRoot == "" && len(out.ReadPaths) == 0 {
 		return nil, toolrejection.RejectInvalidArguments(isolation.CodeCapabilityRequestInvalid, map[string]any{
 			"reason": "capability_request requires at least one declared capability",
 		})
@@ -201,8 +205,28 @@ func parseWriteRoot(raw any) (string, *toolrejection.ToolReject) {
 	return parseCapabilityPath(raw, "write_root")
 }
 
-func parseReadPath(raw any) (string, *toolrejection.ToolReject) {
-	return parseCapabilityPath(raw, "read_path")
+func parseReadPaths(raw any) ([]string, *toolrejection.ToolReject) {
+	values, isList := raw.([]any)
+	if !isList {
+		values = []any{raw}
+	}
+	if len(values) == 0 || len(values) > MaxReadPaths {
+		return nil, toolrejection.RejectInvalidArguments(isolation.CodeCapabilityRequestInvalid, map[string]any{
+			"reason": "read_path must name between one and eight exact protected paths", "capability": "read_path",
+		})
+	}
+	paths := make([]string, 0, len(values))
+	for _, value := range values {
+		path, reject := parseCapabilityPath(value, "read_path")
+		if reject != nil {
+			return nil, reject
+		}
+		if !slices.Contains(paths, path) {
+			paths = append(paths, path)
+		}
+	}
+	slices.Sort(paths)
+	return paths, nil
 }
 
 // parseCapabilityPath validates syntax; authority requires the invocation scratch root.

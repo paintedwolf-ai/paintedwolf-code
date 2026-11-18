@@ -161,6 +161,8 @@ host_facts:
    type: bool
  - name: paintedwolf.progress_open_items
    type: int
+ - name: paintedwolf.progress_has_one_open_item
+   type: bool
  - name: paintedwolf.progress_has_open_steps
    type: bool
  - name: paintedwolf.closeout_has_answer
@@ -235,6 +237,8 @@ host_facts:
    observation: Paths the kernel refused the invocation's processes for reading, at any layer; empty when none.
  - name: paintedwolf.refused_read_grants
    type: list<string>
+ - name: paintedwolf.refused_multiple_read_grants
+   type: bool
    observation: The capability_request.read_path path whose approval would open each refused read path that a reviewed grant can open; empty when none.
  - name: paintedwolf.refused_credential_store_paths
    type: list<string>
@@ -1271,6 +1275,10 @@ host_facts:
  - name: paintedwolf.inapplicable_fields
    type: list<string>
  - name: paintedwolf.missing_required_arguments
+   type: string
+ - name: paintedwolf.missing_required_paths
+   type: list<string>
+ - name: paintedwolf.controlled_header
    type: string
  - name: paintedwolf.found_under
    type: string

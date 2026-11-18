@@ -443,6 +443,8 @@ var staticOccurrenceFactDecls = []factDecl{
 	{"misplaced_fields", oarcore.TypeListString, FactTierHost, ""},
 	{"inapplicable_fields", oarcore.TypeListString, FactTierHost, ""},
 	{"missing_required_arguments", oarcore.TypeString, FactTierHost, ""},
+	{"missing_required_paths", oarcore.TypeListString, FactTierHost, ""},
+	{"controlled_header", oarcore.TypeString, FactTierHost, ""},
 	{"found_under", oarcore.TypeString, FactTierHost, ""},
 	{"belongs_under", oarcore.TypeString, FactTierHost, ""},
 	{"close_before", oarcore.TypeString, FactTierHost, ""},

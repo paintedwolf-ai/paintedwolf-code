@@ -76,6 +76,7 @@ func ValidateCallArguments(qualifiedName string, args, schema map[string]any, tc
 			diag.AddFacts(data)
 			if required := argdiag.MissingRequiredSummary(invalid, schema, args); required != "" {
 				data["missing_required_arguments"] = required
+				data["missing_required_paths"] = argdiag.MissingRequiredPaths(invalid)
 			}
 			data["schema_issues"] = argdiag.SchemaIssues(invalid)
 			return toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", data)
