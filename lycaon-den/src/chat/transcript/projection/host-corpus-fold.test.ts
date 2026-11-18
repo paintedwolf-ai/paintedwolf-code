@@ -28,8 +28,10 @@ function messageEventsBetween(sessionId: string, from: string, to: string): Mess
     .filter(event => event.session_id === sessionId);
 }
 
-function rows(messages: readonly { id: string; role: string; content: string }[]) {
-  return messages.map(({ id, role, content }) => ({ id, role, content }));
+/** Each folded row, read through the fields the host's last bootstrap answers. */
+function asHostRows(folded: readonly object[], host: readonly object[]) {
+  return folded.map((row, index) =>
+    Object.fromEntries(Object.keys(host[index] ?? row).map(key => [key, (row as Record<string, unknown>)[key]])));
 }
 
 describe("host corpus transcript fold", () => {
@@ -42,6 +44,6 @@ describe("host corpus transcript fold", () => {
     for (const event of messageEventsBetween(sessionId, first.event_cursor, last.event_cursor)) {
       applyMessageEvent(store, event);
     }
-    expect(rows(store.state.messages)).toEqual(rows(last.transcript.messages));
+    expect(asHostRows(store.state.messages, last.transcript.messages)).toEqual(last.transcript.messages);
   });
 });
