@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
-// ChatLocationKind is what a chat location is anchored at.
 type ChatLocationKind string
 
 const (
@@ -25,8 +24,7 @@ const (
 	ChatLocationFile       ChatLocationKind = "file"
 )
 
-// ChatLocation is a place outside the project where a root chat has worked.
-// Anchor is an outside-namespace path.
+// ChatLocation uses an outside-namespace path as its anchor.
 type ChatLocation struct {
 	ID, SessionID, Anchor, AnchorIdentity string
 	Kind                                  ChatLocationKind
@@ -49,9 +47,7 @@ func (l ChatLocation) Relative(rel string) string {
 	return strings.TrimPrefix(rel, l.Anchor+"/")
 }
 
-// locationAnchor applies the write-root approval's subject rule to an outside
-// file: its repository work tree, else its folder. A protected file, or one
-// directly under the filesystem root, is its own anchor.
+// Protected files and files at the filesystem root are their own anchors.
 func locationAnchor(rel string) (string, ChatLocationKind) {
 	abs := projectroot.OutsideAbs(rel)
 	if confine.ClassifyBlockedWrite(abs).Kind != confine.WriteSubjectOrdinary {
@@ -90,9 +86,7 @@ func chatLocationFromRow(row db.SourceChatLocations) ChatLocation {
 	return ChatLocation{ID: row.ID, SessionID: row.SessionID, Anchor: row.Anchor, AnchorIdentity: row.AnchorIdentity, Kind: ChatLocationKind(row.Kind), Hidden: row.Hidden != 0}
 }
 
-// placeChatLocation makes the location covering rel visible for the chat,
-// adding one when none covers it.
-func placeChatLocation(ctx context.Context, q *db.Queries, chat, rel string, ts time.Time) error {
+func placeChatLocation(ctx context.Context, q *db.Queries, chat, rel string, relation ChatFileRelation, ts time.Time) error {
 	anchor, kind := locationAnchor(rel)
 	rows, err := q.ListSourceChatLocations(ctx, chat)
 	if err != nil {
@@ -106,7 +100,7 @@ func placeChatLocation(ctx context.Context, q *db.Queries, chat, rel string, ts 
 		if !location.Available() {
 			continue
 		}
-		if location.Hidden {
+		if location.Hidden && relation&(ChatFileChanged|ChatFileOpened) != 0 {
 			return q.SetSourceChatLocationHidden(ctx, db.SetSourceChatLocationHiddenParams{Hidden: 0, ID: location.ID})
 		}
 		return nil
@@ -118,8 +112,7 @@ func placeChatLocation(ctx context.Context, q *db.Queries, chat, rel string, ts 
 	})
 }
 
-// ChatLocations lists the locations of sessionID's root chat in anchor order,
-// leaving out any location another visible one of the chat covers.
+// ChatLocations omits folders covered by a visible ancestor.
 func (s *Store) ChatLocations(ctx context.Context, sessionID string) ([]ChatLocation, error) {
 	chat, err := s.queries.GetRootSessionID(ctx, sessionID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -166,12 +159,12 @@ func (s *Store) ChatLocationCovering(ctx context.Context, sessionID, rel string)
 		return ChatLocation{}, false, err
 	}
 	for _, location := range locations {
-		if location.Kind == ChatLocationFile && location.Covers(rel) {
+		if location.Kind == ChatLocationFile && !location.Hidden && location.Covers(rel) && location.Available() {
 			return location, true, nil
 		}
 	}
 	for _, location := range locations {
-		if location.Covers(rel) {
+		if !location.Hidden && location.Covers(rel) && location.Available() {
 			return location, true, nil
 		}
 	}
@@ -190,8 +183,6 @@ func (s *Store) ChatLocation(ctx context.Context, projectID, id string) (ChatLoc
 	return chatLocationFromRow(row), nil
 }
 
-// HideChatLocation changes whether a location is presented; it revokes and
-// deletes nothing.
 func (s *Store) HideChatLocation(ctx context.Context, projectID, id string, hidden bool) error {
 	if _, err := s.ChatLocation(ctx, projectID, id); err != nil {
 		return err
@@ -203,8 +194,7 @@ func (s *Store) HideChatLocation(ctx context.Context, projectID, id string, hidd
 	return s.queries.SetSourceChatLocationHidden(ctx, db.SetSourceChatLocationHiddenParams{Hidden: value, ID: id})
 }
 
-// TrackChatFile tracks an outside file and records the chat's relation to it
-// in the same transaction.
+// TrackChatFile records the file and chat reference atomically.
 func (s *Store) TrackChatFile(ctx context.Context, raw TrackInput, sessionID string, relation ChatFileRelation) (TrackedFile, error) {
 	return s.trackFile(ctx, raw, func(ctx context.Context, q *db.Queries, in TrackInput, tracked TrackedFile) error {
 		return s.referenceChatFile(ctx, q, in.ProjectID, in.RootID, in.Path, sessionID, tracked.FileID, relation, in.TS)

@@ -15,6 +15,7 @@ export type FilesTreeSelection = {
   path: string;
   fileId?: string;
   locationId?: string;
+  deleted?: boolean;
 };
 
 export type FilesTreeEntrySelection = {

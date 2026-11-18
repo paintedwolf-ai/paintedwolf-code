@@ -9,8 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// outsideFixture makes a host folder outside the scratch roots and returns its
-// outside-namespace path.
+// The managed scratch roots do not produce outside references.
 func outsideFixture(t *testing.T) (string, string) {
 	t.Helper()
 	home, err := os.UserHomeDir()
@@ -68,6 +67,13 @@ func TestHiddenLocationReturnsWithANewChange(t *testing.T) {
 	testutil.FailErr(t, "read the hidden location", err)
 	if !hidden.Hidden {
 		t.Fatal("hiding did not hide the location")
+	}
+	_, err = store.TrackChatFile(ctx, TrackInput{ProjectID: "p1", RootID: outside, Path: rel + "/read.txt", Content: []byte("read\n")}, "chat", ChatFileRead)
+	testutil.FailErr(t, "track a read in a hidden location", err)
+	_, found, err := store.ChatLocationCovering(ctx, "chat", rel+"/read.txt")
+	testutil.FailErr(t, "find visible location", err)
+	if found {
+		t.Fatal("a read made the hidden location visible")
 	}
 	recordOutside(t, store, ctx, outside, "chat", rel+"/b.txt", "b\n")
 	shown, err := store.ChatLocation(ctx, "p1", locations[0].ID)

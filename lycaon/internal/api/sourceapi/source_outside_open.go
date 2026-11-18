@@ -47,7 +47,7 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 		s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found in this project")
 		return
 	}
-	p, ok = requestscope.ProjectForSession(s.SessionStore, s.responses, w, r, p, sess.ID)
+	scoped, ok := requestscope.ProjectForSession(s.SessionStore, s.responses, w, r, p, sess.ID)
 	if !ok {
 		return
 	}
@@ -56,7 +56,7 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 		s.responses.InvalidField(w, "path", "must be an absolute host path")
 		return
 	}
-	if pathInsideAttached(p, abs) {
+	if pathInsideAttached(p, abs) || scoped != p && pathInsideAttached(scoped, abs) {
 		s.responses.InvalidField(w, "path", "is inside a project folder")
 		return
 	}
@@ -71,7 +71,7 @@ func (s *Workspace) HandleOpenOutsideFile(w http.ResponseWriter, r *http.Request
 		return
 	}
 	defer func() { _ = file.Close() }()
-	s.trackOpenedOutsideFile(w, r, p, sess.ID, rel, file, nil)
+	s.trackOpenedOutsideFile(w, r, scoped, sess.ID, rel, file, nil)
 }
 
 func (s *Workspace) trackOpenedOutsideFile(w http.ResponseWriter, r *http.Request, p *project.Project, chatID, rel string, file *os.File, location *sourceledger.ChatLocation) {
@@ -95,17 +95,20 @@ func (s *Workspace) trackOpenedOutsideFile(w http.ResponseWriter, r *http.Reques
 		s.writeSourceReadError(w, r, err)
 		return
 	}
-	covering, found, err := s.SourceLedger.ChatLocationCovering(r.Context(), chatID, rel)
-	if err != nil {
-		s.writeSourceReadError(w, r, err)
-		return
-	}
-	if !found {
-		s.responses.InternalError(w, r, errors.New("opened outside file has no location"))
-		return
+	if location == nil {
+		covering, found, err := s.SourceLedger.ChatLocationCovering(r.Context(), chatID, rel)
+		if err != nil {
+			s.writeSourceReadError(w, r, err)
+			return
+		}
+		if !found {
+			s.writeOutsideFileOpenError(w, r, projectsource.ErrSourceNotFound)
+			return
+		}
+		location = &covering
 	}
 	notifyChatLocationChange(r, p)
-	httpio.WriteJSON(w, http.StatusOK, wire.OpenedOutsideFile{RootID: p.Outside.ID, Path: rel, FileID: tracked.FileID, Location: chatLocationDTO(p, covering)})
+	httpio.WriteJSON(w, http.StatusOK, wire.OpenedOutsideFile{RootID: p.Outside.ID, Path: rel, FileID: tracked.FileID, Location: chatLocationDTO(p, *location)})
 }
 
 // Large files contribute a hash without retained bytes.
@@ -202,7 +205,7 @@ func (s *Workspace) HandleOpenChatLocationFile(w http.ResponseWriter, r *http.Re
 		s.responses.Fail(w, wire.ApiErrorCodeSessionNotFound, "chat not found")
 		return
 	}
-	p, ok = requestscope.ProjectForSession(s.SessionStore, s.responses, w, r, p, chat.ID)
+	scoped, ok := requestscope.ProjectForSession(s.SessionStore, s.responses, w, r, p, chat.ID)
 	if !ok {
 		return
 	}
@@ -212,7 +215,7 @@ func (s *Workspace) HandleOpenChatLocationFile(w http.ResponseWriter, r *http.Re
 		return
 	}
 	defer func() { _ = file.Close() }()
-	if pathInsideAttached(p, file.Name()) {
+	if pathInsideAttached(p, file.Name()) || scoped != p && pathInsideAttached(scoped, file.Name()) {
 		s.responses.InvalidField(w, "path", "is inside a project folder")
 		return
 	}
@@ -221,7 +224,7 @@ func (s *Workspace) HandleOpenChatLocationFile(w http.ResponseWriter, r *http.Re
 		s.responses.Fail(w, wire.ApiErrorCodeSourceNotFound, "file not found")
 		return
 	}
-	s.trackOpenedOutsideFile(w, r, p, chat.ID, rel, file, &location)
+	s.trackOpenedOutsideFile(w, r, scoped, chat.ID, rel, file, &location)
 }
 
 func openChatLocationFile(location sourceledger.ChatLocation, path string) (*os.File, error) {
