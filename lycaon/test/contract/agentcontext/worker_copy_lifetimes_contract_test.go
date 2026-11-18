@@ -210,7 +210,8 @@ func TestWorkerCopyLifetimesAndSkillHistory(t *testing.T) {
 		WebSearch: true,
 	})
 	contractcheck.FailErr(t, "skill reader A", err)
-	varsA := prompts.SkillVars(readerA)
+	varsA, err := prompts.SkillVars(readerA)
+	contractcheck.FailErr(t, "skill vars A", err)
 	for _, sk := range stockSkillCorpus(t) {
 		if sk.Name != "orchestrate-a-large-task" {
 			continue

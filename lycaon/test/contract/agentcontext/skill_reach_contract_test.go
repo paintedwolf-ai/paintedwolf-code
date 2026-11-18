@@ -116,7 +116,8 @@ func forEachStockSkillRender(t *testing.T, check func(t *testing.T, sk skills.Sk
 					continue
 				}
 				t.Run(fmt.Sprintf("coordinator/%s/%d-roots/%s", id, rootCount, sk.Name), func(t *testing.T) {
-					vars := prompts.SkillVars(reader)
+					vars, err := prompts.SkillVars(reader)
+					contractcheck.FailErr(t, "skill vars", err)
 					check(t, sk, fmt.Sprintf("surface %s at %d roots", id, rootCount), reader, vars, renderSkillParts(t, sk, vars))
 				})
 			}
@@ -153,7 +154,8 @@ func forEachStockSkillRender(t *testing.T, check func(t *testing.T, sk skills.Sk
 						continue
 					}
 					t.Run(fmt.Sprintf("worker/%s/on-branch=%t/has-git=%t/%s", agent.ToolProfile, onBranch, hasGit, sk.Name), func(t *testing.T) {
-						vars := prompts.SkillVars(reader)
+						vars, err := prompts.SkillVars(reader)
+						contractcheck.FailErr(t, "skill vars", err)
 						check(t, sk, fmt.Sprintf("profile %s (on branch: %t, git: %t)", agent.ToolProfile, onBranch, hasGit), reader, vars, renderSkillParts(t, sk, vars))
 					})
 				}

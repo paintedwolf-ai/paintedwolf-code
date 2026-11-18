@@ -42,9 +42,7 @@ func TestSkillVarsCoordinatorSurface(t *testing.T) {
 		RootCount: 2,
 	})
 	vars, err := SkillVars(reader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "skill vars", err)
 	if vars["is_coordinator"] != true {
 		t.Fatalf("is_coordinator = %v", vars["is_coordinator"])
 	}
@@ -80,9 +78,7 @@ func TestSkillVarsWorkerProfile(t *testing.T) {
 		RootCount:      1,
 	})
 	vars, err := SkillVars(reader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "skill vars", err)
 	if vars["is_coordinator"] != false {
 		t.Fatalf("is_coordinator = %v", vars["is_coordinator"])
 	}
@@ -125,9 +121,7 @@ func TestSkillVarsCallerShapeSurvivesMerges(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			vars, err := SkillVars(skillTestReader(t, tc.input))
-			if err != nil {
-				t.Fatal(err)
-			}
+			testutil.FailErr(t, "skill vars", err)
 			for k, want := range tc.shape {
 				if vars[k] != want {
 					t.Fatalf("%s = %v, want %v", k, vars[k], want)
@@ -147,9 +141,7 @@ func TestSkillVarsWorkerOfferedMarksDeferredLoaded(t *testing.T) {
 		RootCount: 1,
 	})
 	vars, err := SkillVars(reader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "skill vars", err)
 	if vars["profile_has_held_result"] != true {
 		t.Fatalf("offered deferred tool must render as held: %v", vars["profile_has_held_result"])
 	}
@@ -169,9 +161,7 @@ func TestSkillVarsCoordinatorAddressableTools(t *testing.T) {
 		RootCount: 1,
 	})
 	vars, err := SkillVars(reader)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "skill vars", err)
 	if vars["profile_has_scan_query"] != true {
 		t.Fatalf("floor tool outside Offered must render as addressable: %v", vars["profile_has_scan_query"])
 	}
