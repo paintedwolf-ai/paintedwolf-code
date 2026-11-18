@@ -38,12 +38,7 @@ func TestValidatedProgramIdentityRequiresLiveExecutionLease(t *testing.T) {
 	}
 }
 
-func TestInspectionAndUnvalidatedProgramsCannotProveExecutionAdmission(t *testing.T) {
-	program, err := commandsurface.ParseProgram([]byte("true"), commandsurface.ParseOptions{})
-	testutil.FailErr(t, "inspect valid program", err)
-	if _, _, err := program.ValidatedProgramIdentity(t.Context()); err == nil {
-		t.Fatal("inspection-only copy qualified execution admission")
-	}
+func TestUnvalidatedProgramsCannotProveExecutionAdmission(t *testing.T) {
 	var absent *commandsurface.ParsedProgram
 	if _, _, err := absent.ValidatedProgramIdentity(t.Context()); err == nil {
 		t.Fatal("nil program qualified admission")

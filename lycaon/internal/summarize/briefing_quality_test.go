@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/commandsurface/commandsurfacetest"
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"mvdan.cc/sh/v3/expand"
@@ -159,9 +160,9 @@ func TestInspectionActionsAreLiteralPortableCommands(t *testing.T) {
 		if wire.Tool != "command" || wire.Args.Command == "" || wire.Args.Path != "" {
 			t.Fatalf("retired tool schema leaked: %s", raw)
 		}
-		program, err := commandsurface.ParseProgram([]byte(wire.Args.Command), commandsurface.ParseOptions{})
+		program, err := commandsurfacetest.Admit(t, []byte(wire.Args.Command), commandsurface.ParseOptions{})
 		testutil.FailErr(t, "admit generated portable command", err)
-		if len(program.Snapshot().Statements) != 1 {
+		if len(program.View(t).Statements) != 1 {
 			t.Fatal("literal operand injected another statement")
 		}
 		parsed, err := syntax.NewParser().Parse(strings.NewReader(wire.Args.Command), "fixture")
