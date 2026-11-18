@@ -6,6 +6,23 @@ A session is the durable boundary for one conversation and its work: ordered pro
 
 ---
 
+## Agent and Ask modes
+
+Agent is the default for a new chat. Before its first prompt or workflow start,
+the composer can select either Agent or Ask. The host records the selection with
+that first admission. After admission, an Ask chat can switch to Agent once.
+Rewinding the first turn preserves the chat's mode and admission history.
+
+Ask lets the assistant investigate and answer using native read tools and
+read-scoped workers. It blocks agent-initiated file and blueprint edits,
+commands, background processes, overlay changes, secret changes, and workflow
+phases that require mutation or verification. Connected MCP tools rely on their
+provider's read-only declaration and remain subject to integration trust checks.
+
+Workers inherit the root chat's ceiling and keep their own scopes when the chat
+switches to Agent. Existing permission, confinement, and workflow rules still
+apply. An active Ask turn can use the new authority from its next model round.
+
 ## Why every session has a workflow
 
 There is no policy-free chat mode beside workflow mode. A newly created build session attaches the ambient `implement@` workflow, and an explicitly selected recipe uses the same run engine. This gives every turn one answer to the questions that otherwise drift apart: which phase is active, which tools and agents are available, what evidence is required, which human controls are armed, what must happen before the work may close, and what recovery should restore.
