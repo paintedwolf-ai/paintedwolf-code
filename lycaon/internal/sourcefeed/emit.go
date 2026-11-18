@@ -27,6 +27,7 @@ type Change struct {
 	WorkspaceID   string                  `json:",omitempty"`
 	WorkspaceKind api.SourceWorkspaceKind `json:",omitempty"`
 	RootID        string                  `json:",omitempty"`
+	FromRootID    string                  `json:",omitempty"`
 	Path          string                  `json:",omitempty"`
 	FromPath      string                  `json:",omitempty"`
 	Op            api.SourceChangeOp      `json:",omitempty"`
@@ -230,6 +231,7 @@ func (c Change) event() api.SourceChange {
 	return api.SourceChange{
 		RootID:      strings.TrimSpace(c.RootID),
 		Path:        filepath.ToSlash(strings.TrimSpace(c.Path)),
+		FromRootID:  strings.TrimSpace(c.FromRootID),
 		FromPath:    filepath.ToSlash(strings.TrimSpace(c.FromPath)),
 		Op:          c.Op,
 		Origin:      c.Origin,

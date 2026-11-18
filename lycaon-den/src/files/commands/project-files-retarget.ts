@@ -14,6 +14,7 @@ export function retargetOpenFilesUnderPath(
   rootId: string,
   fromPath: string,
   toPath: string,
+  toRootId = rootId,
 ): void {
   const state = projectFilesState(projectId);
   for (const key of state.order) {
@@ -27,9 +28,9 @@ export function retargetOpenFilesUnderPath(
     }
   }
   batch(() => {
-    rekeyFilesEditorHostsUnderPath(projectId, rootId, fromPath, toPath);
-    rekeySessionFidelityUnderPath(rootId, fromPath, toPath);
-    retargetFilesBufferStoreUnderPath(projectId, rootId, fromPath, toPath);
-    retargetProjectJumpHistory(projectId, rootId, fromPath, toPath);
+    rekeyFilesEditorHostsUnderPath(projectId, rootId, fromPath, toPath, toRootId);
+    rekeySessionFidelityUnderPath(rootId, fromPath, toPath, toRootId);
+    retargetFilesBufferStoreUnderPath(projectId, rootId, fromPath, toPath, toRootId);
+    retargetProjectJumpHistory(projectId, rootId, fromPath, toPath, toRootId);
   });
 }

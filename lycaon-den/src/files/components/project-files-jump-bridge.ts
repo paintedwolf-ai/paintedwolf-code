@@ -59,13 +59,14 @@ export function retargetProjectJumpHistory(
   rootId: string,
   fromPath: string,
   toPath: string,
+  toRootId = rootId,
 ): void {
   const mapEntry = (entry: JumpEntry): JumpEntry | null => {
     const parsed = parseFileBufferKey(entry.bufferKey);
     let nextKey = entry.bufferKey;
     if (parsed?.kind === "path" && parsed.rootId === rootId && !parsed.jobId) {
       const nextPath = retargetPathUnderPath(parsed.path, fromPath, toPath);
-      if (nextPath != null) nextKey = fileBufferKey(rootId, nextPath);
+      if (nextPath != null) nextKey = fileBufferKey(toRootId, nextPath);
     }
     if (entry.rootId !== rootId || entry.jobId) {
       return { ...entry, bufferKey: nextKey };
@@ -74,7 +75,7 @@ export function retargetProjectJumpHistory(
     return {
       ...entry,
       bufferKey: nextKey,
-      ...(nextPath == null ? {} : { path: nextPath }),
+      ...(nextPath == null ? {} : { path: nextPath, rootId: toRootId }),
     };
   };
   historyByProject.set(

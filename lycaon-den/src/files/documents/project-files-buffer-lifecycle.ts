@@ -393,6 +393,7 @@ export function retargetFilesBufferStoreUnderPath(
   rootId: string,
   fromPath: string,
   toPath: string,
+  toRootId = rootId,
 ): void {
   ensureProject(projectId);
   setFilesStore(
@@ -405,7 +406,7 @@ export function retargetFilesBufferStoreUnderPath(
         if (buf.jobId) continue; // Worker views retain their address.
         const nextPath = retargetPathUnderPath(buf.path, fromPath, toPath);
         if (nextPath == null) continue;
-        updates.push({ oldKey: key, buf: { ...buf, path: nextPath } });
+        updates.push({ oldKey: key, buf: { ...buf, rootId: toRootId, path: nextPath } });
       }
       for (const { oldKey, buf } of updates) {
         const newKey = fileBufferKey(buf.rootId, buf.path, buf.jobId, buf.fileId ?? undefined);
