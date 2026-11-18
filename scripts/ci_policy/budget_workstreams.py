@@ -19,6 +19,11 @@ LEGACY_FOOTER = re.compile(
     r'\s*Initial consolidation preserves historical observations from the individual issues\.[^\n]*\s*$')
 
 
+def past_hard_limit(row, bound):
+    """Whether a row exceeds its limit or cap; a category without a hard limit has neither."""
+    return row[bound] is not None and row['measured'] > row[bound]
+
+
 def module(row):
     """Use the source module boundary, independent of metrics and nested packages."""
     parts = row['id'].split('/')
@@ -106,12 +111,12 @@ def block(identity, rows, observation):
              '| Module | Findings | Hard-limit breaches | Renewed reviews |',
              '| --- | ---: | ---: | ---: |']
     ranked = sorted(modules.items(), key=lambda item: (
-        -sum(r['measured'] > r['effective_cap'] for r in item[1]),
+        -sum(past_hard_limit(r, 'effective_cap') for r in item[1]),
         -sum(r.get('review', {}).get('state') in {'boundary_changed', 'shape_changed', 'ceiling_exceeded'} for r in item[1]),
         -len(item[1]), item[0]))
     visible = []
     for name, findings in ranked:
-        hard = sum(r['measured'] > r['limit'] for r in findings)
+        hard = sum(past_hard_limit(r, 'limit') for r in findings)
         renewed = sum(r.get('review', {}).get('state') in {'boundary_changed', 'shape_changed', 'ceiling_exceeded'} for r in findings)
         summary = f"| `{html.escape(name)}` | {len(findings)} | {hard} | {renewed} |"
         if len('\n'.join(lines).encode()) + len(summary.encode()) > 40000:
@@ -130,7 +135,7 @@ def block(identity, rows, observation):
             artifact = row['id'][len(name) + 1:] if row['id'].startswith(name + '/') else row['id']
             label = html.escape(artifact).replace('|', '&#124;')
             status = row.get('review', {}).get('state', 'required')
-            lines.append(f"| [{label}]({url}) | {row['category']} | {row['measured']} | {row['warn']} | {row['limit']} | {row['effective_cap']} | {status} |")
+            lines.append(f"| [{label}]({url}) | {row['category']} | {row['measured']} | {row['warn']} | {row['limit'] or 'none'} | {row['effective_cap'] or 'none'} | {status} |")
             review = row.get('review')
             if review:
                 notes.append(f"\nReview `{html.escape(row['id'])}`: {html.escape(review['reason'])} (workstream `{review['workstream']}`).\n")

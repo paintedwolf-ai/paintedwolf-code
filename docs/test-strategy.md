@@ -304,9 +304,11 @@ coverage; focused ready checks run before queue admission.
 | Maintainability (`test/contract/maintainability`) | Code-bearing lines per production and test file; handwritten files per production and test directory; Go struct fields; Go receiver methods and receiver lines summed across files and platform variants, so splitting a file cannot hide concentration; distinct local TypeScript imports per module. Generated and vendored files are classified from generator inventories. | [`maintainability-budgets.yaml`](../lycaon/test/contract/maintainability-budgets.yaml) |
 | Prompts (`test/contract/agentcontext`) | UTF-8 bytes of every rendered worker persona, coordinator tripartite fixture, inject, agent template, kick, and instruction unit; the tools each coordinator surface and worker profile sends upfront, limited as two classes; and each turn kind's widest static prompt against the model window | `sizes` and `absolute_maximums` in [`prompt-budgets.yaml`](../lycaon/config/packs/painted-wolf/platform/host/prompt-budgets.yaml) |
 
-Each maintainability category has a review threshold (`warn`) and a hard limit
-(`limit`). Warnings permit admission and request architectural review after merge; hard
-limits reject new or growing excess. Maintainability measures both the change
+Each maintainability category has a review threshold (`warn`) and, except test
+files, a hard limit (`limit`). Warnings permit admission and request architectural
+review after merge; hard limits reject new or growing excess. Test files only warn,
+so a scenario is written for the reader rather than compressed to fit a line count;
+a category without a hard limit takes no exceptions. Maintainability measures both the change
 base and current source using the same rules. An artifact that must stay
 larger can have an explicit cap and reason in its own file under
 [`maintainability-exceptions`](../lycaon/test/contract/maintainability-exceptions/).
@@ -450,7 +452,7 @@ change the artifact identity or create new runtime authority boundaries.
 A `refactor` decision classifies work without prescribing extraction: simplifying,
 consolidating fragments, and moving a genuine boundary are all valid outcomes.
 It does not suppress the warning. A `retain` decision requires a numeric `ceiling`
-above the warning threshold and at or below the hard limit, plus `boundaries`: a
+above the warning threshold and at or below the hard limit, if the category has one, plus `boundaries`: a
 map of repository-relative files to their SHA-256 digests. Select the contract
 tests and declarations that support the rationale. Pin only boundaries whose
 changes invalidate the decision; avoid whole implementation files when structural

@@ -132,7 +132,7 @@ func validateReview(review artifactReview, policy sizebudget.Policy, inv *invent
 		}
 		return nil
 	}
-	if review.Ceiling <= limit.Warn || review.Ceiling > limit.Limit || len(review.Boundaries) == 0 || len(review.Boundaries) > 32 {
+	if review.Ceiling <= limit.Warn || limit.Exceeded(review.Ceiling) || len(review.Boundaries) == 0 || len(review.Boundaries) > 32 {
 		return fmt.Errorf("retained warning requires a ceiling within the hard limit and 1-32 boundaries")
 	}
 	if hasReviewShape(review.Category) {

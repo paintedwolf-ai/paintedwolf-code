@@ -109,6 +109,15 @@ class SnapshotTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             snapshot.validate(value, 'a' * 40, 'b' * 40)
 
+    def test_a_warning_only_category_carries_no_limit_or_cap(self):
+        warning_only = {**row(category='test_files', measured=5000), 'limit': None, 'effective_cap': None}
+        _, artifacts = snapshot.validate(report([warning_only]), 'a' * 40, 'b' * 40)
+        self.assertIsNone(next(iter(artifacts.values()))['limit'])
+        for change in ({'effective_cap': 900}, {'limit': 0}, {'measured': 300}):
+            value = report([{**warning_only, **change}])
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                snapshot.validate(value, 'a' * 40, 'b' * 40)
+
     def test_stable_identity_excludes_measurement_and_pr(self):
         self.assertEqual(snapshot.key('source_files', 'pkg/server.go'), snapshot.key(row()['category'], row()['id']))
         self.assertNotEqual(snapshot.key('source_files', 'pkg/server.go'), snapshot.key('test_files', 'pkg/server.go'))
@@ -121,6 +130,16 @@ class WorkstreamTests(unittest.TestCase):
 
     def artifacts(self, *rows):
         return {snapshot.key(r['category'], r['id']): r for r in rows}
+
+    def test_a_warning_only_artifact_counts_as_no_hard_limit_breach(self):
+        bounded = row(measured=950)
+        warning_only = {**row(artifact='pkg/long_test.go', category='test_files', measured=5000),
+                        'limit': None, 'effective_cap': None}
+        self.assertTrue(self.groups.past_hard_limit(bounded, 'limit'))
+        self.assertFalse(self.groups.past_hard_limit(warning_only, 'limit'))
+        self.assertFalse(self.groups.past_hard_limit(warning_only, 'effective_cap'))
+        body = self.groups.block('pkg', [warning_only], observation())
+        self.assertIn('| 5000 | 300 | none | none |', body)
 
     def test_structural_grouping_grows_without_a_module_catalog(self):
         for path, expected in [('lycaon/internal/newmodule/nested/service.go', 'lycaon/internal'),

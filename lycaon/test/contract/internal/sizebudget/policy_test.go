@@ -82,6 +82,32 @@ func TestExceptionChangesNameAddedAndRaisedCaps(t *testing.T) {
 	}
 }
 
+func TestCategoryWithoutHardLimitOnlyWarns(t *testing.T) {
+	t.Parallel()
+	policy := Policy{Limits: map[string]Limit{"tests": {Warn: 10}}}
+	if err := policy.Validate([]string{"tests"}); err != nil {
+		t.Fatalf("warning-only category rejected: %v", err)
+	}
+	measured := Measurements{"tests": {"long": 5000, "long_untouched": 5000, "short": 5}}
+	findings := Evaluate(policy, measured, touchedOnly("long", "short"))
+	if got := kinds(findings); !reflect.DeepEqual(got, map[string]Kind{"long": OverWarn}) {
+		t.Fatalf("finding kinds = %v, want only a warning", got)
+	}
+	if failures := Failures(findings); len(failures) != 0 {
+		t.Fatalf("a warning-only category failed: %v", failures)
+	}
+	if got := Untouched(policy, measured, touchedOnly()); len(got) != 0 {
+		t.Fatalf("untouched past a limit that does not exist: %v", got)
+	}
+	if cap, excepted := policy.Cap("tests", "long"); cap != 0 || excepted {
+		t.Fatalf("cap = %d, %v; want none", cap, excepted)
+	}
+	policy.Exceptions = map[string]map[string]Exception{"tests": {"long": {Cap: 6000, Reason: "r"}}}
+	if err := policy.Validate([]string{"tests"}); err == nil {
+		t.Fatal("accepted an exception for a category without a hard limit")
+	}
+}
+
 func TestValidateRejectsPoliciesThatCannotBeReviewed(t *testing.T) {
 	t.Parallel()
 	categories := []string{"files"}
@@ -92,6 +118,8 @@ func TestValidateRejectsPoliciesThatCannotBeReviewed(t *testing.T) {
 		"missing limit":          func(p *Policy) { delete(p.Limits, "files") },
 		"warn not below limit":   func(p *Policy) { p.Limits["files"] = Limit{Warn: 20, Limit: 20} },
 		"unknown category":       func(p *Policy) { p.Limits["other"] = Limit{Warn: 1, Limit: 2} },
+		"no warning line":        func(p *Policy) { p.Limits["files"] = Limit{Limit: 20} },
+		"negative limit":         func(p *Policy) { p.Limits["files"] = Limit{Warn: 10, Limit: -1} },
 		"exception without why":  func(p *Policy) { p.Exceptions["files"]["bare"] = Exception{Cap: 30} },
 		"exception within limit": func(p *Policy) { p.Exceptions["files"]["small"] = Exception{Cap: 20, Reason: "r"} },
 		"exception for unknown":  func(p *Policy) { p.Exceptions["other"] = map[string]Exception{"x": {Cap: 99, Reason: "r"}} },

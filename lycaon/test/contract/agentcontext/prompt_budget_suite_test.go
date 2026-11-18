@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/prompts"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
+	"gopkg.in/yaml.v3"
 )
 
 func TestShippedPromptSizePolicyIsReviewable(t *testing.T) {
@@ -26,6 +27,25 @@ func TestShippedPromptSizePolicyIsReviewable(t *testing.T) {
 			t.Errorf("%s limit: contract reads %d, runtime reads %d", name, policy.Limits[name].Limit, budgets.Sizes.Limits[name].Limit)
 		}
 	}
+}
+
+func TestPromptSizePolicyRefusesACategoryWithoutAHardLimit(t *testing.T) {
+	t.Parallel()
+	raw, err := os.ReadFile(promptBudgetPolicyFile(contractcheck.RepoRoot(t)))
+	contractcheck.FailErr(t, "read prompt budgets", err)
+	var document map[string]any
+	contractcheck.FailErr(t, "decode prompt budgets", yaml.Unmarshal(raw, &document))
+	limits := document["sizes"].(map[string]any)["limits"].(map[string]any)
+	for name, limit := range limits {
+		delete(limit.(map[string]any), "limit")
+		edited, err := yaml.Marshal(document)
+		contractcheck.FailErr(t, "encode prompt budgets", err)
+		if _, err := decodePromptSizePolicy(edited); err == nil {
+			t.Fatalf("accepted %s without a hard limit", name)
+		}
+		return
+	}
+	t.Fatal("prompt budgets declare no size categories")
 }
 
 func TestPromptBudgetCatalogMatchesRegistry(t *testing.T) {

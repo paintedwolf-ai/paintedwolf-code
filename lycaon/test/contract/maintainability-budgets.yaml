@@ -1,7 +1,8 @@
 # Warning thresholds create post-merge cleanup issues; limits block new or growing excess.
+# Test files have a warning line and no hard limit, so scenarios stay readable rather than compressed to fit.
 limits:
     source_files: {warn: 300, limit: 900}
-    test_files: {warn: 375, limit: 1200}
+    test_files: {warn: 375}
     source_directories: {warn: 25, limit: 75}
     test_directories: {warn: 30, limit: 100}
     go_struct_fields: {warn: 12, limit: 35}
