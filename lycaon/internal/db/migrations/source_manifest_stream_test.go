@@ -41,7 +41,7 @@ VALUES(?,?,'/root',?,?,'index',1,420,1)`, id, i, path, fmt.Sprintf("%040d", i))
 	testutil.FailErr(t, "convert root", err)
 	rows, err := tx.QueryContext(t.Context(), `SELECT e.path FROM source_manifest_layout l
 JOIN source_manifest_entries e ON e.chunk_id = l.chunk_id
-WHERE l.manifest_id = ? ORDER BY l.first_path, e.rowid`, manifest)
+WHERE l.manifest_id = ? ORDER BY l.first_path, e.path`, manifest)
 	testutil.FailErr(t, "read converted manifest", err)
 	var got []string
 	for rows.Next() {

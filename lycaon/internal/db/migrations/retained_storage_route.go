@@ -25,5 +25,5 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// sorters or rebuilds. Discarding live_model_outputs drops a table, and
 	// replacing the version reclaim trigger rewrites no rows.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
-		p.steps[0].Checksum == "988c9c1c31cc93a28367f6b69c4e322568fda1e65dbd2405f7c655e67987d1ae"
+		p.steps[0].Checksum == "b71031971970f4b0f7ca15325b03459b7cde7a57fb1fde8efb3f265b3e13e0b8"
 }
