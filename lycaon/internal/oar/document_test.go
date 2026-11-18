@@ -235,7 +235,7 @@ func TestCopyDoesNotAffectTheDecision(t *testing.T) {
 }
 
 // Portability findings do not fail rule loading.
-func TestlintPortability(t *testing.T) {
+func TestLintPortability(t *testing.T) {
 	l := testLoader(t)
 	p, err := LoadEngineDeclaration(hostCapabilityDocumentPath(t))
 	testutil.FailErr(t, "load host profile", err)
