@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
+	"github.com/lycaon/lycaon/internal/decide"
+	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
@@ -139,6 +141,12 @@ func lineWith(text, name string) string {
 // tools or reachable through its command language.
 func TestEveryRequestNamesOnlyWhatItOffers(t *testing.T) {
 	names := requestNames(t)
+	for label, decider := range map[string]decide.Decider{"load-all": decidetest.LoadAll{}, "absent": decide.Absent{}} {
+		t.Run(label, func(t *testing.T) { probeRequests(t, names, decider) })
+	}
+}
+
+func probeRequests(t *testing.T, names *toolvocab.Catalog, decider decide.Decider) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 		{
 			Pattern:      "parallel modules",
@@ -148,7 +156,7 @@ func TestEveryRequestNamesOnlyWhatItOffers(t *testing.T) {
 		{Pattern: "what is here", FollowUpText: "A small Go module."},
 	}})
 	rec := llm.NewRecordingClient(mock)
-	h := BuildForTest(t, WithLLMClient(rec))
+	h := BuildForTest(t, WithLLMClient(rec), WithDecider(decider))
 	ctx := context.Background()
 	dir := t.TempDir()
 	writeTestProjectApprovalsAllowWrite(t, dir)
