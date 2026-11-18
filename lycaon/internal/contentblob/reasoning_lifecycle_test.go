@@ -53,7 +53,7 @@ func TestReasoningRetentionAndChatTreeDeletionUseProjectBlobLifecycle(t *testing
 	old := timelayout.Format(time.Now().AddDate(-2, 0, 0))
 	_, err = database.ExecContext(t.Context(), `UPDATE model_outputs SET created_at=?,settled_at=?`, old, old)
 	testutil.FailErr(t, "age retained outputs", err)
-	_, err = db.RunRetention(t.Context(), database, db.DefaultRetention())
+	_, err = db.RunMaintenancePass(t.Context(), database, db.DefaultRetention(), true)
 	testutil.FailErr(t, "maintain old history", err)
 	reloaded := store.NewSQL(database)
 	messages, err := reloaded.GetMessages(t.Context(), other.ID)

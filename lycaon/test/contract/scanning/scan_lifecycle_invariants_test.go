@@ -116,8 +116,8 @@ func TestScanRetentionDefaultKeepsOrphanedRows(t *testing.T) {
 
 	cfg := db.DefaultRetention()
 	cfg.IncrementalVacuumMinFreelistPages = 9999
-	_, err = db.RunRetention(ctx, sqlDB, cfg)
-	contractcheck.FailErr(t, "RunRetention", err)
+	_, err = db.RunMaintenancePass(ctx, sqlDB, cfg, true)
+	contractcheck.FailErr(t, "maintenance pass", err)
 	var count int
 	err = sqlDB.QueryRowContext(ctx, `SELECT COUNT(*) FROM code_scans WHERE id = 'orphan-scan'`).Scan(&count)
 	contractcheck.FailErr(t, "count retained scan", err)
