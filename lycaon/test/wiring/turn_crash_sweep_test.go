@@ -24,18 +24,8 @@ func dumpStore(t *testing.T, path string) storeDump {
 	database, err := sql.Open("sqlite", "file:"+filepath.ToSlash(path)+"?mode=ro")
 	testutil.FailErr(t, "open store dump", err)
 	defer func() { _ = database.Close() }()
-	rows, err := database.QueryContext(t.Context(), `SELECT name FROM sqlite_schema WHERE type = 'table' AND sql NOT LIKE 'CREATE VIRTUAL%' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
-	testutil.FailErr(t, "list tables", err)
-	var tables []string
-	for rows.Next() {
-		var name string
-		testutil.FailErr(t, "scan table", rows.Scan(&name))
-		tables = append(tables, name)
-	}
-	testutil.FailErr(t, "finish tables", rows.Err())
-	testutil.FailErr(t, "close tables", rows.Close())
 	dump := storeDump{}
-	for _, table := range tables {
+	for _, table := range storeTables(t, database) {
 		// Index segments are checked by integrity_check, not compared.
 		if ftsShadow.MatchString(table) {
 			continue
@@ -43,6 +33,21 @@ func dumpStore(t *testing.T, path string) storeDump {
 		dump[table] = tableRows(t, database, table)
 	}
 	return dump
+}
+
+func storeTables(t *testing.T, database *sql.DB) []string {
+	t.Helper()
+	rows, err := database.QueryContext(t.Context(), `SELECT name FROM sqlite_schema WHERE type = 'table' AND sql NOT LIKE 'CREATE VIRTUAL%' AND name NOT LIKE 'sqlite_%' ORDER BY name`)
+	testutil.FailErr(t, "list tables", err)
+	defer func() { _ = rows.Close() }()
+	var tables []string
+	for rows.Next() {
+		var name string
+		testutil.FailErr(t, "scan table", rows.Scan(&name))
+		tables = append(tables, name)
+	}
+	testutil.FailErr(t, "finish tables", rows.Err())
+	return tables
 }
 
 func primaryKey(t *testing.T, database *sql.DB, table string) []string {

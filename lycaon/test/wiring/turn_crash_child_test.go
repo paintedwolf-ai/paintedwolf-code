@@ -103,13 +103,13 @@ func mapsKeys(m map[string]bool) func(func(string) bool) {
 
 func (c *commitTracer) commit(label string) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.seen[label]++
 	point := label + " #" + strconv.Itoa(c.seen[label])
 	if point == c.killAt {
 		os.Exit(crashExit)
 	}
 	_, _ = fmt.Fprintln(c.log, point)
+	c.mu.Unlock()
 }
 
 // crashTurnScript is one model output with a tool call, then the closing answer.

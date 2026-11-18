@@ -124,7 +124,8 @@ func TestOrphanedRunReconcileIsIdempotentAndLeavesNoUndrivenRun(t *testing.T) {
 			ids = append(ids, run.ID)
 		}
 		for _, status := range c.terminal {
-			create(&api.WorkflowRun{ID: uuid.NewString(), SessionID: sess.ID, WorkflowID: "plan", WorkflowVersion: "1.0.0", Status: status, CurrentPhase: "review"})
+			ended := time.Now().UTC()
+			create(&api.WorkflowRun{ID: uuid.NewString(), SessionID: sess.ID, WorkflowID: "plan", WorkflowVersion: "1.0.0", Status: status, CurrentPhase: "review", CompletedAt: &ended})
 		}
 		root := &api.WorkflowRun{ID: uuid.NewString(), SessionID: sess.ID, WorkflowID: "plan", WorkflowVersion: "1.0.0", Status: c.rootStatus, CurrentPhase: "review"}
 		if c.ambient {
