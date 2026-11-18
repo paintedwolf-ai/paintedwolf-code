@@ -53,7 +53,7 @@ func TestSupervisorTopologyParentLinks(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
 	_, err = orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -105,7 +105,7 @@ func TestSupervisorMaxAgentsRejected(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
 	ids := []string{
 		"coordinator", "implementer", "code-reviewer",
@@ -138,7 +138,7 @@ func TestSupervisorStrategyParallel(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
 	_, err = orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -170,7 +170,7 @@ func TestSupervisorWorkersDispatchInParallel(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
 	_, err = orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
@@ -192,7 +192,7 @@ func TestSupervisorParallelYamlMockRun(t *testing.T) {
 
 	sess, err := sessMgr.Chats.CreateForProject(ctx, testdbseed.DefaultProjectID, api.SessionPostureOrchestrate)
 	testutil.FailErr(t, "sessMgr.Create failed", err)
-	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore.DB(), sess)
+	projectDir := testdbseed.OrchestrationWorkspace(t, sessStore, sess)
 
 	result, err := orch.Run(ctx, orchestration.RunRequest{
 		SessionID: sess.ID,
