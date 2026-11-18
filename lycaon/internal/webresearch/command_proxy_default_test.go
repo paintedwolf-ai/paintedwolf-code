@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/egress"
+	"github.com/lycaon/lycaon/internal/testsetup/dns"
 	"github.com/lycaon/lycaon/internal/webresearch"
 )
 
@@ -40,7 +40,13 @@ func TestWebToolsUnaffectedByCommandProxyOnlyDefault(t *testing.T) {
 		}
 	}
 
-	egress.TestingResolve(t, egress.StaticLookup(netip.MustParseAddr("1.1.1.1")))
+	dns.Install(t, func(host string) []netip.Addr {
+		if host != "search.brave.com" {
+			t.Errorf("unexpected provider DNS lookup for %q", host)
+			return nil
+		}
+		return []netip.Addr{netip.MustParseAddr("1.1.1.1")}
+	})
 	if err := webresearch.ValidateProviderConfigEndpoint(
 		context.Background(), "https://search.brave.com/", false,
 	); err != nil {
