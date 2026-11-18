@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -47,7 +48,7 @@ func programModelArguments(ctx context.Context, frame ProgramFrame, admission *t
 	if err != nil {
 		return nil, nil, err
 	}
-	if !programModelTool(model.ToolName) || model.ToolCallID != tc.Identity.ToolCallID {
+	if !toolreach.ProgramBacked(model.ToolName) || model.ToolCallID != tc.Identity.ToolCallID {
 		return nil, nil, fmt.Errorf("program observation model call changed")
 	}
 	frame.lifetime.mu.Lock()

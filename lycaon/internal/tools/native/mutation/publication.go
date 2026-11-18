@@ -43,10 +43,10 @@ func (p *Publication) CheckOutput(ctx context.Context, destination commandprogra
 		return nil
 	}
 	bound, err := p.Program.Paths.Bind(ctx, destination.Target.Value, true)
-	if err != nil || bound.Null || bound.Resolved.External {
-		return nil
+	if err == nil && !bound.Null && !bound.Resolved.External {
+		return p.Admission.Check(ctx, destination, outputTarget(destination, bound))
 	}
-	return p.Admission.Check(ctx, destination, outputTarget(destination, bound))
+	return nil
 }
 
 func outputTarget(destination commandprogram.OutputDestination, bound projectpaths.BoundPath) tools.CommandOutputTarget {

@@ -91,7 +91,8 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	boundaryStarted := false
 	ownerStarted := false
 	defer func() {
-		if !ownerStarted || result.Producer.Terminal == toolcontract.ProducerRefused {
+		// Admission checks supply their own attribution, which can be shared across producers.
+		if result.Producer.Terminal == "" || (ownerStarted && result.Producer.Terminal == toolcontract.ProducerRefused) {
 			completeNativeRejection(bound, err)
 		}
 		if !ownerStarted && result.Producer.Terminal == "" {
