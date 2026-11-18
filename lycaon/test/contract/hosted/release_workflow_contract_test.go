@@ -79,7 +79,6 @@ func TestReleaseWorkflowValidatesTagAgainstVERSION(t *testing.T) {
 		"fetch-depth: 0",
 		"scripts/release-source-validate.sh",
 		"refs/remotes/origin/main",
-		"./task release:preflight -- --require-corpus",
 		"./task upgrade:rehearse",
 		"aggregate-release:",
 		"packaging/release-platforms.json",

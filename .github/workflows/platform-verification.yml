@@ -112,7 +112,7 @@ jobs:
   # sidecar build. Each suite runs even when an earlier one fails.
   confinement:
     runs-on: macos-15
-    timeout-minutes: 150
+    timeout-minutes: 240
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -150,6 +150,22 @@ jobs:
           BROWSER_PATH="${BROWSER_OUT##* path=}"
           test -x "$BROWSER_PATH"
           echo "path=$BROWSER_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Install the public feed verifier
+        timeout-minutes: 5
+        run: HOMEBREW_NO_AUTO_UPDATE=1 brew install minisign
+
+      - name: Verify the candidate corpus with the built sidecar
+        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
+        timeout-minutes: 10
+        run: ./task release:preflight -- --require-corpus --reuse-sidecar
+
+      - name: Rehearse the prior-release upgrade with the built sidecar
+        if: ${{ !cancelled() && steps.browser.outcome == 'success' }}
+        timeout-minutes: 90
+        env:
+          DOWNLOAD_BASE_URL: ${{ vars.DOWNLOAD_BASE_URL }}
+        run: ./task upgrade:rehearse -- --reuse-sidecar
 
       - name: Applied Seatbelt confinement
         timeout-minutes: 45

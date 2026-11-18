@@ -1099,26 +1099,38 @@ tier for a pull request whose events start no CI, such as the dependency
 inventory's. A pull request's checks leave out dispatch runs, so the
 dispatch's `dispatched-check` job reports its gate as the required `check`
 commit status on the dispatched commit. [`qualification.yml`](../.github/workflows/qualification.yml)
-runs only on manual dispatch for an exact release candidate on main. It runs the
-complete check, then platform confinement and upgrade corpus beside the release
-profile's platform lanes, then browser and desktop journeys. One qualification
-runs at a time. Its `queue: max` concurrency queue retains up to 100 pending
+runs only on manual dispatch for an exact release candidate on main. It holds no
+lane list of its own: it calls the reusable
+[`nightly-verification.yml`](../.github/workflows/nightly-verification.yml) that
+nightly calls, so a lane added to nightly is added to qualification. A static job
+runs first (release metadata, published stable compatibility), then the
+credential probe; nothing compiles until both pass. The unsigned preparation then
+runs for the candidate, the macOS release custody test runs against the sidecar
+it prepared, and the nightly lane set runs unless a green full
+nightly ran on exactly the candidate's commit and tree. A green or red nightly on
+any other commit, including the parent, is never read. One qualification runs at
+a time. Its `queue: max` concurrency queue retains up to 100 pending
 requests; GitHub cancels additional requests when it is full.
 
 A request selects a full `source-sha` from main's history, or the dispatch commit
 when omitted. The main workflow remains the controller; each verification,
-platform, and E2E checkout uses the selected source. The final aggregate requires
-every stage and publishes `qualification-source-<attempt>`, binding the source
-commit/tree, controller commit, repository, run, and attempt. A skipped or canceled
+platform, and E2E checkout uses the selected source. A full nightly binds its
+source in `nightly-source-<attempt>`; qualification accepts a nightly only when
+that record names the candidate's commit and tree and the run succeeded. The
+final aggregate requires every stage and publishes `qualification-source-<attempt>`,
+binding the source commit/tree, controller commit, repository, run, attempt, the
+nightly run that verified the source and the preparation run. A skipped or canceled
 request cannot qualify a source. Release admission requires a successful manual
 Qualification aggregate and its unexpired exact-source receipt. A failed-job
 rerun may reuse its successful source binding; the receipt identifies the attempt
-that completed the aggregate. Candidate qualification holds at most three runners.
+that completed the aggregate. The cheap path is to qualify the commit the last
+scheduled nightly ran on.
 
 Nightly qualifies main daily with every check and release-platform catalog lane,
 platform confinement and upgrade corpus, and complete web and desktop journeys.
 It also runs race, fuzz, WebKit, stress, and performance checks, every declared
-Python suite, plus the prior-release upgrade rehearsal. A first job binds the
+Python suite, plus the candidate corpus check and prior-release upgrade rehearsal
+in the macOS confinement job, after its one engine build. A first job binds the
 source: the scheduled commit, or the exact commit a dispatch names in
 `source-sha`, which must carry the dispatched commit's CI tooling. The catalog
 matrix, the platform jobs, the browser journeys, and the upgrade rehearsal
@@ -1399,24 +1411,6 @@ lane durations, and unsuccessful merge-group runs. Three distinct runs sharing
 one failure signature appear in the report without opening issues. Missing artifacts
 remain a coverage gap; cancellation is reported separately from an attributed test failure.
 
-### Reusing completed source verification
-
-Qualification reuses complete source lanes from successful merge-group CI runs
-(including recovered `workflow_dispatch` runs on `gh-readonly-queue/main/`)
-whose Git tree exactly matches the selected landed source. Each compact proof
-binds repository, source commit and tree, workflow run and attempt, lane recipe,
-runner label, shard, and successful full-scope execution. The lookup considers
-up to forty recent successful CI runs within fourteen days. PR-only results,
-partial package selections, missing evidence, and failed runs grant no reuse.
-
-All shards of a lane must have matching proofs from one run attempt. Qualification
-retains its own plan listing every reused proof and every lane it executes.
-Change-relative budget and coverage reports always execute against the current
-qualification context. Platform, end-to-end, signed-package, and upgrade checks
-retain their separate gates. Pinned source and toolchains define source-lane
-identity; hosted image versions are recorded as provenance. Native platform
-qualification continues to exercise the current hosted environment.
-
 ### Browser qualification capacity
 
 Web qualification partitions the complete suite across two hosted jobs with two
@@ -1502,10 +1496,10 @@ budgets for the whole selected matrix. Runner caps do not depend on timing data.
 
 | Class | Workflows | One run at a time | Runners (macOS) |
 |---|---|---|---|
-| Qualification | `qualification.yml` | `qualification` | 3 (1): the `check` profile capped at three, then platform's two jobs beside the `release` platform lanes one at a time, then two browser shards beside the desktop journey |
+| Qualification | `qualification.yml` | `qualification` | the nightly cap when it runs the lane set, beside the unsigned preparation; otherwise the static job and the preparation |
 | Cache warming | `build-caches.yml` | `build-caches` | 1 (1): Linux, then macOS including release compilation |
 | Nightly | `nightly.yml` | `nightly` | 20 (7): six verification runners, two platform jobs, two browser shards, the desktop journey, the store upgrade rehearsal, the five release rehearsal jobs, and the installed upgrade's preparation and two cases |
-| Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): source validation beside one signed build, then desktop rehearsal or protected fixture preparation beside Linux packaging |
+| Releases | publishing runs of `release.yml`, `release-halt.yml` | `release-static-update` | 2 (2): one signed build, then desktop rehearsal or protected fixture preparation beside Linux packaging |
 | DCO certification | `dco.yml` | one queue per pull request or merge group | 1 per pull request or group |
 | Maintainability tracking | `maintainability-issues.yml` | `maintainability-issues` | 1 |
 | Queue batching | `queue-batching.yml` | `queue-batching` | 1 |
@@ -1537,23 +1531,18 @@ average occupancy does not change with it. Recorded occupancy averages about eig
 of the twenty runners, and jobs without a matrix cap start within seconds. Raising a
 cap is worthwhile while lanes wait on the cap rather than on a runner; check that
 before changing one. Caps do not establish queue latency guarantees.
-On macOS, qualification and warming hold one runner each, nightly four, and a
-release two. Nightly is scheduled outside the hours releases and qualification
+On macOS, warming holds one runner, nightly four (as does a qualification that
+runs the lane set), and a release two. Nightly is scheduled outside the hours releases and qualification
 run; when they do overlap, macOS jobs wait for one of the five runners. The
 merge queue and the admission tier run on Linux.
 
 ### Upgrade rehearsal preparation and startup evidence
 
-Release source validation runs preflight and the store upgrade rehearsal in one
-checkout on one runner. Both managed targets retain their build validation;
-unchanged compiler inputs and development outputs stay available between them.
-Each phase retains its own evidence, and either failure blocks publication.
-Signing remains isolated in its protected packaging job.
-
-Nightly store upgrade rehearsal uses the shared verification setup for the pinned
-Node/Bun runtimes and frontend semantic fixture dependencies, then installs the
-public feed verifier. The managed rehearsal task owns its development sidecar
-build. Nightly bundle execution installs the published release before the newest
+The candidate corpus check and the store upgrade rehearsal run in the macOS
+confinement job after its engine build and reuse that sidecar, nightly and in
+every qualification; the release reads them through the exact-source
+qualification and builds no development engine. Signing remains isolated in its
+protected packaging job. Nightly bundle execution installs the published release before the newest
 and lets it update itself to the newest, from fixtures that a Linux job prepares
 from public signed bytes alone; no key is used. It exercises the harness on
 known-good inputs and shows nothing about the current source. In a release,

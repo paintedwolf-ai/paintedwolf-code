@@ -1837,8 +1837,10 @@ tasks:
         {{else if hasPrefix "--bundle" .CLI_ARGS}}
         python3 {{.SCRIPTS_DIR}}/release_control.py bundle-rehearse {{trimPrefix "--bundle" .CLI_ARGS}}
         {{else}}
+        {{if not (hasPrefix "--reuse-sidecar" .CLI_ARGS)}}
         ./task build:lycaon-dev
-        bash {{.SCRIPTS_DIR}}/upgrade-rehearse.sh {{.CLI_ARGS}}
+        {{end}}
+        bash {{.SCRIPTS_DIR}}/upgrade-rehearse.sh {{trimPrefix "--reuse-sidecar" .CLI_ARGS}}
         {{end}}
 
   upgrade:corpus:prepare:
