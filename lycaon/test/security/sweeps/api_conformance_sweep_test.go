@@ -91,6 +91,9 @@ func TestAPIConformance(t *testing.T) {
 	projectDir := h.ProjectDir(t, "conformance")
 	testutil.FailErr(t, "write fixture file", os.WriteFile(filepath.Join(projectDir, "README.md"), []byte("conformance\n"), 0o644))
 	project := security.CreateTestProjectHTTP(t, h.Server, projectDir)
+	// The sweep reads as an open window does; without a claim the host parks
+	// the project and stops watching its files.
+	t.Cleanup(h.ProjectLiveness.ClaimWorkspace(project.ID))
 	sess := security.CreateSessionForProjectHTTP(t, h.Server, project.ID, wire.SessionPostureBuild)
 	provider := createConformanceProvider(t, h.Server)
 
@@ -195,6 +198,8 @@ type conformanceOutcomes struct {
 	replayed int
 	// paged counts lists walked one row at a time.
 	paged int
+	// created holds the project and chat ids the host answered from a create.
+	created map[string]bool
 }
 
 func newConformanceSweep(doc *openapi3.T, validator *openapi.Validator, handler http.Handler, notices *usernotice.Catalog) *conformanceSweep {
@@ -202,7 +207,7 @@ func newConformanceSweep(doc *openapi3.T, validator *openapi.Validator, handler 
 		ops: conformanceOperations(doc), validator: validator, handler: handler, notices: notices,
 		values: newConformanceValues(), secrets: &conformanceSecrets{}, findings: newConformanceFindings(),
 		children: map[string][]string{}, readObserved: map[string]bool{},
-		outcomes: &conformanceOutcomes{succeeded: map[string]bool{}, lastAnswer: map[string]string{}}, corpus: newCorpusRecorder(),
+		outcomes: &conformanceOutcomes{succeeded: map[string]bool{}, lastAnswer: map[string]string{}, created: map[string]bool{}}, corpus: newCorpusRecorder(),
 	}
 	seen := map[string]bool{}
 	for _, op := range s.ops {

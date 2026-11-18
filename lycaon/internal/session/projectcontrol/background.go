@@ -79,7 +79,7 @@ func (m *Service) hydrateProjectProcess(
 		Command:         row.Command,
 		RootID:          rootID,
 		WorkingDir:      workingDir,
-		Ports:           append([]string(nil), row.Ports...),
+		Ports:           append([]string{}, row.Ports...),
 		StartedAt:       row.StartedAt,
 		EndedAt:         row.EndedAt,
 		Running:         row.Running,

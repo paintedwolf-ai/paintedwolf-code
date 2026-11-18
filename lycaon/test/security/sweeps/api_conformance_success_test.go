@@ -235,6 +235,11 @@ func (s *conformanceSweep) bindCreated(op *conformanceOp, ex conformanceExchange
 	if json.Unmarshal(ex.body, &answer) != nil {
 		return
 	}
+	if id, ok := answer["id"].(string); ok && op.Method == http.MethodPost && (op.Path == "/v1/projects" || op.Path == "/v1/sessions") {
+		s.outcomes.mu.Lock()
+		s.outcomes.created[id] = true
+		s.outcomes.mu.Unlock()
+	}
 	for _, name := range s.children[op.Path] {
 		value, _ := answer[name].(string)
 		if id, ok := answer["id"].(string); ok && value == "" {

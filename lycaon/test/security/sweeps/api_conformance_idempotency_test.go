@@ -69,7 +69,8 @@ func (s *conformanceSweep) checkIdempotent(ctx context.Context, first conformanc
 	}
 	changed, ok := changedBody(op.JSONBody, first.req.body)
 	if !ok {
-		s.findings.add(ruleKeyedOperationsAreIdempotent, op.ID, "changed body", "the body has no property a client could change")
+		// A body of nothing but its key cannot be sent changed.
+		s.findings.note("%s: changed body: the body carries only its key", op.ID)
 		return
 	}
 	conflict := first.req
