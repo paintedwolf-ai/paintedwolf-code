@@ -124,26 +124,19 @@ func TestScrubJSONScrubsNonJSONAsText(t *testing.T) {
 	}
 }
 
-func TestScrubHeadersKeepsNamesDropsValues(t *testing.T) {
-	in := map[string][]string{
-		"Authorization": {"Bearer " + fakeKey},
-		"X-Api-Key":     {fakeKey},
-		"Content-Type":  {"application/json"},
+func TestScrubJSONKeepsHeaderNamesAndRedactsValues(t *testing.T) {
+	raw := []byte(`{"headers":{"Authorization":["Bearer ` + fakeKey + `"],"X-Api-Key":["` + fakeKey + `"],"Content-Type":["application/json"]}}`)
+	var capture struct {
+		Headers map[string][]string `json:"headers"`
 	}
-
-	out := ScrubHeaders(in)
-
-	if _, ok := out["Authorization"]; !ok {
-		t.Fatal("header name was dropped: a reader must still see that auth was present")
+	if err := json.Unmarshal(ScrubJSON(raw), &capture); err != nil {
+		t.Fatalf("decode scrubbed header capture: %v", err)
 	}
-	if out["Authorization"][0] != "[REDACTED]" {
-		t.Fatalf("Authorization value leaked: %v", out["Authorization"])
-	}
-	if out["X-Api-Key"][0] != "[REDACTED]" {
-		t.Fatalf("X-Api-Key value leaked: %v", out["X-Api-Key"])
-	}
-	if out["Content-Type"][0] != "application/json" {
-		t.Fatalf("benign header altered: %v", out["Content-Type"])
+	for _, name := range []string{"Authorization", "X-Api-Key", "Content-Type"} {
+		values := capture.Headers[name]
+		if len(values) != 1 || values[0] != redacted {
+			t.Errorf("header %q values = %v, want one redaction", name, values)
+		}
 	}
 }
 

@@ -140,20 +140,3 @@ func ScrubJSON(raw []byte) []byte {
 	}
 	return scrubbed
 }
-
-// ScrubHeaders retains header names while redacting their secret values.
-func ScrubHeaders(headers map[string][]string) map[string][]string {
-	out := make(map[string][]string, len(headers))
-	for name, values := range headers {
-		if IsSecretFieldName(name) {
-			out[name] = []string{redacted}
-			continue
-		}
-		scrubbed := make([]string, len(values))
-		for i, v := range values {
-			scrubbed[i] = RedactString(v)
-		}
-		out[name] = scrubbed
-	}
-	return out
-}

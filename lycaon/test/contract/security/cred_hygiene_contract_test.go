@@ -129,8 +129,7 @@ func TestSharedScrubberCoversTheSecretFieldFamily(t *testing.T) {
 	}
 }
 
-// The scrubber must survive the shapes a real capture takes: nested objects,
-// arrays, headers, and a body that failed to parse.
+// Capture screening covers structured data and unparsed bodies.
 func TestScrubberRedactsAcrossCaptureShapes(t *testing.T) {
 	t.Parallel()
 	const key = "sk-live-secret-value-0123456789"
@@ -145,9 +144,9 @@ func TestScrubberRedactsAcrossCaptureShapes(t *testing.T) {
 		t.Fatalf("unparsed body leaked a secret: %s", unparsed)
 	}
 
-	headers := observability.ScrubHeaders(map[string][]string{"Authorization": {"Bearer " + key}})
-	if strings.Contains(strings.Join(headers["Authorization"], ""), key) {
-		t.Fatalf("header leaked a secret: %v", headers)
+	headers := observability.RedactCaptureJSON([]byte(`{"headers":{"Authorization":["Bearer ` + key + `"]}}`))
+	if strings.Contains(headers, key) || !strings.Contains(headers, `"Authorization"`) {
+		t.Fatalf("capture must retain the header name and redact its value: %s", headers)
 	}
 }
 
