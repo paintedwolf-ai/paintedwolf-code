@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/layeredfs/privategit/mounted_isolation_test.go",
+  "kind": "test_suite",
+  "workstream": "privategit-command-fixtures",
+  "disposition": "retain",
+  "reason": "Mounted Git binding, independent view resolution and captured-index coherence exercise one view-access contract. Retain the existing matrix at its measured size; production dispatch and lifecycle remain unchanged.",
+  "reviewed_commit": "54ad1deb254aec3533c9ced5d1c22be62bf3e87a",
+  "ceiling": 474,
+  "boundaries": {
+    "lycaon/internal/layeredfs/privategit/mounted_isolation_test.go": "ba93897a7e76f7d921029fa2297e15c351f32357324126938415c36a4e910916"
+  }
+}
