@@ -435,6 +435,19 @@ def compatibility(root, binary, environment):
                                  for p in files}})
 
 
+def flag_tags(options, flags):
+    """Build tags named by a Go recipe's options and flags."""
+    tags = set()
+    for index, option in enumerate(options):
+        if option == "--tags" and index + 1 < len(options):
+            tags.update(t for t in re.split(r"[\s,]+", options[index + 1]) if t)
+    for flag in flags:
+        name, _, value = flag.partition("=")
+        if name == "-tags":
+            tags.update(t for t in re.split(r"[\s,]+", value) if t)
+    return tags
+
+
 def stage_key(stage):
     if stage["kind"] == "task":
         return identity({"kind": "task", "arguments": stage["arguments"]})

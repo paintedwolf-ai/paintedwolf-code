@@ -618,7 +618,7 @@ print('fixture '+name, flush=True)'''))
     def test_concurrent_snapshots_never_share_a_rust_target(self):
         """Cargo trusts file times, so a target another source built later would pass for this one."""
         self.env.pop("GITHUB_ACTIONS", None)
-        self.hold.touch()
+        self.parallel_profiles()
         first = self.start("build")
         self.queued(1)
         self.queue.resume()

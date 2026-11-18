@@ -13,7 +13,7 @@ import threading
 
 from verification_batch import active_members, child_options, stop_child, write_lease
 from verification_history import estimate, package_durations, read_history, record_duration, record_package_durations
-from verification_plan import catalog, digest_command, expand, resolve_request, stage_key
+from verification_plan import catalog, digest_command, expand, flag_tags, resolve_request, stage_key
 from verification_resources import (Reservation, blocked_reason, bounded_environment, capacity, demand, entries,
                                     order_of, profile)
 from verification_health import identity
@@ -113,19 +113,6 @@ def list_arguments(stage):
             flags.append("-race")
     flags.extend(flag for flag in stage["flags"] if flag.partition("=")[0] in {"-tags", "-race"})
     return ["go", "list", "-json", *flags, *stage["packages"]]
-
-
-def flag_tags(options, flags):
-    """Build tags named by a Go recipe's options and flags."""
-    tags = set()
-    for index, option in enumerate(options):
-        if option == "--tags" and index + 1 < len(options):
-            tags.update(t for t in re.split(r"[\s,]+", options[index + 1]) if t)
-    for flag in flags:
-        name, _, value = flag.partition("=")
-        if name == "-tags":
-            tags.update(t for t in re.split(r"[\s,]+", value) if t)
-    return tags
 
 
 def tier_tags(data):

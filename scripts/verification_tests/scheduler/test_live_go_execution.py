@@ -161,15 +161,20 @@ func TestFixture(t *testing.T) {
 ''')
         self.queue.resume()
 
-        def verify(code, *flags):
-            self.collect(self.start("test:digest", "--", *flags, "./good"), code)
+        def verify(*flags):
+            process = self.start("test:digest", "--", *flags, "./good")
+            out, err = process.communicate(timeout=self.state_timeout + 5)
             self.await_condition(lambda: not self.queue.status()["runs"])
+            return process.returncode, out + err
         for flags in ((), ("-failfast",)):
             with self.subTest(flags=flags):
                 value.write_text("one")
-                verify(0, *flags)
+                code, output = verify(*flags)
+                self.assertEqual(code, 0, output)
                 value.write_text("two")
-                verify(1, *flags)
+                code, output = verify(*flags)
+                self.assertNotEqual(code, 0, output)
+                self.assertIn('read: "two"', output)
 
     def test_an_exclusive_target_runs_again_whatever_its_sources_checksum_says(self):
         """Task skips a target whose `sources:` are unchanged, even when its arguments now select a failure."""
@@ -179,11 +184,14 @@ func TestFixture(t *testing.T) {
     cmds:
       - test "{{.CLI_ARGS}}" != fail
 ''')
+        self.catalog["tasks"]["fixture:sourced"] = ["fixture:sourced"]
         self.catalog["selection"]["fixture:sourced"] = "passthrough"
         self.save_catalog()
         self.queue.resume()
         self.collect(self.start("fixture:sourced", "--", "pass"))
-        self.collect(self.start("fixture:sourced", "--", "fail"), 1)
+        failed = self.start("fixture:sourced", "--", "fail")
+        out, err = failed.communicate(timeout=self.state_timeout + 5)
+        self.assertNotEqual(failed.returncode, 0, out + err)
 
     def test_concurrent_go_publication_cannot_replace_another_runs_evidence(self):
         if resources.capacity() < 3:

@@ -159,6 +159,14 @@ class ArchLintChangesTest(unittest.TestCase):
         later = self.git("rev-parse", "HEAD").strip()
         self.assertEqual(arch_lint_changes.base_checks(self.repo, later, self.binary, POLICY, self.cache), {})
 
+    def test_a_changed_policy_judges_the_base_again(self):
+        arch_lint_changes.base_checks(self.repo, self.base, self.binary, POLICY, self.cache)
+        widened = {**POLICY, "reach": {**POLICY["reach"], "roots": ["./cmd/...", "./internal/..."]}}
+        arch_lint_changes.base_checks(self.repo, self.base, self.binary, widened, self.cache)
+        arguments = json.loads((self.cache / "base-tree" / "args-reach.json").read_text())
+        self.assertEqual(arguments[-2:], ["./cmd/...", "./internal/..."])
+        self.assertEqual(len(list(self.cache.glob("base-*.json"))), 2)
+
     def test_reach_receives_the_product_checks_the_policy_names(self):
         product = {**POLICY["reach"], "product": ["./cmd/app"]}
         arch_lint_changes.checks(self.binary, self.repo, {**POLICY, "reach": {**product, "config_fields": True},

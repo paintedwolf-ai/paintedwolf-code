@@ -15,6 +15,7 @@ Policy, including the test-support package rule, is scripts/arch-lint-policy.jso
 """
 
 import argparse
+import fcntl
 import hashlib
 import json
 import os
@@ -138,20 +139,30 @@ def checks(binary, tree, policy, go=True, den=False, refs=True):
 
 
 def base_checks(root, base, binary, policy, cache, go=True, den=False, refs=True):
-    """Findings at the base, cached by base commit, scope and the binary that judged it."""
-    digest = hashlib.sha256(binary.read_bytes()).hexdigest()[:16] if binary else "knip"
+    """Findings at the base, cached by base commit, scope and everything that judged it: the binary, the
+    policy, and for Den the knip configuration and lockfile the base is judged with."""
+    judge = hashlib.sha256(binary.read_bytes() if binary else b"knip")
+    judge.update(json.dumps(policy, sort_keys=True).encode())
+    if den:
+        for name in ("knip.json", "bun.lock"):
+            path = ROOT / policy["den"]["dir"] / name
+            judge.update(path.read_bytes() if path.exists() else b"")
     parts = ('' if go else '-nogo') + ('' if refs else '-norefs') + ('-den' if den else '')
-    cached = cache / f"base-{base}-{digest}{parts}.json"
-    if cached.exists():
-        return {(f["kind"], f["key"]): f for f in json.loads(cached.read_text())}
-    tree = cache / "base-tree"
-    if tree.exists():
-        run(["git", "-C", str(tree), "checkout", "-q", "--force", "--detach", base])
-    else:
-        run(["git", "-C", str(root), "worktree", "add", "-q", "--force", "--detach", str(tree), base])
-    found = checks(binary, tree, policy, go, den, refs)
-    cached.write_text(json.dumps(list(found.values())))
-    return found
+    cached = cache / f"base-{base}-{judge.hexdigest()[:16]}{parts}.json"
+    cache.mkdir(parents=True, exist_ok=True)
+    # Concurrent batches share this cache and its one base tree.
+    with (cache / "base.lock").open("a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if cached.exists():
+            return {(f["kind"], f["key"]): f for f in json.loads(cached.read_text())}
+        tree = cache / "base-tree"
+        if tree.exists():
+            run(["git", "-C", str(tree), "checkout", "-q", "--force", "--detach", base])
+        else:
+            run(["git", "-C", str(root), "worktree", "add", "-q", "--force", "--detach", str(tree), base])
+        found = checks(binary, tree, policy, go, den, refs)
+        cached.write_text(json.dumps(list(found.values())))
+        return found
 
 
 def golangci_lint(root):
